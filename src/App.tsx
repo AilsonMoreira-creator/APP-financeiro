@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState } from "react";
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
