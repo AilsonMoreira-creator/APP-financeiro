@@ -1009,13 +1009,14 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
         <div style={{display:"flex",flexWrap:"wrap",gap:28,alignItems:"flex-start",background:"#f7f4f0",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",padding:"12px 16px"}}>
           {/* RECEITAS — lado esquerdo */}
           <div style={{flex:"1 1 320px",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
-            <div style={{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5"}}>
-              <div/>
-              {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(
-                <div key={h} style={{padding:"7px 10px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",textAlign:"right",letterSpacing:0.3}}>{h}</div>
-              ))}
-            </div>
             <div style={{maxHeight:660,overflowY:"auto"}}>
+              {/* Header sticky dentro do scroll */}
+              <div style={{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
+                <div/>
+                {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(
+                  <div key={h} style={{padding:"7px 10px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",textAlign:"right",letterSpacing:0.3}}>{h}</div>
+                ))}
+              </div>
               {Array.from({length:31},(_,i)=>i+1).map(dia=>{
                 const d=receitas[dia]||{};
                 const isDom=DOMINGOS_MAR.includes(dia);
@@ -1048,25 +1049,25 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
           </div>
           {/* DESPESAS — lado direito */}
           <div style={{flex:"1 1 260px",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 140px",background:"#4a7fa5"}}>
-              <div style={{padding:"7px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3}}>Categoria</div>
-              <div style={{padding:"7px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",textAlign:"right",letterSpacing:0.3}}>Valor</div>
-            </div>
             <div style={{maxHeight:660,overflowY:"auto"}}>
+              {/* Header sticky dentro do scroll — evita desalinhamento com scrollbar */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 150px 20px",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
+                <div style={{padding:"7px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3}}>Categoria</div>
+                <div style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",textAlign:"right",letterSpacing:0.3}}>Valor</div>
+                <div/>
+              </div>
               {categorias.map(cat=>{
                 const total=calcTotalAux(cat,auxData,recTotais);
                 const isDestaque=cat==="Tecidos"||cat==="Oficinas Costura";
                 const isAuto=SEM_AUX.includes(cat);
                 return(
-                  <div key={cat} style={{display:"grid",gridTemplateColumns:"1fr 140px",alignItems:"center",borderBottom:"1px solid #f0ebe4",padding:"6px 0",background:isDestaque?"#f7f9ff":"#fff",cursor:isAuto?"default":"pointer"}}
+                  <div key={cat} style={{display:"grid",gridTemplateColumns:"1fr 150px 20px",alignItems:"center",borderBottom:"1px solid #f0ebe4",background:isDestaque?"#f7f9ff":"#fff",cursor:isAuto?"default":"pointer",minHeight:32}}
                     onClick={()=>{if(!isAuto){setAba("despesas");setAuxAberta(cat);}}}>
-                    <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:400,color:"#2c3e50",paddingLeft:12}}>{cat}</span>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:isAuto?12:6,gap:4}}>
-                      <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:600,color:total>0?"#2c3e50":"#d0c8c0",fontFamily:"'Courier New',Courier,monospace",textAlign:"right",whiteSpace:"nowrap"}}>
-                        {total>0?"R$ "+total.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
-                      </span>
-                      {!isAuto&&<span style={{color:"#c8d0d8",fontSize:13}}>›</span>}
-                    </div>
+                    <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:400,color:"#2c3e50",padding:"5px 8px 5px 12px"}}>{cat}</span>
+                    <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:600,color:total>0?"#2c3e50":"#d0c8c0",fontFamily:"'Courier New',Courier,monospace",textAlign:"right",whiteSpace:"nowrap",padding:"5px 8px"}}>
+                      {total>0?"R$ "+total.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
+                    </span>
+                    <span style={{color:"#c8d0d8",fontSize:12,textAlign:"center"}}>{!isAuto?"›":""}</span>
                   </div>
                 );
               })}
@@ -1183,8 +1184,17 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
       </div>
       <div style={{background:"#fff",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",overflow:"hidden"}}>
         <div style={{minHeight:300,maxHeight:720,overflowY:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead><tr style={{background:"#4a7fa5"}}>{["Data","Empresa","Nº Nota",filtro==="aberto"?"Mês":null,"Valor","Pago",""].filter(Boolean).map(h=><th key={h} style={{padding:"6px 12px",textAlign:h==="Valor"?"right":"left",color:"#fff",fontWeight:600,fontSize:11}}>{h}</th>)}</tr></thead>
+          <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
+            <colgroup>
+              <col style={{width:"80px"}}/>
+              <col style={{width:"auto"}}/>
+              <col style={{width:"120px"}}/>
+              {filtro==="aberto"&&<col style={{width:"60px"}}/>}
+              <col style={{width:"130px"}}/>
+              <col style={{width:"50px"}}/>
+              <col style={{width:"30px"}}/>
+            </colgroup>
+            <thead><tr style={{background:"#4a7fa5"}}>{["Data","Empresa","Nº Nota",filtro==="aberto"?"Mês":null,"Valor","Pago",""].filter(Boolean).map((h,i)=><th key={i} style={{padding:"6px 12px",textAlign:h==="Valor"?"right":"left",color:"#fff",fontWeight:600,fontSize:11,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
             <tbody>
               {boletosFiltrados.length===0&&<tr><td colSpan={7} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:12}}>Nenhum boleto</td></tr>}
               {boletosFiltrados.map(b=>{
@@ -1563,7 +1573,7 @@ const RelatorioContent=(props)=>{
   const margem=totalVendas>0?((resultado/totalVendas)*100).toFixed(1):0;
   const MesFiltro=()=>(<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:16}}><span style={{fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Mês:</span>{MESES.map((m,i)=><button key={i} onClick={()=>setMesSel(i+1)} style={{padding:"4px 10px",border:"1px solid "+(mesSel===i+1?"#2c3e50":"#e8e2da"),borderRadius:6,background:mesSel===i+1?"#2c3e50":"#fff",color:mesSel===i+1?"#fff":"#6b7c8a",cursor:"pointer",fontSize:11,fontFamily:"Georgia,serif"}}>{m}</button>)}</div>);
   const BackBtn=()=>(<button onClick={()=>setTipo(null)} style={{background:"none",border:"1px solid #a3bacc",borderRadius:6,padding:"5px 14px",fontSize:12,color:"#4a7fa5",cursor:"pointer",fontFamily:"Georgia,serif"}}>← Relatórios</button>);
-  if(!tipo)return(<div><div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Selecione um relatório</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>{TIPOS_REL.map(t=>(<div key={t.id} onClick={()=>t.id==="copiar"?copiarDados():setTipo(t.id)} style={{background:t.id==="copiar"?"#eaf7ee":"#fff",borderRadius:12,padding:20,border:t.id==="copiar"?"1px solid #b8dfc8":"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:14,alignItems:"flex-start"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.08)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}><span style={{fontSize:28,flexShrink:0,marginTop:2}}>{t.icon}</span><div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:600,color:t.id==="copiar"?(copiado?"#27ae60":"#2c3e50"):"#2c3e50",marginBottom:4,lineHeight:1.3}}>{t.id==="copiar"&&copiado?"✓ Copiado! Cole no Claude":t.label}</div><div style={{fontSize:11,color:"#a89f94",lineHeight:1.4}}>{t.desc}</div></div></div>))}</div></div>);
+  if(!tipo)return(<div><div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Selecione um relatório</div><div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>{TIPOS_REL.map(t=>(<div key={t.id} onClick={()=>t.id==="copiar"?copiarDados():setTipo(t.id)} style={{background:t.id==="copiar"?"#eaf7ee":"#fff",borderRadius:12,padding:"16px 20px",border:t.id==="copiar"?"1px solid #b8dfc8":"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:14,alignItems:"center",minHeight:80}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.08)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}><span style={{fontSize:26,flexShrink:0,width:32,textAlign:"center"}}>{t.icon}</span><div style={{minWidth:0,flex:1}}><div style={{fontSize:14,fontWeight:600,color:t.id==="copiar"?(copiado?"#27ae60":"#2c3e50"):"#2c3e50",marginBottom:3,lineHeight:1.3}}>{t.id==="copiar"&&copiado?"✓ Copiado! Cole no Claude":t.label}</div><div style={{fontSize:11,color:"#a89f94",lineHeight:1.4,whiteSpace:"normal"}}>{t.desc}</div></div></div>))}</div></div>);
   if(tipo==="vendas")return(<div><div style={{display:"flex",gap:16,alignItems:"center",marginBottom:24}}><BackBtn/><div style={{fontSize:20,fontWeight:600,color:"#2c3e50"}}>Vendas</div></div><MesFiltro/><div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da"}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:16}}>{[{label:"Total Geral",value:totalVendas,color:"#2c3e50",pct:null},{label:"Silva Teles",value:totalST,color:"#4a7fa5",pct:totalVendas>0?((totalST/totalVendas)*100).toFixed(1):0},{label:"Bom Retiro",value:totalBR,color:"#27ae60",pct:totalVendas>0?((totalBR/totalVendas)*100).toFixed(1):0},{label:"Marketplaces",value:totalMKT,color:"#e67e22",pct:totalVendas>0?((totalMKT/totalVendas)*100).toFixed(1):0}].map(c=>(<div key={c.label} style={{background:"#fff",borderRadius:12,padding:18,border:"1px solid #e8e2da"}}><div style={{fontSize:10,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>{c.label}</div><div style={{fontSize:20,fontWeight:700,color:c.color}}>{fmt(c.value)}</div>{c.pct!==null&&<div style={{fontSize:11,color:"#a89f94",marginTop:4}}>{c.pct}% do total</div>}</div>))}</div></div></div>);
   if(tipo==="despesas")return(<div><div style={{display:"flex",gap:16,alignItems:"center",marginBottom:24}}><BackBtn/><div style={{fontSize:20,fontWeight:600,color:"#2c3e50"}}>Despesas</div></div><MesFiltro/><div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{background:"#f7f4f0",borderBottom:"2px solid #e8e2da"}}>{["Categoria","Valor","% Total"].map(h=><th key={h} style={{padding:"10px 16px",textAlign:h==="Categoria"?"left":"right",color:"#a89f94",fontWeight:600,fontSize:11}}>{h}</th>)}</tr></thead><tbody>{CATS.map(cat=>{const v=calcDesp(cat);if(v===0)return null;const pct=totalDesp>0?((v/totalDesp)*100).toFixed(1):0;return(<tr key={cat} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"11px 16px",color:"#2c3e50"}}>{cat}</td><td style={{padding:"11px 16px",textAlign:"right",color:"#2c3e50",fontWeight:500}}>{fmt(v)}</td><td style={{padding:"11px 16px",textAlign:"right",color:"#a89f94"}}>{pct}%</td></tr>);})}</tbody><tfoot><tr style={{background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}><td style={{padding:"12px 16px",fontWeight:700,color:"#2c3e50"}}>Total</td><td style={{padding:"12px 16px",textAlign:"right",fontWeight:700,color:"#c0392b"}}>{fmt(totalDesp)}</td><td style={{padding:"12px 16px",textAlign:"right",color:"#a89f94"}}>100%</td></tr></tfoot></table></div></div>);
   if(tipo==="resultado")return(<div><div style={{display:"flex",gap:16,alignItems:"center",marginBottom:24}}><BackBtn/><div style={{fontSize:20,fontWeight:600,color:"#2c3e50"}}>Resultado</div></div><MesFiltro/><div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da"}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>{[{label:"Receita Total",value:totalVendas,color:"#4a7fa5"},{label:"Despesa Total",value:totalDesp,color:"#c0392b"},{label:"Saldo",value:resultado,color:resultado>=0?"#27ae60":"#c0392b"},{label:"Margem",value:margem+"%",color:"#2c3e50",raw:true}].map(c=>(<div key={c.label} style={{background:"#fff",borderRadius:12,padding:22,border:"1px solid #e8e2da"}}><div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{c.label}</div><div style={{fontSize:26,fontWeight:700,color:c.color}}>{c.raw?c.value:fmt(c.value)}</div></div>))}</div></div></div>);
@@ -1761,7 +1771,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
 
   // salvar corte
   const salvarCorte=()=>{
-    if(!form.nCorte||!form.ref||!form.oficina||!form.qtd||!form.valorUnit)return;
+    if(!form.ref||!form.oficina||!form.qtd||!form.valorUnit)return;
     const qtd=parseFloat(form.qtd)||0,vu=parseFloat(form.valorUnit)||0;
     const item={id:editId||Date.now(),nCorte:form.nCorte,ref:form.ref,descricao:form.descricao,
       marca:form.marca,qtd,valorUnit:vu,valorTotal:Math.round(qtd*vu*100)/100,
@@ -1992,7 +2002,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
 
           {/* Lista de cortes */}
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-            <div style={{overflowX:"auto"}}>
+            <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
             <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px minmax(160px,1fr) 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95",minWidth:900}}>
               {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","Pago","Qtd.Entr","Faltante",""].map((h,i)=>(
                 <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textAlign:i>=5&&i<=7||i>=11?"right":"left",whiteSpace:"nowrap"}}>{h}</div>
@@ -2265,7 +2275,14 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                 </div>
               </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,tableLayout:"fixed"}}>
+                  <colgroup>
+                    <col style={{width:"70px"}}/>
+                    <col/>
+                    <col style={{width:"80px"}}/>
+                    <col style={{width:"120px"}}/>
+                    <col style={{width:"60px"}}/>
+                  </colgroup>
                   <thead><tr style={{background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Vl. Unitário",""].map(h=><th key={h} style={{padding:"8px 12px",textAlign:h==="Vl. Unitário"?"right":"left",fontSize:11,color:"#fff",fontWeight:600}}>{h}</th>)}</tr></thead>
                   <tbody>
                     {produtos.length===0&&<tr><td colSpan={5} style={{padding:24,textAlign:"center",color:"#c0b8b0"}}>Nenhum produto cadastrado</td></tr>}
