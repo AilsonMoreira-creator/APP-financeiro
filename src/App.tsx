@@ -89,103 +89,103 @@ const AUX_MAR = {
   "Caseado": [{data:"",valor:"2500",descricao:"caseado/estamparia"}],
   "Carreto": [{data:"",valor:"3000",descricao:"carreto"}],
   "Tecidos": [
-    {data:"02/03",empresa:"EURO",nroNota:"",valor:"3438.8",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30062",valor:"1582.87",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529592",valor:"3442.3",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529132",valor:"1459.86",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529295",valor:"1458.4",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529305",valor:"500.28",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529307",valor:"2211.4",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30263",valor:"1578.93",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.83",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",descricao:""},
-    {data:"02/03",empresa:"DIAGONAL TEXTIL",nroNota:"NF 80778",valor:"2263.68",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32138",valor:"7969.46",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32059",valor:"1028.98",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",descricao:""},
-    {data:"02/03",empresa:"MARLES",nroNota:"NF316851",valor:"3401.0",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 31130",valor:"1802.56",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",descricao:""},
-    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32198",valor:"2075.79",descricao:""},
-    {data:"03/03",empresa:"EUROTEXTIL",nroNota:"NF 530050",valor:"1892.17",descricao:""},
-    {data:"03/03",empresa:"EUROTEXTIL",nroNota:"NF 530040",valor:"5832.73",descricao:""},
-    {data:"03/03",empresa:"EUROTEXTIL",nroNota:"NF 30531",valor:"2006.38",descricao:""},
-    {data:"03/03",empresa:"NOUVEAU",nroNota:"NF 18304",valor:"3090.27",descricao:""},
-    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF 30705",valor:"8554.77",descricao:""},
-    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF 532022",valor:"1425.61",descricao:""},
-    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF 31665",valor:"1752.77",descricao:""},
-    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF532822",valor:"1425.61",descricao:""},
-    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF 32626",valor:"1321.94",descricao:""},
-    {data:"05/03",empresa:"matex",nroNota:"",valor:"12847.0",descricao:""},
-    {data:"06/03",empresa:"romana",nroNota:"",valor:"1309.0",descricao:""},
-    {data:"06/03",empresa:"MARLES",nroNota:"",valor:"4541.0",descricao:""},
-    {data:"05/03",empresa:"euro",nroNota:"",valor:"1344.63",descricao:""},
-    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 30263",valor:"1578.86",descricao:""},
-    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",descricao:""},
-    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 30260",valor:"1790.32",descricao:""},
-    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",descricao:""},
-    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",descricao:""},
-    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 31712",valor:"545.19",descricao:""},
-    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 31705",valor:"1363.07",descricao:""},
-    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 31711",valor:"1085.16",descricao:""},
-    {data:"06/03",empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",descricao:""},
-    {data:"06/03",empresa:"EUROTEXTIL",nroNota:"NF 534800",valor:"9583.09",descricao:""},
-    {data:"06/03",empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",descricao:""},
-    {data:"06/03",empresa:"MARLES",nroNota:"NF 317339",valor:"4541.9",descricao:""},
-    {data:"06/03",empresa:"PIX CARLINHOS",nroNota:"",valor:"7594.5",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 530050",valor:"1892.02",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 530040",valor:"5832.28",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.83",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 30705",valor:"8554.77",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 31414",valor:"1820.93",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 532022",valor:"1425.61",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 532402",valor:"1575.0",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 31665",valor:"1752.77",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF532822",valor:"1425.61",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 33123",valor:"1565.89",descricao:""},
-    {data:"09/03",empresa:"MEDTEXTIL",nroNota:"NF 14978",valor:"1561.51",descricao:""},
-    {data:"09/03",empresa:"MEDTEXTIL",nroNota:"NF 192935",valor:"6482.5",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",descricao:""},
-    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",descricao:""},
-    {data:"09/03",empresa:"euro",nroNota:"",valor:"1715.36",descricao:""},
-    {data:"10/03",empresa:"euro",nroNota:"",valor:"2708.22",descricao:""},
-    {data:"11/03",empresa:"euro",nroNota:"",valor:"1486.5",descricao:""},
-    {data:"12/03",empresa:"euro",nroNota:"",valor:"2137.86",descricao:""},
-    {data:"10/03",empresa:"DIAGONAL TEXTIL",nroNota:"NF 80262",valor:"2011.7",descricao:""},
-    {data:"10/03",empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",descricao:""},
-    {data:"10/03",empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",descricao:""},
-    {data:"10/03",empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",descricao:""},
-    {data:"10/03",empresa:"EUROTEXTIL",nroNota:"NF 32059",valor:"1028.98",descricao:""},
-    {data:"10/03",empresa:"HOODORY",nroNota:"NF 5728",valor:"5072.26",descricao:""},
-    {data:"10/03",empresa:"euro",nroNota:"",valor:"1344.63",descricao:""},
-    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",descricao:""},
-    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 32138",valor:"7969.46",descricao:""},
-    {data:"11/03",empresa:"ACT COMERCIO DE TECIDOS",nroNota:"NF 135355",valor:"2597.71",descricao:""},
-    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 31130",valor:"1802.56",descricao:""},
-    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",descricao:""},
-    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 32155",valor:"1835.44",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.35",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF536716",valor:"2137.86",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",descricao:""},
-    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 32198",valor:"2075.79",descricao:""},
-    {data:"13/03",empresa:"EUROTEXTIL",nroNota:"NF 30531",valor:"2006.38",descricao:""},
+    {data:"02/03",empresa:"EURO",nroNota:"",valor:"3438.8",descricao:"",_boletoid:100},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30062",valor:"1582.87",descricao:"",_boletoid:101},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529592",valor:"3442.3",descricao:"",_boletoid:102},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529132",valor:"1459.86",descricao:"",_boletoid:103},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529295",valor:"1458.4",descricao:"",_boletoid:104},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529305",valor:"500.28",descricao:"",_boletoid:105},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 529307",valor:"2211.4",descricao:"",_boletoid:106},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30263",valor:"1578.93",descricao:"",_boletoid:107},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.83",descricao:"",_boletoid:154},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",descricao:"",_boletoid:175},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",descricao:"",_boletoid:188},
+    {data:"02/03",empresa:"DIAGONAL TEXTIL",nroNota:"NF 80778",valor:"2263.68",descricao:"",_boletoid:111},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",descricao:"",_boletoid:189},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",descricao:"",_boletoid:176},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",descricao:"",_boletoid:177},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",descricao:"",_boletoid:181},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32138",valor:"7969.46",descricao:"",_boletoid:182},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32059",valor:"1028.98",descricao:"",_boletoid:178},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",descricao:"",_boletoid:190},
+    {data:"02/03",empresa:"MARLES",nroNota:"NF316851",valor:"3401.0",descricao:"",_boletoid:119},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",descricao:"",_boletoid:192},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 31130",valor:"1802.56",descricao:"",_boletoid:184},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",descricao:"",_boletoid:185},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",descricao:"",_boletoid:193},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",descricao:"",_boletoid:194},
+    {data:"02/03",empresa:"EUROTEXTIL",nroNota:"NF 32198",valor:"2075.79",descricao:"",_boletoid:195},
+    {data:"03/03",empresa:"EUROTEXTIL",nroNota:"NF 530050",valor:"1892.17",descricao:"",_boletoid:126},
+    {data:"03/03",empresa:"EUROTEXTIL",nroNota:"NF 530040",valor:"5832.73",descricao:"",_boletoid:127},
+    {data:"03/03",empresa:"EUROTEXTIL",nroNota:"NF 30531",valor:"2006.38",descricao:"",_boletoid:196},
+    {data:"03/03",empresa:"NOUVEAU",nroNota:"NF 18304",valor:"3090.27",descricao:"",_boletoid:129},
+    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF 30705",valor:"8554.77",descricao:"",_boletoid:155},
+    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF 532022",valor:"1425.61",descricao:"",_boletoid:160},
+    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF 31665",valor:"1752.77",descricao:"",_boletoid:163},
+    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF532822",valor:"1425.61",descricao:"",_boletoid:164},
+    {data:"04/03",empresa:"EUROTEXTIL",nroNota:"NF 32626",valor:"1321.94",descricao:"",_boletoid:134},
+    {data:"05/03",empresa:"matex",nroNota:"",valor:"12847.0",descricao:"",_boletoid:135},
+    {data:"06/03",empresa:"romana",nroNota:"",valor:"1309.0",descricao:"",_boletoid:136},
+    {data:"06/03",empresa:"MARLES",nroNota:"",valor:"4541.0",descricao:"",_boletoid:137},
+    {data:"05/03",empresa:"euro",nroNota:"",valor:"1344.63",descricao:"",_boletoid:180},
+    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 30263",valor:"1578.86",descricao:"",_boletoid:139},
+    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",descricao:"",_boletoid:175},
+    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 30260",valor:"1790.32",descricao:"",_boletoid:141},
+    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",descricao:"",_boletoid:176},
+    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",descricao:"",_boletoid:177},
+    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 31712",valor:"545.19",descricao:"",_boletoid:144},
+    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 31705",valor:"1363.07",descricao:"",_boletoid:145},
+    {data:"05/03",empresa:"EUROTEXTIL",nroNota:"NF 31711",valor:"1085.16",descricao:"",_boletoid:146},
+    {data:"06/03",empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",descricao:"",_boletoid:181},
+    {data:"06/03",empresa:"EUROTEXTIL",nroNota:"NF 534800",valor:"9583.09",descricao:"",_boletoid:148},
+    {data:"06/03",empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",descricao:"",_boletoid:185},
+    {data:"06/03",empresa:"MARLES",nroNota:"NF 317339",valor:"4541.9",descricao:"",_boletoid:150},
+    {data:"06/03",empresa:"PIX CARLINHOS",nroNota:"",valor:"7594.5",descricao:"",_boletoid:151},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 530050",valor:"1892.02",descricao:"",_boletoid:152},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 530040",valor:"5832.28",descricao:"",_boletoid:153},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.83",descricao:"",_boletoid:154},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 30705",valor:"8554.77",descricao:"",_boletoid:155},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",descricao:"",_boletoid:188},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",descricao:"",_boletoid:189},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 31414",valor:"1820.93",descricao:"",_boletoid:158},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",descricao:"",_boletoid:190},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 532022",valor:"1425.61",descricao:"",_boletoid:160},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 532402",valor:"1575.0",descricao:"",_boletoid:161},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",descricao:"",_boletoid:192},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 31665",valor:"1752.77",descricao:"",_boletoid:163},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF532822",valor:"1425.61",descricao:"",_boletoid:164},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 33123",valor:"1565.89",descricao:"",_boletoid:165},
+    {data:"09/03",empresa:"MEDTEXTIL",nroNota:"NF 14978",valor:"1561.51",descricao:"",_boletoid:166},
+    {data:"09/03",empresa:"MEDTEXTIL",nroNota:"NF 192935",valor:"6482.5",descricao:"",_boletoid:167},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",descricao:"",_boletoid:193},
+    {data:"09/03",empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",descricao:"",_boletoid:194},
+    {data:"09/03",empresa:"euro",nroNota:"",valor:"1715.36",descricao:"",_boletoid:170},
+    {data:"10/03",empresa:"euro",nroNota:"",valor:"2708.22",descricao:"",_boletoid:171},
+    {data:"11/03",empresa:"euro",nroNota:"",valor:"1486.5",descricao:"",_boletoid:172},
+    {data:"12/03",empresa:"euro",nroNota:"",valor:"2137.86",descricao:"",_boletoid:173},
+    {data:"10/03",empresa:"DIAGONAL TEXTIL",nroNota:"NF 80262",valor:"2011.7",descricao:"",_boletoid:174},
+    {data:"10/03",empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",descricao:"",_boletoid:175},
+    {data:"10/03",empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",descricao:"",_boletoid:176},
+    {data:"10/03",empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",descricao:"",_boletoid:177},
+    {data:"10/03",empresa:"EUROTEXTIL",nroNota:"NF 32059",valor:"1028.98",descricao:"",_boletoid:178},
+    {data:"10/03",empresa:"HOODORY",nroNota:"NF 5728",valor:"5072.26",descricao:"",_boletoid:179},
+    {data:"10/03",empresa:"euro",nroNota:"",valor:"1344.63",descricao:"",_boletoid:180},
+    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",descricao:"",_boletoid:181},
+    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 32138",valor:"7969.46",descricao:"",_boletoid:182},
+    {data:"11/03",empresa:"ACT COMERCIO DE TECIDOS",nroNota:"NF 135355",valor:"2597.71",descricao:"",_boletoid:183},
+    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 31130",valor:"1802.56",descricao:"",_boletoid:184},
+    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",descricao:"",_boletoid:185},
+    {data:"11/03",empresa:"EUROTEXTIL",nroNota:"NF 32155",valor:"1835.44",descricao:"",_boletoid:186},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.35",descricao:"",_boletoid:187},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",descricao:"",_boletoid:188},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",descricao:"",_boletoid:189},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",descricao:"",_boletoid:190},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF536716",valor:"2137.86",descricao:"",_boletoid:191},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",descricao:"",_boletoid:192},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",descricao:"",_boletoid:193},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",descricao:"",_boletoid:194},
+    {data:"12/03",empresa:"EUROTEXTIL",nroNota:"NF 32198",valor:"2075.79",descricao:"",_boletoid:195},
+    {data:"13/03",empresa:"EUROTEXTIL",nroNota:"NF 30531",valor:"2006.38",descricao:"",_boletoid:196},
   ],
   "Oficinas Costura": [
     {data:"05/03",prestador:"DILMO",valor:"20056.5",descricao:""},
@@ -231,103 +231,103 @@ const AUX_MAR = {
 
 // ── Boletos Março 2026 (Tecidos) ──
 const BOLETOS_MAR = [
-  {id:100,data:"02/03",mes:3,empresa:"EURO",nroNota:"",valor:"3438.8",pago:false},
-  {id:101,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30062",valor:"1582.87",pago:false},
-  {id:102,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529592",valor:"3442.3",pago:false},
-  {id:103,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529132",valor:"1459.86",pago:false},
-  {id:104,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529295",valor:"1458.4",pago:false},
-  {id:105,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529305",valor:"500.28",pago:false},
-  {id:106,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529307",valor:"2211.4",pago:false},
-  {id:107,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30263",valor:"1578.93",pago:false},
-  {id:108,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.83",pago:false},
-  {id:109,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",pago:false},
-  {id:110,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",pago:false},
-  {id:111,data:"02/03",mes:3,empresa:"DIAGONAL TEXTIL",nroNota:"NF 80778",valor:"2263.68",pago:false},
-  {id:112,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",pago:false},
-  {id:113,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",pago:false},
-  {id:114,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",pago:false},
-  {id:115,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",pago:false},
-  {id:116,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32138",valor:"7969.46",pago:false},
-  {id:117,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32059",valor:"1028.98",pago:false},
-  {id:118,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",pago:false},
-  {id:119,data:"02/03",mes:3,empresa:"MARLES",nroNota:"NF316851",valor:"3401.0",pago:false},
-  {id:120,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",pago:false},
-  {id:121,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31130",valor:"1802.56",pago:false},
-  {id:122,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",pago:false},
-  {id:123,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",pago:false},
-  {id:124,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",pago:false},
-  {id:125,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32198",valor:"2075.79",pago:false},
-  {id:126,data:"03/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 530050",valor:"1892.17",pago:false},
-  {id:127,data:"03/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 530040",valor:"5832.73",pago:false},
-  {id:128,data:"03/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30531",valor:"2006.38",pago:false},
-  {id:129,data:"03/03",mes:3,empresa:"NOUVEAU",nroNota:"NF 18304",valor:"3090.27",pago:false},
-  {id:130,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30705",valor:"8554.77",pago:false},
-  {id:131,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532022",valor:"1425.61",pago:false},
-  {id:132,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31665",valor:"1752.77",pago:false},
-  {id:133,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF532822",valor:"1425.61",pago:false},
-  {id:134,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32626",valor:"1321.94",pago:false},
-  {id:135,data:"05/03",mes:3,empresa:"matex",nroNota:"",valor:"12847.0",pago:false},
-  {id:136,data:"06/03",mes:3,empresa:"romana",nroNota:"",valor:"1309.0",pago:false},
-  {id:137,data:"06/03",mes:3,empresa:"MARLES",nroNota:"",valor:"4541.0",pago:false},
-  {id:138,data:"05/03",mes:3,empresa:"euro",nroNota:"",valor:"1344.63",pago:false},
-  {id:139,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30263",valor:"1578.86",pago:false},
-  {id:140,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",pago:false},
-  {id:141,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30260",valor:"1790.32",pago:false},
-  {id:142,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",pago:false},
-  {id:143,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",pago:false},
-  {id:144,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31712",valor:"545.19",pago:false},
-  {id:145,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31705",valor:"1363.07",pago:false},
-  {id:146,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31711",valor:"1085.16",pago:false},
-  {id:147,data:"06/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",pago:false},
-  {id:148,data:"06/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 534800",valor:"9583.09",pago:false},
-  {id:149,data:"06/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",pago:false},
-  {id:150,data:"06/03",mes:3,empresa:"MARLES",nroNota:"NF 317339",valor:"4541.9",pago:false},
-  {id:151,data:"06/03",mes:3,empresa:"PIX CARLINHOS",nroNota:"",valor:"7594.5",pago:false},
-  {id:152,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 530050",valor:"1892.02",pago:false},
-  {id:153,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 530040",valor:"5832.28",pago:false},
-  {id:154,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.83",pago:false},
-  {id:155,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30705",valor:"8554.77",pago:false},
-  {id:156,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",pago:false},
-  {id:157,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",pago:false},
-  {id:158,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31414",valor:"1820.93",pago:false},
-  {id:159,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",pago:false},
-  {id:160,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532022",valor:"1425.61",pago:false},
-  {id:161,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532402",valor:"1575.0",pago:false},
-  {id:162,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",pago:false},
-  {id:163,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31665",valor:"1752.77",pago:false},
-  {id:164,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF532822",valor:"1425.61",pago:false},
-  {id:165,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 33123",valor:"1565.89",pago:false},
-  {id:166,data:"09/03",mes:3,empresa:"MEDTEXTIL",nroNota:"NF 14978",valor:"1561.51",pago:false},
-  {id:167,data:"09/03",mes:3,empresa:"MEDTEXTIL",nroNota:"NF 192935",valor:"6482.5",pago:false},
-  {id:168,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",pago:false},
-  {id:169,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",pago:false},
-  {id:170,data:"09/03",mes:3,empresa:"euro",nroNota:"",valor:"1715.36",pago:false},
-  {id:171,data:"10/03",mes:3,empresa:"euro",nroNota:"",valor:"2708.22",pago:false},
-  {id:172,data:"11/03",mes:3,empresa:"euro",nroNota:"",valor:"1486.5",pago:false},
-  {id:173,data:"12/03",mes:3,empresa:"euro",nroNota:"",valor:"2137.86",pago:false},
-  {id:174,data:"10/03",mes:3,empresa:"DIAGONAL TEXTIL",nroNota:"NF 80262",valor:"2011.7",pago:false},
-  {id:175,data:"10/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",pago:false},
-  {id:176,data:"10/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",pago:false},
-  {id:177,data:"10/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",pago:false},
-  {id:178,data:"10/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32059",valor:"1028.98",pago:false},
-  {id:179,data:"10/03",mes:3,empresa:"HOODORY",nroNota:"NF 5728",valor:"5072.26",pago:false},
-  {id:180,data:"10/03",mes:3,empresa:"euro",nroNota:"",valor:"1344.63",pago:false},
-  {id:181,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",pago:false},
-  {id:182,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32138",valor:"7969.46",pago:false},
-  {id:183,data:"11/03",mes:3,empresa:"ACT COMERCIO DE TECIDOS",nroNota:"NF 135355",valor:"2597.71",pago:false},
-  {id:184,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31130",valor:"1802.56",pago:false},
-  {id:185,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",pago:false},
-  {id:186,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32155",valor:"1835.44",pago:false},
-  {id:187,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.35",pago:false},
-  {id:188,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",pago:false},
-  {id:189,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",pago:false},
-  {id:190,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",pago:false},
-  {id:191,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF536716",valor:"2137.86",pago:false},
-  {id:192,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",pago:false},
-  {id:193,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",pago:false},
-  {id:194,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",pago:false},
-  {id:195,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32198",valor:"2075.79",pago:false},
-  {id:196,data:"13/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30531",valor:"2006.38",pago:false},
+  {id:100,data:"02/03",mes:3,empresa:"EURO",nroNota:"",valor:"3438.8",pago:true},
+  {id:101,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30062",valor:"1582.87",pago:true},
+  {id:102,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529592",valor:"3442.3",pago:true},
+  {id:103,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529132",valor:"1459.86",pago:true},
+  {id:104,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529295",valor:"1458.4",pago:true},
+  {id:105,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529305",valor:"500.28",pago:true},
+  {id:106,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 529307",valor:"2211.4",pago:true},
+  {id:107,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30263",valor:"1578.93",pago:true},
+  {id:108,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.83",pago:true},
+  {id:109,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",pago:true},
+  {id:110,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",pago:true},
+  {id:111,data:"02/03",mes:3,empresa:"DIAGONAL TEXTIL",nroNota:"NF 80778",valor:"2263.68",pago:true},
+  {id:112,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",pago:true},
+  {id:113,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",pago:true},
+  {id:114,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",pago:true},
+  {id:115,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",pago:true},
+  {id:116,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32138",valor:"7969.46",pago:true},
+  {id:117,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32059",valor:"1028.98",pago:true},
+  {id:118,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",pago:true},
+  {id:119,data:"02/03",mes:3,empresa:"MARLES",nroNota:"NF316851",valor:"3401.0",pago:true},
+  {id:120,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",pago:true},
+  {id:121,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31130",valor:"1802.56",pago:true},
+  {id:122,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",pago:true},
+  {id:123,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",pago:true},
+  {id:124,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",pago:true},
+  {id:125,data:"02/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32198",valor:"2075.79",pago:true},
+  {id:126,data:"03/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 530050",valor:"1892.17",pago:true},
+  {id:127,data:"03/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 530040",valor:"5832.73",pago:true},
+  {id:128,data:"03/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30531",valor:"2006.38",pago:true},
+  {id:129,data:"03/03",mes:3,empresa:"NOUVEAU",nroNota:"NF 18304",valor:"3090.27",pago:true},
+  {id:130,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30705",valor:"8554.77",pago:true},
+  {id:131,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532022",valor:"1425.61",pago:true},
+  {id:132,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31665",valor:"1752.77",pago:true},
+  {id:133,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF532822",valor:"1425.61",pago:true},
+  {id:134,data:"04/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32626",valor:"1321.94",pago:true},
+  {id:135,data:"05/03",mes:3,empresa:"matex",nroNota:"",valor:"12847.0",pago:true},
+  {id:136,data:"06/03",mes:3,empresa:"romana",nroNota:"",valor:"1309.0",pago:true},
+  {id:137,data:"06/03",mes:3,empresa:"MARLES",nroNota:"",valor:"4541.0",pago:true},
+  {id:138,data:"05/03",mes:3,empresa:"euro",nroNota:"",valor:"1344.63",pago:true},
+  {id:139,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30263",valor:"1578.86",pago:true},
+  {id:140,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",pago:true},
+  {id:141,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30260",valor:"1790.32",pago:true},
+  {id:142,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",pago:true},
+  {id:143,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",pago:true},
+  {id:144,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31712",valor:"545.19",pago:true},
+  {id:145,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31705",valor:"1363.07",pago:true},
+  {id:146,data:"05/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31711",valor:"1085.16",pago:true},
+  {id:147,data:"06/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",pago:true},
+  {id:148,data:"06/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 534800",valor:"9583.09",pago:true},
+  {id:149,data:"06/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",pago:true},
+  {id:150,data:"06/03",mes:3,empresa:"MARLES",nroNota:"NF 317339",valor:"4541.9",pago:true},
+  {id:151,data:"06/03",mes:3,empresa:"PIX CARLINHOS",nroNota:"",valor:"7594.5",pago:true},
+  {id:152,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 530050",valor:"1892.02",pago:true},
+  {id:153,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 530040",valor:"5832.28",pago:true},
+  {id:154,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.83",pago:true},
+  {id:155,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30705",valor:"8554.77",pago:true},
+  {id:156,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",pago:true},
+  {id:157,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",pago:true},
+  {id:158,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31414",valor:"1820.93",pago:true},
+  {id:159,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",pago:true},
+  {id:160,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532022",valor:"1425.61",pago:true},
+  {id:161,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532402",valor:"1575.0",pago:true},
+  {id:162,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",pago:true},
+  {id:163,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31665",valor:"1752.77",pago:true},
+  {id:164,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF532822",valor:"1425.61",pago:true},
+  {id:165,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 33123",valor:"1565.89",pago:true},
+  {id:166,data:"09/03",mes:3,empresa:"MEDTEXTIL",nroNota:"NF 14978",valor:"1561.51",pago:true},
+  {id:167,data:"09/03",mes:3,empresa:"MEDTEXTIL",nroNota:"NF 192935",valor:"6482.5",pago:true},
+  {id:168,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",pago:true},
+  {id:169,data:"09/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",pago:true},
+  {id:170,data:"09/03",mes:3,empresa:"euro",nroNota:"",valor:"1715.36",pago:true},
+  {id:171,data:"10/03",mes:3,empresa:"euro",nroNota:"",valor:"2708.22",pago:true},
+  {id:172,data:"11/03",mes:3,empresa:"euro",nroNota:"",valor:"1486.5",pago:true},
+  {id:173,data:"12/03",mes:3,empresa:"euro",nroNota:"",valor:"2137.86",pago:true},
+  {id:174,data:"10/03",mes:3,empresa:"DIAGONAL TEXTIL",nroNota:"NF 80262",valor:"2011.7",pago:true},
+  {id:175,data:"10/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531345",valor:"1691.66",pago:true},
+  {id:176,data:"10/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532936",valor:"906.11",pago:true},
+  {id:177,data:"10/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 532901",valor:"1597.52",pago:true},
+  {id:178,data:"10/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32059",valor:"1028.98",pago:true},
+  {id:179,data:"10/03",mes:3,empresa:"HOODORY",nroNota:"NF 5728",valor:"5072.26",pago:true},
+  {id:180,data:"10/03",mes:3,empresa:"euro",nroNota:"",valor:"1344.63",pago:true},
+  {id:181,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32112",valor:"1222.52",pago:true},
+  {id:182,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32138",valor:"7969.46",pago:true},
+  {id:183,data:"11/03",mes:3,empresa:"ACT COMERCIO DE TECIDOS",nroNota:"NF 135355",valor:"2597.71",pago:true},
+  {id:184,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 31130",valor:"1802.56",pago:true},
+  {id:185,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30821",valor:"3078.16",pago:true},
+  {id:186,data:"11/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32155",valor:"1835.44",pago:true},
+  {id:187,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30515",valor:"7375.35",pago:true},
+  {id:188,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531627",valor:"485.7",pago:true},
+  {id:189,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30494",valor:"1202.54",pago:true},
+  {id:190,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32204",valor:"1831.92",pago:true},
+  {id:191,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF536716",valor:"2137.86",pago:true},
+  {id:192,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 531636",valor:"1653.21",pago:true},
+  {id:193,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32205",valor:"1977.93",pago:true},
+  {id:194,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF32201",valor:"1350.01",pago:true},
+  {id:195,data:"12/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 32198",valor:"2075.79",pago:true},
+  {id:196,data:"13/03",mes:3,empresa:"EUROTEXTIL",nroNota:"NF 30531",valor:"2006.38",pago:true},
 ];
 const AUX_INICIAL = {
   "Funcionários": [
@@ -518,7 +518,7 @@ const HISTORICO = {
 
 const fmt=(v)=>{
   if(v===0||v===null||v===undefined)return"—";
-  const abs="R$ "+Math.abs(Number(v)).toLocaleString("pt-BR");
+  const abs="R$ "+Math.abs(Number(v)).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   return v<0?"-"+abs:abs;
 };
 
@@ -835,13 +835,13 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const setAuxData=auxProp!==undefined?setAuxProp:setAuxLocal;
   const categorias=catsProp!==undefined?catsProp:catsLocal;
   const setCategorias=catsProp!==undefined?setCatsProp:setCatsLocal;
-  const [aba,setAba]=useState("receitas");
+  const [aba,setAba]=useState("geral");
   const [novaCategoria,setNovaCategoria]=useState("");
   const [mostraCadastro,setMostraCadastro]=useState(false);
   const [editando,setEditando]=useState(null);
   const [auxAberta,setAuxAberta]=useState(null);
-  const hoje=14;
-  const inputStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px",fontSize:12,outline:"none",background:"#fff",fontFamily:"Georgia,serif"};
+  const hoje=new Date().getDate();
+  const inputStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px",fontSize:13,outline:"none",background:"#fff",fontFamily:"'Courier New',Courier,monospace",fontWeight:600,textAlign:"right"};
   const totRec=Object.values(receitas).reduce((a,d)=>({st:a.st+parseFloat(d.silvaTeles||0),br:a.br+parseFloat(d.bomRetiro||0),mkt:a.mkt+parseFloat(d.marketplaces||0)}),{st:0,br:0,mkt:0});
   const totalGeral=totRec.st+totRec.br+totRec.mkt;
   const recTotais={geral:totalGeral,mkt:totRec.mkt};
@@ -875,13 +875,14 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
       <div style={{display:"flex",gap:0,borderBottom:"1px solid #e8e2da"}}>
         <button onClick={()=>{setAba("receitas");setAuxAberta(null);}} style={{padding:"6px 16px",border:"none",borderBottom:aba==="receitas"?"2px solid #4a7fa5":"2px solid transparent",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontSize:12,color:aba==="receitas"?"#4a7fa5":"#8a9aa4",fontFamily:"Georgia,serif"}}><IconReceitas ativo={aba==="receitas"}/> Receitas</button>
         <button onClick={()=>{setAba("despesas");setAuxAberta(null);}} style={{padding:"6px 16px",border:"none",borderBottom:aba==="despesas"?"2px solid #c0392b":"2px solid transparent",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontSize:12,color:aba==="despesas"?"#c0392b":"#8a9aa4",fontFamily:"Georgia,serif"}}><IconDespesas ativo={aba==="despesas"}/> Despesas</button>
+        <button onClick={()=>{setAba("geral");setAuxAberta(null);}} style={{padding:"6px 16px",border:"none",borderBottom:aba==="geral"?"2px solid #2c3e50":"2px solid transparent",background:"transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontSize:12,color:aba==="geral"?"#2c3e50":"#8a9aa4",fontFamily:"Georgia,serif"}}>📊 Visão Geral</button>
       </div>
       {aba==="receitas"&&(
         <div style={{background:"#fff",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none"}}>
-          <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr",background:"#4a7fa5",borderBottom:"1px solid #3a6f95"}}>
+          <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5",borderBottom:"1px solid #3a6f95"}}>
             <div/>
             {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(
-              <div key={h} style={{padding:"7px 10px",fontSize:11,color:"#fff",letterSpacing:0.5,textTransform:"uppercase",fontWeight:700}}>{h}</div>
+              <div key={h} style={{padding:"7px 10px",fontSize:11,color:"#fff",letterSpacing:0.5,textTransform:"uppercase",fontWeight:700,textAlign:"right"}}>{h}</div>
             ))}
           </div>
           <div style={{minHeight:300,maxHeight:580,overflowY:"auto"}}>
@@ -890,7 +891,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
               const isDom=DOMINGOS_MAR.includes(dia);
               const futuro=dia>hoje;
               return(
-                <div key={dia} style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr",borderBottom:"1px solid #f0ebe4",background:isDom?"#e8e4df":futuro?"#fafafa":"#fff"}}>
+                <div key={dia} style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:"1px solid #f0ebe4",background:isDom?"#e8e4df":futuro?"#fafafa":"#fff"}}>
                   <div style={{padding:"4px 2px",fontSize:10,color:isDom?"#6b5f54":dia===hoje?"#4a7fa5":"#2c3e50",fontWeight:isDom||dia===hoje?700:400,textAlign:"center",lineHeight:"22px"}}>{dia}</div>
                   {["silvaTeles","bomRetiro","marketplaces"].map((canal)=>{
                     const key=dia+"-"+canal;
@@ -899,7 +900,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                         {editando===key?(
                           <input autoFocus defaultValue={d[canal]||""} style={{...inputStyle,width:"90%",padding:"2px 4px",fontSize:11}} onBlur={e=>{salvarCelula(dia,canal,e.target.value);setEditando(null);}} onKeyDown={e=>{if(e.key==="Enter"){salvarCelula(dia,canal,e.target.value);setEditando(null);}}}/>
                         ):(
-                          <div onClick={()=>!futuro&&setEditando(key)} style={{fontSize:12,color:d[canal]?"#4a7fa5":"#d8d0c8",cursor:futuro?"default":"pointer",minWidth:50,fontWeight:d[canal]?600:400}}>
+                          <div onClick={()=>!futuro&&setEditando(key)} style={{fontSize:13,color:d[canal]?"#2c3e50":"#d8d0c8",cursor:futuro?"default":"pointer",minWidth:50,fontWeight:d[canal]?700:400,fontFamily:d[canal]?"'Courier New',Courier,monospace":"Georgia,serif",textAlign:"right",width:"100%"}}>
                             {d[canal]?"R$ "+parseFloat(d[canal]).toLocaleString("pt-BR"):"—"}
                           </div>
                         )}
@@ -910,36 +911,37 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
               );
             })}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
+          <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
             <div style={{padding:"7px",fontSize:10,color:"#a89f94",display:"flex",alignItems:"center",justifyContent:"center"}}>Σ</div>
-            {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:12,fontWeight:700,color:"#4a7fa5"}}>{fmt(t)}</div>)}
+            {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:14,fontWeight:700,color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace",textAlign:"right"}}>{fmt(t)}</div>)}
           </div>
         </div>
       )}
       {aba==="despesas"&&!auxAberta&&(
         <div style={{background:"#fff",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none"}}>
-          <div style={{display:"grid",gridTemplateColumns:"140px 1fr 30px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da"}}>
-            {["Valor","Descrição",""].map((h,i)=><div key={i} style={{padding:"6px 12px",fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>{h}</div>)}
+          <div style={{display:"grid",gridTemplateColumns:"140px 1fr 30px",background:"#4a7fa5",borderBottom:"1px solid #3a6f95"}}>
+            {["Categoria","Valor",""].map((h,i)=><div key={i} style={{padding:"7px 12px",fontSize:11,color:"#fff",fontWeight:700,letterSpacing:0.5,textTransform:"uppercase",textAlign:i===1?"right":"left"}}>{h}</div>)}
           </div>
           <div style={{minHeight:300,maxHeight:580,overflowY:"auto"}}>
             {categorias.map(cat=>{
               const total=calcTotalAux(cat,auxData,recTotais);
               const isAuto=SEM_AUX.includes(cat);
               const regra=cat==="Taxas Cartão"?"1% receita total":cat==="Taxas Marketplaces"?"29% marketplaces":null;
+              const isDestaque=cat==="Tecidos"||cat==="Oficinas Costura";
               return(
-                <div key={cat} style={{display:"grid",gridTemplateColumns:"140px 1fr 30px",borderBottom:"1px solid #f0ebe4"}}>
+                <div key={cat} style={{display:"grid",gridTemplateColumns:"140px 1fr 30px",borderBottom:"1px solid #f0ebe4",background:isDestaque?"#f7f9ff":"#fff"}}>
                   <div style={{padding:"7px 12px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                    <div style={{fontSize:12,fontWeight:(cat==="Tecidos"||cat==="Oficinas Costura")?600:400,color:"#2c3e50"}}>{cat}</div>
+                    <div style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:400,color:"#2c3e50"}}>{cat}</div>
                     {regra&&<div style={{fontSize:9,color:"#a89f94"}}>{regra}</div>}
                   </div>
-                  <div style={{padding:"7px 12px",fontSize:12,color:"#2c3e50",display:"flex",alignItems:"center"}}>{fmt(total)}</div>
+                  <div style={{padding:"7px 12px",fontSize:isDestaque?14:13,color:"#2c3e50",display:"flex",alignItems:"center",fontFamily:"'Courier New',Courier,monospace",fontWeight:isDestaque?700:600,justifyContent:"flex-end"}}>{fmt(total)}</div>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>{!isAuto&&<button onClick={()=>setAuxAberta(cat)} style={{background:"none",border:"none",cursor:"pointer",color:"#4a7fa5",fontSize:14,padding:"2px 6px"}}>›</button>}</div>
                 </div>
               );
             })}
           </div>
           <div style={{padding:"12px 16px",background:"#f7f4f0",borderTop:"2px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>Total: <span style={{color:"#c0392b"}}>{fmt(totalDesp)}</span></div>
+            <div style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>Total: <span style={{color:"#c0392b",fontFamily:"'Courier New',Courier,monospace",fontSize:14}}>{fmt(totalDesp)}</span></div>
             <button onClick={()=>setMostraCadastro(p=>!p)} style={{fontSize:11,color:"#4a7fa5",background:"none",border:"none",cursor:"pointer",fontFamily:"Georgia,serif"}}>{mostraCadastro?"✕ Fechar":"+ Gerenciar Categorias"}</button>
           </div>
           {mostraCadastro&&(
@@ -1001,6 +1003,79 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
           ):(
             <AuxSimplesPanel auxAberta={auxAberta} auxData={auxData} updateLinhaAux={updateLinhaAux} removeLinhaAux={removeLinhaAux} addLinhaAux={addLinhaAux} prestadores={prestadores} setPrestadores={setPrestadores}/>
           )}
+        </div>
+      )}
+      {aba==="geral"&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:16,alignItems:"flex-start",background:"#f7f4f0",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",padding:"12px 16px"}}>
+          {/* RECEITAS — lado esquerdo */}
+          <div style={{flex:"1 1 320px",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+            <div style={{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5"}}>
+              <div/>
+              {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(
+                <div key={h} style={{padding:"7px 10px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",textAlign:"right",letterSpacing:0.3}}>{h}</div>
+              ))}
+            </div>
+            <div style={{maxHeight:560,overflowY:"auto"}}>
+              {Array.from({length:31},(_,i)=>i+1).map(dia=>{
+                const d=receitas[dia]||{};
+                const isDom=DOMINGOS_MAR.includes(dia);
+                const futuro=dia>hoje;
+                return(
+                  <div key={dia} style={{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:"1px solid #f0ebe4",background:isDom?"#e8e4df":futuro?"#fafafa":"#fff"}}>
+                    <div style={{padding:"4px 4px",fontSize:11,color:isDom?"#6b5f54":dia===hoje?"#4a7fa5":"#6b7c8a",fontWeight:isDom||dia===hoje?700:400,textAlign:"center",lineHeight:"22px"}}>{dia}</div>
+                    {["silvaTeles","bomRetiro","marketplaces"].map((canal)=>{
+                      const key="g"+dia+"-"+canal;
+                      return(
+                        <div key={canal} style={{padding:"3px 8px",display:"flex",alignItems:"center"}}>
+                          {editando===key?(
+                            <input autoFocus defaultValue={d[canal]||""} style={{width:"100%",border:"1px solid #4a7fa5",borderRadius:3,padding:"2px 4px",fontSize:12,outline:"none",fontFamily:"'Courier New',Courier,monospace",fontWeight:600,textAlign:"right"}} onBlur={e=>{salvarCelula(dia,canal,e.target.value);setEditando(null);}} onKeyDown={e=>{if(e.key==="Enter"){salvarCelula(dia,canal,e.target.value);setEditando(null);}}}/>
+                          ):(
+                            <div onClick={()=>!futuro&&setEditando(key)} style={{fontSize:12,color:d[canal]?"#2c3e50":"#e0dbd5",cursor:futuro?"default":"pointer",fontWeight:d[canal]?700:400,fontFamily:d[canal]?"'Courier New',Courier,monospace":"Georgia,serif",textAlign:"right",width:"100%"}}>
+                              {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR"):"—"}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#eaf3fb",borderTop:"2px solid #4a7fa5"}}>
+              <div style={{padding:"7px",fontSize:11,color:"#4a7fa5",textAlign:"center",fontWeight:700}}>Σ</div>
+              {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace",textAlign:"right"}}>{t>0?t.toLocaleString("pt-BR"):"—"}</div>)}
+            </div>
+          </div>
+          {/* DESPESAS — lado direito */}
+          <div style={{flex:"1 1 260px",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto",background:"#4a7fa5"}}>
+              <div style={{padding:"7px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3}}>Categoria</div>
+              <div style={{padding:"7px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",textAlign:"right",letterSpacing:0.3}}>Valor</div>
+            </div>
+            <div style={{maxHeight:560,overflowY:"auto"}}>
+              {categorias.map(cat=>{
+                const total=calcTotalAux(cat,auxData,recTotais);
+                const isDestaque=cat==="Tecidos"||cat==="Oficinas Costura";
+                const isAuto=SEM_AUX.includes(cat);
+                return(
+                  <div key={cat} style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f0ebe4",padding:"6px 12px",background:isDestaque?"#f7f9ff":"#fff",cursor:isAuto?"default":"pointer"}}
+                    onClick={()=>{if(!isAuto){setAba("despesas");setAuxAberta(cat);}}}>
+                    <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:400,color:"#2c3e50",flex:1}}>{cat}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:600,color:total>0?"#2c3e50":"#d0c8c0",fontFamily:"'Courier New',Courier,monospace",textAlign:"right",whiteSpace:"nowrap"}}>
+                        {total>0?total.toLocaleString("pt-BR"):"—"}
+                      </span>
+                      {!isAuto&&<span style={{color:"#c8d0d8",fontSize:13}}>›</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{padding:"8px 12px",background:"#fdeaea",borderTop:"2px solid #c0392b",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:11,color:"#c0392b",fontWeight:700,letterSpacing:0.5,textTransform:"uppercase"}}>Total Despesa</span>
+              <span style={{fontSize:14,fontWeight:700,color:"#c0392b",fontFamily:"'Courier New',Courier,monospace"}}>{fmt(totalDesp)}</span>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1120,7 +1195,7 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
                     <td style={{padding:"7px 12px",fontSize:12,color:"#2c3e50",textDecoration:b.pago?"line-through":"none"}}>{b.empresa}</td>
                     <td style={{padding:"7px 12px",fontSize:11,color:"#8a9aa4"}}>{b.nroNota||"—"}</td>
                     {filtro==="aberto"&&<td style={{padding:"7px 12px",fontSize:11,color:"#8a9aa4"}}>{MESES[b.mes-1]}</td>}
-                    <td style={{padding:"7px 12px",fontSize:12,fontWeight:600,textAlign:"right",color:venc?"#c0392b":"#2c3e50"}}>R$ {parseFloat(b.valor).toLocaleString("pt-BR")}</td>
+                    <td style={{padding:"7px 12px",fontSize:13,fontWeight:700,textAlign:"right",color:venc?"#c0392b":"#2c3e50",fontFamily:"'Courier New',Courier,monospace"}}>R$ {parseFloat(b.valor).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
                     <td style={{padding:"7px 12px",textAlign:"center"}}><div onClick={()=>togglePago(b.id)} style={{width:18,height:18,borderRadius:4,background:b.pago?"#27ae60":"#fff",border:b.pago?"none":"2px solid #e8e2da",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto"}}>{b.pago&&<span style={{color:"#fff",fontSize:11,fontWeight:700,lineHeight:1}}>✓</span>}</div></td>
                     <td style={{padding:"7px 6px",textAlign:"center"}}><span onClick={()=>remover(b.id)} style={{color:"#d0c8c0",cursor:"pointer",fontSize:15,lineHeight:1}}>×</span></td>
                   </tr>
@@ -1488,7 +1563,7 @@ const RelatorioContent=(props)=>{
   const margem=totalVendas>0?((resultado/totalVendas)*100).toFixed(1):0;
   const MesFiltro=()=>(<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:16}}><span style={{fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Mês:</span>{MESES.map((m,i)=><button key={i} onClick={()=>setMesSel(i+1)} style={{padding:"4px 10px",border:"1px solid "+(mesSel===i+1?"#2c3e50":"#e8e2da"),borderRadius:6,background:mesSel===i+1?"#2c3e50":"#fff",color:mesSel===i+1?"#fff":"#6b7c8a",cursor:"pointer",fontSize:11,fontFamily:"Georgia,serif"}}>{m}</button>)}</div>);
   const BackBtn=()=>(<button onClick={()=>setTipo(null)} style={{background:"none",border:"1px solid #a3bacc",borderRadius:6,padding:"5px 14px",fontSize:12,color:"#4a7fa5",cursor:"pointer",fontFamily:"Georgia,serif"}}>← Relatórios</button>);
-  if(!tipo)return(<div><div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Selecione um relatório</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>{TIPOS_REL.map(t=>(<div key={t.id} onClick={()=>t.id==="copiar"?copiarDados():setTipo(t.id)} style={{background:t.id==="copiar"?"#eaf7ee":"#fff",borderRadius:12,padding:20,border:t.id==="copiar"?"1px solid #b8dfc8":"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:16,alignItems:"center"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.08)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}><span style={{fontSize:32}}>{t.icon}</span><div><div style={{fontSize:16,fontWeight:600,color:t.id==="copiar"?(copiado?"#27ae60":"#2c3e50"):"#2c3e50",marginBottom:4}}>{t.id==="copiar"&&copiado?"✓ Copiado! Cole no Claude":t.label}</div><div style={{fontSize:12,color:"#a89f94"}}>{t.desc}</div></div></div>))}</div></div>);
+  if(!tipo)return(<div><div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Selecione um relatório</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>{TIPOS_REL.map(t=>(<div key={t.id} onClick={()=>t.id==="copiar"?copiarDados():setTipo(t.id)} style={{background:t.id==="copiar"?"#eaf7ee":"#fff",borderRadius:12,padding:20,border:t.id==="copiar"?"1px solid #b8dfc8":"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:14,alignItems:"flex-start"}} onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.08)"} onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}><span style={{fontSize:28,flexShrink:0,marginTop:2}}>{t.icon}</span><div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:600,color:t.id==="copiar"?(copiado?"#27ae60":"#2c3e50"):"#2c3e50",marginBottom:4,lineHeight:1.3}}>{t.id==="copiar"&&copiado?"✓ Copiado! Cole no Claude":t.label}</div><div style={{fontSize:11,color:"#a89f94",lineHeight:1.4}}>{t.desc}</div></div></div>))}</div></div>);
   if(tipo==="vendas")return(<div><div style={{display:"flex",gap:16,alignItems:"center",marginBottom:24}}><BackBtn/><div style={{fontSize:20,fontWeight:600,color:"#2c3e50"}}>Vendas</div></div><MesFiltro/><div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da"}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:16}}>{[{label:"Total Geral",value:totalVendas,color:"#2c3e50",pct:null},{label:"Silva Teles",value:totalST,color:"#4a7fa5",pct:totalVendas>0?((totalST/totalVendas)*100).toFixed(1):0},{label:"Bom Retiro",value:totalBR,color:"#27ae60",pct:totalVendas>0?((totalBR/totalVendas)*100).toFixed(1):0},{label:"Marketplaces",value:totalMKT,color:"#e67e22",pct:totalVendas>0?((totalMKT/totalVendas)*100).toFixed(1):0}].map(c=>(<div key={c.label} style={{background:"#fff",borderRadius:12,padding:18,border:"1px solid #e8e2da"}}><div style={{fontSize:10,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>{c.label}</div><div style={{fontSize:20,fontWeight:700,color:c.color}}>{fmt(c.value)}</div>{c.pct!==null&&<div style={{fontSize:11,color:"#a89f94",marginTop:4}}>{c.pct}% do total</div>}</div>))}</div></div></div>);
   if(tipo==="despesas")return(<div><div style={{display:"flex",gap:16,alignItems:"center",marginBottom:24}}><BackBtn/><div style={{fontSize:20,fontWeight:600,color:"#2c3e50"}}>Despesas</div></div><MesFiltro/><div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{background:"#f7f4f0",borderBottom:"2px solid #e8e2da"}}>{["Categoria","Valor","% Total"].map(h=><th key={h} style={{padding:"10px 16px",textAlign:h==="Categoria"?"left":"right",color:"#a89f94",fontWeight:600,fontSize:11}}>{h}</th>)}</tr></thead><tbody>{CATS.map(cat=>{const v=calcDesp(cat);if(v===0)return null;const pct=totalDesp>0?((v/totalDesp)*100).toFixed(1):0;return(<tr key={cat} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"11px 16px",color:"#2c3e50"}}>{cat}</td><td style={{padding:"11px 16px",textAlign:"right",color:"#2c3e50",fontWeight:500}}>{fmt(v)}</td><td style={{padding:"11px 16px",textAlign:"right",color:"#a89f94"}}>{pct}%</td></tr>);})}</tbody><tfoot><tr style={{background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}><td style={{padding:"12px 16px",fontWeight:700,color:"#2c3e50"}}>Total</td><td style={{padding:"12px 16px",textAlign:"right",fontWeight:700,color:"#c0392b"}}>{fmt(totalDesp)}</td><td style={{padding:"12px 16px",textAlign:"right",color:"#a89f94"}}>100%</td></tr></tfoot></table></div></div>);
   if(tipo==="resultado")return(<div><div style={{display:"flex",gap:16,alignItems:"center",marginBottom:24}}><BackBtn/><div style={{fontSize:20,fontWeight:600,color:"#2c3e50"}}>Resultado</div></div><MesFiltro/><div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da"}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>{[{label:"Receita Total",value:totalVendas,color:"#4a7fa5"},{label:"Despesa Total",value:totalDesp,color:"#c0392b"},{label:"Saldo",value:resultado,color:resultado>=0?"#27ae60":"#c0392b"},{label:"Margem",value:margem+"%",color:"#2c3e50",raw:true}].map(c=>(<div key={c.label} style={{background:"#fff",borderRadius:12,padding:22,border:"1px solid #e8e2da"}}><div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{c.label}</div><div style={{fontSize:26,fontWeight:700,color:c.color}}>{c.raw?c.value:fmt(c.value)}</div></div>))}</div></div></div>);
@@ -1628,6 +1703,9 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [aba,setAba]=useState("cortes");
   const [cadAba,setCadAba]=useState("produtos");
   const [filtroOf,setFiltroOf]=useState("todas");
+  const [filtroMarca,setFiltroMarca]=useState("todas");
+  const [filtroStatus,setFiltroStatus]=useState("todos");
+  const [filtroPago,setFiltroPago]=useState("todos");
   const [mostraForm,setMostraForm]=useState(false);
   const [editId,setEditId]=useState(null);
   const [form,setForm]=useState({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});
@@ -1658,7 +1736,17 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     if(sa!==sb)return sa-sb;
     return new Date(a.data)-new Date(b.data);
   });
-  const cortesFiltrados=filtroOf==="todas"?cortesOrdenados:cortesOrdenados.filter(c=>c.oficina===filtroOf);
+  const cortesFiltrados=cortesOrdenados.filter(c=>{
+    if(filtroOf!=="todas"&&c.oficina!==filtroOf)return false;
+    if(filtroMarca!=="todas"&&c.marca!==filtroMarca)return false;
+    if(filtroPago==="pago"&&!c.pago)return false;
+    if(filtroPago==="naopago"&&c.pago)return false;
+    if(filtroStatus!=="todos"){
+      const st=getStatusCorte(c);
+      if(filtroStatus!==st)return false;
+    }
+    return true;
+  });
 
   // buscar produto por ref
   const buscarProd=(ref)=>produtos.find(p=>p.ref===String(ref).trim());
@@ -1697,7 +1785,8 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     setCortes(prev=>prev.map(c=>{
       if(c.id!==id)return c;
       const ne=!c.entregue;
-      return{...c,entregue:ne,qtdEntregue:ne?c.qtd:c.qtd,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null};
+      // Se desfazer entrega, desfaz pago também
+      return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,dataPagamento:ne?c.dataPagamento:null};
     }));
   };
 
@@ -1816,15 +1905,32 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
       {/* ── ABA CORTES ── */}
       {aba==="cortes"&&(
         <div>
-          {/* Barra única: filtro + ações */}
-          <div style={{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}>
-            <select value={filtroOf} onChange={e=>setFiltroOf(e.target.value)} style={{...iStyle,minWidth:130,flex:1}}>
+          {/* Barra única: filtros + ações */}
+          <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
+            <select value={filtroOf} onChange={e=>setFiltroOf(e.target.value)} style={{...iStyle,flex:2,minWidth:110}}>
               <option value="todas">Todas as oficinas</option>
               {oficinasCAD.map(o=><option key={o.codigo} value={o.descricao}>{o.descricao}</option>)}
             </select>
+            <select value={filtroMarca} onChange={e=>setFiltroMarca(e.target.value)} style={{...iStyle,flex:1,minWidth:80}}>
+              <option value="todas">Marca</option>
+              <option value="Amícia">Amícia</option>
+              <option value="Meluni">Meluni</option>
+            </select>
+            <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} style={{...iStyle,flex:1,minWidth:90}}>
+              <option value="todos">Status</option>
+              <option value="amarelo">🟡 Na oficina</option>
+              <option value="vermelho">🔴 Atrasado</option>
+              <option value="azul">🔵 Entregue</option>
+              <option value="verde">🟢 Pago</option>
+            </select>
+            <select value={filtroPago} onChange={e=>setFiltroPago(e.target.value)} style={{...iStyle,flex:1,minWidth:80}}>
+              <option value="todos">Pagto</option>
+              <option value="pago">✓ Pago</option>
+              <option value="naopago">⏳ Não pago</option>
+            </select>
             <button onClick={exportarAberto} style={{background:"#fff",border:"1px solid #4a7fa5",color:"#4a7fa5",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>📥 Exportar</button>
             <button onClick={()=>{setMostraForm(p=>!p);setEditId(null);setForm({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});setRefBusca("");}} style={{background:mostraForm?"#2c3e50":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>
-              {mostraForm?"✕":"+ Novo corte"}
+              {mostraForm?"✕":"+ Novo"}
             </button>
           </div>
 
@@ -1886,18 +1992,19 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
 
           {/* Lista de cortes */}
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"6px 80px 60px 1fr 80px 60px 70px 90px 110px 52px 52px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95"}}>
-              {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","Pago",""].map((h,i)=>(
-                <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textAlign:i>=5&&i<=7?"right":"left"}}>{h}</div>
+            <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px 1fr 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95"}}>
+              {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","Pago","Qtd.Entr","Faltante",""].map((h,i)=>(
+                <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textAlign:i>=5&&i<=7||i>=11?"right":"left"}}>{h}</div>
               ))}
             </div>
             <div style={{overflowY:"auto",maxHeight:520}}>
               {cortesFiltrados.length===0&&<div style={{padding:32,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum corte lançado</div>}
               {cortesFiltrados.map(c=>{
                 const st=getStatusCorte(c);
-                const dias=getDias(c);
+                const qtdEntr=c.qtdEntregue!=null?c.qtdEntregue:(c.entregue?c.qtd:null);
+                const faltante=c.entregue&&qtdEntr!=null?c.qtd-qtdEntr:null;
                 return(
-                  <div key={c.id} style={{display:"grid",gridTemplateColumns:"6px 80px 60px 1fr 80px 60px 70px 90px 110px 52px 52px 30px",borderBottom:"1px solid #f0ebe4",background:STATUS_BG[st],alignItems:"center"}}>
+                  <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 80px 60px 1fr 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",borderBottom:"1px solid #f0ebe4",background:STATUS_BG[st],alignItems:"center"}}>
                     <div style={{height:"100%",background:STATUS_COR[st],minHeight:36}}/>
                     <div style={{padding:"5px 8px",fontSize:11,fontWeight:600,color:"#2c3e50"}}>{c.nCorte}</div>
                     <div style={{padding:"5px 8px",fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.ref}</div>
@@ -1906,22 +2013,50 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                       <span style={{fontSize:9,color:"#fff",background:c.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 5px"}}>{c.marca}</span>
                     </div>
                     <div style={{padding:"5px 8px",fontSize:11,color:"#2c3e50"}}>{c.oficina}</div>
-                    <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",color:"#2c3e50"}}>{c.qtd}</div>
-                    <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",color:"#2c3e50"}}>{fmt(c.valorUnit)}</div>
-                    <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",fontWeight:600,color:"#2c3e50"}}>{fmt(c.valorTotal)}</div>
+                    <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace",fontWeight:600}}>{c.qtd}</div>
+                    <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace",fontWeight:600}}>{fmt(c.valorUnit)}</div>
+                    <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",fontWeight:700,color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace"}}>{fmt(c.valorTotal)}</div>
                     <div style={{padding:"5px 8px",fontSize:11,color:"#6b7c8a"}}>{new Date(c.data).toLocaleDateString("pt-BR")}</div>
+                    {/* Entregue */}
                     <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
                       <div onClick={()=>!c.pago&&toggleEntregue(c.id)}
+                        title={c.entregue&&!c.pago?"Clique para desfazer entrega":""}
                         style={{width:18,height:18,borderRadius:4,background:c.entregue||c.pago?"#4a7fa5":"#fff",border:c.entregue||c.pago?"none":"2px solid #c8d8e4",cursor:c.pago?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         {(c.entregue||c.pago)&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}
                       </div>
                     </div>
+                    {/* Pago */}
                     <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
-                      <div onClick={()=>c.entregue&&!c.pago&&togglePago(c.id)}
-                        style={{width:18,height:18,borderRadius:4,background:c.pago?"#27ae60":"#fff",border:c.pago?"none":c.entregue?"2px solid #27ae60":"2px solid #e0e0e0",cursor:c.entregue&&!c.pago?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <div onClick={()=>c.entregue&&togglePago(c.id)}
+                        title={c.pago?"Clique para desfazer pagamento":""}
+                        style={{width:18,height:18,borderRadius:4,background:c.pago?"#27ae60":"#fff",border:c.pago?"none":c.entregue?"2px solid #27ae60":"2px solid #e0e0e0",cursor:c.entregue?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center"}}>
                         {c.pago&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}
                       </div>
                     </div>
+                    {/* Qtd Entregue — editável quando entregue=true */}
+                    <div style={{padding:"3px 6px"}}>
+                      {c.entregue?(
+                        <input
+                          type="number" min="0" max={c.qtd}
+                          value={qtdEntr??""} 
+                          onChange={e=>editarQtdEntregue(c.id,e.target.value)}
+                          style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"3px 5px",fontSize:12,textAlign:"right",fontFamily:"'Courier New',Courier,monospace",fontWeight:700,outline:"none",background:faltante>0?"#fff8e8":"#fff",color:faltante>0?"#b7791f":"#2c3e50"}}
+                        />
+                      ):(
+                        <div style={{textAlign:"right",fontSize:12,color:"#d0c8c0",fontFamily:"'Courier New',Courier,monospace"}}>—</div>
+                      )}
+                    </div>
+                    {/* Faltante — calculado */}
+                    <div style={{padding:"5px 8px",textAlign:"right"}}>
+                      {faltante!=null?(
+                        <span style={{fontSize:12,fontWeight:700,fontFamily:"'Courier New',Courier,monospace",color:faltante>0?"#c0392b":faltante===0?"#27ae60":"#6b7c8a"}}>
+                          {faltante>0?`-${faltante}`:faltante===0?"✓":faltante}
+                        </span>
+                      ):(
+                        <span style={{fontSize:12,color:"#d0c8c0"}}>—</span>
+                      )}
+                    </div>
+                    {/* Ações */}
                     <div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"center",padding:"2px 4px"}}>
                       {!c.pago&&<span onClick={()=>iniciarEdicao(c)} style={{cursor:"pointer",fontSize:12,color:"#4a7fa5"}}>✏</span>}
                       <span onClick={()=>deletarCorte(c.id)} style={{cursor:"pointer",fontSize:13,color:"#d0c8c0"}}>×</span>
@@ -2417,12 +2552,110 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
   );
 };
 
-const ConfiguracoesContent=({codigoFonte=""})=>{
+const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,isAdmin=false})=>{
   const [bling,setBling]=useState({exitus:"",lumia:"",muniam:""});
   const [mire,setMire]=useState({token:"",idSilvaTeles:"",idBomRetiro:""});
   const [statusBling,setStatusBling]=useState({});
   const [statusMire,setStatusMire]=useState(null);
   const [saved,setSaved]=useState(false);
+  const [backupMsg,setBackupMsg]=useState("");
+  const [confirmRestore,setConfirmRestore]=useState(false);
+  const [pastaHandle,setPastaHandle]=useState(null);
+  const [pastaNome,setPastaNome]=useState(localStorage.getItem("amica_backup_folder_name")||"");
+  const [ultimoBackup,setUltimoBackup]=useState(localStorage.getItem("amica_ultimo_backup")||"");
+
+  // Auto-backup: verifica ao montar se faz 7+ dias
+  React.useEffect(()=>{
+    if(!isAdmin||!dadosBackup)return;
+    if(!ultimoBackup)return;
+    const dias=Math.floor((Date.now()-new Date(ultimoBackup))/86400000);
+    if(dias>=7)fazerBackupAuto();
+  },[]);
+
+  const gerarJson=()=>JSON.stringify({versao:"1.0",data:new Date().toISOString(),...dadosBackup},null,2);
+  const nomeArquivo=()=>`Amica_Backup_${new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")}.json`;
+
+  const fazerBackupAuto=async()=>{
+    if(!dadosBackup)return;
+    const json=gerarJson();
+    // Tenta salvar na pasta definida se disponível
+    if(pastaHandle){
+      try{
+        const fh=await pastaHandle.getFileHandle(nomeArquivo(),{create:true});
+        const w=await fh.createWritable();
+        await w.write(json);await w.close();
+        const agora=new Date().toISOString();
+        setUltimoBackup(agora);localStorage.setItem("amica_ultimo_backup",agora);
+        setBackupMsg("✓ Backup automático salvo em: "+pastaNome);
+        setTimeout(()=>setBackupMsg(""),5000);
+        return;
+      }catch{}
+    }
+    // Fallback: download normal
+    const blob=new Blob([json],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=nomeArquivo();a.click();
+    URL.revokeObjectURL(url);
+    const agora=new Date().toISOString();
+    setUltimoBackup(agora);localStorage.setItem("amica_ultimo_backup",agora);
+    setBackupMsg("✓ Backup automático realizado (Downloads)");
+    setTimeout(()=>setBackupMsg(""),5000);
+  };
+
+  const escolherPasta=async()=>{
+    try{
+      const handle=await window.showDirectoryPicker({mode:"readwrite"});
+      setPastaHandle(handle);
+      setPastaNome(handle.name);
+      localStorage.setItem("amica_backup_folder_name",handle.name);
+      setBackupMsg("✓ Pasta definida: "+handle.name);
+      setTimeout(()=>setBackupMsg(""),3000);
+    }catch{setBackupMsg("");}
+  };
+
+  const fazerBackup=async()=>{
+    if(!dadosBackup){setBackupMsg("Sem dados para backup.");return;}
+    const json=gerarJson();
+    if(pastaHandle){
+      try{
+        const fh=await pastaHandle.getFileHandle(nomeArquivo(),{create:true});
+        const w=await fh.createWritable();
+        await w.write(json);await w.close();
+        const agora=new Date().toISOString();
+        setUltimoBackup(agora);localStorage.setItem("amica_ultimo_backup",agora);
+        setBackupMsg("✓ Salvo em: "+pastaNome+" / "+nomeArquivo());
+        setTimeout(()=>setBackupMsg(""),4000);return;
+      }catch{setBackupMsg("Erro ao salvar na pasta. Fazendo download...");}
+    }
+    // Download normal
+    const blob=new Blob([json],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download=nomeArquivo();a.click();
+    URL.revokeObjectURL(url);
+    const agora=new Date().toISOString();
+    setUltimoBackup(agora);localStorage.setItem("amica_ultimo_backup",agora);
+    setBackupMsg("✓ Backup salvo em Downloads!");
+    setTimeout(()=>setBackupMsg(""),3000);
+  };
+
+  const restaurarBackup=(e)=>{
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const dados=JSON.parse(ev.target.result);
+        if(onRestaurar)onRestaurar(dados);
+        setBackupMsg("✓ Backup restaurado com sucesso!");
+        setConfirmRestore(false);setTimeout(()=>setBackupMsg(""),3000);
+      }catch{
+        setBackupMsg("✗ Arquivo inválido. Use um backup gerado por este app.");
+        setTimeout(()=>setBackupMsg(""),4000);
+      }
+    };
+    reader.readAsText(file);e.target.value="";
+  };
+
+  const diasDesdeBackup=ultimoBackup?Math.floor((Date.now()-new Date(ultimoBackup))/86400000):null;
   const [correcao,setCorrecao]=useState({ativo:true,valor:"10000"});
   const [regras,setRegras]=useState({devolucao:"10"});
   const [verCodigo,setVerCodigo]=useState(false);
@@ -2487,6 +2720,61 @@ const ConfiguracoesContent=({codigoFonte=""})=>{
         {saved&&<span style={{fontSize:12,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ Configurações salvas</span>}
         <button onClick={salvar} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"10px 28px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Salvar configurações</button>
       </div>
+
+      {/* Backup e Restauração — só admin */}
+      {isAdmin&&(
+      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}>
+        <div style={{padding:"14px 20px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>💾 Backup e Restauração</div>
+            <div style={{fontSize:12,color:"#a89f94",marginTop:3}}>Salva todos os dados e configurações do app</div>
+          </div>
+          {diasDesdeBackup!==null&&(
+            <div style={{fontSize:11,color:diasDesdeBackup>=7?"#c0392b":"#27ae60",fontWeight:600,textAlign:"right"}}>
+              {diasDesdeBackup===0?"Backup hoje":diasDesdeBackup===1?"Último backup: ontem":`Último backup: há ${diasDesdeBackup} dias`}
+              {diasDesdeBackup>=7&&" ⚠️"}
+            </div>
+          )}
+        </div>
+        <div style={{padding:20}}>
+          {/* Pasta definida */}
+          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14,padding:"10px 14px",background:"#f7f4f0",borderRadius:8,border:"1px solid #e8e2da"}}>
+            <span style={{fontSize:18}}>📁</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,color:"#a89f94",marginBottom:2}}>Pasta de backup</div>
+              <div style={{fontSize:13,fontWeight:pastaNome?600:400,color:pastaNome?"#2c3e50":"#a89f94"}}>{pastaNome||"Nenhuma pasta definida — usará Downloads"}</div>
+            </div>
+            <button onClick={escolherPasta} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>
+              {pastaNome?"Alterar pasta":"Escolher pasta"}
+            </button>
+          </div>
+          {/* Botões */}
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginBottom:12}}>
+            <button onClick={fazerBackup} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"10px 20px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+              📥 Fazer Backup Agora
+            </button>
+            <div>
+              <input type="file" accept=".json" id="restore-input" style={{display:"none"}} onChange={restaurarBackup}/>
+              {!confirmRestore
+                ?<button onClick={()=>setConfirmRestore(true)} style={{background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,padding:"10px 20px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+                  📤 Restaurar Backup
+                </button>
+                :<div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{fontSize:12,color:"#c0392b"}}>⚠ Isso substituirá todos os dados atuais.</span>
+                  <label htmlFor="restore-input" style={{background:"#c0392b",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Confirmar e escolher arquivo</label>
+                  <button onClick={()=>setConfirmRestore(false)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",color:"#6b7c8a",fontFamily:"Georgia,serif"}}>Cancelar</button>
+                </div>
+              }
+            </div>
+          </div>
+          {backupMsg&&<div style={{fontSize:12,padding:"8px 12px",borderRadius:6,background:backupMsg.startsWith("✓")?"#eafbf0":"#fdeaea",color:backupMsg.startsWith("✓")?"#27ae60":"#c0392b",marginBottom:10}}>{backupMsg}</div>}
+          <div style={{fontSize:11,color:"#a89f94",lineHeight:1.6}}>
+            🔄 Backup automático semanal — ao abrir o app após 7 dias sem backup, salva automaticamente<br/>
+            📦 Inclui: lançamentos · receitas · despesas · boletos · cortes · usuários · configurações
+          </div>
+        </div>
+      </div>
+      )}
 
       {/* Código fonte */}
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginTop:16}}>
@@ -2664,7 +2952,7 @@ export default function App(){
           )}
         </div>
       </div>
-      <div style={{flex:1,background:"#f7f4f0",padding:"16px 20px",overflowY:"auto"}}>
+      <div style={{flex:1,background:"#f7f4f0",padding:active==="oficinas"||active==="lancamentos"?"12px 12px":"16px 20px",overflowY:"auto"}}>
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
         {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxMes}/>}
@@ -2673,7 +2961,23 @@ export default function App(){
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxMes} mesAtual={MES_ATUAL}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
-        {active==="configuracoes"&&<ConfiguracoesContent codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||"Código disponível — use o botão Selecionar tudo"}/>}
+        {active==="configuracoes"&&<ConfiguracoesContent
+          codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
+          isAdmin={usuarioLogado?.admin===true}
+          dadosBackup={{receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores}}
+          onRestaurar={(dados)=>{
+            if(dados.receitasPorMes)setReceitasPorMes(dados.receitasPorMes);
+            if(dados.auxDataPorMes)setAuxDataPorMes(dados.auxDataPorMes);
+            if(dados.categoriasPorMes)setCategoriasPorMes(dados.categoriasPorMes);
+            if(dados.boletosShared)setBoletosShared(dados.boletosShared);
+            if(dados.cortes)setCortes(dados.cortes);
+            if(dados.produtos)setProdutos(dados.produtos);
+            if(dados.oficinasCAD)setOficinasCAD(dados.oficinasCAD);
+            if(dados.logTroca)setLogTroca(dados.logTroca);
+            if(dados.usuarios)setUsuarios(dados.usuarios);
+            if(dados.prestadores)setPrestadores(dados.prestadores);
+          }}
+        />}
       </div>
     </div>
   );
