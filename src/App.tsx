@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const modules = [
@@ -2587,7 +2587,7 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
   const [ultimoBackup,setUltimoBackup]=useState(localStorage.getItem("amica_ultimo_backup")||"");
 
   // Auto-backup: verifica ao montar se faz 7+ dias
-  React.useEffect(()=>{
+  useEffect(()=>{
     if(!isAdmin||!dadosBackup)return;
     if(!ultimoBackup)return;
     const dias=Math.floor((Date.now()-new Date(ultimoBackup))/86400000);
@@ -2935,7 +2935,7 @@ export default function App(){
   const [blingStatus,setBlingStatus]=useState(null); // null | "importando" | {ok, msg}
 
   // ── Auto-importação Bling ao abrir o app ────────────────────────────────
-  React.useEffect(()=>{
+  useEffect(()=>{
     const hoje=new Date().toISOString().slice(0,10);
     const ultimaImport=localStorage.getItem("amica_bling_ultima");
     if(ultimaImport===hoje)return; // já importou hoje
