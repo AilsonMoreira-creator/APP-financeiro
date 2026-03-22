@@ -1006,7 +1006,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
         </div>
       )}
       {aba==="geral"&&(
-        <div style={{display:"flex",flexWrap:"wrap",gap:16,alignItems:"flex-start",background:"#f7f4f0",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",padding:"12px 16px"}}>
+        <div style={{display:"flex",flexWrap:"wrap",gap:28,alignItems:"flex-start",background:"#f7f4f0",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",padding:"12px 16px"}}>
           {/* RECEITAS — lado esquerdo */}
           <div style={{flex:"1 1 320px",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
             <div style={{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5"}}>
@@ -1015,7 +1015,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                 <div key={h} style={{padding:"7px 10px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",textAlign:"right",letterSpacing:0.3}}>{h}</div>
               ))}
             </div>
-            <div style={{maxHeight:560,overflowY:"auto"}}>
+            <div style={{maxHeight:660,overflowY:"auto"}}>
               {Array.from({length:31},(_,i)=>i+1).map(dia=>{
                 const d=receitas[dia]||{};
                 const isDom=DOMINGOS_MAR.includes(dia);
@@ -1043,27 +1043,27 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
             </div>
             <div style={{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#eaf3fb",borderTop:"2px solid #4a7fa5"}}>
               <div style={{padding:"7px",fontSize:11,color:"#4a7fa5",textAlign:"center",fontWeight:700}}>Σ</div>
-              {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace",textAlign:"right"}}>{t>0?t.toLocaleString("pt-BR"):"—"}</div>)}
+              {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace",textAlign:"right"}}>{t>0?"R$ "+t.toLocaleString("pt-BR"):"—"}</div>)}
             </div>
           </div>
           {/* DESPESAS — lado direito */}
           <div style={{flex:"1 1 260px",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr auto",background:"#4a7fa5"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 140px",background:"#4a7fa5"}}>
               <div style={{padding:"7px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.3}}>Categoria</div>
               <div style={{padding:"7px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",textAlign:"right",letterSpacing:0.3}}>Valor</div>
             </div>
-            <div style={{maxHeight:560,overflowY:"auto"}}>
+            <div style={{maxHeight:660,overflowY:"auto"}}>
               {categorias.map(cat=>{
                 const total=calcTotalAux(cat,auxData,recTotais);
                 const isDestaque=cat==="Tecidos"||cat==="Oficinas Costura";
                 const isAuto=SEM_AUX.includes(cat);
                 return(
-                  <div key={cat} style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f0ebe4",padding:"6px 12px",background:isDestaque?"#f7f9ff":"#fff",cursor:isAuto?"default":"pointer"}}
+                  <div key={cat} style={{display:"grid",gridTemplateColumns:"1fr 140px",alignItems:"center",borderBottom:"1px solid #f0ebe4",padding:"6px 0",background:isDestaque?"#f7f9ff":"#fff",cursor:isAuto?"default":"pointer"}}
                     onClick={()=>{if(!isAuto){setAba("despesas");setAuxAberta(cat);}}}>
-                    <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:400,color:"#2c3e50",flex:1}}>{cat}</span>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:400,color:"#2c3e50",paddingLeft:12}}>{cat}</span>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:isAuto?12:6,gap:4}}>
                       <span style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:600,color:total>0?"#2c3e50":"#d0c8c0",fontFamily:"'Courier New',Courier,monospace",textAlign:"right",whiteSpace:"nowrap"}}>
-                        {total>0?total.toLocaleString("pt-BR"):"—"}
+                        {total>0?"R$ "+total.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                       </span>
                       {!isAuto&&<span style={{color:"#c8d0d8",fontSize:13}}>›</span>}
                     </div>
@@ -1182,7 +1182,7 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
         {mesesComBoletos.map(m=><button key={m} onClick={()=>setFiltro(m)} style={{padding:"5px 10px",border:"none",background:"transparent",cursor:"pointer",fontSize:11,color:filtro===m?"#2c3e50":"#8a9aa4",borderBottom:filtro===m?"2px solid #2c3e50":"2px solid transparent",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>{MESES[m-1]}</button>)}
       </div>
       <div style={{background:"#fff",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",overflow:"hidden"}}>
-        <div style={{minHeight:300,maxHeight:620,overflowY:"auto"}}>
+        <div style={{minHeight:300,maxHeight:720,overflowY:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead><tr style={{background:"#4a7fa5"}}>{["Data","Empresa","Nº Nota",filtro==="aberto"?"Mês":null,"Valor","Pago",""].filter(Boolean).map(h=><th key={h} style={{padding:"6px 12px",textAlign:h==="Valor"?"right":"left",color:"#fff",fontWeight:600,fontSize:11}}>{h}</th>)}</tr></thead>
             <tbody>
@@ -1992,12 +1992,13 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
 
           {/* Lista de cortes */}
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px 1fr 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95"}}>
+            <div style={{overflowX:"auto"}}>
+            <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px minmax(160px,1fr) 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95",minWidth:900}}>
               {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","Pago","Qtd.Entr","Faltante",""].map((h,i)=>(
-                <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textAlign:i>=5&&i<=7||i>=11?"right":"left"}}>{h}</div>
+                <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textAlign:i>=5&&i<=7||i>=11?"right":"left",whiteSpace:"nowrap"}}>{h}</div>
               ))}
             </div>
-            <div style={{overflowY:"auto",maxHeight:520}}>
+            <div style={{overflowY:"auto",maxHeight:760,minWidth:900}}>
               {cortesFiltrados.length===0&&<div style={{padding:32,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum corte lançado</div>}
               {cortesFiltrados.map(c=>{
                 const st=getStatusCorte(c);
@@ -2065,6 +2066,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                 );
               })}
             </div>
+            </div>{/* end overflowX */}
             {/* Legenda */}
             <div style={{padding:"7px 16px",background:"#f7f4f0",borderTop:"1px solid #e8e2da",display:"flex",gap:16,alignItems:"center"}}>
               {Object.entries(STATUS_LABEL).map(([k,v])=>(
@@ -2252,7 +2254,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Ref</div><input value={formProd.ref} onChange={e=>setFormProd(p=>({...p,ref:e.target.value.replace(/\D/g,"").slice(0,5)}))} style={{...iStyle,width:"100%"}}/></div>
                   <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Descrição</div><input value={formProd.descricao} onChange={e=>setFormProd(p=>({...p,descricao:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
                   <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Marca</div><select value={formProd.marca} onChange={e=>setFormProd(p=>({...p,marca:e.target.value}))} style={{...iStyle,width:"100%"}}><option>Amícia</option><option>Meluni</option></select></div>
-                  <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Vl. Unit</div><input value={formProd.valorUnit} onChange={e=>setFormProd(p=>({...p,valorUnit:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
+                  <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Vl. Unit</div><input value={formProd.valorUnit} onChange={e=>setFormProd(p=>({...p,valorUnit:e.target.value.replace(/[^0-9.,]/g,"")}))} onBlur={e=>{const v=parseFloat(e.target.value.replace(",","."));if(!isNaN(v))setFormProd(p=>({...p,valorUnit:v.toFixed(2).replace(".",",")}));}} placeholder="0,00" style={{...iStyle,width:"100%",textAlign:"right",fontFamily:"'Courier New',Courier,monospace",fontWeight:600}}/></div>
                   <button onClick={()=>{
                     if(!formProd.ref||!formProd.descricao||!formProd.valorUnit)return;
                     if(editProdRef)setProdutos(prev=>prev.map(p=>p.ref===editProdRef?{...formProd,valorUnit:parseFloat(formProd.valorUnit)||0}:p));
@@ -2272,7 +2274,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                         <td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td>
                         <td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td>
                         <td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"2px 6px"}}>{p.marca}</span></td>
-                        <td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:600}}>{fmt(p.valorUnit)}</td>
+                        <td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:"'Courier New',Courier,monospace"}}>{fmt(p.valorUnit)}</td>
                         <td style={{padding:"8px 8px",textAlign:"center"}}>
                           <span onClick={()=>{setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:String(p.valorUnit)});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span>
                           <span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:15}}>×</span>
@@ -2553,7 +2555,10 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
 };
 
 const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,isAdmin=false})=>{
-  const [bling,setBling]=useState({exitus:"",lumia:"",muniam:""});
+  const [bling,setBling]=useState(()=>{
+    try{const s=localStorage.getItem("amica_bling");return s?JSON.parse(s):{exitus:"",lumia:"",muniam:""};}
+    catch{return{exitus:"",lumia:"",muniam:""};}
+  });
   const [mire,setMire]=useState({token:"",idSilvaTeles:"",idBomRetiro:""});
   const [statusBling,setStatusBling]=useState({});
   const [statusMire,setStatusMire]=useState(null);
@@ -2603,6 +2608,11 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
   };
 
   const escolherPasta=async()=>{
+    if(!window.showDirectoryPicker){
+      setBackupMsg("⚠ Seu navegador não suporta seleção de pasta. Use Chrome ou Edge no PC.");
+      setTimeout(()=>setBackupMsg(""),5000);
+      return;
+    }
     try{
       const handle=await window.showDirectoryPicker({mode:"readwrite"});
       setPastaHandle(handle);
@@ -2610,7 +2620,10 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
       localStorage.setItem("amica_backup_folder_name",handle.name);
       setBackupMsg("✓ Pasta definida: "+handle.name);
       setTimeout(()=>setBackupMsg(""),3000);
-    }catch{setBackupMsg("");}
+    }catch(e){
+      if(e.name!=="AbortError")setBackupMsg("⚠ Não foi possível acessar a pasta. Tente novamente.");
+      setTimeout(()=>setBackupMsg(""),4000);
+    }
   };
 
   const fazerBackup=async()=>{
@@ -2660,16 +2673,36 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
   const [regras,setRegras]=useState({devolucao:"10"});
   const [verCodigo,setVerCodigo]=useState(false);
   const [copiado,setCopiado]=useState(false);
-  const testarBling=(marca)=>{setStatusBling(prev=>({...prev,[marca]:"testando"}));setTimeout(()=>setStatusBling(prev=>({...prev,[marca]:bling[marca]?"aguardando_deploy":"erro"})),1500);};
+  const testarBling=async(marca)=>{
+    setStatusBling(prev=>({...prev,[marca]:"testando"}));
+    const token=bling[marca];
+    if(!token){setStatusBling(prev=>({...prev,[marca]:"erro"}));return;}
+    try{
+      const resp=await fetch("/api/bling",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({tokens:{[marca]:token},devolucao:0})
+      });
+      const data=await resp.json();
+      if(data.erros&&data.erros.some(e=>e.startsWith(marca))){
+        setStatusBling(prev=>({...prev,[marca]:"erro"}));
+      } else {
+        setStatusBling(prev=>({...prev,[marca]:"ok"}));
+      }
+    }catch{
+      setStatusBling(prev=>({...prev,[marca]:"erro"}));
+    }
+  };
   const testarMire=()=>{setStatusMire("testando");setTimeout(()=>setStatusMire(mire.token?"aguardando_deploy":"erro"),1500);};
-  const salvar=()=>{setSaved(true);setTimeout(()=>setSaved(false),2500);};
-  const StatusBadge=({status})=>{if(!status)return null;const cfg={testando:{bg:"#f7f4f0",color:"#a89f94",text:"Testando…"},aguardando_deploy:{bg:"#fff8e8",color:"#8a6500",text:"⚡ Pronto — aguardando deploy"},erro:{bg:"#fdeaea",color:"#c0392b",text:"✗ Token inválido"}};const c=cfg[status]||cfg.testando;return<span style={{fontSize:11,padding:"3px 10px",borderRadius:10,background:c.bg,color:c.color}}>{c.text}</span>;};
+  const salvar=()=>{
+    localStorage.setItem("amica_bling",JSON.stringify(bling));
+    setSaved(true);setTimeout(()=>setSaved(false),2500);
+  };
+  const StatusBadge=({status})=>{if(!status)return null;const cfg={testando:{bg:"#f7f4f0",color:"#a89f94",text:"Testando…"},ok:{bg:"#eafbf0",color:"#27ae60",text:"✓ Token válido"},erro:{bg:"#fdeaea",color:"#c0392b",text:"✗ Token inválido ou sem permissão"}};const c=cfg[status]||cfg.testando;return<span style={{fontSize:11,padding:"3px 10px",borderRadius:10,background:c.bg,color:c.color}}>{c.text}</span>;};
   const Section=({title,subtitle,children})=>(<div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}><div style={{padding:"16px 24px",borderBottom:"1px solid #e8e2da",background:"#f7f4f0"}}><div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>{title}</div>{subtitle&&<div style={{fontSize:12,color:"#a89f94",marginTop:3}}>{subtitle}</div>}</div><div style={{padding:24}}>{children}</div></div>);
   const iStyle={border:"1px solid #c8d8e4",borderRadius:6,padding:"7px 12px",fontSize:13,outline:"none",fontFamily:"Georgia,serif",flex:1};
   return(
     <div>
       <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Configurações</div>
-      <div style={{background:"#fff8e8",border:"1px solid #f0d080",borderRadius:12,padding:"12px 20px",marginBottom:16,display:"flex",gap:12,alignItems:"center"}}><span style={{fontSize:20}}>⚙️</span><div><div style={{fontSize:13,fontWeight:600,color:"#8a6500",marginBottom:3}}>Integrações em desenvolvimento</div><div style={{fontSize:12,color:"#8a6500",opacity:0.9}}>Salve os tokens agora para testar assim que o deploy estiver disponível.</div></div></div>
       <Section title="Bling — Marketplaces" subtitle="3 contas separadas · Exitus · Lumia · Muniam">
         {[{key:"exitus",label:"Token API — Exitus",hint:"Bling → Configurações → API → Gerar token"},{key:"lumia",label:"Token API — Lumia",hint:null},{key:"muniam",label:"Token API — Muniam",hint:null}].map(f=>(
           <div key={f.key} style={{marginBottom:20}}>
@@ -2882,6 +2915,55 @@ export default function App(){
     return base;
   });
 
+  const [blingStatus,setBlingStatus]=useState(null); // null | "importando" | {ok, msg}
+
+  // ── Auto-importação Bling ao abrir o app ────────────────────────────────
+  React.useEffect(()=>{
+    const hoje=new Date().toISOString().slice(0,10);
+    const ultimaImport=localStorage.getItem("amica_bling_ultima");
+    if(ultimaImport===hoje)return; // já importou hoje
+    try{
+      const tokens=JSON.parse(localStorage.getItem("amica_bling")||"{}");
+      if(!tokens.exitus&&!tokens.lumia&&!tokens.muniam)return; // sem tokens configurados
+      setBlingStatus("importando");
+      fetch("/api/bling",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({tokens,devolucao:10})
+      })
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.erro){setBlingStatus({ok:false,msg:"Bling: "+data.erro});return;}
+        const val=data.totalLiquido||0;
+        // Lança em marketplaces do dia 1 do mês atual (lump sum)
+        setReceitasPorMes(prev=>{
+          const mesAtual=prev[MES_ATUAL]||{};
+          const diaAtual=new Date().getDate();
+          return{
+            ...prev,
+            [MES_ATUAL]:{
+              ...mesAtual,
+              [diaAtual]:{
+                ...(mesAtual[diaAtual]||{}),
+                marketplaces:String(val)
+              }
+            }
+          };
+        });
+        localStorage.setItem("amica_bling_ultima",hoje);
+        setBlingStatus({
+          ok:true,
+          msg:`✓ Bling: R$ ${val.toLocaleString("pt-BR")} (${data.totalPedidos} pedidos · ${data.pctDevolucao}% dev.)`
+        });
+        setTimeout(()=>setBlingStatus(null),8000);
+      })
+      .catch(e=>{
+        setBlingStatus({ok:false,msg:"Erro Bling: "+e.message});
+        setTimeout(()=>setBlingStatus(null),6000);
+      });
+    }catch{}
+  },[]);
+
   // ── DADOS_MENSAIS computado dinamicamente do estado ─────────────────────
   // Substitui o objeto estático — sempre reflete os dados reais
   const dadosMensais = Object.fromEntries(
@@ -2917,6 +2999,11 @@ export default function App(){
 
   return(
     <div style={{height:"100vh",display:"flex",flexDirection:"column",fontFamily:"Georgia,serif",background:"#f7f4f0"}}>
+      {blingStatus&&(
+        <div style={{background:blingStatus==="importando"?"#f0f6fb":blingStatus.ok?"#eafbf0":"#fdeaea",borderBottom:"1px solid "+(blingStatus==="importando"?"#c8d8e4":blingStatus.ok?"#b8dfc8":"#f0b8b8"),padding:"5px 16px",fontSize:12,color:blingStatus==="importando"?"#4a7fa5":blingStatus.ok?"#27ae60":"#c0392b",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          {blingStatus==="importando"?<>⏳ Importando dados do Bling…</>:<>{blingStatus.msg}</>}
+        </div>
+      )}
       <div style={{background:"#fff",borderBottom:"1px solid #e8e2da",padding:"6px 12px",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
         <div style={{flexShrink:0,marginRight:8}}>
           <div style={{fontSize:8,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",lineHeight:1}}>Grupo</div>
