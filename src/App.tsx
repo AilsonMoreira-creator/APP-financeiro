@@ -2003,12 +2003,13 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
           {/* Lista de cortes */}
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-            <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px minmax(160px,1fr) 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95",minWidth:900}}>
-              {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","Pago","Qtd.Entr","Faltante",""].map((h,i)=>(
-                <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textAlign:i>=5&&i<=7||i>=11?"right":"left",whiteSpace:"nowrap"}}>{h}</div>
-              ))}
-            </div>
             <div style={{overflowY:"auto",maxHeight:760,minWidth:900}}>
+              {/* Header sticky dentro do scroll — evita desalinhamento com scrollbar */}
+              <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px minmax(160px,1fr) 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95",minWidth:900,position:"sticky",top:0,zIndex:1}}>
+                {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","Pago","Qtd.Entr","Faltante",""].map((h,i)=>(
+                  <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textAlign:i>=5&&i<=7||i>=11?"right":"left",whiteSpace:"nowrap"}}>{h}</div>
+                ))}
+              </div>
               {cortesFiltrados.length===0&&<div style={{padding:32,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum corte lançado</div>}
               {cortesFiltrados.map(c=>{
                 const st=getStatusCorte(c);
@@ -2076,6 +2077,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                 );
               })}
             </div>
+            </div>{/* end overflowY */}
             </div>{/* end overflowX */}
             {/* Legenda */}
             <div style={{padding:"7px 16px",background:"#f7f4f0",borderTop:"1px solid #e8e2da",display:"flex",gap:16,alignItems:"center"}}>
@@ -2260,7 +2262,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
           {cadAba==="produtos"&&(
             <div>
               <div style={{background:"#f0f6fb",border:"1px solid #c8d8e4",borderRadius:10,padding:12,marginBottom:12}}>
-                <div style={{display:"grid",gridTemplateColumns:"0.6fr 2fr 0.9fr 0.8fr 0.5fr",gap:6,alignItems:"end"}}>
+                <div style={{display:"grid",gridTemplateColumns:"80px 1fr 120px 110px 130px",gap:6,alignItems:"end"}}>
                   <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Ref</div><input value={formProd.ref} onChange={e=>setFormProd(p=>({...p,ref:e.target.value.replace(/\D/g,"").slice(0,5)}))} style={{...iStyle,width:"100%"}}/></div>
                   <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Descrição</div><input value={formProd.descricao} onChange={e=>setFormProd(p=>({...p,descricao:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
                   <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Marca</div><select value={formProd.marca} onChange={e=>setFormProd(p=>({...p,marca:e.target.value}))} style={{...iStyle,width:"100%"}}><option>Amícia</option><option>Meluni</option></select></div>
@@ -2277,10 +2279,10 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,tableLayout:"fixed"}}>
                   <colgroup>
-                    <col style={{width:"70px"}}/>
-                    <col/>
                     <col style={{width:"80px"}}/>
+                    <col/>
                     <col style={{width:"120px"}}/>
+                    <col style={{width:"110px"}}/>
                     <col style={{width:"60px"}}/>
                   </colgroup>
                   <thead><tr style={{background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Vl. Unitário",""].map(h=><th key={h} style={{padding:"8px 12px",textAlign:h==="Vl. Unitário"?"right":"left",fontSize:11,color:"#fff",fontWeight:600}}>{h}</th>)}</tr></thead>
@@ -2293,7 +2295,11 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                         <td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"2px 6px"}}>{p.marca}</span></td>
                         <td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:"'Courier New',Courier,monospace"}}>{fmt(p.valorUnit)}</td>
                         <td style={{padding:"8px 8px",textAlign:"center"}}>
-                          <span onClick={()=>{setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:String(p.valorUnit)});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span>
+                          <span onClick={()=>{
+                            const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");
+                            setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr});
+                            setEditProdRef(p.ref);
+                          }} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span>
                           <span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:15}}>×</span>
                         </td>
                       </tr>
