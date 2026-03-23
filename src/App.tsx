@@ -5,11 +5,11 @@ const modules = [
 { id: "dashboard", icon: "📊", label: "Dashboard" },
 { id: "lancamentos", icon: "📋", label: "Lançamentos" },
 { id: "boletos", icon: "🧾", label: "Boletos" },
-{ id: "oficinas", icon: "✂️", label: "Oficinas" },
+{ id: "oficinas", icon: "🧵", label: "Oficinas" },
 { id: "agenda", icon: "📅", label: "Agenda" },
 { id: "historico", icon: "🗂️", label: "Histórico" },
 { id: "relatorio", icon: "📄", label: "Relatório" },
-{ id: "usuarios", icon: "👥", label: "Usuários" },
+{ id: "usuarios", icon: "👤", label: "Usuários" },
 { id: "configuracoes", icon: "⚙️", label: "Config." },
 ];
 const CATS = [
@@ -874,7 +874,7 @@ return(
 </div>
 <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
 <div style={{padding:"7px",fontSize:10,color:"#a89f94",display:"flex",alignItems:"center",justifyContent:"center"}}>Σ</div>
-{[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:14,fontWeight:700,color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace",textAlign:"right"}}>{fmt(t)}</div>)}
+{[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:14,fontWeight:800,color:"#1a2a3a",fontFamily:"'Courier New',Courier,monospace",textAlign:"right",letterSpacing:0.3}}><strong>{fmt(t)}</strong></div>)}
 </div>
 </div>
 )}
@@ -901,7 +901,7 @@ return(
 })}
 </div>
 <div style={{padding:"12px 16px",background:"#f7f4f0",borderTop:"2px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-<div style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>Total: <span style={{color:"#c0392b",fontFamily:"'Courier New',Courier,monospace",fontSize:14}}>{fmt(totalDesp)}</span></div>
+<div style={{fontSize:13,fontWeight:800,color:"#2c3e50"}}><strong>Total:</strong> <span style={{color:"#c0392b",fontFamily:"'Courier New',Courier,monospace",fontSize:14,fontWeight:800}}><strong>{fmt(totalDesp)}</strong></span></div>
 <button onClick={()=>setMostraCadastro(p=>!p)} style={{fontSize:11,color:"#4a7fa5",background:"none",border:"none",cursor:"pointer",fontFamily:"Georgia,serif"}}>{mostraCadastro?"✕ Fechar":"+ Gerenciar Categorias"}</button>
 </div>
 {mostraCadastro&&(
@@ -1002,7 +1002,7 @@ return(
 </div>
 <div style={{display:"grid",gridTemplateColumns:"32px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#eaf3fb",borderTop:"2px solid #4a7fa5"}}>
 <div style={{padding:"7px",fontSize:11,color:"#4a7fa5",textAlign:"center",fontWeight:700}}>Σ</div>
-{[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:"'Courier New',Courier,monospace",textAlign:"right"}}>{t>0?"R$ "+t.toLocaleString("pt-BR"):"—"}</div>)}
+{[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:13,fontWeight:800,color:"#1a2a3a",fontFamily:"'Courier New',Courier,monospace",textAlign:"right"}}><strong>{t>0?"R$ "+t.toLocaleString("pt-BR"):"—"}</strong></div>)}
 </div>
 </div>
 {/* DESPESAS — lado direito */}
@@ -1032,7 +1032,7 @@ onClick={()=>{if(!isAuto){setAba("despesas");setAuxAberta(cat);}}}>
 </div>
 <div style={{padding:"8px 12px",background:"#fdeaea",borderTop:"2px solid #c0392b",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <span style={{fontSize:11,color:"#c0392b",fontWeight:700,letterSpacing:0.5,textTransform:"uppercase"}}>Total Despesa</span>
-<span style={{fontSize:14,fontWeight:700,color:"#c0392b",fontFamily:"'Courier New',Courier,monospace"}}>{fmt(totalDesp)}</span>
+<span style={{fontSize:14,fontWeight:800,color:"#c0392b",fontFamily:"'Courier New',Courier,monospace"}}><strong>{fmt(totalDesp)}</strong></span>
 </div></div>
 </div>
 )}
@@ -1847,8 +1847,8 @@ return(
 <option value="naopago"> Não pago</option>
 </select>
 <button onClick={exportarAberto} style={{background:"#fff",border:"1px solid #4a7fa5",color:"#4a7fa5",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}> Exportar</button>
-<button onClick={()=>{setMostraForm(p=>!p);setEditId(null);setForm({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});setRefBusca("");}} style={{background:mostraForm?"#2c3e50":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>
-{mostraForm?"✕":"+ Novo"}
+<button onClick={()=>{setMostraForm(p=>!p);setEditId(null);setForm({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});setRefBusca("");}} style={{background:mostraForm?"#2c3e50":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"8px 18px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",whiteSpace:"nowrap",fontWeight:600}}>
+{mostraForm?"✕ Fechar":"+ Novo Corte"}
 </button>
 </div>
 {/* Formulário novo corte */}
@@ -1878,7 +1878,7 @@ return(
 <input value={form.qtd} onChange={e=>setForm(p=>({...p,qtd:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
 <div>
 <div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Vl.Unit</div>
-<input value={form.valorUnit} onChange={e=>setForm(p=>({...p,valorUnit:e.target.value}))} style={{...iStyle,width:"100%"}}/>
+<div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:11,color:"#6b7c8a",fontWeight:600}}>R$</span><input value={form.valorUnit} onChange={e=>setForm(p=>({...p,valorUnit:e.target.value.replace(/[^0-9,.]/g,"")}))} onBlur={e=>{const v=parseFloat(e.target.value.replace(",","."));if(!isNaN(v))setForm(p=>({...p,valorUnit:v.toFixed(2).replace(".",",")}));}} placeholder="0,00" style={{...iStyle,flex:1,textAlign:"right",fontFamily:"'Courier New',Courier,monospace",fontWeight:600}}/></div>
 </div>
 <div>
 <div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Oficina</div>
@@ -1910,7 +1910,7 @@ return(
 <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
 <div style={{overflowY:"auto",maxHeight:760,minWidth:900}}>
 {/* Header sticky dentro do scroll — evita desalinhamento com scrollbar */}
-<div style={{display:"grid",gridTemplateColumns:"10px 80px 60px minmax(160px,1fr) 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95",minWidth:900,position:"sticky",top:0,zIndex:1}}>
+<div style={{display:"grid",gridTemplateColumns:"10px 80px 60px 1fr 100px 60px 80px 100px 100px 52px 52px 80px 70px 30px",background:"#4a7fa5",borderBottom:"2px solid #3a6f95",minWidth:900,position:"sticky",top:0,zIndex:1}}>
 {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","Pago","Qtd.Entr","Faltante",""].map((h,i)=>(
 <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textAlign:i>=5&&i<=7||i>=11?"right":"left",whiteSpace:"nowrap"}}>{h}</div>
 ))}
@@ -2143,25 +2143,34 @@ return(
 {aba==="cadastros"&&(<div>
 <div style={{display:"flex",gap:4,borderBottom:"1px solid #e8e2da",marginBottom:16}}>
 {[{id:"produtos",label:"Produtos"},{ id:"oficinas",label:"Oficinas"},{id:"troca",label:"Troca de Referência"},{id:"log",label:"Log de Trocas"}].map(t=>(
-<button key={t.id} onClick={()=>setCadAba(t.id)} style={{padding:"6px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:11,fontFamily:"Georgia,serif",color:cadAba===t.id?"#2c3e50":"#8a9aa4",borderBottom:cadAba===t.id?"2px solid #2c3e50":"2px solid transparent"}}>{t.label}</button>
+<button key={t.id} onClick={()=>setCadAba(t.id)} style={{padding:"6px 14px",border:"none",background:"transparent",cursor:"pointer",fontSize:11,fontFamily:"Georgia,serif",color:cadAba===t.id?"#2c3e50":"#8a9aa4",borderBottom:cadAba===t.id?"2px solid #2c3e50":"2px solid transparent",fontWeight:cadAba===t.id?700:500}}>{t.label}</button>
 ))}
 </div>
 {/* Produtos */}
 {cadAba==="produtos"&&(
 <div>
 <div style={{background:"#f0f6fb",border:"1px solid #c8d8e4",borderRadius:10,padding:12,marginBottom:12}}>
-<div style={{display:"grid",gridTemplateColumns:"80px 1fr 120px 110px 130px",gap:6,alignItems:"end"}}>
+<div style={{display:"grid",gridTemplateColumns:"80px 1fr 130px 80px",gap:8,alignItems:"end",marginBottom:10}}>
 <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Ref</div><input value={formProd.ref} onChange={e=>setFormProd(p=>({...p,ref:e.target.value.replace(/\D/g,"").slice(0,5)}))} style={{...iStyle,width:"100%"}}/></div>
 <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Descrição</div><input value={formProd.descricao} onChange={e=>setFormProd(p=>({...p,descricao:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
 <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Marca</div><select value={formProd.marca} onChange={e=>setFormProd(p=>({...p,marca:e.target.value}))} style={{...iStyle,width:"100%"}}><option>Amícia</option><option>Meluni</option></select></div>
-<div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Vl. Unit</div><input value={formProd.valorUnit} onChange={e=>setFormProd(p=>({...p,valorUnit:e.target.value.replace(/\D/g,"").replace(/^(\d+)(\d{2})$/,"$1,$2")}))} onBlur={e=>{const v=parseFloat(e.target.value.replace(",","."));if(!isNaN(v))setFormProd(p=>({...p,valorUnit:v.toFixed(2).replace(".",",")}));}} placeholder="0,00" style={{...iStyle,width:"100%",textAlign:"right",fontFamily:"'Courier New',Courier,monospace",fontWeight:600}}/></div>
+<div>
+<div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Vl. Unitário</div>
+<div style={{display:"flex",alignItems:"center",gap:4}}>
+<span style={{fontSize:12,color:"#6b7c8a",fontWeight:600}}>R$</span>
+<input value={formProd.valorUnit} onChange={e=>setFormProd(p=>({...p,valorUnit:e.target.value.replace(/[^\d,]/g,"")}))} onBlur={e=>{const v=parseFloat(e.target.value.replace(",","."));if(!isNaN(v)&&v>0)setFormProd(p=>({...p,valorUnit:v.toFixed(2).replace(".",",")}));}} placeholder="0,00" style={{...iStyle,flex:1,textAlign:"right",fontFamily:"'Courier New',Courier,monospace",fontWeight:600}}/>
+</div>
+</div>
+</div>
+<div style={{display:"flex",justifyContent:"flex-end"}}>
 <button onClick={()=>{
 if(!formProd.ref||!formProd.descricao||!formProd.valorUnit)return;
-if(editProdRef)setProdutos(prev=>prev.map(p=>p.ref===editProdRef?{...formProd,valorUnit:parseFloat(formProd.valorUnit)||0}:p));
+const valorNum=parseFloat(String(formProd.valorUnit).replace(",","."));
+if(editProdRef)setProdutos(prev=>prev.map(p=>p.ref===editProdRef?{...formProd,valorUnit:valorNum}:p));
 else if(produtos.find(p=>p.ref===formProd.ref)){alert("Ref já cadastrada!");}
-else setProdutos(prev=>[...prev,{...formProd,valorUnit:parseFloat(formProd.valorUnit)||0}]);
+else setProdutos(prev=>[...prev,{...formProd,valorUnit:valorNum}]);
 setFormProd({ref:"",descricao:"",marca:"Amícia",valorUnit:""});setEditProdRef(null);
-}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif"}}>{editProdRef?"Atualizar":"Incluir Produto"}</button>
+}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"8px 20px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>{editProdRef?"Atualizar":"Incluir Produto"}</button>
 </div>
 </div>
 <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
