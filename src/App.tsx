@@ -3409,7 +3409,7 @@ export default function App(){
   const salvarNoSupabase=useCallback((payload)=>{
     if(!supabase||!dbCarregado)return;
     setSyncStatus('saving');
-    supabase.from('amicia_data').upsert({user_id:USER_ID,payload,atualizado_em:new Date().toISOString()},{onConflict:'user_id'})
+   supabase.from('amicia_data').upsert({user_id:USER_ID,payload},{onConflict:'user_id'})
       .then(({error})=>{
         if(error){setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
         else{setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
