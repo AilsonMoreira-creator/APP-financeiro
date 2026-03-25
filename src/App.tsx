@@ -2044,8 +2044,8 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
               <colgroup><col/><col style={{width:130}}/><col style={{width:22}}/></colgroup>
               <thead>
                 <tr style={{background:"#4a7fa5"}}>
-                  <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4}}>Categoria</th>
-                  <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4}}>Valor</th>
+                  <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,borderLeft:"3px solid transparent"}}>Categoria</th>
+                  <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,borderLeft:"1px solid rgba(255,255,255,0.2)"}}>Valor</th>
                   <th/>
                 </tr>
               </thead>
@@ -2334,23 +2334,23 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
 
 
 const AGENDA_INICIAL=[
-{id:1,dia:1,descricao:"Pró-Labore Muniam",feito:false},{id:2,dia:1,descricao:"Pensão — Mãe",feito:false},
-{id:3,dia:3,descricao:"Parcela Casa",feito:false},{id:4,dia:4,descricao:"Correios",feito:false},
-{id:5,dia:5,descricao:"Condomínio",feito:false},{id:6,dia:5,descricao:"Ideris",feito:false},
-{id:7,dia:5,descricao:"Luz Silva Teles",feito:false},{id:8,dia:6,descricao:"Folha de Pagamento",feito:false},
-{id:9,dia:7,descricao:"Mensalidade Site",feito:false},{id:10,dia:7,descricao:"Aluguel Silva Teles",feito:false},
-{id:11,dia:8,descricao:"Mensalidade Contabilidade",feito:false},{id:12,dia:9,descricao:"Bling",feito:false},
-{id:13,dia:9,descricao:"Cartão Amícia",feito:false},{id:14,dia:9,descricao:"Cartão Ailson",feito:false},
-{id:15,dia:10,descricao:"Futura La Amícia",feito:false},{id:16,dia:10,descricao:"Parcela Apartamento",feito:false},
-{id:17,dia:11,descricao:"Cartão Tamara",feito:false},{id:18,dia:15,descricao:"ADPM",feito:false},
-{id:19,dia:17,descricao:"Estacionamento",feito:false},{id:20,dia:18,descricao:"Cestas Básicas",feito:false},
-{id:21,dia:20,descricao:"Impostos DAS",feito:false},{id:22,dia:20,descricao:"FGTS / INSS",feito:false},
-{id:23,dia:20,descricao:"Adiantamento Funcionários",feito:false},{id:24,dia:20,descricao:"Unimed",feito:false},
-{id:25,dia:20,descricao:"Método Marketing",feito:false},{id:26,dia:23,descricao:"Luz José Paulino",feito:false},
-{id:27,dia:25,descricao:"Vale Transporte",feito:false},{id:28,dia:28,descricao:"Pró-Labore Grupo",feito:false},
+{id:1,dia:1,descricao:"Pró-Labore Muniam",feito:true},{id:2,dia:1,descricao:"Pensão — Mãe",feito:true},
+{id:3,dia:3,descricao:"Parcela Casa",feito:true},{id:4,dia:4,descricao:"Correios",feito:true},
+{id:5,dia:5,descricao:"Condomínio",feito:true},{id:6,dia:5,descricao:"Ideris",feito:true},
+{id:7,dia:5,descricao:"Luz Silva Teles",feito:true},{id:8,dia:6,descricao:"Folha de Pagamento",feito:true},
+{id:9,dia:7,descricao:"Mensalidade Site",feito:true},{id:10,dia:7,descricao:"Aluguel Silva Teles",feito:true},
+{id:11,dia:8,descricao:"Mensalidade Contabilidade",feito:true},{id:12,dia:9,descricao:"Bling",feito:true},
+{id:13,dia:9,descricao:"Cartão Amícia",feito:true},{id:14,dia:9,descricao:"Cartão Ailson",feito:true},
+{id:15,dia:10,descricao:"Futura La Amícia",feito:true},{id:16,dia:10,descricao:"Parcela Apartamento",feito:true},
+{id:17,dia:11,descricao:"Cartão Tamara",feito:true},{id:18,dia:15,descricao:"ADPM",feito:true},
+{id:19,dia:17,descricao:"Estacionamento",feito:true},{id:20,dia:18,descricao:"Cestas Básicas",feito:true},
+{id:21,dia:20,descricao:"Impostos DAS",feito:true},{id:22,dia:20,descricao:"FGTS / INSS",feito:true},
+{id:23,dia:20,descricao:"Adiantamento Funcionários",feito:true},{id:24,dia:20,descricao:"Unimed",feito:true},
+{id:25,dia:20,descricao:"Método Marketing",feito:true},{id:26,dia:23,descricao:"Luz José Paulino",feito:true},
+{id:27,dia:25,descricao:"Vale Transporte",feito:true},{id:28,dia:28,descricao:"Pró-Labore Grupo",feito:false},
 {id:29,dia:29,descricao:"Futura Amícia",feito:false},{id:30,dia:30,descricao:"Aluguel José Paulino",feito:false},
 {id:31,dia:30,descricao:"Guias Parcelamento",feito:false},{id:32,dia:30,descricao:"Guia DARF Parcelamento",feito:false},
-{id:33,dia:30,descricao:"Aluguel Escritório",feito:false},{id:34,dia:20,descricao:"ECAD",feito:false},
+{id:33,dia:30,descricao:"Aluguel Escritório",feito:false},{id:34,dia:20,descricao:"ECAD",feito:true},
 ];
 
 const AgendaContent=()=>{
@@ -2623,8 +2623,12 @@ const RelatorioContent=(props)=>{
       <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Tipo de Relatório</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         {TIPOS_REL.map(t=>(
-          <div key={t.id} onClick={()=>{if(t.id==="copiar"){copiarDados();return;}setTipo(t.id);}} style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:16,alignItems:"center"}}>
+          <div key={t.id} onClick={()=>{if(t.id==="copiar"){copiarDados();return;}setTipo(t.id);}} style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:16,alignItems:"flex-start"}}>
             <t.Icon size={40}/>
+            <div style={{paddingTop:4}}>
+              <div style={{fontSize:14,fontWeight:600,color:"#2c3e50",marginBottom:4}}>{t.id==="copiar"&&copiado?"✓ Copiado!":t.label}</div>
+              <div style={{fontSize:11,color:"#a89f94"}}>{t.desc}</div>
+            </div>
             <div>
               <div style={{fontSize:14,fontWeight:600,color:"#2c3e50",marginBottom:4}}>{t.id==="copiar"&&copiado?"✓ Copiado!":t.label}</div>
               <div style={{fontSize:11,color:"#a89f94"}}>{t.desc}</div>
@@ -3411,7 +3415,14 @@ export default function App(){
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
         if(d.boletosShared && d.boletosShared.length>0){
-          setBoletosShared(d.boletosShared);
+          // Deduplicar: se mesmo nroNota+empresa existir, manter o com data mais completa (DD/MM/AAAA > DD/MM)
+          const vistos=new Map();
+          d.boletosShared.forEach(b=>{
+            const chave=`${(b.nroNota||"").trim()}|${(b.empresa||"").trim().toLowerCase()}|${b.valor}`;
+            const atual=vistos.get(chave);
+            if(!atual||(b.data||"").length>(atual.data||"").length){vistos.set(chave,b);}
+          });
+          setBoletosShared([...vistos.values()]);
         }
         if(d.cortes)setCortes(d.cortes);
         if(d.produtos)setProdutos(d.produtos);
