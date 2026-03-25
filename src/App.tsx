@@ -1897,7 +1897,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
             <div/>
             {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"7px 10px",fontSize:11,color:"#fff",letterSpacing:0.5,textTransform:"uppercase",fontWeight:600}}>{h}</div>))}
           </div>
-          <div style={{minHeight:300,maxHeight:600,overflowY:"auto"}}>
+          <div style={{minHeight:300,maxHeight:712,overflowY:"auto"}} ref={el=>{if(el){const rowH=28;el.scrollTop=Math.max(0,(hoje-4)*rowH);}}}>
             {Array.from({length:31},(_,i)=>i+1).map(dia=>{
               const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=dia>hoje;
               const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
@@ -1941,7 +1941,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
               </tr>
             </thead>
           </table>
-          <div style={{minHeight:300,maxHeight:600,overflowY:"auto"}}>
+          <div style={{minHeight:300,maxHeight:712,overflowY:"auto"}} ref={el=>{if(el){const rowH=28;el.scrollTop=Math.max(0,(hoje-4)*rowH);}}}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <colgroup><col/><col style={{width:140}}/><col style={{width:24}}/></colgroup>
               <tbody>
@@ -1999,14 +1999,14 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
         </div>
       )}
       {aba==="geral"&&!auxAberta&&(
-        <div style={{display:"flex",gap:48,alignItems:"flex-start",paddingTop:10}}>
+        <div style={{display:"flex",gap:72,alignItems:"flex-start",paddingTop:10}}>
           {/* ── Receitas ── */}
           <div style={{flex:"0 0 42%",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
               <div/>
               {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4}}>{h}</div>))}
             </div>
-            <div style={{maxHeight:680,overflowY:"auto"}}>
+            <div style={{maxHeight:792,overflowY:"auto"}} ref={el=>{if(el){const rowH=28;el.scrollTop=Math.max(0,(hoje-4)*rowH);}}}>
               {Array.from({length:31},(_,i)=>i+1).map(dia=>{
                 const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=dia>hoje;
                 const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
@@ -2050,7 +2050,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                 </tr>
               </thead>
             </table>
-            <div style={{maxHeight:680,overflowY:"auto"}}>
+            <div style={{maxHeight:792,overflowY:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
                 <colgroup><col/><col style={{width:130}}/><col style={{width:22}}/></colgroup>
                 <tbody>
@@ -2154,14 +2154,15 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
   const [lixeira,setLixeira]=useState([]);
   const [confirm,setConfirm]=useState(null);
   const hoje=new Date().getDate();const mesHoje=new Date().getMonth()+1;
-  const diaNum=(d)=>parseInt((d||"99").split("/")[0]);
+  const diaNum=(d)=>parseInt((d||"99/99").split("/")[0]);
+  const mesNum=(d)=>{const p=(d||"").split("/");return p.length>=2?parseInt(p[1]):99;};
   const isVencido=(b)=>!b.pago&&(b.mes<mesHoje||(b.mes===mesHoje&&diaNum(b.data)<hoje));
   const mesesComBoletos=[...new Set(boletos.map(b=>b.mes))].sort((a,b)=>a-b);
   const boletosFiltrados=filtro==="aberto"
     ?boletos.filter(b=>!b.pago&&(mesAberto===0||b.mes===mesAberto)).sort((a,b)=>a.mes-b.mes||diaNum(a.data)-diaNum(b.data))
     :boletos.filter(b=>b.mes===filtro).sort((a,b)=>diaNum(a.data)-diaNum(b.data));
   const boletosAberto=boletosFiltrados.filter(b=>!b.pago).sort((a,b)=>a.mes-b.mes||diaNum(a.data)-diaNum(b.data));
-  const boletosPagos=boletosFiltrados.filter(b=>b.pago);
+  const boletosPagos=boletosFiltrados.filter(b=>b.pago).sort((a,b)=>diaNum(a.data)-diaNum(b.data));
   const mesFiltro=typeof filtro==="number"?filtro:mesHoje;
   const totalPagoMes=boletos.filter(b=>b.pago&&b.mes===mesFiltro).reduce((s,b)=>s+parseFloat(b.valor||0),0);
   const totalAPagar=boletos.filter(b=>!b.pago&&b.mes===mesHoje).reduce((s,b)=>s+parseFloat(b.valor||0),0);
@@ -2921,7 +2922,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
               <div style={{overflowY:"auto",maxHeight:760,minWidth:900}}>
-                <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.6fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
+                <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.78fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
                   {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","","Pago","Qtd Entr.","Faltante","",""].map((h,i)=>(
                     <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}}>{h}</div>
                   ))}
@@ -2932,7 +2933,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   const qtdEntr=c.qtdEntregue!=null?c.qtdEntregue:(c.entregue?c.qtd:null);
                   const faltante=c.entregue&&qtdEntr!=null?c.qtd-qtdEntr:null;
                   return(
-                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.6fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
+                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.78fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
                       <div style={{height:"100%",background:STATUS_COR[st],minHeight:36}}/>
                       <div style={{padding:"5px 8px",fontSize:11,fontWeight:600,color:"#2c3e50"}}>{c.nCorte}</div>
                       <div style={{padding:"5px 8px",fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.ref}</div>
@@ -3406,7 +3407,13 @@ export default function App(){
         if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
-        if(d.boletosShared)setBoletosShared(d.boletosShared);
+        if(d.boletosShared){
+          // Merge: mantém boletos salvos + adiciona futuros que ainda não estão salvos
+          const futuros=[...BOLETOS_ABR,...BOLETOS_MAI,...BOLETOS_JUN,...BOLETOS_JUL];
+          const ids=new Set(d.boletosShared.map(b=>b.id));
+          const novos=futuros.filter(b=>!ids.has(b.id));
+          setBoletosShared([...d.boletosShared,...novos]);
+        }
         if(d.cortes)setCortes(d.cortes);
         if(d.produtos)setProdutos(d.produtos);
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
@@ -3483,7 +3490,7 @@ export default function App(){
   const setCatsMes=(m,fn)=>setCategoriasPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||[...CATS]):fn}));
 
   if(!usuarioLogado){
-    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.modulos[0]||"dashboard");}}/>;
+    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.modulos.includes("lancamentos")?"lancamentos":u.modulos[0]||"dashboard");}}/>;
   }
 
   const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id));
