@@ -2141,6 +2141,29 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   );
 };
 
+// ── Normalização e deduplicação de boletos ────────────────────────────────────
+const normalizarNota=(s="")=>String(s).toUpperCase().replace(/\s+/g,"").replace(/^NOTA/,"NF");
+const normalizarEmpresa=(s="")=>String(s).trim().toUpperCase().replace(/\s+/g," ");
+const normalizarValor=(v="")=>{const txt=String(v).trim().replace(/\./g,"").replace(",",".");const n=Number(txt);return Number.isFinite(n)?n.toFixed(2):"0.00";};
+const normalizarData=(d="")=>{const txt=String(d).trim().replace(/-/g,"/");const p=txt.split("/");if(p.length===2){const[dia,mes]=p;return`${dia.padStart(2,"0")}/${mes.padStart(2,"0")}/2026`;}if(p.length===3){const[dia,mes,ano]=p;return`${dia.padStart(2,"0")}/${mes.padStart(2,"0")}/${ano}`;}return txt;};
+const chaveBoleto=(b)=>[normalizarNota(b.nroNota),normalizarEmpresa(b.empresa),normalizarValor(b.valor)].join("|");
+const deduplicarBoletos=(lista=[])=>{
+  const vistos=new Map();
+  lista.forEach(b=>{
+    const norm={...b,
+      id:b.id||crypto.randomUUID(),
+      data:normalizarData(b.data),
+      empresa:normalizarEmpresa(b.empresa),
+      nroNota:normalizarNota(b.nroNota),
+      valor:normalizarValor(b.valor),
+      mes:parseInt(normalizarData(b.data).split("/")[1])||Number(b.mes),
+    };
+    const chave=chaveBoleto(norm);
+    const atual=vistos.get(chave);
+    if(!atual||norm.data.length>atual.data.length){vistos.set(chave,norm);}
+  });
+  return[...vistos.values()];
+};
 
 const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
   const [mostraImport,setMostraImport]=useState(false);
@@ -2206,10 +2229,10 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
       const partes=(data||"").split("/");
       const mesDaData=partes.length>=2?parseInt(partes[1]):null;
       const mesCorreto=(mesDaData&&mesDaData>=1&&mesDaData<=12)?mesDaData:mesFiltro;
-      novas.push({id:Date.now()+i,data:data||"—",mes:mesCorreto,empresa:empresa||("Boleto "+(i+1)),nroNota,valor,pago:false});
+      novas.push({id:crypto.randomUUID(),data:normalizarData(data||"—"),mes:mesCorreto,empresa:normalizarEmpresa(empresa||("Boleto "+(i+1))),nroNota:normalizarNota(nroNota),valor:normalizarValor(valor),pago:false});
     });
     if(novas.length===0){setImportError("Formato inválido. Use: Data ; Valor ; Empresa");return;}
-    setBoletos(prev=>[...prev,...novas]);setPasteText("");setMostraImport(false);
+    setBoletos(prev=>deduplicarBoletos([...prev,...novas]));setPasteText("");setMostraImport(false);
     if(erros>0)setImportError(novas.length+" importado(s). "+erros+" ignorado(s).");
   };
   const iStyle={border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 10px",fontSize:13,outline:"none"};
@@ -3415,14 +3438,7 @@ export default function App(){
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
         if(d.boletosShared && d.boletosShared.length>0){
-          // Deduplicar: se mesmo nroNota+empresa existir, manter o com data mais completa (DD/MM/AAAA > DD/MM)
-          const vistos=new Map();
-          d.boletosShared.forEach(b=>{
-            const chave=`${(b.nroNota||"").trim()}|${(b.empresa||"").trim().toLowerCase()}|${b.valor}`;
-            const atual=vistos.get(chave);
-            if(!atual||(b.data||"").length>(atual.data||"").length){vistos.set(chave,b);}
-          });
-          setBoletosShared([...vistos.values()]);
+          setBoletosShared(deduplicarBoletos(d.boletosShared));
         }
         if(d.cortes)setCortes(d.cortes);
         if(d.produtos)setProdutos(d.produtos);
