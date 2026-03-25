@@ -3408,11 +3408,12 @@ export default function App(){
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
         if(d.boletosShared){
-          // Merge: mantém boletos salvos + adiciona futuros que ainda não estão salvos
-          const futuros=[...BOLETOS_ABR,...BOLETOS_MAI,...BOLETOS_JUN,...BOLETOS_JUL];
-          const ids=new Set(d.boletosShared.map(b=>b.id));
-          const novos=futuros.filter(b=>!ids.has(b.id));
-          setBoletosShared([...d.boletosShared,...novos]);
+          const mesAtual=new Date().getMonth()+1;
+          // Supabase: mantém boletos até o mês atual (com status de pago correto)
+          const doSupabase=d.boletosShared.filter(b=>b.mes<=mesAtual);
+          // Hardcoded: boletos futuros apenas (meses além do atual)
+          const futuros=[...BOLETOS_ABR,...BOLETOS_MAI,...BOLETOS_JUN,...BOLETOS_JUL].filter(b=>b.mes>mesAtual);
+          setBoletosShared([...doSupabase,...futuros]);
         }
         if(d.cortes)setCortes(d.cortes);
         if(d.produtos)setProdutos(d.produtos);
