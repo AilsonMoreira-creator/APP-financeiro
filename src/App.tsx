@@ -9,6 +9,7 @@ const _BL = "#a8c0d8";
 const _GR = "#27ae60";
 const _GO = "#c8a040";
 const _FN = "Calibri,'Segoe UI',Arial,sans-serif";
+const _FS = 14;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SVG ICONS — NAVEGAÇÃO PRINCIPAL
@@ -408,6 +409,8 @@ const CATS = [
 
 const SEM_AUX = ["Taxas Cartão","Taxas Marketplaces","Valor de Correção"];
 const CATS_PREST = ["Oficinas Costura","Salas Corte","Passadoria"];
+const LEVE_DEST  = ["Funcionários","Pró-Labore","Salas Corte","Passadoria","Aviamentos"];
+const SUPER_DEST = ["Tecidos","Oficinas Costura"];
 
 const FIXOS_FUNC = [
   { label:"Vale Transporte", valor:7000 },
@@ -416,6 +419,27 @@ const FIXOS_FUNC = [
 ];
 
 const DOMINGOS_MAR = [1,8,15,22,29];
+
+// Domingos por mês 2026
+const DOMINGOS_MES = {
+  1:[4,11,18,25], 2:[1,8,15,22], 3:[1,8,15,22,29],
+  4:[5,12,19,26], 5:[3,10,17,24,31], 6:[7,14,21,28],
+  7:[5,12,19,26], 8:[2,9,16,23,30], 9:[6,13,20,27],
+  10:[4,11,18,25], 11:[1,8,15,22,29], 12:[6,13,20,27],
+};
+
+// Feriados nacionais 2026
+const FERIADOS_2026 = {
+  "01/01":"Confraternização Universal",
+  "03/03":"Carnaval","04/03":"Carnaval","05/03":"Quarta de Cinzas",
+  "03/04":"Sexta-feira Santa","05/04":"Páscoa",
+  "21/04":"Tiradentes","01/05":"Dia do Trabalho",
+  "04/06":"Corpus Christi","07/09":"Independência do Brasil",
+  "12/10":"N. Sra. Aparecida","02/11":"Finados",
+  "15/11":"Proclamação da República","20/11":"Consciência Negra",
+  "25/12":"Natal",
+};
+const getFeriado=(dia,mes)=>FERIADOS_2026[`${String(dia).padStart(2,"0")}/${String(mes).padStart(2,"0")}`]||null;
 
 const PRESTADORES_INICIAL = {
   "Oficinas Costura": [
@@ -1860,17 +1884,22 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
           </div>
           <div style={{minHeight:300,maxHeight:600,overflowY:"auto"}}>
             {Array.from({length:31},(_,i)=>i+1).map(dia=>{
-              const d=receitas[dia]||{};const isDom=DOMINGOS_MAR.includes(dia);const futuro=dia>hoje;
+              const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=dia>hoje;
+              const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
+              const sepCol=isDom?"#b0a898":feriado?"#b0d4b0":"#ede8e0";
+              const valCol=isDom?"#4a3a2a":feriado?"#1a4a1a":"#2c3e50";
+              const emptyCol=isDom?"#a09080":feriado?"#90b890":"#ddd8d0";
               return(
-                <div key={dia} style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:"1px solid #f0ebe4",background:isDom?"#fafaf8":"#fff"}}>
-                  <div style={{padding:"4px 2px",fontSize:10,color:isDom?"#6b5f54":dia===hoje?"#4a7fa5":"#2c3e50",textAlign:"center",fontWeight:dia===hoje?700:400,paddingTop:6}}>{dia}</div>
-                  {["silvaTeles","bomRetiro","marketplaces"].map((canal)=>{
+                <div key={dia} style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:`1px solid ${isDom?"#b8b0a6":feriado?"#a8d0a8":"#f0ebe4"}`,background:rowBg,position:"relative"}}>
+                  <div style={{padding:"4px 2px",fontSize:10,color:isDom?"#6b5f54":dia===hoje?"#4a7fa5":"#2c3e50",textAlign:"center",fontWeight:(isDom||feriado||dia===hoje)?700:400,paddingTop:6,background:isDom?"#b8b0a4":feriado?"#b8ddb8":"transparent",borderRight:`1px solid ${sepCol}`}}>{dia}</div>
+                  {feriado&&<div style={{position:"absolute",left:30,top:2,fontSize:9,color:isDom?"#6a5a4a":"#2d6a2d",fontFamily:"Georgia,serif",background:feriado?"#d4ecd4":"transparent",padding:"1px 5px",borderRadius:3,border:"1px solid #a8d0a8",pointerEvents:"none"}}>🎉 {feriado}</div>}
+                  {["silvaTeles","bomRetiro","marketplaces"].map((canal,ci)=>{
                     const key=dia+"-"+canal;
                     return(
-                      <div key={canal} style={{padding:"3px 8px",display:"flex",alignItems:"center"}}>
+                      <div key={canal} style={{padding:"3px 8px",display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
                         {editando===key?(<input autoFocus defaultValue={d[canal]||""} style={{...inputStyle,width:"90%",padding:"2px 4px"}} onBlur={e=>{salvarCelula(dia,canal,e.target.value);setEditando(null);}} onKeyDown={e=>{if(e.key==="Enter"||e.key==="Tab"){salvarCelula(dia,canal,e.target.value);setEditando(null);}}}/>):(
-                          <div onClick={()=>!futuro&&setEditando(key)} style={{fontSize:13,color:d[canal]?"#2c3e50":"#ddd8d0",cursor:futuro?"default":"pointer",width:"100%",fontFamily:_FN}}>
-                            {d[canal]?"R$ "+parseFloat(d[canal]).toLocaleString("pt-BR"):"—"}
+                          <div onClick={()=>!futuro&&setEditando(key)} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right"}}>
+                            {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                           </div>
                         )}
                       </div>
@@ -1882,7 +1911,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
           </div>
           <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
             <div style={{padding:"7px",fontSize:10,color:"#a89f94",display:"flex",alignItems:"center",justifyContent:"center"}}>Σ</div>
-            {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:_FN}}>{fmt(t)}</div>)}
+            {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:_FS,fontWeight:700,color:"#2c3e50",fontFamily:_FN,textAlign:"right",borderLeft:"1px solid #e8e2da"}}>{t>0?t.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>)}
           </div>
         </div>
       )}
@@ -1905,14 +1934,22 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                   const total=calcTotalAux(cat,auxData,recTotais);
                   const isAuto=SEM_AUX.includes(cat);
                   const regra=cat==="Taxas Cartão"?"1% receita total":cat==="Taxas Marketplaces"?"29% marketplaces":cat==="Valor de Correção"?"valor fixo":null;
-                  const isDestaque=cat==="Tecidos"||cat==="Oficinas Costura";
+                  const isSuper=SUPER_DEST.includes(cat);
+                  const isLeve=LEVE_DEST.includes(cat);
+                  const rowBg=isSuper?"#e4eef7":isLeve?"#f4f8fc":"#fff";
+                  const leftBorder=isSuper?"3px solid #4a7fa5":isLeve?"3px solid #c0d4e8":"3px solid transparent";
+                  const catSize=isSuper?14:isLeve?13:12;
+                  const catWeight=isSuper?800:isLeve?700:400;
+                  const catColor=isSuper?"#1a3a5c":isLeve?"#2c3e50":"#4a5a6a";
+                  const valWeight=isSuper?800:700;
+                  const valColor=total>0?(isSuper?"#1a3a5c":"#2c3e50"):"#d0c8c0";
                   return(
-                    <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:"#fff"}} onClick={()=>{if(!isAuto)setAuxAberta(cat);}}>
+                    <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto)setAuxAberta(cat);}}>
                       <td style={{padding:"7px 12px"}}>
-                        <div style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:400,color:"#2c3e50"}}>{cat}</div>
+                        <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
                         {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
                       </td>
-                      <td style={{padding:"7px 12px",textAlign:"right",fontFamily:_FN,fontSize:isDestaque?13:12,fontWeight:600,color:total>0?"#2c3e50":"#d0c8c0",whiteSpace:"nowrap"}}>
+                      <td style={{padding:"7px 12px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:valWeight,color:valColor,whiteSpace:"nowrap",borderLeft:"1px solid #ede8e0"}}>
                         {total>0?total.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                       </td>
                       <td style={{textAlign:"center",color:"#c8d0d8",fontSize:12,paddingRight:6}}>{!isAuto?"›":""}</td>
@@ -1956,17 +1993,22 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
             </div>
             <div style={{maxHeight:680,overflowY:"auto"}}>
               {Array.from({length:31},(_,i)=>i+1).map(dia=>{
-                const d=receitas[dia]||{};const isDom=DOMINGOS_MAR.includes(dia);const futuro=dia>hoje;
+                const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=dia>hoje;
+                const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
+                const sepCol=isDom?"#b0a898":feriado?"#b0d4b0":"#ede8e0";
+                const valCol=isDom?"#4a3a2a":feriado?"#1a4a1a":"#2c3e50";
+                const emptyCol=isDom?"#a09080":feriado?"#90b890":"#e0dbd5";
                 return(
-                  <div key={dia} style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:"1px solid #f0ebe4",background:isDom?"#fafaf8":"#fff"}}>
-                    <div style={{padding:"4px 3px",fontSize:11,color:isDom?"#8a7060":dia===hoje?"#4a7fa5":"#8a9aa4",textAlign:"center",paddingTop:6,fontWeight:dia===hoje?700:400}}>{dia}</div>
+                  <div key={dia} style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:`1px solid ${isDom?"#b8b0a6":feriado?"#a8d0a8":"#f0ebe4"}`,background:rowBg,position:"relative"}}>
+                    <div style={{padding:"4px 3px",fontSize:11,color:isDom?"#8a7060":dia===hoje?"#4a7fa5":"#8a9aa4",textAlign:"center",paddingTop:6,fontWeight:(isDom||feriado||dia===hoje)?700:400,background:isDom?"#b8b0a4":feriado?"#b8ddb8":"transparent",borderRight:`1px solid ${sepCol}`}}>{dia}</div>
+                    {feriado&&<div style={{position:"absolute",left:30,top:2,fontSize:9,color:"#2d6a2d",fontFamily:"Georgia,serif",background:"#d4ecd4",padding:"1px 5px",borderRadius:3,border:"1px solid #a8d0a8",pointerEvents:"none"}}>🎉 {feriado}</div>}
                     {["silvaTeles","bomRetiro","marketplaces"].map((canal)=>{
                       const key="g"+dia+"-"+canal;
                       return(
-                        <div key={canal} style={{padding:"3px 6px",display:"flex",alignItems:"center"}}>
+                        <div key={canal} style={{padding:"3px 6px",display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
                           {editando===key?(<input autoFocus defaultValue={d[canal]||""} style={{width:"100%",border:"1px solid #4a7fa5",borderRadius:3,padding:"2px 4px",fontSize:12,outline:"none"}} onBlur={e=>{salvarCelula(dia,canal,e.target.value);setEditando(null);}} onKeyDown={e=>{if(e.key==="Enter"||e.key==="Tab"){salvarCelula(dia,canal,e.target.value);setEditando(null);}}}/>):(
-                            <div onClick={()=>!futuro&&setEditando(key)} style={{fontSize:12,color:d[canal]?"#2c3e50":"#e0dbd5",cursor:futuro?"default":"pointer",width:"100%",fontFamily:_FN}}>
-                              {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR"):"—"}
+                            <div onClick={()=>!futuro&&setEditando(key)} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right"}}>
+                              {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                             </div>
                           )}
                         </div>
@@ -1978,7 +2020,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
             </div>
             <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
               <div style={{padding:"7px",fontSize:11,color:"#4a7fa5",textAlign:"center",fontWeight:700}}>Σ</div>
-              {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"6px 8px",fontSize:12,fontWeight:700,color:"#2c3e50",fontFamily:_FN}}>{fmt(t)}</div>)}
+              {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"6px 8px",fontSize:_FS,fontWeight:700,color:"#2c3e50",fontFamily:_FN,textAlign:"right",borderLeft:"1px solid #e8e2da"}}>{t>0?t.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>)}
             </div>
           </div>
           {/* ── Despesas ── */}
@@ -1999,16 +2041,24 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                 <tbody>
                   {categorias.map(cat=>{
                     const total=calcTotalAux(cat,auxData,recTotais);
-                    const isDestaque=cat==="Tecidos"||cat==="Oficinas Costura";
+                    const isSuper=SUPER_DEST.includes(cat);
+                    const isLeve=LEVE_DEST.includes(cat);
                     const isAuto=SEM_AUX.includes(cat);
                     const regra=cat==="Taxas Cartão"?"1% receita":cat==="Taxas Marketplaces"?"29% MKT":null;
+                    const rowBg=isSuper?"#e4eef7":isLeve?"#f4f8fc":"#fff";
+                    const leftBorder=isSuper?"3px solid #4a7fa5":isLeve?"3px solid #c0d4e8":"3px solid transparent";
+                    const catSize=isSuper?14:isLeve?13:12;
+                    const catWeight=isSuper?800:isLeve?700:400;
+                    const catColor=isSuper?"#1a3a5c":isLeve?"#2c3e50":"#4a5a6a";
+                    const valWeight=isSuper?800:700;
+                    const valColor=total>0?(isSuper?"#1a3a5c":"#2c3e50"):"#d0c8c0";
                     return(
-                      <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:"#fff"}} onClick={()=>{if(!isAuto)setAuxAberta(cat);}}>
+                      <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto)setAuxAberta(cat);}}>
                         <td style={{padding:"7px 12px"}}>
-                          <div style={{fontSize:isDestaque?13:12,fontWeight:isDestaque?700:400,color:"#2c3e50"}}>{cat}</div>
+                          <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
                           {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
                         </td>
-                        <td style={{padding:"7px 12px",textAlign:"right",fontFamily:_FN,fontSize:isDestaque?13:12,fontWeight:600,color:total>0?"#2c3e50":"#d0c8c0",whiteSpace:"nowrap"}}>
+                        <td style={{padding:"7px 12px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:valWeight,color:valColor,whiteSpace:"nowrap",borderLeft:"1px solid #ede8e0"}}>
                           {total>0?total.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                         </td>
                         <td style={{textAlign:"center",color:"#c8d0d8",fontSize:12}}>{!isAuto?"›":""}</td>
@@ -2047,7 +2097,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                           {["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].map(f=>(
                             <td key={f} style={{padding:"6px 6px"}}><input value={row[f]||""} onChange={e=>updateLinhaAux("Funcionários",idx,f,e.target.value)} style={{...inputStyle,width:70,textAlign:"right"}}/></td>
                           ))}
-                          <td style={{padding:"6px 10px",textAlign:"right",fontWeight:600,color:"#2c3e50",whiteSpace:"nowrap"}}>{"R$ "+rowTotal.toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
+                          <td style={{padding:"6px 10px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:700,color:"#2c3e50",whiteSpace:"nowrap"}}>{"R$ "+rowTotal.toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
                           <td style={{padding:"6px 6px",textAlign:"center"}}><span onClick={()=>removeLinhaAux("Funcionários",idx)} style={{color:"#c0b8b0",cursor:"pointer",fontSize:16}}>×</span></td>
                         </tr>
                       );
@@ -2083,19 +2133,19 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
   const [novoB,setNovoB]=useState({data:"",mes:3,empresa:"",valor:"",nroNota:""});
   const [pasteText,setPasteText]=useState("");
   const [importError,setImportError]=useState("");
-  const [filtro,setFiltro]=useState(3);
+  const [filtro,setFiltro]=useState(new Date().getMonth()+1);
   const [mesAberto,setMesAberto]=useState(0);
   const [saveStatus,setSaveStatus]=useState(null);
   const [lixeira,setLixeira]=useState([]);
   const [confirm,setConfirm]=useState(null);
-  const hoje=14;const mesHoje=3;
+  const hoje=new Date().getDate();const mesHoje=new Date().getMonth()+1;
   const diaNum=(d)=>parseInt((d||"99").split("/")[0]);
   const isVencido=(b)=>!b.pago&&(b.mes<mesHoje||(b.mes===mesHoje&&diaNum(b.data)<hoje));
   const mesesComBoletos=[...new Set(boletos.map(b=>b.mes))].sort((a,b)=>a-b);
   const boletosFiltrados=filtro==="aberto"
     ?boletos.filter(b=>!b.pago&&(mesAberto===0||b.mes===mesAberto)).sort((a,b)=>a.mes-b.mes||diaNum(a.data)-diaNum(b.data))
     :boletos.filter(b=>b.mes===filtro).sort((a,b)=>diaNum(a.data)-diaNum(b.data));
-  const boletosAberto=boletosFiltrados.filter(b=>!b.pago);
+  const boletosAberto=boletosFiltrados.filter(b=>!b.pago).sort((a,b)=>a.mes-b.mes||diaNum(a.data)-diaNum(b.data));
   const boletosPagos=boletosFiltrados.filter(b=>b.pago);
   const mesFiltro=typeof filtro==="number"?filtro:mesHoje;
   const totalPagoMes=boletos.filter(b=>b.pago&&b.mes===mesFiltro).reduce((s,b)=>s+parseFloat(b.valor||0),0);
@@ -2187,7 +2237,7 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
                       <td style={{padding:"7px 12px",fontSize:12,color:"#2c3e50"}}>{b.empresa}</td>
                       <td style={{padding:"7px 12px",fontSize:11,color:"#8a9aa4"}}>{b.nroNota||"—"}</td>
                       {filtro==="aberto"&&<td style={{padding:"7px 12px",fontSize:11,color:"#8a9aa4"}}>{MESES[b.mes-1]}</td>}
-                      <td style={{padding:"7px 12px",fontSize:13,fontWeight:700,textAlign:"right",color:venc?"#c0392b":"#2c3e50",fontFamily:_FN}}>{fmt(parseFloat(b.valor||0))}</td>
+                      <td style={{padding:"7px 12px",fontSize:_FS,fontWeight:700,textAlign:"right",color:venc?"#c0392b":"#2c3e50",fontFamily:_FN}}>{fmt(parseFloat(b.valor||0))}</td>
                       <td style={{padding:"7px 12px",textAlign:"center"}}><div onClick={()=>togglePago(b.id)} style={{width:18,height:18,borderRadius:4,background:"#fff",border:"1.5px solid #d0d8e0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",margin:"auto"}}/></td>
                       <td style={{padding:"7px 6px",textAlign:"center"}}><span onClick={()=>remover(b.id)} style={{color:"#d0c8c0",cursor:"pointer",fontSize:14}}>×</span></td>
                     </tr>
@@ -2216,7 +2266,7 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
                     <td style={{padding:"6px 12px",fontSize:12,color:"#a0a0a0",textDecoration:"line-through"}}>{b.empresa}</td>
                     <td style={{padding:"6px 12px",fontSize:11,color:"#b0b8b4"}}>{b.nroNota||"—"}</td>
                     {filtro==="aberto"&&<td style={{padding:"6px 12px",fontSize:11,color:"#b0b8b4"}}>{MESES[b.mes-1]}</td>}
-                    <td style={{padding:"6px 12px",fontSize:12,fontWeight:600,textAlign:"right",color:"#27ae60",fontFamily:_FN}}>{fmt(parseFloat(b.valor||0))}</td>
+                    <td style={{padding:"6px 12px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#27ae60",fontFamily:_FN}}>{fmt(parseFloat(b.valor||0))}</td>
                     <td style={{padding:"6px 12px",textAlign:"center"}}><div onClick={()=>togglePago(b.id)} style={{width:18,height:18,borderRadius:4,background:"#27ae60",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",margin:"auto"}}><span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span></div></td>
                     <td style={{padding:"6px 6px",textAlign:"center"}}><span onClick={()=>remover(b.id)} style={{color:"#d0c8c0",cursor:"pointer",fontSize:14}}>×</span></td>
                   </tr>
@@ -3300,7 +3350,7 @@ const calcDadosMes=(mesNum,recMes={},auxMes={})=>{
 const inicializarMesNovo=()=>{const novo={};CATS.forEach(cat=>{novo[cat]=[];});return novo;};
 
 export default function App(){
-  const [active,setActive]=useState("dashboard");
+  const [active,setActive]=useState("lancamentos");
   const [usuarioLogado,setUsuarioLogado]=useState(null);
   const [menuUser,setMenuUser]=useState(false);
   const [usuarios,setUsuarios]=useState(USUARIOS_INICIAL);
@@ -3309,7 +3359,7 @@ export default function App(){
   const [produtos,setProdutos]=useState([]);
   const [oficinasCAD,setOficinasCAD]=useState(OFICINAS_CAD_INICIAL);
   const [logTroca,setLogTroca]=useState([]);
-  const [boletosShared,setBoletosShared]=useState([...BOLETOS_MAR]);
+  const [boletosShared,setBoletosShared]=useState([...BOLETOS_MAR,...BOLETOS_ABR,...BOLETOS_MAI,...BOLETOS_JUN,...BOLETOS_JUL]);
   const receitasIniciais={1:RECEITAS_JAN,2:RECEITAS_FEV,3:RECEITAS_MAR};
   const [receitasPorMes,setReceitasPorMes]=useState(receitasIniciais);
   const auxIniciais={1:AUX_JAN,2:AUX_FEV,3:AUX_MAR};
