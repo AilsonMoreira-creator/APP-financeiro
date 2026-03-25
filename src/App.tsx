@@ -1860,16 +1860,30 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const removerCategoria=(cat)=>{setCategorias(prev=>prev.filter(c=>c!==cat));setAuxData(prev=>{const n={...prev};delete n[cat];return n;});};
   const totalFuncSomente=(auxData["Funcionários"]||[]).reduce((s,r)=>s+calcRowTotal(r),0);
   const totalFuncGeral=totalFuncSomente+FIXOS_FUNC.reduce((s,f)=>s+f.valor,0);
+  const [cardsVisiveis,setCardsVisiveis]=useState(false);
   return(
     <div>
       {!auxAberta&&(
-        <div style={{display:"flex",gap:8,marginBottom:6,background:"#fff",borderRadius:8,padding:"6px 12px",border:"1px solid #e8e2da"}}>
-          <div style={{flex:1,borderRight:"1px solid #e8e2da",paddingRight:10}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Receita</span><div style={{fontSize:15,fontWeight:700,color:"#4a7fa5"}}>{fmt(totalGeral)}</div></div>
-          <div style={{flex:1,borderRight:"1px solid #e8e2da",paddingRight:10,paddingLeft:6}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Despesa</span><div style={{fontSize:15,fontWeight:700,color:"#c0392b"}}>{fmt(totalDesp)}</div></div>
-          <div style={{flex:1,paddingLeft:6}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Saldo</span><div style={{fontSize:15,fontWeight:700,color:(totalGeral-totalDesp)>=0?"#27ae60":"#c0392b"}}>{fmt(totalGeral-totalDesp)}</div></div>
+        <div style={{display:"flex",gap:8,marginBottom:6,background:"#fff",borderRadius:8,padding:"5px 10px",border:"1px solid #e8e2da",alignItems:"center"}}>
+          {cardsVisiveis?(
+            <>
+              <div style={{flex:1,borderRight:"1px solid #e8e2da",paddingRight:10}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Receita</span><div style={{fontSize:15,fontWeight:700,color:"#4a7fa5"}}>{fmt(totalGeral)}</div></div>
+              <div style={{flex:1,borderRight:"1px solid #e8e2da",paddingRight:10,paddingLeft:6}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Despesa</span><div style={{fontSize:15,fontWeight:700,color:"#c0392b"}}>{fmt(totalDesp)}</div></div>
+              <div style={{flex:1,paddingLeft:6}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Saldo</span><div style={{fontSize:15,fontWeight:700,color:(totalGeral-totalDesp)>=0?"#27ae60":"#c0392b"}}>{fmt(totalGeral-totalDesp)}</div></div>
+            </>
+          ):(
+            <div style={{flex:1,display:"flex",gap:16,alignItems:"center"}}>
+              <span style={{fontSize:11,color:"#a89f94",fontFamily:"Georgia,serif"}}>Resumo do mês</span>
+              <span style={{fontSize:11,color:"#4a7fa5",fontWeight:600}}>{fmt(totalGeral)}</span>
+              <span style={{fontSize:11,color:"#6b7c8a"}}>·</span>
+              <span style={{fontSize:11,color:"#c0392b",fontWeight:600}}>{fmt(totalDesp)}</span>
+              <span style={{fontSize:11,color:"#6b7c8a"}}>·</span>
+              <span style={{fontSize:11,fontWeight:700,color:(totalGeral-totalDesp)>=0?"#27ae60":"#c0392b"}}>{fmt(totalGeral-totalDesp)}</span>
+            </div>
+          )}
+          <button onClick={()=>setCardsVisiveis(p=>!p)} style={{background:"none",border:"1px solid #e8e2da",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:11,color:"#a89f94",flexShrink:0}}>{cardsVisiveis?"▲":"▼"}</button>
         </div>
       )}
-      {!auxAberta&&(
         <div style={{display:"flex",gap:0,borderBottom:"1px solid #e8e2da",marginBottom:0}}>
           <button onClick={()=>setAba("geral")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="geral"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="geral"?"#2c3e50":"#8a9aa4"}}>Geral</button>
           <button onClick={()=>setAba("receitas")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="receitas"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="receitas"?"#2c3e50":"#8a9aa4",display:"flex",alignItems:"center",gap:4}}><IconReceitas ativo={aba==="receitas"}/>Receitas</button>
@@ -1984,9 +1998,9 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
         </div>
       )}
       {aba==="geral"&&!auxAberta&&(
-        <div style={{display:"flex",gap:16,alignItems:"flex-start",paddingTop:10}}>
+        <div style={{display:"flex",gap:48,alignItems:"flex-start",paddingTop:10}}>
           {/* ── Receitas ── */}
-          <div style={{flex:"1 1 0",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
+          <div style={{flex:"0 0 42%",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
               <div/>
               {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4}}>{h}</div>))}
@@ -2024,7 +2038,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
             </div>
           </div>
           {/* ── Despesas ── */}
-          <div style={{flex:"1 1 0",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
+          <div style={{flex:"0 0 42%",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
               <colgroup><col/><col style={{width:130}}/><col style={{width:22}}/></colgroup>
               <thead>
@@ -2906,7 +2920,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
               <div style={{overflowY:"auto",maxHeight:760,minWidth:900}}>
-                <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.6fr 90px 60px 80px 90px 90px 52px 10px 52px 70px 60px 30px 26px",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
+                <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.6fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
                   {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","","Pago","Qtd Entr.","Faltante","",""].map((h,i)=>(
                     <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}}>{h}</div>
                   ))}
@@ -2917,15 +2931,15 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   const qtdEntr=c.qtdEntregue!=null?c.qtdEntregue:(c.entregue?c.qtd:null);
                   const faltante=c.entregue&&qtdEntr!=null?c.qtd-qtdEntr:null;
                   return(
-                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.6fr 90px 60px 80px 90px 90px 52px 10px 52px 70px 60px 30px 26px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
+                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.6fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
                       <div style={{height:"100%",background:STATUS_COR[st],minHeight:36}}/>
                       <div style={{padding:"5px 8px",fontSize:11,fontWeight:600,color:"#2c3e50"}}>{c.nCorte}</div>
                       <div style={{padding:"5px 8px",fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.ref}</div>
                       <div style={{padding:"5px 8px"}}><div style={{fontSize:12,color:"#2c3e50"}}>{c.descricao}</div><span style={{fontSize:9,color:"#fff",background:c.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 5px"}}>{c.marca}</span></div>
                       <div style={{padding:"5px 8px",fontSize:11,color:"#2c3e50"}}>{c.oficina}</div>
-                      <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.qtd}</div>
-                      <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.valorUnit}</div>
-                      <div style={{padding:"5px 8px",fontSize:12,textAlign:"right",fontWeight:700,color:"#2c3e50",fontFamily:_FN}}>{fmt(c.valorTotal)}</div>
+                      <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.qtd}</div>
+                      <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.valorUnit!=null?"R$ "+Number(c.valorUnit).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>
+                      <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{fmt(c.valorTotal)}</div>
                       <div style={{padding:"5px 8px",fontSize:11,color:"#6b7c8a"}}>{new Date(c.data).toLocaleDateString("pt-BR")}</div>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><div onClick={()=>!c.pago&&toggleEntregue(c.id)} style={{width:18,height:18,borderRadius:4,background:c.entregue||c.pago?"#4a7fa5":"#fff",border:c.entregue||c.pago?"none":"1px solid #c0d0dc",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{(c.entregue||c.pago)&&<span style={{color:"#fff",fontSize:11,fontWeight:700}}>✓</span>}</div></div>
                       <div/>
@@ -3254,14 +3268,14 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
   return(
     <div>
       <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Configurações</div>
-      <Section title="Bling — Marketplaces" subtitle="3 contas separadas · Exitus · Lumia · Muniam">
-        {[{key:"exitus",label:"Token API — Exitus"},{key:"lumia",label:"Token API — Lumia"},{key:"muniam",label:"Token API — Muniam"}].map(f=>(
-          <div key={f.key} style={{marginBottom:16}}>
-            <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:4}}>{f.label}</div>
-            <div style={{display:"flex",gap:8}}><input value={bling[f.key]} onChange={e=>setBling(prev=>({...prev,[f.key]:e.target.value}))} placeholder="Token Bearer..." style={{...iStyle,flex:1}}/></div>
-          </div>
-        ))}
-      </Section>
+      <div style={{background:"#f0f6fb",border:"1px solid #c8d8e4",borderRadius:10,padding:"10px 16px",marginBottom:16,display:"flex",gap:10,alignItems:"center"}}>
+        <span style={{fontSize:16}}>🔗</span>
+        <div>
+          <div style={{fontSize:12,fontWeight:600,color:"#2c3e50"}}>Bling — Integração Marketplaces</div>
+          <div style={{fontSize:11,color:"#8a9aa4",marginTop:2}}>A integração com o Bling terá um módulo próprio em breve. Exitus · Lumia · Muniam</div>
+        </div>
+        <span style={{marginLeft:"auto",fontSize:10,color:"#4a7fa5",background:"#e0f0ff",borderRadius:4,padding:"2px 8px",fontWeight:600}}>Em breve</span>
+      </div>
       <Section title="Miré — Lojas Físicas" subtitle="Silva Teles e Bom Retiro">
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:4}}>Token API Miré</div>
@@ -3409,7 +3423,7 @@ export default function App(){
   const salvarNoSupabase=useCallback((payload)=>{
     if(!supabase||!dbCarregado)return;
     setSyncStatus('saving');
-   supabase.from('amicia_data').upsert({user_id:USER_ID,payload},{onConflict:'user_id'})
+    supabase.from('amicia_data').upsert({user_id:USER_ID,payload},{onConflict:'user_id'})
       .then(({error})=>{
         if(error){setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
         else{setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
