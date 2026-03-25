@@ -1884,6 +1884,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
           <button onClick={()=>setCardsVisiveis(p=>!p)} style={{background:"none",border:"1px solid #e8e2da",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:11,color:"#a89f94",flexShrink:0}}>{cardsVisiveis?"▲":"▼"}</button>
         </div>
       )}
+      {!auxAberta&&(
         <div style={{display:"flex",gap:0,borderBottom:"1px solid #e8e2da",marginBottom:0}}>
           <button onClick={()=>setAba("geral")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="geral"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="geral"?"#2c3e50":"#8a9aa4"}}>Geral</button>
           <button onClick={()=>setAba("receitas")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="receitas"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="receitas"?"#2c3e50":"#8a9aa4",display:"flex",alignItems:"center",gap:4}}><IconReceitas ativo={aba==="receitas"}/>Receitas</button>
