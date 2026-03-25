@@ -2155,17 +2155,17 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
   const [confirm,setConfirm]=useState(null);
   const hoje=new Date().getDate();const mesHoje=new Date().getMonth()+1;
   const diaNum=(d)=>parseInt((d||"99/99").split("/")[0]);
-  const mesNum=(d)=>{const p=(d||"").split("/");return p.length>=2?parseInt(p[1]):99;};
-  const isVencido=(b)=>!b.pago&&(b.mes<mesHoje||(b.mes===mesHoje&&diaNum(b.data)<hoje));
-  const mesesComBoletos=[...new Set(boletos.map(b=>Number(b.mes)))].sort((a,b)=>a-b);
+  const getMes=(b)=>{const p=(b.data||"").split("/");return(p.length>=2&&parseInt(p[1])>=1&&parseInt(p[1])<=12)?parseInt(p[1]):Number(b.mes);};
+  const isVencido=(b)=>!b.pago&&(getMes(b)<mesHoje||(getMes(b)===mesHoje&&diaNum(b.data)<hoje));
+  const mesesComBoletos=[...new Set(boletos.map(b=>getMes(b)))].sort((a,b)=>a-b);
   const boletosFiltrados=filtro==="aberto"
-    ?boletos.filter(b=>!b.pago&&(mesAberto===0||Number(b.mes)===Number(mesAberto))).sort((a,b)=>Number(a.mes)-Number(b.mes)||diaNum(a.data)-diaNum(b.data))
-    :boletos.filter(b=>Number(b.mes)===Number(filtro)).sort((a,b)=>diaNum(a.data)-diaNum(b.data));
-  const boletosAberto=boletosFiltrados.filter(b=>!b.pago).sort((a,b)=>Number(a.mes)-Number(b.mes)||diaNum(a.data)-diaNum(b.data));
+    ?boletos.filter(b=>!b.pago&&(mesAberto===0||getMes(b)===Number(mesAberto))).sort((a,b)=>getMes(a)-getMes(b)||diaNum(a.data)-diaNum(b.data))
+    :boletos.filter(b=>getMes(b)===Number(filtro)).sort((a,b)=>diaNum(a.data)-diaNum(b.data));
+  const boletosAberto=boletosFiltrados.filter(b=>!b.pago).sort((a,b)=>getMes(a)-getMes(b)||diaNum(a.data)-diaNum(b.data));
   const boletosPagos=boletosFiltrados.filter(b=>b.pago).sort((a,b)=>diaNum(a.data)-diaNum(b.data));
   const mesFiltro=typeof filtro==="number"?filtro:mesHoje;
-  const totalPagoMes=boletos.filter(b=>b.pago&&Number(b.mes)===mesFiltro).reduce((s,b)=>s+parseFloat(b.valor||0),0);
-  const totalAPagar=boletos.filter(b=>!b.pago&&Number(b.mes)===mesHoje).reduce((s,b)=>s+parseFloat(b.valor||0),0);
+  const totalPagoMes=boletos.filter(b=>b.pago&&getMes(b)===mesFiltro).reduce((s,b)=>s+parseFloat(b.valor||0),0);
+  const totalAPagar=boletos.filter(b=>!b.pago&&getMes(b)===mesHoje).reduce((s,b)=>s+parseFloat(b.valor||0),0);
   const totalFiltro=boletosFiltrados.reduce((s,b)=>s+parseFloat(b.valor||0),0);
   const markChange=()=>{setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
   const togglePago=(id)=>{
@@ -2203,7 +2203,10 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
         else{empresa=col;}
       });
       if(!valor){erros++;return;}
-      novas.push({id:Date.now()+i,data:data||"—",mes:mesFiltro,empresa:empresa||("Boleto "+(i+1)),nroNota,valor,pago:false});
+      const partes=(data||"").split("/");
+      const mesDaData=partes.length>=2?parseInt(partes[1]):null;
+      const mesCorreto=(mesDaData&&mesDaData>=1&&mesDaData<=12)?mesDaData:mesFiltro;
+      novas.push({id:Date.now()+i,data:data||"—",mes:mesCorreto,empresa:empresa||("Boleto "+(i+1)),nroNota,valor,pago:false});
     });
     if(novas.length===0){setImportError("Formato inválido. Use: Data ; Valor ; Empresa");return;}
     setBoletos(prev=>[...prev,...novas]);setPasteText("");setMostraImport(false);
