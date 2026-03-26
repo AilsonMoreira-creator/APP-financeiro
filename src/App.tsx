@@ -2144,9 +2144,9 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
 // ── Normalização e deduplicação de boletos ────────────────────────────────────
 const normalizarNota=(s="")=>String(s).toUpperCase().replace(/\s+/g,"").replace(/^NOTA/,"NF");
 const normalizarEmpresa=(s="")=>String(s).trim().toUpperCase().replace(/\s+/g," ");
-const normalizarValor=(v="")=>{const txt=String(v).trim().replace(/\./g,"").replace(",",".");const n=Number(txt);return Number.isFinite(n)?n.toFixed(2):"0.00";};
+const normalizarValor=(v="")=>{const txt=String(v).trim().replace(/R\$\s*/,"");const n=txt.includes(",")?Number(txt.replace(/\./g,"").replace(",",".")):Number(txt);return Number.isFinite(n)?n.toFixed(2):"0.00";};
 const normalizarData=(d="")=>{const txt=String(d).trim().replace(/-/g,"/");const p=txt.split("/");if(p.length===2){const[dia,mes]=p;return`${dia.padStart(2,"0")}/${mes.padStart(2,"0")}/2026`;}if(p.length===3){const[dia,mes,ano]=p;return`${dia.padStart(2,"0")}/${mes.padStart(2,"0")}/${ano}`;}return txt;};
-const chaveBoleto=(b)=>[normalizarNota(b.nroNota),normalizarEmpresa(b.empresa),normalizarValor(b.valor)].join("|");
+const chaveBoleto=(b)=>[normalizarData(b.data),normalizarNota(b.nroNota),normalizarEmpresa(b.empresa),normalizarValor(b.valor)].join("|");
 const deduplicarBoletos=(lista=[])=>{
   const vistos=new Map();
   lista.forEach(b=>{
@@ -2159,8 +2159,7 @@ const deduplicarBoletos=(lista=[])=>{
       mes:parseInt(normalizarData(b.data).split("/")[1])||Number(b.mes),
     };
     const chave=chaveBoleto(norm);
-    const atual=vistos.get(chave);
-    if(!atual||norm.data.length>atual.data.length){vistos.set(chave,norm);}
+    if(!vistos.has(chave)){vistos.set(chave,norm);}
   });
   return[...vistos.values()];
 };
@@ -2646,12 +2645,8 @@ const RelatorioContent=(props)=>{
       <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Tipo de Relatório</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         {TIPOS_REL.map(t=>(
-          <div key={t.id} onClick={()=>{if(t.id==="copiar"){copiarDados();return;}setTipo(t.id);}} style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:16,alignItems:"flex-start"}}>
+          <div key={t.id} onClick={()=>{if(t.id==="copiar"){copiarDados();return;}setTipo(t.id);}} style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:16,alignItems:"center"}}>
             <t.Icon size={40}/>
-            <div style={{paddingTop:4}}>
-              <div style={{fontSize:14,fontWeight:600,color:"#2c3e50",marginBottom:4}}>{t.id==="copiar"&&copiado?"✓ Copiado!":t.label}</div>
-              <div style={{fontSize:11,color:"#a89f94"}}>{t.desc}</div>
-            </div>
             <div>
               <div style={{fontSize:14,fontWeight:600,color:"#2c3e50",marginBottom:4}}>{t.id==="copiar"&&copiado?"✓ Copiado!":t.label}</div>
               <div style={{fontSize:11,color:"#a89f94"}}>{t.desc}</div>
