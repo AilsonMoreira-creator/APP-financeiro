@@ -3491,13 +3491,16 @@ const CalculadoraContent=()=>{
   },[]);
 
   // ── Auto-salvar ───────────────────────────────────────────────────────────
-  const salvarCalc=(novoProds,novoPrs)=>{
-    if(!supabase)return;
-    supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods:novoProds??prods,prs:novoPrs??prs}},{onConflict:'user_id'}).catch(()=>{});
+  const atualizarProds=(fn)=>{
+    const novos=typeof fn==="function"?fn(prods):fn;
+    setProds(novos);
+    if(supabase)supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods:novos,prs}},{onConflict:'user_id'}).catch(()=>{});
   };
-
-  const atualizarProds=(fn)=>{setProds(ps=>{const novos=typeof fn==="function"?fn(ps):fn;salvarCalc(novos,null);return novos;});};
-  const atualizarPrs=(fn)=>{setPrs(ps=>{const novos=typeof fn==="function"?fn(ps):fn;salvarCalc(null,novos);return novos;});};
+  const atualizarPrs=(fn)=>{
+    const novos=typeof fn==="function"?fn(prs):fn;
+    setPrs(novos);
+    if(supabase)supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods,prs:novos}},{onConflict:'user_id'}).catch(()=>{});
+  };
 
   const buscar=()=>{const p=prods.find(x=>x.ref.toLowerCase()===rb.toLowerCase().trim()||x.descricao.toLowerCase().includes(rb.toLowerCase()));if(p)setProd(p);else alert("Produto não encontrado");};
   if(tela==="lista")return<CalcLista prods={prods} setProds={atualizarProds} setProd={setProd} setRb={setRb} setTela={setTela} prod={prod}/>;
