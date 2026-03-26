@@ -136,6 +136,21 @@ const SvgRelatorio = ({ size = 32 }) => (
   </svg>
 );
 
+const SvgCalculadora = ({ size = 32 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <rect x="6" y="8" width="52" height="48" rx="8" fill="white" stroke={_S} strokeWidth="2.2"/>
+    <rect x="6" y="8" width="52" height="18" rx="8" fill={_B}/>
+    <rect x="6" y="20" width="52" height="6" fill={_B}/>
+    <text x="32" y="21" textAnchor="middle" fontSize="9" fontWeight="800" fill="white" fontFamily="Calibri,Arial">PREÇO</text>
+    <text x="16" y="38" textAnchor="middle" fontSize="11" fill={_S} fontFamily="Arial">R$</text>
+    <line x1="28" y1="36" x2="38" y2="36" stroke={_B} strokeWidth="2" strokeLinecap="round"/>
+    <polyline points="35,33 38,36 35,39" fill="none" stroke={_B} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <text x="48" y="38" textAnchor="middle" fontSize="9" fill={_GO} fontFamily="Calibri,Arial" fontWeight="800">%</text>
+    <line x1="12" y1="46" x2="52" y2="46" stroke="#e8e2da" strokeWidth="1.5"/>
+    <text x="32" y="54" textAnchor="middle" fontSize="8" fill={_S} fontFamily="Calibri,Arial" fontWeight="700">lucro</text>
+  </svg>
+);
+
 const SvgUsuarios = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
     <circle cx="32" cy="22" r="14" fill={_B} stroke={_S} strokeWidth="2.2"/>
@@ -393,6 +408,7 @@ const modules = [
   { id:"agenda",        Icon:SvgAgenda,        label:"Agenda"      },
   { id:"historico",     Icon:SvgHistorico,     label:"Histórico"   },
   { id:"relatorio",     Icon:SvgRelatorio,     label:"Relatório"   },
+  { id:"calculadora",   Icon:SvgCalculadora,   label:"Calculadora" },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -3419,6 +3435,191 @@ const calcDadosMes=(mesNum,recMes={},auxMes={})=>{
 
 const inicializarMesNovo=()=>{const novo={};CATS.forEach(cat=>{novo[cat]=[];});return novo;};
 
+// ═════════════════════════════════════════════════════════════════════════════
+// CALCULADORA DE PREÇOS — Módulo isolado
+// ═════════════════════════════════════════════════════════════════════════════
+const CALC_GERAIS={imposto:11,custoFixo:5};
+const CALC_LMIN=10;const CALC_LBOM=14;
+const CALC_PLATS={
+  mercadolivre:{nome:"Mercado Livre",cor:"#FFE600",ct:"#2D3277",taxas:[{l:"Comissão",t:"pct",v:14},{l:"Ads",t:"pct",v:7},{l:"Descontos",t:"pct",v:3}],fretes:[{ate:78.99,f:6},{ate:9999,f:16}]},
+  shopee:{nome:"Shopee",cor:"#EE4D2D",ct:"#fff",taxas:[{l:"Afiliados",t:"pct",v:3}],faixas:[{lb:"até R$79,99",ate:79.99,cp:20,cf:4},{lb:"R$80-99,99",ate:99.99,cp:14,cf:16},{lb:"R$100-139",ate:139,cp:14,cf:20}]},
+  shein:{nome:"Shein",cor:"#000",ct:"#fff",taxas:[{l:"Comissão",t:"pct",v:20},{l:"Descontos",t:"pct",v:2},{l:"Frete",t:"fix",v:6}]},
+  tiktok:{nome:"TikTok Shop",cor:"#010101",ct:"#fff",taxas:[{l:"Comissão",t:"pct",v:14},{l:"Afiliados",t:"pct",v:7},{l:"Frete",t:"fix",v:4}]},
+  meluni:{nome:"Meluni",cor:"#fff",ct:"#000",bd:"#000",taxas:[{l:"Cartão/Antifraude",t:"pct",v:8},{l:"Converter",t:"pct",v:2},{l:"Propaganda",t:"pct",v:10},{l:"Cupons",t:"pct",v:7},{l:"Frete",t:"fix",v:15},{l:"Plataforma",t:"fix",v:5}]},
+};
+const CALC_ORDEM=["mercadolivre","shopee","shein","tiktok","meluni"];
+const CALC_CK=[["tecido","Tecido"],["forro","Forro"],["oficina","Oficina Costura"],["ziper","Zíper"],["botao","Botão/Caseado"],["aviamentos","Aviamentos"],["modelista","Modelista/Piloteiro"],["salaCorte","Sala de Corte"]];
+const calcCusto=p=>CALC_CK.reduce((s,[k])=>s+parseFloat(p[k]||0),0);
+const calcTermo=l=>{if(l==null||isNaN(l))return"#e0d8d0";if(l<8)return"#c0392b";if(l<10)return"#e67e22";if(l<14)return"#27ae60";return"#1a7a40";};
+const calcFmt=v=>isNaN(v)||v==null?"—":Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const calcPreco=(id,c,la)=>{
+  const r=CALC_PLATS[id];
+  if(id==="shopee"){for(const f of r.faixas){const af=r.taxas[0].v;const tp=(f.cp+af+CALC_GERAIS.imposto)/100;const dn=1-tp;if(dn<=0)continue;const p=(la+c+f.cf+CALC_GERAIS.custoFixo)/dn;const mn=r.faixas.indexOf(f)===0?0:r.faixas[r.faixas.indexOf(f)-1].ate;if(p>mn-0.01&&p<=f.ate+0.5){return{p:Math.round(p*100)/100,l:Math.round((p-p*tp-f.cf-CALC_GERAIS.custoFixo-c)*100)/100,fx:f.lb};}}const f=r.faixas[2];const af=r.taxas[0].v;const tp=(f.cp+af+CALC_GERAIS.imposto)/100;const p=(la+c+f.cf+CALC_GERAIS.custoFixo)/(1-tp);return{p:Math.round(p*100)/100,l:Math.round((p-p*tp-f.cf-CALC_GERAIS.custoFixo-c)*100)/100,fx:f.lb};}
+  if(id==="mercadolivre"){const pp=r.taxas.reduce((s,t)=>t.t==="pct"?s+t.v:s,0);const tp=(pp+CALC_GERAIS.imposto)/100;for(const ff of r.fretes){const p=(la+c+ff.f+CALC_GERAIS.custoFixo)/(1-tp);if(p<=ff.ate+0.5)return{p:Math.round(p*100)/100,l:Math.round((p-p*tp-ff.f-CALC_GERAIS.custoFixo-c)*100)/100,fr:ff.f};}const ff=r.fretes[1];const p=(la+c+ff.f+CALC_GERAIS.custoFixo)/(1-r.taxas.reduce((s,t)=>t.t==="pct"?s+t.v:s,0)/100-CALC_GERAIS.imposto/100);return{p:Math.round(p*100)/100,l:Math.round((p*(1-(r.taxas.reduce((s,t)=>t.t==="pct"?s+t.v:s,0)+CALC_GERAIS.imposto)/100)-ff.f-CALC_GERAIS.custoFixo-c)*100)/100,fr:ff.f};}
+  const pp=r.taxas.reduce((s,t)=>t.t==="pct"?s+t.v:s,0);const fx=r.taxas.reduce((s,t)=>t.t==="fix"?s+t.v:s,0);const tp=(pp+CALC_GERAIS.imposto)/100;const p=(la+c+fx+CALC_GERAIS.custoFixo)/(1-tp);return{p:Math.round(p*100)/100,l:Math.round((p-p*tp-fx-CALC_GERAIS.custoFixo-c)*100)/100};
+};
+const calcLucroReal=(id,c,pr)=>{const p=parseFloat(pr);if(!p)return null;const r=CALC_PLATS[id];let tp=CALC_GERAIS.imposto/100,fx=CALC_GERAIS.custoFixo;if(id==="shopee"){const f=r.faixas.find(f=>p<=f.ate)||r.faixas[2];tp+=(f.cp+r.taxas[0].v)/100;fx+=f.cf;}else if(id==="mercadolivre"){tp+=r.taxas.reduce((s,t)=>t.t==="pct"?s+t.v:s,0)/100;const ff=r.fretes.find(f=>p<=f.ate)||r.fretes[1];fx+=ff.f;}else{tp+=r.taxas.reduce((s,t)=>t.t==="pct"?s+t.v:s,0)/100;fx+=r.taxas.reduce((s,t)=>t.t==="fix"?s+t.v:s,0);}return Math.round((p-p*tp-fx-c)*100)/100;};
+const CalcLogoML=({s=26})=><svg width={s} height={s} viewBox="0 0 80 80"><ellipse cx="40" cy="40" rx="38" ry="30" fill="#FFE600" stroke="#2D3277" strokeWidth="3"/><path d="M20,50 C28,32 36,24 40,28 C44,24 52,32 60,50" stroke="#2D3277" strokeWidth="5" fill="none" strokeLinecap="round"/><circle cx="28" cy="43" r="7" fill="#2D3277"/><circle cx="52" cy="43" r="7" fill="#2D3277"/></svg>;
+const CalcLogoShopee=({s=26})=><svg width={s} height={s} viewBox="0 0 80 80"><rect width="80" height="80" rx="12" fill="#EE4D2D"/><rect x="20" y="28" width="40" height="38" rx="3" fill="white"/><path d="M18,22 Q40,12 62,22 L60,28 L20,28 Z" fill="white"/><text x="40" y="55" textAnchor="middle" fontSize="22" fontWeight="bold" fill="#EE4D2D" fontFamily="Arial">S</text></svg>;
+const CalcLogoShein=({s=26})=><svg width={s} height={s} viewBox="0 0 80 80"><rect width="80" height="80" rx="6" fill="#000"/><text x="40" y="52" textAnchor="middle" fontSize="16" fontWeight="900" fill="white" fontFamily="Arial">SHEIN</text></svg>;
+const CalcLogoTikTok=({s=26})=><svg width={s} height={s} viewBox="0 0 80 80"><rect width="80" height="80" rx="12" fill="#010101"/><path d="M46,14 C46,14 48,22 58,25 L58,34 C58,34 51,33 46,27 L46,50 C46,59 38,66 28,63 C18,60 14,51 18,43 C22,35 32,33 40,37 L40,47 C37,45 33,46 32,49 C31,52 33,56 37,57 C41,58 44,55 44,51 L44,14 Z" fill="white"/></svg>;
+const CalcLogoMeluni=({s=26})=><svg width={s} height={s} viewBox="0 0 80 80"><rect width="80" height="80" rx="6" fill="white" stroke="#000" strokeWidth="2.5"/><text x="40" y="47" textAnchor="middle" fontSize="13" fontFamily="Georgia,serif" fill="#000" fontStyle="italic">Meluni</text></svg>;
+const CALC_LOGOS={mercadolivre:CalcLogoML,shopee:CalcLogoShopee,shein:CalcLogoShein,tiktok:CalcLogoTikTok,meluni:CalcLogoMeluni};
+
+const CalculadoraContent=()=>{
+  const[tela,setTela]=useState("home");
+  const[rb,setRb]=useState("");
+  const[prod,setProd]=useState(null);
+  const[platSel,setPlatSel]=useState(null);
+  const[prs,setPrs]=useState({});
+  const[prods,setProds]=useState([]);
+  const[editProd,setEditProd]=useState(null);
+  const buscar=()=>{const p=prods.find(x=>x.ref.toLowerCase()===rb.toLowerCase().trim()||x.descricao.toLowerCase().includes(rb.toLowerCase()));if(p)setProd(p);else alert("Produto não encontrado");};
+  if(tela==="lista")return<CalcLista prods={prods} setProds={setProds} setProd={setProd} setRb={setRb} setTela={setTela} prod={prod}/>;
+  if(tela==="novo")return<CalcFormProd onVoltar={()=>setTela("home")} onSalvar={(np)=>{setProds(ps=>[...ps,np]);setTela("home");}}/>;
+  if(tela==="editar"&&editProd)return<CalcFormProd inicial={editProd} onVoltar={()=>setTela("home")} onSalvar={(np)=>{setProds(ps=>ps.map(p=>p.ref===editProd.ref?np:p));if(prod?.ref===editProd.ref)setProd(np);setTela("home");}}/>;
+  if(tela==="dash")return<CalcDash prods={prods} prs={prs} onVoltar={()=>setTela("home")}/>;
+  if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} onSalvar={(id,p)=>setPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
+  const c=prod?calcCusto(prod):0;
+  return(
+    <div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
+      <div style={{maxWidth:980,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:18}}>
+          <div><div style={{fontSize:10,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Grupo Amícia</div><div style={{fontSize:22,fontWeight:700,color:"#2c3e50"}}>Calculadora de Preços</div><div style={{fontSize:11,color:"#8a9aa4",marginTop:2}}>Marketplaces · Ecommerce Meluni</div></div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setTela("novo")} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>+ Novo Produto</button>
+            <button onClick={()=>setTela("lista")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📋 Lista</button>
+            <button onClick={()=>setTela("dash")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📊 Dashboard</button>
+          </div>
+        </div>
+        <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:16}}>
+          <div style={{fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Buscar produto</div>
+          <div style={{display:"flex",gap:10}}>
+            <input value={rb} onChange={e=>setRb(e.target.value)} onKeyDown={e=>e.key==="Enter"&&buscar()} placeholder="Referência ou descrição..." style={{flex:1,border:"1px solid #c8d8e4",borderRadius:8,padding:"10px 14px",fontSize:14,outline:"none",fontFamily:"Georgia,serif"}}/>
+            <button onClick={buscar} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"10px 22px",fontSize:14,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Calcular</button>
+            {prod&&<button onClick={()=>{setProd(null);setRb("");}} style={{background:"#fff",color:"#c0392b",border:"1px solid #c0392b",borderRadius:8,padding:"10px 12px",cursor:"pointer"}}>✕</button>}
+          </div>
+        </div>
+        {prod&&(
+          <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{display:"flex",gap:10,alignItems:"baseline"}}>
+                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:"#2c3e50"}}>{prod.ref}</span>
+                <span style={{fontSize:16,fontWeight:600,color:"#2c3e50"}}>{prod.descricao}</span>
+                <span style={{fontSize:12,background:prod.marca==="Meluni"?"#f0ebe4":"#edf4fb",color:"#2c3e50",padding:"2px 10px",borderRadius:4}}>{prod.marca}</span>
+              </div>
+              <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                <button onClick={()=>{setEditProd(prod);setTela("editar");}} style={{background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 12px",fontSize:12,cursor:"pointer",color:"#4a7fa5"}}>✏ Editar</button>
+                <div style={{textAlign:"right"}}><div style={{fontSize:10,color:"#a89f94"}}>CUSTO TOTAL</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:700,color:"#2c3e50"}}>R$ {calcFmt(c)}</div></div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {CALC_CK.map(([k,label])=>parseFloat(prod[k]||0)>0?(<div key={k} style={{background:"#f7f4f0",borderRadius:6,padding:"5px 10px",display:"flex",gap:6,alignItems:"center"}}><span style={{fontSize:10,color:"#a89f94"}}>{label}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:"#2c3e50"}}>R$ {calcFmt(prod[k])}</span></div>):null)}
+              <div style={{background:"#edf4fb",borderRadius:6,padding:"5px 10px",display:"flex",gap:6,alignItems:"center",border:"1px solid #c8dff0"}}><span style={{fontSize:10,color:"#4a7fa5"}}>Custo Fixo</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:"#4a7fa5"}}>R$ {calcFmt(CALC_GERAIS.custoFixo)}</span></div>
+            </div>
+          </div>
+        )}
+        {prod&&<div style={{background:"#fff",borderRadius:10,padding:"10px 16px",border:"1px solid #e8e2da",marginBottom:14,display:"flex",gap:20,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:"#27ae60"}}/><span style={{fontSize:12,color:"#6b7c8a"}}>Mínimo: <b style={{color:"#27ae60",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(CALC_LMIN)}</b></span></div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:"#1a7a40"}}/><span style={{fontSize:12,color:"#6b7c8a"}}>Bom: <b style={{color:"#1a7a40",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(CALC_LBOM)}</b></span></div>
+          <div style={{marginLeft:"auto",display:"flex",gap:10}}>{[["#c0392b","< R$ 8"],["#e67e22","R$ 8-9,99"],["#27ae60","R$ 10-13,99"],["#1a7a40","≥ R$ 14"]].map(([cor,l])=><div key={cor} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#8a9aa4"}}><div style={{width:10,height:10,borderRadius:2,background:cor}}/>{l}</div>)}</div>
+        </div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
+          {CALC_ORDEM.map(id=>{
+            const r=CALC_PLATS[id];const Logo=CALC_LOGOS[id];
+            const rm=prod?calcPreco(id,c,CALC_LMIN):null;const rb2=prod?calcPreco(id,c,CALC_LBOM):null;
+            const ps=prod?prs[`${prod.ref}|${id}`]:null;const ls=ps?calcLucroReal(id,c,ps):null;
+            return(<div key={id} onClick={()=>{if(prod){setPlatSel(id);setTela("det");}}} style={{background:r.cor,border:`2px solid ${r.bd||r.cor}`,borderRadius:14,padding:14,cursor:prod?"pointer":"default",transition:"transform 0.15s,box-shadow 0.15s",boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}} onMouseEnter={e=>{if(prod){e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 8px 20px rgba(0,0,0,0.15)";}}} onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)";}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:prod?10:0}}><Logo s={24}/><div style={{fontSize:11,fontWeight:700,color:r.ct}}>{r.nome}</div></div>
+              {prod&&(<>
+                <div style={{background:"rgba(0,0,0,0.25)",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
+                  {ps?(<><div style={{fontSize:9,color:r.ct,opacity:0.8,marginBottom:1}}>💾 PREÇO DEFINIDO</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:r.ct}}>R$ {calcFmt(ps)}</div><div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}><div style={{width:8,height:8,borderRadius:2,background:calcTermo(ls)}}/><span style={{fontSize:9,color:r.ct,opacity:0.9}}>lucro: R$ {calcFmt(ls)}</span></div></>):(<><div style={{fontSize:9,color:r.ct,opacity:0.7,marginBottom:1}}>⭐ PREÇO SUGERIDO</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:r.ct}}>R$ {calcFmt(rb2?.p)}</div><div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}><div style={{width:8,height:8,borderRadius:2,background:calcTermo(rb2?.l)}}/><span style={{fontSize:9,color:r.ct,opacity:0.9}}>lucro: R$ {calcFmt(rb2?.l)}</span></div></>)}
+                </div>
+                {[{la:CALC_LMIN,res:rm},{la:CALC_LBOM,res:rb2}].map(({la,res})=>(<div key={la} style={{background:"rgba(255,255,255,0.12)",borderRadius:7,padding:"7px 10px",marginBottom:5}}><div style={{fontSize:9,color:r.ct,opacity:0.65,marginBottom:1}}>LUCRO ≥ R$ {calcFmt(la)}</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,fontWeight:700,color:r.ct}}>R$ {calcFmt(res?.p)}</div><div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><div style={{width:7,height:7,borderRadius:2,background:calcTermo(res?.l)}}/><span style={{fontSize:9,color:r.ct,opacity:0.75}}>R$ {calcFmt(res?.l)}</span></div></div>))}
+                <div style={{fontSize:9,color:r.ct,opacity:0.45,textAlign:"center",marginTop:4}}>ver detalhes →</div>
+              </>)}
+            </div>);
+          })}
+        </div>
+        {!prod&&<div style={{textAlign:"center",padding:"36px 0",color:"#a89f94",fontSize:13}}>Digite a referência ou descrição de um produto para ver os cálculos</div>}
+      </div>
+    </div>
+  );
+};
+
+const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>(
+  <div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
+    <div style={{maxWidth:700,margin:"0 auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={()=>setTela("home")} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Produtos Cadastrados</div></div>
+      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"80px 1fr 70px 110px 32px",background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Custo",""].map(h=><div key={h} style={{padding:"8px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}</div>
+        {prods.map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 70px 110px 32px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
+          <div onClick={()=>{setProd(p);setRb(p.ref);setTela("home");}} style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:"#4a7fa5",cursor:"pointer"}}>{p.ref}</div>
+          <div onClick={()=>{setProd(p);setRb(p.ref);setTela("home");}} style={{padding:"10px 12px",fontSize:12,color:"#2c3e50",cursor:"pointer"}}>{p.descricao}</div>
+          <div style={{padding:"10px 12px",fontSize:11,color:"#8a9aa4"}}>{p.marca}</div>
+          <div style={{padding:"10px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:"#2c3e50"}}>R$ {calcFmt(calcCusto(p))}</div>
+          <div style={{padding:"4px 6px",textAlign:"center"}}><span onClick={()=>{if(window.confirm(`Excluir ${p.ref}?`)){setProds(ps=>ps.filter((_,j)=>j!==i));if(prod?.ref===p.ref){setProd(null);setRb("");}}}} style={{color:"#c0392b",cursor:"pointer",fontSize:16,fontWeight:700}}>×</span></div>
+        </div>)}
+        {prods.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto cadastrado</div>}
+      </div>
+    </div>
+  </div>
+);
+
+const CalcFormProd=({onSalvar,onVoltar,inicial})=>{
+  const[f,setF]=useState(inicial||{ref:"",descricao:"",marca:"Meluni",tecido:"",forro:"",oficina:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""});
+  const s=(k,v)=>setF(p=>({...p,[k]:v}));
+  return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
+    <div style={{maxWidth:700,margin:"0 auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>{inicial?"Editar Produto":"Novo Produto"}</div></div>
+      <div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:12}}>
+          {[["ref","Referência *"],["descricao","Descrição"]].map(([k,l])=><div key={k}><div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>{l}</div><input value={f[k]} onChange={e=>s(k,e.target.value)} style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"}}/></div>)}
+        </div>
+        <div style={{marginBottom:12}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Marca</div><div style={{display:"flex",gap:8}}>{["Meluni","Amícia"].map(m=><button key={m} onClick={()=>s("marca",m)} style={{background:f.marca===m?"#2c3e50":"#fff",color:f.marca===m?"#fff":"#6b7c8a",border:`1px solid ${f.marca===m?"#2c3e50":"#e8e2da"}`,borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>)}</div></div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+          {CALC_CK.map(([k,l])=><div key={k}><div style={{fontSize:10,color:"#a89f94",marginBottom:4}}>{l}</div><input type="number" value={f[k]} onChange={e=>s(k,e.target.value)} placeholder="0,00" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/></div>)}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div><span style={{fontSize:11,color:"#a89f94"}}>Custo total: </span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:"#4a7fa5"}}>R$ {calcFmt(calcCusto(f))}</span></div>
+          <button onClick={()=>{if(!f.ref.trim())return alert("Ref obrigatória");onSalvar({...f});}} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"10px 24px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}}>Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>);
+};
+
+const CalcDetalhe=({id,prod,prs,onSalvar,onVoltar})=>{
+  const[sim,setSim]=useState("");const[op,setOp]=useState(false);const[pi,setPi]=useState("");
+  const Logo=CALC_LOGOS[id];const r=CALC_PLATS[id];const c=calcCusto(prod);
+  const ps=prs[`${prod.ref}|${id}`];const rm=calcPreco(id,c,CALC_LMIN);const rb=calcPreco(id,c,CALC_LBOM);
+  const ls=sim?calcLucroReal(id,c,parseFloat(sim)):null;const lps=ps?calcLucroReal(id,c,ps):null;
+  const linhas=(pr)=>{const p=parseFloat(pr);if(!p)return[];const ls2=[{l:"Preço de venda",v:p,t:"r"},{l:`Imposto (${CALC_GERAIS.imposto}%)`,v:-(p*CALC_GERAIS.imposto/100),t:"c"}];if(id==="shopee"){const fx=r.faixas.find(f=>p<=f.ate)||r.faixas[2];const af=r.taxas[0].v;ls2.push({l:`Comissão (${fx.cp}%)`,v:-(p*fx.cp/100),t:"c"},{l:`Afiliados (${af}%)`,v:-(p*af/100),t:"c"},{l:"Taxa faixa",v:-fx.cf,t:"c"});}else if(id==="mercadolivre"){r.taxas.forEach(t=>ls2.push({l:`${t.l} (${t.v}%)`,v:-(p*t.v/100),t:"c"}));const ff=r.fretes.find(f=>p<=f.ate)||r.fretes[1];ls2.push({l:"Frete",v:-ff.f,t:"c"});}else r.taxas.forEach(t=>ls2.push({l:t.l,v:t.t==="pct"?-(p*t.v/100):-t.v,t:"c"}));ls2.push({l:"Custo fixo",v:-CALC_GERAIS.custoFixo,t:"c"},{l:"Custo do produto",v:-c,t:"c"},{l:"Lucro líquido",v:calcLucroReal(id,c,p),t:"l"});return ls2;};
+  return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
+    <div style={{maxWidth:700,margin:"0 auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><Logo s={32}/><div><div style={{fontSize:18,fontWeight:700,color:"#2c3e50"}}>{r.nome}</div><div style={{fontSize:11,color:"#8a9aa4"}}>REF {prod.ref} · {prod.descricao}</div></div></div>
+      {ps?(<div style={{background:r.cor,border:`3px solid ${r.bd||r.cor}`,borderRadius:14,padding:20,marginBottom:16,textAlign:"center"}}><div style={{fontSize:11,color:r.ct,opacity:0.8,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>💾 Preço Definido</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:40,fontWeight:800,color:r.ct}}>R$ {calcFmt(ps)}</div><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8}}><div style={{width:14,height:14,borderRadius:3,background:calcTermo(lps)}}/><span style={{fontSize:14,color:r.ct,opacity:0.9,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700}}>Lucro: R$ {calcFmt(lps)}</span></div></div>):<div style={{background:"#fff",borderRadius:14,padding:16,border:"2px dashed #e8e2da",marginBottom:16,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum preço definido ainda</div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>{[{la:CALC_LMIN,res:rm,cor:"#27ae60"},{la:CALC_LBOM,res:rb,cor:"#1a7a40"}].map(({la,res,cor})=>(<div key={la} style={{background:"#fff",borderRadius:12,padding:16,border:`2px solid ${cor}`}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Para lucro R$ {calcFmt(la)}</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:26,fontWeight:700,color:"#2c3e50"}}>R$ {calcFmt(res?.p)}</div><div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}><div style={{width:10,height:10,borderRadius:2,background:calcTermo(res?.l)}}/><span style={{fontSize:12,color:"#6b7c8a"}}>Lucro real: <b style={{color:cor,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(res?.l)}</b></span></div>{res?.fx&&<div style={{fontSize:10,color:"#a89f94",marginTop:4}}>Faixa: {res.fx}</div>}{res?.fr!==undefined&&<div style={{fontSize:10,color:"#a89f94",marginTop:4}}>Frete: R$ {res.fr}</div>}</div>))}</div>
+      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",marginBottom:16,overflow:"hidden"}}><div onClick={()=>setOp(p=>!p)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",cursor:"pointer",userSelect:"none"}}><div style={{fontSize:13,fontWeight:600,color:"#2c3e50"}}>Composição de custos</div><div style={{fontSize:22,color:"#4a7fa5",transition:"transform 0.2s",transform:op?"rotate(90deg)":"none"}}>›</div></div>{op&&<div style={{padding:"0 16px 14px",borderTop:"1px solid #f0ebe4"}}>{r.taxas.map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #f7f4f0",fontSize:12,color:"#2c3e50"}}><span>{t.l}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700}}>{t.t==="pct"?`${t.v}%`:`R$ ${calcFmt(t.v)}`}</span></div>)}{r.faixas&&r.faixas.map((f,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a",borderBottom:"1px solid #f7f4f0"}}><span>Comissão {f.lb}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{f.cp}% + R$ {f.cf}</span></div>)}{r.fretes&&r.fretes.map((f,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a",borderBottom:"1px solid #f7f4f0"}}><span>Frete {i===0?"(até R$79)":"(acima)"}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {f.f}</span></div>)}<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a"}}><span>Imposto geral</span><span>{CALC_GERAIS.imposto}%</span></div><div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a"}}><span>Custo fixo geral</span><span>R$ {CALC_GERAIS.custoFixo}</span></div></div>}</div>
+      <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:14}}><div style={{fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Simulador</div><div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="number" value={sim} onChange={e=>setSim(e.target.value)} placeholder="Digite o preço..." style={{flex:1,border:"1px solid #c8d8e4",borderRadius:8,padding:"10px 14px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none"}}/>{ls!==null&&<div style={{background:calcTermo(ls),borderRadius:8,padding:"10px 18px",textAlign:"center",minWidth:90}}><div style={{fontSize:9,color:"rgba(255,255,255,0.85)"}}>LUCRO</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:800,color:"#fff"}}>R$ {calcFmt(ls)}</div></div>}</div>{sim&&<div style={{borderTop:"1px solid #f0ebe4",paddingTop:10}}>{linhas(sim).map((l,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderTop:l.t==="l"?"2px solid "+calcTermo(ls):"1px solid #f7f4f0",marginTop:l.t==="l"?6:0,paddingTop:l.t==="l"?6:3,fontWeight:l.t==="l"?700:400,color:l.t==="l"?calcTermo(ls):l.t==="r"?"#4a7fa5":"#6b7c8a"}}><span>{l.l}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{l.v>=0?"R$ ":"-R$ "}{calcFmt(Math.abs(l.v))}</span></div>)}</div>}</div>
+      <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",display:"flex",gap:12,alignItems:"flex-end"}}><div style={{flex:1}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Definir preço final</div><input type="number" value={pi} onChange={e=>setPi(e.target.value)} placeholder="Preço de venda final..." style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"10px 14px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>{pi&&<div style={{fontSize:12,color:"#8a9aa4",marginTop:4}}>Lucro: <b style={{color:calcTermo(calcLucroReal(id,c,parseFloat(pi))),fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(calcLucroReal(id,c,parseFloat(pi)))}</b></div>}</div><button disabled={!pi} onClick={()=>{if(pi)onSalvar(id,parseFloat(pi));}} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"11px 24px",fontSize:13,cursor:pi?"pointer":"not-allowed",opacity:pi?1:0.5,fontFamily:"Georgia,serif",fontWeight:600}}>💾 Salvar preço</button></div>
+    </div>
+  </div>);
+};
+
+const CalcDash=({prods,prs,onVoltar})=>{
+  const rk=[];prods.forEach(p=>{const c=calcCusto(p);CALC_ORDEM.forEach(id=>{const ps=prs[`${p.ref}|${id}`];if(ps){const l=calcLucroReal(id,c,ps);rk.push({p,id,ps,l});}});});rk.sort((a,b)=>b.l-a.l);
+  const melhores=rk.slice(0,5);const piores=[...rk].sort((a,b)=>a.l-b.l).slice(0,5);
+  const pp=CALC_ORDEM.map(id=>{const its=rk.filter(r=>r.id===id);const med=its.length?its.reduce((s,r)=>s+r.l,0)/its.length:0;return{id,qtd:its.length,med};}).filter(p=>p.qtd>0).sort((a,b)=>b.med-a.med);
+  return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
+    <div style={{maxWidth:900,margin:"0 auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Dashboard de Preços</div></div>
+      {pp.length>0&&<><div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:10}}>🏆 PLATAFORMAS — média de lucro</div><div style={{display:"flex",gap:10,marginBottom:20}}>{pp.map((p,i)=>{const r=CALC_PLATS[p.id];const Logo=CALC_LOGOS[p.id];return(<div key={p.id} style={{flex:1,background:r.cor,border:`2px solid ${r.cor}`,borderRadius:12,padding:14,position:"relative",boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>{i===0&&<div style={{position:"absolute",top:-8,left:"50%",transform:"translateX(-50%)",background:"#c8a040",color:"#fff",fontSize:9,padding:"2px 8px",borderRadius:10,fontWeight:700}}>MELHOR</div>}<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><Logo s={22}/><div style={{fontSize:11,fontWeight:700,color:r.ct}}>{r.nome}</div></div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:r.ct}}>R$ {calcFmt(p.med)}</div><div style={{fontSize:10,color:r.ct,opacity:0.75,marginTop:2}}>média · {p.qtd} produto{p.qtd>1?"s":""}</div></div>);})}</div></>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{[{titulo:"✅ TOP 5 — Maior lucro",itens:melhores,cor:"#1a7a40"},{titulo:"⚠️ TOP 5 — Menor lucro",itens:piores,cor:"#c0392b"}].map(({titulo,itens,cor})=>(<div key={titulo}><div style={{fontSize:12,fontWeight:600,color:cor,marginBottom:10}}>{titulo}</div><div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>{itens.map((r,i)=>{const Logo=CALC_LOGOS[r.id];const pl=CALC_PLATS[r.id];return(<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:"1px solid #f0ebe4",background:i%2===0?"#fff":"#f7f4f0"}}><div style={{width:24,height:24,borderRadius:"50%",background:pl.cor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Logo s={14}/></div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#2c3e50"}}>{r.p.ref} — {r.p.descricao}</div><div style={{fontSize:10,color:"#a89f94"}}>{pl.nome} · R$ {calcFmt(r.ps)}</div></div><div style={{textAlign:"right"}}><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,fontWeight:700,color:calcTermo(r.l)}}>R$ {calcFmt(r.l)}</div><div style={{fontSize:9,color:"#a89f94"}}>lucro/peça</div></div></div>);}){itens.length===0&&<div style={{padding:20,textAlign:"center",color:"#c0b8b0",fontSize:12}}>Defina preços para ver o ranking</div>}</div></div>))}</div>
+    </div>
+  </div>);
+};
+
 export default function App(){
   const [active,setActive]=useState("lancamentos");
   const [usuarioLogado,setUsuarioLogado]=useState(null);
@@ -3603,6 +3804,7 @@ export default function App(){
         {active==="agenda"&&<AgendaContent/>}
         {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores}/>}
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
+        {active==="calculadora"&&<CalculadoraContent/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
