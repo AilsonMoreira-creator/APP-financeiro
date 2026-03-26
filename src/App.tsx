@@ -2322,6 +2322,21 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
           <div style={{display:"flex",gap:8,alignItems:"center"}}><SaveBadge status={saveStatus}/>{lixeira.length>0&&<button onClick={desfazer} style={{fontSize:11,color:"#4a7fa5",background:"none",border:"1px solid #4a7fa5",borderRadius:4,padding:"2px 8px",cursor:"pointer"}}>↩ Desfazer</button>}</div>
           <div style={{fontSize:12,color:"#8a9aa4"}}>Total: <strong style={{color:"#2c3e50"}}>{fmt(totalFiltro)}</strong></div>
         </div>
+        {/* ── Contador por mês ── */}
+        <div style={{padding:"8px 14px",background:"#f0f6fb",borderTop:"1px solid #e8e2da",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginRight:4}}>Boletos por mês:</span>
+          {mesesComBoletos.map(m=>{
+            const qtd=boletos.filter(b=>getMes(b)===m).length;
+            const totalM=boletos.filter(b=>getMes(b)===m).reduce((s,b)=>s+parseFloat(b.valor||0),0);
+            return(
+              <div key={m} style={{background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"3px 10px",fontSize:11,color:"#2c3e50",display:"flex",gap:6,alignItems:"center"}}>
+                <span style={{fontWeight:700,color:"#4a7fa5"}}>{MESES[m-1]}</span>
+                <span style={{color:"#6b7c8a"}}>{qtd} boleto{qtd!==1?"s":""}</span>
+                <span style={{fontFamily:_FN,fontWeight:700,color:"#2c3e50"}}>R$ {fmt(totalM)}</span>
+              </div>
+            );
+          })}
+        </div>
         <div style={{padding:"6px 14px",background:"#fff",borderTop:"1px solid #f0ebe4",display:"flex",gap:8}}>
           <button onClick={()=>{setMostraAdicionar(p=>!p);setMostraImport(false);}} style={{background:mostraAdicionar?"#2c3e50":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>+ Adicionar</button>
           <button onClick={()=>{setMostraImport(p=>!p);setMostraAdicionar(false);setImportError("");}} style={{background:mostraImport?"#2c3e50":"#fff",color:mostraImport?"#fff":"#4a7fa5",border:"1px solid #4a7fa5",borderRadius:6,padding:"5px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>📋 Importar</button>
@@ -3258,7 +3273,7 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
   );
 };
 
-const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,isAdmin=false})=>{
+const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,isAdmin=false,onZerarBoletos=null})=>{
   const [bling,setBling]=useState(()=>{try{const s=localStorage.getItem("amica_bling");return s?JSON.parse(s):{exitus:"",lumia:"",muniam:""};}catch{return{exitus:"",lumia:"",muniam:""};}}); 
   const [mire,setMire]=useState({token:"",idSilvaTeles:"",idBomRetiro:""});
   const [statusBling,setStatusBling]=useState({});
@@ -3328,6 +3343,20 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
           </div>
         </div>
       </Section>
+      {isAdmin&&(
+        <div style={{background:"#fdeaea",borderRadius:10,border:"1px solid #f4b8b8",padding:"14px 20px",marginBottom:16}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#c0392b",marginBottom:6}}>⚠ Zerar boletos</div>
+          <div style={{fontSize:12,color:"#8a7070",marginBottom:10}}>Remove todos os boletos salvos no Supabase. Use apenas quando precisar reimportar os dados limpos da planilha. Os boletos de Março voltam automaticamente do código.</div>
+          <button onClick={()=>{
+            if(window.confirm("⚠ Tem certeza? Isso vai apagar TODOS os boletos salvos. Os de Março voltam do código — os demais precisarão ser reimportados.")){
+              if(onZerarBoletos) onZerarBoletos();
+              window.alert("✅ Boletos zerados! O auto-save vai salvar o array vazio no Supabase em 2 segundos. Depois reimporte os boletos de Abr/Mai/Jun/Jul.");
+            }
+          }} style={{background:"#c0392b",color:"#fff",border:"none",borderRadius:6,padding:"8px 20px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+            🗑 Zerar todos os boletos
+          </button>
+        </div>
+      )}
       <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:12,marginBottom:16}}>
         {saved&&<span style={{fontSize:12,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ Configurações salvas</span>}
         <button onClick={salvarConfig} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"8px 20px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Salvar Configurações</button>
@@ -3579,6 +3608,7 @@ export default function App(){
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
           isAdmin={usuarioLogado?.admin===true}
+          onZerarBoletos={()=>setBoletosShared([])}
           dadosBackup={{receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores}}
           onRestaurar={(dados)=>{
             if(dados.receitasPorMes)setReceitasPorMes(dados.receitasPorMes);
