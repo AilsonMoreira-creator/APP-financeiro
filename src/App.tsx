@@ -2833,6 +2833,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [filtroMarca,setFiltroMarca]=useState("todas");
   const [filtroStatus,setFiltroStatus]=useState("todos");
   const [filtroPago,setFiltroPago]=useState("todos");
+  const [filtroRef,setFiltroRef]=useState("");
   const [mostraForm,setMostraForm]=useState(false);
   const [editId,setEditId]=useState(null);
   const [form,setForm]=useState({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});
@@ -2859,6 +2860,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     if(filtroPago==="pago"&&!c.pago)return false;
     if(filtroPago==="naopago"&&c.pago)return false;
     if(filtroStatus!=="todos"){const st=getStatusCorte(c);if(filtroStatus!==st)return false;}
+    if(filtroRef.trim()&&!c.ref.toLowerCase().includes(filtroRef.toLowerCase().trim()))return false;
     return true;
   });
   const buscarProd=(ref)=>produtos.find(p=>p.ref===String(ref).trim());
@@ -2943,6 +2945,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
       {aba==="cortes"&&(
         <div>
           <div style={{display:"flex",gap:6,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
+            <input value={filtroRef} onChange={e=>setFiltroRef(e.target.value)} placeholder="Buscar ref..." style={{...iStyle,width:90}} />
             <select value={filtroOf} onChange={e=>setFiltroOf(e.target.value)} style={{...iStyle,flex:2,minWidth:120}}>
               <option value="todas">Todas as oficinas</option>
               {oficinasCAD.map(o=><option key={o.codigo} value={o.descricao}>{o.descricao}</option>)}
@@ -3474,12 +3477,34 @@ const CalculadoraContent=()=>{
   const[prs,setPrs]=useState({});
   const[prods,setProds]=useState([]);
   const[editProd,setEditProd]=useState(null);
+
+  // ── Carregar do Supabase ──────────────────────────────────────────────────
+  useEffect(()=>{
+    if(!supabase)return;
+    supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').single()
+      .then(({data})=>{
+        if(data?.payload){
+          if(data.payload.prods)setProds(data.payload.prods);
+          if(data.payload.prs)setPrs(data.payload.prs);
+        }
+      }).catch(()=>{});
+  },[]);
+
+  // ── Auto-salvar ───────────────────────────────────────────────────────────
+  const salvarCalc=(novoProds,novoPrs)=>{
+    if(!supabase)return;
+    supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods:novoProds??prods,prs:novoPrs??prs}},{onConflict:'user_id'}).catch(()=>{});
+  };
+
+  const atualizarProds=(fn)=>{setProds(ps=>{const novos=typeof fn==="function"?fn(ps):fn;salvarCalc(novos,null);return novos;});};
+  const atualizarPrs=(fn)=>{setPrs(ps=>{const novos=typeof fn==="function"?fn(ps):fn;salvarCalc(null,novos);return novos;});};
+
   const buscar=()=>{const p=prods.find(x=>x.ref.toLowerCase()===rb.toLowerCase().trim()||x.descricao.toLowerCase().includes(rb.toLowerCase()));if(p)setProd(p);else alert("Produto não encontrado");};
-  if(tela==="lista")return<CalcLista prods={prods} setProds={setProds} setProd={setProd} setRb={setRb} setTela={setTela} prod={prod}/>;
-  if(tela==="novo")return<CalcFormProd onVoltar={()=>setTela("home")} onSalvar={(np)=>{setProds(ps=>[...ps,np]);setTela("home");}}/>;
-  if(tela==="editar"&&editProd)return<CalcFormProd inicial={editProd} onVoltar={()=>setTela("home")} onSalvar={(np)=>{setProds(ps=>ps.map(p=>p.ref===editProd.ref?np:p));if(prod?.ref===editProd.ref)setProd(np);setTela("home");}}/>;
+  if(tela==="lista")return<CalcLista prods={prods} setProds={atualizarProds} setProd={setProd} setRb={setRb} setTela={setTela} prod={prod}/>;
+  if(tela==="novo")return<CalcFormProd onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>[...ps,np]);setTela("home");}}/>;
+  if(tela==="editar"&&editProd)return<CalcFormProd inicial={editProd} onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>ps.map(p=>p.ref===editProd.ref?np:p));if(prod?.ref===editProd.ref)setProd(np);setTela("home");}}/>;
   if(tela==="dash")return<CalcDash prods={prods} prs={prs} onVoltar={()=>setTela("home")}/>;
-  if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} onSalvar={(id,p)=>setPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
+  if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
   const c=prod?calcCusto(prod):0;
   return(
     <div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
