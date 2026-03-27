@@ -3444,14 +3444,14 @@ const inicializarMesNovo=()=>{const novo={};CATS.forEach(cat=>{novo[cat]=[];});r
 const CALC_GERAIS={imposto:11,custoFixo:5};
 const CALC_LMIN=10;const CALC_LBOM=14;
 const CALC_PLATS={
-  mercadolivre:{nome:"Mercado Livre",cor:"#FFE600",ct:"#2D3277",taxas:[{l:"Comissão",t:"pct",v:14},{l:"Ads",t:"pct",v:7},{l:"Descontos",t:"pct",v:3}],fretes:[{ate:78.99,f:6},{ate:9999,f:16}]},
+  mercadolivre:{nome:"Mercado Livre",cor:"#FFE600",ct:"#2D3277",taxas:[{l:"Comissão",t:"pct",v:14},{l:"Ads",t:"pct",v:6},{l:"Descontos",t:"pct",v:2}],fretes:[{ate:78.99,f:6},{ate:9999,f:16}]},
   shopee:{nome:"Shopee",cor:"#EE4D2D",ct:"#fff",taxas:[{l:"Afiliados",t:"pct",v:3}],faixas:[{lb:"até R$79,99",ate:79.99,cp:20,cf:4},{lb:"R$80-99,99",ate:99.99,cp:14,cf:16},{lb:"R$100-139",ate:139,cp:14,cf:20}]},
   shein:{nome:"Shein",cor:"#000",ct:"#fff",taxas:[{l:"Comissão",t:"pct",v:20},{l:"Descontos",t:"pct",v:2},{l:"Frete",t:"fix",v:6}]},
   tiktok:{nome:"TikTok Shop",cor:"#010101",ct:"#fff",taxas:[{l:"Comissão",t:"pct",v:14},{l:"Afiliados",t:"pct",v:7},{l:"Frete",t:"fix",v:4}]},
   meluni:{nome:"Meluni",cor:"#fff",ct:"#000",bd:"#000",taxas:[{l:"Cartão/Antifraude",t:"pct",v:8},{l:"Converter",t:"pct",v:2},{l:"Propaganda",t:"pct",v:10},{l:"Cupons",t:"pct",v:7},{l:"Frete",t:"fix",v:15},{l:"Plataforma",t:"fix",v:5}]},
 };
 const CALC_ORDEM=["mercadolivre","shopee","shein","tiktok","meluni"];
-const CALC_CK=[["tecido","Tecido"],["forro","Forro"],["oficina","Oficina Costura"],["ziper","Zíper"],["botao","Botão/Caseado"],["aviamentos","Aviamentos"],["modelista","Modelista/Piloteiro"],["salaCorte","Sala de Corte"]];
+const CALC_CK=[["tecido","Tecido"],["forro","Forro"],["oficina","Oficina Costura"],["passadoria","Passadoria"],["ziper","Zíper"],["botao","Botão/Caseado"],["aviamentos","Aviamentos"],["modelista","Modelista/Piloteiro"],["salaCorte","Sala de Corte"]];
 const calcCusto=p=>CALC_CK.reduce((s,[k])=>s+parseFloat(p[k]||0),0);
 const calcTermo=l=>{if(l==null||isNaN(l))return"#e0d8d0";if(l<8)return"#c0392b";if(l<10)return"#e67e22";if(l<14)return"#27ae60";return"#1a7a40";};
 const calcFmt=v=>isNaN(v)||v==null?"—":Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -3477,29 +3477,45 @@ const CalculadoraContent=()=>{
   const[prs,setPrs]=useState({});
   const[prods,setProds]=useState([]);
   const[editProd,setEditProd]=useState(null);
+  const[syncStatus,setSyncStatus]=useState(null); // null | 'saving' | 'saved' | 'error'
+  const prodsRef=useRef([]);
+  const prsRef=useRef({});
 
   // ── Carregar do Supabase ──────────────────────────────────────────────────
   useEffect(()=>{
     if(!supabase)return;
+    setSyncStatus('saving');
     supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').single()
       .then(({data})=>{
         if(data?.payload){
-          if(data.payload.prods)setProds(data.payload.prods);
-          if(data.payload.prs)setPrs(data.payload.prs);
+          if(data.payload.prods){setProds(data.payload.prods);prodsRef.current=data.payload.prods;}
+          if(data.payload.prs){setPrs(data.payload.prs);prsRef.current=data.payload.prs;}
         }
-      }).catch(()=>{});
+        setSyncStatus('saved');
+        setTimeout(()=>setSyncStatus(null),2000);
+      }).catch(()=>setSyncStatus('error'));
   },[]);
 
-  // ── Auto-salvar ───────────────────────────────────────────────────────────
+  // ── Salvar no Supabase usando refs para valores sempre atuais ─────────────
+  const salvar=(novosProds,novosPrs)=>{
+    if(!supabase)return;
+    setSyncStatus('saving');
+    supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods:novosProds,prs:novosPrs}},{onConflict:'user_id'})
+      .then(()=>{setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);})
+      .catch(()=>setSyncStatus('error'));
+  };
+
   const atualizarProds=(fn)=>{
-    const novos=typeof fn==="function"?fn(prods):fn;
+    const novos=typeof fn==="function"?fn(prodsRef.current):fn;
+    prodsRef.current=novos;
     setProds(novos);
-    if(supabase)supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods:novos,prs}},{onConflict:'user_id'}).catch(()=>{});
+    salvar(novos,prsRef.current);
   };
   const atualizarPrs=(fn)=>{
-    const novos=typeof fn==="function"?fn(prs):fn;
+    const novos=typeof fn==="function"?fn(prsRef.current):fn;
+    prsRef.current=novos;
     setPrs(novos);
-    if(supabase)supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods,prs:novos}},{onConflict:'user_id'}).catch(()=>{});
+    salvar(prodsRef.current,novos);
   };
 
   const buscar=()=>{const p=prods.find(x=>x.ref.toLowerCase()===rb.toLowerCase().trim()||x.descricao.toLowerCase().includes(rb.toLowerCase()));if(p)setProd(p);else alert("Produto não encontrado");};
@@ -3514,7 +3530,10 @@ const CalculadoraContent=()=>{
       <div style={{maxWidth:980,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:18}}>
           <div><div style={{fontSize:10,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Grupo Amícia</div><div style={{fontSize:22,fontWeight:700,color:"#2c3e50"}}>Calculadora de Preços</div><div style={{fontSize:11,color:"#8a9aa4",marginTop:2}}>Marketplaces · Ecommerce Meluni</div></div>
-          <div style={{display:"flex",gap:8}}>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {syncStatus==="saving"&&<span style={{fontSize:11,color:"#a89f94",fontFamily:"Georgia,serif"}}>⏳ Salvando...</span>}
+            {syncStatus==="saved"&&<span style={{fontSize:11,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ Salvo</span>}
+            {syncStatus==="error"&&<span style={{fontSize:11,color:"#c0392b",fontFamily:"Georgia,serif"}}>⚠ Erro ao salvar</span>}
             <button onClick={()=>setTela("novo")} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>+ Novo Produto</button>
             <button onClick={()=>setTela("lista")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📋 Lista</button>
             <button onClick={()=>setTela("dash")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📊 Dashboard</button>
@@ -3595,8 +3614,14 @@ const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>(
 );
 
 const CalcFormProd=({onSalvar,onVoltar,inicial})=>{
-  const[f,setF]=useState(inicial||{ref:"",descricao:"",marca:"Meluni",tecido:"",forro:"",oficina:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""});
+  const[f,setF]=useState(inicial||{ref:"",descricao:"",marca:"Meluni",tecido:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""});
+  const[salvando,setSalvando]=useState(false);
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
+  const handleSalvar=()=>{
+    if(!f.ref.trim())return alert("Ref obrigatória");
+    setSalvando(true);
+    setTimeout(()=>{onSalvar({...f});},300);
+  };
   return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
     <div style={{maxWidth:700,margin:"0 auto"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>{inicial?"Editar Produto":"Novo Produto"}</div></div>
@@ -3606,11 +3631,13 @@ const CalcFormProd=({onSalvar,onVoltar,inicial})=>{
         </div>
         <div style={{marginBottom:12}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Marca</div><div style={{display:"flex",gap:8}}>{["Meluni","Amícia"].map(m=><button key={m} onClick={()=>s("marca",m)} style={{background:f.marca===m?"#2c3e50":"#fff",color:f.marca===m?"#fff":"#6b7c8a",border:`1px solid ${f.marca===m?"#2c3e50":"#e8e2da"}`,borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>)}</div></div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
-          {CALC_CK.map(([k,l])=><div key={k}><div style={{fontSize:10,color:"#a89f94",marginBottom:4}}>{l}</div><input type="number" value={f[k]} onChange={e=>s(k,e.target.value)} placeholder="0,00" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/></div>)}
+          {CALC_CK.map(([k,l])=><div key={k}><div style={{fontSize:10,color:"#a89f94",marginBottom:4}}>{l}</div><input type="number" value={f[k]||""} onChange={e=>s(k,e.target.value)} placeholder="0,00" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/></div>)}
         </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div><span style={{fontSize:11,color:"#a89f94"}}>Custo total: </span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:"#4a7fa5"}}>R$ {calcFmt(calcCusto(f))}</span></div>
-          <button onClick={()=>{if(!f.ref.trim())return alert("Ref obrigatória");onSalvar({...f});}} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"10px 24px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}}>Salvar</button>
+          <button onClick={handleSalvar} disabled={salvando} style={{background:salvando?"#27ae60":"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"10px 24px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",transition:"background 0.2s",minWidth:120}}>
+            {salvando?"✓ Salvo!":"Salvar"}
+          </button>
         </div>
       </div>
     </div>
