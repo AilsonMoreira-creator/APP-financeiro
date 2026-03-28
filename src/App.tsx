@@ -151,6 +151,7 @@ const SvgCalculadora = ({ size = 32 }) => (
   </svg>
 );
 
+
 const SvgFichaTecnica = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
     <rect x="12" y="10" width="40" height="50" rx="4" fill="#e8e2da"/>
@@ -3709,11 +3710,11 @@ const CalcDash=({prods,prs,onVoltar})=>{
    MÓDULO FICHA TÉCNICA — PREVIEW v6
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-var _BF="#4a7fa5",_BG="#f7f4f0",_BD="#e8e2da",_W="#fff",_RD="#c0392b";
+var _BFT="#4a7fa5",_BG="#f7f4f0",_BD="#e8e2da",_W="#fff",_RD="#c0392b";
 var _GE="Georgia,serif";
 var _LB="#a89f94",_TX="#6b7c8a",_TX2="#8a9aa4";
 
-var CUSTO_FIELDS=[
+var ftCUSTO_FIELDS=[
   {key:"tecido1",label:"Tecido 1",short:"Tecido 1"},
   {key:"tecido2",label:"Tecido 2",short:"Tecido 2"},
   {key:"forro",label:"Forro",short:"Forro"},
@@ -3725,26 +3726,26 @@ var CUSTO_FIELDS=[
   {key:"modelista",label:"Modelista/Piloteiro",short:"Modelista"},
   {key:"salaCorte",label:"Sala de Corte",short:"Sala Corte"},
 ];
-var MARCAS=["Amícia","Meluni"];
+var ftMARCAS=["Amícia","Meluni"];
 
 var fmtFT=function(v){return(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});};
 var fmtRFT=function(v){return "R$ "+fmtFT(v);};
-var calcCusto=function(p){return CUSTO_FIELDS.reduce(function(s,f){return s+(parseFloat(p[f.key])||0);},0);};
-var calcMarkupPct=function(pr,cu){return cu>0?((pr/cu)-1)*100:0;};
-var calcMargem=function(pr,cu){return pr>0?((pr-cu)/pr)*100:0;};
-var calcLucro=function(pr,cu){return pr-cu;};
-var thermoColor=function(pr,cu){if(!pr||!cu||cu<=0)return"#ccc";var mk=calcMarkupPct(pr,cu);if(mk>=130)return"#1a8a3e";if(mk>=100)return"#27ae60";if(mk>=80)return"#e6a817";return"#c0392b";};
-var thermoLabel=function(pr,cu){if(!pr||!cu||cu<=0)return"";var mk=calcMarkupPct(pr,cu);if(mk>=130)return"Excelente";if(mk>=100)return"Bom";if(mk>=80)return"Atenção";return"Crítico";};
-var dataHoje=function(){return new Date().toISOString().slice(0,10);};
-var data30=function(){var d=new Date();d.setDate(d.getDate()-30);return d.toISOString().slice(0,10);};
-var fmtData=function(iso){if(!iso)return"";var p=iso.split("-");return p[2]+"/"+p[1]+"/"+p[0];};
-var abrirWhatsApp=function(texto){window.open("https://wa.me/?text="+encodeURIComponent(texto),"_blank");};
+var ftCalcCusto=function(p){return ftCUSTO_FIELDS.reduce(function(s,f){return s+(parseFloat(p[f.key])||0);},0);};
+var ftMarkupPct=function(pr,cu){return cu>0?((pr/cu)-1)*100:0;};
+var ftMargem=function(pr,cu){return pr>0?((pr-cu)/pr)*100:0;};
+var ftLucro=function(pr,cu){return pr-cu;};
+var ftThermoColor=function(pr,cu){if(!pr||!cu||cu<=0)return"#ccc";var mk=ftMarkupPct(pr,cu);if(mk>=130)return"#1a8a3e";if(mk>=100)return"#27ae60";if(mk>=80)return"#e6a817";return"#c0392b";};
+var ftThermoLabel=function(pr,cu){if(!pr||!cu||cu<=0)return"";var mk=ftMarkupPct(pr,cu);if(mk>=130)return"Excelente";if(mk>=100)return"Bom";if(mk>=80)return"Atenção";return"Crítico";};
+var ftDataHoje=function(){return new Date().toISOString().slice(0,10);};
+var ftData30=function(){var d=new Date();d.setDate(d.getDate()-30);return d.toISOString().slice(0,10);};
+var fmtDataFT=function(iso){if(!iso)return"";var p=iso.split("-");return p[2]+"/"+p[1]+"/"+p[0];};
+var ftAbrirWhatsApp=function(texto){window.open("https://wa.me/?text="+encodeURIComponent(texto),"_blank");};
 
-var inpS={border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none",fontFamily:_GE,boxSizing:"border-box"};
-var lblS={fontSize:11,color:_LB,marginBottom:4,letterSpacing:1,textTransform:"uppercase"};
-var btnPri={background:_BF,color:_W,border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:_GE,fontWeight:600};
-var btnSec={background:_W,color:_S,border:"1px solid "+_BD,borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:_GE,fontWeight:600};
-var btnVolt={background:_W,border:"1px solid "+_BD,borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:_BF,fontFamily:_GE};
+var ftInpS={border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none",fontFamily:_GE,boxSizing:"border-box"};
+var ftLblS={fontSize:11,color:_LB,marginBottom:4,letterSpacing:1,textTransform:"uppercase"};
+var ftBtnPri={background:_BFT,color:_W,border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:_GE,fontWeight:600};
+var ftBtnSec={background:_W,color:_S,border:"1px solid "+_BD,borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:_GE,fontWeight:600};
+var ftBtnVolt={background:_W,border:"1px solid "+_BD,borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:_BFT,fontFamily:_GE};
 
 function WhatsAppIcon(props){
   return(<svg width={props.size||18} height={props.size||18} viewBox="0 0 24 24" fill="currentColor">
@@ -3752,7 +3753,7 @@ function WhatsAppIcon(props){
   </svg>);
 }
 
-function FichaSvg(props){
+function FichaSvgIcon(props){
   var size=props.size||32;
   return(<svg width={size} height={size} viewBox="0 0 64 64" fill="none">
     <rect x="12" y="10" width="40" height="50" rx="4" fill="#e8e2da"/>
@@ -3763,7 +3764,7 @@ function FichaSvg(props){
     <line x1="16" y1="24" x2="44" y2="24" stroke="#c8d8e4" strokeWidth="1.5" strokeLinecap="round"/>
     <line x1="16" y1="30" x2="44" y2="30" stroke="#c8d8e4" strokeWidth="1.5" strokeLinecap="round"/>
     <line x1="16" y1="36" x2="36" y2="36" stroke="#c8d8e4" strokeWidth="1.5" strokeLinecap="round"/>
-    <circle cx="44" cy="44" r="12" fill={_BF} stroke={_S} strokeWidth="1.8"/>
+    <circle cx="44" cy="44" r="12" fill={_BFT} stroke={_S} strokeWidth="1.8"/>
     <text x="44" y="49" textAnchor="middle" fontSize="14" fontWeight="bold" fill={_W} fontFamily={_GE}>$</text>
   </svg>);
 }
@@ -3805,7 +3806,7 @@ function FichaLista(props){
     <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
       <div style={{maxWidth:800,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button onClick={onVoltar} style={btnVolt}>← Voltar</button>
+          <button onClick={onVoltar} style={ftBtnVolt}>← Voltar</button>
           <div style={{fontSize:20,fontWeight:700,color:_S}}>Produtos Cadastrados</div>
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
             <span style={{fontSize:11,color:_LB}}>Coleção:</span>
@@ -3816,7 +3817,7 @@ function FichaLista(props){
           </div>
         </div>
         <div style={{background:_W,borderRadius:12,border:"1px solid "+_BD,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 120px 90px",background:_BF}}>
+          <div style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 120px 90px",background:_BFT}}>
             {["Ref","Descrição","Marca","Coleção","Cadastro"].map(function(h){return <div key={h} style={{padding:"8px 12px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase"}}>{h}</div>;})}
           </div>
           {ord.map(function(p,i){return(
@@ -3824,11 +3825,11 @@ function FichaLista(props){
               style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 120px 90px",borderBottom:"1px solid #f0ebe4",alignItems:"center",cursor:"pointer",background:i%2===0?_W:"#faf8f5"}}
               onMouseEnter={function(e){e.currentTarget.style.background="#f0f6fb";}}
               onMouseLeave={function(e){e.currentTarget.style.background=i%2===0?_W:"#faf8f5";}}>
-              <div style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:_BF}}>{p.ref}</div>
+              <div style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:_BFT}}>{p.ref}</div>
               <div style={{padding:"10px 12px",fontSize:12,color:_S}}>{p.descricao}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_TX2}}>{p.marca}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_GO}}>{p.colecao||"—"}</div>
-              <div style={{padding:"10px 12px",fontSize:11,color:_LB}}>{fmtData(p.dataCriacao)}</div>
+              <div style={{padding:"10px 12px",fontSize:11,color:_LB}}>{fmtDataFT(p.dataCriacao)}</div>
             </div>);})}
           {ord.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto cadastrado</div>}
         </div>
@@ -3843,12 +3844,12 @@ function FichaLista(props){
 
 function FichaFormProd(props){
   var onSalvar=props.onSalvar,onVoltar=props.onVoltar,inicial=props.inicial,produtos=props.produtos,colecoesUnicas=props.colecoesUnicas,precosSalvos=props.precosSalvos,onSalvarPreco=props.onSalvarPreco;
-  var blank={id:Date.now(),ref:"",descricao:"",marca:"Amícia",colecao:"",dataCriacao:dataHoje(),tecido1:"",tecido2:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""};
+  var blank={id:Date.now(),ref:"",descricao:"",marca:"Amícia",colecao:"",dataCriacao:ftDataHoje(),tecido1:"",tecido2:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""};
   var _f=useState(inicial?Object.assign({},inicial):blank),f=_f[0],setF=_f[1];
   var _salv=useState(false),salvando=_salv[0],setSalvando=_salv[1];
   var _nc=useState(false),novaColecao=_nc[0],setNovaColecao=_nc[1];
   var s=function(k,v){setF(function(p){var n=Object.assign({},p);n[k]=v;return n;});};
-  var custo=calcCusto(f);
+  var custo=ftCalcCusto(f);
   var refId=f.ref.trim();
 
   var pST=precosSalvos[refId+"|silvaTeles"]||null;
@@ -3898,44 +3899,44 @@ function FichaFormProd(props){
     <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
       <div style={{maxWidth:740,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button onClick={onVoltar} style={btnVolt}>← Voltar</button>
+          <button onClick={onVoltar} style={ftBtnVolt}>← Voltar</button>
           <div style={{fontSize:20,fontWeight:700,color:_S}}>{inicial?"Editar Produto":"Novo Produto"}</div>
         </div>
         <div style={{background:_W,borderRadius:12,padding:20,border:"1px solid "+_BD}}>
           {/* Ref + Desc */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:12}}>
             {[["ref","Referência *"],["descricao","Descrição"]].map(function(a){return(
-              <div key={a[0]}><div style={lblS}>{a[1]}</div><input value={f[a[0]]} onChange={function(e){s(a[0],e.target.value);}} style={Object.assign({},inpS,{width:"100%"})}/></div>);})}
+              <div key={a[0]}><div style={ftLblS}>{a[1]}</div><input value={f[a[0]]} onChange={function(e){s(a[0],e.target.value);}} style={Object.assign({},ftInpS,{width:"100%"})}/></div>);})}
           </div>
           {/* Marca */}
           <div style={{marginBottom:12}}>
-            <div style={lblS}>Marca</div>
-            <div style={{display:"flex",gap:8}}>{MARCAS.map(function(m){return <button key={m} onClick={function(){s("marca",m);}} style={{background:f.marca===m?_S:_W,color:f.marca===m?_W:_TX,border:"1px solid "+(f.marca===m?_S:_BD),borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>;})}</div>
+            <div style={ftLblS}>Marca</div>
+            <div style={{display:"flex",gap:8}}>{ftMARCAS.map(function(m){return <button key={m} onClick={function(){s("marca",m);}} style={{background:f.marca===m?_S:_W,color:f.marca===m?_W:_TX,border:"1px solid "+(f.marca===m?_S:_BD),borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>;})}</div>
           </div>
           {/* Coleção + Data */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
             <div>
-              <div style={lblS}>Coleção/Temporada</div>
-              {!novaColecao?(<select value={f.colecao} onChange={function(e){if(e.target.value==="__nova__"){setNovaColecao(true);s("colecao","");}else s("colecao",e.target.value);}} style={Object.assign({},inpS,{width:"100%",background:_W})}>
+              <div style={ftLblS}>Coleção/Temporada</div>
+              {!novaColecao?(<select value={f.colecao} onChange={function(e){if(e.target.value==="__nova__"){setNovaColecao(true);s("colecao","");}else s("colecao",e.target.value);}} style={Object.assign({},ftInpS,{width:"100%",background:_W})}>
                 <option value="">Selecionar...</option>
                 {colecoesUnicas.map(function(c){return <option key={c} value={c}>{c}</option>;})}
                 <option value="__nova__">+ Nova coleção...</option>
               </select>):(
               <div style={{display:"flex",gap:6}}>
-                <input value={f.colecao} onChange={function(e){s("colecao",e.target.value);}} placeholder="Ex: Inverno 2026" style={Object.assign({},inpS,{flex:1})}/>
+                <input value={f.colecao} onChange={function(e){s("colecao",e.target.value);}} placeholder="Ex: Inverno 2026" style={Object.assign({},ftInpS,{flex:1})}/>
                 <button onClick={function(){setNovaColecao(false);}} style={{background:_W,border:"1px solid "+_BD,borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:11,color:_TX}}>OK</button>
               </div>)}
             </div>
-            <div><div style={lblS}>Data de Criação</div><input type="date" value={f.dataCriacao} onChange={function(e){s("dataCriacao",e.target.value);}} style={Object.assign({},inpS,{width:"100%"})}/></div>
+            <div><div style={ftLblS}>Data de Criação</div><input type="date" value={f.dataCriacao} onChange={function(e){s("dataCriacao",e.target.value);}} style={Object.assign({},ftInpS,{width:"100%"})}/></div>
           </div>
 
           {/* ── Componentes de Custo ─────────────────────────────────── */}
-          <div style={{borderTop:"2px solid "+_BF,marginBottom:14,paddingTop:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:_BF,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Componentes de Custo</div>
+          <div style={{borderTop:"2px solid "+_BFT,marginBottom:14,paddingTop:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:_BFT,letterSpacing:1,textTransform:"uppercase",marginBottom:12}}>Componentes de Custo</div>
           </div>
           {/* Rows: 4+4 campos */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:8}}>
-            {CUSTO_FIELDS.slice(0,8).map(function(cf){return(
+            {ftCUSTO_FIELDS.slice(0,8).map(function(cf){return(
               <div key={cf.key}>
                 <div style={{fontSize:10,color:_LB,marginBottom:4,letterSpacing:0.5,textTransform:"uppercase"}}>{cf.short}</div>
                 <div style={{position:"relative"}}>
@@ -3947,7 +3948,7 @@ function FichaFormProd(props){
           </div>
           {/* Last 2 campos + Custo Total inline */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 2fr",gap:10,marginBottom:20,alignItems:"end"}}>
-            {CUSTO_FIELDS.slice(8).map(function(cf){return(
+            {ftCUSTO_FIELDS.slice(8).map(function(cf){return(
               <div key={cf.key}>
                 <div style={{fontSize:10,color:_LB,marginBottom:4,letterSpacing:0.5,textTransform:"uppercase"}}>{cf.short}</div>
                 <div style={{position:"relative"}}>
@@ -3957,9 +3958,9 @@ function FichaFormProd(props){
                 </div>
               </div>);})}
             {/* Custo Total — compacto ao lado */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8,background:"#edf4fb",border:"1.5px solid "+_BF,borderRadius:10,padding:"8px 16px"}}>
-              <span style={{fontSize:11,color:_BF,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Custo</span>
-              <span style={{fontFamily:_FN,fontSize:22,fontWeight:800,color:_BF}}>{fmtRFT(custo)}</span>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8,background:"#edf4fb",border:"1.5px solid "+_BFT,borderRadius:10,padding:"8px 16px"}}>
+              <span style={{fontSize:11,color:_BFT,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Custo</span>
+              <span style={{fontFamily:_FN,fontSize:22,fontWeight:800,color:_BFT}}>{fmtRFT(custo)}</span>
             </div>
           </div>
 
@@ -3977,14 +3978,14 @@ function FichaFormProd(props){
               {/* 3 Cards editáveis — alinhados */}
               {canaisForm.map(function(c){
                 var v=parseFloat(c.val)||0;
-                var lucro=v>0&&custo>0?calcLucro(v,custo):0;
-                var mk=v>0&&custo>0?calcMarkupPct(v,custo):0;
-                var mg=v>0&&custo>0?calcMargem(v,custo):0;
-                var cor=v>0&&custo>0?thermoColor(v,custo):"#ccc";
-                var lbl=v>0&&custo>0?thermoLabel(v,custo):"";
+                var lucro=v>0&&custo>0?ftLucro(v,custo):0;
+                var mk=v>0&&custo>0?ftMarkupPct(v,custo):0;
+                var mg=v>0&&custo>0?ftMargem(v,custo):0;
+                var cor=v>0&&custo>0?ftThermoColor(v,custo):"#ccc";
+                var lbl=v>0&&custo>0?ftThermoLabel(v,custo):"";
                 return(
                   <div key={c.id} style={{border:"1px solid "+_BD,borderRadius:12,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-                    <div style={{background:_BF,padding:"6px 10px",textAlign:"center"}}><span style={{fontSize:11,fontWeight:700,color:_W,letterSpacing:1}}>{c.label}</span></div>
+                    <div style={{background:_BFT,padding:"6px 10px",textAlign:"center"}}><span style={{fontSize:11,fontWeight:700,color:_W,letterSpacing:1}}>{c.label}</span></div>
                     <div style={{padding:10,background:_W,flex:1,display:"flex",flexDirection:"column",alignItems:"center"}}>
                       <div style={{position:"relative",width:"100%",marginBottom:6}}>
                         <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:_LB}}>R$</span>
@@ -4010,7 +4011,7 @@ function FichaFormProd(props){
 
           {/* ── Salvar ───────────────────────────────────────────────── */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",borderTop:"1px solid "+_BD,paddingTop:14,gap:8}}>
-            <button onClick={onVoltar} style={Object.assign({},btnSec,{color:_TX})}>Cancelar</button>
+            <button onClick={onVoltar} style={Object.assign({},ftBtnSec,{color:_TX})}>Cancelar</button>
             <button onClick={handleSalvar} disabled={salvando}
               style={{background:salvando?_GR:_S,color:_W,border:"none",borderRadius:8,padding:"10px 28px",fontSize:14,cursor:"pointer",fontFamily:_GE,fontWeight:600}}>
               {salvando?"✓ Salvo!":"Salvar Produto"}
@@ -4049,38 +4050,38 @@ function FichaAnalise(props){
   var handleEditSTChange=function(v){setEditST(v);var n=parseFloat(v);if(!isNaN(n)&&n>0){setEditBR(n+10);setEditVR(n+40);}};
   var handleEditBRChange=function(v){setEditBR(v);var n=parseFloat(v);if(!isNaN(n)&&n>0)setEditVR(n+30);};
 
-  var custo=prod?calcCusto(editMode?editF:prod):0;
+  var custo=prod?ftCalcCusto(editMode?editF:prod):0;
   var canaisData=prod?[
     {id:"silvaTeles",label:"Silva Teles",preco:parseFloat(precosSalvos[prod.ref+"|silvaTeles"])||0},
     {id:"bomRetiro",label:"Bom Retiro",preco:parseFloat(precosSalvos[prod.ref+"|bomRetiro"])||0},
     {id:"varejo",label:"Varejo",preco:parseFloat(precosSalvos[prod.ref+"|varejo"])||0},
   ].filter(function(c){return c.preco>0;}):[];
-  var mkMedia=canaisData.length>0?canaisData.reduce(function(s,c){return s+calcMarkupPct(c.preco,custo);},0)/canaisData.length:0;
-  var mgMedia=canaisData.length>0?canaisData.reduce(function(s,c){return s+calcMargem(c.preco,custo);},0)/canaisData.length:0;
-  var melhor=canaisData.length>0?canaisData.reduce(function(a,b){return calcMargem(a.preco,custo)>calcMargem(b.preco,custo)?a:b;}):null;
-  var componentes=prod?CUSTO_FIELDS.filter(function(cf){return parseFloat((editMode?editF:prod)[cf.key])>0;})
+  var mkMedia=canaisData.length>0?canaisData.reduce(function(s,c){return s+ftMarkupPct(c.preco,custo);},0)/canaisData.length:0;
+  var mgMedia=canaisData.length>0?canaisData.reduce(function(s,c){return s+ftMargem(c.preco,custo);},0)/canaisData.length:0;
+  var melhor=canaisData.length>0?canaisData.reduce(function(a,b){return ftMargem(a.preco,custo)>ftMargem(b.preco,custo)?a:b;}):null;
+  var componentes=prod?ftCUSTO_FIELDS.filter(function(cf){return parseFloat((editMode?editF:prod)[cf.key])>0;})
     .map(function(cf){var v=parseFloat((editMode?editF:prod)[cf.key]);return Object.assign({},cf,{valor:v,pct:custo>0?(v/custo)*100:0});}):[];
 
   return(
     <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
       <div style={{maxWidth:860,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button onClick={function(){if(tab==="detalhe"){setTab("lista");setProd(null);setEditMode(false);}else onVoltar();}} style={btnVolt}>← {tab==="detalhe"?"Lista":"Voltar"}</button>
+          <button onClick={function(){if(tab==="detalhe"){setTab("lista");setProd(null);setEditMode(false);}else onVoltar();}} style={ftBtnVolt}>← {tab==="detalhe"?"Lista":"Voltar"}</button>
           <div style={{fontSize:20,fontWeight:700,color:_S}}>Análise Detalhada</div>
         </div>
         <div style={{background:_W,borderRadius:12,padding:14,border:"1px solid "+_BD,marginBottom:14}}>
-          <input value={busca} onChange={function(e){setBusca(e.target.value);if(tab==="detalhe"&&!e.target.value){setTab("lista");setProd(null);}}} placeholder="Buscar por referência ou descrição..." style={Object.assign({},inpS,{width:"100%"})}/>
+          <input value={busca} onChange={function(e){setBusca(e.target.value);if(tab==="detalhe"&&!e.target.value){setTab("lista");setProd(null);}}} placeholder="Buscar por referência ou descrição..." style={Object.assign({},ftInpS,{width:"100%"})}/>
         </div>
 
         {tab==="lista"&&(
           <div style={{background:_W,borderRadius:12,border:"1px solid "+_BD,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 100px 80px 80px 80px",background:_BF}}>
+            <div style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 100px 80px 80px 80px",background:_BFT}}>
               {["Ref","Descrição","Marca","Coleção","Custo","S.Teles","B.Retiro"].map(function(h){return <div key={h} style={{padding:"8px 10px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase"}}>{h}</div>;})}
             </div>
-            {ordenados.map(function(p,i){var cu=calcCusto(p);var st=precosSalvos[p.ref+"|silvaTeles"];var br=precosSalvos[p.ref+"|bomRetiro"];
+            {ordenados.map(function(p,i){var cu=ftCalcCusto(p);var st=precosSalvos[p.ref+"|silvaTeles"];var br=precosSalvos[p.ref+"|bomRetiro"];
               return(<div key={p.id} onClick={function(){selecionar(p);}} style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 100px 80px 80px 80px",borderBottom:"1px solid #f0ebe4",alignItems:"center",cursor:"pointer",background:i%2===0?_W:"#faf8f5"}}
                 onMouseEnter={function(e){e.currentTarget.style.background="#f0f6fb";}} onMouseLeave={function(e){e.currentTarget.style.background=i%2===0?_W:"#faf8f5";}}>
-                <div style={{padding:"8px 10px",fontSize:12,fontWeight:700,color:_BF}}>{p.ref}</div>
+                <div style={{padding:"8px 10px",fontSize:12,fontWeight:700,color:_BFT}}>{p.ref}</div>
                 <div style={{padding:"8px 10px",fontSize:12,color:_S}}>{p.descricao}</div>
                 <div style={{padding:"8px 10px",fontSize:11,color:_TX2}}>{p.marca}</div>
                 <div style={{padding:"8px 10px",fontSize:11,color:_GO}}>{p.colecao||"—"}</div>
@@ -4100,75 +4101,75 @@ function FichaAnalise(props){
               <span style={{fontSize:11,background:prod.marca==="Meluni"?"#f0ebe4":"#edf4fb",color:_S,padding:"2px 10px",borderRadius:4}}>{prod.marca}</span>
               <span style={{fontSize:11,background:"#f5f0e6",color:_GO,padding:"2px 10px",borderRadius:4}}>{prod.colecao||"—"}</span>
             </div>
-            {!editMode&&<button onClick={iniciarEdicao} style={{background:_W,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 12px",fontSize:12,cursor:"pointer",color:_BF}}>✏ Editar</button>}
+            {!editMode&&<button onClick={iniciarEdicao} style={{background:_W,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 12px",fontSize:12,cursor:"pointer",color:_BFT}}>✏ Editar</button>}
           </div>
 
-          {editMode&&(<div style={{background:_W,borderRadius:12,padding:16,border:"2px solid "+_BF,marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:_BF,marginBottom:12}}>Editando Produto + Preços</div>
+          {editMode&&(<div style={{background:_W,borderRadius:12,padding:16,border:"2px solid "+_BFT,marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:_BFT,marginBottom:12}}>Editando Produto + Preços</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
-              <div><div style={{fontSize:10,color:_LB}}>Descrição</div><input value={editF.descricao||""} onChange={function(e){setEditF(function(p){return Object.assign({},p,{descricao:e.target.value});});}} style={Object.assign({},inpS,{width:"100%"})}/></div>
-              <div><div style={{fontSize:10,color:_LB}}>Marca</div><div style={{display:"flex",gap:4}}>{MARCAS.map(function(m){return <button key={m} onClick={function(){setEditF(function(p){return Object.assign({},p,{marca:m});});}} style={{background:editF.marca===m?_S:_W,color:editF.marca===m?_W:_TX,border:"1px solid "+(editF.marca===m?_S:_BD),borderRadius:4,padding:"4px 12px",cursor:"pointer",fontSize:11}}>{m}</button>;})}</div></div>
-              <div><div style={{fontSize:10,color:_LB}}>Coleção</div><input value={editF.colecao||""} onChange={function(e){setEditF(function(p){return Object.assign({},p,{colecao:e.target.value});});}} style={Object.assign({},inpS,{width:"100%"})}/></div>
+              <div><div style={{fontSize:10,color:_LB}}>Descrição</div><input value={editF.descricao||""} onChange={function(e){setEditF(function(p){return Object.assign({},p,{descricao:e.target.value});});}} style={Object.assign({},ftInpS,{width:"100%"})}/></div>
+              <div><div style={{fontSize:10,color:_LB}}>Marca</div><div style={{display:"flex",gap:4}}>{ftMARCAS.map(function(m){return <button key={m} onClick={function(){setEditF(function(p){return Object.assign({},p,{marca:m});});}} style={{background:editF.marca===m?_S:_W,color:editF.marca===m?_W:_TX,border:"1px solid "+(editF.marca===m?_S:_BD),borderRadius:4,padding:"4px 12px",cursor:"pointer",fontSize:11}}>{m}</button>;})}</div></div>
+              <div><div style={{fontSize:10,color:_LB}}>Coleção</div><input value={editF.colecao||""} onChange={function(e){setEditF(function(p){return Object.assign({},p,{colecao:e.target.value});});}} style={Object.assign({},ftInpS,{width:"100%"})}/></div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:10}}>
-              {CUSTO_FIELDS.map(function(cf){return(<div key={cf.key}><div style={{fontSize:9,color:_LB}}>{cf.short}</div>
+              {ftCUSTO_FIELDS.map(function(cf){return(<div key={cf.key}><div style={{fontSize:9,color:_LB}}>{cf.short}</div>
                 <input type="number" value={editF[cf.key]||""} onChange={function(e){setEditF(function(p){var n=Object.assign({},p);n[cf.key]=e.target.value;return n;});}} placeholder="0"
                   style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"5px 6px",fontSize:12,fontFamily:_FN,fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
               </div>);})}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
               {[{l:"Silva Teles",v:editST,fn:handleEditSTChange},{l:"Bom Retiro",v:editBR,fn:handleEditBRChange},{l:"Varejo",v:editVR,fn:function(v){setEditVR(v);}}].map(function(c){
-                var pv=parseFloat(c.v)||0;var cu=calcCusto(editF);
+                var pv=parseFloat(c.v)||0;var cu=ftCalcCusto(editF);
                 return(<div key={c.l}><div style={{fontSize:10,color:_LB}}>{c.l}</div>
                   <input type="number" value={c.v} onChange={function(e){c.fn(e.target.value);}} placeholder="0"
                     style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"5px 6px",fontSize:13,fontFamily:_FN,fontWeight:700,outline:"none",boxSizing:"border-box",marginBottom:4}}/>
                   {pv>0&&cu>0&&<div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <div style={{width:8,height:8,borderRadius:2,background:thermoColor(pv,cu)}}/>
-                    <span style={{fontSize:10,color:thermoColor(pv,cu),fontFamily:_FN,fontWeight:700}}>{fmtRFT(calcLucro(pv,cu))}</span>
-                    <span style={{fontSize:9,color:_LB,marginLeft:"auto"}}>{fmtFT(calcMarkupPct(pv,cu))}%</span>
+                    <div style={{width:8,height:8,borderRadius:2,background:ftThermoColor(pv,cu)}}/>
+                    <span style={{fontSize:10,color:ftThermoColor(pv,cu),fontFamily:_FN,fontWeight:700}}>{fmtRFT(ftLucro(pv,cu))}</span>
+                    <span style={{fontSize:9,color:_LB,marginLeft:"auto"}}>{fmtFT(ftMarkupPct(pv,cu))}%</span>
                   </div>}</div>);})}
             </div>
             <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-              <button onClick={function(){setEditMode(false);}} style={Object.assign({},btnSec,{fontSize:12,padding:"6px 14px"})}>Cancelar</button>
+              <button onClick={function(){setEditMode(false);}} style={Object.assign({},ftBtnSec,{fontSize:12,padding:"6px 14px"})}>Cancelar</button>
               <button onClick={salvarEdicao} style={{background:_S,color:_W,border:"none",borderRadius:6,padding:"6px 18px",fontSize:12,cursor:"pointer",fontFamily:_GE,fontWeight:600}}>Salvar</button>
             </div>
           </div>)}
 
           <div style={{background:_W,borderRadius:12,padding:16,border:"1px solid "+_BD,marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:600,color:_BF,marginBottom:12}}>Composição de Custo</div>
+            <div style={{fontSize:12,fontWeight:600,color:_BFT,marginBottom:12}}>Composição de Custo</div>
             {componentes.map(function(c){return(
               <div key={c.key} style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
                 <div style={{width:100,fontSize:12,color:_S}}>{c.label}</div>
-                <div style={{flex:1,height:16,background:"#f0ebe4",borderRadius:4,overflow:"hidden"}}><div style={{width:c.pct+"%",height:"100%",background:_BF,borderRadius:4}}/></div>
+                <div style={{flex:1,height:16,background:"#f0ebe4",borderRadius:4,overflow:"hidden"}}><div style={{width:c.pct+"%",height:"100%",background:_BFT,borderRadius:4}}/></div>
                 <div style={{width:80,textAlign:"right",fontFamily:_FN,fontSize:13,fontWeight:700,color:_S}}>{fmtRFT(c.valor)}</div>
                 <div style={{width:45,textAlign:"right",fontSize:11,color:_LB}}>{fmtFT(c.pct)}%</div>
               </div>);})}
             <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,borderTop:"1px solid "+_BD,paddingTop:8}}>
-              <div style={{width:100,fontSize:13,fontWeight:700,color:_BF}}>TOTAL</div><div style={{flex:1}}/>
-              <div style={{width:80,textAlign:"right",fontFamily:_FN,fontSize:16,fontWeight:800,color:_BF}}>{fmtRFT(custo)}</div>
-              <div style={{width:45,textAlign:"right",fontSize:12,fontWeight:700,color:_BF}}>100%</div>
+              <div style={{width:100,fontSize:13,fontWeight:700,color:_BFT}}>TOTAL</div><div style={{flex:1}}/>
+              <div style={{width:80,textAlign:"right",fontFamily:_FN,fontSize:16,fontWeight:800,color:_BFT}}>{fmtRFT(custo)}</div>
+              <div style={{width:45,textAlign:"right",fontSize:12,fontWeight:700,color:_BFT}}>100%</div>
             </div>
           </div>
 
           <div style={{background:_W,borderRadius:12,border:"1px solid "+_BD,marginBottom:14,overflow:"hidden"}}>
-            <div style={{padding:"12px 16px",fontSize:12,fontWeight:600,color:_BF}}>Análise de Preços</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr repeat(4,90px)",background:_BF}}>
+            <div style={{padding:"12px 16px",fontSize:12,fontWeight:600,color:_BFT}}>Análise de Preços</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr repeat(4,90px)",background:_BFT}}>
               {["Canal","Preço","Lucro","Markup","Margem"].map(function(h){return <div key={h} style={{padding:"8px 10px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase",textAlign:h==="Canal"?"left":"right"}}>{h}</div>;})}
             </div>
-            {canaisData.map(function(c,i){var isM=melhor&&c.id===melhor.id;var lu=calcLucro(c.preco,custo);
+            {canaisData.map(function(c,i){var isM=melhor&&c.id===melhor.id;var lu=ftLucro(c.preco,custo);
               return(<div key={c.id} style={{display:"grid",gridTemplateColumns:"1fr repeat(4,90px)",borderBottom:"1px solid #f0ebe4",background:isM?"#f0fbf4":i%2===0?_W:"#faf8f5"}}>
                 <div style={{padding:"10px",fontSize:13,fontWeight:600,color:_S}}>{isM?"⭐ ":""}{c.label}</div>
                 <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:14,fontWeight:700,color:_S}}>{fmtRFT(c.preco)}</div>
-                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:14,fontWeight:700,color:thermoColor(c.preco,custo),display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
-                  <div style={{width:8,height:8,borderRadius:2,background:thermoColor(c.preco,custo)}}/>{fmtRFT(lu)}</div>
-                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:13,color:_S}}>{fmtFT(calcMarkupPct(c.preco,custo))}%</div>
-                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:13,color:_S}}>{fmtFT(calcMargem(c.preco,custo))}%</div>
+                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:14,fontWeight:700,color:ftThermoColor(c.preco,custo),display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
+                  <div style={{width:8,height:8,borderRadius:2,background:ftThermoColor(c.preco,custo)}}/>{fmtRFT(lu)}</div>
+                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:13,color:_S}}>{fmtFT(ftMarkupPct(c.preco,custo))}%</div>
+                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:13,color:_S}}>{fmtFT(ftMargem(c.preco,custo))}%</div>
               </div>);})}
             {canaisData.length===0&&<div style={{padding:20,textAlign:"center",color:"#c0b8b0",fontSize:12}}>Nenhum preço definido</div>}
           </div>
 
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14}}>
-            {[{label:"Markup Médio",valor:fmtFT(mkMedia)+"%",cor:_BF},{label:"Margem Média",valor:fmtFT(mgMedia)+"%",cor:_BF},{label:"Melhor Canal",valor:melhor?melhor.label:"—",cor:_GO},{label:"Preço Mínimo",valor:fmtRFT(custo*1.1),sub:"(custo + 10%)",cor:_RD}].map(function(ind){return(
+            {[{label:"Markup Médio",valor:fmtFT(mkMedia)+"%",cor:_BFT},{label:"Margem Média",valor:fmtFT(mgMedia)+"%",cor:_BFT},{label:"Melhor Canal",valor:melhor?melhor.label:"—",cor:_GO},{label:"Preço Mínimo",valor:fmtRFT(custo*1.1),sub:"(custo + 10%)",cor:_RD}].map(function(ind){return(
               <div key={ind.label} style={{background:_W,borderRadius:12,padding:14,border:"1px solid "+_BD,textAlign:"center"}}>
                 <div style={{fontSize:10,color:_LB,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>{ind.label}</div>
                 <div style={{fontFamily:_FN,fontSize:20,fontWeight:800,color:ind.cor}}>{ind.valor}</div>
@@ -4201,8 +4202,8 @@ const FichaTecnicaContent=()=>{
   var _edit=useState(null),editProd=_edit[0],setEditProd=_edit[1];
   var _bRef=useState(""),buscaRef=_bRef[0],setBuscaRef=_bRef[1];
   var _bDesc=useState(""),buscaDesc=_bDesc[0],setBuscaDesc=_bDesc[1];
-  var _bDe=useState(data30),buscaDe=_bDe[0],setBuscaDe=_bDe[1];
-  var _bAte=useState(dataHoje),buscaAte=_bAte[0],setBuscaAte=_bAte[1];
+  var _bDe=useState(ftData30),buscaDe=_bDe[0],setBuscaDe=_bDe[1];
+  var _bAte=useState(ftDataHoje),buscaAte=_bAte[0],setBuscaAte=_bAte[1];
   var produtosRef=useRef([]);var precosRef=useRef({});
   var _ftSync=useState(null),ftSync=_ftSync[0],setFtSync=_ftSync[1];
 
@@ -4237,9 +4238,9 @@ const FichaTecnicaContent=()=>{
   var colecoesUnicas=useMemo(function(){var s=new Set(produtos.map(function(p){return p.colecao;}).filter(Boolean));return Array.from(s).sort();},[produtos]);
 
   var selecionarProduto=function(p){setProdSel(p);setBuscaRef(p.ref);setBuscaDesc("");setTela("home");};
-  var custoSel=prodSel?calcCusto(prodSel):0;
+  var custoSel=prodSel?ftCalcCusto(prodSel):0;
   var getPreco=function(ref,canal){return precosSalvos[ref+"|"+canal]||null;};
-  var getSugerido=function(ref){var c=calcCusto(produtos.find(function(p){return p.ref===ref;})||{});var st=getPreco(ref,"silvaTeles")||c*2;var br=getPreco(ref,"bomRetiro")||(st+10);return{silvaTeles:c*2,bomRetiro:st+10,varejo:br+30};};
+  var getSugerido=function(ref){var c=ftCalcCusto(produtos.find(function(p){return p.ref===ref;})||{});var st=getPreco(ref,"silvaTeles")||c*2;var br=getPreco(ref,"bomRetiro")||(st+10);return{silvaTeles:c*2,bomRetiro:st+10,varejo:br+30};};
 
   var salvarPrecoCanal=function(ref,canal,valor){
     var v=parseFloat(valor);if(isNaN(v)||v<=0)return;
@@ -4260,7 +4261,7 @@ const FichaTecnicaContent=()=>{
     if(br)t+="Bom Retiro: *"+fmtRFT(br)+"*\n";
     if(vr)t+="Varejo: *"+fmtRFT(vr)+"*\n";
     t+="━━━━━━━━━━━━━━━━";
-    abrirWhatsApp(t);
+    ftAbrirWhatsApp(t);
   };
 
   if(tela==="lista")return <FichaLista produtos={produtos} colecoesUnicas={colecoesUnicas} onSelect={selecionarProduto} onVoltar={function(){setTela("home");}}/>;
@@ -4275,14 +4276,14 @@ const FichaTecnicaContent=()=>{
     if(buscaDe&&p.dataCriacao<buscaDe)return false;if(buscaAte&&p.dataCriacao>buscaAte)return false;return true;});
   var produtoAtivo=prodSel;
   var sugeridos=produtoAtivo?getSugerido(produtoAtivo.ref):null;
-  var CANAIS=[{id:"custo",label:"CUSTO",bg:_S,tc:_W},{id:"silvaTeles",label:"SILVA TELES",bg:_BF,tc:_W},{id:"bomRetiro",label:"BOM RETIRO",bg:_BF,tc:_W},{id:"varejo",label:"VAREJO",bg:_BF,tc:_W}];
+  var CANAIS=[{id:"custo",label:"CUSTO",bg:_S,tc:_W},{id:"silvaTeles",label:"SILVA TELES",bg:_BFT,tc:_W},{id:"bomRetiro",label:"BOM RETIRO",bg:_BFT,tc:_W},{id:"varejo",label:"VAREJO",bg:_BFT,tc:_W}];
 
   return(
     <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
       <div style={{maxWidth:980,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
-            <FichaSvg size={38}/>
+            <FichaSvgIcon size={38}/>
             <div>
               <div style={{fontSize:10,color:_LB,letterSpacing:2,textTransform:"uppercase"}}>GRUPO AMÍCIA</div>
               <div style={{fontSize:22,fontWeight:700,color:_S}}>Ficha Técnica</div>
@@ -4293,9 +4294,9 @@ const FichaTecnicaContent=()=>{
             {ftSync==='saving'&&<span style={{fontSize:11,color:"#a89f94",fontFamily:"Georgia,serif"}}>⏳ Salvando...</span>}
             {ftSync==='saved'&&<span style={{fontSize:11,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ Salvo</span>}
             {ftSync==='error'&&<span style={{fontSize:11,color:"#c0392b",fontFamily:"Georgia,serif"}}>⚠ Erro</span>}
-            <button onClick={function(){setEditProd(null);setTela("novo");}} style={btnPri}>+ Novo</button>
-            <button onClick={function(){setTela("lista");}} style={btnSec}>📋 Lista</button>
-            <button onClick={function(){setTela("analise");}} style={btnSec}>📊 Análise</button>
+            <button onClick={function(){setEditProd(null);setTela("novo");}} style={ftBtnPri}>+ Novo</button>
+            <button onClick={function(){setTela("lista");}} style={ftBtnSec}>📋 Lista</button>
+            <button onClick={function(){setTela("analise");}} style={ftBtnSec}>📊 Análise</button>
           </div>
         </div>
 
@@ -4303,20 +4304,20 @@ const FichaTecnicaContent=()=>{
         <div style={{background:_W,borderRadius:12,padding:14,border:"1px solid "+_BD,marginBottom:14}}>
           <div style={{fontSize:11,color:_LB,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Buscar produto</div>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <input value={buscaRef} onChange={function(e){setBuscaRef(e.target.value);if(!e.target.value)setProdSel(null);}} placeholder="Referência" style={Object.assign({},inpS,{width:120})}/>
-            <input value={buscaDesc} onChange={function(e){setBuscaDesc(e.target.value);}} placeholder="Descrição" style={Object.assign({},inpS,{flex:1,minWidth:140})}/>
-            <input type="date" value={buscaDe} onChange={function(e){setBuscaDe(e.target.value);}} style={Object.assign({},inpS,{width:130,fontSize:11})}/>
+            <input value={buscaRef} onChange={function(e){setBuscaRef(e.target.value);if(!e.target.value)setProdSel(null);}} placeholder="Referência" style={Object.assign({},ftInpS,{width:120})}/>
+            <input value={buscaDesc} onChange={function(e){setBuscaDesc(e.target.value);}} placeholder="Descrição" style={Object.assign({},ftInpS,{flex:1,minWidth:140})}/>
+            <input type="date" value={buscaDe} onChange={function(e){setBuscaDe(e.target.value);}} style={Object.assign({},ftInpS,{width:130,fontSize:11})}/>
             <span style={{fontSize:11,color:_LB}}>até</span>
-            <input type="date" value={buscaAte} onChange={function(e){setBuscaAte(e.target.value);}} style={Object.assign({},inpS,{width:130,fontSize:11})}/>
+            <input type="date" value={buscaAte} onChange={function(e){setBuscaAte(e.target.value);}} style={Object.assign({},ftInpS,{width:130,fontSize:11})}/>
             <button onClick={function(){/* filtro já é automático, mas força re-render */setProdSel(null);}} style={{background:_S,color:_W,border:"none",borderRadius:8,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:_GE,fontWeight:600}}>Buscar</button>
-            {produtoAtivo&&<button onClick={function(){setProdSel(null);setBuscaRef("");setBuscaDesc("");setBuscaDe(data30());setBuscaAte(dataHoje());}} style={{background:_W,color:_RD,border:"1px solid "+_RD,borderRadius:8,padding:"8px 10px",cursor:"pointer",fontSize:13}}>✕</button>}
+            {produtoAtivo&&<button onClick={function(){setProdSel(null);setBuscaRef("");setBuscaDesc("");setBuscaDe(ftData30());setBuscaAte(ftDataHoje());}} style={{background:_W,color:_RD,border:"1px solid "+_RD,borderRadius:8,padding:"8px 10px",cursor:"pointer",fontSize:13}}>✕</button>}
           </div>
           {(buscaRef||buscaDesc)&&!produtoAtivo&&filtrados.length>0&&(
             <div style={{marginTop:8,maxHeight:160,overflowY:"auto",borderTop:"1px solid "+_BD,paddingTop:6}}>
               {filtrados.slice(0,8).map(function(p){return(
                 <div key={p.id} onClick={function(){selecionarProduto(p);}} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 8px",cursor:"pointer",borderRadius:6}}
                   onMouseEnter={function(e){e.currentTarget.style.background="#f0f6fb";}} onMouseLeave={function(e){e.currentTarget.style.background="transparent";}}>
-                  <span style={{fontFamily:_FN,fontWeight:700,color:_BF,fontSize:13,minWidth:50}}>{p.ref}</span>
+                  <span style={{fontFamily:_FN,fontWeight:700,color:_BFT,fontSize:13,minWidth:50}}>{p.ref}</span>
                   <span style={{fontSize:12,color:_S}}>{p.descricao}</span>
                   <span style={{fontSize:10,color:_LB,marginLeft:"auto"}}>{p.colecao}</span>
                 </div>);})}
@@ -4331,9 +4332,9 @@ const FichaTecnicaContent=()=>{
               <span style={{fontSize:16,fontWeight:600,color:_S}}>{produtoAtivo.descricao}</span>
               <span style={{fontSize:11,background:produtoAtivo.marca==="Meluni"?"#f0ebe4":"#edf4fb",color:_S,padding:"2px 10px",borderRadius:4}}>{produtoAtivo.marca}</span>
               <span style={{fontSize:11,background:"#f5f0e6",color:_GO,padding:"2px 10px",borderRadius:4}}>{produtoAtivo.colecao||"—"}</span>
-              <span style={{fontSize:10,color:_LB}}>{fmtData(produtoAtivo.dataCriacao)}</span>
+              <span style={{fontSize:10,color:_LB}}>{fmtDataFT(produtoAtivo.dataCriacao)}</span>
             </div>
-            <button onClick={function(){setEditProd(produtoAtivo);setTela("editar");}} style={{background:_W,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 12px",fontSize:12,cursor:"pointer",color:_BF}}>✏ Editar</button>
+            <button onClick={function(){setEditProd(produtoAtivo);setTela("editar");}} style={{background:_W,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 12px",fontSize:12,cursor:"pointer",color:_BFT}}>✏ Editar</button>
           </div>
         </div>)}
 
