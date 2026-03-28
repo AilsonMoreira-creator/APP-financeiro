@@ -3702,6 +3702,31 @@ const CalcDash=({prods,prs,onVoltar})=>{
 };
 
 
+// ── Constantes exclusivas do módulo Ficha Técnica ────────────────────────────
+const _BD="#e8e2da",_W="#fff",_BG_FT_FT="#f7f4f0",_GE="Georgia,serif";
+const _LB="#a89f94",_TX="#6b7c8a",_TX2="#8a9aa4",_RD="#c0392b";
+const _FN_FT_FT="Calibri,'Segoe UI',Arial,sans-serif";
+const CUSTO_FIELDS=[{key:"tecido1",label:"Tecido 1",short:"Tecido 1"},{key:"tecido2",label:"Tecido 2",short:"Tecido 2"},{key:"forro",label:"Forro",short:"Forro"},{key:"oficina",label:"Oficina Costura",short:"Oficina"},{key:"passadoria",label:"Passadoria",short:"Passadoria"},{key:"ziper",label:"Zíper",short:"Zíper"},{key:"botao",label:"Botão/Caseado",short:"Botão/Cas."},{key:"aviamentos",label:"Aviamentos",short:"Aviamentos"},{key:"modelista",label:"Modelista/Piloteiro",short:"Modelista"},{key:"salaCorte",label:"Sala de Corte",short:"Sala Corte"}];
+const MARCAS_FT_FT=["Amícia","Meluni"];
+const ftFmt=v=>(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const ftFmtR=v=>"R$ "+ftFmt(v);
+const ftCalcCusto=p=>CUSTO_FIELDS.reduce((s,f)=>s+(parseFloat(p[f.key])||0),0);
+const ftMarkupPct=(pr,cu)=>cu>0?((pr/cu)-1)*100:0;
+const ftMargem=(pr,cu)=>pr>0?((pr-cu)/pr)*100:0;
+const ftLucro=(pr,cu)=>pr-cu;
+const ftThermoColor=(pr,cu)=>{if(!pr||!cu||cu<=0)return"#ccc";const mk=ftMarkupPct(pr,cu);if(mk>=130)return"#1a8a3e";if(mk>=100)return"#27ae60";if(mk>=80)return"#e6a817";return"#c0392b";};
+const ftThermoLabel=(pr,cu)=>{if(!pr||!cu||cu<=0)return"";const mk=ftMarkupPct(pr,cu);if(mk>=130)return"Excelente";if(mk>=100)return"Bom";if(mk>=80)return"Atenção";return"Crítico";};
+const ftDataHoje=()=>new Date().toISOString().slice(0,10);
+const ftData30=()=>{const d=new Date();d.setDate(d.getDate()-30);return d.toISOString().slice(0,10);};
+const ftFmtData=iso=>{if(!iso)return"";const p=iso.split("-");return p[2]+"/"+p[1]+"/"+p[0];};
+const ftAbrirWhatsApp=texto=>window.open("https://wa.me/?text="+encodeURIComponent(texto),"_blank");
+const ftInpS={border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none",fontFamily:"Georgia,serif",boxSizing:"border-box"};
+const ftLblS={fontSize:11,color:"#a89f94",marginBottom:4,letterSpacing:1,textTransform:"uppercase"};
+const ftBtnPri={background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600};
+const ftBtnSec={background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600};
+const ftBtnVolt={background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5",fontFamily:"Georgia,serif"};
+function WhatsAppIcon(props){return(<svg width={props.size||18} height={props.size||18} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>);}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    CARD HOME — SÓ EXIBE, SEM EDIÇÃO
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -3715,9 +3740,9 @@ function CardHome(props){
       <div style={{background:canal.bg,padding:"8px 14px",minHeight:42,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:11,fontWeight:700,color:canal.tc,letterSpacing:1,textAlign:"center"}}>{canal.label}</div></div>
       <div style={{background:_W,padding:16,flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
         {!ativo?<div style={{color:"#c8c0b8",fontSize:12}}>—</div>
-        :isCusto?<div style={{fontFamily:_FN,fontSize:28,fontWeight:800,color:_S,textAlign:"center"}}>{fmtR(custo)}</div>
-        :preco?<div style={{fontFamily:_FN,fontSize:28,fontWeight:800,color:_S,textAlign:"center"}}>{fmtR(preco)}</div>
-        :<div style={{textAlign:"center"}}><div style={{fontSize:9,color:_TX2,fontStyle:"italic",marginBottom:2}}>SUGERIDO</div><div style={{fontFamily:_FN,fontSize:22,fontWeight:700,color:_TX2,fontStyle:"italic"}}>{fmtR(sugerido)}</div></div>}
+        :isCusto?<div style={{fontFamily:_FN_FT,fontSize:28,fontWeight:800,color:_S,textAlign:"center"}}>{ftFmtR(custo)}</div>
+        :preco?<div style={{fontFamily:_FN_FT,fontSize:28,fontWeight:800,color:_S,textAlign:"center"}}>{ftFmtR(preco)}</div>
+        :<div style={{textAlign:"center"}}><div style={{fontSize:9,color:_TX2,fontStyle:"italic",marginBottom:2}}>SUGERIDO</div><div style={{fontFamily:_FN_FT,fontSize:22,fontWeight:700,color:_TX2,fontStyle:"italic"}}>{ftFmtR(sugerido)}</div></div>}
       </div>
     </div>
   );
@@ -3736,14 +3761,14 @@ function FichaLista(props){
   },[produtos,fc]);
 
   return(
-    <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
+    <div style={{background:_BG_FT,minHeight:"100vh",padding:20,fontFamily:"Georgia,serif"}}>
       <div style={{maxWidth:800,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button onClick={onVoltar} style={btnVolt}>← Voltar</button>
+          <button onClick={onVoltar} style={ftBtnVolt}>← Voltar</button>
           <div style={{fontSize:20,fontWeight:700,color:_S}}>Produtos Cadastrados</div>
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
             <span style={{fontSize:11,color:_LB}}>Coleção:</span>
-            <select value={fc} onChange={function(e){setFc(e.target.value);}} style={{border:"1px solid "+_BD,borderRadius:6,padding:"5px 10px",fontSize:12,outline:"none",fontFamily:_GE,color:_S,background:_W}}>
+            <select value={fc} onChange={function(e){setFc(e.target.value);}} style={{border:"1px solid "+_BD,borderRadius:6,padding:"5px 10px",fontSize:12,outline:"none",fontFamily:"Georgia,serif",color:_S,background:_W}}>
               <option value="">Todas</option>
               {colecoesUnicas.map(function(c){return <option key={c} value={c}>{c}</option>;})}
             </select>
@@ -3762,7 +3787,7 @@ function FichaLista(props){
               <div style={{padding:"10px 12px",fontSize:12,color:_S}}>{p.descricao}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_TX2}}>{p.marca}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_GO}}>{p.colecao||"—"}</div>
-              <div style={{padding:"10px 12px",fontSize:11,color:_LB}}>{fmtData(p.dataCriacao)}</div>
+              <div style={{padding:"10px 12px",fontSize:11,color:_LB}}>{ftFmtData(p.dataCriacao)}</div>
             </div>);})}
           {ord.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto cadastrado</div>}
         </div>
@@ -3777,12 +3802,12 @@ function FichaLista(props){
 
 function FichaFormProd(props){
   var onSalvar=props.onSalvar,onVoltar=props.onVoltar,inicial=props.inicial,produtos=props.produtos,colecoesUnicas=props.colecoesUnicas,precosSalvos=props.precosSalvos,onSalvarPreco=props.onSalvarPreco;
-  var blank={id:Date.now(),ref:"",descricao:"",marca:"Amícia",colecao:"",dataCriacao:dataHoje(),tecido1:"",tecido2:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""};
+  var blank={id:Date.now(),ref:"",descricao:"",marca:"Amícia",colecao:"",dataCriacao:ftDataHoje(),tecido1:"",tecido2:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""};
   var _f=useState(inicial?Object.assign({},inicial):blank),f=_f[0],setF=_f[1];
   var _salv=useState(false),salvando=_salv[0],setSalvando=_salv[1];
   var _nc=useState(false),novaColecao=_nc[0],setNovaColecao=_nc[1];
   var s=function(k,v){setF(function(p){var n=Object.assign({},p);n[k]=v;return n;});};
-  var custo=calcCusto(f);
+  var custo=ftCalcCusto(f);
   var refId=f.ref.trim();
 
   var pST=precosSalvos[refId+"|silvaTeles"]||null;
@@ -3829,38 +3854,38 @@ function FichaFormProd(props){
   };
 
   return(
-    <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
+    <div style={{background:_BG_FT,minHeight:"100vh",padding:20,fontFamily:"Georgia,serif"}}>
       <div style={{maxWidth:740,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button onClick={onVoltar} style={btnVolt}>← Voltar</button>
+          <button onClick={onVoltar} style={ftBtnVolt}>← Voltar</button>
           <div style={{fontSize:20,fontWeight:700,color:_S}}>{inicial?"Editar Produto":"Novo Produto"}</div>
         </div>
         <div style={{background:_W,borderRadius:12,padding:20,border:"1px solid "+_BD}}>
           {/* Ref + Desc */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:12}}>
             {[["ref","Referência *"],["descricao","Descrição"]].map(function(a){return(
-              <div key={a[0]}><div style={lblS}>{a[1]}</div><input value={f[a[0]]} onChange={function(e){s(a[0],e.target.value);}} style={Object.assign({},inpS,{width:"100%"})}/></div>);})}
+              <div key={a[0]}><div style={ftLblS}>{a[1]}</div><input value={f[a[0]]} onChange={function(e){s(a[0],e.target.value);}} style={Object.assign({},ftInpS,{width:"100%"})}/></div>);})}
           </div>
           {/* Marca */}
           <div style={{marginBottom:12}}>
-            <div style={lblS}>Marca</div>
-            <div style={{display:"flex",gap:8}}>{MARCAS.map(function(m){return <button key={m} onClick={function(){s("marca",m);}} style={{background:f.marca===m?_S:_W,color:f.marca===m?_W:_TX,border:"1px solid "+(f.marca===m?_S:_BD),borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>;})}</div>
+            <div style={ftLblS}>Marca</div>
+            <div style={{display:"flex",gap:8}}>{MARCAS_FT.map(function(m){return <button key={m} onClick={function(){s("marca",m);}} style={{background:f.marca===m?_S:_W,color:f.marca===m?_W:_TX,border:"1px solid "+(f.marca===m?_S:_BD),borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>;})}</div>
           </div>
           {/* Coleção + Data */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
             <div>
-              <div style={lblS}>Coleção/Temporada</div>
-              {!novaColecao?(<select value={f.colecao} onChange={function(e){if(e.target.value==="__nova__"){setNovaColecao(true);s("colecao","");}else s("colecao",e.target.value);}} style={Object.assign({},inpS,{width:"100%",background:_W})}>
+              <div style={ftLblS}>Coleção/Temporada</div>
+              {!novaColecao?(<select value={f.colecao} onChange={function(e){if(e.target.value==="__nova__"){setNovaColecao(true);s("colecao","");}else s("colecao",e.target.value);}} style={Object.assign({},ftInpS,{width:"100%",background:_W})}>
                 <option value="">Selecionar...</option>
                 {colecoesUnicas.map(function(c){return <option key={c} value={c}>{c}</option>;})}
                 <option value="__nova__">+ Nova coleção...</option>
               </select>):(
               <div style={{display:"flex",gap:6}}>
-                <input value={f.colecao} onChange={function(e){s("colecao",e.target.value);}} placeholder="Ex: Inverno 2026" style={Object.assign({},inpS,{flex:1})}/>
+                <input value={f.colecao} onChange={function(e){s("colecao",e.target.value);}} placeholder="Ex: Inverno 2026" style={Object.assign({},ftInpS,{flex:1})}/>
                 <button onClick={function(){setNovaColecao(false);}} style={{background:_W,border:"1px solid "+_BD,borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:11,color:_TX}}>OK</button>
               </div>)}
             </div>
-            <div><div style={lblS}>Data de Criação</div><input type="date" value={f.dataCriacao} onChange={function(e){s("dataCriacao",e.target.value);}} style={Object.assign({},inpS,{width:"100%"})}/></div>
+            <div><div style={ftLblS}>Data de Criação</div><input type="date" value={f.dataCriacao} onChange={function(e){s("dataCriacao",e.target.value);}} style={Object.assign({},ftInpS,{width:"100%"})}/></div>
           </div>
 
           {/* ── Componentes de Custo ─────────────────────────────────── */}
@@ -3875,7 +3900,7 @@ function FichaFormProd(props){
                 <div style={{position:"relative"}}>
                   <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:_LB,pointerEvents:"none"}}>R$</span>
                   <input type="number" value={f[cf.key]||""} onChange={function(e){s(cf.key,e.target.value);}} placeholder="0,00"
-                    style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px 9px 30px",fontSize:14,fontFamily:_FN,fontWeight:700,outline:"none",boxSizing:"border-box",background:"#fafafa"}}/>
+                    style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px 9px 30px",fontSize:14,fontFamily:_FN_FT,fontWeight:700,outline:"none",boxSizing:"border-box",background:"#fafafa"}}/>
                 </div>
               </div>);})}
           </div>
@@ -3887,13 +3912,13 @@ function FichaFormProd(props){
                 <div style={{position:"relative"}}>
                   <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:_LB,pointerEvents:"none"}}>R$</span>
                   <input type="number" value={f[cf.key]||""} onChange={function(e){s(cf.key,e.target.value);}} placeholder="0,00"
-                    style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px 9px 30px",fontSize:14,fontFamily:_FN,fontWeight:700,outline:"none",boxSizing:"border-box",background:"#fafafa"}}/>
+                    style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px 9px 30px",fontSize:14,fontFamily:_FN_FT,fontWeight:700,outline:"none",boxSizing:"border-box",background:"#fafafa"}}/>
                 </div>
               </div>);})}
             {/* Custo Total — compacto ao lado */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8,background:"#edf4fb",border:"1.5px solid "+_B,borderRadius:10,padding:"8px 16px"}}>
               <span style={{fontSize:11,color:_B,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Custo</span>
-              <span style={{fontFamily:_FN,fontSize:22,fontWeight:800,color:_B}}>{fmtR(custo)}</span>
+              <span style={{fontFamily:_FN_FT,fontSize:22,fontWeight:800,color:_B}}>{ftFmtR(custo)}</span>
             </div>
           </div>
 
@@ -3905,17 +3930,17 @@ function FichaFormProd(props){
               <div style={{border:"1px solid "+_BD,borderRadius:12,overflow:"hidden",display:"flex",flexDirection:"column"}}>
                 <div style={{background:_S,padding:"6px 10px",textAlign:"center"}}><span style={{fontSize:11,fontWeight:700,color:_W,letterSpacing:1}}>CUSTO</span></div>
                 <div style={{padding:12,background:_W,flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <div style={{fontFamily:_FN,fontSize:22,fontWeight:800,color:_S,textAlign:"center"}}>{custo>0?fmtR(custo):"—"}</div>
+                  <div style={{fontFamily:_FN_FT,fontSize:22,fontWeight:800,color:_S,textAlign:"center"}}>{custo>0?ftFmtR(custo):"—"}</div>
                 </div>
               </div>
               {/* 3 Cards editáveis — alinhados */}
               {canaisForm.map(function(c){
                 var v=parseFloat(c.val)||0;
-                var lucro=v>0&&custo>0?calcLucro(v,custo):0;
-                var mk=v>0&&custo>0?calcMarkupPct(v,custo):0;
-                var mg=v>0&&custo>0?calcMargem(v,custo):0;
-                var cor=v>0&&custo>0?thermoColor(v,custo):"#ccc";
-                var lbl=v>0&&custo>0?thermoLabel(v,custo):"";
+                var lucro=v>0&&custo>0?ftLucro(v,custo):0;
+                var mk=v>0&&custo>0?ftMarkupPct(v,custo):0;
+                var mg=v>0&&custo>0?ftMargem(v,custo):0;
+                var cor=v>0&&custo>0?ftThermoColor(v,custo):"#ccc";
+                var lbl=v>0&&custo>0?ftThermoLabel(v,custo):"";
                 return(
                   <div key={c.id} style={{border:"1px solid "+_BD,borderRadius:12,overflow:"hidden",display:"flex",flexDirection:"column"}}>
                     <div style={{background:_B,padding:"6px 10px",textAlign:"center"}}><span style={{fontSize:11,fontWeight:700,color:_W,letterSpacing:1}}>{c.label}</span></div>
@@ -3923,17 +3948,17 @@ function FichaFormProd(props){
                       <div style={{position:"relative",width:"100%",marginBottom:6}}>
                         <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:_LB}}>R$</span>
                         <input type="number" value={c.val} onChange={function(e){c.onChange(e.target.value);}} placeholder="0,00"
-                          style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 8px 8px 28px",fontSize:16,fontFamily:_FN,fontWeight:800,outline:"none",boxSizing:"border-box",textAlign:"center"}}/>
+                          style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 8px 8px 28px",fontSize:16,fontFamily:_FN_FT,fontWeight:800,outline:"none",boxSizing:"border-box",textAlign:"center"}}/>
                       </div>
                       {v>0&&custo>0&&(
                         <div style={{textAlign:"center",width:"100%"}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginBottom:2}}>
                             <div style={{width:8,height:8,borderRadius:2,background:cor}}/>
-                            <span style={{fontSize:11,color:cor,fontWeight:700,fontFamily:_FN}}>Lucro: {fmtR(lucro)}</span>
+                            <span style={{fontSize:11,color:cor,fontWeight:700,fontFamily:_FN_FT}}>Lucro: {ftFmtR(lucro)}</span>
                           </div>
                           <div style={{fontSize:10,color:_TX2,textAlign:"center"}}>{lbl}</div>
-                          <div style={{fontSize:10,color:_TX2,textAlign:"center"}}>Markup: {fmt(mk)}%</div>
-                          <div style={{fontSize:10,color:_TX2,textAlign:"center"}}>Margem: {fmt(mg)}%</div>
+                          <div style={{fontSize:10,color:_TX2,textAlign:"center"}}>Markup: {ftFmt(mk)}%</div>
+                          <div style={{fontSize:10,color:_TX2,textAlign:"center"}}>Margem: {ftFmt(mg)}%</div>
                         </div>
                       )}
                     </div>
@@ -3944,9 +3969,9 @@ function FichaFormProd(props){
 
           {/* ── Salvar ───────────────────────────────────────────────── */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",borderTop:"1px solid "+_BD,paddingTop:14,gap:8}}>
-            <button onClick={onVoltar} style={Object.assign({},btnSec,{color:_TX})}>Cancelar</button>
+            <button onClick={onVoltar} style={Object.assign({},ftBtnSec,{color:_TX})}>Cancelar</button>
             <button onClick={handleSalvar} disabled={salvando}
-              style={{background:salvando?_GR:_S,color:_W,border:"none",borderRadius:8,padding:"10px 28px",fontSize:14,cursor:"pointer",fontFamily:_GE,fontWeight:600}}>
+              style={{background:salvando?_GR:_S,color:_W,border:"none",borderRadius:8,padding:"10px 28px",fontSize:14,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
               {salvando?"✓ Salvo!":"Salvar Produto"}
             </button>
           </div>
@@ -3983,27 +4008,27 @@ function FichaAnalise(props){
   var handleEditSTChange=function(v){setEditST(v);var n=parseFloat(v);if(!isNaN(n)&&n>0){setEditBR(n+10);setEditVR(n+40);}};
   var handleEditBRChange=function(v){setEditBR(v);var n=parseFloat(v);if(!isNaN(n)&&n>0)setEditVR(n+30);};
 
-  var custo=prod?calcCusto(editMode?editF:prod):0;
+  var custo=prod?ftCalcCusto(editMode?editF:prod):0;
   var canaisData=prod?[
     {id:"silvaTeles",label:"Silva Teles",preco:parseFloat(precosSalvos[prod.ref+"|silvaTeles"])||0},
     {id:"bomRetiro",label:"Bom Retiro",preco:parseFloat(precosSalvos[prod.ref+"|bomRetiro"])||0},
     {id:"varejo",label:"Varejo",preco:parseFloat(precosSalvos[prod.ref+"|varejo"])||0},
   ].filter(function(c){return c.preco>0;}):[];
-  var mkMedia=canaisData.length>0?canaisData.reduce(function(s,c){return s+calcMarkupPct(c.preco,custo);},0)/canaisData.length:0;
-  var mgMedia=canaisData.length>0?canaisData.reduce(function(s,c){return s+calcMargem(c.preco,custo);},0)/canaisData.length:0;
-  var melhor=canaisData.length>0?canaisData.reduce(function(a,b){return calcMargem(a.preco,custo)>calcMargem(b.preco,custo)?a:b;}):null;
+  var mkMedia=canaisData.length>0?canaisData.reduce(function(s,c){return s+ftMarkupPct(c.preco,custo);},0)/canaisData.length:0;
+  var mgMedia=canaisData.length>0?canaisData.reduce(function(s,c){return s+ftMargem(c.preco,custo);},0)/canaisData.length:0;
+  var melhor=canaisData.length>0?canaisData.reduce(function(a,b){return ftMargem(a.preco,custo)>ftMargem(b.preco,custo)?a:b;}):null;
   var componentes=prod?CUSTO_FIELDS.filter(function(cf){return parseFloat((editMode?editF:prod)[cf.key])>0;})
     .map(function(cf){var v=parseFloat((editMode?editF:prod)[cf.key]);return Object.assign({},cf,{valor:v,pct:custo>0?(v/custo)*100:0});}):[];
 
   return(
-    <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
+    <div style={{background:_BG_FT,minHeight:"100vh",padding:20,fontFamily:"Georgia,serif"}}>
       <div style={{maxWidth:860,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-          <button onClick={function(){if(tab==="detalhe"){setTab("lista");setProd(null);setEditMode(false);}else onVoltar();}} style={btnVolt}>← {tab==="detalhe"?"Lista":"Voltar"}</button>
+          <button onClick={function(){if(tab==="detalhe"){setTab("lista");setProd(null);setEditMode(false);}else onVoltar();}} style={ftBtnVolt}>← {tab==="detalhe"?"Lista":"Voltar"}</button>
           <div style={{fontSize:20,fontWeight:700,color:_S}}>Análise Detalhada</div>
         </div>
         <div style={{background:_W,borderRadius:12,padding:14,border:"1px solid "+_BD,marginBottom:14}}>
-          <input value={busca} onChange={function(e){setBusca(e.target.value);if(tab==="detalhe"&&!e.target.value){setTab("lista");setProd(null);}}} placeholder="Buscar por referência ou descrição..." style={Object.assign({},inpS,{width:"100%"})}/>
+          <input value={busca} onChange={function(e){setBusca(e.target.value);if(tab==="detalhe"&&!e.target.value){setTab("lista");setProd(null);}}} placeholder="Buscar por referência ou descrição..." style={Object.assign({},ftInpS,{width:"100%"})}/>
         </div>
 
         {tab==="lista"&&(
@@ -4011,16 +4036,16 @@ function FichaAnalise(props){
             <div style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 100px 80px 80px 80px",background:_B}}>
               {["Ref","Descrição","Marca","Coleção","Custo","S.Teles","B.Retiro"].map(function(h){return <div key={h} style={{padding:"8px 10px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase"}}>{h}</div>;})}
             </div>
-            {ordenados.map(function(p,i){var cu=calcCusto(p);var st=precosSalvos[p.ref+"|silvaTeles"];var br=precosSalvos[p.ref+"|bomRetiro"];
+            {ordenados.map(function(p,i){var cu=ftCalcCusto(p);var st=precosSalvos[p.ref+"|silvaTeles"];var br=precosSalvos[p.ref+"|bomRetiro"];
               return(<div key={p.id} onClick={function(){selecionar(p);}} style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 100px 80px 80px 80px",borderBottom:"1px solid #f0ebe4",alignItems:"center",cursor:"pointer",background:i%2===0?_W:"#faf8f5"}}
                 onMouseEnter={function(e){e.currentTarget.style.background="#f0f6fb";}} onMouseLeave={function(e){e.currentTarget.style.background=i%2===0?_W:"#faf8f5";}}>
                 <div style={{padding:"8px 10px",fontSize:12,fontWeight:700,color:_B}}>{p.ref}</div>
                 <div style={{padding:"8px 10px",fontSize:12,color:_S}}>{p.descricao}</div>
                 <div style={{padding:"8px 10px",fontSize:11,color:_TX2}}>{p.marca}</div>
                 <div style={{padding:"8px 10px",fontSize:11,color:_GO}}>{p.colecao||"—"}</div>
-                <div style={{padding:"8px 10px",fontSize:12,fontFamily:_FN,fontWeight:700,color:_S}}>{fmtR(cu)}</div>
-                <div style={{padding:"8px 10px",fontSize:12,fontFamily:_FN,fontWeight:700,color:st?_S:_TX2}}>{st?fmtR(st):"—"}</div>
-                <div style={{padding:"8px 10px",fontSize:12,fontFamily:_FN,fontWeight:700,color:br?_S:_TX2}}>{br?fmtR(br):"—"}</div>
+                <div style={{padding:"8px 10px",fontSize:12,fontFamily:_FN_FT,fontWeight:700,color:_S}}>{ftFmtR(cu)}</div>
+                <div style={{padding:"8px 10px",fontSize:12,fontFamily:_FN_FT,fontWeight:700,color:st?_S:_TX2}}>{st?ftFmtR(st):"—"}</div>
+                <div style={{padding:"8px 10px",fontSize:12,fontFamily:_FN_FT,fontWeight:700,color:br?_S:_TX2}}>{br?ftFmtR(br):"—"}</div>
               </div>);})}
             {ordenados.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto</div>}
           </div>
@@ -4029,7 +4054,7 @@ function FichaAnalise(props){
         {tab==="detalhe"&&prod&&(<div>
           <div style={{background:_W,borderRadius:12,padding:14,border:"1px solid "+_BD,marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{display:"flex",gap:10,alignItems:"baseline",flexWrap:"wrap"}}>
-              <span style={{fontFamily:_FN,fontSize:20,fontWeight:800,color:_S}}>{prod.ref}</span>
+              <span style={{fontFamily:_FN_FT,fontSize:20,fontWeight:800,color:_S}}>{prod.ref}</span>
               <span style={{fontSize:16,fontWeight:600,color:_S}}>{prod.descricao}</span>
               <span style={{fontSize:11,background:prod.marca==="Meluni"?"#f0ebe4":"#edf4fb",color:_S,padding:"2px 10px",borderRadius:4}}>{prod.marca}</span>
               <span style={{fontSize:11,background:"#f5f0e6",color:_GO,padding:"2px 10px",borderRadius:4}}>{prod.colecao||"—"}</span>
@@ -4040,31 +4065,31 @@ function FichaAnalise(props){
           {editMode&&(<div style={{background:_W,borderRadius:12,padding:16,border:"2px solid "+_B,marginBottom:14}}>
             <div style={{fontSize:12,fontWeight:700,color:_B,marginBottom:12}}>Editando Produto + Preços</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
-              <div><div style={{fontSize:10,color:_LB}}>Descrição</div><input value={editF.descricao||""} onChange={function(e){setEditF(function(p){return Object.assign({},p,{descricao:e.target.value});});}} style={Object.assign({},inpS,{width:"100%"})}/></div>
-              <div><div style={{fontSize:10,color:_LB}}>Marca</div><div style={{display:"flex",gap:4}}>{MARCAS.map(function(m){return <button key={m} onClick={function(){setEditF(function(p){return Object.assign({},p,{marca:m});});}} style={{background:editF.marca===m?_S:_W,color:editF.marca===m?_W:_TX,border:"1px solid "+(editF.marca===m?_S:_BD),borderRadius:4,padding:"4px 12px",cursor:"pointer",fontSize:11}}>{m}</button>;})}</div></div>
-              <div><div style={{fontSize:10,color:_LB}}>Coleção</div><input value={editF.colecao||""} onChange={function(e){setEditF(function(p){return Object.assign({},p,{colecao:e.target.value});});}} style={Object.assign({},inpS,{width:"100%"})}/></div>
+              <div><div style={{fontSize:10,color:_LB}}>Descrição</div><input value={editF.descricao||""} onChange={function(e){setEditF(function(p){return Object.assign({},p,{descricao:e.target.value});});}} style={Object.assign({},ftInpS,{width:"100%"})}/></div>
+              <div><div style={{fontSize:10,color:_LB}}>Marca</div><div style={{display:"flex",gap:4}}>{MARCAS_FT.map(function(m){return <button key={m} onClick={function(){setEditF(function(p){return Object.assign({},p,{marca:m});});}} style={{background:editF.marca===m?_S:_W,color:editF.marca===m?_W:_TX,border:"1px solid "+(editF.marca===m?_S:_BD),borderRadius:4,padding:"4px 12px",cursor:"pointer",fontSize:11}}>{m}</button>;})}</div></div>
+              <div><div style={{fontSize:10,color:_LB}}>Coleção</div><input value={editF.colecao||""} onChange={function(e){setEditF(function(p){return Object.assign({},p,{colecao:e.target.value});});}} style={Object.assign({},ftInpS,{width:"100%"})}/></div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:10}}>
               {CUSTO_FIELDS.map(function(cf){return(<div key={cf.key}><div style={{fontSize:9,color:_LB}}>{cf.short}</div>
                 <input type="number" value={editF[cf.key]||""} onChange={function(e){setEditF(function(p){var n=Object.assign({},p);n[cf.key]=e.target.value;return n;});}} placeholder="0"
-                  style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"5px 6px",fontSize:12,fontFamily:_FN,fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
+                  style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"5px 6px",fontSize:12,fontFamily:_FN_FT,fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
               </div>);})}
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
               {[{l:"Silva Teles",v:editST,fn:handleEditSTChange},{l:"Bom Retiro",v:editBR,fn:handleEditBRChange},{l:"Varejo",v:editVR,fn:function(v){setEditVR(v);}}].map(function(c){
-                var pv=parseFloat(c.v)||0;var cu=calcCusto(editF);
+                var pv=parseFloat(c.v)||0;var cu=ftCalcCusto(editF);
                 return(<div key={c.l}><div style={{fontSize:10,color:_LB}}>{c.l}</div>
                   <input type="number" value={c.v} onChange={function(e){c.fn(e.target.value);}} placeholder="0"
-                    style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"5px 6px",fontSize:13,fontFamily:_FN,fontWeight:700,outline:"none",boxSizing:"border-box",marginBottom:4}}/>
+                    style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"5px 6px",fontSize:13,fontFamily:_FN_FT,fontWeight:700,outline:"none",boxSizing:"border-box",marginBottom:4}}/>
                   {pv>0&&cu>0&&<div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <div style={{width:8,height:8,borderRadius:2,background:thermoColor(pv,cu)}}/>
-                    <span style={{fontSize:10,color:thermoColor(pv,cu),fontFamily:_FN,fontWeight:700}}>{fmtR(calcLucro(pv,cu))}</span>
-                    <span style={{fontSize:9,color:_LB,marginLeft:"auto"}}>{fmt(calcMarkupPct(pv,cu))}%</span>
+                    <div style={{width:8,height:8,borderRadius:2,background:ftThermoColor(pv,cu)}}/>
+                    <span style={{fontSize:10,color:ftThermoColor(pv,cu),fontFamily:_FN_FT,fontWeight:700}}>{ftFmtR(ftLucro(pv,cu))}</span>
+                    <span style={{fontSize:9,color:_LB,marginLeft:"auto"}}>{ftFmt(ftMarkupPct(pv,cu))}%</span>
                   </div>}</div>);})}
             </div>
             <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-              <button onClick={function(){setEditMode(false);}} style={Object.assign({},btnSec,{fontSize:12,padding:"6px 14px"})}>Cancelar</button>
-              <button onClick={salvarEdicao} style={{background:_S,color:_W,border:"none",borderRadius:6,padding:"6px 18px",fontSize:12,cursor:"pointer",fontFamily:_GE,fontWeight:600}}>Salvar</button>
+              <button onClick={function(){setEditMode(false);}} style={Object.assign({},ftBtnSec,{fontSize:12,padding:"6px 14px"})}>Cancelar</button>
+              <button onClick={salvarEdicao} style={{background:_S,color:_W,border:"none",borderRadius:6,padding:"6px 18px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Salvar</button>
             </div>
           </div>)}
 
@@ -4074,12 +4099,12 @@ function FichaAnalise(props){
               <div key={c.key} style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
                 <div style={{width:100,fontSize:12,color:_S}}>{c.label}</div>
                 <div style={{flex:1,height:16,background:"#f0ebe4",borderRadius:4,overflow:"hidden"}}><div style={{width:c.pct+"%",height:"100%",background:_B,borderRadius:4}}/></div>
-                <div style={{width:80,textAlign:"right",fontFamily:_FN,fontSize:13,fontWeight:700,color:_S}}>{fmtR(c.valor)}</div>
-                <div style={{width:45,textAlign:"right",fontSize:11,color:_LB}}>{fmt(c.pct)}%</div>
+                <div style={{width:80,textAlign:"right",fontFamily:_FN_FT,fontSize:13,fontWeight:700,color:_S}}>{ftFmtR(c.valor)}</div>
+                <div style={{width:45,textAlign:"right",fontSize:11,color:_LB}}>{ftFmt(c.pct)}%</div>
               </div>);})}
             <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,borderTop:"1px solid "+_BD,paddingTop:8}}>
               <div style={{width:100,fontSize:13,fontWeight:700,color:_B}}>TOTAL</div><div style={{flex:1}}/>
-              <div style={{width:80,textAlign:"right",fontFamily:_FN,fontSize:16,fontWeight:800,color:_B}}>{fmtR(custo)}</div>
+              <div style={{width:80,textAlign:"right",fontFamily:_FN_FT,fontSize:16,fontWeight:800,color:_B}}>{ftFmtR(custo)}</div>
               <div style={{width:45,textAlign:"right",fontSize:12,fontWeight:700,color:_B}}>100%</div>
             </div>
           </div>
@@ -4089,23 +4114,23 @@ function FichaAnalise(props){
             <div style={{display:"grid",gridTemplateColumns:"1fr repeat(4,90px)",background:_B}}>
               {["Canal","Preço","Lucro","Markup","Margem"].map(function(h){return <div key={h} style={{padding:"8px 10px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase",textAlign:h==="Canal"?"left":"right"}}>{h}</div>;})}
             </div>
-            {canaisData.map(function(c,i){var isM=melhor&&c.id===melhor.id;var lu=calcLucro(c.preco,custo);
+            {canaisData.map(function(c,i){var isM=melhor&&c.id===melhor.id;var lu=ftLucro(c.preco,custo);
               return(<div key={c.id} style={{display:"grid",gridTemplateColumns:"1fr repeat(4,90px)",borderBottom:"1px solid #f0ebe4",background:isM?"#f0fbf4":i%2===0?_W:"#faf8f5"}}>
                 <div style={{padding:"10px",fontSize:13,fontWeight:600,color:_S}}>{isM?"⭐ ":""}{c.label}</div>
-                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:14,fontWeight:700,color:_S}}>{fmtR(c.preco)}</div>
-                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:14,fontWeight:700,color:thermoColor(c.preco,custo),display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
-                  <div style={{width:8,height:8,borderRadius:2,background:thermoColor(c.preco,custo)}}/>{fmtR(lu)}</div>
-                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:13,color:_S}}>{fmt(calcMarkupPct(c.preco,custo))}%</div>
-                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN,fontSize:13,color:_S}}>{fmt(calcMargem(c.preco,custo))}%</div>
+                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN_FT,fontSize:14,fontWeight:700,color:_S}}>{ftFmtR(c.preco)}</div>
+                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN_FT,fontSize:14,fontWeight:700,color:ftThermoColor(c.preco,custo),display:"flex",alignItems:"center",justifyContent:"flex-end",gap:4}}>
+                  <div style={{width:8,height:8,borderRadius:2,background:ftThermoColor(c.preco,custo)}}/>{ftFmtR(lu)}</div>
+                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN_FT,fontSize:13,color:_S}}>{ftFmt(ftMarkupPct(c.preco,custo))}%</div>
+                <div style={{padding:"10px",textAlign:"right",fontFamily:_FN_FT,fontSize:13,color:_S}}>{ftFmt(ftMargem(c.preco,custo))}%</div>
               </div>);})}
             {canaisData.length===0&&<div style={{padding:20,textAlign:"center",color:"#c0b8b0",fontSize:12}}>Nenhum preço definido</div>}
           </div>
 
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14}}>
-            {[{label:"Markup Médio",valor:fmt(mkMedia)+"%",cor:_B},{label:"Margem Média",valor:fmt(mgMedia)+"%",cor:_B},{label:"Melhor Canal",valor:melhor?melhor.label:"—",cor:_GO},{label:"Preço Mínimo",valor:fmtR(custo*1.1),sub:"(custo + 10%)",cor:_RD}].map(function(ind){return(
+            {[{label:"Markup Médio",valor:ftFmt(mkMedia)+"%",cor:_B},{label:"Margem Média",valor:ftFmt(mgMedia)+"%",cor:_B},{label:"Melhor Canal",valor:melhor?melhor.label:"—",cor:_GO},{label:"Preço Mínimo",valor:ftFmtR(custo*1.1),sub:"(custo + 10%)",cor:_RD}].map(function(ind){return(
               <div key={ind.label} style={{background:_W,borderRadius:12,padding:14,border:"1px solid "+_BD,textAlign:"center"}}>
                 <div style={{fontSize:10,color:_LB,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>{ind.label}</div>
-                <div style={{fontFamily:_FN,fontSize:20,fontWeight:800,color:ind.cor}}>{ind.valor}</div>
+                <div style={{fontFamily:_FN_FT,fontSize:20,fontWeight:800,color:ind.cor}}>{ind.valor}</div>
                 {ind.sub&&<div style={{fontSize:9,color:_LB,marginTop:2}}>{ind.sub}</div>}
               </div>);})}
           </div>
@@ -4135,8 +4160,8 @@ const FichaTecnicaContent=()=>{
   var _edit=useState(null),editProd=_edit[0],setEditProd=_edit[1];
   var _bRef=useState(""),buscaRef=_bRef[0],setBuscaRef=_bRef[1];
   var _bDesc=useState(""),buscaDesc=_bDesc[0],setBuscaDesc=_bDesc[1];
-  var _bDe=useState(data30),buscaDe=_bDe[0],setBuscaDe=_bDe[1];
-  var _bAte=useState(dataHoje),buscaAte=_bAte[0],setBuscaAte=_bAte[1];
+  var _bDe=useState(ftData30),buscaDe=_bDe[0],setBuscaDe=_bDe[1];
+  var _bAte=useState(ftDataHoje),buscaAte=_bAte[0],setBuscaAte=_bAte[1];
   var produtosRef=useRef([]);var precosRef=useRef({});
   var _ftSync=useState(null),ftSync=_ftSync[0],setFtSync=_ftSync[1];
 
@@ -4172,9 +4197,9 @@ const FichaTecnicaContent=()=>{
   var colecoesUnicas=useMemo(function(){var s=new Set(produtos.map(function(p){return p.colecao;}).filter(Boolean));return Array.from(s).sort();},[produtos]);
 
   var selecionarProduto=function(p){setProdSel(p);setBuscaRef(p.ref);setBuscaDesc("");setTela("home");};
-  var custoSel=prodSel?calcCusto(prodSel):0;
+  var custoSel=prodSel?ftCalcCusto(prodSel):0;
   var getPreco=function(ref,canal){return precosSalvos[ref+"|"+canal]||null;};
-  var getSugerido=function(ref){var c=calcCusto(produtos.find(function(p){return p.ref===ref;})||{});var st=getPreco(ref,"silvaTeles")||c*2;var br=getPreco(ref,"bomRetiro")||(st+10);return{silvaTeles:c*2,bomRetiro:st+10,varejo:br+30};};
+  var getSugerido=function(ref){var c=ftCalcCusto(produtos.find(function(p){return p.ref===ref;})||{});var st=getPreco(ref,"silvaTeles")||c*2;var br=getPreco(ref,"bomRetiro")||(st+10);return{silvaTeles:c*2,bomRetiro:st+10,varejo:br+30};};
 
   var salvarPrecoCanal=function(ref,canal,valor){
     var v=parseFloat(valor);if(isNaN(v)||v<=0)return;
@@ -4190,12 +4215,12 @@ const FichaTecnicaContent=()=>{
     var st=precosSalvos[prodSel.ref+"|silvaTeles"];var br=precosSalvos[prodSel.ref+"|bomRetiro"];var vr=precosSalvos[prodSel.ref+"|varejo"];
     var t="Preço da ref "+prodSel.ref+" "+prodSel.descricao+" 🚀\n\n";
     t+="💰 *PREÇOS*\n━━━━━━━━━━━━━━━━\n";
-    t+="Custo: *"+fmtR(custoSel)+"*\n";
-    if(st)t+="Silva Teles: *"+fmtR(st)+"*\n";
-    if(br)t+="Bom Retiro: *"+fmtR(br)+"*\n";
-    if(vr)t+="Varejo: *"+fmtR(vr)+"*\n";
+    t+="Custo: *"+ftFmtR(custoSel)+"*\n";
+    if(st)t+="Silva Teles: *"+ftFmtR(st)+"*\n";
+    if(br)t+="Bom Retiro: *"+ftFmtR(br)+"*\n";
+    if(vr)t+="Varejo: *"+ftFmtR(vr)+"*\n";
     t+="━━━━━━━━━━━━━━━━";
-    abrirWhatsApp(t);
+    ftAbrirWhatsApp(t);
   };
 
   if(tela==="lista")return <FichaLista produtos={produtos} colecoesUnicas={colecoesUnicas} onSelect={selecionarProduto} onVoltar={function(){setTela("home");}}/>;
@@ -4213,7 +4238,7 @@ const FichaTecnicaContent=()=>{
   var CANAIS=[{id:"custo",label:"CUSTO",bg:_S,tc:_W},{id:"silvaTeles",label:"SILVA TELES",bg:_B,tc:_W},{id:"bomRetiro",label:"BOM RETIRO",bg:_B,tc:_W},{id:"varejo",label:"VAREJO",bg:_B,tc:_W}];
 
   return(
-    <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
+    <div style={{background:_BG_FT,minHeight:"100vh",padding:20,fontFamily:"Georgia,serif"}}>
       <div style={{maxWidth:980,margin:"0 auto"}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -4228,9 +4253,9 @@ const FichaTecnicaContent=()=>{
             {ftSync==='saving'&&<span style={{fontSize:11,color:"#a89f94",fontFamily:"Georgia,serif"}}>⏳ Salvando...</span>}
             {ftSync==='saved'&&<span style={{fontSize:11,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ Salvo</span>}
             {ftSync==='error'&&<span style={{fontSize:11,color:"#c0392b",fontFamily:"Georgia,serif"}}>⚠ Erro</span>}
-            <button onClick={function(){setEditProd(null);setTela("novo");}} style={btnPri}>+ Novo</button>
-            <button onClick={function(){setTela("lista");}} style={btnSec}>📋 Lista</button>
-            <button onClick={function(){setTela("analise");}} style={btnSec}>📊 Análise</button>
+            <button onClick={function(){setEditProd(null);setTela("novo");}} style={ftBtnPri}>+ Novo</button>
+            <button onClick={function(){setTela("lista");}} style={ftBtnSec}>📋 Lista</button>
+            <button onClick={function(){setTela("analise");}} style={ftBtnSec}>📊 Análise</button>
           </div>
         </div>
 
@@ -4238,20 +4263,20 @@ const FichaTecnicaContent=()=>{
         <div style={{background:_W,borderRadius:12,padding:14,border:"1px solid "+_BD,marginBottom:14}}>
           <div style={{fontSize:11,color:_LB,letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Buscar produto</div>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <input value={buscaRef} onChange={function(e){setBuscaRef(e.target.value);if(!e.target.value)setProdSel(null);}} placeholder="Referência" style={Object.assign({},inpS,{width:120})}/>
-            <input value={buscaDesc} onChange={function(e){setBuscaDesc(e.target.value);}} placeholder="Descrição" style={Object.assign({},inpS,{flex:1,minWidth:140})}/>
-            <input type="date" value={buscaDe} onChange={function(e){setBuscaDe(e.target.value);}} style={Object.assign({},inpS,{width:130,fontSize:11})}/>
+            <input value={buscaRef} onChange={function(e){setBuscaRef(e.target.value);if(!e.target.value)setProdSel(null);}} placeholder="Referência" style={Object.assign({},ftInpS,{width:120})}/>
+            <input value={buscaDesc} onChange={function(e){setBuscaDesc(e.target.value);}} placeholder="Descrição" style={Object.assign({},ftInpS,{flex:1,minWidth:140})}/>
+            <input type="date" value={buscaDe} onChange={function(e){setBuscaDe(e.target.value);}} style={Object.assign({},ftInpS,{width:130,fontSize:11})}/>
             <span style={{fontSize:11,color:_LB}}>até</span>
-            <input type="date" value={buscaAte} onChange={function(e){setBuscaAte(e.target.value);}} style={Object.assign({},inpS,{width:130,fontSize:11})}/>
-            <button onClick={function(){/* filtro já é automático, mas força re-render */setProdSel(null);}} style={{background:_S,color:_W,border:"none",borderRadius:8,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:_GE,fontWeight:600}}>Buscar</button>
-            {produtoAtivo&&<button onClick={function(){setProdSel(null);setBuscaRef("");setBuscaDesc("");setBuscaDe(data30());setBuscaAte(dataHoje());}} style={{background:_W,color:_RD,border:"1px solid "+_RD,borderRadius:8,padding:"8px 10px",cursor:"pointer",fontSize:13}}>✕</button>}
+            <input type="date" value={buscaAte} onChange={function(e){setBuscaAte(e.target.value);}} style={Object.assign({},ftInpS,{width:130,fontSize:11})}/>
+            <button onClick={function(){/* filtro já é automático, mas força re-render */setProdSel(null);}} style={{background:_S,color:_W,border:"none",borderRadius:8,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Buscar</button>
+            {produtoAtivo&&<button onClick={function(){setProdSel(null);setBuscaRef("");setBuscaDesc("");setBuscaDe(ftData30());setBuscaAte(ftDataHoje());}} style={{background:_W,color:_RD,border:"1px solid "+_RD,borderRadius:8,padding:"8px 10px",cursor:"pointer",fontSize:13}}>✕</button>}
           </div>
           {(buscaRef||buscaDesc)&&!produtoAtivo&&filtrados.length>0&&(
             <div style={{marginTop:8,maxHeight:160,overflowY:"auto",borderTop:"1px solid "+_BD,paddingTop:6}}>
               {filtrados.slice(0,8).map(function(p){return(
                 <div key={p.id} onClick={function(){selecionarProduto(p);}} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 8px",cursor:"pointer",borderRadius:6}}
                   onMouseEnter={function(e){e.currentTarget.style.background="#f0f6fb";}} onMouseLeave={function(e){e.currentTarget.style.background="transparent";}}>
-                  <span style={{fontFamily:_FN,fontWeight:700,color:_B,fontSize:13,minWidth:50}}>{p.ref}</span>
+                  <span style={{fontFamily:_FN_FT,fontWeight:700,color:_B,fontSize:13,minWidth:50}}>{p.ref}</span>
                   <span style={{fontSize:12,color:_S}}>{p.descricao}</span>
                   <span style={{fontSize:10,color:_LB,marginLeft:"auto"}}>{p.colecao}</span>
                 </div>);})}
@@ -4262,11 +4287,11 @@ const FichaTecnicaContent=()=>{
         {produtoAtivo&&(<div style={{background:_W,borderRadius:12,padding:14,border:"1px solid "+_BD,marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{display:"flex",gap:10,alignItems:"baseline",flexWrap:"wrap"}}>
-              <span style={{fontFamily:_FN,fontSize:20,fontWeight:800,color:_S}}>{produtoAtivo.ref}</span>
+              <span style={{fontFamily:_FN_FT,fontSize:20,fontWeight:800,color:_S}}>{produtoAtivo.ref}</span>
               <span style={{fontSize:16,fontWeight:600,color:_S}}>{produtoAtivo.descricao}</span>
               <span style={{fontSize:11,background:produtoAtivo.marca==="Meluni"?"#f0ebe4":"#edf4fb",color:_S,padding:"2px 10px",borderRadius:4}}>{produtoAtivo.marca}</span>
               <span style={{fontSize:11,background:"#f5f0e6",color:_GO,padding:"2px 10px",borderRadius:4}}>{produtoAtivo.colecao||"—"}</span>
-              <span style={{fontSize:10,color:_LB}}>{fmtData(produtoAtivo.dataCriacao)}</span>
+              <span style={{fontSize:10,color:_LB}}>{ftFmtData(produtoAtivo.dataCriacao)}</span>
             </div>
             <button onClick={function(){setEditProd(produtoAtivo);setTela("editar");}} style={{background:_W,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 12px",fontSize:12,cursor:"pointer",color:_B}}>✏ Editar</button>
           </div>
@@ -4283,7 +4308,7 @@ const FichaTecnicaContent=()=>{
 
         {/* WhatsApp pequeno */}
         {produtoAtivo&&(<div style={{display:"flex",justifyContent:"center",marginTop:12}}>
-          <button onClick={enviarWhatsHome} style={{background:"#25D366",color:_W,border:"none",borderRadius:8,padding:"6px 16px",fontSize:12,cursor:"pointer",fontFamily:_GE,display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={enviarWhatsHome} style={{background:"#25D366",color:_W,border:"none",borderRadius:8,padding:"6px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",display:"flex",alignItems:"center",gap:6}}>
             <WhatsAppIcon size={16}/>Enviar
           </button>
         </div>)}
