@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase, USER_ID } from "./supabase.js";
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
