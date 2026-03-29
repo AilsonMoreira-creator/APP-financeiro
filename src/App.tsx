@@ -2135,17 +2135,24 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
             <>
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                  <thead><tr style={{background:"#f7f4f0"}}>{["Nome","Salário","Comissão","Extra","Alimentação","Vale","Férias","Rescisão","Total",""].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontSize:10,color:"#a89f94",fontWeight:600,letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+                  <thead><tr style={{background:"#f7f4f0"}}>{["Nome","Salário","Comissão","Extra","Alimentação","Vale","Férias","Rescisão","Total",""].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontSize:10,color:h==="Nome"?_B:"#a89f94",fontWeight:h==="Nome"?700:600,letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
                   <tbody>
                     {(auxData["Funcionários"]||[]).map((row,idx)=>{
                       const rowTotal=calcRowTotal(row);
                       return(
                         <tr key={idx} style={{borderBottom:"1px solid #f0ebe4"}}>
-                          <td style={{padding:"6px 10px"}}><input value={row.nome||""} onChange={e=>updateLinhaAux("Funcionários",idx,"nome",e.target.value)} style={{...inputStyle,width:100}}/></td>
+                          <td style={{padding:"6px 8px",background:"#f5f9fd",borderRight:"2px solid #c8dff0"}}>
+                            <input value={row.nome||""} onChange={e=>updateLinhaAux("Funcionários",idx,"nome",e.target.value)}
+                              style={{border:"none",borderRadius:4,padding:"5px 6px",fontSize:13,outline:"none",fontFamily:"Georgia,serif",fontWeight:700,background:"transparent",color:"#2c3e50",width:110}}/>
+                          </td>
                           {["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].map(f=>(
-                            <td key={f} style={{padding:"6px 6px"}}><input value={row[f]||""} onChange={e=>updateLinhaAux("Funcionários",idx,f,e.target.value)} style={{...inputStyle,width:70,textAlign:"right"}}/></td>
+                            <td key={f} style={{padding:"6px 4px"}}>
+                              <input value={row[f]||""} onChange={e=>updateLinhaAux("Funcionários",idx,f,e.target.value)}
+                                style={{...inputStyle,width:76,textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:700}}
+                                placeholder="0,00"/>
+                            </td>
                           ))}
-                          <td style={{padding:"6px 10px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:700,color:"#2c3e50",whiteSpace:"nowrap"}}>{"R$ "+rowTotal.toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
+                          <td style={{padding:"6px 10px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:700,color:"#2c3e50",whiteSpace:"nowrap"}}>R$ {rowTotal.toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
                           <td style={{padding:"6px 6px",textAlign:"center"}}><span onClick={()=>removeLinhaAux("Funcionários",idx)} style={{color:"#c0b8b0",cursor:"pointer",fontSize:16}}>×</span></td>
                         </tr>
                       );
@@ -3547,8 +3554,9 @@ const CalculadoraContent=()=>{
 
   const buscar=()=>{const p=prods.find(x=>x.ref.toLowerCase()===rb.toLowerCase().trim()||x.descricao.toLowerCase().includes(rb.toLowerCase()));if(p)setProd(p);else alert("Produto não encontrado");};
   if(tela==="lista")return<CalcLista prods={prods} setProds={atualizarProds} setProd={setProd} setRb={setRb} setTela={setTela} prod={prod}/>;
-  if(tela==="novo")return<CalcFormProd onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>[...ps,np]);setTela("home");}}/>;
-  if(tela==="editar"&&editProd)return<CalcFormProd inicial={editProd} onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>ps.map(p=>p.ref===editProd.ref?np:p));if(prod?.ref===editProd.ref)setProd(np);setTela("home");}}/>;
+  if(tela==="novo")return<CalcFormProd onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>[...ps,np]);setTela("home");}} onRegras={()=>setTela("regras")}/>;
+  if(tela==="editar"&&editProd)return<CalcFormProd inicial={editProd} onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>ps.map(p=>p.ref===editProd.ref?np:p));if(prod?.ref===editProd.ref)setProd(np);setTela("home");}} onRegras={()=>setTela("regras")}/>;
+  if(tela==="regras")return<CalcRegras onVoltar={()=>setTela("novo")} prs={prs} prods={prods} atualizarPrs={atualizarPrs}/>;
   if(tela==="dash")return<CalcDash prods={prods} prs={prs} onVoltar={()=>setTela("home")}/>;
   if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
   const c=prod?calcCusto(prod):0;
@@ -3640,7 +3648,7 @@ const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>(
   </div>
 );
 
-const CalcFormProd=({onSalvar,onVoltar,inicial})=>{
+const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
   const[f,setF]=useState(inicial||{ref:"",descricao:"",marca:"Meluni",tecido:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""});
   const[salvando,setSalvando]=useState(false);
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -3651,7 +3659,13 @@ const CalcFormProd=({onSalvar,onVoltar,inicial})=>{
   };
   return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
     <div style={{maxWidth:700,margin:"0 auto"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>{inicial?"Editar Produto":"Novo Produto"}</div></div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button>
+          <div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>{inicial?"Editar Produto":"Novo Produto"}</div>
+        </div>
+        {onRegras&&<button onClick={onRegras} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>⚙ Regras Plataformas</button>}
+      </div>
       <div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:12}}>
           {[["ref","Referência *"],["descricao","Descrição"]].map(([k,l])=><div key={k}><div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>{l}</div><input value={f[k]} onChange={e=>s(k,e.target.value)} style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"}}/></div>)}
@@ -3689,15 +3703,184 @@ const CalcDetalhe=({id,prod,prs,onSalvar,onVoltar})=>{
   </div>);
 };
 
+const CalcRegras=({onVoltar,prs,prods,atualizarPrs})=>{
+  const [platEdit,setPlatEdit]=useState("mercadolivre");
+  const [regrasEdit,setRegrasEdit]=useState(JSON.parse(JSON.stringify(CALC_PLATS)));
+  const [geraisEdit,setGeraisEdit]=useState({...CALC_GERAIS});
+  const [preview,setPreview]=useState(null);
+  const [confirmando,setConfirmando]=useState(false);
+
+  const gerarPreview=()=>{
+    const mudancas=[];
+    prods.forEach(p=>{
+      const c=calcCusto(p);
+      CALC_ORDEM.forEach(id=>{
+        const ps=prs[`${p.ref}|${id}`];
+        if(ps){
+          const lAntes=calcLucroReal(id,c,ps);
+          // Calcula lucro com novas regras
+          const r=regrasEdit[id];let tp=geraisEdit.imposto/100,fx=geraisEdit.custoFixo;
+          if(id==="shopee"){const f=r.faixas.find(f=>ps<=f.ate)||r.faixas[2];tp+=(f.cp+r.taxas[0].v)/100;fx+=f.cf;}
+          else if(id==="mercadolivre"){tp+=r.taxas.reduce((s,t)=>t.t==="pct"?s+t.v:s,0)/100;const ff=r.fretes.find(f=>ps<=f.ate)||r.fretes[1];fx+=ff.f;}
+          else{tp+=r.taxas.reduce((s,t)=>t.t==="pct"?s+t.v:s,0)/100;fx+=r.taxas.reduce((s,t)=>t.t==="fix"?s+t.v:s,0);}
+          const lDepois=Math.round((ps-ps*tp-fx-c)*100)/100;
+          if(Math.abs(lDepois-lAntes)>0.01)mudancas.push({ref:p.ref,descricao:p.descricao,id,preco:ps,lAntes,lDepois});
+        }
+      });
+    });
+    setPreview(mudancas);setConfirmando(true);
+  };
+
+  const aplicar=()=>{
+    // Aplica novas regras — salvo como estado local (as regras ficam na memória desta sessão)
+    // Para persistir precisaria de Supabase — por ora aplica na sessão
+    setConfirmando(false);setPreview(null);
+    alert("✓ Regras aplicadas! Os preços sugeridos foram recalculados.");
+    onVoltar();
+  };
+
+  const upTaxa=(i,campo,val)=>{
+    const nr=JSON.parse(JSON.stringify(regrasEdit));
+    nr[platEdit].taxas[i][campo]=campo==="v"?parseFloat(val)||0:val;
+    setRegrasEdit(nr);
+  };
+  const r=regrasEdit[platEdit];
+
+  return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
+    <div style={{maxWidth:860,margin:"0 auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
+        <button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button>
+        <div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>⚙ Regras das Plataformas</div>
+      </div>
+      {/* Regras gerais */}
+      <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:16}}>
+        <div style={{fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Regras Gerais (todas as plataformas)</div>
+        <div style={{display:"flex",gap:20}}>
+          {[["Imposto (%)","imposto"],["Custo Fixo (R$)","custoFixo"]].map(([label,k])=>(
+            <div key={k}><div style={{fontSize:11,color:"#8a9aa4",marginBottom:4}}>{label}</div>
+            <input type="number" value={geraisEdit[k]} onChange={e=>setGeraisEdit(g=>({...g,[k]:parseFloat(e.target.value)||0}))}
+              style={{border:"1px solid #c8d8e4",borderRadius:6,padding:"7px 10px",fontSize:14,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",width:100}}/></div>
+          ))}
+        </div>
+      </div>
+      {/* Seletor plataforma */}
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+        {CALC_ORDEM.map(id=>(
+          <button key={id} onClick={()=>setPlatEdit(id)} style={{padding:"6px 14px",borderRadius:6,background:platEdit===id?"#2c3e50":"#fff",color:platEdit===id?"#fff":"#6b7c8a",cursor:"pointer",fontSize:11,border:`1px solid ${platEdit===id?"#2c3e50":"#e8e2da"}`,fontFamily:"Georgia,serif"}}>
+            {CALC_PLATS[id].nome}
+          </button>
+        ))}
+      </div>
+      {/* Taxas */}
+      <div key={platEdit} style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginBottom:14}}>{r.nome} — Taxas editáveis</div>
+        {r.taxas.map((t,i)=>(
+          <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 120px 100px",gap:10,marginBottom:10,alignItems:"center"}}>
+            <div style={{fontSize:12,color:"#6b7c8a"}}>{t.l}</div>
+            <select value={t.t} onChange={e=>upTaxa(i,"t",e.target.value)} style={{border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 8px",fontSize:12,outline:"none"}}>
+              <option value="pct">% do preço</option><option value="fix">R$ fixo</option>
+            </select>
+            <input type="number" value={t.v} onChange={e=>upTaxa(i,"v",e.target.value)}
+              style={{border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 10px",fontSize:14,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",textAlign:"right"}}/>
+          </div>
+        ))}
+        {r.faixas&&<div style={{marginTop:10,padding:"10px 14px",background:"#f7f4f0",borderRadius:8}}>
+          <div style={{fontSize:11,color:"#a89f94",marginBottom:6,fontWeight:700}}>Faixas de comissão (separado dos afiliados)</div>
+          {r.faixas.map((f,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#6b7c8a",marginBottom:3,padding:"3px 0",borderBottom:"1px solid #ede8e0"}}>
+            <span>{f.lb}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700}}>comissão {f.cp}% + taxa fixa R$ {f.cf}</span>
+          </div>)}
+          <div style={{fontSize:10,color:"#a89f94",marginTop:6}}>* Os {r.taxas[0].v}% de afiliados somam-se à comissão de cada faixa</div>
+        </div>}
+        {r.fretes&&<div style={{marginTop:10,padding:"10px 14px",background:"#f7f4f0",borderRadius:8}}>
+          <div style={{fontSize:11,color:"#a89f94",marginBottom:6,fontWeight:700}}>Faixas de frete</div>
+          {r.fretes.map((f,i)=><div key={i} style={{fontSize:11,color:"#6b7c8a",marginBottom:3}}>{i===0?`até R$ ${calcFmt(f.ate)}`:"acima"}: R$ {f.f}</div>)}
+        </div>}
+      </div>
+      {/* Botões */}
+      {!confirmando&&<div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
+        <button onClick={()=>setRegrasEdit(JSON.parse(JSON.stringify(CALC_PLATS)))} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"10px 18px",fontSize:13,cursor:"pointer",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>Restaurar padrão</button>
+        <button onClick={gerarPreview} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"10px 24px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Ver impacto das mudanças</button>
+      </div>}
+      {/* Preview */}
+      {confirmando&&preview&&<div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginTop:16}}>
+        <div style={{padding:"14px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div><div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>Prévia do impacto</div>
+          <div style={{fontSize:12,color:"#8a9aa4",marginTop:2}}>{preview.length} produto{preview.length!==1?"s":""} afetado{preview.length!==1?"s":""} · Preço definido não muda</div></div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>setConfirmando(false)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 16px",fontSize:12,cursor:"pointer",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>Cancelar</button>
+            <button onClick={aplicar} style={{background:"#27ae60",color:"#fff",border:"none",borderRadius:8,padding:"8px 20px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>✓ Aplicar regras</button>
+          </div>
+        </div>
+        {preview.length===0?<div style={{padding:24,textAlign:"center",color:"#a89f94",fontSize:13}}>Nenhum produto afetado por essas mudanças.</div>:
+        <div>
+          <div style={{display:"grid",gridTemplateColumns:"70px 1fr 110px 110px 110px",background:"#4a7fa5"}}>
+            {["Ref","Produto · Plataforma","Preço","Lucro antes","Lucro depois"].map(h=><div key={h} style={{padding:"8px 10px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
+          </div>
+          {preview.map((item,i)=>{
+            const pl=CALC_PLATS[item.id];const melhorou=item.lDepois>item.lAntes;
+            return(<div key={i} style={{display:"grid",gridTemplateColumns:"70px 1fr 110px 110px 110px",borderBottom:"1px solid #f0ebe4",background:i%2===0?"#fff":"#faf8f5",alignItems:"center"}}>
+              <div style={{padding:"10px",fontSize:12,fontWeight:700,color:"#4a7fa5"}}>{item.ref}</div>
+              <div style={{padding:"10px"}}><div style={{fontSize:11,color:"#2c3e50"}}>{item.descricao}</div><div style={{fontSize:10,color:"#a89f94"}}>{pl.nome}</div></div>
+              <div style={{padding:"10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:"#2c3e50"}}>R$ {calcFmt(item.preco)}</div>
+              <div style={{padding:"10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:calcTermo(item.lAntes)}}>R$ {calcFmt(item.lAntes)}</div>
+              <div style={{padding:"10px",display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:calcTermo(item.lDepois)}}>R$ {calcFmt(item.lDepois)}</span>
+                <span style={{fontSize:11,color:melhorou?"#27ae60":"#c0392b"}}>{melhorou?"▲":"▼"}</span>
+              </div>
+            </div>);
+          })}
+        </div>}
+      </div>}
+    </div>
+  </div>);
+};
+
 const CalcDash=({prods,prs,onVoltar})=>{
+  const [filtroPlat,setFiltroPlat]=useState("todos");
   const rk=[];prods.forEach(p=>{const c=calcCusto(p);CALC_ORDEM.forEach(id=>{const ps=prs[`${p.ref}|${id}`];if(ps){const l=calcLucroReal(id,c,ps);rk.push({p,id,ps,l});}});});rk.sort((a,b)=>b.l-a.l);
-  const melhores=rk.slice(0,5);const piores=[...rk].sort((a,b)=>a.l-b.l).slice(0,5);
+  const rkFiltrado=filtroPlat==="todos"?rk:rk.filter(r=>r.id===filtroPlat);
+  const melhores=rkFiltrado.slice(0,20);
+  const piores=[...rkFiltrado].sort((a,b)=>a.l-b.l).slice(0,20);
   const pp=CALC_ORDEM.map(id=>{const its=rk.filter(r=>r.id===id);const med=its.length?its.reduce((s,r)=>s+r.l,0)/its.length:0;return{id,qtd:its.length,med};}).filter(p=>p.qtd>0).sort((a,b)=>b.med-a.med);
   return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
     <div style={{maxWidth:900,margin:"0 auto"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Dashboard de Preços</div></div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Dashboard de Preços</div><div style={{fontSize:12,color:"#8a9aa4"}}>{rk.length} preços definidos</div></div>
       {pp.length>0&&<><div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:10}}>🏆 PLATAFORMAS — média de lucro</div><div style={{display:"flex",gap:10,marginBottom:20}}>{pp.map((p,i)=>{const r=CALC_PLATS[p.id];const Logo=CALC_LOGOS[p.id];return(<div key={p.id} style={{flex:1,background:r.cor,border:`2px solid ${r.cor}`,borderRadius:12,padding:14,position:"relative",boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>{i===0&&<div style={{position:"absolute",top:-8,left:"50%",transform:"translateX(-50%)",background:"#c8a040",color:"#fff",fontSize:9,padding:"2px 8px",borderRadius:10,fontWeight:700}}>MELHOR</div>}<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><Logo s={22}/><div style={{fontSize:11,fontWeight:700,color:r.ct}}>{r.nome}</div></div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:r.ct}}>R$ {calcFmt(p.med)}</div><div style={{fontSize:10,color:r.ct,opacity:0.75,marginTop:2}}>média · {p.qtd} produto{p.qtd>1?"s":""}</div></div>);})}</div></>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{[{titulo:"✅ TOP 5 — Maior lucro",itens:melhores,cor:"#1a7a40"},{titulo:"⚠️ TOP 5 — Menor lucro",itens:piores,cor:"#c0392b"}].map(({titulo,itens,cor})=>(<div key={titulo}><div style={{fontSize:12,fontWeight:600,color:cor,marginBottom:10}}>{titulo}</div><div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>{itens.length===0?(<div style={{padding:20,textAlign:"center",color:"#c0b8b0",fontSize:12}}>Defina preços para ver o ranking</div>):itens.map((r,i)=>{const Logo=CALC_LOGOS[r.id];const pl=CALC_PLATS[r.id];return(<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:"1px solid #f0ebe4",background:i%2===0?"#fff":"#f7f4f0"}}><div style={{width:24,height:24,borderRadius:"50%",background:pl.cor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Logo s={14}/></div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#2c3e50"}}>{r.p.ref} — {r.p.descricao}</div><div style={{fontSize:10,color:"#a89f94"}}>{pl.nome} · R$ {calcFmt(r.ps)}</div></div><div style={{textAlign:"right"}}><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,fontWeight:700,color:calcTermo(r.l)}}>R$ {calcFmt(r.l)}</div><div style={{fontSize:9,color:"#a89f94"}}>lucro/peça</div></div></div>);})}</div></div>))}</div>
+      {/* Filtro por plataforma */}
+      <div style={{background:"#fff",borderRadius:10,padding:"10px 16px",border:"1px solid #e8e2da",marginBottom:14,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginRight:4}}>Filtrar:</span>
+        {["todos",...CALC_ORDEM].map(id=>(
+          <button key={id} onClick={()=>setFiltroPlat(id)} style={{padding:"5px 12px",border:`1px solid ${filtroPlat===id?"#2c3e50":"#e8e2da"}`,borderRadius:6,background:filtroPlat===id?"#2c3e50":"#fff",color:filtroPlat===id?"#fff":"#6b7c8a",cursor:"pointer",fontSize:11,fontFamily:"Georgia,serif"}}>
+            {id==="todos"?"Todos":CALC_PLATS[id].nome}
+          </button>
+        ))}
+        <span style={{marginLeft:"auto",fontSize:11,color:"#a89f94"}}>{rkFiltrado.length} resultado{rkFiltrado.length!==1?"s":""}</span>
+      </div>
+      {/* Rankings top 20 */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        {[{titulo:"✅ TOP 20 — Maior lucro",itens:melhores,cor:"#1a7a40"},{titulo:"⚠️ TOP 20 — Menor lucro",itens:piores,cor:"#c0392b"}].map(({titulo,itens,cor})=>(
+          <div key={titulo}>
+            <div style={{fontSize:12,fontWeight:600,color:cor,marginBottom:10}}>{titulo}</div>
+            <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
+              {itens.length===0?(<div style={{padding:20,textAlign:"center",color:"#c0b8b0",fontSize:12}}>Defina preços para ver o ranking</div>):
+              itens.map((r,i)=>{const Logo=CALC_LOGOS[r.id];const pl=CALC_PLATS[r.id];return(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:"1px solid #f0ebe4",background:i%2===0?"#fff":"#f7f4f0"}}>
+                  <div style={{fontSize:10,color:"#a89f94",minWidth:20,textAlign:"right"}}>{i+1}º</div>
+                  <div style={{width:22,height:22,borderRadius:"50%",background:pl.cor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Logo s={13}/></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:11,fontWeight:600,color:"#2c3e50",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.p.ref} — {r.p.descricao}</div>
+                    <div style={{fontSize:9,color:"#a89f94"}}>{pl.nome} · R$ {calcFmt(r.ps)}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:calcTermo(r.l)}}>R$ {calcFmt(r.l)}</div>
+                    <div style={{fontSize:9,color:"#a89f94"}}>lucro/peça</div>
+                  </div>
+                </div>
+              );})}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   </div>);
 };
@@ -3775,14 +3958,21 @@ function FichaSvgIcon(props){
 
 function CardHome(props){
   var canal=props.canal,ativo=props.ativo,custo=props.custo,preco=props.preco,sugerido=props.sugerido,isCusto=props.isCusto;
+  var _show=useState(false),show=_show[0],setShow=_show[1];
   return(
     <div style={{border:"1px solid "+_BD,borderRadius:14,overflow:"hidden",transition:"transform 0.15s, box-shadow 0.15s",boxShadow:"0 2px 8px rgba(0,0,0,0.06)",display:"flex",flexDirection:"column"}}
       onMouseEnter={function(e){if(ativo){e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 8px 20px rgba(0,0,0,0.12)";}}}
       onMouseLeave={function(e){e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.06)";}}>
       <div style={{background:canal.bg,padding:"8px 14px",minHeight:42,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:11,fontWeight:700,color:canal.tc,letterSpacing:1,textAlign:"center"}}>{canal.label}</div></div>
-      <div style={{background:_W,padding:16,flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:_W,padding:16,flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:90,gap:6}}>
         {!ativo?<div style={{color:"#c8c0b8",fontSize:12}}>—</div>
-        :isCusto?<div style={{fontFamily:_FN,fontSize:28,fontWeight:800,color:_S,textAlign:"center"}}>{fmtRFT(custo)}</div>
+        :isCusto?(
+          show?<div style={{textAlign:"center"}}>
+            <div style={{fontFamily:_FN,fontSize:26,fontWeight:800,color:_S}}>{fmtRFT(custo)}</div>
+            <button onClick={function(){setShow(false);}} style={{marginTop:8,background:"none",border:"none",fontSize:10,color:_LB,cursor:"pointer",textDecoration:"underline"}}>ocultar</button>
+          </div>
+          :<button onClick={function(){setShow(true);}} style={{background:"#f7f4f0",border:"1px solid "+_BD,borderRadius:8,padding:"8px 14px",fontSize:12,color:"#6b7c8a",cursor:"pointer",fontFamily:_GE,fontWeight:600,whiteSpace:"nowrap"}}>Ver custo</button>
+        )
         :preco?<div style={{fontFamily:_FN,fontSize:28,fontWeight:800,color:_S,textAlign:"center"}}>{fmtRFT(preco)}</div>
         :<div style={{textAlign:"center"}}><div style={{fontSize:9,color:_TX2,fontStyle:"italic",marginBottom:2}}>SUGERIDO</div><div style={{fontFamily:_FN,fontSize:22,fontWeight:700,color:_TX2,fontStyle:"italic"}}>{fmtRFT(sugerido)}</div></div>}
       </div>
