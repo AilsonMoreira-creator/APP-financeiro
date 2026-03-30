@@ -1897,11 +1897,11 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const salvarCelula=(dia,canal,val)=>setReceitas(prev=>({...prev,[dia]:{...(prev[dia]||{}),[canal]:val}}));
   const updateLinhaAux=(cat,idx,field,val)=>setAuxData(prev=>{const l=[...(prev[cat]||[])];l[idx]={...l[idx],[field]:val};return{...prev,[cat]:l};});
   const removeLinhaAux=(cat,idx)=>setAuxData(prev=>{const l=[...(prev[cat]||[])];l.splice(idx,1);return{...prev,[cat]:l};});
-  const addLinhaAux=(cat)=>{
+  const addLinhaAux=(cat,dadosIniciais)=>{
     if(cat==="Funcionários") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),{nome:"",salario:"",comissao:"",extra:"",alimentacao:"",vale:"",ferias:"",rescisao:""}]}));
-    else if(cat==="Tecidos") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),{data:"",empresa:"",nroNota:"",valor:"",descricao:""}]}));
-    else if(CATS_PREST.includes(cat)) setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),{data:"",prestador:"",valor:"",descricao:""}]}));
-    else setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),{data:"",valor:"",descricao:""}]}));
+    else if(cat==="Tecidos") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:"",empresa:"",nroNota:"",valor:"",descricao:""}]}));
+    else if(CATS_PREST.includes(cat)) setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:"",prestador:"",valor:"",descricao:""}]}));
+    else setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:"",valor:"",descricao:""}]}));
   };
   const adicionarCategoria=()=>{if(!novaCategoria.trim()||categorias.includes(novaCategoria.trim()))return;setCategorias(prev=>[...prev,novaCategoria.trim()]);setAuxData(prev=>({...prev,[novaCategoria.trim()]:[]}));setNovaCategoria("");};
   const removerCategoria=(cat)=>{setCategorias(prev=>prev.filter(c=>c!==cat));setAuxData(prev=>{const n={...prev};delete n[cat];return n;});};
@@ -2226,7 +2226,9 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
           {(auxData[modalRapido]||[]).length>0&&(
             <div style={{borderTop:"1px solid #e8e2da",maxHeight:200,overflowY:"auto"}}>
               <div style={{padding:"8px 18px 4px",fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Histórico</div>
-              {[...(auxData[modalRapido]||[])].reverse().map((l,i)=>(
+              {[...(auxData[modalRapido]||[])].reverse().map((l,i)=>{
+                const idxReal=(auxData[modalRapido]||[]).length-1-i;
+                return(
                 <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
                   padding:"7px 18px",borderBottom:"1px solid #f7f4f0"}}>
                   <div style={{fontSize:11,color:"#a89f94"}}>{l.data}</div>
@@ -2234,11 +2236,12 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                     <div style={{fontFamily:_FN,fontSize:13,fontWeight:700,color:"#2c3e50"}}>
                       R$ {fmt(parseFloat(l.valor||0))}
                     </div>
-                    <span onClick={()=>{const idx=(auxData[modalRapido]||[]).length-1-i;removeLinhaAux(modalRapido,idx);}}
+                    <span onClick={()=>removeLinhaAux(modalRapido,idxReal)}
                       style={{color:"#c0b8b0",cursor:"pointer",fontSize:16,lineHeight:1}}>×</span>
                   </div>
                 </div>
-              ))}
+              );})}
+
               <div style={{display:"flex",justifyContent:"space-between",padding:"10px 18px",
                 background:"#f7f4f0",borderTop:"1px solid #e8e2da"}}>
                 <div style={{fontSize:12,fontWeight:600,color:"#2c3e50"}}>Total acumulado</div>
