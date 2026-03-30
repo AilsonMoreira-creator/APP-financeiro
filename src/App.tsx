@@ -433,14 +433,15 @@ const modules = [
 const CATS = [
   "Funcionários","Free Lances","Passadoria","Salas Corte","Caseado",
   "Carreto","Tecidos","Oficinas Costura","Modelista","Piloteiro",
-  "Aviamentos","Etiquetas/Tags",
+  "Aviamentos","Etiquetas/Tags","Pró-Labore",
   "Gastos Diários Loja e Fábrica","Gastos Carro","Reforma Loja e Equipamentos",
   "Embalagens","Aluguel","Representantes",
   "Impostos DAS","Contabilidade","Giro Empréstimo","Taxas Cartão","Taxas Marketplaces",
-  "Marketing","Modelos Fotos","Pró-Labore","Sistemas","Concessionárias","Correios","Valor de Correção"
+  "Marketing","Modelos Fotos","Sistemas","Concessionárias","Correios","Valor de Correção"
 ];
 
 const SEM_AUX = ["Taxas Cartão","Taxas Marketplaces","Valor de Correção"];
+const CATS_RAPIDAS = ["Free Lances","Carreto","Modelista","Piloteiro","Gastos Diários Loja e Fábrica","Representantes","Reforma Loja e Equipamentos"];
 const CATS_PREST = ["Oficinas Costura","Salas Corte","Passadoria"];
 const LEVE_DEST  = ["Funcionários","Pró-Labore","Salas Corte","Passadoria","Aviamentos"];
 const SUPER_DEST = ["Tecidos","Oficinas Costura"];
@@ -1874,6 +1875,19 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const [mostraCadastro,setMostraCadastro]=useState(false);
   const [editando,setEditando]=useState(null);
   const [auxAberta,setAuxAberta]=useState(null);
+  const [modalRapido,setModalRapido]=useState(null);
+  const [modalInput,setModalInput]=useState("");
+  const [modalErro,setModalErro]=useState("");
+
+  const abrirModalRapido=(cat)=>{setModalRapido(cat);setModalInput("");setModalErro("");};
+  const fecharModalRapido=()=>{setModalRapido(null);setModalInput("");setModalErro("");};
+  const confirmarModalRapido=()=>{
+    const v=parseFloat(modalInput.replace(",","."));
+    if(!v||v<=0){setModalErro("Digite um valor válido");return;}
+    const hoje=new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
+    addLinhaAux(modalRapido,{data:hoje,valor:String(v),descricao:""});
+    fecharModalRapido();
+  };
   const hoje=new Date().getDate();
   const inputStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px",fontSize:12,outline:"none",background:"#fff"};
   const totRec=Object.values(receitas).reduce((a,d)=>({st:a.st+parseFloat(d.silvaTeles||0),br:a.br+parseFloat(d.bomRetiro||0),mkt:a.mkt+parseFloat(d.marketplaces||0)}),{st:0,br:0,mkt:0});
@@ -1992,7 +2006,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                   const valWeight=isSuper?800:700;
                   const valColor=total>0?(isSuper?"#1a3a5c":"#2c3e50"):"#d0c8c0";
                   return(
-                    <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto)setAuxAberta(cat);}}>
+                    <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else setAuxAberta(cat);}}}>
                       <td style={{padding:"7px 12px"}}>
                         <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
                         {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
@@ -2101,7 +2115,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                     const valWeight=isSuper?800:700;
                     const valColor=total>0?(isSuper?"#1a3a5c":"#2c3e50"):"#d0c8c0";
                     return(
-                      <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto)setAuxAberta(cat);}}>
+                      <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else setAuxAberta(cat);}}}>
                         <td style={{padding:"7px 12px"}}>
                           <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
                           {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
@@ -2177,6 +2191,65 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
           )}
         </div>
       )}
+
+      {/* ── Modal lançamento rápido ─────────────────────────────── */}
+      {modalRapido&&(<>
+        <div onClick={fecharModalRapido} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:1000}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+          zIndex:1001,background:"#fff",borderRadius:16,width:320,
+          boxShadow:"0 20px 60px rgba(0,0,0,0.2)",overflow:"hidden"}}>
+          <div style={{background:"#2c3e50",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#fff"}}>{modalRapido}</div>
+            <button onClick={fecharModalRapido} style={{background:"none",border:"none",color:"#a8b8c8",fontSize:22,cursor:"pointer",lineHeight:1}}>×</button>
+          </div>
+          <div style={{padding:"18px 18px 14px"}}>
+            <div style={{fontSize:11,color:"#a89f94",marginBottom:6,letterSpacing:1,textTransform:"uppercase"}}>Valor a acrescentar</div>
+            <div style={{display:"flex",gap:8}}>
+              <div style={{position:"relative",flex:1}}>
+                <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:12,color:"#a89f94",fontFamily:_FN,fontWeight:700}}>R$</span>
+                <input autoFocus value={modalInput}
+                  onChange={e=>{setModalInput(e.target.value);setModalErro("");}}
+                  onKeyDown={e=>e.key==="Enter"&&confirmarModalRapido()}
+                  placeholder="0,00"
+                  style={{width:"100%",border:"1.5px solid "+(modalErro?"#c0392b":"#c8d8e4"),borderRadius:8,
+                    padding:"10px 10px 10px 36px",fontSize:18,fontFamily:_FN,fontWeight:700,
+                    outline:"none",boxSizing:"border-box",color:"#2c3e50"}}/>
+              </div>
+              <button onClick={confirmarModalRapido}
+                style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,
+                  padding:"10px 16px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+                ✓
+              </button>
+            </div>
+            {modalErro&&<div style={{fontSize:11,color:"#c0392b",marginTop:6}}>{modalErro}</div>}
+          </div>
+          {(auxData[modalRapido]||[]).length>0&&(
+            <div style={{borderTop:"1px solid #e8e2da",maxHeight:200,overflowY:"auto"}}>
+              <div style={{padding:"8px 18px 4px",fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Histórico</div>
+              {[...(auxData[modalRapido]||[])].reverse().map((l,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                  padding:"7px 18px",borderBottom:"1px solid #f7f4f0"}}>
+                  <div style={{fontSize:11,color:"#a89f94"}}>{l.data}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{fontFamily:_FN,fontSize:13,fontWeight:700,color:"#2c3e50"}}>
+                      R$ {fmt(parseFloat(l.valor||0))}
+                    </div>
+                    <span onClick={()=>{const idx=(auxData[modalRapido]||[]).length-1-i;removeLinhaAux(modalRapido,idx);}}
+                      style={{color:"#c0b8b0",cursor:"pointer",fontSize:16,lineHeight:1}}>×</span>
+                  </div>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"space-between",padding:"10px 18px",
+                background:"#f7f4f0",borderTop:"1px solid #e8e2da"}}>
+                <div style={{fontSize:12,fontWeight:600,color:"#2c3e50"}}>Total acumulado</div>
+                <div style={{fontFamily:_FN,fontSize:14,fontWeight:800,color:"#4a7fa5"}}>
+                  R$ {fmt((auxData[modalRapido]||[]).reduce((s,l)=>s+parseFloat(l.valor||0),0))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </>)}
     </div>
   );
 };
