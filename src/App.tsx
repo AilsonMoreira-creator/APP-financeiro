@@ -1750,10 +1750,10 @@ const DashboardContent=({dadosMensais=DADOS_MENSAIS,mesAtual=3})=>{
   );
 };
 
-const calcTotalAux=(cat,auxData,recTotais,correcao={ativo:false,valor:10000})=>{
+const calcTotalAux=(cat,auxData,recTotais,correcao={ativo:true,valor:10000})=>{
   if(cat==="Taxas Cartão")return Math.round(recTotais.geral*0.01);
   if(cat==="Taxas Marketplaces")return Math.round(recTotais.mkt*0.29);
-  if(cat==="Valor de Correção")return correcao.ativo?parseFloat(correcao.valor||0):0;
+  if(cat==="Valor de Correção")return 10000;
   if(cat==="Funcionários"){const func=(auxData["Funcionários"]||[]).reduce((s,r)=>s+["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].reduce((a,f)=>a+parseFloat(r[f]||0),0),0);return func+FIXOS_FUNC.reduce((s,f)=>s+f.valor,0);}
   return(auxData[cat]||[]).reduce((s,r)=>s+parseFloat(r.valor||0),0);
 };
@@ -2949,11 +2949,12 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [dashDe,setDashDe]=useState("");
   const [dashAte,setDashAte]=useState("");
   const [dashMarca,setDashMarca]=useState("todas");
+  const [dashOf,setDashOf]=useState("todas");
   const [alertaVer,setAlertaVer]=useState(false);
   const [verValores,setVerValores]=useState(false);
   const [confirm,setConfirm]=useState(null);
   const iStyle={border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 6px",fontSize:12,outline:"none",fontFamily:"Georgia,serif",boxSizing:"border-box"};
-  const cortesOrdenados=[...cortes].sort((a,b)=>{const sa=ORDEM_STATUS[getStatusCorte(a)],sb=ORDEM_STATUS[getStatusCorte(b)];if(sa!==sb)return sa-sb;return new Date(a.data)-new Date(b.data);});
+  const cortesOrdenados=[...cortes].sort((a,b)=>{const sa=ORDEM_STATUS[getStatusCorte(a)],sb=ORDEM_STATUS[getStatusCorte(b)];if(sa!==sb)return sa-sb;return new Date(b.data)-new Date(a.data);});
   const cortesFiltrados=cortesOrdenados.filter(c=>{
     if(filtroOf!=="todas"&&c.oficina!==filtroOf)return false;
     if(filtroMarca!=="todas"&&c.marca!==filtroMarca)return false;
@@ -2999,7 +3000,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const hoje=new Date();
   const anoStr=String(hoje.getFullYear());
   const filtroPeriodo=(c)=>{if(dashPeriodo==="ano")return c.data.startsWith(anoStr);if(dashPeriodo==="custom"&&dashDe&&dashAte)return c.data>=dashDe&&c.data<=dashAte;return true;};
-  const cortesDash=cortes.filter(c=>filtroPeriodo(c)&&(dashMarca==="todas"||c.marca===dashMarca));
+  const cortesDash=cortes.filter(c=>filtroPeriodo(c)&&(dashMarca==="todas"||c.marca===dashMarca)&&(dashOf==="todas"||c.oficina===dashOf));
   const oficinasUnicas=[...new Set(cortes.map(c=>c.oficina))].filter(Boolean);
   const kpiOficina=(of)=>{
     const cs=cortesDash.filter(c=>c.oficina===of);
@@ -3092,13 +3093,13 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   const qtdEntr=c.qtdEntregue!=null?c.qtdEntregue:(c.entregue?c.qtd:null);
                   const faltante=c.entregue&&qtdEntr!=null?c.qtd-qtdEntr:null;
                   return(
-                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.78fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
-                      <div style={{height:"100%",background:STATUS_COR[st],minHeight:36}}/>
-                      <div style={{padding:"5px 8px",fontSize:11,fontWeight:600,color:"#2c3e50"}}>{c.nCorte}</div>
-                      <div style={{padding:"5px 8px",fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.ref}</div>
+                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.78fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",borderBottom:"1px solid #d0dde8",alignItems:"center"}}>
+                      <div style={{height:"100%",background:STATUS_COR[st],minHeight:36,alignSelf:"stretch"}}/>
+                      <div style={{padding:"5px 8px",fontSize:11,fontWeight:600,color:"#4a7fa5",background:"#edf4fb",alignSelf:"stretch",display:"flex",alignItems:"center"}}>{c.nCorte}</div>
+                      <div style={{padding:"5px 8px",fontSize:14,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif"}}>{c.ref}</div>
                       <div style={{padding:"5px 8px"}}><div style={{fontSize:12,color:"#2c3e50"}}>{c.descricao}</div><span style={{fontSize:9,color:"#fff",background:c.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 5px"}}>{c.marca}</span></div>
                       <div style={{padding:"5px 8px",fontSize:11,color:"#2c3e50"}}>{c.oficina}</div>
-                      <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.qtd}</div>
+                      <div style={{padding:"5px 8px",fontSize:15,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.qtd}</div>
                       <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.valorUnit!=null?"R$ "+Number(c.valorUnit).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>
                       <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{fmt(c.valorTotal)}</div>
                       <div style={{padding:"5px 8px",fontSize:11,color:"#6b7c8a"}}>{new Date(c.data).toLocaleDateString("pt-BR")}</div>
@@ -3153,11 +3154,12 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   <button key={o.id} onClick={()=>setDashPeriodo(o.id)} style={{padding:"5px 14px",border:"none",borderRadius:6,background:dashPeriodo===o.id?"#2c3e50":"transparent",color:dashPeriodo===o.id?"#fff":"#6b7c8a",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif"}}>{o.label}</button>
                 ))}
               </div>
-              {dashPeriodo==="custom"&&<><input type="date" value={dashDe} onChange={e=>setDashDe(e.target.value)} style={{...iStyle}}/><span style={{fontSize:12,color:"#a89f94"}}>→</span><input type="date" value={dashAte} onChange={e=>setDashAte(e.target.value)} style={{...iStyle}}/></>}
+              {dashPeriodo==="custom"&&<><input type="date" value={dashDe} onChange={e=>setDashDe(e.target.value)} style={{...iStyle}}/><span style={{fontSize:12,color:"#a89f94"}}>→</span><input type="date" value={dashAte} onChange={e=>setDashAte(e.target.value)} style={{...iStyle}}/><button onClick={()=>{}} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Filtrar</button></>}
               <select value={dashMarca} onChange={e=>setDashMarca(e.target.value)} style={{...iStyle}}><option value="todas">Todas as marcas</option><option>Amícia</option><option>Meluni</option></select>
+              <select value={dashOf} onChange={e=>setDashOf(e.target.value)} style={{...iStyle}}><option value="todas">Todas as oficinas</option>{oficinasUnicas.map(of=><option key={of}>{of}</option>)}</select>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
-              {[{label:"Peças em produção",pcs:totalEmAberto,sub:`${nCortesAberto} corte(s)`,color:"#2c3e50",bg:"#fff",border:"#e8e2da"},{label:"Peças em atraso",pcs:totalAtrasado,sub:`${nCortesAtrasado} corte(s)`,color:"#c0392b",bg:"#fdeaea",border:"#f4b8b8"},{label:"Entregues · últ. 30 dias",pcs:totalEntregue30d,sub:`${nCortes30d} corte(s)`,color:"#27ae60",bg:"#eafbf0",border:"#b8dfc8"},{label:"Peças não entregues",pcs:nNaoEntregue,sub:`${pctNaoEntregue}% do total`,color:nNaoEntregue>0?"#c0392b":"#27ae60",bg:"#fff",border:"#e8e2da"}].map((c,i)=>(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
+              {[{label:"Peças em produção",pcs:totalEmAberto,sub:`${nCortesAberto} corte(s)`,color:"#2c3e50",bg:"#fff",border:"#e8e2da"},{label:"Peças em atraso",pcs:totalAtrasado,sub:`${nCortesAtrasado} corte(s)`,color:"#c0392b",bg:"#fdeaea",border:"#f4b8b8"},{label:"Entregues · últ. 30 dias",pcs:totalEntregue30d,sub:`${nCortes30d} corte(s)`,color:"#27ae60",bg:"#eafbf0",border:"#b8dfc8"}].map((c,i)=>(
                 <div key={i} style={{background:c.bg,borderRadius:12,padding:"16px 18px",border:`1px solid ${c.border}`}}>
                   <div style={{fontSize:9,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>{c.label}</div>
                   <div style={{fontSize:28,fontWeight:700,color:c.color,lineHeight:1}}>{c.pcs}</div>
@@ -3193,7 +3195,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                 <thead><tr style={{background:"#f7f4f0"}}>{["Oficina","Peças fabricadas","Valor pago","Prazo médio","Pontualidade","% Perda","Eficiência"].map(h=>(<th key={h} style={{padding:"8px 12px",textAlign:h==="Oficina"?"left":"center",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>))}</tr></thead>
                 <tbody>
-                  {oficinasUnicas.sort((a,b)=>kpiOficina(b).nota-kpiOficina(a).nota).map(of=>{
+                  {oficinasUnicas.sort((a,b)=>kpiOficina(b).totalEntregues-kpiOficina(a).totalEntregues).map(of=>{
                     const k=kpiOficina(of);
                     return(<tr key={of} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"9px 12px",fontWeight:600,color:"#2c3e50"}}>{of}</td><td style={{padding:"9px 12px",textAlign:"center",color:"#2c3e50"}}>{k.totalEntregues}<span style={{fontSize:10,color:"#a89f94",marginLeft:4}}>pç</span></td><td style={{padding:"9px 12px",textAlign:"center",color:"#27ae60",fontWeight:600}}>{fmt(k.totalValor)}</td><td style={{padding:"9px 12px",textAlign:"center",color:"#2c3e50"}}>{k.prazoMedio!=null?k.prazoMedio+"d":"—"}</td><td style={{padding:"9px 12px",textAlign:"center",color:k.pontualidade>=80?"#27ae60":k.pontualidade>=60?"#f0b429":"#c0392b"}}>{k.pontualidade!=null?k.pontualidade+"%":"—"}</td><td style={{padding:"9px 12px",textAlign:"center",color:k.perda>5?"#c0392b":"#27ae60"}}>{k.perda}%</td><td style={{padding:"9px 12px",textAlign:"center"}}><EstrelaScore n={k.nota}/></td></tr>);
                   })}
@@ -3763,18 +3765,21 @@ const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
 
 const CalcDetalhe=({id,prod,prs,onSalvar,onVoltar})=>{
   const[sim,setSim]=useState("");const[op,setOp]=useState(false);const[pi,setPi]=useState("");
+  const[salvou,setSalvou]=useState(false);
   const Logo=CALC_LOGOS[id];const r=CALC_PLATS[id];const c=calcCusto(prod);
   const ps=prs[`${prod.ref}|${id}`];const rm=calcPreco(id,c,CALC_LMIN);const rb=calcPreco(id,c,CALC_LBOM);
   const ls=sim?calcLucroReal(id,c,parseFloat(sim)):null;const lps=ps?calcLucroReal(id,c,ps):null;
   const linhas=(pr)=>{const p=parseFloat(pr);if(!p)return[];const ls2=[{l:"Preço de venda",v:p,t:"r"},{l:`Imposto (${CALC_GERAIS.imposto}%)`,v:-(p*CALC_GERAIS.imposto/100),t:"c"}];if(id==="shopee"){const fx=r.faixas.find(f=>p<=f.ate)||r.faixas[2];const af=r.taxas[0].v;ls2.push({l:`Comissão (${fx.cp}%)`,v:-(p*fx.cp/100),t:"c"},{l:`Afiliados (${af}%)`,v:-(p*af/100),t:"c"},{l:"Taxa faixa",v:-fx.cf,t:"c"});}else if(id==="mercadolivre"){r.taxas.forEach(t=>ls2.push({l:`${t.l} (${t.v}%)`,v:-(p*t.v/100),t:"c"}));const ff=r.fretes.find(f=>p<=f.ate)||r.fretes[1];ls2.push({l:"Frete",v:-ff.f,t:"c"});}else r.taxas.forEach(t=>ls2.push({l:t.l,v:t.t==="pct"?-(p*t.v/100):-t.v,t:"c"}));ls2.push({l:"Custo fixo",v:-CALC_GERAIS.custoFixo,t:"c"},{l:"Custo do produto",v:-c,t:"c"},{l:"Lucro líquido",v:calcLucroReal(id,c,p),t:"l"});return ls2;};
   return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
     <div style={{maxWidth:700,margin:"0 auto"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><Logo s={32}/><div><div style={{fontSize:18,fontWeight:700,color:"#2c3e50"}}>{r.nome}</div><div style={{fontSize:11,color:"#8a9aa4"}}>REF {prod.ref} · {prod.descricao}</div></div></div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><Logo s={32}/><div><div style={{fontSize:18,fontWeight:700,color:"#2c3e50"}}>{r.nome}</div><div style={{fontSize:11,color:"#8a9aa4"}}>REF {prod.ref} · {prod.descricao}</div></div>
+      {salvou&&<span style={{fontSize:11,color:"#27ae60",fontFamily:"Georgia,serif",marginLeft:8}}>✓ Salvo</span>}
+      </div>
       {ps?(<div style={{background:r.cor,border:`3px solid ${r.bd||r.cor}`,borderRadius:14,padding:20,marginBottom:16,textAlign:"center"}}><div style={{fontSize:11,color:r.ct,opacity:0.8,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>💾 Preço Definido</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:40,fontWeight:800,color:r.ct}}>R$ {calcFmt(ps)}</div><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8}}><div style={{width:14,height:14,borderRadius:3,background:calcTermo(lps)}}/><span style={{fontSize:14,color:r.ct,opacity:0.9,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700}}>Lucro: R$ {calcFmt(lps)}</span></div></div>):<div style={{background:"#fff",borderRadius:14,padding:16,border:"2px dashed #e8e2da",marginBottom:16,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum preço definido ainda</div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>{[{la:CALC_LMIN,res:rm,cor:"#27ae60"},{la:CALC_LBOM,res:rb,cor:"#1a7a40"}].map(({la,res,cor})=>(<div key={la} style={{background:"#fff",borderRadius:12,padding:16,border:`2px solid ${cor}`}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Para lucro R$ {calcFmt(la)}</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:26,fontWeight:700,color:"#2c3e50"}}>R$ {calcFmt(res?.p)}</div><div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}><div style={{width:10,height:10,borderRadius:2,background:calcTermo(res?.l)}}/><span style={{fontSize:12,color:"#6b7c8a"}}>Lucro real: <b style={{color:cor,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(res?.l)}</b></span></div>{res?.fx&&<div style={{fontSize:10,color:"#a89f94",marginTop:4}}>Faixa: {res.fx}</div>}{res?.fr!==undefined&&<div style={{fontSize:10,color:"#a89f94",marginTop:4}}>Frete: R$ {res.fr}</div>}</div>))}</div>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",marginBottom:16,overflow:"hidden"}}><div onClick={()=>setOp(p=>!p)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",cursor:"pointer",userSelect:"none"}}><div style={{fontSize:13,fontWeight:600,color:"#2c3e50"}}>Composição de custos</div><div style={{fontSize:22,color:"#4a7fa5",transition:"transform 0.2s",transform:op?"rotate(90deg)":"none"}}>›</div></div>{op&&<div style={{padding:"0 16px 14px",borderTop:"1px solid #f0ebe4"}}>{r.taxas.map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #f7f4f0",fontSize:12,color:"#2c3e50"}}><span>{t.l}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700}}>{t.t==="pct"?`${t.v}%`:`R$ ${calcFmt(t.v)}`}</span></div>)}{r.faixas&&r.faixas.map((f,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a",borderBottom:"1px solid #f7f4f0"}}><span>Comissão {f.lb}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{f.cp}% + R$ {f.cf}</span></div>)}{r.fretes&&r.fretes.map((f,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a",borderBottom:"1px solid #f7f4f0"}}><span>Frete {i===0?"(até R$79)":"(acima)"}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {f.f}</span></div>)}<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a"}}><span>Imposto geral</span><span>{CALC_GERAIS.imposto}%</span></div><div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a"}}><span>Custo fixo geral</span><span>R$ {CALC_GERAIS.custoFixo}</span></div></div>}</div>
       <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:14}}><div style={{fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Simulador</div><div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="number" value={sim} onChange={e=>setSim(e.target.value)} placeholder="Digite o preço..." style={{flex:1,border:"1px solid #c8d8e4",borderRadius:8,padding:"10px 14px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none"}}/>{ls!==null&&<div style={{background:calcTermo(ls),borderRadius:8,padding:"10px 18px",textAlign:"center",minWidth:90}}><div style={{fontSize:9,color:"rgba(255,255,255,0.85)"}}>LUCRO</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:800,color:"#fff"}}>R$ {calcFmt(ls)}</div></div>}</div>{sim&&<div style={{borderTop:"1px solid #f0ebe4",paddingTop:10}}>{linhas(sim).map((l,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderTop:l.t==="l"?"2px solid "+calcTermo(ls):"1px solid #f7f4f0",marginTop:l.t==="l"?6:0,paddingTop:l.t==="l"?6:3,fontWeight:l.t==="l"?700:400,color:l.t==="l"?calcTermo(ls):l.t==="r"?"#4a7fa5":"#6b7c8a"}}><span>{l.l}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{l.v>=0?"R$ ":"-R$ "}{calcFmt(Math.abs(l.v))}</span></div>)}</div>}</div>
-      <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",display:"flex",gap:12,alignItems:"flex-end"}}><div style={{flex:1}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Definir preço final</div><input type="number" value={pi} onChange={e=>setPi(e.target.value)} placeholder="Preço de venda final..." style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"10px 14px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>{pi&&<div style={{fontSize:12,color:"#8a9aa4",marginTop:4}}>Lucro: <b style={{color:calcTermo(calcLucroReal(id,c,parseFloat(pi))),fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(calcLucroReal(id,c,parseFloat(pi)))}</b></div>}</div><button disabled={!pi} onClick={()=>{if(pi)onSalvar(id,parseFloat(pi));}} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"11px 24px",fontSize:13,cursor:pi?"pointer":"not-allowed",opacity:pi?1:0.5,fontFamily:"Georgia,serif",fontWeight:600}}>💾 Salvar preço</button></div>
+      <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",display:"flex",gap:12,alignItems:"flex-end"}}><div style={{flex:1}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Definir preço final</div><input type="number" value={pi} onChange={e=>setPi(e.target.value)} placeholder="Preço de venda final..." style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"10px 14px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>{pi&&<div style={{fontSize:12,color:"#8a9aa4",marginTop:4}}>Lucro: <b style={{color:calcTermo(calcLucroReal(id,c,parseFloat(pi))),fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(calcLucroReal(id,c,parseFloat(pi)))}</b></div>}</div><button disabled={!pi} onClick={()=>{if(pi){onSalvar(id,parseFloat(pi));setSalvou(true);setTimeout(()=>setSalvou(false),2500);}}} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"11px 24px",fontSize:13,cursor:pi?"pointer":"not-allowed",opacity:pi?1:0.5,fontFamily:"Georgia,serif",fontWeight:600}}>💾 Salvar preço</button></div>
     </div>
   </div>);
 };
