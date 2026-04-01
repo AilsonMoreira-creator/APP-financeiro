@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<title>Conectando ao Bling...</title>
+<style>
+  body{font-family:Georgia,serif;background:#f7f4f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
+  .box{background:#fff;border-radius:16px;padding:40px;border:1px solid #e8e2da;text-align:center;max-width:420px;width:90%;}
+  .logo{width:48px;height:48px;border-radius:10px;background:#4CAF73;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#fff;font-family:Arial;margin:0 auto 16px;}
+  h2{color:#2c3e50;font-size:20px;margin:0 0 8px;}
+  p{color:#8a9aa4;font-size:13px;margin:0 0 16px;}
+  .status{font-size:13px;padding:10px 16px;border-radius:8px;margin-top:12px;}
+  .ok{background:#eafbf0;color:#27ae60;border:1px solid #b8dfc8;}
+  .err{background:#fdeaea;color:#c0392b;border:1px solid #f4b8b8;}
+  .loading{background:#edf4fb;color:#4a7fa5;border:1px solid #c8dff0;}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">B</div>
+  <h2>Amícia × Bling</h2>
+  <p>Autorizando a conta...</p>
+  <div id="status" class="status loading">⏳ Processando...</div>
+</div>
+
+<script>
+(async function(){
+  const st=document.getElementById('status');
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get('code');
+  const state=params.get('state'); // 'exitus', 'lumia' ou 'muniam'
+
+  if(!code||!state){
+    st.className='status err';
+    st.textContent='⚠ Parâmetros inválidos. Feche esta aba e tente novamente.';
+    return;
+  }
+
+  // Pega credenciais salvas pelo módulo Bling
+  const clientId=localStorage.getItem('bling_client_id');
+  const clientSecret=localStorage.getItem('bling_client_secret');
+
+  if(!clientId||!clientSecret){
+    st.className='status err';
+    st.textContent='⚠ Credenciais não encontradas. Configure o Client ID e Secret no módulo Bling primeiro.';
+    return;
+  }
+
+  try{
+    // Troca o code pelo access_token
+    const creds=btoa(clientId+':'+clientSecret);
+    const callback=encodeURIComponent(window.location.origin+'/bling-callback.html');
+    const resp=await fetch('https://www.bling.com.br/Api/v3/oauth/token',{
+      method:'POST',
+      headers:{
+        'Authorization':'Basic '+creds,
+        'Content-Type':'application/x-www-form-urlencoded',
+        'Accept':'application/json'
+      },
+      body:'grant_type=authorization_code&code='+encodeURIComponent(code)+'&redirect_uri='+callback
+    });
+
+    if(!resp.ok){
+      const err=await resp.text();
+      st.className='status err';
+      st.textContent='⚠ Erro ao trocar o código: '+resp.status;
+      console.error(err);
+      return;
+    }
+
+    const data=await resp.json();
+    const tokenData={
+      access_token:data.access_token,
+      refresh_token:data.refresh_token,
+      expires_at:new Date(Date.now()+(data.expires_in||21600)*1000).toISOString()
+    };
+
+    // Salva no Supabase via variável global (injetada pelo app)
+    // Tenta usar o supabase do app se disponível
+    const SUPABASE_URL=localStorage.getItem('sb_url');
+    const SUPABASE_KEY=localStorage.getItem('sb_key');
+
+    if(SUPABASE_URL&&SUPABASE_KEY){
+      await fetch(SUPABASE_URL+'/rest/v1/bling_tokens',{
+        method:'POST',
+        headers:{
+          'apikey':SUPABASE_KEY,
+          'Authorization':'Bearer '+SUPABASE_KEY,
+          'Content-Type':'application/json',
+          'Prefer':'resolution=merge-duplicates'
+        },
+        body:JSON.stringify({conta:state,...tokenData})
+      });
+    }
+
+    // Salva também em localStorage como fallback
+    localStorage.setItem('bling_token_'+state,JSON.stringify(tokenData));
+
+    st.className='status ok';
+    st.textContent='✓ '+state.charAt(0).toUpperCase()+state.slice(1)+' conectada com sucesso! Pode fechar esta aba.';
+
+    // Fecha automaticamente após 3s
+    setTimeout(()=>window.close(),3000);
+
+  }catch(e){
+    st.className='status err';
+    st.textContent='⚠ Erro inesperado: '+e.message;
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
