@@ -1,0 +1,38 @@
+// Vercel Serverless Function — proxy para buscar pedidos de venda no Bling
+// Evita CORS: browser → Vercel → api.bling.com.br
+
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ erro: "Use POST" });
+
+  try {
+    const { access_token, data_inicio, pagina = 1, limite = 100 } = req.body;
+
+    if (!access_token || !data_inicio) {
+      return res.status(400).json({ erro: "Faltam access_token ou data_inicio" });
+    }
+
+    const url = `https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicio=${data_inicio}&pagina=${pagina}&limite=${limite}`;
+
+    const resp = await fetch(url, {
+      headers: {
+        "Authorization": "Bearer " + access_token,
+        "Accept": "application/json",
+      },
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      return res.status(resp.status).json({ erro: "Bling retornou erro", status: resp.status, detalhes: data });
+    }
+
+    return res.status(200).json(data);
+  } catch (e) {
+    return res.status(500).json({ erro: "Erro interno: " + e.message });
+  }
+}
