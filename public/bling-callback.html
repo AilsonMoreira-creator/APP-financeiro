@@ -5,14 +5,15 @@
 <title>Conectando ao Bling...</title>
 <style>
   body{font-family:Georgia,serif;background:#f7f4f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
-  .box{background:#fff;border-radius:16px;padding:40px;border:1px solid #e8e2da;text-align:center;max-width:420px;width:90%;}
+  .box{background:#fff;border-radius:16px;padding:40px;border:1px solid #e8e2da;text-align:center;max-width:520px;width:90%;}
   .logo{width:48px;height:48px;border-radius:10px;background:#4CAF73;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;color:#fff;font-family:Arial;margin:0 auto 16px;}
   h2{color:#2c3e50;font-size:20px;margin:0 0 8px;}
   p{color:#8a9aa4;font-size:13px;margin:0 0 16px;}
-  .status{font-size:13px;padding:10px 16px;border-radius:8px;margin-top:12px;}
+  .status{font-size:13px;padding:10px 16px;border-radius:8px;margin-top:12px;word-break:break-all;}
   .ok{background:#eafbf0;color:#27ae60;border:1px solid #b8dfc8;}
   .err{background:#fdeaea;color:#c0392b;border:1px solid #f4b8b8;}
   .loading{background:#edf4fb;color:#4a7fa5;border:1px solid #c8dff0;}
+  .detail{margin-top:10px;background:#f5f5f5;border-radius:8px;padding:10px;font-size:11px;color:#666;text-align:left;max-height:200px;overflow:auto;word-break:break-all;}
 </style>
 </head>
 <body>
@@ -21,34 +22,35 @@
   <h2>Amícia × Bling</h2>
   <p>Autorizando a conta...</p>
   <div id="status" class="status loading">⏳ Processando...</div>
+  <div id="detail" class="detail" style="display:none;"></div>
 </div>
 
 <script>
 (async function(){
   const st=document.getElementById('status');
+  const dt=document.getElementById('detail');
   const params=new URLSearchParams(window.location.search);
   const code=params.get('code');
-  const state=params.get('state'); // 'exitus', 'lumia' ou 'muniam'
+  const state=params.get('state');
 
-  if(!code||!state){
+  function showError(msg, detail){
     st.className='status err';
-    st.textContent='⚠ Parâmetros inválidos. Feche esta aba e tente novamente.';
-    return;
+    st.textContent='⚠ '+msg;
+    if(detail){dt.style.display='block';dt.textContent=typeof detail==='object'?JSON.stringify(detail,null,2):detail;}
   }
 
-  // Pega credenciais salvas pelo módulo Bling
+  if(!code||!state){showError('Parâmetros inválidos. Feche e tente novamente.');return;}
+
   const clientId=localStorage.getItem('bling_client_id');
   const clientSecret=localStorage.getItem('bling_client_secret');
 
-  if(!clientId||!clientSecret){
-    st.className='status err';
-    st.textContent='⚠ Credenciais não encontradas. Configure o Client ID e Secret no módulo Bling primeiro.';
-    return;
-  }
+  if(!clientId||!clientSecret){showError('Credenciais não encontradas. Configure no módulo Bling primeiro.');return;}
 
   try{
-    // Troca o code pelo access_token VIA PROXY VERCEL (evita CORS)
     const callback=window.location.origin+'/bling-callback.html';
+
+    st.textContent='⏳ Chamando /api/bling-token...';
+
     const resp=await fetch('/api/bling-token',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -61,15 +63,20 @@
       })
     });
 
+    const text=await resp.text();
+    let data;
+    try{data=JSON.parse(text);}catch{data=text;}
+
     if(!resp.ok){
-      const err=await resp.json().catch(()=>({}));
-      st.className='status err';
-      st.textContent='⚠ Erro ao trocar o código: '+(err.erro||resp.status);
-      console.error(err);
+      showError('Erro ao trocar o código: '+resp.status, data);
       return;
     }
 
-    const data=await resp.json();
+    if(!data.access_token){
+      showError('Resposta sem access_token', data);
+      return;
+    }
+
     const tokenData={
       access_token:data.access_token,
       refresh_token:data.refresh_token,
@@ -81,7 +88,7 @@
     const SUPABASE_KEY=localStorage.getItem('sb_key');
 
     if(SUPABASE_URL&&SUPABASE_KEY){
-      await fetch(SUPABASE_URL+'/rest/v1/bling_tokens',{
+      const sbResp=await fetch(SUPABASE_URL+'/rest/v1/bling_tokens',{
         method:'POST',
         headers:{
           'apikey':SUPABASE_KEY,
@@ -91,21 +98,22 @@
         },
         body:JSON.stringify({conta:state,...tokenData})
       });
+      if(!sbResp.ok){
+        const sbErr=await sbResp.text();
+        showError('Token obtido mas erro ao salvar no Supabase: '+sbResp.status, sbErr);
+        // Continua mesmo assim — salva local
+      }
     }
 
-    // Salva também em localStorage como fallback
     localStorage.setItem('bling_token_'+state,JSON.stringify(tokenData));
 
     st.className='status ok';
     st.textContent='✓ '+state.charAt(0).toUpperCase()+state.slice(1)+' conectada com sucesso! Pode fechar esta aba.';
 
-    // Fecha automaticamente após 3s
     setTimeout(()=>window.close(),3000);
 
   }catch(e){
-    st.className='status err';
-    st.textContent='⚠ Erro inesperado: '+e.message;
-    console.error(e);
+    showError('Erro inesperado: '+e.message, e.stack);
   }
 })();
 </script>
