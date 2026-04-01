@@ -197,6 +197,18 @@ const SvgConfiguracoes = ({ size = 32 }) => {
   );
 };
 
+const SvgBlingMkt = ({ size = 32 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <rect x="6" y="10" width="52" height="44" rx="6" fill="#0057FF" stroke={_S} strokeWidth="1.6"/>
+    <rect x="10" y="16" width="20" height="14" rx="3" fill="#fff" opacity="0.9"/>
+    <rect x="34" y="16" width="20" height="14" rx="3" fill="#6c2bd9" opacity="0.7"/>
+    <rect x="10" y="34" width="20" height="14" rx="3" fill="#0096c7" opacity="0.7"/>
+    <rect x="34" y="34" width="20" height="14" rx="3" fill="#fff" opacity="0.5"/>
+    <text x="16" y="26" fontSize="9" fontFamily="Arial" fill="#0057FF" fontWeight="900">B</text>
+    <text x="40" y="26" fontSize="7" fontFamily="Arial" fill="#fff" fontWeight="700">MKT</text>
+  </svg>
+);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SVG ICONS — SUB-ABAS OFICINAS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -427,6 +439,7 @@ const modules = [
   { id:"calculadora",   Icon:SvgCalculadora,   label:"Calculadora" },
   { id:"fichatecnica",  Icon:SvgFichaTecnica,  label:"Ficha Téc."  },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
+  { id:"blingmkt",      Icon:SvgBlingMkt,      label:"Bling Mkt"   },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
 
@@ -3273,7 +3286,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","blingmkt","configuracoes"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas"],admin:false},
@@ -3390,6 +3403,171 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
           </tbody>
         </table>
       </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLING MARKETPLACES — DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════════
+const BlingMarketplacesContent=()=>{
+  const [tela,setTela]=useState("dash");
+  const [histOpen,setHistOpen]=useState(false);
+  const [muniamOn,setMuniamOn]=useState(false);
+  const [syncSt,setSyncSt]=useState("ok");
+  const [blingCreds,setBlingCreds]=useState(()=>{try{return JSON.parse(localStorage.getItem("amica_bling_creds")||'{"clientId":"","clientSecret":""}');}catch{return{clientId:"",clientSecret:""};}});
+  const [devolPct,setDevolPct]=useState(()=>{try{return Number(localStorage.getItem("amica_bling_devol")||"10");}catch{return 10;}});
+  const [tokens,setTokens]=useState(()=>{try{return JSON.parse(localStorage.getItem("amica_bling_tokens")||'{"exitus":true,"lumia":true,"muniam":false}');}catch{return{exitus:true,lumia:true,muniam:false};}});
+
+  useEffect(()=>{try{localStorage.setItem("amica_bling_creds",JSON.stringify(blingCreds));}catch{}},[blingCreds]);
+  useEffect(()=>{try{localStorage.setItem("amica_bling_devol",String(devolPct));}catch{}},[devolPct]);
+  useEffect(()=>{try{localStorage.setItem("amica_bling_tokens",JSON.stringify(tokens));}catch{}},[tokens]);
+
+  const exVal=428750;const luVal=312400;const muVal=241800;
+  const exPed=187;const luPed=143;const muPed=98;
+  const brutoDia=exVal+luVal+(muniamOn?muVal:0);
+  const devol=brutoDia*(devolPct/100);
+  const liquido=brutoDia-devol;
+  const fmt=(v)=>"R$ "+v.toLocaleString("pt-BR",{minimumFractionDigits:2});
+
+  const historico=[
+    {data:"31/03",ex:"R$ 428.750,00",lu:"R$ 312.400,00",mu:"R$ 241.800,00",liq:"R$ 891.915,00"},
+    {data:"30/03",ex:"R$ 395.200,00",lu:"R$ 298.600,00",mu:"R$ 218.300,00",liq:"R$ 822.960,00"},
+    {data:"29/03",ex:"R$ 412.800,00",lu:"R$ 305.100,00",mu:"R$ 233.400,00",liq:"R$ 856.170,00"},
+  ];
+
+  const doSync=()=>{setSyncSt("loading");setTimeout(()=>setSyncSt("ok"),1500);};
+  const toggleMuniam=()=>{const next=!muniamOn;setMuniamOn(next);setTokens(p=>({...p,muniam:next}));};
+
+  const cardStyle=(bg)=>({background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid #e8e2da"});
+  const headerStyle=(bg)=>({padding:"7px 12px",display:"flex",justifyContent:"space-between",background:bg});
+
+  return(
+    <div>
+      {/* HEADER */}
+      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:38,height:38,borderRadius:8,background:"#0057FF",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:22,fontFamily:"Arial"}}>B</div>
+          <div>
+            <div style={{fontSize:18,fontWeight:700,color:"#2c3e50"}}>Bling Marketplaces</div>
+            <div style={{fontSize:11,color:"#8a9aa4"}}>Exitus · Lumia · Muniam</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <span style={{fontSize:11,color:syncSt==="ok"?"#27ae60":"#e67e22"}}>{syncSt==="ok"?"✓ Sincronizado":"⏳ Sincronizando..."}</span>
+          <button onClick={doSync} style={{border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",background:"#4a7fa5",color:"#fff"}}>🔄 Sync</button>
+          <button onClick={()=>setTela(tela==="dash"?"config":"dash")} style={{border:tela==="config"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50"}}>{tela==="config"?"← Voltar":"⚙ Config"}</button>
+        </div>
+      </div>
+
+      {tela==="dash"?(
+        <>
+          {/* ALERTA MUNIAM */}
+          {!muniamOn&&(
+            <div style={{background:"#fff8e8",border:"1px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:12,color:"#8a6500"}}>⚠ <b>Muniam</b> desconectada</span>
+              <button onClick={()=>setTela("config")} style={{fontSize:11,background:"transparent",border:"1px solid #c8a040",borderRadius:6,padding:"3px 10px",cursor:"pointer",color:"#8a6500",fontFamily:"Georgia,serif"}}>Reconectar</button>
+            </div>
+          )}
+
+          {/* CARDS MARCAS */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+            <div style={cardStyle()}>
+              <div style={headerStyle("#0057FF")}><span style={{fontSize:12,fontWeight:700,color:"#fff"}}>Exitus</span><span style={{fontSize:10,color:"rgba(255,255,255,0.8)"}}>{exPed} ped.</span></div>
+              <div style={{padding:12}}><div style={{fontFamily:_FN,fontSize:18,fontWeight:800,color:"#2c3e50"}}>{fmt(exVal)}</div><div style={{fontSize:10,color:"#a89f94",marginTop:3}}>bruto do dia</div></div>
+            </div>
+            <div style={cardStyle()}>
+              <div style={headerStyle("#6c2bd9")}><span style={{fontSize:12,fontWeight:700,color:"#fff"}}>Lumia</span><span style={{fontSize:10,color:"rgba(255,255,255,0.8)"}}>{luPed} ped.</span></div>
+              <div style={{padding:12}}><div style={{fontFamily:_FN,fontSize:18,fontWeight:800,color:"#2c3e50"}}>{fmt(luVal)}</div><div style={{fontSize:10,color:"#a89f94",marginTop:3}}>bruto do dia</div></div>
+            </div>
+            <div style={{...cardStyle(),opacity:muniamOn?1:0.5}}>
+              <div style={headerStyle("#0096c7")}><span style={{fontSize:12,fontWeight:700,color:"#fff"}}>Muniam</span><span style={{fontSize:10,color:"rgba(255,255,255,0.8)"}}>{muniamOn?muPed+" ped.":"offline"}</span></div>
+              <div style={{padding:12}}><div style={{fontFamily:_FN,fontSize:18,fontWeight:800,color:"#2c3e50"}}>{muniamOn?fmt(muVal):"—"}</div><div style={{fontSize:10,color:"#a89f94",marginTop:3}}>bruto do dia</div></div>
+            </div>
+          </div>
+
+          {/* RESUMO */}
+          <div style={{background:"#2c3e50",borderRadius:14,padding:18,marginBottom:12}}>
+            <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Resumo · 31/03/2026</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+              <div><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>Total bruto</div><div style={{fontFamily:_FN,fontSize:18,fontWeight:800,color:"#fff"}}>{fmt(brutoDia)}</div></div>
+              <div><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>Devoluções −{devolPct}%</div><div style={{fontFamily:_FN,fontSize:18,fontWeight:800,color:"#f4b8b8"}}>−{fmt(devol)}</div></div>
+              <div><div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>💰 Líquido lançado</div><div style={{fontFamily:_FN,fontSize:24,fontWeight:900,color:"#4dffcc"}}>{fmt(liquido)}</div><div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:2}}>✓ Lançado em Marketplaces automaticamente</div></div>
+            </div>
+          </div>
+
+          {/* HISTÓRICO */}
+          <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
+            <div onClick={()=>setHistOpen(p=>!p)} style={{padding:"12px 14px",display:"flex",justifyContent:"space-between",cursor:"pointer"}}>
+              <span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>📋 Histórico</span>
+              <span style={{fontSize:11,color:"#4a7fa5"}}>{histOpen?"▲ Fechar":"▼ Ver"}</span>
+            </div>
+            {histOpen&&(
+              <>
+                <div style={{display:"grid",gridTemplateColumns:"70px 1fr 1fr 1fr 1fr",padding:"6px 14px",background:"#f7f4f0"}}>
+                  {["Data","Exitus","Lumia","Muniam","Líquido"].map(h=><div key={h} style={{fontSize:9,color:"#a89f94",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
+                </div>
+                {historico.map((r,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"70px 1fr 1fr 1fr 1fr",padding:"8px 14px",borderBottom:"1px solid #f0ebe4",background:i%2===0?"#fff":"#faf8f5"}}>
+                    <div style={{fontFamily:"Georgia,serif",fontSize:11,color:"#6b7c8a"}}>{r.data}</div>
+                    <div style={{fontFamily:_FN,fontSize:11,color:"#2c3e50"}}>{r.ex}</div>
+                    <div style={{fontFamily:_FN,fontSize:11,color:"#2c3e50"}}>{r.lu}</div>
+                    <div style={{fontFamily:_FN,fontSize:11,color:"#2c3e50"}}>{r.mu}</div>
+                    <div style={{fontFamily:_FN,fontSize:12,fontWeight:800,color:"#27ae60"}}>{r.liq}</div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </>
+      ):(
+        <>
+          {/* CONFIG — CREDENCIAIS */}
+          <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#2c3e50",marginBottom:4}}>Credenciais do App Bling</div>
+            <div style={{fontSize:11,color:"#8a9aa4",marginBottom:12}}>Crie em <b>developer.bling.com.br</b> · mesmo app para as 3 contas</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div><div style={{fontSize:10,color:"#a89f94",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Client ID</div><input value={blingCreds.clientId} onChange={e=>setBlingCreds(p=>({...p,clientId:e.target.value}))} placeholder="Cole o Client ID" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/></div>
+              <div><div style={{fontSize:10,color:"#a89f94",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Client Secret</div><input value={blingCreds.clientSecret} onChange={e=>setBlingCreds(p=>({...p,clientSecret:e.target.value}))} placeholder="Cole o Client Secret" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/></div>
+            </div>
+          </div>
+
+          {/* TOKENS */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+            {[
+              {name:"Exitus",key:"exitus"},
+              {name:"Lumia",key:"lumia"},
+              {name:"Muniam",key:"muniam"},
+            ].map(brand=>{
+              const isOn=brand.key==="muniam"?muniamOn:tokens[brand.key];
+              return(
+                <div key={brand.key} style={{background:"#fff",borderRadius:12,padding:14,border:`2px solid ${isOn?"#b8dfc8":"#f4b8b8"}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:14,fontWeight:700,color:"#2c3e50"}}>{brand.name}</span>
+                    <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,background:isOn?"#eafbf0":"#fdeaea",color:isOn?"#27ae60":"#c0392b"}}>{isOn?"● On":"○ Off"}</span>
+                  </div>
+                  <div style={{fontSize:11,color:"#8a9aa4",marginBottom:8}}>{isOn?"Token ativo · ~4h":"Clique para autorizar"}</div>
+                  {brand.key==="muniam"?(
+                    <button onClick={toggleMuniam} style={{width:"100%",border:isOn?"1px solid #f4b8b8":"none",borderRadius:8,padding:6,fontSize:isOn?11:12,cursor:"pointer",fontFamily:"Georgia,serif",background:isOn?"#fdeaea":"#4a7fa5",color:isOn?"#c0392b":"#fff",fontWeight:isOn?400:600}}>{isOn?"Desconectar":"🔗 Conectar Muniam"}</button>
+                  ):(
+                    <button onClick={()=>setTokens(p=>({...p,[brand.key]:!p[brand.key]}))} style={{width:"100%",border:isOn?"1px solid #f4b8b8":"none",borderRadius:8,padding:6,fontSize:isOn?11:12,cursor:"pointer",fontFamily:"Georgia,serif",background:isOn?"#fdeaea":"#4a7fa5",color:isOn?"#c0392b":"#fff",fontWeight:isOn?400:600}}>{isOn?"Desconectar":`🔗 Conectar ${brand.name}`}</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* REGRA DEVOLUÇÃO */}
+          <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:8}}>Regra de devolução</div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:12,color:"#6b7c8a"}}>Desconto automático:</span>
+              <input type="number" value={devolPct} onChange={e=>setDevolPct(Number(e.target.value)||0)} style={{width:50,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 8px",fontSize:14,fontWeight:700,textAlign:"center",outline:"none",background:"#fff",fontFamily:"Georgia,serif"}}/>
+              <span style={{fontSize:12,color:"#6b7c8a"}}>% do bruto</span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -4837,6 +5015,7 @@ export default function App(){
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
+        {active==="blingmkt"&&<BlingMarketplacesContent/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
           isAdmin={usuarioLogado?.admin===true}
