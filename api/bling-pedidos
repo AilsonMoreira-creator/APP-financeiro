@@ -1,7 +1,8 @@
-// Vercel Serverless Function — proxy para buscar pedidos de venda no Bling
-// Evita CORS: browser → Vercel → api.bling.com.br
+// Vercel Serverless Function — proxy para trocar code/refresh_token com o Bling
+// Evita CORS: browser → Vercel → Bling
 
 export default async function handler(req, res) {
+  // Permitir CORS do próprio domínio
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -10,19 +11,31 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ erro: "Use POST" });
 
   try {
-    const { access_token, data_inicio, pagina = 1, limite = 100 } = req.body;
+    const { client_id, client_secret, grant_type, code, refresh_token, redirect_uri } = req.body;
 
-    if (!access_token || !data_inicio) {
-      return res.status(400).json({ erro: "Faltam access_token ou data_inicio" });
+    if (!client_id || !client_secret || !grant_type) {
+      return res.status(400).json({ erro: "Faltam client_id, client_secret ou grant_type" });
     }
 
-    const url = `https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicio=${data_inicio}&pagina=${pagina}&limite=${limite}`;
+    const creds = Buffer.from(`${client_id}:${client_secret}`).toString("base64");
 
-    const resp = await fetch(url, {
+    let bodyParams = `grant_type=${grant_type}`;
+    if (grant_type === "authorization_code") {
+      if (!code || !redirect_uri) return res.status(400).json({ erro: "Faltam code ou redirect_uri" });
+      bodyParams += `&code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(redirect_uri)}`;
+    } else if (grant_type === "refresh_token") {
+      if (!refresh_token) return res.status(400).json({ erro: "Falta refresh_token" });
+      bodyParams += `&refresh_token=${encodeURIComponent(refresh_token)}`;
+    }
+
+    const resp = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
+      method: "POST",
       headers: {
-        "Authorization": "Bearer " + access_token,
+        "Authorization": "Basic " + creds,
+        "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
       },
+      body: bodyParams,
     });
 
     const data = await resp.json();
