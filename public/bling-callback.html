@@ -47,23 +47,24 @@
   }
 
   try{
-    // Troca o code pelo access_token
-    const creds=btoa(clientId+':'+clientSecret);
-    const callback=encodeURIComponent(window.location.origin+'/bling-callback.html');
-    const resp=await fetch('https://www.bling.com.br/Api/v3/oauth/token',{
+    // Troca o code pelo access_token VIA PROXY VERCEL (evita CORS)
+    const callback=window.location.origin+'/bling-callback.html';
+    const resp=await fetch('/api/bling-token',{
       method:'POST',
-      headers:{
-        'Authorization':'Basic '+creds,
-        'Content-Type':'application/x-www-form-urlencoded',
-        'Accept':'application/json'
-      },
-      body:'grant_type=authorization_code&code='+encodeURIComponent(code)+'&redirect_uri='+callback
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        client_id:clientId,
+        client_secret:clientSecret,
+        grant_type:'authorization_code',
+        code:code,
+        redirect_uri:callback
+      })
     });
 
     if(!resp.ok){
-      const err=await resp.text();
+      const err=await resp.json().catch(()=>({}));
       st.className='status err';
-      st.textContent='⚠ Erro ao trocar o código: '+resp.status;
+      st.textContent='⚠ Erro ao trocar o código: '+(err.erro||resp.status);
       console.error(err);
       return;
     }
@@ -75,8 +76,7 @@
       expires_at:new Date(Date.now()+(data.expires_in||21600)*1000).toISOString()
     };
 
-    // Salva no Supabase via variável global (injetada pelo app)
-    // Tenta usar o supabase do app se disponível
+    // Salva no Supabase
     const SUPABASE_URL=localStorage.getItem('sb_url');
     const SUPABASE_KEY=localStorage.getItem('sb_key');
 
