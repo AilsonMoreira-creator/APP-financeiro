@@ -3437,30 +3437,27 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
 };
 
 // ── Módulo Bling ─────────────────────────────────────────────────────────────
-const SUPABASE_URL="https://jajbdtqrwrgkwxqkxqjw.supabase.co";
-const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphbmJkdHFyd3Jna3d4cWt4cWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder";
-
 const blingDb={
   async getTokens(){
     try{
-      const r=await fetch(`${SUPABASE_URL}/rest/v1/bling_tokens?select=*`,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});
-      return r.ok?(await r.json()):[];
+      const {data}=await supabase.from('bling_tokens').select('*');
+      return data||[];
     }catch{return[];}
   },
   async saveToken(conta,data){
     try{
-      await fetch(`${SUPABASE_URL}/rest/v1/bling_tokens`,{method:"POST",headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"},body:JSON.stringify({conta,...data})});
+      await supabase.from('bling_tokens').upsert({conta,...data},{onConflict:'conta'});
     }catch{}
   },
   async getResultado(data){
     try{
-      const r=await fetch(`${SUPABASE_URL}/rest/v1/bling_resultados?data=eq.${data}&select=*`,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});
-      const d=await r.json();return d[0]||null;
+      const {data:r}=await supabase.from('bling_resultados').select('*').eq('data',data).single();
+      return r||null;
     }catch{return null;}
   },
   async saveResultado(data,exitus,lumia,muniam,total_bruto,valor_liquido){
     try{
-      await fetch(`${SUPABASE_URL}/rest/v1/bling_resultados`,{method:"POST",headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"},body:JSON.stringify({data,exitus,lumia,muniam,total_bruto,valor_liquido})});
+      await supabase.from('bling_resultados').upsert({data,exitus,lumia,muniam,total_bruto,valor_liquido},{onConflict:'data'});
     }catch{}
   },
 };
@@ -3482,6 +3479,15 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
 
   // Carregar tokens e resultado ao montar
   useEffect(()=>{
+    // Injeta URL e key do Supabase no localStorage para o bling-callback.html usar
+    try{
+      if(supabase){
+        const url=import.meta.env.VITE_SUPABASE_URL||"";
+        const key=import.meta.env.VITE_SUPABASE_ANON_KEY||"";
+        if(url)localStorage.setItem("sb_url",url);
+        if(key)localStorage.setItem("sb_key",key);
+      }
+    }catch(e){}
     (async()=>{
       const ts=await blingDb.getTokens();
       const m={exitus:null,lumia:null,muniam:null};
@@ -3491,8 +3497,8 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
       if(r)setResultado(r);
       // Histórico — últimos 7 dias
       try{
-        const r2=await fetch(`${SUPABASE_URL}/rest/v1/bling_resultados?select=*&order=data.desc&limit=7`,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});
-        if(r2.ok)setHistorico(await r2.json());
+        const {data:hist}=await supabase.from('bling_resultados').select('*').order('data',{ascending:false}).limit(7);
+        if(hist)setHistorico(hist);
       }catch{}
     })();
   },[]);
@@ -3582,8 +3588,8 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
       setReceitasMes(mesAtual,prev=>({...prev,[diaNum]:{...(prev[diaNum]||{}),marketplaces:String(liquido)}}));
       setSyncMsg("✓ Sincronizado e lançado em Marketplaces!");
       // Atualizar histórico
-      const r2=await fetch(`${SUPABASE_URL}/rest/v1/bling_resultados?select=*&order=data.desc&limit=7`,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});
-      if(r2.ok)setHistorico(await r2.json());
+      const {data:hist}=await supabase.from('bling_resultados').select('*').order('data',{ascending:false}).limit(7);
+      if(hist)setHistorico(hist);
     }catch(e){setSyncMsg("⚠ Erro ao sincronizar");}
     setSyncing(false);
     setTimeout(()=>setSyncMsg(""),4000);
