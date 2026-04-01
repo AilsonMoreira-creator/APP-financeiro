@@ -3532,14 +3532,13 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
 
   const renovarToken=async(conta,token)=>{
     try{
-      const creds=btoa(`${clientId}:${clientSecret}`);
-      const r=await fetch("https://www.bling.com.br/Api/v3/oauth/token",{
-        method:"POST",headers:{"Authorization":"Basic "+creds,"Content-Type":"application/x-www-form-urlencoded"},
-        body:`grant_type=refresh_token&refresh_token=${token.refresh_token}`
+      const r=await fetch("/api/bling-token",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({client_id:clientId,client_secret:clientSecret,grant_type:"refresh_token",refresh_token:token.refresh_token})
       });
       if(!r.ok)return null;
       const d=await r.json();
-      const nd={access_token:d.access_token,refresh_token:d.refresh_token,expires_at:new Date(Date.now()+d.expires_in*1000).toISOString()};
+      const nd={access_token:d.access_token,refresh_token:d.refresh_token,expires_at:new Date(Date.now()+(d.expires_in||21600)*1000).toISOString()};
       await blingDb.saveToken(conta,nd);
       setTokens(prev=>({...prev,[conta]:{...prev[conta],...nd}}));
       return nd.access_token;
@@ -3556,8 +3555,9 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
       }
       let total=0,pagina=1,continuar=true;
       while(continuar){
-        const r=await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicio=${hoje}&pagina=${pagina}&limite=100`,{
-          headers:{"Authorization":"Bearer "+accessToken,"Accept":"application/json"}
+        const r=await fetch("/api/bling-pedidos",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({access_token:accessToken,data_inicio:hoje,pagina,limite:100})
         });
         if(!r.ok)break;
         const d=await r.json();
