@@ -167,6 +167,15 @@ const SvgFichaTecnica = ({ size = 32 }) => (
   </svg>
 );
 
+const SvgBling = ({ size = 32 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <rect width="64" height="64" rx="10" fill="#4CAF73"/>
+    <text x="8" y="42" fontSize="19" fontWeight="900" fill="white" fontFamily="Arial,Helvetica,sans-serif" letterSpacing="-0.5">bling</text>
+    <rect x="47" y="20" width="7" height="17" rx="3.5" fill="white" transform="rotate(10 50 28)"/>
+    <ellipse cx="51.5" cy="45" rx="4" ry="3.5" fill="white" transform="rotate(10 51 45)"/>
+  </svg>
+);
+
 const SvgUsuarios = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
     <circle cx="32" cy="22" r="14" fill={_B} stroke={_S} strokeWidth="2.2"/>
@@ -426,6 +435,7 @@ const modules = [
   { id:"relatorio",     Icon:SvgRelatorio,     label:"Relatório"   },
   { id:"calculadora",   Icon:SvgCalculadora,   label:"Calculadora" },
   { id:"fichatecnica",  Icon:SvgFichaTecnica,  label:"Ficha Téc."  },
+  { id:"bling",         Icon:SvgBling,         label:"Bling"       },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -441,7 +451,7 @@ const CATS = [
 ];
 
 const SEM_AUX = ["Taxas Cartão","Taxas Marketplaces","Valor de Correção"];
-const CATS_RAPIDAS = ["Free Lances","Carreto","Modelista","Piloteiro","Gastos Diários Loja e Fábrica","Representantes","Reforma Loja e Equipamentos"];
+const CATS_RAPIDAS = ["Free Lances","Carreto","Modelista","Piloteiro","Gastos Diários Loja e Fábrica","Representantes","Reforma Loja e Equipamentos","Gastos Carro","Modelos Fotos","Correios","Giro Empréstimo"];
 const CATS_PREST = ["Oficinas Costura","Salas Corte","Passadoria"];
 const LEVE_DEST  = ["Funcionários","Pró-Labore","Salas Corte","Passadoria","Aviamentos"];
 const SUPER_DEST = ["Tecidos","Oficinas Costura"];
@@ -1812,7 +1822,7 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
   const isTecidos=auxAberta==="Tecidos";
   const listaPrest=prestadores[auxAberta]||[];
   const inputStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px",fontSize:12,outline:"none",background:"#fff"};
-  const gridCols=isTecidos?"80px 1fr 90px 100px 36px":temPrest?"90px 1fr 120px 36px":"90px 1fr 100px 36px";
+  const gridCols=isTecidos?"80px 1fr 90px 110px 36px":temPrest?"90px 1fr 120px 36px":"90px 1fr 120px 36px";
   const headers=isTecidos?["Data","Empresa","Nº Nota","Valor",""]
     :temPrest?["Data","Prestador","Valor",""]
     :["Data","Descrição","Valor",""];
@@ -1822,11 +1832,12 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
       <div style={{display:"grid",gridTemplateColumns:gridCols,background:"#f7f4f0",borderBottom:"1px solid #e8e2da"}}>
         {headers.map((h,i)=><div key={i} style={{padding:"9px 12px",fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",fontWeight:600}}>{h}</div>)}
       </div>
-      <div style={{maxHeight:260,overflowY:"auto"}}>
+      <div style={{maxHeight:400,overflowY:"auto"}}>
         {(auxData[auxAberta]||[]).map((row,idx)=>{
           const fromBoleto=!!row._boletoid;
           const rowStyle={display:"grid",gridTemplateColumns:gridCols,borderBottom:"1px solid #f0ebe4",background:fromBoleto?"#f0f6fb":"#fff"};
           const dis={...inputStyle,background:fromBoleto?"#e8f0f8":"#fff",color:fromBoleto?"#4a7fa5":"#2c3e50"};
+          const valStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px 4px 26px",fontSize:14,fontWeight:700,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",outline:"none",background:fromBoleto?"#e8f0f8":"#fff",color:fromBoleto?"#4a7fa5":"#2c3e50",boxSizing:"border-box"};
           return(
             <div key={idx} style={rowStyle}>
               <div style={{padding:"6px 8px"}}><input value={row.data||""} onChange={e=>updateLinhaAux(auxAberta,idx,"data",e.target.value)} style={dis} disabled={fromBoleto}/></div>
@@ -1840,7 +1851,11 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
               ):(
                 <div style={{padding:"6px 8px"}}><input value={row.descricao||""} onChange={e=>updateLinhaAux(auxAberta,idx,"descricao",e.target.value)} style={dis}/></div>
               )}
-              <div style={{padding:"6px 8px"}}><input value={row.valor||""} onChange={e=>updateLinhaAux(auxAberta,idx,"valor",e.target.value)} style={dis} disabled={fromBoleto}/></div>
+              {/* Valor — Calibri 14 bold + R$ prefixo */}
+              <div style={{padding:"6px 8px",position:"relative"}}>
+                <span style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#a89f94",fontFamily:"Calibri,Arial",fontWeight:600,pointerEvents:"none"}}>R$</span>
+                <input value={row.valor||""} onChange={e=>updateLinhaAux(auxAberta,idx,"valor",e.target.value)} placeholder="0,00" style={valStyle} disabled={fromBoleto}/>
+              </div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
                 {fromBoleto
                   ?<span style={{fontSize:9,color:"#4a7fa5",padding:"2px 5px",background:"#daeaf7",borderRadius:3}}>B</span>
@@ -1889,6 +1904,8 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
     fecharModalRapido();
   };
   const hoje=new Date().getDate();
+  const mesHojeAtual=new Date().getMonth()+1;
+  const mesFechado=mes<mesHojeAtual;
   const inputStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px",fontSize:12,outline:"none",background:"#fff"};
   const totRec=Object.values(receitas).reduce((a,d)=>({st:a.st+parseFloat(d.silvaTeles||0),br:a.br+parseFloat(d.bomRetiro||0),mkt:a.mkt+parseFloat(d.marketplaces||0)}),{st:0,br:0,mkt:0});
   const totalGeral=totRec.st+totRec.br+totRec.mkt;
@@ -1897,11 +1914,14 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const salvarCelula=(dia,canal,val)=>setReceitas(prev=>({...prev,[dia]:{...(prev[dia]||{}),[canal]:val}}));
   const updateLinhaAux=(cat,idx,field,val)=>setAuxData(prev=>{const l=[...(prev[cat]||[])];l[idx]={...l[idx],[field]:val};return{...prev,[cat]:l};});
   const removeLinhaAux=(cat,idx)=>setAuxData(prev=>{const l=[...(prev[cat]||[])];l.splice(idx,1);return{...prev,[cat]:l};});
+  const CATS_DATA_AUTO=["Caseado","Marketing","Sistemas","Concessionárias","Contabilidade","Impostos DAS","Aviamentos","Passadoria","Salas Corte"];
   const addLinhaAux=(cat,dadosIniciais)=>{
+    const hoje=new Date();const dd=`${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}`;
+    const dataAuto=CATS_DATA_AUTO.includes(cat)?dd:"";
     if(cat==="Funcionários") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),{nome:"",salario:"",comissao:"",extra:"",alimentacao:"",vale:"",ferias:"",rescisao:""}]}));
     else if(cat==="Tecidos") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:"",empresa:"",nroNota:"",valor:"",descricao:""}]}));
-    else if(CATS_PREST.includes(cat)) setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:"",prestador:"",valor:"",descricao:""}]}));
-    else setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:"",valor:"",descricao:""}]}));
+    else if(CATS_PREST.includes(cat)) setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:dataAuto,prestador:"",valor:"",descricao:""}]}));
+    else setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:dataAuto,valor:"",descricao:""}]}));
   };
   const adicionarCategoria=()=>{if(!novaCategoria.trim()||categorias.includes(novaCategoria.trim()))return;setCategorias(prev=>[...prev,novaCategoria.trim()]);setAuxData(prev=>({...prev,[novaCategoria.trim()]:[]}));setNovaCategoria("");};
   const removerCategoria=(cat)=>{setCategorias(prev=>prev.filter(c=>c!==cat));setAuxData(prev=>{const n={...prev};delete n[cat];return n;});};
@@ -1946,7 +1966,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
           </div>
           <div style={{minHeight:300,maxHeight:712,overflowY:"auto"}} ref={el=>{if(el){const rowH=28;el.scrollTop=Math.max(0,(hoje-4)*rowH);}}}>
             {Array.from({length:31},(_,i)=>i+1).map(dia=>{
-              const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=dia>hoje;
+              const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=mesFechado?false:dia>hoje;
               const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
               const sepCol=isDom?"#b0a898":feriado?"#b0d4b0":"#ede8e0";
               const valCol=isDom?"#4a3a2a":feriado?"#1a4a1a":"#2c3e50";
@@ -2055,7 +2075,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
             </div>
             <div style={{maxHeight:792,overflowY:"auto"}} ref={el=>{if(el){const rowH=28;el.scrollTop=Math.max(0,(hoje-4)*rowH);}}}>
               {Array.from({length:31},(_,i)=>i+1).map(dia=>{
-                const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=dia>hoje;
+                const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=mesFechado?false:dia>hoje;
                 const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
                 const sepCol=isDom?"#b0a898":feriado?"#b0d4b0":"#ede8e0";
                 const valCol=isDom?"#4a3a2a":feriado?"#1a4a1a":"#2c3e50";
@@ -2508,17 +2528,39 @@ const AGENDA_INICIAL=[
 
 const AgendaContent=()=>{
   const hoje=new Date().getDate();
-  const [itens,setItens]=useState(AGENDA_INICIAL);
+  const mesHoje=new Date().getMonth()+1;
+  const anoHoje=new Date().getFullYear();
+
+  const [itens,setItens]=useState(()=>{
+    // Verifica se precisa resetar ao virar o mês
+    try{
+      const salvo=localStorage.getItem("amica_agenda");
+      if(salvo){
+        const {itens:it,mes,ano}=JSON.parse(salvo);
+        // Mesmo mês e ano — carrega normalmente
+        if(mes===mesHoje&&ano===anoHoje)return it;
+        // Mês novo — reseta todos os feito para false
+        return it.map(i=>({...i,feito:false}));
+      }
+    }catch(e){}
+    return AGENDA_INICIAL;
+  });
+
   const [novoItem,setNovoItem]=useState({dia:"",descricao:""});
   const [mostraAdd,setMostraAdd]=useState(false);
   const [saveStatus,setSaveStatus]=useState(null);
   const [lixeira,setLixeira]=useState([]);
   const [confirm,setConfirm]=useState(null);
-  const markChange=()=>{setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
-  const toggle=(id)=>{setItens(prev=>prev.map(i=>i.id===id?{...i,feito:!i.feito}:i));markChange();};
-  const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);return prev.filter(x=>x.id!==id);});setConfirm(null);markChange();}});};
-  const desfazer=()=>{if(!lixeira.length)return;const u=lixeira[lixeira.length-1];setItens(prev=>[...prev,u].sort((a,b)=>a.dia-b.dia));setLixeira(l=>l.slice(0,-1));};
-  const adicionar=()=>{if(!novoItem.dia||!novoItem.descricao.trim())return;setItens(prev=>[...prev,{id:Date.now(),dia:parseInt(novoItem.dia),descricao:novoItem.descricao.trim(),feito:false}]);setNovoItem({dia:"",descricao:""});markChange();};
+  const markChange=()=>{
+    setSaveStatus("saving");
+    setTimeout(()=>setSaveStatus("saved"),600);
+    // Salva localStorage com mês/ano atual
+    try{localStorage.setItem("amica_agenda",JSON.stringify({itens,mes:mesHoje,ano:anoHoje}));}catch(e){}
+  };
+  const toggle=(id)=>{setItens(prev=>{const novo=prev.map(i=>i.id===id?{...i,feito:!i.feito}:i);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
+  const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);const novo=prev.filter(x=>x.id!==id);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setConfirm(null);markChange();}});};
+  const desfazer=()=>{if(!lixeira.length)return;const u=lixeira[lixeira.length-1];setItens(prev=>{const novo=[...prev,u].sort((a,b)=>a.dia-b.dia);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setLixeira(l=>l.slice(0,-1));};
+  const adicionar=()=>{if(!novoItem.dia||!novoItem.descricao.trim())return;setItens(prev=>{const novo=[...prev,{id:Date.now(),dia:parseInt(novoItem.dia),descricao:novoItem.descricao.trim(),feito:false}];try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setNovoItem({dia:"",descricao:""});markChange();};
   const sorted=[...itens].sort((a,b)=>a.dia-b.dia);
   const alertas=sorted.filter(i=>!i.feito&&i.dia<hoje);
   const hojeItems=sorted.filter(i=>!i.feito&&i.dia===hoje);
@@ -3273,7 +3315,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","bling"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas"],admin:false},
@@ -3389,6 +3431,317 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+};
+
+// ── Módulo Bling ─────────────────────────────────────────────────────────────
+const SUPABASE_URL="https://jajbdtqrwrgkwxqkxqjw.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImphbmJkdHFyd3Jna3d4cWt4cWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder";
+
+const blingDb={
+  async getTokens(){
+    try{
+      const r=await fetch(`${SUPABASE_URL}/rest/v1/bling_tokens?select=*`,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});
+      return r.ok?(await r.json()):[];
+    }catch{return[];}
+  },
+  async saveToken(conta,data){
+    try{
+      await fetch(`${SUPABASE_URL}/rest/v1/bling_tokens`,{method:"POST",headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"},body:JSON.stringify({conta,...data})});
+    }catch{}
+  },
+  async getResultado(data){
+    try{
+      const r=await fetch(`${SUPABASE_URL}/rest/v1/bling_resultados?data=eq.${data}&select=*`,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});
+      const d=await r.json();return d[0]||null;
+    }catch{return null;}
+  },
+  async saveResultado(data,exitus,lumia,muniam,total_bruto,valor_liquido){
+    try{
+      await fetch(`${SUPABASE_URL}/rest/v1/bling_resultados`,{method:"POST",headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates"},body:JSON.stringify({data,exitus,lumia,muniam,total_bruto,valor_liquido})});
+    }catch{}
+  },
+};
+
+const BlingContent=({setReceitasMes,mesAtual})=>{
+  const [tela,setTela]=useState("dash");
+  const [clientId,setClientId]=useState(()=>localStorage.getItem("bling_client_id")||"");
+  const [clientSecret,setClientSecret]=useState(()=>localStorage.getItem("bling_client_secret")||"");
+  const [tokens,setTokens]=useState({exitus:null,lumia:null,muniam:null});
+  const [resultado,setResultado]=useState(null);
+  const [historico,setHistorico]=useState([]);
+  const [hist,setHist]=useState(false);
+  const [syncing,setSyncing]=useState(false);
+  const [syncMsg,setSyncMsg]=useState("");
+  const [devPct,setDevPct]=useState(10);
+  const fmt2=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const hoje=new Date().toISOString().slice(0,10);
+  const hojeStr=new Date().toLocaleDateString("pt-BR");
+
+  // Carregar tokens e resultado ao montar
+  useEffect(()=>{
+    (async()=>{
+      const ts=await blingDb.getTokens();
+      const m={exitus:null,lumia:null,muniam:null};
+      ts.forEach(t=>{if(m[t.conta]!==undefined)m[t.conta]=t;});
+      setTokens(m);
+      const r=await blingDb.getResultado(hoje);
+      if(r)setResultado(r);
+      // Histórico — últimos 7 dias
+      try{
+        const r2=await fetch(`${SUPABASE_URL}/rest/v1/bling_resultados?select=*&order=data.desc&limit=7`,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});
+        if(r2.ok)setHistorico(await r2.json());
+      }catch{}
+    })();
+  },[]);
+
+  const salvarCredenciais=()=>{
+    localStorage.setItem("bling_client_id",clientId);
+    localStorage.setItem("bling_client_secret",clientSecret);
+    setSyncMsg("✓ Credenciais salvas");setTimeout(()=>setSyncMsg(""),2000);
+  };
+
+  const conectarConta=(conta)=>{
+    if(!clientId||!clientSecret){setSyncMsg("⚠ Preencha Client ID e Client Secret primeiro");return;}
+    const state=conta;
+    const callback=encodeURIComponent(window.location.origin+"/bling-callback.html");
+    const url=`https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${callback}&state=${state}`;
+    window.open(url,"_blank");
+    // Polling para checar se token chegou (bling-callback.html salva no Supabase)
+    let tentativas=0;
+    const poll=setInterval(async()=>{
+      tentativas++;
+      const ts=await blingDb.getTokens();
+      const t=ts.find(x=>x.conta===conta);
+      if(t){
+        setTokens(prev=>({...prev,[conta]:t}));
+        setSyncMsg(`✓ ${conta} conectada!`);setTimeout(()=>setSyncMsg(""),3000);
+        clearInterval(poll);
+      }
+      if(tentativas>30)clearInterval(poll);
+    },3000);
+  };
+
+  const renovarToken=async(conta,token)=>{
+    try{
+      const creds=btoa(`${clientId}:${clientSecret}`);
+      const r=await fetch("https://www.bling.com.br/Api/v3/oauth/token",{
+        method:"POST",headers:{"Authorization":"Basic "+creds,"Content-Type":"application/x-www-form-urlencoded"},
+        body:`grant_type=refresh_token&refresh_token=${token.refresh_token}`
+      });
+      if(!r.ok)return null;
+      const d=await r.json();
+      const nd={access_token:d.access_token,refresh_token:d.refresh_token,expires_at:new Date(Date.now()+d.expires_in*1000).toISOString()};
+      await blingDb.saveToken(conta,nd);
+      setTokens(prev=>({...prev,[conta]:{...prev[conta],...nd}}));
+      return nd.access_token;
+    }catch{return null;}
+  };
+
+  const buscarValorConta=async(conta,token)=>{
+    try{
+      let accessToken=token.access_token;
+      // Verificar expiração
+      if(token.expires_at&&new Date(token.expires_at)<new Date()){
+        accessToken=await renovarToken(conta,token);
+        if(!accessToken)return 0;
+      }
+      let total=0,pagina=1,continuar=true;
+      while(continuar){
+        const r=await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicio=${hoje}&pagina=${pagina}&limite=100`,{
+          headers:{"Authorization":"Bearer "+accessToken,"Accept":"application/json"}
+        });
+        if(!r.ok)break;
+        const d=await r.json();
+        if(!d.data||d.data.length===0){continuar=false;break;}
+        d.data.forEach(p=>total+=parseFloat(p.totalProdutos||0));
+        if(d.data.length<100)continuar=false;
+        else pagina++;
+      }
+      return total;
+    }catch{return 0;}
+  };
+
+  const doSync=async()=>{
+    if(syncing)return;
+    setSyncing(true);setSyncMsg("⏳ Buscando nas 3 contas...");
+    try{
+      const [ex,lu,mu]=await Promise.all([
+        tokens.exitus?buscarValorConta("exitus",tokens.exitus):Promise.resolve(0),
+        tokens.lumia?buscarValorConta("lumia",tokens.lumia):Promise.resolve(0),
+        tokens.muniam?buscarValorConta("muniam",tokens.muniam):Promise.resolve(0),
+      ]);
+      const bruto=ex+lu+mu;
+      const liquido=Math.round(bruto*(1-devPct/100)*100)/100;
+      await blingDb.saveResultado(hoje,ex,lu,mu,bruto,liquido);
+      setResultado({data:hoje,exitus:ex,lumia:lu,muniam:mu,total_bruto:bruto,valor_liquido:liquido});
+      // Lançar em Marketplaces do dia atual
+      const diaNum=new Date().getDate();
+      setReceitasMes(mesAtual,prev=>({...prev,[diaNum]:{...(prev[diaNum]||{}),marketplaces:String(liquido)}}));
+      setSyncMsg("✓ Sincronizado e lançado em Marketplaces!");
+      // Atualizar histórico
+      const r2=await fetch(`${SUPABASE_URL}/rest/v1/bling_resultados?select=*&order=data.desc&limit=7`,{headers:{"apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY}});
+      if(r2.ok)setHistorico(await r2.json());
+    }catch(e){setSyncMsg("⚠ Erro ao sincronizar");}
+    setSyncing(false);
+    setTimeout(()=>setSyncMsg(""),4000);
+  };
+
+  const bruto=resultado?.total_bruto||0;
+  const liquido=resultado?.valor_liquido||0;
+  const dev=bruto-liquido;
+
+  return(
+    <div style={{fontFamily:"Georgia,serif",background:"#f7f4f0",minHeight:"100%"}}>
+      {/* Header */}
+      <div style={{background:"#fff",borderBottom:"1px solid #e8e2da",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:36,height:36,borderRadius:8,background:"#4CAF73",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <svg width="36" height="36" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#4CAF73"/><text x="8" y="42" fontSize="19" fontWeight="900" fill="white" fontFamily="Arial" letterSpacing="-0.5">bling</text><rect x="47" y="20" width="7" height="17" rx="3.5" fill="white" transform="rotate(10 50 28)"/><ellipse cx="51.5" cy="45" rx="4" ry="3.5" fill="white" transform="rotate(10 51 45)"/></svg>
+          </div>
+          <div>
+            <div style={{fontSize:17,fontWeight:700,color:"#2c3e50"}}>Bling Marketplaces</div>
+            <div style={{fontSize:11,color:"#8a9aa4"}}>Exitus · Lumia · Muniam</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {syncMsg&&<span style={{fontSize:11,color:syncMsg.startsWith("⚠")?"#c0392b":syncMsg.startsWith("⏳")?"#e67e22":"#27ae60"}}>{syncMsg}</span>}
+          <button onClick={doSync} disabled={syncing} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:syncing?"not-allowed":"pointer",opacity:syncing?0.7:1,fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Sync manual</button>
+          <button onClick={()=>setTela(t=>t==="dash"?"config":"dash")} style={{background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+            {tela==="config"?"← Voltar":"⚙ Config"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:860,margin:"0 auto",padding:16}}>
+
+        {/* DASHBOARD */}
+        {tela==="dash"&&(
+          <div>
+            {/* Alertas contas desconectadas */}
+            {["exitus","lumia","muniam"].filter(c=>!tokens[c]).map(c=>(
+              <div key={c} style={{background:"#fff8e8",border:"1px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:12,color:"#8a6500"}}>⚠ <b style={{textTransform:"capitalize"}}>{c}</b> desconectada</span>
+                <button onClick={()=>setTela("config")} style={{fontSize:11,background:"none",border:"1px solid #c8a040",borderRadius:6,padding:"3px 10px",cursor:"pointer",color:"#8a6500",fontFamily:"Georgia,serif"}}>Reconectar</button>
+              </div>
+            ))}
+
+            {/* Cards 3 contas */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+              {[
+                {nome:"Exitus",cor:"#0057FF",val:resultado?.exitus,ok:!!tokens.exitus},
+                {nome:"Lumia", cor:"#6c2bd9",val:resultado?.lumia, ok:!!tokens.lumia},
+                {nome:"Muniam",cor:"#0096c7",val:resultado?.muniam,ok:!!tokens.muniam},
+              ].map(c=>(
+                <div key={c.nome} style={{background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid #e8e2da",opacity:c.ok?1:0.5}}>
+                  <div style={{background:c.cor,padding:"7px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:12,fontWeight:700,color:"#fff"}}>{c.nome}</span>
+                    <span style={{fontSize:10,color:"rgba(255,255,255,0.8)"}}>{c.ok?"conectada":"offline"}</span>
+                  </div>
+                  <div style={{padding:12}}>
+                    <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:18,fontWeight:800,color:"#2c3e50"}}>{c.ok&&c.val!=null?fmt2(c.val):"—"}</div>
+                    <div style={{fontSize:10,color:"#a89f94",marginTop:3}}>bruto de hoje</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Card total */}
+            <div style={{background:"#2c3e50",borderRadius:14,padding:18,marginBottom:12}}>
+              <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>
+                {resultado?`Sincronizado · ${hojeStr}`:"Sem dados hoje — clique em Sync"}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+                <div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>Total bruto</div>
+                  <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:18,fontWeight:800,color:"#fff"}}>{bruto?fmt2(bruto):"—"}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>Devoluções −{devPct}%</div>
+                  <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:18,fontWeight:800,color:"#f4b8b8"}}>{dev?`−${fmt2(dev)}`:"—"}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>💰 Líquido lançado</div>
+                  <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:24,fontWeight:900,color:"#4dffcc"}}>{liquido?fmt2(liquido):"—"}</div>
+                  {liquido>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:2}}>✓ Lançado em Marketplaces</div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Histórico */}
+            <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
+              <div onClick={()=>setHist(v=>!v)} style={{padding:"12px 14px",display:"flex",justifyContent:"space-between",cursor:"pointer",borderBottom:hist?"1px solid #e8e2da":"none",alignItems:"center"}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>📋 Histórico</span>
+                <span style={{fontSize:11,color:"#4a7fa5"}}>{hist?"▲ Fechar":"▼ Ver"}</span>
+              </div>
+              {hist&&(
+                <div>
+                  <div style={{display:"grid",gridTemplateColumns:"90px 1fr 1fr 1fr 1fr",padding:"6px 14px",background:"#f7f4f0"}}>
+                    {["Data","Exitus","Lumia","Muniam","Líquido"].map(h=><div key={h} style={{fontSize:9,color:"#a89f94",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
+                  </div>
+                  {historico.length===0&&<div style={{padding:16,textAlign:"center",fontSize:12,color:"#c0b8b0"}}>Nenhum registro ainda</div>}
+                  {historico.map((r,i)=>(
+                    <div key={i} style={{display:"grid",gridTemplateColumns:"90px 1fr 1fr 1fr 1fr",padding:"8px 14px",borderBottom:"1px solid #f0ebe4",background:i%2===0?"#fff":"#faf8f5",alignItems:"center"}}>
+                      <div style={{fontSize:11,color:"#6b7c8a"}}>{new Date(r.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</div>
+                      <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:11,color:"#2c3e50"}}>{fmt2(r.exitus||0)}</div>
+                      <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:11,color:"#2c3e50"}}>{fmt2(r.lumia||0)}</div>
+                      <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:11,color:"#2c3e50"}}>{fmt2(r.muniam||0)}</div>
+                      <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:12,fontWeight:800,color:"#27ae60"}}>{fmt2(r.valor_liquido||0)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CONFIG */}
+        {tela==="config"&&(
+          <div>
+            <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#2c3e50",marginBottom:4}}>Credenciais do App Bling</div>
+              <div style={{fontSize:11,color:"#8a9aa4",marginBottom:12}}>Crie em <b>developer.bling.com.br</b> · mesmo app para as 3 contas</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:10,color:"#a89f94",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Client ID</div>
+                  <input value={clientId} onChange={e=>setClientId(e.target.value)} placeholder="Cole o Client ID" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"#a89f94",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Client Secret</div>
+                  <input value={clientSecret} onChange={e=>setClientSecret(e.target.value)} placeholder="Cole o Client Secret" type="password" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
+                </div>
+              </div>
+              <button onClick={salvarCredenciais} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"8px 18px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Salvar credenciais</button>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+              {[{nome:"Exitus",ok:!!tokens.exitus},{nome:"Lumia",ok:!!tokens.lumia},{nome:"Muniam",ok:!!tokens.muniam}].map(c=>(
+                <div key={c.nome} style={{background:"#fff",borderRadius:12,padding:14,border:`2px solid ${c.ok?"#b8dfc8":"#f4b8b8"}`}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:14,fontWeight:700,color:"#2c3e50"}}>{c.nome}</span>
+                    <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,background:c.ok?"#eafbf0":"#fdeaea",color:c.ok?"#27ae60":"#c0392b"}}>{c.ok?"● On":"○ Off"}</span>
+                  </div>
+                  <div style={{fontSize:11,color:"#8a9aa4",marginBottom:8}}>{c.ok?"Token ativo":"Clique para autorizar"}</div>
+                  <button onClick={()=>conectarConta(c.nome.toLowerCase())} style={{width:"100%",background:c.ok?"#fdeaea":"#4a7fa5",color:c.ok?"#c0392b":"#fff",border:c.ok?"1px solid #f4b8b8":"none",borderRadius:8,padding:"7px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+                    {c.ok?"Reconectar":"🔗 Conectar "+c.nome}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{background:"#fff",borderRadius:12,padding:14,border:"1px solid #e8e2da"}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:8}}>Regra de devolução</div>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{fontSize:12,color:"#6b7c8a"}}>Desconto automático:</span>
+                <input type="number" value={devPct} onChange={e=>setDevPct(Number(e.target.value))} style={{width:55,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 8px",fontSize:14,fontWeight:700,textAlign:"center",outline:"none",fontFamily:"Calibri,Arial"}}/>
+                <span style={{fontSize:12,color:"#6b7c8a"}}>% do bruto</span>
+                <span style={{fontSize:11,color:"#a89f94"}}>Aplicado ao somar as 3 contas</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3605,16 +3958,23 @@ const CalculadoraContent=()=>{
       }).catch(()=>setSyncStatus('error'));
   },[]);
 
-  // ── Salvar no Supabase usando refs para valores sempre atuais ─────────────
-  const salvar=(novosProds,novosPrs)=>{
+  // ── Salvar no Supabase com merge (admin + Meluni simultâneos) ────────────
+  const salvar=async(novosProds,novosPrs)=>{
     if(!supabase)return;
-    // Camada 1: localStorage imediato
     try{localStorage.setItem("amica_calc",JSON.stringify({prods:novosProds,prs:novosPrs}));}catch(e){}
-    // Camada 2: Supabase
     setSyncStatus('saving');
-    supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods:novosProds,prs:novosPrs}},{onConflict:'user_id'})
-      .then(()=>{setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);})
-      .catch(()=>setSyncStatus('error'));
+    try{
+      // Fetch estado atual para merge
+      const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').single();
+      const remoto=data?.payload||{};
+      // Merge prods: local + remotos que não existem localmente
+      const localRefs=new Set(novosProds.map(p=>p.ref));
+      const prodsMerged=[...novosProds,...(remoto.prods||[]).filter(p=>!localRefs.has(p.ref))];
+      // Merge prs: local tem prioridade (usuário acabou de alterar), remoto preenche o resto
+      const prsMerged={...(remoto.prs||{}),...novosPrs};
+      await supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods:prodsMerged,prs:prsMerged}},{onConflict:'user_id'});
+      setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
+    }catch(e){setSyncStatus('error');}
   };
 
   const atualizarProds=(fn)=>{
@@ -4659,6 +5019,7 @@ export default function App(){
   const [syncStatus,setSyncStatus]=useState(null); // null | 'loading' | 'saved' | 'error'
   const [dbCarregado,setDbCarregado]=useState(false);
   const debounceRef=useRef(null);
+  const debounceCortes=useRef(null);
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
   const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores};
@@ -4671,29 +5032,38 @@ export default function App(){
       const local=localStorage.getItem("amica_cortes");
       if(local){const d=JSON.parse(local);if(d&&d.length>0)setCortes(d);}
     }catch(e){}
-    // Camada 2: sincroniza com Supabase
+    // Camada 2: sincroniza com Supabase — financeiro
     setSyncStatus('loading');
-    supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single()
-      .then(({data,error})=>{
-        if(error||!data?.payload){setDbCarregado(true);setSyncStatus(null);return;}
-        const d=data.payload;
+    Promise.all([
+      supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single(),
+      supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single(),
+    ]).then(([{data:df,error:ef},{data:dc,error:ec}])=>{
+      // Financeiro
+      if(!ef&&df?.payload){
+        const d=df.payload;
         if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
-        if(d.boletosShared && d.boletosShared.length>0){
-          setBoletosShared(deduplicarBoletos(d.boletosShared));
-        }
+        if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
+        if(d.usuarios)setUsuarios(d.usuarios);
+        if(d.prestadores)setPrestadores(d.prestadores);
+        // Retrocompatibilidade: se ainda tem cortes no payload antigo, usa
+        if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){}}
+        if(d.produtos)setProdutos(d.produtos);
+        if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+        if(d.logTroca)setLogTroca(d.logTroca);
+      }
+      // Cortes (chave separada)
+      if(!ec&&dc?.payload){
+        const d=dc.payload;
         if(d.cortes){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){}}
         if(d.produtos)setProdutos(d.produtos);
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
-        if(d.usuarios)setUsuarios(d.usuarios);
-        if(d.prestadores)setPrestadores(d.prestadores);
-        setDbCarregado(true);
-        setSyncStatus('saved');
-        setTimeout(()=>setSyncStatus(null),2000);
-      })
-      .catch(()=>{setDbCarregado(true);setSyncStatus('error');});
+      }
+      setDbCarregado(true);
+      setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
+    }).catch(()=>{setDbCarregado(true);setSyncStatus('error');});
   },[]);
 
   // ── AUTO-SAVE LOCAL: cortes ────────────────────────────────────────────────
@@ -4702,7 +5072,7 @@ export default function App(){
     try{localStorage.setItem("amica_cortes",JSON.stringify(cortes));}catch(e){}
   },[cortes,dbCarregado]);
 
-  // ── AUTO-SAVE COM DEBOUNCE 2s ──────────────────────────────────────────────
+  // ── SAVE FINANCEIRO (admin only) ───────────────────────────────────────────
   const salvarNoSupabase=useCallback((payload)=>{
     if(!supabase||!dbCarregado)return;
     setSyncStatus('saving');
@@ -4718,10 +5088,33 @@ export default function App(){
     if(!dbCarregado)return;
     if(debounceRef.current)clearTimeout(debounceRef.current);
     debounceRef.current=setTimeout(()=>{
-      salvarNoSupabase({receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores});
+      salvarNoSupabase({receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores});
     },2000);
     return()=>clearTimeout(debounceRef.current);
-  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,dbCarregado]);
+  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,dbCarregado]);
+
+  // ── SAVE CORTES com merge (múltiplos usuários) ────────────────────────────
+  useEffect(()=>{
+    if(!dbCarregado||!supabase)return;
+    if(debounceCortes.current)clearTimeout(debounceCortes.current);
+    debounceCortes.current=setTimeout(async()=>{
+      try{
+        // Fetch estado atual do Supabase
+        const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
+        const remoto=data?.payload||{};
+        // Merge cortes: mantém itens remotos que não existem localmente (outro usuário adicionou)
+        const localIds=new Set((cortes||[]).map(c=>c.id));
+        const remotoOnly=(remoto.cortes||[]).filter(c=>!localIds.has(c.id));
+        const cortesMerged=[...(cortes||[]),...remotoOnly];
+        // Merge produtos: remoto vence para itens não alterados localmente
+        const localRefs=new Set((produtos||[]).map(p=>p.ref));
+        const produtosMerged=[...(produtos||[]),...(remoto.produtos||[]).filter(p=>!localRefs.has(p.ref))];
+        const payload={cortes:cortesMerged,produtos:produtosMerged,oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
+        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
+      }catch(e){}
+    },2000);
+    return()=>clearTimeout(debounceCortes.current);
+  },[cortes,produtos,oficinasCAD,logTroca,dbCarregado]);
 
   useEffect(()=>{
     const hoje=new Date().toISOString().slice(0,10);
@@ -4835,6 +5228,7 @@ export default function App(){
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
+        {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
