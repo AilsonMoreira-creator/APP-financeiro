@@ -41,15 +41,15 @@
 
   if(!code||!state){showError('Parâmetros inválidos. Feche e tente novamente.');return;}
 
-  const clientId=localStorage.getItem('bling_client_id');
-  const clientSecret=localStorage.getItem('bling_client_secret');
+  // Lê credenciais da conta específica (salvas pelo App antes de abrir o auth URL)
+  const clientId=localStorage.getItem('bling_auth_id');
+  const clientSecret=localStorage.getItem('bling_auth_secret');
 
   if(!clientId||!clientSecret){showError('Credenciais não encontradas. Configure no módulo Bling primeiro.');return;}
 
   try{
     const callback=window.location.origin+'/bling-callback.html';
-
-    st.textContent='⏳ Chamando /api/bling-token...';
+    st.textContent='⏳ Trocando código por token...';
 
     const resp=await fetch('/api/bling-token',{
       method:'POST',
@@ -67,15 +67,8 @@
     let data;
     try{data=JSON.parse(text);}catch{data=text;}
 
-    if(!resp.ok){
-      showError('Erro ao trocar o código: '+resp.status, data);
-      return;
-    }
-
-    if(!data.access_token){
-      showError('Resposta sem access_token', data);
-      return;
-    }
+    if(!resp.ok){showError('Erro ao trocar o código: '+resp.status, data);return;}
+    if(!data.access_token){showError('Resposta sem access_token', data);return;}
 
     const tokenData={
       access_token:data.access_token,
@@ -101,7 +94,6 @@
       if(!sbResp.ok){
         const sbErr=await sbResp.text();
         showError('Token obtido mas erro ao salvar no Supabase: '+sbResp.status, sbErr);
-        // Continua mesmo assim — salva local
       }
     }
 
@@ -109,7 +101,6 @@
 
     st.className='status ok';
     st.textContent='✓ '+state.charAt(0).toUpperCase()+state.slice(1)+' conectada com sucesso! Pode fechar esta aba.';
-
     setTimeout(()=>window.close(),3000);
 
   }catch(e){
