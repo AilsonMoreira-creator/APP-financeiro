@@ -34,13 +34,14 @@ export default async function handler(req, res) {
 
   try {
     const body = req.body || {};
-    const { access_token, data_inicio, pagina = 1, limite = 100 } = body;
+    const { access_token, data_inicial, data_final, pagina = 1, limite = 100 } = body;
 
-    if (!access_token || !data_inicio) {
-      return res.status(400).json({ erro: "Faltam access_token ou data_inicio" });
+    if (!access_token || !data_inicial) {
+      return res.status(400).json({ erro: "Faltam access_token ou data_inicial" });
     }
 
-    const path = "/Api/v3/pedidos/vendas?situacaoId=9&dataInicio=" + data_inicio + "&pagina=" + pagina + "&limite=" + limite;
+    const df = data_final || data_inicial;
+    const path = "/Api/v3/pedidos/vendas?situacaoId=9&dataInicial=" + data_inicial + "&dataFinal=" + df + "&pagina=" + pagina + "&limite=" + limite;
     const result = await getBling(access_token, path);
     return res.status(result.status).json(result.body);
   } catch (e) {
