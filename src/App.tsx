@@ -2324,23 +2324,27 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
   const mesFiltro=typeof filtro==="number"?filtro:mesHoje;
   const totalPagoMes=boletos.filter(b=>b.pago&&getMes(b)===mesFiltro).reduce((s,b)=>s+parseFloat(b.valor||0),0);
   const totalAPagar=boletos.filter(b=>!b.pago&&getMes(b)===mesHoje).reduce((s,b)=>s+parseFloat(b.valor||0),0);
+  const parseDateBoleto=(d)=>{const p=(d||"").split("/");if(p.length<2)return null;const dia=parseInt(p[0]),m=parseInt(p[1]),a=p[2]?parseInt(p[2]):new Date().getFullYear()%100;return new Date(2000+a,m-1,dia);};
+  const hojeDate=new Date();hojeDate.setHours(23,59,59);
+  const totalPagamentoDia=boletos.filter(b=>{if(b.pago)return false;const d=parseDateBoleto(b.data);return d&&d<=hojeDate;}).reduce((s,b)=>s+parseFloat(b.valor||0),0);
   const totalFiltro=boletosFiltrados.reduce((s,b)=>s+parseFloat(b.valor||0),0);
   const markChange=()=>{setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
   const togglePago=(id)=>{
-    setBoletos(prev=>{
-      const b=prev.find(x=>x.id===id);if(!b)return prev;
-      const novoPago=!b.pago;
-      if(setAuxDataPorMes){
-        setAuxDataPorMes(mes=>{
-          const mesNum=b.mes;
-          const tecidos=[...(mes[mesNum]?.["Tecidos"]||[])];
-          if(novoPago){if(!tecidos.find(t=>t._boletoid===id)){tecidos.push({data:b.data,empresa:b.empresa,nroNota:b.nroNota||"",valor:b.valor,descricao:"",_boletoid:id});}}
-          else{const idx=tecidos.findIndex(t=>t._boletoid===id);if(idx>=0)tecidos.splice(idx,1);}
-          return{...mes,[mesNum]:{...(mes[mesNum]||{}),"Tecidos":tecidos}};
-        });
-      }
-      return prev.map(x=>x.id===id?{...x,pago:novoPago}:x);
-    });
+    const b=boletos.find(x=>x.id===id);
+    if(!b)return;
+    const novoPago=!b.pago;
+    // Atualiza boletos
+    setBoletos(prev=>prev.map(x=>x.id===id?{...x,pago:novoPago}:x));
+    // Atualiza auxData separadamente (fora do setBoletos)
+    if(setAuxDataPorMes){
+      setAuxDataPorMes(mes=>{
+        const mesNum=b.mes;
+        const tecidos=[...(mes[mesNum]?.["Tecidos"]||[])];
+        if(novoPago){if(!tecidos.find(t=>t._boletoid===id)){tecidos.push({data:b.data,empresa:b.empresa,nroNota:b.nroNota||"",valor:b.valor,descricao:"",_boletoid:id});}}
+        else{const idx=tecidos.findIndex(t=>t._boletoid===id);if(idx>=0)tecidos.splice(idx,1);}
+        return{...mes,[mesNum]:{...(mes[mesNum]||{}),"Tecidos":tecidos}};
+      });
+    }
     markChange();
   };
   const remover=(id)=>setConfirm({msg:"Apagar este boleto?",onYes:()=>{setBoletos(prev=>{const b=prev.find(x=>x.id===id);setLixeira(l=>[...l,b]);return prev.filter(x=>x.id!==id);});setConfirm(null);}});
@@ -2381,6 +2385,8 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
           <div style={{fontSize:11,color:"#a89f94"}}>{boletos.filter(b=>b.pago&&b.mes===mesFiltro).length} boleto(s)</div>
           <div style={{width:1,height:20,background:"#e8e2da"}}/>
           <div><div style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>A Pagar</div><div style={{fontSize:15,fontWeight:700,color:"#c0392b"}}>{fmt(totalAPagar)}</div></div>
+          <div style={{width:1,height:20,background:"#e8e2da"}}/>
+          <div><div style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Pagamento do dia</div><div style={{fontSize:15,fontWeight:700,color:"#e67e22"}}>{fmt(totalPagamentoDia)}</div></div>
         </div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:0,flexWrap:"nowrap",overflowX:"auto",marginBottom:8}}>
@@ -2532,15 +2538,15 @@ const AgendaContent=()=>{
   const anoHoje=new Date().getFullYear();
 
   const [itens,setItens]=useState(()=>{
-    // Verifica se precisa resetar ao virar o mês
     try{
       const salvo=localStorage.getItem("amica_agenda");
       if(salvo){
         const {itens:it,mes,ano}=JSON.parse(salvo);
-        // Mesmo mês e ano — carrega normalmente
         if(mes===mesHoje&&ano===anoHoje)return it;
-        // Mês novo — reseta todos os feito para false
-        return it.map(i=>({...i,feito:false}));
+        // Mês novo — reseta todos os feito para false e salva imediatamente
+        const resetado=it.map(i=>({...i,feito:false}));
+        try{localStorage.setItem("amica_agenda",JSON.stringify({itens:resetado,mes:mesHoje,ano:anoHoje}));}catch(e){}
+        return resetado;
       }
     }catch(e){}
     return AGENDA_INICIAL;
@@ -2554,8 +2560,6 @@ const AgendaContent=()=>{
   const markChange=()=>{
     setSaveStatus("saving");
     setTimeout(()=>setSaveStatus("saved"),600);
-    // Salva localStorage com mês/ano atual
-    try{localStorage.setItem("amica_agenda",JSON.stringify({itens,mes:mesHoje,ano:anoHoje}));}catch(e){}
   };
   const toggle=(id)=>{setItens(prev=>{const novo=prev.map(i=>i.id===id?{...i,feito:!i.feito}:i);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
   const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);const novo=prev.filter(x=>x.id!==id);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setConfirm(null);markChange();}});};
@@ -3464,8 +3468,8 @@ const blingDb={
 
 const BlingContent=({setReceitasMes,mesAtual})=>{
   const [tela,setTela]=useState("dash");
-  const [clientId,setClientId]=useState(()=>localStorage.getItem("bling_client_id")||"");
-  const [clientSecret,setClientSecret]=useState(()=>localStorage.getItem("bling_client_secret")||"");
+  // Credenciais separadas por conta
+  const [creds,setCreds]=useState(()=>{try{return JSON.parse(localStorage.getItem("bling_creds"))||{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}catch{return{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}});
   const [tokens,setTokens]=useState({exitus:null,lumia:null,muniam:null});
   const [resultado,setResultado]=useState(null);
   const [historico,setHistorico]=useState([]);
@@ -3473,13 +3477,22 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
   const [syncing,setSyncing]=useState(false);
   const [syncMsg,setSyncMsg]=useState("");
   const [devPct,setDevPct]=useState(10);
+  const [totalMes,setTotalMes]=useState(0);
+  const [fechandoAnterior,setFechandoAnterior]=useState(false);
   const fmt2=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const hoje=new Date().toISOString().slice(0,10);
   const hojeStr=new Date().toLocaleDateString("pt-BR");
+  const CONTAS=["exitus","lumia","muniam"];
+  const CORES={exitus:"#0057FF",lumia:"#6c2bd9",muniam:"#0096c7"};
 
-  // Carregar tokens e resultado ao montar
+  // Verificar se token está expirado
+  const tokenExpirado=(token)=>{
+    if(!token||!token.expires_at)return true;
+    return new Date(token.expires_at)<new Date();
+  };
+
+  // Carregar tokens e auto-sync ao montar
   useEffect(()=>{
-    // Injeta URL e key do Supabase no localStorage para o bling-callback.html usar
     try{
       if(supabase){
         const url=import.meta.env.VITE_SUPABASE_URL||"";
@@ -3495,49 +3508,54 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
       setTokens(m);
       const r=await blingDb.getResultado(hoje);
       if(r)setResultado(r);
-      // Histórico — últimos 7 dias
       try{
-        const {data:hist}=await supabase.from('bling_resultados').select('*').order('data',{ascending:false}).limit(7);
+        const {data:hist}=await supabase.from('bling_resultados').select('*').order('data',{ascending:false}).limit(31);
         if(hist)setHistorico(hist);
       }catch{}
     })();
   },[]);
 
-  const salvarCredenciais=()=>{
-    localStorage.setItem("bling_client_id",clientId);
-    localStorage.setItem("bling_client_secret",clientSecret);
-    setSyncMsg("✓ Credenciais salvas");setTimeout(()=>setSyncMsg(""),2000);
+  const salvarCreds=(conta,campo,valor)=>{
+    const novo={...creds,[conta]:{...creds[conta],[campo]:valor}};
+    setCreds(novo);
+    localStorage.setItem("bling_creds",JSON.stringify(novo));
   };
 
   const conectarConta=(conta)=>{
-    if(!clientId||!clientSecret){setSyncMsg("⚠ Preencha Client ID e Client Secret primeiro");return;}
+    const c=creds[conta];
+    if(!c.id||!c.secret){setSyncMsg("⚠ Preencha Client ID e Secret da "+conta+" primeiro");setTimeout(()=>setSyncMsg(""),3000);return;}
+    // Salva as creds da conta em chaves temporárias para o callback ler
+    localStorage.setItem("bling_auth_id",c.id);
+    localStorage.setItem("bling_auth_secret",c.secret);
     const state=conta;
     const callback=encodeURIComponent(window.location.origin+"/bling-callback.html");
-    const url=`https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${callback}&state=${state}`;
+    const url=`https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=${c.id}&redirect_uri=${callback}&state=${state}`;
     window.open(url,"_blank");
-    // Polling para checar se token chegou (bling-callback.html salva no Supabase)
     let tentativas=0;
     const poll=setInterval(async()=>{
       tentativas++;
       const ts=await blingDb.getTokens();
       const t=ts.find(x=>x.conta===conta);
-      if(t){
+      if(t&&t.access_token){
         setTokens(prev=>({...prev,[conta]:t}));
         setSyncMsg(`✓ ${conta} conectada!`);setTimeout(()=>setSyncMsg(""),3000);
         clearInterval(poll);
       }
-      if(tentativas>30)clearInterval(poll);
+      if(tentativas>40)clearInterval(poll);
     },3000);
   };
 
   const renovarToken=async(conta,token)=>{
     try{
+      const c=creds[conta];
+      if(!c||!c.id||!c.secret)return null;
       const r=await fetch("/api/bling-token",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({client_id:clientId,client_secret:clientSecret,grant_type:"refresh_token",refresh_token:token.refresh_token})
+        body:JSON.stringify({client_id:c.id,client_secret:c.secret,grant_type:"refresh_token",refresh_token:token.refresh_token})
       });
       if(!r.ok)return null;
       const d=await r.json();
+      if(!d.access_token)return null;
       const nd={access_token:d.access_token,refresh_token:d.refresh_token,expires_at:new Date(Date.now()+(d.expires_in||21600)*1000).toISOString()};
       await blingDb.saveToken(conta,nd);
       setTokens(prev=>({...prev,[conta]:{...prev[conta],...nd}}));
@@ -3545,11 +3563,11 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
     }catch{return null;}
   };
 
-  const buscarValorConta=async(conta,token)=>{
+  const buscarTotalConta=async(conta,token,dataInicial,dataFinal)=>{
+    // Retorna total bruto da conta no período
     try{
       let accessToken=token.access_token;
-      // Verificar expiração
-      if(token.expires_at&&new Date(token.expires_at)<new Date()){
+      if(tokenExpirado(token)){
         accessToken=await renovarToken(conta,token);
         if(!accessToken)return 0;
       }
@@ -3557,7 +3575,7 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
       while(continuar){
         const r=await fetch("/api/bling-pedidos",{
           method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({access_token:accessToken,data_inicio:hoje,pagina,limite:100})
+          body:JSON.stringify({access_token:accessToken,data_inicial:dataInicial,data_final:dataFinal,pagina,limite:100})
         });
         if(!r.ok)break;
         const d=await r.json();
@@ -3570,30 +3588,84 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
     }catch{return 0;}
   };
 
-  const doSync=async()=>{
+  const executarSync=async(mesOverride)=>{
     if(syncing)return;
-    setSyncing(true);setSyncMsg("⏳ Buscando nas 3 contas...");
+    setSyncing(true);
+    const isFechamento=!!mesOverride;
+    setSyncMsg(isFechamento?"⏳ Fechando mês anterior...":"⏳ Sincronizando mês...");
     try{
+      const now=new Date();
+      let anoMes,dataInicial,dataFinal,mesAlvo;
+      if(mesOverride){
+        // Fechar mês anterior
+        anoMes=mesOverride; // "YYYY-MM"
+        dataInicial=anoMes+"-01";
+        const [y,m]=anoMes.split("-").map(Number);
+        const ultimoDia=new Date(y,m,0).getDate();
+        dataFinal=anoMes+"-"+String(ultimoDia).padStart(2,"0");
+        mesAlvo=mesOverride;
+      }else{
+        anoMes=now.toISOString().slice(0,7);
+        dataInicial=anoMes+"-01";
+        dataFinal=hoje;
+        mesAlvo=mesAtual;
+      }
+
       const [ex,lu,mu]=await Promise.all([
-        tokens.exitus?buscarValorConta("exitus",tokens.exitus):Promise.resolve(0),
-        tokens.lumia?buscarValorConta("lumia",tokens.lumia):Promise.resolve(0),
-        tokens.muniam?buscarValorConta("muniam",tokens.muniam):Promise.resolve(0),
+        tokens.exitus?buscarTotalConta("exitus",tokens.exitus,dataInicial,dataFinal):Promise.resolve(0),
+        tokens.lumia?buscarTotalConta("lumia",tokens.lumia,dataInicial,dataFinal):Promise.resolve(0),
+        tokens.muniam?buscarTotalConta("muniam",tokens.muniam,dataInicial,dataFinal):Promise.resolve(0),
       ]);
+
       const bruto=ex+lu+mu;
       const liquido=Math.round(bruto*(1-devPct/100)*100)/100;
-      await blingDb.saveResultado(hoje,ex,lu,mu,bruto,liquido);
-      setResultado({data:hoje,exitus:ex,lumia:lu,muniam:mu,total_bruto:bruto,valor_liquido:liquido});
-      // Lançar em Marketplaces do dia atual
-      const diaNum=new Date().getDate();
-      setReceitasMes(mesAtual,prev=>({...prev,[diaNum]:{...(prev[diaNum]||{}),marketplaces:String(liquido)}}));
-      setSyncMsg("✓ Sincronizado e lançado em Marketplaces!");
-      // Atualizar histórico
-      const {data:hist}=await supabase.from('bling_resultados').select('*').order('data',{ascending:false}).limit(7);
+
+      // Salvar resultado consolidado no Supabase (data = último dia do período)
+      await blingDb.saveResultado(dataFinal,ex,lu,mu,bruto,liquido);
+
+      // Lançar valor acumulado do mês em Marketplaces (célula do dia 1)
+      setReceitasMes(mesAlvo,prev=>{
+        const limpo={...prev};
+        // Limpar marketplaces de outros dias pra não duplicar
+        for(const k of Object.keys(limpo)){
+          if(limpo[k]?.marketplaces)limpo[k]={...limpo[k],marketplaces:""};
+        }
+        limpo[1]={...(limpo[1]||{}),marketplaces:String(liquido)};
+        return limpo;
+      });
+
+      if(!isFechamento){
+        setResultado({data:hoje,exitus:ex,lumia:lu,muniam:mu,total_bruto:bruto,valor_liquido:liquido});
+        setTotalMes(liquido);
+        localStorage.setItem("bling_ultimo_sync",hoje);
+      }
+
+      setSyncMsg(isFechamento?`✓ Mês ${anoMes} fechado: ${fmt2(liquido)}`:`✓ Mês: ${fmt2(liquido)} (bruto ${fmt2(bruto)})`);
+      const {data:hist}=await supabase.from('bling_resultados').select('*').order('data',{ascending:false}).limit(31);
       if(hist)setHistorico(hist);
-    }catch(e){setSyncMsg("⚠ Erro ao sincronizar");}
+    }catch(e){setSyncMsg("⚠ Erro: "+e.message);}
     setSyncing(false);
-    setTimeout(()=>setSyncMsg(""),4000);
+    if(isFechamento)setFechandoAnterior(false);
+    setTimeout(()=>setSyncMsg(""),6000);
   };
+
+  const doSync=()=>executarSync(null);
+  const fecharMesAnterior=()=>{
+    const now=new Date();
+    const prev=new Date(now.getFullYear(),now.getMonth()-1,1);
+    const anoMes=prev.toISOString().slice(0,7);
+    setFechandoAnterior(true);
+    executarSync(anoMes);
+  };
+
+  // Auto-sync: quando tokens carregarem e não sincronizou hoje, dispara
+  useEffect(()=>{
+    const ultimoSync=localStorage.getItem("bling_ultimo_sync");
+    if(ultimoSync===hoje)return;
+    if(tokens.exitus||tokens.lumia||tokens.muniam){
+      doSync();
+    }
+  },[tokens]);
 
   const bruto=resultado?.total_bruto||0;
   const liquido=resultado?.valor_liquido||0;
@@ -3612,9 +3684,9 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
             <div style={{fontSize:11,color:"#8a9aa4"}}>Exitus · Lumia · Muniam</div>
           </div>
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           {syncMsg&&<span style={{fontSize:11,color:syncMsg.startsWith("⚠")?"#c0392b":syncMsg.startsWith("⏳")?"#e67e22":"#27ae60"}}>{syncMsg}</span>}
-          <button onClick={doSync} disabled={syncing} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:syncing?"not-allowed":"pointer",opacity:syncing?0.7:1,fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Sync manual</button>
+          <button onClick={doSync} disabled={syncing} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:syncing?"not-allowed":"pointer",opacity:syncing?0.7:1,fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Sync</button>
           <button onClick={()=>setTela(t=>t==="dash"?"config":"dash")} style={{background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
             {tela==="config"?"← Voltar":"⚙ Config"}
           </button>
@@ -3626,42 +3698,50 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
         {/* DASHBOARD */}
         {tela==="dash"&&(
           <div>
-            {/* Alertas contas desconectadas */}
-            {["exitus","lumia","muniam"].filter(c=>!tokens[c]).map(c=>(
-              <div key={c} style={{background:"#fff8e8",border:"1px solid #f0d080",borderRadius:10,padding:"10px 14px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:12,color:"#8a6500"}}>⚠ <b style={{textTransform:"capitalize"}}>{c}</b> desconectada</span>
-                <button onClick={()=>setTela("config")} style={{fontSize:11,background:"none",border:"1px solid #c8a040",borderRadius:6,padding:"3px 10px",cursor:"pointer",color:"#8a6500",fontFamily:"Georgia,serif"}}>Reconectar</button>
-              </div>
-            ))}
+            {/* Alertas de token expirado ou desconectado */}
+            {CONTAS.map(c=>{
+              const tk=tokens[c];
+              const semCred=!creds[c]?.id;
+              const desconectada=!tk;
+              const expirado=tk&&tokenExpirado(tk);
+              if(!desconectada&&!expirado)return null;
+              return(
+                <div key={c} style={{background:expirado?"#fdeaea":"#fff8e8",border:`1px solid ${expirado?"#f4b8b8":"#f0d080"}`,borderRadius:10,padding:"10px 14px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:12,color:expirado?"#c0392b":"#8a6500"}}>{expirado?"🔴":"⚠"} <b style={{textTransform:"capitalize"}}>{c}</b> {semCred?"sem credenciais":expirado?"token expirado — reconecte":"desconectada"}</span>
+                  <button onClick={()=>{if(semCred)setTela("config");else conectarConta(c);}} style={{fontSize:11,background:"none",border:`1px solid ${expirado?"#c0392b":"#c8a040"}`,borderRadius:6,padding:"3px 10px",cursor:"pointer",color:expirado?"#c0392b":"#8a6500",fontFamily:"Georgia,serif"}}>{semCred?"Configurar":"Reconectar"}</button>
+                </div>
+              );
+            })}
 
             {/* Cards 3 contas */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
-              {[
-                {nome:"Exitus",cor:"#0057FF",val:resultado?.exitus,ok:!!tokens.exitus},
-                {nome:"Lumia", cor:"#6c2bd9",val:resultado?.lumia, ok:!!tokens.lumia},
-                {nome:"Muniam",cor:"#0096c7",val:resultado?.muniam,ok:!!tokens.muniam},
-              ].map(c=>(
-                <div key={c.nome} style={{background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid #e8e2da",opacity:c.ok?1:0.5}}>
-                  <div style={{background:c.cor,padding:"7px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:12,fontWeight:700,color:"#fff"}}>{c.nome}</span>
-                    <span style={{fontSize:10,color:"rgba(255,255,255,0.8)"}}>{c.ok?"conectada":"offline"}</span>
+              {CONTAS.map(c=>{
+                const tk=tokens[c];
+                const ok=!!tk&&!tokenExpirado(tk);
+                const val=resultado?resultado[c]:null;
+                return(
+                  <div key={c} style={{background:"#fff",borderRadius:12,overflow:"hidden",border:"1px solid #e8e2da",opacity:ok?1:0.5}}>
+                    <div style={{background:CORES[c],padding:"7px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:12,fontWeight:700,color:"#fff",textTransform:"capitalize"}}>{c}</span>
+                      <span style={{fontSize:10,color:"rgba(255,255,255,0.8)"}}>{ok?"conectada":tk?"expirado":"offline"}</span>
+                    </div>
+                    <div style={{padding:12}}>
+                      <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:18,fontWeight:800,color:"#2c3e50"}}>{ok&&val!=null?fmt2(val):"—"}</div>
+                      <div style={{fontSize:10,color:"#a89f94",marginTop:3}}>acumulado mês</div>
+                    </div>
                   </div>
-                  <div style={{padding:12}}>
-                    <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:18,fontWeight:800,color:"#2c3e50"}}>{c.ok&&c.val!=null?fmt2(c.val):"—"}</div>
-                    <div style={{fontSize:10,color:"#a89f94",marginTop:3}}>bruto de hoje</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Card total */}
             <div style={{background:"#2c3e50",borderRadius:14,padding:18,marginBottom:12}}>
               <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>
-                {resultado?`Sincronizado · ${hojeStr}`:"Sem dados hoje — clique em Sync"}
+                {resultado?`Sincronizado · ${hojeStr}`:"Sem dados — sync automático ao abrir"}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
                 <div>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>Total bruto</div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>Total bruto mês</div>
                   <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:18,fontWeight:800,color:"#fff"}}>{bruto?fmt2(bruto):"—"}</div>
                 </div>
                 <div>
@@ -3674,6 +3754,13 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
                   {liquido>0&&<div style={{fontSize:9,color:"rgba(255,255,255,0.4)",marginTop:2}}>✓ Lançado em Marketplaces</div>}
                 </div>
               </div>
+            </div>
+
+            {/* Botão fechar mês anterior */}
+            <div style={{display:"flex",gap:10,marginBottom:12}}>
+              <button onClick={fecharMesAnterior} disabled={syncing||fechandoAnterior} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:10,padding:"10px 16px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",fontWeight:600,color:"#2c3e50",flex:1,opacity:syncing?0.6:1}}>
+                📅 Fechar mês anterior
+              </button>
             </div>
 
             {/* Histórico */}
@@ -3703,39 +3790,41 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
           </div>
         )}
 
-        {/* CONFIG */}
+        {/* CONFIG — Credenciais separadas por conta */}
         {tela==="config"&&(
           <div>
-            <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:12}}>
-              <div style={{fontSize:13,fontWeight:700,color:"#2c3e50",marginBottom:4}}>Credenciais do App Bling</div>
-              <div style={{fontSize:11,color:"#8a9aa4",marginBottom:12}}>Crie em <b>developer.bling.com.br</b> · mesmo app para as 3 contas</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-                <div>
-                  <div style={{fontSize:10,color:"#a89f94",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Client ID</div>
-                  <input value={clientId} onChange={e=>setClientId(e.target.value)} placeholder="Cole o Client ID" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
-                </div>
-                <div>
-                  <div style={{fontSize:10,color:"#a89f94",marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>Client Secret</div>
-                  <input value={clientSecret} onChange={e=>setClientSecret(e.target.value)} placeholder="Cole o Client Secret" type="password" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
-                </div>
-              </div>
-              <button onClick={salvarCredenciais} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"8px 18px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Salvar credenciais</button>
-            </div>
+            <div style={{fontSize:13,fontWeight:700,color:"#2c3e50",marginBottom:4}}>Credenciais por conta</div>
+            <div style={{fontSize:11,color:"#8a9aa4",marginBottom:12}}>Cada Bling tem seu próprio app em <b>developer.bling.com.br</b></div>
 
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
-              {[{nome:"Exitus",ok:!!tokens.exitus},{nome:"Lumia",ok:!!tokens.lumia},{nome:"Muniam",ok:!!tokens.muniam}].map(c=>(
-                <div key={c.nome} style={{background:"#fff",borderRadius:12,padding:14,border:`2px solid ${c.ok?"#b8dfc8":"#f4b8b8"}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <span style={{fontSize:14,fontWeight:700,color:"#2c3e50"}}>{c.nome}</span>
-                    <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,background:c.ok?"#eafbf0":"#fdeaea",color:c.ok?"#27ae60":"#c0392b"}}>{c.ok?"● On":"○ Off"}</span>
+            {CONTAS.map(conta=>{
+              const c=creds[conta];
+              const tk=tokens[conta];
+              const ok=!!tk&&!tokenExpirado(tk);
+              return(
+                <div key={conta} style={{background:"#fff",borderRadius:12,padding:14,border:`2px solid ${ok?"#b8dfc8":"#f4b8b8"}`,marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:10,height:10,borderRadius:5,background:CORES[conta]}}/>
+                      <span style={{fontSize:14,fontWeight:700,color:"#2c3e50",textTransform:"capitalize"}}>{conta}</span>
+                    </div>
+                    <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:700,background:ok?"#eafbf0":tk?"#fff3e0":"#fdeaea",color:ok?"#27ae60":tk?"#e67e22":"#c0392b"}}>{ok?"● On":tk?"● Expirado":"○ Off"}</span>
                   </div>
-                  <div style={{fontSize:11,color:"#8a9aa4",marginBottom:8}}>{c.ok?"Token ativo":"Clique para autorizar"}</div>
-                  <button onClick={()=>conectarConta(c.nome.toLowerCase())} style={{width:"100%",background:c.ok?"#fdeaea":"#4a7fa5",color:c.ok?"#c0392b":"#fff",border:c.ok?"1px solid #f4b8b8":"none",borderRadius:8,padding:"7px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
-                    {c.ok?"Reconectar":"🔗 Conectar "+c.nome}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                    <div>
+                      <div style={{fontSize:9,color:"#a89f94",marginBottom:3,textTransform:"uppercase",letterSpacing:1}}>Client ID</div>
+                      <input value={c.id} onChange={e=>salvarCreds(conta,"id",e.target.value)} placeholder="Client ID" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 8px",fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:9,color:"#a89f94",marginBottom:3,textTransform:"uppercase",letterSpacing:1}}>Client Secret</div>
+                      <input value={c.secret} onChange={e=>salvarCreds(conta,"secret",e.target.value)} placeholder="Client Secret" type="password" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 8px",fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
+                    </div>
+                  </div>
+                  <button onClick={()=>conectarConta(conta)} disabled={!c.id||!c.secret} style={{width:"100%",background:ok?"#fdeaea":(!c.id||!c.secret)?"#e8e2da":"#4a7fa5",color:ok?"#c0392b":(!c.id||!c.secret)?"#a89f94":"#fff",border:ok?"1px solid #f4b8b8":"none",borderRadius:8,padding:"7px",fontSize:12,cursor:(!c.id||!c.secret)?"not-allowed":"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+                    {ok?"Reconectar":tk?"🔄 Renovar token":"🔗 Conectar "+conta}
                   </button>
                 </div>
-              ))}
-            </div>
+              );
+            })}
 
             <div style={{background:"#fff",borderRadius:12,padding:14,border:"1px solid #e8e2da"}}>
               <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:8}}>Regra de devolução</div>
