@@ -167,6 +167,16 @@ const SvgFichaTecnica = ({ size = 32 }) => (
   </svg>
 );
 
+const SvgSalasCorte = ({ size = 32 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <rect x="5" y="22" width="54" height="6" rx="2.5" fill={_B} stroke={_S} strokeWidth="1.5"/>
+    <rect x="10" y="28" width="5" height="22" rx="1.5" fill={_BL} stroke={_S} strokeWidth="1.2"/>
+    <rect x="49" y="28" width="5" height="22" rx="1.5" fill={_BL} stroke={_S} strokeWidth="1.2"/>
+    <rect x="15" y="38" width="34" height="3" rx="1" fill={_S} opacity="0.2"/>
+    <rect x="9" y="16" width="46" height="7" rx="1" fill="white" stroke={_S} strokeWidth="0.8" opacity="0.5"/>
+  </svg>
+);
+
 const SvgBling = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
     <rect width="64" height="64" rx="10" fill="#4CAF73"/>
@@ -435,6 +445,7 @@ const modules = [
   { id:"relatorio",     Icon:SvgRelatorio,     label:"Relatório"   },
   { id:"calculadora",   Icon:SvgCalculadora,   label:"Calculadora" },
   { id:"fichatecnica",  Icon:SvgFichaTecnica,  label:"Ficha Téc."  },
+  { id:"salascorte",   Icon:SvgSalasCorte,    label:"Salas Corte" },
   { id:"bling",         Icon:SvgBling,         label:"Bling"       },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
@@ -2324,25 +2335,27 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
   const mesFiltro=typeof filtro==="number"?filtro:mesHoje;
   const totalPagoMes=boletos.filter(b=>b.pago&&getMes(b)===mesFiltro).reduce((s,b)=>s+parseFloat(b.valor||0),0);
   const totalAPagar=boletos.filter(b=>!b.pago&&getMes(b)===mesHoje).reduce((s,b)=>s+parseFloat(b.valor||0),0);
-  const parseDateBoleto=(d)=>{const p=(d||"").split("/");if(p.length<2)return null;const dia=parseInt(p[0]),m=parseInt(p[1]),a=p[2]?parseInt(p[2]):new Date().getFullYear()%100;return new Date(2000+a,m-1,dia);};
+  const parseDateBoleto=(d)=>{const p=(d||"").split("/");if(p.length<2)return null;const dia=parseInt(p[0]),m=parseInt(p[1]);if(isNaN(dia)||isNaN(m)||m<1||m>12)return null;const a=p[2]&&p[2].length>0?parseInt(p[2]):new Date().getFullYear()%100;const ano=a<100?2000+a:a;return new Date(ano,m-1,dia);};
   const hojeDate=new Date();hojeDate.setHours(23,59,59);
-  const totalPagamentoDia=boletos.filter(b=>{if(b.pago)return false;const d=parseDateBoleto(b.data);return d&&d<=hojeDate;}).reduce((s,b)=>s+parseFloat(b.valor||0),0);
+  const boletosDoDia=boletos.filter(b=>{if(b.pago)return false;const d=parseDateBoleto(b.data);return d&&d<=hojeDate;});
+  const totalPagamentoDia=boletosDoDia.reduce((s,b)=>s+parseFloat(b.valor||0),0);
+  const qtdBoletosDia=boletosDoDia.length;
   const totalFiltro=boletosFiltrados.reduce((s,b)=>s+parseFloat(b.valor||0),0);
   const markChange=()=>{setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
   const togglePago=(id)=>{
     const b=boletos.find(x=>x.id===id);
     if(!b)return;
     const novoPago=!b.pago;
+    const mesNum=getMes(b);
     // Atualiza boletos
     setBoletos(prev=>prev.map(x=>x.id===id?{...x,pago:novoPago}:x));
     // Atualiza auxData separadamente (fora do setBoletos)
     if(setAuxDataPorMes){
-      setAuxDataPorMes(mes=>{
-        const mesNum=b.mes;
-        const tecidos=[...(mes[mesNum]?.["Tecidos"]||[])];
+      setAuxDataPorMes(prev=>{
+        const tecidos=[...(prev[mesNum]?.["Tecidos"]||[])];
         if(novoPago){if(!tecidos.find(t=>t._boletoid===id)){tecidos.push({data:b.data,empresa:b.empresa,nroNota:b.nroNota||"",valor:b.valor,descricao:"",_boletoid:id});}}
         else{const idx=tecidos.findIndex(t=>t._boletoid===id);if(idx>=0)tecidos.splice(idx,1);}
-        return{...mes,[mesNum]:{...(mes[mesNum]||{}),"Tecidos":tecidos}};
+        return{...prev,[mesNum]:{...(prev[mesNum]||{}),"Tecidos":tecidos}};
       });
     }
     markChange();
@@ -2386,7 +2399,7 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
           <div style={{width:1,height:20,background:"#e8e2da"}}/>
           <div><div style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>A Pagar</div><div style={{fontSize:15,fontWeight:700,color:"#c0392b"}}>{fmt(totalAPagar)}</div></div>
           <div style={{width:1,height:20,background:"#e8e2da"}}/>
-          <div><div style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Pagamento do dia</div><div style={{fontSize:15,fontWeight:700,color:"#e67e22"}}>{fmt(totalPagamentoDia)}</div></div>
+          <div><div style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Pagamento do dia</div><div style={{fontSize:15,fontWeight:700,color:"#e67e22"}}>{fmt(totalPagamentoDia)}</div><div style={{fontSize:10,color:"#a89f94"}}>{qtdBoletosDia} boleto(s)</div></div>
         </div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:0,flexWrap:"nowrap",overflowX:"auto",marginBottom:8}}>
@@ -2549,7 +2562,10 @@ const AgendaContent=()=>{
         return resetado;
       }
     }catch(e){}
-    return AGENDA_INICIAL;
+    // Primeira vez ou dados corrompidos — carrega agenda inicial com tudo desmarcado e salva
+    const inicial=AGENDA_INICIAL.map(i=>({...i,feito:false}));
+    try{localStorage.setItem("amica_agenda",JSON.stringify({itens:inicial,mes:mesHoje,ano:anoHoje}));}catch(e){}
+    return inicial;
   });
 
   const [novoItem,setNovoItem]=useState({dia:"",descricao:""});
@@ -3319,7 +3335,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","bling"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas"],admin:false},
@@ -3837,6 +3853,367 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+// ── Módulo Salas de Corte ────────────────────────────────────────────────────
+const SALAS_CORTE_INICIAL=["Antonio","Adalecio","Chico"];
+const scDb={
+  async load(){try{const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','salas-corte').single();return data?.payload||null;}catch{return null;}},
+  async save(payload){try{await supabase.from('amicia_data').upsert({user_id:'salas-corte',payload},{onConflict:'user_id'});}catch{}},
+};
+
+const SalasCorteContent=({produtos=[]})=>{
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+  const mobile=w<640;
+
+  const [tela,setTela]=useState("lancamento");
+  const [cortesSala,setCortesSala]=useState([]);
+  const [salas,setSalas]=useState(SALAS_CORTE_INICIAL);
+  const [novaSala,setNovaSala]=useState("");
+  const [mostraAddSala,setMostraAddSala]=useState(false);
+  const [salaSelected,setSalaSelected]=useState("");
+  const [refBusca,setRefBusca]=useState("");
+  const [prodFound,setProdFound]=useState(null);
+  const [qtdRolos,setQtdRolos]=useState("");
+  const [saveMsg,setSaveMsg]=useState("");
+  const [editandoPecas,setEditandoPecas]=useState(null);
+  const [pecasInput,setPecasInput]=useState("");
+  const [abaAnalise,setAbaAnalise]=useState("ranking");
+  const [refBuscaAnalise,setRefBuscaAnalise]=useState("");
+  const [prodCardRef,setProdCardRef]=useState(null);
+  const [filtroSala,setFiltroSala]=useState("todas");
+  const [addHist,setAddHist]=useState(false);
+  const [histForm,setHistForm]=useState({sala:"",qtdRolos:"",qtdPecas:""});
+  const [dbLoaded,setDbLoaded]=useState(false);
+  const debRef=useRef(null);
+
+  const _FN="Calibri,'Segoe UI',Arial";
+  const fmt=(v)=>Number(v||0).toLocaleString("pt-BR");
+
+  // ── Supabase: load com merge ──
+  useEffect(()=>{
+    (async()=>{
+      const remote=await scDb.load();
+      if(remote){
+        if(remote.cortes)setCortesSala(remote.cortes);
+        if(remote.salas)setSalas(remote.salas);
+      }
+      setDbLoaded(true);
+    })();
+  },[]);
+
+  // ── Supabase: auto-save com merge (multi-usuário) ──
+  useEffect(()=>{
+    if(!dbLoaded)return;
+    if(debRef.current)clearTimeout(debRef.current);
+    debRef.current=setTimeout(async()=>{
+      try{
+        const remote=await scDb.load();
+        const remoteCortes=remote?.cortes||[];
+        // Merge: mantém itens remotos que não existem localmente
+        const localIds=new Set(cortesSala.map(c=>c.id));
+        const remoteOnly=remoteCortes.filter(c=>!localIds.has(c.id));
+        const merged=[...cortesSala,...remoteOnly];
+        // Merge salas
+        const mergedSalas=[...new Set([...salas,...(remote?.salas||[])])];
+        await scDb.save({cortes:merged,salas:mergedSalas});
+      }catch{}
+    },2000);
+    return()=>clearTimeout(debRef.current);
+  },[cortesSala,salas,dbLoaded]);
+
+  // ── Sync descrições de produtos ──
+  useEffect(()=>{
+    if(!dbLoaded||!produtos.length)return;
+    setCortesSala(prev=>{
+      let mudou=false;
+      const att=prev.map(c=>{
+        if(c.descricao&&c.marca)return c;
+        const p=produtos.find(x=>x.ref===c.ref);
+        if(!p)return c;
+        mudou=true;
+        return{...c,descricao:p.descricao,marca:p.marca};
+      });
+      return mudou?att:prev;
+    });
+  },[produtos,dbLoaded]);
+
+  const concluidos=cortesSala.filter(c=>c.status==="concluido");
+  const pendentes=cortesSala.filter(c=>c.status==="pendente").sort((a,b)=>new Date(a.data)-new Date(b.data));
+  const buscarProd=(ref)=>produtos.find(p=>p.ref===String(ref).trim());
+  const handleRefChange=(val)=>{setRefBusca(val);setProdFound(buscarProd(val));};
+  const descCorte=(c)=>{if(c.descricao)return c.descricao;const p=buscarProd(c.ref);return p?p.descricao:"";};
+
+  const mediaRef=useMemo(()=>{
+    const m={};
+    concluidos.forEach(c=>{
+      if(!m[c.ref])m[c.ref]={total:0,rolos:0,count:0,descricao:c.descricao||descCorte(c),marca:c.marca,min:Infinity,max:0};
+      m[c.ref].total+=c.qtdPecas;m[c.ref].rolos+=c.qtdRolos;m[c.ref].count++;
+      if(c.rendimento<m[c.ref].min)m[c.ref].min=c.rendimento;
+      if(c.rendimento>m[c.ref].max)m[c.ref].max=c.rendimento;
+    });
+    Object.keys(m).forEach(r=>{m[r].media=Math.round((m[r].total/m[r].rolos)*100)/100;if(m[r].min===Infinity)m[r].min=0;});
+    return m;
+  },[concluidos,produtos]);
+
+  const ranking=useMemo(()=>{
+    const m={};salas.forEach(s=>{m[s]={total:0,limpos:0};});
+    concluidos.forEach(c=>{if(!m[c.sala])m[c.sala]={total:0,limpos:0};m[c.sala].total++;if(!c.alerta)m[c.sala].limpos++;});
+    return Object.entries(m).map(([sala,d])=>({sala,...d,pct:d.total>0?Math.round(d.limpos/d.total*100):100})).sort((a,b)=>b.pct-a.pct||b.total-a.total);
+  },[concluidos,salas]);
+
+  const alertas=cortesSala.filter(c=>c.alerta&&!c.visto&&c.status==="concluido");
+
+  const salvarCorte=()=>{
+    if(!salaSelected||(!prodFound&&!refBusca.trim())||!qtdRolos){setSaveMsg("⚠ Preencha todos os campos");setTimeout(()=>setSaveMsg(""),2000);return;}
+    const novo={id:Date.now(),data:new Date().toISOString().slice(0,10),sala:salaSelected,ref:prodFound?prodFound.ref:refBusca.trim(),descricao:prodFound?prodFound.descricao:"",marca:prodFound?prodFound.marca:"",qtdRolos:Number(qtdRolos),qtdPecas:null,rendimento:null,status:"pendente",alerta:false,visto:true};
+    setCortesSala(prev=>[novo,...prev]);
+    setSalaSelected("");setRefBusca("");setProdFound(null);setQtdRolos("");
+    setSaveMsg("✓ Corte registrado!");setTimeout(()=>setSaveMsg(""),2500);
+  };
+
+  const fecharCorte=()=>{
+    if(!editandoPecas||!pecasInput)return;
+    const pecas=Number(pecasInput),corte=cortesSala.find(c=>c.id===editandoPecas);
+    if(!corte)return;
+    const rend=Math.round((pecas/corte.qtdRolos)*100)/100;
+    const ref=mediaRef[corte.ref];
+    const temAlerta=ref&&ref.media>0&&rend<ref.media*0.95;
+    setCortesSala(prev=>prev.map(c=>c.id===editandoPecas?{...c,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:temAlerta,visto:!temAlerta}:c));
+    setEditandoPecas(null);setPecasInput("");
+  };
+
+  const marcarVisto=(id)=>setCortesSala(prev=>prev.map(c=>c.id===id?{...c,visto:true}:c));
+
+  const addHistorico=()=>{
+    if(!prodCardRef||!histForm.sala||!histForm.qtdRolos||!histForm.qtdPecas)return;
+    const rolos=Number(histForm.qtdRolos),pecas=Number(histForm.qtdPecas);
+    const rend=Math.round((pecas/rolos)*100)/100;
+    const prod=buscarProd(prodCardRef);
+    const novo={id:Date.now(),data:new Date().toISOString().slice(0,10),sala:histForm.sala,ref:prodCardRef,descricao:prod?.descricao||"",marca:prod?.marca||"",qtdRolos:rolos,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:false,visto:true};
+    setCortesSala(prev=>[novo,...prev]);
+    setHistForm({sala:"",qtdRolos:"",qtdPecas:""});setAddHist(false);
+  };
+
+  const cortesFiltrados=useMemo(()=>{
+    let list=[...cortesSala].filter(c=>c.status==="concluido");
+    if(filtroSala!=="todas")list=list.filter(c=>c.sala===filtroSala);
+    return list.sort((a,b)=>new Date(b.data)-new Date(a.data));
+  },[cortesSala,filtroSala]);
+
+  const sty={
+    card:{background:"#fff",borderRadius:14,padding:mobile?14:16,border:"1px solid #e8e2da",marginBottom:12},
+    input:{width:"100%",border:"1px solid #c8d8e4",borderRadius:10,padding:mobile?"14px 16px":"12px 14px",fontSize:mobile?17:15,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"},
+    label:{fontSize:mobile?11:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:6},
+    salaBtn:(s)=>({flex:1,minWidth:mobile?80:90,padding:mobile?"18px 8px":"14px 8px",borderRadius:12,border:s?"2px solid #4a7fa5":"2px solid #e8e2da",background:s?"#e8f0f8":"#fff",cursor:"pointer",textAlign:"center",fontFamily:"Georgia,serif",fontSize:mobile?16:14,fontWeight:700,color:s?"#4a7fa5":"#2c3e50"}),
+    tab:(a)=>({padding:mobile?"8px 12px":"6px 14px",borderRadius:8,border:"none",fontSize:mobile?13:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:a?"#4a7fa5":"transparent",color:a?"#fff":"#8a9aa4",whiteSpace:"nowrap",flex:mobile?1:"none"}),
+  };
+
+  return(
+    <div style={{fontFamily:"Georgia,serif",background:"#f7f4f0",minHeight:"100%"}}>
+      {/* Header */}
+      <div style={{background:"#fff",borderBottom:"1px solid #e8e2da",padding:mobile?"8px 12px":"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <SvgSalasCorte size={36}/>
+          <div>
+            <div style={{fontSize:mobile?15:17,fontWeight:700,color:"#2c3e50"}}>Salas de Corte</div>
+            <div style={{fontSize:11,color:"#8a9aa4"}}>Controle de rendimento</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {alertas.length>0&&tela==="analise"&&<span style={{background:"#c0392b",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{alertas.length}</span>}
+          <button onClick={()=>setTela("lancamento")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="lancamento"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="lancamento"?"#2c3e50":"#fff",color:tela==="lancamento"?"#fff":"#2c3e50"}}>📋 Lançar</button>
+          <button onClick={()=>setTela("analise")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="analise"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="analise"?"#2c3e50":"#fff",color:tela==="analise"?"#fff":"#2c3e50"}}>📊 Análise</button>
+        </div>
+      </div>
+
+      <div style={{maxWidth:900,margin:"0 auto",padding:mobile?10:16}}>
+        {/* ═══ LANÇAMENTO ═══ */}
+        {tela==="lancamento"&&(<div>
+          <div style={sty.card}><div style={sty.label}>Sala de Corte</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {salas.map(s=><div key={s} onClick={()=>setSalaSelected(s)} style={sty.salaBtn(salaSelected===s)}>{s}</div>)}
+              {!mostraAddSala?<div onClick={()=>setMostraAddSala(true)} style={{...sty.salaBtn(false),color:"#a89f94",borderStyle:"dashed",fontSize:20,padding:"10px 8px"}}>+</div>
+              :<div style={{display:"flex",gap:6,flex:1,minWidth:140}}>
+                <input value={novaSala} onChange={e=>setNovaSala(e.target.value)} placeholder="Nome" style={{...sty.input,padding:"10px 12px",fontSize:14}}/>
+                <button onClick={()=>{if(novaSala.trim()){setSalas(p=>[...p,novaSala.trim()]);setNovaSala("");setMostraAddSala(false);}}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer"}}>OK</button>
+                <button onClick={()=>{setMostraAddSala(false);setNovaSala("");}} style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 10px",fontSize:13,cursor:"pointer"}}>✕</button>
+              </div>}
+            </div>
+          </div>
+          <div style={sty.card}><div style={sty.label}>Referência</div>
+            <input value={refBusca} onChange={e=>handleRefChange(e.target.value)} placeholder="Digite a referência" style={sty.input}/>
+            {prodFound&&<div style={{marginTop:10,padding:"12px 14px",background:"#eafbf0",borderRadius:10,border:"1px solid #b8dfc8"}}><div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50"}}>{prodFound.descricao}</div><span style={{fontSize:10,color:"#fff",background:prodFound.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{prodFound.marca}</span></div>}
+            {refBusca&&!prodFound&&<div style={{marginTop:8,padding:"10px 12px",background:"#fff8e8",border:"1px solid #f0d080",borderRadius:8}}><div style={{fontSize:12,color:"#8a6500"}}>⚠ REF <b>{refBusca}</b> não cadastrada</div><div style={{fontSize:11,color:"#a89f94",marginTop:4}}>Pode continuar sem descrição. Cadastre depois em Oficinas → Produtos.</div></div>}
+          </div>
+          <div style={sty.card}><div style={sty.label}>Quantidade de Rolos</div>
+            <div style={{display:"flex",gap:8,alignItems:"center",flexDirection:mobile?"column":"row"}}>
+              <input type="number" value={qtdRolos} onChange={e=>setQtdRolos(e.target.value)} placeholder="Qtd" style={{...sty.input,width:mobile?"100%":100,textAlign:"center",fontSize:mobile?28:22,fontWeight:800,fontFamily:_FN}}/>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {[5,10,15,20,25,30].map(n=><button key={n} onClick={()=>setQtdRolos(String(n))} style={{padding:mobile?"12px 16px":"8px 12px",borderRadius:8,border:qtdRolos===String(n)?"2px solid #4a7fa5":"1px solid #e8e2da",background:qtdRolos===String(n)?"#e8f0f8":"#fff",cursor:"pointer",fontSize:mobile?16:13,fontWeight:700,color:"#2c3e50",fontFamily:_FN,flex:mobile?1:"none",minWidth:mobile?50:"auto"}}>{n}</button>)}
+              </div>
+            </div>
+          </div>
+          {saveMsg&&<div style={{textAlign:"center",padding:"8px",fontSize:14,color:saveMsg.startsWith("⚠")?"#c0392b":"#27ae60",fontWeight:600}}>{saveMsg}</div>}
+          <button onClick={salvarCorte} style={{width:"100%",padding:mobile?"18px":"16px",borderRadius:12,border:"none",fontSize:mobile?18:16,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif",background:(salaSelected&&(prodFound||refBusca.trim())&&qtdRolos)?"#4a7fa5":"#c8d8e4",color:"#fff",marginBottom:20}}>✓ Registrar Corte</button>
+
+          {/* Pendentes */}
+          {pendentes.length>0&&(<div>
+            <div style={{fontSize:mobile?14:12,fontWeight:700,color:"#e67e22",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+              <span style={{background:"#e67e22",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:11}}>{pendentes.length}</span>Aguardando qtd de peças
+            </div>
+            {pendentes.map(c=>(
+              <div key={c.id} onClick={()=>{setEditandoPecas(c.id);setPecasInput("");}} style={{background:"#fff",borderRadius:12,padding:mobile?"14px 16px":"12px 14px",border:"2px solid #f0d080",marginBottom:8,cursor:"pointer"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div><span style={{fontSize:mobile?14:12,fontWeight:700,color:"#e67e22"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div>
+                  <span style={{fontSize:10,background:"#fff8e8",color:"#8a6500",padding:"2px 8px",borderRadius:6}}>⏳ pendente</span>
+                </div>
+                <div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50",marginTop:4}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}{!descCorte(c)&&<span style={{fontSize:11,color:"#a89f94",fontStyle:"italic",marginLeft:6}}>sem cadastro</span>}</div>
+                <div style={{fontSize:mobile?13:12,color:"#6b7c8a",marginTop:2}}>{c.qtdRolos} rolos · toque para informar peças</div>
+              </div>
+            ))}
+          </div>)}
+
+          {/* Últimos concluídos */}
+          {concluidos.length>0&&(<div style={{marginTop:16}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Últimos concluídos</div>
+            {[...concluidos].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,5).map(c=>(
+              <div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:"1px solid #e8e2da",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontSize:12,fontWeight:600,color:"#2c3e50"}}>{c.sala} · REF {c.ref}</div><div style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</div></div>
+                <span style={{fontSize:10,color:"#27ae60",fontWeight:700}}>✓</span>
+              </div>
+            ))}
+          </div>)}
+
+          {/* Modal Peças */}
+          {editandoPecas&&(
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
+              <div style={{background:"#fff",borderRadius:16,padding:mobile?20:24,maxWidth:380,width:"100%"}}>
+                {(()=>{const c=cortesSala.find(x=>x.id===editandoPecas);if(!c)return null;
+                  const ref=mediaRef[c.ref];const estimativa=ref?Math.round(ref.media*c.qtdRolos):null;
+                  return(<>
+                    <div style={{fontSize:11,color:"#a89f94",textTransform:"uppercase",letterSpacing:1}}>Informar peças</div>
+                    <div style={{fontSize:mobile?18:16,fontWeight:700,color:"#2c3e50",marginTop:4}}>{c.sala} · REF {c.ref}</div>
+                    <div style={{fontSize:13,color:"#6b7c8a",marginTop:2}}>{descCorte(c)||"Ref sem cadastro"} · {c.qtdRolos} rolos</div>
+                    {estimativa&&<div style={{marginTop:8,padding:"8px 10px",background:"#f0f6fb",borderRadius:8,fontSize:12,color:"#4a7fa5"}}>📊 Estimativa: ~{fmt(estimativa)} peças</div>}
+                    <input type="number" value={pecasInput} onChange={e=>setPecasInput(e.target.value)} placeholder="Qtd de peças" autoFocus style={{...sty.input,marginTop:12,textAlign:"center",fontSize:mobile?30:24,fontWeight:800,fontFamily:_FN}}/>
+                    {pecasInput&&estimativa&&Number(pecasInput)<estimativa*0.95&&<div style={{marginTop:8,padding:"8px 10px",background:"#fdeaea",borderRadius:8,fontSize:13,color:"#c0392b",fontWeight:600}}>⚠ {Math.round((1-Number(pecasInput)/estimativa)*100)}% abaixo da estimativa!</div>}
+                    <div style={{display:"flex",gap:8,marginTop:14}}>
+                      <button onClick={()=>setEditandoPecas(null)} style={{flex:1,padding:mobile?"14px":"12px",borderRadius:10,border:"1px solid #e8e2da",background:"#fff",fontSize:mobile?16:14,cursor:"pointer",fontFamily:"Georgia,serif"}}>Cancelar</button>
+                      <button onClick={fecharCorte} disabled={!pecasInput} style={{flex:1,padding:mobile?"14px":"12px",borderRadius:10,border:"none",background:pecasInput?"#27ae60":"#c8d8e4",color:"#fff",fontSize:mobile?16:14,fontWeight:700,cursor:pecasInput?"pointer":"not-allowed",fontFamily:"Georgia,serif"}}>Confirmar</button>
+                    </div>
+                  </>);
+                })()}
+              </div>
+            </div>
+          )}
+        </div>)}
+
+        {/* ═══ ANÁLISE ═══ */}
+        {tela==="analise"&&(<div>
+          <div style={{display:"flex",gap:4,marginBottom:14,background:"#fff",borderRadius:10,padding:4,border:"1px solid #e8e2da",overflowX:"auto"}}>
+            {[{id:"ranking",label:"🏆 Ranking"},{id:"produtos",label:"📦 Produtos"},{id:"cortes",label:"📋 Cortes"},{id:"alertas",label:`🚨 Alertas${alertas.length>0?` (${alertas.length})`:""}`}].map(t=>(
+              <button key={t.id} onClick={()=>setAbaAnalise(t.id)} style={sty.tab(abaAnalise===t.id)}>{t.label}</button>
+            ))}
+          </div>
+
+          {/* RANKING */}
+          {abaAnalise==="ranking"&&(<div>
+            <div style={{fontSize:11,color:"#8a9aa4",marginBottom:12}}>Ordenado por % de cortes sem alertas</div>
+            <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr 1fr",gap:10}}>
+              {ranking.map((s,i)=>{const corPct=s.pct>=95?(i===0?"#4dffcc":"#27ae60"):s.pct>=90?"#e67e22":"#c0392b";
+                return(<div key={s.sala} style={{background:i===0?"#2c3e50":i===1?"#f7f4f0":"#fff",borderRadius:14,padding:16,textAlign:"center",border:i===0?"none":"1px solid #e8e2da"}}>
+                  {i<3&&<div style={{fontSize:i===0?18:16}}>{["🥇","🥈","🥉"][i]}</div>}
+                  <div style={{fontSize:32,fontWeight:900,color:corPct,fontFamily:_FN}}>{s.pct}%</div>
+                  <div style={{fontSize:10,color:i===0?"rgba(255,255,255,0.6)":"#a89f94",marginTop:2}}>cortes limpos</div>
+                  <div style={{fontSize:15,fontWeight:700,color:i===0?"#fff":"#2c3e50",marginTop:8}}>{s.sala}</div>
+                  <div style={{fontSize:11,color:i===0?"rgba(255,255,255,0.5)":"#a89f94",marginTop:2}}>{s.total} cortes · {s.limpos} limpos</div>
+                  {s.total-s.limpos>0&&<div style={{marginTop:4,fontSize:10,color:i===0?"#ff6b6b":"#c0392b",fontWeight:700}}>🔴 {s.total-s.limpos} alerta(s)</div>}
+                </div>);
+              })}
+            </div>
+          </div>)}
+
+          {/* PRODUTOS */}
+          {abaAnalise==="produtos"&&(<div>
+            <input value={refBuscaAnalise} onChange={e=>{setRefBuscaAnalise(e.target.value);setProdCardRef(null);}} placeholder="Buscar por referência..." style={{...sty.input,marginBottom:12}}/>
+            {!prodCardRef?(<div>
+              {(refBuscaAnalise?produtos.filter(p=>p.ref.includes(refBuscaAnalise)||p.descricao.toLowerCase().includes(refBuscaAnalise.toLowerCase())):produtos).map(p=>{
+                const ref=mediaRef[p.ref];
+                return(<div key={p.ref} onClick={()=>setProdCardRef(p.ref)} style={{background:"#fff",borderRadius:10,padding:"12px 14px",border:"1px solid #e8e2da",marginBottom:6,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:12,color:"#6b7c8a",marginLeft:8}}>{p.descricao}</span></div>
+                  {ref?<div style={{fontSize:12,fontWeight:800,color:"#4a7fa5",fontFamily:_FN}}>{ref.count} corte(s)</div>:<div style={{fontSize:11,color:"#a89f94"}}>sem cortes</div>}
+                </div>);
+              })}
+            </div>):(<div>
+              <button onClick={()=>setProdCardRef(null)} style={{background:"none",border:"none",color:"#4a7fa5",cursor:"pointer",fontSize:12,marginBottom:8,fontFamily:"Georgia,serif"}}>← Voltar</button>
+              {(()=>{const p=buscarProd(prodCardRef);const ref=mediaRef[prodCardRef];const cortesDaRef=concluidos.filter(c=>c.ref===prodCardRef).sort((a,b)=>new Date(b.data)-new Date(a.data));
+                return(<div style={sty.card}>
+                  <div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:18,fontWeight:700,color:"#2c3e50"}}>REF {prodCardRef}</div><div style={{fontSize:13,color:"#6b7c8a"}}>{p?.descricao}</div>{p?.marca&&<span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span>}</div><div style={{fontSize:11,color:"#a89f94"}}>{ref?.count||0} corte(s)</div></div>
+                  {ref?(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:14}}>
+                    <div style={{background:"#eafbf0",borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:9,color:"#27ae60",textTransform:"uppercase",letterSpacing:1}}>Máximo</div><div style={{fontSize:22,fontWeight:800,color:"#27ae60",fontFamily:_FN}}>{ref.max}</div><div style={{fontSize:10,color:"#a89f94"}}>pç/rolo</div></div>
+                    <div style={{background:"#f0f6fb",borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:9,color:"#4a7fa5",textTransform:"uppercase",letterSpacing:1}}>Média</div><div style={{fontSize:22,fontWeight:800,color:"#4a7fa5",fontFamily:_FN}}>{ref.media}</div><div style={{fontSize:10,color:"#a89f94"}}>pç/rolo</div></div>
+                    <div style={{background:"#fdeaea",borderRadius:10,padding:12,textAlign:"center"}}><div style={{fontSize:9,color:"#c0392b",textTransform:"uppercase",letterSpacing:1}}>Mínimo</div><div style={{fontSize:22,fontWeight:800,color:"#c0392b",fontFamily:_FN}}>{ref.min}</div><div style={{fontSize:10,color:"#a89f94"}}>pç/rolo</div></div>
+                  </div>):<div style={{marginTop:12,padding:12,background:"#f7f4f0",borderRadius:8,fontSize:12,color:"#a89f94",textAlign:"center"}}>Sem dados ainda</div>}
+                  <div style={{marginTop:14}}>
+                    {!addHist?<button onClick={()=>setAddHist(true)} style={{width:"100%",padding:"10px",borderRadius:8,border:"1px dashed #c8d8e4",background:"#fff",fontSize:12,cursor:"pointer",color:"#4a7fa5",fontFamily:"Georgia,serif",fontWeight:600}}>+ Adicionar corte ao histórico</button>
+                    :<div style={{background:"#f7f4f0",borderRadius:10,padding:12}}>
+                      <div style={{fontSize:10,color:"#a89f94",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Corte manual</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                        <select value={histForm.sala} onChange={e=>setHistForm(p=>({...p,sala:e.target.value}))} style={{...sty.input,padding:"8px 10px",fontSize:12}}><option value="">Sala</option>{salas.map(s=><option key={s} value={s}>{s}</option>)}</select>
+                        <input type="number" value={histForm.qtdRolos} onChange={e=>setHistForm(p=>({...p,qtdRolos:e.target.value}))} placeholder="Rolos" style={{...sty.input,padding:"8px 10px",fontSize:12,textAlign:"center"}}/>
+                        <input type="number" value={histForm.qtdPecas} onChange={e=>setHistForm(p=>({...p,qtdPecas:e.target.value}))} placeholder="Peças" style={{...sty.input,padding:"8px 10px",fontSize:12,textAlign:"center"}}/>
+                      </div>
+                      <div style={{display:"flex",gap:8,marginTop:8}}>
+                        <button onClick={()=>{setAddHist(false);setHistForm({sala:"",qtdRolos:"",qtdPecas:""});}} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid #e8e2da",background:"#fff",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+                        <button onClick={addHistorico} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#4a7fa5",color:"#fff",fontSize:12,cursor:"pointer",fontWeight:600}}>Salvar</button>
+                      </div>
+                    </div>}
+                  </div>
+                  {cortesDaRef.length>0&&(<div style={{marginTop:14}}>
+                    <div style={{fontSize:10,color:"#a89f94",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Histórico</div>
+                    {cortesDaRef.map(c=>(<div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",borderRadius:6,marginBottom:3,background:c.alerta?"#fdeaea":"#f9f9f7"}}>
+                      <div style={{fontSize:11,color:"#6b7c8a"}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})} · {c.sala}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:"#6b7c8a"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)}pç</span><span style={{fontSize:12,fontWeight:800,fontFamily:_FN,color:c.alerta?"#c0392b":"#27ae60"}}>{c.rendimento}</span>{c.alerta&&<span>🔴</span>}</div>
+                    </div>))}
+                  </div>)}
+                </div>);
+              })()}
+            </div>)}
+          </div>)}
+
+          {/* CORTES */}
+          {abaAnalise==="cortes"&&(<div>
+            <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+              <button onClick={()=>setFiltroSala("todas")} style={sty.tab(filtroSala==="todas")}>Todas</button>
+              {salas.map(s=><button key={s} onClick={()=>setFiltroSala(s)} style={sty.tab(filtroSala===s)}>{s}</button>)}
+            </div>
+            <div style={{fontSize:11,color:"#a89f94",marginBottom:8}}>{cortesFiltrados.length} corte(s)</div>
+            {cortesFiltrados.map(c=>(<div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:c.alerta?"2px solid #f4b8b8":"1px solid #e8e2da",marginBottom:6}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:800,fontFamily:_FN,color:c.alerta?"#c0392b":"#2c3e50"}}>{c.rendimento} pç/r</span>{c.alerta&&<span>🔴</span>}</div></div>
+              <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:3}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
+              <div style={{fontSize:11,color:"#6b7c8a",marginTop:2}}>{c.qtdRolos} rolos → {fmt(c.qtdPecas)} peças</div>
+            </div>))}
+          </div>)}
+
+          {/* ALERTAS */}
+          {abaAnalise==="alertas"&&(<div>
+            {alertas.length===0?(<div style={{...sty.card,textAlign:"center",padding:32}}><div style={{fontSize:32,marginBottom:8}}>✅</div><div style={{fontSize:14,fontWeight:700,color:"#27ae60"}}>Nenhum alerta pendente</div><div style={{fontSize:12,color:"#a89f94",marginTop:4}}>Todos os cortes dentro da tolerância de 5%</div></div>)
+            :(<>{alertas.map(c=>{const ref=mediaRef[c.ref];const diff=ref&&ref.media>0?Math.round((1-c.rendimento/ref.media)*100):0;
+              return(<div key={c.id} style={{background:"#fff",borderRadius:12,padding:"12px 14px",border:"2px solid #f4b8b8",marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:13,fontWeight:700,color:"#c0392b"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div><span style={{fontSize:16,fontWeight:900,color:"#c0392b",fontFamily:_FN}}>−{diff}%</span></div>
+                <div style={{fontSize:14,fontWeight:700,color:"#2c3e50",marginTop:4}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
+                <div style={{fontSize:12,color:"#6b7c8a",marginTop:2}}>{c.qtdRolos}r → {fmt(c.qtdPecas)}pç ({c.rendimento} pç/r) · Média: {ref?.media}</div>
+                <button onClick={()=>marcarVisto(c.id)} style={{marginTop:8,width:"100%",padding:"10px",borderRadius:8,border:"1px solid #c0392b",background:"#fff",color:"#c0392b",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>✓ Marcar como visto</button>
+              </div>);
+            })}</>)}
+          </div>)}
+        </div>)}
       </div>
     </div>
   );
@@ -5161,6 +5538,46 @@ export default function App(){
     }).catch(()=>{setDbCarregado(true);setSyncStatus('error');});
   },[]);
 
+  // ── RECONCILIAÇÃO: boletos pagos → Tecidos em auxDataPorMes ─────────────
+  // Garante que boletos marcados como "pago" tenham entrada correspondente em Tecidos
+  // Roda após carregar dados do Supabase e sempre que boletosShared mudar
+  useEffect(()=>{
+    if(!dbCarregado)return;
+    const getMesBoleto=(b)=>{const p=(b.data||"").split("/");return(p.length>=2&&parseInt(p[1])>=1&&parseInt(p[1])<=12)?parseInt(p[1]):Number(b.mes);};
+    const pagos=boletosShared.filter(b=>b.pago);
+    if(pagos.length===0)return;
+    setAuxDataPorMes(prev=>{
+      let mudou=false;
+      const novo={...prev};
+      pagos.forEach(b=>{
+        const mesNum=getMesBoleto(b);
+        if(!mesNum)return;
+        const mesData=novo[mesNum]||{};
+        const tecidos=[...(mesData["Tecidos"]||[])];
+        if(!tecidos.find(t=>t._boletoid===b.id)){
+          tecidos.push({data:b.data,empresa:b.empresa,nroNota:b.nroNota||"",valor:b.valor,descricao:"",_boletoid:b.id});
+          mudou=true;
+        }
+        if(mudou||!novo[mesNum]){
+          novo[mesNum]={...mesData,"Tecidos":tecidos};
+        }
+      });
+      // Também remove entradas de boletos que foram desmarcados (pago→não pago)
+      const pagoIds=new Set(pagos.map(b=>b.id));
+      Object.keys(novo).forEach(mesKey=>{
+        const mesData=novo[mesKey];
+        if(!mesData?.["Tecidos"])return;
+        const antes=mesData["Tecidos"].length;
+        const filtrado=mesData["Tecidos"].filter(t=>!t._boletoid||pagoIds.has(t._boletoid));
+        if(filtrado.length!==antes){
+          novo[mesKey]={...mesData,"Tecidos":filtrado};
+          mudou=true;
+        }
+      });
+      return mudou?novo:prev;
+    });
+  },[boletosShared,dbCarregado]);
+
   // ── AUTO-SAVE LOCAL: cortes ────────────────────────────────────────────────
   useEffect(()=>{
     if(!dbCarregado)return;
@@ -5314,7 +5731,7 @@ export default function App(){
         </div>
       </div>
       {/* Conteúdo */}
-      <div style={{flex:1,background:"#f7f4f0",padding:active==="oficinas"||active==="lancamentos"?"8px 8px":"16px 20px",overflowY:"auto"}}>
+      <div style={{flex:1,background:"#f7f4f0",padding:active==="oficinas"||active==="lancamentos"||active==="salascorte"?"8px 8px":"16px 20px",overflowY:"auto"}}>
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
         {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
@@ -5323,6 +5740,7 @@ export default function App(){
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
+        {active==="salascorte"&&<SalasCorteContent produtos={produtos}/>}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
