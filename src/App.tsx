@@ -2988,7 +2988,7 @@ const getDias=(c)=>Math.floor((Date.now()-new Date(c.data))/(86400000));
 const ORDEM_STATUS={amarelo:0,vermelho:1,azul:2,verde:3};
 const EstrelaScore=({n})=>(<span style={{color:"#f0b429",fontSize:12}}>{[1,2,3,4,5].map(i=><span key={i} style={{opacity:i<=n?1:0.25}}>★</span>)}</span>);
 
-const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes})=>{
+const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD})=>{
   const [aba,setAba]=useState("cortes");
   const [cadAba,setCadAba]=useState("produtos");
   const [filtroOf,setFiltroOf]=useState("todas");
@@ -3000,10 +3000,12 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [editId,setEditId]=useState(null);
   const [form,setForm]=useState({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});
   const [refBusca,setRefBusca]=useState("");
-  const [formProd,setFormProd]=useState({ref:"",descricao:"",marca:"Amícia",valorUnit:""});
+  const [formProd,setFormProd]=useState({ref:"",descricao:"",marca:"Amícia",valorUnit:"",tecido:""});
   const [formOf,setFormOf]=useState({codigo:"",descricao:""});
   const [editProdRef,setEditProdRef]=useState(null);
   const [editOfCod,setEditOfCod]=useState(null);
+  const [formTec,setFormTec]=useState({descricao:"",metragemRolo:"",valorMetro:""});
+  const [editTecId,setEditTecId]=useState(null);
   const [trocaDe,setTrocaDe]=useState("");
   const [trocaPara,setTrocaPara]=useState("");
   const [trocaMsg,setTrocaMsg]=useState("");
@@ -3272,24 +3274,42 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
       {aba==="cadastros"&&(
         <div>
           <div style={{display:"flex",gap:4,borderBottom:"1px solid #e8e2da",marginBottom:16}}>
-            {[{id:"produtos",label:"Produtos"},{id:"oficinas",label:"Oficinas"},{id:"troca",label:"Troca de REF"},{id:"log",label:"Log"}].map(t=>(
+            {[{id:"produtos",label:"Produtos"},{id:"tecidos",label:"Tecidos"},{id:"oficinas",label:"Oficinas"},{id:"troca",label:"Troca de REF"},{id:"log",label:"Log"}].map(t=>(
               <button key={t.id} onClick={()=>setCadAba(t.id)} style={{padding:"6px 14px",border:"none",background:"transparent",borderBottom:cadAba===t.id?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:cadAba===t.id?"#2c3e50":"#8a9aa4"}}>{t.label}</button>
             ))}
           </div>
           {cadAba==="produtos"&&(
             <div>
               <div style={{background:"#f0f6fb",border:"1px solid #c8d8e4",borderRadius:10,padding:12,marginBottom:12}}>
-                <div style={{display:"grid",gridTemplateColumns:"50px 3fr 70px 50px 80px",gap:6,alignItems:"end"}}>
-                  <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Ref</div><input value={formProd.ref} onChange={e=>setFormProd(p=>({...p,ref:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
-                  <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Descrição</div><input value={formProd.descricao} onChange={e=>setFormProd(p=>({...p,descricao:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
-                  <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Marca</div><select value={formProd.marca} onChange={e=>setFormProd(p=>({...p,marca:e.target.value}))} style={{...iStyle,width:"100%"}}><option>Amícia</option><option>Meluni</option></select></div>
-                  <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>R$</div><input value={formProd.valorUnit} onChange={e=>setFormProd(p=>({...p,valorUnit:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
-                  <div style={{display:"flex",alignItems:"flex-end"}}><button onClick={()=>{if(!formProd.ref||!formProd.descricao||!formProd.valorUnit)return;const valorNum=parseFloat(String(formProd.valorUnit).replace(",","."));if(editProdRef)setProdutos(prev=>prev.map(p=>p.ref===editProdRef?{...formProd,valorUnit:valorNum}:p));else if(produtos.find(p=>p.ref===formProd.ref)){alert("Ref já cadastrada!");}else setProdutos(prev=>[...prev,{...formProd,valorUnit:valorNum}]);setFormProd({ref:"",descricao:"",marca:"Amícia",valorUnit:""});setEditProdRef(null);}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editProdRef?"Atualizar":"Adicionar"}</button></div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"end"}}>
+                  <div style={{minWidth:50,flex:"0 0 50px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Ref</div><input value={formProd.ref} onChange={e=>setFormProd(p=>({...p,ref:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
+                  <div style={{flex:"2 1 120px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Descrição</div><input value={formProd.descricao} onChange={e=>setFormProd(p=>({...p,descricao:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
+                  <div style={{flex:"0 0 70px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Marca</div><select value={formProd.marca} onChange={e=>setFormProd(p=>({...p,marca:e.target.value}))} style={{...iStyle,width:"100%"}}><option>Amícia</option><option>Meluni</option></select></div>
+                  <div style={{flex:"0 0 50px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>R$</div><input value={formProd.valorUnit} onChange={e=>setFormProd(p=>({...p,valorUnit:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
+                  <div style={{flex:"1 1 90px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Tecido</div><select value={formProd.tecido||""} onChange={e=>setFormProd(p=>({...p,tecido:e.target.value}))} style={{...iStyle,width:"100%",color:formProd.tecido?"#2c3e50":"#a89f94"}}><option value="">—</option>{(tecidosCAD||[]).map(t=><option key={t.id} value={t.descricao}>{t.descricao}</option>)}</select></div>
+                  <div style={{flex:"0 0 80px"}}><button onClick={()=>{if(!formProd.ref||!formProd.descricao||!formProd.valorUnit)return;const valorNum=parseFloat(String(formProd.valorUnit).replace(",","."));if(editProdRef)setProdutos(prev=>prev.map(p=>p.ref===editProdRef?{...formProd,valorUnit:valorNum}:p));else if(produtos.find(p=>p.ref===formProd.ref)){alert("Ref já cadastrada!");}else setProdutos(prev=>[...prev,{...formProd,valorUnit:valorNum}]);setFormProd({ref:"",descricao:"",marca:"Amícia",valorUnit:"",tecido:""});setEditProdRef(null);}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editProdRef?"Atualizar":"Adicionar"}</button></div>
                 </div>
               </div>
-              <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Vl. Unitário",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{produtos.length===0&&<tr><td colSpan={5} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto cadastrado</td></tr>}{produtos.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
+              <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:500}}><thead><tr style={{background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Tecido","Vl. Unit.",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
+                  <tbody>{produtos.length===0&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto cadastrado</td></tr>}{produtos.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {cadAba==="tecidos"&&(
+            <div>
+              <div style={{background:"#f0f6fb",border:"1px solid #c8d8e4",borderRadius:10,padding:12,marginBottom:12}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"end"}}>
+                  <div style={{flex:"2 1 120px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Descrição</div><input value={formTec.descricao} onChange={e=>setFormTec(p=>({...p,descricao:e.target.value}))} placeholder="Ex: Linho" style={{...iStyle,width:"100%"}}/></div>
+                  <div style={{flex:"1 1 80px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Metragem/Rolo</div><input type="number" value={formTec.metragemRolo} onChange={e=>setFormTec(p=>({...p,metragemRolo:e.target.value}))} placeholder="50" style={{...iStyle,width:"100%",textAlign:"center"}}/></div>
+                  <div style={{flex:"1 1 80px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Valor/Metro</div><input value={formTec.valorMetro} onChange={e=>setFormTec(p=>({...p,valorMetro:e.target.value}))} placeholder="28,50" style={{...iStyle,width:"100%",textAlign:"center"}}/></div>
+                  <div style={{flex:"0 0 80px"}}><button onClick={()=>{if(!formTec.descricao.trim())return;const t={id:editTecId||Date.now(),descricao:formTec.descricao.trim(),metragemRolo:Number(formTec.metragemRolo)||0,valorMetro:Number(String(formTec.valorMetro).replace(",","."))||0};if(editTecId&&setTecidosCAD)setTecidosCAD(prev=>prev.map(x=>x.id===editTecId?t:x));else if(setTecidosCAD)setTecidosCAD(prev=>[...prev,t]);setFormTec({descricao:"",metragemRolo:"",valorMetro:""});setEditTecId(null);}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editTecId?"Atualizar":"Adicionar"}</button></div>
+                </div>
+              </div>
+              <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:400}}><thead><tr style={{background:"#4a7fa5"}}>{["Tecido","Metragem/Rolo","Valor/Metro","Custo/Rolo",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
+                  <tbody>{(tecidosCAD||[]).length===0&&<tr><td colSpan={5} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum tecido cadastrado</td></tr>}{(tecidosCAD||[]).map(t=>(<tr key={t.id} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{t.descricao}</td><td style={{padding:"8px 12px",color:"#6b7c8a"}}>{t.metragemRolo}m</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#2c3e50"}}>{fmt(t.valorMetro)}</td><td style={{padding:"8px 12px",fontFamily:_FN,fontWeight:700,color:"#4a7fa5"}}>{fmt(t.valorMetro*t.metragemRolo)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormTec({descricao:t.descricao,metragemRolo:String(t.metragemRolo),valorMetro:String(t.valorMetro)});setEditTecId(t.id);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>{if(setTecidosCAD)setTecidosCAD(prev=>prev.filter(x=>x.id!==t.id));}} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
                 </table>
               </div>
             </div>
@@ -3484,7 +3504,7 @@ const blingDb={
 
 const BlingContent=({setReceitasMes,mesAtual})=>{
   const [tela,setTela]=useState("dash");
-  // Credenciais separadas por conta
+  // Credenciais separadas por conta — localStorage + Supabase
   const [creds,setCreds]=useState(()=>{try{return JSON.parse(localStorage.getItem("bling_creds"))||{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}catch{return{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}});
   const [tokens,setTokens]=useState({exitus:null,lumia:null,muniam:null});
   const [resultado,setResultado]=useState(null);
@@ -3507,7 +3527,7 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
     return new Date(token.expires_at)<new Date();
   };
 
-  // Carregar tokens e auto-sync ao montar
+  // Carregar tokens, creds do Supabase e auto-sync ao montar
   useEffect(()=>{
     try{
       if(supabase){
@@ -3522,6 +3542,18 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
       const m={exitus:null,lumia:null,muniam:null};
       ts.forEach(t=>{if(m[t.conta]!==undefined)m[t.conta]=t;});
       setTokens(m);
+      // Carregar credenciais do Supabase (se localStorage estiver vazio)
+      try{
+        const {data:sbCreds}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-creds').single();
+        if(sbCreds?.payload){
+          const local=JSON.parse(localStorage.getItem("bling_creds")||"{}");
+          const hasLocal=local.exitus?.id||local.lumia?.id||local.muniam?.id;
+          if(!hasLocal){
+            setCreds(sbCreds.payload);
+            localStorage.setItem("bling_creds",JSON.stringify(sbCreds.payload));
+          }
+        }
+      }catch{}
       const r=await blingDb.getResultado(hoje);
       if(r)setResultado(r);
       try{
@@ -3535,6 +3567,8 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
     const novo={...creds,[conta]:{...creds[conta],[campo]:valor}};
     setCreds(novo);
     localStorage.setItem("bling_creds",JSON.stringify(novo));
+    // Salva no Supabase também
+    try{supabase.from('amicia_data').upsert({user_id:'bling-creds',payload:novo},{onConflict:'user_id'});}catch{}
   };
 
   const conectarConta=(conta)=>{
@@ -3865,7 +3899,7 @@ const scDb={
   async save(payload){try{await supabase.from('amicia_data').upsert({user_id:'salas-corte',payload},{onConflict:'user_id'});}catch{}},
 };
 
-const SalasCorteContent=({produtos=[]})=>{
+const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
   const mobile=w<640;
@@ -3887,12 +3921,28 @@ const SalasCorteContent=({produtos=[]})=>{
   const [prodCardRef,setProdCardRef]=useState(null);
   const [filtroSala,setFiltroSala]=useState("todas");
   const [addHist,setAddHist]=useState(false);
-  const [histForm,setHistForm]=useState({sala:"",qtdRolos:"",qtdPecas:""});
+  const [histForm,setHistForm]=useState({sala:"",qtdRolos:"",qtdPecas:"",data:""});
   const [dbLoaded,setDbLoaded]=useState(false);
   const debRef=useRef(null);
+  const [logSC,setLogSC]=useState([]);
+  const [editCorte,setEditCorte]=useState(null);
+  const [editForm,setEditForm]=useState({sala:"",ref:"",qtdRolos:"",qtdPecas:""});
+  const [confirm,setConfirm]=useState(null);
+  const [custoAberto,setCustoAberto]=useState(null);
 
   const _FN="Calibri,'Segoe UI',Arial";
   const fmt=(v)=>Number(v||0).toLocaleString("pt-BR");
+  const fmtR=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const getTecido=(nome)=>tecidosCAD.find(t=>t.descricao===nome);
+  const tecCorte=(c)=>{const p=buscarProd(c.ref);return p?.tecido||"";};
+  const custoCorte=(c)=>{
+    const prod=buscarProd(c.ref);if(!prod?.tecido)return null;
+    const tec=getTecido(prod.tecido);if(!tec)return null;
+    const custoRolo=tec.valorMetro*tec.metragemRolo;
+    const custoTotal=custoRolo*c.qtdRolos;
+    const custoPeca=c.qtdPecas?Math.round((custoTotal/c.qtdPecas)*100)/100:null;
+    return{custoRolo,custoTotal,custoPeca,tecido:tec.descricao};
+  };
 
   // ── Supabase: load com merge ──
   useEffect(()=>{
@@ -3901,6 +3951,7 @@ const SalasCorteContent=({produtos=[]})=>{
       if(remote){
         if(remote.cortes)setCortesSala(remote.cortes);
         if(remote.salas)setSalas(remote.salas);
+        if(remote.logs)setLogSC(remote.logs);
       }
       setDbLoaded(true);
     })();
@@ -3920,11 +3971,16 @@ const SalasCorteContent=({produtos=[]})=>{
         const merged=[...cortesSala,...remoteOnly];
         // Merge salas
         const mergedSalas=[...new Set([...salas,...(remote?.salas||[])])];
-        await scDb.save({cortes:merged,salas:mergedSalas});
+        // Merge logs
+        const remoteLogs=remote?.logs||[];
+        const localLogIds=new Set(logSC.map(l=>l.id));
+        const remoteLogsOnly=remoteLogs.filter(l=>!localLogIds.has(l.id));
+        const mergedLogs=[...logSC,...remoteLogsOnly].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,200);
+        await scDb.save({cortes:merged,salas:mergedSalas,logs:mergedLogs});
       }catch{}
     },2000);
     return()=>clearTimeout(debRef.current);
-  },[cortesSala,salas,dbLoaded]);
+  },[cortesSala,salas,logSC,dbLoaded]);
 
   // ── Sync descrições de produtos ──
   useEffect(()=>{
@@ -3944,9 +4000,62 @@ const SalasCorteContent=({produtos=[]})=>{
 
   const concluidos=cortesSala.filter(c=>c.status==="concluido");
   const pendentes=cortesSala.filter(c=>c.status==="pendente").sort((a,b)=>new Date(a.data)-new Date(b.data));
+  const hoje=new Date();
+  const parados=pendentes.filter(c=>{const d=new Date(c.data+"T12:00:00");return(hoje-d)/(1000*60*60*24)>3;});
   const buscarProd=(ref)=>produtos.find(p=>p.ref===String(ref).trim());
   const handleRefChange=(val)=>{setRefBusca(val);setProdFound(buscarProd(val));};
   const descCorte=(c)=>{if(c.descricao)return c.descricao;const p=buscarProd(c.ref);return p?p.descricao:"";};
+
+  // Log helper
+  const addLog=(acao,detalhe)=>{setLogSC(prev=>[{id:Date.now(),data:new Date().toISOString(),usuario:usuario||"—",acao,detalhe},...prev].slice(0,200));};
+
+  // Excluir corte
+  const excluirCorte=(id)=>{
+    const c=cortesSala.find(x=>x.id===id);
+    setConfirm({msg:`Excluir corte REF ${c?.ref} (${c?.sala})?`,onYes:()=>{
+      setCortesSala(prev=>prev.filter(x=>x.id!==id));
+      addLog("excluir",`REF ${c?.ref} · ${c?.sala} · ${c?.qtdRolos}r`);
+      setConfirm(null);
+    }});
+  };
+
+  // Editar corte — abre modal
+  const iniciarEdicao=(c)=>{
+    setEditCorte(c.id);
+    setEditForm({sala:c.sala,ref:c.ref,qtdRolos:String(c.qtdRolos),qtdPecas:c.qtdPecas?String(c.qtdPecas):""});
+  };
+  const salvarEdicao=()=>{
+    if(!editCorte)return;
+    const rolos=Number(editForm.qtdRolos),pecas=editForm.qtdPecas?Number(editForm.qtdPecas):null;
+    const rend=pecas&&rolos?Math.round((pecas/rolos)*100)/100:null;
+    const prod=buscarProd(editForm.ref);
+    setCortesSala(prev=>prev.map(c=>{
+      if(c.id!==editCorte)return c;
+      const ref=mediaRef[editForm.ref];
+      const temAlerta=ref&&ref.media>0&&rend&&rend<ref.media*0.95;
+      return{...c,sala:editForm.sala,ref:editForm.ref,descricao:prod?.descricao||c.descricao||"",marca:prod?.marca||c.marca||"",qtdRolos:rolos,qtdPecas:pecas,rendimento:rend,status:pecas?"concluido":"pendente",alerta:!!temAlerta,visto:!temAlerta};
+    }));
+    addLog("editar",`REF ${editForm.ref} · ${editForm.sala} · ${editForm.qtdRolos}r${editForm.qtdPecas?` → ${editForm.qtdPecas}pç`:""}`);
+    setEditCorte(null);
+  };
+
+  // Sync troca de referências do módulo Oficinas
+  const [lastTrocaLen,setLastTrocaLen]=useState(0);
+  useEffect(()=>{
+    if(!dbLoaded||!logTroca.length||logTroca.length<=lastTrocaLen)return;
+    const novasTrocas=logTroca.slice(lastTrocaLen);
+    setCortesSala(prev=>{
+      let mudou=false;
+      const att=prev.map(c=>{
+        const troca=novasTrocas.find(t=>t.de===c.ref);
+        if(!troca)return c;
+        mudou=true;
+        return{...c,ref:troca.para};
+      });
+      return mudou?att:prev;
+    });
+    setLastTrocaLen(logTroca.length);
+  },[logTroca,dbLoaded]);
 
   const mediaRef=useMemo(()=>{
     const m={};
@@ -3974,6 +4083,7 @@ const SalasCorteContent=({produtos=[]})=>{
     setCortesSala(prev=>[novo,...prev]);
     setSalaSelected("");setRefBusca("");setProdFound(null);setQtdRolos("");
     setSaveMsg("✓ Corte registrado!");setTimeout(()=>setSaveMsg(""),2500);
+    addLog("criar",`REF ${novo.ref} · ${salaSelected} · ${qtdRolos}r`);
   };
 
   const fecharCorte=()=>{
@@ -3984,19 +4094,22 @@ const SalasCorteContent=({produtos=[]})=>{
     const ref=mediaRef[corte.ref];
     const temAlerta=ref&&ref.media>0&&rend<ref.media*0.95;
     setCortesSala(prev=>prev.map(c=>c.id===editandoPecas?{...c,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:temAlerta,visto:!temAlerta}:c));
+    addLog("fechar",`REF ${corte.ref} · ${corte.sala} · ${corte.qtdRolos}r → ${pecas}pç (${rend} pç/r)`);
     setEditandoPecas(null);setPecasInput("");
   };
 
-  const marcarVisto=(id)=>setCortesSala(prev=>prev.map(c=>c.id===id?{...c,visto:true}:c));
+  const marcarVisto=(id)=>{setCortesSala(prev=>prev.map(c=>c.id===id?{...c,visto:true}:c));addLog("visto",`Alerta corte ${id}`);};
 
   const addHistorico=()=>{
     if(!prodCardRef||!histForm.sala||!histForm.qtdRolos||!histForm.qtdPecas)return;
     const rolos=Number(histForm.qtdRolos),pecas=Number(histForm.qtdPecas);
     const rend=Math.round((pecas/rolos)*100)/100;
     const prod=buscarProd(prodCardRef);
-    const novo={id:Date.now(),data:new Date().toISOString().slice(0,10),sala:histForm.sala,ref:prodCardRef,descricao:prod?.descricao||"",marca:prod?.marca||"",qtdRolos:rolos,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:false,visto:true};
+    const dataCorte=histForm.data||new Date().toISOString().slice(0,10);
+    const novo={id:Date.now(),data:dataCorte,sala:histForm.sala,ref:prodCardRef,descricao:prod?.descricao||"",marca:prod?.marca||"",qtdRolos:rolos,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:false,visto:true};
     setCortesSala(prev=>[novo,...prev]);
-    setHistForm({sala:"",qtdRolos:"",qtdPecas:""});setAddHist(false);
+    addLog("manual",`REF ${prodCardRef} · ${histForm.sala} · ${rolos}r → ${pecas}pç`);
+    setHistForm({sala:"",qtdRolos:"",qtdPecas:"",data:""});setAddHist(false);
   };
 
   const cortesFiltrados=useMemo(()=>{
@@ -4047,7 +4160,7 @@ const SalasCorteContent=({produtos=[]})=>{
           </div>
           <div style={sty.card}><div style={sty.label}>Referência</div>
             <input value={refBusca} onChange={e=>handleRefChange(e.target.value)} placeholder="Digite a referência" style={sty.input}/>
-            {prodFound&&<div style={{marginTop:10,padding:"12px 14px",background:"#eafbf0",borderRadius:10,border:"1px solid #b8dfc8"}}><div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50"}}>{prodFound.descricao}</div><span style={{fontSize:10,color:"#fff",background:prodFound.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{prodFound.marca}</span></div>}
+            {prodFound&&<div style={{marginTop:10,padding:"12px 14px",background:"#eafbf0",borderRadius:10,border:"1px solid #b8dfc8"}}><div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50"}}>{prodFound.descricao}</div><div style={{display:"flex",gap:6,marginTop:6}}><span style={{fontSize:10,color:"#fff",background:prodFound.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{prodFound.marca}</span>{prodFound.tecido&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {prodFound.tecido}</span>}</div></div>}
             {refBusca&&!prodFound&&<div style={{marginTop:8,padding:"10px 12px",background:"#fff8e8",border:"1px solid #f0d080",borderRadius:8}}><div style={{fontSize:12,color:"#8a6500"}}>⚠ REF <b>{refBusca}</b> não cadastrada</div><div style={{fontSize:11,color:"#a89f94",marginTop:4}}>Pode continuar sem descrição. Cadastre depois em Oficinas → Produtos.</div></div>}
           </div>
           <div style={sty.card}><div style={sty.label}>Quantidade de Rolos</div>
@@ -4061,6 +4174,14 @@ const SalasCorteContent=({produtos=[]})=>{
           {saveMsg&&<div style={{textAlign:"center",padding:"8px",fontSize:14,color:saveMsg.startsWith("⚠")?"#c0392b":"#27ae60",fontWeight:600}}>{saveMsg}</div>}
           <button onClick={salvarCorte} style={{width:"100%",padding:mobile?"18px":"16px",borderRadius:12,border:"none",fontSize:mobile?18:16,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif",background:(salaSelected&&(prodFound||refBusca.trim())&&qtdRolos)?"#4a7fa5":"#c8d8e4",color:"#fff",marginBottom:20}}>✓ Registrar Corte</button>
 
+          {/* Alerta tecido parado */}
+          {parados.length>0&&(<div style={{marginBottom:12,padding:"10px 14px",background:"#fdeaea",border:"2px solid #f4b8b8",borderRadius:12}}>
+            <div style={{fontSize:mobile?14:12,fontWeight:700,color:"#c0392b",display:"flex",alignItems:"center",gap:6}}>🚨 {parados.length} corte(s) parado(s) há mais de 3 dias</div>
+            {parados.map(c=>{const dias=Math.floor((hoje-new Date(c.data+"T12:00:00"))/(1000*60*60*24));return(
+              <div key={c.id} style={{marginTop:6,fontSize:12,color:"#6b7c8a"}}>• <b style={{color:"#c0392b"}}>{c.sala}</b> — REF {c.ref} — {c.qtdRolos}r — <b style={{color:"#c0392b"}}>{dias} dias</b></div>
+            );})}
+          </div>)}
+
           {/* Pendentes */}
           {pendentes.length>0&&(<div>
             <div style={{fontSize:mobile?14:12,fontWeight:700,color:"#e67e22",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
@@ -4073,7 +4194,7 @@ const SalasCorteContent=({produtos=[]})=>{
                   <span style={{fontSize:10,background:"#fff8e8",color:"#8a6500",padding:"2px 8px",borderRadius:6}}>⏳ pendente</span>
                 </div>
                 <div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50",marginTop:4}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}{!descCorte(c)&&<span style={{fontSize:11,color:"#a89f94",fontStyle:"italic",marginLeft:6}}>sem cadastro</span>}</div>
-                <div style={{fontSize:mobile?13:12,color:"#6b7c8a",marginTop:2}}>{c.qtdRolos} rolos · toque para informar peças</div>
+                <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:mobile?13:12,color:"#6b7c8a"}}>{c.qtdRolos} rolos · toque para informar peças</span></div>
               </div>
             ))}
           </div>)}
@@ -4082,9 +4203,21 @@ const SalasCorteContent=({produtos=[]})=>{
           {concluidos.length>0&&(<div style={{marginTop:16}}>
             <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Últimos concluídos</div>
             {[...concluidos].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,5).map(c=>(
-              <div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:"1px solid #e8e2da",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontSize:12,fontWeight:600,color:"#2c3e50"}}>{c.sala} · REF {c.ref}</div><div style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</div></div>
-                <span style={{fontSize:10,color:"#27ae60",fontWeight:700}}>✓</span>
+              <div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:"1px solid #e8e2da",marginBottom:6}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span>
+                      <span style={{fontSize:11,color:"#a89f94"}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:2}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
+                    <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</span></div>
+                  </div>
+                  <div style={{display:"flex",gap:8,alignItems:"center",marginLeft:8}}>
+                    <span onClick={()=>iniciarEdicao(c)} style={{cursor:"pointer",color:"#4a7fa5",fontSize:14}}>✏</span>
+                    <span onClick={()=>excluirCorte(c.id)} style={{cursor:"pointer",color:"#d0c8c0",fontSize:16}}>×</span>
+                  </div>
+                </div>
               </div>
             ))}
           </div>)}
@@ -4116,7 +4249,7 @@ const SalasCorteContent=({produtos=[]})=>{
         {/* ═══ ANÁLISE ═══ */}
         {tela==="analise"&&(<div>
           <div style={{display:"flex",gap:4,marginBottom:14,background:"#fff",borderRadius:10,padding:4,border:"1px solid #e8e2da",overflowX:"auto"}}>
-            {[{id:"ranking",label:"🏆 Ranking"},{id:"produtos",label:"📦 Produtos"},{id:"cortes",label:"📋 Cortes"},{id:"alertas",label:`🚨 Alertas${alertas.length>0?` (${alertas.length})`:""}`}].map(t=>(
+            {[{id:"ranking",label:"🏆 Ranking"},{id:"produtos",label:"📦 Produtos"},{id:"cortes",label:"📋 Cortes"},{id:"alertas",label:`🚨 Alertas${alertas.length>0?` (${alertas.length})`:""}`},{id:"logs",label:"📝 Logs"}].map(t=>(
               <button key={t.id} onClick={()=>setAbaAnalise(t.id)} style={sty.tab(abaAnalise===t.id)}>{t.label}</button>
             ))}
           </div>
@@ -4163,13 +4296,14 @@ const SalasCorteContent=({produtos=[]})=>{
                     {!addHist?<button onClick={()=>setAddHist(true)} style={{width:"100%",padding:"10px",borderRadius:8,border:"1px dashed #c8d8e4",background:"#fff",fontSize:12,cursor:"pointer",color:"#4a7fa5",fontFamily:"Georgia,serif",fontWeight:600}}>+ Adicionar corte ao histórico</button>
                     :<div style={{background:"#f7f4f0",borderRadius:10,padding:12}}>
                       <div style={{fontSize:10,color:"#a89f94",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Corte manual</div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                        <select value={histForm.sala} onChange={e=>setHistForm(p=>({...p,sala:e.target.value}))} style={{...sty.input,padding:"8px 10px",fontSize:12}}><option value="">Sala</option>{salas.map(s=><option key={s} value={s}>{s}</option>)}</select>
-                        <input type="number" value={histForm.qtdRolos} onChange={e=>setHistForm(p=>({...p,qtdRolos:e.target.value}))} placeholder="Rolos" style={{...sty.input,padding:"8px 10px",fontSize:12,textAlign:"center"}}/>
-                        <input type="number" value={histForm.qtdPecas} onChange={e=>setHistForm(p=>({...p,qtdPecas:e.target.value}))} placeholder="Peças" style={{...sty.input,padding:"8px 10px",fontSize:12,textAlign:"center"}}/>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+                        <div><div style={{fontSize:9,color:"#a89f94",marginBottom:3}}>Data</div><input type="date" value={histForm.data} onChange={e=>setHistForm(p=>({...p,data:e.target.value}))} style={{...sty.input,padding:"8px 6px",fontSize:11}}/></div>
+                        <div><div style={{fontSize:9,color:"#a89f94",marginBottom:3}}>Sala</div><select value={histForm.sala} onChange={e=>setHistForm(p=>({...p,sala:e.target.value}))} style={{...sty.input,padding:"8px 6px",fontSize:11}}><option value="">—</option>{salas.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+                        <div><div style={{fontSize:9,color:"#a89f94",marginBottom:3}}>Rolos</div><input type="number" value={histForm.qtdRolos} onChange={e=>setHistForm(p=>({...p,qtdRolos:e.target.value}))} placeholder="Qtd" style={{...sty.input,padding:"8px 6px",fontSize:11,textAlign:"center"}}/></div>
+                        <div><div style={{fontSize:9,color:"#a89f94",marginBottom:3}}>Peças</div><input type="number" value={histForm.qtdPecas} onChange={e=>setHistForm(p=>({...p,qtdPecas:e.target.value}))} placeholder="Qtd" style={{...sty.input,padding:"8px 6px",fontSize:11,textAlign:"center"}}/></div>
                       </div>
                       <div style={{display:"flex",gap:8,marginTop:8}}>
-                        <button onClick={()=>{setAddHist(false);setHistForm({sala:"",qtdRolos:"",qtdPecas:""});}} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid #e8e2da",background:"#fff",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+                        <button onClick={()=>{setAddHist(false);setHistForm({sala:"",qtdRolos:"",qtdPecas:"",data:""});}} style={{flex:1,padding:"8px",borderRadius:8,border:"1px solid #e8e2da",background:"#fff",fontSize:12,cursor:"pointer"}}>Cancelar</button>
                         <button onClick={addHistorico} style={{flex:1,padding:"8px",borderRadius:8,border:"none",background:"#4a7fa5",color:"#fff",fontSize:12,cursor:"pointer",fontWeight:600}}>Salvar</button>
                       </div>
                     </div>}
@@ -4193,12 +4327,23 @@ const SalasCorteContent=({produtos=[]})=>{
               {salas.map(s=><button key={s} onClick={()=>setFiltroSala(s)} style={sty.tab(filtroSala===s)}>{s}</button>)}
             </div>
             <div style={{fontSize:11,color:"#a89f94",marginBottom:8}}>{cortesFiltrados.length} corte(s)</div>
-            {cortesFiltrados.map(c=>(<div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:c.alerta?"2px solid #f4b8b8":"1px solid #e8e2da",marginBottom:6}}>
+            {cortesFiltrados.map(c=>{const custo=custoCorte(c);const aberto=custoAberto===c.id;return(<div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:c.alerta?"2px solid #f4b8b8":"1px solid #e8e2da",marginBottom:6}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div>
-                <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:800,fontFamily:_FN,color:c.alerta?"#c0392b":"#2c3e50"}}>{c.rendimento} pç/r</span>{c.alerta&&<span>🔴</span>}</div></div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:12,fontWeight:800,fontFamily:_FN,color:c.alerta?"#c0392b":"#2c3e50"}}>{c.rendimento} pç/r</span>{c.alerta&&<span>🔴</span>}
+                  <span onClick={()=>iniciarEdicao(c)} style={{cursor:"pointer",color:"#4a7fa5",fontSize:14}}>✏</span>
+                  <span onClick={()=>excluirCorte(c.id)} style={{cursor:"pointer",color:"#d0c8c0",fontSize:16}}>×</span>
+                </div></div>
               <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:3}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
-              <div style={{fontSize:11,color:"#6b7c8a",marginTop:2}}>{c.qtdRolos} rolos → {fmt(c.qtdPecas)} peças</div>
-            </div>))}
+              <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#6b7c8a"}}>{c.qtdRolos} rolos → {fmt(c.qtdPecas)} peças</span></div>
+              {custo&&(<div style={{marginTop:6}}><div onClick={()=>setCustoAberto(aberto?null:c.id)} style={{cursor:"pointer",fontSize:11,color:"#4a7fa5",display:"flex",alignItems:"center",gap:4}}>💰 {aberto?"▲ Ocultar custo":"▼ Ver custo tecido"}</div>
+                {aberto&&(<div style={{marginTop:6,background:"#f7f4f0",borderRadius:10,padding:12}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                  <div><div style={{fontSize:9,color:"#a89f94",textTransform:"uppercase",letterSpacing:1}}>Custo/Rolo</div><div style={{fontSize:14,fontWeight:800,color:"#6b7c8a",fontFamily:_FN}}>{fmtR(custo.custoRolo)}</div></div>
+                  <div><div style={{fontSize:9,color:"#a89f94",textTransform:"uppercase",letterSpacing:1}}>Total tecido</div><div style={{fontSize:14,fontWeight:800,color:"#2c3e50",fontFamily:_FN}}>{fmtR(custo.custoTotal)}</div></div>
+                  <div><div style={{fontSize:9,color:"#a89f94",textTransform:"uppercase",letterSpacing:1}}>Custo/Peça</div><div style={{fontSize:18,fontWeight:900,color:"#27ae60",fontFamily:_FN}}>{fmtR(custo.custoPeca)}</div></div>
+                </div></div>)}
+              </div>)}
+            </div>);})}
           </div>)}
 
           {/* ALERTAS */}
@@ -4213,7 +4358,70 @@ const SalasCorteContent=({produtos=[]})=>{
               </div>);
             })}</>)}
           </div>)}
+
+          {/* LOGS */}
+          {abaAnalise==="logs"&&(<div>
+            <div style={{fontSize:11,color:"#8a9aa4",marginBottom:12}}>Registro de ações — {logSC.length} entrada(s)</div>
+            {logSC.length===0?<div style={{...sty.card,textAlign:"center",padding:32,color:"#c0b8b0",fontSize:13}}>Nenhum log ainda</div>
+            :logSC.slice(0,50).map(l=>(
+              <div key={l.id} style={{background:"#fff",borderRadius:8,padding:"8px 12px",border:"1px solid #e8e2da",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <span style={{fontSize:11,fontWeight:700,color:l.acao==="excluir"?"#c0392b":l.acao==="editar"?"#e67e22":l.acao==="criar"?"#27ae60":"#4a7fa5"}}>{l.acao}</span>
+                  <span style={{fontSize:11,color:"#6b7c8a",marginLeft:8}}>{l.detalhe}</span>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
+                  <div style={{fontSize:10,color:"#a89f94"}}>{new Date(l.data).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>
+                  <div style={{fontSize:9,color:"#c0b8b0"}}>{l.usuario}</div>
+                </div>
+              </div>
+            ))}
+          </div>)}
+
         </div>)}
+
+        {/* Modal Editar Corte */}
+        {editCorte&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
+            <div style={{background:"#fff",borderRadius:16,padding:mobile?20:24,maxWidth:400,width:"100%"}}>
+              <div style={{fontSize:11,color:"#a89f94",textTransform:"uppercase",letterSpacing:1}}>Editar corte</div>
+              <div style={{marginTop:10,display:"grid",gap:10}}>
+                <div><div style={{fontSize:10,color:"#a89f94",marginBottom:3}}>SALA</div>
+                  <select value={editForm.sala} onChange={e=>setEditForm(p=>({...p,sala:e.target.value}))} style={{...sty.input,padding:"8px 10px",fontSize:13}}>
+                    <option value="">—</option>{salas.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div><div style={{fontSize:10,color:"#a89f94",marginBottom:3}}>REF</div>
+                  <input value={editForm.ref} onChange={e=>setEditForm(p=>({...p,ref:e.target.value}))} style={{...sty.input,padding:"8px 10px",fontSize:13}}/>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div><div style={{fontSize:10,color:"#a89f94",marginBottom:3}}>ROLOS</div>
+                    <input type="number" value={editForm.qtdRolos} onChange={e=>setEditForm(p=>({...p,qtdRolos:e.target.value}))} style={{...sty.input,padding:"8px 10px",fontSize:13,textAlign:"center"}}/>
+                  </div>
+                  <div><div style={{fontSize:10,color:"#a89f94",marginBottom:3}}>PEÇAS</div>
+                    <input type="number" value={editForm.qtdPecas} onChange={e=>setEditForm(p=>({...p,qtdPecas:e.target.value}))} placeholder="—" style={{...sty.input,padding:"8px 10px",fontSize:13,textAlign:"center"}}/>
+                  </div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:14}}>
+                <button onClick={()=>setEditCorte(null)} style={{flex:1,padding:mobile?"14px":"10px",borderRadius:10,border:"1px solid #e8e2da",background:"#fff",fontSize:14,cursor:"pointer",fontFamily:"Georgia,serif"}}>Cancelar</button>
+                <button onClick={salvarEdicao} style={{flex:1,padding:mobile?"14px":"10px",borderRadius:10,border:"none",background:"#4a7fa5",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}}>Salvar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Confirm Dialog */}
+        {confirm&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
+            <div style={{background:"#fff",borderRadius:16,padding:24,maxWidth:320,width:"100%",textAlign:"center"}}>
+              <div style={{fontSize:14,fontWeight:600,color:"#2c3e50",marginBottom:16}}>{confirm.msg}</div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>setConfirm(null)} style={{flex:1,padding:"10px",borderRadius:10,border:"1px solid #e8e2da",background:"#fff",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}}>Cancelar</button>
+                <button onClick={confirm.onYes} style={{flex:1,padding:"10px",borderRadius:10,border:"none",background:"#c0392b",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif"}}>Excluir</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -5474,6 +5682,16 @@ export default function App(){
   const [produtos,setProdutos]=useState([]);
   const [oficinasCAD,setOficinasCAD]=useState(OFICINAS_CAD_INICIAL);
   const [logTroca,setLogTroca]=useState([]);
+  const [tecidosCAD,setTecidosCAD]=useState([
+    {id:1,descricao:"Linho s/ elastano",metragemRolo:50,valorMetro:10},
+    {id:2,descricao:"Linho c/ elastano",metragemRolo:50,valorMetro:18},
+    {id:3,descricao:"Viscolinho",metragemRolo:50,valorMetro:10},
+    {id:4,descricao:"Verona",metragemRolo:50,valorMetro:10},
+    {id:5,descricao:"Couro site",metragemRolo:50,valorMetro:10},
+    {id:6,descricao:"Couro loja",metragemRolo:50,valorMetro:19},
+    {id:7,descricao:"Viscose estampada",metragemRolo:50,valorMetro:20},
+    {id:8,descricao:"Tricoline site",metragemRolo:50,valorMetro:10},
+  ]);
   const [boletosShared,setBoletosShared]=useState([...BOLETOS_MAR,...BOLETOS_ABR,...BOLETOS_MAI,...BOLETOS_JUN,...BOLETOS_JUL]);
   const receitasIniciais={1:RECEITAS_JAN,2:RECEITAS_FEV,3:RECEITAS_MAR};
   const [receitasPorMes,setReceitasPorMes]=useState(receitasIniciais);
@@ -5494,7 +5712,7 @@ export default function App(){
   const debounceCortes=useRef(null);
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
-  const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores};
+  const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD};
 
   // ── LOAD DO SUPABASE NA ABERTURA ───────────────────────────────────────────
   useEffect(()=>{
@@ -5524,6 +5742,7 @@ export default function App(){
         if(d.produtos)setProdutos(d.produtos);
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
+        if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
       }
       // Cortes (chave separada)
       if(!ec&&dc?.payload){
@@ -5532,6 +5751,7 @@ export default function App(){
         if(d.produtos)setProdutos(d.produtos);
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
+        if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
       }
       setDbCarregado(true);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
@@ -5740,9 +5960,9 @@ export default function App(){
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
-        {active==="salascorte"&&<SalasCorteContent produtos={produtos}/>}
+        {active==="salascorte"&&<SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/>}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL}/>}
-        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes}/>}
+        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
