@@ -462,7 +462,7 @@ const CATS = [
 ];
 
 const SEM_AUX = ["Taxas Cartão","Taxas Marketplaces","Valor de Correção"];
-const CATS_RAPIDAS = ["Free Lances","Carreto","Modelista","Piloteiro","Gastos Diários Loja e Fábrica","Representantes","Reforma Loja e Equipamentos","Gastos Carro","Modelos Fotos","Correios","Giro Empréstimo"];
+const CATS_RAPIDAS = ["Free Lances","Carreto","Modelista","Piloteiro","Gastos Diários Loja e Fábrica","Representantes","Reforma Loja e Equipamentos","Gastos Carro","Modelos Fotos","Correios","Giro Empréstimo","Etiquetas/Tags"];
 const CATS_PREST = ["Oficinas Costura","Salas Corte","Passadoria"];
 const LEVE_DEST  = ["Funcionários","Pró-Labore","Salas Corte","Passadoria","Aviamentos"];
 const SUPER_DEST = ["Tecidos","Oficinas Costura"];
@@ -472,6 +472,37 @@ const FIXOS_FUNC = [
   { label:"Café da Manhã",   valor:4000 },
   { label:"Cestas Básicas",  valor:3200 },
 ];
+
+// ─── Templates fixos para categorias com itens recorrentes ──────────────────
+const FIXOS_NOMES_FUNC = [
+  "CELIA","CRISTIANE","FRANCISCA","JEAN","GILIARDE","PEDRO",
+  "MATHEUS","CLEIDE","VANESSA","IGOR","TALITA","STEFANY",
+  "POLY","INGRID","GABRIELLY","KELLY","EMANUELLE","LUCIA",
+];
+
+const FIXOS_TEMPLATE = {
+  "Pró-Labore": [
+    "Plano Saúde","Condomínio","Água/Luz/Net","Leia (férias/salário)","Marta",
+    "Parcela Casa/Apto","Diarista","Previdência","Consórcio casa/carro Itaú dia 15",
+    "Gastos Gerais","Escola Isabella","Cartão","Mercado/Frutas/Açougue","Farmácia",
+    "Restaurante","Reforma","Estacionamento/Seguro Carro","Gasolina/Lavar/Insulfilm",
+    "Presentes","Heitor","Ailson","Tamara","Isabella","Saída Sábado","Porto",
+    "Viagem Parcela","Reforma Casa",
+  ],
+  "Contabilidade": [
+    "FGTS AMICIA","FGTS LA AMICIA","INSS AMICIA","INSS LA AMICIA","MUNIAM","CONTABILIDADE",
+  ],
+  "Impostos DAS": [
+    "DAS/Imposto",
+  ],
+  "Concessionárias": [
+    "Água Silva Teles","Água José Paulino","Telefone Silva Teles","Telefone José Paulino",
+    "Internet José Paulino","Nextel","Futura Silva Teles","Verisure Silva Teles",
+    "Segurança Silva Teles","Segurança Bom Retiro","Boa Vista",
+    "Bling Amicia","Bling La Amicia","Bling Muniam","Ideris","Vesti","Site",
+  ],
+};
+const CATS_FIXAS = Object.keys(FIXOS_TEMPLATE);
 
 const DOMINGOS_MAR = [1,8,15,22,29];
 
@@ -1831,10 +1862,15 @@ const GerenciarPrestadores=({cat,prestadores,setPrestadores})=>{
 const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinhaAux,prestadores,setPrestadores})=>{
   const temPrest=CATS_PREST.includes(auxAberta);
   const isTecidos=auxAberta==="Tecidos";
+  const isFixa=CATS_FIXAS.includes(auxAberta);
   const listaPrest=prestadores[auxAberta]||[];
   const inputStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px",fontSize:12,outline:"none",background:"#fff"};
-  const gridCols=isTecidos?"80px 1fr 90px 110px 36px":temPrest?"90px 1fr 120px 36px":"90px 1fr 120px 36px";
-  const headers=isTecidos?["Data","Empresa","Nº Nota","Valor",""]
+  const gridCols=isFixa?"50px 1fr 120px 36px"
+    :isTecidos?"80px 1fr 90px 110px 36px"
+    :temPrest?"90px 1fr 120px 36px"
+    :"90px 1fr 120px 36px";
+  const headers=isFixa?["Data","Descrição","Valor",""]
+    :isTecidos?["Data","Empresa","Nº Nota","Valor",""]
     :temPrest?["Data","Prestador","Valor",""]
     :["Data","Descrição","Valor",""];
   return(
@@ -1843,16 +1879,22 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
       <div style={{display:"grid",gridTemplateColumns:gridCols,background:"#f7f4f0",borderBottom:"1px solid #e8e2da"}}>
         {headers.map((h,i)=><div key={i} style={{padding:"9px 12px",fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",fontWeight:600}}>{h}</div>)}
       </div>
-      <div style={{maxHeight:400,overflowY:"auto"}}>
+      <div style={{maxHeight:isFixa?20*33:400,overflowY:"auto"}}>
         {(auxData[auxAberta]||[]).map((row,idx)=>{
           const fromBoleto=!!row._boletoid;
-          const rowStyle={display:"grid",gridTemplateColumns:gridCols,borderBottom:"1px solid #f0ebe4",background:fromBoleto?"#f0f6fb":"#fff"};
+          const rowStyle={display:"grid",gridTemplateColumns:gridCols,borderBottom:"1px solid #f0ebe4",background:fromBoleto?"#f0f6fb":row.valor?"#f9fdf9":"#fff"};
           const dis={...inputStyle,background:fromBoleto?"#e8f0f8":"#fff",color:fromBoleto?"#4a7fa5":"#2c3e50"};
           const valStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px 4px 26px",fontSize:14,fontWeight:700,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",outline:"none",background:fromBoleto?"#e8f0f8":"#fff",color:fromBoleto?"#4a7fa5":"#2c3e50",boxSizing:"border-box"};
           return(
             <div key={idx} style={rowStyle}>
-              <div style={{padding:"6px 8px"}}><input value={row.data||""} onChange={e=>updateLinhaAux(auxAberta,idx,"data",e.target.value)} style={dis} disabled={fromBoleto}/></div>
-              {isTecidos?(
+              {isFixa?(
+                <div style={{padding:"6px 8px",fontSize:11,color:"#6b7c8a",fontFamily:"Calibri,Arial"}}>{row.data||<span style={{color:"#d0d0d0"}}>—</span>}</div>
+              ):(
+                <div style={{padding:"6px 8px"}}><input value={row.data||""} onChange={e=>updateLinhaAux(auxAberta,idx,"data",e.target.value)} style={dis} disabled={fromBoleto}/></div>
+              )}
+              {isFixa?(
+                <div style={{padding:"6px 12px",fontWeight:700,color:"#2c3e50",fontSize:12}}>{row.descricao}</div>
+              ):isTecidos?(
                 <>
                   <div style={{padding:"6px 8px"}}><input value={row.empresa||""} onChange={e=>updateLinhaAux(auxAberta,idx,"empresa",e.target.value)} style={dis} disabled={fromBoleto}/></div>
                   <div style={{padding:"6px 8px"}}><input value={row.nroNota||""} onChange={e=>updateLinhaAux(auxAberta,idx,"nroNota",e.target.value)} style={dis} disabled={fromBoleto}/></div>
@@ -1878,15 +1920,16 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
         })}
         {(auxData[auxAberta]||[]).length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum lançamento</div>}
       </div>
-      <div style={{padding:"12px 16px",background:"#f7f4f0",borderTop:"1px solid #e8e2da"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"#f7f4f0",borderTop:isFixa?"2px solid #4a7fa5":"1px solid #e8e2da"}}>
         <button onClick={()=>addLinhaAux(auxAberta)} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer"}}>+ Adicionar linha</button>
+        {isFixa&&<span style={{fontSize:14,fontWeight:900,color:"#2c3e50",fontFamily:"Calibri,Arial"}}>R$ {Number((auxData[auxAberta]||[]).reduce((s,l)=>s+(parseFloat(String(l.valor).replace(",","."))||0),0)).toLocaleString("pt-BR",{minimumFractionDigits:2})}</span>}
       </div>
     </>
   );
 };
 
 
-const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores})=>{
+const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc})=>{
   const [recLocal,setRecLocal]=useState(RECEITAS_EXEMPLO);
   const [auxLocal,setAuxLocal]=useState(AUX_INICIAL);
   const [catsLocal,setCatsLocal]=useState([...CATS]);
@@ -1901,6 +1944,26 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const [mostraCadastro,setMostraCadastro]=useState(false);
   const [editando,setEditando]=useState(null);
   const [auxAberta,setAuxAberta]=useState(null);
+  const abrirAux=(cat)=>{
+    // Auto-populate fixed categories if empty
+    const cfg=fixosConfig||FIXOS_TEMPLATE;
+    if(cfg[cat]){
+      const atual=auxData[cat]||[];
+      if(atual.length===0){
+        const linhas=cfg[cat].map(desc=>({data:"",valor:"",descricao:desc}));
+        setAuxData(prev=>({...prev,[cat]:linhas}));
+      }
+    }
+    if(cat==="Funcionários"){
+      const atual=auxData["Funcionários"]||[];
+      if(atual.length===0){
+        const nomes=fixosNomesFunc||FIXOS_NOMES_FUNC;
+        const linhas=nomes.map(nome=>({nome,salario:"",comissao:"",extra:"",alimentacao:"",vale:"",ferias:"",rescisao:""}));
+        setAuxData(prev=>({...prev,["Funcionários"]:linhas}));
+      }
+    }
+    setAuxAberta(cat);
+  };
   const [modalRapido,setModalRapido]=useState(null);
   const [modalInput,setModalInput]=useState("");
   const [modalErro,setModalErro]=useState("");
@@ -1923,8 +1986,33 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const recTotais={geral:totalGeral,mkt:totRec.mkt};
   const totalDesp=categorias.reduce((s,c)=>s+calcTotalAux(c,auxData,recTotais),0);
   const salvarCelula=(dia,canal,val)=>setReceitas(prev=>({...prev,[dia]:{...(prev[dia]||{}),[canal]:val}}));
-  const updateLinhaAux=(cat,idx,field,val)=>setAuxData(prev=>{const l=[...(prev[cat]||[])];l[idx]={...l[idx],[field]:val};return{...prev,[cat]:l};});
-  const removeLinhaAux=(cat,idx)=>setAuxData(prev=>{const l=[...(prev[cat]||[])];l.splice(idx,1);return{...prev,[cat]:l};});
+  const updateLinhaAux=(cat,idx,field,val)=>setAuxData(prev=>{
+    const l=[...(prev[cat]||[])];const oldVal=l[idx]?.[field];l[idx]={...l[idx],[field]:val};
+    // Auto-date for fixed categories when valor is entered
+    if(field==="valor"&&CATS_FIXAS.includes(cat)){
+      const v=parseFloat(String(val).replace(",","."));
+      if(v>0&&!l[idx].data){
+        const h=new Date();l[idx].data=`${String(h.getDate()).padStart(2,"0")}/${String(h.getMonth()+1).padStart(2,"0")}`;
+      }
+      if(!val||v===0||isNaN(v))l[idx].data="";
+    }
+    // Sync new descriptions to fixosConfig template
+    if(field==="descricao"&&CATS_FIXAS.includes(cat)&&val&&!oldVal&&setFixosConfig){
+      setFixosConfig(pc=>{const cfg={...pc};if(!(cfg[cat]||[]).includes(val))cfg[cat]=[...(cfg[cat]||[]),val];return cfg;});
+    }
+    return{...prev,[cat]:l};
+  });
+  const removeLinhaAux=(cat,idx)=>{
+    const row=(auxData[cat]||[])[idx];
+    setAuxData(prev=>{const l=[...(prev[cat]||[])];l.splice(idx,1);return{...prev,[cat]:l};});
+    // Sync template: remove from fixosConfig if it's a fixed category
+    if(CATS_FIXAS.includes(cat)&&row?.descricao&&setFixosConfig){
+      setFixosConfig(prev=>{const cfg={...prev};cfg[cat]=(cfg[cat]||[]).filter(d=>d!==row.descricao);return cfg;});
+    }
+    if(cat==="Funcionários"&&row?.nome&&setFixosNomesFunc){
+      setFixosNomesFunc(prev=>prev.filter(n=>n!==row.nome));
+    }
+  };
   const CATS_DATA_AUTO=["Caseado","Marketing","Sistemas","Concessionárias","Contabilidade","Impostos DAS","Aviamentos","Passadoria","Salas Corte"];
   const addLinhaAux=(cat,dadosIniciais)=>{
     const hoje=new Date();const dd=`${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}`;
@@ -2037,7 +2125,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                   const valWeight=isSuper?800:700;
                   const valColor=total>0?(isSuper?"#1a3a5c":"#2c3e50"):"#d0c8c0";
                   return(
-                    <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else setAuxAberta(cat);}}}>
+                    <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else abrirAux(cat);}}}>
                       <td style={{padding:"7px 12px"}}>
                         <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
                         {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
@@ -2146,7 +2234,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                     const valWeight=isSuper?800:700;
                     const valColor=total>0?(isSuper?"#1a3a5c":"#2c3e50"):"#d0c8c0";
                     return(
-                      <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else setAuxAberta(cat);}}}>
+                      <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else abrirAux(cat);}}}>
                         <td style={{padding:"7px 12px"}}>
                           <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
                           {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
@@ -2184,11 +2272,16 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                   <tbody>
                     {(auxData["Funcionários"]||[]).map((row,idx)=>{
                       const rowTotal=calcRowTotal(row);
+                      const isFixo=FIXOS_NOMES_FUNC.includes(row.nome?.toUpperCase());
                       return(
-                        <tr key={idx} style={{borderBottom:"1px solid #f0ebe4"}}>
+                        <tr key={idx} style={{borderBottom:"1px solid #f0ebe4",background:rowTotal>0?"#f9fdf9":"#fff"}}>
                           <td style={{padding:"6px 8px",background:"#f5f9fd",borderRight:"2px solid #c8dff0"}}>
-                            <input value={row.nome||""} onChange={e=>updateLinhaAux("Funcionários",idx,"nome",e.target.value)}
-                              style={{border:"none",borderRadius:4,padding:"5px 6px",fontSize:13,outline:"none",fontFamily:"Georgia,serif",fontWeight:700,background:"transparent",color:"#2c3e50",width:110}}/>
+                            {isFixo?(
+                              <div style={{padding:"5px 6px",fontSize:13,fontFamily:"Georgia,serif",fontWeight:700,color:"#2c3e50",width:110}}>{row.nome}</div>
+                            ):(
+                              <input value={row.nome||""} onChange={e=>updateLinhaAux("Funcionários",idx,"nome",e.target.value)}
+                                style={{border:"none",borderRadius:4,padding:"5px 6px",fontSize:13,outline:"none",fontFamily:"Georgia,serif",fontWeight:700,background:"transparent",color:"#2c3e50",width:110}}/>
+                            )}
                           </td>
                           {["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].map(f=>(
                             <td key={f} style={{padding:"6px 4px"}}>
@@ -2647,7 +2740,7 @@ const AgendaContent=()=>{
   );
 };
 
-const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceitasMes,auxDataPorMes,setAuxDataPorMes,categoriasPorMes,setCategoriasPorMes,dadosMensais,mesAtual,prestadores,setPrestadores})=>{
+const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceitasMes,auxDataPorMes,setAuxDataPorMes,categoriasPorMes,setCategoriasPorMes,dadosMensais,mesAtual,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc})=>{
   const anoAtual=2026;
   const anos=[2026,2025,2024,2023,2022,2021,2020,2019];
   const [anoSel,setAnoSel]=useState(anoAtual);
@@ -2676,6 +2769,7 @@ const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceit
             auxData={auxDataPorMes[mesNum]||{}} setAuxData={(fn)=>setAuxDataPorMes(prev=>({...prev,[mesNum]:typeof fn==="function"?fn(prev[mesNum]||{}):fn}))}
             categorias={categoriasPorMes[mesNum]||[...CATS]} setCategorias={(fn)=>setCategoriasPorMes(prev=>({...prev,[mesNum]:typeof fn==="function"?fn(prev[mesNum]||[...CATS]):fn}))}
             boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores}
+            fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc}
           />
         </div>
       );
@@ -5678,6 +5772,8 @@ export default function App(){
   const [menuUser,setMenuUser]=useState(false);
   const [usuarios,setUsuarios]=useState(USUARIOS_INICIAL);
   const [prestadores,setPrestadores]=useState(PRESTADORES_INICIAL);
+  const [fixosConfig,setFixosConfig]=useState(FIXOS_TEMPLATE);
+  const [fixosNomesFunc,setFixosNomesFunc]=useState(FIXOS_NOMES_FUNC);
   const [cortes,setCortes]=useState([]);
   const [produtos,setProdutos]=useState([]);
   const [oficinasCAD,setOficinasCAD]=useState(OFICINAS_CAD_INICIAL);
@@ -5712,7 +5808,7 @@ export default function App(){
   const debounceCortes=useRef(null);
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
-  const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD};
+  const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
 
   // ── LOAD DO SUPABASE NA ABERTURA ───────────────────────────────────────────
   useEffect(()=>{
@@ -5743,6 +5839,8 @@ export default function App(){
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
         if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+        if(d.fixosConfig)setFixosConfig(d.fixosConfig);
+        if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
       }
       // Cortes (chave separada)
       if(!ec&&dc?.payload){
@@ -5752,6 +5850,8 @@ export default function App(){
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
         if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+        if(d.fixosConfig)setFixosConfig(d.fixosConfig);
+        if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
       }
       setDbCarregado(true);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
@@ -5953,10 +6053,10 @@ export default function App(){
       {/* Conteúdo */}
       <div style={{flex:1,background:"#f7f4f0",padding:active==="oficinas"||active==="lancamentos"||active==="salascorte"?"8px 8px":"16px 20px",overflowY:"auto"}}>
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
-        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes}/>}
+        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="agenda"&&<AgendaContent/>}
-        {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores}/>}
+        {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc}/>}
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
