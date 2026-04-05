@@ -5896,6 +5896,19 @@ export default function App(){
       if(!ec&&dc?.payload){
         const d=dc.payload;
         if(d.cortes){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
+        // Recuperação: se o payload principal perdeu produtos/oficinas (bug anterior), tenta recuperar daqui
+        const mainP=(!ef&&df?.payload)?df.payload:{};
+        if((!mainP.produtos||mainP.produtos.length===0)&&d.produtos&&d.produtos.length>0){
+          console.log("Recuperando produtos de ailson_cortes:",d.produtos.length);
+          setProdutos(d.produtos);
+        }
+        if((!mainP.oficinasCAD||mainP.oficinasCAD.length===0)&&d.oficinasCAD&&d.oficinasCAD.length>0){
+          console.log("Recuperando oficinasCAD de ailson_cortes:",d.oficinasCAD.length);
+          setOficinasCAD(d.oficinasCAD);
+        }
+        if((!mainP.logTroca||mainP.logTroca.length===0)&&d.logTroca&&d.logTroca.length>0){
+          setLogTroca(d.logTroca);
+        }
       }
       setDbCarregado(true);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
