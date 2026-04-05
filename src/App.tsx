@@ -3100,6 +3100,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [editOfCod,setEditOfCod]=useState(null);
   const [formTec,setFormTec]=useState({descricao:"",metragemRolo:"",valorMetro:""});
   const [editTecId,setEditTecId]=useState(null);
+  const [buscaProd,setBuscaProd]=useState("");
   const [trocaDe,setTrocaDe]=useState("");
   const [trocaPara,setTrocaPara]=useState("");
   const [trocaMsg,setTrocaMsg]=useState("");
@@ -3384,11 +3385,18 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   <div style={{flex:"0 0 80px"}}><button onClick={()=>{if(!formProd.ref||!formProd.descricao||!formProd.valorUnit)return;const valorNum=parseFloat(String(formProd.valorUnit).replace(",","."));if(editProdRef)setProdutos(prev=>prev.map(p=>p.ref===editProdRef?{...formProd,valorUnit:valorNum}:p));else if(produtos.find(p=>p.ref===formProd.ref)){alert("Ref já cadastrada!");}else setProdutos(prev=>[...prev,{...formProd,valorUnit:valorNum}]);setFormProd({ref:"",descricao:"",marca:"Amícia",valorUnit:"",tecido:""});setEditProdRef(null);}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editProdRef?"Atualizar":"Adicionar"}</button></div>
                 </div>
               </div>
+              {/* Busca */}
+              {(()=>{const prodsFilt=buscaProd.trim()?produtos.filter(p=>p.ref.toLowerCase().includes(buscaProd.toLowerCase())||p.descricao.toLowerCase().includes(buscaProd.toLowerCase())):produtos;return(<>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <div style={{position:"relative",flex:1}}><span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#a89f94",pointerEvents:"none"}}>🔍</span><input value={buscaProd} onChange={e=>setBuscaProd(e.target.value)} placeholder="Buscar por referência ou descrição..." style={{...iStyle,width:"100%",paddingLeft:32,fontSize:12}}/></div>
+                {buscaProd&&<button onClick={()=>setBuscaProd("")} style={{background:"none",border:"1px solid #e8e2da",borderRadius:6,padding:"6px 10px",fontSize:12,cursor:"pointer",color:"#a89f94"}}>✕</button>}
+                <span style={{fontSize:11,color:"#a89f94",whiteSpace:"nowrap"}}>{prodsFilt.length} de {produtos.length}</span>
+              </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:500}}><thead><tr style={{background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Tecido","Vl. Unit.",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{produtos.length===0&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto cadastrado</td></tr>}{produtos.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
+                  <tbody>{prodsFilt.length===0&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{buscaProd?`Nenhum produto com "${buscaProd}"`:"Nenhum produto cadastrado"}</td></tr>}{prodsFilt.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
                 </table>
-              </div>
+              </div></>);})()}
             </div>
           )}
           {cadAba==="tecidos"&&(
@@ -5892,23 +5900,13 @@ export default function App(){
           try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:Date.now()}));}catch(e){console.error(e);}
         }
       }
-      // Cortes (chave separada — só cortes com merge)
+      // Cortes (chave separada — cortes + oficinas data)
       if(!ec&&dc?.payload){
         const d=dc.payload;
         if(d.cortes){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
-        // Recuperação: se o payload principal perdeu produtos/oficinas (bug anterior), tenta recuperar daqui
-        const mainP=(!ef&&df?.payload)?df.payload:{};
-        if((!mainP.produtos||mainP.produtos.length===0)&&d.produtos&&d.produtos.length>0){
-          console.log("Recuperando produtos de ailson_cortes:",d.produtos.length);
-          setProdutos(d.produtos);
-        }
-        if((!mainP.oficinasCAD||mainP.oficinasCAD.length===0)&&d.oficinasCAD&&d.oficinasCAD.length>0){
-          console.log("Recuperando oficinasCAD de ailson_cortes:",d.oficinasCAD.length);
-          setOficinasCAD(d.oficinasCAD);
-        }
-        if((!mainP.logTroca||mainP.logTroca.length===0)&&d.logTroca&&d.logTroca.length>0){
-          setLogTroca(d.logTroca);
-        }
+        if(d.produtos&&d.produtos.length>0)setProdutos(d.produtos);
+        if(d.oficinasCAD&&d.oficinasCAD.length>0)setOficinasCAD(d.oficinasCAD);
+        if(d.logTroca)setLogTroca(d.logTroca);
       }
       setDbCarregado(true);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
@@ -6000,11 +5998,14 @@ export default function App(){
         const localIds=new Set((cortes||[]).map(c=>c.id));
         const remotoOnly=(remoto.cortes||[]).filter(c=>!localIds.has(c.id));
         const cortesMerged=[...(cortes||[]),...remotoOnly];
-        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload:{cortes:cortesMerged}},{onConflict:'user_id'});
+        const localRefs=new Set((produtos||[]).map(p=>p.ref));
+        const produtosMerged=[...(produtos||[]),...(remoto.produtos||[]).filter(p=>!localRefs.has(p.ref))];
+        const payload={cortes:cortesMerged,produtos:produtosMerged,oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
+        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
       }catch(e){console.error("Erro save cortes:",e);}
     },1500);
     return()=>clearTimeout(debounceCortes.current);
-  },[cortes,dbCarregado]);
+  },[cortes,produtos,oficinasCAD,logTroca,dbCarregado]);
 
   // ── SAVE AO SAIR DA PÁGINA / TROCAR APP (celular) ─────────────────────────
   useEffect(()=>{
