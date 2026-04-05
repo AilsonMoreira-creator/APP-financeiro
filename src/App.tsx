@@ -462,7 +462,7 @@ const CATS = [
 ];
 
 const SEM_AUX = ["Taxas Cartão","Taxas Marketplaces","Valor de Correção"];
-const CATS_RAPIDAS = ["Free Lances","Carreto","Modelista","Piloteiro","Gastos Diários Loja e Fábrica","Representantes","Reforma Loja e Equipamentos","Gastos Carro","Modelos Fotos","Correios","Giro Empréstimo","Etiquetas/Tags"];
+const CATS_RAPIDAS = ["Free Lances","Carreto","Modelista","Piloteiro","Gastos Diários Loja e Fábrica","Representantes","Reforma Loja e Equipamentos","Gastos Carro","Modelos Fotos","Correios","Giro Empréstimo","Etiquetas/Tags","Embalagens"];
 const CATS_PREST = ["Oficinas Costura","Salas Corte","Passadoria"];
 const LEVE_DEST  = ["Funcionários","Pró-Labore","Salas Corte","Passadoria","Aviamentos"];
 const SUPER_DEST = ["Tecidos","Oficinas Costura"];
@@ -2651,13 +2651,13 @@ const AgendaContent=()=>{
         if(mes===mesHoje&&ano===anoHoje)return it;
         // Mês novo — reseta todos os feito para false e salva imediatamente
         const resetado=it.map(i=>({...i,feito:false}));
-        try{localStorage.setItem("amica_agenda",JSON.stringify({itens:resetado,mes:mesHoje,ano:anoHoje}));}catch(e){}
+        try{localStorage.setItem("amica_agenda",JSON.stringify({itens:resetado,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}
         return resetado;
       }
-    }catch(e){}
+    }catch(e){console.error(e)}
     // Primeira vez ou dados corrompidos — carrega agenda inicial com tudo desmarcado e salva
     const inicial=AGENDA_INICIAL.map(i=>({...i,feito:false}));
-    try{localStorage.setItem("amica_agenda",JSON.stringify({itens:inicial,mes:mesHoje,ano:anoHoje}));}catch(e){}
+    try{localStorage.setItem("amica_agenda",JSON.stringify({itens:inicial,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}
     return inicial;
   });
 
@@ -2670,10 +2670,10 @@ const AgendaContent=()=>{
     setSaveStatus("saving");
     setTimeout(()=>setSaveStatus("saved"),600);
   };
-  const toggle=(id)=>{setItens(prev=>{const novo=prev.map(i=>i.id===id?{...i,feito:!i.feito}:i);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
-  const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);const novo=prev.filter(x=>x.id!==id);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setConfirm(null);markChange();}});};
-  const desfazer=()=>{if(!lixeira.length)return;const u=lixeira[lixeira.length-1];setItens(prev=>{const novo=[...prev,u].sort((a,b)=>a.dia-b.dia);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setLixeira(l=>l.slice(0,-1));};
-  const adicionar=()=>{if(!novoItem.dia||!novoItem.descricao.trim())return;setItens(prev=>{const novo=[...prev,{id:Date.now(),dia:parseInt(novoItem.dia),descricao:novoItem.descricao.trim(),feito:false}];try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){}return novo;});setNovoItem({dia:"",descricao:""});markChange();};
+  const toggle=(id)=>{setItens(prev=>{const novo=prev.map(i=>i.id===id?{...i,feito:!i.feito}:i);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}return novo;});setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
+  const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);const novo=prev.filter(x=>x.id!==id);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}return novo;});setConfirm(null);markChange();}});};
+  const desfazer=()=>{if(!lixeira.length)return;const u=lixeira[lixeira.length-1];setItens(prev=>{const novo=[...prev,u].sort((a,b)=>a.dia-b.dia);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}return novo;});setLixeira(l=>l.slice(0,-1));};
+  const adicionar=()=>{if(!novoItem.dia||!novoItem.descricao.trim())return;setItens(prev=>{const novo=[...prev,{id:Date.now(),dia:parseInt(novoItem.dia),descricao:novoItem.descricao.trim(),feito:false}];try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}return novo;});setNovoItem({dia:"",descricao:""});markChange();};
   const sorted=[...itens].sort((a,b)=>a.dia-b.dia);
   const alertas=sorted.filter(i=>!i.feito&&i.dia<hoje);
   const hojeItems=sorted.filter(i=>!i.feito&&i.dia===hoje);
@@ -2932,11 +2932,11 @@ const RelatorioContent=(props)=>{
       <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Tipo de Relatório</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         {TIPOS_REL.map(t=>(
-          <div key={t.id} onClick={()=>{if(t.id==="copiar"){copiarDados();return;}setTipo(t.id);}} style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:16,alignItems:"center"}}>
-            <t.Icon size={40}/>
-            <div>
-              <div style={{fontSize:14,fontWeight:600,color:"#2c3e50",marginBottom:4}}>{t.id==="copiar"&&copiado?"✓ Copiado!":t.label}</div>
-              <div style={{fontSize:11,color:"#a89f94"}}>{t.desc}</div>
+          <div key={t.id} onClick={()=>{if(t.id==="copiar"){copiarDados();return;}setTipo(t.id);}} style={{background:"#fff",borderRadius:12,padding:"20px 16px",border:"1px solid #e8e2da",cursor:"pointer",display:"flex",gap:14,alignItems:"center",minHeight:70}}>
+            <div style={{width:44,height:44,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}><t.Icon size={40}/></div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:600,color:"#2c3e50",marginBottom:3}}>{t.id==="copiar"&&copiado?"✓ Copiado!":t.label}</div>
+              <div style={{fontSize:11,color:"#a89f94",lineHeight:1.3}}>{t.desc}</div>
             </div>
           </div>
         ))}
@@ -3581,7 +3581,7 @@ const blingDb={
   async saveToken(conta,data){
     try{
       await supabase.from('bling_tokens').upsert({conta,...data},{onConflict:'conta'});
-    }catch{}
+    }catch(e){console.error(e)}
   },
   async getResultado(data){
     try{
@@ -3592,7 +3592,7 @@ const blingDb={
   async saveResultado(data,exitus,lumia,muniam,total_bruto,valor_liquido){
     try{
       await supabase.from('bling_resultados').upsert({data,exitus,lumia,muniam,total_bruto,valor_liquido},{onConflict:'data'});
-    }catch{}
+    }catch(e){console.error(e)}
   },
 };
 
@@ -3630,7 +3630,7 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
         if(url)localStorage.setItem("sb_url",url);
         if(key)localStorage.setItem("sb_key",key);
       }
-    }catch(e){}
+    }catch(e){console.error(e)}
     (async()=>{
       const ts=await blingDb.getTokens();
       const m={exitus:null,lumia:null,muniam:null};
@@ -3647,13 +3647,13 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
             localStorage.setItem("bling_creds",JSON.stringify(sbCreds.payload));
           }
         }
-      }catch{}
+      }catch(e){console.error(e)}
       const r=await blingDb.getResultado(hoje);
       if(r)setResultado(r);
       try{
         const {data:hist}=await supabase.from('bling_resultados').select('*').order('data',{ascending:false}).limit(31);
         if(hist)setHistorico(hist);
-      }catch{}
+      }catch(e){console.error(e)}
     })();
   },[]);
 
@@ -3662,7 +3662,7 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
     setCreds(novo);
     localStorage.setItem("bling_creds",JSON.stringify(novo));
     // Salva no Supabase também
-    try{supabase.from('amicia_data').upsert({user_id:'bling-creds',payload:novo},{onConflict:'user_id'});}catch{}
+    try{supabase.from('amicia_data').upsert({user_id:'bling-creds',payload:novo},{onConflict:'user_id'});}catch(e){console.error(e)}
   };
 
   const conectarConta=(conta)=>{
@@ -3990,7 +3990,7 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
 const SALAS_CORTE_INICIAL=["Antonio","Adalecio","Chico"];
 const scDb={
   async load(){try{const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','salas-corte').single();return data?.payload||null;}catch{return null;}},
-  async save(payload){try{await supabase.from('amicia_data').upsert({user_id:'salas-corte',payload},{onConflict:'user_id'});}catch{}},
+  async save(payload){try{await supabase.from('amicia_data').upsert({user_id:'salas-corte',payload},{onConflict:'user_id'});}catch(e){console.error(e)}},
 };
 
 const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
@@ -4071,7 +4071,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
         const remoteLogsOnly=remoteLogs.filter(l=>!localLogIds.has(l.id));
         const mergedLogs=[...logSC,...remoteLogsOnly].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,200);
         await scDb.save({cortes:merged,salas:mergedSalas,logs:mergedLogs});
-      }catch{}
+      }catch(e){console.error(e)}
     },2000);
     return()=>clearTimeout(debRef.current);
   },[cortesSala,salas,logSC,dbLoaded]);
@@ -4717,7 +4717,7 @@ const CalculadoraContent=()=>{
     try{
       const local=localStorage.getItem("amica_calc");
       if(local){const d=JSON.parse(local);if(d?.prods)setProds(d.prods);if(d?.prs)setPrs(d.prs);if(d?.prods)prodsRef.current=d.prods;if(d?.prs)prsRef.current=d.prs;}
-    }catch(e){}
+    }catch(e){console.error(e)}
     // Camada 2: Supabase
     setSyncStatus('saving');
     supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').single()
@@ -4725,7 +4725,7 @@ const CalculadoraContent=()=>{
         if(data?.payload){
           if(data.payload.prods){setProds(data.payload.prods);prodsRef.current=data.payload.prods;}
           if(data.payload.prs){setPrs(data.payload.prs);prsRef.current=data.payload.prs;}
-          try{localStorage.setItem("amica_calc",JSON.stringify({prods:data.payload.prods||[],prs:data.payload.prs||{}}));}catch(e){}
+          try{localStorage.setItem("amica_calc",JSON.stringify({prods:data.payload.prods||[],prs:data.payload.prs||{}}));}catch(e){console.error(e)}
         }
         setSyncStatus('saved');
         setTimeout(()=>setSyncStatus(null),2000);
@@ -4735,7 +4735,7 @@ const CalculadoraContent=()=>{
   // ── Salvar no Supabase com merge (admin + Meluni simultâneos) ────────────
   const salvar=async(novosProds,novosPrs)=>{
     if(!supabase)return;
-    try{localStorage.setItem("amica_calc",JSON.stringify({prods:novosProds,prs:novosPrs}));}catch(e){}
+    try{localStorage.setItem("amica_calc",JSON.stringify({prods:novosProds,prs:novosPrs}));}catch(e){console.error(e)}
     setSyncStatus('saving');
     try{
       // Fetch estado atual para merge
@@ -5616,7 +5616,7 @@ const FichaTecnicaContent=()=>{
     try{var raw=localStorage.getItem("amica_ficha");if(raw){var d=JSON.parse(raw);
       if(d.produtos){setProdutos(d.produtos);produtosRef.current=d.produtos;}
       if(d.precosSalvos){setPrecosSalvos(d.precosSalvos);precosRef.current=d.precosSalvos;}
-    }}catch(e){}
+    }}catch(e){console.error(e)}
     if(!supabase)return;
     setFtSync('saving');
     supabase.from('amicia_data').select('payload').eq('user_id','ficha-tecnica').single()
@@ -5624,13 +5624,13 @@ const FichaTecnicaContent=()=>{
         if(d&&d.payload){
           if(d.payload.produtos){setProdutos(d.payload.produtos);produtosRef.current=d.payload.produtos;}
           if(d.payload.precosSalvos){setPrecosSalvos(d.payload.precosSalvos);precosRef.current=d.payload.precosSalvos;}
-          try{localStorage.setItem("amica_ficha",JSON.stringify({produtos:d.payload.produtos||[],precosSalvos:d.payload.precosSalvos||{}}));}catch(e){}
+          try{localStorage.setItem("amica_ficha",JSON.stringify({produtos:d.payload.produtos||[],precosSalvos:d.payload.precosSalvos||{}}));}catch(e){console.error(e)}
         }
         setFtSync('saved');setTimeout(function(){setFtSync(null);},2000);
       }).catch(function(){setFtSync('error');});
   },[]);
 
-  var salvarLocal=useCallback(function(pr,pc){try{localStorage.setItem("amica_ficha",JSON.stringify({produtos:pr,precosSalvos:pc}));}catch(e){}},[]);
+  var salvarLocal=useCallback(function(pr,pc){try{localStorage.setItem("amica_ficha",JSON.stringify({produtos:pr,precosSalvos:pc}));}catch(e){console.error(e)}},[]);
   var salvarSB=useCallback(function(pr,pc){
     if(!supabase)return;
     setFtSync('saving');
@@ -5802,7 +5802,7 @@ export default function App(){
     return base;
   });
   const [blingStatus,setBlingStatus]=useState(null);
-  const [syncStatus,setSyncStatus]=useState(null); // null | 'loading' | 'saved' | 'error'
+  const [syncStatus,setSyncStatus]=useState(null); // null | 'loading' | 'saved' | 'error' | 'local'
   const [dbCarregado,setDbCarregado]=useState(false);
   const debounceRef=useRef(null);
   const debounceCortes=useRef(null);
@@ -5810,15 +5810,42 @@ export default function App(){
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
   const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
 
+  // ── SAVE LOCAL IMEDIATO (sem debounce) ─────────────────────────────────────
+  const salvarLocal=useCallback((dados)=>{
+    try{
+      const payload={...dados,_updated:Date.now()};
+      localStorage.setItem("amica_financeiro",JSON.stringify(payload));
+    }catch(e){console.error("Erro salvando localStorage:",e);}
+  },[]);
+
   // ── LOAD DO SUPABASE NA ABERTURA ───────────────────────────────────────────
   useEffect(()=>{
     if(!supabase){setDbCarregado(true);return;}
-    // Camada 1: carrega localStorage imediatamente
+    // Camada 1: carrega localStorage imediatamente (dados aparecem na hora)
     try{
       const local=localStorage.getItem("amica_cortes");
       if(local){const d=JSON.parse(local);if(d&&d.length>0)setCortes(d);}
-    }catch(e){}
-    // Camada 2: sincroniza com Supabase — financeiro
+    }catch(e){console.error("Erro lendo cortes local:",e);}
+    try{
+      const localFin=localStorage.getItem("amica_financeiro");
+      if(localFin){
+        const d=JSON.parse(localFin);
+        if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
+        if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
+        if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
+        if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
+        if(d.usuarios)setUsuarios(d.usuarios);
+        if(d.prestadores)setPrestadores(d.prestadores);
+        if(d.produtos)setProdutos(d.produtos);
+        if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+        if(d.logTroca)setLogTroca(d.logTroca);
+        if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+        if(d.fixosConfig)setFixosConfig(d.fixosConfig);
+        if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
+        setSyncStatus('local');
+      }
+    }catch(e){console.error("Erro lendo financeiro local:",e);}
+    // Camada 2: sincroniza com Supabase — dados mais recentes vencem
     setSyncStatus('loading');
     Promise.all([
       supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single(),
@@ -5827,35 +5854,52 @@ export default function App(){
       // Financeiro
       if(!ef&&df?.payload){
         const d=df.payload;
-        if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
-        if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
-        if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
-        if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
-        if(d.usuarios)setUsuarios(d.usuarios);
-        if(d.prestadores)setPrestadores(d.prestadores);
-        // Retrocompatibilidade: se ainda tem cortes no payload antigo, usa
-        if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){}}
-        if(d.produtos)setProdutos(d.produtos);
-        if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
-        if(d.logTroca)setLogTroca(d.logTroca);
-        if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
-        if(d.fixosConfig)setFixosConfig(d.fixosConfig);
-        if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
+        // Comparar: Supabase pode ter dados mais recentes que localStorage
+        const localRaw=localStorage.getItem("amica_financeiro");
+        const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
+        const remoteTs=d._updated||0;
+        // Se local é mais novo que remoto, faz upload do local pro Supabase
+        if(localTs>remoteTs&&localRaw){
+          const localData=JSON.parse(localRaw);
+          if(localData.receitasPorMes)setReceitasPorMes(localData.receitasPorMes);
+          if(localData.auxDataPorMes)setAuxDataPorMes(localData.auxDataPorMes);
+          if(localData.categoriasPorMes)setCategoriasPorMes(localData.categoriasPorMes);
+          if(localData.boletosShared&&localData.boletosShared.length>0)setBoletosShared(deduplicarBoletos(localData.boletosShared));
+          if(localData.usuarios)setUsuarios(localData.usuarios);
+          if(localData.prestadores)setPrestadores(localData.prestadores);
+          if(localData.produtos)setProdutos(localData.produtos);
+          if(localData.oficinasCAD)setOficinasCAD(localData.oficinasCAD);
+          if(localData.logTroca)setLogTroca(localData.logTroca);
+          if(localData.tecidosCAD)setTecidosCAD(localData.tecidosCAD);
+          if(localData.fixosConfig)setFixosConfig(localData.fixosConfig);
+          if(localData.fixosNomesFunc)setFixosNomesFunc(localData.fixosNomesFunc);
+        }else{
+          // Remoto é mais recente — usa Supabase
+          if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
+          if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
+          if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
+          if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
+          if(d.usuarios)setUsuarios(d.usuarios);
+          if(d.prestadores)setPrestadores(d.prestadores);
+          if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e);}}
+          if(d.produtos)setProdutos(d.produtos);
+          if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+          if(d.logTroca)setLogTroca(d.logTroca);
+          if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+          if(d.fixosConfig)setFixosConfig(d.fixosConfig);
+          if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
+          // Salva remoto no localStorage pra ter cópia local
+          try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:Date.now()}));}catch(e){console.error(e);}
+        }
       }
-      // Cortes (chave separada)
+      // Cortes (chave separada — só cortes com merge)
       if(!ec&&dc?.payload){
         const d=dc.payload;
-        if(d.cortes){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){}}
-        if(d.produtos)setProdutos(d.produtos);
-        if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
-        if(d.logTroca)setLogTroca(d.logTroca);
-        if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
-        if(d.fixosConfig)setFixosConfig(d.fixosConfig);
-        if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
+        if(d.cortes){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
       }
       setDbCarregado(true);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
-    }).catch(()=>{setDbCarregado(true);setSyncStatus('error');});
+    }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);setSyncStatus('error');});
   },[]);
 
   // ── RECONCILIAÇÃO: boletos pagos → Tecidos em auxDataPorMes ─────────────
@@ -5901,29 +5945,36 @@ export default function App(){
   // ── AUTO-SAVE LOCAL: cortes ────────────────────────────────────────────────
   useEffect(()=>{
     if(!dbCarregado)return;
-    try{localStorage.setItem("amica_cortes",JSON.stringify(cortes));}catch(e){}
+    try{localStorage.setItem("amica_cortes",JSON.stringify(cortes));}catch(e){console.error(e)}
   },[cortes,dbCarregado]);
 
   // ── SAVE FINANCEIRO (admin only) ───────────────────────────────────────────
   const salvarNoSupabase=useCallback((payload)=>{
     if(!supabase||!dbCarregado)return;
     setSyncStatus('saving');
-    supabase.from('amicia_data').upsert({user_id:USER_ID,payload},{onConflict:'user_id'})
+    const payloadComTs={...payload,_updated:Date.now()};
+    supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
       .then(({error})=>{
-        if(error){setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
+        if(error){console.error("Erro Supabase save:",error);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
         else{setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
       })
-      .catch(()=>{setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
+      .catch((e)=>{console.error("Erro Supabase save:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
   },[dbCarregado]);
 
+  // Auto-save: localStorage IMEDIATO + Supabase com debounce 1.5s
   useEffect(()=>{
     if(!dbCarregado)return;
+    const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
+    // Camada 1: salva local na hora
+    salvarLocal(dados);
+    setSyncStatus('local');
+    // Camada 2: Supabase com debounce
     if(debounceRef.current)clearTimeout(debounceRef.current);
     debounceRef.current=setTimeout(()=>{
-      salvarNoSupabase({receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores});
-    },2000);
+      salvarNoSupabase(dados);
+    },1500);
     return()=>clearTimeout(debounceRef.current);
-  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,dbCarregado]);
+  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc,dbCarregado]);
 
   // ── SAVE CORTES com merge (múltiplos usuários) ────────────────────────────
   useEffect(()=>{
@@ -5931,22 +5982,38 @@ export default function App(){
     if(debounceCortes.current)clearTimeout(debounceCortes.current);
     debounceCortes.current=setTimeout(async()=>{
       try{
-        // Fetch estado atual do Supabase
         const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
         const remoto=data?.payload||{};
-        // Merge cortes: mantém itens remotos que não existem localmente (outro usuário adicionou)
         const localIds=new Set((cortes||[]).map(c=>c.id));
         const remotoOnly=(remoto.cortes||[]).filter(c=>!localIds.has(c.id));
         const cortesMerged=[...(cortes||[]),...remotoOnly];
-        // Merge produtos: remoto vence para itens não alterados localmente
-        const localRefs=new Set((produtos||[]).map(p=>p.ref));
-        const produtosMerged=[...(produtos||[]),...(remoto.produtos||[]).filter(p=>!localRefs.has(p.ref))];
-        const payload={cortes:cortesMerged,produtos:produtosMerged,oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
-        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
-      }catch(e){}
-    },2000);
+        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload:{cortes:cortesMerged}},{onConflict:'user_id'});
+      }catch(e){console.error("Erro save cortes:",e);}
+    },1500);
     return()=>clearTimeout(debounceCortes.current);
-  },[cortes,produtos,oficinasCAD,logTroca,dbCarregado]);
+  },[cortes,dbCarregado]);
+
+  // ── SAVE AO SAIR DA PÁGINA / TROCAR APP (celular) ─────────────────────────
+  useEffect(()=>{
+    const flushSave=()=>{
+      if(!dbCarregado)return;
+      const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
+      salvarLocal(dados);
+      // Tenta Supabase sync (pode não completar se a página fechar)
+      if(supabase){
+        const payloadComTs={...dados,_updated:Date.now()};
+        supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'}).catch(e=>console.error("Flush save erro:",e));
+      }
+    };
+    const onVisChange=()=>{if(document.visibilityState==="hidden")flushSave();};
+    const onPageHide=()=>flushSave();
+    document.addEventListener("visibilitychange",onVisChange);
+    window.addEventListener("pagehide",onPageHide);
+    return()=>{
+      document.removeEventListener("visibilitychange",onVisChange);
+      window.removeEventListener("pagehide",onPageHide);
+    };
+  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc,dbCarregado]);
 
   useEffect(()=>{
     const hoje=new Date().toISOString().slice(0,10);
@@ -5967,7 +6034,7 @@ export default function App(){
           setTimeout(()=>setBlingStatus(null),8000);
         })
         .catch(e=>{setBlingStatus({ok:false,msg:"Erro Bling: "+e.message});setTimeout(()=>setBlingStatus(null),6000);});
-    }catch{}
+    }catch(e){console.error(e)}
   },[]);
 
   const dadosMensais=Object.fromEntries(
@@ -6011,9 +6078,11 @@ export default function App(){
         <div style={{display:"flex",gap:1,overflowX:"auto",flex:1,scrollbarWidth:"none",msOverflowStyle:"none"}}>
           {modulosVisiveis.map(m=>(
             <button key={m.id} onClick={()=>{
-                // Salva imediatamente ao trocar de módulo
+                // Flush: salva local + Supabase imediatamente ao trocar de módulo
                 if(debounceRef.current)clearTimeout(debounceRef.current);
-                salvarNoSupabase({receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores});
+                const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
+                salvarLocal(dados);
+                salvarNoSupabase(dados);
                 setActive(m.id);
               }}
               style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"4px 10px",border:"none",background:active===m.id?"#f0f6fb":"transparent",borderBottom:active===m.id?"2px solid #4a7fa5":"2px solid transparent",borderRadius:active===m.id?"6px 6px 0 0":0,cursor:"pointer",flexShrink:0,gap:3,transition:"all 0.15s"}}>
@@ -6025,10 +6094,10 @@ export default function App(){
         <div style={{position:"relative",flexShrink:0,display:"flex",alignItems:"center",gap:8}} id="user-menu">
           {syncStatus&&(
             <span style={{fontSize:11,padding:"3px 9px",borderRadius:10,
-              background:syncStatus==='loading'||syncStatus==='saving'?"#f0f6fb":syncStatus==='saved'?"#eafbf0":"#fdeaea",
-              color:syncStatus==='loading'||syncStatus==='saving'?"#4a7fa5":syncStatus==='saved'?"#27ae60":"#c0392b",
+              background:syncStatus==='local'?"#fff8e8":syncStatus==='loading'||syncStatus==='saving'?"#f0f6fb":syncStatus==='saved'?"#eafbf0":"#fdeaea",
+              color:syncStatus==='local'?"#b7791f":syncStatus==='loading'||syncStatus==='saving'?"#4a7fa5":syncStatus==='saved'?"#27ae60":"#c0392b",
               fontFamily:"Georgia,serif",whiteSpace:"nowrap"}}>
-              {syncStatus==='loading'?"⏳ carregando…":syncStatus==='saving'?"☁ salvando…":syncStatus==='saved'?"☁ salvo":"✗ erro sync"}
+              {syncStatus==='loading'?"⏳ carregando…":syncStatus==='saving'?"☁ salvando…":syncStatus==='saved'?"☁ salvo":syncStatus==='local'?"💾 local":"✗ erro sync"}
             </span>
           )}
           <div onClick={()=>setMenuUser(p=>!p)} style={{width:30,height:30,borderRadius:"50%",background:"#2c3e50",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
