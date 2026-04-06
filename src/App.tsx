@@ -4529,7 +4529,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   );
 };
 
-const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,isAdmin=false,onZerarBoletos=null})=>{
+const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,isAdmin=false,onZerarBoletos=null,onRestaurarDiario=null})=>{
   const [bling,setBling]=useState(()=>{try{const s=localStorage.getItem("amica_bling");return s?JSON.parse(s):{exitus:"",lumia:"",muniam:""};}catch{return{exitus:"",lumia:"",muniam:""};}}); 
   const [mire,setMire]=useState({token:"",idSilvaTeles:"",idBomRetiro:""});
   const [statusBling,setStatusBling]=useState({});
@@ -4537,6 +4537,7 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
   const [saved,setSaved]=useState(false);
   const [backupMsg,setBackupMsg]=useState("");
   const [confirmRestore,setConfirmRestore]=useState(false);
+  const [confirmDiario,setConfirmDiario]=useState(false);
   const [pastaNome,setPastaNome]=useState(localStorage.getItem("amica_backup_folder_name")||"");
   const [ultimoBackup,setUltimoBackup]=useState(localStorage.getItem("amica_ultimo_backup")||"");
   const [correcao,setCorrecao]=useState({ativo:true,valor:"10000"});
@@ -4547,17 +4548,46 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
   const nomeArquivo=()=>`Amica_Backup_${new Date().toLocaleDateString("pt-BR").replace(/\//g,"-")}.json`;
   const fazerBackup=async()=>{
     if(!dadosBackup){setBackupMsg("Sem dados para backup.");return;}
-    const json=gerarJson();
-    const blob=new Blob([json],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download=nomeArquivo();a.click();URL.revokeObjectURL(url);
-    const agora=new Date().toISOString();setUltimoBackup(agora);localStorage.setItem("amica_ultimo_backup",agora);
-    setBackupMsg("✓ Backup salvo em Downloads!");setTimeout(()=>setBackupMsg(""),3000);
+    setBackupMsg("⏳ Preparando backup completo...");
+    try{
+      let modulos={};
+      if(supabase){
+        const [rCalc,rFicha,rSalas,rBling]=await Promise.all([
+          supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').single(),
+          supabase.from('amicia_data').select('payload').eq('user_id','ficha-tecnica').single(),
+          supabase.from('amicia_data').select('payload').eq('user_id','salas-corte').single(),
+          supabase.from('amicia_data').select('payload').eq('user_id','bling-creds').single(),
+        ]);
+        modulos={calculadora:rCalc.data?.payload||null,fichaTecnica:rFicha.data?.payload||null,salasCorte:rSalas.data?.payload||null,blingCreds:rBling.data?.payload||null};
+      }
+      const json=JSON.stringify({versao:"1.0",data:new Date().toISOString(),...dadosBackup,_modulos:modulos},null,2);
+      const blob=new Blob([json],{type:"application/json"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");a.href=url;a.download=nomeArquivo();a.click();URL.revokeObjectURL(url);
+      const agora=new Date().toISOString();setUltimoBackup(agora);localStorage.setItem("amica_ultimo_backup",agora);
+      setBackupMsg("✓ Backup completo salvo em Downloads!");setTimeout(()=>setBackupMsg(""),3000);
+    }catch(e){console.error("Erro backup:",e);setBackupMsg("✗ Erro ao gerar backup");setTimeout(()=>setBackupMsg(""),4000);}
   };
   const restaurarBackup=(e)=>{
     const file=e.target.files[0];if(!file)return;
     const reader=new FileReader();
-    reader.onload=(ev)=>{try{const dados=JSON.parse(ev.target.result);if(onRestaurar)onRestaurar(dados);setBackupMsg("✓ Backup restaurado!");setConfirmRestore(false);setTimeout(()=>setBackupMsg(""),3000);}catch{setBackupMsg("✗ Arquivo inválido.");setTimeout(()=>setBackupMsg(""),4000);}};
+    reader.onload=async(ev)=>{
+      try{
+        const dados=JSON.parse(ev.target.result);
+        if(onRestaurar)onRestaurar(dados);
+        // Restaura módulos independentes se existirem no backup
+        if(dados._modulos&&supabase){
+          const m=dados._modulos;
+          const ops=[];
+          if(m.calculadora)ops.push(supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:m.calculadora},{onConflict:'user_id'}));
+          if(m.fichaTecnica)ops.push(supabase.from('amicia_data').upsert({user_id:'ficha-tecnica',payload:m.fichaTecnica},{onConflict:'user_id'}));
+          if(m.salasCorte)ops.push(supabase.from('amicia_data').upsert({user_id:'salas-corte',payload:m.salasCorte},{onConflict:'user_id'}));
+          if(m.blingCreds)ops.push(supabase.from('amicia_data').upsert({user_id:'bling-creds',payload:m.blingCreds},{onConflict:'user_id'}));
+          if(ops.length>0)await Promise.all(ops);
+        }
+        setBackupMsg("✓ Backup completo restaurado!");setConfirmRestore(false);setTimeout(()=>setBackupMsg(""),3000);
+      }catch(e){console.error("Erro restaurar:",e);setBackupMsg("✗ Arquivo inválido.");setTimeout(()=>setBackupMsg(""),4000);}
+    };
     reader.readAsText(file);e.target.value="";
   };
   const salvarConfig=()=>{localStorage.setItem("amica_bling",JSON.stringify(bling));setSaved(true);setTimeout(()=>setSaved(false),2500);};
@@ -4635,6 +4665,18 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
               </div>
             </div>
             {backupMsg&&<div style={{fontSize:12,padding:"8px 12px",borderRadius:6,background:backupMsg.startsWith("✓")?"#eafbf0":"#fdeaea",color:backupMsg.startsWith("✓")?"#27ae60":"#c0392b"}}>{backupMsg}</div>}
+            {/* Backup Diário Automático */}
+            <div style={{marginTop:14,paddingTop:14,borderTop:"1px dashed #e8e2da"}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:6}}>☁ Backup Diário Automático</div>
+              <div style={{fontSize:11,color:"#a89f94",marginBottom:8}}>Salvo automaticamente ao abrir o app · 1x por dia no Supabase</div>
+              {!confirmDiario?
+                <button onClick={()=>setConfirmDiario(true)} style={{background:"#fff",color:"#e67e22",border:"1px solid #e67e22",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>↩ Restaurar Backup Diário</button>
+              :<div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{fontSize:12,color:"#c0392b"}}>⚠ Isso substituirá todos os dados atuais.</span>
+                <button onClick={async()=>{if(onRestaurarDiario){const r=await onRestaurarDiario();setBackupMsg(r.msg);setConfirmDiario(false);setTimeout(()=>setBackupMsg(""),3000);}}} style={{background:"#e67e22",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Confirmar</button>
+                <button onClick={()=>setConfirmDiario(false)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:6,padding:"8px 12px",fontSize:12,cursor:"pointer"}}>Cancelar</button>
+              </div>}
+            </div>
           </div>
         </div>
       )}
@@ -5823,6 +5865,7 @@ export default function App(){
     try{
       const payload={...dados,_updated:Date.now()};
       localStorage.setItem("amica_financeiro",JSON.stringify(payload));
+      localStorage.setItem("amica_pending_sync","true");
     }catch(e){console.error("Erro salvando localStorage:",e);}
   },[]);
 
@@ -5896,8 +5939,8 @@ export default function App(){
           if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
           if(d.fixosConfig)setFixosConfig(d.fixosConfig);
           if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
-          // Salva remoto no localStorage pra ter cópia local
-          try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:Date.now()}));}catch(e){console.error(e);}
+          // Salva remoto no localStorage pra ter cópia local (preserva timestamp original)
+          try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:remoteTs||Date.now()}));}catch(e){console.error(e);}
         }
       }
       // Cortes (chave separada — cortes + oficinas data)
@@ -5912,6 +5955,41 @@ export default function App(){
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);setSyncStatus('error');});
   },[]);
+
+  // ── BACKUP DIÁRIO AUTOMÁTICO (1x por dia ao abrir) ─────────────────────────
+  useEffect(()=>{
+    if(!dbCarregado||!supabase)return;
+    const hoje=new Date().toISOString().slice(0,10);
+    const ultimoBackup=localStorage.getItem("amica_backup_diario_data");
+    if(ultimoBackup===hoje)return; // já fez hoje
+    // Aguarda 5s pra garantir que todos os dados carregaram
+    const timer=setTimeout(async()=>{
+      try{
+        const [rCalc,rFicha,rSalas,rBling]=await Promise.all([
+          supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').single(),
+          supabase.from('amicia_data').select('payload').eq('user_id','ficha-tecnica').single(),
+          supabase.from('amicia_data').select('payload').eq('user_id','salas-corte').single(),
+          supabase.from('amicia_data').select('payload').eq('user_id','bling-creds').single(),
+        ]);
+        const payload={
+          receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,
+          usuarios,prestadores,produtos,oficinasCAD,logTroca,
+          tecidosCAD,fixosConfig,fixosNomesFunc,cortes,
+          _modulos:{
+            calculadora:rCalc.data?.payload||null,
+            fichaTecnica:rFicha.data?.payload||null,
+            salasCorte:rSalas.data?.payload||null,
+            blingCreds:rBling.data?.payload||null,
+          },
+          _backupDate:hoje,_backupTime:new Date().toISOString()
+        };
+        const {error}=await supabase.from('amicia_data').upsert({user_id:'backup-diario',payload},{onConflict:'user_id'});
+        if(!error){localStorage.setItem("amica_backup_diario_data",hoje);console.log("Backup diário completo:",hoje);}
+        else{console.error("Erro backup diário:",error);}
+      }catch(e){console.error("Erro backup diário:",e);}
+    },5000);
+    return()=>clearTimeout(timer);
+  },[dbCarregado]);
 
   // ── RECONCILIAÇÃO: boletos pagos → Tecidos em auxDataPorMes ─────────────
   // Garante que boletos marcados como "pago" tenham entrada correspondente em Tecidos
@@ -5967,7 +6045,7 @@ export default function App(){
     supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
       .then(({error})=>{
         if(error){console.error("Erro Supabase save:",error);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
-        else{setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
+        else{localStorage.setItem("amica_pending_sync","false");setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
       })
       .catch((e)=>{console.error("Erro Supabase save:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
   },[dbCarregado]);
@@ -6007,25 +6085,49 @@ export default function App(){
     return()=>clearTimeout(debounceCortes.current);
   },[cortes,produtos,oficinasCAD,logTroca,dbCarregado]);
 
-  // ── SAVE AO SAIR DA PÁGINA / TROCAR APP (celular) ─────────────────────────
+  // ── SAVE AO SAIR + RETRY AO VOLTAR ─────────────────────────────────────────
   useEffect(()=>{
     const flushSave=()=>{
       if(!dbCarregado)return;
       const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
       salvarLocal(dados);
-      // Tenta Supabase sync (pode não completar se a página fechar)
       if(supabase){
         const payloadComTs={...dados,_updated:Date.now()};
-        supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'}).catch(e=>console.error("Flush save erro:",e));
+        supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
+          .then(({error})=>{if(!error)localStorage.setItem("amica_pending_sync","false");})
+          .catch(e=>console.error("Flush save erro:",e));
       }
     };
-    const onVisChange=()=>{if(document.visibilityState==="hidden")flushSave();};
+    const retrySePendente=()=>{
+      if(!dbCarregado||!supabase)return;
+      const pendente=localStorage.getItem("amica_pending_sync");
+      if(pendente!=="true")return;
+      console.log("Retry sync: dados pendentes encontrados");
+      const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
+      setSyncStatus('saving');
+      const payloadComTs={...dados,_updated:Date.now()};
+      supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
+        .then(({error})=>{
+          if(!error){localStorage.setItem("amica_pending_sync","false");setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
+          else{console.error("Retry falhou:",error);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
+        }).catch(e=>{console.error("Retry falhou:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
+    };
+    const onVisChange=()=>{
+      if(document.visibilityState==="hidden")flushSave();
+      if(document.visibilityState==="visible")retrySePendente();
+    };
     const onPageHide=()=>flushSave();
+    // Retry periódico a cada 30s
+    const retryInterval=setInterval(retrySePendente,30000);
+    // Retry ao abrir (se ficou pendente de sessão anterior)
+    const retryInicial=setTimeout(retrySePendente,3000);
     document.addEventListener("visibilitychange",onVisChange);
     window.addEventListener("pagehide",onPageHide);
     return()=>{
       document.removeEventListener("visibilitychange",onVisChange);
       window.removeEventListener("pagehide",onPageHide);
+      clearInterval(retryInterval);
+      clearTimeout(retryInicial);
     };
   },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc,dbCarregado]);
 
@@ -6151,7 +6253,7 @@ export default function App(){
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
           isAdmin={usuarioLogado?.admin===true}
           onZerarBoletos={()=>setBoletosShared([])}
-          dadosBackup={{receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores}}
+          dadosBackup={{receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc}}
           onRestaurar={(dados)=>{
             if(dados.receitasPorMes)setReceitasPorMes(dados.receitasPorMes);
             if(dados.auxDataPorMes)setAuxDataPorMes(dados.auxDataPorMes);
@@ -6163,6 +6265,40 @@ export default function App(){
             if(dados.logTroca)setLogTroca(dados.logTroca);
             if(dados.usuarios)setUsuarios(dados.usuarios);
             if(dados.prestadores)setPrestadores(dados.prestadores);
+            if(dados.tecidosCAD)setTecidosCAD(dados.tecidosCAD);
+            if(dados.fixosConfig)setFixosConfig(dados.fixosConfig);
+            if(dados.fixosNomesFunc)setFixosNomesFunc(dados.fixosNomesFunc);
+          }}
+          onRestaurarDiario={async()=>{
+            try{
+              const {data,error}=await supabase.from('amicia_data').select('payload').eq('user_id','backup-diario').single();
+              if(error||!data?.payload)return{ok:false,msg:"Nenhum backup diário encontrado"};
+              const d=data.payload;
+              if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
+              if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
+              if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
+              if(d.boletosShared)setBoletosShared(d.boletosShared);
+              if(d.cortes)setCortes(d.cortes);
+              if(d.produtos)setProdutos(d.produtos);
+              if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+              if(d.logTroca)setLogTroca(d.logTroca);
+              if(d.usuarios)setUsuarios(d.usuarios);
+              if(d.prestadores)setPrestadores(d.prestadores);
+              if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+              if(d.fixosConfig)setFixosConfig(d.fixosConfig);
+              if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
+              // Restaura módulos independentes
+              if(d._modulos){
+                const m=d._modulos;
+                const ops=[];
+                if(m.calculadora)ops.push(supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:m.calculadora},{onConflict:'user_id'}));
+                if(m.fichaTecnica)ops.push(supabase.from('amicia_data').upsert({user_id:'ficha-tecnica',payload:m.fichaTecnica},{onConflict:'user_id'}));
+                if(m.salasCorte)ops.push(supabase.from('amicia_data').upsert({user_id:'salas-corte',payload:m.salasCorte},{onConflict:'user_id'}));
+                if(m.blingCreds)ops.push(supabase.from('amicia_data').upsert({user_id:'bling-creds',payload:m.blingCreds},{onConflict:'user_id'}));
+                if(ops.length>0)await Promise.all(ops);
+              }
+              return{ok:true,msg:`✓ Backup completo de ${d._backupDate||"?"} restaurado!`};
+            }catch(e){console.error("Erro restaurar diário:",e);return{ok:false,msg:"Erro ao restaurar"};}
           }}
         />}
       </div>
