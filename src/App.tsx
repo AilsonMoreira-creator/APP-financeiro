@@ -6079,6 +6079,7 @@ export default function App(){
       setDbCarregado(true);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);setSyncStatus('error');});
+    });
   },[]);
 
   // ── BACKUP DIÁRIO AUTOMÁTICO (1x por dia ao abrir) ─────────────────────────
@@ -6483,3 +6484,5 @@ export default function App(){
     </div>
   );
 }
+
+
