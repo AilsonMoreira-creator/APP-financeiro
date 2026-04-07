@@ -2072,7 +2072,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
             <div/>
             {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"8px 10px",fontSize:10,color:"#fff",letterSpacing:0.5,textTransform:"uppercase",fontWeight:700,borderLeft:"1px solid rgba(255,255,255,0.25)"}}>{h}</div>))}
           </div>
-          <div style={{minHeight:300,maxHeight:792,overflowY:"auto"}} ref={el=>{if(el){el.scrollTop=Math.max(0,(hoje-4)*36);}}}>
+          <div style={{minHeight:300,maxHeight:792,overflowY:"auto"}} >
             {Array.from({length:31},(_,i)=>i+1).map(dia=>{
               const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=mesFechado?false:dia>hoje;
               const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
@@ -2120,7 +2120,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
               </tr>
             </thead>
           </table>
-          <div style={{minHeight:300,maxHeight:712,overflowY:"auto"}} ref={el=>{if(el){const rowH=28;el.scrollTop=Math.max(0,(hoje-4)*rowH);}}}>
+          <div style={{minHeight:300,maxHeight:712,overflowY:"auto"}} >
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <colgroup><col/><col style={{width:140}}/><col style={{width:24}}/></colgroup>
               <tbody>
@@ -2185,7 +2185,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
               <div/>
               {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"8px 10px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,borderLeft:"1px solid rgba(255,255,255,0.25)"}}>{h}</div>))}
             </div>
-            <div style={{maxHeight:792,overflowY:"auto"}} ref={el=>{if(el){el.scrollTop=Math.max(0,(hoje-4)*36);}}}>
+            <div style={{maxHeight:792,overflowY:"auto"}} >
               {Array.from({length:31},(_,i)=>i+1).map(dia=>{
                 const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=mesFechado?false:dia>hoje;
                 const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
@@ -4043,6 +4043,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   const [histForm,setHistForm]=useState({sala:"",qtdRolos:"",qtdPecas:"",data:""});
   const [dbLoaded,setDbLoaded]=useState(false);
   const debRef=useRef(null);
+  const deletedIdsRef=useRef(new Set()); // rastreia IDs excluídos pra não voltar no merge
   const [logSC,setLogSC]=useState([]);
   const [editCorte,setEditCorte]=useState(null);
   const [editForm,setEditForm]=useState({sala:"",ref:"",qtdRolos:"",qtdPecas:""});
@@ -4084,9 +4085,9 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
       try{
         const remote=await scDb.load();
         const remoteCortes=remote?.cortes||[];
-        // Merge: mantém itens remotos que não existem localmente
+        // Merge: mantém itens remotos que não existem localmente E que não foram excluídos
         const localIds=new Set(cortesSala.map(c=>c.id));
-        const remoteOnly=remoteCortes.filter(c=>!localIds.has(c.id));
+        const remoteOnly=remoteCortes.filter(c=>!localIds.has(c.id)&&!deletedIdsRef.current.has(c.id));
         const merged=[...cortesSala,...remoteOnly];
         // Merge salas
         const mergedSalas=[...new Set([...salas,...(remote?.salas||[])])];
@@ -4128,13 +4129,17 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   // Log helper
   const addLog=(acao,detalhe)=>{setLogSC(prev=>[{id:Date.now(),data:new Date().toISOString(),usuario:usuario||"—",acao,detalhe},...prev].slice(0,200));};
 
-  // Excluir corte
+  // Excluir corte — salva imediatamente no Supabase (sem esperar debounce)
   const excluirCorte=(id)=>{
     const c=cortesSala.find(x=>x.id===id);
     setConfirm({msg:`Excluir corte REF ${c?.ref} (${c?.sala})?`,onYes:()=>{
-      setCortesSala(prev=>prev.filter(x=>x.id!==id));
+      deletedIdsRef.current.add(id);
+      const novosCortes=cortesSala.filter(x=>x.id!==id);
+      setCortesSala(novosCortes);
       addLog("excluir",`REF ${c?.ref} · ${c?.sala} · ${c?.qtdRolos}r`);
       setConfirm(null);
+      // Save imediato — não depende do debounce
+      scDb.save({cortes:novosCortes,salas,logs:logSC}).then(()=>console.log("Corte excluído salvo no Supabase")).catch(e=>console.error("Erro salvando exclusão:",e));
     }});
   };
 
