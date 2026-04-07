@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase, USER_ID } from "./supabase.js";
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
+const APP_VERSION="6.2";
 const _S = "#2c3e50";
 const _B = "#5a7faa";
 const _BL = "#a8c0d8";
@@ -505,6 +506,7 @@ const FIXOS_TEMPLATE = {
 const CATS_FIXAS = Object.keys(FIXOS_TEMPLATE);
 
 const DOMINGOS_MAR = [1,8,15,22,29];
+const DIAS_SEMANA=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
 // Domingos por mês 2026
 const DOMINGOS_MES = {
@@ -1943,6 +1945,17 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const [novaCategoria,setNovaCategoria]=useState("");
   const [mostraCadastro,setMostraCadastro]=useState(false);
   const [editando,setEditando]=useState(null);
+  const navCelula=(e,dia,canal,prefix="")=>{
+    if(e.key==="Enter"||e.key==="Tab"){
+      e.preventDefault();
+      const canais=["silvaTeles","bomRetiro"];
+      const idx=canais.indexOf(canal);
+      if(idx===0)setEditando(prefix+dia+"-bomRetiro");
+      else{const prox=dia+1;if(prox<=31)setEditando(prefix+prox+"-silvaTeles");else setEditando(null);}
+    }
+    if(e.key==="Escape")setEditando(null);
+  };
+  const getDiaSemana=(dia)=>DIAS_SEMANA[new Date(2026,mes-1,dia).getDay()];
   const [auxAberta,setAuxAberta]=useState(null);
   const abrirAux=(cat)=>{
     // Auto-populate fixed categories if empty
@@ -2027,27 +2040,23 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const totalFuncSomente=(auxData["Funcionários"]||[]).reduce((s,r)=>s+calcRowTotal(r),0);
   const totalFuncGeral=totalFuncSomente+FIXOS_FUNC.reduce((s,f)=>s+f.valor,0);
   const [cardsVisiveis,setCardsVisiveis]=useState(false);
+  const saldoMes=totalGeral-totalDesp;
   return(
     <div>
       {!auxAberta&&(
-        <div style={{display:"flex",gap:8,marginBottom:6,background:"#fff",borderRadius:8,padding:"5px 10px",border:"1px solid #e8e2da",alignItems:"center"}}>
-          {cardsVisiveis?(
-            <>
-              <div style={{flex:1,borderRight:"1px solid #e8e2da",paddingRight:10}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Receita</span><div style={{fontSize:15,fontWeight:700,color:"#4a7fa5"}}>{fmt(totalGeral)}</div></div>
-              <div style={{flex:1,borderRight:"1px solid #e8e2da",paddingRight:10,paddingLeft:6}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Despesa</span><div style={{fontSize:15,fontWeight:700,color:"#c0392b"}}>{fmt(totalDesp)}</div></div>
-              <div style={{flex:1,paddingLeft:6}}><span style={{fontSize:9,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Saldo</span><div style={{fontSize:15,fontWeight:700,color:(totalGeral-totalDesp)>=0?"#27ae60":"#c0392b"}}>{fmt(totalGeral-totalDesp)}</div></div>
-            </>
-          ):(
-            <div style={{flex:1,display:"flex",gap:16,alignItems:"center"}}>
-              <span style={{fontSize:11,color:"#a89f94",fontFamily:"Georgia,serif"}}>Resumo do mês</span>
-              <span style={{fontSize:11,color:"#4a7fa5",fontWeight:600}}>{fmt(totalGeral)}</span>
-              <span style={{fontSize:11,color:"#6b7c8a"}}>·</span>
-              <span style={{fontSize:11,color:"#c0392b",fontWeight:600}}>{fmt(totalDesp)}</span>
-              <span style={{fontSize:11,color:"#6b7c8a"}}>·</span>
-              <span style={{fontSize:11,fontWeight:700,color:(totalGeral-totalDesp)>=0?"#27ae60":"#c0392b"}}>{fmt(totalGeral-totalDesp)}</span>
-            </div>
-          )}
-          <button onClick={()=>setCardsVisiveis(p=>!p)} style={{background:"none",border:"1px solid #e8e2da",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:11,color:"#a89f94",flexShrink:0}}>{cardsVisiveis?"▲":"▼"}</button>
+        <div style={{display:"flex",gap:8,marginBottom:8}}>
+          <div style={{flex:1,background:"#fff",borderRadius:8,padding:"6px 14px",border:"1px solid #e8e2da",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:10,color:"#a89f94",letterSpacing:1}}>RECEITA</span>
+            <span style={{fontSize:16,fontWeight:800,color:"#4a7fa5",fontFamily:_FN}}>{fmt(totalGeral)}</span>
+          </div>
+          <div style={{flex:1,background:"#fff",borderRadius:8,padding:"6px 14px",border:"1px solid #e8e2da",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:10,color:"#a89f94",letterSpacing:1}}>DESPESA</span>
+            <span style={{fontSize:16,fontWeight:800,color:"#c0392b",fontFamily:_FN}}>{fmt(totalDesp)}</span>
+          </div>
+          <div style={{flex:1,background:saldoMes>=0?"#eafbf0":"#fdeaea",borderRadius:8,padding:"6px 14px",border:`1px solid ${saldoMes>=0?"#c8e6c9":"#f0c8c8"}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:10,color:saldoMes>=0?"#27ae60":"#c0392b",letterSpacing:1}}>SALDO</span>
+            <span style={{fontSize:16,fontWeight:800,color:saldoMes>=0?"#27ae60":"#c0392b",fontFamily:_FN}}>{fmt(saldoMes)}</span>
+          </div>
         </div>
       )}
       {!auxAberta&&(
@@ -2059,27 +2068,31 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
       )}
       {aba==="receitas"&&!auxAberta&&(
         <div style={{background:"#fff",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5",position:"sticky",top:0,zIndex:2}}>
+          <div style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",background:"#4a7fa5",position:"sticky",top:0,zIndex:2}}>
             <div/>
-            {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"7px 10px",fontSize:11,color:"#fff",letterSpacing:0.5,textTransform:"uppercase",fontWeight:600}}>{h}</div>))}
+            {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"8px 10px",fontSize:10,color:"#fff",letterSpacing:0.5,textTransform:"uppercase",fontWeight:700,borderLeft:"1px solid rgba(255,255,255,0.25)"}}>{h}</div>))}
           </div>
-          <div style={{minHeight:300,maxHeight:712,overflowY:"auto"}} ref={el=>{if(el){const rowH=28;el.scrollTop=Math.max(0,(hoje-4)*rowH);}}}>
+          <div style={{minHeight:300,maxHeight:792,overflowY:"auto"}} ref={el=>{if(el){el.scrollTop=Math.max(0,(hoje-4)*36);}}}>
             {Array.from({length:31},(_,i)=>i+1).map(dia=>{
               const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=mesFechado?false:dia>hoje;
               const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
-              const sepCol=isDom?"#b0a898":feriado?"#b0d4b0":"#ede8e0";
+              const sepCol=isDom?"#b0a898":feriado?"#b0d4b0":"#ddd8d0";
               const valCol=isDom?"#4a3a2a":feriado?"#1a4a1a":"#2c3e50";
-              const emptyCol=isDom?"#a09080":feriado?"#90b890":"#ddd8d0";
+              const emptyCol=isDom?"#a09080":feriado?"#90b890":"#e0dbd5";
               return(
-                <div key={dia} style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:`1px solid ${isDom?"#b8b0a6":feriado?"#a8d0a8":"#f0ebe4"}`,background:rowBg,position:"relative"}}>
-                  <div style={{padding:"4px 2px",fontSize:10,color:isDom?"#6b5f54":dia===hoje?"#4a7fa5":"#2c3e50",textAlign:"center",fontWeight:(isDom||feriado||dia===hoje)?700:400,paddingTop:6,background:isDom?"#b8b0a4":feriado?"#b8ddb8":"transparent",borderRight:`1px solid ${sepCol}`}}>{dia}</div>
-                  {feriado&&<div style={{position:"absolute",left:30,top:2,fontSize:9,color:isDom?"#6a5a4a":"#2d6a2d",fontFamily:"Georgia,serif",background:feriado?"#d4ecd4":"transparent",padding:"1px 5px",borderRadius:3,border:"1px solid #a8d0a8",pointerEvents:"none"}}>🎉 {feriado}</div>}
-                  {["silvaTeles","bomRetiro","marketplaces"].map((canal,ci)=>{
+                <div key={dia} style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",borderBottom:`1px solid ${isDom?"#b8b0a6":feriado?"#a8d0a8":"#f0ebe4"}`,background:rowBg,borderLeft:dia===hoje?"3px solid #f39c12":"3px solid transparent"}}>
+                  <div style={{padding:"5px 2px",textAlign:"center",background:isDom?"#b8b0a4":feriado?"#b8ddb8":"transparent",borderRight:`1px solid ${sepCol}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                    <div style={{fontSize:14,fontWeight:(isDom||feriado||dia===hoje)?700:500,color:isDom?"#6b5f54":dia===hoje?"#4a7fa5":"#2c3e50",lineHeight:1.1}}>{dia}</div>
+                    <div style={{fontSize:9,color:isDom?"#8a7e74":"#a89f94",fontWeight:isDom?600:400,lineHeight:1,marginTop:1}}>{getDiaSemana(dia)}</div>
+                  </div>
+                  {["silvaTeles","bomRetiro","marketplaces"].map((canal)=>{
                     const key=dia+"-"+canal;
                     return(
-                      <div key={canal} style={{padding:"3px 8px",display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
-                        {editando===key?(<input autoFocus defaultValue={d[canal]||""} style={{...inputStyle,width:"90%",padding:"2px 4px"}} onBlur={e=>{salvarCelula(dia,canal,e.target.value);setEditando(null);}} onKeyDown={e=>{if(e.key==="Enter"||e.key==="Tab"){salvarCelula(dia,canal,e.target.value);setEditando(null);}}}/>):(
-                          <div onClick={()=>!futuro&&setEditando(key)} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right"}}>
+                      <div key={canal} style={{display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
+                        {editando===key?(
+                          <input autoFocus value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:"5px 10px",fontSize:_FS,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal)}/>
+                        ):(
+                          <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:"5px 10px",borderRadius:3,transition:"background 0.12s"}}>
                             {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                           </div>
                         )}
@@ -2090,9 +2103,9 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
               );
             })}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
-            <div style={{padding:"7px",fontSize:10,color:"#a89f94",display:"flex",alignItems:"center",justifyContent:"center"}}>Σ</div>
-            {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:_FS,fontWeight:700,color:"#2c3e50",fontFamily:_FN,textAlign:"right",borderLeft:"1px solid #e8e2da"}}>{t>0?t.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>)}
+          <div style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
+            <div style={{padding:"8px",fontSize:11,color:"#4a7fa5",textAlign:"center",fontWeight:700}}>Σ</div>
+            {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:_FS,fontWeight:800,color:"#2c3e50",fontFamily:_FN,textAlign:"right",borderLeft:"1px solid #e8e2da"}}>{t>0?t.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>)}
           </div>
         </div>
       )}
@@ -2165,30 +2178,34 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
         </div>
       )}
       {aba==="geral"&&!auxAberta&&(
-        <div style={{display:"flex",gap:72,alignItems:"flex-start",paddingTop:10}}>
+        <div style={{display:"flex",gap:24,alignItems:"flex-start",paddingTop:10}}>
           {/* ── Receitas ── */}
-          <div style={{flex:"0 0 42%",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
+          <div style={{flex:1,minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
               <div/>
-              {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4}}>{h}</div>))}
+              {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"8px 10px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,borderLeft:"1px solid rgba(255,255,255,0.25)"}}>{h}</div>))}
             </div>
-            <div style={{maxHeight:792,overflowY:"auto"}} ref={el=>{if(el){const rowH=28;el.scrollTop=Math.max(0,(hoje-4)*rowH);}}}>
+            <div style={{maxHeight:792,overflowY:"auto"}} ref={el=>{if(el){el.scrollTop=Math.max(0,(hoje-4)*36);}}}>
               {Array.from({length:31},(_,i)=>i+1).map(dia=>{
                 const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=mesFechado?false:dia>hoje;
                 const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
-                const sepCol=isDom?"#b0a898":feriado?"#b0d4b0":"#ede8e0";
+                const sepCol=isDom?"#b0a898":feriado?"#b0d4b0":"#ddd8d0";
                 const valCol=isDom?"#4a3a2a":feriado?"#1a4a1a":"#2c3e50";
                 const emptyCol=isDom?"#a09080":feriado?"#90b890":"#e0dbd5";
                 return(
-                  <div key={dia} style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",borderBottom:`1px solid ${isDom?"#b8b0a6":feriado?"#a8d0a8":"#f0ebe4"}`,background:rowBg,position:"relative"}}>
-                    <div style={{padding:"4px 3px",fontSize:11,color:isDom?"#8a7060":dia===hoje?"#4a7fa5":"#8a9aa4",textAlign:"center",paddingTop:6,fontWeight:(isDom||feriado||dia===hoje)?700:400,background:isDom?"#b8b0a4":feriado?"#b8ddb8":"transparent",borderRight:`1px solid ${sepCol}`}}>{dia}</div>
-                    {feriado&&<div style={{position:"absolute",left:30,top:2,fontSize:9,color:"#2d6a2d",fontFamily:"Georgia,serif",background:"#d4ecd4",padding:"1px 5px",borderRadius:3,border:"1px solid #a8d0a8",pointerEvents:"none"}}>🎉 {feriado}</div>}
+                  <div key={dia} style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",borderBottom:`1px solid ${isDom?"#b8b0a6":feriado?"#a8d0a8":"#f0ebe4"}`,background:rowBg,borderLeft:dia===hoje?"3px solid #f39c12":"3px solid transparent"}}>
+                    <div style={{padding:"5px 2px",textAlign:"center",background:isDom?"#b8b0a4":feriado?"#b8ddb8":"transparent",borderRight:`1px solid ${sepCol}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+                      <div style={{fontSize:14,fontWeight:(isDom||feriado||dia===hoje)?700:500,color:isDom?"#6b5f54":dia===hoje?"#4a7fa5":"#2c3e50",lineHeight:1.1}}>{dia}</div>
+                      <div style={{fontSize:9,color:isDom?"#8a7e74":"#a89f94",fontWeight:isDom?600:400,lineHeight:1,marginTop:1}}>{getDiaSemana(dia)}</div>
+                    </div>
                     {["silvaTeles","bomRetiro","marketplaces"].map((canal)=>{
                       const key="g"+dia+"-"+canal;
                       return(
-                        <div key={canal} style={{padding:"3px 6px",display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
-                          {editando===key?(<input autoFocus defaultValue={d[canal]||""} style={{width:"100%",border:"1px solid #4a7fa5",borderRadius:3,padding:"2px 4px",fontSize:12,outline:"none"}} onBlur={e=>{salvarCelula(dia,canal,e.target.value);setEditando(null);}} onKeyDown={e=>{if(e.key==="Enter"||e.key==="Tab"){salvarCelula(dia,canal,e.target.value);setEditando(null);}}}/>):(
-                            <div onClick={()=>!futuro&&setEditando(key)} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right"}}>
+                        <div key={canal} style={{display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
+                          {editando===key?(
+                            <input autoFocus value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:"5px 10px",fontSize:_FS,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal,"g")}/>
+                          ):(
+                            <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:"5px 10px",borderRadius:3,transition:"background 0.12s"}}>
                               {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                             </div>
                           )}
@@ -2199,26 +2216,26 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                 );
               })}
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"28px minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
-              <div style={{padding:"7px",fontSize:11,color:"#4a7fa5",textAlign:"center",fontWeight:700}}>Σ</div>
-              {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"6px 8px",fontSize:_FS,fontWeight:700,color:"#2c3e50",fontFamily:_FN,textAlign:"right",borderLeft:"1px solid #e8e2da"}}>{t>0?t.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>)}
+            <div style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",background:"#f7f4f0",borderTop:"2px solid #e8e2da"}}>
+              <div style={{padding:"8px",fontSize:11,color:"#4a7fa5",textAlign:"center",fontWeight:700}}>Σ</div>
+              {[totRec.st,totRec.br,totRec.mkt].map((t,i)=><div key={i} style={{padding:"7px 10px",fontSize:_FS,fontWeight:800,color:"#2c3e50",fontFamily:_FN,textAlign:"right",borderLeft:"1px solid #e8e2da"}}>{t>0?t.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>)}
             </div>
           </div>
           {/* ── Despesas ── */}
-          <div style={{flex:"0 0 42%",minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
+          <div style={{flex:1,minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
-              <colgroup><col/><col style={{width:130}}/><col style={{width:22}}/></colgroup>
+              <colgroup><col/><col style={{width:"35%"}}/><col style={{width:22}}/></colgroup>
               <thead>
                 <tr style={{background:"#4a7fa5"}}>
-                  <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,borderLeft:"3px solid transparent"}}>Categoria</th>
-                  <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,borderLeft:"1px solid rgba(255,255,255,0.2)"}}>Valor</th>
+                  <th style={{padding:"8px 14px",textAlign:"left",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,borderLeft:"3px solid transparent"}}>Categoria</th>
+                  <th style={{padding:"8px 14px",textAlign:"right",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,borderLeft:"1px solid rgba(255,255,255,0.25)"}}>Valor</th>
                   <th/>
                 </tr>
               </thead>
             </table>
             <div style={{maxHeight:792,overflowY:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
-                <colgroup><col/><col style={{width:130}}/><col style={{width:22}}/></colgroup>
+                <colgroup><col/><col style={{width:"35%"}}/><col style={{width:22}}/></colgroup>
                 <tbody>
                   {categorias.map(cat=>{
                     const total=calcTotalAux(cat,auxData,recTotais);
@@ -2235,11 +2252,11 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                     const valColor=total>0?(isSuper?"#1a3a5c":"#2c3e50"):"#d0c8c0";
                     return(
                       <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else abrirAux(cat);}}}>
-                        <td style={{padding:"7px 12px"}}>
+                        <td style={{padding:"7px 14px"}}>
                           <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
                           {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
                         </td>
-                        <td style={{padding:"7px 12px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:valWeight,color:valColor,whiteSpace:"nowrap",borderLeft:"1px solid #ede8e0"}}>
+                        <td style={{padding:"7px 14px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:valWeight,color:valColor,whiteSpace:"nowrap",borderLeft:"1px solid #ede8e0"}}>
                           {total>0?total.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                         </td>
                         <td style={{textAlign:"center",color:"#c8d0d8",fontSize:12}}>{!isAuto?"›":""}</td>
@@ -2249,9 +2266,9 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                 </tbody>
               </table>
             </div>
-            <div style={{padding:"8px 12px",background:"#fdeaea",borderTop:"2px solid #c0392b",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11,color:"#c0392b",fontWeight:700,letterSpacing:0.5,textTransform:"uppercase"}}>Total Despesas</span>
-              <span style={{fontSize:13,fontWeight:800,color:"#c0392b",fontFamily:_FN}}>{fmt(totalDesp)}</span>
+            <div style={{padding:"8px 14px",background:"#f7f4f0",borderTop:"2px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:12,fontWeight:700,color:"#a89f94",textTransform:"uppercase"}}>Total Despesas</span>
+              <span style={{fontSize:16,fontWeight:900,color:"#c0392b",fontFamily:_FN}}>{fmt(totalDesp)}</span>
             </div>
           </div>
         </div>
@@ -5940,6 +5957,8 @@ export default function App(){
   const [blingStatus,setBlingStatus]=useState(null);
   const [syncStatus,setSyncStatus]=useState(null); // null | 'loading' | 'saved' | 'error' | 'local'
   const [dbCarregado,setDbCarregado]=useState(false);
+  const [sessaoExpirada,setSessaoExpirada]=useState(false);
+  const sessaoInicio=useRef(Date.now());
   const debounceRef=useRef(null);
   const debounceCortes=useRef(null);
 
@@ -5982,53 +6001,73 @@ export default function App(){
         setSyncStatus('local');
       }
     }catch(e){console.error("Erro lendo financeiro local:",e);}
-    // Camada 2: sincroniza com Supabase — dados mais recentes vencem
-    setSyncStatus('loading');
-    Promise.all([
-      supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single(),
-      supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single(),
-    ]).then(([{data:df,error:ef},{data:dc,error:ec}])=>{
-      // Financeiro
-      if(!ef&&df?.payload){
-        const d=df.payload;
-        // Comparar: Supabase pode ter dados mais recentes que localStorage
-        const localRaw=localStorage.getItem("amica_financeiro");
-        const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
-        const remoteTs=d._updated||0;
-        // Se local é mais novo que remoto, faz upload do local pro Supabase
-        if(localTs>remoteTs&&localRaw){
+
+    // Camada 2: se tem dados pendentes, envia pro Supabase ANTES de carregar
+    const flushPendente=async()=>{
+      const pendente=localStorage.getItem("amica_pending_sync");
+      const localRaw=localStorage.getItem("amica_financeiro");
+      if(pendente==="true"&&localRaw){
+        try{
           const localData=JSON.parse(localRaw);
-          if(localData.receitasPorMes)setReceitasPorMes(localData.receitasPorMes);
-          if(localData.auxDataPorMes)setAuxDataPorMes(localData.auxDataPorMes);
-          if(localData.categoriasPorMes)setCategoriasPorMes(localData.categoriasPorMes);
-          if(localData.boletosShared&&localData.boletosShared.length>0)setBoletosShared(deduplicarBoletos(localData.boletosShared));
-          if(localData.usuarios)setUsuarios(localData.usuarios);
-          if(localData.prestadores)setPrestadores(localData.prestadores);
-          if(localData.produtos)setProdutos(localData.produtos);
-          if(localData.oficinasCAD)setOficinasCAD(localData.oficinasCAD);
-          if(localData.logTroca)setLogTroca(localData.logTroca);
-          if(localData.tecidosCAD)setTecidosCAD(localData.tecidosCAD);
-          if(localData.fixosConfig)setFixosConfig(localData.fixosConfig);
-          if(localData.fixosNomesFunc)setFixosNomesFunc(localData.fixosNomesFunc);
-        }else{
-          // Remoto é mais recente — usa Supabase
-          if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
-          if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
-          if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
-          if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
-          if(d.usuarios)setUsuarios(d.usuarios);
-          if(d.prestadores)setPrestadores(d.prestadores);
-          if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e);}}
-          if(d.produtos)setProdutos(d.produtos);
-          if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
-          if(d.logTroca)setLogTroca(d.logTroca);
-          if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
-          if(d.fixosConfig)setFixosConfig(d.fixosConfig);
-          if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
-          // Salva remoto no localStorage pra ter cópia local (preserva timestamp original)
-          try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:remoteTs||Date.now()}));}catch(e){console.error(e);}
-        }
+          const payloadUp={...localData,_updated:Date.now()};
+          console.log("SYNC: enviando dados pendentes pro Supabase antes de carregar...");
+          const {error}=await supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadUp},{onConflict:'user_id'});
+          if(!error){
+            localStorage.setItem("amica_pending_sync","false");
+            // Atualiza timestamp local pra refletir o upload
+            localStorage.setItem("amica_financeiro",JSON.stringify(payloadUp));
+            console.log("SYNC: dados pendentes enviados com sucesso");
+          }else{console.error("SYNC: erro enviando pendentes:",error);}
+        }catch(e){console.error("SYNC: erro flush pendente:",e);}
       }
+    };
+
+    // Camada 3: carrega Supabase (após flush de pendentes)
+    setSyncStatus('loading');
+    flushPendente().then(()=>{
+      Promise.all([
+        supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single(),
+        supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single(),
+      ]).then(([{data:df,error:ef},{data:dc,error:ec}])=>{
+        // Financeiro — timestamp mais recente vence (simples e seguro)
+        if(!ef&&df?.payload){
+          const d=df.payload;
+          const localRaw=localStorage.getItem("amica_financeiro");
+          const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
+          const remoteTs=d._updated||0;
+          if(localTs>remoteTs&&localRaw){
+            console.log("SYNC: localStorage vence (timestamp mais novo:",localTs,">",remoteTs,")");
+            const localData=JSON.parse(localRaw);
+            if(localData.receitasPorMes)setReceitasPorMes(localData.receitasPorMes);
+            if(localData.auxDataPorMes)setAuxDataPorMes(localData.auxDataPorMes);
+            if(localData.categoriasPorMes)setCategoriasPorMes(localData.categoriasPorMes);
+            if(localData.boletosShared&&localData.boletosShared.length>0)setBoletosShared(deduplicarBoletos(localData.boletosShared));
+            if(localData.usuarios)setUsuarios(localData.usuarios);
+            if(localData.prestadores)setPrestadores(localData.prestadores);
+            if(localData.produtos)setProdutos(localData.produtos);
+            if(localData.oficinasCAD)setOficinasCAD(localData.oficinasCAD);
+            if(localData.logTroca)setLogTroca(localData.logTroca);
+            if(localData.tecidosCAD)setTecidosCAD(localData.tecidosCAD);
+            if(localData.fixosConfig)setFixosConfig(localData.fixosConfig);
+            if(localData.fixosNomesFunc)setFixosNomesFunc(localData.fixosNomesFunc);
+          }else{
+            console.log("SYNC: Supabase vence (timestamp:",remoteTs,">=",localTs,")");
+            if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
+            if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
+            if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
+            if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
+            if(d.usuarios)setUsuarios(d.usuarios);
+            if(d.prestadores)setPrestadores(d.prestadores);
+            if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e);}}
+            if(d.produtos)setProdutos(d.produtos);
+            if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+            if(d.logTroca)setLogTroca(d.logTroca);
+            if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+            if(d.fixosConfig)setFixosConfig(d.fixosConfig);
+            if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
+            try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:remoteTs||Date.now()}));localStorage.setItem("amica_pending_sync","false");}catch(e){console.error(e);}
+          }
+        }
       // Cortes (chave separada — cortes + oficinas data)
       if(!ec&&dc?.payload){
         const d=dc.payload;
@@ -6177,11 +6216,20 @@ export default function App(){
       if(!dbCarregado)return;
       const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
       salvarLocal(dados);
-      if(supabase){
-        const payloadComTs={...dados,_updated:Date.now()};
-        supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
-          .then(({error})=>{if(!error)localStorage.setItem("amica_pending_sync","false");})
-          .catch(e=>console.error("Flush save erro:",e));
+      // Usa fetch com keepalive pra garantir que o browser completa a request mesmo fechando
+      const sbUrl=localStorage.getItem("sb_url");
+      const sbKey=localStorage.getItem("sb_key");
+      if(sbUrl&&sbKey){
+        try{
+          const payloadComTs={...dados,_updated:Date.now()};
+          fetch(`${sbUrl}/rest/v1/amicia_data`,{
+            method:'POST',
+            headers:{'Content-Type':'application/json','apikey':sbKey,'Authorization':`Bearer ${sbKey}`,'Prefer':'resolution=merge-duplicates'},
+            body:JSON.stringify({user_id:USER_ID,payload:payloadComTs}),
+            keepalive:true
+          }).then(r=>{if(r.ok)localStorage.setItem("amica_pending_sync","false");})
+            .catch(()=>{});
+        }catch(e){console.error("Flush keepalive erro:",e);}
       }
     };
     const retrySePendente=()=>{
@@ -6203,9 +6251,7 @@ export default function App(){
       if(document.visibilityState==="visible")retrySePendente();
     };
     const onPageHide=()=>flushSave();
-    // Retry periódico a cada 30s
     const retryInterval=setInterval(retrySePendente,30000);
-    // Retry ao abrir (se ficou pendente de sessão anterior)
     const retryInicial=setTimeout(retrySePendente,3000);
     document.addEventListener("visibilitychange",onVisChange);
     window.addEventListener("pagehide",onPageHide);
@@ -6216,6 +6262,30 @@ export default function App(){
       clearTimeout(retryInicial);
     };
   },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc,dbCarregado]);
+
+  // ── SESSÃO EXPIRADA + VERSÃO DO APP ────────────────────────────────────────
+  useEffect(()=>{
+    const TIMEOUT_MS=6*60*60*1000; // 6 horas
+    // Verifica versão do app (deploy novo enquanto aba estava aberta)
+    const versaoLocal=localStorage.getItem("amica_app_version");
+    if(versaoLocal&&versaoLocal!==APP_VERSION){
+      setSessaoExpirada(true);
+      return;
+    }
+    localStorage.setItem("amica_app_version",APP_VERSION);
+    // Verifica timeout ao voltar à aba após longo período
+    const checkSessao=()=>{
+      if(document.visibilityState==="visible"){
+        const elapsed=Date.now()-sessaoInicio.current;
+        if(elapsed>TIMEOUT_MS){
+          console.log("Sessão expirada após",Math.round(elapsed/3600000),"horas");
+          setSessaoExpirada(true);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange",checkSessao);
+    return()=>document.removeEventListener("visibilitychange",checkSessao);
+  },[]);
 
   useEffect(()=>{
     const hoje=new Date().toISOString().slice(0,10);
@@ -6257,6 +6327,28 @@ export default function App(){
   const setReceitasMes=(m,fn)=>setReceitasPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||{}):fn}));
   const setAuxMes=(m,fn)=>setAuxDataPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||{}):fn}));
   const setCatsMes=(m,fn)=>setCategoriasPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||[...CATS]):fn}));
+
+  // ── MODAL SESSÃO EXPIRADA ────────────────────────────────────────────────────
+  if(sessaoExpirada){
+    return(
+      <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",background:"#f7f4f0"}}>
+        <div style={{background:"#fff",borderRadius:16,padding:"40px 32px",textAlign:"center",maxWidth:360,boxShadow:"0 4px 24px rgba(0,0,0,0.1)",border:"1px solid #e8e2da"}}>
+          <div style={{fontSize:40,marginBottom:16}}>🔄</div>
+          <div style={{fontSize:18,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Atualização necessária</div>
+          <div style={{fontSize:13,color:"#6b7c8a",marginBottom:24,lineHeight:1.6}}>
+            {localStorage.getItem("amica_app_version")!==APP_VERSION
+              ?"Uma nova versão do app está disponível. Recarregue para atualizar."
+              :"A sessão expirou após longo período. Recarregue para continuar com dados atualizados."}
+          </div>
+          <button onClick={()=>{localStorage.setItem("amica_app_version",APP_VERSION);window.location.reload();}}
+            style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"12px 32px",fontSize:14,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+            Recarregar agora
+          </button>
+          <div style={{fontSize:10,color:"#a89f94",marginTop:16}}>v{APP_VERSION} · Seus dados estão salvos</div>
+        </div>
+      </div>
+    );
+  }
 
   if(!usuarioLogado){
     return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.modulos.includes("lancamentos")?"lancamentos":u.modulos[0]||"dashboard");}}/>;
