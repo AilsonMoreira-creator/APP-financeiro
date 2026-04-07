@@ -2090,7 +2090,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                     return(
                       <div key={canal} style={{display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
                         {editando===key?(
-                          <input autoFocus value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:"5px 10px",fontSize:_FS,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal)}/>
+                          <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:"5px 10px",fontSize:_FS,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal)}/>
                         ):(
                           <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:"5px 10px",borderRadius:3,transition:"background 0.12s"}}>
                             {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
@@ -2203,7 +2203,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                       return(
                         <div key={canal} style={{display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
                           {editando===key?(
-                            <input autoFocus value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:"5px 10px",fontSize:_FS,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal,"g")}/>
+                            <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:"5px 10px",fontSize:_FS,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal,"g")}/>
                           ):(
                             <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:"5px 10px",borderRadius:3,transition:"background 0.12s"}}>
                               {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
@@ -5961,6 +5961,7 @@ export default function App(){
   const sessaoInicio=useRef(Date.now());
   const debounceRef=useRef(null);
   const debounceCortes=useRef(null);
+  const dadosRef=useRef(null); // ref pra flush/retry sem re-registrar listeners
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
   const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
@@ -5969,7 +5970,10 @@ export default function App(){
   const salvarLocal=useCallback((dados)=>{
     try{
       const payload={...dados,_updated:Date.now()};
-      localStorage.setItem("amica_financeiro",JSON.stringify(payload));
+      const json=JSON.stringify(payload);
+      const size=new Blob([json]).size;
+      if(size>60000)console.warn("⚠ Payload localStorage:",Math.round(size/1024),"KB",size>65536?"— EXCEDE 64KB keepalive!":"");
+      localStorage.setItem("amica_financeiro",json);
       localStorage.setItem("amica_pending_sync","true");
     }catch(e){console.error("Erro salvando localStorage:",e);}
   },[]);
@@ -6002,72 +6006,43 @@ export default function App(){
       }
     }catch(e){console.error("Erro lendo financeiro local:",e);}
 
-    // Camada 2: se tem dados pendentes, envia pro Supabase ANTES de carregar
-    const flushPendente=async()=>{
-      const pendente=localStorage.getItem("amica_pending_sync");
-      const localRaw=localStorage.getItem("amica_financeiro");
-      if(pendente==="true"&&localRaw){
-        try{
-          const localData=JSON.parse(localRaw);
-          const payloadUp={...localData,_updated:Date.now()};
-          console.log("SYNC: enviando dados pendentes pro Supabase antes de carregar...");
-          const {error}=await supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadUp},{onConflict:'user_id'});
-          if(!error){
-            localStorage.setItem("amica_pending_sync","false");
-            // Atualiza timestamp local pra refletir o upload
-            localStorage.setItem("amica_financeiro",JSON.stringify(payloadUp));
-            console.log("SYNC: dados pendentes enviados com sucesso");
-          }else{console.error("SYNC: erro enviando pendentes:",error);}
-        }catch(e){console.error("SYNC: erro flush pendente:",e);}
-      }
-    };
-
-    // Camada 3: carrega Supabase (após flush de pendentes)
+    // Camada 2: carrega Supabase — compara com local usando pending_sync + timestamp
     setSyncStatus('loading');
-    flushPendente().then(()=>{
-      Promise.all([
-        supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single(),
-        supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single(),
-      ]).then(([{data:df,error:ef},{data:dc,error:ec}])=>{
-        // Financeiro — timestamp mais recente vence (simples e seguro)
-        if(!ef&&df?.payload){
-          const d=df.payload;
-          const localRaw=localStorage.getItem("amica_financeiro");
-          const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
-          const remoteTs=d._updated||0;
-          if(localTs>remoteTs&&localRaw){
-            console.log("SYNC: localStorage vence (timestamp mais novo:",localTs,">",remoteTs,")");
-            const localData=JSON.parse(localRaw);
-            if(localData.receitasPorMes)setReceitasPorMes(localData.receitasPorMes);
-            if(localData.auxDataPorMes)setAuxDataPorMes(localData.auxDataPorMes);
-            if(localData.categoriasPorMes)setCategoriasPorMes(localData.categoriasPorMes);
-            if(localData.boletosShared&&localData.boletosShared.length>0)setBoletosShared(deduplicarBoletos(localData.boletosShared));
-            if(localData.usuarios)setUsuarios(localData.usuarios);
-            if(localData.prestadores)setPrestadores(localData.prestadores);
-            if(localData.produtos)setProdutos(localData.produtos);
-            if(localData.oficinasCAD)setOficinasCAD(localData.oficinasCAD);
-            if(localData.logTroca)setLogTroca(localData.logTroca);
-            if(localData.tecidosCAD)setTecidosCAD(localData.tecidosCAD);
-            if(localData.fixosConfig)setFixosConfig(localData.fixosConfig);
-            if(localData.fixosNomesFunc)setFixosNomesFunc(localData.fixosNomesFunc);
-          }else{
-            console.log("SYNC: Supabase vence (timestamp:",remoteTs,">=",localTs,")");
-            if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
-            if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
-            if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
-            if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
-            if(d.usuarios)setUsuarios(d.usuarios);
-            if(d.prestadores)setPrestadores(d.prestadores);
-            if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e);}}
-            if(d.produtos)setProdutos(d.produtos);
-            if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
-            if(d.logTroca)setLogTroca(d.logTroca);
-            if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
-            if(d.fixosConfig)setFixosConfig(d.fixosConfig);
-            if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
-            try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:remoteTs||Date.now()}));localStorage.setItem("amica_pending_sync","false");}catch(e){console.error(e);}
-          }
+    Promise.all([
+      supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single(),
+      supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single(),
+    ]).then(([{data:df,error:ef},{data:dc,error:ec}])=>{
+      if(!ef&&df?.payload){
+        const d=df.payload;
+        const localRaw=localStorage.getItem("amica_financeiro");
+        const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
+        const remoteTs=d._updated||0;
+        const pendente=localStorage.getItem("amica_pending_sync")==="true";
+
+        if(pendente&&localTs>remoteTs){
+          // LOCAL VENCE: edits pendentes + timestamp mais recente que Supabase
+          // Estado já foi setado no Passo 1 (localStorage), não sobrescreve
+          // Auto-save vai enviar pro Supabase quando dbCarregado=true
+          console.log("SYNC: LOCAL vence — pending_sync=true, local:",new Date(localTs).toLocaleString("pt-BR"),"| remoto:",remoteTs?new Date(remoteTs).toLocaleString("pt-BR"):"nenhum");
+        }else{
+          // SUPABASE VENCE: dados remotos mais recentes ou sem pending
+          console.log("SYNC: SUPABASE vence —",pendente?"pending mas remoto mais novo":"sem pending",", remoto:",remoteTs?new Date(remoteTs).toLocaleString("pt-BR"):"nenhum");
+          if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
+          if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
+          if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
+          if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
+          if(d.usuarios)setUsuarios(d.usuarios);
+          if(d.prestadores)setPrestadores(d.prestadores);
+          if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e);}}
+          if(d.produtos)setProdutos(d.produtos);
+          if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+          if(d.logTroca)setLogTroca(d.logTroca);
+          if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+          if(d.fixosConfig)setFixosConfig(d.fixosConfig);
+          if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
+          try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:remoteTs||Date.now()}));localStorage.setItem("amica_pending_sync","false");}catch(e){console.error(e);}
         }
+      }
       // Cortes (chave separada — cortes + oficinas data)
       if(!ec&&dc?.payload){
         const d=dc.payload;
@@ -6079,8 +6054,38 @@ export default function App(){
       setDbCarregado(true);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);setSyncStatus('error');});
-    });
   },[]);
+
+  // ── SUPABASE REALTIME — recebe mudanças de outros devices em tempo real ────
+  useEffect(()=>{
+    if(!supabase||!dbCarregado)return;
+    const channel=supabase.channel('sync-financeiro')
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amicia_data',filter:`user_id=eq.${USER_ID}`},(payload)=>{
+        const d=payload.new?.payload;
+        if(!d||!d._updated)return;
+        // Ignora se é o próprio device (timestamp muito próximo do último save local)
+        const localRaw=localStorage.getItem("amica_financeiro");
+        const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
+        if(Math.abs(d._updated-localTs)<2000)return; // provavelmente eco do próprio save
+        const pendente=localStorage.getItem("amica_pending_sync")==="true";
+        if(pendente)return; // tem edits locais não salvos, não sobrescreve
+        console.log("REALTIME: recebido update de outro device, timestamp:",new Date(d._updated).toLocaleString("pt-BR"));
+        if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
+        if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
+        if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
+        if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
+        if(d.usuarios)setUsuarios(d.usuarios);
+        if(d.prestadores)setPrestadores(d.prestadores);
+        if(d.produtos)setProdutos(d.produtos);
+        if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+        if(d.logTroca)setLogTroca(d.logTroca);
+        if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+        if(d.fixosConfig)setFixosConfig(d.fixosConfig);
+        if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
+        try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:d._updated}));}catch(e){console.error(e);}
+      }).subscribe();
+    return()=>{supabase.removeChannel(channel);};
+  },[dbCarregado]);
 
   // ── BACKUP DIÁRIO AUTOMÁTICO (1x por dia ao abrir) ─────────────────────────
   useEffect(()=>{
@@ -6180,6 +6185,7 @@ export default function App(){
   useEffect(()=>{
     if(!dbCarregado)return;
     const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
+    dadosRef.current=dados; // sync ref pra flush/retry
     // Camada 1: salva local na hora
     salvarLocal(dados);
     setSyncStatus('local');
@@ -6211,36 +6217,36 @@ export default function App(){
     return()=>clearTimeout(debounceCortes.current);
   },[cortes,produtos,oficinasCAD,logTroca,dbCarregado]);
 
-  // ── SAVE AO SAIR + RETRY AO VOLTAR ─────────────────────────────────────────
+  // ── SAVE AO SAIR + RETRY AO VOLTAR (usa dadosRef pra evitar re-registro) ──
   useEffect(()=>{
     const flushSave=()=>{
-      if(!dbCarregado)return;
-      const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
+      if(!dadosRef.current)return;
+      const dados=dadosRef.current;
       salvarLocal(dados);
-      // Usa fetch com keepalive pra garantir que o browser completa a request mesmo fechando
       const sbUrl=localStorage.getItem("sb_url");
       const sbKey=localStorage.getItem("sb_key");
       if(sbUrl&&sbKey){
         try{
           const payloadComTs={...dados,_updated:Date.now()};
+          const body=JSON.stringify({user_id:USER_ID,payload:payloadComTs});
+          const size=body.length;
+          if(size>65536)console.warn("⚠ Flush payload excede 64KB keepalive:",Math.round(size/1024),"KB — pode falhar silenciosamente");
           fetch(`${sbUrl}/rest/v1/amicia_data`,{
             method:'POST',
             headers:{'Content-Type':'application/json','apikey':sbKey,'Authorization':`Bearer ${sbKey}`,'Prefer':'resolution=merge-duplicates'},
-            body:JSON.stringify({user_id:USER_ID,payload:payloadComTs}),
-            keepalive:true
+            body,keepalive:true
           }).then(r=>{if(r.ok)localStorage.setItem("amica_pending_sync","false");})
             .catch(()=>{});
         }catch(e){console.error("Flush keepalive erro:",e);}
       }
     };
     const retrySePendente=()=>{
-      if(!dbCarregado||!supabase)return;
+      if(!dadosRef.current||!supabase)return;
       const pendente=localStorage.getItem("amica_pending_sync");
       if(pendente!=="true")return;
       console.log("Retry sync: dados pendentes encontrados");
-      const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
       setSyncStatus('saving');
-      const payloadComTs={...dados,_updated:Date.now()};
+      const payloadComTs={...dadosRef.current,_updated:Date.now()};
       supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
         .then(({error})=>{
           if(!error){localStorage.setItem("amica_pending_sync","false");setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
@@ -6262,7 +6268,7 @@ export default function App(){
       clearInterval(retryInterval);
       clearTimeout(retryInicial);
     };
-  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc,dbCarregado]);
+  },[dbCarregado]); // ← deps mínimas — dados vêm do dadosRef
 
   // ── SESSÃO EXPIRADA + VERSÃO DO APP ────────────────────────────────────────
   useEffect(()=>{
