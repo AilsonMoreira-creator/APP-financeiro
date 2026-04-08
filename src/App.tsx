@@ -5973,6 +5973,7 @@ export default function App(){
   const debounceRef=useRef(null);
   const debounceCortes=useRef(null);
   const dadosRef=useRef(null); // ref pra flush/retry sem re-registrar listeners
+  const lastSaveTs=useRef(0); // timestamp do último save pra detectar eco do Realtime
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
   const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
@@ -6073,12 +6074,10 @@ export default function App(){
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amicia_data',filter:`user_id=eq.${USER_ID}`},(payload)=>{
         const d=payload.new?.payload;
         if(!d||!d._updated)return;
-        // Ignora se é o próprio device (timestamp muito próximo do último save local)
-        const localRaw=localStorage.getItem("amica_financeiro");
-        const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
-        if(Math.abs(d._updated-localTs)<2000)return; // provavelmente eco do próprio save
+        // Ignora eco do próprio save (5s de margem)
+        if(Math.abs(d._updated-lastSaveTs.current)<5000){console.log("REALTIME: ignorando eco do próprio save");return;}
         const pendente=localStorage.getItem("amica_pending_sync")==="true";
-        if(pendente)return; // tem edits locais não salvos, não sobrescreve
+        if(pendente){console.log("REALTIME: ignorando — pending_sync=true");return;}
         console.log("REALTIME: recebido update de outro device, timestamp:",new Date(d._updated).toLocaleString("pt-BR"));
         if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
@@ -6182,7 +6181,9 @@ export default function App(){
   const salvarNoSupabase=useCallback((payload)=>{
     if(!supabase||!dbCarregado)return;
     setSyncStatus('saving');
-    const payloadComTs={...payload,_updated:Date.now()};
+    const ts=Date.now();
+    lastSaveTs.current=ts;
+    const payloadComTs={...payload,_updated:ts};
     supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
       .then(({error})=>{
         if(error){console.error("Erro Supabase save:",error);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
@@ -6237,7 +6238,9 @@ export default function App(){
       const sbKey=localStorage.getItem("sb_key");
       if(sbUrl&&sbKey){
         try{
-          const payloadComTs={...dados,_updated:Date.now()};
+          const ts=Date.now();
+          lastSaveTs.current=ts;
+          const payloadComTs={...dados,_updated:ts};
           const body=JSON.stringify({user_id:USER_ID,payload:payloadComTs});
           const size=body.length;
           if(size>65536)console.warn("⚠ Flush payload excede 64KB keepalive:",Math.round(size/1024),"KB — pode falhar silenciosamente");
@@ -6256,7 +6259,9 @@ export default function App(){
       if(pendente!=="true")return;
       console.log("Retry sync: dados pendentes encontrados");
       setSyncStatus('saving');
-      const payloadComTs={...dadosRef.current,_updated:Date.now()};
+      const ts=Date.now();
+      lastSaveTs.current=ts;
+      const payloadComTs={...dadosRef.current,_updated:ts};
       supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
         .then(({error})=>{
           if(!error){localStorage.setItem("amica_pending_sync","false");setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
