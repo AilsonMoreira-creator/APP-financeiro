@@ -1881,7 +1881,7 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
       <div style={{display:"grid",gridTemplateColumns:gridCols,background:"#f7f4f0",borderBottom:"1px solid #e8e2da"}}>
         {headers.map((h,i)=><div key={i} style={{padding:"9px 12px",fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",fontWeight:600}}>{h}</div>)}
       </div>
-      <div style={{maxHeight:isFixa?20*33:400,overflowY:"auto"}}>
+      <div style={{maxHeight:900,overflowY:"auto"}}>
         {(auxData[auxAberta]||[]).map((row,idx)=>{
           const fromBoleto=!!row._boletoid;
           const rowStyle={display:"grid",gridTemplateColumns:gridCols,borderBottom:"1px solid #f0ebe4",background:fromBoleto?"#f0f6fb":row.valor?"#f9fdf9":"#fff"};
@@ -1895,7 +1895,9 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
                 <div style={{padding:"6px 8px"}}><input value={row.data||""} onChange={e=>updateLinhaAux(auxAberta,idx,"data",e.target.value)} style={dis} disabled={fromBoleto}/></div>
               )}
               {isFixa?(
-                <div style={{padding:"6px 12px",fontWeight:700,color:"#2c3e50",fontSize:12}}>{row.descricao}</div>
+                row.descricao?
+                  <div style={{padding:"6px 12px",fontWeight:700,color:"#2c3e50",fontSize:12}}>{row.descricao}</div>
+                  :<div style={{padding:"6px 8px"}}><input value={row.descricao||""} onChange={e=>updateLinhaAux(auxAberta,idx,"descricao",e.target.value)} placeholder="Descrição..." style={{...inputStyle,fontWeight:700}}/></div>
               ):isTecidos?(
                 <>
                   <div style={{padding:"6px 8px"}}><input value={row.empresa||""} onChange={e=>updateLinhaAux(auxAberta,idx,"empresa",e.target.value)} style={dis} disabled={fromBoleto}/></div>
@@ -4033,6 +4035,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   const [prodFound,setProdFound]=useState(null);
   const [qtdRolos,setQtdRolos]=useState("");
   const [saveMsg,setSaveMsg]=useState("");
+  const [scSync,setScSync]=useState(null); // null | 'saving' | 'saved' | 'error'
   const [editandoPecas,setEditandoPecas]=useState(null);
   const [pecasInput,setPecasInput]=useState("");
   const [abaAnalise,setAbaAnalise]=useState("ranking");
@@ -4096,8 +4099,10 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
         const localLogIds=new Set(logSC.map(l=>l.id));
         const remoteLogsOnly=remoteLogs.filter(l=>!localLogIds.has(l.id));
         const mergedLogs=[...logSC,...remoteLogsOnly].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,200);
+        setScSync('saving');
         await scDb.save({cortes:merged,salas:mergedSalas,logs:mergedLogs});
-      }catch(e){console.error(e)}
+        setScSync('saved');setTimeout(()=>setScSync(null),2000);
+      }catch(e){console.error(e);setScSync('error');setTimeout(()=>setScSync(null),4000);}
     },2000);
     return()=>clearTimeout(debRef.current);
   },[cortesSala,salas,logSC,dbLoaded]);
@@ -4139,7 +4144,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
       addLog("excluir",`REF ${c?.ref} · ${c?.sala} · ${c?.qtdRolos}r`);
       setConfirm(null);
       // Save imediato — não depende do debounce
-      scDb.save({cortes:novosCortes,salas,logs:logSC}).then(()=>console.log("Corte excluído salvo no Supabase")).catch(e=>console.error("Erro salvando exclusão:",e));
+      scDb.save({cortes:novosCortes,salas,logs:logSC}).then(()=>{setScSync('saved');setTimeout(()=>setScSync(null),2000);}).catch(e=>{console.error("Erro salvando exclusão:",e);setScSync('error');setTimeout(()=>setScSync(null),4000);});
     }});
   };
 
@@ -4260,6 +4265,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
             <div style={{fontSize:mobile?15:17,fontWeight:700,color:"#2c3e50"}}>Salas de Corte</div>
             <div style={{fontSize:11,color:"#8a9aa4"}}>Controle de rendimento</div>
           </div>
+          {scSync&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,fontFamily:"Georgia,serif",background:scSync==='saving'?"#f0f6fb":scSync==='saved'?"#eafbf0":"#fdeaea",color:scSync==='saving'?"#4a7fa5":scSync==='saved'?"#27ae60":"#c0392b"}}>{scSync==='saving'?"☁ salvando…":scSync==='saved'?"☁ salvo":"✗ erro"}</span>}
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           {alertas.length>0&&tela==="analise"&&<span style={{background:"#c0392b",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{alertas.length}</span>}
@@ -6048,11 +6054,10 @@ export default function App(){
           try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:remoteTs||Date.now()}));localStorage.setItem("amica_pending_sync","false");}catch(e){console.error(e);}
         }
       }
-      // Cortes (chave separada — cortes + oficinas data)
+      // Cortes (chave separada — só cortes, produtos vêm do payload principal)
       if(!ec&&dc?.payload){
         const d=dc.payload;
         if(d.cortes){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
-        if(d.produtos&&d.produtos.length>0)setProdutos(d.produtos);
         if(d.oficinasCAD&&d.oficinasCAD.length>0)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
       }
@@ -6210,12 +6215,12 @@ export default function App(){
       try{
         const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
         const remoto=data?.payload||{};
+        // Merge cortes: mantém cortes de outros usuários (multi-user)
         const localIds=new Set((cortes||[]).map(c=>c.id));
         const remotoOnly=(remoto.cortes||[]).filter(c=>!localIds.has(c.id));
         const cortesMerged=[...(cortes||[]),...remotoOnly];
-        const localRefs=new Set((produtos||[]).map(p=>p.ref));
-        const produtosMerged=[...(produtos||[]),...(remoto.produtos||[]).filter(p=>!localRefs.has(p.ref))];
-        const payload={cortes:cortesMerged,produtos:produtosMerged,oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
+        // Produtos: SEM merge — admin controla, salva sempre a versão atual
+        const payload={cortes:cortesMerged,produtos:produtos||[],oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
         await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
       }catch(e){console.error("Erro save cortes:",e);}
     },1500);
