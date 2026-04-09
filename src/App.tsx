@@ -4624,14 +4624,6 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
   return(
     <div>
       <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Configurações</div>
-      <div style={{background:"#f0f6fb",border:"1px solid #c8d8e4",borderRadius:10,padding:"10px 16px",marginBottom:16,display:"flex",gap:10,alignItems:"center"}}>
-        <span style={{fontSize:16}}>🔗</span>
-        <div>
-          <div style={{fontSize:12,fontWeight:600,color:"#2c3e50"}}>Bling — Integração Marketplaces</div>
-          <div style={{fontSize:11,color:"#8a9aa4",marginTop:2}}>A integração com o Bling terá um módulo próprio em breve. Exitus · Lumia · Muniam</div>
-        </div>
-        <span style={{marginLeft:"auto",fontSize:10,color:"#4a7fa5",background:"#e0f0ff",borderRadius:4,padding:"2px 8px",fontWeight:600}}>Em breve</span>
-      </div>
       <Section title="Miré — Lojas Físicas" subtitle="Silva Teles e Bom Retiro">
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:4}}>Token API Miré</div>
@@ -4675,8 +4667,8 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
         {saved&&<span style={{fontSize:12,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ Configurações salvas</span>}
         <button onClick={salvarConfig} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"8px 20px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Salvar Configurações</button>
       </div>
-      {isAdmin&&(
-        <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}>
+      {/* Backup — visível pra todos com acesso a configurações */}
+      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}>
           <div style={{padding:"14px 20px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
               <div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>🗄 Backup e Restauração</div>
@@ -4707,7 +4699,7 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
             </div>
           </div>
         </div>
-      )}
+      </div>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
         <div style={{padding:"14px 20px",borderBottom:verCodigo?"1px solid #e8e2da":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>setVerCodigo(p=>!p)}>
           <div><div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>💻 Código Fonte do App</div><div style={{fontSize:12,color:"#a89f94",marginTop:2}}>Copie para deploy no StackBlitz / Vercel</div></div>
@@ -5966,6 +5958,8 @@ export default function App(){
     return base;
   });
   const [blingStatus,setBlingStatus]=useState(null);
+  const [blingVendas,setBlingVendas]=useState({});
+  const [blingImportStatus,setBlingImportStatus]=useState(null);
   const [syncStatus,setSyncStatus]=useState(null); // null | 'loading' | 'saved' | 'error' | 'local'
   const [dbCarregado,setDbCarregado]=useState(false);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
@@ -6309,27 +6303,121 @@ export default function App(){
     return()=>document.removeEventListener("visibilitychange",checkSessao);
   },[]);
 
+  // ── BLING AUTO-IMPORT: totais + vendas detalhadas (só hoje) ──────────────
   useEffect(()=>{
+    if(!dbCarregado||!supabase)return;
     const hoje=new Date().toISOString().slice(0,10);
-    const ultimaImport=localStorage.getItem("amica_bling_ultima");
-    if(ultimaImport===hoje)return;
-    try{
-      const tokens=JSON.parse(localStorage.getItem("amica_bling")||"{}");
+    const ultimaImport=localStorage.getItem("amica_bling_ultima_det");
+    const jaImportouHoje=ultimaImport===hoje;
+
+    // Carrega cache existente do Supabase
+    (async()=>{
+      try{
+        const {data:cacheData}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-vendas').single();
+        if(cacheData?.payload){setBlingVendas(cacheData.payload);try{localStorage.setItem("amica_bling_vendas",JSON.stringify(cacheData.payload));}catch(e){}}
+      }catch(e){}
+
+      // Se já importou hoje, não importa de novo (refresh a cada 30 min via interval)
+      if(jaImportouHoje)return;
+
+      // Busca tokens do Supabase (não localStorage!)
+      const {data:tokensData}=await supabase.from('bling_tokens').select('*');
+      if(!tokensData||tokensData.length===0)return;
+      const tokens={};
+      tokensData.forEach(t=>{if(t.conta&&t.access_token)tokens[t.conta]=t.access_token;});
       if(!tokens.exitus&&!tokens.lumia&&!tokens.muniam)return;
-      setBlingStatus("importando");
-      fetch("/api/bling",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tokens,devolucao:10})})
-        .then(r=>r.json())
-        .then(data=>{
-          if(data.erro){setBlingStatus({ok:false,msg:"Bling: "+data.erro});return;}
-          const val=data.totalLiquido||0;
-          setReceitasPorMes(prev=>{const mesAtual=prev[MES_ATUAL]||{};const diaAtual=new Date().getDate();return{...prev,[MES_ATUAL]:{...mesAtual,[diaAtual]:{...(mesAtual[diaAtual]||{}),marketplaces:String(val)}}};});
-          localStorage.setItem("amica_bling_ultima",hoje);
-          setBlingStatus({ok:true,msg:`✓ Bling: R$ ${val.toLocaleString("pt-BR")}`});
-          setTimeout(()=>setBlingStatus(null),8000);
-        })
-        .catch(e=>{setBlingStatus({ok:false,msg:"Erro Bling: "+e.message});setTimeout(()=>setBlingStatus(null),6000);});
-    }catch(e){console.error(e)}
-  },[]);
+
+      setBlingImportStatus("importando vendas do dia...");
+      const contas=["exitus","lumia","muniam"];
+      let totalBruto=0;
+      const cache=JSON.parse(localStorage.getItem("amica_bling_vendas")||"{}");
+      const mesKey=hoje.slice(0,7);
+      const diaKey=hoje.slice(8,10);
+      if(!cache[mesKey])cache[mesKey]={};
+      const diaData={};
+
+      for(const conta of contas){
+        if(!tokens[conta])continue;
+        try{
+          const resp=await fetch("/api/bling-vendas-dia",{
+            method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({access_token:tokens[conta],data:hoje})
+          });
+          if(!resp.ok)continue;
+          const result=await resp.json();
+          if(!result.ok)continue;
+          if(result.totalPedidos>0){
+            diaData[conta]=result.canais;
+            // Soma bruto pra lançamentos
+            Object.values(result.canais).forEach(c=>{totalBruto+=c.bruto||0;});
+          }
+          // Log dos primeiros itens parseados (diagnóstico)
+          if(result._debug&&result._debug.length>0){
+            console.log(`BLING [${conta}] formato itens:`,result._debug);
+          }
+        }catch(e){console.error(`Bling ${conta}:`,e);}
+      }
+
+      // Salva dados detalhados
+      cache[mesKey][diaKey]=Object.keys(diaData).length>0?diaData:{_vazio:true};
+      setBlingVendas({...cache});
+      try{localStorage.setItem("amica_bling_vendas",JSON.stringify(cache));}catch(e){}
+      try{await supabase.from('amicia_data').upsert({user_id:'bling-vendas',payload:cache},{onConflict:'user_id'});}catch(e){console.error("Erro salvando cache bling:",e);}
+
+      // Atualiza total em Lançamentos (desconta 10% devoluções)
+      if(totalBruto>0){
+        const liquido=Math.round(totalBruto*0.90);
+        setReceitasPorMes(prev=>{const m=prev[MES_ATUAL]||{};const d=new Date().getDate();return{...prev,[MES_ATUAL]:{...m,[d]:{...(m[d]||{}),marketplaces:String(liquido)}}};});
+        setBlingStatus({ok:true,msg:`✓ Bling: R$ ${liquido.toLocaleString("pt-BR")} (${Object.keys(diaData).length} contas)`});
+        setTimeout(()=>setBlingStatus(null),8000);
+      }
+      localStorage.setItem("amica_bling_ultima_det",hoje);
+      setBlingImportStatus("✓ vendas importadas");
+      setTimeout(()=>setBlingImportStatus(null),3000);
+    })().catch(e=>{console.error("Bling auto-import:",e);setBlingImportStatus(null);});
+
+    // Refresh a cada 30 min (só hoje)
+    const refreshInterval=setInterval(async()=>{
+      try{
+        const hojeRefresh=new Date().toISOString().slice(0,10);
+        const {data:tokensData}=await supabase.from('bling_tokens').select('*');
+        if(!tokensData||tokensData.length===0)return;
+        const tokens={};
+        tokensData.forEach(t=>{if(t.conta&&t.access_token)tokens[t.conta]=t.access_token;});
+        const contas=["exitus","lumia","muniam"];
+        const cache={...blingVendas};
+        const mesKey=hojeRefresh.slice(0,7);
+        const diaKey=hojeRefresh.slice(8,10);
+        if(!cache[mesKey])cache[mesKey]={};
+        const diaData={};
+        let totalBruto=0;
+        for(const conta of contas){
+          if(!tokens[conta])continue;
+          try{
+            const resp=await fetch("/api/bling-vendas-dia",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_token:tokens[conta],data:hojeRefresh})});
+            if(!resp.ok)continue;
+            const result=await resp.json();
+            if(result.ok&&result.totalPedidos>0){
+              diaData[conta]=result.canais;
+              Object.values(result.canais).forEach(c=>{totalBruto+=c.bruto||0;});
+            }
+          }catch(e){}
+        }
+        if(Object.keys(diaData).length>0){
+          cache[mesKey][diaKey]=diaData;
+          setBlingVendas({...cache});
+          try{localStorage.setItem("amica_bling_vendas",JSON.stringify(cache));}catch(e){}
+          try{await supabase.from('amicia_data').upsert({user_id:'bling-vendas',payload:cache},{onConflict:'user_id'});}catch(e){}
+          if(totalBruto>0){
+            const liquido=Math.round(totalBruto*0.90);
+            setReceitasPorMes(prev=>{const m=prev[MES_ATUAL]||{};const d=new Date().getDate();return{...prev,[MES_ATUAL]:{...m,[d]:{...(m[d]||{}),marketplaces:String(liquido)}}};});
+          }
+        }
+      }catch(e){console.error("Bling refresh:",e);}
+    },30*60*1000); // 30 min
+
+    return()=>clearInterval(refreshInterval);
+  },[dbCarregado]);
 
   const dadosMensais=Object.fromEntries(
     Array.from({length:12},(_,i)=>{
@@ -6383,6 +6471,11 @@ export default function App(){
       {blingStatus&&(
         <div style={{background:blingStatus==="importando"?"#f0f6fb":blingStatus.ok?"#eafbf0":"#fdeaea",color:blingStatus==="importando"?"#4a7fa5":blingStatus.ok?"#27ae60":"#c0392b",padding:"6px 16px",fontSize:12,textAlign:"center"}}>
           {blingStatus==="importando"?<>⏳ Importando dados do Bling…</>:<>{blingStatus.msg}</>}
+        </div>
+      )}
+      {blingImportStatus&&!blingStatus&&(
+        <div style={{background:"#f0f6fb",color:"#4a7fa5",padding:"4px 16px",fontSize:11,textAlign:"center"}}>
+          📦 {blingImportStatus}
         </div>
       )}
       {/* Barra de navegação com ícones SVG */}
