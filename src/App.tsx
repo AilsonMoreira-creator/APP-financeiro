@@ -4699,7 +4699,6 @@ const ConfiguracoesContent=({codigoFonte="",dadosBackup=null,onRestaurar=null,is
             </div>
           </div>
         </div>
-      </div>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
         <div style={{padding:"14px 20px",borderBottom:verCodigo?"1px solid #e8e2da":"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}} onClick={()=>setVerCodigo(p=>!p)}>
           <div><div style={{fontSize:14,fontWeight:600,color:"#2c3e50"}}>💻 Código Fonte do App</div><div style={{fontSize:12,color:"#a89f94",marginTop:2}}>Copie para deploy no StackBlitz / Vercel</div></div>
