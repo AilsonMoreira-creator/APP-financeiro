@@ -6649,6 +6649,7 @@ export default function App(){
           }
           if(result._debug&&result._debug.length>0)console.log(`BLING [${conta}] itens:`,result._debug);
           if(result._canaisRaw)console.log(`BLING [${conta}] canais ORIGINAIS Bling:`,result._canaisRaw);
+          if(result._primeiroPedido)console.log(`BLING [${conta}] ESTRUTURA pedido:`,result._primeiroPedido);
           console.log(`BLING [${conta}] ✓ ${result.totalPedidos} pedidos, canais normalizados:`,Object.keys(result.canais).join(", "));
         }catch(e){console.error(`Bling ${conta}:`,e);}
       }
