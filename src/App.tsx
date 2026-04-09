@@ -3623,8 +3623,84 @@ const blingDb={
   },
 };
 
-const BlingContent=({setReceitasMes,mesAtual})=>{
+const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=null})=>{
   const [tela,setTela]=useState("dash");
+  const [vendasSub,setVendasSub]=useState("overview"); // "overview" | "produtos"
+  const [vendasFiltro,setVendasFiltro]=useState("hoje");
+  const [filtroMarca,setFiltroMarca]=useState("todas");
+  const [filtroCanal,setFiltroCanal]=useState("todos");
+  const [prodFiltroData,setProdFiltroData]=useState("7dias");
+
+  // Agregação de dados do cache blingVendas
+  const agregarPeriodo=(dataInicio,dataFim)=>{
+    const r={totalPedidos:0,totalBruto:0,totalFrete:0,totalItens:0,porCanal:{},porMarca:{},porProduto:{},porDia:[],tamGeral:{},corGeral:{}};
+    const CONTAS_AGG=["exitus","lumia","muniam"];
+    let d=new Date(dataInicio+"T00:00:00");const fim=new Date(dataFim+"T00:00:00");
+    while(d<=fim){
+      const ds=d.toISOString().slice(0,10);const mk=ds.slice(0,7);const dk=ds.slice(8,10);
+      const dd=blingVendas[mk]?.[dk];let totalDia=0;
+      if(dd&&!dd._vazio){
+        for(const marca of CONTAS_AGG){
+          const md=dd[marca];if(!md)continue;
+          const mn=marca.charAt(0).toUpperCase()+marca.slice(1);
+          if(!r.porMarca[mn])r.porMarca[mn]={pedidos:0,bruto:0,itens:0};
+          for(const cn in md){
+            const cd=md[cn];
+            if(!r.porCanal[cn])r.porCanal[cn]={pedidos:0,bruto:0,frete:0,itens:0,subcanais:{},produtos:{}};
+            const cc=r.porCanal[cn];
+            cc.pedidos+=cd.pedidos||0;cc.bruto+=cd.bruto||0;cc.frete+=cd.frete||0;cc.itens+=cd.itens||0;
+            r.porMarca[mn].pedidos+=cd.pedidos||0;r.porMarca[mn].bruto+=cd.bruto||0;r.porMarca[mn].itens+=cd.itens||0;
+            r.totalPedidos+=cd.pedidos||0;r.totalBruto+=cd.bruto||0;r.totalFrete+=cd.frete||0;r.totalItens+=cd.itens||0;totalDia+=cd.bruto||0;
+            if(cd.subcanais)for(const sc in cd.subcanais){if(!cc.subcanais[sc])cc.subcanais[sc]={pedidos:0,bruto:0};cc.subcanais[sc].pedidos+=cd.subcanais[sc].pedidos||0;cc.subcanais[sc].bruto+=cd.subcanais[sc].bruto||0;}
+            for(const prod of(cd.produtos||[])){
+              const ref=prod.ref;
+              if(!cc.produtos[ref])cc.produtos[ref]={ref,desc:prod.desc,qtd:0,valor:0};
+              cc.produtos[ref].qtd+=prod.qtd||0;cc.produtos[ref].valor+=prod.valor||0;
+              if(!r.porProduto[ref])r.porProduto[ref]={ref,desc:prod.desc,marca:mn,qtd:0,valor:0,tam:{},cor:{},porCanal:{}};
+              const rp=r.porProduto[ref];rp.qtd+=prod.qtd||0;rp.valor+=prod.valor||0;
+              if(!rp.porCanal[cn])rp.porCanal[cn]={qtd:0,valor:0};rp.porCanal[cn].qtd+=prod.qtd||0;rp.porCanal[cn].valor+=prod.valor||0;
+              for(const t in(prod.tam||{})){rp.tam[t]=(rp.tam[t]||0)+prod.tam[t];r.tamGeral[t]=(r.tamGeral[t]||0)+prod.tam[t];}
+              for(const c in(prod.cor||{})){rp.cor[c]=(rp.cor[c]||0)+prod.cor[c];r.corGeral[c]=(r.corGeral[c]||0)+prod.cor[c];}
+            }
+          }
+        }
+      }
+      r.porDia.push({dia:ds,total:totalDia});
+      d.setDate(d.getDate()+1);
+    }
+    for(const cn in r.porCanal)r.porCanal[cn].produtos=Object.values(r.porCanal[cn].produtos).sort((a,b)=>b.qtd-a.qtd);
+    r.top20=Object.values(r.porProduto).sort((a,b)=>b.qtd-a.qtd).slice(0,20);
+    return r;
+  };
+
+  // Date helpers
+  const hojeDate=new Date().toISOString().slice(0,10);
+  const ontemDate=new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const mesAtualInicio=hojeDate.slice(0,8)+"01";
+  const seteDiasAtras=new Date(Date.now()-7*86400000).toISOString().slice(0,10);
+  const mesAnterior=()=>{const d=new Date();d.setMonth(d.getMonth()-1);const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,"0");const last=new Date(y,d.getMonth()+1,0).getDate();return{inicio:`${y}-${m}-01`,fim:`${y}-${m}-${last}`};};
+
+  const getVendasRange=()=>{
+    if(vendasFiltro==="hoje")return agregarPeriodo(hojeDate,hojeDate);
+    if(vendasFiltro==="ontem")return agregarPeriodo(ontemDate,ontemDate);
+    if(vendasFiltro==="mes"){return agregarPeriodo(mesAtualInicio,hojeDate);}
+    if(vendasFiltro==="mespassado"){const mp=mesAnterior();return agregarPeriodo(mp.inicio,mp.fim);}
+    return agregarPeriodo(hojeDate,hojeDate);
+  };
+  const getProdRange=()=>{
+    if(prodFiltroData==="7dias")return agregarPeriodo(seteDiasAtras,hojeDate);
+    if(prodFiltroData==="mes")return agregarPeriodo(mesAtualInicio,hojeDate);
+    if(prodFiltroData==="mespassado"){const mp=mesAnterior();return agregarPeriodo(mp.inicio,mp.fim);}
+    return agregarPeriodo(seteDiasAtras,hojeDate);
+  };
+
+  const CANAIS_ALL=["Mercado Livre","Shopee","Shein","TikTok","Magalu","Meluni"];
+  const MARCAS_ALL=["Exitus","Lumia","Muniam"];
+  const CORES_CANAL={"Mercado Livre":"#FFE600","Shopee":"#EE4D2D","Shein":"#222","TikTok":"#00f2ea","Magalu":"#0086ff","Meluni":"#9b59b6"};
+  const CORES_MARCA2={Exitus:"#0057FF",Lumia:"#6c2bd9",Muniam:"#0096c7"};
+  const fmtV=(v)=>Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:0});
+  const fmtRV=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2});
+  const dotColor=(cor)=>{const m={Preto:"#222",Natural:"#d4c8a8",Branco:"#f0ebe4",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Azul Marinho":"#1a3a6a","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0"};return m[cor]||"#a89f94";};
   // Credenciais separadas por conta — localStorage + Supabase
   const [creds,setCreds]=useState(()=>{try{return JSON.parse(localStorage.getItem("bling_creds"))||{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}catch{return{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}});
   const [tokens,setTokens]=useState({exitus:null,lumia:null,muniam:null});
@@ -3858,6 +3934,7 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           {syncMsg&&<span style={{fontSize:11,color:syncMsg.startsWith("⚠")?"#c0392b":syncMsg.startsWith("⏳")?"#e67e22":"#27ae60"}}>{syncMsg}</span>}
           <button onClick={doSync} disabled={syncing} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:syncing?"not-allowed":"pointer",opacity:syncing?0.7:1,fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Sync</button>
+          <button onClick={()=>{setTela("vendas");setVendasSub("overview");}} style={{background:tela==="vendas"?"#2c3e50":"#fff",color:tela==="vendas"?"#fff":"#2c3e50",border:tela==="vendas"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📦 Vendas</button>
           <button onClick={()=>setTela(t=>t==="dash"?"config":"dash")} style={{background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
             {tela==="config"?"← Voltar":"⚙ Config"}
           </button>
@@ -4003,11 +4080,189 @@ const BlingContent=({setReceitasMes,mesAtual})=>{
                 <span style={{fontSize:12,color:"#6b7c8a"}}>Desconto automático:</span>
                 <input type="number" value={devPct} onChange={e=>setDevPct(Number(e.target.value))} style={{width:55,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 8px",fontSize:14,fontWeight:700,textAlign:"center",outline:"none",fontFamily:"Calibri,Arial"}}/>
                 <span style={{fontSize:12,color:"#6b7c8a"}}>% do bruto</span>
-                <span style={{fontSize:11,color:"#a89f94"}}>Aplicado ao somar as 3 contas</span>
               </div>
             </div>
           </div>
         )}
+
+        {/* ════ VENDAS DASHBOARD ════ */}
+        {tela==="vendas"&&vendasSub==="overview"&&(()=>{
+          const vd=getVendasRange();
+          const canaisAtivos=CANAIS_ALL.filter(c=>vd.porCanal[c]?.bruto>0).sort((a,b)=>(vd.porCanal[b]?.bruto||0)-(vd.porCanal[a]?.bruto||0));
+          const maxCanal=canaisAtivos.length>0?vd.porCanal[canaisAtivos[0]]?.bruto||1:1;
+          const filtroLabel=vendasFiltro==="hoje"?hojeDate.split("-").reverse().join("/")+" · 🔴 ao vivo":vendasFiltro==="ontem"?ontemDate.split("-").reverse().join("/")+" · consolidado":vendasFiltro==="mes"?"Mês atual":"Mês passado";
+          return(
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Vendas Detalhadas</div>
+                  <div style={{fontSize:16,fontWeight:700,color:"#2c3e50"}}>{filtroLabel}</div>
+                </div>
+                <div style={{display:"flex",gap:4}}>
+                  {[["hoje","Hoje"],["ontem","Ontem"],["mes","Este mês"],["mespassado","Mês passado"]].map(([k,l])=>(
+                    <button key={k} onClick={()=>setVendasFiltro(k)} style={{background:vendasFiltro===k?"#2c3e50":"#fff",color:vendasFiltro===k?"#fff":"#2c3e50",border:vendasFiltro===k?"none":"1px solid #e8e2da",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif"}}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Total card */}
+              <div style={{background:"#2c3e50",borderRadius:12,padding:"14px 20px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:10,color:"#7a9ab5",letterSpacing:1}}>FATURAMENTO</div>
+                  <div style={{fontSize:26,fontWeight:900,color:"#fff",fontFamily:"Calibri,Arial"}}>{fmtRV(vd.totalBruto)}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:13,color:"#a3bacc",fontFamily:"Calibri,Arial"}}>{fmtV(vd.totalItens)} itens · {fmtV(vd.totalPedidos)} pedidos</div>
+                  {blingImportStatus&&<div style={{fontSize:10,color:"#7a9ab5",marginTop:3}}>📦 {blingImportStatus}</div>}
+                </div>
+              </div>
+              {vd.totalPedidos===0?(
+                <div style={{background:"#fff",borderRadius:12,border:"1px dashed #d0c8c0",padding:40,textAlign:"center"}}>
+                  <div style={{fontSize:32,marginBottom:10}}>📦</div>
+                  <div style={{fontSize:14,color:"#a89f94"}}>Sem dados de vendas detalhadas neste período</div>
+                  <div style={{fontSize:11,color:"#c0b8b0",marginTop:4}}>Os dados são importados automaticamente ao abrir o app</div>
+                </div>
+              ):(
+                <div style={{display:"flex",gap:14}}>
+                  {/* Canais */}
+                  <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #e8e2da",padding:"14px 16px"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:10}}>Faturamento por Canal</div>
+                    {canaisAtivos.map(c=>{const cd=vd.porCanal[c];const pct=cd.bruto/vd.totalBruto;const bar=cd.bruto/maxCanal;return(
+                      <div key={c} style={{marginBottom:10}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                          <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:"50%",background:CORES_CANAL[c]||"#aaa"}}/><span style={{fontSize:12,color:"#2c3e50"}}>{c}</span></div>
+                          <span style={{fontSize:12,fontWeight:700,color:"#2c3e50",fontFamily:"Calibri,Arial"}}>{fmtRV(cd.bruto)} <span style={{fontWeight:400,color:"#a89f94"}}>({Math.round(pct*100)}%)</span></span>
+                        </div>
+                        <div style={{height:8,background:"#f0ebe4",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",borderRadius:4,background:CORES_CANAL[c]==="##222"?"#555":CORES_CANAL[c]||"#aaa",width:`${bar*100}%`,opacity:0.75}}/></div>
+                        <div style={{fontSize:10,color:"#a89f94",marginTop:1}}>{fmtV(cd.itens)} itens · ticket {fmtRV(cd.bruto/(cd.pedidos||1))}</div>
+                        {cd.subcanais&&Object.keys(cd.subcanais).length>1&&<div style={{fontSize:9,color:"#4a7fa5",marginTop:1}}>{Object.entries(cd.subcanais).map(([sc,sd])=>`${sc}: ${fmtV(sd.pedidos)} ped`).join(" · ")}</div>}
+                      </div>
+                    );})}
+                  </div>
+                  {/* Marcas + botão produtos */}
+                  <div style={{flex:1,display:"flex",flexDirection:"column",gap:12}}>
+                    <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",padding:"14px 16px"}}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:10}}>Por Marca</div>
+                      <div style={{display:"flex",gap:8}}>
+                        {MARCAS_ALL.filter(m=>vd.porMarca[m]?.bruto>0).map(m=>{const md=vd.porMarca[m];const pct=vd.totalBruto>0?md.bruto/vd.totalBruto:0;return(
+                          <div key={m} style={{flex:1,textAlign:"center",padding:"10px 6px",background:"#f7f4f0",borderRadius:8}}>
+                            <span style={{fontSize:9,color:"#fff",background:CORES_MARCA2[m],borderRadius:3,padding:"2px 8px",fontWeight:700}}>{m}</span>
+                            <div style={{fontSize:16,fontWeight:800,color:"#2c3e50",fontFamily:"Calibri,Arial",marginTop:6}}>{fmtRV(md.bruto)}</div>
+                            <div style={{fontSize:10,color:"#a89f94",marginTop:2}}>{fmtV(md.itens)} itens · {Math.round(pct*100)}%</div>
+                          </div>
+                        );})}
+                      </div>
+                    </div>
+                    {/* Gráfico dias */}
+                    {vd.porDia.length>1&&(
+                      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",padding:"14px 16px"}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:10}}>Por Dia</div>
+                        <div style={{display:"flex",alignItems:"flex-end",gap:4,height:120}}>
+                          {(()=>{const maxD=Math.max(...vd.porDia.map(d=>d.total),1);return vd.porDia.map((d,i)=>{const h=maxD>0?(d.total/maxD)*100:0;const isHoje=d.dia===hojeDate;return(
+                            <div key={d.dia} style={{flex:1,textAlign:"center"}}>
+                              <div style={{fontSize:8,color:"#2c3e50",fontFamily:"Calibri,Arial",marginBottom:2}}>{d.total>0?(d.total/1000).toFixed(1)+"k":""}</div>
+                              <div style={{height:h,background:isHoje?"#4a7fa5":"#c8d8e4",borderRadius:"3px 3px 0 0",minHeight:d.total>0?4:0}}/>
+                              <div style={{fontSize:9,color:isHoje?"#4a7fa5":"#a89f94",marginTop:3,fontWeight:isHoje?700:400}}>{d.dia.slice(8)}</div>
+                            </div>
+                          );});})()}
+                        </div>
+                      </div>
+                    )}
+                    {/* Botão Produtos */}
+                    <div onClick={()=>setVendasSub("produtos")} style={{background:"linear-gradient(135deg,#2c3e50,#4a7fa5)",borderRadius:12,padding:"16px",cursor:"pointer",textAlign:"center"}} onMouseEnter={e=>e.currentTarget.style.opacity="0.9"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                      <div style={{fontSize:14,fontWeight:700,color:"#fff"}}>📦 Ver Produtos</div>
+                      <div style={{fontSize:11,color:"#a3bacc",marginTop:3}}>Ranking · Tamanhos · Cores</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ════ PRODUTOS ════ */}
+        {tela==="vendas"&&vendasSub==="produtos"&&(()=>{
+          const pd=getProdRange();
+          const prods=Object.values(pd.porProduto).filter(p=>filtroMarca==="todas"||p.marca===filtroMarca).map(p=>({...p,qtdF:filtroCanal==="todos"?p.qtd:(p.porCanal[filtroCanal]?.qtd||0),valF:filtroCanal==="todos"?p.valor:(p.porCanal[filtroCanal]?.valor||0)})).sort((a,b)=>b.qtdF-a.qtdF).slice(0,20);
+          const maxQ=prods.length>0?prods[0].qtdF:1;
+          const tamS=Object.entries(pd.tamGeral).sort((a,b)=>b[1]-a[1]);const tamT=tamS.reduce((s,t)=>s+t[1],0)||1;const maxTam=tamS.length>0?tamS[0][1]:1;
+          const corS=Object.entries(pd.corGeral).sort((a,b)=>b[1]-a[1]);const corT=corS.reduce((s,c)=>s+c[1],0)||1;const maxCor=corS.length>0?corS[0][1]:1;
+          return(
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+                <button onClick={()=>setVendasSub("overview")} style={{background:"none",border:"1px solid #e8e2da",borderRadius:6,padding:"5px 12px",fontSize:12,cursor:"pointer",color:"#4a7fa5"}}>← Voltar</button>
+                <div style={{fontSize:16,fontWeight:700,color:"#2c3e50"}}>📦 Produtos</div>
+              </div>
+              {/* Filtro data */}
+              <div style={{display:"flex",gap:4,marginBottom:8,alignItems:"center"}}>
+                <span style={{fontSize:11,color:"#a89f94"}}>Período:</span>
+                {[["7dias","Últimos 7 dias"],["mes","Mês atual"],["mespassado","Mês passado"]].map(([k,l])=>(
+                  <button key={k} onClick={()=>setProdFiltroData(k)} style={{background:prodFiltroData===k?"#2c3e50":"#fff",color:prodFiltroData===k?"#fff":"#2c3e50",border:prodFiltroData===k?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>{l}</button>
+                ))}
+              </div>
+              {/* Filtro marca + canal */}
+              <div style={{display:"flex",gap:4,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontSize:11,color:"#a89f94"}}>Marca:</span>
+                {["todas",...MARCAS_ALL].map(m=>(<button key={m} onClick={()=>setFiltroMarca(m)} style={{background:filtroMarca===m?(m==="todas"?"#2c3e50":CORES_MARCA2[m]||"#2c3e50"):"#fff",color:filtroMarca===m?"#fff":"#2c3e50",border:filtroMarca===m?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 8px",fontSize:10,cursor:"pointer"}}>{m==="todas"?"Todas":m}</button>))}
+                <div style={{width:1,height:16,background:"#e8e2da",margin:"0 4px"}}/>
+                <span style={{fontSize:11,color:"#a89f94"}}>Canal:</span>
+                {["todos",...CANAIS_ALL].map(c=>(<button key={c} onClick={()=>setFiltroCanal(c)} style={{background:filtroCanal===c?"#2c3e50":"#fff",color:filtroCanal===c?"#fff":"#2c3e50",border:filtroCanal===c?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 7px",fontSize:9,cursor:"pointer"}}>{c==="todos"?"Todos":c}</button>))}
+              </div>
+              {prods.length===0?(
+                <div style={{background:"#fff",borderRadius:12,border:"1px dashed #d0c8c0",padding:40,textAlign:"center"}}><div style={{fontSize:14,color:"#a89f94"}}>Sem dados de produto neste período</div></div>
+              ):(
+                <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
+                  {/* Ranking */}
+                  <div style={{flex:"1 1 50%",background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
+                    <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 20</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
+                    <div style={{maxHeight:520,overflowY:"auto"}}>
+                      {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
+                        <div key={p.ref} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:"1px solid #f0ebe4"}}>
+                          <div style={{width:22,height:22,borderRadius:"50%",background:i<3?["#FFD700","#C0C0C0","#CD7F32"][i]:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:i<3?"#fff":"#8a9aa4",flexShrink:0}}>{i+1}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:10,color:"#6b7c8a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc}</span><span style={{fontSize:8,color:"#fff",background:CORES_MARCA2[p.marca]||"#888",borderRadius:3,padding:"1px 4px",flexShrink:0,marginLeft:"auto"}}>{p.marca}</span></div>
+                            <div style={{marginTop:3,height:4,background:"#f0ebe4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#4a7fa5,#2c3e50)",width:`${pct*100}%`}}/></div>
+                          </div>
+                          <div style={{textAlign:"right",flexShrink:0,marginLeft:6}}><div style={{fontSize:13,fontWeight:800,color:"#2c3e50",fontFamily:"Calibri,Arial"}}>{fmtV(p.qtdF)} un</div><div style={{fontSize:10,color:"#4a7fa5",fontFamily:"Calibri,Arial"}}>{fmtRV(p.valF)}</div></div>
+                        </div>
+                      );})}
+                    </div>
+                  </div>
+                  {/* Tamanhos + Cores */}
+                  <div style={{flex:"1 1 46%",display:"flex",flexDirection:"column",gap:12}}>
+                    <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
+                      <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",fontSize:12,fontWeight:700,color:"#2c3e50"}}>📏 Vendas por Tamanho</div>
+                      <div style={{padding:"12px 16px"}}>
+                        {tamS.length===0?<div style={{fontSize:11,color:"#a89f94"}}>Sem dados de tamanho</div>:tamS.map(([tam,qtd],i)=>{const pct=qtd/tamT;const bar=qtd/maxTam;return(
+                          <div key={tam} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                            <div style={{width:32,height:32,borderRadius:6,background:i===0?"#2c3e50":"#f7f4f0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:i===0?"#fff":"#2c3e50",fontFamily:"Calibri,Arial",flexShrink:0}}>{tam}</div>
+                            <div style={{flex:1}}>
+                              <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:"Calibri,Arial"}}>{fmtV(qtd)} un</span><span style={{fontSize:12,fontWeight:800,color:"#4a7fa5",fontFamily:"Calibri,Arial"}}>{Math.round(pct*100)}%</span></div>
+                              <div style={{height:6,background:"#f0ebe4",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",borderRadius:3,background:i===0?"#2c3e50":"#4a7fa5",width:`${bar*100}%`,opacity:1-i*0.12}}/></div>
+                            </div>
+                          </div>
+                        );})}
+                      </div>
+                    </div>
+                    <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
+                      <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",fontSize:12,fontWeight:700,color:"#2c3e50"}}>🎨 Vendas por Cor</div>
+                      <div style={{padding:"12px 16px"}}>
+                        {corS.length===0?<div style={{fontSize:11,color:"#a89f94"}}>Sem dados de cor</div>:corS.slice(0,12).map(([cor,qtd])=>{const pct=qtd/corT;const bar=qtd/maxCor;const dc=dotColor(cor);return(
+                          <div key={cor} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                            <div style={{width:12,height:12,borderRadius:"50%",background:dc,border:cor==="Branco"?"1px solid #d0c8c0":"none",flexShrink:0}}/>
+                            <span style={{fontSize:11,color:"#2c3e50",width:80,flexShrink:0}}>{cor}</span>
+                            <div style={{flex:1,height:6,background:"#f0ebe4",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",borderRadius:3,background:dc==="#f0ebe4"?"#d0c8c0":dc,width:`${bar*100}%`,opacity:0.7}}/></div>
+                            <span style={{fontSize:12,fontWeight:700,color:"#2c3e50",fontFamily:"Calibri,Arial",width:40,textAlign:"right",flexShrink:0}}>{fmtV(qtd)}</span>
+                            <span style={{fontSize:10,color:"#4a7fa5",fontFamily:"Calibri,Arial",width:30,textAlign:"right",flexShrink:0}}>{Math.round(pct*100)}%</span>
+                          </div>
+                        );})}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -6538,7 +6793,7 @@ export default function App(){
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
         {active==="salascorte"&&<SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/>}
-        {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL}/>}
+        {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
