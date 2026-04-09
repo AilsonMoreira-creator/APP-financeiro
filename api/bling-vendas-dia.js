@@ -20,12 +20,24 @@ function parseDescricao(descricao) {
 function parseCanal(loja) {
   const nome = (loja?.descricao || loja?.nome || "Desconhecido").trim();
   const l = nome.toLowerCase();
-  if (l.includes("mercado livre")||l.includes("mercadolivre")) return { geral:"Mercado Livre", detalhe: l.includes("full")||l.includes("fulfillment")?"ML Full":"ML Clássico" };
+  // Mercado Livre (várias variações)
+  if (l.includes("mercado livre")||l.includes("mercadolivre")||l.includes("meli")) {
+    const isFull = l.includes("full")||l.includes("fulfillment")||l.includes("flex");
+    return { geral:"Mercado Livre", detalhe: isFull?"ML Full":"ML Clássico" };
+  }
+  // Shopee
   if (l.includes("shopee")) return { geral:"Shopee", detalhe:"Shopee" };
+  // Shein / Neli
   if (l.includes("shein")||l.includes("neli")) return { geral:"Shein", detalhe:"Shein" };
-  if (l.includes("tiktok")||l.includes("tik tok")) return { geral:"TikTok", detalhe:"TikTok" };
-  if (l.includes("magalu")||l.includes("magazine")) return { geral:"Magalu", detalhe:"Magalu" };
-  if (l.includes("meluni")||l.includes("nuvemshop")||l.includes("nuvem")) return { geral:"Meluni", detalhe:"Meluni" };
+  // TikTok
+  if (l.includes("tiktok")||l.includes("tik tok")||l.includes("tik-tok")) return { geral:"TikTok", detalhe:"TikTok" };
+  // Magalu
+  if (l.includes("magalu")||l.includes("magazine luiza")||l.includes("magazineluiza")) return { geral:"Magalu", detalhe:"Magalu" };
+  // Meluni / Nuvemshop
+  if (l.includes("meluni")||l.includes("nuvemshop")||l.includes("nuvem")||l.includes("loja virtual")) return { geral:"Meluni", detalhe:"Meluni" };
+  // Amazon
+  if (l.includes("amazon")) return { geral:"Amazon", detalhe:"Amazon" };
+  // Fallback: retorna o nome original
   return { geral:nome, detalhe:nome };
 }
 
@@ -40,15 +52,31 @@ export default async function handler(req, res) {
     const { access_token, data } = req.body;
     if (!access_token||!data) return res.status(400).json({erro:"Faltam access_token ou data"});
 
-    // 1. Lista pedidos do dia
+    // 1. Lista pedidos do dia — tenta ambos os formatos de data pra garantir
     let pedidoIds=[], pagina=1;
+    const canaisRaw = new Set(); // pra debug
+
     while (true) {
-      const url=`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicial=${data}&dataFinal=${data}&pagina=${pagina}&limite=100`;
+      // Usa AMBOS os formatos de parâmetro como safeguard
+      const url=`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicial=${data}&dataFinal=${data}&dataInicio=${data}&dataFim=${data}&pagina=${pagina}&limite=100`;
       const resp=await fetch(url,{headers:{"Authorization":"Bearer "+access_token,"Accept":"application/json"}});
-      if (!resp.ok) break;
+      if (!resp.ok) {
+        // Se falhar, tenta só com dataInicial/dataFinal
+        const url2=`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicial=${data}&dataFinal=${data}&pagina=${pagina}&limite=100`;
+        const resp2=await fetch(url2,{headers:{"Authorization":"Bearer "+access_token,"Accept":"application/json"}});
+        if (!resp2.ok) break;
+        const d2=await resp2.json();
+        if (!d2.data||d2.data.length===0) break;
+        // Filtra por data server-side como safeguard
+        d2.data.forEach(p=>{if((p.data||"").startsWith(data))pedidoIds.push(p.id);});
+        if (d2.data.length<100) break;
+        pagina++;
+        continue;
+      }
       const d=await resp.json();
       if (!d.data||d.data.length===0) break;
-      pedidoIds.push(...d.data.map(p=>p.id));
+      // Filtra por data server-side como safeguard extra
+      d.data.forEach(p=>{if((p.data||"").startsWith(data))pedidoIds.push(p.id);});
       if (d.data.length<100) break;
       pagina++;
     }
@@ -65,8 +93,15 @@ export default async function handler(req, res) {
         if (!dr.ok) continue;
         const det=await dr.json();
         const ped=det.data||det;
+        
+        // Safeguard: verifica data do pedido
+        if (ped.data && !ped.data.startsWith(data)) continue;
+        
         const canal=parseCanal(ped.loja);
         const ck=canal.geral;
+        
+        // Log raw canal name
+        canaisRaw.add(ped.loja?.descricao || ped.loja?.nome || "?");
 
         if (!porCanal[ck]) porCanal[ck]={pedidos:0,bruto:0,frete:0,itens:0,subcanais:{},produtos:{}};
         const cc=porCanal[ck];
@@ -95,6 +130,11 @@ export default async function handler(req, res) {
     }
 
     for (const ck in porCanal) porCanal[ck].produtos=Object.values(porCanal[ck].produtos).sort((a,b)=>b.qtd-a.qtd);
-    return res.json({ok:true,data,totalPedidos:pedidoIds.length,canais:porCanal,_debug:debug});
+    
+    return res.json({
+      ok:true, data, totalPedidos:pedidoIds.length, canais:porCanal,
+      _debug:debug,
+      _canaisRaw: [...canaisRaw] // nomes originais dos canais no Bling
+    });
   } catch(e) { return res.status(500).json({erro:"Erro: "+e.message}); }
 }
