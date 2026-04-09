@@ -1,6 +1,5 @@
-// /api/bling-vendas-dia.js
-// Busca pedidos de UM dia para UMA conta, com itens detalhados
-// Parser extrai REF, cor, tamanho da DESCRIÇÃO (SKU codes são hashes aleatórios)
+// /api/bling-vendas-dia.js v3
+// DIAGNÓSTICO: loga estrutura do primeiro pedido pra encontrar campo do canal
 
 function parseDescricao(descricao) {
   const r = { ref: "", tamanho: "", cor: "", estoque: "", descLimpa: "" };
@@ -17,27 +16,34 @@ function parseDescricao(descricao) {
   return r;
 }
 
-function parseCanal(loja) {
-  const nome = (loja?.descricao || loja?.nome || "Desconhecido").trim();
+function parseCanal(ped) {
+  // Tenta múltiplos campos onde o canal pode estar
+  const loja = ped.loja || {};
+  const canal = ped.canal || {};
+  
+  // Tenta: loja.descricao, loja.nome, canal.descricao, canal.nome, 
+  // ped.tipoVenda, ped.numeroPedidoLoja, ped.observacoes
+  const nome = (
+    loja.descricao || loja.nome || 
+    canal.descricao || canal.nome ||
+    (typeof ped.loja === "string" ? ped.loja : "") ||
+    (typeof ped.canal === "string" ? ped.canal : "") ||
+    ""
+  ).trim();
+  
+  if (!nome) return { geral: "Desconhecido", detalhe: "Desconhecido" };
+  
   const l = nome.toLowerCase();
-  // Mercado Livre (várias variações)
   if (l.includes("mercado livre")||l.includes("mercadolivre")||l.includes("meli")) {
     const isFull = l.includes("full")||l.includes("fulfillment")||l.includes("flex");
     return { geral:"Mercado Livre", detalhe: isFull?"ML Full":"ML Clássico" };
   }
-  // Shopee
   if (l.includes("shopee")) return { geral:"Shopee", detalhe:"Shopee" };
-  // Shein / Neli
   if (l.includes("shein")||l.includes("neli")) return { geral:"Shein", detalhe:"Shein" };
-  // TikTok
   if (l.includes("tiktok")||l.includes("tik tok")||l.includes("tik-tok")) return { geral:"TikTok", detalhe:"TikTok" };
-  // Magalu
   if (l.includes("magalu")||l.includes("magazine luiza")||l.includes("magazineluiza")) return { geral:"Magalu", detalhe:"Magalu" };
-  // Meluni / Nuvemshop
   if (l.includes("meluni")||l.includes("nuvemshop")||l.includes("nuvem")||l.includes("loja virtual")) return { geral:"Meluni", detalhe:"Meluni" };
-  // Amazon
   if (l.includes("amazon")) return { geral:"Amazon", detalhe:"Amazon" };
-  // Fallback: retorna o nome original
   return { geral:nome, detalhe:nome };
 }
 
@@ -52,31 +58,15 @@ export default async function handler(req, res) {
     const { access_token, data } = req.body;
     if (!access_token||!data) return res.status(400).json({erro:"Faltam access_token ou data"});
 
-    // 1. Lista pedidos do dia — tenta ambos os formatos de data pra garantir
+    // 1. Lista pedidos do dia
     let pedidoIds=[], pagina=1;
-    const canaisRaw = new Set(); // pra debug
-
     while (true) {
-      // Usa AMBOS os formatos de parâmetro como safeguard
       const url=`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicial=${data}&dataFinal=${data}&dataInicio=${data}&dataFim=${data}&pagina=${pagina}&limite=100`;
       const resp=await fetch(url,{headers:{"Authorization":"Bearer "+access_token,"Accept":"application/json"}});
-      if (!resp.ok) {
-        // Se falhar, tenta só com dataInicial/dataFinal
-        const url2=`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicial=${data}&dataFinal=${data}&pagina=${pagina}&limite=100`;
-        const resp2=await fetch(url2,{headers:{"Authorization":"Bearer "+access_token,"Accept":"application/json"}});
-        if (!resp2.ok) break;
-        const d2=await resp2.json();
-        if (!d2.data||d2.data.length===0) break;
-        // Filtra por data server-side como safeguard
-        d2.data.forEach(p=>{if((p.data||"").startsWith(data))pedidoIds.push(p.id);});
-        if (d2.data.length<100) break;
-        pagina++;
-        continue;
-      }
+      if (!resp.ok) break;
       const d=await resp.json();
       if (!d.data||d.data.length===0) break;
-      // Filtra por data server-side como safeguard extra
-      d.data.forEach(p=>{if((p.data||"").startsWith(data))pedidoIds.push(p.id);});
+      d.data.forEach(p=>{if(!p.data||p.data.startsWith(data))pedidoIds.push(p.id);});
       if (d.data.length<100) break;
       pagina++;
     }
@@ -85,6 +75,8 @@ export default async function handler(req, res) {
     // 2. Detalhe de cada pedido
     const porCanal={};
     const debug=[];
+    const canaisRaw = new Set();
+    let primeiroPedidoRaw = null; // DIAGNÓSTICO: estrutura completa do primeiro pedido
 
     for (const pid of pedidoIds) {
       await new Promise(r=>setTimeout(r,350));
@@ -94,14 +86,22 @@ export default async function handler(req, res) {
         const det=await dr.json();
         const ped=det.data||det;
         
-        // Safeguard: verifica data do pedido
+        // DIAGNÓSTICO: salva estrutura do primeiro pedido (sem itens pra não ficar enorme)
+        if (!primeiroPedidoRaw) {
+          primeiroPedidoRaw = {};
+          // Copia todos os campos exceto itens
+          for (const key of Object.keys(ped)) {
+            if (key === "itens") primeiroPedidoRaw.itens = `[${(ped.itens||[]).length} itens]`;
+            else primeiroPedidoRaw[key] = ped[key];
+          }
+        }
+        
         if (ped.data && !ped.data.startsWith(data)) continue;
         
-        const canal=parseCanal(ped.loja);
-        const ck=canal.geral;
+        const canal = parseCanal(ped);
+        const ck = canal.geral;
         
-        // Log raw canal name
-        canaisRaw.add(ped.loja?.descricao || ped.loja?.nome || "?");
+        canaisRaw.add(JSON.stringify({loja:ped.loja, canal:ped.canal, numeroPedidoLoja:ped.numeroPedidoLoja}));
 
         if (!porCanal[ck]) porCanal[ck]={pedidos:0,bruto:0,frete:0,itens:0,subcanais:{},produtos:{}};
         const cc=porCanal[ck];
@@ -134,7 +134,8 @@ export default async function handler(req, res) {
     return res.json({
       ok:true, data, totalPedidos:pedidoIds.length, canais:porCanal,
       _debug:debug,
-      _canaisRaw: [...canaisRaw] // nomes originais dos canais no Bling
+      _canaisRaw: [...canaisRaw],
+      _primeiroPedido: primeiroPedidoRaw // estrutura completa do primeiro pedido
     });
   } catch(e) { return res.status(500).json({erro:"Erro: "+e.message}); }
 }
