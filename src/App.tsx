@@ -3697,10 +3697,10 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const CANAIS_ALL=["Mercado Livre","Shopee","Shein","TikTok","Magalu","Meluni"];
   const MARCAS_ALL=["Exitus","Lumia","Muniam"];
   const CORES_CANAL={"Mercado Livre":"#FFE600","Shopee":"#EE4D2D","Shein":"#222","TikTok":"#00f2ea","Magalu":"#0086ff","Meluni":"#9b59b6"};
-  const CORES_MARCA2={Exitus:"#0057FF",Lumia:"#6c2bd9",Muniam:"#0096c7"};
+  const CORES_MARCA2={Exitus:"#d4c8a8",Lumia:"#b8a88a",Muniam:"#8a7560"};
   const fmtV=(v)=>Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:0});
   const fmtRV=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2});
-  const dotColor=(cor)=>{const m={Preto:"#222",Natural:"#d4c8a8",Branco:"#f0ebe4",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Azul Marinho":"#1a3a6a","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0"};return m[cor]||"#a89f94";};
+  const dotColor=(cor)=>{const m={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#7a9a6a","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0","Vinho":"#5a1a2a"};return m[cor]||"#a89f94";};
   // Credenciais separadas por conta — localStorage + Supabase
   const [creds,setCreds]=useState(()=>{try{return JSON.parse(localStorage.getItem("bling_creds"))||{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}catch{return{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}});
   const [tokens,setTokens]=useState({exitus:null,lumia:null,muniam:null});
@@ -4132,7 +4132,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                           <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:"50%",background:CORES_CANAL[c]||"#aaa"}}/><span style={{fontSize:12,color:"#2c3e50"}}>{c}</span></div>
                           <span style={{fontSize:12,fontWeight:700,color:"#2c3e50",fontFamily:"Calibri,Arial"}}>{fmtRV(cd.bruto)} <span style={{fontWeight:400,color:"#a89f94"}}>({Math.round(pct*100)}%)</span></span>
                         </div>
-                        <div style={{height:8,background:"#f0ebe4",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",borderRadius:4,background:CORES_CANAL[c]==="##222"?"#555":CORES_CANAL[c]||"#aaa",width:`${bar*100}%`,opacity:0.75}}/></div>
+                        <div style={{height:8,background:"#f0ebe4",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",borderRadius:4,background:CORES_CANAL[c]==="#222"?"#555":CORES_CANAL[c]||"#aaa",width:`${bar*100}%`,opacity:0.75}}/></div>
                         <div style={{fontSize:10,color:"#a89f94",marginTop:1}}>{fmtV(cd.itens)} itens · ticket {fmtRV(cd.bruto/(cd.pedidos||1))}</div>
                         {cd.subcanais&&Object.keys(cd.subcanais).length>1&&<div style={{fontSize:9,color:"#4a7fa5",marginTop:1}}>{Object.entries(cd.subcanais).map(([sc,sd])=>`${sc}: ${fmtV(sd.pedidos)} ped`).join(" · ")}</div>}
                       </div>
@@ -4143,14 +4143,19 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                     <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",padding:"14px 16px"}}>
                       <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:10}}>Por Marca</div>
                       <div style={{display:"flex",gap:8}}>
-                        {MARCAS_ALL.filter(m=>vd.porMarca[m]?.bruto>0).map(m=>{const md=vd.porMarca[m];const pct=vd.totalBruto>0?md.bruto/vd.totalBruto:0;return(
-                          <div key={m} style={{flex:1,textAlign:"center",padding:"10px 6px",background:"#f7f4f0",borderRadius:8}}>
-                            <span style={{fontSize:9,color:"#fff",background:CORES_MARCA2[m],borderRadius:3,padding:"2px 8px",fontWeight:700}}>{m}</span>
-                            <div style={{fontSize:16,fontWeight:800,color:"#2c3e50",fontFamily:"Calibri,Arial",marginTop:6}}>{fmtRV(md.bruto)}</div>
-                            <div style={{fontSize:10,color:"#a89f94",marginTop:2}}>{fmtV(md.itens)} itens · {Math.round(pct*100)}%</div>
+                        {MARCAS_ALL.map(m=>{const md=vd.porMarca[m]||{bruto:0,itens:0};const pct=vd.totalBruto>0?md.bruto/vd.totalBruto:0;const semDado=md.bruto===0;return(
+                          <div key={m} style={{flex:1,textAlign:"center",padding:"10px 6px",background:semDado?"#fafafa":"#f7f4f0",borderRadius:8,opacity:semDado?0.5:1}}>
+                            <span style={{fontSize:9,color:"#4a3a2a",background:CORES_MARCA2[m],borderRadius:3,padding:"2px 8px",fontWeight:700}}>{m}</span>
+                            {semDado?<div style={{fontSize:11,color:"#c0b8b0",marginTop:8}}>sem dados</div>:(
+                              <><div style={{fontSize:16,fontWeight:800,color:"#2c3e50",fontFamily:"Calibri,Arial",marginTop:6}}>{fmtRV(md.bruto)}</div>
+                              <div style={{fontSize:10,color:"#a89f94",marginTop:2}}>{fmtV(md.itens)} itens · {Math.round(pct*100)}%</div></>
+                            )}
                           </div>
                         );})}
                       </div>
+                      {MARCAS_ALL.some(m=>!vd.porMarca[m]||vd.porMarca[m].bruto===0)&&(
+                        <div style={{fontSize:10,color:"#c0392b",marginTop:8,textAlign:"center"}}>⚠ Marcas sem dados — verificar tokens no Console (F12) ou em Config</div>
+                      )}
                     </div>
                     {/* Gráfico dias */}
                     {vd.porDia.length>1&&(
@@ -4182,7 +4187,10 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
         {/* ════ PRODUTOS ════ */}
         {tela==="vendas"&&vendasSub==="produtos"&&(()=>{
           const pd=getProdRange();
-          const prods=Object.values(pd.porProduto).filter(p=>filtroMarca==="todas"||p.marca===filtroMarca).map(p=>({...p,qtdF:filtroCanal==="todos"?p.qtd:(p.porCanal[filtroCanal]?.qtd||0),valF:filtroCanal==="todos"?p.valor:(p.porCanal[filtroCanal]?.valor||0)})).sort((a,b)=>b.qtdF-a.qtdF).slice(0,20);
+          // Canais e marcas reais (do dado, não hardcoded)
+          const canaisReais=Object.keys(pd.porCanal).sort((a,b)=>(pd.porCanal[b]?.bruto||0)-(pd.porCanal[a]?.bruto||0));
+          const marcasReais=Object.keys(pd.porMarca).sort((a,b)=>(pd.porMarca[b]?.bruto||0)-(pd.porMarca[a]?.bruto||0));
+          const prods=Object.values(pd.porProduto).filter(p=>filtroMarca==="todas"||p.marca===filtroMarca).map(p=>({...p,qtdF:filtroCanal==="todos"?p.qtd:(p.porCanal[filtroCanal]?.qtd||0),valF:filtroCanal==="todos"?p.valor:(p.porCanal[filtroCanal]?.valor||0)})).filter(p=>p.qtdF>0).sort((a,b)=>b.qtdF-a.qtdF).slice(0,20);
           const maxQ=prods.length>0?prods[0].qtdF:1;
           const tamS=Object.entries(pd.tamGeral).sort((a,b)=>b[1]-a[1]);const tamT=tamS.reduce((s,t)=>s+t[1],0)||1;const maxTam=tamS.length>0?tamS[0][1]:1;
           const corS=Object.entries(pd.corGeral).sort((a,b)=>b[1]-a[1]);const corT=corS.reduce((s,c)=>s+c[1],0)||1;const maxCor=corS.length>0?corS[0][1]:1;
@@ -4199,13 +4207,15 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                   <button key={k} onClick={()=>setProdFiltroData(k)} style={{background:prodFiltroData===k?"#2c3e50":"#fff",color:prodFiltroData===k?"#fff":"#2c3e50",border:prodFiltroData===k?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>{l}</button>
                 ))}
               </div>
-              {/* Filtro marca + canal */}
+              {/* Filtro marca + canal — dinâmico dos dados reais */}
               <div style={{display:"flex",gap:4,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{fontSize:11,color:"#a89f94"}}>Marca:</span>
-                {["todas",...MARCAS_ALL].map(m=>(<button key={m} onClick={()=>setFiltroMarca(m)} style={{background:filtroMarca===m?(m==="todas"?"#2c3e50":CORES_MARCA2[m]||"#2c3e50"):"#fff",color:filtroMarca===m?"#fff":"#2c3e50",border:filtroMarca===m?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 8px",fontSize:10,cursor:"pointer"}}>{m==="todas"?"Todas":m}</button>))}
+                <button onClick={()=>setFiltroMarca("todas")} style={{background:filtroMarca==="todas"?"#2c3e50":"#fff",color:filtroMarca==="todas"?"#fff":"#2c3e50",border:filtroMarca==="todas"?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 8px",fontSize:10,cursor:"pointer"}}>Todas</button>
+                {marcasReais.map(m=>(<button key={m} onClick={()=>setFiltroMarca(m)} style={{background:filtroMarca===m?CORES_MARCA2[m]||"#2c3e50":"#fff",color:filtroMarca===m?"#4a3a2a":"#2c3e50",border:filtroMarca===m?"1px solid "+(CORES_MARCA2[m]||"#2c3e50"):"1px solid #e8e2da",borderRadius:6,padding:"4px 8px",fontSize:10,cursor:"pointer",fontWeight:filtroMarca===m?700:400}}>{m} ({pd.porMarca[m]?.itens||0})</button>))}
                 <div style={{width:1,height:16,background:"#e8e2da",margin:"0 4px"}}/>
                 <span style={{fontSize:11,color:"#a89f94"}}>Canal:</span>
-                {["todos",...CANAIS_ALL].map(c=>(<button key={c} onClick={()=>setFiltroCanal(c)} style={{background:filtroCanal===c?"#2c3e50":"#fff",color:filtroCanal===c?"#fff":"#2c3e50",border:filtroCanal===c?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 7px",fontSize:9,cursor:"pointer"}}>{c==="todos"?"Todos":c}</button>))}
+                <button onClick={()=>setFiltroCanal("todos")} style={{background:filtroCanal==="todos"?"#2c3e50":"#fff",color:filtroCanal==="todos"?"#fff":"#2c3e50",border:filtroCanal==="todos"?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 7px",fontSize:9,cursor:"pointer"}}>Todos</button>
+                {canaisReais.map(c=>(<button key={c} onClick={()=>setFiltroCanal(c)} style={{background:filtroCanal===c?"#2c3e50":"#fff",color:filtroCanal===c?"#fff":"#2c3e50",border:filtroCanal===c?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 7px",fontSize:9,cursor:"pointer"}}>{c} ({pd.porCanal[c]?.itens||0})</button>))}
               </div>
               {prods.length===0?(
                 <div style={{background:"#fff",borderRadius:12,border:"1px dashed #d0c8c0",padding:40,textAlign:"center"}}><div style={{fontSize:14,color:"#a89f94"}}>Sem dados de produto neste período</div></div>
@@ -4214,12 +4224,12 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                   {/* Ranking */}
                   <div style={{flex:"1 1 50%",background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                     <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 20</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
-                    <div style={{maxHeight:520,overflowY:"auto"}}>
+                    <div style={{maxHeight:440,overflowY:"auto"}}>
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
                         <div key={p.ref} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:"1px solid #f0ebe4"}}>
-                          <div style={{width:22,height:22,borderRadius:"50%",background:i<3?["#FFD700","#C0C0C0","#CD7F32"][i]:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:i<3?"#fff":"#8a9aa4",flexShrink:0}}>{i+1}</div>
+                          <div style={{width:22,height:22,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:10,color:"#6b7c8a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc}</span><span style={{fontSize:8,color:"#fff",background:CORES_MARCA2[p.marca]||"#888",borderRadius:3,padding:"1px 4px",flexShrink:0,marginLeft:"auto"}}>{p.marca}</span></div>
+                            <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:10,color:"#6b7c8a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc}</span><span style={{fontSize:8,color:"#4a3a2a",background:CORES_MARCA2[p.marca]||"#888",borderRadius:3,padding:"1px 4px",flexShrink:0,marginLeft:"auto"}}>{p.marca}</span></div>
                             <div style={{marginTop:3,height:4,background:"#f0ebe4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#4a7fa5,#2c3e50)",width:`${pct*100}%`}}/></div>
                           </div>
                           <div style={{textAlign:"right",flexShrink:0,marginLeft:6}}><div style={{fontSize:13,fontWeight:800,color:"#2c3e50",fontFamily:"Calibri,Arial"}}>{fmtV(p.qtdF)} un</div><div style={{fontSize:10,color:"#4a7fa5",fontFamily:"Calibri,Arial"}}>{fmtRV(p.valF)}</div></div>
@@ -6574,11 +6584,44 @@ export default function App(){
       // Se já importou hoje, não importa de novo (refresh a cada 30 min via interval)
       if(jaImportouHoje)return;
 
-      // Busca tokens do Supabase (não localStorage!)
+      // Busca tokens COMPLETOS do Supabase (com refresh_token e expires_at)
       const {data:tokensData}=await supabase.from('bling_tokens').select('*');
-      if(!tokensData||tokensData.length===0)return;
+      if(!tokensData||tokensData.length===0){console.log("BLING: nenhum token na tabela bling_tokens");return;}
+      
+      // Helper: tenta renovar token expirado
+      const refreshToken=async(conta,tokenObj)=>{
+        try{
+          if(!tokenObj?.refresh_token){console.log(`BLING [${conta}] sem refresh_token`);return null;}
+          const {data:sbCreds}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-creds').single();
+          const cred=sbCreds?.payload?.[conta];
+          if(!cred?.id||!cred?.secret){console.log(`BLING [${conta}] sem credenciais client_id/secret`);return null;}
+          console.log(`BLING [${conta}] renovando token...`);
+          const r=await fetch("/api/bling-token",{method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({client_id:cred.id,client_secret:cred.secret,grant_type:"refresh_token",refresh_token:tokenObj.refresh_token})});
+          if(!r.ok){console.error(`BLING [${conta}] refresh HTTP ${r.status}`);return null;}
+          const d=await r.json();
+          if(!d.access_token){console.error(`BLING [${conta}] refresh sem access_token`);return null;}
+          await supabase.from('bling_tokens').upsert({conta,access_token:d.access_token,refresh_token:d.refresh_token||tokenObj.refresh_token,expires_at:new Date(Date.now()+(d.expires_in||21600)*1000).toISOString()},{onConflict:'conta'});
+          console.log(`BLING [${conta}] ✓ token renovado`);
+          return d.access_token;
+        }catch(e){console.error(`BLING [${conta}] erro refresh:`,e);return null;}
+      };
+
+      // Valida tokens, renova se expirado
       const tokens={};
-      tokensData.forEach(t=>{if(t.conta&&t.access_token)tokens[t.conta]=t.access_token;});
+      for(const t of tokensData){
+        if(!t.conta)continue;
+        const expirado=!t.expires_at||new Date(t.expires_at)<new Date();
+        if(!expirado&&t.access_token){
+          tokens[t.conta]=t.access_token;
+          console.log(`BLING [${t.conta}] token válido (expira ${new Date(t.expires_at).toLocaleString("pt-BR")})`);
+        }else{
+          const novo=await refreshToken(t.conta,t);
+          if(novo)tokens[t.conta]=novo;
+          else console.log(`BLING [${t.conta}] ✗ token expirado e refresh falhou`);
+        }
+      }
+      console.log("BLING tokens válidos:",Object.keys(tokens).join(", ")||"NENHUM");
       if(!tokens.exitus&&!tokens.lumia&&!tokens.muniam)return;
 
       setBlingImportStatus("importando vendas do dia...");
@@ -6591,24 +6634,22 @@ export default function App(){
       const diaData={};
 
       for(const conta of contas){
-        if(!tokens[conta])continue;
+        if(!tokens[conta]){console.log(`BLING [${conta}] ✗ sem token válido`);continue;}
         try{
           const resp=await fetch("/api/bling-vendas-dia",{
             method:"POST",headers:{"Content-Type":"application/json"},
             body:JSON.stringify({access_token:tokens[conta],data:hoje})
           });
-          if(!resp.ok)continue;
+          if(!resp.ok){console.error(`BLING [${conta}] ✗ HTTP ${resp.status}`);continue;}
           const result=await resp.json();
-          if(!result.ok)continue;
+          if(!result.ok){console.error(`BLING [${conta}] ✗ API:`,result.erro);continue;}
           if(result.totalPedidos>0){
             diaData[conta]=result.canais;
-            // Soma bruto pra lançamentos
             Object.values(result.canais).forEach(c=>{totalBruto+=c.bruto||0;});
           }
-          // Log dos primeiros itens parseados (diagnóstico)
-          if(result._debug&&result._debug.length>0){
-            console.log(`BLING [${conta}] formato itens:`,result._debug);
-          }
+          if(result._debug&&result._debug.length>0)console.log(`BLING [${conta}] itens:`,result._debug);
+          if(result._canaisRaw)console.log(`BLING [${conta}] canais ORIGINAIS Bling:`,result._canaisRaw);
+          console.log(`BLING [${conta}] ✓ ${result.totalPedidos} pedidos, canais normalizados:`,Object.keys(result.canais).join(", "));
         }catch(e){console.error(`Bling ${conta}:`,e);}
       }
 
