@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase, USER_ID } from "./supabase.js";
+import MLPerguntas from './MLPerguntas';
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
 const APP_VERSION="6.2";
@@ -175,6 +176,16 @@ const SvgSalasCorte = ({ size = 32 }) => (
     <rect x="49" y="28" width="5" height="22" rx="1.5" fill={_BL} stroke={_S} strokeWidth="1.2"/>
     <rect x="15" y="38" width="34" height="3" rx="1" fill={_S} opacity="0.2"/>
     <rect x="9" y="16" width="46" height="7" rx="1" fill="white" stroke={_S} strokeWidth="0.8" opacity="0.5"/>
+  </svg>
+);
+
+const SvgSAC = ({ size = 32 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
+    <path d="M12 34 C12 20 20 10 32 10 C44 10 52 20 52 34" stroke={_S} strokeWidth="3" fill="none"/>
+    <rect x="8" y="30" width="10" height="18" rx="4" fill={_B} stroke={_S} strokeWidth="2"/>
+    <rect x="46" y="30" width="10" height="18" rx="4" fill={_B} stroke={_S} strokeWidth="2"/>
+    <path d="M46 44 Q46 54 36 54 L32 54" stroke={_S} strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+    <rect x="26" y="51" width="8" height="6" rx="3" fill={_B} stroke={_S} strokeWidth="1.5"/>
   </svg>
 );
 
@@ -447,6 +458,7 @@ const modules = [
   { id:"calculadora",   Icon:SvgCalculadora,   label:"Calculadora" },
   { id:"fichatecnica",  Icon:SvgFichaTecnica,  label:"Ficha Téc."  },
   { id:"salascorte",   Icon:SvgSalasCorte,    label:"Salas Corte" },
+  { id:"sac",          Icon:SvgSAC,           label:"SAC"         },
   { id:"bling",         Icon:SvgBling,         label:"Bling"       },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
@@ -3476,7 +3488,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas"],admin:false},
@@ -6825,7 +6837,7 @@ export default function App(){
         </div>
       </div>
       {/* Conteúdo */}
-      <div style={{flex:1,background:"#f7f4f0",padding:active==="oficinas"||active==="lancamentos"||active==="salascorte"?"8px 8px":"16px 20px",overflowY:"auto"}}>
+      <div style={{flex:1,background:"#f7f4f0",padding:active==="oficinas"||active==="lancamentos"||active==="salascorte"||active==="sac"?"8px 8px":"16px 20px",overflowY:"auto"}}>
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
         {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
@@ -6835,6 +6847,7 @@ export default function App(){
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
         {active==="salascorte"&&<SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/>}
+        {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
