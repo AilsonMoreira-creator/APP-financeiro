@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     // 1. Lista pedidos do dia
     let pedidoIds=[], pagina=1;
     while (true) {
-      const url=`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicio=${data}&dataFim=${data}&pagina=${pagina}&limite=100`;
+      const url=`https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicial=${data}&dataFinal=${data}&pagina=${pagina}&limite=100`;
       const resp=await fetch(url,{headers:{"Authorization":"Bearer "+access_token,"Accept":"application/json"}});
       if (!resp.ok) break;
       const d=await resp.json();
