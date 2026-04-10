@@ -198,6 +198,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   const [qaHistory, setQaHistory] = useState([]);
   const [error, setError] = useState(null);
   const [stockAlerts, setStockAlerts] = useState([]);
+  const [aiResponses, setAiResponses] = useState([]);
+  const [absenceResponses, setAbsenceResponses] = useState([]);
 
   const heartbeatRef = useRef(null);
   const syncRef = useRef(null);
@@ -314,6 +316,27 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       }).eq('id', alertId);
       fetchStockAlerts();
     } catch (err) { console.error('[MLPerguntas] Resolve alert error:', err); }
+  }
+
+  // ── Fetch AI and absence responses from Supabase ──
+  async function fetchAutoResponses() {
+    if (!supabase) return;
+    try {
+      const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const { data: ai } = await supabase.from('ml_qa_history')
+        .select('*').eq('answered_by', '_auto_ia')
+        .gte('answered_at', cutoff).order('answered_at', { ascending: false }).limit(20);
+      setAiResponses(ai || []);
+
+      const { data: aiLow } = await supabase.from('ml_qa_history')
+        .select('*').eq('answered_by', '_auto_ia_low')
+        .gte('answered_at', cutoff).order('answered_at', { ascending: false }).limit(20);
+
+      const { data: absence } = await supabase.from('ml_qa_history')
+        .select('*').eq('answered_by', '_auto_absence')
+        .gte('answered_at', cutoff).order('answered_at', { ascending: false }).limit(20);
+      setAbsenceResponses([...(absence || []), ...(aiLow || [])]);
+    } catch (err) { console.error('[MLPerguntas] Auto responses error:', err); }
   }
 
   // ── Fetch locks ──
@@ -526,7 +549,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             ].map(t => (
               <button key={t.id} onClick={() => {
                 setTab(t.id);
-                if (t.id === 'respondidas' || t.id === 'ausencia' || t.id === 'ia_resp') fetchAnswered();
+                if (t.id === 'respondidas' || t.id === 'ausencia' || t.id === 'ia_resp') { fetchAnswered(); fetchAutoResponses(); }
                 if (t.id === 'estoque') fetchStockAlerts();
               }} style={{
                 ...S, padding: '5px 12px', fontSize: 11, fontWeight: 600,
@@ -578,19 +601,45 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           </div>
         ) : tab === 'ausencia' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {answeredToday.filter(q => q.answer && q.answer.text && (q.answer.text.includes('fora do horário') || q.answer.text.includes('Retornaremos'))).length === 0 ? (
+            {absenceResponses.length === 0 ? (
               <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
-                🌙 Nenhuma resposta de ausência nas últimas 24h
+                🌙 Nenhuma resposta de ausência nas últimas 48h
               </div>
-            ) : answeredToday.filter(q => q.answer && (q.answer.text.includes('fora do horário') || q.answer.text.includes('Retornaremos'))).map(q => renderQuestionCard(q))}
+            ) : absenceResponses.map((r, i) => (
+              <div key={i} style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: '10px 12px', borderLeft: `4px solid ${PALETTE.orange}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <BrandTag brand={r.brand} />
+                  <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                    {new Date(r.answered_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span style={{ ...S, fontSize: 11, color: PALETTE.orange, fontWeight: 600 }}>
+                    {r.answered_by === '_auto_ia_low' ? '🤖 IA (baixa confiança)' : '🌙 Ausência'}
+                  </span>
+                </div>
+                <div style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
+                <div style={{ ...S, fontSize: 12, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
+              </div>
+            ))}
           </div>
         ) : tab === 'ia_resp' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {answeredToday.filter(q => q.answer && q.answered_by === '_auto_ia').length === 0 ? (
+            {aiResponses.length === 0 ? (
               <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
-                🤖 Nenhuma resposta da IA nas últimas 24h
+                🤖 Nenhuma resposta da IA nas últimas 48h
               </div>
-            ) : answeredToday.filter(q => q.answered_by === '_auto_ia').map(q => renderQuestionCard(q))}
+            ) : aiResponses.map((r, i) => (
+              <div key={i} style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: '10px 12px', borderLeft: `4px solid ${PALETTE.blue}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <BrandTag brand={r.brand} />
+                  <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                    {new Date(r.answered_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span style={{ ...S, fontSize: 11, color: PALETTE.blue, fontWeight: 600 }}>🤖 IA (alta confiança)</span>
+                </div>
+                <div style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
+                <div style={{ ...S, fontSize: 12, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
+              </div>
+            ))}
           </div>
         ) : tab === 'estoque' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
