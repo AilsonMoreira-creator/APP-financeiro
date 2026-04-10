@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       .gte('data_pedido', data_inicio)
       .lte('data_pedido', fim)
       .order('data_pedido', { ascending: true })
-      .limit(10000);
+      .limit(30000);
 
     if (error) {
       console.error("[bling-cache] erro query:", error);
