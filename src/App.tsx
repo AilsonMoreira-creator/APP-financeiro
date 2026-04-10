@@ -6583,11 +6583,25 @@ export default function App(){
   useEffect(()=>{
     if(!dbCarregado||!supabase)return;
     const hoje=new Date().toISOString().slice(0,10);
+    // Auto-invalidação de cache quando versão muda
+    const BLING_CACHE_VERSION="v6";
+    const cacheVer=localStorage.getItem("amica_bling_ver");
+    if(cacheVer!==BLING_CACHE_VERSION){
+      console.log("BLING: versão mudou, limpando cache antigo...");
+      localStorage.removeItem("amica_bling_vendas");
+      localStorage.removeItem("amica_bling_ultima_det");
+      localStorage.setItem("amica_bling_ver",BLING_CACHE_VERSION);
+    }
+
     const ultimaImport=localStorage.getItem("amica_bling_ultima_det");
     const jaImportouHoje=ultimaImport===hoje;
 
     // Carrega cache existente do Supabase
     (async()=>{
+      // Se versão mudou, limpa cache do Supabase também
+      if(cacheVer!==BLING_CACHE_VERSION){
+        try{await supabase.from('amicia_data').upsert({user_id:'bling-vendas',payload:{}},{onConflict:'user_id'});}catch(e){}
+      }
       try{
         const {data:cacheData}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-vendas').single();
         if(cacheData?.payload){setBlingVendas(cacheData.payload);try{localStorage.setItem("amica_bling_vendas",JSON.stringify(cacheData.payload));}catch(e){}}
@@ -6645,24 +6659,62 @@ export default function App(){
       if(!cache[mesKey])cache[mesKey]={};
       const diaData={};
 
+      // Helper: merge dois objetos de canais
+      const mergeCanais=(target,source)=>{
+        for(const cn in source){
+          const s=source[cn];
+          if(!target[cn])target[cn]={pedidos:0,bruto:0,frete:0,itens:0,subcanais:{},produtos:{}};
+          const t=target[cn];
+          t.pedidos+=s.pedidos||0;t.bruto+=s.bruto||0;t.frete+=s.frete||0;t.itens+=s.itens||0;
+          for(const sc in(s.subcanais||{})){if(!t.subcanais[sc])t.subcanais[sc]={pedidos:0,bruto:0};t.subcanais[sc].pedidos+=(s.subcanais[sc]?.pedidos||0);t.subcanais[sc].bruto+=(s.subcanais[sc]?.bruto||0);}
+          for(const prod of(s.produtos||[])){
+            if(!t.produtos[prod.ref])t.produtos[prod.ref]={ref:prod.ref,desc:prod.desc,qtd:0,valor:0,tam:{},cor:{}};
+            const tp=t.produtos[prod.ref];tp.qtd+=prod.qtd;tp.valor+=prod.valor;
+            for(const k in(prod.tam||{}))tp.tam[k]=(tp.tam[k]||0)+prod.tam[k];
+            for(const k in(prod.cor||{}))tp.cor[k]=(tp.cor[k]||0)+prod.cor[k];
+          }
+        }
+      };
+
       for(const conta of contas){
         if(!tokens[conta]){console.log(`BLING [${conta}] ✗ sem token válido`);continue;}
         try{
-          const resp=await fetch("/api/bling-vendas-dia",{
-            method:"POST",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({access_token:tokens[conta],data:hoje})
-          });
-          if(!resp.ok){console.error(`BLING [${conta}] ✗ HTTP ${resp.status}`);continue;}
-          const result=await resp.json();
-          if(!result.ok){console.error(`BLING [${conta}] ✗ API:`,result.erro);continue;}
-          if(result.totalPedidos>0){
-            diaData[conta]=result.canais;
-            Object.values(result.canais).forEach(c=>{totalBruto+=c.bruto||0;});
+          // Loop de chunks: processa 80 pedidos por vez pra não estourar timeout Vercel
+          let skip=0,pedidoIds=null,lojaNames=null,contaCanais={},totalPedidos=0;
+          while(true){
+            setBlingImportStatus(`importando ${conta}... ${skip>0?`(${skip}+)`:""}`)
+            const body={access_token:tokens[conta],data:hoje,skip};
+            if(pedidoIds)body.pedidoIds=pedidoIds;
+            if(lojaNames)body.lojaNames=lojaNames;
+            const resp=await fetch("/api/bling-vendas-dia",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+            if(!resp.ok){console.error(`BLING [${conta}] ✗ HTTP ${resp.status}`);break;}
+            const result=await resp.json();
+            if(!result.ok){console.error(`BLING [${conta}] ✗ API:`,result.erro);break;}
+            totalPedidos=result.totalPedidos||0;
+            // Merge canais deste chunk
+            mergeCanais(contaCanais,result.canais||{});
+            // Logs (só no primeiro chunk)
+            if(skip===0){
+              if(result._debug&&result._debug.length>0)console.log(`BLING [${conta}] itens:`,result._debug);
+              if(result._canaisRaw)console.log(`BLING [${conta}] canais ORIGINAIS Bling:`,result._canaisRaw);
+            }
+            console.log(`BLING [${conta}] chunk ${skip}-${result.processados||"?"} de ${totalPedidos}`);
+            if(!result.temMais)break;
+            skip=result.nextSkip;
+            pedidoIds=result.pedidoIds;
+            lojaNames=result.lojaNames;
           }
-          if(result._debug&&result._debug.length>0)console.log(`BLING [${conta}] itens:`,result._debug);
-          if(result._canaisRaw)console.log(`BLING [${conta}] canais ORIGINAIS Bling:`,result._canaisRaw);
-          if(result._primeiroPedido)console.log(`BLING [${conta}] ESTRUTURA pedido:`,result._primeiroPedido);
-          console.log(`BLING [${conta}] ✓ ${result.totalPedidos} pedidos, canais normalizados:`,Object.keys(result.canais).join(", "));
+          // Converte produtos de object pra array
+          for(const cn in contaCanais){
+            if(contaCanais[cn].produtos&&!Array.isArray(contaCanais[cn].produtos)){
+              contaCanais[cn].produtos=Object.values(contaCanais[cn].produtos).sort((a,b)=>b.qtd-a.qtd);
+            }
+          }
+          if(totalPedidos>0){
+            diaData[conta]=contaCanais;
+            Object.values(contaCanais).forEach(c=>{totalBruto+=c.bruto||0;});
+          }
+          console.log(`BLING [${conta}] ✓ ${totalPedidos} pedidos, canais:`,Object.keys(contaCanais).join(", "));
         }catch(e){console.error(`Bling ${conta}:`,e);}
       }
 
@@ -6684,47 +6736,30 @@ export default function App(){
       setTimeout(()=>setBlingImportStatus(null),3000);
     })().catch(e=>{console.error("Bling auto-import:",e);setBlingImportStatus(null);});
 
-    // Refresh a cada 30 min (só hoje)
-    const refreshInterval=setInterval(async()=>{
-      try{
-        const hojeRefresh=new Date().toISOString().slice(0,10);
-        const {data:tokensData}=await supabase.from('bling_tokens').select('*');
-        if(!tokensData||tokensData.length===0)return;
-        const tokens={};
-        tokensData.forEach(t=>{if(t.conta&&t.access_token)tokens[t.conta]=t.access_token;});
-        const contas=["exitus","lumia","muniam"];
-        const cache={...blingVendas};
-        const mesKey=hojeRefresh.slice(0,7);
-        const diaKey=hojeRefresh.slice(8,10);
-        if(!cache[mesKey])cache[mesKey]={};
-        const diaData={};
-        let totalBruto=0;
-        for(const conta of contas){
-          if(!tokens[conta])continue;
-          try{
-            const resp=await fetch("/api/bling-vendas-dia",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({access_token:tokens[conta],data:hojeRefresh})});
-            if(!resp.ok)continue;
-            const result=await resp.json();
-            if(result.ok&&result.totalPedidos>0){
-              diaData[conta]=result.canais;
-              Object.values(result.canais).forEach(c=>{totalBruto+=c.bruto||0;});
-            }
-          }catch(e){}
-        }
-        if(Object.keys(diaData).length>0){
-          cache[mesKey][diaKey]=diaData;
-          setBlingVendas({...cache});
-          try{localStorage.setItem("amica_bling_vendas",JSON.stringify(cache));}catch(e){}
-          try{await supabase.from('amicia_data').upsert({user_id:'bling-vendas',payload:cache},{onConflict:'user_id'});}catch(e){}
-          if(totalBruto>0){
-            const liquido=Math.round(totalBruto*0.90);
-            setReceitasPorMes(prev=>{const m=prev[MES_ATUAL]||{};const d=new Date().getDate();return{...prev,[MES_ATUAL]:{...m,[d]:{...(m[d]||{}),marketplaces:String(liquido)}}};});
-          }
-        }
-      }catch(e){console.error("Bling refresh:",e);}
-    },30*60*1000); // 30 min
+    // Refresh: limpa flag a cada 30 min pra forçar re-import no próximo visibilitychange
+    const refreshInterval=setInterval(()=>{
+      localStorage.removeItem("amica_bling_ultima_det");
+      console.log("BLING: flag de import limpa, próximo acesso re-importa");
+    },30*60*1000);
 
-    return()=>clearInterval(refreshInterval);
+    // Ao voltar pra aba: re-importa se flag foi limpa
+    const onVisibility=()=>{
+      if(document.visibilityState==="visible"){
+        const flag=localStorage.getItem("amica_bling_ultima_det");
+        const hojeCheck=new Date().toISOString().slice(0,10);
+        if(flag!==hojeCheck){
+          console.log("BLING: re-importando ao voltar pra aba...");
+          localStorage.removeItem("amica_bling_vendas");
+          localStorage.removeItem("amica_bling_ultima_det");
+          // Força re-render que re-executa o useEffect
+          setBlingImportStatus("re-importando...");
+          window.location.reload();
+        }
+      }
+    };
+    document.addEventListener("visibilitychange",onVisibility);
+
+    return()=>{clearInterval(refreshInterval);document.removeEventListener("visibilitychange",onVisibility);};
   },[dbCarregado]);
 
   const dadosMensais=Object.fromEntries(
