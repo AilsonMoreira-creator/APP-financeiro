@@ -53,6 +53,18 @@ const DEFAULT_CONFIG = {
   ai_enabled: true,
   ai_tone: 'Formal mas amigável. Sempre educado, nunca robótico. Foco em conversão. Usar "você" e não "senhor/senhora".',
   ai_read_description: true,
+  ai_auto_enabled: true,
+  ai_auto_schedule: [
+    { day: 'Segunda', active: true, start: '17:00', end: '23:59' },
+    { day: 'Terça', active: true, start: '17:00', end: '23:59' },
+    { day: 'Quarta', active: true, start: '17:00', end: '23:59' },
+    { day: 'Quinta', active: true, start: '17:00', end: '23:59' },
+    { day: 'Sexta', active: true, start: '17:00', end: '23:59' },
+    { day: 'Sábado', active: true, start: '00:00', end: '23:59' },
+    { day: 'Domingo', active: true, start: '00:00', end: '23:59' },
+  ],
+  ai_auto_morning: '00:00',
+  ai_low_confidence_msg: 'Olá! Agradecemos sua pergunta. Alguém do nosso time vai responder em breve. Obrigado!',
   alert_warning: 15,
   alert_urgent: 30,
   alert_critical: 60,
@@ -78,7 +90,7 @@ const DEFAULT_CONFIG = {
 // SHARED UI COMPONENTS
 // ══════════════════════════════════════════════════════════
 
-const S = { fontFamily: 'Georgia, serif' };
+const S = { fontFamily: "Calibri, 'Segoe UI', Arial, sans-serif", fontSize: 14 };
 
 const Badge = ({ count, color = PALETTE.red }) => count > 0 ? (
   <span style={{
@@ -87,6 +99,13 @@ const Badge = ({ count, color = PALETTE.red }) => count > 0 ? (
     display: 'inline-block', textAlign: 'center',
   }}>{count}</span>
 ) : null;
+
+const formatTime = (min) => {
+  if (min < 60) return `${min} min`;
+  if (min < 1440) return `${Math.floor(min / 60)}h ${min % 60}min`;
+  const days = Math.floor(min / 1440);
+  return `${days}d ${Math.floor((min % 1440) / 60)}h`;
+};
 
 const TimeTag = ({ minutes, config }) => {
   const w = config?.alert_warning || 15;
@@ -99,7 +118,7 @@ const TimeTag = ({ minutes, config }) => {
       background: critical ? PALETTE.redLight : urgent ? PALETTE.orangeLight : PALETTE.greenLight,
       color: critical ? PALETTE.red : urgent ? PALETTE.orange : PALETTE.green,
     }}>
-      {minutes < 60 ? `${minutes}min` : `${Math.floor(minutes / 60)}h${minutes % 60}m`}
+      ⏱ {formatTime(minutes)}
     </span>
   );
 };
@@ -474,11 +493,13 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             {[
               { id: 'pendentes', label: 'Pendentes', badge: pending.length },
               { id: 'respondidas', label: 'Respondidas (24h)', badge: 0 },
+              { id: 'ausencia', label: 'Ausência', badge: 0 },
+              { id: 'ia_resp', label: 'IA', badge: 0 },
               { id: 'arquivo', label: 'Arquivo', badge: 0 },
             ].map(t => (
               <button key={t.id} onClick={() => {
                 setTab(t.id);
-                if (t.id === 'respondidas') fetchAnswered();
+                if (t.id === 'respondidas' || t.id === 'ausencia' || t.id === 'ia_resp') fetchAnswered();
               }} style={{
                 ...S, padding: '5px 12px', fontSize: 11, fontWeight: 600,
                 border: 'none', borderRadius: 5, cursor: 'pointer',
@@ -526,6 +547,22 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         {tab === 'arquivo' ? (
           <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
             📁 Arquivo — busca por período em desenvolvimento
+          </div>
+        ) : tab === 'ausencia' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {answeredToday.filter(q => q.answer && q.answer.text && (q.answer.text.includes('fora do horário') || q.answer.text.includes('Retornaremos'))).length === 0 ? (
+              <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
+                🌙 Nenhuma resposta de ausência nas últimas 24h
+              </div>
+            ) : answeredToday.filter(q => q.answer && (q.answer.text.includes('fora do horário') || q.answer.text.includes('Retornaremos'))).map(q => renderQuestionCard(q))}
+          </div>
+        ) : tab === 'ia_resp' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {answeredToday.filter(q => q.answer && q.answered_by === '_auto_ia').length === 0 ? (
+              <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
+                🤖 Nenhuma resposta da IA nas últimas 24h
+              </div>
+            ) : answeredToday.filter(q => q.answered_by === '_auto_ia').map(q => renderQuestionCard(q))}
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.green, fontSize: 14, fontWeight: 600 }}>
@@ -593,21 +630,20 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           onClick={() => !isAnswered && !lockedByOther && handleExpand(q.id)}
           style={{ padding: '10px 12px', cursor: isAnswered || lockedByOther ? 'default' : 'pointer' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
             {/* Thumbnail */}
-            <div style={{
-              width: 44, height: 44, borderRadius: 6, overflow: 'hidden',
-              background: PALETTE.sand, flexShrink: 0,
-            }}>
-              {q.item_thumbnail ? (
+            {q.item_thumbnail && (
+              <div style={{
+                width: 52, height: 52, borderRadius: 6, overflow: 'hidden',
+                background: PALETTE.sand, flexShrink: 0,
+              }}>
                 <img src={q.item_thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  onError={e => { e.target.style.display = 'none'; }} />
-              ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>👗</div>
-              )}
-            </div>
+                  onError={e => { e.target.parentElement.style.display = 'none'; }} />
+              </div>
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
+              {/* Row 1: Brand + Time */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
                 <BrandTag brand={q.brand} />
                 {!isAnswered && <TimeTag minutes={q.minutes_elapsed} config={config} />}
                 {lockedByOther && (
@@ -616,8 +652,13 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                   </span>
                 )}
               </div>
-              <div style={{ ...S, fontSize: 12, fontWeight: 600, color: PALETTE.dark, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {q.item_title}
+              {/* Row 2: Product Title bold */}
+              <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, lineHeight: 1.3, marginBottom: 2 }}>
+                {q.item_title && q.item_title !== q.item_id ? q.item_title : 'Carregando título...'}
+              </div>
+              {/* Row 3: MLB ID small gray */}
+              <div style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                {q.item_id}
               </div>
             </div>
           </div>
@@ -767,7 +808,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             { label: 'Recebidas', value: total, icon: '📩', color: PALETTE.blue },
             { label: 'Respondidas', value: todayAnswered, icon: '✅', color: PALETTE.green },
             { label: 'Pendentes', value: todayPending, icon: '⏳', color: todayPending > 5 ? PALETTE.red : PALETTE.orange },
-            { label: 'Tempo Médio', value: `${avgTime}m`, icon: '⚡', color: PALETTE.dark },
+            { label: 'Tempo Médio', value: formatTime(avgTime), icon: '⚡', color: PALETTE.dark },
           ].map((k, i) => (
             <div key={i} style={{
               background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8,
@@ -973,16 +1014,16 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         {/* IA */}
         {configSection === 'ia' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
-            <div style={{ ...S, fontSize: 12, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>🤖 Configuração da IA</div>
-            <div style={{ ...S, fontSize: 11, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
+            <div style={{ ...S, fontSize: 13, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>🤖 Configuração da IA</div>
+            <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
               A IA aprende com cada resposta enviada. Lê a descrição do anúncio + histórico de Q&A.
             </div>
-            <div style={{ ...S, fontSize: 11, fontWeight: 700, color: PALETTE.dark, marginBottom: 3 }}>Tom de voz</div>
+            <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 3 }}>Tom de voz</div>
             <textarea
               value={config.ai_tone}
               onChange={e => saveConfig({ ...config, ai_tone: e.target.value })}
               rows={3}
-              style={{ ...S, width: '100%', padding: 8, fontSize: 12, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }}
+              style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }}
             />
             <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
               <label style={{ ...S, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
@@ -995,6 +1036,56 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                   onChange={() => saveConfig({ ...config, ai_read_description: !config.ai_read_description })} />
                 Ler descrição
               </label>
+            </div>
+
+            {/* Auto-resposta IA */}
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${PALETTE.sand}` }}>
+              <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>🤖 Resposta Automática da IA</div>
+              <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
+                A IA responde automaticamente quando tem alta confiança. Se não tiver confiança, envia mensagem padrão.
+              </div>
+              <label style={{ ...S, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginBottom: 8 }}>
+                <input type="checkbox" checked={config.ai_auto_enabled || false}
+                  onChange={() => saveConfig({ ...config, ai_auto_enabled: !config.ai_auto_enabled })} />
+                <b>Ativar resposta automática da IA</b>
+              </label>
+
+              {config.ai_auto_enabled && (<>
+                <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>Horário da IA (responde sozinha)</div>
+                {(config.ai_auto_schedule || []).map((day, i) => (
+                  <div key={day.day} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, opacity: day.active ? 1 : 0.4 }}>
+                    <label style={{ ...S, display: 'flex', alignItems: 'center', gap: 4, width: 85, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={day.active} onChange={() => {
+                        const s = [...(config.ai_auto_schedule || [])];
+                        s[i] = { ...s[i], active: !s[i].active };
+                        saveConfig({ ...config, ai_auto_schedule: s });
+                      }} />
+                      {day.day}
+                    </label>
+                    {day.active && <>
+                      <input type="time" value={day.start} onChange={e => {
+                        const s = [...(config.ai_auto_schedule || [])];
+                        s[i] = { ...s[i], start: e.target.value };
+                        saveConfig({ ...config, ai_auto_schedule: s });
+                      }} style={{ ...S, fontSize: 12, padding: '3px 4px', border: `1px solid ${PALETTE.border}`, borderRadius: 4 }} />
+                      <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>às</span>
+                      <input type="time" value={day.end} onChange={e => {
+                        const s = [...(config.ai_auto_schedule || [])];
+                        s[i] = { ...s[i], end: e.target.value };
+                        saveConfig({ ...config, ai_auto_schedule: s });
+                      }} style={{ ...S, fontSize: 12, padding: '3px 4px', border: `1px solid ${PALETTE.border}`, borderRadius: 4 }} />
+                    </>}
+                  </div>
+                ))}
+
+                <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginTop: 8, marginBottom: 3 }}>Mensagem quando sem confiança</div>
+                <textarea
+                  value={config.ai_low_confidence_msg || ''}
+                  onChange={e => saveConfig({ ...config, ai_low_confidence_msg: e.target.value })}
+                  rows={2}
+                  style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }}
+                />
+              </>)}
             </div>
           </div>
         )}
@@ -1040,9 +1131,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 18 }}>🛒</span>
+          <span style={{ fontSize: 18 }}>🎧</span>
           <div>
-            <div style={{ ...S, color: '#fff', fontWeight: 700, fontSize: 14 }}>ML Perguntas</div>
+            <div style={{ ...S, color: '#fff', fontWeight: 700, fontSize: 15 }}>SAC</div>
             <div style={{ ...S, color: '#ffffff77', fontSize: 10 }}>
               Sync: {lastSync ? new Date(lastSync).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}
               {' · '}{currentUser}
