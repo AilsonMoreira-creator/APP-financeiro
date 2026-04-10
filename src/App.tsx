@@ -3712,7 +3712,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const CORES_MARCA2={Exitus:"#d4c8a8",Lumia:"#b8a88a",Muniam:"#8a7560"};
   const fmtV=(v)=>Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:0});
   const fmtRV=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2});
-  const dotColor=(cor)=>{const m={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#7a9a6a","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0","Vinho":"#5a1a2a"};return m[cor]||"#a89f94";};
+  const dotColor=(cor)=>{const m={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#b5c99a","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Azul Serenity":"#5b9bd5","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0","Bege Claro":"#e8d8c0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0",Nude:"#c8a890","Vinho":"#5a1a2a"};return m[cor]||"#a89f94";};
   // Credenciais separadas por conta — localStorage + Supabase
   const [creds,setCreds]=useState(()=>{try{return JSON.parse(localStorage.getItem("bling_creds"))||{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}catch{return{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}});
   const [tokens,setTokens]=useState({exitus:null,lumia:null,muniam:null});
@@ -3940,8 +3940,8 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
       {/* Header */}
       <div style={{background:"#fff",borderBottom:"1px solid #e8e2da",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:36,height:36,borderRadius:8,background:"#4CAF73",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <svg width="36" height="36" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#4CAF73"/><text x="8" y="42" fontSize="19" fontWeight="900" fill="white" fontFamily="Arial" letterSpacing="-0.5">bling</text><rect x="47" y="20" width="7" height="17" rx="3.5" fill="white" transform="rotate(10 50 28)"/><ellipse cx="51.5" cy="45" rx="4" ry="3.5" fill="white" transform="rotate(10 51 45)"/></svg>
+          <div style={{width:36,height:36,borderRadius:8,background:"#4a7fa5",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2C10.5 2 9.5 3 9.5 4.5C9.5 5.5 10 6.3 10.7 6.7L8 12L5 22H19L16 12L13.3 6.7C14 6.3 14.5 5.5 14.5 4.5C14.5 3 13.5 2 12 2Z" fill="white" opacity="0.9"/><path d="M8 12C8 12 9.5 14 12 14C14.5 14 16 12 16 12" stroke="#4a7fa5" strokeWidth="1.2"/><ellipse cx="12" cy="4.5" rx="2" ry="2" fill="white"/></svg>
           </div>
           <div>
             <div style={{fontSize:17,fontWeight:700,color:"#2c3e50"}}>Bling Marketplaces</div>
@@ -3951,7 +3951,8 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           {syncMsg&&<span style={{fontSize:11,color:syncMsg.startsWith("⚠")?"#c0392b":syncMsg.startsWith("⏳")?"#e67e22":"#27ae60"}}>{syncMsg}</span>}
           <button onClick={doSync} disabled={syncing} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:syncing?"not-allowed":"pointer",opacity:syncing?0.7:1,fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Sync</button>
-          <button onClick={()=>{setTela("vendas");setVendasSub("overview");}} style={{background:tela==="vendas"?"#2c3e50":"#fff",color:tela==="vendas"?"#fff":"#2c3e50",border:tela==="vendas"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📦 Vendas</button>
+          <button onClick={()=>{setTela("vendas");setVendasSub("overview");}} style={{background:tela==="vendas"&&vendasSub==="overview"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="overview"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="overview"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📦 Vendas</button>
+          <button onClick={()=>{setTela("vendas");setVendasSub("produtos");}} style={{background:tela==="vendas"&&vendasSub==="produtos"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="produtos"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="produtos"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>👗 Produtos</button>
           <button onClick={()=>setTela(t=>t==="dash"?"config":"dash")} style={{background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
             {tela==="config"?"← Voltar":"⚙ Config"}
           </button>
@@ -4241,7 +4242,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                   {/* Ranking */}
                   <div style={{flex:"1 1 50%",background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                     <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 20</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
-                    <div style={{maxHeight:440,overflowY:"auto"}}>
+                    <div style={{maxHeight:650,overflowY:"auto"}}>
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
                         <div key={p.ref} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:"1px solid #f0ebe4"}}>
                           <div style={{width:22,height:22,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
