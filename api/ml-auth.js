@@ -1,4 +1,4 @@
-import { supabase, saveToken, getValidToken, setCors } from './_ml-helpers.js';
+import { supabase, saveToken, getValidToken, setCors } from './_ml-helpers.js'; 
 
 const ML_API = 'https://api.mercadolibre.com';
 const ML_AUTH = 'https://auth.mercadolivre.com.br';
