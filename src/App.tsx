@@ -3751,18 +3751,23 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
       const m={exitus:null,lumia:null,muniam:null};
       ts.forEach(t=>{if(m[t.conta]!==undefined)m[t.conta]=t;});
       setTokens(m);
-      // Carregar credenciais do Supabase (se localStorage estiver vazio)
+      // Carregar credenciais — sync bidirecional localStorage ↔ Supabase
       try{
-        const {data:sbCreds}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-creds').single();
-        if(sbCreds?.payload){
-          const local=JSON.parse(localStorage.getItem("bling_creds")||"{}");
-          const hasLocal=local.exitus?.id||local.lumia?.id||local.muniam?.id;
-          if(!hasLocal){
-            setCreds(sbCreds.payload);
-            localStorage.setItem("bling_creds",JSON.stringify(sbCreds.payload));
-          }
+        const {data:sbCreds}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-creds').maybeSingle();
+        const local=JSON.parse(localStorage.getItem("bling_creds")||"{}");
+        const hasLocal=local.exitus?.id||local.lumia?.id||local.muniam?.id;
+        const hasSb=sbCreds?.payload?.exitus?.id||sbCreds?.payload?.lumia?.id||sbCreds?.payload?.muniam?.id;
+
+        if(hasLocal&&!hasSb){
+          // localStorage tem creds mas Supabase não → salva no Supabase (pra cron usar)
+          console.log("BLING: sincronizando creds localStorage → Supabase");
+          await supabase.from('amicia_data').upsert({user_id:'bling-creds',payload:local},{onConflict:'user_id'});
+        }else if(hasSb&&!hasLocal){
+          // Supabase tem mas localStorage não → carrega
+          setCreds(sbCreds.payload);
+          localStorage.setItem("bling_creds",JSON.stringify(sbCreds.payload));
         }
-      }catch(e){console.error(e)}
+      }catch(e){console.error("BLING creds sync:",e)}
       const r=await blingDb.getResultado(hoje);
       if(r)setResultado(r);
       try{
