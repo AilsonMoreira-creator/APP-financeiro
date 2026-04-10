@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/bling-cron",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/ml-sync",
       "schedule": "0 8 * * *"
     }
