@@ -72,29 +72,36 @@ export async function blingFetch(url, headers, { maxRetries = 3, baseDelay = 100
 // ── Refresh token Bling ──
 export async function refreshBlingToken(conta) {
   // Busca creds do amicia_data
-  const { data: credsData } = await supabase
+  const { data: credsData, error: credsErr } = await supabase
     .from('amicia_data')
     .select('payload')
     .eq('user_id', 'bling-creds')
     .single();
 
-  if (!credsData?.payload?.[conta]?.id || !credsData?.payload?.[conta]?.secret) {
-    console.log(`[bling-cron] sem creds para ${conta}`);
-    return null;
+  if (credsErr || !credsData?.payload) {
+    throw new Error(`sem creds no Supabase (bling-creds): ${credsErr?.message || 'payload vazio'}`);
+  }
+
+  if (!credsData.payload[conta]?.id || !credsData.payload[conta]?.secret) {
+    const keys = Object.keys(credsData.payload);
+    throw new Error(`sem client_id/secret para ${conta} (chaves encontradas: ${keys.join(',')})`);
   }
 
   const creds = credsData.payload[conta];
 
   // Busca token atual
-  const { data: tokenData } = await supabase
+  const { data: tokenData, error: tokenErr } = await supabase
     .from('bling_tokens')
     .select('*')
     .eq('conta', conta)
     .single();
 
-  if (!tokenData?.refresh_token) {
-    console.log(`[bling-cron] sem refresh_token para ${conta}`);
-    return null;
+  if (tokenErr || !tokenData) {
+    throw new Error(`sem registro em bling_tokens para ${conta}: ${tokenErr?.message || 'não encontrado'}`);
+  }
+
+  if (!tokenData.refresh_token) {
+    throw new Error(`bling_tokens.${conta} existe mas sem refresh_token`);
   }
 
   // Verifica se precisa renovar
@@ -119,12 +126,14 @@ export async function refreshBlingToken(conta) {
   });
 
   if (!resp.ok) {
-    console.error(`[bling-cron] refresh falhou para ${conta}: ${resp.status}`);
-    return null;
+    const errBody = await resp.text().catch(() => '');
+    throw new Error(`refresh HTTP ${resp.status} para ${conta}: ${errBody.slice(0, 200)}`);
   }
 
   const d = await resp.json();
-  if (!d.access_token) return null;
+  if (!d.access_token) {
+    throw new Error(`refresh ${conta} retornou sem access_token: ${JSON.stringify(d).slice(0, 200)}`);
+  }
 
   // Salva novo token
   await supabase.from('bling_tokens').upsert({

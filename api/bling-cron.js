@@ -32,13 +32,20 @@ export default async function handler(req, res) {
   try {
     // Busca mapa de lojas uma vez por conta (pra identificar canais)
     for (const conta of CONTAS) {
-      const contaResumo = { pedidosTotal: 0, novosInseridos: 0, erros: 0 };
+      const contaResumo = { pedidosTotal: 0, novosInseridos: 0, erros: 0, detalhe: "" };
       resumo.porConta[conta] = contaResumo;
 
       // Obtém token válido
-      const token = await refreshBlingToken(conta);
+      let token;
+      try {
+        token = await refreshBlingToken(conta);
+      } catch (e) {
+        contaResumo.detalhe = "refreshToken erro: " + e.message;
+        contaResumo.erros++;
+        continue;
+      }
       if (!token) {
-        console.log(`[bling-cron] ✗ ${conta}: sem token válido`);
+        contaResumo.detalhe = "sem token válido (ver logs Vercel)";
         contaResumo.erros++;
         continue;
       }
