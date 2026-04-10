@@ -134,9 +134,17 @@ export default async function handler(req, res) {
         }
       }
 
-      // Prioridade 2: Fora do horário → ausência (só se IA não respondeu)
+      // Prioridade 2: Fora do horário → ausência (só se IA não respondeu e ausência ativa)
       if (outside && autoStatus === 'pending') {
-        const msg = await getAbsenceMessage();
+        // Checar se ausência está ativada
+        let absenceEnabled = false;
+        try {
+          const { data: cfgData } = await supabase.from('amicia_data').select('payload').eq('user_id', 'ml-perguntas-config').single();
+          absenceEnabled = cfgData?.payload?.config?.absence_enabled || false;
+        } catch {}
+
+        if (absenceEnabled) {
+          const msg = await getAbsenceMessage();
         const ansRes = await fetch(`${ML_API}/answers`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -150,6 +158,7 @@ export default async function handler(req, res) {
           });
           autoStatus = 'auto_absence';
         }
+        } // end absenceEnabled
       }
 
       await supabase.from('ml_pending_questions').upsert({

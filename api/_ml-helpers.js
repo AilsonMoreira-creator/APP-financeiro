@@ -82,7 +82,6 @@ export async function isOutsideBusinessHours() {
 
     if (!data?.payload?.config?.schedule) return false;
     const config = data.payload.config;
-    if (!config.absence_enabled) return false;
 
     const now = new Date();
     const spTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
