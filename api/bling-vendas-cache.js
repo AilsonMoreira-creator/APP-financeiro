@@ -23,13 +23,14 @@ export default async function handler(req, res) {
 
     const fim = data_fim || data_inicio;
 
-    // Busca todos os pedidos cacheados no período
+    // Busca todos os pedidos cacheados no período (limite alto pra pegar todas as contas)
     const { data: pedidos, error } = await supabase
       .from('bling_vendas_detalhe')
-      .select('*')
+      .select('conta,pedido_id,data_pedido,canal_geral,canal_detalhe,total_produtos,total_pedido,itens')
       .gte('data_pedido', data_inicio)
       .lte('data_pedido', fim)
-      .order('data_pedido', { ascending: true });
+      .order('data_pedido', { ascending: true })
+      .limit(10000);
 
     if (error) {
       console.error("[bling-cache] erro query:", error);
