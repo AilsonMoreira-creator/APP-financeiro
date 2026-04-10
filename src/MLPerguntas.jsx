@@ -44,7 +44,10 @@ const BRANDS = {
 
 const DAYS_OF_WEEK = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 
+const CONFIG_VERSION = 2; // Incrementar pra forçar reset de config
+
 const DEFAULT_CONFIG = {
+  _version: CONFIG_VERSION,
   schedule: DAYS_OF_WEEK.map((d, i) => ({
     day: d, active: i < 6, start: '08:00', end: i === 5 ? '14:00' : '18:00',
   })),
@@ -211,7 +214,19 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   // ── Load config from localStorage / Supabase ──
   useEffect(() => {
     const local = loadLocal();
-    if (local?.config) setConfig({ ...DEFAULT_CONFIG, ...local.config });
+    if (local?.config) {
+      // Se versão antiga, forçar defaults novos (schedule, etc)
+      if ((local.config._version || 0) < CONFIG_VERSION) {
+        const updated = { ...DEFAULT_CONFIG, ...local.config, _version: CONFIG_VERSION,
+          ai_auto_schedule: DEFAULT_CONFIG.ai_auto_schedule,
+          schedule: DEFAULT_CONFIG.schedule,
+        };
+        setConfig(updated);
+        saveLocal({ config: updated });
+      } else {
+        setConfig({ ...DEFAULT_CONFIG, ...local.config });
+      }
+    }
     if (local?.answeredToday) setAnsweredToday(local.answeredToday);
 
     // Load from Supabase
