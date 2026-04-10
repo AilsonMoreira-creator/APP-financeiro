@@ -41,10 +41,10 @@ async function getSimilarQA(questionText, itemId) {
 
 async function getAIConfig() {
   try {
-    const { data } = await supabase.from('amicia_data').select('data').eq('user_id', 'ml-perguntas-config').single();
+    const { data } = await supabase.from('amicia_data').select('payload').eq('user_id', 'ml-perguntas-config').single();
     return {
-      tone: data?.data?.config?.ai_tone || 'Formal mas amigável. Foco em conversão.',
-      enabled: data?.data?.config?.ai_enabled !== false,
+      tone: data?.payload?.config?.ai_tone || 'Formal mas amigável. Foco em conversão.',
+      enabled: data?.payload?.config?.ai_enabled !== false,
     };
   } catch { return { tone: 'Formal mas amigável. Foco em conversão.', enabled: true }; }
 }

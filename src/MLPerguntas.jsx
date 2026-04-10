@@ -55,11 +55,11 @@ const DEFAULT_CONFIG = {
   ai_read_description: true,
   ai_auto_enabled: true,
   ai_auto_schedule: [
-    { day: 'Segunda', active: true, start: '17:00', end: '23:59' },
-    { day: 'Terça', active: true, start: '17:00', end: '23:59' },
-    { day: 'Quarta', active: true, start: '17:00', end: '23:59' },
-    { day: 'Quinta', active: true, start: '17:00', end: '23:59' },
-    { day: 'Sexta', active: true, start: '17:00', end: '23:59' },
+    { day: 'Segunda', active: true, start: '17:00', end: '08:00' },
+    { day: 'Terça', active: true, start: '17:00', end: '08:00' },
+    { day: 'Quarta', active: true, start: '17:00', end: '08:00' },
+    { day: 'Quinta', active: true, start: '17:00', end: '08:00' },
+    { day: 'Sexta', active: true, start: '17:00', end: '08:00' },
     { day: 'Sábado', active: true, start: '00:00', end: '23:59' },
     { day: 'Domingo', active: true, start: '00:00', end: '23:59' },
   ],
@@ -238,11 +238,11 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
     try {
       const { data } = await supabase
         .from('amicia_data')
-        .select('data')
+        .select('payload')
         .eq('user_id', CONFIG_KEY)
         .single();
-      if (data?.data?.config) {
-        setConfig(prev => ({ ...prev, ...data.data.config }));
+      if (data?.payload?.config) {
+        setConfig(prev => ({ ...prev, ...data.payload.config }));
       }
     } catch (err) { console.error('[MLPerguntas] Supabase load error:', err); }
   }
@@ -257,7 +257,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       try {
         await supabase.from('amicia_data').upsert({
           user_id: CONFIG_KEY,
-          data: toSave,
+          payload: toSave,
         }, { onConflict: 'user_id' });
       } catch (err) { console.error('[MLPerguntas] Config save error:', err); }
     }

@@ -76,12 +76,12 @@ export async function isOutsideBusinessHours() {
   try {
     const { data } = await supabase
       .from('amicia_data')
-      .select('data')
+      .select('payload')
       .eq('user_id', 'ml-perguntas-config')
       .single();
 
-    if (!data?.data?.config?.schedule) return false;
-    const config = data.data.config;
+    if (!data?.payload?.config?.schedule) return false;
+    const config = data.payload.config;
     if (!config.absence_enabled) return false;
 
     const now = new Date();
@@ -104,10 +104,10 @@ export async function getAbsenceMessage() {
   try {
     const { data } = await supabase
       .from('amicia_data')
-      .select('data')
+      .select('payload')
       .eq('user_id', 'ml-perguntas-config')
       .single();
-    return data?.data?.config?.absence_message ||
+    return data?.payload?.config?.absence_message ||
       'Olá! Agradecemos seu contato. No momento estamos fora do horário de atendimento. Retornaremos assim que possível.';
   } catch {
     return 'Olá! Agradecemos seu contato. No momento estamos fora do horário de atendimento. Retornaremos assim que possível.';
@@ -120,12 +120,12 @@ export async function isInAISchedule() {
   try {
     const { data } = await supabase
       .from('amicia_data')
-      .select('data')
+      .select('payload')
       .eq('user_id', 'ml-perguntas-config')
       .single();
 
-    if (!data?.data?.config?.ai_auto_enabled) return false;
-    const schedule = data.data.config.ai_auto_schedule;
+    if (!data?.payload?.config?.ai_auto_enabled) return false;
+    const schedule = data.payload.config.ai_auto_schedule;
     if (!schedule) return false;
 
     const now = new Date();
@@ -155,10 +155,10 @@ export async function getAILowConfidenceMsg() {
   try {
     const { data } = await supabase
       .from('amicia_data')
-      .select('data')
+      .select('payload')
       .eq('user_id', 'ml-perguntas-config')
       .single();
-    return data?.data?.config?.ai_low_confidence_msg ||
+    return data?.payload?.config?.ai_low_confidence_msg ||
       'Olá! Agradecemos sua pergunta. Alguém do nosso time vai responder em breve. Obrigado!';
   } catch {
     return 'Olá! Agradecemos sua pergunta. Alguém do nosso time vai responder em breve. Obrigado!';

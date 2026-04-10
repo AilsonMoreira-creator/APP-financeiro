@@ -63,7 +63,7 @@ export default async function handler(req, res) {
 
     await supabase.from('amicia_data').upsert({
       user_id: 'ml-last-sync',
-      data: { synced_at: new Date().toISOString(), results, outside },
+      payload: { synced_at: new Date().toISOString(), results, outside },
     }, { onConflict: 'user_id' });
 
     return res.json({ success: true, outside, results });
