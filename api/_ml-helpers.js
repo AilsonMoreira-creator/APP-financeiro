@@ -125,29 +125,10 @@ export async function isInAISchedule() {
       .single();
 
     if (!data?.payload?.config?.ai_auto_enabled) return false;
-    const schedule = data.payload.config.ai_auto_schedule;
-    if (!schedule) return false;
 
-    const now = new Date();
-    const spTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-    const dayIndex = spTime.getDay();
-    const scheduleIndex = dayIndex === 0 ? 6 : dayIndex - 1;
-    const daySchedule = schedule[scheduleIndex];
-
-    if (!daySchedule || !daySchedule.active) return false;
-
-    const currentTime = spTime.getHours() * 60 + spTime.getMinutes();
-    const [sH, sM] = daySchedule.start.split(':').map(Number);
-    const [eH, eM] = daySchedule.end.split(':').map(Number);
-    const startTime = sH * 60 + sM;
-    const endTime = eH * 60 + eM;
-
-    // Handle overnight (e.g. 17:00 to 23:59 + 00:00 to 08:00)
-    if (endTime >= startTime) {
-      return currentTime >= startTime && currentTime <= endTime;
-    } else {
-      return currentTime >= startTime || currentTime <= endTime;
-    }
+    // IA responde fora do horário de atendimento
+    const outside = await isOutsideBusinessHours();
+    return outside;
   } catch { return false; }
 }
 

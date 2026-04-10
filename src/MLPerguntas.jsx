@@ -44,7 +44,7 @@ const BRANDS = {
 
 const DAYS_OF_WEEK = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 
-const CONFIG_VERSION = 2; // Incrementar pra forçar reset de config
+const CONFIG_VERSION = 3; // Incrementar pra forçar reset de config
 
 const DEFAULT_CONFIG = {
   _version: CONFIG_VERSION,
@@ -57,16 +57,6 @@ const DEFAULT_CONFIG = {
   ai_tone: 'Formal mas amigável. Sempre educado, nunca robótico. Foco em conversão. Usar "você" e não "senhor/senhora".',
   ai_read_description: true,
   ai_auto_enabled: true,
-  ai_auto_schedule: [
-    { day: 'Segunda', active: true, start: '17:00', end: '08:00' },
-    { day: 'Terça', active: true, start: '17:00', end: '08:00' },
-    { day: 'Quarta', active: true, start: '17:00', end: '08:00' },
-    { day: 'Quinta', active: true, start: '17:00', end: '08:00' },
-    { day: 'Sexta', active: true, start: '17:00', end: '08:00' },
-    { day: 'Sábado', active: true, start: '00:00', end: '23:59' },
-    { day: 'Domingo', active: true, start: '00:00', end: '23:59' },
-  ],
-  ai_auto_morning: '00:00',
   ai_low_confidence_msg: 'Olá! Agradecemos sua pergunta. Alguém do nosso time vai responder em breve. Obrigado!',
   alert_warning: 15,
   alert_urgent: 30,
@@ -218,7 +208,6 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       // Se versão antiga, forçar defaults novos (schedule, etc)
       if ((local.config._version || 0) < CONFIG_VERSION) {
         const updated = { ...DEFAULT_CONFIG, ...local.config, _version: CONFIG_VERSION,
-          ai_auto_schedule: DEFAULT_CONFIG.ai_auto_schedule,
           schedule: DEFAULT_CONFIG.schedule,
         };
         setConfig(updated);
@@ -1058,50 +1047,25 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${PALETTE.sand}` }}>
               <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>🤖 Resposta Automática da IA</div>
               <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
-                A IA responde automaticamente quando tem alta confiança. Se não tiver confiança, envia mensagem padrão.
+                A IA responde automaticamente <b>fora do horário de atendimento</b> (configurado na aba Horários). Quando tem alta confiança, envia a resposta. Se não tiver confiança, envia a mensagem padrão abaixo.
               </div>
-              <label style={{ ...S, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginBottom: 8 }}>
+              <label style={{ ...S, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 10, padding: '8px 12px', background: config.ai_auto_enabled ? PALETTE.greenLight : PALETTE.sand, borderRadius: 6 }}>
                 <input type="checkbox" checked={config.ai_auto_enabled || false}
                   onChange={() => saveConfig({ ...config, ai_auto_enabled: !config.ai_auto_enabled })} />
-                <b>Ativar resposta automática da IA</b>
+                <b>IA responde fora do horário de atendimento</b>
               </label>
 
-              {config.ai_auto_enabled && (<>
-                <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>Horário da IA (responde sozinha)</div>
-                {(config.ai_auto_schedule || []).map((day, i) => (
-                  <div key={day.day} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, opacity: day.active ? 1 : 0.4 }}>
-                    <label style={{ ...S, display: 'flex', alignItems: 'center', gap: 4, width: 85, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={day.active} onChange={() => {
-                        const s = [...(config.ai_auto_schedule || [])];
-                        s[i] = { ...s[i], active: !s[i].active };
-                        saveConfig({ ...config, ai_auto_schedule: s });
-                      }} />
-                      {day.day}
-                    </label>
-                    {day.active && <>
-                      <input type="time" value={day.start} onChange={e => {
-                        const s = [...(config.ai_auto_schedule || [])];
-                        s[i] = { ...s[i], start: e.target.value };
-                        saveConfig({ ...config, ai_auto_schedule: s });
-                      }} style={{ ...S, fontSize: 12, padding: '3px 4px', border: `1px solid ${PALETTE.border}`, borderRadius: 4 }} />
-                      <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>às</span>
-                      <input type="time" value={day.end} onChange={e => {
-                        const s = [...(config.ai_auto_schedule || [])];
-                        s[i] = { ...s[i], end: e.target.value };
-                        saveConfig({ ...config, ai_auto_schedule: s });
-                      }} style={{ ...S, fontSize: 12, padding: '3px 4px', border: `1px solid ${PALETTE.border}`, borderRadius: 4 }} />
-                    </>}
-                  </div>
-                ))}
-
-                <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginTop: 8, marginBottom: 3 }}>Mensagem quando sem confiança</div>
-                <textarea
-                  value={config.ai_low_confidence_msg || ''}
-                  onChange={e => saveConfig({ ...config, ai_low_confidence_msg: e.target.value })}
-                  rows={2}
-                  style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }}
-                />
-              </>)}
+              {config.ai_auto_enabled && (
+                <div>
+                  <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 3 }}>Mensagem quando sem confiança</div>
+                  <textarea
+                    value={config.ai_low_confidence_msg || ''}
+                    onChange={e => saveConfig({ ...config, ai_low_confidence_msg: e.target.value })}
+                    rows={2}
+                    style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1131,7 +1095,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
             <div style={{ ...S, fontSize: 13, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>📚 Treinar IA — Adicionar Perguntas e Respostas</div>
             <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 10, lineHeight: 1.4 }}>
-              Adicione perguntas e respostas reais pra IA aprender. Quanto mais exemplos, melhor as sugestões.
+              Adicione perguntas e respostas reais pra IA aprender. Vale pra todas as lojas (Exitus, Lumia, Muniam).
             </div>
             <div style={{ marginBottom: 6 }}>
               <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>Pergunta do cliente</div>
@@ -1143,29 +1107,52 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
               <textarea id="qa-resposta" rows={3} placeholder="Ex: Olá! Sim, o tamanho G corresponde ao 42..."
                 style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }} />
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <select id="qa-brand" style={{ ...S, padding: '6px 8px', fontSize: 12, border: `1px solid ${PALETTE.border}`, borderRadius: 4 }}>
-                <option value="Exitus">Exitus</option>
-                <option value="Lumia">Lumia</option>
-                <option value="Muniam">Muniam</option>
-              </select>
-              <Btn primary small onClick={async () => {
-                const pergunta = document.getElementById('qa-pergunta')?.value?.trim();
-                const resposta = document.getElementById('qa-resposta')?.value?.trim();
-                const brand = document.getElementById('qa-brand')?.value || 'Exitus';
-                if (!pergunta || !resposta) { alert('Preencha pergunta e resposta'); return; }
-                try {
-                  if (supabase) {
-                    await supabase.from('ml_qa_history').insert({
+            <Btn primary small onClick={async () => {
+              const pergunta = document.getElementById('qa-pergunta')?.value?.trim();
+              const resposta = document.getElementById('qa-resposta')?.value?.trim();
+              if (!pergunta || !resposta) { alert('Preencha pergunta e resposta'); return; }
+              try {
+                if (supabase) {
+                  const brands = ['Exitus', 'Lumia', 'Muniam'];
+                  await Promise.all(brands.map(brand =>
+                    supabase.from('ml_qa_history').insert({
                       brand, item_id: 'MANUAL', question_text: pergunta, answer_text: resposta,
                       answered_by: currentUser || 'admin', answered_at: new Date().toISOString(),
-                    });
-                    document.getElementById('qa-pergunta').value = '';
+                    })
+                  ));
+                  document.getElementById('qa-pergunta').value = '';
+                  document.getElementById('qa-resposta').value = '';
+                  alert('✅ Salvo pra Exitus, Lumia e Muniam! A IA vai usar como referência.');
+                }
+              } catch (err) { alert('Erro: ' + err.message); }
+            }}>💾 Salvar pra todas as lojas</Btn>
+
+            {/* Quiz: IA quer aprender */}
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${PALETTE.sand}` }}>
+              <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>🧠 IA quer aprender</div>
+              <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
+                A IA gera perguntas que não sabe responder bem. Você confirma ou corrige — e ela aprende.
+              </div>
+              <Btn small onClick={async () => {
+                try {
+                  const data = await apiCall('/api/ml-ai', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      question_text: '_QUIZ_MODE_',
+                      item_id: '',
+                      brand: 'Exitus',
+                    }),
+                  });
+                  if (data.suggestion) {
+                    document.getElementById('qa-pergunta').value = data.suggestion;
                     document.getElementById('qa-resposta').value = '';
-                    alert('✅ Salvo! A IA vai usar como referência.');
+                    document.getElementById('qa-resposta').focus();
+                    alert('A IA gerou uma pergunta acima. Escreva a resposta correta e salve!');
+                  } else {
+                    alert('A IA não tem dúvidas no momento. Continue respondendo perguntas normalmente.');
                   }
                 } catch (err) { alert('Erro: ' + err.message); }
-              }}>💾 Salvar</Btn>
+              }}>🧠 Gerar pergunta pra eu responder</Btn>
             </div>
           </div>
         )}

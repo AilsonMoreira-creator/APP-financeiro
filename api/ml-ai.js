@@ -62,6 +62,41 @@ export default async function handler(req, res) {
     const { question_text, item_id, brand } = req.body;
     if (!question_text) return res.status(400).json({ error: 'Missing question_text' });
 
+    // Quiz mode: IA gera pergunta pra admin responder
+    if (question_text === '_QUIZ_MODE_') {
+      if (!process.env.ANTHROPIC_API_KEY) return res.json({ suggestion: null });
+      
+      let recentQA = '';
+      try {
+        const { data: recent } = await supabase.from('ml_qa_history')
+          .select('question_text').neq('answered_by', '_auto_absence')
+          .order('answered_at', { ascending: false }).limit(20);
+        if (recent?.length > 0) {
+          recentQA = recent.map(q => q.question_text).join('\n');
+        }
+      } catch {}
+
+      const quizRes = await fetch(CLAUDE_API, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 200,
+          system: `Você é um comprador no Mercado Livre querendo comprar roupas femininas de linho/alfaiataria. Gere UMA pergunta realista que um cliente faria sobre tamanhos, tecido, medidas, cuidados ou disponibilidade. A pergunta deve ser diferente destas já existentes:\n${recentQA}\n\nRetorne APENAS a pergunta, sem aspas.`,
+          messages: [{ role: 'user', content: 'Gere uma pergunta de cliente:' }],
+        }),
+      });
+      if (quizRes.ok) {
+        const qData = await quizRes.json();
+        return res.json({ suggestion: qData.content?.[0]?.text?.trim() || null });
+      }
+      return res.json({ suggestion: null });
+    }
+
     const aiConfig = await getAIConfig();
     if (!aiConfig.enabled) return res.json({ suggestion: null, reason: 'AI disabled' });
 
