@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     if (req.method === 'GET') {
-      const { action, code, brand } = req.query;
+      const { action, code, brand, state } = req.query;
 
       if (action === 'url') {
         const authUrl = `${ML_AUTH}/authorization?response_type=code&client_id=${process.env.ML_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.ML_REDIRECT_URI)}`;
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
 
       if (action === 'callback' && code) {
         const tokenData = await exchangeCode(code);
-        const brandName = brand || 'Unknown';
+        const brandName = brand || state || 'Unknown';
         const saved = await saveToken(brandName, tokenData);
         return res.json({ success: true, brand: brandName, seller_id: saved.seller_id });
       }
