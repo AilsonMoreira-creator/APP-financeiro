@@ -197,6 +197,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   const [answeredToday, setAnsweredToday] = useState([]);
   const [qaHistory, setQaHistory] = useState([]);
   const [error, setError] = useState(null);
+  const [stockAlerts, setStockAlerts] = useState([]);
 
   const heartbeatRef = useRef(null);
   const syncRef = useRef(null);
@@ -223,6 +224,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
     // Initial fetch
     fetchQuestions();
     fetchLocks();
+    fetchStockAlerts();
 
     // Sync interval
     syncRef.current = setInterval(() => {
@@ -283,7 +285,6 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   async function fetchAnswered() {
     try {
       const data = await apiCall('/api/ml-questions?status=ANSWERED');
-      // Filtrar só últimas 24h
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
       const recent = (data.questions || []).filter(
         q => q.answer && new Date(q.answer.date_created).getTime() > cutoff
@@ -292,6 +293,27 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
     } catch (err) {
       console.error('[MLPerguntas] Fetch answered error:', err);
     }
+  }
+
+  // ── Stock alerts ──
+  async function fetchStockAlerts() {
+    if (!supabase) return;
+    try {
+      const { data } = await supabase.from('ml_stock_alerts')
+        .select('*').order('promised_at', { ascending: false }).limit(50);
+      setStockAlerts(data || []);
+    } catch (err) { console.error('[MLPerguntas] Stock alerts error:', err); }
+  }
+
+  async function resolveStockAlert(alertId, resolved) {
+    if (!supabase) return;
+    try {
+      await supabase.from('ml_stock_alerts').update({
+        status: resolved ? 'resolvido' : 'cancelado',
+        resolved_by: currentUser, resolved_at: new Date().toISOString(),
+      }).eq('id', alertId);
+      fetchStockAlerts();
+    } catch (err) { console.error('[MLPerguntas] Resolve alert error:', err); }
   }
 
   // ── Fetch locks ──
@@ -499,11 +521,13 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
               { id: 'respondidas', label: 'Respondidas (24h)', badge: 0 },
               { id: 'ausencia', label: 'Ausência', badge: 0 },
               { id: 'ia_resp', label: 'IA', badge: 0 },
+              { id: 'estoque', label: '📦 Estoque', badge: stockAlerts.filter(a => a.status === 'pendente').length },
               { id: 'arquivo', label: 'Arquivo', badge: 0 },
             ].map(t => (
               <button key={t.id} onClick={() => {
                 setTab(t.id);
                 if (t.id === 'respondidas' || t.id === 'ausencia' || t.id === 'ia_resp') fetchAnswered();
+                if (t.id === 'estoque') fetchStockAlerts();
               }} style={{
                 ...S, padding: '5px 12px', fontSize: 11, fontWeight: 600,
                 border: 'none', borderRadius: 5, cursor: 'pointer',
@@ -567,6 +591,71 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 🤖 Nenhuma resposta da IA nas últimas 24h
               </div>
             ) : answeredToday.filter(q => q.answered_by === '_auto_ia').map(q => renderQuestionCard(q))}
+          </div>
+        ) : tab === 'estoque' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {stockAlerts.length === 0 ? (
+              <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.green, fontSize: 14, fontWeight: 600 }}>
+                ✅ Nenhum alerta de estoque!
+              </div>
+            ) : stockAlerts.map(alert => (
+              <div key={alert.id} style={{
+                background: PALETTE.white,
+                border: `1px solid ${alert.status === 'pendente' ? PALETTE.orange : PALETTE.border}`,
+                borderRadius: 8, overflow: 'hidden',
+                borderLeft: `4px solid ${alert.status === 'pendente' ? PALETTE.orange : PALETTE.green}`,
+              }}>
+                <div style={{ padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <BrandTag brand={alert.brand} />
+                    <span style={{
+                      ...S, fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
+                      background: alert.status === 'pendente' ? PALETTE.orangeLight : PALETTE.greenLight,
+                      color: alert.status === 'pendente' ? PALETTE.orange : PALETTE.green,
+                    }}>
+                      {alert.status === 'pendente' ? '⚠️ Pendente' : '✅ Resolvido'}
+                    </span>
+                    <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                      {new Date(alert.promised_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                      por {alert.promised_by === '_auto_ia' ? '🤖 IA' : alert.promised_by}
+                    </span>
+                  </div>
+                  <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>
+                    {alert.item_title || alert.item_id}
+                  </div>
+                  <div style={{ ...S, fontSize: 11, color: PALETTE.textLight, marginBottom: 8 }}>{alert.item_id}</div>
+                  <div style={{
+                    ...S, fontSize: 13, padding: '8px 10px', borderRadius: 6,
+                    background: alert.status === 'pendente' ? '#fff8f0' : '#f0fff4',
+                    border: `1px solid ${alert.status === 'pendente' ? '#ffe0b2' : '#c8e6c9'}`,
+                    color: PALETTE.dark, lineHeight: 1.4,
+                  }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4, color: alert.status === 'pendente' ? PALETTE.orange : PALETTE.green }}>
+                      📦 {alert.detail}
+                    </div>
+                    <div style={{ fontSize: 12, color: PALETTE.textLight }}>
+                      <b>Pergunta:</b> "{alert.question_text}"
+                    </div>
+                    <div style={{ fontSize: 12, color: PALETTE.textLight, marginTop: 2 }}>
+                      <b>Resposta:</b> "{(alert.answer_text || '').slice(0, 120)}..."
+                    </div>
+                  </div>
+                  {alert.status === 'pendente' && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                      <Btn primary small onClick={() => resolveStockAlert(alert.id, true)}>✅ Peça incluída</Btn>
+                      <Btn small onClick={() => resolveStockAlert(alert.id, false)}>❌ Não foi possível</Btn>
+                    </div>
+                  )}
+                  {alert.status !== 'pendente' && alert.resolved_by && (
+                    <div style={{ ...S, fontSize: 11, color: PALETTE.green, marginTop: 6 }}>
+                      ✅ {alert.status === 'resolvido' ? 'Resolvido' : 'Cancelado'} por {alert.resolved_by} em {new Date(alert.resolved_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.green, fontSize: 14, fontWeight: 600 }}>

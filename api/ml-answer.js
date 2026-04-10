@@ -36,6 +36,23 @@ export default async function handler(req, res) {
       });
     } catch (e) { console.error('[ml-answer] History error:', e.message); }
 
+    // Detectar promessa de estoque
+    try {
+      const stockKeywords = ['disponibilizar', 'incluir no estoque', 'estoque de segurança', 'vamos incluir', 'acrescentar', 'vamos adicionar'];
+      const lowerText = text.toLowerCase();
+      const hasStockPromise = stockKeywords.some(kw => lowerText.includes(kw));
+      if (hasStockPromise) {
+        await supabase.from('ml_stock_alerts').insert({
+          brand, item_id: item_id || null, item_title: '',
+          question_text: question_text || '', answer_text: text,
+          detail: 'Promessa de inclusão no estoque detectada na resposta',
+          promised_by: answered_by || 'unknown', promised_at: new Date().toISOString(),
+          status: 'pendente',
+        });
+        console.log(`[ml-answer] Stock alert created for Q${question_id}`);
+      }
+    } catch (e) { console.error('[ml-answer] Stock alert error:', e.message); }
+
     // Remover lock
     try {
       await supabase.from('ml_question_locks').delete().eq('question_id', String(question_id));
