@@ -1,6 +1,69 @@
-import { supabase, getValidToken, isOutsideBusinessHours, getAbsenceMessage } from './_ml-helpers.js';
+import { supabase, getValidToken, isOutsideBusinessHours, getAbsenceMessage, isInAISchedule, getAILowConfidenceMsg } from './_ml-helpers.js';
 
 const ML_API = 'https://api.mercadolibre.com';
+const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
+
+async function getAIAutoResponse(questionText, itemId, brand) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+
+  let title = '', desc = '';
+  try {
+    const token = await getValidToken(brand);
+    const [tRes, dRes] = await Promise.all([
+      fetch(`${ML_API}/items/${itemId}?attributes=title`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${ML_API}/items/${itemId}/description`, { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    if (tRes.ok) title = (await tRes.json()).title || '';
+    if (dRes.ok) desc = ((await dRes.json()).plain_text || '').slice(0, 1500);
+  } catch {}
+
+  let qaExamples = '';
+  try {
+    const { data: sameItem } = await supabase.from('ml_qa_history')
+      .select('question_text, answer_text').eq('item_id', itemId)
+      .neq('answered_by', '_auto_absence').neq('answered_by', '_auto_ia_low')
+      .order('answered_at', { ascending: false }).limit(5);
+    if (sameItem?.length > 0) {
+      qaExamples = sameItem.map((qa, i) => `Ex${i+1}: P: ${qa.question_text}\nR: ${qa.answer_text}`).join('\n');
+    }
+  } catch {}
+
+  let tone = 'Formal mas amigável. Foco em conversão.';
+  try {
+    const { data } = await supabase.from('amicia_data').select('data').eq('user_id', 'ml-perguntas-config').single();
+    if (data?.data?.config?.ai_tone) tone = data.data.config.ai_tone;
+  } catch {}
+
+  const claudeRes = await fetch(CLAUDE_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      system: `Você é atendente da Amícia (moda feminina, Mercado Livre).
+TOM: ${tone}
+REGRAS:
+- Gere a resposta COMPLETA: saudação + corpo + despedida
+- Max 500 caracteres total
+- NUNCA invente informações que não estejam na descrição ou nos exemplos
+- NUNCA passe telefone ou direcione fora da plataforma
+- Se não souber responder com certeza, responda APENAS: BAIXA_CONFIANCA
+- Responda APENAS o texto da resposta ou BAIXA_CONFIANCA`,
+      messages: [{ role: 'user', content: `PRODUTO: ${title}\nDESCRIÇÃO: ${desc || 'N/A'}\n\nEXEMPLOS:\n${qaExamples || 'Nenhum'}\n\nPERGUNTA: "${questionText}"\n\nResponda:` }],
+    }),
+  });
+
+  if (!claudeRes.ok) return null;
+  const data = await claudeRes.json();
+  const response = data.content?.[0]?.text?.trim();
+  if (!response) return null;
+  if (response.includes('BAIXA_CONFIANCA')) return { text: null, confidence: 'low' };
+  return { text: response, confidence: 'high' };
+}
 
 export default async function handler(req, res) {
   try {
@@ -9,7 +72,6 @@ export default async function handler(req, res) {
     const { resource, user_id, topic } = req.body;
     if (topic !== 'questions' || !resource) return res.status(200).json({ ignored: true });
 
-    // Identificar marca pelo seller_id
     const { data: tokenRec } = await supabase
       .from('ml_tokens').select('brand').eq('seller_id', String(user_id)).single();
     if (!tokenRec) return res.status(200).json({ ignored: true, reason: 'unknown_seller' });
@@ -26,8 +88,50 @@ export default async function handler(req, res) {
 
     if (question.status === 'UNANSWERED') {
       const outside = await isOutsideBusinessHours();
+      const inAISchedule = await isInAISchedule();
+      let autoStatus = 'pending';
 
-      if (outside) {
+      // Prioridade 1: Dentro do horário da IA → resposta automática
+      if (inAISchedule) {
+        try {
+          const aiResult = await getAIAutoResponse(question.text, question.item_id, brand);
+          if (aiResult?.confidence === 'high' && aiResult.text) {
+            const ansRes = await fetch(`${ML_API}/answers`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ question_id: question.id, text: aiResult.text }),
+            });
+            if (ansRes.ok) {
+              await supabase.from('ml_qa_history').insert({
+                question_id: question.id, brand, item_id: question.item_id,
+                question_text: question.text, answer_text: aiResult.text,
+                answered_by: '_auto_ia', answered_at: new Date().toISOString(),
+              });
+              autoStatus = 'auto_ia';
+            }
+          } else {
+            const lowMsg = await getAILowConfidenceMsg();
+            const ansRes = await fetch(`${ML_API}/answers`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ question_id: question.id, text: lowMsg }),
+            });
+            if (ansRes.ok) {
+              await supabase.from('ml_qa_history').insert({
+                question_id: question.id, brand, item_id: question.item_id,
+                question_text: question.text, answer_text: lowMsg,
+                answered_by: '_auto_ia_low', answered_at: new Date().toISOString(),
+              });
+              autoStatus = 'auto_ia_low';
+            }
+          }
+        } catch (aiErr) {
+          console.error('[ml-webhook] AI error:', aiErr.message);
+        }
+      }
+
+      // Prioridade 2: Fora do horário → ausência (só se IA não respondeu)
+      if (outside && autoStatus === 'pending') {
         const msg = await getAbsenceMessage();
         const ansRes = await fetch(`${ML_API}/answers`, {
           method: 'POST',
@@ -40,14 +144,14 @@ export default async function handler(req, res) {
             question_text: question.text, answer_text: msg,
             answered_by: '_auto_absence', answered_at: new Date().toISOString(),
           });
+          autoStatus = 'auto_absence';
         }
       }
 
       await supabase.from('ml_pending_questions').upsert({
         question_id: String(question.id), brand, item_id: question.item_id,
         question_text: question.text, buyer_id: String(question.from?.id || ''),
-        date_created: question.date_created,
-        status: outside ? 'auto_answered' : 'pending',
+        date_created: question.date_created, status: autoStatus,
         received_at: new Date().toISOString(),
       }, { onConflict: 'question_id' });
     }

@@ -114,6 +114,57 @@ export async function getAbsenceMessage() {
   }
 }
 
+// ── AI Auto-response schedule check ──
+
+export async function isInAISchedule() {
+  try {
+    const { data } = await supabase
+      .from('amicia_data')
+      .select('data')
+      .eq('user_id', 'ml-perguntas-config')
+      .single();
+
+    if (!data?.data?.config?.ai_auto_enabled) return false;
+    const schedule = data.data.config.ai_auto_schedule;
+    if (!schedule) return false;
+
+    const now = new Date();
+    const spTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const dayIndex = spTime.getDay();
+    const scheduleIndex = dayIndex === 0 ? 6 : dayIndex - 1;
+    const daySchedule = schedule[scheduleIndex];
+
+    if (!daySchedule || !daySchedule.active) return false;
+
+    const currentTime = spTime.getHours() * 60 + spTime.getMinutes();
+    const [sH, sM] = daySchedule.start.split(':').map(Number);
+    const [eH, eM] = daySchedule.end.split(':').map(Number);
+    const startTime = sH * 60 + sM;
+    const endTime = eH * 60 + eM;
+
+    // Handle overnight (e.g. 17:00 to 23:59 + 00:00 to 08:00)
+    if (endTime >= startTime) {
+      return currentTime >= startTime && currentTime <= endTime;
+    } else {
+      return currentTime >= startTime || currentTime <= endTime;
+    }
+  } catch { return false; }
+}
+
+export async function getAILowConfidenceMsg() {
+  try {
+    const { data } = await supabase
+      .from('amicia_data')
+      .select('data')
+      .eq('user_id', 'ml-perguntas-config')
+      .single();
+    return data?.data?.config?.ai_low_confidence_msg ||
+      'Olá! Agradecemos sua pergunta. Alguém do nosso time vai responder em breve. Obrigado!';
+  } catch {
+    return 'Olá! Agradecemos sua pergunta. Alguém do nosso time vai responder em breve. Obrigado!';
+  }
+}
+
 // ── CORS headers ──
 
 export function setCors(res) {
