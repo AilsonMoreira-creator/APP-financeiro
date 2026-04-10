@@ -47,11 +47,15 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       system: `Você é atendente da Amícia (moda feminina, Mercado Livre).
 TOM: ${tone}
 REGRAS:
-- Gere a resposta COMPLETA: saudação + corpo + despedida
+- Gere a resposta COMPLETA com saudação + corpo + despedida
+- Saudação: use "Olá! Bom dia!", "Olá! Boa tarde!" ou "Olá! Boa noite!" conforme horário de Brasília
+- Despedida: "Agradecemos seu contato! Boas compras!" ou "Qualquer dúvida, estamos à disposição!"
 - Max 500 caracteres total
 - NUNCA invente informações que não estejam na descrição ou nos exemplos
-- NUNCA passe telefone ou direcione fora da plataforma
-- Se não souber responder com certeza, responda APENAS: BAIXA_CONFIANCA
+- NUNCA passe telefone, WhatsApp ou direcione fora da plataforma
+- NUNCA sugira enviar fotos adicionais — as fotos são apenas as do anúncio
+- NUNCA prometa incluir peças no estoque ou disponibilizar tamanhos/cores esgotadas
+- Se não souber responder com certeza baseado na descrição e exemplos, responda APENAS: BAIXA_CONFIANCA
 - Responda APENAS o texto da resposta ou BAIXA_CONFIANCA`,
       messages: [{ role: 'user', content: `PRODUTO: ${title}\nDESCRIÇÃO: ${desc || 'N/A'}\n\nEXEMPLOS:\n${qaExamples || 'Nenhum'}\n\nPERGUNTA: "${questionText}"\n\nResponda:` }],
     }),

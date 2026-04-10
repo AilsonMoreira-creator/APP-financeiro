@@ -869,6 +869,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       { id: 'ausencia', label: '🌙 Ausência' },
       { id: 'ia', label: '🤖 IA' },
       { id: 'alertas', label: '🔔 Alertas' },
+      { id: 'treinamento', label: '📚 Treinar IA' },
     ];
 
     return (
@@ -1107,6 +1108,50 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>min</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* TREINAMENTO IA */}
+        {configSection === 'treinamento' && (
+          <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
+            <div style={{ ...S, fontSize: 13, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>📚 Treinar IA — Adicionar Perguntas e Respostas</div>
+            <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 10, lineHeight: 1.4 }}>
+              Adicione perguntas e respostas reais pra IA aprender. Quanto mais exemplos, melhor as sugestões.
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>Pergunta do cliente</div>
+              <textarea id="qa-pergunta" rows={2} placeholder="Ex: Esse vestido veste bem quem usa 42?"
+                style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }} />
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>Resposta ideal</div>
+              <textarea id="qa-resposta" rows={3} placeholder="Ex: Olá! Sim, o tamanho G corresponde ao 42..."
+                style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select id="qa-brand" style={{ ...S, padding: '6px 8px', fontSize: 12, border: `1px solid ${PALETTE.border}`, borderRadius: 4 }}>
+                <option value="Exitus">Exitus</option>
+                <option value="Lumia">Lumia</option>
+                <option value="Muniam">Muniam</option>
+              </select>
+              <Btn primary small onClick={async () => {
+                const pergunta = document.getElementById('qa-pergunta')?.value?.trim();
+                const resposta = document.getElementById('qa-resposta')?.value?.trim();
+                const brand = document.getElementById('qa-brand')?.value || 'Exitus';
+                if (!pergunta || !resposta) { alert('Preencha pergunta e resposta'); return; }
+                try {
+                  if (supabase) {
+                    await supabase.from('ml_qa_history').insert({
+                      brand, item_id: 'MANUAL', question_text: pergunta, answer_text: resposta,
+                      answered_by: currentUser || 'admin', answered_at: new Date().toISOString(),
+                    });
+                    document.getElementById('qa-pergunta').value = '';
+                    document.getElementById('qa-resposta').value = '';
+                    alert('✅ Salvo! A IA vai usar como referência.');
+                  }
+                } catch (err) { alert('Erro: ' + err.message); }
+              }}>💾 Salvar</Btn>
+            </div>
           </div>
         )}
       </div>

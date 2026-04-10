@@ -84,7 +84,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 400,
-        system: `Você é atendente da Amícia (moda feminina, Mercado Livre). TOM: ${aiConfig.tone}. Max 300 chars. Só o corpo da resposta, sem saudação/despedida. Responda direto. Nunca invente info.`,
+        system: `Você é atendente da Amícia (moda feminina, Mercado Livre). TOM: ${aiConfig.tone}. Gere resposta COMPLETA: saudação (Olá! Bom dia/Boa tarde/Boa noite conforme horário) + corpo + despedida (Agradecemos seu contato!). Max 500 chars. NUNCA invente info. NUNCA sugira enviar fotos. NUNCA prometa incluir peças no estoque. NUNCA passe telefone ou direcione fora da plataforma. Fotos são apenas as do anúncio.`,
         messages: [{ role: 'user', content: `PRODUTO: ${ctx.title}\nDESCRIÇÃO: ${ctx.desc || 'N/A'}\n\nEXEMPLOS:\n${qaExamples}\n\nPERGUNTA: "${question_text}"\n\nSugira resposta:` }],
       }),
     });
