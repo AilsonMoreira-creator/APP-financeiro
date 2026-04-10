@@ -71,24 +71,6 @@ export async function blingFetch(url, headers, { maxRetries = 3, baseDelay = 100
 
 // ── Refresh token Bling ──
 export async function refreshBlingToken(conta) {
-  // Busca creds do amicia_data
-  const { data: credsData, error: credsErr } = await supabase
-    .from('amicia_data')
-    .select('payload')
-    .eq('user_id', 'bling-creds')
-    .single();
-
-  if (credsErr || !credsData?.payload) {
-    throw new Error(`sem creds no Supabase (bling-creds): ${credsErr?.message || 'payload vazio'}`);
-  }
-
-  if (!credsData.payload[conta]?.id || !credsData.payload[conta]?.secret) {
-    const keys = Object.keys(credsData.payload);
-    throw new Error(`sem client_id/secret para ${conta} (chaves encontradas: ${keys.join(',')})`);
-  }
-
-  const creds = credsData.payload[conta];
-
   // Busca token atual
   const { data: tokenData, error: tokenErr } = await supabase
     .from('bling_tokens')
@@ -100,15 +82,32 @@ export async function refreshBlingToken(conta) {
     throw new Error(`sem registro em bling_tokens para ${conta}: ${tokenErr?.message || 'não encontrado'}`);
   }
 
-  if (!tokenData.refresh_token) {
-    throw new Error(`bling_tokens.${conta} existe mas sem refresh_token`);
-  }
-
-  // Verifica se precisa renovar
+  // Se token ainda é válido, usa direto (não precisa de creds)
   const expirado = !tokenData.expires_at || new Date(tokenData.expires_at) < new Date();
   if (!expirado && tokenData.access_token) {
     return tokenData.access_token;
   }
+
+  // Token expirado — precisa das creds pra renovar
+  if (!tokenData.refresh_token) {
+    throw new Error(`bling_tokens.${conta} token expirado e sem refresh_token`);
+  }
+
+  const { data: credsData, error: credsErr } = await supabase
+    .from('amicia_data')
+    .select('payload')
+    .eq('user_id', 'bling-creds')
+    .maybeSingle();
+
+  if (credsErr || !credsData?.payload) {
+    throw new Error(`token ${conta} expirado e sem creds no Supabase pra renovar. Abra Config no app pra salvar as creds.`);
+  }
+
+  if (!credsData.payload[conta]?.id || !credsData.payload[conta]?.secret) {
+    throw new Error(`token ${conta} expirado e creds incompletas (sem client_id/secret)`);
+  }
+
+  const creds = credsData.payload[conta];
 
   // Renova
   console.log(`[bling-cron] renovando token ${conta}...`);
