@@ -1,4 +1,4 @@
-// @ts-nocheck 
+// @ts-nocheck  
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase, USER_ID } from "./supabase.js";
 import MLPerguntas from './MLPerguntas';
