@@ -38,9 +38,9 @@ const PALETTE = {
 };
 
 const BRANDS = {
-  Exitus: { color: '#2c3e50', bg: '#2c3e5018' },
-  Lumia: { color: '#8e44ad', bg: '#8e44ad18' },
-  Muniam: { color: '#e67e22', bg: '#e67e2218' },
+  Exitus: { color: '#4a3a2a', bg: '#d4c8a8' },
+  Lumia: { color: '#4a3a2a', bg: '#b8a88a' },
+  Muniam: { color: '#4a3a2a', bg: '#8a7560' },
 };
 
 const DAYS_OF_WEEK = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
@@ -121,7 +121,7 @@ const BrandTag = ({ brand }) => (
   <span style={{
     ...S, fontSize: 10, padding: '2px 8px', borderRadius: 3, fontWeight: 700,
     letterSpacing: 0.5, textTransform: 'uppercase',
-    background: BRANDS[brand]?.bg, color: BRANDS[brand]?.color,
+    background: BRANDS[brand]?.bg || '#ccc', color: brand === 'Muniam' ? '#fff' : BRANDS[brand]?.color || '#333',
   }}>{brand}</span>
 );
 
@@ -576,14 +576,14 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       <div>
         {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {[
-              { id: 'pendentes', label: 'Pendentes', badge: pending.length },
-              { id: 'posvenda', label: '📦 Pós-Venda', badge: pvUnread },
-              { id: 'respondidas', label: 'Respondidas (24h)', badge: answeredToday.length },
-              { id: 'ausencia', label: 'Ausência', badge: absenceResponses.length },
-              { id: 'ia_resp', label: '✨ IA', badge: aiResponses.length },
-              { id: 'estoque', label: '📦 Estoque', badge: stockAlerts.filter(a => a.status === 'pendente').length },
+              { id: 'pendentes', label: 'Pendentes', badge: pending.length, badgeColor: PALETTE.red },
+              { id: 'posvenda', label: '📦 Pós-Venda', badge: pvUnread, badgeColor: PALETTE.blue },
+              { id: 'respondidas', label: 'Respondidas (24h)', badge: answeredToday.length, badgeColor: PALETTE.textLight },
+              ...(absenceResponses.length > 0 ? [{ id: 'ausencia', label: 'Ausência', badge: absenceResponses.length, badgeColor: PALETTE.textLight }] : []),
+              { id: 'ia_resp', label: '✨ IA', badge: aiResponses.length, badgeColor: PALETTE.textLight },
+              { id: 'estoque', label: '📦 Estoque', badge: stockAlerts.filter(a => a.status === 'pendente').length, badgeColor: PALETTE.red },
               { id: 'arquivo', label: 'Arquivo', badge: 0 },
             ].map(t => (
               <button key={t.id} onClick={() => {
@@ -597,13 +597,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 color: tab === t.id ? '#fff' : PALETTE.text,
               }}>
                 {t.label}
-                {t.badge > 0 && <Badge count={t.badge} />}
+                {t.badge > 0 && <Badge count={t.badge} color={t.badgeColor} />}
               </button>
             ))}
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <Btn small onClick={() => setShowTemplates(!showTemplates)}>⚡ Rápidas</Btn>
-            <Btn small onClick={() => { fetchQuestions(); fetchLocks(); }}>🔄</Btn>
           </div>
         </div>
 
@@ -805,9 +801,21 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         background: PALETTE.white,
         border: `1px solid ${isExpanded ? PALETTE.blue : PALETTE.border}`,
         borderRadius: 8, overflow: 'hidden',
-        borderLeft: `4px solid ${BRANDS[q.brand]?.color || PALETTE.dark}`,
+        borderLeft: `4px solid ${BRANDS[q.brand]?.bg || PALETTE.dark}`,
         opacity: lockedByOther ? 0.7 : 1,
+        position: 'relative',
       }}>
+        {/* Botão X para arquivar */}
+        {!isAnswered && (
+          <button onClick={async (e) => {
+            e.stopPropagation();
+            if (!confirm('Arquivar essa pergunta?')) return;
+            try {
+              await supabase.from('ml_pending_questions').update({ status: 'archived' }).eq('question_id', String(q.id));
+              fetchQuestions();
+            } catch {}
+          }} style={{ position: 'absolute', top: 6, right: 8, background: 'none', border: 'none', color: PALETTE.textLight, cursor: 'pointer', fontSize: 14, padding: '2px 4px', zIndex: 2 }}>✕</button>
+        )}
         {/* Card header */}
         <div
           onClick={() => !isAnswered && !lockedByOther && handleExpand(q.id)}
@@ -1108,6 +1116,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       { id: 'ia', label: '✨ IA' },
       { id: 'alertas', label: '🔔 Alertas' },
       { id: 'treinamento', label: '📚 Treinar IA' },
+      { id: 'treinamento_pv', label: '📚 Pós-Venda' },
     ];
 
     return (
@@ -1533,6 +1542,43 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             </div>
           </div>
         )}
+
+        {/* TREINAMENTO PÓS-VENDA */}
+        {configSection === 'treinamento_pv' && (
+          <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
+            <div style={{ ...S, fontSize: 13, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>📚 Treinar IA — Pós-Venda</div>
+            <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 10, lineHeight: 1.4 }}>
+              Adicione situações reais de pós-venda e respostas ideais. A IA usa como referência nas sugestões.
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>Situação do cliente</div>
+              <textarea id="qa-pv-situacao" rows={2} placeholder='Ex: "Recebi o produto com defeito"'
+                style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }} />
+            </div>
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ ...S, fontSize: 12, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>Resposta ideal</div>
+              <textarea id="qa-pv-resposta" rows={3} placeholder='Ex: "Lamentamos o ocorrido! Vamos resolver..."'
+                style={{ ...S, width: '100%', padding: 8, fontSize: 13, border: `1px solid ${PALETTE.border}`, borderRadius: 5, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.4 }} />
+            </div>
+            <Btn primary small onClick={async () => {
+              const situacao = document.getElementById('qa-pv-situacao')?.value?.trim();
+              const resposta = document.getElementById('qa-pv-resposta')?.value?.trim();
+              if (!situacao || !resposta) { alert('Preencha situação e resposta'); return; }
+              try {
+                const brands = ['Exitus', 'Lumia', 'Muniam'];
+                await Promise.all(brands.map(brand =>
+                  supabase.from('ml_qa_history_posvenda').insert({
+                    brand, situation_text: situacao, answer_text: resposta,
+                    answered_by: currentUser || 'admin', answered_at: new Date().toISOString(),
+                  })
+                ));
+                document.getElementById('qa-pv-situacao').value = '';
+                document.getElementById('qa-pv-resposta').value = '';
+                alert('✅ Salvo pra Exitus, Lumia e Muniam!');
+              } catch (err) { alert('Erro: ' + err.message); }
+            }}>💾 Salvar pra todas as lojas</Btn>
+          </div>
+        )}
       </div>
     );
   }
@@ -1542,13 +1588,13 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   // ══════════════════════════════════════════════════════════
 
   const pages = [
-    { id: 'respostas', label: '💬 Respostas', badge: pending.length },
+    { id: 'respostas', label: '💬 Perguntas', badge: 0 },
     { id: 'dashboard', label: '📊 Dashboard', badge: 0 },
     { id: 'config', label: '⚙️ Config', badge: 0 },
   ];
 
   return (
-    <div style={{ maxWidth: 700, margin: '0 auto' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
       {/* Header */}
       <div style={{
         background: PALETTE.dark, padding: '12px 14px', borderRadius: '8px 8px 0 0',
@@ -1564,8 +1610,12 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             </div>
           </div>
         </div>
-        <div style={{ ...S, background: '#ffffff18', padding: '3px 8px', borderRadius: 10, fontSize: 10, color: '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S, background: '#ffffff22', color: '#fff', border: '1px solid #ffffff33', borderRadius: 6, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>⚡ Rápidas</button>
+          <button onClick={() => { fetchQuestions(); fetchLocks(); }} style={{ ...S, background: '#ffffff22', color: '#fff', border: '1px solid #ffffff33', borderRadius: 6, padding: '4px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>🔄</button>
+          <span style={{ ...S, background: '#ffffff18', padding: '3px 8px', borderRadius: 10, fontSize: 10, color: '#fff' }}>
           {Object.keys(locks).length > 0 ? `🔒 ${Object.keys(locks).length} em atendimento` : '🟢 Online'}
+          </span>
         </div>
       </div>
 

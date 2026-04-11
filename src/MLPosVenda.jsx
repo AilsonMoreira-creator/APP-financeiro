@@ -10,9 +10,9 @@ const PALETTE = {
   orange: '#e67e22', orangeLight: '#e67e2222', text: '#2c3e50', textLight: '#7f8c8d', border: '#d5cec6',
 };
 const BRANDS = {
-  Exitus: { color: '#0057FF', bg: '#0057FF15' },
-  Lumia: { color: '#6c2bd9', bg: '#6c2bd915' },
-  Muniam: { color: '#0096c7', bg: '#0096c715' },
+  Exitus: { color: '#4a3a2a', bg: '#d4c8a8' },
+  Lumia: { color: '#4a3a2a', bg: '#b8a88a' },
+  Muniam: { color: '#fff', bg: '#8a7560' },
 };
 const TAGS = {
   urgente: { emoji: '🔴', label: 'Urgente', color: '#c0392b', bg: '#c0392b15' },
@@ -286,8 +286,8 @@ export default function MLPosVenda({ supabase, currentUser }) {
         <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>🔄</button>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+      {/* Filters — uma linha só */}
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10 }}>
         {[
           { id: 'todos', label: 'Todas' },
           { id: 'pendentes', label: '⏳ Pendentes', badge: openCount },
@@ -302,16 +302,13 @@ export default function MLPosVenda({ supabase, currentUser }) {
             {f.label} {f.badge > 0 && <span style={{ background: PALETTE.red, color: '#fff', borderRadius: 8, padding: '1px 5px', fontSize: 8, marginLeft: 2 }}>{f.badge}</span>}
           </button>
         ))}
-      </div>
-
-      {/* Brand filter */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+        <span style={{ ...S, fontSize: 10, color: PALETTE.textLight, padding: '4px 2px' }}>│</span>
         {['Todas', 'Exitus', 'Lumia', 'Muniam'].map(b => (
           <button key={b} onClick={() => setBrandFilter(b)} style={{
             ...S, padding: '3px 10px', fontSize: 10, fontWeight: 600, cursor: 'pointer',
-            border: brandFilter === b ? `2px solid ${b === 'Todas' ? PALETTE.dark : BRANDS[b]?.color}` : `1px solid ${PALETTE.border}`,
-            borderRadius: 4, background: brandFilter === b ? (b === 'Todas' ? PALETTE.dark + '12' : BRANDS[b]?.bg) : 'transparent',
-            color: b === 'Todas' ? PALETTE.dark : BRANDS[b]?.color,
+            border: brandFilter === b ? 'none' : `1px solid ${PALETTE.border}`,
+            borderRadius: 4, background: brandFilter === b ? (b === 'Todas' ? PALETTE.dark : BRANDS[b]?.bg) : 'transparent',
+            color: brandFilter === b ? (b === 'Muniam' || b === 'Todas' ? '#fff' : BRANDS[b]?.color) : PALETTE.text,
           }}>{b}</button>
         ))}
       </div>
@@ -364,35 +361,6 @@ export default function MLPosVenda({ supabase, currentUser }) {
         );
       })}
 
-      {/* Training section */}
-      <div style={{ marginTop: 16 }}>
-        <button onClick={() => { setShowTraining(!showTraining); if (!showTraining) fetchTraining(); }} style={{
-          ...S, background: PALETTE.white, border: `1px solid ${PALETTE.sand}`, borderRadius: 10,
-          padding: '10px 14px', width: '100%', textAlign: 'left', cursor: 'pointer',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: PALETTE.dark }}>🧠 Treinar IA — Pós-Venda</span>
-          <span style={{ fontSize: 10, color: PALETTE.textLight }}>{training.length} exemplos · {showTraining ? '▲' : '▼'}</span>
-        </button>
-        {showTraining && (
-          <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.sand}`, borderTop: 'none', borderRadius: '0 0 10px 10px', padding: 14 }}>
-            <div style={{ ...S, fontSize: 10, color: PALETTE.textLight, marginBottom: 8 }}>
-              Exemplos salvos aqui são usados APENAS pra sugestões no pós-venda. Não se misturam com perguntas pré-venda.
-            </div>
-            {training.slice(0, 10).map((t, i) => (
-              <div key={t.id || i} style={{ padding: '6px 0', borderBottom: `1px solid ${PALETTE.sand}` }}>
-                <div style={{ ...S, fontSize: 10, color: PALETTE.blue, fontWeight: 600 }}>Situação: {t.situation_text}</div>
-                <div style={{ ...S, fontSize: 10, color: PALETTE.text, marginTop: 1 }}>Resposta: {t.answer_text}</div>
-              </div>
-            ))}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-              <input value={trainQ} onChange={e => setTrainQ(e.target.value)} placeholder="Tipo de situação (ex: defeito no produto, nota fiscal...)" style={{ ...S, border: `1px solid ${PALETTE.border}`, borderRadius: 5, padding: '5px 8px', fontSize: 11, outline: 'none' }} />
-              <textarea value={trainA} onChange={e => setTrainA(e.target.value)} placeholder="Resposta ideal pra essa situação..." rows={2} style={{ ...S, border: `1px solid ${PALETTE.border}`, borderRadius: 5, padding: '5px 8px', fontSize: 11, outline: 'none', resize: 'vertical' }} />
-              <button onClick={saveTraining} disabled={!trainQ.trim() || !trainA.trim()} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 12px', fontSize: 10, cursor: 'pointer', fontWeight: 600, alignSelf: 'flex-start', opacity: (!trainQ.trim() || !trainA.trim()) ? 0.5 : 1 }}>+ Adicionar exemplo</button>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
