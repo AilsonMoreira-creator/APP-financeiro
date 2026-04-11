@@ -79,6 +79,13 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(200).end();
 
     const { resource, user_id, topic } = req.body;
+
+    // Mensagens pós-venda → redireciona pro handler de mensagens
+    if (topic === 'messages') {
+      const { default: messagesHandler } = await import('./ml-messages-webhook.js');
+      return messagesHandler(req, res);
+    }
+
     if (topic !== 'questions' || !resource) return res.status(200).json({ ignored: true });
 
     const { data: tokenRec } = await supabase
