@@ -229,6 +229,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
     fetchQuestions();
     fetchLocks();
     fetchStockAlerts();
+    fetchAnswered();
+    fetchAutoResponses();
     // Post-sale unread count
     const fetchPvUnread = async () => {
       try {
@@ -553,9 +555,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             {[
               { id: 'pendentes', label: 'Pendentes', badge: pending.length },
               { id: 'posvenda', label: '📦 Pós-Venda', badge: pvUnread },
-              { id: 'respondidas', label: 'Respondidas (24h)', badge: 0 },
-              { id: 'ausencia', label: 'Ausência', badge: 0 },
-              { id: 'ia_resp', label: 'IA', badge: 0 },
+              { id: 'respondidas', label: 'Respondidas (24h)', badge: answeredToday.length },
+              { id: 'ausencia', label: 'Ausência', badge: absenceResponses.length },
+              { id: 'ia_resp', label: '✨ IA', badge: aiResponses.length },
               { id: 'estoque', label: '📦 Estoque', badge: stockAlerts.filter(a => a.status === 'pendente').length },
               { id: 'arquivo', label: 'Arquivo', badge: 0 },
             ].map(t => (
