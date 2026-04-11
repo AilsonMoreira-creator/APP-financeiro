@@ -25,9 +25,11 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const inicio = Date.now();
-  // Últimos 7 dias (backfill progressivo — pedidos já cacheados são skipados)
+  // Últimos 45 dias (cobre mês atual + mês passado)
+  // Backfill progressivo: pedidos já cacheados são skipados
+  // Primeiras execuções levam vários ciclos de 10min pra completar
   const datas = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 45; i++) {
     datas.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
   }
 
@@ -72,7 +74,7 @@ export default async function handler(req, res) {
         console.log(`[bling-cron] ⚠ ${conta}: erro buscando lojas: ${e.message}`);
       }
 
-      // Para cada data (hoje + ontem)
+      // Para cada data (45 dias, do mais recente ao mais antigo)
       for (const data of datas) {
         // 1. Lista pedidos do dia
         let pedidosLista = [];
