@@ -201,6 +201,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   const [stockAlerts, setStockAlerts] = useState([]);
   const [aiResponses, setAiResponses] = useState([]);
   const [absenceResponses, setAbsenceResponses] = useState([]);
+  const [pvUnread, setPvUnread] = useState(0);
 
   const heartbeatRef = useRef(null);
   const syncRef = useRef(null);
@@ -228,11 +229,20 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
     fetchQuestions();
     fetchLocks();
     fetchStockAlerts();
+    // Post-sale unread count
+    const fetchPvUnread = async () => {
+      try {
+        const r = await fetch('/api/ml-messages?limit=200');
+        if (r.ok) { const d = await r.json(); setPvUnread((d.conversations || []).filter(c => c.status === 'aberto' && c.unread_count > 0).length); }
+      } catch {}
+    };
+    fetchPvUnread();
 
     // Sync interval
     syncRef.current = setInterval(() => {
       fetchQuestions();
       fetchLocks();
+      fetchPvUnread();
     }, SYNC_INTERVAL);
 
     return () => {
@@ -542,7 +552,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           <div style={{ display: 'flex', gap: 4 }}>
             {[
               { id: 'pendentes', label: 'Pendentes', badge: pending.length },
-              { id: 'posvenda', label: '📦 Pós-Venda', badge: 0 },
+              { id: 'posvenda', label: '📦 Pós-Venda', badge: pvUnread },
               { id: 'respondidas', label: 'Respondidas (24h)', badge: 0 },
               { id: 'ausencia', label: 'Ausência', badge: 0 },
               { id: 'ia_resp', label: 'IA', badge: 0 },
