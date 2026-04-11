@@ -4192,6 +4192,19 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                     }} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
                       🔄 Sincronizar Agora
                     </button>
+                    <button onClick={async()=>{
+                      if(!confirm("⚠️ Isso vai limpar todo o cache e reimportar ~5600 pedidos.\nVai levar ~2-3 horas pro cron completar.\n\nContinuar?"))return;
+                      setHealthLoading(true);
+                      try{
+                        const r=await fetch("/api/bling-health",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"reprocess_all"})});
+                        const d=await r.json();
+                        alert(d.ok?"✅ "+d.msg:"❌ "+(d.error||""));
+                      }catch(e){alert("Erro: "+e.message);}
+                      setHealthLoading(false);
+                      setTimeout(fetchBlingHealth,3000);
+                    }} style={{background:"#c0392b",color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+                      🗑 Reprocessar Tudo
+                    </button>
                     {CONTAS.map(conta=>(
                       <button key={conta} onClick={async()=>{
                         setHealthLoading(true);

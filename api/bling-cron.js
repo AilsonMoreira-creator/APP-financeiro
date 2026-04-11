@@ -151,8 +151,34 @@ export default async function handler(req, res) {
             const det = await dr.json();
             const ped = det.data || det;
 
-            // Parse canal
-            const canal = parseCanal(pedido.lojaNome);
+            // Parse canal — tenta do detalhe primeiro, depois da listagem
+            let lojaNome = pedido.lojaNome || '';
+            if (!lojaNome) {
+              const lojaDetail = ped.loja || {};
+              lojaNome = lojaDetail.descricao || lojaDetail.nome || '';
+              if (!lojaNome && lojaDetail.id && lojaMap[lojaDetail.id]) {
+                lojaNome = lojaMap[lojaDetail.id];
+              }
+            }
+            // Fallback: tenta pelo campo 'contato' ou 'transporte'
+            if (!lojaNome && ped.contato?.nome) {
+              const cn = ped.contato.nome.toLowerCase();
+              if (cn.includes('mercado') || cn.includes('shopee') || cn.includes('shein') || cn.includes('magalu') || cn.includes('amazon')) {
+                lojaNome = ped.contato.nome;
+              }
+            }
+            const canal = parseCanal(lojaNome);
+
+            // Debug: log first order's loja info per account/date
+            if (novos.indexOf(pedido) === 0) {
+              console.log(`[bling-cron] ${conta}/${data}: loja debug:`, JSON.stringify({
+                listing_loja: pedido.lojaNome,
+                detail_loja: ped.loja,
+                contato: ped.contato?.nome,
+                canal_result: canal,
+                lojaNome_final: lojaNome
+              }));
+            }
 
             // Parse itens
             const itensParsed = [];
@@ -180,7 +206,7 @@ export default async function handler(req, res) {
               total_produtos: parseFloat(ped.totalProdutos || 0),
               total_pedido: parseFloat(ped.total || 0),
               itens: itensParsed,
-              loja_nome: pedido.lojaNome
+              loja_nome: lojaNome || ''
             }, { onConflict: 'conta,pedido_id' });
 
             if (error) {

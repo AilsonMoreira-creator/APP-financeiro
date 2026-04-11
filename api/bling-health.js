@@ -39,6 +39,27 @@ export default async function handler(req, res) {
       }
     }
 
+    if (action === 'reprocess_all') {
+      // Limpa o cache e força re-importação completa
+      try {
+        const { count } = await supabase.from('bling_vendas_detalhe')
+          .delete().neq('id', 0);
+        return res.json({ ok: true, msg: `Cache limpo (${count || 'todos'} registros). O cron vai re-importar tudo nos próximos ciclos (~2-3h).` });
+      } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+      }
+    }
+
+    if (action === 'reprocess_conta' && conta) {
+      try {
+        const { count } = await supabase.from('bling_vendas_detalhe')
+          .delete().eq('conta', conta);
+        return res.json({ ok: true, msg: `Cache ${conta} limpo (${count || 'todos'} registros). Re-importa nos próximos ciclos.` });
+      } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+      }
+    }
+
     return res.status(400).json({ error: 'action inválida' });
   }
 
