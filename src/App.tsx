@@ -6564,7 +6564,7 @@ export default function App(){
 
   // ── SESSÃO EXPIRADA + VERSÃO DO APP ────────────────────────────────────────
   useEffect(()=>{
-    const TIMEOUT_MS=24*60*60*1000; // 24 horas
+    const TIMEOUT_MS=6*60*60*1000; // 6 horas
     // Verifica versão do app (deploy novo enquanto aba estava aberta)
     const versaoLocal=localStorage.getItem("amica_app_version");
     if(versaoLocal&&versaoLocal!==APP_VERSION){
@@ -6631,7 +6631,7 @@ export default function App(){
           }
           if(totalBrutoHoje>0){
             const liquido=Math.round(totalBrutoHoje*0.90);
-            setReceitasPorMes(prev=>{const m=prev[MES_ATUAL]||{};const dd=new Date().getDate();return{...prev,[MES_ATUAL]:{...m,[dd]:{...(m[dd]||{}),marketplaces:String(liquido)}}};});
+            setReceitasPorMes(prev=>{const m=prev[MES_ATUAL]||{};return{...prev,[MES_ATUAL]:{...m,[1]:{...(m[1]||{}),marketplaces:String(liquido)}}};});
             setBlingStatus({ok:true,msg:`✓ Bling: R$ ${liquido.toLocaleString("pt-BR")}`});
             setTimeout(()=>setBlingStatus(null),8000);
           }
