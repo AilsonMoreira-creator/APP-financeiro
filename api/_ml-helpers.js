@@ -14,6 +14,83 @@ export const supabase = createClient(
 
 export const BRANDS = ['Exitus', 'Lumia', 'Muniam'];
 
+// ── Stock Color Detection ──
+
+const DEFAULT_STOCK_COLORS = [
+  { nome: 'Preto', aliases: ['preto', 'black'] },
+  { nome: 'Bege', aliases: ['bege', 'creme'] },
+  { nome: 'Figo', aliases: ['figo'] },
+  { nome: 'Marrom', aliases: ['marrom', 'marron', 'brown'] },
+  { nome: 'Marrom Escuro', aliases: ['marrom escuro', 'marron escuro'] },
+  { nome: 'Azul Marinho', aliases: ['azul marinho', 'azul escuro', 'marinho', 'navy'] },
+  { nome: 'Vinho', aliases: ['vinho', 'bordô', 'bordo', 'marsala', 'bordó'] },
+];
+
+export async function getStockColors() {
+  try {
+    const { data } = await supabase
+      .from('amicia_data').select('payload')
+      .eq('user_id', 'ml-perguntas-config').maybeSingle();
+    return data?.payload?.config?.stock_colors || DEFAULT_STOCK_COLORS;
+  } catch { return DEFAULT_STOCK_COLORS; }
+}
+
+export function detectColorsInText(text, stockColors) {
+  const lower = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const matched = [];
+  for (const cor of stockColors) {
+    for (const alias of cor.aliases) {
+      const aliasNorm = alias.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (lower.includes(aliasNorm)) {
+        if (!matched.find(m => m.nome === cor.nome)) matched.push(cor);
+        break;
+      }
+    }
+  }
+  return matched;
+}
+
+const COLOR_REQUEST_PATTERNS = [
+  'tem em ', 'tem na cor', 'tem no ', 'tem na ', 'disponível em', 'disponivel em',
+  'vem em ', 'vem na cor', 'queria na cor', 'quero na cor', 'não tem na cor',
+  'essa peça tem na cor', 'pode colocar na cor', 'tem essa cor', 'essa cor',
+  'tem nessa cor', 'queria em ', 'quero em ', 'volta o ', 'volta na cor',
+  'volta em ', 'tem o tamanho', 'tem no tamanho', 'volta o tamanho',
+  'tem tamanho', 'quando volta',
+];
+
+export function isColorRequest(text) {
+  const lower = text.toLowerCase();
+  return COLOR_REQUEST_PATTERNS.some(p => lower.includes(p));
+}
+
+export function detectSizeInText(text) {
+  const m = text.match(/\b(PP|P|M|G|GG|G1|G2|G3|XG|XXG|EG|EGG)\b/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+const CONFIRM_PATTERNS = [
+  'sim', 'quero', 'pode', 'coloca', 'acrescenta', 'por favor', 'gostaria',
+  'pode colocar', 'pode sim', 'quero sim', 'pode incluir', 'isso mesmo',
+  'perfeito', 'fechado', 'bora', 'manda ver', 'pode ser', 'quero esse',
+  'quero essa', 'isso', 'com certeza', 'claro', 'manda', 'faz isso',
+  'aguardo', 'vou querer', 'tenho interesse',
+];
+
+const REFUSAL_PATTERNS = [
+  'não', 'nao', 'não precisa', 'nao precisa', 'deixa', 'não quero',
+  'nao quero', 'esquece', 'deixa pra lá', 'vou pensar', 'agora não',
+  'não obrigad', 'nao obrigad', 'valeu mas', 'obrigado mas não',
+];
+
+export function detectConfirmation(text) {
+  const lower = text.toLowerCase().trim();
+  // Recusa tem prioridade (ex: "não, obrigado" não é confirmação)
+  if (REFUSAL_PATTERNS.some(p => lower.includes(p))) return 'recusa';
+  if (CONFIRM_PATTERNS.some(p => lower.includes(p))) return 'confirmacao';
+  return null;
+}
+
 // ── Token Management ──
 
 async function getTokenRecord(brand) {

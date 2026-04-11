@@ -202,6 +202,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   const [aiResponses, setAiResponses] = useState([]);
   const [absenceResponses, setAbsenceResponses] = useState([]);
   const [pvUnread, setPvUnread] = useState(0);
+  const [conversions, setConversions] = useState([]);
+  const [stockColorInput, setStockColorInput] = useState('');
+  const [stockAliasInput, setStockAliasInput] = useState('');
 
   const heartbeatRef = useRef(null);
   const syncRef = useRef(null);
@@ -231,6 +234,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
     fetchStockAlerts();
     fetchAnswered();
     fetchAutoResponses();
+    fetchConversions();
     // Post-sale unread count
     const fetchPvUnread = async () => {
       try {
@@ -329,6 +333,17 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       }).eq('id', alertId);
       fetchStockAlerts();
     } catch (err) { console.error('[MLPerguntas] Resolve alert error:', err); }
+  }
+
+  async function fetchConversions() {
+    if (!supabase) return;
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+      const { data } = await supabase.from('ml_conversions')
+        .select('*').gte('order_at', sevenDaysAgo)
+        .order('order_at', { ascending: false }).limit(50);
+      setConversions(data || []);
+    } catch (err) { console.error('[MLPerguntas] Conversions error:', err); }
   }
 
   // ── Fetch AI and absence responses from Supabase ──
@@ -1011,7 +1026,61 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         </div>
 
         {/* Load dashboard data */}
-        <Btn small onClick={fetchAnswered} style={{ marginTop: 4 }}>📊 Atualizar Dashboard</Btn>
+        <Btn small onClick={() => { fetchAnswered(); fetchConversions(); }} style={{ marginTop: 4 }}>📊 Atualizar Dashboard</Btn>
+
+        {/* Conversions: perguntas que geraram vendas */}
+        <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12, marginTop: 14 }}>
+          <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark, marginBottom: 8 }}>🛒 Conversão de Perguntas (7 dias)</div>
+          {conversions.length === 0 ? (
+            <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, textAlign: 'center', padding: 16 }}>
+              Nenhuma conversão detectada nos últimos 7 dias.
+              <div style={{ fontSize: 10, marginTop: 4 }}>O cron roda a cada 30min cruzando perguntas × pedidos.</div>
+            </div>
+          ) : (() => {
+            const totalConv = conversions.length;
+            const totalValor = conversions.reduce((s, c) => s + parseFloat(c.order_value || 0), 0);
+            const diretas = conversions.filter(c => c.conversion_type === 'direta').length;
+            const porIA = conversions.filter(c => c.answered_by?.startsWith('_auto_ia')).length;
+            const byBrandConv = {};
+            conversions.forEach(c => { byBrandConv[c.brand] = (byBrandConv[c.brand] || 0) + 1; });
+            const avgTime = totalConv > 0 ? Math.round(conversions.reduce((s, c) => s + (c.time_to_buy_minutes || 0), 0) / totalConv) : 0;
+            const fmtR = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+            const fmtT = m => m < 60 ? `${m}min` : `${Math.floor(m/60)}h${m%60>0?` ${m%60}min`:''}`;
+            return (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
+                  {[
+                    { icon: '🛒', value: totalConv, label: 'Vendas' },
+                    { icon: '💰', value: fmtR(totalValor), label: 'Faturado' },
+                    { icon: '✨', value: porIA, label: 'Via IA' },
+                    { icon: '⚡', value: fmtT(avgTime), label: 'Tempo médio' },
+                  ].map((k, i) => (
+                    <div key={i} style={{ background: PALETTE.cream, borderRadius: 6, padding: '8px 4px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 14 }}>{k.icon}</div>
+                      <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark }}>{k.value}</div>
+                      <div style={{ ...S, fontSize: 9, color: PALETTE.textLight }}>{k.label}</div>
+                    </div>
+                  ))}
+                </div>
+                {Object.entries(byBrandConv).map(([brand, count]) => (
+                  <div key={brand} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <BrandTag brand={brand} />
+                    <span style={{ ...S, fontSize: 11, color: PALETTE.dark }}>{count} vendas</span>
+                    <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>({fmtR(conversions.filter(c => c.brand === brand).reduce((s, c) => s + parseFloat(c.order_value || 0), 0))})</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 8, borderTop: `1px solid ${PALETTE.sand}`, paddingTop: 8 }}>
+                  <div style={{ ...S, fontSize: 11, fontWeight: 600, color: PALETTE.dark, marginBottom: 4 }}>Últimas conversões</div>
+                  {conversions.slice(0, 5).map((c, i) => (
+                    <div key={i} style={{ ...S, fontSize: 11, color: PALETTE.text, marginBottom: 3, padding: '3px 0', borderBottom: `1px solid ${PALETTE.sand}` }}>
+                      <span style={{ color: PALETTE.green }}>✅</span> {c.item_title?.slice(0, 35) || c.item_id} — {fmtR(c.order_value)} <span style={{ color: PALETTE.textLight }}>({fmtT(c.time_to_buy_minutes)} depois · {c.answered_by?.startsWith('_auto_ia') ? '✨ IA' : c.answered_by || '?'})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
       </div>
     );
   }
@@ -1308,6 +1377,46 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 } catch (err) { alert('Erro: ' + err.message); }
               }}>🧠 Gerar pergunta pra eu responder</Btn>
             </div>
+
+            {/* Stock Colors: cores disponíveis pra oferta de estoque */}
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${PALETTE.sand}` }}>
+              <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>🎨 Cores Disponíveis pra Estoque</div>
+              <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
+                Quando um cliente perguntar sobre essas cores, a IA oferece incluir no estoque. Cores fora da lista recebem resposta genérica de reposição.
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                {(config.stock_colors || []).map((cor, i) => (
+                  <div key={i} style={{ ...S, display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: PALETTE.cream, border: `1px solid ${PALETTE.border}`, borderRadius: 6, fontSize: 11 }}>
+                    <span style={{ fontWeight: 700, color: PALETTE.dark }}>{cor.nome}</span>
+                    <span style={{ fontSize: 9, color: PALETTE.textLight }}>({cor.aliases.join(', ')})</span>
+                    <button onClick={() => {
+                      const updated = (config.stock_colors || []).filter((_, j) => j !== i);
+                      saveConfig({ ...config, stock_colors: updated });
+                    }} style={{ background: 'none', border: 'none', color: PALETTE.red, cursor: 'pointer', fontSize: 12, padding: 0, marginLeft: 2 }}>×</button>
+                  </div>
+                ))}
+                {(!config.stock_colors || config.stock_colors.length === 0) && (
+                  <div style={{ ...S, fontSize: 11, color: PALETTE.orange }}>⚠ Nenhuma cor cadastrada. Usando padrão: Preto, Bege, Figo, Marrom, Marrom Escuro, Azul Marinho, Vinho</div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ ...S, fontSize: 10, color: PALETTE.textLight, marginBottom: 2 }}>Nome da cor</div>
+                  <input value={stockColorInput} onChange={e => setStockColorInput(e.target.value)} placeholder="Ex: Verde Sálvia" style={{ ...S, width: '100%', border: `1px solid ${PALETTE.border}`, borderRadius: 5, padding: '5px 8px', fontSize: 11, boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ ...S, fontSize: 10, color: PALETTE.textLight, marginBottom: 2 }}>Variações (vírgula)</div>
+                  <input value={stockAliasInput} onChange={e => setStockAliasInput(e.target.value)} placeholder="Ex: verde salvia, pistache" style={{ ...S, width: '100%', border: `1px solid ${PALETTE.border}`, borderRadius: 5, padding: '5px 8px', fontSize: 11, boxSizing: 'border-box' }} />
+                </div>
+                <Btn primary small onClick={() => {
+                  if (!stockColorInput.trim()) return;
+                  const aliases = stockAliasInput ? stockAliasInput.split(',').map(a => a.trim().toLowerCase()).filter(Boolean) : [stockColorInput.trim().toLowerCase()];
+                  const updated = [...(config.stock_colors || []), { nome: stockColorInput.trim(), aliases }];
+                  saveConfig({ ...config, stock_colors: updated });
+                  setStockColorInput(''); setStockAliasInput('');
+                }}>+ Adicionar</Btn>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1351,7 +1460,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         {pages.map(p => (
           <button key={p.id} onClick={() => {
             setPage(p.id);
-            if (p.id === 'dashboard') fetchAnswered();
+            if (p.id === 'dashboard') { fetchAnswered(); fetchConversions(); }
           }} style={{
             ...S, flex: 1, padding: '9px 0', fontSize: 12, fontWeight: 600,
             border: 'none', cursor: 'pointer',
