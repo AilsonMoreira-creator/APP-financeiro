@@ -6352,7 +6352,7 @@ export default function App(){
         const d=payload.new?.payload;
         if(!d||!d._updated)return;
         // Ignora eco do próprio save (5s de margem)
-        if(Math.abs(d._updated-lastSaveTs.current)<5000){console.log("REALTIME: ignorando eco do próprio save");return;}
+        if(Math.abs(d._updated-lastSaveTs.current)<10000){console.log("REALTIME: ignorando eco do próprio save");return;}
         const pendente=localStorage.getItem("amica_pending_sync")==="true";
         if(pendente){console.log("REALTIME: ignorando — pending_sync=true");return;}
         console.log("REALTIME: recebido update de outro device, timestamp:",new Date(d._updated).toLocaleString("pt-BR"));
@@ -6564,7 +6564,7 @@ export default function App(){
 
   // ── SESSÃO EXPIRADA + VERSÃO DO APP ────────────────────────────────────────
   useEffect(()=>{
-    const TIMEOUT_MS=6*60*60*1000; // 6 horas
+    const TIMEOUT_MS=24*60*60*1000; // 24 horas
     // Verifica versão do app (deploy novo enquanto aba estava aberta)
     const versaoLocal=localStorage.getItem("amica_app_version");
     if(versaoLocal&&versaoLocal!==APP_VERSION){

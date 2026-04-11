@@ -30,8 +30,8 @@ async function getAIAutoResponse(questionText, itemId, brand) {
 
   let tone = 'Formal mas amigável. Foco em conversão.';
   try {
-    const { data } = await supabase.from('amicia_data').select('data').eq('user_id', 'ml-perguntas-config').single();
-    if (data?.data?.config?.ai_tone) tone = data.data.config.ai_tone;
+    const { data } = await supabase.from('amicia_data').select('payload').eq('user_id', 'ml-perguntas-config').maybeSingle();
+    if (data?.payload?.config?.ai_tone) tone = data.payload.config.ai_tone;
   } catch {}
 
   const claudeRes = await fetch(CLAUDE_API, {

@@ -613,7 +613,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                     {new Date(r.answered_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
                   <span style={{ ...S, fontSize: 11, color: PALETTE.orange, fontWeight: 600 }}>
-                    {r.answered_by === '_auto_ia_low' ? '🤖 IA (baixa confiança)' : '🌙 Ausência'}
+                    {r.answered_by === '_auto_ia_low' ? '✨ IA (baixa confiança)' : '🌙 Ausência'}
                   </span>
                 </div>
                 <div style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
@@ -625,7 +625,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {aiResponses.length === 0 ? (
               <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
-                🤖 Nenhuma resposta da IA nas últimas 48h
+                ✨ Nenhuma resposta da IA nas últimas 48h
               </div>
             ) : aiResponses.map((r, i) => (
               <div key={i} style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: '10px 12px', borderLeft: `4px solid ${PALETTE.blue}` }}>
@@ -634,7 +634,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                   <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
                     {new Date(r.answered_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <span style={{ ...S, fontSize: 11, color: PALETTE.blue, fontWeight: 600 }}>🤖 IA (alta confiança)</span>
+                  <span style={{ ...S, fontSize: 11, color: PALETTE.blue, fontWeight: 600 }}>✨ IA (alta confiança)</span>
                 </div>
                 <div style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
                 <div style={{ ...S, fontSize: 12, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
@@ -668,7 +668,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                       {new Date(alert.promised_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </span>
                     <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
-                      por {alert.promised_by === '_auto_ia' ? '🤖 IA' : alert.promised_by}
+                      por {alert.promised_by === '_auto_ia' ? '✨ IA' : alert.promised_by}
                     </span>
                   </div>
                   <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>
@@ -831,7 +831,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             <div style={{ margin: '8px 0 6px' }}>
               <button onClick={() => requestAISuggestion(q)} disabled={aiLoading}
                 style={{ ...S, fontSize: 11, color: PALETTE.blue, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
-                {aiLoading ? '⏳ Pensando...' : '🤖 Pedir sugestão da IA'}
+                {aiLoading ? '⏳ Pensando...' : '✨ Pedir sugestão da IA'}
               </button>
               {aiSuggestion && (
                 <div style={{
@@ -1009,7 +1009,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       { id: 'templates', label: '⚡ Templates' },
       { id: 'horario', label: '🕐 Horários' },
       { id: 'ausencia', label: '🌙 Ausência' },
-      { id: 'ia', label: '🤖 IA' },
+      { id: 'ia', label: '✨ IA' },
       { id: 'alertas', label: '🔔 Alertas' },
       { id: 'treinamento', label: '📚 Treinar IA' },
     ];
@@ -1157,7 +1157,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         {/* IA */}
         {configSection === 'ia' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
-            <div style={{ ...S, fontSize: 13, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>🤖 Configuração da IA</div>
+            <div style={{ ...S, fontSize: 13, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>✨ Configuração da IA</div>
             <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
               A IA aprende com cada resposta enviada. Lê a descrição do anúncio + histórico de Q&A.
             </div>
@@ -1183,7 +1183,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
 
             {/* Auto-resposta IA */}
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${PALETTE.sand}` }}>
-              <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>🤖 Resposta Automática da IA</div>
+              <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>✨ Resposta Automática da IA</div>
               <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
                 A IA responde automaticamente <b>fora do horário de atendimento</b> (configurado na aba Horários). Quando tem alta confiança, envia a resposta. Se não tiver confiança, envia a mensagem padrão abaixo.
               </div>
