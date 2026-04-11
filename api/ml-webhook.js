@@ -197,8 +197,9 @@ export default async function handler(req, res) {
       const inAISchedule = await isInAISchedule();
       let autoStatus = 'pending';
 
-      // P0: Stock flow
-      if (inAISchedule && autoStatus === 'pending') {
+      // P0: Stock flow — roda SEMPRE (independente do horário)
+      // É regra de negócio (cores pré-cadastradas), não IA genérica
+      if (autoStatus === 'pending') {
         try {
           const stockResult = await handleStockFlow(question, brand, token);
           if (stockResult) {

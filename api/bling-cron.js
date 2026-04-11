@@ -4,17 +4,19 @@
  * Tabela: bling_vendas_detalhe
  * 
  * Estratégia:
- * 1. Para cada conta (exitus, lumia, muniam), lista pedidos de hoje e ontem
- * 2. Filtra pedidos já cacheados no Supabase
- * 3. Busca detalhes dos novos (com delay + backoff em 429)
+ * 1. Para cada conta (exitus, lumia, muniam), lista pedidos dos últimos 7 dias
+ * 2. Filtra pedidos já cacheados no Supabase (skipados)
+ * 3. Busca detalhes dos novos (com delay 350ms + backoff em 429)
  * 4. Insere no Supabase
+ * 5. Se timeout (280s), para e continua no próximo ciclo (10min)
  * 
+ * Backfill progressivo: primeiras execuções levam vários ciclos pra completar
  * maxDuration: 300s (Vercel Pro)
  */
 import { supabase, parseDescricao, parseCanal, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 
 const CONTAS = ['exitus', 'lumia', 'muniam'];
-const DELAY_MS = 500; // 500ms entre requests = 2 req/s (bem abaixo do limite de 3/s)
+const DELAY_MS = 350; // 350ms entre requests = ~2.8 req/s (dentro do limite de 3/s)
 
 export const config = { maxDuration: 300 };
 
@@ -23,9 +25,11 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const inicio = Date.now();
-  const hoje = new Date().toISOString().slice(0, 10);
-  const ontem = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  const datas = [hoje, ontem]; // Sempre sincroniza hoje + ontem (backfill)
+  // Últimos 7 dias (backfill progressivo — pedidos já cacheados são skipados)
+  const datas = [];
+  for (let i = 0; i < 7; i++) {
+    datas.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+  }
 
   const resumo = { processados: 0, novos: 0, erros: 0, porConta: {} };
 
