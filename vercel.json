@@ -5,6 +5,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/ml-messages-sync",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/ml-sync",
       "schedule": "0 8 * * *"
     }

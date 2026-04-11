@@ -15,6 +15,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import MLPosVenda from './MLPosVenda';
 
 // ══════════════════════════════════════════════════════════
 // CONSTANTS
@@ -541,6 +542,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           <div style={{ display: 'flex', gap: 4 }}>
             {[
               { id: 'pendentes', label: 'Pendentes', badge: pending.length },
+              { id: 'posvenda', label: '📦 Pós-Venda', badge: 0 },
               { id: 'respondidas', label: 'Respondidas (24h)', badge: 0 },
               { id: 'ausencia', label: 'Ausência', badge: 0 },
               { id: 'ia_resp', label: 'IA', badge: 0 },
@@ -595,7 +597,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         )}
 
         {/* Questions list */}
-        {tab === 'arquivo' ? (
+        {tab === 'posvenda' ? (
+          <MLPosVenda supabase={supabase} currentUser={currentUser} />
+        ) : tab === 'arquivo' ? (
           <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
             📁 Arquivo — busca por período em desenvolvimento
           </div>
