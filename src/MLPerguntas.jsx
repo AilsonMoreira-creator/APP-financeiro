@@ -193,7 +193,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   const [brandFilter, setBrandFilter] = useState('Todas');
   const [showTemplates, setShowTemplates] = useState(false);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
-  const [configSection, setConfigSection] = useState('contas');
+  const [configSection, setConfigSection] = useState('saude');
   const [tokenStatus, setTokenStatus] = useState([]);
   const [answeredToday, setAnsweredToday] = useState([]);
   const [qaHistory, setQaHistory] = useState([]);
@@ -205,6 +205,16 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   const [conversions, setConversions] = useState([]);
   const [stockColorInput, setStockColorInput] = useState('');
   const [stockAliasInput, setStockAliasInput] = useState('');
+  const [sacHealth, setSacHealth] = useState(null);
+  const [sacHealthLoading, setSacHealthLoading] = useState(false);
+  const fetchSacHealth = async () => {
+    try {
+      setSacHealthLoading(true);
+      const r = await fetch('/api/ml-health');
+      if (r.ok) { const d = await r.json(); setSacHealth(d); }
+    } catch (e) { console.error('sac health:', e); }
+    finally { setSacHealthLoading(false); }
+  };
 
   const heartbeatRef = useRef(null);
   const syncRef = useRef(null);
@@ -1090,6 +1100,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   // ══════════════════════════════════════════════════════════
   function renderConfig() {
     const sections = [
+      { id: 'saude', label: '🩺 Saúde' },
       { id: 'contas', label: '🔗 Contas' },
       { id: 'templates', label: '⚡ Templates' },
       { id: 'horario', label: '🕐 Horários' },
@@ -1103,7 +1114,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       <div>
         <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
           {sections.map(s => (
-            <button key={s.id} onClick={() => setConfigSection(s.id)} style={{
+            <button key={s.id} onClick={() => { setConfigSection(s.id); if (s.id === 'saude') fetchSacHealth(); }} style={{
               ...S, padding: '5px 10px', fontSize: 11, fontWeight: 600,
               border: 'none', borderRadius: 5, cursor: 'pointer',
               background: configSection === s.id ? PALETTE.dark : PALETTE.sand,
@@ -1111,6 +1122,109 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             }}>{s.label}</button>
           ))}
         </div>
+
+        {/* SAÚDE */}
+        {configSection === 'saude' && (
+          <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark }}>🩺 Saúde do SAC</div>
+              <button onClick={fetchSacHealth} disabled={sacHealthLoading} style={{ ...S, background: PALETTE.blue, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: 600, opacity: sacHealthLoading ? 0.6 : 1 }}>
+                {sacHealthLoading ? 'Carregando...' : '🔄 Atualizar'}
+              </button>
+            </div>
+
+            {!sacHealth ? (
+              <div style={{ ...S, fontSize: 11, color: PALETTE.textLight, textAlign: 'center', padding: 16 }}>Clique em Atualizar pra ver o status</div>
+            ) : (
+              <div>
+                {/* Config status */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'IA Sugestão', ok: sacHealth.config?.ia_enabled, icon: '✨' },
+                    { label: 'IA Auto', ok: sacHealth.config?.ia_auto_enabled, icon: '🤖' },
+                    { label: 'Ausência', ok: sacHealth.config?.absence_enabled, icon: '🌙' },
+                  ].map((c, i) => (
+                    <div key={i} style={{ ...S, fontSize: 10, padding: '3px 8px', borderRadius: 5, fontWeight: 600, background: c.ok ? '#eafbf0' : '#fdeaea', color: c.ok ? '#27ae60' : '#c0392b' }}>
+                      {c.icon} {c.label}: {c.ok ? 'ON' : 'OFF'}
+                    </div>
+                  ))}
+                  <div style={{ ...S, fontSize: 10, padding: '3px 8px', borderRadius: 5, fontWeight: 600, background: '#f0f4ff', color: PALETTE.blue }}>
+                    🎨 {sacHealth.config?.stock_colors_count || 0} cores estoque
+                  </div>
+                </div>
+
+                {/* KPIs gerais */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Conversões 7d', value: sacHealth.conversoes_7d || 0, icon: '🛒' },
+                    { label: 'Faturado', value: 'R$ ' + Number(sacHealth.conversoes_valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0 }), icon: '💰' },
+                    { label: 'Alertas estoque', value: sacHealth.alertas_pendentes || 0, icon: '📦' },
+                    { label: 'Pós-venda abertas', value: sacHealth.posvenda_abertas || 0, icon: '💬' },
+                  ].map((k, i) => (
+                    <div key={i} style={{ flex: 1, minWidth: 80, background: PALETTE.cream, borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 12 }}>{k.icon}</div>
+                      <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark }}>{k.value}</div>
+                      <div style={{ ...S, fontSize: 8, color: PALETTE.textLight }}>{k.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Por conta */}
+                {['Exitus', 'Lumia', 'Muniam'].map(brand => {
+                  const c = sacHealth.contas?.[brand];
+                  if (!c) return null;
+                  const tkColor = c.token_status === 'valido' ? '#27ae60' : c.token_status === 'expira_breve' ? '#e67e22' : '#c0392b';
+                  const tkLabel = c.token_status === 'valido' ? '✅ Token OK' : c.token_status === 'expira_breve' ? '⚠️ Expira em breve' : c.token_status === 'expirado' ? '❌ Expirado' : '❓ Sem token';
+                  const totalResp = c.ia_auto_24h + c.ia_low_24h + c.ausencia_24h;
+                  const iaPct = c.perguntas_24h > 0 ? Math.round((c.ia_auto_24h / c.perguntas_24h) * 100) : 0;
+                  const temProblema = c.token_status !== 'valido';
+                  const webhookOk = c.ultimo_webhook && (new Date() - new Date(c.ultimo_webhook)) < 24 * 3600000;
+                  return (
+                    <div key={brand} style={{ background: temProblema ? '#fef5f5' : '#fafff5', border: `1px solid ${temProblema ? '#f4b8b8' : '#d4edc4'}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <BrandTag brand={brand} />
+                        <span style={{ ...S, fontSize: 9, fontWeight: 700, color: tkColor, padding: '2px 8px', borderRadius: 8, background: tkColor + '18' }}>{tkLabel}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 4, marginBottom: 6 }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ ...S, fontSize: 8, color: PALETTE.textLight }}>Perguntas 24h</div>
+                          <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark }}>{c.perguntas_24h}</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ ...S, fontSize: 8, color: PALETTE.textLight }}>✨ IA auto</div>
+                          <div style={{ ...S, fontSize: 13, fontWeight: 700, color: '#27ae60' }}>{c.ia_auto_24h}</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ ...S, fontSize: 8, color: PALETTE.textLight }}>🌙 Ausência</div>
+                          <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.blue }}>{c.ausencia_24h}</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ ...S, fontSize: 8, color: PALETTE.textLight }}>📦 Estoque</div>
+                          <div style={{ ...S, fontSize: 13, fontWeight: 700, color: c.estoque_pendentes > 0 ? '#e67e22' : PALETTE.dark }}>{c.estoque_pendentes}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <div style={{ ...S, fontSize: 9, color: PALETTE.textLight }}>
+                          Webhook: <span style={{ fontWeight: 700, color: webhookOk ? '#27ae60' : '#c0392b' }}>{webhookOk ? '✅ ativo' : '⚠️ sem atividade'}</span>
+                        </div>
+                        {c.perguntas_24h > 0 && (
+                          <div style={{ ...S, fontSize: 9, color: PALETTE.textLight }}>
+                            IA taxa: <span style={{ fontWeight: 700, color: iaPct > 40 ? '#27ae60' : '#e67e22' }}>{iaPct}%</span>
+                          </div>
+                        )}
+                        {c.token_expires && (
+                          <div style={{ ...S, fontSize: 9, color: PALETTE.textLight }}>
+                            Token expira: {new Date(c.token_expires).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* CONTAS */}
         {configSection === 'contas' && (
