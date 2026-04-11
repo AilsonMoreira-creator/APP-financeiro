@@ -140,6 +140,14 @@ export default async function handler(req, res) {
       .lt('created_at', new Date(Date.now() - 48 * 3600000).toISOString());
   } catch (e) { console.error('[ml-conv] expire offers:', e.message); }
 
+  // Auto-archive stock alerts >48h (pra pular fim de semana)
+  try {
+    await supabase.from('ml_stock_alerts')
+      .update({ status: 'arquivado', resolved_by: '_auto_48h', resolved_at: new Date().toISOString() })
+      .eq('status', 'pendente')
+      .lt('promised_at', new Date(Date.now() - 48 * 3600000).toISOString());
+  } catch (e) { console.error('[ml-conv] archive alerts:', e.message); }
+
   const results = [];
   for (const brand of BRANDS) {
     results.push(await syncBrand(brand));

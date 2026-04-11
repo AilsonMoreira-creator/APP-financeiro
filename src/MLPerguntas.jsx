@@ -117,6 +117,20 @@ const TimeTag = ({ minutes, config }) => {
   );
 };
 
+const RobotIcon = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle', marginRight: 2 }}>
+    <rect x="5" y="9" width="14" height="10" rx="2" fill="currentColor" opacity="0.8"/>
+    <rect x="9" y="4" width="6" height="6" rx="3" fill="currentColor" opacity="0.6"/>
+    <circle cx="10" cy="13" r="1.5" fill="#fff"/>
+    <circle cx="14" cy="13" r="1.5" fill="#fff"/>
+    <line x1="12" y1="2" x2="12" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <circle cx="12" cy="1.5" r="1" fill="currentColor"/>
+    <rect x="8" y="16" width="8" height="1.5" rx="0.75" fill="#fff" opacity="0.7"/>
+    <line x1="2" y1="13" x2="5" y2="13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <line x1="19" y1="13" x2="22" y2="13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+  </svg>
+);
+
 const BrandTag = ({ brand }) => (
   <span style={{
     ...S, fontSize: 10, padding: '2px 8px', borderRadius: 3, fontWeight: 700,
@@ -596,7 +610,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 background: tab === t.id ? PALETTE.dark : PALETTE.sand,
                 color: tab === t.id ? '#fff' : PALETTE.text,
               }}>
-                {t.label}
+                {t.id === 'ia_resp' ? <><RobotIcon size={13} /> IA</> : t.label}
                 {t.badge > 0 && <Badge count={t.badge} color={t.badgeColor} />}
               </button>
             ))}
