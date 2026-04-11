@@ -3725,6 +3725,16 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const [devPct,setDevPct]=useState(10);
   const [totalMes,setTotalMes]=useState(0);
   const [fechandoAnterior,setFechandoAnterior]=useState(false);
+  const [blingHealth,setBlingHealth]=useState(null);
+  const [healthLoading,setHealthLoading]=useState(false);
+  const fetchBlingHealth=async()=>{
+    try{
+      setHealthLoading(true);
+      const r=await fetch("/api/bling-health");
+      if(r.ok){const d=await r.json();setBlingHealth(d);}
+    }catch(e){console.error("health:",e);}
+    finally{setHealthLoading(false);}
+  };
   const fmt2=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const hoje=new Date().toISOString().slice(0,10);
   const hojeStr=new Date().toLocaleDateString("pt-BR");
@@ -3954,7 +3964,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
           <button onClick={doSync} disabled={syncing} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:syncing?"not-allowed":"pointer",opacity:syncing?0.7:1,fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Sync</button>
           <button onClick={()=>{setTela("vendas");setVendasSub("overview");}} style={{background:tela==="vendas"&&vendasSub==="overview"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="overview"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="overview"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📦 Vendas</button>
           <button onClick={()=>{setTela("vendas");setVendasSub("produtos");}} style={{background:tela==="vendas"&&vendasSub==="produtos"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="produtos"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="produtos"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"flex",alignItems:"center",gap:5}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2C10.8 2 10 2.8 10 4C10 4.8 10.4 5.4 11 5.7L8.5 11L5 22H19L15.5 11L13 5.7C13.6 5.4 14 4.8 14 4C14 2.8 13.2 2 12 2Z" fill={tela==="vendas"&&vendasSub==="produtos"?"white":"#4a7fa5"}/></svg> Produtos</button>
-          <button onClick={()=>setTela(t=>t==="dash"?"config":"dash")} style={{background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+          <button onClick={()=>{const next=tela==="dash"?"config":"dash";setTela(next);if(next==="config")fetchBlingHealth();}} style={{background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
             {tela==="config"?"← Voltar":"⚙ Config"}
           </button>
         </div>
@@ -4100,6 +4110,105 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                 <input type="number" value={devPct} onChange={e=>setDevPct(Number(e.target.value))} style={{width:55,border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 8px",fontSize:14,fontWeight:700,textAlign:"center",outline:"none",fontFamily:"Calibri,Arial"}}/>
                 <span style={{fontSize:12,color:"#6b7c8a"}}>% do bruto</span>
               </div>
+            </div>
+
+            {/* ════ SAÚDE DA INTEGRAÇÃO ════ */}
+            <div style={{background:"#fff",borderRadius:12,padding:14,border:"1px solid #e8e2da",marginTop:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🩺 Saúde da Integração</div>
+                <button onClick={fetchBlingHealth} disabled={healthLoading} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"4px 10px",fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,opacity:healthLoading?0.6:1}}>
+                  {healthLoading?"Carregando...":"🔄 Atualizar"}
+                </button>
+              </div>
+
+              {!blingHealth?(
+                <div style={{fontSize:11,color:"#a89f94",textAlign:"center",padding:12}}>Clique em Atualizar pra ver o status</div>
+              ):(
+                <div>
+                  {/* Último cron */}
+                  <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:120,background:"#f7f4f0",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#a89f94",marginBottom:2}}>Último cron</div>
+                      <div style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>{blingHealth.last_cron?new Date(blingHealth.last_cron).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"—"}</div>
+                    </div>
+                    <div style={{flex:1,minWidth:120,background:"#f7f4f0",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#a89f94",marginBottom:2}}>Duração</div>
+                      <div style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>{blingHealth.duracao_ultimo||"—"}</div>
+                    </div>
+                    <div style={{flex:1,minWidth:120,background:"#f7f4f0",borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                      <div style={{fontSize:9,color:"#a89f94",marginBottom:2}}>Pedidos 7d</div>
+                      <div style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>{blingHealth.total_7d||0}</div>
+                    </div>
+                  </div>
+
+                  {/* Por conta */}
+                  {CONTAS.map(conta=>{
+                    const c=blingHealth.contas?.[conta];
+                    if(!c)return null;
+                    const tkColor=c.token_status==="valido"?"#27ae60":c.token_status==="expira_breve"?"#e67e22":"#c0392b";
+                    const tkLabel=c.token_status==="valido"?"✅ Válido":c.token_status==="expira_breve"?"⚠️ Expira em breve":c.token_status==="expirado"?"❌ Expirado":"❓ Sem token";
+                    const temErro=c.erros_ultimo_ciclo>0;
+                    return(
+                      <div key={conta} style={{background:temErro?"#fef5f5":"#fafff5",border:`1px solid ${temErro?"#f4b8b8":"#d4edc4"}`,borderRadius:8,padding:10,marginBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <div style={{width:8,height:8,borderRadius:4,background:CORES[conta]}}/>
+                            <span style={{fontSize:12,fontWeight:700,color:"#2c3e50",textTransform:"capitalize"}}>{conta}</span>
+                          </div>
+                          <span style={{fontSize:9,fontWeight:700,color:tkColor,padding:"2px 8px",borderRadius:8,background:tkColor+"18"}}>{tkLabel}</span>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:6}}>
+                          <div style={{textAlign:"center"}}>
+                            <div style={{fontSize:9,color:"#a89f94"}}>Hoje</div>
+                            <div style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>{c.pedidos_hoje}</div>
+                          </div>
+                          <div style={{textAlign:"center"}}>
+                            <div style={{fontSize:9,color:"#a89f94"}}>Novos (ciclo)</div>
+                            <div style={{fontSize:13,fontWeight:700,color:c.novos_ultimo_ciclo>0?"#27ae60":"#2c3e50"}}>{c.novos_ultimo_ciclo}</div>
+                          </div>
+                          <div style={{textAlign:"center"}}>
+                            <div style={{fontSize:9,color:"#a89f94"}}>Erros</div>
+                            <div style={{fontSize:13,fontWeight:700,color:temErro?"#c0392b":"#27ae60"}}>{c.erros_ultimo_ciclo}</div>
+                          </div>
+                        </div>
+                        {c.last_error&&<div style={{fontSize:9,color:"#c0392b",background:"#fdeaea",borderRadius:4,padding:"3px 6px",marginBottom:4}}>⚠ {c.last_error}</div>}
+                        {c.token_expires&&<div style={{fontSize:9,color:"#8a9aa4"}}>Token expira: {new Date(c.token_expires).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</div>}
+                      </div>
+                    );
+                  })}
+
+                  {/* Botões operacionais */}
+                  <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+                    <button onClick={async()=>{
+                      if(!confirm("Disparar sincronização manual agora?"))return;
+                      setHealthLoading(true);
+                      try{
+                        const r=await fetch("/api/bling-health",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"sync_now"})});
+                        const d=await r.json();
+                        alert(d.ok?"✅ Sync disparado! Aguarde ~5min e atualize.":"❌ Erro: "+(d.error||""));
+                      }catch(e){alert("Erro: "+e.message);}
+                      setHealthLoading(false);
+                      setTimeout(fetchBlingHealth,5000);
+                    }} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
+                      🔄 Sincronizar Agora
+                    </button>
+                    {CONTAS.map(conta=>(
+                      <button key={conta} onClick={async()=>{
+                        setHealthLoading(true);
+                        try{
+                          const r=await fetch("/api/bling-health",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"refresh_token",conta})});
+                          const d=await r.json();
+                          alert(d.ok?`✅ Token ${conta} renovado!`:"❌ "+(d.error||""));
+                        }catch(e){alert("Erro: "+e.message);}
+                        setHealthLoading(false);
+                        fetchBlingHealth();
+                      }} style={{background:"#f7f4f0",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:6,padding:"5px 10px",fontSize:9,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,textTransform:"capitalize"}}>
+                        🔑 Token {conta}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

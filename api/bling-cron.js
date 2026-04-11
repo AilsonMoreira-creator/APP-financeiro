@@ -203,6 +203,26 @@ export default async function handler(req, res) {
     const duracao = ((Date.now() - inicio) / 1000).toFixed(1);
     console.log(`[bling-cron] ✓ concluído em ${duracao}s — ${resumo.novos} novos, ${resumo.erros} erros`);
 
+    // Salva status da execução no Supabase pra painel de saúde
+    try {
+      await supabase.from('amicia_data').upsert({
+        user_id: 'bling-cron-status',
+        payload: {
+          last_run: new Date().toISOString(),
+          duracao,
+          resumo,
+          por_conta: Object.fromEntries(
+            CONTAS.map(c => [c, {
+              ...resumo.porConta[c],
+              last_success: resumo.porConta[c]?.erros === 0 ? new Date().toISOString() : undefined,
+              last_error: resumo.porConta[c]?.erros > 0 ? resumo.porConta[c]?.detalhe || 'erro desconhecido' : undefined,
+            }])
+          ),
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    } catch (e) { console.error('[bling-cron] status save error:', e.message); }
+
     return res.status(200).json({
       ok: true,
       duracao: duracao + "s",
