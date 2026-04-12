@@ -617,7 +617,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           </div>
         </div>
 
-        {/* Brand filter */}
+        {/* Brand filter — não mostra no pós-venda (tem filtro próprio) */}
+        {tab !== 'posvenda' && (
         <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
           {['Todas', 'Exitus', 'Lumia', 'Muniam'].map(b => (
             <button key={b} onClick={() => setBrandFilter(b)} style={{
@@ -631,6 +632,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             </button>
           ))}
         </div>
+        )}
 
         {/* Templates panel */}
         {showTemplates && renderTemplatesPanel()}

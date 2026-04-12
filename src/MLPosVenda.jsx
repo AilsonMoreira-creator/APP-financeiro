@@ -278,14 +278,6 @@ export default function MLPosVenda({ supabase, currentUser }) {
   // ═══════════════ LIST VIEW ═══════════════
   return (
     <div>
-      {/* Header info */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <div style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
-          {openCount} abertas · {unreadTotal} não lidas
-        </div>
-        <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>🔄</button>
-      </div>
-
       {/* Filters — uma linha só */}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10 }}>
         {[
@@ -311,6 +303,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
             color: brandFilter === b ? (b === 'Muniam' || b === 'Todas' ? '#fff' : BRANDS[b]?.color) : PALETTE.text,
           }}>{b}</button>
         ))}
+        <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>🔄</button>
       </div>
 
       {/* Conversation cards */}
