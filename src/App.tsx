@@ -2673,24 +2673,71 @@ const AgendaContent=()=>{
   const hoje=new Date().getDate();
   const mesHoje=new Date().getMonth()+1;
   const anoHoje=new Date().getFullYear();
+  const saveTimerRef=useRef(null);
+  const lastSyncRef=useRef(0);
 
+  // ── Helpers de persistência ──
+  const lerLocal=()=>{try{const s=localStorage.getItem("amica_agenda");return s?JSON.parse(s):null;}catch{return null;}};
+  const salvarLocal=(itens,ts)=>{try{localStorage.setItem("amica_agenda",JSON.stringify({itens,mes:mesHoje,ano:anoHoje,_updated:ts||Date.now()}));}catch(e){console.error(e)}};
+  const salvarSupabase=(itens,ts)=>{
+    const now=ts||Date.now();
+    lastSyncRef.current=now;
+    if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
+    saveTimerRef.current=setTimeout(()=>{
+      supabase.from('amicia_data').upsert({user_id:'agenda',payload:{itens,mes:mesHoje,ano:anoHoje,_updated:now}},{onConflict:'user_id'})
+        .then(({error})=>{if(error)console.error("AGENDA save Supabase:",error.message);else console.log("AGENDA: salvo no Supabase");});
+    },1500);
+  };
+  const salvarTudo=(novosItens)=>{
+    const ts=Date.now();
+    salvarLocal(novosItens,ts);
+    salvarSupabase(novosItens,ts);
+  };
+
+  // ── Estado inicial: localStorage imediato ──
   const [itens,setItens]=useState(()=>{
-    try{
-      const salvo=localStorage.getItem("amica_agenda");
-      if(salvo){
-        const {itens:it,mes,ano}=JSON.parse(salvo);
-        if(mes===mesHoje&&ano===anoHoje)return it;
-        // Mês novo — reseta todos os feito para false e salva imediatamente
-        const resetado=it.map(i=>({...i,feito:false}));
-        try{localStorage.setItem("amica_agenda",JSON.stringify({itens:resetado,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}
-        return resetado;
-      }
-    }catch(e){console.error(e)}
-    // Primeira vez ou dados corrompidos — carrega agenda inicial com tudo desmarcado e salva
+    const salvo=lerLocal();
+    if(salvo?.itens){
+      if(salvo.mes===mesHoje&&salvo.ano===anoHoje)return salvo.itens;
+      const resetado=salvo.itens.map(i=>({...i,feito:false}));
+      salvarLocal(resetado,Date.now());
+      return resetado;
+    }
     const inicial=AGENDA_INICIAL.map(i=>({...i,feito:false}));
-    try{localStorage.setItem("amica_agenda",JSON.stringify({itens:inicial,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}
+    salvarLocal(inicial,Date.now());
     return inicial;
   });
+
+  // ── Sync com Supabase ao montar + visibilitychange ──
+  useEffect(()=>{
+    const syncFromSupabase=async()=>{
+      try{
+        const {data:row}=await supabase.from('amicia_data').select('payload').eq('user_id','agenda').maybeSingle();
+        if(!row?.payload?.itens)return;
+        const remote=row.payload;
+        const local=lerLocal();
+        const localTs=local?._updated||0;
+        const remoteTs=remote._updated||0;
+        // Se mês diferente no remoto, reseta feito
+        let remoteItens=remote.itens;
+        if(remote.mes!==mesHoje||remote.ano!==anoHoje){
+          remoteItens=remoteItens.map(i=>({...i,feito:false}));
+        }
+        if(remoteTs>localTs){
+          console.log("AGENDA: Supabase mais recente, usando remoto",new Date(remoteTs).toLocaleString("pt-BR"));
+          setItens(remoteItens);
+          salvarLocal(remoteItens,remoteTs);
+        }else if(localTs>remoteTs){
+          console.log("AGENDA: localStorage mais recente, enviando pro Supabase");
+          salvarSupabase(local.itens,localTs);
+        }
+      }catch(e){console.error("AGENDA sync:",e)}
+    };
+    syncFromSupabase();
+    const onVis=()=>{if(document.visibilityState==="visible")syncFromSupabase();};
+    document.addEventListener("visibilitychange",onVis);
+    return()=>{document.removeEventListener("visibilitychange",onVis);if(saveTimerRef.current)clearTimeout(saveTimerRef.current);};
+  },[]);
 
   const [novoItem,setNovoItem]=useState({dia:"",descricao:""});
   const [mostraAdd,setMostraAdd]=useState(false);
@@ -2701,10 +2748,10 @@ const AgendaContent=()=>{
     setSaveStatus("saving");
     setTimeout(()=>setSaveStatus("saved"),600);
   };
-  const toggle=(id)=>{setItens(prev=>{const novo=prev.map(i=>i.id===id?{...i,feito:!i.feito}:i);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}return novo;});setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
-  const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);const novo=prev.filter(x=>x.id!==id);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}return novo;});setConfirm(null);markChange();}});};
-  const desfazer=()=>{if(!lixeira.length)return;const u=lixeira[lixeira.length-1];setItens(prev=>{const novo=[...prev,u].sort((a,b)=>a.dia-b.dia);try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}return novo;});setLixeira(l=>l.slice(0,-1));};
-  const adicionar=()=>{if(!novoItem.dia||!novoItem.descricao.trim())return;setItens(prev=>{const novo=[...prev,{id:Date.now(),dia:parseInt(novoItem.dia),descricao:novoItem.descricao.trim(),feito:false}];try{localStorage.setItem("amica_agenda",JSON.stringify({itens:novo,mes:mesHoje,ano:anoHoje}));}catch(e){console.error(e)}return novo;});setNovoItem({dia:"",descricao:""});markChange();};
+  const toggle=(id)=>{setItens(prev=>{const novo=prev.map(i=>i.id===id?{...i,feito:!i.feito}:i);salvarTudo(novo);return novo;});setSaveStatus("saving");setTimeout(()=>setSaveStatus("saved"),600);};
+  const remover=(id)=>{setConfirm({msg:"Apagar este compromisso?",onYes:()=>{setItens(prev=>{const item=prev.find(x=>x.id===id);if(item)setLixeira(l=>[...l,item]);const novo=prev.filter(x=>x.id!==id);salvarTudo(novo);return novo;});setConfirm(null);markChange();}});};
+  const desfazer=()=>{if(!lixeira.length)return;const u=lixeira[lixeira.length-1];setItens(prev=>{const novo=[...prev,u].sort((a,b)=>a.dia-b.dia);salvarTudo(novo);return novo;});setLixeira(l=>l.slice(0,-1));};
+  const adicionar=()=>{if(!novoItem.dia||!novoItem.descricao.trim())return;setItens(prev=>{const novo=[...prev,{id:Date.now(),dia:parseInt(novoItem.dia),descricao:novoItem.descricao.trim(),feito:false}];salvarTudo(novo);return novo;});setNovoItem({dia:"",descricao:""});markChange();};
   const sorted=[...itens].sort((a,b)=>a.dia-b.dia);
   const alertas=sorted.filter(i=>!i.feito&&i.dia<hoje);
   const hojeItems=sorted.filter(i=>!i.feito&&i.dia===hoje);
