@@ -161,6 +161,7 @@ export default async function handler(req, res) {
               }
             }
             const canal = parseCanal(lojaNome, {
+              lojaId: ped.loja?.id,
               intermediador: ped.intermediador,
               numeroPedidoLoja: ped.numeroPedidoLoja,
               contato: ped.contato,
