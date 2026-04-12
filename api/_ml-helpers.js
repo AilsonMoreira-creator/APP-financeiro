@@ -51,12 +51,20 @@ export function detectColorsInText(text, stockColors) {
 }
 
 const COLOR_REQUEST_PATTERNS = [
-  'tem em ', 'tem na cor', 'tem no ', 'tem na ', 'disponível em', 'disponivel em',
-  'vem em ', 'vem na cor', 'queria na cor', 'quero na cor', 'não tem na cor',
+  'tem em ', 'tem na cor', 'tem no ', 'tem na ', 'tem o ', 'tem a ',
+  'disponível em', 'disponivel em', 'disponível na', 'disponivel na',
+  'vem em ', 'vem na cor', 'vem no ', 'vem na ',
+  'queria na cor', 'quero na cor', 'quero o ', 'quero a ', 'quero em ', 'queria em ', 'queria o ', 'queria a ',
+  'não tem na cor', 'nao tem na cor', 'não tem em ', 'nao tem em ',
   'essa peça tem na cor', 'pode colocar na cor', 'tem essa cor', 'essa cor',
-  'tem nessa cor', 'queria em ', 'quero em ', 'volta o ', 'volta na cor',
-  'volta em ', 'tem o tamanho', 'tem no tamanho', 'volta o tamanho',
-  'tem tamanho', 'quando volta',
+  'tem nessa cor', 'gostaria na cor', 'gostaria em ', 'gostaria no ',
+  'volta o ', 'volta na cor', 'volta em ', 'volta a ',
+  'tem o tamanho', 'tem no tamanho', 'volta o tamanho', 'tem tamanho',
+  'quando volta', 'quando chega', 'vai ter', 'vai voltar',
+  'preciso do ', 'preciso da ', 'preciso em ', 'preciso na ',
+  'quero esse', 'quero essa', 'quero um ', 'quero uma ',
+  'no bege', 'no preto', 'no marrom', 'no azul', 'no verde', 'no figo', 'no vinho',
+  'na cor ', 'tem cor ',
 ];
 
 export function isColorRequest(text) {

@@ -193,6 +193,7 @@ REGRAS DE MEDIDAS E TAMANHOS (CRÍTICO):
 - Se a medida do corpo ULTRAPASSA o maior tamanho disponível: diga honestamente que infelizmente não temos tamanho que atenda.
 - NUNCA diga que vai ficar "folgado" quando a medida do corpo é MAIOR que a da peça — isso significa APERTADO.
 - NUNCA invente medidas que não estão na descrição do produto.
+- PLUS SIZE: as refs 02277, 02601, 02600, 02700, 01628, 02798 possuem versão Plus Size (G1/G2/G3). Se as medidas da cliente ultrapassam o GG e o produto é uma dessas refs, sugira que ela busque o anúncio da versão Plus Size do mesmo modelo.
 
 REGRAS GERAIS:
 - NUNCA use "Amícia" — marca da loja física
@@ -268,6 +269,7 @@ export default async function handler(req, res) {
                 question_id: question.id, brand, item_id: question.item_id,
                 question_text: question.text, answer_text: stockResult.text,
                 answered_by: '_auto_ia', answered_at: new Date().toISOString(),
+                buyer_id: String(question.from?.id || ''),
               });
               autoStatus = stockResult.status;
             }
@@ -289,6 +291,7 @@ export default async function handler(req, res) {
                 question_id: question.id, brand, item_id: question.item_id,
                 question_text: question.text, answer_text: aiResult.text,
                 answered_by: '_auto_ia', answered_at: new Date().toISOString(),
+                buyer_id: String(question.from?.id || ''),
               });
               autoStatus = 'auto_ia';
             }
@@ -303,6 +306,7 @@ export default async function handler(req, res) {
                 question_id: question.id, brand, item_id: question.item_id,
                 question_text: question.text, answer_text: lowMsg,
                 answered_by: '_auto_ia_low', answered_at: new Date().toISOString(),
+                buyer_id: String(question.from?.id || ''),
               });
               autoStatus = 'auto_ia_low';
             }
@@ -328,6 +332,7 @@ export default async function handler(req, res) {
               question_id: question.id, brand, item_id: question.item_id,
               question_text: question.text, answer_text: msg,
               answered_by: '_auto_absence', answered_at: new Date().toISOString(),
+              buyer_id: String(question.from?.id || ''),
             });
             autoStatus = 'auto_absence';
           }

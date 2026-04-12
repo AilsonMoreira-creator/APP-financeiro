@@ -324,15 +324,23 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
     }
   }
 
-  // ── Fetch answered (last 24h) ──
+  // ── Fetch answered (last 24h) from Supabase ──
   async function fetchAnswered() {
+    if (!supabase) return;
     try {
-      const data = await apiCall('/api/ml-questions?status=ANSWERED');
-      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-      const recent = (data.questions || []).filter(
-        q => q.answer && new Date(q.answer.date_created).getTime() > cutoff
-      );
-      setAnsweredToday(recent);
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase.from('ml_qa_history')
+        .select('*')
+        .gte('answered_at', cutoff)
+        .order('answered_at', { ascending: false })
+        .limit(50);
+      setAnsweredToday((data || []).map(q => ({
+        id: q.question_id, brand: q.brand, item_id: q.item_id,
+        question_text: q.question_text, question_status: 'ANSWERED',
+        date_created: q.answered_at,
+        answer: { text: q.answer_text, date_created: q.answered_at, answered_by: q.answered_by },
+        answered_by: q.answered_by,
+      })));
     } catch (err) {
       console.error('[MLPerguntas] Fetch answered error:', err);
     }
@@ -761,7 +769,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.green, fontSize: 14, fontWeight: 600 }}>
-            ✓ Nenhuma pergunta pendente{brandFilter !== 'Todas' ? ` para ${brandFilter}` : ''}!
+            ✓ {tab === 'respondidas' ? 'Nenhuma resposta nas últimas 24h' : `Nenhuma pergunta pendente${brandFilter !== 'Todas' ? ` para ${brandFilter}` : ''}`}!
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
