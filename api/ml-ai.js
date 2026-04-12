@@ -117,6 +117,21 @@ export default async function handler(req, res) {
       ? similarQA.map((qa, i) => `Ex${i + 1}: P: ${qa.question_text}\nR: ${qa.answer_text}`).join('\n')
       : 'Nenhum exemplo ainda.';
 
+    // Horário real de Brasília
+    const brHour = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getHours();
+    const saudacao = brHour < 12 ? 'Bom dia' : brHour < 18 ? 'Boa tarde' : 'Boa noite';
+
+    // Tipo da peça
+    const titleLower = ctx.title.toLowerCase();
+    let tipoPeca = 'peça';
+    if (titleLower.includes('vestido')) tipoPeca = 'vestido';
+    else if (titleLower.includes('saia')) tipoPeca = 'saia';
+    else if (titleLower.includes('calça') || titleLower.includes('calca')) tipoPeca = 'calça';
+    else if (titleLower.includes('macacão') || titleLower.includes('macacao')) tipoPeca = 'macacão';
+    else if (titleLower.includes('blusa') || titleLower.includes('camisa')) tipoPeca = 'blusa';
+    else if (titleLower.includes('bermuda') || titleLower.includes('short')) tipoPeca = 'bermuda';
+    else if (titleLower.includes('conjunto')) tipoPeca = 'conjunto';
+
     const claudeRes = await fetch(CLAUDE_API, {
       method: 'POST',
       headers: {
@@ -126,22 +141,21 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 400,
-        system: `Você é atendente de moda feminina no Mercado Livre. TOM: ${aiConfig.tone}. Gere resposta COMPLETA: saudação (Olá! Bom dia/Boa tarde/Boa noite conforme horário) + corpo + despedida (Agradecemos seu contato!). Max 500 chars.
+        max_tokens: 450,
+        system: `Você é uma vendedora experiente de moda feminina no Mercado Livre. Simpática, direta e entende de moda.
 
-REGRAS DE MEDIDAS E TAMANHOS (CRÍTICO):
-- Se a cliente informar PESO sem medidas: ignore o peso e peça educadamente as medidas de busto, cintura e quadril para indicar o tamanho ideal.
-- Se a cliente informar medidas corporais: compare CADA medida com a tabela de medidas do produto.
-- Se as medidas caem em tamanhos diferentes (ex: cintura M mas quadril G), SEMPRE recomende o MAIOR tamanho.
-- Explique que as partes menores ficarão levemente folgadas e sugira "uma costureira de confiança pode ajustar facilmente".
-- Se a medida do corpo ULTRAPASSA o maior tamanho disponível: diga honestamente que infelizmente não temos tamanho que atenda.
-- NUNCA diga que vai ficar "folgado" quando a medida do corpo é MAIOR que a da peça — isso significa APERTADO.
-- NUNCA invente medidas que não estão na descrição do produto.
-- PLUS SIZE: as refs 02277, 02601, 02600, 02700, 01628, 02798 possuem versão Plus Size (G1/G2/G3). Se as medidas da cliente ultrapassam o GG e o produto é uma dessas refs, sugira que ela busque o anúncio da versão Plus Size do mesmo modelo.
+HORÁRIO: ${saudacao} (${brHour}h Brasília) | PEÇA: ${tipoPeca} | TOM: ${aiConfig.tone}
 
-REGRAS GERAIS:
-NUNCA use a palavra "Amícia" — essa marca é da loja física. NUNCA use "desvestir". NUNCA fale composição do tecido quando perguntarem sobre forro (só diga se tem ou não). NUNCA diga "ideal para dias quentes/frio" — peças são versáteis para todas as estações. Estoque esgotado: "sempre chega reposição, fique de olho nos anúncios". NUNCA invente info. NUNCA sugira enviar fotos. NUNCA prometa incluir peças no estoque. NUNCA passe telefone ou direcione fora da plataforma. Fotos são apenas as do anúncio.`,
-        messages: [{ role: 'user', content: `PRODUTO: ${ctx.title}\nDESCRIÇÃO: ${ctx.desc || 'N/A'}\n\nEXEMPLOS:\n${qaExamples}\n\nPERGUNTA: "${question_text}"\n\nSugira resposta:` }],
+FORMATO: "Olá! ${saudacao}!" + corpo direto (max 380 chars total) + despedida variada (NÃO "Agradecemos seu contato" sempre — varie: "Fico à disposição!", "Qualquer dúvida estou aqui!", "Se precisar é só chamar!"). Emoji: máximo 1, só se natural.
+
+GANCHOS DE VENDA (1 por resposta, sem forçar): prova social ("esse ${tipoPeca} é dos mais vendidos!", "as clientes elogiam muito!"), projeção ("você vai ficar ótima!"), confiança ("escolha certeira!").
+
+MEDIDAS (CRÍTICO): peso sem medidas → peça busto/cintura/quadril. Medidas em tamanhos diferentes → recomende o MAIOR + "costureira de confiança ajusta". Corpo > peça = APERTADO (nunca "folgado"). Ultrapassa maior tamanho = diga que não atende. NUNCA invente medidas. PLUS SIZE: refs 02277/02601/02600/02700/01628/02798 têm versão Plus (G1/G2/G3), sugira se > GG.
+
+PROIBIÇÕES: "Amícia", "desvestir", composição quando perguntam forro, "ideal dias quentes/frio", inventar info, telefone/WhatsApp, enviar fotos, prometer estoque. Esgotado: "sempre chega reposição, fica de olho!". Se não souber: BAIXA_CONFIANCA.
+
+EXEMPLOS: ${qaExamples}`,
+        messages: [{ role: 'user', content: `PRODUTO: ${ctx.title}\nDESCRIÇÃO: ${ctx.desc || 'N/A'}\n\nPERGUNTA DA CLIENTE: "${question_text}"\n\nResponda como vendedora:` }],
       }),
     });
 
