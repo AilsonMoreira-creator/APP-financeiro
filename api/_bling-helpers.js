@@ -42,14 +42,18 @@ export function parseCanal(lojaNome, extra = {}) {
   if (intermediador) {
     const cnpj = (intermediador.cnpj || '').replace(/\D/g, '');
     const nomeUser = (intermediador.nomeUsuario || '').toLowerCase();
-    // CNPJs conhecidos dos marketplaces
+    // CNPJs reais dos intermediadores (mapeados do banco)
     const CNPJ_MAP = {
-      '10573521000191': { geral: 'Mercado Livre', detalhe: 'Mercado Livre' },
-      '29115458000130': { geral: 'Shopee', detalhe: 'Shopee' },
-      '43196424000126': { geral: 'Shein', detalhe: 'Shein' },
-      '03007331000181': { geral: 'Magalu', detalhe: 'Magalu' },
-      '15436940000103': { geral: 'Amazon', detalhe: 'Amazon' },
-      '33050196000188': { geral: 'TikTok', detalhe: 'TikTok' },
+      // ML: intermediador usa CNPJ da própria empresa (03.007.331/0001-41)
+      '03007331000141': { geral: 'Mercado Livre', detalhe: 'Mercado Livre' },
+      // Shopee: CNPJ 45.814.425/0001-72 (nomeUsuario = emails)
+      '45814425000172': { geral: 'Shopee', detalhe: 'Shopee' },
+      // Shein: CNPJ 35.635.824/0001-12 (nomeUsuario = IDs numéricos)
+      '35635824000112': { geral: 'Shein', detalhe: 'Shein' },
+      // Magalu: CNPJ 47.960.950/0001-21
+      '47960950000121': { geral: 'Magalu', detalhe: 'Magalu' },
+      // TikTok: CNPJ 27.415.911/0001-36
+      '27415911000136': { geral: 'TikTok', detalhe: 'TikTok' },
     };
     if (cnpj && CNPJ_MAP[cnpj]) return CNPJ_MAP[cnpj];
     // Fallback: nome do intermediador
