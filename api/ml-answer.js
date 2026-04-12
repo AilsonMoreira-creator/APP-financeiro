@@ -41,6 +41,14 @@ export default async function handler(req, res) {
       await supabase.from('ml_question_locks').delete().eq('question_id', String(question_id));
     } catch (e) { console.error('[ml-answer] Lock cleanup error:', e.message); }
 
+    // Cancelar resposta da fila se existir (operador respondeu antes dos 2min)
+    try {
+      await supabase.from('ml_response_queue')
+        .update({ status: 'cancelled', error: 'manual_answer' })
+        .eq('question_id', Number(question_id))
+        .eq('status', 'queued');
+    } catch (e) { console.error('[ml-answer] Queue cancel error:', e.message); }
+
     return res.json({ success: true, question_id, brand, ml_response: mlData });
   } catch (err) {
     console.error('[ml-answer]', err.message);

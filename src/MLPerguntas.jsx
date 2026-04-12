@@ -215,6 +215,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   const [stockAlerts, setStockAlerts] = useState([]);
   const [aiResponses, setAiResponses] = useState([]);
   const [absenceResponses, setAbsenceResponses] = useState([]);
+  const [queuedIds, setQueuedIds] = useState(new Set());
   const [pvUnread, setPvUnread] = useState(0);
   const [conversions, setConversions] = useState([]);
   const [stockColorInput, setStockColorInput] = useState('');
@@ -321,6 +322,14 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       setError(null);
     } catch (err) {
       setError(`Erro no sync: ${err.message}`);
+    }
+    // Busca respostas na fila (pra mostrar indicador "IA respondendo")
+    if (supabase) {
+      try {
+        const { data: queued } = await supabase.from('ml_response_queue')
+          .select('question_id').eq('status', 'queued').limit(50);
+        setQueuedIds(new Set((queued || []).map(q => q.question_id)));
+      } catch {}
     }
   }
 
@@ -864,6 +873,11 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 {lockedByOther && (
                   <span style={{ ...S, fontSize: 10, color: PALETTE.orange, fontWeight: 600 }}>
                     🔒 {lock.user} respondendo...
+                  </span>
+                )}
+                {!isAnswered && !lockedByOther && queuedIds.has(q.id) && (
+                  <span style={{ ...S, fontSize: 10, color: '#27ae60', fontWeight: 600 }}>
+                    🤖 IA respondendo...
                   </span>
                 )}
               </div>

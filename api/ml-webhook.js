@@ -298,7 +298,7 @@ export default async function handler(req, res) {
         try {
           const stockResult = await handleStockFlow(question, brand, token);
           if (stockResult) {
-            await queueResponse(stockResult.text, '_auto_stock');
+            await queueResponse(stockResult.text, '_auto_ia');
             autoStatus = 'queued_' + stockResult.status;
           }
         } catch (e) { console.error('[ml-webhook] Stock flow error:', e.message); }
