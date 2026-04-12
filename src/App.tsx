@@ -3535,7 +3535,7 @@ const LoginScreen=({usuarios,onLogin})=>{
 };
 
 const UsuariosContent=({usuarios,setUsuarios})=>{
-  const [form,setForm]=useState({usuario:"",senha:"",modulos:[],admin:false});
+  const [form,setForm]=useState({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});
   const [editId,setEditId]=useState(null);
   const [erro,setErro]=useState("");
   const toggleMod=(mod)=>setForm(p=>({...p,modulos:p.modulos.includes(mod)?p.modulos.filter(m=>m!==mod):[...p.modulos,mod]}));
@@ -3546,9 +3546,9 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
     if(form.modulos.length===0){setErro("Selecione ao menos um módulo.");return;}
     if(editId){setUsuarios(prev=>prev.map(u=>u.id===editId?{...u,...form,usuario:form.usuario.trim().toLowerCase()}:u));}
     else{setUsuarios(prev=>[...prev,{id:Date.now(),...form,usuario:form.usuario.trim().toLowerCase()}]);}
-    setForm({usuario:"",senha:"",modulos:[],admin:false});setEditId(null);setErro("");
+    setForm({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});setEditId(null);setErro("");
   };
-  const editar=(u)=>{setForm({usuario:u.usuario,senha:u.senha,modulos:[...u.modulos],admin:u.admin});setEditId(u.id);};
+  const editar=(u)=>{setForm({usuario:u.usuario,senha:u.senha,modulos:[...u.modulos],admin:u.admin,moduloPadrao:u.moduloPadrao||"home"});setEditId(u.id);};
   const deletar=(id)=>{if(usuarios.find(u=>u.id===id)?.admin){setErro("Não é possível excluir o admin.");return;}setUsuarios(prev=>prev.filter(u=>u.id!==id));};
   const iStyle={border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 10px",fontSize:12,outline:"none",fontFamily:"Georgia,serif"};
   const modulesAll=[...modules.filter(m=>m.id!=="usuarios")];
@@ -3583,10 +3583,23 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
             </div>
           </div>
         )}
+        {/* Página inicial */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>Página inicial ao logar</div>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <select value={form.moduloPadrao||"home"} onChange={e=>setForm(p=>({...p,moduloPadrao:e.target.value}))} style={{...iStyle,minWidth:200}}>
+              <option value="home">🏠 Tela inicial (home)</option>
+              {modulesAll.filter(m=>form.admin||form.modulos.includes(m.id)).map(m=>(
+                <option key={m.id} value={m.id}>📌 {m.label}</option>
+              ))}
+            </select>
+            <span style={{fontSize:10,color:"#a89f94"}}>{(form.moduloPadrao||"home")==="home"?"Abre com os cards dos módulos":"Abre direto no módulo"}</span>
+          </div>
+        </div>
         {erro&&<div style={{fontSize:12,color:"#c0392b",marginBottom:10}}>{erro}</div>}
         <div style={{display:"flex",gap:8}}>
           <button onClick={salvar} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"8px 20px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>{editId?"Salvar alterações":"Criar usuário"}</button>
-          {editId&&<button onClick={()=>{setForm({usuario:"",senha:"",modulos:[],admin:false});setEditId(null);setErro("");}} style={{background:"#fff",color:"#6b7c8a",border:"1px solid #e8e2da",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Cancelar</button>}
+          {editId&&<button onClick={()=>{setForm({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});setEditId(null);setErro("");}} style={{background:"#fff",color:"#6b7c8a",border:"1px solid #e8e2da",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Cancelar</button>}
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
@@ -6839,7 +6852,7 @@ export default function App(){
   }
 
   if(!usuarioLogado){
-    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.modulos.includes("lancamentos")?"lancamentos":u.modulos[0]||"dashboard");}}/>;
+    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.moduloPadrao||"home");}}/>;
   }
 
   const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id));
@@ -6858,7 +6871,7 @@ export default function App(){
       )}
       {/* Barra de navegação com ícones SVG */}
       <div style={{background:"#fff",borderBottom:"1px solid #e8e2da",padding:"6px 12px",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-        <div style={{flexShrink:0,marginRight:8}}>
+        <div style={{flexShrink:0,marginRight:8,cursor:"pointer"}} onClick={()=>setActive("home")}>
           <div style={{fontSize:8,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",lineHeight:1.2}}>Grupo</div>
           <div style={{fontSize:13,color:"#2c3e50",fontWeight:700,lineHeight:1.2}}>Amícia</div>
         </div>
@@ -6907,7 +6920,85 @@ export default function App(){
         </div>
       </div>
       {/* Conteúdo */}
-      <div style={{flex:1,background:"#f7f4f0",padding:active==="oficinas"||active==="lancamentos"||active==="salascorte"||active==="sac"?"8px 8px":"16px 20px",overflowY:"auto"}}>
+      <div style={{flex:1,background:"#f7f4f0",padding:active==="oficinas"||active==="lancamentos"||active==="salascorte"||active==="sac"?"8px 8px":active==="home"?"0":"16px 20px",overflowY:"auto"}}>
+        {active==="home"&&(()=>{
+          const now=new Date();const hour=now.getHours();
+          const greeting=hour<12?"Bom dia":hour<18?"Boa tarde":"Boa noite";
+          const emoji=hour<12?"☀️":hour<18?"🌤️":"🌙";
+          const dias=["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
+          const meses=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+          const dataStr=`${dias[now.getDay()]}, ${now.getDate()} de ${meses[now.getMonth()]}`;
+          const nome=usuarioLogado?.usuario||"";
+          const nomeDisplay=nome.charAt(0).toUpperCase()+nome.slice(1);
+
+          // KPIs dinâmicos
+          const hojeDt=now.toISOString().slice(0,10);
+          const hojeMk=hojeDt.slice(0,7);const hojeDk=hojeDt.slice(8,10);
+          let blingHoje=0,blingPedidos=0;
+          const dHoje=blingVendas[hojeMk]?.[hojeDk];
+          if(dHoje){for(const c in dHoje){for(const cn in dHoje[c]){blingHoje+=dHoje[c][cn]?.bruto||0;blingPedidos+=dHoje[c][cn]?.pedidos||0;}}}
+          const cortesAbertos=cortes.filter(c=>c.status!=="entregue"&&c.status!=="cancelado");
+          const pecasAbertas=cortesAbertos.reduce((s,c)=>s+parseInt(c.qtd||0),0);
+
+          const homeModules=[
+            {id:"sac",label:"SAC",Icon:SvgSAC,color:"#4a7fa5",bg:"#f0f6fb",border:"#c8dae8",
+              kpiValue:"—",kpiLabel:"pendentes",detail:"Abra pra ver"},
+            {id:"bling",label:"Bling",Icon:SvgBling,color:"#2c3e50",bg:"#f7f4f0",border:"#e8e2da",
+              kpiValue:blingHoje>0?"R$ "+Math.round(blingHoje).toLocaleString("pt-BR"):"—",kpiLabel:"faturamento hoje",
+              detail:blingPedidos>0?`${blingPedidos} pedidos · 3 contas`:"cron atualizando..."},
+            {id:"oficinas",label:"Oficinas",Icon:SvgOficinas,color:"#8e6b3a",bg:"#faf6f0",border:"#e8dcc8",
+              kpiValue:cortesAbertos.length>0?`${cortesAbertos.length} cortes`:"—",kpiLabel:"em produção",
+              detail:pecasAbertas>0?`${pecasAbertas.toLocaleString("pt-BR")} peças em aberto`:"sem cortes abertos"},
+            {id:"salascorte",label:"Salas de Corte",Icon:SvgSalasCorte,color:"#6b4c3b",bg:"#f8f3ee",border:"#e0d4c8",
+              kpiValue:"—",kpiLabel:"cortes pendentes",detail:"Abra pra ver"},
+            {id:"fichatecnica",label:"Ficha Técnica",Icon:SvgFichaTecnica,color:"#6b5b73",bg:"#f6f3f8",border:"#ddd4e4",
+              kpiValue:produtos.length>0?`Ref ${produtos[produtos.length-1]?.ref||"—"}`:"—",kpiLabel:"última cadastrada",
+              detail:produtos.length>0?`${produtos.length} fichas no total`:"nenhuma ficha"},
+            {id:"calculadora",label:"Calculadora",Icon:SvgCalculadora,color:"#2e7d6a",bg:"#f0f8f5",border:"#c8e4da",
+              kpiValue:"—",kpiLabel:"calculadora",detail:"Calcular preços e margens"},
+            {id:"boletos",label:"Boletos",Icon:SvgBoletos,color:"#5a6e82",bg:"#f2f5f8",border:"#d0dae4",
+              kpiValue:boletosShared.length>0?new Date(boletosShared[boletosShared.length-1]?.vencimento||"").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}):"—",
+              kpiLabel:"último cadastro",detail:`${boletosShared.length} boletos este mês`},
+          ].filter(m=>usuarioLogado.modulos.includes(m.id));
+
+          return(
+            <div style={{maxWidth:820,margin:"0 auto",padding:"36px 20px"}}>
+              <div style={{marginBottom:30}}>
+                <div style={{fontSize:26,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif"}}>{greeting}, {nomeDisplay}! {emoji}</div>
+                <div style={{fontSize:13,color:"#8a9aa4",marginTop:3,fontFamily:"Georgia,serif"}}>{dataStr}</div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(230px, 1fr))",gap:12}}>
+                {homeModules.map(m=>(
+                  <div key={m.id} onClick={()=>setActive(m.id)}
+                    onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.borderColor=m.color;e.currentTarget.style.boxShadow=`0 8px 24px ${m.color}18, 0 2px 6px rgba(0,0,0,0.06)`;e.currentTarget.querySelector(".home-bar").style.background=m.color;e.currentTarget.querySelector(".home-arrow").style.opacity="1";e.currentTarget.querySelector(".home-arrow").style.transform="translateX(3px)";e.currentTarget.querySelector(".home-kpi").style.background=m.bg;}}
+                    onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.borderColor=m.border;e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.03)";e.currentTarget.querySelector(".home-bar").style.background="transparent";e.currentTarget.querySelector(".home-arrow").style.opacity="0.25";e.currentTarget.querySelector(".home-arrow").style.transform="none";e.currentTarget.querySelector(".home-kpi").style.background="transparent";}}
+                    style={{background:"#fff",border:`1.5px solid ${m.border}`,borderRadius:14,padding:"18px 16px 14px",cursor:"pointer",transition:"all 0.25s ease",position:"relative",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.03)"}}>
+                    <div className="home-bar" style={{position:"absolute",top:0,left:0,right:0,height:3,background:"transparent",transition:"background 0.25s",borderRadius:"14px 14px 0 0"}}/>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{width:44,height:44,borderRadius:11,background:m.bg,display:"flex",alignItems:"center",justifyContent:"center",border:`1px solid ${m.border}`}}>
+                          <m.Icon size={28}/>
+                        </div>
+                        <div style={{fontSize:15,fontWeight:700,color:m.color,fontFamily:"Georgia,serif"}}>{m.label}</div>
+                      </div>
+                      <div className="home-arrow" style={{opacity:0.25,transition:"all 0.25s"}}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke={m.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                    </div>
+                    <div className="home-kpi" style={{borderTop:`1px solid ${m.border}`,background:"transparent",margin:"0 -16px -14px",padding:"11px 16px 14px",borderRadius:"0 0 13px 13px",transition:"background 0.25s"}}>
+                      <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:2}}>
+                        <span style={{fontSize:20,fontWeight:700,color:"#2c3e50",fontFamily:"Calibri,'Segoe UI',Arial"}}>{m.kpiValue}</span>
+                        <span style={{fontSize:10,color:m.color,fontWeight:600,fontFamily:"Georgia,serif"}}>{m.kpiLabel}</span>
+                      </div>
+                      <div style={{fontSize:10,color:"#8a9aa4",fontFamily:"Georgia,serif"}}>{m.detail}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{textAlign:"center",marginTop:36,fontSize:11,color:"#8a9aa4",opacity:0.5,fontFamily:"Georgia,serif"}}>Selecione um módulo para começar</div>
+            </div>
+          );
+        })()}
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
         {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
