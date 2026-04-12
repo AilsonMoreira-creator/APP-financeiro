@@ -1,11 +1,16 @@
 -- ═══════════════════════════════════════════════════════════
--- VIEWS E FUNCTIONS PARA AGREGAÇÃO NO BANCO
--- Rodar no SQL Editor do Supabase
--- Substitui a lógica de puxar 15000+ linhas e agregar no servidor
+-- MIGRAÇÃO: Fix canal detection + quantidades
+-- Rodar no SQL Editor do Supabase ANTES de reprocessar
 -- ═══════════════════════════════════════════════════════════
 
--- 1. RESUMO DE VENDAS POR DIA/CONTA/CANAL
--- Retorna ~100-200 linhas em vez de 15000+
+-- 1. Adicionar colunas novas pra armazenar dados do Bling
+ALTER TABLE bling_vendas_detalhe 
+  ADD COLUMN IF NOT EXISTS loja_id BIGINT,
+  ADD COLUMN IF NOT EXISTS intermediador JSONB,
+  ADD COLUMN IF NOT EXISTS numero_pedido_loja TEXT;
+
+-- 2. Recriar fn_vendas_resumo com soma de quantidades reais
+-- (ANTES: contava jsonb_array_length = nº de linhas, não unidades)
 CREATE OR REPLACE FUNCTION fn_vendas_resumo(p_data_inicio DATE, p_data_fim DATE)
 RETURNS TABLE (
   data_pedido DATE,
@@ -36,8 +41,7 @@ RETURNS TABLE (
   ORDER BY bvd.data_pedido, bvd.conta, bvd.canal_geral;
 $$ LANGUAGE sql STABLE;
 
--- 2. TOP PRODUTOS COM TAMANHO E COR
--- Explode itens JSONB, agrupa por ref, retorna top 50
+-- 3. Recriar as outras RPCs (sem alteração funcional, só pra garantir)
 CREATE OR REPLACE FUNCTION fn_vendas_produtos(p_data_inicio DATE, p_data_fim DATE)
 RETURNS TABLE (
   data_pedido DATE,
@@ -71,7 +75,6 @@ RETURNS TABLE (
   ORDER BY qtd DESC;
 $$ LANGUAGE sql STABLE;
 
--- 3. CONTAGEM TOTAL (pra KPI rápido)
 CREATE OR REPLACE FUNCTION fn_vendas_total(p_data_inicio DATE, p_data_fim DATE)
 RETURNS TABLE (
   total_pedidos BIGINT,

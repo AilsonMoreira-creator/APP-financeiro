@@ -33,22 +33,69 @@ export function parseDescricao(descricao) {
 }
 
 // ── Parse canal de venda ──
-export function parseCanal(nome) {
-  if (!nome) return { geral: "Outros", detalhe: "Outros" };
-  const l = nome.toLowerCase().trim();
-  if (!l) return { geral: "Outros", detalhe: "Outros" };
-  if (l.includes("mercado livre") || l.includes("mercadolivre") || l.includes("meli")) {
-    const isFull = l.includes("full") || l.includes("fulfillment") || l.includes("flex");
+// Detecta canal a partir de múltiplas fontes do pedido Bling v3
+// Prioridade: intermediador > lojaNome > lojaMap > numeroPedidoLoja > contato
+export function parseCanal(lojaNome, extra = {}) {
+  const { intermediador, numeroPedidoLoja, contato } = extra;
+
+  // ── 1. intermediador (campo mais confiável pra marketplaces) ──
+  if (intermediador) {
+    const cnpj = (intermediador.cnpj || '').replace(/\D/g, '');
+    const nomeUser = (intermediador.nomeUsuario || '').toLowerCase();
+    // CNPJs conhecidos dos marketplaces
+    const CNPJ_MAP = {
+      '10573521000191': { geral: 'Mercado Livre', detalhe: 'Mercado Livre' },
+      '29115458000130': { geral: 'Shopee', detalhe: 'Shopee' },
+      '43196424000126': { geral: 'Shein', detalhe: 'Shein' },
+      '03007331000181': { geral: 'Magalu', detalhe: 'Magalu' },
+      '15436940000103': { geral: 'Amazon', detalhe: 'Amazon' },
+      '33050196000188': { geral: 'TikTok', detalhe: 'TikTok' },
+    };
+    if (cnpj && CNPJ_MAP[cnpj]) return CNPJ_MAP[cnpj];
+    // Fallback: nome do intermediador
+    const found = detectFromText(nomeUser);
+    if (found) return found;
+  }
+
+  // ── 2. lojaNome (do endpoint de detalhe ou listagem) ──
+  if (lojaNome) {
+    const found = detectFromText(lojaNome.toLowerCase().trim());
+    if (found) return found;
+  }
+
+  // ── 3. numeroPedidoLoja (padrão do marketplace) ──
+  if (numeroPedidoLoja) {
+    const num = String(numeroPedidoLoja).trim();
+    // ML: números longos (11+ dígitos) que começam com 2000+
+    if (/^\d{11,}$/.test(num) && num.startsWith('2')) return { geral: 'Mercado Livre', detalhe: 'Mercado Livre' };
+    // Shopee: formato específico com letras e números
+    if (/^[A-Z0-9]{15,}$/.test(num) && !num.startsWith('2')) return { geral: 'Shopee', detalhe: 'Shopee' };
+  }
+
+  // ── 4. contato.nome como última tentativa ──
+  if (contato) {
+    const cn = (typeof contato === 'string' ? contato : contato.nome || '').toLowerCase();
+    const found = detectFromText(cn);
+    if (found) return found;
+  }
+
+  return { geral: "Outros", detalhe: "Outros" };
+}
+
+// Detecta canal a partir de texto genérico
+function detectFromText(text) {
+  if (!text) return null;
+  if (text.includes("mercado livre") || text.includes("mercadolivre") || text.includes("meli") || text.includes("mercado envios") || text.includes("meliuz")) {
+    const isFull = text.includes("full") || text.includes("fulfillment") || text.includes("flex");
     return { geral: "Mercado Livre", detalhe: isFull ? "ML Full" : "ML Clássico" };
   }
-  if (l.includes("shopee")) return { geral: "Shopee", detalhe: "Shopee" };
-  if (l.includes("shein") || l.includes("neli")) return { geral: "Shein", detalhe: "Shein" };
-  if (l.includes("tiktok") || l.includes("tik tok")) return { geral: "TikTok", detalhe: "TikTok" };
-  if (l.includes("magalu") || l.includes("magazine")) return { geral: "Magalu", detalhe: "Magalu" };
-  if (l.includes("meluni") || l.includes("nuvemshop") || l.includes("nuvem")) return { geral: "Meluni", detalhe: "Meluni" };
-  if (l.includes("amazon")) return { geral: "Amazon", detalhe: "Amazon" };
-  if (l.includes("ideris")) return { geral: "Outros", detalhe: "Ideris" };
-  return { geral: nome.trim(), detalhe: nome.trim() };
+  if (text.includes("shopee")) return { geral: "Shopee", detalhe: "Shopee" };
+  if (text.includes("shein") || text.includes("neli")) return { geral: "Shein", detalhe: "Shein" };
+  if (text.includes("tiktok") || text.includes("tik tok")) return { geral: "TikTok", detalhe: "TikTok" };
+  if (text.includes("magalu") || text.includes("magazine luiza")) return { geral: "Magalu", detalhe: "Magalu" };
+  if (text.includes("meluni") || text.includes("nuvemshop") || text.includes("nuvem")) return { geral: "Meluni", detalhe: "Meluni" };
+  if (text.includes("amazon")) return { geral: "Amazon", detalhe: "Amazon" };
+  return null;
 }
 
 // ── Fetch com retry e backoff para 429 ──

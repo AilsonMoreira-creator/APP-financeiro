@@ -4377,15 +4377,15 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                 <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
                   {/* Ranking */}
                   <div style={{flex:"1 1 50%",background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-                    <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 20</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
-                    <div style={{maxHeight:650,overflowY:"auto"}}>
+                    <div style={{padding:"7px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 20</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
+                    <div style={{maxHeight:780,overflowY:"auto"}}>
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
-                        <div key={p.ref} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:"1px solid #f0ebe4"}}>
-                          <div style={{width:22,height:22,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
-                          {(()=>{const foto=produtos.find(x=>x.ref===p.ref)?.foto;return foto?<img src={foto} style={{width:38,height:50,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0}}/>:<div style={{width:38,height:50,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:14,opacity:0.3}}>📷</span></div>;})()}
+                        <div key={p.ref} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 14px",borderBottom:"1px solid #f0ebe4"}}>
+                          <div style={{width:20,height:20,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
+                          {(()=>{const foto=produtos.find(x=>x.ref===p.ref)?.foto;return foto?<img src={foto} style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0}}/>:<div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;})()}
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:10,color:"#6b7c8a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc}</span><span style={{display:"flex",gap:2,flexShrink:0,marginLeft:"auto"}}>{Object.entries(p.marcas||{}).map(([m,q])=>(<span key={m} style={{fontSize:8,color:"#4a3a2a",background:CORES_MARCA2[m]||"#888",borderRadius:3,padding:"1px 4px"}} title={`${m}: ${q} un`}>{m}</span>))}</span></div>
-                            <div style={{marginTop:3,height:4,background:"#f0ebe4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#4a7fa5,#2c3e50)",width:`${pct*100}%`}}/></div>
+                            <div style={{marginTop:2,height:3,background:"#f0ebe4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#4a7fa5,#2c3e50)",width:`${pct*100}%`}}/></div>
                           </div>
                           <div style={{textAlign:"right",flexShrink:0,marginLeft:6}}><div style={{fontSize:13,fontWeight:800,color:"#2c3e50",fontFamily:"Calibri,Arial"}}>{fmtV(p.qtdF)} un</div><div style={{fontSize:10,color:"#4a7fa5",fontFamily:"Calibri,Arial"}}>{fmtRV(p.valF)}</div></div>
                         </div>

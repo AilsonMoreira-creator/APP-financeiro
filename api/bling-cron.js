@@ -151,7 +151,7 @@ export default async function handler(req, res) {
             const det = await dr.json();
             const ped = det.data || det;
 
-            // Parse canal — tenta do detalhe primeiro, depois da listagem
+            // Parse canal — usa múltiplas fontes de detecção
             let lojaNome = pedido.lojaNome || '';
             if (!lojaNome) {
               const lojaDetail = ped.loja || {};
@@ -160,23 +160,21 @@ export default async function handler(req, res) {
                 lojaNome = lojaMap[lojaDetail.id];
               }
             }
-            // Fallback: tenta pelo campo 'contato' ou 'transporte'
-            if (!lojaNome && ped.contato?.nome) {
-              const cn = ped.contato.nome.toLowerCase();
-              if (cn.includes('mercado') || cn.includes('shopee') || cn.includes('shein') || cn.includes('magalu') || cn.includes('amazon')) {
-                lojaNome = ped.contato.nome;
-              }
-            }
-            const canal = parseCanal(lojaNome);
+            const canal = parseCanal(lojaNome, {
+              intermediador: ped.intermediador,
+              numeroPedidoLoja: ped.numeroPedidoLoja,
+              contato: ped.contato,
+            });
 
-            // Debug: log first order's loja info per account/date
+            // Debug: log first order's detection info per account/date
             if (novos.indexOf(pedido) === 0) {
-              console.log(`[bling-cron] ${conta}/${data}: loja debug:`, JSON.stringify({
-                listing_loja: pedido.lojaNome,
-                detail_loja: ped.loja,
-                contato: ped.contato?.nome,
+              console.log(`[bling-cron] ${conta}/${data}: canal debug:`, JSON.stringify({
+                lojaNome,
+                loja: ped.loja,
+                intermediador: ped.intermediador,
+                numeroPedidoLoja: ped.numeroPedidoLoja,
+                contato_nome: ped.contato?.nome,
                 canal_result: canal,
-                lojaNome_final: lojaNome
               }));
             }
 
@@ -206,7 +204,10 @@ export default async function handler(req, res) {
               total_produtos: parseFloat(ped.totalProdutos || 0),
               total_pedido: parseFloat(ped.total || 0),
               itens: itensParsed,
-              loja_nome: lojaNome || ''
+              loja_nome: lojaNome || '',
+              loja_id: ped.loja?.id || null,
+              intermediador: ped.intermediador || null,
+              numero_pedido_loja: ped.numeroPedidoLoja || null,
             }, { onConflict: 'conta,pedido_id' });
 
             if (error) {
