@@ -4458,7 +4458,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                     <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                       <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",fontSize:12,fontWeight:700,color:"#2c3e50"}}>🎨 Vendas por Cor</div>
                       <div style={{padding:"12px 16px"}}>
-                        {corS.length===0?<div style={{fontSize:11,color:"#a89f94"}}>Sem dados de cor</div>:corS.slice(0,12).map(([cor,qtd])=>{const pct=qtd/corT;const bar=qtd/maxCor;const dc=dotColor(cor);return(
+                        {corS.length===0?<div style={{fontSize:11,color:"#a89f94"}}>Sem dados de cor</div>:corS.slice(0,14).map(([cor,qtd])=>{const pct=qtd/corT;const bar=qtd/maxCor;const dc=dotColor(cor);return(
                           <div key={cor} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                             <div style={{width:12,height:12,borderRadius:"50%",background:dc,border:cor==="Branco"?"1px solid #d0c8c0":"none",flexShrink:0}}/>
                             <span style={{fontSize:11,color:"#2c3e50",width:80,flexShrink:0}}>{cor}</span>
@@ -6866,20 +6866,24 @@ export default function App(){
           setBlingVendas(result.vendas);
           try{localStorage.setItem("amica_bling_vendas",JSON.stringify(result.vendas));}catch(e){}
 
-          // Atualiza total em Lançamentos (desconta 10% devoluções)
-          // Calcula bruto só de hoje
-          const hojeMk=hoje.slice(0,7);const hojeDk=hoje.slice(8,10);
-          let totalBrutoHoje=0;
-          const diaHoje=result.vendas[hojeMk]?.[hojeDk];
-          if(diaHoje){
-            for(const conta in diaHoje){
-              for(const canal in diaHoje[conta]){
-                totalBrutoHoje+=diaHoje[conta][canal]?.bruto||0;
+          // Atualiza total MENSAL em Lançamentos (desconta 10% devoluções)
+          const hojeMk=hoje.slice(0,7);
+          let totalBrutoMes=0;
+          const mesData=result.vendas[hojeMk];
+          if(mesData){
+            for(const diaKey in mesData){
+              const diaData=mesData[diaKey];
+              if(diaData&&!diaData._vazio){
+                for(const conta in diaData){
+                  for(const canal in diaData[conta]){
+                    totalBrutoMes+=diaData[conta][canal]?.bruto||0;
+                  }
+                }
               }
             }
           }
-          if(totalBrutoHoje>0){
-            const liquido=Math.round(totalBrutoHoje*0.90);
+          if(totalBrutoMes>0){
+            const liquido=Math.round(totalBrutoMes*0.90);
             setReceitasPorMes(prev=>{const m=prev[MES_ATUAL]||{};return{...prev,[MES_ATUAL]:{...m,[1]:{...(m[1]||{}),marketplaces:String(liquido)}}};});
             setBlingStatus({ok:true,msg:`✓ Bling: R$ ${liquido.toLocaleString("pt-BR")}`});
             setTimeout(()=>setBlingStatus(null),8000);
@@ -7051,8 +7055,13 @@ export default function App(){
           let blingHoje=0,blingPedidos=0;
           const dHoje=blingVendas[hojeMk]?.[hojeDk];
           if(dHoje){for(const c in dHoje){for(const cn in dHoje[c]){blingHoje+=dHoje[c][cn]?.bruto||0;blingPedidos+=dHoje[c][cn]?.pedidos||0;}}}
-          const cortesAbertos=cortes.filter(c=>c.status!=="entregue"&&c.status!=="cancelado");
-          const pecasAbertas=cortesAbertos.reduce((s,c)=>s+parseInt(c.qtd||0),0);
+          const cortesAbertos=cortes.filter(c=>!c.entregue&&!c.pago);
+          const nCortesAberto=cortesAbertos.length;
+          const pecasAbertas=cortesAbertos.reduce((s,c)=>s+(parseInt(c.qtd)||0),0);
+          // Boletos: último com data válida
+          const boletosComData=boletosShared.filter(b=>b.vencimento&&!isNaN(new Date(b.vencimento).getTime()));
+          const boletosMesAtual=boletosShared.filter(b=>{try{const d=new Date(b.vencimento);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();}catch{return false;}});
+          const boletosAbertos=boletosMesAtual.filter(b=>!b.pago);
 
           const homeModules=[
             {id:"sac",label:"SAC",Icon:SvgSAC,color:"#4a7fa5",bg:"#f0f6fb",border:"#c8dae8",
@@ -7061,8 +7070,8 @@ export default function App(){
               kpiValue:blingHoje>0?"R$ "+Math.round(blingHoje).toLocaleString("pt-BR"):"—",kpiLabel:"faturamento hoje",
               detail:blingPedidos>0?`${blingPedidos} pedidos · 3 contas`:"cron atualizando..."},
             {id:"oficinas",label:"Oficinas",Icon:SvgOficinas,color:"#8e6b3a",bg:"#faf6f0",border:"#e8dcc8",
-              kpiValue:cortesAbertos.length>0?`${cortesAbertos.length} cortes`:"—",kpiLabel:"em produção",
-              detail:pecasAbertas>0?`${pecasAbertas.toLocaleString("pt-BR")} peças em aberto`:"sem cortes abertos"},
+              kpiValue:nCortesAberto>0?`${nCortesAberto} cortes`:"—",kpiLabel:"em produção",
+              detail:nCortesAberto>0?`${pecasAbertas.toLocaleString("pt-BR")} peças`:"sem cortes abertos"},
             {id:"salascorte",label:"Salas de Corte",Icon:SvgSalasCorte,color:"#6b4c3b",bg:"#f8f3ee",border:"#e0d4c8",
               kpiValue:"—",kpiLabel:"cortes pendentes",detail:"Abra pra ver"},
             {id:"fichatecnica",label:"Ficha Técnica",Icon:SvgFichaTecnica,color:"#6b5b73",bg:"#f6f3f8",border:"#ddd4e4",
@@ -7071,8 +7080,8 @@ export default function App(){
             {id:"calculadora",label:"Calculadora",Icon:SvgCalculadora,color:"#2e7d6a",bg:"#f0f8f5",border:"#c8e4da",
               kpiValue:"—",kpiLabel:"calculadora",detail:"Calcular preços e margens"},
             {id:"boletos",label:"Boletos",Icon:SvgBoletos,color:"#5a6e82",bg:"#f2f5f8",border:"#d0dae4",
-              kpiValue:boletosShared.length>0?new Date(boletosShared[boletosShared.length-1]?.vencimento||"").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}):"—",
-              kpiLabel:"último cadastro",detail:`${boletosShared.length} boletos este mês`},
+              kpiValue:`${boletosMesAtual.length}`,
+              kpiLabel:"boletos este mês",detail:boletosAbertos.length>0?`${boletosAbertos.length} em aberto`:"todos pagos ✓"},
           ].filter(m=>usuarioLogado.modulos.includes(m.id));
 
           return(
