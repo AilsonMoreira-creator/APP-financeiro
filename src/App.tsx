@@ -3424,8 +3424,8 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                 <span style={{fontSize:11,color:"#a89f94",whiteSpace:"nowrap"}}>{prodsFilt.length} de {produtos.length}</span>
               </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
-                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:500}}><thead><tr style={{background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Tecido","Vl. Unit.",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{prodsFilt.length===0&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{buscaProd?`Nenhum produto com "${buscaProd}"`:"Nenhum produto cadastrado"}</td></tr>}{prodsFilt.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:500}}><thead><tr style={{background:"#4a7fa5"}}>{["","Ref","Descrição","Marca","Tecido","Vl. Unit.",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
+                  <tbody>{prodsFilt.length===0&&<tr><td colSpan={7} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{buscaProd?`Nenhum produto com "${buscaProd}"`:"Nenhum produto cadastrado"}</td></tr>}{prodsFilt.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"4px 8px",width:44}}>{p.foto?<img src={p.foto} style={{width:34,height:45,objectFit:"cover",borderRadius:3,border:"1px solid #e8e2da"}}/>:<div style={{width:34,height:45,borderRadius:3,background:"#f0ebe3",border:"1px solid #e8e2da"}}/>}</td><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
                 </table>
               </div></>);})()}
             </div>
@@ -3648,7 +3648,7 @@ const blingDb={
   },
 };
 
-const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=null})=>{
+const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=null,produtos=[]})=>{
   const [tela,setTela]=useState("dash");
   const [vendasSub,setVendasSub]=useState("overview"); // "overview" | "produtos"
   const [vendasFiltro,setVendasFiltro]=useState("hoje");
@@ -4382,6 +4382,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
                         <div key={p.ref} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:"1px solid #f0ebe4"}}>
                           <div style={{width:22,height:22,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
+                          {(()=>{const foto=produtos.find(x=>x.ref===p.ref)?.foto;return foto?<img src={foto} style={{width:38,height:50,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0}}/>:<div style={{width:38,height:50,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:14,opacity:0.3}}>📷</span></div>;})()}
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:10,color:"#6b7c8a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc}</span><span style={{display:"flex",gap:2,flexShrink:0,marginLeft:"auto"}}>{Object.entries(p.marcas||{}).map(([m,q])=>(<span key={m} style={{fontSize:8,color:"#4a3a2a",background:CORES_MARCA2[m]||"#888",borderRadius:3,padding:"1px 4px"}} title={`${m}: ${q} un`}>{m}</span>))}</span></div>
                             <div style={{marginTop:3,height:4,background:"#f0ebe4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#4a7fa5,#2c3e50)",width:`${pct*100}%`}}/></div>
@@ -5334,8 +5335,9 @@ const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>(
     <div style={{maxWidth:700,margin:"0 auto"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={()=>setTela("home")} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Produtos Cadastrados</div></div>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"80px 1fr 70px 110px 32px",background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Custo",""].map(h=><div key={h} style={{padding:"8px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}</div>
-        {prods.map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 70px 110px 32px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
+        <div style={{display:"grid",gridTemplateColumns:"48px 80px 1fr 70px 110px 32px",background:"#4a7fa5"}}>{["","Ref","Descrição","Marca","Custo",""].map(h=><div key={h} style={{padding:"8px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}</div>
+        {prods.map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"48px 80px 1fr 70px 110px 32px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
+          <div style={{padding:"4px 6px"}}>{p.foto?<img src={p.foto} style={{width:38,height:50,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da"}}/>:<div style={{width:38,height:50,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da"}}><span style={{fontSize:14,opacity:0.3}}>📷</span></div>}</div>
           <div onClick={()=>{setProd(p);setRb(p.ref);setTela("home");}} style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:"#4a7fa5",cursor:"pointer"}}>{p.ref}</div>
           <div onClick={()=>{setProd(p);setRb(p.ref);setTela("home");}} style={{padding:"10px 12px",fontSize:12,color:"#2c3e50",cursor:"pointer"}}>{p.descricao}</div>
           <div style={{padding:"10px 12px",fontSize:11,color:"#8a9aa4"}}>{p.marca}</div>
@@ -5349,9 +5351,54 @@ const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>(
 );
 
 const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
-  const[f,setF]=useState(inicial||{ref:"",descricao:"",marca:"Meluni",tecido:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""});
+  const[f,setF]=useState(inicial||{ref:"",descricao:"",marca:"Meluni",tecido:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:"",foto:""});
   const[salvando,setSalvando]=useState(false);
+  const[fotoPreview,setFotoPreview]=useState(inicial?.foto||"");
+  const[fotoUploading,setFotoUploading]=useState(false);
+  const fotoRef=useRef(null);
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
+
+  const resizeImage=(file,maxW=600,maxH=800)=>new Promise((resolve)=>{
+    const reader=new FileReader();
+    reader.onload=(e)=>{
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement("canvas");
+        let w=img.width,h=img.height;
+        if(w>maxW||h>maxH){const ratio=Math.min(maxW/w,maxH/h);w=Math.round(w*ratio);h=Math.round(h*ratio);}
+        canvas.width=w;canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL("image/jpeg",0.82));
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const handleFotoUpload=async(e)=>{
+    const file=e.target.files?.[0];if(!file)return;
+    if(!["image/jpeg","image/png","image/webp"].includes(file.type)){alert("Formato aceito: JPEG, PNG ou WebP");return;}
+    if(file.size>2*1024*1024){alert("Máximo 2MB");return;}
+    if(!f.ref.trim()){alert("Preencha a Referência antes de adicionar a foto");return;}
+    setFotoUploading(true);
+    try{
+      const resized=await resizeImage(file);
+      setFotoPreview(resized);
+      const resp=await fetch("/api/produto-foto",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ref:f.ref.trim(),image_base64:resized,content_type:"image/jpeg"})});
+      const data=await resp.json();
+      if(data.ok&&data.url){s("foto",data.url);setFotoPreview(data.url);}
+      else{alert("Erro no upload: "+(data.error||""));}
+    }catch(err){alert("Erro: "+err.message);}
+    setFotoUploading(false);
+  };
+
+  const handleFotoRemove=async()=>{
+    if(!f.ref.trim())return;
+    try{await fetch("/api/produto-foto",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:f.ref.trim()})});}catch{}
+    s("foto","");setFotoPreview("");
+  };
+
   const handleSalvar=()=>{
     if(!f.ref.trim())return alert("Ref obrigatória");
     setSalvando(true);
@@ -5367,10 +5414,30 @@ const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
         {onRegras&&<button onClick={onRegras} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>⚙ Regras Plataformas</button>}
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da"}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:12}}>
-          {[["ref","Referência *"],["descricao","Descrição"]].map(([k,l])=><div key={k}><div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>{l}</div><input value={f[k]} onChange={e=>s(k,e.target.value)} style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"}}/></div>)}
+        <div style={{display:"flex",gap:16,marginBottom:12}}>
+          {/* Foto */}
+          <div style={{flexShrink:0}}>
+            <div onClick={()=>fotoRef.current?.click()} style={{width:118,height:157,borderRadius:10,background:fotoPreview?"transparent":"#f0ebe3",border:fotoPreview?"1px solid #e8e2da":"2px dashed #e8e2da",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",overflow:"hidden",position:"relative"}}>
+              {fotoUploading?(<div style={{fontSize:11,color:"#4a7fa5"}}>⏳</div>):fotoPreview?(
+                <><img src={fotoPreview} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"4px",background:"rgba(0,0,0,0.5)",textAlign:"center",fontSize:9,color:"#fff"}}>trocar foto</div></>
+              ):(<>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" style={{marginBottom:6,opacity:0.4}}><rect x="3" y="3" width="18" height="18" rx="3" stroke="#8a9aa4" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="2" stroke="#8a9aa4" strokeWidth="1.5"/><path d="M3 16l5-5 4 4 3-3 6 6" stroke="#8a9aa4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <div style={{fontSize:10,color:"#8a9aa4",textAlign:"center",lineHeight:1.3}}>Adicionar<br/>foto</div>
+                <div style={{fontSize:8,color:"#8a9aa4",marginTop:4,opacity:0.6}}>JPG · PNG</div>
+              </>)}
+            </div>
+            <input ref={fotoRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFotoUpload} style={{display:"none"}}/>
+            {fotoPreview&&<button onClick={handleFotoRemove} style={{width:"100%",marginTop:4,background:"none",border:"1px solid #f4b8b8",borderRadius:6,padding:"3px",fontSize:9,color:"#c0392b",cursor:"pointer"}}>remover</button>}
+          </div>
+          {/* Ref + Descrição + Marca */}
+          <div style={{flex:1}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:12}}>
+              {[["ref","Referência *"],["descricao","Descrição"]].map(([k,l])=><div key={k}><div style={{fontSize:11,color:"#a89f94",marginBottom:4}}>{l}</div><input value={f[k]} onChange={e=>s(k,e.target.value)} style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"}}/></div>)}
+            </div>
+            <div style={{marginBottom:12}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Marca</div><div style={{display:"flex",gap:8}}>{["Meluni","Amícia"].map(m=><button key={m} onClick={()=>s("marca",m)} style={{background:f.marca===m?"#2c3e50":"#fff",color:f.marca===m?"#fff":"#6b7c8a",border:`1px solid ${f.marca===m?"#2c3e50":"#e8e2da"}`,borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>)}</div></div>
+          </div>
         </div>
-        <div style={{marginBottom:12}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Marca</div><div style={{display:"flex",gap:8}}>{["Meluni","Amícia"].map(m=><button key={m} onClick={()=>s("marca",m)} style={{background:f.marca===m?"#2c3e50":"#fff",color:f.marca===m?"#fff":"#6b7c8a",border:`1px solid ${f.marca===m?"#2c3e50":"#e8e2da"}`,borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>)}</div></div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
           {CALC_CK.map(([k,l])=><div key={k}><div style={{fontSize:10,color:"#a89f94",marginBottom:4}}>{l}</div><input type="number" value={f[k]||""} onChange={e=>s(k,e.target.value)} placeholder="0,00" style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/></div>)}
         </div>
@@ -7009,7 +7076,7 @@ export default function App(){
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
         {active==="salascorte"&&<SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/>}
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} />}
-        {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus}/>}
+        {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
