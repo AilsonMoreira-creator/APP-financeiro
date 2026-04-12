@@ -144,10 +144,20 @@ async function getAIAutoResponse(questionText, itemId, brand) {
   let qaExamples = '';
   try {
     // 1. Perguntas treinadas manualmente (MANUAL) — prioridade máxima
-    const { data: manual } = await supabase.from('ml_qa_history')
+    // Cada pergunta foi salva 3x (Exitus/Lumia/Muniam), então puxamos mais e deduplicamos
+    const { data: manualRaw } = await supabase.from('ml_qa_history')
       .select('question_text, answer_text').eq('item_id', 'MANUAL')
       .neq('answered_by', '_auto_absence').neq('answered_by', '_auto_ia_low')
-      .order('answered_at', { ascending: false }).limit(50);
+      .order('answered_at', { ascending: false }).limit(300);
+
+    // Deduplica (mesma pergunta salva em 3 marcas)
+    const seen = new Set();
+    const manual = (manualRaw || []).filter(qa => {
+      const key = qa.question_text.toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     // 2. Perguntas do mesmo item
     const { data: sameItem } = await supabase.from('ml_qa_history')
