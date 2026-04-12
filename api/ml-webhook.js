@@ -279,25 +279,27 @@ export default async function handler(req, res) {
       const inAISchedule = await isInAISchedule();
       let autoStatus = 'pending';
 
+      const DELAY_MS = 2 * 60 * 1000; // 2 minutos
+      const buyerId = String(question.from?.id || '');
+      const respondAfter = new Date(Date.now() + DELAY_MS).toISOString();
+
+      // Helper: enfileira resposta pra envio com delay
+      const queueResponse = async (text, answeredBy) => {
+        await supabase.from('ml_response_queue').insert({
+          question_id: question.id, brand, item_id: question.item_id,
+          question_text: question.text, response_text: text,
+          answered_by: answeredBy, buyer_id: buyerId,
+          respond_after: respondAfter, status: 'queued',
+        });
+      };
+
       // P0: Stock flow — roda SEMPRE (independente do horário)
-      // É regra de negócio (cores pré-cadastradas), não IA genérica
       if (autoStatus === 'pending') {
         try {
           const stockResult = await handleStockFlow(question, brand, token);
           if (stockResult) {
-            const ansRes = await fetch(`${ML_API}/answers`, {
-              method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question_id: question.id, text: stockResult.text }),
-            });
-            if (ansRes.ok) {
-              await supabase.from('ml_qa_history').insert({
-                question_id: question.id, brand, item_id: question.item_id,
-                question_text: question.text, answer_text: stockResult.text,
-                answered_by: '_auto_ia', answered_at: new Date().toISOString(),
-                buyer_id: String(question.from?.id || ''),
-              });
-              autoStatus = stockResult.status;
-            }
+            await queueResponse(stockResult.text, '_auto_stock');
+            autoStatus = 'queued_' + stockResult.status;
           }
         } catch (e) { console.error('[ml-webhook] Stock flow error:', e.message); }
       }
@@ -307,34 +309,12 @@ export default async function handler(req, res) {
         try {
           const aiResult = await getAIAutoResponse(question.text, question.item_id, brand);
           if (aiResult?.confidence === 'high' && aiResult.text) {
-            const ansRes = await fetch(`${ML_API}/answers`, {
-              method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question_id: question.id, text: aiResult.text }),
-            });
-            if (ansRes.ok) {
-              await supabase.from('ml_qa_history').insert({
-                question_id: question.id, brand, item_id: question.item_id,
-                question_text: question.text, answer_text: aiResult.text,
-                answered_by: '_auto_ia', answered_at: new Date().toISOString(),
-                buyer_id: String(question.from?.id || ''),
-              });
-              autoStatus = 'auto_ia';
-            }
+            await queueResponse(aiResult.text, '_auto_ia');
+            autoStatus = 'queued_ia';
           } else {
             const lowMsg = await getAILowConfidenceMsg();
-            const ansRes = await fetch(`${ML_API}/answers`, {
-              method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question_id: question.id, text: lowMsg }),
-            });
-            if (ansRes.ok) {
-              await supabase.from('ml_qa_history').insert({
-                question_id: question.id, brand, item_id: question.item_id,
-                question_text: question.text, answer_text: lowMsg,
-                answered_by: '_auto_ia_low', answered_at: new Date().toISOString(),
-                buyer_id: String(question.from?.id || ''),
-              });
-              autoStatus = 'auto_ia_low';
-            }
+            await queueResponse(lowMsg, '_auto_ia_low');
+            autoStatus = 'queued_ia_low';
           }
         } catch (aiErr) { console.error('[ml-webhook] AI error:', aiErr.message); }
       }
@@ -348,19 +328,8 @@ export default async function handler(req, res) {
         } catch {}
         if (absenceEnabled) {
           const msg = await getAbsenceMessage();
-          const ansRes = await fetch(`${ML_API}/answers`, {
-            method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question_id: question.id, text: msg }),
-          });
-          if (ansRes.ok) {
-            await supabase.from('ml_qa_history').insert({
-              question_id: question.id, brand, item_id: question.item_id,
-              question_text: question.text, answer_text: msg,
-              answered_by: '_auto_absence', answered_at: new Date().toISOString(),
-              buyer_id: String(question.from?.id || ''),
-            });
-            autoStatus = 'auto_absence';
-          }
+          await queueResponse(msg, '_auto_absence');
+          autoStatus = 'queued_absence';
         }
       }
 
