@@ -1,7 +1,13 @@
 /**
- * bling-vendas-cache.js — Lê vendas detalhadas do cache Supabase
- * Retorna dados agregados no formato que o frontend espera
- * Substitui bling-vendas-dia.js (que batia no rate limit)
+ * bling-vendas-cache.js — Lê vendas via RPCs do Supabase (agregação no banco)
+ * 
+ * ANTES: puxava 15000+ linhas e agregava no servidor (~2s, 5MB)
+ * AGORA: 2 RPCs retornam ~300 linhas já agregadas (~100ms, 20KB)
+ * 
+ * RPCs usadas:
+ * - fn_vendas_resumo: vendas por dia/conta/canal
+ * - fn_vendas_produtos: itens por ref/cor/tamanho
+ * - fn_vendas_total: contagem total
  */
 import { createClient } from '@supabase/supabase-js';
 
@@ -20,32 +26,34 @@ export default async function handler(req, res) {
   try {
     const { data_inicio, data_fim } = req.body;
     if (!data_inicio) return res.status(400).json({ erro: "Falta data_inicio" });
-
     const fim = data_fim || data_inicio;
 
-    // Busca todos os pedidos cacheados no período (limite alto pra pegar todas as contas)
-    const { data: pedidos, error } = await supabase
-      .from('bling_vendas_detalhe')
-      .select('conta,pedido_id,data_pedido,canal_geral,canal_detalhe,total_produtos,total_pedido,itens')
-      .gte('data_pedido', data_inicio)
-      .lte('data_pedido', fim)
-      .order('data_pedido', { ascending: true })
-      .limit(30000);
+    // 3 RPCs em paralelo — muito mais rápido que puxar todas as linhas
+    const [resumoRes, produtosRes, totalRes] = await Promise.all([
+      supabase.rpc('fn_vendas_resumo', { p_data_inicio: data_inicio, p_data_fim: fim }),
+      supabase.rpc('fn_vendas_produtos', { p_data_inicio: data_inicio, p_data_fim: fim }),
+      supabase.rpc('fn_vendas_total', { p_data_inicio: data_inicio, p_data_fim: fim }),
+    ]);
 
-    if (error) {
-      console.error("[bling-cache] erro query:", error);
-      return res.status(500).json({ erro: error.message });
+    if (resumoRes.error) {
+      console.error("[bling-cache] RPC resumo error:", resumoRes.error);
+      return res.status(500).json({ erro: resumoRes.error.message });
     }
 
-    // Agrega no formato: { mesKey: { diaKey: { conta: { canal: {...} } } } }
+    const resumo = resumoRes.data || [];
+    const produtos = produtosRes.data || [];
+    const totais = totalRes.data?.[0] || { total_pedidos: 0, total_bruto: 0 };
+
+    // Montar estrutura que o frontend espera: { mesKey: { diaKey: { conta: { canal: {...} } } } }
     const resultado = {};
 
-    for (const p of (pedidos || [])) {
-      const mesKey = p.data_pedido.slice(0, 7);   // "2026-04"
-      const diaKey = p.data_pedido.slice(8, 10);   // "10"
-      const conta = p.conta;
-      const canalGeral = p.canal_geral || "Outros";
-      const canalDetalhe = p.canal_detalhe || "Outros";
+    // 1. Resumo por dia/conta/canal
+    for (const r of resumo) {
+      const ds = r.data_pedido; // "2026-04-10"
+      const mesKey = ds.slice(0, 7);
+      const diaKey = ds.slice(8, 10);
+      const conta = r.conta;
+      const canalGeral = r.canal_geral;
 
       if (!resultado[mesKey]) resultado[mesKey] = {};
       if (!resultado[mesKey][diaKey]) resultado[mesKey][diaKey] = {};
@@ -53,71 +61,72 @@ export default async function handler(req, res) {
 
       const contaData = resultado[mesKey][diaKey][conta];
       if (!contaData[canalGeral]) {
-        contaData[canalGeral] = {
-          pedidos: 0,
-          bruto: 0,
-          frete: 0,
-          itens: 0,
-          subcanais: {},
-          produtos: {}
-        };
+        contaData[canalGeral] = { pedidos: 0, bruto: 0, frete: 0, itens: 0, subcanais: {}, produtos: [] };
       }
 
       const cc = contaData[canalGeral];
-      cc.pedidos++;
-      cc.bruto += parseFloat(p.total_produtos || 0);
-      cc.frete += Math.max(0, parseFloat(p.total_pedido || 0) - parseFloat(p.total_produtos || 0));
+      cc.pedidos += parseInt(r.pedidos) || 0;
+      cc.bruto += parseFloat(r.bruto) || 0;
+      cc.frete += parseFloat(r.frete) || 0;
+      cc.itens += parseInt(r.total_itens) || 0;
 
       // Subcanais
+      const canalDetalhe = r.canal_detalhe;
       if (!cc.subcanais[canalDetalhe]) cc.subcanais[canalDetalhe] = { pedidos: 0, bruto: 0 };
-      cc.subcanais[canalDetalhe].pedidos++;
-      cc.subcanais[canalDetalhe].bruto += parseFloat(p.total_produtos || 0);
+      cc.subcanais[canalDetalhe].pedidos += parseInt(r.pedidos) || 0;
+      cc.subcanais[canalDetalhe].bruto += parseFloat(r.bruto) || 0;
+    }
 
-      // Itens / Produtos
-      const itens = p.itens || [];
-      for (const item of itens) {
-        const ref = item.ref || "SEM-REF";
-        const qtd = parseInt(item.quantidade) || 1;
-        const valor = parseFloat(item.valor) || 0;
-        cc.itens += qtd;
+    // 2. Produtos — distribuir por dia/conta/canal
+    for (const p of produtos) {
+      const ds = p.data_pedido;
+      const mesKey = ds.slice(0, 7);
+      const diaKey = ds.slice(8, 10);
+      const conta = p.conta;
+      const canal = p.canal_geral;
+      const qtd = parseInt(p.qtd) || 0;
+      const valor = parseFloat(p.valor) || 0;
 
-        if (ref === "SEM-REF") continue;
-        if (!cc.produtos[ref]) {
-          cc.produtos[ref] = { ref, desc: item.descLimpa || "", qtd: 0, valor: 0, tam: {}, cor: {} };
-        }
-        const prod = cc.produtos[ref];
-        prod.qtd += qtd;
-        prod.valor += valor * qtd;
-        if (item.tamanho) prod.tam[item.tamanho] = (prod.tam[item.tamanho] || 0) + qtd;
-        if (item.cor) prod.cor[item.cor] = (prod.cor[item.cor] || 0) + qtd;
+      // Garante que a estrutura existe
+      if (!resultado[mesKey]) resultado[mesKey] = {};
+      if (!resultado[mesKey][diaKey]) resultado[mesKey][diaKey] = {};
+      if (!resultado[mesKey][diaKey][conta]) resultado[mesKey][diaKey][conta] = {};
+      if (!resultado[mesKey][diaKey][conta][canal]) {
+        resultado[mesKey][diaKey][conta][canal] = { pedidos: 0, bruto: 0, frete: 0, itens: 0, subcanais: {}, produtos: [] };
+      }
+
+      const cc = resultado[mesKey][diaKey][conta][canal];
+      const existing = cc.produtos.find(x => x.ref === p.ref);
+      if (existing) {
+        existing.qtd += qtd;
+        existing.valor += valor;
+        if (p.tamanho) existing.tam[p.tamanho] = (existing.tam[p.tamanho] || 0) + qtd;
+        if (p.cor) existing.cor[p.cor] = (existing.cor[p.cor] || 0) + qtd;
+      } else {
+        const tam = {}; if (p.tamanho) tam[p.tamanho] = qtd;
+        const cor = {}; if (p.cor) cor[p.cor] = qtd;
+        cc.produtos.push({ ref: p.ref, desc: p.desc_limpa || '', qtd, valor, tam, cor });
       }
     }
 
-    // Converte produtos de objeto pra array ordenado (como o frontend espera)
+    // Ordenar produtos por qtd desc
     for (const mesKey in resultado) {
       for (const diaKey in resultado[mesKey]) {
         for (const conta in resultado[mesKey][diaKey]) {
           for (const canal in resultado[mesKey][diaKey][conta]) {
-            const cc = resultado[mesKey][diaKey][conta][canal];
-            cc.produtos = Object.values(cc.produtos).sort((a, b) => b.qtd - a.qtd);
+            resultado[mesKey][diaKey][conta][canal].produtos.sort((a, b) => b.qtd - a.qtd);
           }
         }
       }
-    }
-
-    // Total bruto geral (pra o frontend usar no lançamento)
-    let totalBruto = 0;
-    for (const p of (pedidos || [])) {
-      totalBruto += parseFloat(p.total_produtos || 0);
     }
 
     return res.json({
       ok: true,
       data_inicio,
       data_fim: fim,
-      totalPedidos: (pedidos || []).length,
-      totalBruto,
-      vendas: resultado
+      totalPedidos: parseInt(totais.total_pedidos) || 0,
+      totalBruto: parseFloat(totais.total_bruto) || 0,
+      vendas: resultado,
     });
 
   } catch (e) {
