@@ -251,7 +251,7 @@ ${qaExamples || 'Nenhum exemplo disponível'}`;
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-6',
       max_tokens: 450,
       system: systemPrompt,
       messages: [{ role: 'user', content: `PRODUTO: ${title}\nDESCRIÇÃO DO ANÚNCIO: ${desc || 'N/A'}\n\nPERGUNTA DA CLIENTE: "${questionText}"\n\nResponda como vendedora:` }],
@@ -266,7 +266,7 @@ ${qaExamples || 'Nenhum exemplo disponível'}`;
     descricao: desc ? `${desc.length} chars` : 'sem descrição',
     exemplos_encontrados: debugExamples.length,
     exemplos: debugExamples,
-    modelo: 'claude-haiku-4-5',
+    modelo: 'claude-sonnet-4-6',
   };
   if (response.includes('BAIXA_CONFIANCA')) return { text: null, confidence: 'low', debug };
   return { text: response, confidence: 'high', debug };
