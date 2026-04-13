@@ -3598,8 +3598,8 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
     if(!form.usuario.trim()||!form.senha.trim()){setErro("Preencha usuário e senha.");return;}
     if(!editId&&usuarios.find(u=>u.usuario===form.usuario.trim().toLowerCase())){setErro("Usuário já existe.");return;}
     if(form.modulos.length===0){setErro("Selecione ao menos um módulo.");return;}
-    if(editId){setUsuarios(prev=>prev.map(u=>u.id===editId?{...u,...form,usuario:form.usuario.trim().toLowerCase()}:u));}
-    else{setUsuarios(prev=>[...prev,{id:Date.now(),...form,usuario:form.usuario.trim().toLowerCase()}]);}
+    if(editId){setUsuarios(prev=>prev.map(u=>u.id===editId?{...u,...form,usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()}:u));}
+    else{setUsuarios(prev=>[...prev,{id:Date.now(),...form,usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()}]);}
     setForm({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});setEditId(null);setErro("");
   };
   const editar=(u)=>{setForm({usuario:u.usuario,senha:u.senha,modulos:[...u.modulos],admin:u.admin,moduloPadrao:u.moduloPadrao||"home"});setEditId(u.id);};
@@ -6638,7 +6638,7 @@ export default function App(){
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
         if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
-        if(d.usuarios)setUsuarios(d.usuarios);
+        if(d.usuarios)setUsuarios(prev=>{const rm=new Map(d.usuarios.map(u=>[u.id,u]));const lm=new Map(prev.map(u=>[u.id,u]));const m=prev.map(lu=>{const ru=rm.get(lu.id);return ru&&(ru._mod||0)>(lu._mod||0)?ru:lu;});for(const[id,ru]of rm){if(!lm.has(id))m.push(ru);}return m;});
         if(d.prestadores)setPrestadores(d.prestadores);
         if(d.produtos)setProdutos(d.produtos);
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
