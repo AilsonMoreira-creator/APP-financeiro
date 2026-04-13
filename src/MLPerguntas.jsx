@@ -747,7 +747,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                   </div>
                 )}
               </div>
-            );})
+            );
+            })}
           </div>
         ) : tab === 'estoque' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
