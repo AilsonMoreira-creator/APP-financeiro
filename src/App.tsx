@@ -3720,9 +3720,13 @@ const FotoProd=({sbUrl,refProd,onZoom})=>{
   const storageBase=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/`:'';
   const cb='?v='+new Date().toISOString().slice(0,10);
   if(!storageBase)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
-  // Sequência: norm.jpg → norm.png → norm.webp → orig.jpg → orig.png → orig.webp → placeholder
+  // Sequência: norm → orig (se diferente) → zero-padded (4 e 5 dígitos) → placeholder
   const urls=[norm+'.jpg',norm+'.png',norm+'.webp'];
   if(orig!==norm)urls.push(orig+'.jpg',orig+'.png',orig+'.webp');
+  // Tenta com zero-padding (376 → 0376, 0376 → 00376)
+  const pad4=norm.padStart(4,'0');const pad5=norm.padStart(5,'0');
+  if(pad4!==norm&&pad4!==orig)urls.push(pad4+'.jpg',pad4+'.png',pad4+'.webp');
+  if(pad5!==norm&&pad5!==orig&&pad5!==pad4)urls.push(pad5+'.jpg',pad5+'.png',pad5+'.webp');
   return <img src={storageBase+urls[0]+cb}
     onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
     onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(e.target.src);}}
