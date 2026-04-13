@@ -3742,7 +3742,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
       d.setDate(d.getDate()+1);
     }
     for(const cn in r.porCanal)r.porCanal[cn].produtos=Object.values(r.porCanal[cn].produtos).sort((a,b)=>b.qtd-a.qtd);
-    r.top20=Object.values(r.porProduto).sort((a,b)=>b.qtd-a.qtd).slice(0,20);
+    r.top20=Object.values(r.porProduto).sort((a,b)=>b.qtd-a.qtd).slice(0,30);
     return r;
   };
 
@@ -4391,7 +4391,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
           // Canais e marcas reais (do dado, não hardcoded)
           const canaisReais=Object.keys(pd.porCanal).sort((a,b)=>(pd.porCanal[b]?.bruto||0)-(pd.porCanal[a]?.bruto||0));
           const marcasReais=Object.keys(pd.porMarca).sort((a,b)=>(pd.porMarca[b]?.bruto||0)-(pd.porMarca[a]?.bruto||0));
-          const prods=Object.values(pd.porProduto).filter(p=>filtroMarca==="todas"||(p.marcas&&p.marcas[filtroMarca]>0)).map(p=>({...p,qtdF:filtroMarca!=="todas"?(p.marcas[filtroMarca]||0):(filtroCanal==="todos"?p.qtd:(p.porCanal[filtroCanal]?.qtd||0)),valF:filtroCanal==="todos"?p.valor:(p.porCanal[filtroCanal]?.valor||0)})).filter(p=>p.qtdF>0).sort((a,b)=>b.qtdF-a.qtdF).slice(0,20);
+          const prods=Object.values(pd.porProduto).filter(p=>filtroMarca==="todas"||(p.marcas&&p.marcas[filtroMarca]>0)).map(p=>({...p,qtdF:filtroMarca!=="todas"?(p.marcas[filtroMarca]||0):(filtroCanal==="todos"?p.qtd:(p.porCanal[filtroCanal]?.qtd||0)),valF:filtroCanal==="todos"?p.valor:(p.porCanal[filtroCanal]?.valor||0)})).filter(p=>p.qtdF>0).sort((a,b)=>b.qtdF-a.qtdF).slice(0,30);
           const maxQ=prods.length>0?prods[0].qtdF:1;
           const tamS=Object.entries(pd.tamGeral).sort((a,b)=>b[1]-a[1]);const tamT=tamS.reduce((s,t)=>s+t[1],0)||1;const maxTam=tamS.length>0?tamS[0][1]:1;
           const corS=Object.entries(pd.corGeral).sort((a,b)=>b[1]-a[1]);const corT=corS.reduce((s,c)=>s+c[1],0)||1;const maxCor=corS.length>0?corS[0][1]:1;
@@ -4424,8 +4424,8 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                 <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
                   {/* Ranking */}
                   <div style={{flex:"1 1 50%",background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-                    <div style={{padding:"7px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 20</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
-                    <div style={{maxHeight:780,overflowY:"auto"}}>
+                    <div style={{padding:"7px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 30</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
+                    <div style={{maxHeight:900,overflowY:"auto"}}>
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
                         <div key={p.ref} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 14px",borderBottom:"1px solid #f0ebe4"}}>
                           <div style={{width:20,height:20,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
