@@ -348,6 +348,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data } = await supabase.from('ml_qa_history')
         .select('*')
+        .neq('item_id', 'MANUAL')
         .gte('answered_at', cutoff)
         .order('answered_at', { ascending: false })
         .limit(50);
@@ -401,7 +402,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
     try {
       const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
       const { data: ai } = await supabase.from('ml_qa_history')
-        .select('*').eq('answered_by', '_auto_ia')
+        .select('*').eq('answered_by', '_auto_ia').neq('item_id', 'MANUAL')
         .gte('answered_at', cutoff).order('answered_at', { ascending: false }).limit(20);
       setAiResponses(ai || []);
 
@@ -416,11 +417,11 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       }
 
       const { data: aiLow } = await supabase.from('ml_qa_history')
-        .select('*').eq('answered_by', '_auto_ia_low')
+        .select('*').eq('answered_by', '_auto_ia_low').neq('item_id', 'MANUAL')
         .gte('answered_at', cutoff).order('answered_at', { ascending: false }).limit(20);
 
       const { data: absence } = await supabase.from('ml_qa_history')
-        .select('*').eq('answered_by', '_auto_absence')
+        .select('*').eq('answered_by', '_auto_absence').neq('item_id', 'MANUAL')
         .gte('answered_at', cutoff).order('answered_at', { ascending: false }).limit(20);
       setAbsenceResponses([...(absence || []), ...(aiLow || [])]);
     } catch (err) { console.error('[MLPerguntas] Auto responses error:', err); }
