@@ -3698,12 +3698,13 @@ const blingDb={
 // Foto do produto: tenta jpg→png→webp, placeholder se falhar, click pra zoom
 const FotoProd=({sbUrl,refProd,onZoom})=>{
   const base=useMemo(()=>{const r=String(refProd).replace(/^0+/,'').toUpperCase();return sbUrl?`${sbUrl}/storage/v1/object/public/produtos/${r}`:null;},[sbUrl,refProd]);
-  const [status,setStatus]=useState("loading"); // loading | ok | failed
+  const [status,setStatus]=useState("loading");
   const [src,setSrc]=useState(base?base+".jpg":null);
   useEffect(()=>{if(base){setSrc(base+".jpg");setStatus("loading");}else{setStatus("failed");}},[base]);
-  if(status==="failed"||!src)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
-  if(status==="ok")return <img src={src} onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(src);}} style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;
-  return <img src={src} onLoad={()=>setStatus("ok")} onError={()=>{if(src&&src.endsWith('.jpg'))setSrc(base+'.png');else if(src&&src.endsWith('.png'))setSrc(base+'.webp');else setStatus("failed");}} style={{width:0,height:0,position:"absolute",opacity:0}}/>;
+  const placeholder=<div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
+  if(status==="failed"||!src)return placeholder;
+  if(status==="ok")return <div onClick={(e)=>{e.stopPropagation();if(onZoom)onZoom(src);}} style={{cursor:"pointer",flexShrink:0}}><img src={src} style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",display:"block"}}/></div>;
+  return <><img src={src} onLoad={()=>setStatus("ok")} onError={()=>{if(src&&src.endsWith('.jpg'))setSrc(base+'.png');else if(src&&src.endsWith('.png'))setSrc(base+'.webp');else setStatus("failed");}} style={{width:0,height:0,position:"absolute",opacity:0}}/>{placeholder}</>;
 };
 
 const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=null,produtos=[]})=>{
