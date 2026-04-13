@@ -6,14 +6,31 @@ const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
 async function getItemContext(itemId, brand) {
   try {
     const token = await getValidToken(brand);
-    const [titleRes, descRes] = await Promise.all([
-      fetch(`${ML_API}/items/${itemId}?attributes=title`, { headers: { Authorization: `Bearer ${token}` } }),
+    const [itemRes, descRes] = await Promise.all([
+      fetch(`${ML_API}/items/${itemId}?attributes=title,attributes,variations,available_quantity,seller_custom_field,price`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${ML_API}/items/${itemId}/description`, { headers: { Authorization: `Bearer ${token}` } }),
     ]);
-    const title = titleRes.ok ? (await titleRes.json()).title || '' : '';
-    const desc = descRes.ok ? ((await descRes.json()).plain_text || '').slice(0, 1500) : '';
-    return { title, desc };
-  } catch { return { title: '', desc: '' }; }
+    let title = '', itemContext = '';
+    if (itemRes.ok) {
+      const item = await itemRes.json();
+      title = item.title || '';
+      const attrs = (item.attributes || [])
+        .filter(a => a.value_name && !['Item condition', 'Listing type'].includes(a.name))
+        .map(a => `${a.name}: ${a.value_name}`).join('\n');
+      const variations = (item.variations || []).map(v => {
+        const combos = (v.attribute_combinations || []).map(a => `${a.name}: ${a.value_name}`).join(', ');
+        return `${combos} → ${v.available_quantity > 0 ? v.available_quantity + ' estoque' : 'ESGOTADO'}`;
+      }).join('\n');
+      itemContext = `TÍTULO: ${title}`;
+      if (item.seller_custom_field) itemContext += `\nREF: ${item.seller_custom_field}`;
+      if (item.price) itemContext += `\nPREÇO: R$ ${item.price}`;
+      itemContext += `\nESTOQUE: ${item.available_quantity || 0}`;
+      if (attrs) itemContext += `\n\nATRIBUTOS:\n${attrs}`;
+      if (variations) itemContext += `\n\nVARIAÇÕES:\n${variations}`;
+    }
+    const desc = descRes.ok ? ((await descRes.json()).plain_text || '').slice(0, 3000) : '';
+    return { title, desc, itemContext };
+  } catch { return { title: '', desc: '', itemContext: '' }; }
 }
 
 async function getSimilarQA(questionText, itemId) {
@@ -39,17 +56,42 @@ async function getSimilarQA(questionText, itemId) {
       .not('answered_by', 'like', '_auto%')
       .order('answered_at', { ascending: false }).limit(5);
 
-    // Filtrar manuais relevantes por keywords
-    const keywords = questionText.toLowerCase().replace(/[?!.,;]/g, '').split(/\s+/)
-      .filter(w => w.length > 3 && !['para','como','esse','essa','este','esta','qual','quero','voces','vocês','tenho','pode','posso','seria','tambem','também'].includes(w));
+    // ── Extração inteligente de keywords ──
+    const STOPWORDS = new Set([
+      'para','como','esse','essa','este','esta','qual','quero','voces','vocês',
+      'tenho','pode','posso','seria','tambem','também','gostaria','modelo',
+      'teria','desse','deste','dessa','desta','muito','mais','ainda','aqui',
+      'favor','obrigada','obrigado','comprar','comprei','anuncio','anúncio',
+      'pergunta','ola','olá','bom','boa','dia','tarde','noite','por','com',
+      'uma','uns','umas','que','não','nao','sim','está','esta','tem','ter',
+    ]);
+    const rawWords = questionText.toLowerCase().replace(/[?!.,;:()]/g, '').split(/\s+/);
+    const keywords = rawWords.filter(w => w.length >= 2 && !STOPWORDS.has(w));
+    const qLower = questionText.toLowerCase();
+    const expandedKeywords = [...keywords];
+    if (qLower.match(/\b(forro|forrado|forrada)\b/)) expandedKeywords.push('forro', 'forrado');
+    if (qLower.match(/\b(tamanho|tam|medida|medidas|visto|veste|vestir|cabe)\b/)) expandedKeywords.push('tamanho', 'medida', 'medidas', 'veste');
+    if (qLower.match(/\b(cor|cores|preto|bege|figo|marrom|azul|verde|branco|vinho|rosa|nude|caramelo)\b/)) expandedKeywords.push('cor', 'disponível', 'cores');
+    if (qLower.match(/\b(tecido|linho|viscolinho|material)\b/)) expandedKeywords.push('tecido', 'linho', 'material');
+    if (qLower.match(/\b(entrega|entregar|chega|frete|prazo|flex)\b/)) expandedKeywords.push('entrega', 'prazo', 'frete');
+    if (qLower.match(/\b(lavar|lavagem|passar|ferro|cuidado)\b/)) expandedKeywords.push('lavar', 'lavagem', 'cuidado');
+    if (qLower.match(/\b(plus|maior|grande|g1|g2|g3)\b/)) expandedKeywords.push('plus', 'tamanho', 'maior');
+    if (qLower.match(/\b(estoque|disponível|disponivel|acabou|esgotado|volta)\b/)) expandedKeywords.push('estoque', 'disponível', 'reposição');
+    const uniqueKeywords = [...new Set(expandedKeywords)];
     
     const relevantManual = (manual || []).filter(qa =>
-      keywords.some(kw => qa.question_text.toLowerCase().includes(kw) || qa.answer_text.toLowerCase().includes(kw))
+      uniqueKeywords.some(kw => qa.question_text.toLowerCase().includes(kw) || qa.answer_text.toLowerCase().includes(kw))
     ).slice(0, 5);
 
-    // Combinar: MANUAL primeiro, depois sameItem humano
+    const fallbackManual = (manual || []).slice(0, 2);
+
+    // Combinar: MANUAL primeiro, depois sameItem humano, fallback
     const combined = [...relevantManual];
     for (const qa of (sameItem || [])) {
+      if (!combined.find(c => c.question_text === qa.question_text)) combined.push(qa);
+    }
+    for (const qa of fallbackManual) {
+      if (combined.length >= 8) break;
       if (!combined.find(c => c.question_text === qa.question_text)) combined.push(qa);
     }
     return combined.slice(0, 8);

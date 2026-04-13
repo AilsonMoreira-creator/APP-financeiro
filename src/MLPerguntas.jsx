@@ -736,6 +736,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                     <div style={{ ...S, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>🔍 Fontes da IA</div>
                     <div style={{ ...S, color: PALETTE.textLight, marginBottom: 2 }}>📦 Produto: {dbg.produto || '—'}</div>
                     <div style={{ ...S, color: PALETTE.textLight, marginBottom: 2 }}>📄 Descrição: {dbg.descricao || '—'}</div>
+                    <div style={{ ...S, color: PALETTE.textLight, marginBottom: 2 }}>🔑 Keywords: {(dbg.keywords || []).join(', ') || '—'}</div>
                     <div style={{ ...S, color: PALETTE.textLight, marginBottom: 4 }}>🧠 Modelo: {dbg.modelo || '—'}</div>
                     <div style={{ ...S, fontWeight: 600, color: PALETTE.dark, marginBottom: 2 }}>📚 {dbg.exemplos_encontrados || 0} exemplos usados:</div>
                     {(dbg.exemplos || []).map((ex, j) => (

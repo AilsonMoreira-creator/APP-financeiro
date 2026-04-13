@@ -129,23 +129,57 @@ async function handleStockFlow(question, brand, token) {
 // ── AI auto-response ──
 async function getAIAutoResponse(questionText, itemId, brand) {
   if (!process.env.ANTHROPIC_API_KEY) return null;
-  let title = '', desc = '';
+  
+  // ── Buscar contexto completo do anúncio ──
+  let title = '', desc = '', itemContext = '';
   try {
     const token = await getValidToken(brand);
-    const [tRes, dRes] = await Promise.all([
-      fetch(`${ML_API}/items/${itemId}?attributes=title`, { headers: { Authorization: `Bearer ${token}` } }),
+    const [itemRes, descRes] = await Promise.all([
+      fetch(`${ML_API}/items/${itemId}?attributes=title,attributes,variations,available_quantity,seller_custom_field,price,sale_terms`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${ML_API}/items/${itemId}/description`, { headers: { Authorization: `Bearer ${token}` } }),
     ]);
-    if (tRes.ok) title = (await tRes.json()).title || '';
-    if (dRes.ok) desc = ((await dRes.json()).plain_text || '').slice(0, 1500);
-  } catch {}
+    
+    if (itemRes.ok) {
+      const item = await itemRes.json();
+      title = item.title || '';
+      
+      // Atributos estruturados (composição, marca, gênero, etc)
+      const attrs = (item.attributes || [])
+        .filter(a => a.value_name && !['Item condition', 'Listing type'].includes(a.name))
+        .map(a => `${a.name}: ${a.value_name}`)
+        .join('\n');
+      
+      // Variações (cores e tamanhos disponíveis com estoque)
+      const variations = (item.variations || []).map(v => {
+        const combos = (v.attribute_combinations || []).map(a => `${a.name}: ${a.value_name}`).join(', ');
+        const qty = v.available_quantity || 0;
+        return `${combos} → ${qty > 0 ? qty + ' em estoque' : 'ESGOTADO'}`;
+      }).join('\n');
+      
+      // Estoque total
+      const totalStock = item.available_quantity || 0;
+      
+      // Seller custom field (REF do produto)
+      const sellerField = item.seller_custom_field || '';
+      
+      // Montar contexto estruturado
+      itemContext = `TÍTULO: ${title}`;
+      if (sellerField) itemContext += `\nREF DO VENDEDOR: ${sellerField}`;
+      if (item.price) itemContext += `\nPREÇO: R$ ${item.price}`;
+      itemContext += `\nESTOQUE TOTAL: ${totalStock}`;
+      if (attrs) itemContext += `\n\nATRIBUTOS DO PRODUTO:\n${attrs}`;
+      if (variations) itemContext += `\n\nVARIAÇÕES DISPONÍVEIS (cor/tamanho + estoque):\n${variations}`;
+    }
+    
+    if (descRes.ok) desc = ((await descRes.json()).plain_text || '').slice(0, 3000);
+  } catch (e) { console.error('[ml-webhook] item fetch error:', e.message); }
 
   // ── Busca ampla de exemplos Q&A ──
   let qaExamples = '';
   let debugExamples = [];
+  let debugKeywords = [];
   try {
     // 1. Perguntas treinadas manualmente (MANUAL) — prioridade máxima
-    // Cada pergunta foi salva 3x (Exitus/Lumia/Muniam), então puxamos mais e deduplicamos
     const { data: manualRaw } = await supabase.from('ml_qa_history')
       .select('question_text, answer_text').eq('item_id', 'MANUAL')
       .neq('answered_by', '_auto_absence').neq('answered_by', '_auto_ia_low')
@@ -166,17 +200,50 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       .not('answered_by', 'like', '_auto%')
       .order('answered_at', { ascending: false }).limit(5);
 
-    // Filtrar exemplos relevantes por keywords da pergunta
-    const keywords = questionText.toLowerCase().replace(/[?!.,;]/g, '').split(/\s+/)
-      .filter(w => w.length > 3 && !['para','como','esse','essa','este','esta','qual','quero','voces','vocês','tenho','pode','posso','seria','seria','tambem','também'].includes(w));
+    // ── Extração inteligente de keywords ──
+    const STOPWORDS = new Set([
+      'para','como','esse','essa','este','esta','qual','quero','voces','vocês',
+      'tenho','pode','posso','seria','tambem','também','gostaria','modelo',
+      'teria','desse','deste','dessa','desta','muito','mais','ainda','aqui',
+      'favor','obrigada','obrigado','comprar','comprei','anuncio','anúncio',
+      'pergunta','ola','olá','bom','boa','dia','tarde','noite','por','com',
+      'uma','uns','umas','que','não','nao','sim','está','esta','tem','ter',
+    ]);
     
+    // Extrai keywords da pergunta (min 2 chars, sem stopwords)
+    const rawWords = questionText.toLowerCase().replace(/[?!.,;:()]/g, '').split(/\s+/);
+    const keywords = rawWords.filter(w => w.length >= 2 && !STOPWORDS.has(w));
+    
+    // Expande keywords com sinônimos/tópicos relacionados
+    const expandedKeywords = [...keywords];
+    const qLower = questionText.toLowerCase();
+    if (qLower.match(/\b(forro|forrado|forrada)\b/)) expandedKeywords.push('forro', 'forrado');
+    if (qLower.match(/\b(tamanho|tam|medida|medidas|visto|veste|vestir|cabe)\b/)) expandedKeywords.push('tamanho', 'medida', 'medidas', 'veste', 'cabe');
+    if (qLower.match(/\b(cor|cores|preto|bege|figo|marrom|azul|verde|branco|vinho|rosa|nude|caramelo)\b/)) expandedKeywords.push('cor', 'disponível', 'disponivel', 'cores');
+    if (qLower.match(/\b(tecido|linho|viscolinho|material|composição|composicao)\b/)) expandedKeywords.push('tecido', 'linho', 'material');
+    if (qLower.match(/\b(entrega|entregar|chega|frete|prazo|flex|amanhã|amanha)\b/)) expandedKeywords.push('entrega', 'prazo', 'frete', 'flex');
+    if (qLower.match(/\b(lavar|lava|lavagem|passar|ferro|cuidado)\b/)) expandedKeywords.push('lavar', 'lavagem', 'cuidado');
+    if (qLower.match(/\b(plus|maior|grande|g1|g2|g3|46|48|50)\b/)) expandedKeywords.push('plus', 'tamanho', 'maior');
+    if (qLower.match(/\b(estoque|disponível|disponivel|acabou|esgotado|volta)\b/)) expandedKeywords.push('estoque', 'disponível', 'reposição');
+    const uniqueKeywords = [...new Set(expandedKeywords)];
+    debugKeywords = uniqueKeywords.slice(0, 15);
+    
+    // Busca manuais relevantes por keywords expandidas
     const relevantManual = (manual || []).filter(qa =>
-      keywords.some(kw => qa.question_text.toLowerCase().includes(kw) || qa.answer_text.toLowerCase().includes(kw))
+      uniqueKeywords.some(kw => qa.question_text.toLowerCase().includes(kw) || qa.answer_text.toLowerCase().includes(kw))
     ).slice(0, 5);
 
-    // Combinar: MANUAL primeiro (prioridade), depois sameItem humano
+    // Sempre inclui 2 exemplos gerais como contexto base (mesmo sem match)
+    const fallbackManual = (manual || []).slice(0, 2);
+    
+    // Combinar: MANUAL relevante primeiro, sameItem humano, fallback
     const combined = [...relevantManual];
     for (const qa of (sameItem || [])) {
+      if (!combined.find(c => c.question_text === qa.question_text)) combined.push(qa);
+    }
+    // Adiciona fallbacks se ainda tem espaço
+    for (const qa of fallbackManual) {
+      if (combined.length >= 8) break;
       if (!combined.find(c => c.question_text === qa.question_text)) combined.push(qa);
     }
     const final = combined.slice(0, 8);
@@ -222,30 +289,38 @@ E) PÓS-VENDA: pedido, troca, devolução
 F) PLUS SIZE: cliente precisa de tamanho maior que o disponível
 G) OUTRO: não se encaixa acima
 
-PASSO 2 — CONSULTE A DESCRIÇÃO DO ANÚNCIO antes de responder:
-- Se a resposta está na descrição (tabela de medidas, composição, cores disponíveis): USE essa informação.
-- Se a resposta NÃO está na descrição: consulte os EXEMPLOS DE REFERÊNCIA abaixo.
-- Se não encontrou em nenhum dos dois: responda APENAS BAIXA_CONFIANCA
+PASSO 2 — CONSULTE AS FONTES nesta ordem de prioridade:
+FONTE 1 (principal): DADOS DO ANÚNCIO acima — atributos, variações com estoque, preço
+FONTE 2: DESCRIÇÃO DO ANÚNCIO — tabela de medidas, composição, detalhes
+FONTE 3: EXEMPLOS DE REFERÊNCIA abaixo — respostas aprovadas pela loja
+FONTE 4: Se NENHUMA fonte acima tem a resposta → responda APENAS BAIXA_CONFIANCA
+
+REGRA DE OURO: Se a informação NÃO está claramente nos dados do anúncio, na descrição ou nos exemplos aprovados, você NÃO SABE a resposta. Responda BAIXA_CONFIANCA. NUNCA invente, NUNCA deduza, NUNCA "ache que".
 
 PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 
 ───── A) DISPONIBILIDADE ─────
 - Identifique separadamente: o que é COR e o que é TAMANHO na pergunta.
   Exemplos: "figo GG" → cor=figo, tam=GG. "preto M" → cor=preto, tam=M. "marrom P" → cor=marrom, tam=P.
-- Verifique na descrição do anúncio se a cor e tamanho estão disponíveis.
-- Se disponível: confirme e incentive a compra.
-- Se não disponível: diga que no momento não temos, mas sempre chega reposição. "Fica de olho no anúncio!"
-- NUNCA confunda cor com tamanho. Figo, marrom, bege, preto, azul = CORES. P, M, G, GG, G1, G2, G3 = TAMANHOS.
+- CONSULTE A SEÇÃO "VARIAÇÕES DISPONÍVEIS" nos dados do anúncio — ela mostra cada combinação cor/tamanho e se tem estoque.
+- Se a variação existe e tem estoque > 0: confirme e incentive a compra.
+- Se a variação está ESGOTADA ou não existe: diga que no momento não temos disponível, mas sempre chega reposição. "Fica de olho no anúncio!"
+- NUNCA confunda cor com tamanho. Figo, marrom, bege, preto, azul, natural, vinho = CORES. P, M, G, GG, G1, G2, G3 = TAMANHOS.
 
 ───── B) MEDIDAS/TAMANHO ─────
 - Se a cliente informou PESO sem medidas: ignore o peso completamente. Peça busto, cintura e quadril.
 - Se informou medidas (busto, cintura, quadril):
-  1. Encontre a TABELA DE MEDIDAS na descrição do anúncio (procure por "Guia de Tamanhos", "Medidas", "P -", "M -", "G -" etc)
+  1. Encontre a TABELA DE MEDIDAS na descrição do anúncio (procure por "Guia de Tamanhos", "Medidas", "Busto", "Cintura", "Quadril", "P -", "M -", "G -" etc)
   2. Compare CADA medida do corpo com CADA tamanho da tabela
   3. Se as medidas caem em tamanhos DIFERENTES (ex: cintura=M, quadril=G), SEMPRE recomende o MAIOR (G neste caso)
   4. Explique: "O ${tipoPeca} vai ficar levemente folgado na cintura, e uma costureira de confiança ajusta facilmente!"
   5. Se a medida do corpo é MAIOR que o tamanho da peça → isso significa APERTADO. NUNCA diga "folgado" nesse caso.
+- MEDIDAS PARCIAIS: se informou apenas 1 ou 2 medidas (ex: só cintura):
+  1. Use a medida informada pra dar uma indicação inicial
+  2. Mas peça as medidas faltantes pra uma recomendação mais precisa
+  3. Ex: "Com cintura 80cm, o tamanho G atende! Pra confirmar certinho, me passa o busto e quadril também?"
 - Se perguntou "qual tamanho?" sem informar medidas: peça as medidas de busto, cintura e quadril.
+- Se perguntou "visto 42, qual tamanho?" sem medidas: numeração pode variar entre marcas, peça medidas.
 - NUNCA INVENTE medidas que não estão na descrição.
 - NUNCA recomende um tamanho MENOR que o necessário.
 
@@ -305,7 +380,7 @@ ${qaExamples || 'Nenhum exemplo disponível'}`;
       model: 'claude-sonnet-4-6',
       max_tokens: 450,
       system: systemPrompt,
-      messages: [{ role: 'user', content: `PRODUTO: ${title}\n\nDESCRIÇÃO COMPLETA DO ANÚNCIO (leia com atenção — contém tabela de medidas, cores disponíveis e informações do produto):\n${desc || 'Sem descrição disponível'}\n\nPERGUNTA DA CLIENTE: "${questionText}"\n\nClassifique a pergunta, consulte a descrição e os exemplos, e responda como vendedora:` }],
+      messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${itemContext || 'TÍTULO: ' + title}\n\n═══ DESCRIÇÃO DO ANÚNCIO ═══\n${desc || 'Sem descrição disponível'}\n\n═══ PERGUNTA DA CLIENTE ═══\n"${questionText}"\n\nSiga o processo obrigatório: classifique → consulte fontes → responda:` }],
     }),
   });
   if (!claudeRes.ok) return null;
@@ -315,6 +390,7 @@ ${qaExamples || 'Nenhum exemplo disponível'}`;
   const debug = {
     produto: title.slice(0, 60),
     descricao: desc ? `${desc.length} chars` : 'sem descrição',
+    keywords: debugKeywords,
     exemplos_encontrados: debugExamples.length,
     exemplos: debugExamples,
     modelo: 'claude-sonnet-4-6',
