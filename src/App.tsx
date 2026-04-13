@@ -6427,7 +6427,7 @@ const FichaTecnicaContent=()=>{
 
 export default function App(){
   const [active,setActive]=useState("lancamentos");
-  const [usuarioLogado,setUsuarioLogado]=useState(null);
+  const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");return s?JSON.parse(s):null;}catch{return null;}});
   const [menuUser,setMenuUser]=useState(false);
   const [usuarios,setUsuarios]=useState(USUARIOS_INICIAL);
   const [prestadores,setPrestadores]=useState(PRESTADORES_INICIAL);
@@ -7137,7 +7137,7 @@ export default function App(){
 
   if(!usuarioLogado){
     if(!dbCarregado)return <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7f4f0",fontFamily:"Georgia,serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Amícia</div><div style={{fontSize:13,color:"#a89f94"}}>Carregando...</div></div></div>;
-    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.moduloPadrao||"home");}}/>;
+    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.moduloPadrao||"home");try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}}/>;
   }
 
   const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id));
@@ -7194,7 +7194,7 @@ export default function App(){
                 <div style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Conectado como</div>
                 <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:2}}>{usuarioLogado.usuario}</div>
               </div>
-              <div onClick={()=>{setUsuarioLogado(null);setActive("dashboard");setMenuUser(false);}}
+              <div onClick={()=>{setUsuarioLogado(null);setActive("dashboard");setMenuUser(false);try{localStorage.removeItem("amica_session");}catch{}}}
                 style={{padding:"10px 14px",cursor:"pointer",fontSize:13,color:"#c0392b",display:"flex",alignItems:"center",gap:8}}
                 onMouseEnter={e=>e.currentTarget.style.background="#fdeaea"}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
