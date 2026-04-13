@@ -6664,8 +6664,8 @@ export default function App(){
       .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amicia_data',filter:`user_id=eq.${USER_ID}`},(payload)=>{
         const d=payload.new?.payload;
         if(!d||!d._updated)return;
-        // Ignora eco do próprio save (5s de margem)
-        if(Math.abs(d._updated-lastSaveTs.current)<10000){console.log("REALTIME: ignorando eco do próprio save");return;}
+        // Ignora eco do próprio save (30s de margem — suficiente pra round-trip)
+        if(Math.abs(d._updated-lastSaveTs.current)<30000){console.log("REALTIME: ignorando eco do próprio save");return;}
         const pendente=localStorage.getItem("amica_pending_sync")==="true";
         if(pendente){console.log("REALTIME: ignorando — pending_sync=true");return;}
         console.log("REALTIME: recebido update de outro device, timestamp:",new Date(d._updated).toLocaleString("pt-BR"));
@@ -6691,7 +6691,7 @@ export default function App(){
         if(d.fixosConfig)setFixosConfig(d.fixosConfig);
         if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
         try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:d._updated}));}catch(e){console.error(e);}
-        setTimeout(()=>{realtimeProcessing.current=false;},100); // reset após React processar
+        setTimeout(()=>{realtimeProcessing.current=false;},2000); // reset após React processar batched updates
       }).subscribe();
     return()=>{supabase.removeChannel(channel);};
   },[dbCarregado]);
@@ -6868,7 +6868,7 @@ export default function App(){
 
   // ── SAVE CORTES com merge (múltiplos usuários) ────────────────────────────
   useEffect(()=>{
-    if(!dbCarregado||!supabase)return;
+    if(!dbCarregado||!supabase||realtimeProcessing.current)return;
     if(debounceCortes.current)clearTimeout(debounceCortes.current);
     debounceCortes.current=setTimeout(async()=>{
       try{
