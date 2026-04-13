@@ -160,10 +160,10 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       return true;
     });
 
-    // 2. Perguntas do mesmo item
+    // 2. Perguntas do mesmo item (SÓ respostas humanas, não auto-IA)
     const { data: sameItem } = await supabase.from('ml_qa_history')
       .select('question_text, answer_text').eq('item_id', itemId)
-      .neq('answered_by', '_auto_absence').neq('answered_by', '_auto_ia_low')
+      .not('answered_by', 'like', '_auto%')
       .order('answered_at', { ascending: false }).limit(5);
 
     // Filtrar exemplos relevantes por keywords da pergunta
@@ -174,9 +174,9 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       keywords.some(kw => qa.question_text.toLowerCase().includes(kw) || qa.answer_text.toLowerCase().includes(kw))
     ).slice(0, 5);
 
-    // Combinar: mesmo item + manuais relevantes (sem duplicar)
-    const combined = [...(sameItem || [])];
-    for (const qa of relevantManual) {
+    // Combinar: MANUAL primeiro (prioridade), depois sameItem humano
+    const combined = [...relevantManual];
+    for (const qa of (sameItem || [])) {
       if (!combined.find(c => c.question_text === qa.question_text)) combined.push(qa);
     }
     const final = combined.slice(0, 8);
