@@ -6531,7 +6531,7 @@ export default function App(){
   const lastSaveTs=useRef(0); // timestamp do último save pra detectar eco do Realtime
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
-  const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,cortes,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
+  const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
 
   // ── SAVE LOCAL IMEDIATO (sem debounce) ─────────────────────────────────────
   const salvarLocal=useCallback((dados)=>{
@@ -7071,6 +7071,7 @@ export default function App(){
   }
 
   if(!usuarioLogado){
+    if(!dbCarregado)return <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7f4f0",fontFamily:"Georgia,serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Amícia</div><div style={{fontSize:13,color:"#a89f94"}}>Carregando...</div></div></div>;
     return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.moduloPadrao||"home");}}/>;
   }
 
