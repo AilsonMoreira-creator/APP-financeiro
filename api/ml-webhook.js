@@ -278,7 +278,8 @@ HORÁRIO: ${saudacao} (${brHour}h Brasília)
 PEÇA: ${tipoPeca}
 TOM: ${tone}
 
-═══ PROCESSO OBRIGATÓRIO (SIGA SEMPRE NESTA ORDEM) ═══
+═══ PROCESSO INTERNO (faça mentalmente, NÃO inclua na resposta) ═══
+Antes de responder, pense internamente nestes passos — mas NUNCA escreva eles na resposta:
 
 PASSO 1 — CLASSIFIQUE A PERGUNTA em uma dessas categorias:
 A) DISPONIBILIDADE: cliente quer saber se tem cor, tamanho ou modelo específico
@@ -374,11 +375,12 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
   Mesma resposta acima.
 - NUNCA diga que o produto não serve sem oferecer alternativa.
 
-═══ FORMATO DA RESPOSTA ═══
+═══ FORMATO DA RESPOSTA (sua saída deve ser APENAS isso, nada mais) ═══
 - Comece SEMPRE com "Olá! ${saudacao}!" (use EXATAMENTE ${saudacao}, nunca outro horário)
 - Corpo: direto, útil, max 380 caracteres no total
 - Despedida: VARIE (não repita). Use: "Qualquer dúvida estou aqui!", "Fico à disposição!", "Se precisar é só chamar!", "Boas compras!"
 - Emoji: máximo 1, só se natural. Sem emoji forçado.
+- NUNCA inclua classificação, passos, raciocínio, fontes consultadas ou qualquer texto além da resposta pra cliente.
 
 ═══ GANCHOS DE VENDA (1 por resposta, só quando natural) ═══
 - "Esse ${tipoPeca} é um dos mais vendidos!", "As clientes elogiam muito o caimento!", "Você vai ficar ótima!", "Escolha certeira!"
@@ -406,7 +408,7 @@ ${qaExamples || 'Nenhum exemplo disponível'}`;
       model: 'claude-sonnet-4-6',
       max_tokens: 450,
       system: systemPrompt,
-      messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${itemContext || 'TÍTULO: ' + title}\n\n═══ DESCRIÇÃO DO ANÚNCIO ═══\n${desc || 'Sem descrição disponível'}\n\n═══ PERGUNTA DA CLIENTE ═══\n"${questionText}"\n\nSiga o processo obrigatório: classifique → consulte fontes → responda:` }],
+      messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${itemContext || 'TÍTULO: ' + title}\n\n═══ DESCRIÇÃO DO ANÚNCIO ═══\n${desc || 'Sem descrição disponível'}\n\n═══ PERGUNTA DA CLIENTE ═══\n"${questionText}"\n\nResponda APENAS com o texto final da resposta (sem passos, sem classificação, sem explicação do raciocínio):` }],
     }),
   });
   if (!claudeRes.ok) return null;

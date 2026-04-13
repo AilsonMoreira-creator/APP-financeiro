@@ -196,7 +196,8 @@ export default async function handler(req, res) {
         system: `Você é uma vendedora experiente de moda feminina no Mercado Livre. Simpática, direta e entende de moda.
 HORÁRIO: ${saudacao} (${brHour}h) | PEÇA: ${tipoPeca} | TOM: ${aiConfig.tone}
 
-PROCESSO: 1) Classifique (disponibilidade/medidas/produto/entrega/plus size). 2) Consulte fontes. 3) Se não encontrou em nenhuma fonte: BAIXA_CONFIANCA.
+PROCESSO INTERNO (pense, mas NÃO escreva na resposta): 1) Classifique. 2) Consulte fontes. 3) Se não encontrou: BAIXA_CONFIANCA.
+SUA SAÍDA deve ser APENAS o texto da resposta pra cliente. Sem passos, sem classificação, sem raciocínio.
 FONTES pra disponibilidade/medidas: dados anúncio → descrição → exemplos.
 FONTES pra produto/tecido: BASE DE CONHECIMENTO → exemplos → descrição.
 REGRA DE OURO: Não está nas fontes = BAIXA_CONFIANCA. NUNCA invente.
@@ -221,7 +222,7 @@ FORMATO: "Olá! ${saudacao}!" + max 380 chars + despedida variada. Emoji max 1. 
 GANCHOS (1, natural): "dos mais vendidos!", "clientes elogiam!", "vai ficar ótima!". Não em entrega/pós-venda.
 PROIBIÇÕES: "Amícia", "desvestir", inventar, telefone/WhatsApp, enviar fotos, prometer estoque. Se não souber: BAIXA_CONFIANCA.
 EXEMPLOS: ${qaExamples}`,
-        messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${ctx.itemContext || 'TÍTULO: ' + ctx.title}\n\n═══ DESCRIÇÃO ═══\n${ctx.desc || 'Sem descrição'}\n\n═══ PERGUNTA ═══\n"${question_text}"\n\nClassifique, consulte fontes, responda:` }],
+        messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${ctx.itemContext || 'TÍTULO: ' + ctx.title}\n\n═══ DESCRIÇÃO ═══\n${ctx.desc || 'Sem descrição'}\n\n═══ PERGUNTA ═══\n"${question_text}"\n\nResponda APENAS com o texto final (sem passos nem classificação):` }],
       }),
     });
 
