@@ -3705,7 +3705,8 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
 
   // Foto do produto: URL direta do Supabase Storage (bucket público "produtos")
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
-  const fotoUrl=(ref)=>{const r=String(ref).replace(/^0+/,'').toUpperCase();return sbUrl?`${sbUrl}/storage/v1/object/public/produtos/${r}.jpg`:null;};
+  const fotoBase=(ref)=>{const r=String(ref).replace(/^0+/,'').toUpperCase();return sbUrl?`${sbUrl}/storage/v1/object/public/produtos/${r}`:null;};
+  const [zoomFoto,setZoomFoto]=useState(null);
 
   // Agregação de dados do cache blingVendas
   const agregarPeriodo=(dataInicio,dataFim)=>{
@@ -4433,7 +4434,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
                         <div key={p.ref} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 14px",borderBottom:"1px solid #f0ebe4"}}>
                           <div style={{width:20,height:20,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
-                          {(()=>{const url=fotoUrl(p.ref);return url?<img src={url} onError={e=>{e.target.style.display='none';e.target.nextSibling.style.display='flex';}} style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0}}/> :null;})()}<div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:fotoUrl(p.ref)?"none":"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
+                          {(()=>{const base=fotoBase(p.ref);if(!base)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;return <img src={base+".jpg"} onError={e=>{if(e.target.src.endsWith('.jpg')){e.target.src=base+'.png';}else if(e.target.src.endsWith('.png')){e.target.src=base+'.webp';}else{e.target.style.display='none';e.target.nextSibling&&(e.target.nextSibling.style.display='flex');}}} onClick={(e)=>{e.stopPropagation();setZoomFoto(e.target.src);}} style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;})()}<div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:10,color:"#6b7c8a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc}</span><span style={{display:"flex",gap:2,flexShrink:0,marginLeft:"auto"}}>{Object.entries(p.marcas||{}).map(([m,q])=>(<span key={m} style={{fontSize:8,color:"#4a3a2a",background:CORES_MARCA2[m]||"#888",borderRadius:3,padding:"1px 4px"}} title={`${m}: ${q} un`}>{m}</span>))}</span></div>
                             <div style={{marginTop:2,height:3,background:"#f0ebe4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#4a7fa5,#2c3e50)",width:`${pct*100}%`}}/></div>
@@ -5024,6 +5025,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
           </div>
         )}
       </div>
+      {zoomFoto&&<div onClick={()=>setZoomFoto(null)} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><img src={zoomFoto} style={{maxWidth:"90vw",maxHeight:"90vh",borderRadius:8,boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}/></div>}
     </div>
   );
 };
