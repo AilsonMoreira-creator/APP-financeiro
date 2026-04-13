@@ -6579,6 +6579,8 @@ export default function App(){
   // ── LOAD DO SUPABASE NA ABERTURA ───────────────────────────────────────────
   useEffect(()=>{
     if(!supabase){setDbCarregado(true);return;}
+    // Safety timeout: se Supabase não responder em 10s, libera o app
+    const safetyTimer=setTimeout(()=>{setDbCarregado(prev=>{if(!prev){console.warn("SAFETY: Supabase não respondeu em 10s, liberando app");setSyncStatus('error');}return true;});},10000);
     // Camada 1: carrega localStorage imediatamente (dados aparecem na hora)
     try{
       const local=localStorage.getItem("amica_cortes");
@@ -6648,9 +6650,10 @@ export default function App(){
         if(d.oficinasCAD&&d.oficinasCAD.length>0)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
       }
-      setDbCarregado(true);
+      setDbCarregado(true);clearTimeout(safetyTimer);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
-    }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);setSyncStatus('error');});
+    }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);clearTimeout(safetyTimer);setSyncStatus('error');});
+    return()=>clearTimeout(safetyTimer);
   },[]);
 
   // ── SUPABASE REALTIME — recebe mudanças de outros devices em tempo real ────
