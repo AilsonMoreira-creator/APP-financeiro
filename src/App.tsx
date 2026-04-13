@@ -6651,6 +6651,39 @@ export default function App(){
     return()=>{supabase.removeChannel(channel);};
   },[dbCarregado]);
 
+  // ── REALTIME OFICINAS — sync cortes entre 3 usuários simultâneos ────────────
+  const lastCorteSaveTs=useRef(0);
+  useEffect(()=>{
+    if(!supabase||!dbCarregado)return;
+    const ch=supabase.channel('sync-oficinas')
+      .on('postgres_changes',{event:'UPDATE',schema:'public',table:'amicia_data',filter:'user_id=eq.ailson_cortes'},(payload)=>{
+        const d=payload.new?.payload;
+        if(!d?.cortes)return;
+        // Ignora eco do próprio save (3s margem)
+        if(Date.now()-lastCorteSaveTs.current<3000){console.log("REALTIME OFICINAS: ignorando eco");return;}
+        console.log("REALTIME OFICINAS: recebido update de outro usuário,",d.cortes.length,"cortes");
+        // Merge inteligente por _mod timestamp
+        setCortes(prev=>{
+          const localMap=new Map(prev.map(c=>[c.id,c]));
+          let mudou=false;
+          const merged=prev.map(lc=>{
+            const rc=d.cortes.find(r=>r.id===lc.id);
+            if(rc&&(rc._mod||0)>(lc._mod||0)){mudou=true;return rc;}
+            return lc;
+          });
+          const localIds=new Set(prev.map(c=>c.id));
+          const novos=d.cortes.filter(c=>!localIds.has(c.id));
+          if(novos.length>0)mudou=true;
+          if(!mudou)return prev;
+          console.log("REALTIME OFICINAS: merge aplicado,",novos.length,"novos");
+          return[...merged,...novos];
+        });
+        if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+        if(d.logTroca)setLogTroca(d.logTroca);
+      }).subscribe();
+    return()=>{supabase.removeChannel(ch);};
+  },[dbCarregado]);
+
   // ── BACKUP DIÁRIO AUTOMÁTICO (1x por dia ao abrir) ─────────────────────────
   useEffect(()=>{
     if(!dbCarregado||!supabase)return;
@@ -6787,6 +6820,7 @@ export default function App(){
           if(!localMap.has(id))merged.push(rc);
         }
         const payload={cortes:merged,produtos:produtos||[],oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
+        lastCorteSaveTs.current=Date.now();
         await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
       }catch(e){console.error("Erro save cortes:",e);}
     },1500);
