@@ -929,7 +929,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
               </div>
               {/* Row 2: Product Title bold */}
               <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, lineHeight: 1.3, marginBottom: 2 }}>
-                {q.item_title && q.item_title !== q.item_id ? q.item_title : 'Carregando título...'}
+                {q.item_title && q.item_title !== q.item_id ? q.item_title : q.item_id || '—'}
               </div>
               {/* Row 3: MLB ID small gray */}
               <div style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>

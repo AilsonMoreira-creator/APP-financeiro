@@ -28,7 +28,7 @@ async function getItemContext(itemId, brand) {
       if (attrs) itemContext += `\n\nATRIBUTOS:\n${attrs}`;
       if (variations) itemContext += `\n\nVARIAÇÕES:\n${variations}`;
     }
-    const desc = descRes.ok ? ((await descRes.json()).plain_text || '').slice(0, 3000) : '';
+    const desc = descRes.ok ? ((await descRes.json()).plain_text || '').slice(0, 4000) : '';
     return { title, desc, itemContext };
   } catch { return { title: '', desc: '', itemContext: '' }; }
 }
@@ -212,15 +212,18 @@ TECIDOS (só fale composição se perguntarem):
 • Suplex (sem poliamida): poliéster com elastano.
 FORRO: só diga se tem ou não. NUNCA composição.
 CORES da loja: Preto, Bege, Natural, Figo, Marrom, Marrom Escuro, Azul Marinho, Vinho, Verde, Terracota, Rose, Off White, Cappuccino, Areia — são CORES, não tamanhos.
+TABELA PADRÃO (medidas corporais cm): P(36/38) B88-92 C70-75 Q96-102 | M(40) B92-96 C76-79 Q102-106 | G(42) B96-100 C80-83 Q106-110 | GG(44) B100-104 C84-86 Q110-114 | Plus: G1(46) B110 C92 Q124 | G2(48) B114 C96 Q128 | G3(50) B118 C100 Q132. Se anúncio tem tabela própria, use a do anúncio. Medidas em tamanhos diferentes → MAIOR + "costureira ajusta".
 
 DISPONIBILIDADE: Separe COR de TAMANHO (figo GG = cor figo, tam GG). Consulte VARIAÇÕES nos dados do anúncio. NUNCA confunda cor com tamanho.
-MEDIDAS: Peso → peça busto/cintura/quadril. Com medidas → tabela na descrição → MAIOR tamanho → "costureira ajusta". Corpo > peça = APERTADO. NUNCA invente. NUNCA recomende menor.
-PLUS SIZE: Medidas > maior tamanho → "Temos versão Plus Size! Busque 'plus size' na nossa loja."
+MEDIDAS: Peso → peça busto/cintura/quadril. Numeração (38,40,42) → peça medidas (varia entre marcas). Com medidas → tabela na descrição → MAIOR tamanho → "costureira ajusta". Medidas parciais → usa a informada + pede o resto. Corpo > peça = APERTADO. NUNCA invente. NUNCA recomende menor.
+PLUS SIZE: Medidas > maior tamanho → "Alguns dos nossos modelos possuem versão Plus Size! Vale buscar por 'plus size' nos nossos anúncios." NUNCA afirme que aquele modelo específico tem Plus Size.
 ENTREGA: "Chega amanhã?" → "Se for Flex, próximo dia útil! Prazos no anúncio conforme CEP." Prazo/frete → "Aparece no anúncio conforme CEP!" Rastreamento → "Acompanhe em Minhas Compras." NUNCA prometa prazo.
+ESGOTADO: Tom de venda! "Repomos com frequência e as peças voam rápido! Salva nos favoritos pra não perder!"
+PRODUTO: Comprimento → só se na descrição. Transparência → se não mencionada, cores claras sem forro podem ter leve transparência. Lavagem → Linho: ciclo delicado, não torcer. Suplex: pode lavar máquina. Na dúvida: "siga a etiqueta".
 NUNCA "ideal dias quentes/frio" — versátil pra todas as estações.
-FORMATO: "Olá! ${saudacao}!" + max 380 chars + despedida variada. Emoji max 1. NUNCA **negrito**.
+FORMATO: "Olá! ${saudacao}!" + 100-380 chars + despedida variada. Se múltiplas perguntas, responda TODAS. Emoji max 1. NUNCA **negrito**.
 GANCHOS (1, natural): "dos mais vendidos!", "clientes elogiam!", "vai ficar ótima!". Não em entrega/pós-venda.
-PROIBIÇÕES: "Amícia", "desvestir", inventar, telefone/WhatsApp, enviar fotos, prometer estoque. Se não souber: BAIXA_CONFIANCA.
+PROIBIÇÕES: "Amícia", "desvestir", inventar, telefone/WhatsApp, enviar fotos, prometer desconto/cupom, inventar medidas em cm. Conjunto → "Temos uma opção de conjunto nos nossos anúncios!" Se não souber: BAIXA_CONFIANCA.
 EXEMPLOS: ${qaExamples}`,
         messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${ctx.itemContext || 'TÍTULO: ' + ctx.title}\n\n═══ DESCRIÇÃO ═══\n${ctx.desc || 'Sem descrição'}\n\n═══ PERGUNTA ═══\n"${question_text}"\n\nResponda APENAS com o texto final (sem passos nem classificação):` }],
       }),

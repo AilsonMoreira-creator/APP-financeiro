@@ -2479,7 +2479,7 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
     const novoPago=!b.pago;
     const mesNum=getMes(b);
     // Atualiza boletos
-    setBoletos(prev=>prev.map(x=>x.id===id?{...x,pago:novoPago}:x));
+    setBoletos(prev=>prev.map(x=>x.id===id?{...x,pago:novoPago,_mod:Date.now()}:x));
     // Atualiza auxData separadamente (fora do setBoletos)
     if(setAuxDataPorMes){
       setAuxDataPorMes(prev=>{
@@ -2495,28 +2495,32 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
   const desfazer=()=>{if(!lixeira.length)return;const u=lixeira[lixeira.length-1];setBoletos(prev=>[...prev,u]);setLixeira(l=>l.slice(0,-1));};
   const parsePaste=()=>{
     setImportError("");
-    const linhas=pasteText.trim().split("\n").filter(l=>l.trim());
-    const novas=[];let erros=0;
-    linhas.forEach((linha,i)=>{
-      const cols=linha.split(/\t|;/).map(c=>c.trim());
-      if(cols.length<2){erros++;return;}
-      let data="",valor="",empresa="",nroNota="";
-      cols.forEach(col=>{
-        const cl=col.replace("R$","").replace(/\s/g,"");
-        if(/^\d{1,2}[/-]\d{1,2}/.test(col)){data=col.replace("-","/")}
-        else if(/^[\d.,]+$/.test(cl)&&!valor){valor=cl.replace(/\./g,"").replace(",",".")}
-        else if(/^(NF|NF-|nf|nota|#)/i.test(col)||/^\d{3,}$/.test(col.trim())){nroNota=col}
-        else{empresa=col;}
+    try{
+      const linhas=pasteText.trim().split("\n").filter(l=>l.trim());
+      if(linhas.length===0){setImportError("⚠ Cole os dados antes de importar.");return;}
+      const novas=[];let erros=0;
+      linhas.forEach((linha,i)=>{
+        const cols=linha.split(/\t|;/).map(c=>c.trim());
+        if(cols.length<2){erros++;return;}
+        let data="",valor="",empresa="",nroNota="";
+        cols.forEach(col=>{
+          const cl=col.replace("R$","").replace(/\s/g,"");
+          if(/^\d{1,2}[/-]\d{1,2}/.test(col)){data=col.replace("-","/")}
+          else if(/^[\d.,]+$/.test(cl)&&!valor){valor=cl.replace(/\./g,"").replace(",",".")}
+          else if(/^(NF|NF-|nf|nota|#)/i.test(col)||/^\d{3,}$/.test(col.trim())){nroNota=col}
+          else{empresa=col;}
+        });
+        if(!valor){erros++;return;}
+        const partes=(data||"").split("/");
+        const mesDaData=partes.length>=2?parseInt(partes[1]):null;
+        const mesCorreto=(mesDaData&&mesDaData>=1&&mesDaData<=12)?mesDaData:mesFiltro;
+        novas.push({id:crypto.randomUUID(),data:normalizarData(data||"—"),mes:mesCorreto,empresa:normalizarEmpresa(empresa||("Boleto "+(i+1))),nroNota:normalizarNota(nroNota),valor:normalizarValor(valor),pago:false,_mod:Date.now()});
       });
-      if(!valor){erros++;return;}
-      const partes=(data||"").split("/");
-      const mesDaData=partes.length>=2?parseInt(partes[1]):null;
-      const mesCorreto=(mesDaData&&mesDaData>=1&&mesDaData<=12)?mesDaData:mesFiltro;
-      novas.push({id:crypto.randomUUID(),data:normalizarData(data||"—"),mes:mesCorreto,empresa:normalizarEmpresa(empresa||("Boleto "+(i+1))),nroNota:normalizarNota(nroNota),valor:normalizarValor(valor),pago:false});
-    });
-    if(novas.length===0){setImportError("Formato inválido. Use: Data ; Valor ; Empresa");return;}
-    setBoletos(prev=>deduplicarBoletos([...prev,...novas]));setPasteText("");setMostraImport(false);
-    if(erros>0)setImportError(novas.length+" importado(s). "+erros+" ignorado(s).");
+      if(novas.length===0){setImportError("⚠ Formato inválido. Use: Data ; Valor ; Empresa");return;}
+      setBoletos(prev=>deduplicarBoletos([...prev,...novas]));setPasteText("");
+      if(erros>0)setImportError("✓ "+novas.length+" importado(s). "+erros+" ignorado(s).");
+      else setImportError("✓ "+novas.length+" boleto(s) importado(s) com sucesso!");
+    }catch(e){console.error("Erro import boletos:",e);setImportError("⚠ Erro ao importar: "+e.message);}
   };
   const iStyle={border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 10px",fontSize:13,outline:"none"};
   return(
@@ -2635,7 +2639,7 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
               <div><div style={{fontSize:10,color:"#a89f94",marginBottom:2}}>Empresa</div><input value={novoB.empresa} onChange={e=>setNovoB(p=>({...p,empresa:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
               <div><div style={{fontSize:10,color:"#a89f94",marginBottom:2}}>Nº Nota</div><input value={novoB.nroNota} onChange={e=>setNovoB(p=>({...p,nroNota:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
               <div><div style={{fontSize:10,color:"#a89f94",marginBottom:2}}>Valor</div><input value={novoB.valor} onChange={e=>setNovoB(p=>({...p,valor:e.target.value}))} placeholder="0.00" style={{...iStyle,width:"100%"}}/></div>
-              <button onClick={()=>{if(!novoB.empresa||!novoB.valor)return;setBoletos(p=>[...p,{id:Date.now(),...novoB,pago:false}]);setNovoB({data:"",mes:3,empresa:"",valor:"",nroNota:""});markChange();}} style={{background:"#27ae60",color:"#fff",border:"none",borderRadius:6,padding:"7px",fontSize:12,cursor:"pointer",height:34}}>✓</button>
+              <button onClick={()=>{if(!novoB.empresa||!novoB.valor)return;setBoletos(p=>[...p,{id:Date.now(),...novoB,pago:false,_mod:Date.now()}]);setNovoB({data:"",mes:3,empresa:"",valor:"",nroNota:""});markChange();}} style={{background:"#27ae60",color:"#fff",border:"none",borderRadius:6,padding:"7px",fontSize:12,cursor:"pointer",height:34}}>✓</button>
             </div>
           </div>
         )}
@@ -2643,7 +2647,7 @@ const BoletosContent=({boletos,setBoletos,setAuxDataPorMes})=>{
           <div style={{padding:"8px 12px",background:"#f0f6fb",borderTop:"1px solid #e8e2da"}}>
             <div style={{fontSize:11,color:"#8a9aa4",marginBottom:6}}>Cole da planilha (Data ; Valor ; Empresa)</div>
             <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={"14/03\tFornecedor\t1500,00"} style={{width:"100%",height:80,border:"1px solid #c8d8e4",borderRadius:6,padding:"8px",fontSize:12,fontFamily:"monospace",resize:"vertical",outline:"none"}}/>
-            {importError&&<div style={{fontSize:11,color:"#c0392b",marginTop:4}}>{importError}</div>}
+            {importError&&<div style={{fontSize:11,color:importError.startsWith("✓")?"#27ae60":"#c0392b",marginTop:4,fontWeight:600}}>{importError}</div>}
             <div style={{display:"flex",gap:6,marginTop:6}}>
               <button onClick={parsePaste} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer"}}>Importar</button>
               <button onClick={()=>{setPasteText("");setImportError("");}} style={{background:"#fff",color:"#8a9aa4",border:"1px solid #e8e2da",borderRadius:6,padding:"6px 12px",fontSize:12,cursor:"pointer"}}>Limpar</button>
@@ -3706,10 +3710,11 @@ const blingDb={
 const FotoProd=({sbUrl,refProd,onZoom})=>{
   const r=String(refProd).replace(/^0+/,'').toUpperCase();
   const base=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/${r}`:'';
+  const cb='?v='+new Date().toISOString().slice(0,10); // cache-bust diário
   if(!base)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
-  return <img src={base+".jpg"}
-    onError={(e)=>{const s=e.target.src;if(s.endsWith('.jpg'))e.target.src=base+'.png';else if(s.endsWith('.png'))e.target.src=base+'.webp';else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
-    onClick={(e)=>{e.stopPropagation();window._zoomFoto=e.target.src;onZoom&&onZoom(e.target.src);}}
+  return <img src={base+".jpg"+cb}
+    onError={(e)=>{const s=e.target.src;if(s.includes('.jpg'))e.target.src=base+'.png'+cb;else if(s.includes('.png'))e.target.src=base+'.webp'+cb;else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+    onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(e.target.src);}}
     style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;
 };
 
@@ -4521,6 +4526,10 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
   const mobile=w<640;
 
+  // Fotos: mesma lógica do Bling (FotoProd + zoom DOM)
+  const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
+  const handleZoom=(src)=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer';const img=document.createElement('img');img.src=src;img.style.cssText='width:200px;height:280px;object-fit:cover;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.3);border:3px solid #fff';ov.appendChild(img);ov.onclick=()=>document.body.removeChild(ov);document.body.appendChild(ov);};
+
   const [tela,setTela]=useState("lancamento");
   const [cortesSala,setCortesSala]=useState([]);
   const [salas,setSalas]=useState(SALAS_CORTE_INICIAL);
@@ -4819,8 +4828,13 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
                   <div><span style={{fontSize:mobile?14:12,fontWeight:700,color:"#e67e22"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div>
                   <span style={{fontSize:10,background:"#fff8e8",color:"#8a6500",padding:"2px 8px",borderRadius:6}}>⏳ pendente</span>
                 </div>
-                <div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50",marginTop:4}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}{!descCorte(c)&&<span style={{fontSize:11,color:"#a89f94",fontStyle:"italic",marginLeft:6}}>sem cadastro</span>}</div>
-                <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:mobile?13:12,color:"#6b7c8a"}}>{c.qtdRolos} rolos · toque para informar peças</span></div>
+                <div style={{display:"flex",gap:10,marginTop:6,alignItems:"center"}}>
+                  <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50"}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}{!descCorte(c)&&<span style={{fontSize:11,color:"#a89f94",fontStyle:"italic",marginLeft:6}}>sem cadastro</span>}</div>
+                    <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:mobile?13:12,color:"#6b7c8a"}}>{c.qtdRolos} rolos · toque para informar peças</span></div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>)}
@@ -4831,13 +4845,16 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
             {[...concluidos].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,5).map(c=>(
               <div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:"1px solid #e8e2da",marginBottom:6}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div style={{flex:1}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span>
-                      <span style={{fontSize:11,color:"#a89f94"}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>
+                  <div style={{display:"flex",gap:10,flex:1,alignItems:"center"}}>
+                    <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span>
+                        <span style={{fontSize:11,color:"#a89f94"}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:2}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
+                      <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</span></div>
                     </div>
-                    <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:2}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
-                    <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#a89f94"}}>{c.qtdRolos}r → {fmt(c.qtdPecas)} pç</span></div>
                   </div>
                   <div style={{display:"flex",gap:8,alignItems:"center",marginLeft:8}}>
                     <span onClick={()=>iniciarEdicao(c)} style={{cursor:"pointer",color:"#4a7fa5",fontSize:14}}>✏</span>
@@ -5463,7 +5480,7 @@ const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
       const resp=await fetch("/api/produto-foto",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({ref:f.ref.trim(),image_base64:resized,content_type:"image/jpeg"})});
       const data=await resp.json();
-      if(data.ok&&data.url){s("foto",data.url);setFotoPreview(data.url);}
+      if(data.ok&&data.url){const cacheBust=data.url+'?t='+Date.now();s("foto",cacheBust);setFotoPreview(cacheBust);}
       else{alert("Erro no upload: "+(data.error||""));}
     }catch(err){alert("Erro: "+err.message);}
     setFotoUploading(false);
@@ -6523,6 +6540,9 @@ export default function App(){
   const [blingImportStatus,setBlingImportStatus]=useState(null);
   const [syncStatus,setSyncStatus]=useState(null); // null | 'loading' | 'saved' | 'error' | 'local'
   const [dbCarregado,setDbCarregado]=useState(false);
+  const [homeSacPending,setHomeSacPending]=useState(0);
+  const [homeSCPending,setHomeSCPending]=useState(0);
+  const [homeAgendaHoje,setHomeAgendaHoje]=useState(0);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
   const sessaoInicio=useRef(Date.now());
   const debounceRef=useRef(null);
@@ -6637,7 +6657,14 @@ export default function App(){
         if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
-        if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
+        // Merge boletos: mantém todos, mais recente por _mod ganha
+        if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(prev=>{
+          const rm=new Map(d.boletosShared.map(b=>[b.id,b]));
+          const lm=new Map(prev.map(b=>[b.id,b]));
+          const merged=prev.map(lb=>{const rb=rm.get(lb.id);return rb&&(rb._mod||0)>(lb._mod||0)?rb:lb;});
+          for(const[id,rb]of rm){if(!lm.has(id))merged.push(rb);}
+          return deduplicarBoletos(merged);
+        });
         if(d.usuarios)setUsuarios(prev=>{const rm=new Map(d.usuarios.map(u=>[u.id,u]));const lm=new Map(prev.map(u=>[u.id,u]));const m=prev.map(lu=>{const ru=rm.get(lu.id);return ru&&(ru._mod||0)>(lu._mod||0)?ru:lu;});for(const[id,ru]of rm){if(!lm.has(id))m.push(ru);}return m;});
         if(d.prestadores)setPrestadores(d.prestadores);
         if(d.produtos)setProdutos(d.produtos);
@@ -6682,6 +6709,30 @@ export default function App(){
         if(d.logTroca)setLogTroca(d.logTroca);
       }).subscribe();
     return()=>{supabase.removeChannel(ch);};
+  },[dbCarregado]);
+
+  // ── HOME KPIs: SAC pendentes, Salas Corte pendentes, Agenda hoje ──
+  useEffect(()=>{
+    if(!dbCarregado||!supabase)return;
+    // SAC: count pending questions via API
+    fetch('/api/ml-questions').then(r=>r.json()).then(d=>{
+      const pending=(d.questions||[]).filter(q=>q.status==='UNANSWERED').length;
+      setHomeSacPending(pending);
+    }).catch(()=>{});
+    // Salas de Corte: count pendentes
+    supabase.from('amicia_data').select('payload').eq('user_id','salas-corte').single().then(({data})=>{
+      const cortesSC=data?.payload?.cortes||[];
+      setHomeSCPending(cortesSC.filter(c=>c.status==='pendente').length);
+    }).catch(()=>{});
+    // Agenda: count today's items
+    try{
+      const s=localStorage.getItem("amica_agenda");
+      if(s){const d=JSON.parse(s);const now=new Date();if(d?.itens&&d.mes===now.getMonth()+1)setHomeAgendaHoje(d.itens.filter(i=>!i.feito).length);}
+    }catch{}
+    supabase.from('amicia_data').select('payload').eq('user_id','agenda').single().then(({data})=>{
+      const now=new Date();
+      if(data?.payload?.itens&&data.payload.mes===now.getMonth()+1)setHomeAgendaHoje(data.payload.itens.filter(i=>!i.feito).length);
+    }).catch(()=>{});
   },[dbCarregado]);
 
   // ── BACKUP DIÁRIO AUTOMÁTICO (1x por dia ao abrir) ─────────────────────────
@@ -7160,14 +7211,20 @@ export default function App(){
           const cortesAbertos=cortes.filter(c=>!c.entregue&&!c.pago);
           const nCortesAberto=cortesAbertos.length;
           const pecasAbertas=cortesAbertos.reduce((s,c)=>s+(parseInt(c.qtd)||0),0);
-          // Boletos: último com data válida
-          const boletosComData=boletosShared.filter(b=>b.vencimento&&!isNaN(new Date(b.vencimento).getTime()));
-          const boletosMesAtual=boletosShared.filter(b=>{try{const d=new Date(b.vencimento);return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();}catch{return false;}});
-          const boletosAbertos=boletosMesAtual.filter(b=>!b.pago);
+          // Boletos: vencendo hoje e no mês
+          const hojeDia=now.getDate();const hojeMes=now.getMonth()+1;
+          const diaNum=(d)=>parseInt((d||"99/99").split("/")[0]);
+          const getMes=(b)=>{const p=(b.data||"").split("/");return(p.length>=2&&parseInt(p[1])>=1&&parseInt(p[1])<=12)?parseInt(p[1]):Number(b.mes);};
+          const boletosMesAtual=boletosShared.filter(b=>getMes(b)===hojeMes);
+          const boletosAbertosMes=boletosMesAtual.filter(b=>!b.pago);
+          const boletosHoje=boletosShared.filter(b=>!b.pago&&getMes(b)===hojeMes&&diaNum(b.data)===hojeDia);
+          const valorHoje=boletosHoje.reduce((s,b)=>s+(parseFloat(b.valor)||0),0);
+          const fmt=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 
           const homeModules=[
             {id:"sac",label:"SAC",Icon:SvgSAC,color:"#4a7fa5",bg:"#f0f6fb",border:"#c8dae8",
-              kpiValue:"—",kpiLabel:"pendentes",detail:"Abra pra ver"},
+              kpiValue:homeSacPending>0?`${homeSacPending}`:"✓",kpiLabel:homeSacPending>0?"pendentes":"sem pendentes",
+              detail:homeSacPending>0?"Responder agora":"Tudo respondido"},
             {id:"bling",label:"Bling",Icon:SvgBling,color:"#2c3e50",bg:"#f7f4f0",border:"#e8e2da",
               kpiValue:blingHoje>0?"R$ "+Math.round(blingHoje).toLocaleString("pt-BR"):"—",kpiLabel:"faturamento hoje",
               detail:blingPedidos>0?`${blingPedidos} pedidos · 3 contas`:"cron atualizando..."},
@@ -7175,15 +7232,20 @@ export default function App(){
               kpiValue:nCortesAberto>0?`${nCortesAberto} cortes`:"—",kpiLabel:"em produção",
               detail:nCortesAberto>0?`${pecasAbertas.toLocaleString("pt-BR")} peças`:"sem cortes abertos"},
             {id:"salascorte",label:"Salas de Corte",Icon:SvgSalasCorte,color:"#6b4c3b",bg:"#f8f3ee",border:"#e0d4c8",
-              kpiValue:"—",kpiLabel:"cortes pendentes",detail:"Abra pra ver"},
+              kpiValue:homeSCPending>0?`${homeSCPending}`:"✓",kpiLabel:homeSCPending>0?"cortes pendentes":"todos concluídos",
+              detail:homeSCPending>0?"Aguardando peças":"Nenhum pendente"},
+            {id:"agenda",label:"Agenda",Icon:SvgAgenda,color:"#2c7d5a",bg:"#f0f8f3",border:"#c8e4d4",
+              kpiValue:homeAgendaHoje>0?`${homeAgendaHoje}`:"✓",kpiLabel:homeAgendaHoje>0?"compromissos hoje":"dia livre",
+              detail:homeAgendaHoje>0?"Ver agenda":"Sem compromissos"},
             {id:"fichatecnica",label:"Ficha Técnica",Icon:SvgFichaTecnica,color:"#6b5b73",bg:"#f6f3f8",border:"#ddd4e4",
               kpiValue:produtos.length>0?`Ref ${produtos[produtos.length-1]?.ref||"—"}`:"—",kpiLabel:"última cadastrada",
               detail:produtos.length>0?`${produtos.length} fichas no total`:"nenhuma ficha"},
             {id:"calculadora",label:"Calculadora",Icon:SvgCalculadora,color:"#2e7d6a",bg:"#f0f8f5",border:"#c8e4da",
               kpiValue:"—",kpiLabel:"calculadora",detail:"Calcular preços e margens"},
             {id:"boletos",label:"Boletos",Icon:SvgBoletos,color:"#5a6e82",bg:"#f2f5f8",border:"#d0dae4",
-              kpiValue:`${boletosMesAtual.length}`,
-              kpiLabel:"boletos este mês",detail:boletosAbertos.length>0?`${boletosAbertos.length} em aberto`:"todos pagos ✓"},
+              kpiValue:boletosAbertosMes.length>0?`${boletosAbertosMes.length}`:"✓",
+              kpiLabel:boletosAbertosMes.length>0?"a vencer este mês":"todos pagos ✓",
+              detail:boletosHoje.length>0?`${boletosHoje.length} hoje · ${fmt(valorHoje)}`:"nenhum vencendo hoje"},
           ].filter(m=>usuarioLogado.modulos.includes(m.id));
 
           return(

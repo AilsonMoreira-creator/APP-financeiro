@@ -109,7 +109,9 @@ async function handleStockFlow(question, brand, token) {
   }
 
   if (size && matched.length === 0) {
-    const mentionsAnyColor = /cor\s+\w+|na\s+cor|no\s+\w+\s*(preto|bege|azul|verde|marrom|vinho|figo|rosa|branco|cinza)/i.test(text);
+    // Verifica se o cliente já mencionou QUALQUER cor (mesmo fora das 7 do stock)
+    const ALL_COLORS = /\b(preto|preta|bege|azul|verde|marrom|marron|vinho|figo|rosa|branco|branca|cinza|caramelo|cappuccino|off\s*white|natural|nude|terracota|caqui|areia|azul\s*marinho|marrom\s*escuro|verde\s*militar|rose)\b/i;
+    const mentionsAnyColor = ALL_COLORS.test(text);
     if (!mentionsAnyColor) {
       await supabase.from('ml_stock_offers').insert({
         brand, item_id: itemId, question_id: String(question.id),
@@ -121,9 +123,9 @@ async function handleStockFlow(question, brand, token) {
         status: 'auto_stock_ask_color',
       };
     }
+    // Cliente já disse cor + tamanho mas cor não é do stock → deixa IA responder
+    return null;
   }
-
-  return null;
 }
 
 // ── AI auto-response ──
@@ -171,7 +173,7 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       if (variations) itemContext += `\n\nVARIAÇÕES DISPONÍVEIS (cor/tamanho + estoque):\n${variations}`;
     }
     
-    if (descRes.ok) desc = ((await descRes.json()).plain_text || '').slice(0, 3000);
+    if (descRes.ok) desc = ((await descRes.json()).plain_text || '').slice(0, 4000);
   } catch (e) { console.error('[ml-webhook] item fetch error:', e.message); }
 
   // ── Busca ampla de exemplos Q&A ──
@@ -222,9 +224,13 @@ async function getAIAutoResponse(questionText, itemId, brand) {
     if (qLower.match(/\b(cor|cores|preto|bege|figo|marrom|azul|verde|branco|vinho|rosa|nude|caramelo)\b/)) expandedKeywords.push('cor', 'disponível', 'disponivel', 'cores');
     if (qLower.match(/\b(tecido|linho|viscolinho|material|composição|composicao)\b/)) expandedKeywords.push('tecido', 'linho', 'material');
     if (qLower.match(/\b(entrega|entregar|chega|frete|prazo|flex|amanhã|amanha)\b/)) expandedKeywords.push('entrega', 'prazo', 'frete', 'flex');
-    if (qLower.match(/\b(lavar|lava|lavagem|passar|ferro|cuidado)\b/)) expandedKeywords.push('lavar', 'lavagem', 'cuidado');
-    if (qLower.match(/\b(plus|maior|grande|g1|g2|g3|46|48|50)\b/)) expandedKeywords.push('plus', 'tamanho', 'maior');
+    if (qLower.match(/\b(lavar|lava|lavagem|passar|ferro|cuidado|encolhe|encolhimento)\b/)) expandedKeywords.push('lavar', 'lavagem', 'cuidado', 'encolhe');
+    if (qLower.match(/\b(plus|maior|grande|g1|g2|g3|46|48|50|52)\b/)) expandedKeywords.push('plus', 'tamanho', 'maior');
     if (qLower.match(/\b(estoque|disponível|disponivel|acabou|esgotado|volta)\b/)) expandedKeywords.push('estoque', 'disponível', 'reposição');
+    if (qLower.match(/\b(comprimento|compri|midi|longo|curto|mini|joelho)\b/)) expandedKeywords.push('comprimento', 'midi', 'longo');
+    if (qLower.match(/\b(transparente|transparência|transparencia|translúcid)\b/)) expandedKeywords.push('transparente', 'forro');
+    if (qLower.match(/\b(desconto|promoção|promocao|cupom|mais barato)\b/)) expandedKeywords.push('preço', 'valor');
+    if (qLower.match(/\b(conjunto|combina|combinação|combinacao)\b/)) expandedKeywords.push('conjunto', 'kit');
     const uniqueKeywords = [...new Set(expandedKeywords)];
     debugKeywords = uniqueKeywords.slice(0, 15);
     
@@ -327,6 +333,19 @@ CORES (nomes usados pela loja):
 • Preto, Bege, Natural, Figo, Marrom, Marrom Escuro, Azul Marinho, Vinho, Verde, Verde Militar, Terracota, Rose, Caqui, Off White, Cappuccino, Caramelo, Branco, Cinza, Areia
 • Esses são CORES, nunca confunda com tamanhos.
 
+TABELA DE MEDIDAS PADRÃO (medidas corporais em cm — vale pra maioria dos produtos):
+REGULAR:
+• P (36/38): Busto 88-92, Cintura 70-75, Quadril 96-102
+• M (40): Busto 92-96, Cintura 76-79, Quadril 102-106
+• G (42): Busto 96-100, Cintura 80-83, Quadril 106-110
+• GG (44): Busto 100-104, Cintura 84-86, Quadril 110-114
+PLUS SIZE:
+• G1 (46): Busto 110, Cintura 92, Quadril 124
+• G2 (48): Busto 114, Cintura 96, Quadril 128
+• G3 (50): Busto 118, Cintura 100, Quadril 132
+REGRA: Se a descrição do anúncio tem tabela própria, use a do anúncio. Se não tem, use esta tabela padrão.
+EXEMPLO: Cintura 73cm = P (70-75), Quadril 103cm = M (102-106) → tamanhos diferentes → recomende M (o MAIOR) + "a cintura fica levemente folgada, uma costureira de confiança ajusta facilmente!"
+
 PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 
 ───── A) DISPONIBILIDADE ─────
@@ -334,17 +353,21 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
   Exemplos: "figo GG" → cor=figo, tam=GG. "preto M" → cor=preto, tam=M. "marrom P" → cor=marrom, tam=P.
 - CONSULTE A SEÇÃO "VARIAÇÕES DISPONÍVEIS" nos dados do anúncio — ela mostra cada combinação cor/tamanho e se tem estoque.
 - Se a variação existe e tem estoque > 0: confirme e incentive a compra.
-- Se a variação está ESGOTADA ou não existe: diga que no momento não temos disponível, mas sempre chega reposição. "Fica de olho no anúncio!"
+- Se a variação está ESGOTADA ou não existe: diga que no momento não temos disponível. Use tom de venda: "Repomos com frequência e as peças voam rápido! Salva o anúncio nos favoritos pra não perder!" ou "Sempre chega reposição! Aproveita pra conhecer as outras cores/tamanhos disponíveis."
 - NUNCA confunda cor com tamanho.
 
 ───── B) MEDIDAS/TAMANHO ─────
 - Se a cliente informou PESO sem medidas: ignore o peso completamente. Peça busto, cintura e quadril.
+- Se informou NUMERAÇÃO (36, 38, 40, 42, 44, 46) sem medidas: diga que a numeração pode variar entre marcas e peça busto, cintura e quadril pra uma recomendação certeira.
 - Se informou medidas (busto, cintura, quadril):
   1. Encontre a TABELA DE MEDIDAS na descrição do anúncio (procure por "Guia de Tamanhos", "Medidas", "Busto", "Cintura", "Quadril", "P -", "M -", "G -" etc)
   2. Compare CADA medida do corpo com CADA tamanho da tabela
   3. Se as medidas caem em tamanhos DIFERENTES (ex: cintura=M, quadril=G), SEMPRE recomende o MAIOR (G neste caso)
   4. Explique: "O ${tipoPeca} vai ficar levemente folgado na cintura, e uma costureira de confiança ajusta facilmente!"
   5. Se a medida do corpo é MAIOR que o tamanho da peça → isso significa APERTADO. NUNCA diga "folgado" nesse caso.
+- MEDIDAS PARCIAIS (só 1 ou 2 medidas):
+  1. Use a medida informada pra dar uma indicação inicial
+  2. Mas peça as medidas faltantes: "Com cintura 80cm, o tamanho M atende! Pra confirmar certinho, me passa o busto e quadril também?"
 - Se perguntou "qual tamanho?" sem informar medidas: peça as medidas de busto, cintura e quadril.
 - NUNCA INVENTE medidas que não estão na descrição.
 - NUNCA recomende um tamanho MENOR que o necessário.
@@ -354,6 +377,10 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 - Forro: diga APENAS se tem ou não tem. NUNCA mencione composição.
 - Tecido: use a BASE DE CONHECIMENTO pra identificar o tipo de tecido pelo título/descrição. Só fale composição se perguntarem.
 - Caimento: use o que está na descrição.
+- Comprimento: APENAS se estiver na descrição (midi, longo, curto, mini). NUNCA invente medidas em cm.
+- Transparência: se a descrição ou atributos mencionam, informe. Se não, diga que peças em cores claras sem forro podem ter leve transparência.
+- Lavagem: Linho → lavar à mão ou máquina ciclo delicado, não torcer, secar à sombra. Verona → mesma orientação. Suplex → pode lavar na máquina. Na dúvida: "Recomendamos seguir as instruções da etiqueta que acompanha a peça!"
+- Encolhimento: Linho tem pouco encolhimento. Demais tecidos mantêm forma.
 
 ───── D) ENTREGA ─────
 - "Chega amanhã?" / "Entrega hoje?" / "Consigo receber amanhã?" / "Entrega rápida?":
@@ -370,14 +397,16 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 
 ───── F) PLUS SIZE ─────
 - Se as medidas da cliente ultrapassam o MAIOR tamanho disponível no anúncio:
-  Responda: "Infelizmente esse modelo vai até o tamanho [maior]. Mas temos a versão Plus Size desse modelo com tamanhos maiores! Busque por 'plus size' na nossa loja que vai encontrar."
+  Responda: "Infelizmente esse modelo vai até o tamanho [maior]. Mas alguns dos nossos modelos possuem versão Plus Size com tamanhos maiores! Vale dar uma olhada nos nossos anúncios buscando por 'plus size'."
 - Se a cliente pergunta "tem tamanho maior?" e o maior é GG:
   Mesma resposta acima.
+- NUNCA afirme que AQUELE modelo específico tem versão Plus Size (nem todos têm).
 - NUNCA diga que o produto não serve sem oferecer alternativa.
 
 ═══ FORMATO DA RESPOSTA (sua saída deve ser APENAS isso, nada mais) ═══
 - Comece SEMPRE com "Olá! ${saudacao}!" (use EXATAMENTE ${saudacao}, nunca outro horário)
-- Corpo: direto, útil, max 380 caracteres no total
+- Corpo: direto, útil, entre 100 e 380 caracteres no total
+- Se a mensagem contém MAIS DE UMA pergunta, responda TODAS na mesma mensagem
 - Despedida: VARIE (não repita). Use: "Qualquer dúvida estou aqui!", "Fico à disposição!", "Se precisar é só chamar!", "Boas compras!"
 - Emoji: máximo 1, só se natural. Sem emoji forçado.
 - NUNCA inclua classificação, passos, raciocínio, fontes consultadas ou qualquer texto além da resposta pra cliente.
@@ -389,11 +418,15 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 ═══ PROIBIÇÕES ABSOLUTAS ═══
 - NUNCA use "Amícia" (marca da loja física)
 - NUNCA use "desvestir"
-- NUNCA invente informações que não estão na descrição nem nos exemplos
+- NUNCA invente informações que não estão nas fontes
 - NUNCA passe telefone, WhatsApp ou direcione fora da plataforma
 - NUNCA sugira enviar fotos
-- NUNCA prometa incluir peças no estoque
+- NUNCA prometa incluir peças no estoque por conta própria (o sistema de estoque cuida disso automaticamente)
+- NUNCA prometa desconto, cupom ou promoção
 - NUNCA formate com **negrito** ou *itálico* — texto puro sempre
+- NUNCA invente medidas em cm que não estão na descrição
+- PREÇO: confirme o preço que está nos dados do anúncio. Não invente valores.
+- CONJUNTO: se perguntarem se tem conjunto, diga "Temos uma opção de conjunto! Vale dar uma olhada nos nossos anúncios."
 - Se não souber com certeza: responda APENAS a palavra BAIXA_CONFIANCA (nada mais)
 
 ═══ EXEMPLOS DE REFERÊNCIA (TREINAMENTO) ═══
@@ -457,8 +490,12 @@ export default async function handler(req, res) {
       const buyerId = String(question.from?.id || '');
       const respondAfter = new Date(Date.now() + DELAY_MS).toISOString();
 
-      // Helper: enfileira resposta pra envio com delay
+      // Helper: enfileira resposta pra envio com delay (com check de duplicata)
       const queueResponse = async (text, answeredBy, debug) => {
+        // Verifica se já tem resposta na fila pra essa pergunta
+        const { data: existing } = await supabase.from('ml_response_queue')
+          .select('id').eq('question_id', question.id).eq('status', 'queued').limit(1);
+        if (existing?.length > 0) { console.log(`[ml-webhook] Q${question.id} já na fila, ignorando duplicata`); return; }
         await supabase.from('ml_response_queue').insert({
           question_id: question.id, brand, item_id: question.item_id,
           question_text: question.text, response_text: text,

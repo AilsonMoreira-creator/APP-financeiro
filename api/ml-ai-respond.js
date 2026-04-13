@@ -41,6 +41,19 @@ export default async function handler(req, res) {
       try {
         const token = await getValidToken(item.brand);
 
+        // Verifica se a pergunta ainda está sem resposta (evita duplicata se operador respondeu)
+        try {
+          const qCheck = await fetch(`${ML_API}/questions/${item.question_id}?api_version=4`, { headers: { Authorization: `Bearer ${token}` } });
+          if (qCheck.ok) {
+            const qData = await qCheck.json();
+            if (qData.status !== 'UNANSWERED') {
+              console.log(`[ml-respond] Q${item.question_id} já respondida, cancelando`);
+              await supabase.from('ml_response_queue').update({ status: 'cancelled', error: 'já respondida' }).eq('id', item.id);
+              continue;
+            }
+          }
+        } catch {}
+
         // Envia resposta pra ML API
         const ansRes = await fetch(`${ML_API}/answers`, {
           method: 'POST',
