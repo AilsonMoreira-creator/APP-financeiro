@@ -142,6 +142,7 @@ async function getAIAutoResponse(questionText, itemId, brand) {
 
   // ── Busca ampla de exemplos Q&A ──
   let qaExamples = '';
+  let debugExamples = [];
   try {
     // 1. Perguntas treinadas manualmente (MANUAL) — prioridade máxima
     // Cada pergunta foi salva 3x (Exitus/Lumia/Muniam), então puxamos mais e deduplicamos
@@ -179,6 +180,7 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       if (!combined.find(c => c.question_text === qa.question_text)) combined.push(qa);
     }
     const final = combined.slice(0, 8);
+    debugExamples = final.map(qa => ({ p: qa.question_text.slice(0, 80), r: qa.answer_text.slice(0, 80) }));
     if (final.length > 0) qaExamples = final.map((qa, i) => `Ex${i+1}: P: ${qa.question_text}\nR: ${qa.answer_text}`).join('\n');
   } catch (e) { console.error('[ml-webhook] QA search error:', e.message); }
 
@@ -259,8 +261,15 @@ ${qaExamples || 'Nenhum exemplo disponível'}`;
   const data = await claudeRes.json();
   const response = data.content?.[0]?.text?.trim();
   if (!response) return null;
-  if (response.includes('BAIXA_CONFIANCA')) return { text: null, confidence: 'low' };
-  return { text: response, confidence: 'high' };
+  const debug = {
+    produto: title.slice(0, 60),
+    descricao: desc ? `${desc.length} chars` : 'sem descrição',
+    exemplos_encontrados: debugExamples.length,
+    exemplos: debugExamples,
+    modelo: 'claude-haiku-4-5',
+  };
+  if (response.includes('BAIXA_CONFIANCA')) return { text: null, confidence: 'low', debug };
+  return { text: response, confidence: 'high', debug };
 }
 
 // ── Main handler ──
@@ -294,12 +303,13 @@ export default async function handler(req, res) {
       const respondAfter = new Date(Date.now() + DELAY_MS).toISOString();
 
       // Helper: enfileira resposta pra envio com delay
-      const queueResponse = async (text, answeredBy) => {
+      const queueResponse = async (text, answeredBy, debug) => {
         await supabase.from('ml_response_queue').insert({
           question_id: question.id, brand, item_id: question.item_id,
           question_text: question.text, response_text: text,
           answered_by: answeredBy, buyer_id: buyerId,
           respond_after: respondAfter, status: 'queued',
+          debug: debug || null,
         });
       };
 
@@ -308,7 +318,7 @@ export default async function handler(req, res) {
         try {
           const stockResult = await handleStockFlow(question, brand, token);
           if (stockResult) {
-            await queueResponse(stockResult.text, '_auto_ia');
+            await queueResponse(stockResult.text, '_auto_ia', { fonte: 'stock_flow' });
             autoStatus = 'queued_' + stockResult.status;
           }
         } catch (e) { console.error('[ml-webhook] Stock flow error:', e.message); }
@@ -319,12 +329,12 @@ export default async function handler(req, res) {
         try {
           const aiResult = await getAIAutoResponse(question.text, question.item_id, brand);
           if (aiResult?.confidence === 'high' && aiResult.text) {
-            await queueResponse(aiResult.text, '_auto_ia');
+            await queueResponse(aiResult.text, '_auto_ia', aiResult.debug);
             autoStatus = 'queued_ia';
           } else {
-            const lowMsg = await getAILowConfidenceMsg();
-            await queueResponse(lowMsg, '_auto_ia_low');
-            autoStatus = 'queued_ia_low';
+            // Baixa confiança: NÃO responde, fica como pendente pra humano
+            autoStatus = 'ia_low_pending';
+            console.log(`[ml-webhook] ${brand} Q${question.id}: IA baixa confiança, deixando pendente`);
           }
         } catch (aiErr) { console.error('[ml-webhook] AI error:', aiErr.message); }
       }

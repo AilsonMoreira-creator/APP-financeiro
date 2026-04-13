@@ -216,6 +216,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
   const [aiResponses, setAiResponses] = useState([]);
   const [absenceResponses, setAbsenceResponses] = useState([]);
   const [queuedIds, setQueuedIds] = useState(new Set());
+  const [iaDebug, setIaDebug] = useState({});
+  const [debugOpen, setDebugOpen] = useState({});
+  const [iaLowIds, setIaLowIds] = useState(new Set());
   const [pvUnread, setPvUnread] = useState(0);
   const [conversions, setConversions] = useState([]);
   const [stockColorInput, setStockColorInput] = useState('');
@@ -324,11 +327,16 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
       setError(`Erro no sync: ${err.message}`);
     }
     // Busca respostas na fila (pra mostrar indicador "IA respondendo")
+    // e perguntas que a IA preferiu não responder
     if (supabase) {
       try {
         const { data: queued } = await supabase.from('ml_response_queue')
           .select('question_id').eq('status', 'queued').limit(50);
         setQueuedIds(new Set((queued || []).map(q => q.question_id)));
+
+        const { data: lowPending } = await supabase.from('ml_pending_questions')
+          .select('question_id').eq('status', 'ia_low_pending').limit(50);
+        setIaLowIds(new Set((lowPending || []).map(q => Number(q.question_id))));
       } catch {}
     }
   }
@@ -396,6 +404,16 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         .select('*').eq('answered_by', '_auto_ia')
         .gte('answered_at', cutoff).order('answered_at', { ascending: false }).limit(20);
       setAiResponses(ai || []);
+
+      // Busca debug info da fila de respostas
+      const { data: queueItems } = await supabase.from('ml_response_queue')
+        .select('question_id, debug').in('status', ['sent', 'queued'])
+        .gte('created_at', cutoff).limit(50);
+      if (queueItems) {
+        const debugMap = {};
+        for (const q of queueItems) { if (q.debug) debugMap[q.question_id] = q.debug; }
+        setIaDebug(debugMap);
+      }
 
       const { data: aiLow } = await supabase.from('ml_qa_history')
         .select('*').eq('answered_by', '_auto_ia_low')
@@ -697,7 +715,10 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
               <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
                 ✨ Nenhuma resposta da IA nas últimas 48h
               </div>
-            ) : aiResponses.map((r, i) => (
+            ) : aiResponses.map((r, i) => {
+              const dbg = iaDebug[r.question_id];
+              const isOpen = debugOpen[r.question_id];
+              return (
               <div key={i} style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: '10px 12px', borderLeft: `4px solid ${PALETTE.blue}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <BrandTag brand={r.brand} />
@@ -705,11 +726,28 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                     {new Date(r.answered_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
                   <span style={{ ...S, fontSize: 11, color: PALETTE.blue, fontWeight: 600 }}>✨ IA (alta confiança)</span>
+                  {dbg && <button onClick={() => setDebugOpen(p => ({ ...p, [r.question_id]: !p[r.question_id] }))} style={{ ...S, fontSize: 9, color: PALETTE.textLight, background: PALETTE.sand, border: `1px solid ${PALETTE.border}`, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', marginLeft: 'auto' }}>{isOpen ? '▼ Fechar' : '🔍 Fontes'}</button>}
                 </div>
                 <div style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
                 <div style={{ ...S, fontSize: 12, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
+                {isOpen && dbg && (
+                  <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8f6f3', borderRadius: 6, border: `1px solid ${PALETTE.border}`, fontSize: 11 }}>
+                    <div style={{ ...S, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>🔍 Fontes da IA</div>
+                    <div style={{ ...S, color: PALETTE.textLight, marginBottom: 2 }}>📦 Produto: {dbg.produto || '—'}</div>
+                    <div style={{ ...S, color: PALETTE.textLight, marginBottom: 2 }}>📄 Descrição: {dbg.descricao || '—'}</div>
+                    <div style={{ ...S, color: PALETTE.textLight, marginBottom: 4 }}>🧠 Modelo: {dbg.modelo || '—'}</div>
+                    <div style={{ ...S, fontWeight: 600, color: PALETTE.dark, marginBottom: 2 }}>📚 {dbg.exemplos_encontrados || 0} exemplos usados:</div>
+                    {(dbg.exemplos || []).map((ex, j) => (
+                      <div key={j} style={{ ...S, padding: '3px 0', borderBottom: j < (dbg.exemplos || []).length - 1 ? `1px solid ${PALETTE.border}` : 'none' }}>
+                        <div style={{ color: PALETTE.text }}>P: {ex.p}</div>
+                        <div style={{ color: PALETTE.green }}>R: {ex.r}</div>
+                      </div>
+                    ))}
+                    {(!dbg.exemplos || dbg.exemplos.length === 0) && <div style={{ ...S, color: PALETTE.orange }}>⚠ Nenhum exemplo do treinamento foi encontrado pra essa pergunta</div>}
+                  </div>
+                )}
               </div>
-            ))}
+            );})
           </div>
         ) : tab === 'estoque' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -878,6 +916,11 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 {!isAnswered && !lockedByOther && queuedIds.has(q.id) && (
                   <span style={{ ...S, fontSize: 10, color: '#27ae60', fontWeight: 600 }}>
                     🤖 IA respondendo...
+                  </span>
+                )}
+                {!isAnswered && !lockedByOther && !queuedIds.has(q.id) && iaLowIds.has(q.id) && (
+                  <span style={{ ...S, fontSize: 10, color: PALETTE.orange, fontWeight: 600 }}>
+                    🤔 IA sem confiança
                   </span>
                 )}
               </div>
