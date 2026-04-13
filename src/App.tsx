@@ -1,7 +1,14 @@
 // @ts-nocheck  
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Component } from "react";
 import { supabase, USER_ID } from "./supabase.js";
 import MLPerguntas from './MLPerguntas';
+
+// ── Error Boundary (mostra erro em vez de tela branca) ──
+class ModuleErrorBoundary extends Component{
+  constructor(props){super(props);this.state={hasError:false,error:null};}
+  static getDerivedStateFromError(error){return{hasError:true,error};}
+  render(){if(this.state.hasError)return<div style={{padding:30,textAlign:"center"}}><div style={{fontSize:16,color:"#c0392b",fontWeight:700,marginBottom:8}}>⚠ Erro no módulo</div><div style={{fontSize:12,color:"#666",marginBottom:12}}>{this.state.error?.message||"Erro desconhecido"}</div><button onClick={()=>this.setState({hasError:false,error:null})} style={{padding:"8px 16px",borderRadius:6,border:"1px solid #e8e2da",background:"#fff",cursor:"pointer",fontSize:12}}>Tentar novamente</button></div>;return this.props.children;}
+}
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
 const APP_VERSION="6.2";
@@ -3206,7 +3213,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const salvarCorte=()=>{
     if(!form.ref||!form.oficina||!form.qtd||!form.valorUnit)return;
     const qtd=parseFloat(form.qtd)||0,vu=parseFloat(form.valorUnit)||0;
-    const item={id:editId||Date.now(),nCorte:form.nCorte,ref:form.ref,descricao:form.descricao,marca:form.marca,qtd,valorUnit:vu,valorTotal:Math.round(qtd*vu*100)/100,oficina:form.oficina,data:form.data,qtdEntregue:qtd,entregue:false,dataEntrega:null,pago:false,dataPagamento:null,obs:""};
+    const item={id:editId||Date.now(),nCorte:form.nCorte,ref:form.ref,descricao:form.descricao,marca:form.marca,qtd,valorUnit:vu,valorTotal:Math.round(qtd*vu*100)/100,oficina:form.oficina,data:form.data,qtdEntregue:qtd,entregue:false,dataEntrega:null,pago:false,dataPagamento:null,obs:"",_mod:Date.now()};
     if(editId)setCortes(prev=>prev.map(c=>c.id===editId?item:c));
     else setCortes(prev=>[...prev,item]);
     setForm({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});
@@ -3214,21 +3221,21 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   };
   const iniciarEdicao=(c)=>{setEditId(c.id);setForm({nCorte:c.nCorte,ref:c.ref,descricao:c.descricao,marca:c.marca,qtd:String(c.qtd),valorUnit:String(c.valorUnit),oficina:c.oficina,data:c.data});setRefBusca(c.ref);setMostraForm(true);};
   const deletarCorte=(id)=>setConfirm({msg:"Apagar este corte?",onYes:()=>{setCortes(prev=>prev.filter(c=>c.id!==id));setConfirm(null);}});
-  const toggleEntregue=(id)=>{setCortes(prev=>prev.map(c=>{if(c.id!==id)return c;const ne=!c.entregue;return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false};}));};
+  const toggleEntregue=(id)=>{setCortes(prev=>prev.map(c=>{if(c.id!==id)return c;const ne=!c.entregue;return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
   const togglePago=(id)=>{
     setCortes(prev=>prev.map(c=>{
       if(c.id!==id||!c.entregue)return c;
       const np=!c.pago;
       if(np&&setAuxDataPorMes){const hoje=new Date(),mes=hoje.getMonth()+1;const dd=`${String(hoje.getDate()).padStart(2,"0")}/${String(mes).padStart(2,"0")}`;const vl=String(Math.round((c.qtdEntregue||c.qtd)*(c.valorUnit||0)*100)/100);setAuxDataPorMes(m=>{const aux=m[mes]||{},ofs=[...(aux["Oficinas Costura"]||[])];ofs.push({data:dd,prestador:c.oficina,valor:vl,descricao:`REF ${c.ref} - ${c.descricao}`});return{...m,[mes]:{...aux,"Oficinas Costura":ofs}};});}
-      return{...c,pago:np,dataPagamento:np?new Date().toLocaleDateString("pt-BR"):null};
+      return{...c,pago:np,dataPagamento:np?new Date().toLocaleDateString("pt-BR"):null,_mod:Date.now()};
     }));
   };
-  const editarQtdEntregue=(id,v)=>setCortes(prev=>prev.map(c=>c.id===id?{...c,qtdEntregue:parseFloat(v)||0}:c));
+  const editarQtdEntregue=(id,v)=>setCortes(prev=>prev.map(c=>c.id===id?{...c,qtdEntregue:parseFloat(v)||0,_mod:Date.now()}:c));
   const executarTroca=()=>{
     if(!trocaDe||!trocaPara){setTrocaMsg("Preencha os dois campos.");return;}
     if(trocaDe===trocaPara){setTrocaMsg("As referências são iguais.");return;}
     setProdutos(prev=>prev.map(p=>p.ref===trocaDe?{...p,ref:trocaPara}:p));
-    setCortes(prev=>prev.map(c=>c.ref===trocaDe?{...c,ref:trocaPara}:c));
+    setCortes(prev=>prev.map(c=>c.ref===trocaDe?{...c,ref:trocaPara,_mod:Date.now()}:c));
     const hoje=new Date().toLocaleDateString("pt-BR");
     setLogTroca(prev=>[{de:trocaDe,para:trocaPara,data:hoje},...prev]);
     setTrocaMsg(`✓ REF ${trocaDe} → ${trocaPara} atualizada.`);
@@ -3695,16 +3702,15 @@ const blingDb={
   },
 };
 
-// Foto do produto: tenta jpg→png→webp, placeholder se falhar, click pra zoom
+// Foto do produto: tenta jpg→png→webp, placeholder se falhar
 const FotoProd=({sbUrl,refProd,onZoom})=>{
-  const base=useMemo(()=>{const r=String(refProd).replace(/^0+/,'').toUpperCase();return sbUrl?`${sbUrl}/storage/v1/object/public/produtos/${r}`:null;},[sbUrl,refProd]);
-  const [status,setStatus]=useState("loading");
-  const [src,setSrc]=useState(base?base+".jpg":null);
-  useEffect(()=>{if(base){setSrc(base+".jpg");setStatus("loading");}else{setStatus("failed");}},[base]);
-  const placeholder=<div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
-  if(status==="failed"||!src)return placeholder;
-  if(status==="ok")return <div onClick={(e)=>{e.stopPropagation();if(onZoom)onZoom(src);}} style={{cursor:"pointer",flexShrink:0}}><img src={src} style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",display:"block"}}/></div>;
-  return <><img src={src} onLoad={()=>setStatus("ok")} onError={()=>{if(src&&src.endsWith('.jpg'))setSrc(base+'.png');else if(src&&src.endsWith('.png'))setSrc(base+'.webp');else setStatus("failed");}} style={{width:0,height:0,position:"absolute",opacity:0}}/>{placeholder}</>;
+  const r=String(refProd).replace(/^0+/,'').toUpperCase();
+  const base=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/${r}`:'';
+  if(!base)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
+  return <img src={base+".jpg"}
+    onError={(e)=>{const s=e.target.src;if(s.endsWith('.jpg'))e.target.src=base+'.png';else if(s.endsWith('.png'))e.target.src=base+'.webp';else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+    onClick={(e)=>{e.stopPropagation();window._zoomFoto=e.target.src;onZoom&&onZoom(e.target.src);}}
+    style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;
 };
 
 const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=null,produtos=[]})=>{
@@ -3716,7 +3722,16 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const [prodFiltroData,setProdFiltroData]=useState("7dias");
 
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
-  const [zoomFoto,setZoomFoto]=useState(null);
+  const handleZoom=(src)=>{
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer';
+    const img=document.createElement('img');
+    img.src=src;
+    img.style.cssText='width:265px;height:378px;object-fit:cover;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.3);border:3px solid #fff';
+    overlay.appendChild(img);
+    overlay.onclick=()=>document.body.removeChild(overlay);
+    document.body.appendChild(overlay);
+  };
   // Agregação de dados do cache blingVendas
   const agregarPeriodo=(dataInicio,dataFim)=>{
     const r={totalPedidos:0,totalBruto:0,totalFrete:0,totalItens:0,porCanal:{},porMarca:{},porProduto:{},porDia:[],tamGeral:{},corGeral:{}};
@@ -4443,7 +4458,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
                         <div key={p.ref} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 14px",borderBottom:"1px solid #f0ebe4"}}>
                           <div style={{width:20,height:20,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
-                          <FotoProd sbUrl={sbUrl} refProd={p.ref} onZoom={setZoomFoto}/>
+                          <FotoProd sbUrl={sbUrl} refProd={p.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:10,color:"#6b7c8a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc}</span><span style={{display:"flex",gap:2,flexShrink:0,marginLeft:"auto"}}>{Object.entries(p.marcas||{}).map(([m,q])=>(<span key={m} style={{fontSize:8,color:"#4a3a2a",background:CORES_MARCA2[m]||"#888",borderRadius:3,padding:"1px 4px"}} title={`${m}: ${q} un`}>{m}</span>))}</span></div>
                             <div style={{marginTop:2,height:3,background:"#f0ebe4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#4a7fa5,#2c3e50)",width:`${pct*100}%`}}/></div>
@@ -5034,7 +5049,6 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
           </div>
         )}
       </div>
-      {zoomFoto&&<div onClick={()=>setZoomFoto(null)} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><img src={zoomFoto} style={{width:265,height:378,objectFit:"cover",borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,0.3)",border:"3px solid #fff"}}/></div>}
     </div>
   );
 };
@@ -6757,17 +6771,55 @@ export default function App(){
       try{
         const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
         const remoto=data?.payload||{};
-        // Merge cortes: mantém cortes de outros usuários (multi-user)
-        const localIds=new Set((cortes||[]).map(c=>c.id));
-        const remotoOnly=(remoto.cortes||[]).filter(c=>!localIds.has(c.id));
-        const cortesMerged=[...(cortes||[]),...remotoOnly];
-        // Produtos: SEM merge — admin controla, salva sempre a versão atual
-        const payload={cortes:cortesMerged,produtos:produtos||[],oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
+        // Merge cortes: por ID, mais recente ganha (_mod timestamp)
+        const now=Date.now();
+        const localMap=new Map((cortes||[]).map(c=>[c.id,{...c,_mod:c._mod||now}]));
+        const remoteMap=new Map((remoto.cortes||[]).map(c=>[c.id,c]));
+        // 1. Todos os locais (com timestamp atualizado)
+        const merged=[];
+        for(const [id,lc] of localMap){
+          const rc=remoteMap.get(id);
+          if(!rc){merged.push(lc);}  // só local → mantém
+          else{merged.push((lc._mod||0)>=(rc._mod||0)?lc:rc);}  // conflito → mais recente
+        }
+        // 2. Remotos que não existem localmente
+        for(const [id,rc] of remoteMap){
+          if(!localMap.has(id))merged.push(rc);
+        }
+        const payload={cortes:merged,produtos:produtos||[],oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
         await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
       }catch(e){console.error("Erro save cortes:",e);}
     },1500);
     return()=>clearTimeout(debounceCortes.current);
   },[cortes,produtos,oficinasCAD,logTroca,dbCarregado]);
+
+  // ── Oficinas: reload ao voltar pra aba (pega mudanças do outro usuário) ──
+  useEffect(()=>{
+    const onVis=async()=>{
+      if(document.visibilityState!=="visible"||!supabase||!dbCarregado)return;
+      try{
+        const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
+        if(!data?.payload?.cortes)return;
+        const remoteCortes=data.payload.cortes;
+        setCortes(prev=>{
+          const localMap=new Map(prev.map(c=>[c.id,c]));
+          let mudou=false;
+          const merged=prev.map(lc=>{
+            const rc=remoteCortes.find(r=>r.id===lc.id);
+            if(rc&&(rc._mod||0)>(lc._mod||0)){mudou=true;return rc;}
+            return lc;
+          });
+          // Adiciona remotos novos
+          const localIds=new Set(prev.map(c=>c.id));
+          const novos=remoteCortes.filter(c=>!localIds.has(c.id));
+          if(novos.length>0)mudou=true;
+          return mudou?[...merged,...novos]:prev;
+        });
+      }catch(e){console.error("Oficinas reload:",e);}
+    };
+    document.addEventListener("visibilitychange",onVis);
+    return()=>document.removeEventListener("visibilitychange",onVis);
+  },[dbCarregado]);
 
   // ── SAVE AO SAIR + RETRY AO VOLTAR (usa dadosRef pra evitar re-registro) ──
   useEffect(()=>{
@@ -7145,7 +7197,7 @@ export default function App(){
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
-        {active==="salascorte"&&<SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/>}
+        {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/></ModuleErrorBoundary>}
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD}/>}
