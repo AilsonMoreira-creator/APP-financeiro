@@ -6560,6 +6560,7 @@ export default function App(){
   const debounceCortes=useRef(null);
   const dadosRef=useRef(null); // ref pra flush/retry sem re-registrar listeners
   const lastSaveTs=useRef(0); // timestamp do último save pra detectar eco do Realtime
+  const realtimeProcessing=useRef(false); // flag pra pular auto-save durante Realtime
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
   const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,usuarios,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
@@ -6668,6 +6669,7 @@ export default function App(){
         const pendente=localStorage.getItem("amica_pending_sync")==="true";
         if(pendente){console.log("REALTIME: ignorando — pending_sync=true");return;}
         console.log("REALTIME: recebido update de outro device, timestamp:",new Date(d._updated).toLocaleString("pt-BR"));
+        realtimeProcessing.current=true;
         if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
         if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
@@ -6675,11 +6677,12 @@ export default function App(){
         if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(prev=>{
           const rm=new Map(d.boletosShared.map(b=>[b.id,b]));
           const lm=new Map(prev.map(b=>[b.id,b]));
-          const merged=prev.map(lb=>{const rb=rm.get(lb.id);return rb&&(rb._mod||0)>(lb._mod||0)?rb:lb;});
-          for(const[id,rb]of rm){if(!lm.has(id))merged.push(rb);}
-          return deduplicarBoletos(merged);
+          let mudou=false;
+          const merged=prev.map(lb=>{const rb=rm.get(lb.id);if(rb&&(rb._mod||0)>(lb._mod||0)){mudou=true;return rb;}return lb;});
+          for(const[id,rb]of rm){if(!lm.has(id)){merged.push(rb);mudou=true;}}
+          return mudou?deduplicarBoletos(merged):prev;
         });
-        if(d.usuarios)setUsuarios(prev=>{const rm=new Map(d.usuarios.map(u=>[u.id,u]));const lm=new Map(prev.map(u=>[u.id,u]));const m=prev.map(lu=>{const ru=rm.get(lu.id);return ru&&(ru._mod||0)>(lu._mod||0)?ru:lu;});for(const[id,ru]of rm){if(!lm.has(id))m.push(ru);}return m;});
+        if(d.usuarios)setUsuarios(prev=>{const rm=new Map(d.usuarios.map(u=>[u.id,u]));const lm=new Map(prev.map(u=>[u.id,u]));let mudou=false;const m=prev.map(lu=>{const ru=rm.get(lu.id);if(ru&&(ru._mod||0)>(lu._mod||0)){mudou=true;return ru;}return lu;});for(const[id,ru]of rm){if(!lm.has(id)){m.push(ru);mudou=true;}}return mudou?m:prev;});
         if(d.prestadores)setPrestadores(d.prestadores);
         if(d.produtos)setProdutos(d.produtos);
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
@@ -6688,6 +6691,7 @@ export default function App(){
         if(d.fixosConfig)setFixosConfig(d.fixosConfig);
         if(d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
         try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:d._updated}));}catch(e){console.error(e);}
+        setTimeout(()=>{realtimeProcessing.current=false;},100); // reset após React processar
       }).subscribe();
     return()=>{supabase.removeChannel(channel);};
   },[dbCarregado]);
@@ -6848,6 +6852,7 @@ export default function App(){
   // Auto-save: localStorage IMEDIATO + Supabase com debounce 1.5s
   useEffect(()=>{
     if(!dbCarregado)return;
+    if(realtimeProcessing.current){return;} // pula save durante Realtime (evita loop)
     const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,usuarios,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
     dadosRef.current=dados; // sync ref pra flush/retry
     // Camada 1: salva local na hora
