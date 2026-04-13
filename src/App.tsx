@@ -3193,6 +3193,10 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [trocaDe,setTrocaDe]=useState("");
   const [trocaPara,setTrocaPara]=useState("");
   const [trocaMsg,setTrocaMsg]=useState("");
+
+  // Fotos: mesma lógica FotoProd + zoom DOM
+  const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
+  const handleZoom=(src)=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer';const img=document.createElement('img');img.src=src;img.style.cssText='width:265px;height:378px;object-fit:cover;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.3);border:3px solid #fff';ov.appendChild(img);ov.onclick=()=>document.body.removeChild(ov);document.body.appendChild(ov);};
   const [dashPeriodo,setDashPeriodo]=useState("ano");
   const [dashDe,setDashDe]=useState("");
   const [dashAte,setDashAte]=useState("");
@@ -3329,8 +3333,8 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
           )}
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-              <div style={{overflowY:"auto",maxHeight:760,minWidth:900}}>
-                <div style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.78fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
+              <div style={{overflowY:"auto",maxHeight:760,minWidth:1150}}>
+                <div style={{display:"grid",gridTemplateColumns:"10px 52px 84px 1fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 32px 28px",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
                   {["","Nº Corte","Ref","Descrição · Marca","Oficina","Qtd","Vl.Unit","Total","Data","Entregue","","Pago","Qtd Entr.","Faltante","",""].map((h,i)=>(
                     <div key={i} style={{padding:"7px 8px",fontSize:10,color:"#fff",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}}>{h}</div>
                   ))}
@@ -3341,10 +3345,13 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   const qtdEntr=c.qtdEntregue!=null?c.qtdEntregue:(c.entregue?c.qtd:null);
                   const faltante=c.entregue&&qtdEntr!=null?c.qtd-qtdEntr:null;
                   return(
-                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 80px 60px 0.78fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 30px 26px",borderBottom:"1px solid #d0dde8",alignItems:"center"}}>
+                    <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 52px 84px 1fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 32px 28px",borderBottom:"1px solid #d0dde8",alignItems:"center"}}>
                       <div style={{height:"100%",background:STATUS_COR[st],minHeight:36,alignSelf:"stretch"}}/>
-                      <div style={{padding:"5px 8px",fontSize:11,fontWeight:600,color:"#4a7fa5",background:"#edf4fb",alignSelf:"stretch",display:"flex",alignItems:"center"}}>{c.nCorte}</div>
-                      <div style={{padding:"5px 8px",fontSize:14,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif"}}>{c.ref}</div>
+                      <div style={{padding:"5px 6px",fontSize:11,fontWeight:600,color:"#4a7fa5",background:"#edf4fb",alignSelf:"stretch",display:"flex",alignItems:"center"}}>{c.nCorte}</div>
+                      <div style={{padding:"3px 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                        <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
+                        <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif"}}>{c.ref}</div>
+                      </div>
                       <div style={{padding:"5px 8px"}}><div style={{fontSize:12,color:"#2c3e50"}}>{c.descricao}</div><span style={{fontSize:9,color:"#fff",background:c.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 5px"}}>{c.marca}</span></div>
                       <div style={{padding:"5px 8px",fontSize:11,color:"#2c3e50"}}>{c.oficina}</div>
                       <div style={{padding:"5px 8px",fontSize:15,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.qtd}</div>
@@ -3706,14 +3713,18 @@ const blingDb={
   },
 };
 
-// Foto do produto: tenta jpg→png→webp, placeholder se falhar
+// Foto do produto: tenta jpg→png→webp (normalizado + original), placeholder se falhar
 const FotoProd=({sbUrl,refProd,onZoom})=>{
-  const r=String(refProd).replace(/^0+/,'').toUpperCase();
-  const base=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/${r}`:'';
-  const cb='?v='+new Date().toISOString().slice(0,10); // cache-bust diário
-  if(!base)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
-  return <img src={base+".jpg"+cb}
-    onError={(e)=>{const s=e.target.src;if(s.includes('.jpg'))e.target.src=base+'.png'+cb;else if(s.includes('.png'))e.target.src=base+'.webp'+cb;else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+  const orig=String(refProd).toUpperCase();
+  const norm=orig.replace(/^0+/,'');
+  const storageBase=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/`:'';
+  const cb='?v='+new Date().toISOString().slice(0,10);
+  if(!storageBase)return <div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>;
+  // Sequência: norm.jpg → norm.png → norm.webp → orig.jpg → orig.png → orig.webp → placeholder
+  const urls=[norm+'.jpg',norm+'.png',norm+'.webp'];
+  if(orig!==norm)urls.push(orig+'.jpg',orig+'.png',orig+'.webp');
+  return <img src={storageBase+urls[0]+cb}
+    onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
     onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(e.target.src);}}
     style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;
 };
@@ -4829,7 +4840,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
                   <span style={{fontSize:10,background:"#fff8e8",color:"#8a6500",padding:"2px 8px",borderRadius:6}}>⏳ pendente</span>
                 </div>
                 <div style={{display:"flex",gap:10,marginTop:6,alignItems:"center"}}>
-                  <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/>
+                  <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:mobile?16:14,fontWeight:700,color:"#2c3e50"}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}{!descCorte(c)&&<span style={{fontSize:11,color:"#a89f94",fontStyle:"italic",marginLeft:6}}>sem cadastro</span>}</div>
                     <div style={{display:"flex",gap:6,marginTop:4,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:mobile?13:12,color:"#6b7c8a"}}>{c.qtdRolos} rolos · toque para informar peças</span></div>
@@ -4846,7 +4857,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
               <div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:"1px solid #e8e2da",marginBottom:6}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                   <div style={{display:"flex",gap:10,flex:1,alignItems:"center"}}>
-                    <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/>
+                    <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:6}}>
                         <span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span>
