@@ -6481,6 +6481,7 @@ const FichaTecnicaContent=()=>{
 
 export default function App(){
   const [active,setActive]=useState("lancamentos");
+  const [sacResetTrigger,setSacResetTrigger]=useState(0);
   const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");return s?JSON.parse(s):null;}catch{return null;}});
   const [menuUser,setMenuUser]=useState(false);
   const [usuarios,setUsuarios]=useState(USUARIOS_INICIAL);
@@ -7304,6 +7305,7 @@ export default function App(){
                 const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
                 salvarLocal(dados);
                 salvarNoSupabase(dados);
+                if(m.id==="sac"&&active==="sac")setSacResetTrigger(p=>p+1);
                 setActive(m.id);
               }}
               style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"4px 10px",border:"none",background:active===m.id?"#f0f6fb":"transparent",borderBottom:active===m.id?"2px solid #4a7fa5":"2px solid transparent",borderRadius:active===m.id?"6px 6px 0 0":0,cursor:"pointer",flexShrink:0,gap:3,transition:"all 0.15s"}}>
@@ -7445,7 +7447,7 @@ export default function App(){
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
         {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/></ModuleErrorBoundary>}
-        {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} />}
+        {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}

@@ -192,8 +192,11 @@ async function apiCall(path, options = {}) {
 // MAIN MODULE COMPONENT
 // ══════════════════════════════════════════════════════════
 
-export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
+export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrigger = 0 }) {
   const [page, setPage] = useState('respostas');
+
+  // Reset to home when SAC icon is re-clicked
+  useEffect(() => { if (resetTrigger > 0) setPage('respostas'); }, [resetTrigger]);
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [lastSync, setLastSync] = useState(null);
