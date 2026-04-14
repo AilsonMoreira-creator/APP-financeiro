@@ -84,12 +84,12 @@ const DEFAULT_CONFIG = {
 // SHARED UI COMPONENTS
 // ══════════════════════════════════════════════════════════
 
-const S = { fontFamily: "Calibri, 'Segoe UI', Arial, sans-serif", fontSize: 14 };
+const S = { fontFamily: "Calibri, 'Segoe UI', Arial, sans-serif", fontSize: 15 };
 
 const Badge = ({ count, color = PALETTE.red }) => count > 0 ? (
   <span style={{
     ...S, background: color, color: '#fff', borderRadius: 10, padding: '1px 7px',
-    fontSize: 11, fontWeight: 700, marginLeft: 6, minWidth: 18,
+    fontSize: 12, fontWeight: 700, marginLeft: 6, minWidth: 18,
     display: 'inline-block', textAlign: 'center',
   }}>{count}</span>
 ) : null;
@@ -108,7 +108,7 @@ const TimeTag = ({ minutes, config }) => {
   const critical = minutes > u;
   return (
     <span style={{
-      ...S, fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
+      ...S, fontSize: 12, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
       background: critical ? PALETTE.redLight : urgent ? PALETTE.orangeLight : PALETTE.greenLight,
       color: critical ? PALETTE.red : urgent ? PALETTE.orange : PALETTE.green,
     }}>
@@ -133,7 +133,7 @@ const RobotIcon = ({ size = 14 }) => (
 
 const BrandTag = ({ brand }) => (
   <span style={{
-    ...S, fontSize: 10, padding: '2px 8px', borderRadius: 3, fontWeight: 700,
+    ...S, fontSize: 11, padding: '2px 8px', borderRadius: 3, fontWeight: 700,
     letterSpacing: 0.5, textTransform: 'uppercase',
     background: BRANDS[brand]?.bg || '#ccc', color: brand === 'Muniam' ? '#fff' : BRANDS[brand]?.color || '#333',
   }}>{brand}</span>
@@ -641,7 +641,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 if (t.id === 'respondidas' || t.id === 'ausencia' || t.id === 'ia_resp') { fetchAnswered(); fetchAutoResponses(); }
                 if (t.id === 'estoque') fetchStockAlerts();
               }} style={{
-                ...S, padding: '5px 12px', fontSize: 11, fontWeight: 600,
+                ...S, padding: '5px 12px', fontSize: 12, fontWeight: 600,
                 border: 'none', borderRadius: 5, cursor: 'pointer',
                 background: tab === t.id ? PALETTE.dark : PALETTE.sand,
                 color: tab === t.id ? '#fff' : PALETTE.text,
@@ -658,7 +658,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
           {['Todas', 'Exitus', 'Lumia', 'Muniam'].map(b => (
             <button key={b} onClick={() => setBrandFilter(b)} style={{
-              ...S, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              ...S, padding: '3px 10px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
               border: brandFilter === b ? `2px solid ${b === 'Todas' ? PALETTE.dark : BRANDS[b]?.color}` : `1px solid ${PALETTE.border}`,
               borderRadius: 4,
               background: brandFilter === b ? (b === 'Todas' ? PALETTE.dark + '12' : BRANDS[b]?.bg) : 'transparent',
@@ -685,35 +685,35 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         {tab === 'posvenda' ? (
           <MLPosVenda supabase={supabase} currentUser={currentUser} />
         ) : tab === 'arquivo' ? (
-          <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
+          <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 14 }}>
             📁 Arquivo — busca por período em desenvolvimento
           </div>
         ) : tab === 'ausencia' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {absenceResponses.length === 0 ? (
-              <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
+              <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 14 }}>
                 🌙 Nenhuma resposta de ausência nas últimas 48h
               </div>
             ) : absenceResponses.map((r, i) => (
               <div key={i} style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: '10px 12px', borderLeft: `4px solid ${PALETTE.orange}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <BrandTag brand={r.brand} />
-                  <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                  <span style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>
                     {new Date(r.answered_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <span style={{ ...S, fontSize: 11, color: PALETTE.orange, fontWeight: 600 }}>
+                  <span style={{ ...S, fontSize: 12, color: PALETTE.orange, fontWeight: 600 }}>
                     {r.answered_by === '_auto_ia_low' ? '✨ IA (baixa confiança)' : '🌙 Ausência'}
                   </span>
                 </div>
-                <div style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
-                <div style={{ ...S, fontSize: 12, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
+                <div style={{ ...S, fontSize: 15, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
+                <div style={{ ...S, fontSize: 14, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
               </div>
             ))}
           </div>
         ) : tab === 'ia_resp' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {aiResponses.length === 0 ? (
-              <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 13 }}>
+              <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 14 }}>
                 ✨ Nenhuma resposta da IA nas últimas 48h
               </div>
             ) : aiResponses.map((r, i) => {
@@ -723,14 +723,14 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
               <div key={i} style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: '10px 12px', borderLeft: `4px solid ${PALETTE.blue}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <BrandTag brand={r.brand} />
-                  <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                  <span style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>
                     {new Date(r.answered_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <span style={{ ...S, fontSize: 11, color: PALETTE.blue, fontWeight: 600 }}>✨ IA (alta confiança)</span>
-                  {dbg && <button onClick={() => setDebugOpen(p => ({ ...p, [r.question_id]: !p[r.question_id] }))} style={{ ...S, fontSize: 9, color: PALETTE.textLight, background: PALETTE.sand, border: `1px solid ${PALETTE.border}`, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', marginLeft: 'auto' }}>{isOpen ? '▼ Fechar' : '🔍 Fontes'}</button>}
+                  <span style={{ ...S, fontSize: 12, color: PALETTE.blue, fontWeight: 600 }}>✨ IA (alta confiança)</span>
+                  {dbg && <button onClick={() => setDebugOpen(p => ({ ...p, [r.question_id]: !p[r.question_id] }))} style={{ ...S, fontSize: 10, color: PALETTE.textLight, background: PALETTE.sand, border: `1px solid ${PALETTE.border}`, borderRadius: 4, padding: '2px 6px', cursor: 'pointer', marginLeft: 'auto' }}>{isOpen ? '▼ Fechar' : '🔍 Fontes'}</button>}
                 </div>
-                <div style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
-                <div style={{ ...S, fontSize: 12, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
+                <div style={{ ...S, fontSize: 15, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
+                <div style={{ ...S, fontSize: 14, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
                 {isOpen && dbg && (
                   <div style={{ marginTop: 8, padding: '8px 10px', background: '#f8f6f3', borderRadius: 6, border: `1px solid ${PALETTE.border}`, fontSize: 11 }}>
                     <div style={{ ...S, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>🔍 Fontes da IA</div>
@@ -769,25 +769,25 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                     <BrandTag brand={alert.brand} />
                     <span style={{
-                      ...S, fontSize: 11, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
+                      ...S, fontSize: 12, padding: '2px 8px', borderRadius: 4, fontWeight: 600,
                       background: alert.status === 'pendente' ? PALETTE.orangeLight : PALETTE.greenLight,
                       color: alert.status === 'pendente' ? PALETTE.orange : PALETTE.green,
                     }}>
                       {alert.status === 'pendente' ? '⚠️ Pendente' : '✅ Resolvido'}
                     </span>
-                    <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                    <span style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>
                       {new Date(alert.promised_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+                    <span style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>
                       por {alert.promised_by === '_auto_ia' ? '✨ IA' : alert.promised_by}
                     </span>
                   </div>
-                  <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>
+                  <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>
                     {alert.item_title || alert.item_id}
                   </div>
-                  <div style={{ ...S, fontSize: 11, color: PALETTE.textLight, marginBottom: 8 }}>{alert.item_id}</div>
+                  <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8 }}>{alert.item_id}</div>
                   <div style={{
-                    ...S, fontSize: 13, padding: '8px 10px', borderRadius: 6,
+                    ...S, fontSize: 14, padding: '8px 10px', borderRadius: 6,
                     background: alert.status === 'pendente' ? '#fff8f0' : '#f0fff4',
                     border: `1px solid ${alert.status === 'pendente' ? '#ffe0b2' : '#c8e6c9'}`,
                     color: PALETTE.dark, lineHeight: 1.4,
@@ -795,7 +795,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                     <div style={{ fontWeight: 700, marginBottom: 4, color: alert.status === 'pendente' ? PALETTE.orange : PALETTE.green }}>
                       📦 {alert.detail}
                     </div>
-                    <div style={{ fontSize: 12, color: PALETTE.textLight }}>
+                    <div style={{ fontSize: 13, color: PALETTE.textLight }}>
                       <b>Pergunta:</b> "{alert.question_text}"
                     </div>
                     <div style={{ fontSize: 12, color: PALETTE.textLight, marginTop: 2 }}>
@@ -928,18 +928,18 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 )}
               </div>
               {/* Row 2: Product Title bold */}
-              <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, lineHeight: 1.3, marginBottom: 2 }}>
+              <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark, lineHeight: 1.3, marginBottom: 2 }}>
                 {q.item_title && q.item_title !== q.item_id ? q.item_title : q.item_id || '—'}
               </div>
               {/* Row 3: MLB ID small gray */}
-              <div style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>
+              <div style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>
                 {q.item_id}
               </div>
             </div>
           </div>
 
           <div style={{
-            ...S, fontSize: 13, color: PALETTE.text, lineHeight: 1.4,
+            ...S, fontSize: 15, color: PALETTE.text, lineHeight: 1.4,
             padding: '6px 8px', background: '#fafaf8', borderRadius: 4,
           }}>
             💬 "{q.question_text}"
@@ -949,10 +949,10 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
           {isAnswered && q.answer && (
             <div style={{
               ...S, marginTop: 6, padding: '6px 8px', background: PALETTE.greenLight,
-              borderRadius: 4, fontSize: 12, color: PALETTE.green,
+              borderRadius: 4, fontSize: 14, color: PALETTE.green,
             }}>
               ✓ Respondida
-              <div style={{ marginTop: 3, color: PALETTE.text, fontSize: 12 }}>{q.answer.text}</div>
+              <div style={{ marginTop: 3, color: PALETTE.text, fontSize: 14 }}>{q.answer.text}</div>
             </div>
           )}
         </div>
@@ -963,15 +963,15 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             {/* AI suggestion */}
             <div style={{ margin: '8px 0 6px' }}>
               <button onClick={() => requestAISuggestion(q)} disabled={aiLoading}
-                style={{ ...S, fontSize: 11, color: PALETTE.blue, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
+                style={{ ...S, fontSize: 13, color: PALETTE.blue, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
                 {aiLoading ? '⏳ Pensando...' : '✨ Pedir sugestão da IA'}
               </button>
               {aiSuggestion && (
                 <div style={{
                   marginTop: 6, padding: 8, background: '#e8f4fd', borderRadius: 6,
-                  ...S, fontSize: 12, color: PALETTE.dark, borderLeft: `3px solid ${PALETTE.blue}`, lineHeight: 1.4,
+                  ...S, fontSize: 14, color: PALETTE.dark, borderLeft: `3px solid ${PALETTE.blue}`, lineHeight: 1.4,
                 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: PALETTE.blue, marginBottom: 3 }}>💡 Sugestão IA</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: PALETTE.blue, marginBottom: 3 }}>💡 Sugestão IA</div>
                   <span style={{ cursor: 'pointer' }}
                     onClick={() => setFields(f => ({ ...f, mensagem: aiSuggestion }))}>
                     {aiSuggestion}
@@ -1159,7 +1159,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                   ].map((k, i) => (
                     <div key={i} style={{ background: PALETTE.cream, borderRadius: 6, padding: '8px 4px', textAlign: 'center' }}>
                       <div style={{ fontSize: 14 }}>{k.icon}</div>
-                      <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark }}>{k.value}</div>
+                      <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark }}>{k.value}</div>
                       <div style={{ ...S, fontSize: 9, color: PALETTE.textLight }}>{k.label}</div>
                     </div>
                   ))}
@@ -1168,7 +1168,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                   <div key={brand} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                     <BrandTag brand={brand} />
                     <span style={{ ...S, fontSize: 11, color: PALETTE.dark }}>{count} vendas</span>
-                    <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>({fmtR(conversions.filter(c => c.brand === brand).reduce((s, c) => s + parseFloat(c.order_value || 0), 0))})</span>
+                    <span style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>({fmtR(conversions.filter(c => c.brand === brand).reduce((s, c) => s + parseFloat(c.order_value || 0), 0))})</span>
                   </div>
                 ))}
                 <div style={{ marginTop: 8, borderTop: `1px solid ${PALETTE.sand}`, paddingTop: 8 }}>
@@ -1227,7 +1227,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
             </div>
 
             {!sacHealth ? (
-              <div style={{ ...S, fontSize: 11, color: PALETTE.textLight, textAlign: 'center', padding: 16 }}>Clique em Atualizar pra ver o status</div>
+              <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, textAlign: 'center', padding: 16 }}>Clique em Atualizar pra ver o status</div>
             ) : (
               <div>
                 {/* Config status */}
@@ -1413,7 +1413,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                     s[i] = { ...s[i], start: e.target.value };
                     saveConfig({ ...config, schedule: s });
                   }} style={{ ...S, fontSize: 12, padding: '3px 4px', border: `1px solid ${PALETTE.border}`, borderRadius: 4 }} />
-                  <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>às</span>
+                  <span style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>às</span>
                   <input type="time" value={day.end} onChange={e => {
                     const s = [...config.schedule];
                     s[i] = { ...s[i], end: e.target.value };
@@ -1429,7 +1429,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
         {configSection === 'ausencia' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
             <div style={{ ...S, fontSize: 12, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>🌙 Resposta Automática de Ausência</div>
-            <div style={{ ...S, fontSize: 11, color: PALETTE.textLight, marginBottom: 8 }}>
+            <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 8 }}>
               Disparada automaticamente fora do horário configurado
             </div>
             <textarea
@@ -1514,7 +1514,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin' }) {
                 <input type="number" value={config[a.key] || a.def}
                   onChange={e => saveConfig({ ...config, [a.key]: Number(e.target.value) })}
                   style={{ ...S, width: 55, padding: '3px 6px', fontSize: 12, border: `1px solid ${PALETTE.border}`, borderRadius: 4, textAlign: 'center' }} />
-                <span style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>min</span>
+                <span style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>min</span>
               </div>
             ))}
           </div>

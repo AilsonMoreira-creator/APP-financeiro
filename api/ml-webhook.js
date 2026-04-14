@@ -229,6 +229,7 @@ async function getAIAutoResponse(questionText, itemId, brand) {
     if (qLower.match(/\b(estoque|disponível|disponivel|acabou|esgotado|volta)\b/)) expandedKeywords.push('estoque', 'disponível', 'reposição');
     if (qLower.match(/\b(comprimento|compri|midi|longo|curto|mini|joelho)\b/)) expandedKeywords.push('comprimento', 'midi', 'longo');
     if (qLower.match(/\b(transparente|transparência|transparencia|translúcid)\b/)) expandedKeywords.push('transparente', 'forro');
+    if (qLower.match(/\b(bojo|sustentação|sustentacao|estrutura.*busto|enchimento)\b/)) expandedKeywords.push('bojo', 'forro', 'dupla');
     if (qLower.match(/\b(desconto|promoção|promocao|cupom|mais barato)\b/)) expandedKeywords.push('preço', 'valor');
     if (qLower.match(/\b(conjunto|combina|combinação|combinacao)\b/)) expandedKeywords.push('conjunto', 'kit');
     const uniqueKeywords = [...new Set(expandedKeywords)];
@@ -324,6 +325,10 @@ TECIDOS — só fale composição se a cliente perguntar diretamente:
 
 FORRO:
 • Diga APENAS se tem ou não tem forro. NUNCA mencione composição do forro.
+
+BOJO:
+• Nenhum modelo tem bojo. A frente é sempre dupla de tecido (duas camadas), mas NÃO tem bojo/enchimento.
+• Se a cliente perguntar "tem bojo?", "tem sustentação?", "tem estrutura no busto?": responda que não tem bojo, mas a frente é forrada com dupla camada de tecido.
 
 CAIMENTO:
 • Use o que está na descrição. Termos comuns: amplo, soltinho, ajustado, evasê, reto.
@@ -528,20 +533,29 @@ export default async function handler(req, res) {
             autoStatus = 'ia_low_pending';
             console.log(`[ml-webhook] ${brand} Q${question.id}: IA baixa confiança, deixando pendente`);
           }
-        } catch (aiErr) { console.error('[ml-webhook] AI error:', aiErr.message); }
+        } catch (aiErr) {
+          // IA falhou mas estava no horário IA — NÃO cai pra ausência
+          autoStatus = 'ia_error_pending';
+          console.error(`[ml-webhook] ${brand} Q${question.id}: AI error (não vai cair em ausência):`, aiErr.message);
+        }
       }
 
-      // P2: Absence
+      // P2: Absence — só se ausência habilitada E nenhum outro handler processou
       if (outside && autoStatus === 'pending') {
         let absenceEnabled = false;
         try {
           const { data: cfgData } = await supabase.from('amicia_data').select('payload').eq('user_id', 'ml-perguntas-config').single();
-          absenceEnabled = cfgData?.payload?.config?.absence_enabled || false;
-        } catch {}
+          absenceEnabled = cfgData?.payload?.config?.absence_enabled === true; // strict check, não aceita truthy
+          console.log(`[ml-webhook] ${brand} Q${question.id}: absence check — enabled=${absenceEnabled}`);
+        } catch (cfgErr) {
+          console.error(`[ml-webhook] ${brand} Q${question.id}: erro lendo config ausência:`, cfgErr.message);
+        }
         if (absenceEnabled) {
           const msg = await getAbsenceMessage();
           await queueResponse(msg, '_auto_absence');
           autoStatus = 'queued_absence';
+          console.log(`[ml-webhook] ${brand} Q${question.id}: ausência enviada`);
+        }
         }
       }
 
