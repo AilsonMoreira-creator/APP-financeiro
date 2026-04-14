@@ -6674,8 +6674,7 @@ export default function App(){
     Promise.all([
       supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single(),
       supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single(),
-      supabase.from('amicia_data').select('payload').eq('user_id','usuarios').maybeSingle(),
-    ]).then(([{data:df,error:ef},{data:dc,error:ec},{data:du,error:eu}])=>{
+    ]).then(([{data:df,error:ef},{data:dc,error:ec}])=>{
       if(!ef&&df?.payload){
         const d=df.payload;
         const localRaw=localStorage.getItem("amica_financeiro");
@@ -6706,29 +6705,14 @@ export default function App(){
           try{localStorage.setItem("amica_financeiro",JSON.stringify({...d,_updated:remoteTs||Date.now()}));localStorage.setItem("amica_pending_sync","false");}catch(e){console.error(e);}
         }
         // ── MIGRAÇÃO: se payload principal ainda tem usuarios, migra pro key separado ──
-        if(d.usuarios&&d.usuarios.length>0&&(!du?.payload?.usuarios||du.payload.usuarios.length<d.usuarios.length)){
+        if(d.usuarios&&d.usuarios.length>0){
           console.log("MIGRAÇÃO: movendo",d.usuarios.length,"usuarios do payload principal → user_id='usuarios'");
           const usrPayload={usuarios:d.usuarios,_updated:Date.now()};
           supabase.from('amicia_data').upsert({user_id:'usuarios',payload:usrPayload},{onConflict:'user_id'}).then(()=>{
             console.log("MIGRAÇÃO usuarios concluída");
-          });
+          }).catch(()=>{});
           setUsuarios(d.usuarios);
           try{localStorage.setItem("amica_usuarios",JSON.stringify(usrPayload));}catch(e){console.error(e);}
-        }
-      }
-      // ── USUARIOS (chave separada) ──
-      if(!eu&&du?.payload?.usuarios&&du.payload.usuarios.length>0){
-        const usrLocal=localStorage.getItem("amica_usuarios");
-        const localUsrTs=usrLocal?JSON.parse(usrLocal)._updated||0:0;
-        const remoteUsrTs=du.payload._updated||0;
-        if(remoteUsrTs>=localUsrTs){
-          console.log("USUARIOS: Supabase vence, carregando",du.payload.usuarios.length,"usuarios");
-          setUsuarios(du.payload.usuarios);
-          try{localStorage.setItem("amica_usuarios",JSON.stringify(du.payload));}catch(e){console.error(e);}
-        }else{
-          console.log("USUARIOS: localStorage mais recente, enviando pro Supabase");
-          const localData=JSON.parse(usrLocal);
-          supabase.from('amicia_data').upsert({user_id:'usuarios',payload:localData},{onConflict:'user_id'}).catch(e=>console.error("Usuarios sync:",e));
         }
       }
       // Cortes (chave separada — só cortes, produtos vêm do payload principal)
@@ -6741,6 +6725,24 @@ export default function App(){
       setDbCarregado(true);clearTimeout(safetyTimer);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);clearTimeout(safetyTimer);setSyncStatus('error');});
+
+    // ── USUARIOS: carrega separado (não afeta load principal) ──
+    supabase.from('amicia_data').select('payload').eq('user_id','usuarios').maybeSingle()
+      .then(({data:du})=>{
+        if(du?.payload?.usuarios&&du.payload.usuarios.length>0){
+          const usrLocal=localStorage.getItem("amica_usuarios");
+          const localUsrTs=usrLocal?JSON.parse(usrLocal)._updated||0:0;
+          const remoteUsrTs=du.payload._updated||0;
+          if(remoteUsrTs>=localUsrTs){
+            console.log("USUARIOS: Supabase vence, carregando",du.payload.usuarios.length,"usuarios");
+            setUsuarios(du.payload.usuarios);
+            try{localStorage.setItem("amica_usuarios",JSON.stringify(du.payload));}catch(e){console.error(e);}
+          }else{
+            console.log("USUARIOS: localStorage mais recente, enviando pro Supabase");
+            try{const localData=JSON.parse(usrLocal);supabase.from('amicia_data').upsert({user_id:'usuarios',payload:localData},{onConflict:'user_id'}).catch(e=>console.error("Usuarios sync:",e));}catch{}
+          }
+        }
+      }).catch(e=>console.error("Usuarios load:",e));
     return()=>clearTimeout(safetyTimer);
   },[]);
 
