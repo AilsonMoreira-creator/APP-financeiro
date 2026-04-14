@@ -3605,9 +3605,9 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
 
 const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac"];
 const USUARIOS_INICIAL=[
-  {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true},
-  {id:2,usuario:"corte",senha:"1234",modulos:["oficinas"],admin:false},
-  {id:3,usuario:"financeiro",senha:"1234",modulos:["boletos"],admin:false},
+  {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true,moduloPadrao:"home"},
+  {id:2,usuario:"corte",senha:"1234",modulos:["oficinas","salascorte"],admin:false,moduloPadrao:"oficinas"},
+  {id:3,usuario:"financeiro",senha:"1234",modulos:["boletos"],admin:false,moduloPadrao:"boletos"},
 ];
 
 const LoginScreen=({usuarios,onLogin})=>{
@@ -6480,9 +6480,11 @@ const FichaTecnicaContent=()=>{
 
 
 export default function App(){
-  const [active,setActive]=useState("lancamentos");
-  const [sacResetTrigger,setSacResetTrigger]=useState(0);
   const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");return s?JSON.parse(s):null;}catch{return null;}});
+  const [active,setActive]=useState(()=>{
+    try{const s=localStorage.getItem("amica_session");if(s){const u=JSON.parse(s);const mod=u.moduloPadrao||"home";if(u.admin||mod==="home"||u.modulos?.includes(mod))return mod;return u.modulos?.[0]||"home";}}catch{}return"lancamentos";
+  });
+  const [sacResetTrigger,setSacResetTrigger]=useState(0);
   const [menuUser,setMenuUser]=useState(false);
   const [usuarios,setUsuarios]=useState(USUARIOS_INICIAL);
   const [prestadores,setPrestadores]=useState(PRESTADORES_INICIAL);
@@ -6983,9 +6985,10 @@ export default function App(){
       .catch((e)=>{console.error("Erro Supabase save:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
   },[dbCarregado]);
 
-  // Auto-save: localStorage IMEDIATO + Supabase com debounce 1.5s
+  // Auto-save: localStorage IMEDIATO + Supabase com debounce 1.5s (SOMENTE ADMIN)
   useEffect(()=>{
     if(!dbCarregado)return;
+    if(!usuarioLogado?.admin)return; // NÃO-ADMIN NÃO SALVA payload principal
     if(realtimeProcessing.current){return;} // pula save durante Realtime (evita loop)
     const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
     dadosRef.current=dados; // sync ref pra flush/retry
@@ -7059,10 +7062,10 @@ export default function App(){
     return()=>document.removeEventListener("visibilitychange",onVis);
   },[dbCarregado]);
 
-  // ── SAVE AO SAIR + RETRY AO VOLTAR (usa dadosRef pra evitar re-registro) ──
+  // ── SAVE AO SAIR + RETRY AO VOLTAR (SOMENTE ADMIN) ──
   useEffect(()=>{
     const flushSave=()=>{
-      if(!dadosRef.current)return;
+      if(!dadosRef.current||!usuarioLogado?.admin)return;
       const dados=dadosRef.current;
       salvarLocal(dados);
       const sbUrl=localStorage.getItem("sb_url");
@@ -7276,7 +7279,7 @@ export default function App(){
 
   if(!usuarioLogado){
     if(!dbCarregado)return <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7f4f0",fontFamily:"Georgia,serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Amícia</div><div style={{fontSize:13,color:"#a89f94"}}>Carregando...</div></div></div>;
-    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);setActive(u.moduloPadrao||"home");try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}}/>;
+    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);const defaultMod=u.moduloPadrao||"home";const canAccess=u.admin||defaultMod==="home"||u.modulos.includes(defaultMod);setActive(canAccess?defaultMod:(u.modulos[0]||"home"));try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}}/>;
   }
 
   const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id));
@@ -7302,11 +7305,13 @@ export default function App(){
         <div style={{display:"flex",gap:1,overflowX:"auto",flex:1,scrollbarWidth:"none",msOverflowStyle:"none"}}>
           {modulosVisiveis.map(m=>(
             <button key={m.id} onClick={()=>{
-                // Flush: salva local + Supabase imediatamente ao trocar de módulo
-                if(debounceRef.current)clearTimeout(debounceRef.current);
-                const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
-                salvarLocal(dados);
-                salvarNoSupabase(dados);
+                // Flush: salva local + Supabase imediatamente ao trocar de módulo (SOMENTE ADMIN)
+                if(usuarioLogado?.admin){
+                  if(debounceRef.current)clearTimeout(debounceRef.current);
+                  const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
+                  salvarLocal(dados);
+                  salvarNoSupabase(dados);
+                }
                 if(m.id==="sac"&&active==="sac")setSacResetTrigger(p=>p+1);
                 setActive(m.id);
               }}
