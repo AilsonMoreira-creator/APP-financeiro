@@ -5962,11 +5962,43 @@ function FichaLista(props){
 
 function FichaFormProd(props){
   var onSalvar=props.onSalvar,onVoltar=props.onVoltar,inicial=props.inicial,produtos=props.produtos,colecoesUnicas=props.colecoesUnicas,precosSalvos=props.precosSalvos,onSalvarPreco=props.onSalvarPreco;
-  var blank={id:Date.now(),ref:"",descricao:"",marca:"Amícia",colecao:"",dataCriacao:ftDataHoje(),tecido1:"",tecido2:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:""};
+  var blank={id:Date.now(),ref:"",descricao:"",marca:"Amícia",colecao:"",dataCriacao:ftDataHoje(),tecido1:"",tecido2:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:"",foto:""};
   var _f=useState(inicial?Object.assign({},inicial):blank),f=_f[0],setF=_f[1];
   var _salv=useState(false),salvando=_salv[0],setSalvando=_salv[1];
   var _nc=useState(false),novaColecao=_nc[0],setNovaColecao=_nc[1];
+  var _fotoP=useState(inicial?.foto||""),fotoPreview=_fotoP[0],setFotoPreview=_fotoP[1];
+  var _fotoU=useState(false),fotoUploading=_fotoU[0],setFotoUploading=_fotoU[1];
+  var fotoRef=useRef(null);
   var s=function(k,v){setF(function(p){var n=Object.assign({},p);n[k]=v;return n;});};
+
+  var resizeImage=function(file,maxW,maxH){maxW=maxW||600;maxH=maxH||800;return new Promise(function(resolve){
+    var reader=new FileReader();
+    reader.onload=function(e){var img=new Image();img.onload=function(){var canvas=document.createElement("canvas");var w=img.width,h=img.height;
+      if(w>maxW||h>maxH){var ratio=Math.min(maxW/w,maxH/h);w=Math.round(w*ratio);h=Math.round(h*ratio);}
+      canvas.width=w;canvas.height=h;canvas.getContext("2d").drawImage(img,0,0,w,h);resolve(canvas.toDataURL("image/jpeg",0.82));};img.src=e.target.result;};
+    reader.readAsDataURL(file);});};
+
+  var handleFotoUpload=function(e){
+    var file=e.target.files&&e.target.files[0];if(!file)return;
+    if(["image/jpeg","image/png","image/webp"].indexOf(file.type)===-1){alert("Formato aceito: JPEG, PNG ou WebP");return;}
+    if(file.size>2*1024*1024){alert("Máximo 2MB");return;}
+    if(!f.ref.trim()){alert("Preencha a Referência antes de adicionar a foto");return;}
+    setFotoUploading(true);
+    resizeImage(file).then(function(resized){
+      setFotoPreview(resized);
+      return fetch("/api/produto-foto",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ref:f.ref.trim(),image_base64:resized,content_type:"image/jpeg"})});
+    }).then(function(resp){return resp.json();}).then(function(data){
+      if(data.ok&&data.url){var cacheBust=data.url+'?t='+Date.now();s("foto",cacheBust);setFotoPreview(cacheBust);}
+      else{alert("Erro no upload: "+(data.error||""));}
+    }).catch(function(err){alert("Erro: "+err.message);}).finally(function(){setFotoUploading(false);});
+  };
+
+  var handleFotoRemove=function(){
+    if(!f.ref.trim())return;
+    fetch("/api/produto-foto",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({ref:f.ref.trim()})}).catch(function(){});
+    s("foto","");setFotoPreview("");
+  };
   var custo=ftCalcCusto(f);
   var refId=f.ref.trim();
 
@@ -6021,6 +6053,24 @@ function FichaFormProd(props){
           <div style={{fontSize:20,fontWeight:700,color:_S}}>{inicial?"Editar Produto":"Novo Produto"}</div>
         </div>
         <div style={{background:_W,borderRadius:12,padding:20,border:"1px solid "+_BD}}>
+          <div style={{display:"flex",gap:16,marginBottom:12}}>
+            {/* Foto */}
+            <div style={{flexShrink:0}}>
+              <div onClick={function(){fotoRef.current&&fotoRef.current.click();}} style={{width:118,height:157,borderRadius:10,background:fotoPreview?"transparent":"#f0ebe3",border:fotoPreview?"1px solid "+_BD:"2px dashed "+_BD,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",overflow:"hidden",position:"relative"}}>
+                {fotoUploading?(<div style={{fontSize:11,color:_BFT}}>⏳</div>):fotoPreview?(
+                  <><img src={fotoPreview} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                  <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"4px",background:"rgba(0,0,0,0.5)",textAlign:"center",fontSize:9,color:"#fff"}}>trocar foto</div></>
+                ):(<>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" style={{marginBottom:6,opacity:0.4}}><rect x="3" y="3" width="18" height="18" rx="3" stroke="#8a9aa4" strokeWidth="1.5"/><circle cx="8.5" cy="8.5" r="2" stroke="#8a9aa4" strokeWidth="1.5"/><path d="M3 16l5-5 4 4 3-3 6 6" stroke="#8a9aa4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <div style={{fontSize:10,color:"#8a9aa4",textAlign:"center",lineHeight:1.3}}>Adicionar<br/>foto</div>
+                  <div style={{fontSize:8,color:"#8a9aa4",marginTop:4,opacity:0.6}}>JPG · PNG</div>
+                </>)}
+              </div>
+              <input ref={fotoRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFotoUpload} style={{display:"none"}}/>
+              {fotoPreview&&<button onClick={handleFotoRemove} style={{width:"100%",marginTop:4,background:"none",border:"1px solid #f4b8b8",borderRadius:6,padding:"3px",fontSize:9,color:"#c0392b",cursor:"pointer"}}>remover</button>}
+            </div>
+            {/* Ref + Desc + Marca */}
+            <div style={{flex:1}}>
           {/* Ref + Desc */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:12}}>
             {[["ref","Referência *"],["descricao","Descrição"]].map(function(a){return(
@@ -6030,6 +6080,8 @@ function FichaFormProd(props){
           <div style={{marginBottom:12}}>
             <div style={ftLblS}>Marca</div>
             <div style={{display:"flex",gap:8}}>{ftMARCAS.map(function(m){return <button key={m} onClick={function(){s("marca",m);}} style={{background:f.marca===m?_S:_W,color:f.marca===m?_W:_TX,border:"1px solid "+(f.marca===m?_S:_BD),borderRadius:6,padding:"6px 20px",cursor:"pointer",fontSize:13}}>{m}</button>;})}</div>
+          </div>
+            </div>
           </div>
           {/* Coleção + Data */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
