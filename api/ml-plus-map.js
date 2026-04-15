@@ -82,8 +82,11 @@ async function fetchItemTitles(itemIds, token) {
 
 export default async function handler(req, res) {
   try {
-    const brandFilter = req.query?.brand; // opcional: exitus, lumia, muniam
-    const brands = brandFilter ? [brandFilter] : ['exitus', 'lumia', 'muniam'];
+    const brandFilter = req.query?.brand; // opcional: Exitus, Lumia, Muniam
+    const ALL_BRANDS = ['Exitus', 'Lumia', 'Muniam'];
+    const brands = brandFilter 
+      ? ALL_BRANDS.filter(b => b.toLowerCase() === brandFilter.toLowerCase())
+      : ALL_BRANDS;
     
     const results = {};
 
