@@ -183,6 +183,27 @@ export default async function handler(req, res) {
     else if (titleLower.includes('bermuda') || titleLower.includes('short')) tipoPeca = 'bermuda';
     else if (titleLower.includes('conjunto')) tipoPeca = 'conjunto';
 
+    // ── CROSS-SELL PLUS SIZE ──
+    const PLUS_CATEGORIAS = [
+      { keywords: ['vestido', 'linho', 'midi'], search: 'vestido linho midi plus size' },
+      { keywords: ['macacão', 'linho'], search: 'macacão linho plus size' },
+      { keywords: ['macacao', 'linho'], search: 'macacão linho plus size' },
+      { keywords: ['saia', 'linho'], search: 'saia midi linho plus size' },
+      { keywords: ['saia', 'midi'], search: 'saia midi linho plus size' },
+      { keywords: ['calça', 'linho'], search: 'calça pantalona linho plus size' },
+      { keywords: ['calca', 'linho'], search: 'calça pantalona linho plus size' },
+      { keywords: ['pantalona'], search: 'calça pantalona linho plus size' },
+      { keywords: ['vestido', 'verona'], search: 'vestido verona plus size' },
+      { keywords: ['cropped', 'viscolinho'], search: 'cropped viscolinho plus size' },
+    ];
+    const isPlus = titleLower.includes('plus size') || titleLower.includes('plussize');
+    let plusCrossSell = '';
+    if (!isPlus) {
+      for (const cat of PLUS_CATEGORIAS) {
+        if (cat.keywords.every(k => titleLower.includes(k))) { plusCrossSell = cat.search; break; }
+      }
+    }
+
     const claudeRes = await fetch(CLAUDE_API, {
       method: 'POST',
       headers: {
@@ -216,7 +237,7 @@ TABELA PADRÃO (medidas corporais cm): P(36/38) B88-92 C70-75 Q96-102 | M(40) B9
 
 DISPONIBILIDADE: Separe COR de TAMANHO (figo GG = cor figo, tam GG). Consulte VARIAÇÕES nos dados do anúncio. NUNCA confunda cor com tamanho.
 MEDIDAS: Peso → peça busto/cintura/quadril. Numeração (38,40,42) → peça medidas (varia entre marcas). Com medidas → tabela na descrição → MAIOR tamanho → "costureira ajusta". Medidas parciais → usa a informada + pede o resto. Corpo > peça = APERTADO. NUNCA invente. NUNCA recomende menor.
-PLUS SIZE: Medidas > maior tamanho → "Alguns dos nossos modelos possuem versão Plus Size! Vale buscar por 'plus size' nos nossos anúncios." NUNCA afirme que aquele modelo específico tem Plus Size.
+PLUS SIZE: ${plusCrossSell ? `Este modelo TEM versão Plus Size (G1/G2/G3)! Se a cliente precisa de tamanho maior, diga: "Temos esse modelo em Plus Size! Busque por '${plusCrossSell}' nos nossos anúncios!"` : `Medidas > maior tamanho → "Alguns dos nossos modelos possuem versão Plus Size! Vale buscar por 'plus size' nos nossos anúncios." NUNCA afirme que aquele modelo específico tem Plus Size.`}
 ENTREGA: "Chega amanhã?" → "Se for Flex, próximo dia útil! Prazos no anúncio conforme CEP." Prazo/frete → "Aparece no anúncio conforme CEP!" Rastreamento → "Acompanhe em Minhas Compras." NUNCA prometa prazo.
 ESGOTADO: Tom de venda! "Repomos com frequência e as peças voam rápido! Salva nos favoritos pra não perder!"
 PRODUTO: Comprimento → só se na descrição. Transparência → se não mencionada, cores claras sem forro podem ter leve transparência. Lavagem → Linho: ciclo delicado, não torcer. Suplex: pode lavar máquina. Na dúvida: "siga a etiqueta".

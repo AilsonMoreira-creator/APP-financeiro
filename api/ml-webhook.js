@@ -279,6 +279,30 @@ async function getAIAutoResponse(questionText, itemId, brand) {
   else if (titleLower.includes('bermuda') || titleLower.includes('short')) tipoPeca = 'bermuda';
   else if (titleLower.includes('conjunto')) tipoPeca = 'conjunto';
 
+  // ── CROSS-SELL PLUS SIZE: detecta se existe versão plus deste tipo de peça ──
+  const PLUS_CATEGORIAS = [
+    { keywords: ['vestido', 'linho', 'midi'], search: 'vestido linho midi plus size' },
+    { keywords: ['macacão', 'linho'], search: 'macacão linho plus size' },
+    { keywords: ['macacao', 'linho'], search: 'macacão linho plus size' },
+    { keywords: ['saia', 'linho'], search: 'saia midi linho plus size' },
+    { keywords: ['saia', 'midi'], search: 'saia midi linho plus size' },
+    { keywords: ['calça', 'linho'], search: 'calça pantalona linho plus size' },
+    { keywords: ['calca', 'linho'], search: 'calça pantalona linho plus size' },
+    { keywords: ['pantalona'], search: 'calça pantalona linho plus size' },
+    { keywords: ['vestido', 'verona'], search: 'vestido verona plus size' },
+    { keywords: ['cropped', 'viscolinho'], search: 'cropped viscolinho plus size' },
+  ];
+  const isPlus = titleLower.includes('plus size') || titleLower.includes('plussize');
+  let plusCrossSell = '';
+  if (!isPlus) {
+    for (const cat of PLUS_CATEGORIAS) {
+      if (cat.keywords.every(k => titleLower.includes(k))) {
+        plusCrossSell = cat.search;
+        break;
+      }
+    }
+  }
+
   const systemPrompt = `Você é uma vendedora experiente de moda feminina no Mercado Livre. Simpática, direta, entende de moda e quer ajudar a cliente a comprar.
 
 HORÁRIO: ${saudacao} (${brHour}h Brasília)
@@ -402,11 +426,13 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 - Trocas/devoluções: siga a política do Mercado Livre.
 
 ───── F) PLUS SIZE ─────
-- Se as medidas da cliente ultrapassam o MAIOR tamanho disponível no anúncio:
-  Responda: "Infelizmente esse modelo vai até o tamanho [maior]. Mas alguns dos nossos modelos possuem versão Plus Size com tamanhos maiores! Vale dar uma olhada nos nossos anúncios buscando por 'plus size'."
+${plusCrossSell ? `CROSS-SELL ATIVO: Este modelo TEM versão Plus Size! Termo de busca: "${plusCrossSell}"
+- Se a cliente precisa de tamanho maior, OU menciona "plus", "G1", "G2", "G3", OU as medidas ultrapassam o maior tamanho:
+  Diga: "Temos esse modelo em versão Plus Size com tamanhos G1, G2 e G3! Busque por '${plusCrossSell}' nos nossos anúncios!"
+- Se a cliente pergunta sobre tamanho e o anúncio é regular: responda normalmente e ADICIONE no final: "E se precisar de tamanhos maiores, temos a versão Plus Size desse modelo!"` : `- Se as medidas da cliente ultrapassam o MAIOR tamanho disponível no anúncio:
+  Responda: "Infelizmente esse modelo vai até o tamanho [maior]. Alguns dos nossos modelos possuem versão Plus Size! Vale buscar por 'plus size' nos nossos anúncios."
 - Se a cliente pergunta "tem tamanho maior?" e o maior é GG:
-  Mesma resposta acima.
-- NUNCA afirme que AQUELE modelo específico tem versão Plus Size (nem todos têm).
+  Mesma resposta acima.`}
 - NUNCA diga que o produto não serve sem oferecer alternativa.
 
 ═══ FORMATO DA RESPOSTA (sua saída deve ser APENAS isso, nada mais) ═══
