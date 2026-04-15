@@ -11,7 +11,7 @@ class ModuleErrorBoundary extends Component{
 }
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
-const APP_VERSION="6.6";
+const APP_VERSION="6.7";
 const _S = "#2c3e50";
 const _B = "#5a7faa";
 const _BL = "#a8c0d8";
@@ -5921,15 +5921,21 @@ function CardHome(props){
 function FichaLista(props){
   var produtos=props.produtos,colecoesUnicas=props.colecoesUnicas,onSelect=props.onSelect,onVoltar=props.onVoltar;
   var _fc=useState(""),fc=_fc[0],setFc=_fc[1];
+  var _bRef=useState(""),bRef=_bRef[0],setBRef=_bRef[1];
+  var _bDesc=useState(""),bDesc=_bDesc[0],setBDesc=_bDesc[1];
   var ord=useMemo(function(){
-    var l=produtos.slice();if(fc)l=l.filter(function(p){return p.colecao===fc;});
+    var l=produtos.slice();
+    if(fc)l=l.filter(function(p){return p.colecao===fc;});
+    if(bRef.trim())l=l.filter(function(p){return(p.ref||"").toLowerCase().includes(bRef.trim().toLowerCase());});
+    if(bDesc.trim())l=l.filter(function(p){return(p.descricao||"").toLowerCase().includes(bDesc.trim().toLowerCase());});
     l.sort(function(a,b){return(b.dataCriacao||"").localeCompare(a.dataCriacao||"");});return l;
-  },[produtos,fc]);
+  },[produtos,fc,bRef,bDesc]);
+  var _iS={border:"1px solid "+_BD,borderRadius:6,padding:"7px 10px 7px 28px",fontSize:12,outline:"none",fontFamily:_GE,width:"100%",color:_S,background:_W};
 
   return(
     <div style={{background:_BG,minHeight:"100vh",padding:20,fontFamily:_GE}}>
-      <div style={{maxWidth:800,margin:"0 auto"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+      <div style={{maxWidth:850,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
           <button onClick={onVoltar} style={ftBtnVolt}>← Voltar</button>
           <div style={{fontSize:20,fontWeight:700,color:_S}}>Produtos Cadastrados</div>
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
@@ -5940,22 +5946,29 @@ function FichaLista(props){
             </select>
           </div>
         </div>
+        <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+          <div style={{position:"relative",flex:"0 0 120px"}}><span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:13,color:_LB,pointerEvents:"none"}}>🔍</span><input value={bRef} onChange={function(e){setBRef(e.target.value);}} placeholder="Referência" style={_iS}/></div>
+          <div style={{position:"relative",flex:1}}><span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:13,color:_LB,pointerEvents:"none"}}>🔍</span><input value={bDesc} onChange={function(e){setBDesc(e.target.value);}} placeholder="Descrição" style={_iS}/></div>
+          {(bRef||bDesc)?<button onClick={function(){setBRef("");setBDesc("");}} style={{background:"none",border:"1px solid "+_BD,borderRadius:6,padding:"6px 10px",fontSize:12,cursor:"pointer",color:_LB}}>✕</button>:null}
+          <span style={{fontSize:11,color:_LB,whiteSpace:"nowrap"}}>{ord.length} de {produtos.length}</span>
+        </div>
         <div style={{background:_W,borderRadius:12,border:"1px solid "+_BD,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 120px 90px",background:_BFT}}>
-            {["Ref","Descrição","Marca","Coleção","Cadastro"].map(function(h){return <div key={h} style={{padding:"8px 12px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase"}}>{h}</div>;})}
+          <div style={{display:"grid",gridTemplateColumns:"44px 70px 1fr 80px 120px 90px",background:_BFT}}>
+            {["","Ref","Descrição","Marca","Coleção","Cadastro"].map(function(h){return <div key={h} style={{padding:"8px 12px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase"}}>{h}</div>;})}
           </div>
           {ord.map(function(p,i){return(
             <div key={p.id} onClick={function(){onSelect(p);}}
-              style={{display:"grid",gridTemplateColumns:"70px 1fr 80px 120px 90px",borderBottom:"1px solid #f0ebe4",alignItems:"center",cursor:"pointer",background:i%2===0?_W:"#faf8f5"}}
+              style={{display:"grid",gridTemplateColumns:"44px 70px 1fr 80px 120px 90px",borderBottom:"1px solid #f0ebe4",alignItems:"center",cursor:"pointer",background:i%2===0?_W:"#faf8f5"}}
               onMouseEnter={function(e){e.currentTarget.style.background="#f0f6fb";}}
               onMouseLeave={function(e){e.currentTarget.style.background=i%2===0?_W:"#faf8f5";}}>
+              <div style={{padding:"3px 4px"}}>{p.foto?<img src={p.foto} style={{width:36,height:48,objectFit:"cover",borderRadius:4,border:"1px solid "+_BD}}/>:<div style={{width:36,height:48,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid "+_BD}}><span style={{fontSize:13,opacity:0.3}}>📷</span></div>}</div>
               <div style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:_BFT}}>{p.ref}</div>
               <div style={{padding:"10px 12px",fontSize:12,color:_S}}>{p.descricao}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_TX2}}>{p.marca}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_GO}}>{p.colecao||"—"}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_LB}}>{fmtDataFT(p.dataCriacao)}</div>
             </div>);})}
-          {ord.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto cadastrado</div>}
+          {ord.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{(bRef||bDesc)?"Nenhum produto encontrado":"Nenhum produto cadastrado"}</div>}
         </div>
       </div>
     </div>

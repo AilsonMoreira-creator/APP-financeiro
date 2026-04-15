@@ -1688,9 +1688,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 20 }}>🎧</span>
+          <span onClick={() => setPage('respostas')} style={{ fontSize: 20, cursor: 'pointer' }} title="Ir para Perguntas">🎧</span>
           <div>
-            <div style={{ ...S, color: '#fff', fontWeight: 700, fontSize: 17 }}>SAC</div>
+            <div onClick={() => setPage('respostas')} style={{ ...S, color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer' }}>SAC</div>
             <div style={{ ...S, color: '#ffffff77', fontSize: 12 }}>
               Sync: {lastSync ? new Date(lastSync).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}
               {' · '}{currentUser}
