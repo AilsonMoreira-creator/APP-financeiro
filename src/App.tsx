@@ -11,7 +11,7 @@ class ModuleErrorBoundary extends Component{
 }
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
-const APP_VERSION="6.2";
+const APP_VERSION="6.3";
 const _S = "#2c3e50";
 const _B = "#5a7faa";
 const _BL = "#a8c0d8";
@@ -7424,9 +7424,10 @@ export default function App(){
     };
   },[dbCarregado,usuarioLogado]); // ← inclui usuarioLogado pra closure do flush sempre ter o valor correto
 
-  // ── SESSÃO EXPIRADA + VERSÃO DO APP ────────────────────────────────────────
+  // ── SESSÃO EXPIRADA + VERSÃO DO APP (auto-update polling) ───────────────────
   useEffect(()=>{
     const TIMEOUT_MS=6*60*60*1000; // 6 horas
+    const POLL_MS=3*60*1000; // 3 minutos
     // Verifica versão do app (deploy novo enquanto aba estava aberta)
     const versaoLocal=localStorage.getItem("amica_app_version");
     if(versaoLocal&&versaoLocal!==APP_VERSION){
@@ -7434,18 +7435,45 @@ export default function App(){
       return;
     }
     localStorage.setItem("amica_app_version",APP_VERSION);
-    // Verifica timeout ao voltar à aba após longo período
+
+    // Checa versão remota: se diferente do APP_VERSION atual → forçar reload
+    const checkVersaoRemota=async()=>{
+      try{
+        const r=await fetch('/api/version',{cache:'no-store'});
+        if(!r.ok)return;
+        const d=await r.json();
+        if(d.version&&d.version!==APP_VERSION){
+          console.log("AUTO-UPDATE: versão remota",d.version,"≠ local",APP_VERSION,"→ forçando reload");
+          setSessaoExpirada(true);
+        }
+      }catch(e){/* offline, ignora */}
+    };
+
+    // Verifica timeout + versão ao voltar à aba
     const checkSessao=()=>{
       if(document.visibilityState==="visible"){
         const elapsed=Date.now()-sessaoInicio.current;
         if(elapsed>TIMEOUT_MS){
           console.log("Sessão expirada após",Math.round(elapsed/3600000),"horas");
           setSessaoExpirada(true);
+          return;
         }
+        // Checa versão remota ao voltar pra aba
+        checkVersaoRemota();
       }
     };
+
+    // Poll a cada 3 minutos enquanto app está aberto
+    const pollInterval=setInterval(checkVersaoRemota,POLL_MS);
+    // Primeiro check 30s após abrir (dá tempo do app carregar)
+    const firstCheck=setTimeout(checkVersaoRemota,30000);
+
     document.addEventListener("visibilitychange",checkSessao);
-    return()=>document.removeEventListener("visibilitychange",checkSessao);
+    return()=>{
+      document.removeEventListener("visibilitychange",checkSessao);
+      clearInterval(pollInterval);
+      clearTimeout(firstCheck);
+    };
   },[]);
 
   // ── BLING: lê vendas do cache Supabase (cron popula a cada 10min) ──────────
