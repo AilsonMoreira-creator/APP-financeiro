@@ -11,7 +11,7 @@ class ModuleErrorBoundary extends Component{
 }
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
-const APP_VERSION="6.5";
+const APP_VERSION="6.6";
 const _S = "#2c3e50";
 const _B = "#5a7faa";
 const _BL = "#a8c0d8";
@@ -3659,7 +3659,13 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
     if(!form.usuario.trim()||!form.senha.trim()){setErro("Preencha usuário e senha.");return;}
     if(!editId&&usuarios.find(u=>u.usuario===form.usuario.trim().toLowerCase())){setErro("Usuário já existe.");return;}
     if(form.modulos.length===0){setErro("Selecione ao menos um módulo.");return;}
-    if(editId){setUsuarios(prev=>prev.map(u=>u.id===editId?{...u,...form,usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()}:u));}
+    if(editId){setUsuarios(prev=>prev.map(u=>{
+      if(u.id!==editId)return u;
+      const updated={...u,...form,usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()};
+      // PROTEÇÃO: user id=1 (admin) NUNCA pode perder admin:true
+      if(u.id===1||u.usuario==='admin')updated.admin=true;
+      return updated;
+    }));}
     else{setUsuarios(prev=>[...prev,{id:Date.now(),...form,usuario:form.usuario.trim().toLowerCase(),_mod:Date.now()}]);}
     setForm({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});setEditId(null);setErro("");
   };
@@ -6596,7 +6602,7 @@ const FichaTecnicaContent=()=>{
 
 
 export default function App(){
-  const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");return s?JSON.parse(s):null;}catch{return null;}});
+  const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);if((u.id===1||u.usuario==='admin')&&!u.admin){u.admin=true;try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}return u;}catch{return null;}});
   const [active,setActive]=useState(()=>{
     try{const s=localStorage.getItem("amica_session");if(s){const u=JSON.parse(s);const mod=u.moduloPadrao||"home";if(u.admin||mod==="home"||u.modulos?.includes(mod))return mod;return u.modulos?.[0]||"home";}}catch{}return"lancamentos";
   });
@@ -7756,7 +7762,7 @@ export default function App(){
 
   if(!usuarioLogado){
     if(!dbCarregado)return <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7f4f0",fontFamily:"Georgia,serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Amícia</div><div style={{fontSize:13,color:"#a89f94"}}>Carregando...</div></div></div>;
-    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{setUsuarioLogado(u);const defaultMod=u.moduloPadrao||"home";const canAccess=u.admin||defaultMod==="home"||u.modulos.includes(defaultMod);setActive(canAccess?defaultMod:(u.modulos[0]||"home"));try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}}/>;
+    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{const safeUser=(u.id===1||u.usuario==='admin')?{...u,admin:true}:u;setUsuarioLogado(safeUser);const defaultMod=safeUser.moduloPadrao||"home";const canAccess=safeUser.admin||defaultMod==="home"||safeUser.modulos.includes(defaultMod);setActive(canAccess?defaultMod:(safeUser.modulos[0]||"home"));try{localStorage.setItem("amica_session",JSON.stringify(safeUser));}catch{}}}/>;
   }
 
   const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id));
