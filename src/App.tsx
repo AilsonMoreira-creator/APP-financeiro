@@ -6736,7 +6736,13 @@ export default function App(){
         const remoteTs=d._updated||0;
         const pendente=localStorage.getItem("amica_pending_sync")==="true";
 
-        if(pendente&&localTs>remoteTs){
+        // Non-admin: SEMPRE usa Supabase (limpa pending_sync residual de antes do fix)
+        if(!usuarioLogado?.admin&&pendente){
+          console.log("SYNC: limpando pending_sync residual pra não-admin");
+          localStorage.setItem("amica_pending_sync","false");
+        }
+
+        if(pendente&&localTs>remoteTs&&usuarioLogado?.admin){
           // LOCAL VENCE: edits pendentes + timestamp mais recente que Supabase
           // Estado já foi setado no Passo 1 (localStorage), não sobrescreve
           // Auto-save vai enviar pro Supabase quando dbCarregado=true
@@ -6897,9 +6903,10 @@ export default function App(){
     return()=>{supabase.removeChannel(ch);};
   },[dbCarregado]);
 
-  // ── SAVE USUARIOS (payload separado) ──────────────────────────────────────
+  // ── SAVE USUARIOS (payload separado — SOMENTE ADMIN) ────────────────────
   useEffect(()=>{
     if(!dbCarregado||!supabase||realtimeUsuarios.current)return;
+    if(!usuarioLogado?.admin)return; // NÃO-ADMIN NÃO SALVA usuarios
     // Não salva se ainda é o array inicial sem modificações
     if(usuarios.length<=3&&usuarios.every(u=>u.id<=3))return;
     const usrPayload={usuarios,_updated:Date.now()};
@@ -7078,7 +7085,10 @@ export default function App(){
         for(const [id,rc] of remoteMap){
           if(!localMap.has(id))merged.push(rc);
         }
-        const payload={cortes:merged,produtos:produtos||[],oficinasCAD:oficinasCAD||[],logTroca:logTroca||[]};
+        const payload={cortes:merged,
+          produtos:usuarioLogado?.admin?produtos||[]:remoto.produtos||produtos||[],
+          oficinasCAD:usuarioLogado?.admin?oficinasCAD||[]:remoto.oficinasCAD||oficinasCAD||[],
+          logTroca:usuarioLogado?.admin?logTroca||[]:remoto.logTroca||logTroca||[]};
         lastCorteSaveTs.current=Date.now();
         await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
       }catch(e){console.error("Erro save cortes:",e);}
