@@ -11,7 +11,7 @@ class ModuleErrorBoundary extends Component{
 }
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
-const APP_VERSION="6.3";
+const APP_VERSION="6.4";
 const _S = "#2c3e50";
 const _B = "#5a7faa";
 const _BL = "#a8c0d8";
@@ -6724,6 +6724,7 @@ export default function App(){
   const [blingImportStatus,setBlingImportStatus]=useState(null);
   const [syncStatus,setSyncStatus]=useState(null); // null | 'loading' | 'saved' | 'error' | 'local'
   const [dbCarregado,setDbCarregado]=useState(false);
+  const dbCarregadoTs=useRef(0); // timestamp de quando dbCarregado virou true
   const [homeSacPending,setHomeSacPending]=useState(0);
   const [homeSCPending,setHomeSCPending]=useState(0);
   const [homeAgendaHoje,setHomeAgendaHoje]=useState(0);
@@ -6817,19 +6818,92 @@ export default function App(){
 
         // DECISÃO POR TIMESTAMP: quem tem _updated mais recente vence
         if(localTs>remoteTs&&usuarioLogado?.admin&&localParsed){
-          // LOCAL VENCE: localStorage tem timestamp mais recente que Supabase
-          // Estado já foi setado no Passo 1 (localStorage), não sobrescreve
-          // Auto-save vai enviar pro Supabase quando dbCarregado=true
+          // LOCAL VENCE por timestamp: estado já foi setado no Passo 1 (localStorage)
+          // MAS faz merge com remoto pra não perder dados que só existem no Supabase
           console.log("SYNC: LOCAL vence — localTs:",new Date(localTs).toLocaleString("pt-BR"),"(",localTs,") > remotoTs:",remoteTs?new Date(remoteTs).toLocaleString("pt-BR"):"nenhum","(",remoteTs,")");
           console.log("SYNC: LOCAL dados —",localParsed.boletosShared?.length||0,"boletos,",Object.keys(localParsed.receitasPorMes||{}).length,"meses receitas");
+          // Merge receitas: se Supabase tem meses que local não tem, preserva
+          if(d.receitasPorMes){
+            const localRec=localParsed.receitasPorMes||{};
+            const remoteRec=d.receitasPorMes||{};
+            const mergedRec={...remoteRec,...localRec}; // local sobrescreve remoto (tem prioridade)
+            // Mas preserva meses que SÓ existem no remoto
+            Object.keys(remoteRec).forEach(m=>{if(!localRec[m])mergedRec[m]=remoteRec[m];});
+            if(Object.keys(mergedRec).length>Object.keys(localRec).length){
+              console.log("SYNC: merge receitas — local tinha",Object.keys(localRec).length,"meses, remoto",Object.keys(remoteRec).length,"→ resultado",Object.keys(mergedRec).length);
+              setReceitasPorMes(mergedRec);
+            }
+          }
+          // Merge auxData: mesma lógica
+          if(d.auxDataPorMes){
+            const localAux=localParsed.auxDataPorMes||{};
+            const remoteAux=d.auxDataPorMes||{};
+            const mergedAux={...remoteAux,...localAux};
+            Object.keys(remoteAux).forEach(m=>{if(!localAux[m])mergedAux[m]=remoteAux[m];});
+            if(Object.keys(mergedAux).length>Object.keys(localAux).length)setAuxDataPorMes(mergedAux);
+          }
+          // Merge categorias
+          if(d.categoriasPorMes){
+            const localCats=localParsed.categoriasPorMes||{};
+            const remoteCats=d.categoriasPorMes||{};
+            const mergedCats={...remoteCats,...localCats};
+            Object.keys(remoteCats).forEach(m=>{if(!localCats[m])mergedCats[m]=remoteCats[m];});
+            if(Object.keys(mergedCats).length>Object.keys(localCats).length)setCategoriasPorMes(mergedCats);
+          }
+          // Merge boletos por ID
+          if(d.boletosShared&&d.boletosShared.length>0){
+            const localBol=localParsed.boletosShared||[];
+            const remoteBol=d.boletosShared||[];
+            const bolMap=new Map(localBol.map(b=>[b.id,b]));
+            for(const rb of remoteBol){if(!bolMap.has(rb.id))bolMap.set(rb.id,rb);else{const lb=bolMap.get(rb.id);if((rb._mod||0)>(lb._mod||0))bolMap.set(rb.id,rb);}}
+            const mergedBol=[...bolMap.values()];
+            if(mergedBol.length>localBol.length){
+              console.log("SYNC: merge boletos — local",localBol.length,", remoto",remoteBol.length,"→ resultado",mergedBol.length);
+              setBoletosShared(deduplicarBoletos(mergedBol));
+            }
+          }
+          // Outros campos: local já tem prioridade (setado no passo 1)
+          // Mas se local não tem, usa remoto
+          if(!localParsed.prestadores&&d.prestadores)setPrestadores(d.prestadores);
+          if(!localParsed.produtos&&d.produtos)setProdutos(d.produtos);
+          if(!localParsed.oficinasCAD&&d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
+          if(!localParsed.logTroca&&d.logTroca)setLogTroca(d.logTroca);
+          if(!localParsed.tecidosCAD&&d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
+          if(!localParsed.fixosConfig&&d.fixosConfig)setFixosConfig(d.fixosConfig);
+          if(!localParsed.fixosNomesFunc&&d.fixosNomesFunc)setFixosNomesFunc(d.fixosNomesFunc);
         }else{
           // SUPABASE VENCE: dados remotos mais recentes (ou iguais, ou non-admin)
           console.log("SYNC: SUPABASE vence — remotoTs:",remoteTs?new Date(remoteTs).toLocaleString("pt-BR"):"nenhum","(",remoteTs,") >= localTs:",localTs?"("+localTs+")":"nenhum");
           console.log("SYNC: SUPABASE dados —",d.boletosShared?.length||0,"boletos,",Object.keys(d.receitasPorMes||{}).length,"meses receitas");
-          if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
-          if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
-          if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
-          if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
+          // Merge com local pra não perder dados que só existem localmente
+          const localRec=localParsed?.receitasPorMes||{};
+          const localAux=localParsed?.auxDataPorMes||{};
+          const localCats=localParsed?.categoriasPorMes||{};
+          const localBol=localParsed?.boletosShared||[];
+          // Receitas: remoto tem prioridade, mas preserva meses exclusivos do local
+          if(d.receitasPorMes){
+            const merged={...localRec,...d.receitasPorMes};
+            Object.keys(localRec).forEach(m=>{if(!d.receitasPorMes[m])merged[m]=localRec[m];});
+            setReceitasPorMes(merged);
+          }
+          if(d.auxDataPorMes){
+            const merged={...localAux,...d.auxDataPorMes};
+            Object.keys(localAux).forEach(m=>{if(!d.auxDataPorMes[m])merged[m]=localAux[m];});
+            setAuxDataPorMes(merged);
+          }
+          if(d.categoriasPorMes){
+            const merged={...localCats,...d.categoriasPorMes};
+            Object.keys(localCats).forEach(m=>{if(!d.categoriasPorMes[m])merged[m]=localCats[m];});
+            setCategoriasPorMes(merged);
+          }
+          // Boletos: merge por ID
+          if(d.boletosShared&&d.boletosShared.length>0){
+            const bolMap=new Map(d.boletosShared.map(b=>[b.id,b]));
+            for(const lb of localBol){if(!bolMap.has(lb.id))bolMap.set(lb.id,lb);else{const rb=bolMap.get(lb.id);if((lb._mod||0)>(rb._mod||0))bolMap.set(lb.id,lb);}}
+            setBoletosShared(deduplicarBoletos([...bolMap.values()]));
+          }else if(localBol.length>0){
+            setBoletosShared(deduplicarBoletos(localBol));
+          }
           if(d.prestadores)setPrestadores(d.prestadores);
           if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e);}}
           if(d.produtos)setProdutos(d.produtos);
@@ -6877,7 +6951,7 @@ export default function App(){
           });
         }
       }
-      setDbCarregado(true);clearTimeout(safetyTimer);
+      setDbCarregado(true);dbCarregadoTs.current=Date.now();clearTimeout(safetyTimer);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);clearTimeout(safetyTimer);setSyncStatus('error');});
 
@@ -7232,6 +7306,15 @@ export default function App(){
     const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
     dadosRef.current=dados;
     if(!usuarioLogado?.admin){return;}
+    // Guard: não salva nos primeiros 3s após load (state pode não ter estabilizado)
+    const sinceDload=Date.now()-dbCarregadoTs.current;
+    if(sinceDload<3000){
+      console.log("AUTO-SAVE: aguardando estabilização do load (",Math.round(sinceDload),"ms < 3000ms)");
+      const retrySettle=setTimeout(()=>{
+        if(dadosRef.current){salvarLocal(dadosRef.current,Date.now());salvarNoSupabase(dadosRef.current);}
+      },3000-sinceDload+100);
+      return()=>clearTimeout(retrySettle);
+    }
     if(realtimeProcessing.current){
       console.log("AUTO-SAVE: bloqueado por realtimeProcessing — dadosRef atualizado, retry em 2.5s");
       const retryRT=setTimeout(()=>{
