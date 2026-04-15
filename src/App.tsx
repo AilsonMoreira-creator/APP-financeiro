@@ -11,7 +11,7 @@ class ModuleErrorBoundary extends Component{
 }
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
-const APP_VERSION="6.4";
+const APP_VERSION="6.5";
 const _S = "#2c3e50";
 const _B = "#5a7faa";
 const _BL = "#a8c0d8";
@@ -7274,45 +7274,108 @@ export default function App(){
     try{localStorage.setItem("amica_cortes",JSON.stringify(cortes));}catch(e){console.error(e)}
   },[cortes,dbCarregado]);
 
-  // ── SAVE FINANCEIRO (admin only) ───────────────────────────────────────────
-  const salvarNoSupabase=useCallback((payload)=>{
+  // ── SAVE FINANCEIRO (admin only — read-merge-write, NUNCA perde dados) ─────
+  const salvarNoSupabase=useCallback(async(payload)=>{
     if(!supabase||!dbCarregado)return;
     setSyncStatus('saving');
-    const ts=Date.now();
-    lastSaveTs.current=ts;
-    const payloadComTs={...payload,_updated:ts};
-    console.log("SUPABASE-SAVE: enviando, ts:",ts,", boletos:",payload.boletosShared?.length||0);
-    supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
-      .then(({error})=>{
-        if(error){
-          console.error("SUPABASE-SAVE: erro:",error);
-          setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);
-        }else{
-          // Sucesso: atualiza localStorage COM O MESMO timestamp do Supabase
-          // Assim localTs === remoteTs → na próxima abertura, Supabase vence (>=)
-          try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
-          localStorage.setItem("amica_pending_sync","false");
-          setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
-          console.log("SUPABASE-SAVE: sucesso, ts:",ts);
+    try{
+      // READ: busca dados atuais do Supabase antes de salvar
+      const {data:remoteData}=await supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single();
+      const remote=remoteData?.payload||{};
+
+      // MERGE: protege contra perda de dados em receitas, auxData, categorias, boletos
+      const mergedPayload={...payload};
+
+      // Receitas: preserva meses que existem no remoto mas não no local
+      if(remote.receitasPorMes){
+        const localRec=payload.receitasPorMes||{};
+        const remoteRec=remote.receitasPorMes||{};
+        const merged={...localRec};
+        let preserved=0;
+        Object.keys(remoteRec).forEach(m=>{
+          if(!localRec[m]||(typeof localRec[m]==='object'&&Object.keys(localRec[m]).length===0)){
+            merged[m]=remoteRec[m];preserved++;
+          }
+        });
+        if(preserved>0)console.log("SUPABASE-SAVE: preservou",preserved,"meses do remoto que local não tinha");
+        mergedPayload.receitasPorMes=merged;
+      }
+
+      // AuxData: mesma proteção
+      if(remote.auxDataPorMes){
+        const localAux=payload.auxDataPorMes||{};
+        const remoteAux=remote.auxDataPorMes||{};
+        const merged={...localAux};
+        Object.keys(remoteAux).forEach(m=>{if(!localAux[m])merged[m]=remoteAux[m];});
+        mergedPayload.auxDataPorMes=merged;
+      }
+
+      // Categorias: mesma proteção
+      if(remote.categoriasPorMes){
+        const localCats=payload.categoriasPorMes||{};
+        const remoteCats=remote.categoriasPorMes||{};
+        const merged={...localCats};
+        Object.keys(remoteCats).forEach(m=>{if(!localCats[m])merged[m]=remoteCats[m];});
+        mergedPayload.categoriasPorMes=merged;
+      }
+
+      // Boletos: merge por ID (nunca perde boletos)
+      if(remote.boletosShared&&remote.boletosShared.length>0){
+        const localBol=payload.boletosShared||[];
+        const bolMap=new Map(localBol.map(b=>[b.id,b]));
+        for(const rb of remote.boletosShared){
+          if(!bolMap.has(rb.id))bolMap.set(rb.id,rb);
+          else{const lb=bolMap.get(rb.id);if((rb._mod||0)>(lb._mod||0))bolMap.set(rb.id,rb);}
         }
-      })
-      .catch((e)=>{console.error("SUPABASE-SAVE: catch:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
+        mergedPayload.boletosShared=[...bolMap.values()];
+      }
+
+      // WRITE: salva o resultado mergeado
+      const ts=Date.now();
+      lastSaveTs.current=ts;
+      const payloadComTs={...mergedPayload,_updated:ts};
+      const recMeses=Object.keys(payloadComTs.receitasPorMes||{}).length;
+      const bolCount=payloadComTs.boletosShared?.length||0;
+      console.log("SUPABASE-SAVE: enviando merge, ts:",ts,",",recMeses,"meses receitas,",bolCount,"boletos");
+
+      const {error}=await supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'});
+      if(error){
+        console.error("SUPABASE-SAVE: erro:",error);
+        setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);
+      }else{
+        try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
+        localStorage.setItem("amica_pending_sync","false");
+        setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
+        console.log("SUPABASE-SAVE: sucesso, ts:",ts);
+      }
+    }catch(e){
+      console.error("SUPABASE-SAVE: catch:",e);
+      setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);
+    }
   },[dbCarregado]);
 
   // Auto-save: localStorage IMEDIATO + Supabase com debounce 1.5s (SOMENTE ADMIN)
+  // NOTA: produtos/oficinasCAD/logTroca são REMOVIDOS dos deps — são salvos pelo SAVE CORTES.
+  // Incluí-los aqui causava save do payload inteiro quando cortes mudavam via Realtime.
   useEffect(()=>{
     if(!dbCarregado)return;
     // SEMPRE atualiza dadosRef — flush/retry precisam do snapshot mais recente
     const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
     dadosRef.current=dados;
     if(!usuarioLogado?.admin){return;}
-    // Guard: não salva nos primeiros 3s após load (state pode não ter estabilizado)
+    // Guard: não salva antes do Supabase load ter completado
+    if(!dbCarregadoTs.current){console.log("AUTO-SAVE: bloqueado — load não completou");return;}
+    // Guard: não salva nos primeiros 5s após load (state pode não ter estabilizado)
     const sinceDload=Date.now()-dbCarregadoTs.current;
-    if(sinceDload<3000){
-      console.log("AUTO-SAVE: aguardando estabilização do load (",Math.round(sinceDload),"ms < 3000ms)");
+    if(sinceDload<5000){
+      console.log("AUTO-SAVE: aguardando estabilização (",Math.round(sinceDload),"ms < 5000ms)");
       const retrySettle=setTimeout(()=>{
-        if(dadosRef.current){salvarLocal(dadosRef.current,Date.now());salvarNoSupabase(dadosRef.current);}
-      },3000-sinceDload+100);
+        if(dadosRef.current&&usuarioLogado?.admin){
+          console.log("AUTO-SAVE: retry pós-estabilização executando");
+          salvarLocal(dadosRef.current,Date.now());
+          salvarNoSupabase(dadosRef.current);
+        }
+      },5000-sinceDload+200);
       return()=>clearTimeout(retrySettle);
     }
     if(realtimeProcessing.current){
@@ -7333,15 +7396,13 @@ export default function App(){
     // Camada 1: salva local na hora COM o timestamp que vai pro Supabase
     salvarLocal(dados,ts);
     setSyncStatus('local');
-    // Camada 2: Supabase com debounce — usa mesmo ts
+    // Camada 2: Supabase com debounce
     if(debounceRef.current)clearTimeout(debounceRef.current);
     debounceRef.current=setTimeout(()=>{
-      // salvarNoSupabase gera ts próprio (mais recente que o local) — intencional
-      // assim no reload, se Supabase salvou com sucesso, remoteTs >= localTs → Supabase vence
       salvarNoSupabase(dados);
     },1500);
     return()=>clearTimeout(debounceRef.current);
-  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc,dbCarregado]);
+  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc,dbCarregado]);
 
   // ── SAVE CORTES com merge (múltiplos usuários) ────────────────────────────
   useEffect(()=>{
