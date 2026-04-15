@@ -6989,12 +6989,15 @@ export default function App(){
             if(rc&&(rc._mod||0)>(lc._mod||0)){mudou=true;return rc;}
             return lc;
           });
-          const localIds=new Set(prev.map(c=>c.id));
-          const novos=d.cortes.filter(c=>!localIds.has(c.id));
-          if(novos.length>0)mudou=true;
-          if(!mudou)return prev;
-          console.log("REALTIME OFICINAS: merge aplicado,",novos.length,"novos");
-          return[...merged,...novos];
+          // Novos do remoto: non-admin adiciona, admin NÃO (pode ter deletado)
+          if(!usuarioLogado?.admin){
+            const localIds=new Set(prev.map(c=>c.id));
+            const novos=d.cortes.filter(c=>!localIds.has(c.id));
+            if(novos.length>0){mudou=true;console.log("REALTIME OFICINAS: merge aplicado,",novos.length,"novos");}
+            if(!mudou)return prev;
+            return[...merged,...novos];
+          }
+          return mudou?merged:prev;
         });
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
@@ -7278,7 +7281,11 @@ export default function App(){
         }
         // 2. Remotos que não existem localmente
         for(const [id,rc] of remoteMap){
-          if(!localMap.has(id))merged.push(rc);
+          if(!localMap.has(id)){
+            // Admin deletou localmente → NÃO traz de volta
+            // Non-admin: pode ser corte novo de outro usuário → inclui
+            if(!usuarioLogado?.admin)merged.push(rc);
+          }
         }
         const payload={cortes:merged,
           // MERGE PRODUTOS por ref + _mod (qualquer usuário pode editar produtos)
@@ -7329,11 +7336,14 @@ export default function App(){
             if(rc&&(rc._mod||0)>(lc._mod||0)){mudou=true;return rc;}
             return lc;
           });
-          // Adiciona remotos novos
-          const localIds=new Set(prev.map(c=>c.id));
-          const novos=remoteCortes.filter(c=>!localIds.has(c.id));
-          if(novos.length>0)mudou=true;
-          return mudou?[...merged,...novos]:prev;
+          // Remotos novos: non-admin adiciona, admin NÃO (pode ter deletado)
+          if(!usuarioLogado?.admin){
+            const localIds=new Set(prev.map(c=>c.id));
+            const novos=remoteCortes.filter(c=>!localIds.has(c.id));
+            if(novos.length>0)mudou=true;
+            return mudou?[...merged,...novos]:prev;
+          }
+          return mudou?merged:prev;
         });
       }catch(e){console.error("Oficinas reload:",e);}
     };
