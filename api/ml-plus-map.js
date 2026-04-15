@@ -81,6 +81,9 @@ async function fetchItemTitles(itemIds, token) {
 }
 
 export default async function handler(req, res) {
+  // Anti-cache
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   try {
     const brandFilter = req.query?.brand; // opcional: Exitus, Lumia, Muniam
     const ALL_BRANDS = ['Exitus', 'Lumia', 'Muniam'];
