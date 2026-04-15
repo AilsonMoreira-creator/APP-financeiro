@@ -3221,7 +3221,7 @@ const getDias=(c)=>Math.floor((Date.now()-new Date(c.data))/(86400000));
 const ORDEM_STATUS={amarelo:0,vermelho:1,azul:2,verde:3};
 const EstrelaScore=({n})=>(<span style={{color:"#f0b429",fontSize:12}}>{[1,2,3,4,5].map(i=><span key={i} style={{opacity:i<=n?1:0.25}}>★</span>)}</span>);
 
-const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD})=>{
+const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD,isAdmin=true})=>{
   const [aba,setAba]=useState("cortes");
   const [cadAba,setCadAba]=useState("produtos");
   const [filtroOf,setFiltroOf]=useState("todas");
@@ -3292,7 +3292,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const executarTroca=()=>{
     if(!trocaDe||!trocaPara){setTrocaMsg("Preencha os dois campos.");return;}
     if(trocaDe===trocaPara){setTrocaMsg("As referências são iguais.");return;}
-    setProdutos(prev=>prev.map(p=>p.ref===trocaDe?{...p,ref:trocaPara}:p));
+    setProdutos(prev=>prev.map(p=>p.ref===trocaDe?{...p,ref:trocaPara,_mod:Date.now()}:p));
     setCortes(prev=>prev.map(c=>c.ref===trocaDe?{...c,ref:trocaPara,_mod:Date.now()}:c));
     const hoje=new Date().toLocaleDateString("pt-BR");
     setLogTroca(prev=>[{de:trocaDe,para:trocaPara,data:hoje},...prev]);
@@ -3528,7 +3528,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   <div style={{flex:"0 0 70px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Marca</div><select value={formProd.marca} onChange={e=>setFormProd(p=>({...p,marca:e.target.value}))} style={{...iStyle,width:"100%"}}><option>Amícia</option><option>Meluni</option></select></div>
                   <div style={{flex:"0 0 50px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>R$</div><input value={formProd.valorUnit} onChange={e=>setFormProd(p=>({...p,valorUnit:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
                   <div style={{flex:"1 1 90px"}}><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Tecido</div><select value={formProd.tecido||""} onChange={e=>setFormProd(p=>({...p,tecido:e.target.value}))} style={{...iStyle,width:"100%",color:formProd.tecido?"#2c3e50":"#a89f94"}}><option value="">—</option>{(tecidosCAD||[]).map(t=><option key={t.id} value={t.descricao}>{t.descricao}</option>)}</select></div>
-                  <div style={{flex:"0 0 80px"}}><button onClick={()=>{if(!formProd.ref||!formProd.descricao||!formProd.valorUnit)return;const valorNum=parseFloat(String(formProd.valorUnit).replace(",","."));if(editProdRef)setProdutos(prev=>prev.map(p=>p.ref===editProdRef?{...formProd,valorUnit:valorNum}:p));else if(produtos.find(p=>p.ref===formProd.ref)){alert("Ref já cadastrada!");}else setProdutos(prev=>[...prev,{...formProd,valorUnit:valorNum}]);setFormProd({ref:"",descricao:"",marca:"Amícia",valorUnit:"",tecido:""});setEditProdRef(null);}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editProdRef?"Atualizar":"Adicionar"}</button></div>
+                  <div style={{flex:"0 0 80px"}}><button onClick={()=>{if(!formProd.ref||!formProd.descricao||!formProd.valorUnit)return;const valorNum=parseFloat(String(formProd.valorUnit).replace(",","."));if(editProdRef)setProdutos(prev=>prev.map(p=>p.ref===editProdRef?{...formProd,valorUnit:valorNum,_mod:Date.now()}:p));else if(produtos.find(p=>p.ref===formProd.ref)){alert("Ref já cadastrada!");}else setProdutos(prev=>[...prev,{...formProd,valorUnit:valorNum,_mod:Date.now()}]);setFormProd({ref:"",descricao:"",marca:"Amícia",valorUnit:"",tecido:""});setEditProdRef(null);}} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editProdRef?"Atualizar":"Adicionar"}</button></div>
                 </div>
               </div>
               {/* Busca */}
@@ -3540,7 +3540,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:500}}><thead><tr style={{background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Tecido","Vl. Unit.",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{prodsFilt.length===0&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{buscaProd?`Nenhum produto com "${buscaProd}"`:"Nenhum produto cadastrado"}</td></tr>}{prodsFilt.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>))}</tbody>
+                  <tbody>{prodsFilt.length===0&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{buscaProd?`Nenhum produto com "${buscaProd}"`:"Nenhum produto cadastrado"}</td></tr>}{prodsFilt.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span>{isAdmin&&<span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span>}</td></tr>))}</tbody>
                 </table>
               </div></>);})()}
             </div>
@@ -6376,32 +6376,96 @@ const FichaTecnicaContent=()=>{
   var _bAte=useState(ftDataHoje),buscaAte=_bAte[0],setBuscaAte=_bAte[1];
   var produtosRef=useRef([]);var precosRef=useRef({});
   var _ftSync=useState(null),ftSync=_ftSync[0],setFtSync=_ftSync[1];
+  var ftDebounce=useRef(null);
 
+  // ── LOAD com merge por ref + _mod ──
   useEffect(function(){
+    var localProds=[],localPrecos={};
     try{var raw=localStorage.getItem("amica_ficha");if(raw){var d=JSON.parse(raw);
-      if(d.produtos){setProdutos(d.produtos);produtosRef.current=d.produtos;}
-      if(d.precosSalvos){setPrecosSalvos(d.precosSalvos);precosRef.current=d.precosSalvos;}
+      if(d.produtos){localProds=d.produtos;}
+      if(d.precosSalvos){localPrecos=d.precosSalvos;}
+      setProdutos(localProds);produtosRef.current=localProds;
+      setPrecosSalvos(localPrecos);precosRef.current=localPrecos;
     }}catch(e){console.error(e)}
     if(!supabase)return;
     setFtSync('saving');
     supabase.from('amicia_data').select('payload').eq('user_id','ficha-tecnica').single()
       .then(function(r){var d=r.data;
         if(d&&d.payload){
-          if(d.payload.produtos){setProdutos(d.payload.produtos);produtosRef.current=d.payload.produtos;}
-          if(d.payload.precosSalvos){setPrecosSalvos(d.payload.precosSalvos);precosRef.current=d.payload.precosSalvos;}
-          try{localStorage.setItem("amica_ficha",JSON.stringify({produtos:d.payload.produtos||[],precosSalvos:d.payload.precosSalvos||{}}));}catch(e){console.error(e)}
+          var remoteProds=d.payload.produtos||[];
+          var remotePrecos=d.payload.precosSalvos||{};
+          // MERGE produtos por ref + _mod
+          var localMap=new Map(localProds.map(function(p){return[p.ref,p];}));
+          var remoteMap=new Map(remoteProds.map(function(p){return[p.ref,p];}));
+          var mergedProds=[];
+          var prodSource={}; // ref → 'local'|'remote' (de onde veio cada produto)
+          var allRefs=new Set([].concat(Array.from(localMap.keys()),Array.from(remoteMap.keys())));
+          allRefs.forEach(function(ref){
+            var lp=localMap.get(ref);var rp=remoteMap.get(ref);
+            if(lp&&rp){
+              if((lp._mod||0)>(rp._mod||0)){mergedProds.push(lp);prodSource[ref]='local';}
+              else{mergedProds.push(rp);prodSource[ref]='remote';}
+            }else if(lp){mergedProds.push(lp);prodSource[ref]='local';}
+            else{mergedProds.push(rp);prodSource[ref]='remote';}
+          });
+          // MERGE precos: pra cada ref, usa os precos da fonte vencedora
+          var mergedPrecos=Object.assign({},remotePrecos); // base: remoto
+          Object.keys(localPrecos).forEach(function(key){
+            var ref=key.split("|")[0];
+            if(prodSource[ref]==='local'){mergedPrecos[key]=localPrecos[key];}
+            // Se remote venceu, mantém remotePrecos (já é a base)
+            // Se ref não existe em nenhum produto, mantém o que tiver
+            if(!prodSource[ref]){mergedPrecos[key]=localPrecos[key];}
+          });
+          console.log("FICHA TÉC: merge —",localProds.length,"local,",remoteProds.length,"remoto →",mergedProds.length,"resultado");
+          setProdutos(mergedProds);produtosRef.current=mergedProds;
+          setPrecosSalvos(mergedPrecos);precosRef.current=mergedPrecos;
+          try{localStorage.setItem("amica_ficha",JSON.stringify({produtos:mergedProds,precosSalvos:mergedPrecos}));}catch(e){console.error(e)}
         }
         setFtSync('saved');setTimeout(function(){setFtSync(null);},2000);
       }).catch(function(){setFtSync('error');});
   },[]);
 
   var salvarLocal=useCallback(function(pr,pc){try{localStorage.setItem("amica_ficha",JSON.stringify({produtos:pr,precosSalvos:pc}));}catch(e){console.error(e)}},[]);
+
+  // ── SAVE com debounce + read-merge-write ──
   var salvarSB=useCallback(function(pr,pc){
     if(!supabase)return;
-    setFtSync('saving');
-    supabase.from('amicia_data').upsert({user_id:'ficha-tecnica',payload:{produtos:pr,precosSalvos:pc}},{onConflict:'user_id'})
-      .then(function(){setFtSync('saved');setTimeout(function(){setFtSync(null);},2000);})
-      .catch(function(){setFtSync('error');});
+    if(ftDebounce.current)clearTimeout(ftDebounce.current);
+    ftDebounce.current=setTimeout(function(){
+      setFtSync('saving');
+      supabase.from('amicia_data').select('payload').eq('user_id','ficha-tecnica').single()
+        .then(function(r){
+          var remote=r.data?.payload||{};
+          var remoteProds=remote.produtos||[];
+          var remotePrecos=remote.precosSalvos||{};
+          // Merge produtos por ref + _mod
+          var localMap=new Map(pr.map(function(p){return[p.ref,p];}));
+          var remoteMap=new Map(remoteProds.map(function(p){return[p.ref,p];}));
+          var mergedProds=[];var prodSource={};
+          var allRefs=new Set([].concat(Array.from(localMap.keys()),Array.from(remoteMap.keys())));
+          allRefs.forEach(function(ref){
+            var lp=localMap.get(ref);var rp=remoteMap.get(ref);
+            if(lp&&rp){
+              if((lp._mod||0)>=(rp._mod||0)){mergedProds.push(lp);prodSource[ref]='local';}
+              else{mergedProds.push(rp);prodSource[ref]='remote';}
+            }else if(lp){mergedProds.push(lp);prodSource[ref]='local';}
+            else{mergedProds.push(rp);prodSource[ref]='remote';}
+          });
+          // Merge precos
+          var mergedPrecos=Object.assign({},remotePrecos);
+          Object.keys(pc).forEach(function(key){
+            var ref=key.split("|")[0];
+            if(prodSource[ref]!=='remote'){mergedPrecos[key]=pc[key];}
+          });
+          return supabase.from('amicia_data').upsert({user_id:'ficha-tecnica',payload:{produtos:mergedProds,precosSalvos:mergedPrecos}},{onConflict:'user_id'});
+        })
+        .then(function(res){
+          if(res?.error){console.error("FICHA TÉC SAVE:",res.error);setFtSync('error');}
+          else{setFtSync('saved');setTimeout(function(){setFtSync(null);},2000);}
+        })
+        .catch(function(e){console.error("FICHA TÉC SAVE:",e);setFtSync('error');});
+    },1500);
   },[]);
   var atualizarProdutos=useCallback(function(fn){var n=typeof fn==="function"?fn(produtosRef.current):fn;produtosRef.current=n;setProdutos(n);salvarLocal(n,precosRef.current);salvarSB(n,precosRef.current);},[salvarLocal,salvarSB]);
   var atualizarPrecos=useCallback(function(fn){var n=typeof fn==="function"?fn(precosRef.current):fn;precosRef.current=n;setPrecosSalvos(n);salvarLocal(produtosRef.current,n);salvarSB(produtosRef.current,n);},[salvarLocal,salvarSB]);
@@ -6435,9 +6499,9 @@ const FichaTecnicaContent=()=>{
   };
 
   if(tela==="lista")return <FichaLista produtos={produtos} colecoesUnicas={colecoesUnicas} onSelect={selecionarProduto} onVoltar={function(){setTela("home");}}/>;
-  if(tela==="novo")return <FichaFormProd produtos={produtos} colecoesUnicas={colecoesUnicas} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onVoltar={function(){setTela("home");}} onSalvar={function(np){atualizarProdutos(function(ps){return ps.concat([np]);});setProdSel(np);setBuscaRef(np.ref);setTela("home");}}/>;
-  if(tela==="editar"&&editProd)return <FichaFormProd inicial={editProd} produtos={produtos} colecoesUnicas={colecoesUnicas} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onVoltar={function(){setTela("home");}} onSalvar={function(np){atualizarProdutos(function(ps){return ps.map(function(p){return p.id===editProd.id?np:p;});});if(prodSel&&prodSel.id===editProd.id)setProdSel(np);setTela("home");}}/>;
-  if(tela==="analise")return <FichaAnalise produtos={produtos} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onSalvarProduto={function(np){atualizarProdutos(function(ps){return ps.map(function(p){return p.id===np.id?np:p;});});if(prodSel&&prodSel.id===np.id)setProdSel(np);}} onVoltar={function(){setTela("home");}}/>;
+  if(tela==="novo")return <FichaFormProd produtos={produtos} colecoesUnicas={colecoesUnicas} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onVoltar={function(){setTela("home");}} onSalvar={function(np){np._mod=Date.now();atualizarProdutos(function(ps){return ps.concat([np]);});setProdSel(np);setBuscaRef(np.ref);setTela("home");}}/>;
+  if(tela==="editar"&&editProd)return <FichaFormProd inicial={editProd} produtos={produtos} colecoesUnicas={colecoesUnicas} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onVoltar={function(){setTela("home");}} onSalvar={function(np){np._mod=Date.now();atualizarProdutos(function(ps){return ps.map(function(p){return p.id===editProd.id?np:p;});});if(prodSel&&prodSel.id===editProd.id)setProdSel(np);setTela("home");}}/>;
+  if(tela==="analise")return <FichaAnalise produtos={produtos} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onSalvarProduto={function(np){np._mod=Date.now();atualizarProdutos(function(ps){return ps.map(function(p){return p.id===np.id?np:p;});});if(prodSel&&prodSel.id===np.id)setProdSel(np);}} onVoltar={function(){setTela("home");}}/>;
 
   // HOME
   var filtrados=produtos.filter(function(p){
@@ -6678,9 +6742,10 @@ export default function App(){
   const lastUsuariosSaveTs=useRef(0);
 
   // ── SAVE LOCAL IMEDIATO (sem debounce) ─────────────────────────────────────
-  const salvarLocal=useCallback((dados)=>{
+  // salvarLocal aceita timestamp opcional — quando fornecido, usa o MESMO que vai pro Supabase
+  const salvarLocal=useCallback((dados,ts)=>{
     try{
-      const payload={...dados,_updated:Date.now()};
+      const payload={...dados,_updated:ts||Date.now()};
       const json=JSON.stringify(payload);
       const size=new Blob([json]).size;
       if(size>60000)console.warn("⚠ Payload localStorage:",Math.round(size/1024),"KB",size>65536?"— EXCEDE 64KB keepalive!":"");
@@ -6692,6 +6757,13 @@ export default function App(){
   // ── LOAD DO SUPABASE NA ABERTURA ───────────────────────────────────────────
   useEffect(()=>{
     if(!supabase){setDbCarregado(true);return;}
+    // Garante que sb_url e sb_key estejam no localStorage pro flush keepalive funcionar
+    try{
+      const url=import.meta.env.VITE_SUPABASE_URL||"";
+      const key=import.meta.env.VITE_SUPABASE_ANON_KEY||"";
+      if(url)localStorage.setItem("sb_url",url);
+      if(key)localStorage.setItem("sb_key",key);
+    }catch(e){console.error("Erro salvando sb_url/sb_key:",e);}
     // Safety timeout: se Supabase não responder em 10s, libera o app
     const safetyTimer=setTimeout(()=>{setDbCarregado(prev=>{if(!prev){console.warn("SAFETY: Supabase não respondeu em 10s, liberando app");setSyncStatus('error');}return true;});},10000);
     // Camada 1: carrega localStorage imediatamente (dados aparecem na hora)
@@ -6723,7 +6795,7 @@ export default function App(){
       if(localUsr){const d=JSON.parse(localUsr);if(d.usuarios&&d.usuarios.length>0)setUsuarios(d.usuarios);}
     }catch(e){console.error("Erro lendo usuarios local:",e);}
 
-    // Camada 2: carrega Supabase — compara com local usando pending_sync + timestamp
+    // Camada 2: carrega Supabase — compara timestamps (MAIS RECENTE VENCE, sem depender de pending_sync)
     setSyncStatus('loading');
     Promise.all([
       supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single(),
@@ -6732,24 +6804,28 @@ export default function App(){
       if(!ef&&df?.payload){
         const d=df.payload;
         const localRaw=localStorage.getItem("amica_financeiro");
-        const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
+        let localParsed=null;
+        try{localParsed=localRaw?JSON.parse(localRaw):null;}catch(e){console.error("Erro parsing localStorage:",e);}
+        const localTs=localParsed?._updated||0;
         const remoteTs=d._updated||0;
-        const pendente=localStorage.getItem("amica_pending_sync")==="true";
 
-        // Non-admin: SEMPRE usa Supabase (limpa pending_sync residual de antes do fix)
-        if(!usuarioLogado?.admin&&pendente){
-          console.log("SYNC: limpando pending_sync residual pra não-admin");
+        // Non-admin: SEMPRE usa Supabase
+        if(!usuarioLogado?.admin){
+          console.log("SYNC: não-admin → Supabase vence sempre");
           localStorage.setItem("amica_pending_sync","false");
         }
 
-        if(pendente&&localTs>remoteTs&&usuarioLogado?.admin){
-          // LOCAL VENCE: edits pendentes + timestamp mais recente que Supabase
+        // DECISÃO POR TIMESTAMP: quem tem _updated mais recente vence
+        if(localTs>remoteTs&&usuarioLogado?.admin&&localParsed){
+          // LOCAL VENCE: localStorage tem timestamp mais recente que Supabase
           // Estado já foi setado no Passo 1 (localStorage), não sobrescreve
           // Auto-save vai enviar pro Supabase quando dbCarregado=true
-          console.log("SYNC: LOCAL vence — pending_sync=true, local:",new Date(localTs).toLocaleString("pt-BR"),"| remoto:",remoteTs?new Date(remoteTs).toLocaleString("pt-BR"):"nenhum");
+          console.log("SYNC: LOCAL vence — localTs:",new Date(localTs).toLocaleString("pt-BR"),"(",localTs,") > remotoTs:",remoteTs?new Date(remoteTs).toLocaleString("pt-BR"):"nenhum","(",remoteTs,")");
+          console.log("SYNC: LOCAL dados —",localParsed.boletosShared?.length||0,"boletos,",Object.keys(localParsed.receitasPorMes||{}).length,"meses receitas");
         }else{
-          // SUPABASE VENCE: dados remotos mais recentes ou sem pending
-          console.log("SYNC: SUPABASE vence —",pendente?"pending mas remoto mais novo":"sem pending",", remoto:",remoteTs?new Date(remoteTs).toLocaleString("pt-BR"):"nenhum");
+          // SUPABASE VENCE: dados remotos mais recentes (ou iguais, ou non-admin)
+          console.log("SYNC: SUPABASE vence — remotoTs:",remoteTs?new Date(remoteTs).toLocaleString("pt-BR"):"nenhum","(",remoteTs,") >= localTs:",localTs?"("+localTs+")":"nenhum");
+          console.log("SYNC: SUPABASE dados —",d.boletosShared?.length||0,"boletos,",Object.keys(d.receitasPorMes||{}).length,"meses receitas");
           if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
           if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
           if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
@@ -6775,32 +6851,77 @@ export default function App(){
           try{localStorage.setItem("amica_usuarios",JSON.stringify(usrPayload));}catch(e){console.error(e);}
         }
       }
-      // Cortes (chave separada — só cortes, produtos vêm do payload principal)
+      // Cortes (chave separada — cortes + produtos com merge por _mod)
       if(!ec&&dc?.payload){
         const d=dc.payload;
         if(d.cortes){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
         if(d.oficinasCAD&&d.oficinasCAD.length>0)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
+        // Merge produtos do cortes payload com os já carregados do payload principal
+        if(d.produtos&&d.produtos.length>0){
+          setProdutos(prev=>{
+            const mainMap=new Map((prev||[]).map(p=>[p.ref,p]));
+            const cortesMap=new Map(d.produtos.map(p=>[p.ref,p]));
+            let mudou=false;
+            const merged=prev.map(mp=>{
+              const cp=cortesMap.get(mp.ref);
+              if(cp&&(cp._mod||0)>(mp._mod||0)){mudou=true;return cp;}
+              return mp;
+            });
+            // Produtos novos que só existem no cortes (não-admin adicionou)
+            for(const [ref,cp] of cortesMap){
+              if(!mainMap.has(ref)){merged.push(cp);mudou=true;}
+            }
+            if(mudou)console.log("LOAD: merge produtos — cortes tinha",d.produtos.length,", resultado:",merged.length);
+            return mudou?merged:prev;
+          });
+        }
       }
       setDbCarregado(true);clearTimeout(safetyTimer);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);clearTimeout(safetyTimer);setSyncStatus('error');});
 
-    // ── USUARIOS: carrega separado (não afeta load principal) ──
+    // ── USUARIOS: carrega separado com MERGE por id + _mod (nunca sobrescreve cegamente) ──
     supabase.from('amicia_data').select('payload').eq('user_id','usuarios').maybeSingle()
       .then(({data:du})=>{
-        if(du?.payload?.usuarios&&du.payload.usuarios.length>0){
-          const usrLocal=localStorage.getItem("amica_usuarios");
-          const localUsrTs=usrLocal?JSON.parse(usrLocal)._updated||0:0;
-          const remoteUsrTs=du.payload._updated||0;
-          if(remoteUsrTs>=localUsrTs){
-            console.log("USUARIOS: Supabase vence, carregando",du.payload.usuarios.length,"usuarios");
-            setUsuarios(du.payload.usuarios);
-            try{localStorage.setItem("amica_usuarios",JSON.stringify(du.payload));}catch(e){console.error(e);}
+        const remoteUsers=du?.payload?.usuarios||[];
+        let localParsed=null;
+        try{const raw=localStorage.getItem("amica_usuarios");localParsed=raw?JSON.parse(raw):null;}catch(e){console.error("Usuarios parse local:",e);}
+        const localUsers=localParsed?.usuarios||[];
+
+        if(remoteUsers.length===0&&localUsers.length===0)return; // nada pra fazer
+
+        // MERGE por id + _mod — garante que nenhum usuário se perde
+        const remoteMap=new Map(remoteUsers.map(u=>[u.id,u]));
+        const localMap=new Map(localUsers.map(u=>[u.id,u]));
+        const mergedUsers=[];
+        const allIds=new Set([...remoteMap.keys(),...localMap.keys()]);
+        for(const id of allIds){
+          const ru=remoteMap.get(id);
+          const lu=localMap.get(id);
+          if(ru&&lu){
+            // Conflito: mais recente por _mod vence
+            mergedUsers.push((lu._mod||0)>(ru._mod||0)?lu:ru);
           }else{
-            console.log("USUARIOS: localStorage mais recente, enviando pro Supabase");
-            try{const localData=JSON.parse(usrLocal);supabase.from('amicia_data').upsert({user_id:'usuarios',payload:localData},{onConflict:'user_id'}).catch(e=>console.error("Usuarios sync:",e));}catch{}
+            // Só existe em um lado → preserva (nunca perde)
+            mergedUsers.push(ru||lu);
           }
+        }
+
+        const mudou=mergedUsers.length!==remoteUsers.length||
+          mergedUsers.some((u,i)=>u.id!==(remoteUsers[i]?.id)||u._mod!==(remoteUsers[i]?._mod));
+
+        console.log("USUARIOS: merge —",remoteUsers.length,"remoto,",localUsers.length,"local →",mergedUsers.length,"resultado",mudou?"(MUDOU)":"(igual)");
+        setUsuarios(mergedUsers);
+        const mergedPayload={usuarios:mergedUsers,_updated:Date.now()};
+        try{localStorage.setItem("amica_usuarios",JSON.stringify(mergedPayload));}catch(e){console.error(e);}
+
+        // Se merge mudou algo em relação ao remoto, salva no Supabase
+        if(mudou&&usuarioLogado?.admin){
+          console.log("USUARIOS: merge diferente do remoto, sincronizando pro Supabase");
+          supabase.from('amicia_data').upsert({user_id:'usuarios',payload:mergedPayload},{onConflict:'user_id'})
+            .then(({error})=>{if(error)console.error("Usuarios merge sync:",error);})
+            .catch(e=>console.error("Usuarios merge sync:",e));
         }
       }).catch(e=>console.error("Usuarios load:",e));
     return()=>clearTimeout(safetyTimer);
@@ -6814,9 +6935,13 @@ export default function App(){
         const d=payload.new?.payload;
         if(!d||!d._updated)return;
         // Ignora eco do próprio save (30s de margem — suficiente pra round-trip)
-        if(Math.abs(d._updated-lastSaveTs.current)<30000){console.log("REALTIME: ignorando eco do próprio save");return;}
-        const pendente=localStorage.getItem("amica_pending_sync")==="true";
-        if(pendente){console.log("REALTIME: ignorando — pending_sync=true");return;}
+        if(Math.abs(d._updated-lastSaveTs.current)<30000){console.log("REALTIME: ignorando eco do próprio save, diff:",Math.abs(d._updated-lastSaveTs.current),"ms");return;}
+        // Ignora se localStorage tem dados mais recentes (edits locais pendentes)
+        try{
+          const localRaw=localStorage.getItem("amica_financeiro");
+          const localTs=localRaw?JSON.parse(localRaw)._updated||0:0;
+          if(localTs>d._updated){console.log("REALTIME: ignorando — localStorage mais recente (",localTs,") que Realtime (",d._updated,")");return;}
+        }catch(e){}
         console.log("REALTIME: recebido update de outro device, timestamp:",new Date(d._updated).toLocaleString("pt-BR"));
         realtimeProcessing.current=true;
         if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
@@ -6873,6 +6998,24 @@ export default function App(){
         });
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
+        // Merge produtos por ref + _mod (outro usuário editou/adicionou produto)
+        if(d.produtos&&d.produtos.length>0){
+          setProdutos(prev=>{
+            const localMap=new Map((prev||[]).map(p=>[p.ref,p]));
+            const remoteMap=new Map(d.produtos.map(p=>[p.ref,p]));
+            let mudou=false;
+            const merged=prev.map(lp=>{
+              const rp=remoteMap.get(lp.ref);
+              if(rp&&(rp._mod||0)>(lp._mod||0)){mudou=true;return rp;}
+              return lp;
+            });
+            for(const [ref,rp] of remoteMap){
+              if(!localMap.has(ref)){merged.push(rp);mudou=true;}
+            }
+            if(mudou)console.log("REALTIME OFICINAS: merge produtos aplicado");
+            return mudou?merged:prev;
+          });
+        }
       }).subscribe();
     return()=>{supabase.removeChannel(ch);};
   },[dbCarregado]);
@@ -6903,22 +7046,47 @@ export default function App(){
     return()=>{supabase.removeChannel(ch);};
   },[dbCarregado]);
 
-  // ── SAVE USUARIOS (payload separado — SOMENTE ADMIN) ────────────────────
+  // ── SAVE USUARIOS (payload separado — SOMENTE ADMIN — com merge por id) ──
   useEffect(()=>{
     if(!dbCarregado||!supabase||realtimeUsuarios.current)return;
-    if(!usuarioLogado?.admin)return; // NÃO-ADMIN NÃO SALVA usuarios
+    if(!usuarioLogado?.admin)return;
     // Não salva se ainda é o array inicial sem modificações
     if(usuarios.length<=3&&usuarios.every(u=>u.id<=3))return;
     const usrPayload={usuarios,_updated:Date.now()};
     try{localStorage.setItem("amica_usuarios",JSON.stringify(usrPayload));}catch(e){console.error(e);}
     if(debounceUsuarios.current)clearTimeout(debounceUsuarios.current);
-    debounceUsuarios.current=setTimeout(()=>{
-      const ts=Date.now();
-      lastUsuariosSaveTs.current=ts;
-      const payload={usuarios,_updated:ts};
-      supabase.from('amicia_data').upsert({user_id:'usuarios',payload},{onConflict:'user_id'})
-        .then(({error})=>{if(error)console.error("Erro save usuarios:",error);else console.log("USUARIOS: salvo no Supabase,",usuarios.length,"usuarios");})
-        .catch(e=>console.error("Erro save usuarios:",e));
+    debounceUsuarios.current=setTimeout(async()=>{
+      try{
+        // READ-MERGE-WRITE: lê remoto, mergeia por id+_mod, salva resultado
+        const {data:remoteData}=await supabase.from('amicia_data').select('payload').eq('user_id','usuarios').maybeSingle();
+        const remoteUsers=remoteData?.payload?.usuarios||[];
+        const localMap=new Map(usuarios.map(u=>[u.id,u]));
+        const remoteMap=new Map(remoteUsers.map(u=>[u.id,u]));
+        const mergedUsers=[];
+        const allIds=new Set([...localMap.keys(),...remoteMap.keys()]);
+        for(const id of allIds){
+          const lu=localMap.get(id);
+          const ru=remoteMap.get(id);
+          if(lu&&ru){mergedUsers.push((lu._mod||0)>=(ru._mod||0)?lu:ru);}
+          else if(lu){mergedUsers.push(lu);} // novo local
+          else if(ru){
+            // Existe no remoto mas não local — foi deletado localmente?
+            // Se o admin deletou (não está no local), NÃO preserva
+            mergedUsers.push(ru); // Preserva por segurança — admin pode deletar de novo
+          }
+        }
+        const ts=Date.now();
+        lastUsuariosSaveTs.current=ts;
+        const payload={usuarios:mergedUsers,_updated:ts};
+        const {error}=await supabase.from('amicia_data').upsert({user_id:'usuarios',payload},{onConflict:'user_id'});
+        if(error)console.error("USUARIOS SAVE: erro:",error);
+        else{
+          console.log("USUARIOS SAVE: merge-write OK,",mergedUsers.length,"usuarios, ts:",ts);
+          // Atualiza local com resultado do merge
+          if(mergedUsers.length!==usuarios.length)setUsuarios(mergedUsers);
+          try{localStorage.setItem("amica_usuarios",JSON.stringify(payload));}catch(e){console.error(e);}
+        }
+      }catch(e){console.error("USUARIOS SAVE: catch:",e);}
     },1500);
     return()=>{if(debounceUsuarios.current)clearTimeout(debounceUsuarios.current);};
   },[usuarios,dbCarregado]);
@@ -7036,27 +7204,54 @@ export default function App(){
     const ts=Date.now();
     lastSaveTs.current=ts;
     const payloadComTs={...payload,_updated:ts};
+    console.log("SUPABASE-SAVE: enviando, ts:",ts,", boletos:",payload.boletosShared?.length||0);
     supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
       .then(({error})=>{
-        if(error){console.error("Erro Supabase save:",error);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
-        else{localStorage.setItem("amica_pending_sync","false");setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
+        if(error){
+          console.error("SUPABASE-SAVE: erro:",error);
+          setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);
+        }else{
+          // Sucesso: atualiza localStorage COM O MESMO timestamp do Supabase
+          // Assim localTs === remoteTs → na próxima abertura, Supabase vence (>=)
+          try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
+          localStorage.setItem("amica_pending_sync","false");
+          setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
+          console.log("SUPABASE-SAVE: sucesso, ts:",ts);
+        }
       })
-      .catch((e)=>{console.error("Erro Supabase save:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
+      .catch((e)=>{console.error("SUPABASE-SAVE: catch:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
   },[dbCarregado]);
 
   // Auto-save: localStorage IMEDIATO + Supabase com debounce 1.5s (SOMENTE ADMIN)
   useEffect(()=>{
     if(!dbCarregado)return;
-    if(!usuarioLogado?.admin)return; // NÃO-ADMIN NÃO SALVA payload principal
-    if(realtimeProcessing.current){return;} // pula save durante Realtime (evita loop)
+    // SEMPRE atualiza dadosRef — flush/retry precisam do snapshot mais recente
     const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
-    dadosRef.current=dados; // sync ref pra flush/retry
-    // Camada 1: salva local na hora
-    salvarLocal(dados);
+    dadosRef.current=dados;
+    if(!usuarioLogado?.admin){return;}
+    if(realtimeProcessing.current){
+      console.log("AUTO-SAVE: bloqueado por realtimeProcessing — dadosRef atualizado, retry em 2.5s");
+      const retryRT=setTimeout(()=>{
+        if(!realtimeProcessing.current&&dadosRef.current){
+          console.log("AUTO-SAVE: retry pós-Realtime executando");
+          const retryTs=Date.now();
+          salvarLocal(dadosRef.current,retryTs);
+          salvarNoSupabase(dadosRef.current);
+        }
+      },2500);
+      return()=>clearTimeout(retryRT);
+    }
+    // Timestamp ÚNICO: mesmo valor vai pro localStorage e pro Supabase
+    const ts=Date.now();
+    console.log("AUTO-SAVE: salvando —",boletosShared.length,"boletos,",Object.keys(receitasPorMes).length,"meses receitas, ts:",ts);
+    // Camada 1: salva local na hora COM o timestamp que vai pro Supabase
+    salvarLocal(dados,ts);
     setSyncStatus('local');
-    // Camada 2: Supabase com debounce
+    // Camada 2: Supabase com debounce — usa mesmo ts
     if(debounceRef.current)clearTimeout(debounceRef.current);
     debounceRef.current=setTimeout(()=>{
+      // salvarNoSupabase gera ts próprio (mais recente que o local) — intencional
+      // assim no reload, se Supabase salvou com sucesso, remoteTs >= localTs → Supabase vence
       salvarNoSupabase(dados);
     },1500);
     return()=>clearTimeout(debounceRef.current);
@@ -7086,7 +7281,29 @@ export default function App(){
           if(!localMap.has(id))merged.push(rc);
         }
         const payload={cortes:merged,
-          produtos:usuarioLogado?.admin?produtos||[]:remoto.produtos||produtos||[],
+          // MERGE PRODUTOS por ref + _mod (qualquer usuário pode editar produtos)
+          produtos:(()=>{
+            const localProds=(produtos||[]).map(p=>({...p,_mod:p._mod||0}));
+            const remoteProds=(remoto.produtos||[]).map(p=>({...p,_mod:p._mod||0}));
+            const localMap=new Map(localProds.map(p=>[p.ref,p]));
+            const remoteMap=new Map(remoteProds.map(p=>[p.ref,p]));
+            const mergedProds=[];
+            // 1. Todos os locais — se conflito, mais recente ganha
+            for(const [ref,lp] of localMap){
+              const rp=remoteMap.get(ref);
+              if(!rp){mergedProds.push(lp);} // só local (novo)
+              else{mergedProds.push((lp._mod||0)>=(rp._mod||0)?lp:rp);} // conflito → _mod maior
+            }
+            // 2. Remotos que não existem localmente (admin pode ter deletado)
+            for(const [ref,rp] of remoteMap){
+              if(!localMap.has(ref)){
+                // Se admin e não tem local → admin deletou → não inclui
+                // Se non-admin e não tem local → pode ser novo do admin → inclui
+                if(!usuarioLogado?.admin)mergedProds.push(rp);
+              }
+            }
+            return mergedProds;
+          })(),
           oficinasCAD:usuarioLogado?.admin?oficinasCAD||[]:remoto.oficinasCAD||oficinasCAD||[],
           logTroca:usuarioLogado?.admin?logTroca||[]:remoto.logTroca||logTroca||[]};
         lastCorteSaveTs.current=Date.now();
@@ -7127,42 +7344,58 @@ export default function App(){
   // ── SAVE AO SAIR + RETRY AO VOLTAR (SOMENTE ADMIN) ──
   useEffect(()=>{
     const flushSave=()=>{
-      if(!dadosRef.current||!usuarioLogado?.admin)return;
+      if(!dadosRef.current||!usuarioLogado?.admin){
+        console.log("FLUSH: bloqueado —",!dadosRef.current?"dadosRef vazio":"não é admin",", usuarioLogado:",usuarioLogado?.usuario||"null");
+        return;
+      }
       const dados=dadosRef.current;
-      salvarLocal(dados);
+      const ts=Date.now();
+      lastSaveTs.current=ts;
+      const payloadComTs={...dados,_updated:ts};
+      console.log("FLUSH: salvando —",dados.boletosShared?.length||0,"boletos,",Object.keys(dados.receitasPorMes||{}).length,"meses receitas, ts:",ts);
+      // localStorage com MESMO timestamp que vai pro Supabase
+      try{
+        localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));
+        localStorage.setItem("amica_pending_sync","true");
+      }catch(e){console.error("FLUSH localStorage erro:",e);}
       const sbUrl=localStorage.getItem("sb_url");
       const sbKey=localStorage.getItem("sb_key");
       if(sbUrl&&sbKey){
         try{
-          const ts=Date.now();
-          lastSaveTs.current=ts;
-          const payloadComTs={...dados,_updated:ts};
           const body=JSON.stringify({user_id:USER_ID,payload:payloadComTs});
           const size=body.length;
           if(size>65536)console.warn("⚠ Flush payload excede 64KB keepalive:",Math.round(size/1024),"KB — pode falhar silenciosamente");
+          // CRITICAL: NÃO setar pending_sync=false no .then() — página pode morrer antes
+          // O retry ao voltar vai resolver pendências que o keepalive salvou com sucesso
           fetch(`${sbUrl}/rest/v1/amicia_data`,{
             method:'POST',
             headers:{'Content-Type':'application/json','apikey':sbKey,'Authorization':`Bearer ${sbKey}`,'Prefer':'resolution=merge-duplicates'},
             body,keepalive:true
-          }).then(r=>{if(r.ok)localStorage.setItem("amica_pending_sync","false");})
-            .catch(()=>{});
+          }).catch(()=>{});
         }catch(e){console.error("Flush keepalive erro:",e);}
       }
     };
     const retrySePendente=()=>{
-      if(!dadosRef.current||!supabase)return;
+      if(!dadosRef.current||!supabase||!usuarioLogado?.admin)return;
       const pendente=localStorage.getItem("amica_pending_sync");
       if(pendente!=="true")return;
-      console.log("Retry sync: dados pendentes encontrados");
+      console.log("RETRY: dados pendentes encontrados, enviando pro Supabase...");
       setSyncStatus('saving');
       const ts=Date.now();
       lastSaveTs.current=ts;
       const payloadComTs={...dadosRef.current,_updated:ts};
       supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
         .then(({error})=>{
-          if(!error){localStorage.setItem("amica_pending_sync","false");setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);}
-          else{console.error("Retry falhou:",error);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);}
-        }).catch(e=>{console.error("Retry falhou:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
+          if(!error){
+            try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
+            localStorage.setItem("amica_pending_sync","false");
+            setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
+            console.log("RETRY: sucesso, ts:",ts);
+          }else{
+            console.error("RETRY: falhou:",error);
+            setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);
+          }
+        }).catch(e=>{console.error("RETRY: catch:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
     };
     const onVisChange=()=>{
       if(document.visibilityState==="hidden")flushSave();
@@ -7179,7 +7412,7 @@ export default function App(){
       clearInterval(retryInterval);
       clearTimeout(retryInicial);
     };
-  },[dbCarregado]); // ← deps mínimas — dados vêm do dadosRef
+  },[dbCarregado,usuarioLogado]); // ← inclui usuarioLogado pra closure do flush sempre ter o valor correto
 
   // ── SESSÃO EXPIRADA + VERSÃO DO APP ────────────────────────────────────────
   useEffect(()=>{
@@ -7518,7 +7751,7 @@ export default function App(){
         {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/></ModuleErrorBoundary>}
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
-        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD}/>}
+        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
