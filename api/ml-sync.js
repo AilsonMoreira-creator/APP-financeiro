@@ -2,7 +2,7 @@ import { supabase, getValidToken, BRANDS, isOutsideBusinessHours, getAbsenceMess
 
 const ML_API = 'https://api.mercadolibre.com';
 
-async function syncBrand(brand, outside, absMsg) {
+async function syncBrand(brand, outside, absMsg, absenceEnabled) {
   const token = await getValidToken(brand);
   const { data: rec } = await supabase.from('ml_tokens').select('seller_id').eq('brand', brand).single();
   if (!rec) return { brand, synced: 0, autoReplied: 0 };
@@ -18,7 +18,8 @@ async function syncBrand(brand, outside, absMsg) {
   let autoReplied = 0;
 
   for (const q of questions) {
-    if (outside) {
+    // Ausência: SÓ se está fora do horário E absence_enabled === true
+    if (outside && absenceEnabled && absMsg) {
       try {
         const aRes = await fetch(`${ML_API}/answers`, {
           method: 'POST',
@@ -40,7 +41,7 @@ async function syncBrand(brand, outside, absMsg) {
       question_id: String(q.id), brand, item_id: q.item_id,
       question_text: q.text, buyer_id: String(q.from?.id || ''),
       date_created: q.date_created,
-      status: outside ? 'auto_answered' : 'pending',
+      status: (outside && absenceEnabled) ? 'auto_answered' : 'pending',
       received_at: new Date().toISOString(),
     }, { onConflict: 'question_id' });
   }
@@ -52,9 +53,17 @@ export default async function handler(req, res) {
   try {
     const outside = await isOutsideBusinessHours();
     const absMsg = outside ? await getAbsenceMessage() : '';
+    
+    // Checa absence_enabled no config (strict check)
+    let absenceEnabled = false;
+    try {
+      const { data: cfgData } = await supabase.from('amicia_data').select('payload').eq('user_id', 'ml-perguntas-config').single();
+      absenceEnabled = cfgData?.payload?.config?.absence_enabled === true;
+      console.log('[ml-sync] absence_enabled:', absenceEnabled, '| outside:', outside);
+    } catch (e) { console.error('[ml-sync] config read error:', e.message); }
 
     const results = await Promise.all(
-      BRANDS.map(b => syncBrand(b, outside, absMsg).catch(e => ({ brand: b, error: e.message })))
+      BRANDS.map(b => syncBrand(b, outside, absMsg, absenceEnabled).catch(e => ({ brand: b, error: e.message })))
     );
 
     // Limpar locks expirados (>5 min)
@@ -66,7 +75,7 @@ export default async function handler(req, res) {
       payload: { synced_at: new Date().toISOString(), results, outside },
     }, { onConflict: 'user_id' });
 
-    return res.json({ success: true, outside, results });
+    return res.json({ success: true, outside, absenceEnabled, results });
   } catch (err) {
     console.error('[ml-sync]', err.message);
     return res.status(500).json({ error: err.message });
