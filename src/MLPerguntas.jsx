@@ -218,6 +218,14 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
   const [stockAlerts, setStockAlerts] = useState([]);
   const [aiResponses, setAiResponses] = useState([]);
   const [absenceResponses, setAbsenceResponses] = useState([]);
+  // ── Arquivo (respondidas > 24h) ──
+  const [archived, setArchived] = useState([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archivedDateFrom, setArchivedDateFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10);
+  });
+  const [archivedDateTo, setArchivedDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [archivedSearch, setArchivedSearch] = useState('');
   const [queuedIds, setQueuedIds] = useState(new Set());
   const [iaDebug, setIaDebug] = useState({});
   const [debugOpen, setDebugOpen] = useState({});
@@ -364,6 +372,37 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
       })));
     } catch (err) {
       console.error('[MLPerguntas] Fetch answered error:', err);
+    }
+  }
+
+  // ── Fetch archived (respondidas > 24h) from Supabase ──
+  // Busca tudo que foi respondido no período [dateFrom, dateTo] e é mais antigo que 24h.
+  // A aba "Respondidas (24h)" cobre as últimas 24h; o Arquivo começa onde ela termina.
+  async function fetchArchived() {
+    if (!supabase) return;
+    try {
+      setArchivedLoading(true);
+      const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const fromISO = archivedDateFrom ? new Date(archivedDateFrom + 'T00:00:00').toISOString() : null;
+      const toISO = archivedDateTo ? new Date(archivedDateTo + 'T23:59:59').toISOString() : null;
+
+      let query = supabase.from('ml_qa_history')
+        .select('*')
+        .neq('item_id', 'MANUAL')
+        .lt('answered_at', cutoff24h);
+      if (fromISO) query = query.gte('answered_at', fromISO);
+      if (toISO) query = query.lte('answered_at', toISO);
+
+      const { data, error: qErr } = await query
+        .order('answered_at', { ascending: false })
+        .limit(500);
+      if (qErr) throw qErr;
+      setArchived(data || []);
+    } catch (err) {
+      console.error('[MLPerguntas] Fetch archived error:', err);
+      setArchived([]);
+    } finally {
+      setArchivedLoading(false);
     }
   }
 
@@ -637,12 +676,13 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
               ...(absenceResponses.length > 0 ? [{ id: 'ausencia', label: 'Ausência', badge: absenceResponses.length, badgeColor: PALETTE.textLight }] : []),
               { id: 'ia_resp', label: '✨ IA', badge: aiResponses.length, badgeColor: PALETTE.textLight },
               { id: 'estoque', label: '📦 Estoque', badge: stockAlerts.filter(a => a.status === 'pendente').length, badgeColor: PALETTE.red },
-              { id: 'arquivo', label: 'Arquivo', badge: 0 },
+              { id: 'arquivo', label: 'Arquivo', badge: archived.length, badgeColor: PALETTE.textLight },
             ].map(t => (
               <button key={t.id} onClick={() => {
                 setTab(t.id);
                 if (t.id === 'respondidas' || t.id === 'ausencia' || t.id === 'ia_resp') { fetchAnswered(); fetchAutoResponses(); }
                 if (t.id === 'estoque') fetchStockAlerts();
+                if (t.id === 'arquivo') fetchArchived();
               }} style={{
                 ...S, padding: '5px 12px', fontSize: 14, fontWeight: 600,
                 border: 'none', borderRadius: 5, cursor: 'pointer',
@@ -688,9 +728,72 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         {tab === 'posvenda' ? (
           <MLPosVenda supabase={supabase} currentUser={currentUser} />
         ) : tab === 'arquivo' ? (
-          <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 16 }}>
-            📁 Arquivo — busca por período em desenvolvimento
-          </div>
+          (() => {
+            // filtra por marca (global) e busca textual
+            const filteredArch = archived
+              .filter(r => brandFilter === 'Todas' || r.brand === brandFilter)
+              .filter(r => {
+                if (!archivedSearch.trim()) return true;
+                const s = archivedSearch.trim().toLowerCase();
+                return (r.question_text || '').toLowerCase().includes(s)
+                  || (r.answer_text || '').toLowerCase().includes(s)
+                  || (r.item_id || '').toLowerCase().includes(s);
+              });
+
+            const inputStyle = { ...S, padding: '6px 10px', fontSize: 14, border: `1px solid ${PALETTE.border}`, borderRadius: 6, outline: 'none', background: PALETTE.white, color: PALETTE.text };
+
+            return (
+              <div>
+                {/* Filtros */}
+                <div style={{ ...S, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', background: PALETTE.white, padding: 10, borderRadius: 8, border: `1px solid ${PALETTE.border}`, marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: PALETTE.textLight }}>De:</span>
+                  <input type="date" value={archivedDateFrom} onChange={e => setArchivedDateFrom(e.target.value)} style={inputStyle} />
+                  <span style={{ fontSize: 13, color: PALETTE.textLight }}>Até:</span>
+                  <input type="date" value={archivedDateTo} onChange={e => setArchivedDateTo(e.target.value)} style={inputStyle} />
+                  <input type="text" placeholder="🔍 Buscar pergunta, resposta ou MLB..." value={archivedSearch} onChange={e => setArchivedSearch(e.target.value)} style={{ ...inputStyle, flex: '1 1 220px', minWidth: 180 }} />
+                  <Btn small onClick={fetchArchived} disabled={archivedLoading}>{archivedLoading ? 'Buscando…' : '🔄 Buscar'}</Btn>
+                  <span style={{ fontSize: 12, color: PALETTE.textLight, marginLeft: 'auto' }}>
+                    {filteredArch.length} de {archived.length}
+                  </span>
+                </div>
+
+                {/* Lista */}
+                {archivedLoading ? (
+                  <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 15 }}>Carregando arquivo…</div>
+                ) : filteredArch.length === 0 ? (
+                  <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.textLight, fontSize: 15 }}>
+                    📁 Nenhuma pergunta arquivada no período selecionado
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {filteredArch.map(r => {
+                      const who = r.answered_by === '_auto_ia' ? '✨ IA'
+                        : r.answered_by === '_auto_ia_low' ? '✨ IA (baixa)'
+                        : r.answered_by === '_auto_absence' ? '🌙 Ausência'
+                        : r.answered_by || '—';
+                      const whoColor = r.answered_by?.startsWith('_auto_ia') ? PALETTE.blue
+                        : r.answered_by === '_auto_absence' ? PALETTE.orange
+                        : PALETTE.textLight;
+                      return (
+                        <div key={(r.question_id || '') + '_' + (r.answered_at || '')} style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                            <BrandTag brand={r.brand} />
+                            <span style={{ ...S, fontSize: 13, color: PALETTE.textLight }}>
+                              {new Date(r.answered_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <span style={{ ...S, fontSize: 13, color: whoColor, fontWeight: 600 }}>{who}</span>
+                            {r.item_id && <span style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginLeft: 'auto' }}>{r.item_id}</span>}
+                          </div>
+                          <div style={{ ...S, fontSize: 15, color: PALETTE.text, marginBottom: 4 }}>💬 "{r.question_text}"</div>
+                          <div style={{ ...S, fontSize: 14, color: PALETTE.green, padding: '4px 8px', background: PALETTE.greenLight, borderRadius: 4 }}>✓ {r.answer_text}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()
         ) : tab === 'ausencia' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {absenceResponses.length === 0 ? (

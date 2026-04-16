@@ -5494,13 +5494,28 @@ const CalculadoraContent=()=>{
   );
 };
 
-const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>(
+const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>{
+  const[bRef,setBRef]=useState("");
+  const[bDesc,setBDesc]=useState("");
+  const iS={border:"1px solid #e8e2da",borderRadius:6,padding:"7px 10px 7px 28px",fontSize:12,outline:"none",fontFamily:"Georgia,serif",width:"100%",color:"#2c3e50",background:"#fff"};
+  const filtrados=prods.map((p,i)=>({p,i})).filter(({p})=>{
+    if(bRef.trim()&&!(p.ref||"").toLowerCase().includes(bRef.trim().toLowerCase()))return false;
+    if(bDesc.trim()&&!(p.descricao||"").toLowerCase().includes(bDesc.trim().toLowerCase()))return false;
+    return true;
+  });
+  return(
   <div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
     <div style={{maxWidth:700,margin:"0 auto"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={()=>setTela("home")} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Produtos Cadastrados</div></div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}><button onClick={()=>setTela("home")} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Produtos Cadastrados</div></div>
+      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+        <div style={{position:"relative",flex:"0 0 140px"}}><span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#8a9aa4",pointerEvents:"none"}}>🔍</span><input value={bRef} onChange={e=>setBRef(e.target.value)} placeholder="Referência" style={iS}/></div>
+        <div style={{position:"relative",flex:1}}><span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#8a9aa4",pointerEvents:"none"}}>🔍</span><input value={bDesc} onChange={e=>setBDesc(e.target.value)} placeholder="Descrição" style={iS}/></div>
+        {(bRef||bDesc)?<button onClick={()=>{setBRef("");setBDesc("");}} style={{background:"none",border:"1px solid #e8e2da",borderRadius:6,padding:"6px 10px",fontSize:12,cursor:"pointer",color:"#8a9aa4"}}>✕</button>:null}
+        <span style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>{filtrados.length} de {prods.length}</span>
+      </div>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
         <div style={{display:"grid",gridTemplateColumns:"48px 80px 1fr 70px 110px 32px",background:"#4a7fa5"}}>{["","Ref","Descrição","Marca","Custo",""].map(h=><div key={h} style={{padding:"8px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}</div>
-        {prods.map((p,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"48px 80px 1fr 70px 110px 32px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
+        {filtrados.map(({p,i})=><div key={i} style={{display:"grid",gridTemplateColumns:"48px 80px 1fr 70px 110px 32px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
           <div style={{padding:"4px 6px"}}>{p.foto?<img src={p.foto} style={{width:38,height:50,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da"}}/>:<div style={{width:38,height:50,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da"}}><span style={{fontSize:14,opacity:0.3}}>📷</span></div>}</div>
           <div onClick={()=>{setProd(p);setRb(p.ref);setTela("home");}} style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:"#4a7fa5",cursor:"pointer"}}>{p.ref}</div>
           <div onClick={()=>{setProd(p);setRb(p.ref);setTela("home");}} style={{padding:"10px 12px",fontSize:12,color:"#2c3e50",cursor:"pointer"}}>{p.descricao}</div>
@@ -5508,11 +5523,11 @@ const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>(
           <div style={{padding:"10px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:"#2c3e50"}}>R$ {calcFmt(calcCusto(p))}</div>
           <div style={{padding:"4px 6px",textAlign:"center"}}><span onClick={()=>{if(window.confirm(`Excluir ${p.ref}?`)){setProds(ps=>ps.filter((_,j)=>j!==i));if(prod?.ref===p.ref){setProd(null);setRb("");}}}} style={{color:"#c0392b",cursor:"pointer",fontSize:16,fontWeight:700}}>×</span></div>
         </div>)}
-        {prods.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum produto cadastrado</div>}
+        {filtrados.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{(bRef||bDesc)?"Nenhum produto encontrado":"Nenhum produto cadastrado"}</div>}
       </div>
     </div>
   </div>
-);
+);};
 
 const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
   const[f,setF]=useState(inicial||{ref:"",descricao:"",marca:"Meluni",tecido:"",forro:"",oficina:"",passadoria:"",ziper:"",botao:"",aviamentos:"",modelista:"",salaCorte:"",foto:""});
@@ -5919,7 +5934,7 @@ function CardHome(props){
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function FichaLista(props){
-  var produtos=props.produtos,colecoesUnicas=props.colecoesUnicas,onSelect=props.onSelect,onVoltar=props.onVoltar;
+  var produtos=props.produtos,colecoesUnicas=props.colecoesUnicas,onSelect=props.onSelect,onVoltar=props.onVoltar,onEditar=props.onEditar,onExcluir=props.onExcluir;
   var _fc=useState(""),fc=_fc[0],setFc=_fc[1];
   var _bRef=useState(""),bRef=_bRef[0],setBRef=_bRef[1];
   var _bDesc=useState(""),bDesc=_bDesc[0],setBDesc=_bDesc[1];
@@ -5953,12 +5968,12 @@ function FichaLista(props){
           <span style={{fontSize:11,color:_LB,whiteSpace:"nowrap"}}>{ord.length} de {produtos.length}</span>
         </div>
         <div style={{background:_W,borderRadius:12,border:"1px solid "+_BD,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"44px 70px 1fr 80px 120px 90px",background:_BFT}}>
-            {["","Ref","Descrição","Marca","Coleção","Cadastro"].map(function(h){return <div key={h} style={{padding:"8px 12px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase"}}>{h}</div>;})}
+          <div style={{display:"grid",gridTemplateColumns:"44px 70px 1fr 80px 120px 90px 70px",background:_BFT}}>
+            {["","Ref","Descrição","Marca","Coleção","Cadastro",""].map(function(h,hi){return <div key={hi} style={{padding:"8px 12px",fontSize:10,color:_W,fontWeight:700,textTransform:"uppercase"}}>{h}</div>;})}
           </div>
           {ord.map(function(p,i){return(
             <div key={p.id} onClick={function(){onSelect(p);}}
-              style={{display:"grid",gridTemplateColumns:"44px 70px 1fr 80px 120px 90px",borderBottom:"1px solid #f0ebe4",alignItems:"center",cursor:"pointer",background:i%2===0?_W:"#faf8f5"}}
+              style={{display:"grid",gridTemplateColumns:"44px 70px 1fr 80px 120px 90px 70px",borderBottom:"1px solid #f0ebe4",alignItems:"center",cursor:"pointer",background:i%2===0?_W:"#faf8f5"}}
               onMouseEnter={function(e){e.currentTarget.style.background="#f0f6fb";}}
               onMouseLeave={function(e){e.currentTarget.style.background=i%2===0?_W:"#faf8f5";}}>
               <div style={{padding:"3px 4px"}}>{p.foto?<img src={p.foto} style={{width:36,height:48,objectFit:"cover",borderRadius:4,border:"1px solid "+_BD}}/>:<div style={{width:36,height:48,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid "+_BD}}><span style={{fontSize:13,opacity:0.3}}>📷</span></div>}</div>
@@ -5967,6 +5982,10 @@ function FichaLista(props){
               <div style={{padding:"10px 12px",fontSize:11,color:_TX2}}>{p.marca}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_GO}}>{p.colecao||"—"}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_LB}}>{fmtDataFT(p.dataCriacao)}</div>
+              <div style={{padding:"6px 8px",display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}} onClick={function(e){e.stopPropagation();}}>
+                <span title="Editar" onClick={function(e){e.stopPropagation();if(onEditar)onEditar(p);}} style={{cursor:"pointer",fontSize:15,color:_BFT,padding:"2px 4px"}}>✏️</span>
+                <span title="Excluir" onClick={function(e){e.stopPropagation();if(window.confirm("Excluir "+p.ref+" — "+(p.descricao||"")+"?")){if(onExcluir)onExcluir(p);}}} style={{cursor:"pointer",fontSize:16,fontWeight:700,color:"#c0392b",padding:"2px 4px"}}>×</span>
+              </div>
             </div>);})}
           {ord.length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{(bRef||bDesc)?"Nenhum produto encontrado":"Nenhum produto cadastrado"}</div>}
         </div>
@@ -6517,7 +6536,7 @@ const FichaTecnicaContent=()=>{
     ftAbrirWhatsApp(t);
   };
 
-  if(tela==="lista")return <FichaLista produtos={produtos} colecoesUnicas={colecoesUnicas} onSelect={selecionarProduto} onVoltar={function(){setTela("home");}}/>;
+  if(tela==="lista")return <FichaLista produtos={produtos} colecoesUnicas={colecoesUnicas} onSelect={selecionarProduto} onVoltar={function(){setTela("home");}} onEditar={function(p){setEditProd(p);setTela("editar");}} onExcluir={function(p){atualizarProdutos(function(ps){return ps.filter(function(x){return x.id!==p.id;});});if(prodSel&&prodSel.id===p.id){setProdSel(null);setBuscaRef("");}}}/>;
   if(tela==="novo")return <FichaFormProd produtos={produtos} colecoesUnicas={colecoesUnicas} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onVoltar={function(){setTela("home");}} onSalvar={function(np){np._mod=Date.now();atualizarProdutos(function(ps){return ps.concat([np]);});setProdSel(np);setBuscaRef(np.ref);setTela("home");}}/>;
   if(tela==="editar"&&editProd)return <FichaFormProd inicial={editProd} produtos={produtos} colecoesUnicas={colecoesUnicas} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onVoltar={function(){setTela("home");}} onSalvar={function(np){np._mod=Date.now();atualizarProdutos(function(ps){return ps.map(function(p){return p.id===editProd.id?np:p;});});if(prodSel&&prodSel.id===editProd.id)setProdSel(np);setTela("home");}}/>;
   if(tela==="analise")return <FichaAnalise produtos={produtos} precosSalvos={precosSalvos} onSalvarPreco={salvarPrecoCanal} onSalvarProduto={function(np){np._mod=Date.now();atualizarProdutos(function(ps){return ps.map(function(p){return p.id===np.id?np:p;});});if(prodSel&&prodSel.id===np.id)setProdSel(np);}} onVoltar={function(){setTela("home");}}/>;
