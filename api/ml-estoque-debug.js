@@ -166,6 +166,85 @@ export default async function handler(req, res) {
       skusDasRefsOk[refOk] = data;
     }
 
+    // ── 9. Diagnóstico ULTRA específico pra ref 02277/2277 ──
+    // Pergunta: quantos pedidos do Bling têm essa ref? Os itens têm código?
+    //          Os códigos batem com os SKUs do ML Lumia?
+    const { data: pedidosComRef } = await supabase
+      .from('bling_vendas_detalhe')
+      .select('pedido_id, data_pedido, conta, itens')
+      .limit(2000);
+
+    let pedidosTotal = pedidosComRef?.length || 0;
+    let itensTotal = 0;
+    let itensDa2277 = 0;
+    let itensDa2277SemCodigo = 0;
+    let itensDa2277ComCodigo = 0;
+    const codigosUnicos2277 = new Map(); // codigo → qtdVezes
+    const refOriginaisVariantes = new Map(); // ref parseada → qtdVezes
+
+    for (const p of (pedidosComRef || [])) {
+      for (const it of (p.itens || [])) {
+        itensTotal++;
+        const refN = normRef(it.ref);
+        if (refN === '2277') {
+          itensDa2277++;
+          refOriginaisVariantes.set(it.ref || '(vazio)', (refOriginaisVariantes.get(it.ref || '(vazio)') || 0) + 1);
+          if (!it.codigo || !it.codigo.trim()) {
+            itensDa2277SemCodigo++;
+          } else {
+            itensDa2277ComCodigo++;
+            codigosUnicos2277.set(it.codigo, (codigosUnicos2277.get(it.codigo) || 0) + 1);
+          }
+        }
+      }
+    }
+
+    // Verificar se esses códigos existem no snapshot ML
+    const codigosList = Array.from(codigosUnicos2277.keys());
+    const { data: matchesML } = codigosList.length > 0
+      ? await supabase.from('ml_estoque_snapshot').select('sku, item_id, ml_title, available').in('sku', codigosList)
+      : { data: [] };
+
+    // Ver se Lumia tem um anúncio com "02277" ou "2277" no título
+    let anunciosComRef2277 = [];
+    try {
+      const token = await getValidToken('Lumia');
+      const { data: tokRec } = await supabase.from('ml_tokens').select('seller_id').eq('brand', 'Lumia').single();
+      const sellerId = tokRec?.seller_id;
+      // Busca com filtro por texto
+      const sr = await fetch(
+        `${ML_API}/users/${sellerId}/items/search?q=02277&status=active&limit=10`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const srData = await sr.json();
+      const ids = srData.results || [];
+      if (ids.length > 0) {
+        const multi = await fetch(
+          `${ML_API}/items?ids=${ids.slice(0, 5).join(',')}&attributes=id,title,status,variations,seller_custom_field`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const arr = await multi.json();
+        for (const entry of arr) {
+          if (entry.code === 200 && entry.body) {
+            const item = entry.body;
+            const firstVar = (item.variations || [])[0];
+            const firstSku = firstVar ? (firstVar.attributes || []).find(a => a.id === 'SELLER_SKU')?.value_name : null;
+            anunciosComRef2277.push({
+              mlb: item.id,
+              title: item.title,
+              status: item.status,
+              seller_custom_field: item.seller_custom_field,
+              qtd_variacoes: (item.variations || []).length,
+              primeiro_sku: firstSku,
+              primeiros_3_skus: (item.variations || []).slice(0, 3).map(v => (v.attributes || []).find(a => a.id === 'SELLER_SKU')?.value_name),
+            });
+          }
+        }
+      }
+    } catch (e) {
+      anunciosComRef2277 = [{ erro: e.message }];
+    }
+
     // ── 7. Retorna ──
     return res.json({
       ok: true,
@@ -201,6 +280,18 @@ export default async function handler(req, res) {
         comentario: "Mostrando SKUs das refs que bateram com Calculadora",
         refs_ok: skusDasRefsOk,
       },
+      AUTOPSIA_REF_2277: {
+        pedidos_bling_analisados: pedidosTotal,
+        itens_total_analisados: itensTotal,
+        itens_da_2277: itensDa2277,
+        itens_da_2277_sem_codigo: itensDa2277SemCodigo,
+        itens_da_2277_com_codigo: itensDa2277ComCodigo,
+        formatos_ref_encontrados: Object.fromEntries(refOriginaisVariantes),
+        codigos_distintos: codigosUnicos2277.size,
+        amostra_codigos: Array.from(codigosUnicos2277.entries()).slice(0, 10).map(([c, q]) => ({ codigo: c, apareceu_vezes: q })),
+        esses_codigos_existem_no_ml_snapshot: matchesML || [],
+      },
+      ANUNCIOS_LUMIA_COM_02277: anunciosComRef2277,
       anuncio_com_variacao: anuncioRaw,
       anuncio_sem_variacao: anuncioSemVarRaw,
     });
