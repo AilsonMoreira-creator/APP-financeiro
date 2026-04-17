@@ -1,69 +1,79 @@
 /**
- * ml-estoque-import-scf-bling-pdf.js — Importa os 53 pares ref→sku_pai
- * extraídos do PDF "Relatório de Produtos" do Bling em 17/abr/2026
+ * ml-estoque-import-scf-bling-pdf.js
+ * 
+ * Popula ml_scf_ref_map com os pares ref→sku_pai conhecidos.
+ * Fonte principal: PDF "Relatório de Produtos" Bling (17/abr/2026) — 53 pares.
+ * Fonte complementar: SCFs órfãos que o Ailson confirmou manualmente — 3 pares.
  *
- * POST /api/ml-estoque-import-scf-bling-pdf  (sem body necessário)
- *   → popula ml_scf_ref_map com os 53 pares ref→scf já extraídos
+ * Acesse via GET ou POST (sem body necessário). Idempotente.
  */
 import { supabase } from './_ml-helpers.js';
 
-// Extraídos manualmente do PDF enviado pelo Ailson (Bling_-_Relato_rio_de_Produtos.pdf)
-// Formato: ref normalizada → sku pai (seller_custom_field no ML)
-const MAPPING = {
-  '5':    'z23101938082',
-  '1287': 'z23042792980',
-  '1871': 'z23041920878',
-  '2134': 'z23062789886',
-  '2136': 'z23111549252',
-  '2267': 'z23042228451',
-  '2274': 'z23042993226',
-  '2277': 'z23071326203',
-  '2321': 'z23070182585',
-  '2329': 'z23071294758',
-  '2339': 'z23081248458',
-  '2347': 'z23071231159',
-  '2352': 'z23071261461',
-  '2353': 'z23062616468',
-  '2358': 'z23062392244',
-  '2361': 'z23062160770',
-  '2362': 'z23062174146',
-  '2382': 'z23082339979',
-  '2410': 'z23100673177',
-  '2413': 'z24022868661',
-  '2472': 'z24022801195',
-  '2502': 'z24022865561',
-  '2534': 'z24041337932',
-  '2544': 'z23062710147',
-  '2553': 'z230627101478',
-  '2592': 'z24062834311',
-  '2600': 'z23111549264',
-  '2601': 'z231020958987',
-  '2638': 'z24070665696',
-  '2655': 'z24070665797',
-  '2671': 'z240706658101',
-  '2700': 'z23042966435',
-  '2708': 'z2304224848',
-  '2723': 'z230422484952',
-  '2733': 'z240706657101',
-  '2773': 'z23042236352',
-  '2776': 'z230419120282',
-  '2780': 'z230422363523',
-  '2782': 'z230422363553',
-  '2790': 'z2304200525',
-  '2798': 'z23042425459',
-  '2820': 'z230422454415578',
-  '2822': 'z231115492642738',
-  '2823': 'z230429664353117',
-  '2832': 'z2304296643501587',
-  '2864': 'z231115492647980',
-  '2881': 'z2304296643511085',
-  '2891': 'z23042478459453',
-  '2902': 'z2304191202847810',
-  '2927': 'z230422363585367',
-  '2934': 'z2304223635237650',
-  '3150': 'z2304223635853152671',
-  '3186': 'z2304224544174521',
-};
+// ── 53 pares extraídos do PDF do Bling ──
+// Convenção: cada produto-pai no Bling tem um único scf (começa com 'z'),
+// extraído da linha do cabeçalho do produto (sem Cor: / Tamanho:).
+const PAIRS_PDF = [
+  { ref: '5',    scf: 'z23101938082' },
+  { ref: '1287', scf: 'z23042792980' },
+  { ref: '1871', scf: 'z23041920878' },
+  { ref: '2134', scf: 'z23062789886' },
+  { ref: '2136', scf: 'z23111549252' },
+  { ref: '2267', scf: 'z23042228451' },
+  { ref: '2274', scf: 'z23042993226' },
+  { ref: '2277', scf: 'z23071326203' },
+  { ref: '2321', scf: 'z23070182585' },
+  { ref: '2329', scf: 'z23071294758' },
+  { ref: '2339', scf: 'z23081248458' },
+  { ref: '2347', scf: 'z23071231159' },
+  { ref: '2352', scf: 'z23071261461' },
+  { ref: '2353', scf: 'z23062616468' },
+  { ref: '2358', scf: 'z23062392244' },
+  { ref: '2361', scf: 'z23062160770' },
+  { ref: '2362', scf: 'z23062174146' },
+  { ref: '2382', scf: 'z23082339979' },
+  { ref: '2410', scf: 'z23100673177' },
+  { ref: '2413', scf: 'z24022868661' },
+  { ref: '2472', scf: 'z24022801195' },
+  { ref: '2502', scf: 'z24022865561' },
+  { ref: '2534', scf: 'z24041337932' },
+  { ref: '2544', scf: 'z23062710147' },
+  { ref: '2553', scf: 'z230627101478' },
+  { ref: '2592', scf: 'z24062834311' },
+  { ref: '2600', scf: 'z23111549264' },
+  { ref: '2601', scf: 'z231020958987' },
+  { ref: '2638', scf: 'z24070665696' },
+  { ref: '2655', scf: 'z24070665797' },
+  { ref: '2671', scf: 'z240706658101' },
+  { ref: '2700', scf: 'z23042966435' },
+  { ref: '2708', scf: 'z2304224848' },
+  { ref: '2723', scf: 'z230422484952' },
+  { ref: '2733', scf: 'z240706657101' },
+  { ref: '2773', scf: 'z23042236352' },
+  { ref: '2776', scf: 'z230419120282' },
+  { ref: '2780', scf: 'z230422363523' },
+  { ref: '2782', scf: 'z230422363553' },
+  { ref: '2790', scf: 'z2304200525' },
+  { ref: '2798', scf: 'z23042425459' },
+  { ref: '2820', scf: 'z230422454415578' },
+  { ref: '2822', scf: 'z231115492642738' },
+  { ref: '2823', scf: 'z230429664353117' },
+  { ref: '2832', scf: 'z2304296643501587' },
+  { ref: '2864', scf: 'z231115492647980' },
+  { ref: '2881', scf: 'z2304296643511085' },
+  { ref: '2891', scf: 'z23042478459453' },
+  { ref: '2902', scf: 'z2304191202847810' },
+  { ref: '2927', scf: 'z230422363585367' },
+  { ref: '2934', scf: 'z2304223635237650' },
+  { ref: '3150', scf: 'z2304223635853152671' },
+  { ref: '3186', scf: 'z2304224544174521' },
+];
+
+// ── SCFs órfãos confirmados pelo Ailson (não estão no PDF mas ativos na Lumia) ──
+const PAIRS_MANUAL = [
+  { ref: '376',  scf: 'z23041476303', obs: 'Body transpassado decote V poliamida (ref 0376)' },
+  { ref: '395',  scf: 'z23041818108', obs: 'Body malha poliamida premium (ref 0395)' },
+  { ref: '2277', scf: 'z23042054535', obs: 'Segundo scf pai antigo da ref 02277 (saia linho super nobre)' },
+];
 
 export default async function handler(req, res) {
   try {
@@ -71,17 +81,26 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: 'Use GET ou POST' });
     }
 
-    const rows = Object.entries(MAPPING).map(([ref, scf]) => ({
-      scf,
-      ref,
-      origem: 'pdf_bling_20260417',
-      observacao: 'Extraído do PDF Relatório de Produtos Bling enviado 17/abr/2026',
-      updated_at: new Date().toISOString(),
-    }));
+    const todos = [
+      ...PAIRS_PDF.map(p => ({
+        scf: p.scf,
+        ref: p.ref,
+        origem: 'pdf_bling_20260417',
+        observacao: null,
+        updated_at: new Date().toISOString(),
+      })),
+      ...PAIRS_MANUAL.map(p => ({
+        scf: p.scf,
+        ref: p.ref,
+        origem: 'manual_ailson',
+        observacao: p.obs,
+        updated_at: new Date().toISOString(),
+      })),
+    ];
 
     let inseridos = 0;
-    for (let i = 0; i < rows.length; i += 100) {
-      const batch = rows.slice(i, i + 100);
+    for (let i = 0; i < todos.length; i += 100) {
+      const batch = todos.slice(i, i + 100);
       const { error } = await supabase
         .from('ml_scf_ref_map')
         .upsert(batch, { onConflict: 'scf' });
@@ -91,10 +110,13 @@ export default async function handler(req, res) {
 
     return res.json({
       ok: true,
-      total_rows: rows.length,
+      total_scfs: todos.length,
       inseridos,
-      observacao: 'Mapa carregado. Roda /api/ml-estoque-cron pra resolver as refs.',
-      amostra: rows.slice(0, 5),
+      origem: {
+        pdf_bling: PAIRS_PDF.length,
+        manual_ailson: PAIRS_MANUAL.length,
+      },
+      proximo_passo: 'Agora abre /api/ml-estoque-cron pra rodar o sync',
     });
   } catch (e) {
     return res.status(500).json({ erro: e.message });
