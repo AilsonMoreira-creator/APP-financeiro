@@ -93,7 +93,50 @@ export default async function handler(req, res) {
       anuncioRaw = { erro_busca: e.message };
     }
 
-    // ── 6. Retorna ──
+    // ── 6. Diagnóstico crítico: refs da Calculadora vs. refs encontradas no mapa ──
+    //    Ref que o mapa tem mas Calculadora não, NÃO aparece no ml_estoque_ref_atual
+    function normRef(r) { return String(r || '').replace(/\D/g, '').replace(/^0+/, '').trim(); }
+
+    const { data: calcData } = await supabase.from('amicia_data')
+      .select('payload').eq('user_id', 'calc-meluni').maybeSingle();
+    const prodsCalc = calcData?.payload?.prods || [];
+    const refsCalculadora = prodsCalc.map(p => normRef(p.ref)).filter(Boolean);
+
+    // Pega TODAS as refs distintas do mapa (pra saber o que o Bling conhece)
+    const refsDoMapaSet = new Set();
+    let off = 0;
+    while (true) {
+      const { data } = await supabase.from('ml_sku_ref_map').select('ref').range(off, off + 999);
+      if (!data || data.length === 0) break;
+      for (const r of data) refsDoMapaSet.add(normRef(r.ref));
+      if (data.length < 1000) break;
+      off += 1000;
+    }
+    const refsDoMapa = Array.from(refsDoMapaSet).sort();
+
+    // Simula resolução: pegar TODAS as refs que o snapshot conseguiria resolver
+    const { data: snapshotTodo } = await supabase.from('ml_estoque_snapshot').select('sku');
+    const skusNoSnapshot = new Set((snapshotTodo || []).map(s => s.sku));
+
+    const { data: mapaTodo } = await supabase.from('ml_sku_ref_map').select('sku, ref').range(0, 9999);
+    const refsResolvidasSnapshot = new Set();
+    for (const m of (mapaTodo || [])) {
+      if (skusNoSnapshot.has(m.sku)) refsResolvidasSnapshot.add(normRef(m.ref));
+    }
+
+    const calcSet = new Set(refsCalculadora);
+    const refsResolvidasNaCalc = [];
+    const refsResolvidasForaCalc = [];
+    for (const r of refsResolvidasSnapshot) {
+      if (calcSet.has(r)) refsResolvidasNaCalc.push(r);
+      else refsResolvidasForaCalc.push(r);
+    }
+    const calcSemDadosSet = [];
+    for (const r of refsCalculadora) {
+      if (!refsResolvidasSnapshot.has(r)) calcSemDadosSet.push(r);
+    }
+
+    // ── 7. Retorna ──
     return res.json({
       ok: true,
       totais: {
@@ -106,6 +149,19 @@ export default async function handler(req, res) {
         skus_snapshot_testados: skusDoSnapshot,
         encontrados_no_mapa: matches,
         qtd_encontrados: matches?.length || 0,
+      },
+      DIAGNOSTICO_REFS: {
+        qtd_refs_calculadora: refsCalculadora.length,
+        qtd_refs_unicas_no_mapa: refsDoMapa.length,
+        qtd_refs_que_snapshot_resolveria: refsResolvidasSnapshot.size,
+        qtd_resolvidas_que_estao_na_calc: refsResolvidasNaCalc.length,
+        qtd_resolvidas_QUE_NAO_ESTAO_na_calc: refsResolvidasForaCalc.length,
+        qtd_calc_SEM_dados_no_snapshot: calcSemDadosSet.length,
+
+        refs_calculadora_sample: refsCalculadora.slice(0, 50),
+        refs_resolvidas_DENTRO_calc: refsResolvidasNaCalc.sort(),
+        refs_resolvidas_FORA_calc_amostra: refsResolvidasForaCalc.slice(0, 30),
+        refs_calc_SEM_dados_amostra: calcSemDadosSet.slice(0, 30),
       },
       anuncio_com_variacao: anuncioRaw,
       anuncio_sem_variacao: anuncioSemVarRaw,
