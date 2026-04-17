@@ -187,6 +187,29 @@ function extractRefFromCustomField(scf, scfMap) {
   return null;
 }
 
+// ── 5b. EXTRAIR REF DO TÍTULO DO ANÚNCIO ──
+// Fallback pra anúncios novos sem venda (não entram no mapa SKU→ref)
+// cujo SCF também não está mapeado.
+// Padrões típicos do título espelhado do Ideris:
+//   "Camisa De Tricoline Estruturada Com Design Moderno (03186)"
+//   "Vestido Plus Size Verona (ref 02934)"
+//   "Vestido Midi De Couro (ref 02927) Lumia/Exitus/Muniam"
+// Tenta em ordem: (ref XXXX) → (XXXX) → "ref XXXX"
+function extractRefFromTitle(title) {
+  if (!title) return null;
+  const t = String(title);
+  // Caminho A: "(ref 02934)" — mais confiável, marcação explícita
+  const mRef = t.match(/\(\s*ref\.?\s*(\d{3,5})\s*\)/i);
+  if (mRef) return normRef(mRef[1]);
+  // Caminho B: "(03186)" — dígitos sozinhos entre parênteses
+  const mPar = t.match(/\((\d{3,5})\)/);
+  if (mPar) return normRef(mPar[1]);
+  // Caminho C: "ref 02934" fora de parênteses
+  const mRefSolto = t.match(/(?:^|[\s,;])ref\.?\s*(\d{3,5})(?:[\s,;.]|$)/i);
+  if (mRefSolto) return normRef(mRefSolto[1]);
+  return null;
+}
+
 // ── HANDLER PRINCIPAL ──────────────────────────────────────
 export default async function handler(req, res) {
   const inicio = Date.now();
@@ -253,6 +276,7 @@ export default async function handler(req, res) {
     let multigetErroCode = 0;
     let anunciosSemSkuEmNenhumaVar = 0;
     let anunciosComRefDireta = 0;  // NOVO: anúncios cuja ref veio do custom_field
+    let anunciosRefViaTitle = 0;   // NOVO: anúncios cuja ref veio do título (fallback)
 
     for (let i = 0; i < itemIds.length; i += 20) {
       if (Date.now() - inicio > 240000) {
@@ -283,9 +307,15 @@ export default async function handler(req, res) {
         const varList = [];
         let totalEstoque = 0;
 
-        // NOVO: Tenta extrair ref DIRETO do seller_custom_field
+        // Tenta extrair ref DIRETO do seller_custom_field (caminho principal)
         // Hierarquia: scfToRef (manual) > regex "(02277)" > regex só dígitos
-        const refDireta = extractRefFromCustomField(sellerField, scfToRef);
+        let refDireta = extractRefFromCustomField(sellerField, scfToRef);
+        let refDiretaFonte = refDireta ? 'scf' : null;
+        // Fallback: extrai do título do anúncio (resolve produtos novos sem venda)
+        if (!refDireta) {
+          const refTitle = extractRefFromTitle(title);
+          if (refTitle) { refDireta = refTitle; refDiretaFonte = 'title'; }
+        }
 
         if (variations.length > 0) {
           for (const v of variations) {
@@ -348,8 +378,9 @@ export default async function handler(req, res) {
         }
 
         if (refDireta) anunciosComRefDireta++;
+        if (refDiretaFonte === 'title') anunciosRefViaTitle++;
 
-        mlbInfo[itemId] = { title, variations: varList, total: totalEstoque, refDireta };
+        mlbInfo[itemId] = { title, variations: varList, total: totalEstoque, refDireta, refDiretaFonte };
         if (varList.length === 0) anunciosSemSkuEmNenhumaVar++;
       }
 
@@ -362,6 +393,7 @@ export default async function handler(req, res) {
     resumo.multiget_erro_code = multigetErroCode;
     resumo.anuncios_sem_sku = anunciosSemSkuEmNenhumaVar;
     resumo.anuncios_com_ref_direta = anunciosComRefDireta;
+    resumo.anuncios_ref_via_title = anunciosRefViaTitle;
 
     // ═══ FASE 5: reescrever ml_estoque_snapshot ═══
     resumo.fase = 'snapshot_write';
