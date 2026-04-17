@@ -83,6 +83,25 @@ export default async function handler(req, res) {
       const json = await resp.json();
       const lista = json?.data || [];
 
+      // Debug: na primeira página, guarda amostra do que a API Bling retornou
+      if (pagina === 1) {
+        resumo.primeira_pagina_status = resp.status;
+        resumo.primeira_pagina_total_itens = lista.length;
+        resumo.primeira_pagina_exemplo = lista[0] ? {
+          id: lista[0].id,
+          codigo: lista[0].codigo,
+          nome: lista[0].nome,
+          tipo: lista[0].tipo,
+          situacao: lista[0].situacao,
+          formato: lista[0].formato,
+          keys: Object.keys(lista[0]).slice(0, 20),
+        } : null;
+        if (!lista[0]) {
+          resumo.primeira_pagina_raw_keys = Object.keys(json || {});
+          resumo.primeira_pagina_raw_sample = JSON.stringify(json).slice(0, 400);
+        }
+      }
+
       if (lista.length === 0) break;
       resumo.paginas_lidas++;
 
