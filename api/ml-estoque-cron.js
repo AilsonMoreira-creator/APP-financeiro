@@ -167,16 +167,22 @@ function extractSellerSku(attrs) {
   return null;
 }
 
-// ── 5. EXTRAIR REF DO seller_custom_field (formato "z23041912028(02277)") ──
-// Fallback crucial pros anúncios antigos da Lumia onde variações não têm SELLER_SKU
-// mas o campo pai tem a ref entre parênteses.
-function extractRefFromCustomField(scf) {
+// ── 5. EXTRAIR REF DO seller_custom_field ──
+// Hierarquia:
+//   1. Se scfMap tem esse scf exato, usa o ref do mapa (caminho principal — 95%)
+//   2. Se scf tem padrão "xxx(02277)", extrai os dígitos entre parênteses
+//   3. Se scf é só dígitos (ex: "02277"), usa direto
+//   4. null caso contrário
+function extractRefFromCustomField(scf, scfMap) {
   if (!scf) return null;
-  // Padrão principal: qualquer coisa + (XXXXX) com 3-5 dígitos
-  const m = String(scf).match(/\((\d{3,5})\)/);
+  const scfTrim = String(scf).trim();
+  // Caminho 1: match direto no mapa (produto-pai Ideris)
+  if (scfMap && scfMap.has(scfTrim)) return scfMap.get(scfTrim);
+  // Caminho 2: regex parênteses "(02277)"
+  const m = scfTrim.match(/\((\d{3,5})\)/);
   if (m) return normRef(m[1]);
-  // Fallback: campo inteiro é só a ref (ex: "02277")
-  const m2 = String(scf).match(/^\s*0*(\d{3,5})\s*$/);
+  // Caminho 3: campo inteiro é só a ref (ex: "02277")
+  const m2 = scfTrim.match(/^\s*0*(\d{3,5})\s*$/);
   if (m2) return normRef(m2[1]);
   return null;
 }
@@ -218,6 +224,25 @@ export default async function handler(req, res) {
     resumo.total_anuncios = itemIds.length;
     console.log(`[estoque-cron] Lumia: ${itemIds.length} anúncios ativos`);
 
+    // ═══ FASE 3.5: carregar mapa SCF→REF (código-pai Ideris → ref interna) ═══
+    // É o caminho principal pra resolver anúncios antigos (95% da Lumia).
+    // Populado manualmente via /api/ml-estoque-import-scf
+    resumo.fase = 'carregar_scf_map';
+    const scfToRef = new Map();
+    let scfPage = 0;
+    while (true) {
+      const { data: page } = await supabase
+        .from('ml_scf_ref_map')
+        .select('scf, ref')
+        .range(scfPage, scfPage + 999);
+      if (!page || page.length === 0) break;
+      for (const row of page) scfToRef.set(row.scf.trim(), normRef(row.ref));
+      if (page.length < 1000) break;
+      scfPage += 1000;
+    }
+    resumo.scf_map_carregado = scfToRef.size;
+    console.log(`[estoque-cron] scf map: ${scfToRef.size} entries`);
+
     // ═══ FASE 4: multiget e extração ═══
     resumo.fase = 'multiget';
     const snapshotRows = [];
@@ -258,9 +283,9 @@ export default async function handler(req, res) {
         const varList = [];
         let totalEstoque = 0;
 
-        // NOVO: Tenta extrair ref DIRETO do seller_custom_field (formato "xxx(02277)")
-        // Esse é o caminho pros anúncios antigos onde variação não tem SELLER_SKU
-        const refDireta = extractRefFromCustomField(sellerField);
+        // NOVO: Tenta extrair ref DIRETO do seller_custom_field
+        // Hierarquia: scfToRef (manual) > regex "(02277)" > regex só dígitos
+        const refDireta = extractRefFromCustomField(sellerField, scfToRef);
 
         if (variations.length > 0) {
           for (const v of variations) {

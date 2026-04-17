@@ -60,3 +60,17 @@ CREATE TABLE IF NOT EXISTS ml_estoque_total_mensal (
   snapshot_date DATE DEFAULT CURRENT_DATE,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 5. MAPA SCF → REF (NOVO)
+-- scf = seller_custom_field = código do produto-pai no Ideris/Bling
+-- Ex: z23041912028 → ref 2277
+-- Esse mapa é populado via upload manual (endpoint /api/ml-estoque-import-scf)
+-- Cobre 95% dos anúncios da Lumia que não têm SELLER_SKU preenchido nas variações
+CREATE TABLE IF NOT EXISTS ml_scf_ref_map (
+  scf TEXT PRIMARY KEY,                      -- código pai (ex: "z23041912028")
+  ref TEXT NOT NULL,                         -- ref normalizada (ex: "2277")
+  origem TEXT DEFAULT 'manual',              -- manual | import_csv | import_json
+  observacao TEXT,                           -- espaço pra nota do usuário
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_scf_ref ON ml_scf_ref_map(ref);
