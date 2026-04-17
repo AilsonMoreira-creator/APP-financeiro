@@ -84,7 +84,7 @@ export default async function handler(req, res) {
         resumo.scf_atualizado = existSCF.ref !== ref;
         if (!dry && existSCF.ref !== ref) {
           const { error } = await supabase.from('ml_scf_ref_map')
-            .update({ ref, fonte: 'manual', updated_at: new Date().toISOString() })
+            .update({ ref, origem: 'manual_ailson', updated_at: new Date().toISOString() })
             .eq('scf', parent);
           if (error) throw new Error('update scf_ref_map: ' + error.message);
         }
@@ -92,7 +92,7 @@ export default async function handler(req, res) {
         resumo.scf_inserido = true;
         if (!dry) {
           const { error } = await supabase.from('ml_scf_ref_map')
-            .insert({ scf: parent, ref, fonte: 'manual' });
+            .insert({ scf: parent, ref, origem: 'manual_ailson' });
           if (error) throw new Error('insert scf_ref_map: ' + error.message);
         }
       }
