@@ -136,6 +136,36 @@ export default async function handler(req, res) {
       if (!refsResolvidasSnapshot.has(r)) calcSemDadosSet.push(r);
     }
 
+    // ── 8. Verificação final: ref 2782 (da Calculadora, sem dados) está em algum pedido Bling? ──
+    // Pega 3 refs da Calc sem dados e procura em qualquer pedido do Bling
+    const refsTest = calcSemDadosSet.slice(0, 5);
+    const refsEncontradasEmPedidos = {};
+    for (const refTest of refsTest) {
+      const { data: samples } = await supabase
+        .from('bling_vendas_detalhe')
+        .select('pedido_id, data_pedido, itens')
+        .limit(500);
+      let encontrou = [];
+      for (const p of (samples || [])) {
+        for (const it of (p.itens || [])) {
+          if (normRef(it.ref) === refTest) {
+            encontrou.push({ pedido: p.pedido_id, data: p.data_pedido, codigo: it.codigo, ref_original: it.ref });
+            if (encontrou.length >= 3) break;
+          }
+        }
+        if (encontrou.length >= 3) break;
+      }
+      refsEncontradasEmPedidos[refTest] = encontrou;
+    }
+
+    // Também: pega 3 refs do mapa (que bateram com Calc) e mostra
+    const refsOk = refsResolvidasNaCalc.slice(0, 3);
+    const skusDasRefsOk = {};
+    for (const refOk of refsOk) {
+      const { data } = await supabase.from('ml_sku_ref_map').select('sku, ref, ultima_venda').eq('ref', refOk).limit(5);
+      skusDasRefsOk[refOk] = data;
+    }
+
     // ── 7. Retorna ──
     return res.json({
       ok: true,
@@ -162,6 +192,14 @@ export default async function handler(req, res) {
         refs_resolvidas_DENTRO_calc: refsResolvidasNaCalc.sort(),
         refs_resolvidas_FORA_calc_amostra: refsResolvidasForaCalc.slice(0, 30),
         refs_calc_SEM_dados_amostra: calcSemDadosSet.slice(0, 30),
+      },
+      VERIFICACAO_BLING: {
+        comentario: "Procurando 5 refs da Calculadora sem dados em qualquer pedido Bling (500 mais recentes)",
+        refs_testadas: refsEncontradasEmPedidos,
+      },
+      VERIFICACAO_MAPA_OK: {
+        comentario: "Mostrando SKUs das refs que bateram com Calculadora",
+        refs_ok: skusDasRefsOk,
       },
       anuncio_com_variacao: anuncioRaw,
       anuncio_sem_variacao: anuncioSemVarRaw,
