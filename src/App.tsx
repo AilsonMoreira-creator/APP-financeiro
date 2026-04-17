@@ -3789,6 +3789,281 @@ const FotoProd=({sbUrl,refProd,onZoom})=>{
     style={{width:34,height:44,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",flexShrink:0,cursor:"pointer"}}/>;
 };
 
+const FotoProdLarge=({sbUrl,refProd,onZoom})=>{
+  const orig=String(refProd).toUpperCase();
+  const norm=orig.replace(/^0+/,'');
+  const storageBase=sbUrl?`${sbUrl}/storage/v1/object/public/produtos/`:'';
+  const cb='?v='+new Date().toISOString().slice(0,10);
+  if(!storageBase)return <div style={{width:"100%",aspectRatio:"3/4",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)",display:"flex",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {String(refProd)}</div>;
+  const urls=[norm+'.jpg',norm+'.png',norm+'.webp'];
+  if(orig!==norm)urls.push(orig+'.jpg',orig+'.png',orig+'.webp');
+  const pad4=norm.padStart(4,'0');const pad5=norm.padStart(5,'0');
+  if(pad4!==norm&&pad4!==orig)urls.push(pad4+'.jpg',pad4+'.png',pad4+'.webp');
+  if(pad5!==norm&&pad5!==orig&&pad5!==pad4)urls.push(pad5+'.jpg',pad5+'.png',pad5+'.webp');
+  return(<div style={{width:"100%",aspectRatio:"3/4",position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)"}}>
+    <img src={storageBase+urls[0]+cb}
+      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
+      onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(e.target.src);}}
+      style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer",display:"block"}}/>
+    <div style={{display:"none",width:"100%",height:"100%",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {String(refProd)}</div>
+  </div>);
+};
+
+// ── Tela de Estoque (ML Lumia proxy) ─────────────────────────────────────────
+const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
+  const [dados,setDados]=useState(null); // {total_geral, refs, historico, ultimaSync}
+  const [loading,setLoading]=useState(true);
+  const [erro,setErro]=useState(null);
+  const [view,setView]=useState("grid"); // "grid" | "list"
+  const [busca,setBusca]=useState("");
+  const [modalRef,setModalRef]=useState(null); // ref selecionada
+  const [syncing,setSyncing]=useState(false);
+  const [calcDesc,setCalcDesc]=useState({}); // ref → descricao da Calculadora
+
+  const carregarCalc=async()=>{
+    try{
+      const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').maybeSingle();
+      const prods=data?.payload?.prods||[];
+      const map={};
+      prods.forEach(p=>{const rk=String(p.ref||'').replace(/\D/g,'').replace(/^0+/,'');if(rk)map[rk]=p.descricao||'';});
+      setCalcDesc(map);
+    }catch(e){console.error('calc desc:',e.message);}
+  };
+
+  const carregar=async()=>{
+    setLoading(true);setErro(null);
+    try{
+      const r=await fetch('/api/ml-estoque?action=list');
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const d=await r.json();
+      setDados(d);
+    }catch(e){setErro(e.message);}
+    finally{setLoading(false);}
+  };
+
+  const forcarSync=async()=>{
+    if(syncing)return;
+    setSyncing(true);
+    try{
+      const r=await fetch('/api/ml-estoque',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"sync_now"})});
+      if(!r.ok)throw new Error('Falha ao sincronizar');
+      await new Promise(rr=>setTimeout(rr,1500));
+      await carregar();
+    }catch(e){alert('Erro: '+e.message);}
+    finally{setSyncing(false);}
+  };
+
+  useEffect(()=>{carregarCalc();carregar();},[]);
+
+  const refs=useMemo(()=>{
+    const arr=(dados?.refs||[]).filter(r=>!r.sem_dados);
+    const q=busca.trim().toLowerCase();
+    if(!q)return arr;
+    return arr.filter(r=>{
+      const rk=String(r.ref).toLowerCase();
+      const desc=(calcDesc[r.ref]||r.descricao||'').toLowerCase();
+      return rk.includes(q)||desc.includes(q);
+    });
+  },[dados,busca,calcDesc]);
+
+  const totalGeral=dados?.total_geral||0;
+  const qtdRefsAtivas=refs.length;
+  const qtdVariacoes=useMemo(()=>refs.reduce((a,r)=>a+(r.variations?.length||0),0),[refs]);
+
+  // Histórico 12 meses — vem do back (tabela ml_estoque_total_mensal) ou cria mock
+  const historico=useMemo(()=>{
+    const h=dados?.historico||[];
+    // h esperado: [{ano_mes:"2026-04", qtd_total:N}, ...]
+    // Se faltar, preenche os últimos 12 meses com 0
+    const hoje=new Date();
+    const meses=[];
+    for(let i=11;i>=0;i--){
+      const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
+      const ym=d.toISOString().slice(0,7);
+      const encontrado=h.find(x=>x.ano_mes===ym);
+      const mesNome=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][d.getMonth()];
+      meses.push({ano_mes:ym,lbl:mesNome,qtd:encontrado?.qtd_total||(i===0?totalGeral:0)});
+    }
+    return meses;
+  },[dados,totalGeral]);
+
+  const maxHist=Math.max(1,...historico.map(m=>m.qtd));
+  const varPct=(()=>{
+    const atual=historico[historico.length-1]?.qtd||0;
+    const ant=historico[historico.length-2]?.qtd||0;
+    if(!ant)return null;
+    return Math.round(((atual-ant)/ant)*1000)/10;
+  })();
+
+  const selectedRef=modalRef?(dados?.refs||[]).find(r=>r.ref===modalRef):null;
+
+  if(loading){
+    return <div style={{padding:40,textAlign:"center",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>Carregando estoque...</div>;
+  }
+  if(erro){
+    return <div style={{padding:40,textAlign:"center",color:"#c0392b",fontFamily:"Georgia,serif"}}>Erro: {erro}<br/><button onClick={carregar} style={{marginTop:16,background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontFamily:"Georgia,serif"}}>Tentar de novo</button></div>;
+  }
+  if(!dados||refs.length===0 && !busca){
+    return <div style={{padding:40,textAlign:"center",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>
+      Nenhum dado de estoque ainda.<br/>
+      <button onClick={forcarSync} disabled={syncing} style={{marginTop:16,background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",opacity:syncing?0.7:1}}>
+        {syncing?"⏳ Sincronizando...":"🔄 Sincronizar agora"}
+      </button>
+    </div>;
+  }
+
+  const ultSync=dados?.ultima_sync?new Date(dados.ultima_sync).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';
+
+  return(<div>
+    {/* TOPO: total geral + gráfico 12 meses */}
+    <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:"16px 20px",marginBottom:14,display:"grid",gridTemplateColumns:"auto 1fr",gap:28,alignItems:"center"}}>
+      <div style={{borderRight:"1px solid #e8e2da",paddingRight:28}}>
+        <div style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Estoque total</div>
+        <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:38,fontWeight:700,color:"#2c3e50",lineHeight:1,margin:"4px 0 2px"}}>{totalGeral.toLocaleString('pt-BR')}</div>
+        <div style={{fontSize:11,color:"#8a9aa4"}}>em <b style={{color:"#2c3e50",fontWeight:700}}>{qtdRefsAtivas} refs ativas</b> · <b style={{color:"#2c3e50",fontWeight:700}}>{qtdVariacoes} variações</b></div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
+          <span style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Evolução últimos 12 meses</span>
+          {varPct!==null&&<span style={{fontSize:11,fontWeight:700,color:varPct>0?"#27ae60":varPct<0?"#c0392b":"#8a9aa4"}}>{varPct>0?"↑ +":varPct<0?"↓ ":"→ "}{Math.abs(varPct)}% vs mês passado</span>}
+        </div>
+        <div style={{display:"flex",gap:4,alignItems:"flex-end",height:52}}>
+          {historico.map((m,i)=>(
+            <div key={m.ano_mes} title={m.lbl+": "+m.qtd.toLocaleString('pt-BR')} style={{flex:1,background:i===historico.length-1?"#c19a3e":"#4a7fa5",borderRadius:"2px 2px 0 0",minHeight:3,height:`${(m.qtd/maxHist)*100}%`,transition:"background 0.15s"}}/>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:4,marginTop:2}}>
+          {historico.map(m=><div key={m.ano_mes} style={{flex:1,textAlign:"center",fontSize:9,color:"#8a9aa4",letterSpacing:0.3}}>{m.lbl}</div>)}
+        </div>
+      </div>
+    </div>
+
+    {/* Toolbar */}
+    <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:"10px 14px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+      <div style={{flex:1,minWidth:200,position:"relative"}}>
+        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#8a9aa4",fontSize:13,pointerEvents:"none"}}>🔍</span>
+        <input type="text" value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por referência ou descrição..." style={{width:"100%",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px 7px 32px",fontSize:13,fontFamily:"Georgia,serif",color:"#2c3e50",background:"#faf8f5",outline:"none"}}/>
+      </div>
+      <div style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>última sync: <b style={{color:"#2c3e50"}}>{ultSync}</b></div>
+      <button onClick={forcarSync} disabled={syncing} title="Forçar sync agora" style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#4a7fa5",opacity:syncing?0.5:1}}>{syncing?"⏳":"🔄"}</button>
+      <div style={{display:"flex",background:"#faf8f5",border:"1px solid #e8e2da",borderRadius:8,padding:3,gap:2}}>
+        <button onClick={()=>setView("grid")} style={{background:view==="grid"?"#2c3e50":"transparent",color:view==="grid"?"#fff":"#8a9aa4",border:"none",padding:"5px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontFamily:"Georgia,serif",fontWeight:600}}>▦ Grid</button>
+        <button onClick={()=>setView("list")} style={{background:view==="list"?"#2c3e50":"transparent",color:view==="list"?"#fff":"#8a9aa4",border:"none",padding:"5px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontFamily:"Georgia,serif",fontWeight:600}}>≡ Lista</button>
+      </div>
+    </div>
+
+    {/* Grid / Lista */}
+    {view==="grid"?(
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:10}}>
+        {refs.map(r=>{
+          const refN=String(r.ref);
+          const desc=calcDesc[refN]||r.descricao||'';
+          const qtd=r.qtd_total||0;
+          const low=qtd<5;
+          return(<div key={refN} onClick={()=>setModalRef(refN)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:10,overflow:"hidden",cursor:"pointer",transition:"all 0.15s",position:"relative"}}
+            onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 4px 14px rgba(44,62,80,0.08)";e.currentTarget.style.borderColor="#4a7fa5";}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";e.currentTarget.style.borderColor="#e8e2da";}}
+          >
+            {r.alerta_duplicata&&<div style={{position:"absolute",top:6,right:6,background:"#c19a3e",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2,zIndex:2}}>⚠ DUP</div>}
+            {low&&<div style={{position:"absolute",top:6,left:6,background:"#c0392b",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2,zIndex:2}}>BAIXO</div>}
+            <FotoProdLarge sbUrl={sbUrl} refProd={refN} onZoom={handleZoom}/>
+            <div style={{padding:"8px 10px 10px"}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",letterSpacing:0.3,marginBottom:2}}>{refN}</div>
+              <div style={{fontSize:10.5,color:"#2c3e50",lineHeight:1.25,minHeight:26,marginBottom:6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{desc}</div>
+              <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",paddingTop:6,borderTop:"1px solid #e8e2da"}}>
+                <div>
+                  <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:18,fontWeight:700,color:"#2c3e50",lineHeight:1}}>{qtd.toLocaleString('pt-BR')}</div>
+                  <div style={{fontSize:8,color:"#8a9aa4",letterSpacing:0.3,textTransform:"uppercase",marginTop:1}}>estoque</div>
+                </div>
+                <div style={{fontSize:9,color:"#8a9aa4"}}>{r.variations?.length||0} var</div>
+              </div>
+            </div>
+          </div>);
+        })}
+        {refs.length===0&&<div style={{gridColumn:"1/-1",padding:30,textAlign:"center",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>Nenhuma ref encontrada.</div>}
+      </div>
+    ):(
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {refs.map(r=>{
+          const refN=String(r.ref);
+          const desc=calcDesc[refN]||r.descricao||'';
+          const qtd=r.qtd_total||0;
+          const low=qtd<5;
+          return(<div key={refN} onClick={()=>setModalRef(refN)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:10,cursor:"pointer",display:"grid",gridTemplateColumns:"60px 1fr auto",gap:14,alignItems:"center",padding:"8px 14px 8px 8px",transition:"all 0.15s"}}
+            onMouseEnter={e=>{e.currentTarget.style.transform="translateX(2px)";e.currentTarget.style.borderColor="#4a7fa5";}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.borderColor="#e8e2da";}}
+          >
+            <div style={{width:60,aspectRatio:"3/4",borderRadius:6,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={refN} onZoom={handleZoom}/></div>
+            <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",display:"flex",alignItems:"center",gap:6}}>
+                {refN}
+                {r.alerta_duplicata&&<span style={{background:"#c19a3e",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2}}>⚠ DUP</span>}
+                {low&&<span style={{background:"#c0392b",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2}}>BAIXO</span>}
+              </div>
+              <div style={{fontSize:12,color:"#2c3e50",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{desc}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:20,fontWeight:700,color:"#2c3e50",lineHeight:1}}>{qtd.toLocaleString('pt-BR')}</div>
+              <div style={{fontSize:8,color:"#8a9aa4",letterSpacing:0.3,textTransform:"uppercase",marginTop:1}}>estoque · {r.variations?.length||0} var</div>
+            </div>
+          </div>);
+        })}
+        {refs.length===0&&<div style={{padding:30,textAlign:"center",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>Nenhuma ref encontrada.</div>}
+      </div>
+    )}
+
+    {/* Modal de variações */}
+    {modalRef&&selectedRef&&(()=>{
+      const desc=calcDesc[modalRef]||selectedRef.descricao||'';
+      const vars=(selectedRef.variations||[]).slice().sort((a,b)=>{
+        const corA=a.cor||'';const corB=b.cor||'';
+        if(corA!==corB)return corA.localeCompare(corB);
+        const tamOrder={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
+        return (tamOrder[a.tam]||99)-(tamOrder[b.tam]||99);
+      });
+      return <div onClick={()=>setModalRef(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:100,overflowY:"auto",backdropFilter:"blur(3px)"}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:680,overflow:"hidden",boxShadow:"0 20px 50px rgba(0,0,0,0.25)"}}>
+          <div style={{display:"flex",gap:14,padding:"18px 20px",borderBottom:"1px solid #e8e2da",background:"#faf8f5",alignItems:"flex-start"}}>
+            <div style={{width:64,height:84,borderRadius:8,background:"#e8e2da",flexShrink:0,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={modalRef} onZoom={handleZoom}/></div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:11,color:"#4a7fa5",fontWeight:700,letterSpacing:0.4}}>REF {modalRef}</div>
+              <div style={{fontSize:17,fontWeight:700,color:"#2c3e50",margin:"2px 0 6px",lineHeight:1.25}}>{desc||"(sem descrição)"}</div>
+              <div style={{display:"flex",gap:14,fontSize:11,color:"#8a9aa4",flexWrap:"wrap"}}>
+                <span>Total: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:40}}>{(selectedRef.qtd_total||0).toLocaleString('pt-BR')}</b></span>
+                <span>· Variações: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:13}}>{vars.length}</b></span>
+              </div>
+              {selectedRef.alerta_duplicata&&<div style={{background:"#fef7e6",border:"1px solid #f5dba1",color:"#8a6a1f",padding:"8px 12px",borderRadius:6,fontSize:11,marginTop:10}}>⚠️ <b style={{color:"#c19a3e"}}>Duplicata:</b> esta ref está em múltiplos anúncios ativos. Usando o MLB com maior saldo.</div>}
+            </div>
+            <button onClick={()=>setModalRef(null)} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer",padding:"0 4px",lineHeight:1}}>×</button>
+          </div>
+          <div style={{padding:"16px 20px"}}>
+            <div style={{fontSize:10,color:"#8a9aa4",fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Variações · Estoque atual</div>
+            <table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12}}>
+              <thead><tr>
+                <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Cor</th>
+                <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Tamanho</th>
+                <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>SKU</th>
+                <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right"}}>Estoque</th>
+              </tr></thead>
+              <tbody>
+                {vars.map((v,i)=>{
+                  const q=v.qtd||0;const cls=q===0?"#c0392b":q<=3?"#c19a3e":"#2c3e50";
+                  return<tr key={i} style={{background:i%2===0?"#fff":"#faf8f5",borderBottom:"1px solid #e8e2da"}}>
+                    <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{v.cor||'—'}</td>
+                    <td style={{padding:"8px 12px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{v.tam||'—'}</td>
+                    <td style={{padding:"8px 12px",fontFamily:"Courier New,monospace",fontSize:10,color:"#8a9aa4"}}>{v.sku&&!String(v.sku).startsWith('_SINT_')?v.sku:'—'}</td>
+                    <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:cls}}>{q}</td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>;
+    })()}
+  </div>);
+};
+
 const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=null,produtos=[]})=>{
   const [tela,setTela]=useState("dash");
   const [vendasSub,setVendasSub]=useState("overview"); // "overview" | "produtos"
@@ -4129,6 +4404,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
           <button onClick={doSync} disabled={syncing} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:syncing?"not-allowed":"pointer",opacity:syncing?0.7:1,fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Sync</button>
           <button onClick={()=>{setTela("vendas");setVendasSub("overview");}} style={{background:tela==="vendas"&&vendasSub==="overview"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="overview"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="overview"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📦 Vendas</button>
           <button onClick={()=>{setTela("vendas");setVendasSub("produtos");}} style={{background:tela==="vendas"&&vendasSub==="produtos"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="produtos"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="produtos"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"flex",alignItems:"center",gap:5}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2C10.8 2 10 2.8 10 4C10 4.8 10.4 5.4 11 5.7L8.5 11L5 22H19L15.5 11L13 5.7C13.6 5.4 14 4.8 14 4C14 2.8 13.2 2 12 2Z" fill={tela==="vendas"&&vendasSub==="produtos"?"white":"#4a7fa5"}/></svg> Produtos</button>
+          <button onClick={()=>setTela("estoque")} style={{background:tela==="estoque"?"#2c3e50":"#fff",color:tela==="estoque"?"#fff":"#2c3e50",border:tela==="estoque"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"flex",alignItems:"center",gap:5}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 6h16v12H4zM4 10h16M8 6v12M16 6v12" stroke={tela==="estoque"?"white":"#4a7fa5"} strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg> Estoque</button>
           <button onClick={()=>{const next=tela==="dash"?"config":"dash";setTela(next);if(next==="config")fetchBlingHealth();}} style={{background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
             {tela==="config"?"← Voltar":"⚙ Config"}
           </button>
@@ -4389,6 +4665,11 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
               )}
             </div>
           </div>
+        )}
+
+        {/* ════ ESTOQUE (ML Lumia proxy) ════ */}
+        {tela==="estoque"&&(
+          <EstoqueView sbUrl={sbUrl} handleZoom={handleZoom} produtos={produtos}/>
         )}
 
         {/* ════ VENDAS DASHBOARD ════ */}
