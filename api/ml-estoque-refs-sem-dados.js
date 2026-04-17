@@ -18,22 +18,33 @@ export default async function handler(req, res) {
       if (r) refsCalc.set(r, p.descricao || '');
     }
 
-    // 2. Refs que foram resolvidas (estão em ml_estoque_ref_atual com total > 0)
+    // 2. Refs que foram resolvidas (estão em ml_estoque_ref_atual com qtd_total > 0)
     const { data: refsResolvidas } = await supabase
       .from('ml_estoque_ref_atual')
-      .select('ref, total_estoque');
+      .select('ref, qtd_total, sem_dados, mlb_escolhido, alerta_duplicata');
     const refsResolvidasSet = new Set(
       (refsResolvidas || [])
-        .filter(r => (r.total_estoque || 0) > 0)
+        .filter(r => !r.sem_dados && (r.qtd_total || 0) > 0)
         .map(r => normRef(r.ref))
+    );
+    // Mapa completo pra retornar detalhes
+    const refsResolvidasMap = new Map(
+      (refsResolvidas || []).map(r => [normRef(r.ref), r])
     );
 
     // 3. Diferença = refs sem dados
     const semDados = [];
     const comDados = [];
     for (const [ref, desc] of refsCalc) {
+      const resolved = refsResolvidasMap.get(ref);
       if (refsResolvidasSet.has(ref)) {
-        comDados.push({ ref, descricao: desc });
+        comDados.push({
+          ref,
+          descricao: desc,
+          qtd_total: resolved?.qtd_total || 0,
+          mlb_escolhido: resolved?.mlb_escolhido || null,
+          alerta_duplicata: resolved?.alerta_duplicata || false,
+        });
       } else {
         semDados.push({ ref, descricao: desc });
       }
@@ -53,6 +64,7 @@ export default async function handler(req, res) {
       total_calc: refsCalc.size,
       total_resolvidas: comDados.length,
       total_sem_dados: semDados.length,
+      refs_resolvidas: comDados.sort((a, b) => b.qtd_total - a.qtd_total),
       refs_sem_dados: semDados.sort((a, b) => a.ref.localeCompare(b.ref)),
       interpretacao: {
         'tem_no_scf_map: true':  'Ref está no mapa mas não há anúncio ativo com esse scf na Lumia (pode ser só Exitus/Muniam)',
