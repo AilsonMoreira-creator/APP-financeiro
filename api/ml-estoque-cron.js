@@ -27,9 +27,12 @@ const DELAY_MS = 200;
 
 export const config = { maxDuration: 300 };
 
-// Normaliza ref pra comparação (remove zeros à esquerda e espaços)
+// Normaliza ref pra comparação:
+// - remove zeros à esquerda
+// - remove espaços e caracteres não-numéricos internos
+// Ex: "02 897" → "2897", "ref. 2410" → "2410"
 function normRef(ref) {
-  return String(ref || '').replace(/^0+/, '').trim();
+  return String(ref || '').replace(/\D/g, '').replace(/^0+/, '').trim();
 }
 
 // ── 1. ATUALIZAR MAPA SKU→REF a partir do cache do Bling ──
@@ -324,14 +327,30 @@ export default async function handler(req, res) {
 
     // ═══ FASE 6: resolver ref — busca mapa + refs ativas ═══
     resumo.fase = 'resolver_ref';
-    const [{ data: mapaRows }, { data: calcData }] = await Promise.all([
-      supabase.from('ml_sku_ref_map').select('sku, ref'),
-      supabase.from('amicia_data').select('payload').eq('user_id', 'calc-meluni').maybeSingle(),
-    ]);
 
+    // IMPORTANTE: Supabase limita select em 1000 linhas por padrão.
+    // Paginamos pra pegar o mapa inteiro (pode ter milhares de SKUs).
     const skuToRef = new Map();
-    for (const m of (mapaRows || [])) skuToRef.set(m.sku, normRef(m.ref));
+    let offsetMap = 0;
+    const PAGE = 1000;
+    while (true) {
+      const { data: mapaPage, error: mapaErr } = await supabase
+        .from('ml_sku_ref_map')
+        .select('sku, ref')
+        .range(offsetMap, offsetMap + PAGE - 1);
+      if (mapaErr) { console.error('[estoque-cron] mapa paginação:', mapaErr.message); break; }
+      if (!mapaPage || mapaPage.length === 0) break;
+      for (const m of mapaPage) {
+        // normRef também remove espaços internos: "2 897" → "2897"
+        skuToRef.set(m.sku, normRef(m.ref));
+      }
+      if (mapaPage.length < PAGE) break;
+      offsetMap += PAGE;
+    }
+    resumo.mapa_carregado = skuToRef.size;
 
+    const { data: calcData } = await supabase.from('amicia_data')
+      .select('payload').eq('user_id', 'calc-meluni').maybeSingle();
     const prodsCalc = calcData?.payload?.prods || [];
     const refDescMap = new Map();
     for (const p of prodsCalc) {
