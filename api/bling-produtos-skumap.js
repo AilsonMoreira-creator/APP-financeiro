@@ -32,7 +32,7 @@ function extractRefFromTitle(title) {
 
 export default async function handler(req, res) {
   const inicio = Date.now();
-  const conta = req.query?.conta || 'Lumia';
+  const conta = String(req.query?.conta || 'lumia').toLowerCase().trim();
   const dryRun = req.query?.dryRun === 'true';
 
   const resumo = {
