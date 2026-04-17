@@ -205,6 +205,10 @@ export default async function handler(req, res) {
     resumo.fase = 'multiget';
     const snapshotRows = [];
     const mlbInfo = {}; // { itemId: { title, variations: [{sku,cor,tam,qtd}], total } }
+    let multigetOk = 0;
+    let multigetSkippedNaoAtivo = 0;
+    let multigetErroCode = 0;
+    let anunciosSemSkuEmNenhumaVar = 0;
 
     for (let i = 0; i < itemIds.length; i += 20) {
       if (Date.now() - inicio > 240000) {
@@ -223,9 +227,10 @@ export default async function handler(req, res) {
       const arr = await r.json();
 
       for (const entry of arr) {
-        if (entry.code !== 200 || !entry.body) continue;
+        if (entry.code !== 200 || !entry.body) { multigetErroCode++; continue; }
         const item = entry.body;
-        if (item.status !== 'active') continue;
+        if (item.status !== 'active') { multigetSkippedNaoAtivo++; continue; }
+        multigetOk++;
 
         const itemId = item.id;
         const title = item.title || '';
@@ -275,18 +280,43 @@ export default async function handler(req, res) {
         }
 
         mlbInfo[itemId] = { title, variations: varList, total: totalEstoque };
+        if (varList.length === 0) anunciosSemSkuEmNenhumaVar++;
       }
 
       await new Promise(r => setTimeout(r, DELAY_MS));
     }
 
     resumo.total_variacoes = snapshotRows.length;
+    resumo.multiget_ok = multigetOk;
+    resumo.multiget_nao_ativo = multigetSkippedNaoAtivo;
+    resumo.multiget_erro_code = multigetErroCode;
+    resumo.anuncios_sem_sku = anunciosSemSkuEmNenhumaVar;
 
     // ═══ FASE 5: reescrever ml_estoque_snapshot ═══
     resumo.fase = 'snapshot_write';
+
+    // DEDUP por SKU: mesmo SKU pode estar em vários MLBs (duplicata de anúncio).
+    // Mantemos a linha com maior available (regra consistente com a de ref_atual).
+    // Sem isso, upsert falha com "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    const skuDedup = new Map();
+    let dupsEncontradas = 0;
+    for (const row of snapshotRows) {
+      const existing = skuDedup.get(row.sku);
+      if (!existing) {
+        skuDedup.set(row.sku, row);
+      } else {
+        dupsEncontradas++;
+        if ((row.available || 0) > (existing.available || 0)) {
+          skuDedup.set(row.sku, row);
+        }
+      }
+    }
+    const snapshotDedup = Array.from(skuDedup.values());
+    resumo.skus_duplicados_no_ml = dupsEncontradas;
+
     await supabase.from('ml_estoque_snapshot').delete().neq('sku', '__nada__');
-    for (let i = 0; i < snapshotRows.length; i += 500) {
-      const batch = snapshotRows.slice(i, i + 500);
+    for (let i = 0; i < snapshotDedup.length; i += 500) {
+      const batch = snapshotDedup.slice(i, i + 500);
       const { error } = await supabase.from('ml_estoque_snapshot').upsert(batch, { onConflict: 'sku' });
       if (error) { console.error('[estoque-cron] snapshot insert:', error.message); resumo.erros++; }
       else resumo.snapshot_inseridos += batch.length;
