@@ -470,7 +470,11 @@ export default async function handler(req, res) {
     resumo.mlbs_resolvidos_por_ref_direta = mlbsResolvidosPorRefDireta;
     resumo.mlbs_resolvidos_por_mapa = mlbsResolvidosPorMapa;
 
-    // Pra cada ref ativa, escolhe MLB com MAIOR estoque
+    // Pra cada ref ativa: consolida variações de TODOS os MLBs da ref.
+    // Regra de dedupe por SKU:
+    //   - SKU real (mesmo SKU em 2+ MLBs) = espelho Ideris → pega o MAIOR (não soma)
+    //   - SKU sintético (_SINT_ = item_id + variation_id, único por anúncio) → soma natural
+    // Isso resolve o bug das DUPs: antes pegava só o MLB maior e perdia variações dos outros.
     const refAtualRows = [];
     const agoraISO = new Date().toISOString();
     for (const ref of refsAtivas) {
@@ -490,13 +494,38 @@ export default async function handler(req, res) {
         resumo.refs_sem_dados++;
         continue;
       }
-      const escolhido = candidatos.reduce((best, c) => (c.total > best.total ? c : best), candidatos[0]);
+
+      // Consolida: SKU → melhor entrada (maior qtd se repetido)
+      const skuMap = new Map();
+      for (const c of candidatos) {
+        for (const v of (c.variations || [])) {
+          if (!v.sku) continue;
+          const existing = skuMap.get(v.sku);
+          if (!existing || (v.qtd || 0) > (existing.qtd || 0)) {
+            skuMap.set(v.sku, { ...v, _source_mlb: c.itemId });
+          }
+        }
+      }
+      const variacoesConsolidadas = Array.from(skuMap.values()).map(({ _source_mlb, ...rest }) => rest);
+      const totalConsolidado = variacoesConsolidadas.reduce((a, v) => a + (v.qtd || 0), 0);
+
+      // MLB "dominante" (só pra referência visual) = o que contribuiu com mais variações únicas
+      const contribPorMlb = new Map();
+      for (const v of skuMap.values()) {
+        contribPorMlb.set(v._source_mlb, (contribPorMlb.get(v._source_mlb) || 0) + 1);
+      }
+      let mlbDominante = candidatos[0].itemId;
+      let maxContrib = 0;
+      for (const [mlb, c] of contribPorMlb) {
+        if (c > maxContrib) { maxContrib = c; mlbDominante = mlb; }
+      }
+
       refAtualRows.push({
         ref,
         descricao: refDescMap.get(ref) || '',
-        qtd_total: escolhido.total,
-        variations: escolhido.variations,
-        mlb_escolhido: escolhido.itemId,
+        qtd_total: totalConsolidado,
+        variations: variacoesConsolidadas,
+        mlb_escolhido: mlbDominante,
         mlbs_encontrados: candidatos.map(c => ({ item_id: c.itemId, total: c.total })),
         alerta_duplicata: candidatos.length > 1,
         sem_dados: false,

@@ -3866,13 +3866,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     });
   },[dados,busca,calcDesc]);
 
-  const totalGeral=dados?.total_geral||0;
+  const totalGeral=dados?.stats?.total_geral||0;
   const qtdRefsAtivas=refs.length;
   const qtdVariacoes=useMemo(()=>refs.reduce((a,r)=>a+(r.variations?.length||0),0),[refs]);
 
   // Histórico 12 meses — vem do back (tabela ml_estoque_total_mensal) ou cria mock
   const historico=useMemo(()=>{
-    const h=dados?.historico||[];
+    const h=dados?.historico_mensal||[];
     // h esperado: [{ano_mes:"2026-04", qtd_total:N}, ...]
     // Se faltar, preenche os últimos 12 meses com 0
     const hoje=new Date();
@@ -3912,7 +3912,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     </div>;
   }
 
-  const ultSync=dados?.ultima_sync?new Date(dados.ultima_sync).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';
+  const ultSync=dados?.status?.last_run?new Date(dados.status.last_run).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';
 
   return(<div>
     {/* TOPO: total geral + gráfico 12 meses */}
