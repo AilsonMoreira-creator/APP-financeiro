@@ -11,7 +11,7 @@ class ModuleErrorBoundary extends Component{
 }
 
 // ─── Paleta ───────────────────────────────────────────────────────────────────
-const APP_VERSION="6.7";
+const APP_VERSION="6.8";
 const _S = "#2c3e50";
 const _B = "#5a7faa";
 const _BL = "#a8c0d8";
@@ -8082,12 +8082,12 @@ export default function App(){
 
   return(
     <div style={{height:"100vh",display:"flex",flexDirection:"column",fontFamily:"Georgia,serif",background:"#f7f4f0"}}>
-      {blingStatus&&(
+      {usuarioLogado?.admin&&blingStatus&&(
         <div style={{background:blingStatus==="importando"?"#f0f6fb":blingStatus.ok?"#eafbf0":"#fdeaea",color:blingStatus==="importando"?"#4a7fa5":blingStatus.ok?"#27ae60":"#c0392b",padding:"6px 16px",fontSize:12,textAlign:"center"}}>
           {blingStatus==="importando"?<>⏳ Importando dados do Bling…</>:<>{blingStatus.msg}</>}
         </div>
       )}
-      {blingImportStatus&&!blingStatus&&(
+      {usuarioLogado?.admin&&blingImportStatus&&!blingStatus&&(
         <div style={{background:"#f0f6fb",color:"#4a7fa5",padding:"4px 16px",fontSize:11,textAlign:"center"}}>
           📦 {blingImportStatus}
         </div>
