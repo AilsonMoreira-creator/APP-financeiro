@@ -73,9 +73,16 @@ export default async function handler(req, res) {
         Accept: 'application/json',
       });
 
+      // Debug da primeira página — captura ANTES do break pra ver erros HTTP
+      if (pagina === 1) {
+        resumo.primeira_pagina_status = resp.status;
+        resumo.primeira_pagina_url = url;
+      }
+
       if (!resp.ok) {
         const body = await resp.text().catch(() => '');
         console.error(`[bling-produtos-skumap] página ${pagina} HTTP ${resp.status}: ${body.slice(0, 200)}`);
+        if (pagina === 1) resumo.primeira_pagina_body = body.slice(0, 400);
         resumo.erros++;
         break;
       }
@@ -85,7 +92,6 @@ export default async function handler(req, res) {
 
       // Debug: na primeira página, guarda amostra do que a API Bling retornou
       if (pagina === 1) {
-        resumo.primeira_pagina_status = resp.status;
         resumo.primeira_pagina_total_itens = lista.length;
         resumo.primeira_pagina_exemplo = lista[0] ? {
           id: lista[0].id,
