@@ -167,6 +167,20 @@ function extractSellerSku(attrs) {
   return null;
 }
 
+// ── 5. EXTRAIR REF DO seller_custom_field (formato "z23041912028(02277)") ──
+// Fallback crucial pros anúncios antigos da Lumia onde variações não têm SELLER_SKU
+// mas o campo pai tem a ref entre parênteses.
+function extractRefFromCustomField(scf) {
+  if (!scf) return null;
+  // Padrão principal: qualquer coisa + (XXXXX) com 3-5 dígitos
+  const m = String(scf).match(/\((\d{3,5})\)/);
+  if (m) return normRef(m[1]);
+  // Fallback: campo inteiro é só a ref (ex: "02277")
+  const m2 = String(scf).match(/^\s*0*(\d{3,5})\s*$/);
+  if (m2) return normRef(m2[1]);
+  return null;
+}
+
 // ── HANDLER PRINCIPAL ──────────────────────────────────────
 export default async function handler(req, res) {
   const inicio = Date.now();
@@ -207,11 +221,13 @@ export default async function handler(req, res) {
     // ═══ FASE 4: multiget e extração ═══
     resumo.fase = 'multiget';
     const snapshotRows = [];
-    const mlbInfo = {}; // { itemId: { title, variations: [{sku,cor,tam,qtd}], total } }
+    // mlbInfo agora tem opcional refDireta (quando ref veio do seller_custom_field)
+    const mlbInfo = {};
     let multigetOk = 0;
     let multigetSkippedNaoAtivo = 0;
     let multigetErroCode = 0;
     let anunciosSemSkuEmNenhumaVar = 0;
+    let anunciosComRefDireta = 0;  // NOVO: anúncios cuja ref veio do custom_field
 
     for (let i = 0; i < itemIds.length; i += 20) {
       if (Date.now() - inicio > 240000) {
@@ -219,7 +235,7 @@ export default async function handler(req, res) {
         break;
       }
       const batch = itemIds.slice(i, i + 20);
-      const url = `${ML_API}/items?ids=${batch.join(',')}&attributes=id,title,status,available_quantity,variations,attributes`;
+      const url = `${ML_API}/items?ids=${batch.join(',')}&attributes=id,title,status,available_quantity,variations,attributes,seller_custom_field`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) {
         console.error(`[estoque-cron] multiget HTTP ${r.status}`);
@@ -237,52 +253,78 @@ export default async function handler(req, res) {
 
         const itemId = item.id;
         const title = item.title || '';
+        const sellerField = item.seller_custom_field || '';
         const variations = item.variations || [];
         const varList = [];
         let totalEstoque = 0;
 
+        // NOVO: Tenta extrair ref DIRETO do seller_custom_field (formato "xxx(02277)")
+        // Esse é o caminho pros anúncios antigos onde variação não tem SELLER_SKU
+        const refDireta = extractRefFromCustomField(sellerField);
+
         if (variations.length > 0) {
           for (const v of variations) {
             const { cor, tamanho } = extractColorSize(v.attribute_combinations);
-            const sku = extractSellerSku(v.attributes);
+            const skuReal = extractSellerSku(v.attributes);
             const qtd = v.available_quantity || 0;
-            if (!sku) continue; // sem SKU não conseguimos cruzar com ref
-            snapshotRows.push({
-              sku,
-              item_id: itemId,
-              variation_id: String(v.id || ''),
-              cor,
-              tamanho,
-              available: qtd,
-              ml_title: title,
-              ml_status: 'active',
-              updated_at: new Date().toISOString(),
-            });
-            varList.push({ sku, cor, tam: tamanho, qtd });
+
+            if (skuReal) {
+              // Caminho 1: tem SELLER_SKU — snapshot com SKU real (chave pra mapa)
+              snapshotRows.push({
+                sku: skuReal,
+                item_id: itemId,
+                variation_id: String(v.id || ''),
+                cor, tamanho,
+                available: qtd,
+                ml_title: title,
+                ml_status: 'active',
+                updated_at: new Date().toISOString(),
+              });
+              varList.push({ sku: skuReal, cor, tam: tamanho, qtd });
+            } else if (refDireta) {
+              // Caminho 2: sem SKU mas ref veio do custom_field — salva com SKU sintético
+              // SKU sintético = item_id + variation_id (único, não conflita com SKUs reais)
+              const skuSint = `_SINT_${itemId}_${v.id}`;
+              snapshotRows.push({
+                sku: skuSint,
+                item_id: itemId,
+                variation_id: String(v.id || ''),
+                cor, tamanho,
+                available: qtd,
+                ml_title: title,
+                ml_status: 'active',
+                updated_at: new Date().toISOString(),
+              });
+              varList.push({ sku: skuSint, cor, tam: tamanho, qtd });
+            } else {
+              // Sem SKU e sem ref — não dá pra rastrear, pula essa variação
+              continue;
+            }
             totalEstoque += qtd;
           }
         } else {
-          // Anúncio sem variação — SKU no nível do item
-          const sku = extractSellerSku(item.attributes);
-          if (sku) {
-            const qtd = item.available_quantity || 0;
+          // Anúncio sem variação
+          const skuReal = extractSellerSku(item.attributes) || sellerField;
+          const qtd = item.available_quantity || 0;
+          if (skuReal) {
             snapshotRows.push({
-              sku,
+              sku: skuReal,
               item_id: itemId,
               variation_id: null,
-              cor: null,
-              tamanho: null,
+              cor: null, tamanho: null,
               available: qtd,
               ml_title: title,
               ml_status: 'active',
               updated_at: new Date().toISOString(),
             });
-            varList.push({ sku, cor: null, tam: null, qtd });
+            varList.push({ sku: skuReal, cor: null, tam: null, qtd });
             totalEstoque = qtd;
           }
         }
 
-        mlbInfo[itemId] = { title, variations: varList, total: totalEstoque };
+        if (refDireta) anunciosComRefDireta++;
+
+        mlbInfo[itemId] = { title, variations: varList, total: totalEstoque, refDireta };
         if (varList.length === 0) anunciosSemSkuEmNenhumaVar++;
       }
 
@@ -294,6 +336,7 @@ export default async function handler(req, res) {
     resumo.multiget_nao_ativo = multigetSkippedNaoAtivo;
     resumo.multiget_erro_code = multigetErroCode;
     resumo.anuncios_sem_sku = anunciosSemSkuEmNenhumaVar;
+    resumo.anuncios_com_ref_direta = anunciosComRefDireta;
 
     // ═══ FASE 5: reescrever ml_estoque_snapshot ═══
     resumo.fase = 'snapshot_write';
@@ -361,27 +404,46 @@ export default async function handler(req, res) {
     resumo.refs_ativas = refsAtivas.length;
 
     // Agrupa: ref → [{itemId, total, variations}]
+    // Hierarquia de resolução:
+    //   1. refDireta (vem do seller_custom_field em formato "xxx(02277)")
+    //   2. Via SKU no mapa ml_sku_ref_map (se variações têm SELLER_SKU real)
     const mlbsPorRef = new Map();
     let skusSemRef = 0;
+    let mlbsResolvidosPorRefDireta = 0;
+    let mlbsResolvidosPorMapa = 0;
     for (const itemId in mlbInfo) {
       const info = mlbInfo[itemId];
-      // Pra cada variação, descobre a ref via SKU. Se tiver múltiplas refs num MLB
-      // (estranho, mas possível), usa a mais comum.
+
+      // Prioridade 1: refDireta
+      if (info.refDireta) {
+        const refDom = info.refDireta;
+        if (!mlbsPorRef.has(refDom)) mlbsPorRef.set(refDom, []);
+        mlbsPorRef.get(refDom).push({ itemId, total: info.total, variations: info.variations, via: 'custom_field' });
+        mlbsResolvidosPorRefDireta++;
+        continue;
+      }
+
+      // Prioridade 2: via SKUs reais no mapa
       const contRef = new Map();
       for (const v of info.variations) {
+        // Ignora SKUs sintéticos (não estão no mapa)
+        if (v.sku && v.sku.startsWith('_SINT_')) continue;
         const ref = skuToRef.get(v.sku);
         if (ref) contRef.set(ref, (contRef.get(ref) || 0) + 1);
         else skusSemRef++;
       }
       if (contRef.size === 0) continue;
-      // Ref dominante
+      // Ref dominante (mais comum entre as variações)
       let refDom = null; let maxC = 0;
       for (const [r, c] of contRef) if (c > maxC) { maxC = c; refDom = r; }
       if (!refDom) continue;
       if (!mlbsPorRef.has(refDom)) mlbsPorRef.set(refDom, []);
-      mlbsPorRef.get(refDom).push({ itemId, total: info.total, variations: info.variations });
+      mlbsPorRef.get(refDom).push({ itemId, total: info.total, variations: info.variations, via: 'mapa_sku' });
+      mlbsResolvidosPorMapa++;
     }
     resumo.skus_sem_ref = skusSemRef;
+    resumo.mlbs_resolvidos_por_ref_direta = mlbsResolvidosPorRefDireta;
+    resumo.mlbs_resolvidos_por_mapa = mlbsResolvidosPorMapa;
 
     // Pra cada ref ativa, escolhe MLB com MAIOR estoque
     const refAtualRows = [];
