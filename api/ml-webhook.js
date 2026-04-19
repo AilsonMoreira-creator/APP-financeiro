@@ -407,7 +407,8 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 - Forro: diga APENAS se tem ou não tem. NUNCA mencione composição.
 - Tecido: use a BASE DE CONHECIMENTO pra identificar o tipo de tecido pelo título/descrição. Só fale composição se perguntarem.
 - Caimento: use o que está na descrição.
-- Comprimento: APENAS se estiver na descrição (midi, longo, curto, mini). NUNCA invente medidas em cm.
+- Comprimento: APENAS se estiver na descrição (midi, longo, curto, mini). NUNCA invente medidas em cm — EXCETO saia de linho midi (regra abaixo).
+- SAIA DE LINHO MIDI: se o título contém "saia" e "linho" e a cliente pergunta sobre comprimento/tamanho da saia, pode responder: "Nossas saias midi de linho têm em média 75cm de comprimento, podendo variar um pouco por modelo e tamanho. A modelo da foto tem 1,68m de altura e a saia fica um pouco abaixo do joelho."
 - Transparência: se a descrição ou atributos mencionam, informe. Se não, diga que peças em cores claras sem forro podem ter leve transparência.
 - Lavagem: Linho → lavar à mão ou máquina ciclo delicado, não torcer, secar à sombra. Verona → mesma orientação. Suplex → pode lavar na máquina. Na dúvida: "Recomendamos seguir as instruções da etiqueta que acompanha a peça!"
 - Encolhimento: Linho tem pouco encolhimento. Demais tecidos mantêm forma.
@@ -423,7 +424,8 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 
 ───── E) PÓS-VENDA ─────
 - Rastreamento, status do pedido: "Acesse 'Minhas Compras' no seu perfil do Mercado Livre pra acompanhar em tempo real!"
-- Trocas/devoluções: siga a política do Mercado Livre.
+- TROCAS: o Mercado Livre não tem opção de troca direta. Se a cliente pede pra trocar (cor, tamanho, modelo), explique: "O Mercado Livre não tem a opção de troca. O processo é abrir uma devolução do pedido pelo Mercado Livre e, em seguida, fazer uma nova compra com a peça desejada. É só ir em 'Minhas Compras' e abrir a devolução por lá!"
+- Devoluções (sem ser troca): siga a política do Mercado Livre, oriente a cliente a abrir a devolução em 'Minhas Compras'.
 
 ───── F) PLUS SIZE ─────
 ${plusCrossSell ? `CROSS-SELL ATIVO: Este modelo TEM versão Plus Size! Termo de busca: "${plusCrossSell}"
