@@ -62,6 +62,7 @@ export default async function handler(req, res) {
     const [
       { data: refs, error: eRefs },
       { data: historico, error: eHist },
+      { data: histDiario },
     ] = await Promise.all([
       supabase.from('ml_estoque_ref_atual')
         .select('ref, descricao, qtd_total, variations, alerta_duplicata, sem_dados, mlb_escolhido, updated_at')
@@ -70,6 +71,10 @@ export default async function handler(req, res) {
         .select('ano_mes, qtd_total, qtd_refs, snapshot_date')
         .order('ano_mes', { ascending: false })
         .limit(12),
+      supabase.from('amicia_data')
+        .select('payload')
+        .eq('user_id', 'ml-estoque-historico-diario')
+        .maybeSingle(),
     ]);
 
     if (eRefs) throw eRefs;
@@ -77,6 +82,7 @@ export default async function handler(req, res) {
 
     // Reordena histórico em ordem cronológica ascendente pro frontend
     const historicoOrdenado = (historico || []).slice().reverse();
+    const diario = histDiario?.payload?.diario || {};
 
     const total_geral = (refs || []).reduce((a, r) => a + (r.qtd_total || 0), 0);
     const qtd_refs_ativas = (refs || []).length;
@@ -88,6 +94,7 @@ export default async function handler(req, res) {
       ok: true,
       refs: refs || [],
       historico_mensal: historicoOrdenado,
+      historico_diario: diario,
       stats: {
         total_geral,
         qtd_refs_ativas,

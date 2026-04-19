@@ -598,6 +598,26 @@ export default async function handler(req, res) {
     }, { onConflict: 'ano_mes' });
     if (errMensal) { console.error('[estoque-cron] total_mensal:', errMensal.message); resumo.erros++; }
 
+    // ═══ FASE 8.5: histórico diário (amicia_data — sem migration SQL) ═══
+    // Permite o front exibir "Semana" e "Mês atual" com dados diários.
+    // Mantém últimos 90 dias.
+    resumo.fase = 'historico_diario';
+    try {
+      const hojeISO = new Date().toISOString().slice(0, 10);
+      const { data: histRow } = await supabase.from('amicia_data')
+        .select('payload').eq('user_id', 'ml-estoque-historico-diario').maybeSingle();
+      const diario = histRow?.payload?.diario || {};
+      diario[hojeISO] = { total: totalGeral, refs: refsComEstoque };
+      // Limpa entradas com mais de 90 dias
+      const limite = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+      for (const dia in diario) { if (dia < limite) delete diario[dia]; }
+      await supabase.from('amicia_data').upsert({
+        user_id: 'ml-estoque-historico-diario',
+        payload: { diario, _updated: agoraISO },
+      }, { onConflict: 'user_id' });
+      resumo.historico_diario_dias = Object.keys(diario).length;
+    } catch (e) { console.error('[estoque-cron] historico_diario:', e.message); resumo.erros++; }
+
     // ═══ FASE 9: salvar status pro painel ═══
     resumo.fase = 'done';
     const duracao = ((Date.now() - inicio) / 1000).toFixed(1);

@@ -3224,7 +3224,7 @@ const EstrelaScore=({n})=>(<span style={{color:"#f0b429",fontSize:12}}>{[1,2,3,4
 // ====== DETALHAMENTO DE CORTE — Tamanhos × Cores × Folhas ====================
 const TAMANHOS_DETALHE=["PP","P","M","G","GG","G1","G2","G3","Único"];
 // Mapa de hex pra nomes de cor do Bling (compartilhado entre BlingContent e DetalhamentoModal)
-const BLING_COR_HEX={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#b5c99a","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Azul Serenity":"#5b9bd5","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0","Bege Claro":"#e8d8c0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0",Nude:"#c8a890","Vinho":"#5a1a2a"};
+const BLING_COR_HEX={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#b5c99a","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Azul Serenity":"#5b9bd5",Amarelo:"#f0c040","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0","Bege Claro":"#e8d8c0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0",Nude:"#c8a890","Vinho":"#5a1a2a"};
 const dotColorBling=(cor)=>BLING_COR_HEX[cor]||"#a89f94";
 
 // Ranking Bling — top cores por venda. Atualizar manualmente conforme Bling
@@ -4121,6 +4121,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [syncing,setSyncing]=useState(false);
   const [syncCatalogo,setSyncCatalogo]=useState(false);
   const [syncCatalogoMsg,setSyncCatalogoMsg]=useState(null);
+  const [periodo,setPeriodo]=useState("semana"); // "semana" | "mes" | "anual"
   const [calcDesc,setCalcDesc]=useState({}); // ref → descricao da Calculadora
 
   const carregarCalc=async()=>{
@@ -4197,22 +4198,59 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const qtdRefsAtivas=refs.length;
   const qtdVariacoes=useMemo(()=>refs.reduce((a,r)=>a+(r.variations?.length||0),0),[refs]);
 
-  // Histórico 12 meses — vem do back (tabela ml_estoque_total_mensal) ou cria mock
+  // Histórico — depende do período selecionado
+  // Semana: últimos 7 dias (do diário) · Mês: dias do mês corrente (do diário) · Anual: 12 meses (do mensal)
   const historico=useMemo(()=>{
-    const h=dados?.historico_mensal||[];
-    // h esperado: [{ano_mes:"2026-04", qtd_total:N}, ...]
-    // Se faltar, preenche os últimos 12 meses com 0
     const hoje=new Date();
-    const meses=[];
-    for(let i=11;i>=0;i--){
-      const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
-      const ym=d.toISOString().slice(0,7);
-      const encontrado=h.find(x=>x.ano_mes===ym);
-      const mesNome=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][d.getMonth()];
-      meses.push({ano_mes:ym,lbl:mesNome,qtd:encontrado?.qtd_total||(i===0?totalGeral:0)});
+    const diario=dados?.historico_diario||{};
+
+    if(periodo==="anual"){
+      // Comportamento original: 12 meses do histórico mensal
+      const h=dados?.historico_mensal||[];
+      const meses=[];
+      for(let i=11;i>=0;i--){
+        const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
+        const ym=d.toISOString().slice(0,7);
+        const encontrado=h.find(x=>x.ano_mes===ym);
+        const mesNome=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][d.getMonth()];
+        meses.push({key:ym,lbl:mesNome,qtd:encontrado?.qtd_total||(i===0?totalGeral:0)});
+      }
+      return meses;
     }
-    return meses;
-  },[dados,totalGeral]);
+
+    if(periodo==="semana"){
+      // Últimos 7 dias do histórico diário
+      const dias=[];
+      for(let i=6;i>=0;i--){
+        const d=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate()-i);
+        const dk=d.toISOString().slice(0,10);
+        const dn=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()];
+        const dia=String(d.getDate()).padStart(2,"0");
+        const reg=diario[dk];
+        // Se for hoje e não tem registro, usa totalGeral
+        const qtd=reg?.total??(i===0?totalGeral:0);
+        dias.push({key:dk,lbl:`${dn} ${dia}`,qtd});
+      }
+      return dias;
+    }
+
+    // Mês atual: do dia 1 até hoje
+    const ano=hoje.getFullYear(),mes=hoje.getMonth();
+    const ultimoDia=hoje.getDate();
+    const dias=[];
+    for(let dn=1;dn<=ultimoDia;dn++){
+      const d=new Date(ano,mes,dn);
+      const dk=d.toISOString().slice(0,10);
+      const reg=diario[dk];
+      const qtd=reg?.total??(dn===ultimoDia?totalGeral:0);
+      dias.push({key:dk,lbl:String(dn).padStart(2,"0"),qtd});
+    }
+    return dias;
+  },[dados,totalGeral,periodo]);
+
+  // Aviso quando estamos em semana/mês mas ainda não há histórico diário acumulado
+  const diarioCount=Object.keys(dados?.historico_diario||{}).length;
+  const semHistoricoDiario=periodo!=="anual"&&diarioCount<=1;
 
   const maxHist=Math.max(1,...historico.map(m=>m.qtd));
   const varPct=(()=>{
@@ -4242,7 +4280,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const ultSync=dados?.status?.last_run?new Date(dados.status.last_run).toLocaleString('pt-BR',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';
 
   return(<div>
-    {/* TOPO: total geral + gráfico 12 meses */}
+    {/* TOPO: total geral + gráfico evolução */}
     <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:"16px 20px",marginBottom:14,display:"grid",gridTemplateColumns:"auto 1fr",gap:28,alignItems:"center"}}>
       <div style={{borderRight:"1px solid #e8e2da",paddingRight:28}}>
         <div style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Estoque total</div>
@@ -4250,18 +4288,33 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         <div style={{fontSize:11,color:"#8a9aa4"}}>em <b style={{color:"#2c3e50",fontWeight:700}}>{qtdRefsAtivas} refs ativas</b> · <b style={{color:"#2c3e50",fontWeight:700}}>{qtdVariacoes} variações</b></div>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
-        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
-          <span style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Evolução últimos 12 meses</span>
-          {varPct!==null&&<span style={{fontSize:11,fontWeight:700,color:varPct>0?"#27ae60":varPct<0?"#c0392b":"#8a9aa4"}}>{varPct>0?"↑ +":varPct<0?"↓ ":"→ "}{Math.abs(varPct)}% vs mês passado</span>}
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Evolução · {periodo==="semana"?"última semana":periodo==="mes"?"mês atual":"últimos 12 meses"}</span>
+          <div style={{display:"flex",gap:3,alignItems:"center"}}>
+            {[["semana","Semana"],["mes","Mês"],["anual","Anual"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setPeriodo(k)} style={{background:periodo===k?"#2c3e50":"transparent",color:periodo===k?"#fff":"#8a9aa4",border:periodo===k?"none":"1px solid #e8e2da",borderRadius:5,padding:"3px 9px",fontSize:10,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>{l}</button>
+            ))}
+            {periodo==="anual"&&varPct!==null&&<span style={{fontSize:11,fontWeight:700,color:varPct>0?"#27ae60":varPct<0?"#c0392b":"#8a9aa4",marginLeft:6}}>{varPct>0?"↑ +":varPct<0?"↓ ":"→ "}{Math.abs(varPct)}%</span>}
+          </div>
         </div>
-        <div style={{display:"flex",gap:4,alignItems:"flex-end",height:52}}>
-          {historico.map((m,i)=>(
-            <div key={m.ano_mes} title={m.lbl+": "+m.qtd.toLocaleString('pt-BR')} style={{flex:1,background:i===historico.length-1?"#c19a3e":"#4a7fa5",borderRadius:"2px 2px 0 0",minHeight:3,height:`${(m.qtd/maxHist)*100}%`,transition:"background 0.15s"}}/>
-          ))}
-        </div>
-        <div style={{display:"flex",gap:4,marginTop:2}}>
-          {historico.map(m=><div key={m.ano_mes} style={{flex:1,textAlign:"center",fontSize:9,color:"#8a9aa4",letterSpacing:0.3}}>{m.lbl}</div>)}
-        </div>
+        {semHistoricoDiario?(
+          <div style={{height:52,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#a89f94",fontStyle:"italic",border:"1px dashed #e8e2da",borderRadius:6,padding:"0 12px",textAlign:"center"}}>Histórico diário começa a acumular agora — volta amanhã pra ver a evolução</div>
+        ):(
+          <div style={{display:"flex",gap:periodo==="mes"?2:4,alignItems:"flex-end",height:52}}>
+            {historico.map((m,i)=>(
+              <div key={m.key} title={m.lbl+": "+m.qtd.toLocaleString('pt-BR')} style={{flex:1,background:i===historico.length-1?"#c19a3e":"#4a7fa5",borderRadius:"2px 2px 0 0",minHeight:3,height:`${(m.qtd/maxHist)*100}%`,transition:"background 0.15s"}}/>
+            ))}
+          </div>
+        )}
+        {!semHistoricoDiario&&(
+          <div style={{display:"flex",gap:periodo==="mes"?2:4,marginTop:2}}>
+            {historico.map((m,i)=>{
+              // No mês com 30+ dias, mostra só dias múltiplos de 5 pra não poluir
+              const mostrar=periodo!=="mes"||i===0||i===historico.length-1||((i+1)%5===0);
+              return <div key={m.key} style={{flex:1,textAlign:"center",fontSize:9,color:"#8a9aa4",letterSpacing:0.3}}>{mostrar?m.lbl:""}</div>;
+            })}
+          </div>
+        )}
       </div>
     </div>
 
@@ -4505,7 +4558,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const CORES_MARCA2={Exitus:"#d4c8a8",Lumia:"#b8a88a",Muniam:"#8a7560"};
   const fmtV=(v)=>Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:0});
   const fmtRV=(v)=>"R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2});
-  const dotColor=(cor)=>{const m={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#b5c99a","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Azul Serenity":"#5b9bd5","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0","Bege Claro":"#e8d8c0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0",Nude:"#c8a890","Vinho":"#5a1a2a"};return m[cor]||"#a89f94";};
+  const dotColor=(cor)=>{const m={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#b5c99a","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Azul Serenity":"#5b9bd5",Amarelo:"#f0c040","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0","Bege Claro":"#e8d8c0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0",Nude:"#c8a890","Vinho":"#5a1a2a"};return m[cor]||"#a89f94";};
   // Credenciais separadas por conta — localStorage + Supabase
   const [creds,setCreds]=useState(()=>{try{return JSON.parse(localStorage.getItem("bling_creds"))||{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}catch{return{exitus:{id:"",secret:""},lumia:{id:"",secret:""},muniam:{id:"",secret:""}};}});
   const [tokens,setTokens]=useState({exitus:null,lumia:null,muniam:null});
@@ -4754,7 +4807,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           {syncMsg&&<span style={{fontSize:11,color:syncMsg.startsWith("⚠")?"#c0392b":syncMsg.startsWith("⏳")?"#e67e22":"#27ae60"}}>{syncMsg}</span>}
           <button onClick={doSync} disabled={syncing} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:syncing?"not-allowed":"pointer",opacity:syncing?0.7:1,fontFamily:"Georgia,serif",fontWeight:600}}>🔄 Sync</button>
-          <button onClick={()=>{setTela("vendas");setVendasSub("overview");}} style={{background:tela==="vendas"&&vendasSub==="overview"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="overview"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="overview"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📦 Vendas</button>
+          <button onClick={()=>{setTela("vendas");setVendasSub("overview");}} style={{background:tela==="vendas"&&vendasSub==="overview"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="overview"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="overview"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"flex",alignItems:"center",gap:5}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 4 L15 4 L13.5 7 L10.5 7 Z" fill={tela==="vendas"&&vendasSub==="overview"?"#c19a3e":"#c19a3e"} stroke={tela==="vendas"&&vendasSub==="overview"?"white":"#8a6500"} strokeWidth="0.8" strokeLinejoin="round"/><path d="M10.5 7 Q5 10 5 15 Q5 20 12 20 Q19 20 19 15 Q19 10 13.5 7 Z" fill={tela==="vendas"&&vendasSub==="overview"?"#c19a3e":"#c19a3e"} stroke={tela==="vendas"&&vendasSub==="overview"?"white":"#8a6500"} strokeWidth="1.2" strokeLinejoin="round"/><text x="12" y="17" fontSize="7" fontWeight="900" textAnchor="middle" fill={tela==="vendas"&&vendasSub==="overview"?"white":"#8a6500"} fontFamily="Georgia,serif">$</text></svg> Vendas</button>
           <button onClick={()=>{setTela("vendas");setVendasSub("produtos");}} style={{background:tela==="vendas"&&vendasSub==="produtos"?"#2c3e50":"#fff",color:tela==="vendas"&&vendasSub==="produtos"?"#fff":"#2c3e50",border:tela==="vendas"&&vendasSub==="produtos"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"flex",alignItems:"center",gap:5}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2C10.8 2 10 2.8 10 4C10 4.8 10.4 5.4 11 5.7L8.5 11L5 22H19L15.5 11L13 5.7C13.6 5.4 14 4.8 14 4C14 2.8 13.2 2 12 2Z" fill={tela==="vendas"&&vendasSub==="produtos"?"white":"#4a7fa5"}/></svg> Produtos</button>
           <button onClick={()=>setTela("estoque")} style={{background:tela==="estoque"?"#2c3e50":"#fff",color:tela==="estoque"?"#fff":"#2c3e50",border:tela==="estoque"?"none":"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"flex",alignItems:"center",gap:5}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 6h16v12H4zM4 10h16M8 6v12M16 6v12" stroke={tela==="estoque"?"white":"#4a7fa5"} strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg> Estoque</button>
           <button onClick={()=>{const next=tela==="dash"?"config":"dash";setTela(next);if(next==="config")fetchBlingHealth();}} style={{background:tela==="config"?"#2c3e50":"#fff",color:tela==="config"?"#fff":"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
