@@ -3221,6 +3221,282 @@ const getDias=(c)=>Math.floor((Date.now()-new Date(c.data))/(86400000));
 const ORDEM_STATUS={amarelo:0,vermelho:1,azul:2,verde:3};
 const EstrelaScore=({n})=>(<span style={{color:"#f0b429",fontSize:12}}>{[1,2,3,4,5].map(i=><span key={i} style={{opacity:i<=n?1:0.25}}>★</span>)}</span>);
 
+// ====== DETALHAMENTO DE CORTE — Tamanhos × Cores × Folhas ====================
+const TAMANHOS_DETALHE=["PP","P","M","G","GG","G1","G2","G3","Único"];
+// Ranking inicial — quando integrar Bling de produtos, substituir por dados reais.
+const CORES_RANKING_INICIAL=[
+  {nome:"Preto",     hex:"#1a1a1a"},
+  {nome:"Natural",   hex:"#e4d8be"},
+  {nome:"Off-White", hex:"#f4ede0"},
+  {nome:"Marinho",   hex:"#1c2e4a"},
+  {nome:"Bege",      hex:"#d4c4a4"},
+  {nome:"Areia",     hex:"#c8b896"},
+  {nome:"Cappuccino",hex:"#8b6f47"},
+  {nome:"Bordô",     hex:"#5c1a1a"},
+];
+const CORES_OUTRAS_INICIAL=[
+  {nome:"Terracota", hex:"#a0573c"},
+  {nome:"Mostarda",  hex:"#c49a3a"},
+  {nome:"Oliva",     hex:"#6b6a34"},
+  {nome:"Musgo",     hex:"#4a5d3a"},
+  {nome:"Marrom",    hex:"#5c3a20"},
+  {nome:"Rosa",      hex:"#d4a6a6"},
+  {nome:"Lilás",     hex:"#b8a0c8"},
+  {nome:"Azul",      hex:"#4a7fa5"},
+  {nome:"Verde",     hex:"#3d7a4e"},
+  {nome:"Vermelho",  hex:"#a82828"},
+  {nome:"Cinza",     hex:"#888888"},
+  {nome:"Branco",    hex:"#ffffff"},
+];
+// Helper: corte tem detalhamento válido (tamanhos + cores preenchidos)
+const temDetalhe=(c)=>!!(c?.detalhes&&Array.isArray(c.detalhes.tamanhos)&&c.detalhes.tamanhos.length>0&&Array.isArray(c.detalhes.cores)&&c.detalhes.cores.length>0);
+// SVG do ícone matrix (mesmo do preview)
+const SvgMatrixDet=({color="#4a7fa5",size=13})=>(
+  <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
+    <rect x="1" y="1" width="4" height="4" fill="none" stroke={color} strokeWidth="1"/>
+    <rect x="6" y="1" width="4" height="4" fill={color}/>
+    <rect x="1" y="6" width="4" height="4" fill={color}/>
+    <rect x="6" y="6" width="4" height="4" fill="none" stroke={color} strokeWidth="1"/>
+  </svg>
+);
+
+const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
+  const [estado,setEstado]=useState(temDetalhe(corte)?"salvo":"editando");
+  const [tamSel,setTamSel]=useState(()=>(corte.detalhes?.tamanhos||[]).map(t=>t.tam));
+  const [grades,setGrades]=useState(()=>{const g={};(corte.detalhes?.tamanhos||[]).forEach(t=>{g[t.tam]=t.grade;});return g;});
+  const [coresSel,setCoresSel]=useState(()=>(corte.detalhes?.cores||[]).map(c=>({...c})));
+  const [verTodas,setVerTodas]=useState(false);
+  const [novaCorNome,setNovaCorNome]=useState("");
+  const [novaCorHex,setNovaCorHex]=useState("#888888");
+  const [confirmDel,setConfirmDel]=useState(false);
+  const ehLeitura=estado==="salvo";
+
+  const toggleTam=(t)=>{
+    if(ehLeitura)return;
+    setTamSel(prev=>{
+      if(prev.includes(t)){
+        const novo=prev.filter(x=>x!==t);
+        setGrades(g=>{const{[t]:_,...rest}=g;return rest;});
+        return novo;
+      }
+      // NÃO pré-define grade: input fica vazio e botões 1/2 ficam brancos até user escolher
+      return [...prev,t];
+    });
+  };
+  const setGradeTam=(t,v)=>{if(ehLeitura)return;setGrades(g=>({...g,[t]:v===""||v==null?undefined:(parseInt(v)||0)}));};
+  const toggleCor=(cor)=>{
+    if(ehLeitura)return;
+    setCoresSel(prev=>{
+      const i=prev.findIndex(c=>c.nome===cor.nome);
+      if(i>=0)return prev.filter(c=>c.nome!==cor.nome);
+      return [...prev,{nome:cor.nome,hex:cor.hex,folhas:0}];
+    });
+  };
+  const setFolhasCor=(nome,v)=>{if(ehLeitura)return;setCoresSel(prev=>prev.map(c=>c.nome===nome?{...c,folhas:parseInt(v)||0}:c));};
+  const removerCor=(nome)=>{if(ehLeitura)return;setCoresSel(prev=>prev.filter(c=>c.nome!==nome));};
+  const adicionarNovaCor=()=>{if(ehLeitura||!novaCorNome.trim())return;if(coresSel.some(c=>c.nome.toLowerCase()===novaCorNome.trim().toLowerCase()))return;setCoresSel(prev=>[...prev,{nome:novaCorNome.trim(),hex:novaCorHex,folhas:0}]);setNovaCorNome("");};
+
+  const somaGrades=tamSel.reduce((s,t)=>s+(parseInt(grades[t])||0),0);
+  const somaFolhas=coresSel.reduce((s,c)=>s+(c.folhas||0),0);
+  const qtdCalculada=somaGrades*somaFolhas;
+  const qtdManual=parseFloat(corte.qtd)||0;
+  const divergencia=qtdManual-qtdCalculada;
+  const matriz=tamSel.length&&coresSel.length?coresSel.map(c=>{const linha=tamSel.map(t=>(parseInt(grades[t])||0)*(c.folhas||0));return{cor:c,valores:linha,total:linha.reduce((a,b)=>a+b,0)};}):[];
+  const totaisPorTam=tamSel.map((t,i)=>matriz.reduce((s,row)=>s+row.valores[i],0));
+
+  const salvar=()=>{
+    const detalhes={
+      tamanhos:tamSel.map(t=>({tam:t,grade:parseInt(grades[t])||0})).filter(x=>x.grade>0),
+      cores:coresSel.filter(c=>c.folhas>0).map(c=>({nome:c.nome,hex:c.hex,folhas:c.folhas})),
+    };
+    onSave(corte.id,detalhes);
+    setEstado("salvo");
+  };
+  const apagar=()=>{onDelete(corte.id);onClose();};
+
+  const C={navy:"#2c3e50",blue:"#4a7fa5",cream:"#f7f4f0",sand:"#e8e2da",muted:"#8a9aa4",light:"#c0b8b0",softBlue:"#edf4fb",softBlueBorder:"#c8d8e4",formBg:"#f0f6fb",red:"#c0392b",redBg:"#fdeaea",yellowBg:"#fff8e8",yellowBorder:"#f0d080",yellowText:"#8a6500",green:"#27ae60",greenBg:"#eafbf0",greenBorder:"#b8dfc8"};
+  const FONT="Georgia,serif",MONO="'Courier New',monospace",CALIBRI="Calibri,'Trebuchet MS',sans-serif";
+  const iStyle={border:`1px solid ${C.softBlueBorder}`,borderRadius:6,padding:"6px 8px",fontSize:12,fontFamily:FONT,outline:"none",boxSizing:"border-box",color:C.navy,background:"#fff"};
+  const opLeit=ehLeitura?0.78:1;
+
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9998,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px",overflowY:"auto"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fcfaf7",border:`2px solid ${C.softBlueBorder}`,borderRadius:14,padding:18,maxWidth:780,width:"100%",fontFamily:FONT,color:C.navy,boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
+
+        {/* Cabeçalho */}
+        <div style={{background:C.softBlue,border:`1px solid ${C.softBlueBorder}`,borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:10,color:C.blue,letterSpacing:2,textTransform:"uppercase"}}>Detalhes do corte</div>
+            <div style={{fontSize:17,color:C.navy,fontWeight:600,marginTop:2}}>REF {corte.ref} · {corte.descricao}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{corte.oficina} · {new Date(corte.data).toLocaleDateString("pt-BR")} · Qtd manual: <strong>{qtdManual}</strong></div>
+          </div>
+          <span onClick={onClose} style={{fontSize:22,color:C.muted,cursor:"pointer",padding:6,lineHeight:1}}>×</span>
+        </div>
+
+        {/* TAMANHOS */}
+        <div style={{marginBottom:20,opacity:opLeit}}>
+          <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Tamanhos · marque os que vão no enfesto</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+            {TAMANHOS_DETALHE.map(t=>{const ativo=tamSel.includes(t);return(
+              <button key={t} onClick={()=>toggleTam(t)} disabled={ehLeitura} style={{padding:"8px 14px",border:`1.5px solid ${ativo?C.blue:C.sand}`,background:ativo?C.blue:"#fff",color:ativo?"#fff":C.muted,borderRadius:8,fontSize:12,fontWeight:600,fontFamily:FONT,cursor:ehLeitura?"default":"pointer",letterSpacing:0.5,minWidth:t==="Único"?70:46}}>{t} {ativo&&"✓"}</button>
+            );})}
+          </div>
+
+          {tamSel.length>0&&(
+            <div style={{background:C.formBg,border:`1px solid ${C.softBlueBorder}`,borderRadius:8,padding:14}}>
+              <div style={{fontSize:14,color:C.navy,marginBottom:12,fontWeight:700,fontFamily:FONT}}>Grade</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {tamSel.map(t=>{
+                  const valor=grades[t];
+                  const Btn=({n})=>{const ativo=valor===n;return(
+                    <button onClick={()=>setGradeTam(t,n)} disabled={ehLeitura} style={{width:32,height:30,border:`1.5px solid ${ativo?C.blue:C.sand}`,background:ativo?C.blue:"#fff",color:ativo?"#fff":C.muted,borderRadius:6,fontSize:13,fontWeight:700,fontFamily:MONO,cursor:ehLeitura?"default":"pointer"}}>{n}</button>
+                  );};
+                  return(
+                    <div key={t} style={{display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{fontSize:13,fontWeight:700,color:C.blue,minWidth:32}}>{t}:</span>
+                      <Btn n={1}/><Btn n={2}/>
+                      <span style={{fontSize:10,color:C.muted,marginLeft:4}}>ou</span>
+                      <input type="number" min="0" value={valor==null?"":valor} onChange={e=>setGradeTam(t,e.target.value)} disabled={ehLeitura} placeholder="—" style={{...iStyle,width:60,height:30,textAlign:"center",fontFamily:MONO,fontWeight:700,fontSize:13}}/>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{marginTop:12,fontSize:11,color:C.muted,textAlign:"right"}}>Soma da grade: <strong style={{color:C.navy,fontFamily:MONO}}>{somaGrades}</strong> pç/folha</div>
+            </div>
+          )}
+        </div>
+
+        {/* CORES */}
+        <div style={{marginBottom:20,opacity:opLeit}}>
+          <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Cores · ranking Bling</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+            {CORES_RANKING_INICIAL.map((c,i)=>{const ativo=coresSel.some(s=>s.nome===c.nome);return(
+              <button key={c.nome} onClick={()=>toggleCor(c)} disabled={ehLeitura} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px 6px 6px",border:`1.5px solid ${ativo?C.blue:C.sand}`,background:ativo?C.softBlue:"#fff",borderRadius:20,fontSize:11,fontFamily:FONT,cursor:ehLeitura?"default":"pointer",color:ativo?C.navy:C.navy,fontWeight:ativo?600:400}}>
+                <span style={{width:14,height:14,borderRadius:"50%",background:c.hex,border:`1px solid ${C.sand}`}}/>
+                <span>{c.nome}</span>
+                <span style={{fontSize:9,color:C.muted,fontFamily:MONO}}>#{i+1}</span>
+              </button>
+            );})}
+          </div>
+          <button onClick={()=>setVerTodas(v=>!v)} style={{background:"none",border:`1px dashed ${C.softBlueBorder}`,color:C.blue,padding:"5px 12px",borderRadius:6,fontSize:11,fontFamily:FONT,cursor:"pointer",marginBottom:8}}>{verTodas?"▲ ocultar":`▼ ver todas (${CORES_RANKING_INICIAL.length+CORES_OUTRAS_INICIAL.length})`}</button>
+          {verTodas&&(
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10,padding:10,background:C.cream,borderRadius:8}}>
+              {CORES_OUTRAS_INICIAL.map(c=>{const ativo=coresSel.some(s=>s.nome===c.nome);return(
+                <button key={c.nome} onClick={()=>toggleCor(c)} disabled={ehLeitura} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px 5px 5px",border:`1px solid ${ativo?C.blue:C.sand}`,background:ativo?C.softBlue:"#fff",borderRadius:16,fontSize:10.5,fontFamily:FONT,cursor:ehLeitura?"default":"pointer",color:C.navy}}>
+                  <span style={{width:12,height:12,borderRadius:"50%",background:c.hex,border:`1px solid ${C.sand}`}}/>{c.nome}
+                </button>
+              );})}
+            </div>
+          )}
+          {!ehLeitura&&(
+            <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:14}}>
+              <input type="color" value={novaCorHex} onChange={e=>setNovaCorHex(e.target.value)} style={{width:36,height:30,border:`1px solid ${C.sand}`,borderRadius:6,cursor:"pointer",padding:2}}/>
+              <input placeholder="Nome da nova cor…" value={novaCorNome} onChange={e=>setNovaCorNome(e.target.value)} style={{...iStyle,flex:1,maxWidth:220}}/>
+              <button onClick={adicionarNovaCor} style={{background:C.blue,color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:11,fontFamily:FONT,cursor:"pointer"}}>+ Incluir cor</button>
+            </div>
+          )}
+          {coresSel.length>0&&(
+            <div style={{background:C.formBg,border:`1px solid ${C.softBlueBorder}`,borderRadius:8,padding:14}}>
+              <div style={{fontSize:14,color:C.navy,marginBottom:12,fontWeight:700,fontFamily:FONT}}>Folhas por cor</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))",gap:8}}>
+                {coresSel.map(c=>(
+                  <div key={c.nome} style={{display:"flex",alignItems:"center",gap:8,background:"#fff",borderRadius:6,padding:"6px 8px",border:`1px solid ${C.sand}`}}>
+                    <span style={{width:14,height:14,borderRadius:"50%",background:c.hex,border:`1px solid ${C.sand}`,flexShrink:0}}/>
+                    <span style={{fontSize:12,color:C.navy,flex:1,fontWeight:500}}>{c.nome}</span>
+                    <input type="number" min="0" value={c.folhas||""} onChange={e=>setFolhasCor(c.nome,e.target.value)} disabled={ehLeitura} style={{...iStyle,width:50,textAlign:"center",fontFamily:CALIBRI,fontWeight:700,fontSize:13}}/>
+                    {!ehLeitura&&<span onClick={()=>removerCor(c.nome)} style={{cursor:"pointer",color:C.light,fontSize:14,padding:2}}>×</span>}
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:10,fontSize:11,color:C.muted,textAlign:"right"}}>Total de folhas: <strong style={{color:C.navy,fontFamily:MONO}}>{somaFolhas}</strong></div>
+            </div>
+          )}
+        </div>
+
+        {/* MATRIZ */}
+        {coresSel.length>0&&tamSel.length>0&&somaFolhas>0&&somaGrades>0&&(
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Matriz · peças por tamanho × cor</div>
+            <div style={{background:"#fff",border:`1px solid ${C.sand}`,borderRadius:10,overflow:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:FONT}}>
+                <thead><tr style={{background:C.cream}}>
+                  <th style={{padding:"8px 10px",textAlign:"left",fontSize:10,color:C.muted,borderBottom:`1px solid ${C.sand}`,fontWeight:600}}>Cor</th>
+                  {tamSel.map(t=><th key={t} style={{padding:"8px 10px",textAlign:"center",fontSize:10,color:C.muted,borderBottom:`1px solid ${C.sand}`,fontWeight:600}}>{t}</th>)}
+                  <th style={{padding:"8px 10px",textAlign:"center",fontSize:10,color:C.blue,borderBottom:`1px solid ${C.sand}`,fontWeight:700}}>Total</th>
+                </tr></thead>
+                <tbody>
+                  {matriz.map((row,ri)=>(
+                    <tr key={ri} style={{borderBottom:`1px solid ${C.cream}`}}>
+                      <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:12,height:12,borderRadius:"50%",background:row.cor.hex,border:`1px solid ${C.sand}`}}/><span style={{fontSize:12,color:C.navy,fontWeight:500}}>{row.cor.nome}</span></div></td>
+                      {row.valores.map((v,i)=><td key={i} style={{padding:"7px 10px",textAlign:"center",color:C.navy,fontFamily:MONO}}>{v}</td>)}
+                      <td style={{padding:"7px 10px",textAlign:"center",color:C.blue,fontFamily:MONO,fontWeight:700}}>{row.total}</td>
+                    </tr>
+                  ))}
+                  <tr style={{background:C.softBlue,borderTop:`2px solid ${C.softBlueBorder}`}}>
+                    <td style={{padding:"9px 10px",fontWeight:700,fontSize:11,color:C.navy,letterSpacing:1}}>TOTAL</td>
+                    {totaisPorTam.map((t,i)=><td key={i} style={{padding:"9px 10px",textAlign:"center",color:C.navy,fontFamily:MONO,fontWeight:700}}>{t}</td>)}
+                    <td style={{padding:"9px 10px",textAlign:"center",color:C.navy,fontFamily:MONO,fontWeight:700,fontSize:14}}>{qtdCalculada}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* COMPARATIVO */}
+        {(coresSel.length>0||tamSel.length>0)&&(
+          <div style={{background:divergencia===0&&qtdCalculada>0?C.greenBg:C.yellowBg,border:`1px solid ${divergencia===0&&qtdCalculada>0?C.greenBorder:C.yellowBorder}`,borderRadius:10,padding:"14px 16px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:12}}>
+            <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+              <div><div style={{fontSize:9,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>Qtd manual</div><div style={{fontSize:22,fontWeight:700,fontFamily:MONO,color:C.navy}}>{qtdManual}</div></div>
+              <div><div style={{fontSize:9,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>Qtd calculada</div><div style={{fontSize:22,fontWeight:700,fontFamily:MONO,color:C.navy}}>{qtdCalculada}</div></div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              {divergencia===0&&qtdCalculada>0?(
+                <><div style={{fontSize:20,color:C.green}}>✓</div><div style={{fontSize:12,color:C.green,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Quantidade OK</div></>
+              ):(
+                <><div style={{fontSize:11,color:C.yellowText,letterSpacing:2,textTransform:"uppercase",fontWeight:700,marginBottom:2}}>⚠ Divergência</div><div style={{fontSize:18,fontWeight:700,color:C.yellowText,fontFamily:MONO}}>{divergencia>0?"+":""}{divergencia}</div><div style={{fontSize:10,color:C.yellowText,marginTop:2}}>{divergencia>0?"manual maior que calculada":"calculada maior que manual"}</div></>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CONFIRMAÇÃO EXCLUIR */}
+        {confirmDel&&(
+          <div style={{background:C.redBg,border:`1px solid ${C.red}`,borderRadius:10,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <div style={{fontSize:12,color:C.red}}><strong>Apagar todos os detalhes deste corte?</strong> O corte continua, só os detalhes são removidos.</div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>setConfirmDel(false)} style={{background:"#fff",color:C.muted,border:`1px solid ${C.sand}`,borderRadius:6,padding:"6px 14px",fontSize:11,fontFamily:FONT,cursor:"pointer"}}>Não</button>
+              <button onClick={apagar} style={{background:C.red,color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:11,fontFamily:FONT,cursor:"pointer",fontWeight:600}}>Sim, apagar</button>
+            </div>
+          </div>
+        )}
+
+        {/* BOTÕES */}
+        <div style={{display:"flex",justifyContent:"flex-end",gap:8,alignItems:"center"}}>
+          {ehLeitura?(
+            <>
+              <button onClick={()=>setConfirmDel(true)} title="Excluir os dados de detalhamento" style={{background:C.red,color:"#fff",border:"none",borderRadius:6,padding:"8px 14px",fontSize:12,fontFamily:FONT,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 3L13 13M13 3L3 13" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>
+                Excluir detalhes
+              </button>
+              <button onClick={()=>setEstado("editando")} title="Editar o detalhamento salvo" style={{background:C.blue,color:"#fff",border:"none",borderRadius:6,padding:"8px 18px",fontSize:12,fontFamily:FONT,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontWeight:600}}>
+                <svg width="12" height="12" viewBox="0 0 20 20" fill="none"><path d="M14.5 2.5L17.5 5.5L7 16H4V13L14.5 2.5Z" fill="#fff" stroke="#fff" strokeWidth="0.5" strokeLinejoin="round"/><path d="M12.5 4.5L15.5 7.5" stroke="#fff" strokeWidth="1" strokeLinecap="round"/></svg>
+                Editar
+              </button>
+            </>
+          ):(
+            <>
+              <button onClick={onClose} style={{background:"#fff",color:C.muted,border:`1px solid ${C.sand}`,borderRadius:6,padding:"8px 18px",fontSize:12,fontFamily:FONT,cursor:"pointer"}}>Cancelar</button>
+              <button onClick={salvar} disabled={tamSel.length===0||coresSel.length===0||somaFolhas===0||somaGrades===0} style={{background:tamSel.length===0||coresSel.length===0||somaFolhas===0||somaGrades===0?C.light:C.blue,color:"#fff",border:"none",borderRadius:6,padding:"8px 22px",fontSize:12,fontFamily:FONT,cursor:tamSel.length===0||coresSel.length===0||somaFolhas===0||somaGrades===0?"not-allowed":"pointer",fontWeight:600}}>Salvar detalhamento</button>
+            </>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
 const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD,isAdmin=true})=>{
   const [aba,setAba]=useState("cortes");
   const [cadAba,setCadAba]=useState("produtos");
@@ -3243,6 +3519,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [trocaDe,setTrocaDe]=useState("");
   const [trocaPara,setTrocaPara]=useState("");
   const [trocaMsg,setTrocaMsg]=useState("");
+  const [corteDetalhe,setCorteDetalhe]=useState(null); // null = fechado, corte = modal aberto pra esse corte
 
   // Fotos: mesma lógica FotoProd + zoom DOM
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
@@ -3289,6 +3566,8 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     }));
   };
   const editarQtdEntregue=(id,v)=>setCortes(prev=>prev.map(c=>c.id===id?{...c,qtdEntregue:parseFloat(v)||0,_mod:Date.now()}:c));
+  const salvarDetalhes=(id,detalhes)=>setCortes(prev=>prev.map(c=>c.id===id?{...c,detalhes,_mod:Date.now()}:c));
+  const excluirDetalhes=(id)=>setCortes(prev=>prev.map(c=>{if(c.id!==id)return c;const{detalhes,...rest}=c;return{...rest,_mod:Date.now()};}));
   const executarTroca=()=>{
     if(!trocaDe||!trocaPara){setTrocaMsg("Preencha os dois campos.");return;}
     if(trocaDe===trocaPara){setTrocaMsg("As referências são iguais.");return;}
@@ -3339,6 +3618,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   return(
     <div>
       <ConfirmDialog confirm={confirm?confirm.msg:null} onCancel={()=>setConfirm(null)} onConfirm={()=>{confirm.onYes();}}/>
+      {corteDetalhe&&<DetalhamentoModal corte={corteDetalhe} onClose={()=>setCorteDetalhe(null)} onSave={salvarDetalhes} onDelete={excluirDetalhes}/>}
       <div style={{display:"flex",borderBottom:"1px solid #e8e2da",marginBottom:16}}>
         <TabBtn id="cortes" label="Cortes" Icon={SvgCortes}/>
         <TabBtn id="dashboard" label="Dashboard" Icon={SvgDashOficinas}/>
@@ -3397,7 +3677,13 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                   return(
                     <div key={c.id} style={{display:"grid",gridTemplateColumns:"10px 52px 84px 1fr 90px 60px 100px 90px 90px 52px 24px 52px 70px 60px 32px 28px",borderBottom:"1px solid #d0dde8",alignItems:"center"}}>
                       <div style={{height:"100%",background:STATUS_COR[st],minHeight:36,alignSelf:"stretch"}}/>
-                      <div style={{padding:"5px 6px",fontSize:11,fontWeight:600,color:"#4a7fa5",background:"#edf4fb",alignSelf:"stretch",display:"flex",alignItems:"center"}}>{c.nCorte}</div>
+                      <div style={{padding:"4px 4px",background:"#edf4fb",alignSelf:"stretch",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3}}>
+                        <span style={{fontSize:11,fontWeight:600,color:"#4a7fa5"}}>{c.nCorte}</span>
+                        <button onClick={()=>setCorteDetalhe(c)} title={temDetalhe(c)?"Ver detalhamento":"Adicionar detalhamento"} style={{position:"relative",width:22,height:22,borderRadius:5,background:"#fff",border:"1px solid #c8d8e4",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          <SvgMatrixDet color="#4a7fa5"/>
+                          {!temDetalhe(c)&&<span style={{position:"absolute",top:-3,right:-3,width:9,height:9,borderRadius:"50%",background:"#f0b429",border:"1.5px solid #fff"}}/>}
+                        </button>
+                      </div>
                       <div style={{padding:"3px 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                         <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                         <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif"}}>{c.ref}</div>
