@@ -3223,30 +3223,24 @@ const EstrelaScore=({n})=>(<span style={{color:"#f0b429",fontSize:12}}>{[1,2,3,4
 
 // ====== DETALHAMENTO DE CORTE — Tamanhos × Cores × Folhas ====================
 const TAMANHOS_DETALHE=["PP","P","M","G","GG","G1","G2","G3","Único"];
-// Ranking inicial — quando integrar Bling de produtos, substituir por dados reais.
+// Ranking Bling — top 10 cores por venda (atualizar quando integrar Bling Vendas).
 const CORES_RANKING_INICIAL=[
-  {nome:"Preto",     hex:"#1a1a1a"},
-  {nome:"Natural",   hex:"#e4d8be"},
-  {nome:"Off-White", hex:"#f4ede0"},
-  {nome:"Marinho",   hex:"#1c2e4a"},
-  {nome:"Bege",      hex:"#d4c4a4"},
-  {nome:"Areia",     hex:"#c8b896"},
-  {nome:"Cappuccino",hex:"#8b6f47"},
-  {nome:"Bordô",     hex:"#5c1a1a"},
+  {nome:"Preto",        hex:"#1a1a1a"},
+  {nome:"Bege",         hex:"#d4c4a4"},
+  {nome:"Marrom",       hex:"#5c3a20"},
+  {nome:"Figo",         hex:"#6b3a4c"},
+  {nome:"Azul Marinho", hex:"#1c2e4a"},
+  {nome:"Caramelo",     hex:"#a8743b"},
+  {nome:"Verde Militar",hex:"#4a5d3a"},
+  {nome:"Nude",         hex:"#e8c8b0"},
+  {nome:"Azul Serenity",hex:"#91a8d0"},
+  {nome:"Marrom Escuro",hex:"#3d2418"},
 ];
 const CORES_OUTRAS_INICIAL=[
-  {nome:"Terracota", hex:"#a0573c"},
-  {nome:"Mostarda",  hex:"#c49a3a"},
-  {nome:"Oliva",     hex:"#6b6a34"},
-  {nome:"Musgo",     hex:"#4a5d3a"},
-  {nome:"Marrom",    hex:"#5c3a20"},
-  {nome:"Rosa",      hex:"#d4a6a6"},
-  {nome:"Lilás",     hex:"#b8a0c8"},
-  {nome:"Azul",      hex:"#4a7fa5"},
-  {nome:"Verde",     hex:"#3d7a4e"},
-  {nome:"Vermelho",  hex:"#a82828"},
-  {nome:"Cinza",     hex:"#888888"},
-  {nome:"Branco",    hex:"#ffffff"},
+  {nome:"Verde Sálvia", hex:"#87a96b"},
+  {nome:"Azul Claro",   hex:"#a8c8e0"},
+  {nome:"Vinho",        hex:"#5c1a2e"},
+  {nome:"Bege Claro",   hex:"#ebdcc0"},
 ];
 // Helper: corte tem detalhamento válido (tamanhos + cores preenchidos)
 const temDetalhe=(c)=>!!(c?.detalhes&&Array.isArray(c.detalhes.tamanhos)&&c.detalhes.tamanhos.length>0&&Array.isArray(c.detalhes.cores)&&c.detalhes.cores.length>0);
