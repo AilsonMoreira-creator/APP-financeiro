@@ -243,6 +243,28 @@ export default async function handler(req, res) {
     resumo.scf_map_carregado = scfToRef.size;
     console.log(`[estoque-cron] scf map: ${scfToRef.size} entries`);
 
+    // ═══ FASE 3.6: carregar catálogo Bling (sku → {cor, tamanho}) ═══
+    // Fallback pra cor/tam quando ML não retorna no formato família.
+    // Populado por /api/bling-produtos-sync (cron diário 6h).
+    resumo.fase = 'carregar_bling_catalogo';
+    const blingCatalogo = new Map();
+    try {
+      const { data: catRow } = await supabase
+        .from('amicia_data')
+        .select('payload')
+        .eq('user_id', 'bling-catalogo-skus')
+        .maybeSingle();
+      const skus = catRow?.payload?.skus || {};
+      for (const sku in skus) {
+        const info = skus[sku];
+        if (info?.cor || info?.tamanho) {
+          blingCatalogo.set(sku, { cor: info.cor || null, tamanho: info.tamanho || null });
+        }
+      }
+    } catch (e) { console.error('[estoque-cron] bling catalogo load:', e.message); }
+    resumo.bling_catalogo_carregado = blingCatalogo.size;
+    console.log(`[estoque-cron] bling catalogo: ${blingCatalogo.size} skus com cor/tam`);
+
     // ═══ FASE 4: multiget e extração ═══
     resumo.fase = 'multiget';
     const snapshotRows = [];
@@ -328,21 +350,30 @@ export default async function handler(req, res) {
             totalEstoque += qtd;
           }
         } else {
-          // Anúncio sem variação
+          // Anúncio sem variação (caso família novo do ML — cada variação é seu próprio MLB)
           const skuReal = extractSellerSku(item.attributes) || sellerField;
           const qtd = item.available_quantity || 0;
           if (skuReal) {
+            // Tenta extrair cor/tam dos attributes do item (pode vir como atributo direto)
+            let { cor: corItem, tamanho: tamItem } = extractColorSize(item.attributes);
+            // Fallback: se ainda null, busca no catálogo Bling pelo SKU
+            if ((!corItem || !tamItem) && blingCatalogo.has(skuReal)) {
+              const fb = blingCatalogo.get(skuReal);
+              if (!corItem) corItem = fb.cor;
+              if (!tamItem) tamItem = fb.tamanho;
+            }
             snapshotRows.push({
               sku: skuReal,
               item_id: itemId,
               variation_id: null,
-              cor: null, tamanho: null,
+              cor: corItem || null,
+              tamanho: tamItem || null,
               available: qtd,
               ml_title: title,
               ml_status: 'active',
               updated_at: new Date().toISOString(),
             });
-            varList.push({ sku: skuReal, cor: null, tam: null, qtd });
+            varList.push({ sku: skuReal, cor: corItem || null, tam: tamItem || null, qtd });
             totalEstoque = qtd;
           }
         }

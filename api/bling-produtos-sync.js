@@ -225,6 +225,25 @@ export default async function handler(req, res) {
     }
     resumo.skus_gravados = totalGravado;
 
+    // ── FASE 4.5: salva catalogo COMPLETO (sku -> {ref, cor, tamanho}) em amicia_data ──
+    // ml_sku_ref_map so guarda sku/ref. cor/tam ficam aqui pra ml-estoque-cron usar
+    // como fallback quando ML nao retorna attribute_combinations (caso familia).
+    resumo.fase = 'salvar_catalogo';
+    const catalogoSkus = {};
+    for (const [sku, info] of skuMap.entries()) {
+      catalogoSkus[sku] = {
+        ref: info.ref,
+        cor: info.cor || null,
+        tamanho: info.tamanho || null,
+      };
+    }
+    const { error: catErr } = await supabase.from('amicia_data').upsert(
+      { user_id: 'bling-catalogo-skus', payload: { skus: catalogoSkus, total: skuMap.size, _updated: agora } },
+      { onConflict: 'user_id' }
+    );
+    if (catErr) { console.error('[bling-produtos-sync] catalogo:', catErr.message); resumo.erros++; }
+    else resumo.catalogo_skus_salvos = skuMap.size;
+
     // ── FASE 5: salvar status ─────────────────────────────────────────
     resumo.fase = 'salvar_status';
     resumo.duracao_ms = Date.now() - inicio;
