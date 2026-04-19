@@ -4513,10 +4513,11 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
               const ref=prod.ref;
               if(!cc.produtos[ref])cc.produtos[ref]={ref,desc:prod.desc,qtd:0,valor:0};
               cc.produtos[ref].qtd+=prod.qtd||0;cc.produtos[ref].valor+=prod.valor||0;
-              if(!r.porProduto[ref])r.porProduto[ref]={ref,desc:prod.desc,marca:mn,marcas:{},qtd:0,valor:0,tam:{},cor:{},porCanal:{}};
+              if(!r.porProduto[ref])r.porProduto[ref]={ref,desc:prod.desc,marca:mn,marcas:{},qtd:0,valor:0,tam:{},cor:{},porCanal:{},marcaCanal:{}};
               const rp=r.porProduto[ref];rp.qtd+=prod.qtd||0;rp.valor+=prod.valor||0;
               rp.marcas[mn]=(rp.marcas[mn]||0)+(prod.qtd||0);
               if(!rp.porCanal[cn])rp.porCanal[cn]={qtd:0,valor:0};rp.porCanal[cn].qtd+=prod.qtd||0;rp.porCanal[cn].valor+=prod.valor||0;
+              if(!rp.marcaCanal[mn])rp.marcaCanal[mn]={};if(!rp.marcaCanal[mn][cn])rp.marcaCanal[mn][cn]={qtd:0,valor:0};rp.marcaCanal[mn][cn].qtd+=prod.qtd||0;rp.marcaCanal[mn][cn].valor+=prod.valor||0;
               for(const t in(prod.tam||{})){rp.tam[t]=(rp.tam[t]||0)+prod.tam[t];r.tamGeral[t]=(r.tamGeral[t]||0)+prod.tam[t];}
               for(const c in(prod.cor||{})){rp.cor[c]=(rp.cor[c]||0)+prod.cor[c];r.corGeral[c]=(r.corGeral[c]||0)+prod.cor[c];}
             }
@@ -5182,7 +5183,41 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
           // Canais e marcas reais (do dado, não hardcoded)
           const canaisReais=Object.keys(pd.porCanal).sort((a,b)=>(pd.porCanal[b]?.bruto||0)-(pd.porCanal[a]?.bruto||0));
           const marcasReais=Object.keys(pd.porMarca).sort((a,b)=>(pd.porMarca[b]?.bruto||0)-(pd.porMarca[a]?.bruto||0));
-          const prods=Object.values(pd.porProduto).filter(p=>filtroMarca==="todas"||(p.marcas&&p.marcas[filtroMarca]>0)).map(p=>({...p,qtdF:filtroMarca!=="todas"?(p.marcas[filtroMarca]||0):(filtroCanal==="todos"?p.qtd:(p.porCanal[filtroCanal]?.qtd||0)),valF:filtroCanal==="todos"?p.valor:(p.porCanal[filtroCanal]?.valor||0)})).filter(p=>p.qtdF>0).sort((a,b)=>b.qtdF-a.qtdF).slice(0,30);
+          const prods=Object.values(pd.porProduto).filter(p=>{
+            // Filtro de marca: precisa ter vendas daquela marca
+            if(filtroMarca!=="todas"&&!(p.marcas&&p.marcas[filtroMarca]>0))return false;
+            // Filtro de canal: precisa ter vendas naquele canal (quando filtro marca ativo, precisa ter naquele cruzamento)
+            if(filtroCanal!=="todos"){
+              if(filtroMarca!=="todas"){
+                // Ambos filtros: exige cruzamento marca × canal
+                if(!(p.marcaCanal&&p.marcaCanal[filtroMarca]&&p.marcaCanal[filtroMarca][filtroCanal]?.qtd>0))return false;
+              } else {
+                // Só filtro de canal: exige vendas no canal
+                if(!(p.porCanal&&p.porCanal[filtroCanal]?.qtd>0))return false;
+              }
+            }
+            return true;
+          }).map(p=>{
+            let qtdF,valF;
+            if(filtroMarca!=="todas"&&filtroCanal!=="todos"){
+              // Cruzamento marca × canal
+              qtdF=p.marcaCanal?.[filtroMarca]?.[filtroCanal]?.qtd||0;
+              valF=p.marcaCanal?.[filtroMarca]?.[filtroCanal]?.valor||0;
+            } else if(filtroMarca!=="todas"){
+              // Só marca: soma todos canais daquela marca
+              qtdF=p.marcas[filtroMarca]||0;
+              valF=p.marcaCanal?.[filtroMarca]?Object.values(p.marcaCanal[filtroMarca]).reduce((s,x)=>s+(x.valor||0),0):0;
+            } else if(filtroCanal!=="todos"){
+              // Só canal
+              qtdF=p.porCanal[filtroCanal]?.qtd||0;
+              valF=p.porCanal[filtroCanal]?.valor||0;
+            } else {
+              // Nenhum filtro
+              qtdF=p.qtd;
+              valF=p.valor;
+            }
+            return {...p,qtdF,valF};
+          }).filter(p=>p.qtdF>0).sort((a,b)=>b.qtdF-a.qtdF).slice(0,30);
           const maxQ=prods.length>0?prods[0].qtdF:1;
           const tamS=Object.entries(pd.tamGeral).sort((a,b)=>b[1]-a[1]);const tamT=tamS.reduce((s,t)=>s+t[1],0)||1;const maxTam=tamS.length>0?tamS[0][1]:1;
           const corS=Object.entries(pd.corGeral).sort((a,b)=>b[1]-a[1]);const corT=corS.reduce((s,c)=>s+c[1],0)||1;const maxCor=corS.length>0?corS[0][1]:1;
