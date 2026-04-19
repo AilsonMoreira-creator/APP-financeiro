@@ -23,6 +23,10 @@
     {
       "path": "/api/ml-estoque-cron",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/bling-produtos-sync",
+      "schedule": "0 6 * * *"
     }
   ]
 }

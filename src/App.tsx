@@ -3223,7 +3223,12 @@ const EstrelaScore=({n})=>(<span style={{color:"#f0b429",fontSize:12}}>{[1,2,3,4
 
 // ====== DETALHAMENTO DE CORTE — Tamanhos × Cores × Folhas ====================
 const TAMANHOS_DETALHE=["PP","P","M","G","GG","G1","G2","G3","Único"];
-// Ranking Bling — top 10 cores por venda (atualizar quando integrar Bling Vendas).
+// Mapa de hex pra nomes de cor do Bling (compartilhado entre BlingContent e DetalhamentoModal)
+const BLING_COR_HEX={Preto:"#222",Natural:"#d4c8a8",Branco:"#f5f0e8",Areia:"#c8b88a",Verde:"#4a8a4a","Verde Agua":"#5ab8a0","Verde Militar":"#5a6b4a","Verde Salvia":"#b5c99a","Verde Escuro":"#2d5a2d",Terracota:"#b85c38",Rose:"#d4a0a0",Caqui:"#8a7a5a",Cinza:"#999",Marrom:"#6b4226","Marrom Escuro":"#4a2a12",Azul:"#3a6aa5","Azul Marinho":"#1a3a6a","Azul Claro":"#7ab0d4","Azul Serenity":"#5b9bd5","Amarelo Manteiga":"#e8d080",Bege:"#d4c0a0","Bege Claro":"#e8d8c0",Caramelo:"#b87a3a",Figo:"#6a3a5a","Off White":"#f0e8d8",Creme:"#e8d8c0",Cappuccino:"#8a6a4a",Vermelho:"#c0392b",Roxo:"#6a2d8a",Laranja:"#e67e22",Bordo:"#6a1a2a",Rosa:"#d48aa0",Nude:"#c8a890","Vinho":"#5a1a2a"};
+const dotColorBling=(cor)=>BLING_COR_HEX[cor]||"#a89f94";
+
+// Ranking Bling — top cores por venda. Atualizar manualmente conforme Bling
+// expande o ranking; quando integrar Bling Vendas, puxar via API.
 const CORES_RANKING_INICIAL=[
   {nome:"Preto",        hex:"#1a1a1a"},
   {nome:"Bege",         hex:"#d4c4a4"},
@@ -3235,13 +3240,13 @@ const CORES_RANKING_INICIAL=[
   {nome:"Nude",         hex:"#e8c8b0"},
   {nome:"Azul Serenity",hex:"#91a8d0"},
   {nome:"Marrom Escuro",hex:"#3d2418"},
-];
-const CORES_OUTRAS_INICIAL=[
   {nome:"Verde Sálvia", hex:"#87a96b"},
   {nome:"Azul Claro",   hex:"#a8c8e0"},
   {nome:"Vinho",        hex:"#5c1a2e"},
   {nome:"Bege Claro",   hex:"#ebdcc0"},
+  // TODO: posicoes 15 e 16 — aguardando confirmacao do ranking Bling real
 ];
+const CORES_OUTRAS_INICIAL=[];
 // Helper: corte tem detalhamento válido (tamanhos + cores preenchidos)
 const temDetalhe=(c)=>!!(c?.detalhes&&Array.isArray(c.detalhes.tamanhos)&&c.detalhes.tamanhos.length>0&&Array.isArray(c.detalhes.cores)&&c.detalhes.cores.length>0);
 // SVG do ícone matrix (mesmo do preview)
@@ -3264,6 +3269,18 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
   const [novaCorHex,setNovaCorHex]=useState("#888888");
   const [confirmDel,setConfirmDel]=useState(false);
   const ehLeitura=estado==="salvo";
+
+  // Lê o ranking REAL do Bling salvo pelo BlingContent (top 16 cores por venda).
+  // Fallback pra lista hardcoded se Bling ainda não foi sincronizado.
+  const [rankingBling,_setRB]=useState(()=>{
+    try{
+      const raw=localStorage.getItem("amica_bling_cores_top");
+      if(raw){const d=JSON.parse(raw);if(d?.cores?.length>0)return{cores:d.cores,fonte:"bling",ts:d._updated};}
+    }catch(e){console.error("Read bling cores top:",e);}
+    return{cores:CORES_RANKING_INICIAL,fonte:"fallback",ts:null};
+  });
+  const coresRanking=rankingBling.cores;
+  const coresOutras=CORES_OUTRAS_INICIAL;
 
   const toggleTam=(t)=>{
     if(ehLeitura)return;
@@ -3362,9 +3379,13 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
 
         {/* CORES */}
         <div style={{marginBottom:20,opacity:opLeit}}>
-          <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Cores · ranking Bling</div>
+          <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+            <span>Cores · ranking Bling</span>
+            {rankingBling.fonte==="bling"&&rankingBling.ts&&<span style={{fontSize:9,color:C.green,letterSpacing:0.5,textTransform:"none",fontWeight:500}}>● dados reais ({new Date(rankingBling.ts).toLocaleDateString("pt-BR")})</span>}
+            {rankingBling.fonte==="fallback"&&<span style={{fontSize:9,color:C.yellowText,letterSpacing:0.5,textTransform:"none",fontWeight:500}}>● aguardando sync Bling</span>}
+          </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-            {CORES_RANKING_INICIAL.map((c,i)=>{const ativo=coresSel.some(s=>s.nome===c.nome);return(
+            {coresRanking.map((c,i)=>{const ativo=coresSel.some(s=>s.nome===c.nome);return(
               <button key={c.nome} onClick={()=>toggleCor(c)} disabled={ehLeitura} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px 6px 6px",border:`1.5px solid ${ativo?C.blue:C.sand}`,background:ativo?C.softBlue:"#fff",borderRadius:20,fontSize:11,fontFamily:FONT,cursor:ehLeitura?"default":"pointer",color:ativo?C.navy:C.navy,fontWeight:ativo?600:400}}>
                 <span style={{width:14,height:14,borderRadius:"50%",background:c.hex,border:`1px solid ${C.sand}`}}/>
                 <span>{c.nome}</span>
@@ -3372,10 +3393,10 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
               </button>
             );})}
           </div>
-          <button onClick={()=>setVerTodas(v=>!v)} style={{background:"none",border:`1px dashed ${C.softBlueBorder}`,color:C.blue,padding:"5px 12px",borderRadius:6,fontSize:11,fontFamily:FONT,cursor:"pointer",marginBottom:8}}>{verTodas?"▲ ocultar":`▼ ver todas (${CORES_RANKING_INICIAL.length+CORES_OUTRAS_INICIAL.length})`}</button>
+          {coresOutras.length>0&&<button onClick={()=>setVerTodas(v=>!v)} style={{background:"none",border:`1px dashed ${C.softBlueBorder}`,color:C.blue,padding:"5px 12px",borderRadius:6,fontSize:11,fontFamily:FONT,cursor:"pointer",marginBottom:8}}>{verTodas?"▲ ocultar":`▼ ver todas (${coresRanking.length+coresOutras.length})`}</button>}
           {verTodas&&(
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10,padding:10,background:C.cream,borderRadius:8}}>
-              {CORES_OUTRAS_INICIAL.map(c=>{const ativo=coresSel.some(s=>s.nome===c.nome);return(
+              {coresOutras.map(c=>{const ativo=coresSel.some(s=>s.nome===c.nome);return(
                 <button key={c.nome} onClick={()=>toggleCor(c)} disabled={ehLeitura} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px 5px 5px",border:`1px solid ${ativo?C.blue:C.sand}`,background:ativo?C.softBlue:"#fff",borderRadius:16,fontSize:10.5,fontFamily:FONT,cursor:ehLeitura?"default":"pointer",color:C.navy}}>
                   <span style={{width:12,height:12,borderRadius:"50%",background:c.hex,border:`1px solid ${C.sand}`}}/>{c.nome}
                 </button>
@@ -4098,6 +4119,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [busca,setBusca]=useState("");
   const [modalRef,setModalRef]=useState(null); // ref selecionada
   const [syncing,setSyncing]=useState(false);
+  const [syncCatalogo,setSyncCatalogo]=useState(false);
+  const [syncCatalogoMsg,setSyncCatalogoMsg]=useState(null);
   const [calcDesc,setCalcDesc]=useState({}); // ref → descricao da Calculadora
 
   const carregarCalc=async()=>{
@@ -4131,6 +4154,30 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       await carregar();
     }catch(e){alert('Erro: '+e.message);}
     finally{setSyncing(false);}
+  };
+
+  const sincronizarCatalogo=async()=>{
+    if(syncCatalogo)return;
+    setSyncCatalogo(true);setSyncCatalogoMsg("⏳ Lendo catálogo Bling Lumia...");
+    try{
+      const r=await fetch('/api/bling-produtos-sync');
+      const d=await r.json();
+      if(!d.ok){setSyncCatalogoMsg("❌ Erro: "+(d.error||"desconhecido"));return;}
+      const partes=[];
+      if(d.skus_novos)partes.push(`${d.skus_novos} SKUs novos`);
+      if(d.skus_atualizados)partes.push(`${d.skus_atualizados} atualizados`);
+      if(d.skus_inalterados)partes.push(`${d.skus_inalterados} já mapeados`);
+      const dur=Math.round((d.duracao_ms||0)/1000);
+      setSyncCatalogoMsg(`✓ ${d.refs_unicas} refs · ${partes.join(" · ")} (${dur}s). Disparando recalculo do estoque...`);
+      // Em seguida dispara o cron de estoque pra refletir os novos mapeamentos
+      await fetch('/api/ml-estoque',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"sync_now"})});
+      setTimeout(async()=>{
+        await carregar();
+        setSyncCatalogoMsg(`✓ ${d.refs_unicas} refs no catálogo. Estoque atualizado.`);
+        setTimeout(()=>setSyncCatalogoMsg(null),8000);
+      },3000);
+    }catch(e){setSyncCatalogoMsg("❌ Erro: "+e.message);}
+    finally{setSyncCatalogo(false);}
   };
 
   useEffect(()=>{carregarCalc();carregar();},[]);
@@ -4219,18 +4266,20 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     </div>
 
     {/* Toolbar */}
-    <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:"10px 14px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+    <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:"10px 14px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:syncCatalogoMsg?6:14}}>
       <div style={{flex:1,minWidth:200,position:"relative"}}>
         <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#8a9aa4",fontSize:13,pointerEvents:"none"}}>🔍</span>
         <input type="text" value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por referência ou descrição..." style={{width:"100%",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px 7px 32px",fontSize:13,fontFamily:"Georgia,serif",color:"#2c3e50",background:"#faf8f5",outline:"none"}}/>
       </div>
       <div style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>última sync: <b style={{color:"#2c3e50"}}>{ultSync}</b></div>
-      <button onClick={forcarSync} disabled={syncing} title="Forçar sync agora" style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#4a7fa5",opacity:syncing?0.5:1}}>{syncing?"⏳":"🔄"}</button>
+      <button onClick={sincronizarCatalogo} disabled={syncCatalogo} title="Lê o catálogo do Bling (Lumia) e popula SKU→ref pra refs novas/sem mapeamento" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ catálogo":"📚 sync catálogo Bling"}</button>
+      <button onClick={forcarSync} disabled={syncing} title="Força recálculo do estoque ML agora" style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#4a7fa5",opacity:syncing?0.5:1}}>{syncing?"⏳":"🔄"}</button>
       <div style={{display:"flex",background:"#faf8f5",border:"1px solid #e8e2da",borderRadius:8,padding:3,gap:2}}>
         <button onClick={()=>setView("grid")} style={{background:view==="grid"?"#2c3e50":"transparent",color:view==="grid"?"#fff":"#8a9aa4",border:"none",padding:"5px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontFamily:"Georgia,serif",fontWeight:600}}>▦ Grid</button>
         <button onClick={()=>setView("list")} style={{background:view==="list"?"#2c3e50":"transparent",color:view==="list"?"#fff":"#8a9aa4",border:"none",padding:"5px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontFamily:"Georgia,serif",fontWeight:600}}>≡ Lista</button>
       </div>
     </div>
+    {syncCatalogoMsg&&<div style={{background:syncCatalogoMsg.startsWith("❌")?"#fdeaea":syncCatalogoMsg.startsWith("✓")?"#eafbf0":"#fff8e8",border:`1px solid ${syncCatalogoMsg.startsWith("❌")?"#f4b8b8":syncCatalogoMsg.startsWith("✓")?"#b8dfc8":"#f0d080"}`,borderRadius:8,padding:"7px 14px",fontSize:11,color:syncCatalogoMsg.startsWith("❌")?"#c0392b":syncCatalogoMsg.startsWith("✓")?"#27ae60":"#8a6500",marginBottom:14,fontFamily:"Georgia,serif"}}>{syncCatalogoMsg}</div>}
 
     {/* Grid / Lista */}
     {view==="grid"?(
@@ -4351,6 +4400,29 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const [filtroMarca,setFiltroMarca]=useState("todas");
   const [filtroCanal,setFiltroCanal]=useState("todos");
   const [prodFiltroData,setProdFiltroData]=useState("7dias");
+
+  // ── Escaneia blingVendas e salva o top 16 cores no localStorage pra o
+  // modal de Detalhamento (em Oficinas) ler o ranking REAL do Bling. ─────
+  useEffect(()=>{
+    if(!blingVendas||Object.keys(blingVendas).length===0)return;
+    const corCounts={};
+    for(const mk in blingVendas){
+      const monthData=blingVendas[mk];if(!monthData||monthData._vazio)continue;
+      for(const dk in monthData){
+        const dd=monthData[dk];if(!dd||dd._vazio)continue;
+        for(const marca of ["exitus","lumia","muniam"]){
+          const md=dd[marca];if(!md)continue;
+          for(const cn in md){
+            for(const prod of(md[cn].produtos||[])){
+              for(const c in(prod.cor||{})){corCounts[c]=(corCounts[c]||0)+(prod.cor[c]||0);}
+            }
+          }
+        }
+      }
+    }
+    const top16=Object.entries(corCounts).sort((a,b)=>b[1]-a[1]).slice(0,16).map(([nome,qtd])=>({nome,hex:dotColorBling(nome),qtd}));
+    if(top16.length>0){try{localStorage.setItem("amica_bling_cores_top",JSON.stringify({cores:top16,_updated:Date.now()}));}catch(e){console.error("Save bling cores top:",e);}}
+  },[blingVendas]);
 
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
   const handleZoom=(src)=>{
@@ -5124,7 +5196,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                     <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                       <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",fontSize:12,fontWeight:700,color:"#2c3e50"}}>🎨 Vendas por Cor</div>
                       <div style={{padding:"12px 16px"}}>
-                        {corS.length===0?<div style={{fontSize:11,color:"#a89f94"}}>Sem dados de cor</div>:corS.slice(0,14).map(([cor,qtd])=>{const pct=qtd/corT;const bar=qtd/maxCor;const dc=dotColor(cor);return(
+                        {corS.length===0?<div style={{fontSize:11,color:"#a89f94"}}>Sem dados de cor</div>:corS.slice(0,16).map(([cor,qtd])=>{const pct=qtd/corT;const bar=qtd/maxCor;const dc=dotColor(cor);return(
                           <div key={cor} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                             <div style={{width:12,height:12,borderRadius:"50%",background:dc,border:cor==="Branco"?"1px solid #d0c8c0":"none",flexShrink:0}}/>
                             <span style={{fontSize:11,color:"#2c3e50",width:80,flexShrink:0}}>{cor}</span>
