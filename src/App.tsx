@@ -2,6 +2,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Component } from "react";
 import { supabase, USER_ID } from "./supabase.js";
 import MLPerguntas from './MLPerguntas';
+import OrdemDeCorte from './OrdemDeCorte';
+import FilaDeCorte from './FilaDeCorte';
+import OrdemMatrixModal from './OrdemMatrixModal';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -5313,7 +5316,7 @@ const scDb={
   async save(payload){try{await supabase.from('amicia_data').upsert({user_id:'salas-corte',payload},{onConflict:'user_id'});}catch(e){console.error(e)}},
 };
 
-const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
+const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdmin=false})=>{
   const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
   const mobile=w<640;
@@ -5339,6 +5342,8 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   const [refBuscaAnalise,setRefBuscaAnalise]=useState("");
   const [prodCardRef,setProdCardRef]=useState(null);
   const [filtroSala,setFiltroSala]=useState("todas");
+  const [buscaCorte,setBuscaCorte]=useState("");
+  const [matrixOrdemId,setMatrixOrdemId]=useState(null);
   const [addHist,setAddHist]=useState(false);
   const [histForm,setHistForm]=useState({sala:"",qtdRolos:"",qtdPecas:"",data:""});
   const [dbLoaded,setDbLoaded]=useState(false);
@@ -5377,6 +5382,39 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
     })();
   },[]);
 
+  // ── Realtime: escuta mudanças no payload salas-corte feitas pelo backend
+  //    (ex: endpoint /api/ordens-corte-status cria corte quando Fila define sala).
+  //    Sem isso, o corte novo só apareceria depois de refresh manual.
+  useEffect(()=>{
+    if(!dbLoaded)return;
+    const ch=supabase.channel('sync-salas-corte-payload')
+      .on('postgres_changes',
+        {event:'UPDATE',schema:'public',table:'amicia_data',filter:'user_id=eq.salas-corte'},
+        async(payload)=>{
+          try{
+            const remote=payload?.new?.payload;
+            if(!remote)return;
+            const remoteCortes=remote.cortes||[];
+            // Merge: adiciona itens remotos que não estão no local (criados pelo backend)
+            setCortesSala(prev=>{
+              const localIds=new Set(prev.map(c=>c.id));
+              const novos=remoteCortes.filter(c=>!localIds.has(c.id)&&!deletedIdsRef.current.has(c.id));
+              if(novos.length===0)return prev;
+              return [...prev,...novos];
+            });
+            if(remote.logs){
+              setLogSC(prev=>{
+                const localLogIds=new Set(prev.map(l=>l.id));
+                const novosLogs=remote.logs.filter(l=>!localLogIds.has(l.id));
+                if(novosLogs.length===0)return prev;
+                return [...novosLogs,...prev].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,200);
+              });
+            }
+          }catch(e){console.error('realtime salas-corte erro:',e);}
+        })
+      .subscribe();
+    return()=>{try{supabase.removeChannel(ch);}catch{}};
+  },[dbLoaded]);
   // ── Supabase: auto-save com merge (multi-usuário) ──
   useEffect(()=>{
     if(!dbLoaded)return;
@@ -5431,6 +5469,21 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   // Log helper
   const addLog=(acao,detalhe)=>{setLogSC(prev=>[{id:Date.now(),data:new Date().toISOString(),usuario:usuario||"—",acao,detalhe},...prev].slice(0,200));};
 
+  // Auto-fecha ordem vinculada quando corte é concluído
+  // Fire-and-log: se falhar, corte fica concluído mas ordem fica em na_sala (admin pode fechar manualmente via Ordem de Corte)
+  const fecharOrdemSeVinculada=async(corte)=>{
+    if(!corte?.ordemId)return;
+    try{
+      const r=await fetch('/api/ordens-corte-status',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-User':usuario||'sistema'},
+        body:JSON.stringify({id:corte.ordemId,novoStatus:'concluido',usuario:usuario||'sistema'}),
+      });
+      const d=await r.json();
+      if(!r.ok)console.warn('Auto-conclusão ordem falhou:',d?.error||r.status);
+    }catch(e){console.warn('Auto-conclusão ordem erro:',e?.message||e);}
+  };
+
   // Excluir corte — salva imediatamente no Supabase (sem esperar debounce)
   const excluirCorte=(id)=>{
     const c=cortesSala.find(x=>x.id===id);
@@ -5455,6 +5508,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
     const rolos=Number(editForm.qtdRolos),pecas=editForm.qtdPecas?Number(editForm.qtdPecas):null;
     const rend=pecas&&rolos?Math.round((pecas/rolos)*100)/100:null;
     const prod=buscarProd(editForm.ref);
+    const corteAntes=cortesSala.find(c=>c.id===editCorte);
     setCortesSala(prev=>prev.map(c=>{
       if(c.id!==editCorte)return c;
       const ref=mediaRef[editForm.ref];
@@ -5463,6 +5517,8 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
     }));
     addLog("editar",`REF ${editForm.ref} · ${editForm.sala} · ${editForm.qtdRolos}r${editForm.qtdPecas?` → ${editForm.qtdPecas}pç`:""}`);
     setEditCorte(null);
+    // Auto-fecha ordem vinculada se transição pendente → concluído
+    if(corteAntes&&corteAntes.status!=="concluido"&&pecas)fecharOrdemSeVinculada(corteAntes);
   };
 
   // Sync troca de referências do módulo Oficinas
@@ -5522,6 +5578,8 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
     setCortesSala(prev=>prev.map(c=>c.id===editandoPecas?{...c,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:temAlerta,visto:!temAlerta}:c));
     addLog("fechar",`REF ${corte.ref} · ${corte.sala} · ${corte.qtdRolos}r → ${pecas}pç (${rend} pç/r)`);
     setEditandoPecas(null);setPecasInput("");
+    // Auto-fecha ordem vinculada (se houver)
+    fecharOrdemSeVinculada(corte);
   };
 
   const marcarVisto=(id)=>{setCortesSala(prev=>prev.map(c=>c.id===id?{...c,visto:true}:c));addLog("visto",`Alerta corte ${id}`);};
@@ -5541,8 +5599,12 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
   const cortesFiltrados=useMemo(()=>{
     let list=[...cortesSala].filter(c=>c.status==="concluido");
     if(filtroSala!=="todas")list=list.filter(c=>c.sala===filtroSala);
+    if(buscaCorte.trim()){
+      const q=buscaCorte.trim().toLowerCase();
+      list=list.filter(c=>String(c.ref).toLowerCase().includes(q)||String(c.descricao||"").toLowerCase().includes(q));
+    }
     return list.sort((a,b)=>new Date(b.data)-new Date(a.data));
-  },[cortesSala,filtroSala]);
+  },[cortesSala,filtroSala,buscaCorte]);
 
   const sty={
     card:{background:"#fff",borderRadius:14,padding:mobile?14:16,border:"1px solid #e8e2da",marginBottom:12},
@@ -5564,10 +5626,12 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
           </div>
           {scSync&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,fontFamily:"Georgia,serif",background:scSync==='saving'?"#f0f6fb":scSync==='saved'?"#eafbf0":"#fdeaea",color:scSync==='saving'?"#4a7fa5":scSync==='saved'?"#27ae60":"#c0392b"}}>{scSync==='saving'?"☁ salvando…":scSync==='saved'?"☁ salvo":"✗ erro"}</span>}
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {alertas.length>0&&tela==="analise"&&<span style={{background:"#c0392b",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{alertas.length}</span>}
-          <button onClick={()=>setTela("lancamento")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="lancamento"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="lancamento"?"#2c3e50":"#fff",color:tela==="lancamento"?"#fff":"#2c3e50"}}>📋 Lançar</button>
-          <button onClick={()=>setTela("analise")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="analise"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="analise"?"#2c3e50":"#fff",color:tela==="analise"?"#fff":"#2c3e50"}}>📊 Análise</button>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          {alertas.length>0&&tela==="analise"&&isAdmin&&<span style={{background:"#c0392b",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{alertas.length}</span>}
+          <button onClick={()=>setTela("lancamento")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="lancamento"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="lancamento"?"#2c3e50":"#fff",color:tela==="lancamento"?"#fff":"#2c3e50"}}>✏️ Lançar</button>
+          {isAdmin&&<button onClick={()=>setTela("analise")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="analise"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="analise"?"#2c3e50":"#fff",color:tela==="analise"?"#fff":"#2c3e50"}}>📊 Análise</button>}
+          {isAdmin&&<button onClick={()=>setTela("ordem")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="ordem"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="ordem"?"#2c3e50":"#fff",color:tela==="ordem"?"#fff":"#2c3e50"}}>📋 Ordem</button>}
+          <button onClick={()=>setTela("fila")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="fila"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="fila"?"#2c3e50":"#fff",color:tela==="fila"?"#fff":"#2c3e50"}}>✂️ Fila</button>
         </div>
       </div>
 
@@ -5682,7 +5746,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
         </div>)}
 
         {/* ═══ ANÁLISE ═══ */}
-        {tela==="analise"&&(<div>
+        {tela==="analise"&&isAdmin&&(<div>
           <div style={{display:"flex",gap:4,marginBottom:14,background:"#fff",borderRadius:10,padding:4,border:"1px solid #e8e2da",overflowX:"auto"}}>
             {[{id:"ranking",label:"🏆 Ranking"},{id:"produtos",label:"📦 Produtos"},{id:"cortes",label:"📋 Cortes"},{id:"alertas",label:`🚨 Alertas${alertas.length>0?` (${alertas.length})`:""}`},{id:"logs",label:"📝 Logs"}].map(t=>(
               <button key={t.id} onClick={()=>setAbaAnalise(t.id)} style={sty.tab(abaAnalise===t.id)}>{t.label}</button>
@@ -5757,6 +5821,10 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
 
           {/* CORTES */}
           {abaAnalise==="cortes"&&(<div>
+            <div style={{position:"relative",marginBottom:10}}>
+              <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#a89f94",pointerEvents:"none"}}>🔍</span>
+              <input value={buscaCorte} onChange={e=>setBuscaCorte(e.target.value)} placeholder="Buscar por ref ou descrição..." style={{width:"100%",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 12px 8px 30px",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
+            </div>
             <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
               <button onClick={()=>setFiltroSala("todas")} style={sty.tab(filtroSala==="todas")}>Todas</button>
               {salas.map(s=><button key={s} onClick={()=>setFiltroSala(s)} style={sty.tab(filtroSala===s)}>{s}</button>)}
@@ -5766,6 +5834,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:12,fontWeight:800,fontFamily:_FN,color:c.alerta?"#c0392b":"#2c3e50"}}>{c.rendimento} pç/r</span>{c.alerta&&<span>🔴</span>}
+                  {c.ordemId&&<span onClick={()=>setMatrixOrdemId(c.ordemId)} title="Ver ordem original" style={{cursor:"pointer",color:"#4a7fa5",fontSize:14,padding:"2px 4px",borderRadius:4,background:"#f0f4fa",border:"1px solid #c8d8e8"}}>📋</span>}
                   <span onClick={()=>iniciarEdicao(c)} style={{cursor:"pointer",color:"#4a7fa5",fontSize:14}}>✏</span>
                   <span onClick={()=>excluirCorte(c.id)} style={{cursor:"pointer",color:"#d0c8c0",fontSize:16}}>×</span>
                 </div></div>
@@ -5814,6 +5883,12 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
 
         </div>)}
 
+        {/* ═══ ORDEM DE CORTE (admin only) ═══ */}
+        {tela==="ordem"&&isAdmin&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}} mediaRef={mediaRef}/>)}
+
+        {/* ═══ FILA DE CORTE (admin + funcionário) ═══ */}
+        {tela==="fila"&&(<FilaDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}}/>)}
+
         {/* Modal Editar Corte */}
         {editCorte&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:20}}>
@@ -5857,6 +5932,9 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
             </div>
           </div>
         )}
+
+        {/* Modal Matrix (detalhes da ordem vinculada) */}
+        {matrixOrdemId&&(<OrdemMatrixModal ordemId={matrixOrdemId} onClose={()=>setMatrixOrdemId(null)}/>)}
       </div>
     </div>
   );
@@ -8689,7 +8767,7 @@ export default function App(){
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
-        {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/></ModuleErrorBoundary>}
+        {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true}/>}
