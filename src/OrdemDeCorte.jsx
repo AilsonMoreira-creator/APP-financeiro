@@ -393,7 +393,7 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
   return (
     <div>
       {cores.length === 0 ? (
-        <div style={{ padding: 14, textAlign: 'center', color: '#8a9aa4', fontFamily: SERIF, fontSize: 12, fontStyle: 'italic' }}>
+        <div style={{ padding: 14, textAlign: 'center', color: '#8a9aa4', fontFamily: SERIF, fontSize: 13, fontStyle: 'italic' }}>
           nenhuma cor ainda — adicione uma abaixo
         </div>
       ) : (
@@ -401,11 +401,11 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
           {cores.map((c, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #e8e2da', borderRadius: 6, padding: '6px 10px' }}>
               <span style={{ width: 14, height: 14, borderRadius: '50%', background: c.hex || hexCor(c.nome), border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0 }} />
-              <span style={{ flex: 1, fontFamily: SERIF, fontSize: 12, color: '#1C2533' }}>{c.nome}</span>
+              <span style={{ flex: 1, fontFamily: SERIF, fontSize: 13, color: '#1C2533' }}>{c.nome}</span>
               <input type="number" min={1} value={c.rolos}
                 onChange={e => setRolos(i, e.target.value)}
-                style={{ width: 56, padding: 5, border: '1px solid #e8e2da', borderRadius: 4, fontFamily: FN, fontSize: 12, fontWeight: 'bold', textAlign: 'center' }} />
-              <span style={{ fontFamily: FN, fontSize: 9.5, color: '#8a9aa4' }}>rolos</span>
+                style={{ width: 56, padding: 5, border: '1px solid #e8e2da', borderRadius: 4, fontFamily: FN, fontSize: 13, fontWeight: 'bold', textAlign: 'center' }} />
+              <span style={{ fontFamily: FN, fontSize: 11, color: '#8a9aa4' }}>rolos</span>
               <button type="button" onClick={() => remover(i)} style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 15, padding: '0 4px' }}>✕</button>
             </div>
           ))}
@@ -414,7 +414,7 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
 
       {coresRanking.length > 0 && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e8e2da' }}>
-          <div style={{ fontFamily: FN, fontSize: 10, color: '#8a9aa4', marginBottom: 6 }}>📊 Ranking Bling · clique pra adicionar</div>
+          <div style={{ fontFamily: FN, fontSize: 13, color: '#8a9aa4', marginBottom: 6 }}>📊 Ranking Bling · clique pra adicionar</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {coresRanking.slice(0, 16).map((r, idx) => {
               const ja = cores.some(c => c.nome.toLowerCase() === r.nome.toLowerCase());
@@ -424,11 +424,11 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                     padding: '5px 10px', background: '#fff',
                     border: '1px solid #e8e2da', borderRadius: 14,
-                    cursor: ja ? 'default' : 'pointer', fontSize: 11,
+                    cursor: ja ? 'default' : 'pointer', fontSize: 13,
                     fontFamily: SERIF, color: '#1C2533', opacity: ja ? 0.4 : 1,
                   }}>
                   <span style={{ width: 10, height: 10, borderRadius: '50%', background: r.hex || hexCor(r.nome) }} />
-                  {r.nome} <span style={{ fontFamily: FN, fontSize: 9, color: '#8a9aa4' }}>#{idx + 1}</span>
+                  {r.nome} <span style={{ fontFamily: FN, fontSize: 11, color: '#8a9aa4' }}>#{idx + 1}</span>
                 </button>
               );
             })}
@@ -436,19 +436,22 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+      <div style={{ fontFamily: FN, fontSize: 13, color: '#8a9aa4', marginTop: 14, marginBottom: 6 }}>✎ Não achou a cor? Adicione manualmente:</div>
+      <div style={{ display: 'flex', gap: 6 }}>
         <input type="text" value={corManual.nome}
           onChange={e => setCorManual(p => ({ ...p, nome: e.target.value }))}
-          placeholder="nome da cor nova"
-          style={{ flex: 1, padding: '7px 10px', border: '1px dashed #8a9aa4', borderRadius: 6, fontFamily: SERIF, fontSize: 12 }} />
+          onKeyDown={e => e.key === 'Enter' && addManual()}
+          placeholder="digite o nome da cor"
+          style={{ flex: 1, padding: '7px 10px', border: '1px dashed #8a9aa4', borderRadius: 6, fontFamily: SERIF, fontSize: 13 }} />
         <input type="number" min={1} value={corManual.rolos}
           onChange={e => setCorManual(p => ({ ...p, rolos: e.target.value }))}
-          style={{ width: 64, padding: 7, border: '1px dashed #8a9aa4', borderRadius: 6, fontFamily: FN, fontSize: 12, fontWeight: 'bold', textAlign: 'center' }} />
+          style={{ width: 64, padding: 7, border: '1px dashed #8a9aa4', borderRadius: 6, fontFamily: FN, fontSize: 13, fontWeight: 'bold', textAlign: 'center' }} />
         <input type="color" value={corManual.hex}
           onChange={e => setCorManual(p => ({ ...p, hex: e.target.value }))}
+          title="escolher cor"
           style={{ width: 40, height: 34, padding: 2, border: '1px dashed #8a9aa4', borderRadius: 6, cursor: 'pointer' }} />
         <button type="button" onClick={addManual}
-          style={{ padding: '7px 14px', background: '#4a7fa5', color: '#fff', border: 'none', borderRadius: 6, fontFamily: SERIF, fontSize: 12, cursor: 'pointer' }}>
+          style={{ padding: '7px 14px', background: '#4a7fa5', color: '#fff', border: 'none', borderRadius: 6, fontFamily: SERIF, fontSize: 13, cursor: 'pointer', fontWeight: 'bold' }}>
           + cor
         </button>
       </div>
@@ -464,7 +467,7 @@ function MatrizEstimativa({ grade, cores, pcrolo, refStr }) {
 
   if (tamsAtivos.length === 0 || cores.length === 0) {
     return (
-      <div style={{ padding: 20, textAlign: 'center', fontFamily: SERIF, fontSize: 12, color: '#8a9aa4', fontStyle: 'italic', background: '#fff', borderRadius: 6 }}>
+      <div style={{ padding: 20, textAlign: 'center', fontFamily: SERIF, fontSize: 13, color: '#8a9aa4', fontStyle: 'italic', background: '#fff', borderRadius: 6 }}>
         adicione pelo menos 1 tamanho e 1 cor pra ver a estimativa
       </div>
     );
@@ -472,9 +475,9 @@ function MatrizEstimativa({ grade, cores, pcrolo, refStr }) {
 
   if (!pcrolo) {
     return (
-      <div style={{ padding: 20, textAlign: 'center', fontFamily: SERIF, fontSize: 12, color: '#8a9aa4', fontStyle: 'italic', background: '#fff', borderRadius: 6 }}>
+      <div style={{ padding: 20, textAlign: 'center', fontFamily: SERIF, fontSize: 13, color: '#8a9aa4', fontStyle: 'italic', background: '#fff', borderRadius: 6 }}>
         📊 sem histórico de rendimento pra ref {refStr || ''}<br />
-        <span style={{ fontSize: 10.5 }}>corte ao menos 1x essa ref pra ter estimativa automática</span>
+        <span style={{ fontSize: 12 }}>corte ao menos 1x essa ref pra ter estimativa automática</span>
       </div>
     );
   }
@@ -493,32 +496,32 @@ function MatrizEstimativa({ grade, cores, pcrolo, refStr }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FN }}>
         <thead>
           <tr style={{ background: '#e8e2da' }}>
-            <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'left' }}>Cor</th>
+            <th style={{ padding: '8px 10px', fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'left' }}>Cor</th>
             {tamsAtivos.map(t => (
-              <th key={t} style={{ padding: '8px 10px', fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'center' }}>{t}</th>
+              <th key={t} style={{ padding: '8px 10px', fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'center' }}>{t}</th>
             ))}
-            <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'center' }}>Total</th>
+            <th style={{ padding: '8px 10px', fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'center' }}>Total</th>
           </tr>
         </thead>
         <tbody>
           {linhas.map((l, i) => (
             <tr key={i} style={{ borderBottom: '1px solid #e8e2da' }}>
-              <td style={{ padding: '8px 10px', fontSize: 12, color: '#1C2533', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <td style={{ padding: '8px 10px', fontSize: 13, color: '#1C2533', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ width: 12, height: 12, borderRadius: '50%', background: l.cor.hex || hexCor(l.cor.nome) }} />
                 {l.cor.nome} · {l.cor.rolos}r
               </td>
               {l.cells.map((n, j) => (
-                <td key={j} style={{ padding: '8px 10px', fontSize: 12, color: '#1C2533', textAlign: 'center' }}>{n}</td>
+                <td key={j} style={{ padding: '8px 10px', fontSize: 13, color: '#1C2533', textAlign: 'center' }}>{n}</td>
               ))}
-              <td style={{ padding: '8px 10px', fontSize: 12, color: '#1C2533', fontWeight: 'bold', background: '#f7f4f0', textAlign: 'center' }}>{l.total}</td>
+              <td style={{ padding: '8px 10px', fontSize: 13, color: '#1C2533', fontWeight: 'bold', background: '#f7f4f0', textAlign: 'center' }}>{l.total}</td>
             </tr>
           ))}
           <tr style={{ background: '#f7f4f0' }}>
-            <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 'bold', color: '#1C2533' }}>Total · {totalRolos} rolos</td>
+            <td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 'bold', color: '#1C2533' }}>Total · {totalRolos} rolos</td>
             {colTotals.map((n, j) => (
-              <td key={j} style={{ padding: '8px 10px', fontSize: 12, fontWeight: 'bold', color: '#1C2533', textAlign: 'center' }}>{n}</td>
+              <td key={j} style={{ padding: '8px 10px', fontSize: 13, fontWeight: 'bold', color: '#1C2533', textAlign: 'center' }}>{n}</td>
             ))}
-            <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 'bold', color: '#1C2533', textAlign: 'center' }}>{totalGeral}</td>
+            <td style={{ padding: '8px 10px', fontSize: 13, fontWeight: 'bold', color: '#1C2533', textAlign: 'center' }}>{totalGeral}</td>
           </tr>
         </tbody>
       </table>
@@ -662,7 +665,7 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
         {/* ETAPA 1: Escolher ref */}
         {etapa === 'ref' && (
           <div>
-            <label style={{ display: 'block', fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Ref do produto</label>
+            <label style={{ display: 'block', fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Ref do produto</label>
             <div style={{ position: 'relative', marginBottom: 16 }}>
               <input type="text" value={refBusca} onChange={e => setRefBusca(e.target.value)} autoFocus
                 placeholder="Ex: 02277"
@@ -707,16 +710,16 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
             <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 'bold', color: '#1C2533', margin: '0 0 4px 0', lineHeight: 1.2 }}>
               ref {produto.ref} · {produto.descricao || '—'}
             </h2>
-            <p style={{ fontSize: 13, color: '#5a6b7a', margin: '0 0 16px 0' }}>
+            <p style={{ fontSize: 14, color: '#5a6b7a', margin: '0 0 16px 0' }}>
               🧵 {produto.tecido}
               {pcrolo ? (
-                <span style={{ color: '#8a9aa4', fontFamily: FN, fontSize: 12, marginLeft: 8 }}>· média {pcrolo} pç/rolo</span>
+                <span style={{ color: '#8a9aa4', fontFamily: FN, fontSize: 13, marginLeft: 8 }}>· média {pcrolo} pç/rolo</span>
               ) : (
-                <span style={{ color: '#c8a040', fontFamily: FN, fontSize: 12, marginLeft: 8 }}>· sem histórico de rendimento</span>
+                <span style={{ color: '#c8a040', fontFamily: FN, fontSize: 13, marginLeft: 8 }}>· sem histórico de rendimento</span>
               )}
               {!isEdit && (
                 <a href="#" onClick={e => { e.preventDefault(); trocarRef(); }}
-                  style={{ marginLeft: 14, color: '#4a7fa5', fontSize: 12, fontFamily: SERIF, textDecoration: 'underline' }}>trocar ref</a>
+                  style={{ marginLeft: 14, color: '#4a7fa5', fontSize: 13, fontFamily: SERIF, textDecoration: 'underline' }}>trocar ref</a>
               )}
             </p>
 
@@ -726,7 +729,7 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
               background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8,
               padding: isMobile ? '10px 12px' : '12px 16px', flexWrap: 'wrap',
             }}>
-              <span style={{ fontFamily: FN, fontSize: 11, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Grupo</span>
+              <span style={{ fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Grupo</span>
               <input type="text" maxLength={1} value={grupo}
                 onChange={e => setGrupo(e.target.value.replace(/[^0-9]/g, '').slice(0, 1))}
                 placeholder="—"
@@ -736,7 +739,7 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
                   fontFamily: FN, fontSize: 22, fontWeight: 'bold',
                   color: '#1C2533', background: '#fff',
                 }} />
-              <span style={{ fontSize: 11, color: '#5a6b7a', fontStyle: 'italic', flex: isMobile ? '100%' : 'none' }}>
+              <span style={{ fontSize: 13, color: '#5a6b7a', fontStyle: 'italic', flex: isMobile ? '100%' : 'none' }}>
                 opcional · 0–9 · identifica o enfesto no chão de fábrica
               </span>
             </div>
@@ -744,7 +747,7 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
             {/* Grade */}
             <div style={{ background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8, padding: isMobile ? '12px' : '14px 16px', marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Grade do enfesto</span>
+                <span style={{ fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Grade do enfesto</span>
               </div>
               <GradeEditorResponsive grade={grade} onChange={setGrade} isMobile={isMobile} />
             </div>
@@ -752,7 +755,7 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
             {/* Cores */}
             <div style={{ background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8, padding: isMobile ? '12px' : '14px 16px', marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>
+                <span style={{ fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>
                   Cores e rolos · total: {totalRolos}R
                 </span>
               </div>
@@ -762,7 +765,7 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
             {/* Matriz */}
             <div style={{ background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8, padding: isMobile ? '12px' : '14px 16px', marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
-                <span style={{ fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Estimativa · cor × tamanho</span>
+                <span style={{ fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Estimativa · cor × tamanho</span>
                 {pcrolo && tamsAtivos.length > 0 && cores.length > 0 && (
                   <span style={{ fontFamily: FN, fontSize: 10, color: '#8a9aa4' }}>base {pcrolo} pç/rolo · histórico Salas de Corte</span>
                 )}
@@ -776,12 +779,12 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
               padding: isMobile ? '12px 14px' : '14px 18px', marginBottom: 16,
               display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12,
             }}>
-              <div style={{ fontSize: 12, opacity: 0.9 }}>
+              <div style={{ fontSize: 13, opacity: 0.9 }}>
                 {cores.length} cor(es) · {tamsAtivos.length} tamanho(s)
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: FN, fontSize: 24, fontWeight: 'bold', lineHeight: 1 }}>{totalRolos} rolos</div>
-                <div style={{ fontFamily: FN, fontSize: 11, opacity: 0.75, marginTop: 2 }}>
+                <div style={{ fontFamily: FN, fontSize: 26, fontWeight: 'bold', lineHeight: 1 }}>{totalRolos} rolos</div>
+                <div style={{ fontFamily: FN, fontSize: 13, opacity: 0.8, marginTop: 3 }}>
                   {pecasEstimadas != null ? `≈ ${pecasEstimadas} peças estimadas` : 'peças sem estimativa'}
                 </div>
               </div>
@@ -790,7 +793,7 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
             {/* Motivo (edit only) */}
             {isEdit && (
               <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Motivo da edição *</label>
+                <label style={{ display: 'block', fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Motivo da edição *</label>
                 <input type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
                   placeholder="ex: Adicionar cor Bege"
                   style={{ width: '100%', padding: '10px 12px', border: '1px solid #e8e2da', borderRadius: 8, fontSize: 13, fontFamily: SERIF, boxSizing: 'border-box' }} />
@@ -842,7 +845,7 @@ function GradeEditorResponsive({ grade, onChange, isMobile }) {
           const incluido = grade[t] > 0;
           return (
             <div key={t} style={{ position: 'relative', paddingTop: 4 }}>
-              <span style={{ display: 'block', fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textAlign: 'center', marginBottom: 4 }}>{t}</span>
+              <span style={{ display: 'block', fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textAlign: 'center', marginBottom: 4 }}>{t}</span>
               <input type="number" min={0} value={grade[t] || 0}
                 onChange={e => setMod(t, e.target.value)}
                 onFocus={e => e.target.select()}
@@ -866,7 +869,7 @@ function GradeEditorResponsive({ grade, onChange, isMobile }) {
           );
         })}
       </div>
-      <div style={{ fontFamily: SERIF, fontSize: 11, color: '#8a9aa4', fontStyle: 'italic' }}>
+      <div style={{ fontFamily: SERIF, fontSize: 13, color: '#8a9aa4', fontStyle: 'italic' }}>
         Clique no <strong style={{ color: '#27ae60' }}>+</strong> pra incluir · ajuste quantidade · <strong style={{ color: '#c0392b' }}>✕</strong> remove
       </div>
     </div>

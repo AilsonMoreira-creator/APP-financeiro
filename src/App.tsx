@@ -5382,6 +5382,39 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     })();
   },[]);
 
+  // ── Realtime: escuta mudanças no payload salas-corte feitas pelo backend
+  //    (ex: endpoint /api/ordens-corte-status cria corte quando Fila define sala).
+  //    Sem isso, o corte novo só apareceria depois de refresh manual.
+  useEffect(()=>{
+    if(!dbLoaded)return;
+    const ch=supabase.channel('sync-salas-corte-payload')
+      .on('postgres_changes',
+        {event:'UPDATE',schema:'public',table:'amicia_data',filter:'user_id=eq.salas-corte'},
+        async(payload)=>{
+          try{
+            const remote=payload?.new?.payload;
+            if(!remote)return;
+            const remoteCortes=remote.cortes||[];
+            // Merge: adiciona itens remotos que não estão no local (criados pelo backend)
+            setCortesSala(prev=>{
+              const localIds=new Set(prev.map(c=>c.id));
+              const novos=remoteCortes.filter(c=>!localIds.has(c.id)&&!deletedIdsRef.current.has(c.id));
+              if(novos.length===0)return prev;
+              return [...prev,...novos];
+            });
+            if(remote.logs){
+              setLogSC(prev=>{
+                const localLogIds=new Set(prev.map(l=>l.id));
+                const novosLogs=remote.logs.filter(l=>!localLogIds.has(l.id));
+                if(novosLogs.length===0)return prev;
+                return [...novosLogs,...prev].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,200);
+              });
+            }
+          }catch(e){console.error('realtime salas-corte erro:',e);}
+        })
+      .subscribe();
+    return()=>{try{supabase.removeChannel(ch);}catch{}};
+  },[dbLoaded]);
   // ── Supabase: auto-save com merge (multi-usuário) ──
   useEffect(()=>{
     if(!dbLoaded)return;

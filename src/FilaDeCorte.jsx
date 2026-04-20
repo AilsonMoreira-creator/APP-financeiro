@@ -102,7 +102,11 @@ export default function FilaDeCorte({ supabase, usuarioLogado }) {
           Pra separar <span style={{ background: '#f0ebe4', padding: '1px 7px', borderRadius: 8, fontSize: 11, marginLeft: 4 }}>{aguardando.length}</span>
         </button>
         <button onClick={() => setAba('separado')} style={{ flex: 1, padding: '11px 8px', background: 'none', border: 'none', borderBottom: aba === 'separado' ? '2px solid #2c3e50' : '2px solid transparent', cursor: 'pointer', fontFamily: SERIF, fontSize: 13, fontWeight: aba === 'separado' ? 700 : 400, color: aba === 'separado' ? '#2c3e50' : '#8a9aa4' }}>
-          Separados <span style={{ background: '#f0ebe4', padding: '1px 7px', borderRadius: 8, fontSize: 11, marginLeft: 4 }}>{separadas.length}</span>
+          Separados <span style={{
+            background: separadas.length > 0 ? '#c8a040' : '#f0ebe4',
+            color: separadas.length > 0 ? '#fff' : '#2c3e50',
+            padding: '1px 7px', borderRadius: 8, fontSize: 11, marginLeft: 4, fontWeight: 700,
+          }}>{separadas.length}</span>
         </button>
       </div>
 
