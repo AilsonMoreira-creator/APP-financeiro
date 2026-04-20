@@ -4,6 +4,7 @@ import { supabase, USER_ID } from "./supabase.js";
 import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
+import OrdemMatrixModal from './OrdemMatrixModal';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -5341,6 +5342,8 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   const [refBuscaAnalise,setRefBuscaAnalise]=useState("");
   const [prodCardRef,setProdCardRef]=useState(null);
   const [filtroSala,setFiltroSala]=useState("todas");
+  const [buscaCorte,setBuscaCorte]=useState("");
+  const [matrixOrdemId,setMatrixOrdemId]=useState(null);
   const [addHist,setAddHist]=useState(false);
   const [histForm,setHistForm]=useState({sala:"",qtdRolos:"",qtdPecas:"",data:""});
   const [dbLoaded,setDbLoaded]=useState(false);
@@ -5433,6 +5436,21 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   // Log helper
   const addLog=(acao,detalhe)=>{setLogSC(prev=>[{id:Date.now(),data:new Date().toISOString(),usuario:usuario||"—",acao,detalhe},...prev].slice(0,200));};
 
+  // Auto-fecha ordem vinculada quando corte é concluído
+  // Fire-and-log: se falhar, corte fica concluído mas ordem fica em na_sala (admin pode fechar manualmente via Ordem de Corte)
+  const fecharOrdemSeVinculada=async(corte)=>{
+    if(!corte?.ordemId)return;
+    try{
+      const r=await fetch('/api/ordens-corte-status',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-User':usuario||'sistema'},
+        body:JSON.stringify({id:corte.ordemId,novoStatus:'concluido',usuario:usuario||'sistema'}),
+      });
+      const d=await r.json();
+      if(!r.ok)console.warn('Auto-conclusão ordem falhou:',d?.error||r.status);
+    }catch(e){console.warn('Auto-conclusão ordem erro:',e?.message||e);}
+  };
+
   // Excluir corte — salva imediatamente no Supabase (sem esperar debounce)
   const excluirCorte=(id)=>{
     const c=cortesSala.find(x=>x.id===id);
@@ -5457,6 +5475,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     const rolos=Number(editForm.qtdRolos),pecas=editForm.qtdPecas?Number(editForm.qtdPecas):null;
     const rend=pecas&&rolos?Math.round((pecas/rolos)*100)/100:null;
     const prod=buscarProd(editForm.ref);
+    const corteAntes=cortesSala.find(c=>c.id===editCorte);
     setCortesSala(prev=>prev.map(c=>{
       if(c.id!==editCorte)return c;
       const ref=mediaRef[editForm.ref];
@@ -5465,6 +5484,8 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     }));
     addLog("editar",`REF ${editForm.ref} · ${editForm.sala} · ${editForm.qtdRolos}r${editForm.qtdPecas?` → ${editForm.qtdPecas}pç`:""}`);
     setEditCorte(null);
+    // Auto-fecha ordem vinculada se transição pendente → concluído
+    if(corteAntes&&corteAntes.status!=="concluido"&&pecas)fecharOrdemSeVinculada(corteAntes);
   };
 
   // Sync troca de referências do módulo Oficinas
@@ -5524,6 +5545,8 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     setCortesSala(prev=>prev.map(c=>c.id===editandoPecas?{...c,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:temAlerta,visto:!temAlerta}:c));
     addLog("fechar",`REF ${corte.ref} · ${corte.sala} · ${corte.qtdRolos}r → ${pecas}pç (${rend} pç/r)`);
     setEditandoPecas(null);setPecasInput("");
+    // Auto-fecha ordem vinculada (se houver)
+    fecharOrdemSeVinculada(corte);
   };
 
   const marcarVisto=(id)=>{setCortesSala(prev=>prev.map(c=>c.id===id?{...c,visto:true}:c));addLog("visto",`Alerta corte ${id}`);};
@@ -5543,8 +5566,12 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   const cortesFiltrados=useMemo(()=>{
     let list=[...cortesSala].filter(c=>c.status==="concluido");
     if(filtroSala!=="todas")list=list.filter(c=>c.sala===filtroSala);
+    if(buscaCorte.trim()){
+      const q=buscaCorte.trim().toLowerCase();
+      list=list.filter(c=>String(c.ref).toLowerCase().includes(q)||String(c.descricao||"").toLowerCase().includes(q));
+    }
     return list.sort((a,b)=>new Date(b.data)-new Date(a.data));
-  },[cortesSala,filtroSala]);
+  },[cortesSala,filtroSala,buscaCorte]);
 
   const sty={
     card:{background:"#fff",borderRadius:14,padding:mobile?14:16,border:"1px solid #e8e2da",marginBottom:12},
@@ -5761,6 +5788,10 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
 
           {/* CORTES */}
           {abaAnalise==="cortes"&&(<div>
+            <div style={{position:"relative",marginBottom:10}}>
+              <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#a89f94",pointerEvents:"none"}}>🔍</span>
+              <input value={buscaCorte} onChange={e=>setBuscaCorte(e.target.value)} placeholder="Buscar por ref ou descrição..." style={{width:"100%",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 12px 8px 30px",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"Georgia,serif"}}/>
+            </div>
             <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
               <button onClick={()=>setFiltroSala("todas")} style={sty.tab(filtroSala==="todas")}>Todas</button>
               {salas.map(s=><button key={s} onClick={()=>setFiltroSala(s)} style={sty.tab(filtroSala===s)}>{s}</button>)}
@@ -5770,6 +5801,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <span style={{fontSize:12,fontWeight:800,fontFamily:_FN,color:c.alerta?"#c0392b":"#2c3e50"}}>{c.rendimento} pç/r</span>{c.alerta&&<span>🔴</span>}
+                  {c.ordemId&&<span onClick={()=>setMatrixOrdemId(c.ordemId)} title="Ver ordem original" style={{cursor:"pointer",color:"#4a7fa5",fontSize:14,padding:"2px 4px",borderRadius:4,background:"#f0f4fa",border:"1px solid #c8d8e8"}}>📋</span>}
                   <span onClick={()=>iniciarEdicao(c)} style={{cursor:"pointer",color:"#4a7fa5",fontSize:14}}>✏</span>
                   <span onClick={()=>excluirCorte(c.id)} style={{cursor:"pointer",color:"#d0c8c0",fontSize:16}}>×</span>
                 </div></div>
@@ -5867,6 +5899,9 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
             </div>
           </div>
         )}
+
+        {/* Modal Matrix (detalhes da ordem vinculada) */}
+        {matrixOrdemId&&(<OrdemMatrixModal ordemId={matrixOrdemId} onClose={()=>setMatrixOrdemId(null)}/>)}
       </div>
     </div>
   );
