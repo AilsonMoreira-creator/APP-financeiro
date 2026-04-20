@@ -92,6 +92,8 @@ export default function HistoricoVendas({ supabase }) {
   const [dados, setDados]       = useState(null);   // payload bruto do Supabase
   const [filtroMarca, setFiltroMarca]       = useState('todas');
   const [filtroPlat, setFiltroPlat]         = useState('todas');
+  const [filtroMesDe, setFiltroMesDe]       = useState(null); // null = desde o inicio
+  const [filtroMesAte, setFiltroMesAte]     = useState(null); // null = ate o fim
   const [refSelecionada, setRefSelecionada] = useState(null);
 
   useEffect(() => {
@@ -126,13 +128,22 @@ export default function HistoricoVendas({ supabase }) {
     });
   }, [filtroMarca, filtroPlat]);
 
-  // Lista de meses ordenada (ascendente)
-  const meses = useMemo(() => {
+  // Lista de meses disponíveis no dataset (ordenada ascendente)
+  const mesesDisponiveis = useMemo(() => {
     if (!dados?.refs) return [];
     const primeiraRef = Object.values(dados.refs)[0];
     if (!primeiraRef?.vendas) return [];
     return Object.keys(primeiraRef.vendas).sort();
   }, [dados]);
+
+  // Meses filtrados — todos os cálculos operam sobre essa lista
+  const meses = useMemo(() => {
+    return mesesDisponiveis.filter(m => {
+      if (filtroMesDe && m < filtroMesDe) return false;
+      if (filtroMesAte && m > filtroMesAte) return false;
+      return true;
+    });
+  }, [mesesDisponiveis, filtroMesDe, filtroMesAte]);
 
   // Processamento: soma filtrada por ref/mês/canal
   const somaRefMes = (refData, mes) => {
@@ -220,7 +231,7 @@ export default function HistoricoVendas({ supabase }) {
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>📊 Histórico de Vendas</div>
         <div style={{ fontSize: 11, color: C.muted }}>
-          {dados._meta?.periodo || '—'} · {dados._meta?.refsTotal || Object.keys(dados.refs).length} refs · {dados._meta?.mesesTotal || meses.length} meses
+          {dados._meta?.periodo || '—'} · {dados._meta?.refsTotal || Object.keys(dados.refs).length} refs · {meses.length} de {mesesDisponiveis.length} meses
         </div>
         {dados._meta?.observacoes?.length > 0 && (
           <div style={{ fontSize: 10, color: C.muted, fontStyle: 'italic', flex: '1 1 100%' }}>
@@ -230,7 +241,7 @@ export default function HistoricoVendas({ supabase }) {
       </div>
 
       {/* Filtros */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11, color: C.muted }}>Marca:</span>
         <FilterButton active={filtroMarca==='todas'} onClick={()=>setFiltroMarca('todas')}>Todas</FilterButton>
         {MARCAS.map(m => (
@@ -244,12 +255,65 @@ export default function HistoricoVendas({ supabase }) {
         ))}
       </div>
 
+      {/* Filtro de mês (range) */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: C.muted }}>Mês:</span>
+        <FilterButton
+          active={!filtroMesDe && !filtroMesAte}
+          onClick={()=>{ setFiltroMesDe(null); setFiltroMesAte(null); }}
+        >Todos</FilterButton>
+        <FilterButton
+          active={filtroMesDe==='2025-01' && filtroMesAte==='2025-12'}
+          onClick={()=>{ setFiltroMesDe('2025-01'); setFiltroMesAte('2025-12'); }}
+        >2025</FilterButton>
+        <FilterButton
+          active={filtroMesDe==='2026-01' && filtroMesAte==='2026-02'}
+          onClick={()=>{ setFiltroMesDe('2026-01'); setFiltroMesAte('2026-02'); }}
+        >2026</FilterButton>
+        {mesesDisponiveis.length >= 3 && (
+          <FilterButton
+            active={filtroMesDe===mesesDisponiveis[mesesDisponiveis.length-3] && filtroMesAte===mesesDisponiveis[mesesDisponiveis.length-1]}
+            onClick={()=>{ setFiltroMesDe(mesesDisponiveis[mesesDisponiveis.length-3]); setFiltroMesAte(mesesDisponiveis[mesesDisponiveis.length-1]); }}
+          >Últimos 3 meses</FilterButton>
+        )}
+        {mesesDisponiveis.length >= 6 && (
+          <FilterButton
+            active={filtroMesDe===mesesDisponiveis[mesesDisponiveis.length-6] && filtroMesAte===mesesDisponiveis[mesesDisponiveis.length-1]}
+            onClick={()=>{ setFiltroMesDe(mesesDisponiveis[mesesDisponiveis.length-6]); setFiltroMesAte(mesesDisponiveis[mesesDisponiveis.length-1]); }}
+          >Últimos 6 meses</FilterButton>
+        )}
+        <div style={{ width: 1, height: 14, background: C.border, margin: '0 6px' }} />
+        <span style={{ fontSize: 11, color: C.muted }}>De:</span>
+        <select
+          value={filtroMesDe || ''}
+          onChange={e => setFiltroMesDe(e.target.value || null)}
+          style={{ padding: '3px 6px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontFamily: SERIF, color: C.text, background: C.card, cursor: 'pointer' }}
+        >
+          <option value="">(início)</option>
+          {mesesDisponiveis.map(m => <option key={m} value={m}>{labelMes(m)}</option>)}
+        </select>
+        <span style={{ fontSize: 11, color: C.muted }}>até:</span>
+        <select
+          value={filtroMesAte || ''}
+          onChange={e => setFiltroMesAte(e.target.value || null)}
+          style={{ padding: '3px 6px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11, fontFamily: SERIF, color: C.text, background: C.card, cursor: 'pointer' }}
+        >
+          <option value="">(fim)</option>
+          {mesesDisponiveis.map(m => <option key={m} value={m}>{labelMes(m)}</option>)}
+        </select>
+        {(filtroMesDe || filtroMesAte) && (
+          <span style={{ fontSize: 10, color: C.muted, marginLeft: 8, fontStyle: 'italic' }}>
+            · {meses.length} mês(es) no filtro
+          </span>
+        )}
+      </div>
+
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 14 }}>
         <KpiCard
           label="Total de peças"
           value={fmtNum(kpis.totalGeral)}
-          sub={`14 meses · ${canaisAtivos.length} canal(is)`}
+          sub={`${meses.length} mês(es) · ${canaisAtivos.length} canal(is)`}
         />
         <KpiCard
           label="Melhor plataforma"
