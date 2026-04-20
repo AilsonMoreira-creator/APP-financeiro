@@ -5851,7 +5851,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
         </div>)}
 
         {/* ═══ ORDEM DE CORTE (admin only) ═══ */}
-        {tela==="ordem"&&isAdmin&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}}/>)}
+        {tela==="ordem"&&isAdmin&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}} mediaRef={mediaRef}/>)}
 
         {/* ═══ FILA DE CORTE (admin + funcionário) ═══ */}
         {tela==="fila"&&(<FilaDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}}/>)}

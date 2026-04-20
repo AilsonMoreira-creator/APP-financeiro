@@ -4,6 +4,8 @@
  * Props:
  *   - supabase: cliente Supabase
  *   - usuarioLogado: { usuario, admin, ... }
+ *   - mediaRef: objeto { [ref]: { media: number, ... } } com rendimento histórico
+ *               do módulo Salas de Corte (pra cálculo de estimativa da matriz)
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -11,6 +13,8 @@ import OrdemMatrixModal from './OrdemMatrixModal';
 
 const FN = "Calibri,'Segoe UI',Arial,sans-serif";
 const SERIF = "Georgia,'Times New Roman',serif";
+
+const TAMANHOS_PADRAO = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 const STATUS_OPTIONS = [
   { id: 'todos', label: 'Todos' },
@@ -43,7 +47,6 @@ function hexCor(nome) {
   return COR_FALLBACK_HEX[k] || '#999';
 }
 
-// Carrega ranking de cores do Bling (já existe no localStorage)
 function loadCoresRanking() {
   try {
     const raw = localStorage.getItem('amica_bling_cores_top');
@@ -53,7 +56,11 @@ function loadCoresRanking() {
   } catch { return []; }
 }
 
-export default function OrdemDeCorte({ supabase, usuarioLogado }) {
+// ════════════════════════════════════════════════════════════════════════════
+// COMPONENTE PRINCIPAL
+// ════════════════════════════════════════════════════════════════════════════
+
+export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} }) {
   const [ordens, setOrdens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -62,44 +69,33 @@ export default function OrdemDeCorte({ supabase, usuarioLogado }) {
   const [expandidas, setExpandidas] = useState(new Set());
   const [matrixOrdem, setMatrixOrdem] = useState(null);
 
-  // Modais
   const [showNova, setShowNova] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [excluindoId, setExcluindoId] = useState(null);
 
   const usuario = usuarioLogado?.usuario || '';
 
-  // ── Carrega ordens (chamado em mount + sempre que precisar refresh) ──
   const carregar = useCallback(async () => {
     try {
-      setLoading(true);
-      setErro(null);
+      setLoading(true); setErro(null);
       const r = await fetch('/api/ordens-corte-listar?perfil=admin');
       const d = await r.json();
       if (d.error) { setErro(d.error); return; }
       setOrdens(d.ordens || []);
-    } catch (e) {
-      setErro(e?.message || 'erro ao carregar');
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setErro(e?.message || 'erro ao carregar'); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  // ── Realtime: sync entre dispositivos ──
   useEffect(() => {
     if (!supabase) return;
     const ch = supabase.channel('sync-ordens-corte')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens_corte' }, () => {
-        // Qualquer mudança → recarrega lista (simples e seguro)
-        carregar();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordens_corte' }, () => carregar())
       .subscribe();
     return () => { try { supabase.removeChannel(ch); } catch {} };
   }, [supabase, carregar]);
 
-  // ── Filtra ordens ──
   const ordensFiltradas = useMemo(() => {
     let r = ordens;
     if (filtroStatus !== 'todos') r = r.filter(o => o.status === filtroStatus);
@@ -107,7 +103,6 @@ export default function OrdemDeCorte({ supabase, usuarioLogado }) {
       const q = busca.trim().toLowerCase();
       r = r.filter(o => String(o.ref).toLowerCase().includes(q));
     }
-    // Ordem visual: aguardando > separado > na_sala > concluido > cancelado, depois por created_at desc
     const ordemStatus = { aguardando: 1, separado: 2, na_sala: 3, concluido: 4, cancelado: 5 };
     return [...r].sort((a, b) => {
       const sa = ordemStatus[a.status] || 99;
@@ -130,7 +125,6 @@ export default function OrdemDeCorte({ supabase, usuarioLogado }) {
 
   return (
     <div style={{ fontFamily: SERIF, color: '#2c3e50', padding: 16, maxWidth: 1300, margin: '0 auto' }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 22, margin: 0 }}>📋 Ordem de Corte</h1>
@@ -153,7 +147,6 @@ export default function OrdemDeCorte({ supabase, usuarioLogado }) {
         </div>
       </div>
 
-      {/* Filtros status */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
         {STATUS_OPTIONS.map(opt => {
           const n = opt.id === 'todos' ? ordens.length : ordens.filter(o => o.status === opt.id).length;
@@ -176,7 +169,6 @@ export default function OrdemDeCorte({ supabase, usuarioLogado }) {
         })}
       </div>
 
-      {/* Estado: loading/erro/vazio */}
       {loading && <div style={{ padding: 32, textAlign: 'center', color: '#8a9aa4' }}>Carregando ordens...</div>}
       {erro && <div style={{ padding: 16, background: '#fdeaea', color: '#c0392b', borderRadius: 8, marginBottom: 12 }}>⚠ {erro}</div>}
       {!loading && ordensFiltradas.length === 0 && (
@@ -187,7 +179,6 @@ export default function OrdemDeCorte({ supabase, usuarioLogado }) {
         </div>
       )}
 
-      {/* Lista de cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {ordensFiltradas.map(o => (
           <OrdemCard
@@ -202,22 +193,20 @@ export default function OrdemDeCorte({ supabase, usuarioLogado }) {
         ))}
       </div>
 
-      {/* Modal Matrix */}
       {matrixOrdem && (
         <OrdemMatrixModal ordem={matrixOrdem} onClose={() => setMatrixOrdem(null)} />
       )}
 
-      {/* Modal Nova/Editar ordem */}
       {(showNova || editandoId) && (
         <ModalOrdem
           ordemEditando={ordemEditando}
           usuario={usuario}
+          mediaRef={mediaRef}
           onClose={() => { setShowNova(false); setEditandoId(null); }}
           onSalvo={() => { setShowNova(false); setEditandoId(null); carregar(); }}
         />
       )}
 
-      {/* Modal Excluir */}
       {excluindoId && ordemExcluindo && (
         <ModalExcluir
           ordem={ordemExcluindo}
@@ -231,7 +220,7 @@ export default function OrdemDeCorte({ supabase, usuarioLogado }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CARD DE ORDEM
+// CARD DE ORDEM (intocado)
 // ════════════════════════════════════════════════════════════════════════════
 
 function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix }) {
@@ -243,19 +232,14 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
 
   return (
     <div style={{
-      background: '#fff',
-      border: '1px solid #e8e2da',
-      borderRadius: 10,
-      padding: 14,
+      background: '#fff', border: '1px solid #e8e2da', borderRadius: 10, padding: 14,
       opacity: isFinalizada ? 0.85 : 1,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        {/* Status pill */}
         <span style={{ background: status.bg, color: status.color, border: `1px solid ${status.border}`, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
           {status.txt}
         </span>
 
-        {/* Info principal */}
         <div style={{ flex: '1 1 250px', minWidth: 200 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>
             REF {ordem.ref}{ordem.descricao ? ` · ${ordem.descricao}` : ''}
@@ -265,7 +249,6 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
           </div>
         </div>
 
-        {/* Cores resumo */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: '0 1 auto' }}>
           {cores.slice(0, 4).map((c, i) => (
             <span key={i} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: '#f7f4f0', borderRadius: 10 }}>
@@ -276,7 +259,6 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
           {cores.length > 4 && <span style={{ fontSize: 10, color: '#8a9aa4' }}>+{cores.length - 4}</span>}
         </div>
 
-        {/* Total rolos + grupo */}
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 20, fontWeight: 700, fontFamily: FN, color: '#2c3e50' }}>{ordem.total_rolos}</div>
@@ -288,14 +270,12 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
           </div>
         </div>
 
-        {/* Sala (se na_sala) */}
         {ordem.sala && (
           <div style={{ textAlign: 'center', padding: '4px 10px', background: '#eafbf0', borderRadius: 6, color: '#27ae60', fontSize: 11, fontWeight: 600 }}>
             ✂️ {ordem.sala}
           </div>
         )}
 
-        {/* Ações */}
         <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
           <button onClick={onAbrirMatrix} title="Ver matriz" style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -310,7 +290,6 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
         </div>
       </div>
 
-      {/* Área expandida */}
       {expandida && (
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f0ebe4', fontSize: 12, color: '#5a6b7a' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
@@ -354,28 +333,195 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// MODAL NOVA/EDITAR ORDEM
+// MODAL NOVA/EDITAR ORDEM — novo design
 // ════════════════════════════════════════════════════════════════════════════
 
-function ModalOrdem({ ordemEditando, usuario, onClose, onSalvo }) {
+// Sub: editor de cores (lista + chips ranking + manual)
+function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual }) {
+  const addCor = (c) => {
+    if (cores.some(x => x.nome.toLowerCase() === c.nome.toLowerCase())) return;
+    onChange([...cores, { nome: c.nome, hex: c.hex || hexCor(c.nome), rolos: 1 }]);
+  };
+  const setRolos = (i, v) => {
+    const n = Math.max(1, parseInt(v) || 1);
+    onChange(cores.map((c, idx) => idx === i ? { ...c, rolos: n } : c));
+  };
+  const remover = (i) => onChange(cores.filter((_, idx) => idx !== i));
+  const addManual = () => {
+    const nome = corManual.nome.trim();
+    if (!nome) return;
+    if (cores.some(x => x.nome.toLowerCase() === nome.toLowerCase())) return;
+    onChange([...cores, { nome, hex: corManual.hex || '#888', rolos: parseInt(corManual.rolos) || 1 }]);
+    setCorManual({ nome: '', rolos: 1, hex: '#888' });
+  };
+
+  return (
+    <div>
+      {cores.length === 0 ? (
+        <div style={{ padding: 14, textAlign: 'center', color: '#8a9aa4', fontFamily: SERIF, fontSize: 12, fontStyle: 'italic' }}>
+          nenhuma cor ainda — adicione uma abaixo
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+          {cores.map((c, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #e8e2da', borderRadius: 6, padding: '6px 10px' }}>
+              <span style={{ width: 14, height: 14, borderRadius: '50%', background: c.hex || hexCor(c.nome), border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0 }} />
+              <span style={{ flex: 1, fontFamily: SERIF, fontSize: 12, color: '#1C2533' }}>{c.nome}</span>
+              <input type="number" min={1} value={c.rolos}
+                onChange={e => setRolos(i, e.target.value)}
+                style={{ width: 56, padding: 5, border: '1px solid #e8e2da', borderRadius: 4, fontFamily: FN, fontSize: 12, fontWeight: 'bold', textAlign: 'center' }} />
+              <span style={{ fontFamily: FN, fontSize: 9.5, color: '#8a9aa4' }}>rolos</span>
+              <button type="button" onClick={() => remover(i)} style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 15, padding: '0 4px' }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {coresRanking.length > 0 && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e8e2da' }}>
+          <div style={{ fontFamily: FN, fontSize: 10, color: '#8a9aa4', marginBottom: 6 }}>📊 Ranking Bling · clique pra adicionar</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {coresRanking.slice(0, 16).map((r, idx) => {
+              const ja = cores.some(c => c.nome.toLowerCase() === r.nome.toLowerCase());
+              return (
+                <button key={r.nome} type="button" onClick={() => !ja && addCor(r)} disabled={ja}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '5px 10px', background: '#fff',
+                    border: '1px solid #e8e2da', borderRadius: 14,
+                    cursor: ja ? 'default' : 'pointer', fontSize: 11,
+                    fontFamily: SERIF, color: '#1C2533', opacity: ja ? 0.4 : 1,
+                  }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: r.hex || hexCor(r.nome) }} />
+                  {r.nome} <span style={{ fontFamily: FN, fontSize: 9, color: '#8a9aa4' }}>#{idx + 1}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        <input type="text" value={corManual.nome}
+          onChange={e => setCorManual(p => ({ ...p, nome: e.target.value }))}
+          placeholder="nome da cor nova"
+          style={{ flex: 1, padding: '7px 10px', border: '1px dashed #8a9aa4', borderRadius: 6, fontFamily: SERIF, fontSize: 12 }} />
+        <input type="number" min={1} value={corManual.rolos}
+          onChange={e => setCorManual(p => ({ ...p, rolos: e.target.value }))}
+          style={{ width: 64, padding: 7, border: '1px dashed #8a9aa4', borderRadius: 6, fontFamily: FN, fontSize: 12, fontWeight: 'bold', textAlign: 'center' }} />
+        <input type="color" value={corManual.hex}
+          onChange={e => setCorManual(p => ({ ...p, hex: e.target.value }))}
+          style={{ width: 40, height: 34, padding: 2, border: '1px dashed #8a9aa4', borderRadius: 6, cursor: 'pointer' }} />
+        <button type="button" onClick={addManual}
+          style={{ padding: '7px 14px', background: '#4a7fa5', color: '#fff', border: 'none', borderRadius: 6, fontFamily: SERIF, fontSize: 12, cursor: 'pointer' }}>
+          + cor
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Sub: matriz de estimativa
+function MatrizEstimativa({ grade, cores, pcrolo, refStr }) {
+  const tamsAtivos = TAMANHOS_PADRAO.filter(t => grade[t] > 0);
+  const totalModulos = tamsAtivos.reduce((s, t) => s + grade[t], 0);
+  const totalRolos = cores.reduce((s, c) => s + (c.rolos || 0), 0);
+
+  if (tamsAtivos.length === 0 || cores.length === 0) {
+    return (
+      <div style={{ padding: 20, textAlign: 'center', fontFamily: SERIF, fontSize: 12, color: '#8a9aa4', fontStyle: 'italic', background: '#fff', borderRadius: 6 }}>
+        adicione pelo menos 1 tamanho e 1 cor pra ver a estimativa
+      </div>
+    );
+  }
+
+  if (!pcrolo) {
+    return (
+      <div style={{ padding: 20, textAlign: 'center', fontFamily: SERIF, fontSize: 12, color: '#8a9aa4', fontStyle: 'italic', background: '#fff', borderRadius: 6 }}>
+        📊 sem histórico de rendimento pra ref {refStr || ''}<br />
+        <span style={{ fontSize: 10.5 }}>corte ao menos 1x essa ref pra ter estimativa automática</span>
+      </div>
+    );
+  }
+
+  const linhas = cores.map(c => {
+    const totalCor = c.rolos * pcrolo;
+    const cells = tamsAtivos.map(t => Math.round(totalCor * (grade[t] / totalModulos)));
+    const total = cells.reduce((s, n) => s + n, 0);
+    return { cor: c, cells, total };
+  });
+  const colTotals = tamsAtivos.map((_, i) => linhas.reduce((s, l) => s + l.cells[i], 0));
+  const totalGeral = linhas.reduce((s, l) => s + l.total, 0);
+
+  return (
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FN }}>
+        <thead>
+          <tr style={{ background: '#e8e2da' }}>
+            <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'left' }}>Cor</th>
+            {tamsAtivos.map(t => (
+              <th key={t} style={{ padding: '8px 10px', fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'center' }}>{t}</th>
+            ))}
+            <th style={{ padding: '8px 10px', fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', textAlign: 'center' }}>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.map((l, i) => (
+            <tr key={i} style={{ borderBottom: '1px solid #e8e2da' }}>
+              <td style={{ padding: '8px 10px', fontSize: 12, color: '#1C2533', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 12, height: 12, borderRadius: '50%', background: l.cor.hex || hexCor(l.cor.nome) }} />
+                {l.cor.nome} · {l.cor.rolos}r
+              </td>
+              {l.cells.map((n, j) => (
+                <td key={j} style={{ padding: '8px 10px', fontSize: 12, color: '#1C2533', textAlign: 'center' }}>{n}</td>
+              ))}
+              <td style={{ padding: '8px 10px', fontSize: 12, color: '#1C2533', fontWeight: 'bold', background: '#f7f4f0', textAlign: 'center' }}>{l.total}</td>
+            </tr>
+          ))}
+          <tr style={{ background: '#f7f4f0' }}>
+            <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 'bold', color: '#1C2533' }}>Total · {totalRolos} rolos</td>
+            {colTotals.map((n, j) => (
+              <td key={j} style={{ padding: '8px 10px', fontSize: 12, fontWeight: 'bold', color: '#1C2533', textAlign: 'center' }}>{n}</td>
+            ))}
+            <td style={{ padding: '8px 10px', fontSize: 12, fontWeight: 'bold', color: '#1C2533', textAlign: 'center' }}>{totalGeral}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo }) {
   const isEdit = !!ordemEditando;
-  const [refBusca, setRefBusca] = useState(ordemEditando?.ref || '');
-  const [autocomplete, setAutocomplete] = useState([]);
-  const [produtoSel, setProdutoSel] = useState(isEdit ? { ref: ordemEditando.ref, descricao: ordemEditando.descricao, tecido: ordemEditando.tecido } : null);
+
+  // Etapa: 'ref' (escolhendo ref) ou 'completa' (ref escolhida, preenchendo grade/cores)
+  const [etapa, setEtapa] = useState(isEdit ? 'completa' : 'ref');
+
+  // Produto selecionado
+  const [produto, setProduto] = useState(
+    isEdit ? { ref: ordemEditando.ref, descricao: ordemEditando.descricao, tecido: ordemEditando.tecido } : null
+  );
+
+  // Campos da ordem
   const [grupo, setGrupo] = useState(ordemEditando?.grupo ?? '');
   const [grade, setGrade] = useState(ordemEditando?.grade || {});
-  const [novoTam, setNovoTam] = useState('');
   const [cores, setCores] = useState(ordemEditando?.cores || []);
-  const [novaCor, setNovaCor] = useState({ nome: '', rolos: '', hex: '' });
-  const [coresRanking] = useState(loadCoresRanking());
+
+  // Edição (obrigatório motivo ao editar)
   const [motivo, setMotivo] = useState('');
+
+  // Auxiliares
+  const [refBusca, setRefBusca] = useState('');
+  const [autocomplete, setAutocomplete] = useState([]);
+  const [coresRanking] = useState(loadCoresRanking());
+  const [corManual, setCorManual] = useState({ nome: '', rolos: 1, hex: '#888' });
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState(null);
 
-  // Autocomplete de ref (com debounce)
+  // Autocomplete ref (só modo novo)
   useEffect(() => {
     if (isEdit) return;
-    if (!refBusca.trim() || produtoSel?.ref === refBusca.trim()) { setAutocomplete([]); return; }
+    if (!refBusca.trim()) { setAutocomplete([]); return; }
     const t = setTimeout(async () => {
       try {
         const r = await fetch(`/api/ordens-corte-buscar-ref?q=${encodeURIComponent(refBusca.trim())}`);
@@ -384,45 +530,43 @@ function ModalOrdem({ ordemEditando, usuario, onClose, onSalvo }) {
       } catch { setAutocomplete([]); }
     }, 250);
     return () => clearTimeout(t);
-  }, [refBusca, produtoSel, isEdit]);
+  }, [refBusca, isEdit]);
 
   const escolherProduto = (p) => {
-    setProdutoSel(p);
-    setRefBusca(p.ref);
+    if (!p.tecido) { setErro('⚠ Esse produto não tem tecido cadastrado em Oficinas. Complete o cadastro antes.'); return; }
+    setProduto(p);
+    setRefBusca('');
     setAutocomplete([]);
-    if (!p.tecido) setErro('⚠ Esse produto não tem tecido cadastrado em Oficinas. Não dá pra criar ordem.');
-    else setErro(null);
-  };
-
-  const addTamanho = () => {
-    const t = novoTam.trim().toUpperCase();
-    if (!t || grade[t] !== undefined) { setNovoTam(''); return; }
-    setGrade(g => ({ ...g, [t]: 1 }));
-    setNovoTam('');
-  };
-  const setQtdTam = (t, v) => setGrade(g => ({ ...g, [t]: Math.max(1, parseInt(v) || 1) }));
-  const removerTam = (t) => setGrade(g => { const n = { ...g }; delete n[t]; return n; });
-
-  const addCor = (preset) => {
-    const c = preset || { nome: novaCor.nome.trim(), rolos: parseInt(novaCor.rolos) || 1, hex: novaCor.hex || hexCor(novaCor.nome) };
-    if (!c.nome) return;
-    if (cores.some(x => x.nome.toLowerCase() === c.nome.toLowerCase())) { setErro(`Cor "${c.nome}" já adicionada`); return; }
-    setCores(prev => [...prev, c]);
-    setNovaCor({ nome: '', rolos: '', hex: '' });
+    setEtapa('completa');
     setErro(null);
   };
-  const setRolosCor = (i, v) => setCores(prev => prev.map((c, idx) => idx === i ? { ...c, rolos: Math.max(1, parseInt(v) || 1) } : c));
-  const removerCor = (i) => setCores(prev => prev.filter((_, idx) => idx !== i));
 
+  const trocarRef = () => {
+    setProduto(null);
+    setGrade({});
+    setCores([]);
+    setGrupo('');
+    setEtapa('ref');
+  };
+
+  const pcrolo = produto ? (mediaRef?.[produto.ref]?.media || null) : null;
   const totalRolos = cores.reduce((s, c) => s + (Number(c.rolos) || 0), 0);
+  const tamsAtivos = TAMANHOS_PADRAO.filter(t => grade[t] > 0);
+  const totalModulos = tamsAtivos.reduce((s, t) => s + grade[t], 0);
+  const pecasEstimadas = pcrolo && tamsAtivos.length > 0 && cores.length > 0 ? totalRolos * pcrolo : null;
+
+  const podeSalvar = produto?.ref && produto?.tecido && tamsAtivos.length > 0 && cores.length > 0 && (!isEdit || motivo.trim());
 
   const salvar = async () => {
     setErro(null);
-    if (!produtoSel?.ref) { setErro('Selecione uma ref válida'); return; }
-    if (!produtoSel.tecido) { setErro('Produto sem tecido cadastrado'); return; }
-    if (Object.keys(grade).length === 0) { setErro('Adicione pelo menos 1 tamanho na grade'); return; }
-    if (cores.length === 0) { setErro('Adicione pelo menos 1 cor com rolos'); return; }
-    if (isEdit && !motivo.trim()) { setErro('Motivo da edição obrigatório'); return; }
+    if (!podeSalvar) {
+      if (!produto?.ref) setErro('Selecione uma ref');
+      else if (!produto.tecido) setErro('Produto sem tecido cadastrado');
+      else if (tamsAtivos.length === 0) setErro('Adicione pelo menos 1 tamanho na grade');
+      else if (cores.length === 0) setErro('Adicione pelo menos 1 cor');
+      else if (isEdit && !motivo.trim()) setErro('Motivo da edição obrigatório');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -435,9 +579,8 @@ function ModalOrdem({ ordemEditando, usuario, onClose, onSalvo }) {
       } else {
         url = '/api/ordens-corte-criar';
         method = 'POST';
-        body = { ref: produtoSel.ref, grade, cores, grupo: grupoNum, criada_por: usuario };
+        body = { ref: produto.ref, grade, cores, grupo: grupoNum, criada_por: usuario };
       }
-
       const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'X-User': usuario }, body: JSON.stringify(body) });
       const d = await r.json();
       if (!r.ok) { setErro(d.error || 'Erro ao salvar'); setSaving(false); return; }
@@ -449,143 +592,254 @@ function ModalOrdem({ ordemEditando, usuario, onClose, onSalvo }) {
     }
   };
 
+  // Responsividade (4 colunas no celular pra grade)
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 600 : false);
+  useEffect(() => {
+    const h = () => setIsMobile(window.innerWidth < 600);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+
+  const cssMobileGrade = isMobile ? { gridTemplateColumns: 'repeat(4, 1fr)' } : {};
+
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)', zIndex: 99998, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: '#fff', borderRadius: 12, maxWidth: 720, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 24, fontFamily: SERIF, color: '#2c3e50' }}>
-        <h2 style={{ margin: '0 0 16px 0', fontSize: 18 }}>{isEdit ? '✎ Editar ordem de corte' : '+ Nova ordem de corte'}</h2>
-
-        {/* REF + autocomplete */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 11, color: '#8a9aa4', textTransform: 'uppercase', letterSpacing: 0.5 }}>Ref do produto</label>
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              value={refBusca}
-              onChange={e => { setRefBusca(e.target.value); if (!isEdit) { setProdutoSel(null); } }}
-              disabled={isEdit}
-              placeholder="Ex: 02277"
-              style={{ width: '100%', padding: '9px 12px', border: '1px solid #e8e2da', borderRadius: 6, fontSize: 14, fontFamily: SERIF, marginTop: 4, boxSizing: 'border-box', background: isEdit ? '#f7f4f0' : '#fff' }}
-            />
-            {autocomplete.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e8e2da', borderRadius: 6, marginTop: 2, maxHeight: 200, overflowY: 'auto', zIndex: 10 }}>
-                {autocomplete.map(p => (
-                  <div key={p.ref} onClick={() => escolherProduto(p)} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid #f0ebe4' }} onMouseEnter={e => e.currentTarget.style.background = '#f7f4f0'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-                    <strong>{p.ref}</strong> · {p.descricao} <span style={{ color: '#8a9aa4', fontSize: 11 }}>{p.tecido ? `· ${p.tecido}` : '⚠ sem tecido'}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {produtoSel && (
-            <div style={{ marginTop: 6, fontSize: 12, color: produtoSel.tecido ? '#27ae60' : '#c0392b' }}>
-              {produtoSel.tecido ? `🧵 ${produtoSel.tecido}` : '⚠ Esse produto não tem tecido cadastrado em Oficinas'}
-            </div>
-          )}
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.45)', zIndex: 99998,
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      padding: isMobile ? 8 : 20, overflowY: 'auto',
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: '#fff', borderRadius: isMobile ? 10 : 14,
+        maxWidth: 720, width: '100%', padding: isMobile ? 16 : 24,
+        fontFamily: SERIF, color: '#2c3e50',
+        boxShadow: '0 16px 48px rgba(0,0,0,0.25)',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 20, fontWeight: 'bold', color: '#1C2533' }}>
+            {isEdit ? '✎ Editar ordem de corte' : '+ Nova ordem de corte'}
+          </h2>
+          <button onClick={onClose} title="Fechar"
+            style={{ background: 'none', border: 'none', fontSize: 26, color: '#8a9aa4', cursor: 'pointer', padding: '0 6px', lineHeight: 1 }}>×</button>
         </div>
 
-        {/* Grupo */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 11, color: '#8a9aa4', textTransform: 'uppercase', letterSpacing: 0.5 }}>Grupo (opcional, 0-9)</label>
-          <input type="number" min="0" max="9" value={grupo} onChange={e => setGrupo(e.target.value)} style={{ display: 'block', marginTop: 4, padding: '9px 12px', border: '1px solid #e8e2da', borderRadius: 6, fontSize: 14, fontFamily: FN, width: 80 }} />
-        </div>
-
-        {/* Grade */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 11, color: '#8a9aa4', textTransform: 'uppercase', letterSpacing: 0.5 }}>Grade do enfesto</label>
-          <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            {Object.entries(grade).map(([t, v]) => (
-              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f7f4f0', padding: '4px 6px 4px 10px', borderRadius: 6 }}>
-                <span style={{ fontWeight: 600 }}>{t}</span>
-                <input type="number" min="1" value={v} onChange={e => setQtdTam(t, e.target.value)} style={{ width: 40, padding: '3px 4px', border: '1px solid #e8e2da', borderRadius: 4, fontFamily: FN, fontSize: 12, textAlign: 'center' }} />
-                <button onClick={() => removerTam(t)} style={{ padding: '0 4px', background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b' }}>×</button>
-              </div>
-            ))}
-            <input type="text" value={novoTam} onChange={e => setNovoTam(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTamanho()} placeholder="P, M, GG..." style={{ width: 80, padding: '5px 8px', border: '1px solid #e8e2da', borderRadius: 4, fontSize: 12, textTransform: 'uppercase' }} />
-            <button onClick={addTamanho} style={{ padding: '5px 12px', background: '#5a7faa', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>+ tam</button>
-          </div>
-        </div>
-
-        {/* Cores */}
-        <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 11, color: '#8a9aa4', textTransform: 'uppercase', letterSpacing: 0.5 }}>Cores e rolos · Total: <strong>{totalRolos}r</strong></label>
-
-          {/* Cores adicionadas */}
-          {cores.length > 0 && (
-            <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 6 }}>
-              {cores.map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: '#fff', border: '1px solid #e8e2da', borderRadius: 6 }}>
-                  <span style={{ width: 14, height: 14, borderRadius: '50%', background: c.hex || hexCor(c.nome) }} />
-                  <span style={{ flex: 1, fontSize: 12 }}>{c.nome}</span>
-                  <input type="number" min="1" value={c.rolos} onChange={e => setRolosCor(i, e.target.value)} style={{ width: 40, padding: '2px 4px', border: '1px solid #e8e2da', borderRadius: 4, fontFamily: FN, fontSize: 12, textAlign: 'center' }} />
-                  <button onClick={() => removerCor(i)} style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer' }}>×</button>
+        {/* ETAPA 1: Escolher ref */}
+        {etapa === 'ref' && (
+          <div>
+            <label style={{ display: 'block', fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Ref do produto</label>
+            <div style={{ position: 'relative', marginBottom: 16 }}>
+              <input type="text" value={refBusca} onChange={e => setRefBusca(e.target.value)} autoFocus
+                placeholder="Ex: 02277"
+                style={{
+                  width: '100%', padding: '11px 14px',
+                  border: '1px solid #e8e2da', borderRadius: 8,
+                  fontSize: 16, fontFamily: FN, fontWeight: 'bold',
+                  color: '#1C2533', boxSizing: 'border-box',
+                }} />
+              {autocomplete.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+                  background: '#fff', border: '1px solid #e8e2da', borderRadius: 8,
+                  boxShadow: '0 6px 20px rgba(0,0,0,0.12)', maxHeight: 240, overflowY: 'auto', zIndex: 10,
+                }}>
+                  {autocomplete.map(p => (
+                    <div key={p.ref} onClick={() => escolherProduto(p)}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f7f4f0'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                      style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #f7f4f0' }}>
+                      <div style={{ fontFamily: FN, fontWeight: 'bold', fontSize: 14, color: '#1C2533' }}>{p.ref}</div>
+                      <div style={{ fontSize: 12, color: '#5a6b7a' }}>{p.descricao || '—'}</div>
+                      <div style={{ fontSize: 11, color: p.tecido ? '#8a9aa4' : '#c0392b', marginTop: 2 }}>
+                        {p.tecido ? `🧵 ${p.tecido}` : '⚠ sem tecido cadastrado em Oficinas'}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-
-          {/* Sugestões Bling */}
-          {coresRanking.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 10, color: '#8a9aa4', marginBottom: 4 }}>📊 Cores sugeridas (Ranking Bling)</div>
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {coresRanking.slice(0, 16).map(c => {
-                  const ja = cores.some(x => x.nome.toLowerCase() === c.nome.toLowerCase());
-                  return (
-                    <button
-                      key={c.nome}
-                      onClick={() => !ja && addCor({ nome: c.nome, rolos: 1, hex: c.hex || hexCor(c.nome) })}
-                      disabled={ja}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                        padding: '4px 8px', background: ja ? '#f7f4f0' : '#fff',
-                        border: '1px solid #e8e2da', borderRadius: 12,
-                        cursor: ja ? 'default' : 'pointer', fontSize: 11,
-                        opacity: ja ? 0.5 : 1,
-                      }}
-                    >
-                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: c.hex || hexCor(c.nome) }} />
-                      {c.nome}
-                    </button>
-                  );
-                })}
-              </div>
+            {erro && <div style={{ padding: 10, background: '#fdeaea', color: '#c0392b', borderRadius: 6, fontSize: 12 }}>{erro}</div>}
+            <div style={{ textAlign: 'right', marginTop: 16 }}>
+              <button onClick={onClose} style={{ padding: '9px 18px', background: '#fff', color: '#5a6b7a', border: '1px solid #e8e2da', borderRadius: 8, fontSize: 13, fontFamily: SERIF, cursor: 'pointer' }}>Cancelar</button>
             </div>
-          )}
-
-          {/* Add cor manual */}
-          <div style={{ marginTop: 8, display: 'flex', gap: 4 }}>
-            <input type="text" value={novaCor.nome} onChange={e => setNovaCor(p => ({ ...p, nome: e.target.value }))} placeholder="Nome da cor" style={{ flex: 1, padding: '6px 10px', border: '1px solid #e8e2da', borderRadius: 4, fontSize: 12 }} />
-            <input type="number" min="1" value={novaCor.rolos} onChange={e => setNovaCor(p => ({ ...p, rolos: e.target.value }))} placeholder="Rolos" style={{ width: 60, padding: '6px 8px', border: '1px solid #e8e2da', borderRadius: 4, fontSize: 12, fontFamily: FN, textAlign: 'center' }} />
-            <input type="color" value={novaCor.hex || '#999999'} onChange={e => setNovaCor(p => ({ ...p, hex: e.target.value }))} style={{ width: 36, height: 32, padding: 2, border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer' }} />
-            <button onClick={() => addCor()} style={{ padding: '5px 12px', background: '#5a7faa', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}>+ cor</button>
-          </div>
-        </div>
-
-        {/* Motivo de edição (só pra editar) */}
-        {isEdit && (
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 11, color: '#8a9aa4', textTransform: 'uppercase', letterSpacing: 0.5 }}>Motivo da edição *</label>
-            <input type="text" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ex: Adicionar cor Bege" style={{ display: 'block', marginTop: 4, width: '100%', padding: '9px 12px', border: '1px solid #e8e2da', borderRadius: 6, fontSize: 13, fontFamily: SERIF, boxSizing: 'border-box' }} />
           </div>
         )}
 
-        {/* Erro */}
-        {erro && <div style={{ padding: 10, background: '#fdeaea', color: '#c0392b', borderRadius: 6, marginBottom: 12, fontSize: 12 }}>{erro}</div>}
+        {/* ETAPA 2: Produto escolhido, preencher tudo */}
+        {etapa === 'completa' && produto && (
+          <>
+            {/* Título + tecido */}
+            <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 'bold', color: '#1C2533', margin: '0 0 4px 0', lineHeight: 1.2 }}>
+              ref {produto.ref} · {produto.descricao || '—'}
+            </h2>
+            <p style={{ fontSize: 13, color: '#5a6b7a', margin: '0 0 16px 0' }}>
+              🧵 {produto.tecido}
+              {pcrolo ? (
+                <span style={{ color: '#8a9aa4', fontFamily: FN, fontSize: 12, marginLeft: 8 }}>· média {pcrolo} pç/rolo</span>
+              ) : (
+                <span style={{ color: '#c8a040', fontFamily: FN, fontSize: 12, marginLeft: 8 }}>· sem histórico de rendimento</span>
+              )}
+              {!isEdit && (
+                <a href="#" onClick={e => { e.preventDefault(); trocarRef(); }}
+                  style={{ marginLeft: 14, color: '#4a7fa5', fontSize: 12, fontFamily: SERIF, textDecoration: 'underline' }}>trocar ref</a>
+              )}
+            </p>
 
-        {/* Ações */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onClose} disabled={saving} style={{ padding: '9px 18px', background: '#fff', color: '#5a6b7a', border: '1px solid #e8e2da', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontFamily: SERIF }}>Cancelar</button>
-          <button onClick={salvar} disabled={saving || !produtoSel?.tecido} style={{ padding: '9px 22px', background: saving ? '#8a9aa4' : '#27ae60', color: '#fff', border: 'none', borderRadius: 6, cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontFamily: SERIF, fontWeight: 600 }}>
-            {saving ? 'Salvando...' : (isEdit ? 'Salvar alterações' : 'Criar ordem')}
-          </button>
-        </div>
+            {/* Grupo */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16,
+              background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8,
+              padding: isMobile ? '10px 12px' : '12px 16px', flexWrap: 'wrap',
+            }}>
+              <span style={{ fontFamily: FN, fontSize: 11, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Grupo</span>
+              <input type="text" maxLength={1} value={grupo}
+                onChange={e => setGrupo(e.target.value.replace(/[^0-9]/g, '').slice(0, 1))}
+                placeholder="—"
+                style={{
+                  width: 48, height: 44, textAlign: 'center',
+                  border: '1.5px solid #e8e2da', borderRadius: 8,
+                  fontFamily: FN, fontSize: 22, fontWeight: 'bold',
+                  color: '#1C2533', background: '#fff',
+                }} />
+              <span style={{ fontSize: 11, color: '#5a6b7a', fontStyle: 'italic', flex: isMobile ? '100%' : 'none' }}>
+                opcional · 0–9 · identifica o enfesto no chão de fábrica
+              </span>
+            </div>
+
+            {/* Grade */}
+            <div style={{ background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8, padding: isMobile ? '12px' : '14px 16px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Grade do enfesto</span>
+              </div>
+              <GradeEditorResponsive grade={grade} onChange={setGrade} isMobile={isMobile} />
+            </div>
+
+            {/* Cores */}
+            <div style={{ background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8, padding: isMobile ? '12px' : '14px 16px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  Cores e rolos · total: {totalRolos}R
+                </span>
+              </div>
+              <CoresEditor cores={cores} onChange={setCores} coresRanking={coresRanking} corManual={corManual} setCorManual={setCorManual} />
+            </div>
+
+            {/* Matriz */}
+            <div style={{ background: '#f7f4f0', border: '1px solid #e8e2da', borderRadius: 8, padding: isMobile ? '12px' : '14px 16px', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
+                <span style={{ fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1 }}>Estimativa · cor × tamanho</span>
+                {pcrolo && tamsAtivos.length > 0 && cores.length > 0 && (
+                  <span style={{ fontFamily: FN, fontSize: 10, color: '#8a9aa4' }}>base {pcrolo} pç/rolo · histórico Salas de Corte</span>
+                )}
+              </div>
+              <MatrizEstimativa grade={grade} cores={cores} pcrolo={pcrolo} refStr={produto.ref} />
+            </div>
+
+            {/* Total footer escuro */}
+            <div style={{
+              background: '#1C2533', color: '#fff', borderRadius: 8,
+              padding: isMobile ? '12px 14px' : '14px 18px', marginBottom: 16,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12,
+            }}>
+              <div style={{ fontSize: 12, opacity: 0.9 }}>
+                {cores.length} cor(es) · {tamsAtivos.length} tamanho(s)
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontFamily: FN, fontSize: 24, fontWeight: 'bold', lineHeight: 1 }}>{totalRolos} rolos</div>
+                <div style={{ fontFamily: FN, fontSize: 11, opacity: 0.75, marginTop: 2 }}>
+                  {pecasEstimadas != null ? `≈ ${pecasEstimadas} peças estimadas` : 'peças sem estimativa'}
+                </div>
+              </div>
+            </div>
+
+            {/* Motivo (edit only) */}
+            {isEdit && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Motivo da edição *</label>
+                <input type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
+                  placeholder="ex: Adicionar cor Bege"
+                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #e8e2da', borderRadius: 8, fontSize: 13, fontFamily: SERIF, boxSizing: 'border-box' }} />
+              </div>
+            )}
+
+            {/* Erro */}
+            {erro && <div style={{ padding: 10, background: '#fdeaea', color: '#c0392b', borderRadius: 6, marginBottom: 12, fontSize: 12 }}>{erro}</div>}
+
+            {/* Ações */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={onClose} disabled={saving}
+                style={{ padding: '11px 22px', background: '#fff', color: '#5a6b7a', border: '1px solid #e8e2da', borderRadius: 8, fontSize: 13, fontFamily: SERIF, cursor: saving ? 'wait' : 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={salvar} disabled={saving || !podeSalvar}
+                style={{ padding: '11px 24px', background: !podeSalvar ? '#ccc' : (saving ? '#8a9aa4' : '#27ae60'), color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontFamily: SERIF, fontWeight: 'bold', cursor: (!podeSalvar || saving) ? 'not-allowed' : 'pointer' }}>
+                {saving ? 'Salvando...' : (isEdit ? 'Salvar alterações' : 'Criar ordem')}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Wrapper da grade com responsividade (4 colunas no mobile, 8 no desktop)
+function GradeEditorResponsive({ grade, onChange, isMobile }) {
+  const setMod = (t, v) => {
+    const n = Math.max(0, Math.min(99, parseInt(v) || 0));
+    const next = { ...grade };
+    if (n === 0) delete next[t]; else next[t] = n;
+    onChange(next);
+  };
+  const toggle = (t) => {
+    const next = { ...grade };
+    if (next[t] > 0) delete next[t]; else next[t] = 1;
+    onChange(next);
+  };
+
+  return (
+    <div>
+      <div style={{
+        display: 'grid', gap: isMobile ? '10px 8px' : 8, marginBottom: 12,
+        gridTemplateColumns: isMobile ? 'repeat(4, 1fr)' : 'repeat(8, 1fr)',
+      }}>
+        {TAMANHOS_PADRAO.map(t => {
+          const incluido = grade[t] > 0;
+          return (
+            <div key={t} style={{ position: 'relative', paddingTop: 4 }}>
+              <span style={{ display: 'block', fontFamily: FN, fontSize: 10, fontWeight: 'bold', color: '#373F51', textAlign: 'center', marginBottom: 4 }}>{t}</span>
+              <input type="number" min={0} value={grade[t] || 0}
+                onChange={e => setMod(t, e.target.value)}
+                onFocus={e => e.target.select()}
+                style={{
+                  width: '100%', padding: 8, textAlign: 'center',
+                  background: incluido ? '#eafbf0' : '#f5f5f5',
+                  border: `1.5px solid ${incluido ? '#27ae60' : '#e8e2da'}`,
+                  borderRadius: 6, fontFamily: FN, fontSize: 15, fontWeight: 'bold',
+                  color: incluido ? '#1C2533' : '#ccc', boxSizing: 'border-box',
+                }} />
+              <button type="button" onClick={() => toggle(t)}
+                style={{
+                  position: 'absolute', top: -2, right: -4, width: 20, height: 20,
+                  borderRadius: '50%', border: '2px solid #fff', cursor: 'pointer',
+                  fontSize: 11, fontWeight: 'bold', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                  color: '#fff', background: incluido ? '#c0392b' : '#27ae60',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)', zIndex: 2, padding: 0,
+                }}>{incluido ? '✕' : '+'}</button>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontFamily: SERIF, fontSize: 11, color: '#8a9aa4', fontStyle: 'italic' }}>
+        Clique no <strong style={{ color: '#27ae60' }}>+</strong> pra incluir · ajuste quantidade · <strong style={{ color: '#c0392b' }}>✕</strong> remove
       </div>
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// MODAL EXCLUIR
+// MODAL EXCLUIR (intocado)
 // ════════════════════════════════════════════════════════════════════════════
 
 function ModalExcluir({ ordem, usuario, onClose, onExcluido }) {
@@ -613,7 +867,7 @@ function ModalExcluir({ ordem, usuario, onClose, onExcluido }) {
       <div style={{ background: '#fff', borderRadius: 12, maxWidth: 480, width: '100%', padding: 24, fontFamily: SERIF, color: '#2c3e50' }}>
         <h3 style={{ margin: '0 0 8px 0', color: '#c0392b' }}>🗑 Excluir ordem?</h3>
         <p style={{ fontSize: 13, color: '#5a6b7a', marginBottom: 16 }}>
-          REF <strong>{ordem.ref}</strong> · {ordem.total_rolos} rolos<br/>
+          REF <strong>{ordem.ref}</strong> · {ordem.total_rolos} rolos<br />
           Esta ação marca a ordem como cancelada (não apaga histórico).
         </p>
         <label style={{ fontSize: 11, color: '#8a9aa4', textTransform: 'uppercase' }}>Motivo *</label>
