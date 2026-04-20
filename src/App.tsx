@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Component } from "react";
 import { supabase, USER_ID } from "./supabase.js";
 import MLPerguntas from './MLPerguntas';
+import OrdemDeCorte from './OrdemDeCorte';
+import FilaDeCorte from './FilaDeCorte';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -5817,32 +5819,10 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
         </div>)}
 
         {/* ═══ ORDEM DE CORTE (admin only) ═══ */}
-        {tela==="ordem"&&isAdmin&&(<div>
-          <div style={{background:"#fff",borderRadius:12,padding:mobile?20:32,border:"1px solid #e8e2da",textAlign:"center"}}>
-            <div style={{fontSize:48,marginBottom:12}}>📋</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#2c3e50",marginBottom:6,fontFamily:"Georgia,serif"}}>Ordem de Corte</div>
-            <div style={{fontSize:13,color:"#8a9aa4",marginBottom:18,fontFamily:"Georgia,serif"}}>Tela em construção · Fase A</div>
-            <div style={{fontSize:12,color:"#a89f94",fontFamily:"Georgia,serif",lineHeight:1.6,maxWidth:380,margin:"0 auto"}}>
-              Aqui o admin vai criar e gerenciar as ordens de corte.<br/>
-              Cards expansíveis com grade, cores e matriz cor×tamanho.<br/>
-              Endpoints já estão prontos. UI no próximo commit.
-            </div>
-          </div>
-        </div>)}
+        {tela==="ordem"&&isAdmin&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}}/>)}
 
         {/* ═══ FILA DE CORTE (admin + funcionário) ═══ */}
-        {tela==="fila"&&(<div>
-          <div style={{background:"#fff",borderRadius:12,padding:mobile?20:32,border:"1px solid #e8e2da",textAlign:"center"}}>
-            <div style={{fontSize:48,marginBottom:12}}>✂️</div>
-            <div style={{fontSize:16,fontWeight:700,color:"#2c3e50",marginBottom:6,fontFamily:"Georgia,serif"}}>Fila de Corte</div>
-            <div style={{fontSize:13,color:"#8a9aa4",marginBottom:18,fontFamily:"Georgia,serif"}}>Tela em construção · Fase A</div>
-            <div style={{fontSize:12,color:"#a89f94",fontFamily:"Georgia,serif",lineHeight:1.6,maxWidth:380,margin:"0 auto"}}>
-              Aqui o funcionário vai separar tecido e definir sala.<br/>
-              Cards mobile com confirmação de tecido + escolha de sala.<br/>
-              Endpoints já estão prontos. UI no próximo commit.
-            </div>
-          </div>
-        </div>)}
+        {tela==="fila"&&(<FilaDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}}/>)}
 
         {/* Modal Editar Corte */}
         {editCorte&&(
