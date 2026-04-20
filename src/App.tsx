@@ -3953,7 +3953,7 @@ const LoginScreen=({usuarios,onLogin})=>{
   );
 };
 
-const UsuariosContent=({usuarios,setUsuarios})=>{
+const UsuariosContent=({usuarios,setUsuarios,onDeletarUsuario,saveStatus})=>{
   const [form,setForm]=useState({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});
   const [editId,setEditId]=useState(null);
   const [erro,setErro]=useState("");
@@ -3974,11 +3974,33 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
     setForm({usuario:"",senha:"",modulos:[],admin:false,moduloPadrao:"home"});setEditId(null);setErro("");
   };
   const editar=(u)=>{setForm({usuario:u.usuario,senha:u.senha,modulos:[...u.modulos],admin:u.admin,moduloPadrao:u.moduloPadrao||"home"});setEditId(u.id);};
-  const deletar=(id)=>{if(usuarios.find(u=>u.id===id)?.admin){setErro("Não é possível excluir o admin.");return;}setUsuarios(prev=>prev.filter(u=>u.id!==id));};
+  const deletar=(id)=>{
+    const alvo=usuarios.find(u=>u.id===id);
+    if(alvo?.admin){setErro("Não é possível excluir o admin.");return;}
+    if(!window.confirm(`Excluir o usuário "${alvo?.usuario}"? Esta ação não pode ser desfeita.`))return;
+    // Usa handler externo (marca id como deletado + sync direto no Supabase)
+    if(onDeletarUsuario)onDeletarUsuario(id);
+    else setUsuarios(prev=>prev.filter(u=>u.id!==id));
+  };
   const iStyle={border:"1px solid #c8d8e4",borderRadius:6,padding:"6px 10px",fontSize:12,outline:"none",fontFamily:"Georgia,serif"};
   const modulesAll=[...modules.filter(m=>m.id!=="usuarios")];
+  // Badge visual do status de save (importante pra confirmar no momento que foi salvo)
+  const statusBadge=saveStatus==='saving'?{bg:'#faf6ec',color:'#c8a040',txt:'💾 Salvando no Supabase...'}
+                  :saveStatus==='saved'?{bg:'#eafbf0',color:'#27ae60',txt:'✓ Salvo no Supabase'}
+                  :saveStatus==='error'?{bg:'#fdeaea',color:'#c0392b',txt:'⚠ Erro no save — veja o console'}
+                  :null;
   return(
     <div>
+      {statusBadge&&(
+        <div style={{
+          padding:'10px 16px',borderRadius:8,marginBottom:12,
+          background:statusBadge.bg,color:statusBadge.color,
+          fontSize:13,fontWeight:600,fontFamily:'Georgia,serif',
+          border:`1px solid ${statusBadge.color}`,
+        }}>
+          {statusBadge.txt}
+        </div>
+      )}
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",padding:20,marginBottom:16}}>
         <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>{editId?"Editar usuário":"Novo usuário"}</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
@@ -4028,7 +4050,20 @@ const UsuariosContent=({usuarios,setUsuarios})=>{
         </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-        <div style={{padding:"12px 16px",borderBottom:"1px solid #e8e2da",fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Usuários do sistema</div>
+        <div style={{padding:"12px 16px",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Usuários do sistema · <strong style={{color:"#2c3e50"}}>{usuarios.length}</strong> no app</div>
+          <button onClick={async()=>{
+            try{
+              const{data,error}=await supabase.from('amicia_data').select('payload').eq('user_id','usuarios').maybeSingle();
+              if(error){alert("Erro ao consultar Supabase: "+error.message);return;}
+              const remoteUsers=data?.payload?.usuarios||[];
+              const ids=remoteUsers.map(u=>u.usuario).join(", ");
+              alert(`Supabase tem ${remoteUsers.length} usuário(s):\n\n${ids||'(nenhum)'}\n\nNo app local: ${usuarios.length}\n\n${remoteUsers.length===usuarios.length?'✓ Sincronizado':'⚠ Diferente do local!'}`);
+            }catch(e){alert("Erro: "+(e?.message||e));}
+          }} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+            🔍 Verificar no Supabase
+          </button>
+        </div>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
           <thead><tr style={{background:"#f7f4f0"}}>{["Usuário","Perfil","Módulos com acesso",""].map(h=><th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>)}</tr></thead>
           <tbody>
@@ -7440,6 +7475,8 @@ export default function App(){
   const [sacResetTrigger,setSacResetTrigger]=useState(0);
   const [menuUser,setMenuUser]=useState(false);
   const [usuarios,setUsuarios]=useState(USUARIOS_INICIAL);
+  // Status do último save de usuários (exibido no UsuariosContent pra confirmação visual)
+  const [usuariosSaveStatus,setUsuariosSaveStatus]=useState(null); // null | 'saving' | 'saved' | 'error'
   const [prestadores,setPrestadores]=useState(PRESTADORES_INICIAL);
   const [fixosConfig,setFixosConfig]=useState(FIXOS_TEMPLATE);
   const [fixosNomesFunc,setFixosNomesFunc]=useState(FIXOS_NOMES_FUNC);
@@ -7578,6 +7615,39 @@ export default function App(){
   const debounceUsuarios=useRef(null);
   const realtimeUsuarios=useRef(false);
   const lastUsuariosSaveTs=useRef(0);
+  // ── SEGURANÇA USUÁRIOS ──
+  // Flag: só permite save depois que load do Supabase completou
+  // (evita dispositivo limpo sobrescrever com USUARIOS_INICIAL)
+  const usuariosCarregadosDoRemoto=useRef(false);
+  // Set de IDs explicitamente deletados pelo admin (não ressuscitam via merge)
+  const usuariosDeletadosRef=useRef(new Set());
+
+  // Handler de delete explícito: marca ID no ref + faz delete direto no Supabase
+  const deletarUsuario=useCallback(async(id)=>{
+    const alvo=usuarios.find(u=>u.id===id);
+    if(!alvo)return;
+    if(alvo.admin||alvo.id===1||alvo.usuario==='admin'){
+      console.warn("USUARIOS: tentativa de deletar admin bloqueada");
+      return false;
+    }
+    // Marca no ref ANTES de atualizar state (merge respeita isso)
+    usuariosDeletadosRef.current.add(id);
+    // Atualiza state local
+    setUsuarios(prev=>prev.filter(u=>u.id!==id));
+    // Delete direto no Supabase (read-filter-write) sem esperar debounce
+    try{
+      const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','usuarios').maybeSingle();
+      const remotos=data?.payload?.usuarios||[];
+      const filtrados=remotos.filter(u=>u.id!==id);
+      const ts=Date.now();
+      lastUsuariosSaveTs.current=ts;
+      const payload={usuarios:filtrados,_updated:ts};
+      await supabase.from('amicia_data').upsert({user_id:'usuarios',payload},{onConflict:'user_id'});
+      try{localStorage.setItem("amica_usuarios",JSON.stringify(payload));}catch{}
+      console.log("USUARIOS DELETE: id",id,"removido no Supabase. Total agora:",filtrados.length);
+    }catch(e){console.error("USUARIOS DELETE: erro:",e);}
+    return true;
+  },[usuarios]);
 
   // ── SAVE LOCAL IMEDIATO (sem debounce) ─────────────────────────────────────
   // salvarLocal aceita timestamp opcional — quando fornecido, usa o MESMO que vai pro Supabase
@@ -7800,7 +7870,13 @@ export default function App(){
         try{const raw=localStorage.getItem("amica_usuarios");localParsed=raw?JSON.parse(raw):null;}catch(e){console.error("Usuarios parse local:",e);}
         const localUsers=localParsed?.usuarios||[];
 
-        if(remoteUsers.length===0&&localUsers.length===0)return; // nada pra fazer
+        // ✅ Marca flag de carregamento remoto concluído — destrava saves futuros
+        usuariosCarregadosDoRemoto.current=true;
+
+        if(remoteUsers.length===0&&localUsers.length===0){
+          console.log("USUARIOS: nenhum remoto ou local. Mantendo USUARIOS_INICIAL.");
+          return;
+        }
 
         // MERGE por id + _mod — garante que nenhum usuário se perde
         const remoteMap=new Map(remoteUsers.map(u=>[u.id,u]));
@@ -7827,14 +7903,23 @@ export default function App(){
         const mergedPayload={usuarios:mergedUsers,_updated:Date.now()};
         try{localStorage.setItem("amica_usuarios",JSON.stringify(mergedPayload));}catch(e){console.error(e);}
 
-        // Se merge mudou algo em relação ao remoto, salva no Supabase
-        if(mudou&&usuarioLogado?.admin){
-          console.log("USUARIOS: merge diferente do remoto, sincronizando pro Supabase");
-          supabase.from('amicia_data').upsert({user_id:'usuarios',payload:mergedPayload},{onConflict:'user_id'})
-            .then(({error})=>{if(error)console.error("Usuarios merge sync:",error);})
+        // ⚡ IMPORTANTE: removido o check de usuarioLogado?.admin aqui.
+        // No load inicial, usuarioLogado ainda é null — antes nunca sincronizava.
+        // Agora: se merge achou usuários locais que faltam no remoto, sincroniza SEMPRE.
+        // Segurança: só sincroniza se merge resultado é MAIOR que remoto (adição), nunca MENOR (exclusão).
+        if(mudou&&mergedUsers.length>remoteUsers.length){
+          console.log("USUARIOS: merge tem usuários a mais que remoto, sincronizando pro Supabase");
+          const ts=Date.now();
+          lastUsuariosSaveTs.current=ts;
+          supabase.from('amicia_data').upsert({user_id:'usuarios',payload:{usuarios:mergedUsers,_updated:ts}},{onConflict:'user_id'})
+            .then(({error})=>{if(error)console.error("Usuarios merge sync:",error);else console.log("USUARIOS: sync pós-merge OK");})
             .catch(e=>console.error("Usuarios merge sync:",e));
         }
-      }).catch(e=>console.error("Usuarios load:",e));
+      }).catch(e=>{
+        console.error("Usuarios load:",e);
+        // Mesmo com erro, destrava flag pra permitir saves futuros (melhor tentar que bloquear tudo)
+        usuariosCarregadosDoRemoto.current=true;
+      });
     return()=>clearTimeout(safetyTimer);
   },[]);
 
@@ -7935,6 +8020,8 @@ export default function App(){
   },[dbCarregado]);
 
   // ── REALTIME USUARIOS — sync entre devices ────────────────────────────────
+  // CRÍTICO: só ADICIONA/ATUALIZA usuários — NUNCA deleta por ausência.
+  // Delete é operação explícita via deletarUsuario() que marca no ref.
   useEffect(()=>{
     if(!supabase||!dbCarregado)return;
     const ch=supabase.channel('sync-usuarios')
@@ -7948,11 +8035,28 @@ export default function App(){
           const rm=new Map(d.usuarios.map(u=>[u.id,u]));
           const lm=new Map(prev.map(u=>[u.id,u]));
           let mudou=false;
-          const m=prev.map(lu=>{const ru=rm.get(lu.id);if(ru&&(ru._mod||0)>(lu._mod||0)){mudou=true;return ru;}return lu;});
-          for(const[id,ru]of rm){if(!lm.has(id)){m.push(ru);mudou=true;}}
-          // Remove locais que não existem no remoto (deletados em outro device)
-          const final=m.filter(u=>rm.has(u.id)||lm.has(u.id));
-          return mudou||final.length!==m.length?final:prev;
+          // 1. Atualiza locais se remoto tem _mod mais recente
+          const m=prev.map(lu=>{
+            const ru=rm.get(lu.id);
+            if(ru&&(ru._mod||0)>(lu._mod||0)){mudou=true;return ru;}
+            return lu;
+          });
+          // 2. Adiciona remotos que não existem localmente
+          //    EXCETO se o ID está na lista de deletados explícitos (evita ressuscitar)
+          for(const[id,ru]of rm){
+            if(!lm.has(id)){
+              if(usuariosDeletadosRef.current.has(id)){
+                console.log("REALTIME USUARIOS: ignorando id",id,"(deletado localmente)");
+                continue;
+              }
+              m.push(ru);
+              mudou=true;
+            }
+          }
+          // ⚡ REMOVIDO: filter que deletava locais ausentes no remoto.
+          //    Causava perda de usuários quando device "limpo" propagava só os iniciais.
+          //    Delete agora só via deletarUsuario() explícito.
+          return mudou?m:prev;
         });
         try{localStorage.setItem("amica_usuarios",JSON.stringify(d));}catch(e){console.error(e);}
         setTimeout(()=>{realtimeUsuarios.current=false;},2000);
@@ -7964,11 +8068,18 @@ export default function App(){
   useEffect(()=>{
     if(!dbCarregado||!supabase||realtimeUsuarios.current)return;
     if(!usuarioLogado?.admin)return;
+    // ⚡ GUARD CRÍTICO: só salva se load remoto completou
+    // Evita dispositivo "limpo" sobrescrever Supabase com USUARIOS_INICIAL
+    if(!usuariosCarregadosDoRemoto.current){
+      console.log("USUARIOS SAVE: bloqueado — load remoto ainda não completou");
+      return;
+    }
     // Não salva se ainda é o array inicial sem modificações
     if(usuarios.length<=3&&usuarios.every(u=>u.id<=3))return;
     const usrPayload={usuarios,_updated:Date.now()};
     try{localStorage.setItem("amica_usuarios",JSON.stringify(usrPayload));}catch(e){console.error(e);}
     if(debounceUsuarios.current)clearTimeout(debounceUsuarios.current);
+    setUsuariosSaveStatus('saving');
     debounceUsuarios.current=setTimeout(async()=>{
       try{
         // READ-MERGE-WRITE: lê remoto, mergeia por id+_mod, salva resultado
@@ -7979,28 +8090,37 @@ export default function App(){
         const mergedUsers=[];
         const allIds=new Set([...localMap.keys(),...remoteMap.keys()]);
         for(const id of allIds){
+          // ⚡ Respeita deleções explícitas
+          if(usuariosDeletadosRef.current.has(id)){
+            console.log("USUARIOS SAVE: pulando id",id,"(deletado explicitamente)");
+            continue;
+          }
           const lu=localMap.get(id);
           const ru=remoteMap.get(id);
           if(lu&&ru){mergedUsers.push((lu._mod||0)>=(ru._mod||0)?lu:ru);}
           else if(lu){mergedUsers.push(lu);} // novo local
-          else if(ru){
-            // Existe no remoto mas não local — foi deletado localmente?
-            // Se o admin deletou (não está no local), NÃO preserva
-            mergedUsers.push(ru); // Preserva por segurança — admin pode deletar de novo
-          }
+          else if(ru){mergedUsers.push(ru);} // preserva remoto (não deleta por ausência local)
         }
         const ts=Date.now();
         lastUsuariosSaveTs.current=ts;
         const payload={usuarios:mergedUsers,_updated:ts};
         const {error}=await supabase.from('amicia_data').upsert({user_id:'usuarios',payload},{onConflict:'user_id'});
-        if(error)console.error("USUARIOS SAVE: erro:",error);
-        else{
+        if(error){
+          console.error("USUARIOS SAVE: erro:",error);
+          setUsuariosSaveStatus('error');
+          setTimeout(()=>setUsuariosSaveStatus(null),5000);
+        }else{
           console.log("USUARIOS SAVE: merge-write OK,",mergedUsers.length,"usuarios, ts:",ts);
-          // Atualiza local com resultado do merge
+          setUsuariosSaveStatus('saved');
+          setTimeout(()=>setUsuariosSaveStatus(null),3000);
           if(mergedUsers.length!==usuarios.length)setUsuarios(mergedUsers);
           try{localStorage.setItem("amica_usuarios",JSON.stringify(payload));}catch(e){console.error(e);}
         }
-      }catch(e){console.error("USUARIOS SAVE: catch:",e);}
+      }catch(e){
+        console.error("USUARIOS SAVE: catch:",e);
+        setUsuariosSaveStatus('error');
+        setTimeout(()=>setUsuariosSaveStatus(null),5000);
+      }
     },1500);
     return()=>{if(debounceUsuarios.current)clearTimeout(debounceUsuarios.current);};
   },[usuarios,dbCarregado]);
@@ -8771,7 +8891,7 @@ export default function App(){
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true}/>}
-        {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios}/>}
+        {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
           isAdmin={usuarioLogado?.admin===true}
