@@ -14,6 +14,60 @@ import OrdemMatrixModal from './OrdemMatrixModal';
 const FN = "Calibri,'Segoe UI',Arial,sans-serif";
 const SERIF = "Georgia,'Times New Roman',serif";
 
+// Thumbnail do produto a partir do bucket `produtos` do Supabase.
+// Tenta jpg → png → webp (ref normalizada e com zero-padding).
+// Fallback: placeholder cinza com 📷.
+function FotoOrdem({ refProd }) {
+  const sbUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL)
+    || (typeof localStorage !== 'undefined' && localStorage.getItem('sb_url'))
+    || '';
+  const storageBase = sbUrl ? `${sbUrl}/storage/v1/object/public/produtos/` : '';
+  const placeholder = (
+    <div style={{
+      width: 52, height: 66, borderRadius: 6,
+      background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      border: '1px solid #e8e2da', flexShrink: 0, color: '#c0b8b0', fontSize: 16,
+    }}>📷</div>
+  );
+  if (!storageBase || !refProd) return placeholder;
+  const orig = String(refProd).toUpperCase();
+  const norm = orig.replace(/^0+/, '') || '0';
+  const urls = [norm + '.jpg', norm + '.png', norm + '.webp'];
+  if (orig !== norm) urls.push(orig + '.jpg', orig + '.png', orig + '.webp');
+  const pad4 = norm.padStart(4, '0'), pad5 = norm.padStart(5, '0');
+  if (pad4 !== norm && pad4 !== orig) urls.push(pad4 + '.jpg', pad4 + '.png', pad4 + '.webp');
+  if (pad5 !== norm && pad5 !== orig && pad5 !== pad4) urls.push(pad5 + '.jpg', pad5 + '.png', pad5 + '.webp');
+  const cb = '?v=' + new Date().toISOString().slice(0, 10);
+  return (
+    <div style={{ position: 'relative', width: 52, height: 66, flexShrink: 0 }}>
+      <img
+        src={storageBase + urls[0] + cb}
+        alt={`REF ${refProd}`}
+        onError={(e) => {
+          const cur = e.target.src;
+          const idx = urls.findIndex(u => cur.includes(u));
+          if (idx >= 0 && idx < urls.length - 1) {
+            e.target.src = storageBase + urls[idx + 1] + cb;
+          } else {
+            e.target.style.display = 'none';
+            const ph = e.target.nextSibling;
+            if (ph) ph.style.display = 'flex';
+          }
+        }}
+        style={{ width: 52, height: 66, objectFit: 'cover', borderRadius: 6, border: '1px solid #e8e2da' }}
+      />
+      <div style={{
+        width: 52, height: 66, borderRadius: 6,
+        background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
+        display: 'none', alignItems: 'center', justifyContent: 'center',
+        border: '1px solid #e8e2da', position: 'absolute', top: 0, left: 0,
+        color: '#c0b8b0', fontSize: 16,
+      }}>📷</div>
+    </div>
+  );
+}
+
 const TAMANHOS_PADRAO = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 const STATUS_OPTIONS = [
@@ -250,16 +304,32 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
 function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix }) {
   const status = STATUS_PILL[ordem.status] || STATUS_PILL.aguardando;
   const cores = ordem.cores || [];
-  const podeEditar = ordem.status === 'aguardando' || ordem.status === 'separado';
-  const podeExcluir = ordem.status !== 'na_sala' && ordem.status !== 'concluido' && ordem.status !== 'cancelado';
-  const isFinalizada = ordem.status === 'na_sala' || ordem.status === 'concluido';
+  const isFinalizada = ordem.status === 'na_sala' || ordem.status === 'concluido' || ordem.status === 'cancelado';
+
+  // Editar/excluir sempre visíveis e funcionais.
+  // Editar ordem finalizada exige confirmação extra (abrir modal de edição pra algo concluído pode ser acidente).
+  // Excluir NÃO usa window.confirm aqui porque o ModalExcluir já pede motivo explícito.
+  const handleEditar = () => {
+    if (isFinalizada) {
+      const msg = `Essa ordem já está "${status.txt}". Deseja editar mesmo assim?`;
+      if (!window.confirm(msg)) return;
+    }
+    onEditar();
+  };
+  const handleExcluir = () => {
+    // Sem confirm aqui — o ModalExcluir abre em seguida e exige motivo obrigatório.
+    onExcluir();
+  };
 
   return (
     <div style={{
       background: '#fff', border: '1px solid #e8e2da', borderRadius: 10, padding: 14,
       opacity: isFinalizada ? 0.85 : 1,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        {/* Thumbnail do produto (Supabase Storage bucket `produtos`) */}
+        <FotoOrdem refProd={ordem.ref} />
+
         <span style={{ background: status.bg, color: status.color, border: `1px solid ${status.border}`, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
           {status.txt}
         </span>
@@ -304,12 +374,9 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
           <button onClick={onAbrirMatrix} title="Ver matriz" style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           </button>
-          {podeEditar && (
-            <button onClick={onEditar} title="Editar" style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14, color: '#4a7fa5' }}>✎</button>
-          )}
-          {podeExcluir && (
-            <button onClick={onExcluir} title="Excluir" style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14, color: '#c0392b' }}>✕</button>
-          )}
+          {/* Editar/excluir SEMPRE visíveis — confirmação extra se ordem finalizada */}
+          <button onClick={handleEditar} title={isFinalizada ? "Editar (ordem finalizada)" : "Editar"} style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14, color: '#4a7fa5' }}>✎</button>
+          <button onClick={handleExcluir} title={isFinalizada ? "Excluir (ordem finalizada)" : "Excluir"} style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14, color: '#c0392b' }}>✕</button>
           <button onClick={onToggleExpand} title="Expandir" style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14, transform: expandida ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▾</button>
         </div>
       </div>
