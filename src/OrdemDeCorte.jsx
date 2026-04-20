@@ -47,13 +47,37 @@ function hexCor(nome) {
   return COR_FALLBACK_HEX[k] || '#999';
 }
 
+// Fallback hardcoded (cópia de CORES_RANKING_INICIAL do App.tsx)
+// Usado quando localStorage amica_bling_cores_top está vazio
+// (ex: em ambiente de preview sem ter passado pelo Bling Produtos)
+const CORES_RANKING_FALLBACK = [
+  { nome: 'Preto',         hex: '#1a1a1a' },
+  { nome: 'Bege',          hex: '#d4c4a4' },
+  { nome: 'Marrom',        hex: '#5c3a20' },
+  { nome: 'Figo',          hex: '#6b3a4c' },
+  { nome: 'Azul Marinho',  hex: '#1c2e4a' },
+  { nome: 'Caramelo',      hex: '#a8743b' },
+  { nome: 'Verde Militar', hex: '#4a5d3a' },
+  { nome: 'Nude',          hex: '#e8c8b0' },
+  { nome: 'Azul Serenity', hex: '#91a8d0' },
+  { nome: 'Marrom Escuro', hex: '#3d2418' },
+  { nome: 'Verde Sálvia',  hex: '#87a96b' },
+  { nome: 'Azul Claro',    hex: '#a8c8e0' },
+  { nome: 'Vinho',         hex: '#5c1a2e' },
+  { nome: 'Bege Claro',    hex: '#ebdcc0' },
+];
+
 function loadCoresRanking() {
   try {
     const raw = localStorage.getItem('amica_bling_cores_top');
-    if (!raw) return [];
-    const d = JSON.parse(raw);
-    return d?.cores || [];
-  } catch { return []; }
+    if (raw) {
+      const d = JSON.parse(raw);
+      const lista = d?.cores || [];
+      if (lista.length > 0) return lista;
+    }
+  } catch {}
+  // Fallback: ranking hardcoded quando localStorage vazio
+  return CORES_RANKING_FALLBACK;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -337,10 +361,14 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
 // ════════════════════════════════════════════════════════════════════════════
 
 // Sub: editor de cores (lista + chips ranking + manual)
-function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual }) {
+function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, onErro }) {
   const addCor = (c) => {
-    if (cores.some(x => x.nome.toLowerCase() === c.nome.toLowerCase())) return;
+    if (cores.some(x => x.nome.toLowerCase() === c.nome.toLowerCase())) {
+      onErro && onErro(`Cor "${c.nome}" já adicionada`);
+      return;
+    }
     onChange([...cores, { nome: c.nome, hex: c.hex || hexCor(c.nome), rolos: 1 }]);
+    onErro && onErro(null);
   };
   const setRolos = (i, v) => {
     const n = Math.max(1, parseInt(v) || 1);
@@ -349,10 +377,17 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual })
   const remover = (i) => onChange(cores.filter((_, idx) => idx !== i));
   const addManual = () => {
     const nome = corManual.nome.trim();
-    if (!nome) return;
-    if (cores.some(x => x.nome.toLowerCase() === nome.toLowerCase())) return;
+    if (!nome) {
+      onErro && onErro('Digite o nome da cor antes de incluir');
+      return;
+    }
+    if (cores.some(x => x.nome.toLowerCase() === nome.toLowerCase())) {
+      onErro && onErro(`Cor "${nome}" já adicionada`);
+      return;
+    }
     onChange([...cores, { nome, hex: corManual.hex || '#888', rolos: parseInt(corManual.rolos) || 1 }]);
     setCorManual({ nome: '', rolos: 1, hex: '#888' });
+    onErro && onErro(null);
   };
 
   return (
@@ -721,7 +756,7 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
                   Cores e rolos · total: {totalRolos}R
                 </span>
               </div>
-              <CoresEditor cores={cores} onChange={setCores} coresRanking={coresRanking} corManual={corManual} setCorManual={setCorManual} />
+              <CoresEditor cores={cores} onChange={setCores} coresRanking={coresRanking} corManual={corManual} setCorManual={setCorManual} onErro={setErro} />
             </div>
 
             {/* Matriz */}
