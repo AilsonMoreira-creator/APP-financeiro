@@ -5,6 +5,7 @@ import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import OrdemMatrixModal from './OrdemMatrixModal';
+import HistoricoVendas from './HistoricoVendas';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -5266,12 +5267,18 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                 <div style={{fontSize:16,fontWeight:700,color:"#2c3e50"}}>📦 Produtos</div>
               </div>
               {/* Filtro data */}
-              <div style={{display:"flex",gap:4,marginBottom:8,alignItems:"center"}}>
+              <div style={{display:"flex",gap:4,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{fontSize:11,color:"#a89f94"}}>Período:</span>
                 {[["7dias","Últimos 7 dias"],["mes","Mês atual"],["mespassado","Mês passado"]].map(([k,l])=>(
                   <button key={k} onClick={()=>setProdFiltroData(k)} style={{background:prodFiltroData===k?"#2c3e50":"#fff",color:prodFiltroData===k?"#fff":"#2c3e50",border:prodFiltroData===k?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>{l}</button>
                 ))}
+                <div style={{width:1,height:16,background:"#e8e2da",margin:"0 4px"}}/>
+                <button onClick={()=>setProdFiltroData("historico")} style={{background:prodFiltroData==="historico"?"#2c3e50":"#fff",color:prodFiltroData==="historico"?"#fff":"#2c3e50",border:prodFiltroData==="historico"?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>📊 Histórico</button>
               </div>
+
+              {prodFiltroData==="historico"?(
+                <HistoricoVendas supabase={supabase}/>
+              ):(<>
               {/* Filtro marca + canal — dinâmico dos dados reais */}
               <div style={{display:"flex",gap:4,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
                 <span style={{fontSize:11,color:"#a89f94"}}>Marca:</span>
@@ -5336,6 +5343,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                   </div>
                 </div>
               )}
+              </>)}
             </div>
           );
         })()}
