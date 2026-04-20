@@ -5313,7 +5313,7 @@ const scDb={
   async save(payload){try{await supabase.from('amicia_data').upsert({user_id:'salas-corte',payload},{onConflict:'user_id'});}catch(e){console.error(e)}},
 };
 
-const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
+const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdmin=false})=>{
   const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
   const mobile=w<640;
@@ -5564,10 +5564,12 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
           </div>
           {scSync&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,fontFamily:"Georgia,serif",background:scSync==='saving'?"#f0f6fb":scSync==='saved'?"#eafbf0":"#fdeaea",color:scSync==='saving'?"#4a7fa5":scSync==='saved'?"#27ae60":"#c0392b"}}>{scSync==='saving'?"☁ salvando…":scSync==='saved'?"☁ salvo":"✗ erro"}</span>}
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {alertas.length>0&&tela==="analise"&&<span style={{background:"#c0392b",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{alertas.length}</span>}
-          <button onClick={()=>setTela("lancamento")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="lancamento"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="lancamento"?"#2c3e50":"#fff",color:tela==="lancamento"?"#fff":"#2c3e50"}}>📋 Lançar</button>
-          <button onClick={()=>setTela("analise")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="analise"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="analise"?"#2c3e50":"#fff",color:tela==="analise"?"#fff":"#2c3e50"}}>📊 Análise</button>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          {alertas.length>0&&tela==="analise"&&isAdmin&&<span style={{background:"#c0392b",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{alertas.length}</span>}
+          <button onClick={()=>setTela("lancamento")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="lancamento"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="lancamento"?"#2c3e50":"#fff",color:tela==="lancamento"?"#fff":"#2c3e50"}}>✏️ Lançar</button>
+          {isAdmin&&<button onClick={()=>setTela("analise")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="analise"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="analise"?"#2c3e50":"#fff",color:tela==="analise"?"#fff":"#2c3e50"}}>📊 Análise</button>}
+          {isAdmin&&<button onClick={()=>setTela("ordem")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="ordem"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="ordem"?"#2c3e50":"#fff",color:tela==="ordem"?"#fff":"#2c3e50"}}>📋 Ordem</button>}
+          <button onClick={()=>setTela("fila")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="fila"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="fila"?"#2c3e50":"#fff",color:tela==="fila"?"#fff":"#2c3e50"}}>✂️ Fila</button>
         </div>
       </div>
 
@@ -5682,7 +5684,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
         </div>)}
 
         {/* ═══ ANÁLISE ═══ */}
-        {tela==="analise"&&(<div>
+        {tela==="analise"&&isAdmin&&(<div>
           <div style={{display:"flex",gap:4,marginBottom:14,background:"#fff",borderRadius:10,padding:4,border:"1px solid #e8e2da",overflowX:"auto"}}>
             {[{id:"ranking",label:"🏆 Ranking"},{id:"produtos",label:"📦 Produtos"},{id:"cortes",label:"📋 Cortes"},{id:"alertas",label:`🚨 Alertas${alertas.length>0?` (${alertas.length})`:""}`},{id:"logs",label:"📝 Logs"}].map(t=>(
               <button key={t.id} onClick={()=>setAbaAnalise(t.id)} style={sty.tab(abaAnalise===t.id)}>{t.label}</button>
@@ -5812,6 +5814,34 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[]})=>{
             ))}
           </div>)}
 
+        </div>)}
+
+        {/* ═══ ORDEM DE CORTE (admin only) ═══ */}
+        {tela==="ordem"&&isAdmin&&(<div>
+          <div style={{background:"#fff",borderRadius:12,padding:mobile?20:32,border:"1px solid #e8e2da",textAlign:"center"}}>
+            <div style={{fontSize:48,marginBottom:12}}>📋</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#2c3e50",marginBottom:6,fontFamily:"Georgia,serif"}}>Ordem de Corte</div>
+            <div style={{fontSize:13,color:"#8a9aa4",marginBottom:18,fontFamily:"Georgia,serif"}}>Tela em construção · Fase A</div>
+            <div style={{fontSize:12,color:"#a89f94",fontFamily:"Georgia,serif",lineHeight:1.6,maxWidth:380,margin:"0 auto"}}>
+              Aqui o admin vai criar e gerenciar as ordens de corte.<br/>
+              Cards expansíveis com grade, cores e matriz cor×tamanho.<br/>
+              Endpoints já estão prontos. UI no próximo commit.
+            </div>
+          </div>
+        </div>)}
+
+        {/* ═══ FILA DE CORTE (admin + funcionário) ═══ */}
+        {tela==="fila"&&(<div>
+          <div style={{background:"#fff",borderRadius:12,padding:mobile?20:32,border:"1px solid #e8e2da",textAlign:"center"}}>
+            <div style={{fontSize:48,marginBottom:12}}>✂️</div>
+            <div style={{fontSize:16,fontWeight:700,color:"#2c3e50",marginBottom:6,fontFamily:"Georgia,serif"}}>Fila de Corte</div>
+            <div style={{fontSize:13,color:"#8a9aa4",marginBottom:18,fontFamily:"Georgia,serif"}}>Tela em construção · Fase A</div>
+            <div style={{fontSize:12,color:"#a89f94",fontFamily:"Georgia,serif",lineHeight:1.6,maxWidth:380,margin:"0 auto"}}>
+              Aqui o funcionário vai separar tecido e definir sala.<br/>
+              Cards mobile com confirmação de tecido + escolha de sala.<br/>
+              Endpoints já estão prontos. UI no próximo commit.
+            </div>
+          </div>
         </div>)}
 
         {/* Modal Editar Corte */}
@@ -8689,7 +8719,7 @@ export default function App(){
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
-        {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD}/></ModuleErrorBoundary>}
+        {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true}/>}
