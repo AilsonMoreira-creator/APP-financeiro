@@ -16,7 +16,7 @@ import {
   supabase, setCors, getUserFromReq, parseBody, insertHistorico
 } from './_ordens-corte-helpers.js';
 
-const STATUS_BLOQUEADOS = ['na_sala', 'concluido', 'cancelado'];
+const STATUS_BLOQUEADOS = ['cancelado']; // concluido e na_sala agora podem ser excluidos
 
 export default async function handler(req, res) {
   setCors(res);
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
 
     if (STATUS_BLOQUEADOS.includes(atual.status)) {
       return res.status(400).json({
-        error: `Ordens em status "${atual.status}" não podem ser excluídas. Gerencie via Lista de Cortes.`,
+        error: `Ordem já está cancelada.`,
         codigo: 'STATUS_BLOQUEADO',
       });
     }
