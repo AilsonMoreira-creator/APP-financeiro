@@ -12,6 +12,14 @@
  *   - usuarioLogado: { usuario, admin }
  */
 import { useEffect, useState, useCallback } from 'react';
+import {
+  Card2Vendas24m,
+  Card3CanaisComp,
+  Card4ContasBling,
+  Card5TopMovers,
+  Card6Margens,
+  Card7Oportunidades,
+} from './MarketplacesCards.jsx';
 
 const SERIF = "Georgia,'Times New Roman',serif";
 const CALIBRI = "Calibri,'Segoe UI',Arial,sans-serif";
@@ -799,6 +807,14 @@ function TabMarketplaces({ usuario, isAdmin, C, SERIF, CALIBRI }) {
     <div>
       {/* Card 1 — Lucro do mês (admin-only, dupla validação no backend) */}
       {isAdmin && <Card1LucroMes usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />}
+
+      {/* Cards 2-7 — dashboard operacional visual (Sprint 5) */}
+      <Card3CanaisComp      C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+      <Card4ContasBling     C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+      <Card5TopMovers       C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+      <Card6Margens         C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+      <Card7Oportunidades   C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+      <Card2Vendas24m       C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
 
       {/* Barra de ação */}
       <div
