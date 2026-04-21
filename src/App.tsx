@@ -6,6 +6,7 @@ import OrdemDeCorte from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
+import OsAmicia from './os-amicia/OsAmicia';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -206,6 +207,22 @@ const SvgBling = ({ size = 32 }) => (
     <text x="8" y="42" fontSize="19" fontWeight="900" fill="white" fontFamily="Arial,Helvetica,sans-serif" letterSpacing="-0.5">bling</text>
     <rect x="47" y="20" width="7" height="17" rx="3.5" fill="white" transform="rotate(10 50 28)"/>
     <ellipse cx="51.5" cy="45" rx="4" ry="3.5" fill="white" transform="rotate(10 51 45)"/>
+  </svg>
+);
+
+// OS Amícia — contrato visual do Preview (quadrado central sem texto + 4 nós conectados)
+const SvgOSAmicia = ({ size = 32 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+    <rect width="100" height="100" rx="20" fill="#EAE0D5"/>
+    <path d="M50 35V20H75" stroke="#373F51" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M50 65V80H25" stroke="#373F51" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M35 50H20V30" stroke="#373F51" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M65 50H80V70" stroke="#373F51" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="75" cy="20" r="5" fill="#373F51"/>
+    <circle cx="25" cy="80" r="5" fill="#373F51"/>
+    <circle cx="20" cy="30" r="5" fill="#373F51"/>
+    <circle cx="80" cy="70" r="5" fill="#373F51"/>
+    <rect x="35" y="35" width="30" height="30" rx="6" fill="#1C2533"/>
   </svg>
 );
 
@@ -471,6 +488,10 @@ const modules = [
   { id:"salascorte",   Icon:SvgSalasCorte,    label:"Salas Corte" },
   { id:"sac",          Icon:SvgSAC,           label:"SAC"         },
   { id:"bling",         Icon:SvgBling,         label:"Bling"       },
+  // OS Amícia — Fase 1 (feature flag VITE_OS_AMICIA_ENABLED)
+  ...(import.meta.env.VITE_OS_AMICIA_ENABLED === 'true'
+    ? [{ id:"osamicia", Icon:SvgOSAmicia, label:"OS" }]
+    : []),
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -3908,7 +3929,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true,moduloPadrao:"home"},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas","salascorte"],admin:false,moduloPadrao:"oficinas"},
@@ -8829,6 +8850,11 @@ export default function App(){
             {id:"bling",label:"Bling",Icon:SvgBling,color:"#2c3e50",bg:"#f7f4f0",border:"#e8e2da",
               kpiValue:blingHoje>0?"R$ "+Math.round(blingHoje).toLocaleString("pt-BR"):"—",kpiLabel:"faturamento hoje",
               detail:blingPedidos>0?`${blingPedidos} pedidos · 3 contas`:"cron atualizando..."},
+            ...(import.meta.env.VITE_OS_AMICIA_ENABLED==='true'?[{
+              id:"osamicia",label:"OS Amícia",Icon:SvgOSAmicia,color:"#1C2533",bg:"#EAE0D5",border:"#d4c8b8",
+              kpiValue:"🧠",kpiLabel:"sistema operacional",
+              detail:"Conecta · analisa · recomenda",
+            }]:[]),
             {id:"oficinas",label:"Oficinas",Icon:SvgOficinas,color:"#8e6b3a",bg:"#faf6f0",border:"#e8dcc8",
               kpiValue:nCortesAberto>0?`${nCortesAberto} cortes`:"—",kpiLabel:"em produção",
               detail:nCortesAberto>0?`${pecasAbertas.toLocaleString("pt-BR")} peças`:"sem cortes abertos"},
@@ -8898,6 +8924,7 @@ export default function App(){
         {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
+        {active==="osamicia"&&import.meta.env.VITE_OS_AMICIA_ENABLED==='true'&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={usuarioLogado}/></ModuleErrorBoundary>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
