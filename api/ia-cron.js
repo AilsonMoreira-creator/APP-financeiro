@@ -116,6 +116,13 @@ LIMITE DE TOKENS: resposta total deve caber em ~1000 tokens. Se gerar mais de 5 
 FORMATO DE SAÍDA:
 Retorne APENAS um array JSON válido, sem markdown, sem texto antes/depois.
 
+REGRAS DE JSON ESTRITAS (obrigatórias pra evitar erro de parse):
+- SEM vírgula depois do último item de arrays ou objetos (trailing comma é erro).
+- SEMPRE aspas duplas " (NUNCA aspas inteligentes ou simples).
+- Se precisar de aspas dentro de uma string, escape com \\" (ex: "resumo": "Ref 1108 \\"saia linho\\" caindo").
+- Não use quebras de linha dentro de strings (substitua por espaço ou ponto).
+- Não invente campos além dos listados abaixo.
+
 [
   {
     "escopo": "marketplaces",
@@ -365,13 +372,39 @@ async function chamarClaude({ jsonInput, modelo, temperature, max_tokens, timeou
     const data = await r.json();
     const texto = data.content?.[0]?.text?.trim() || '';
     const usage = data.usage || { input_tokens: 0, output_tokens: 0 };
-    const limpo = texto.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
 
-    let arr;
+    // Remove cercas de markdown
+    let limpo = texto.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+
+    // Tenta parse direto primeiro (caminho feliz)
+    let arr = null;
     try {
       arr = JSON.parse(limpo);
-    } catch (e) {
-      return { ok: false, erro: `JSON inválido do Claude: ${e.message}`, raw: limpo.slice(0, 300) };
+    } catch (e1) {
+      // Parser tolerante: corrige problemas comuns do output do Claude.
+      // Sonnet ocasionalmente gera:
+      //   - virgula extra antes de ] ou }  (trailing comma)
+      //   - aspas "inteligentes" em vez de " (smart quotes)
+      //   - aspas nao escapadas dentro de strings
+      const tolerante = limpo
+        .replace(/[\u201C\u201D]/g, '"')           // smart double quotes -> "
+        .replace(/[\u2018\u2019]/g, "'")           // smart single quotes -> '
+        .replace(/,(\s*[}\]])/g, '$1')              // trailing comma antes de } ou ]
+        .replace(/}\s*{/g, '},{')                   // } { -> },{ (objetos colados sem virgula)
+        ;
+
+      try {
+        arr = JSON.parse(tolerante);
+      } catch (e2) {
+        // Se ainda falhou, salva fingerprint do erro pra investigacao
+        return {
+          ok: false,
+          erro: `JSON inválido do Claude: ${e1.message}`,
+          raw: limpo.slice(0, 500),
+          raw_tail: limpo.slice(-300),
+          tentou_tolerante: true,
+        };
+      }
     }
 
     if (!Array.isArray(arr)) {
