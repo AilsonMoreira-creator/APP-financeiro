@@ -266,7 +266,11 @@ export default function OsAmicia({ supabase, usuarioLogado }) {
           </>
         )}
 
-        {area !== 'home' && (
+        {area === 'producao' && (
+          <TabProducao usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+        )}
+
+        {area !== 'home' && area !== 'producao' && (
           <div
             style={{
               background: '#fff',
@@ -292,6 +296,421 @@ export default function OsAmicia({ supabase, usuarioLogado }) {
     </div>
   );
 }
+
+function TabProducao({ usuario, C, SERIF, CALIBRI }) {
+  const [insights, setInsights] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [disparando, setDisparando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const [feedbackEnviando, setFeedbackEnviando] = useState({});
+  const [feedbackDado, setFeedbackDado] = useState({});
+  const [ultimoDisparo, setUltimoDisparo] = useState(null);
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    setErro(null);
+    try {
+      const r = await fetch('/api/ia-feed?area=producao&limit=50', {
+        headers: { 'X-User': usuario },
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setInsights(d.insights || []);
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [usuario]);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
+  const dispararAgora = async () => {
+    setDisparando(true);
+    setErro(null);
+    setUltimoDisparo(null);
+    try {
+      const r = await fetch('/api/ia-disparar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': usuario },
+        body: '{}',
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setUltimoDisparo({
+        modo: d.modo,
+        total: d.total_insights_gerados,
+        custo_brl: d.custo_brl,
+        duracao_ms: d.duracao_ms,
+        erro_claude: d.erro_claude,
+      });
+      // Recarrega a lista
+      await carregar();
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setDisparando(false);
+    }
+  };
+
+  const enviarFeedback = async (insightId, resposta) => {
+    setFeedbackEnviando(prev => ({ ...prev, [insightId]: resposta }));
+    try {
+      const r = await fetch('/api/ia-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': usuario },
+        body: JSON.stringify({ insight_id: insightId, resposta }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setFeedbackDado(prev => ({ ...prev, [insightId]: resposta }));
+    } catch (e) {
+      alert(`Erro ao enviar feedback: ${e.message}`);
+    } finally {
+      setFeedbackEnviando(prev => {
+        const n = { ...prev };
+        delete n[insightId];
+        return n;
+      });
+    }
+  };
+
+  return (
+    <div>
+      {/* Barra de ação */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <button
+          onClick={dispararAgora}
+          disabled={disparando}
+          style={{
+            background: C.iaDarker,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            padding: '10px 18px',
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: SERIF,
+            cursor: disparando ? 'wait' : 'pointer',
+            opacity: disparando ? 0.6 : 1,
+          }}
+        >
+          {disparando ? '⏳ Analisando…' : '⚡ Disparar agora'}
+        </button>
+        <button
+          onClick={carregar}
+          disabled={loading}
+          style={{
+            background: 'transparent',
+            color: C.iaDarker,
+            border: `1px solid ${C.iaDark}`,
+            borderRadius: 8,
+            padding: '10px 14px',
+            fontSize: 12,
+            fontFamily: SERIF,
+            cursor: loading ? 'wait' : 'pointer',
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          {loading ? 'Carregando…' : '🔄 Atualizar feed'}
+        </button>
+        <div style={{ marginLeft: 'auto', fontSize: 11, color: C.muted }}>
+          {insights.length} insight{insights.length === 1 ? '' : 's'} ativo{insights.length === 1 ? '' : 's'}
+        </div>
+      </div>
+
+      {/* Resultado do último disparo */}
+      {ultimoDisparo && (
+        <div
+          style={{
+            background: ultimoDisparo.modo?.startsWith('fallback') ? '#fff8e1' : '#e8f5e9',
+            border: `1px solid ${ultimoDisparo.modo?.startsWith('fallback') ? C.warning : C.success}`,
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 16,
+            fontSize: 12,
+            color: C.iaDarker,
+            fontFamily: CALIBRI,
+          }}
+        >
+          <b>Disparo concluído:</b> modo <code>{ultimoDisparo.modo}</code>,{' '}
+          {ultimoDisparo.total} insight{ultimoDisparo.total === 1 ? '' : 's'} gerado
+          {ultimoDisparo.total === 1 ? '' : 's'}, custo R$ {(ultimoDisparo.custo_brl || 0).toFixed(4)},{' '}
+          {ultimoDisparo.duracao_ms}ms
+          {ultimoDisparo.erro_claude && (
+            <div style={{ marginTop: 6, color: C.critical, fontSize: 11 }}>
+              ⚠ Claude: {ultimoDisparo.erro_claude}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Erro */}
+      {erro && (
+        <div
+          style={{
+            background: '#fce4e4',
+            border: `1px solid ${C.critical}`,
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 16,
+            fontSize: 12,
+            color: C.critical,
+          }}
+        >
+          ❌ {erro}
+        </div>
+      )}
+
+      {/* Lista de insights */}
+      {loading && insights.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontSize: 12 }}>
+          Carregando insights…
+        </div>
+      ) : insights.length === 0 ? (
+        <div
+          style={{
+            background: '#fff',
+            border: `1px dashed ${C.cream}`,
+            borderRadius: 12,
+            padding: 40,
+            textAlign: 'center',
+            color: C.muted,
+          }}
+        >
+          <div style={{ fontSize: 36, marginBottom: 8 }}>✂️</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.blueDark }}>
+            Nenhum insight de produção ainda
+          </div>
+          <div style={{ fontSize: 12, marginTop: 6 }}>
+            Clique em <b>⚡ Disparar agora</b> pra gerar a primeira análise.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {insights.map(i => (
+            <CardInsight
+              key={i.id}
+              insight={i}
+              onFeedback={enviarFeedback}
+              enviando={feedbackEnviando[i.id]}
+              jaRespondido={feedbackDado[i.id]}
+              C={C}
+              SERIF={SERIF}
+              CALIBRI={CALIBRI}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardInsight({ insight, onFeedback, enviando, jaRespondido, C, SERIF, CALIBRI }) {
+  const severityColor = {
+    critico: C.critical,
+    atencao: C.warning,
+    positiva: C.success,
+    oportunidade: C.blue,
+    info: C.muted,
+  }[insight.severity] || C.muted;
+
+  const confidenceIcon = {
+    alta: '🟢',
+    media: '🟡',
+    baixa: '🔴',
+  }[insight.confidence] || '⚪';
+
+  const isFallback = insight.origem === 'fallback_deterministico';
+
+  return (
+    <div
+      style={{
+        background: '#fff',
+        borderLeft: `4px solid ${severityColor}`,
+        border: `1px solid ${C.cream}`,
+        borderLeftWidth: 4,
+        borderRadius: 8,
+        padding: 16,
+        fontFamily: CALIBRI,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 8,
+          flexWrap: 'wrap',
+        }}
+      >
+        <span
+          style={{
+            background: severityColor,
+            color: '#fff',
+            fontSize: 9,
+            fontWeight: 700,
+            padding: '2px 8px',
+            borderRadius: 4,
+            letterSpacing: 0.5,
+            textTransform: 'uppercase',
+            fontFamily: SERIF,
+          }}
+        >
+          {insight.severity}
+        </span>
+        <span style={{ fontSize: 11, color: C.muted }}>
+          {confidenceIcon} confiança {insight.confidence}
+        </span>
+        {insight.categoria && (
+          <span
+            style={{
+              fontSize: 10,
+              color: C.muted,
+              background: C.appBg,
+              padding: '2px 6px',
+              borderRadius: 4,
+            }}
+          >
+            {insight.categoria}
+          </span>
+        )}
+        {isFallback && (
+          <span
+            style={{
+              fontSize: 10,
+              color: C.warning,
+              background: '#fff8e1',
+              padding: '2px 6px',
+              borderRadius: 4,
+              border: `1px solid ${C.warning}`,
+            }}
+          >
+            fallback
+          </span>
+        )}
+      </div>
+
+      {/* Título */}
+      <div
+        style={{
+          fontFamily: SERIF,
+          fontSize: 15,
+          fontWeight: 700,
+          color: C.iaDarker,
+          marginBottom: 6,
+        }}
+      >
+        {insight.titulo}
+      </div>
+
+      {/* Resumo */}
+      {insight.resumo && (
+        <div style={{ fontSize: 13, color: C.blueDark, marginBottom: 6, lineHeight: 1.5 }}>
+          {insight.resumo}
+        </div>
+      )}
+
+      {/* Impacto */}
+      {insight.impacto && (
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 6, fontStyle: 'italic' }}>
+          Impacto: {insight.impacto}
+        </div>
+      )}
+
+      {/* Ação sugerida */}
+      {insight.acao_sugerida && (
+        <div
+          style={{
+            background: C.appBg,
+            borderRadius: 6,
+            padding: 10,
+            fontSize: 13,
+            fontWeight: 600,
+            color: C.iaDarker,
+            marginTop: 8,
+            marginBottom: 10,
+          }}
+        >
+          → {insight.acao_sugerida}
+        </div>
+      )}
+
+      {/* Chaves (se tem) */}
+      {insight.chaves && Object.keys(insight.chaves).length > 0 && (
+        <div style={{ fontSize: 10, color: C.muted, marginBottom: 10 }}>
+          {Object.entries(insight.chaves)
+            .filter(([, v]) => v !== null && v !== undefined && v !== '')
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' · ')}
+        </div>
+      )}
+
+      {/* Feedback */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          alignItems: 'center',
+          borderTop: `1px solid ${C.cream}`,
+          paddingTop: 10,
+        }}
+      >
+        <span style={{ fontSize: 11, color: C.muted, marginRight: 4 }}>Útil?</span>
+        {['sim', 'parcial', 'nao'].map(op => {
+          const ativo = jaRespondido === op;
+          const aguardando = enviando === op;
+          const label = op === 'sim' ? '👍 Sim' : op === 'parcial' ? '🤔 Parcial' : '👎 Não';
+          const corAtivo = op === 'sim' ? C.success : op === 'parcial' ? C.warning : C.critical;
+          return (
+            <button
+              key={op}
+              disabled={!!enviando || !!jaRespondido}
+              onClick={() => onFeedback(insight.id, op)}
+              style={{
+                background: ativo ? corAtivo : 'transparent',
+                color: ativo ? '#fff' : C.iaDarker,
+                border: `1px solid ${ativo ? corAtivo : C.cream}`,
+                borderRadius: 6,
+                padding: '4px 10px',
+                fontSize: 11,
+                fontFamily: SERIF,
+                cursor: (enviando || jaRespondido) ? 'default' : 'pointer',
+                opacity: aguardando ? 0.6 : 1,
+              }}
+            >
+              {aguardando ? '…' : label}
+            </button>
+          );
+        })}
+        <span
+          style={{
+            marginLeft: 'auto',
+            fontSize: 10,
+            color: C.muted,
+            fontFamily: CALIBRI,
+          }}
+        >
+          {new Date(insight.created_at).toLocaleString('pt-BR', {
+            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+          })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 
 function StatusCard({ label, valor, hint, warn = false }) {
   return (

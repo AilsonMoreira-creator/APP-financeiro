@@ -27,6 +27,14 @@
     {
       "path": "/api/bling-produtos-sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/ia-cron?token=$CRON_SECRET&janela=manha",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/ia-cron?token=$CRON_SECRET&janela=tarde",
+      "schedule": "0 17 * * *"
     }
   ]
 }

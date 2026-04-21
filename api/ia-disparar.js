@@ -1,19 +1,14 @@
 /**
- * ia-disparar.js — Admin dispara o cron manualmente.
+ * ia-disparar.js — Admin dispara o cron manualmente (Sprint 3).
  *
  * POST /api/ia-disparar
- *   Body: (vazio)
- *   Admin-only.
+ *   Header: X-User: <usuario admin>
+ *   Body:   (vazio)
  *
- * Na Fase 1 (Sprint 1), este endpoint é apenas um placeholder que:
- *   - Valida admin
- *   - Registra a tentativa em ia_usage (pra auditar quem disparou)
- *   - Devolve 202 (Accepted) sem fazer nada
- *
- * No Sprint 3 será estendido pra realmente invocar /api/ia-cron
- * e aguardar o retorno.
+ * Valida admin e chama internamente /api/ia-cron com header X-Cron-Secret,
+ * devolvendo o payload real do cron (não mais 202 placeholder).
  */
-import { supabase, validarAdmin, setCors } from './_ia-helpers.js';
+import { validarAdmin, setCors } from './_ia-helpers.js';
 
 export default async function handler(req, res) {
   setCors(res);
@@ -23,31 +18,52 @@ export default async function handler(req, res) {
   const admin = await validarAdmin(req);
   if (!admin.ok) return res.status(admin.status).json({ error: admin.error });
 
-  try {
-    // Placeholder Sprint 1: só registra a tentativa.
-    // No Sprint 3 este endpoint vai chamar /api/ia-cron internamente.
-    const hoje = new Date().toISOString().slice(0, 10);
-    const anoMes = hoje.slice(0, 7);
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return res.status(500).json({ error: 'CRON_SECRET não configurado no ambiente' });
+  }
 
-    // Registra que admin disparou (custo 0, só auditoria)
-    await supabase.from('ia_usage').insert({
-      data: hoje,
-      ano_mes: anoMes,
-      tipo: 'cron',
-      modelo: 'placeholder-sprint-1',
-      input_tokens: 0,
-      output_tokens: 0,
-      custo_usd: 0,
-      custo_brl: 0,
-      user_id: admin.user.usuario,
+  // Monta URL interna. Prioridade:
+  //   1. Protocol+host do próprio request (mesma instância Vercel/local)
+  //   2. VERCEL_URL (fallback)
+  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim();
+  const host = req.headers['x-forwarded-host'] || req.headers.host || process.env.VERCEL_URL;
+  if (!host) {
+    return res.status(500).json({ error: 'Não foi possível determinar host pra chamada interna' });
+  }
+
+  const url = `${proto}://${host}/api/ia-cron?janela=manual`;
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cron-Secret': cronSecret,
+      },
+      // 65s margem: ia-cron tem timeout Claude de 30s + possível retry 30s
+      signal: AbortSignal.timeout(65000),
     });
 
-    return res.status(202).json({
+    const data = await r.json().catch(() => ({}));
+
+    if (!r.ok) {
+      return res.status(r.status).json({
+        error: data.error || `ia-cron retornou ${r.status}`,
+        disparado_por: admin.user.usuario,
+        ...data,
+      });
+    }
+
+    return res.json({
       ok: true,
-      msg: 'Disparo registrado. Cron real entrará no Sprint 3 (orquestração + Claude).',
-      registrado_por: admin.user.usuario,
+      disparado_por: admin.user.usuario,
+      ...data,
     });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    const msg = e.name === 'TimeoutError' || e.name === 'AbortError'
+      ? 'Timeout esperando ia-cron (> 65s)'
+      : (e.message || 'erro interno');
+    return res.status(500).json({ error: msg });
   }
 }
