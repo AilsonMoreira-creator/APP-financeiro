@@ -35,11 +35,11 @@ Production — o módulo fica escondido na prod até merge):
 
 | Nome | Valor | Ambiente |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | a chave que você me passou | ☑ Preview |
-| `SUPABASE_SERVICE_ROLE_KEY` | service role key do Supabase | ☑ Preview |
+| `ANTHROPIC_API_KEY` | a chave que você me passou (ou a que já existe no Vercel pelo SAC) | ☑ Preview |
+| `SUPABASE_KEY` | service role key do Supabase (já existe no Vercel — é a mesma que `ml-skumap-*` usa) | ☑ Preview |
 | `VITE_OS_AMICIA_ENABLED` | `true` | ☑ Preview |
 
-**Onde pegar a service role key:** Supabase → Settings → API → `service_role` (a chave secreta, não a anon).
+**Onde pegar a service role key:** Supabase → Settings → API → `service_role` (a chave secreta, não a anon). Esta var **já existe** no Vercel com nome `SUPABASE_KEY` (é o padrão dos outros endpoints). Só confirma que está marcada em Preview também.
 
 ### 3️⃣ Aguardar deploy automático da branch
 
