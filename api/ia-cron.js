@@ -86,7 +86,7 @@ Se sala_recomendada for null, use categoria="investigar_ref" e severity≥atenca
 
 function validarAuth(req) {
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return { ok: false, erro: 'CRON_SECRET não configurado no runtime do ia-cron', status: 500 };
+  if (!cronSecret) return { ok: false, erro: 'CRON_SECRET não configurado', status: 500 };
 
   const tokenQuery = req.query?.token;
   const tokenHeader = req.headers['x-cron-secret'];
@@ -94,21 +94,7 @@ function validarAuth(req) {
   if (tokenQuery === cronSecret) return { ok: true, via: 'query' };
   if (tokenHeader === cronSecret) return { ok: true, via: 'header' };
 
-  // Debug: retorna fingerprints pra comparar sem vazar valor
-  // (só ativa quando a auth falha — remover após smoke test)
-  const fp = (s) => (s && s.length >= 4 ? `${s.slice(0, 2)}...${s.slice(-2)} [${s.length}ch]` : s ? `[${s.length}ch]` : 'null');
-  return {
-    ok: false,
-    erro: 'Unauthorized',
-    status: 401,
-    debug: {
-      env_secret_fp: fp(cronSecret),
-      header_fp: fp(tokenHeader),
-      query_fp: fp(tokenQuery),
-      header_present: !!tokenHeader,
-      query_present: !!tokenQuery,
-    },
-  };
+  return { ok: false, erro: 'Unauthorized', status: 401 };
 }
 
 /**
@@ -235,11 +221,7 @@ export default async function handler(req, res) {
 
   // Auth
   const auth = validarAuth(req);
-  if (!auth.ok) {
-    const payload = { error: auth.erro };
-    if (auth.debug) payload.debug = auth.debug;
-    return res.status(auth.status).json(payload);
-  }
+  if (!auth.ok) return res.status(auth.status).json({ error: auth.erro });
 
   const janela = req.query?.janela || 'manual';
   const cronRunId = randomUUID();

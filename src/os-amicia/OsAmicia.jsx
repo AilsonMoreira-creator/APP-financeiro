@@ -338,12 +338,7 @@ function TabProducao({ usuario, C, SERIF, CALIBRI }) {
         body: '{}',
       });
       const d = await r.json();
-      if (!r.ok) {
-        const msg = d.debug
-          ? `${d.error || 'erro'} · debug: ${JSON.stringify(d.debug)}`
-          : (d.error || `HTTP ${r.status}`);
-        throw new Error(msg);
-      }
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
       setUltimoDisparo({
         modo: d.modo,
         total: d.total_insights_gerados,

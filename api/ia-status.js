@@ -93,13 +93,6 @@ export default async function handler(req, res) {
         max_dia: perguntas_max,
         restantes: Math.max(0, perguntas_max - perguntas_hoje),
       },
-      // Probe diagnóstico: só booleans, não vaza valores.
-      env_check: {
-        supabase_url: !!process.env.SUPABASE_URL,
-        supabase_key: !!process.env.SUPABASE_KEY,
-        anthropic_api_key: !!process.env.ANTHROPIC_API_KEY,
-        cron_secret: !!process.env.CRON_SECRET,
-      },
     });
   } catch (e) {
     return res.status(500).json({ error: e.message });
