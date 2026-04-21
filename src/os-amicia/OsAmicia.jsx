@@ -270,7 +270,11 @@ export default function OsAmicia({ supabase, usuarioLogado }) {
           <TabProducao usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
         )}
 
-        {area !== 'home' && area !== 'producao' && (
+        {area === 'marketplaces' && (
+          <TabMarketplaces usuario={usuario} isAdmin={isAdmin} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+        )}
+
+        {area !== 'home' && area !== 'producao' && area !== 'marketplaces' && (
           <div
             style={{
               background: '#fff',
@@ -706,6 +710,422 @@ function CardInsight({ insight, onFeedback, enviando, jaRespondido, C, SERIF, CA
             day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
           })}
         </span>
+      </div>
+    </div>
+  );
+}
+
+
+function TabMarketplaces({ usuario, isAdmin, C, SERIF, CALIBRI }) {
+  const [insights, setInsights] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [disparando, setDisparando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const [feedbackEnviando, setFeedbackEnviando] = useState({});
+  const [feedbackDado, setFeedbackDado] = useState({});
+  const [ultimoDisparo, setUltimoDisparo] = useState(null);
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    setErro(null);
+    try {
+      const r = await fetch('/api/ia-feed?area=marketplaces&limit=50', {
+        headers: { 'X-User': usuario },
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setInsights(d.insights || []);
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [usuario]);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
+  const dispararAgora = async () => {
+    setDisparando(true);
+    setErro(null);
+    setUltimoDisparo(null);
+    try {
+      const r = await fetch('/api/ia-disparar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': usuario },
+        body: JSON.stringify({ escopo: 'marketplaces' }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setUltimoDisparo({
+        modo: d.modo,
+        total: d.total_insights_gerados,
+        custo_brl: d.custo_brl,
+        duracao_ms: d.duracao_ms,
+        erro_claude: d.erro_claude,
+      });
+      await carregar();
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setDisparando(false);
+    }
+  };
+
+  const enviarFeedback = async (insightId, resposta) => {
+    setFeedbackEnviando(prev => ({ ...prev, [insightId]: resposta }));
+    try {
+      const r = await fetch('/api/ia-feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': usuario },
+        body: JSON.stringify({ insight_id: insightId, resposta }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setFeedbackDado(prev => ({ ...prev, [insightId]: resposta }));
+    } catch (e) {
+      alert(`Erro ao enviar feedback: ${e.message}`);
+    } finally {
+      setFeedbackEnviando(prev => {
+        const n = { ...prev };
+        delete n[insightId];
+        return n;
+      });
+    }
+  };
+
+  return (
+    <div>
+      {/* Card 1 — Lucro do mês (admin-only, dupla validação no backend) */}
+      {isAdmin && <Card1LucroMes usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />}
+
+      {/* Barra de ação */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <button
+          onClick={dispararAgora}
+          disabled={disparando}
+          style={{
+            background: C.iaDarker,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            padding: '10px 18px',
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: SERIF,
+            cursor: disparando ? 'wait' : 'pointer',
+            opacity: disparando ? 0.6 : 1,
+          }}
+        >
+          {disparando ? '⏳ Analisando…' : '⚡ Disparar agora'}
+        </button>
+        <button
+          onClick={carregar}
+          disabled={loading}
+          style={{
+            background: 'transparent',
+            color: C.iaDarker,
+            border: `1px solid ${C.iaDark}`,
+            borderRadius: 8,
+            padding: '10px 14px',
+            fontSize: 12,
+            fontFamily: SERIF,
+            cursor: loading ? 'wait' : 'pointer',
+            opacity: loading ? 0.6 : 1,
+          }}
+        >
+          {loading ? 'Carregando…' : '🔄 Atualizar feed'}
+        </button>
+        <div style={{ marginLeft: 'auto', fontSize: 11, color: C.muted }}>
+          {insights.length} insight{insights.length === 1 ? '' : 's'} ativo{insights.length === 1 ? '' : 's'}
+        </div>
+      </div>
+
+      {/* Resultado do último disparo */}
+      {ultimoDisparo && (
+        <div
+          style={{
+            background: ultimoDisparo.modo?.startsWith('fallback') ? '#fff8e1' : '#e8f5e9',
+            border: `1px solid ${ultimoDisparo.modo?.startsWith('fallback') ? C.warning : C.success}`,
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 16,
+            fontSize: 12,
+            color: C.iaDarker,
+            fontFamily: CALIBRI,
+          }}
+        >
+          <b>Disparo concluído:</b> modo <code>{ultimoDisparo.modo}</code>,{' '}
+          {ultimoDisparo.total} insight{ultimoDisparo.total === 1 ? '' : 's'} gerado
+          {ultimoDisparo.total === 1 ? '' : 's'}, custo R$ {(ultimoDisparo.custo_brl || 0).toFixed(4)},{' '}
+          {ultimoDisparo.duracao_ms}ms
+          {ultimoDisparo.erro_claude && (
+            <div style={{ marginTop: 6, color: C.critical, fontSize: 11 }}>
+              ⚠ Claude: {ultimoDisparo.erro_claude}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Erro */}
+      {erro && (
+        <div
+          style={{
+            background: '#fce4e4',
+            border: `1px solid ${C.critical}`,
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 16,
+            fontSize: 12,
+            color: C.critical,
+          }}
+        >
+          ❌ {erro}
+        </div>
+      )}
+
+      {/* Lista de insights */}
+      {loading && insights.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontSize: 12 }}>
+          Carregando insights…
+        </div>
+      ) : insights.length === 0 ? (
+        <div
+          style={{
+            background: '#fff',
+            border: `1px dashed ${C.cream}`,
+            borderRadius: 12,
+            padding: 40,
+            textAlign: 'center',
+            color: C.muted,
+          }}
+        >
+          <div style={{ fontSize: 36, marginBottom: 8 }}>🛒</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.blueDark }}>
+            Nenhum insight de marketplaces ainda
+          </div>
+          <div style={{ fontSize: 12, marginTop: 6 }}>
+            Clique em <b>⚡ Disparar agora</b> pra gerar a primeira análise.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {insights.map(i => (
+            <CardInsight
+              key={i.id}
+              insight={i}
+              onFeedback={enviarFeedback}
+              enviando={feedbackEnviando[i.id]}
+              jaRespondido={feedbackDado[i.id]}
+              C={C}
+              SERIF={SERIF}
+              CALIBRI={CALIBRI}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
+  const [dados, setDados] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    setErro(null);
+    try {
+      const r = await fetch('/api/ia-lucro-mes', {
+        headers: { 'X-User': usuario },
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setDados(d);
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [usuario]);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
+  const fmt = (v) => (Number(v) || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+
+  const canalLabel = {
+    mercadolivre: 'Mercado Livre',
+    shopee: 'Shopee',
+    shein: 'Shein',
+    tiktok: 'TikTok Shop',
+    meluni: 'Meluni',
+    outros: 'Outros',
+  };
+
+  const canalCor = {
+    mercadolivre: '#FFE600',
+    shopee: '#EE4D2D',
+    shein: '#000',
+    tiktok: '#010101',
+    meluni: '#8B7355',
+    outros: C.muted,
+  };
+
+  const canalTextCor = {
+    mercadolivre: '#2D3277',
+    shopee: '#fff',
+    shein: '#fff',
+    tiktok: '#fff',
+    meluni: '#fff',
+    outros: '#fff',
+  };
+
+  return (
+    <div
+      style={{
+        background: 'linear-gradient(135deg, #fff 0%, #f7f4f0 100%)',
+        border: `1px solid ${C.cream}`,
+        borderRadius: 12,
+        padding: 20,
+        marginBottom: 18,
+        fontFamily: SERIF,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 10, color: C.muted, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Card 1 · Admin · Mês corrente ({dados?.mes_ref || '—'})
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.iaDarker, marginTop: 2 }}>
+            Lucro líquido do mês
+          </div>
+        </div>
+        <button
+          onClick={carregar}
+          disabled={loading}
+          style={{
+            background: 'transparent',
+            border: `1px solid ${C.cream}`,
+            color: C.muted,
+            borderRadius: 6,
+            padding: '6px 12px',
+            fontSize: 11,
+            cursor: loading ? 'wait' : 'pointer',
+            opacity: loading ? 0.6 : 1,
+            fontFamily: SERIF,
+          }}
+        >
+          {loading ? '…' : '🔄'}
+        </button>
+      </div>
+
+      {erro ? (
+        <div style={{ fontSize: 12, color: C.critical, padding: 12 }}>❌ {erro}</div>
+      ) : !dados ? (
+        <div style={{ fontSize: 12, color: C.muted, padding: 12 }}>Carregando…</div>
+      ) : (
+        <>
+          {/* Destaque: total */}
+          <div
+            style={{
+              background: C.iaDarker,
+              color: '#fff',
+              borderRadius: 10,
+              padding: 18,
+              marginBottom: 14,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 12,
+            }}
+          >
+            <KpiMini label="Unidades" valor={dados.totais.unidades.toLocaleString('pt-BR')} fam={CALIBRI} />
+            <KpiMini label="Receita bruta" valor={`R$ ${fmt(dados.totais.receita_bruta)}`} fam={CALIBRI} />
+            <KpiMini label="Lucro bruto" valor={`R$ ${fmt(dados.totais.lucro_bruto)}`} fam={CALIBRI} />
+            <KpiMini
+              label={`Lucro líquido (-${dados.devolucao_aplicada_pct || 10}%)`}
+              valor={`R$ ${fmt(dados.totais.lucro_liquido)}`}
+              fam={CALIBRI}
+              destaque
+            />
+          </div>
+
+          {/* Breakdown por canal */}
+          {dados.canais.length === 0 ? (
+            <div style={{ fontSize: 12, color: C.muted, padding: 12, textAlign: 'center' }}>
+              Sem vendas sincronizadas neste mês ainda.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+              {dados.canais
+                .sort((a, b) => b.lucro_liquido - a.lucro_liquido)
+                .map(c => (
+                  <div
+                    key={c.canal}
+                    style={{
+                      background: canalCor[c.canal] || C.muted,
+                      color: canalTextCor[c.canal] || '#fff',
+                      borderRadius: 8,
+                      padding: 12,
+                      fontFamily: CALIBRI,
+                    }}
+                  >
+                    <div style={{ fontSize: 10, opacity: 0.8, letterSpacing: 1, textTransform: 'uppercase', fontFamily: SERIF }}>
+                      {canalLabel[c.canal] || c.canal}
+                    </div>
+                    <div style={{ fontSize: 18, fontWeight: 800, marginTop: 3 }}>
+                      R$ {fmt(c.lucro_liquido)}
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.85, marginTop: 3 }}>
+                      {c.unidades.toLocaleString('pt-BR')} un · R$ {fmt(c.receita_bruta)}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function KpiMini({ label, valor, fam, destaque = false }) {
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 9,
+          opacity: 0.7,
+          letterSpacing: 1,
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: destaque ? 20 : 16,
+          fontWeight: 800,
+          marginTop: 2,
+          fontFamily: fam,
+          color: destaque ? '#ffe600' : '#fff',
+        }}
+      >
+        {valor}
       </div>
     </div>
   );

@@ -32,7 +32,13 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Não foi possível determinar host pra chamada interna' });
   }
 
-  const url = `${proto}://${host}/api/ia-cron?janela=manual`;
+  // Aceita escopo no body (producao|marketplaces). Default 'producao' preserva Sprint 3.
+  const escopo = (req.body?.escopo || 'producao').toLowerCase();
+  if (!['producao', 'marketplaces'].includes(escopo)) {
+    return res.status(400).json({ error: `Escopo inválido: ${escopo}` });
+  }
+
+  const url = `${proto}://${host}/api/ia-cron?janela=manual&escopo=${escopo}`;
 
   try {
     const r = await fetch(url, {
@@ -41,6 +47,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'X-Cron-Secret': cronSecret,
       },
+      body: JSON.stringify({ escopo }),
       // 65s margem: ia-cron tem timeout Claude de 30s + possível retry 30s
       signal: AbortSignal.timeout(65000),
     });
@@ -51,6 +58,7 @@ export default async function handler(req, res) {
       return res.status(r.status).json({
         error: data.error || `ia-cron retornou ${r.status}`,
         disparado_por: admin.user.usuario,
+        escopo,
         ...data,
       });
     }
@@ -58,6 +66,7 @@ export default async function handler(req, res) {
     return res.json({
       ok: true,
       disparado_por: admin.user.usuario,
+      escopo,
       ...data,
     });
   } catch (e) {

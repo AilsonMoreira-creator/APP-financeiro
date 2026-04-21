@@ -1,31 +1,32 @@
 /**
- * ia-cron.js — Motor do OS Amícia (Sprint 3).
+ * ia-cron.js — Motor do OS Amícia (Sprint 3 produção + Sprint 4 marketplaces).
  *
- * Orquestra o fluxo completo de geração de insights de produção:
+ * Orquestra o fluxo completo de geração de insights via Claude Sonnet 4.6:
  *   1. Valida auth (CRON_SECRET via query ?token= OU header X-Cron-Secret)
- *   2. Chama fn_ia_cortes_recomendados() no Postgres → recebe JSONB
- *   3. Se refs == 0 → grava insight "tudo saudável" e retorna 200
- *   4. Se temOrcamento() == false → pula Claude, fallback determinístico
- *   5. Chama Claude Sonnet 4.6 com as 8 regras do prompt de sistema
+ *   2. Lê ?escopo= (default 'producao' pra compatibilidade com Sprint 3)
+ *   3. Chama a RPC correspondente no Postgres → recebe JSONB
+ *   4. Se payload vazio → grava insight "tudo saudável" e retorna 200
+ *   5. Se temOrcamento() == false → pula Claude, fallback determinístico
+ *   6. Chama Claude Sonnet 4.6 com prompt de sistema específico do escopo
  *      - Timeout 30s. Se timeout/erro → 1 retry com temperature=0.1
  *      - Se retry também falhar → fallback determinístico
- *   6. Parseia JSON do Claude, valida campos, grava em ia_insights
- *   7. Grava consumo em ia_usage
- *   8. Retorna { ok, total_insights_gerados, custo_brl, modo }
+ *   7. Parseia JSON do Claude, valida campos, grava em ia_insights
+ *   8. Grava consumo em ia_usage
+ *   9. Retorna { ok, total_insights_gerados, custo_brl, modo, escopo }
  *
  * Endpoints:
- *   GET  /api/ia-cron?token=<CRON_SECRET>&janela=manha|tarde
- *        (usado pelo Vercel Cron na query)
+ *   GET  /api/ia-cron?token=<CRON_SECRET>&janela=manha|tarde&escopo=producao|marketplaces
+ *        (usado pelo Vercel Cron)
  *   POST /api/ia-cron
  *        Header: X-Cron-Secret: <CRON_SECRET>
- *        (usado por /api/ia-disparar quando admin clica "Disparar agora")
+ *        Body:   { escopo?: 'producao'|'marketplaces' }
+ *        (usado por /api/ia-disparar)
  *
- * Regras do briefing Sprint 3:
+ * Regras do briefing Sprint 3/4:
  *   - NUNCA citar "Amícia" nos insights (marca interna)
  *   - Fallback sempre confidence='media' no máximo
- *   - Refs vêm SEM zero à esquerda (função já normaliza)
- *   - Tratar null em sala_recomendada, descricao vazia, etc.
- *   - Origem no ia_insights: 'cron' ou 'fallback_deterministico' (CHECK constraint)
+ *   - Refs vêm SEM zero à esquerda (função SQL já normaliza)
+ *   - Origem no ia_insights: 'cron' ou 'fallback_deterministico'
  *     modelo = 'claude-sonnet-4-6' OU 'fallback_deterministico'
  */
 import {
@@ -39,8 +40,11 @@ import { randomUUID } from 'node:crypto';
 
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
 
-// ─── Prompt de sistema · 8 regras do briefing seção 7 ───────────────────────
-const PROMPT_SISTEMA = `Você é o cérebro de decisão de produção de uma confecção feminina em São Paulo.
+// ═══════════════════════════════════════════════════════════════════════════
+// PROMPTS DE SISTEMA (um por escopo)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PROMPT_PRODUCAO = `Você é o cérebro de decisão de produção de uma confecção feminina em São Paulo.
 Recebe um JSON consolidado de refs candidatas a corte e devolve insights acionáveis.
 
 8 REGRAS INEGOCIÁVEIS:
@@ -82,7 +86,67 @@ MAPEAMENTO severity ← severidade do input:
 Se confianca_ref do input for "media" ou "baixa", rebaixe seu confidence na mesma medida.
 Se sala_recomendada for null, use categoria="investigar_ref" e severity≥atencao.`;
 
-// ─── Helpers internos ───────────────────────────────────────────────────────
+const PROMPT_MARKETPLACES = `Você é o cérebro de decisão comercial de uma operação de marketplaces de moda feminina em São Paulo.
+Recebe um JSON com 10 seções de dados (canais, contas Bling, top movers, margens, oportunidades) e devolve insights acionáveis.
+
+10 REGRAS INEGOCIÁVEIS:
+1. Toda análise termina em ação concreta. NÃO use "considerar", "avaliar", "monitorar".
+   USE: "subir preço do shein pra R$ 89,90", "pausar ads de ref 2700 no ML", "replicar título da ref 2601 muniam pra exitus".
+2. Variação percentual baixa (< 20%) em volume baixo (< 10 un) é ruído. Ignore.
+3. Margem crítica (< R$ 8) é prioridade máxima mesmo com pouca venda.
+4. Oportunidade de margem alta + venda baixa = ação de tráfego/ads, não de preço.
+5. Quando uma ref tem comportamento divergente entre contas Bling (Exitus/Lumia/Muniam), investigue qual conta tem título/foto/ads melhores e sugira replicar.
+6. Linguagem direta, números concretos em R$ e %. Zero adjetivos vagos.
+7. Brevidade cirúrgica: resumo ≤ 2 frases, acao_sugerida ≤ 1 frase, impacto ≤ 1 frase.
+8. Refs do input são autoridade (já normalizadas sem zero à esquerda).
+9. Nomes de canais: sempre completos — "Mercado Livre", "Shopee", "Shein", "TikTok Shop", "Meluni".
+10. Contas Bling têm nomes próprios: Exitus, Lumia, Muniam (capitalização exata).
+
+REGRA BÔNUS: nunca cite a marca "Amícia" no texto. Use "a operação", "a loja".
+
+PRIORIZAÇÃO DE INSIGHTS (gere no MÁXIMO 8-10 no total):
+  - Prioridade máxima (severity=critico): margens_urgencia (lucro < 0 ou < R$ 8)
+  - Alta (severity=atencao): quedas >30% em canais/contas, concentração de quedas
+  - Média (severity=oportunidade): oportunidades Card 7, refs subindo >40%
+  - Baixa (severity=info): variações pequenas notáveis mas não-acionáveis agora
+
+FORMATO DE SAÍDA:
+Retorne APENAS um array JSON válido, sem markdown, sem texto antes/depois.
+
+[
+  {
+    "escopo": "marketplaces",
+    "categoria": "margem_critica" | "margem_atencao" | "canal_queda" | "canal_alta" | "conta_queda" | "mover_subindo" | "mover_caindo" | "cruzamento_contas" | "oportunidade_trafego" | "ajuste_preco",
+    "severity": "critico" | "atencao" | "positiva" | "oportunidade" | "info",
+    "confidence": "alta" | "media" | "baixa",
+    "titulo": "string curta (até ~70 chars)",
+    "resumo": "até 2 frases com os números-chave",
+    "impacto": "1 frase sobre consequência se não agir",
+    "acao_sugerida": "1 frase iniciando com verbo no infinitivo",
+    "chaves": { "ref": "...", "canal": "...", "conta": "..." }
+  }
+]
+
+Preencha apenas as chaves que fazem sentido para o insight em questão. Exemplo: insight de canal não tem "ref".`;
+
+const ESCOPOS = {
+  producao: {
+    rpc: 'fn_ia_cortes_recomendados',
+    prompt: PROMPT_PRODUCAO,
+    categoriaTudoSaudavel: 'tudo_saudavel',
+    tituloTudoSaudavel: 'Nenhuma ref precisa de corte agora',
+  },
+  marketplaces: {
+    rpc: 'fn_ia_marketplaces_insights',
+    prompt: PROMPT_MARKETPLACES,
+    categoriaTudoSaudavel: 'marketplaces_saudaveis',
+    tituloTudoSaudavel: 'Nenhum alerta de marketplace nesta janela',
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
 
 function validarAuth(req) {
   const cronSecret = process.env.CRON_SECRET;
@@ -98,14 +162,33 @@ function validarAuth(req) {
 }
 
 /**
- * Fallback determinístico — gera 1 insight por ref a partir do JSONB puro
- * da função. Nunca explode; trata null gracioso (ref 2851 no teste real de
- * 21/04 veio com descricao="", sala_recomendada=null).
+ * Conta elementos totais num payload de marketplaces. Se 0 em todas as
+ * seções, sinaliza "tudo saudável".
  */
-function gerarFallback(ref) {
+function payloadVazio(jsonInput, escopo) {
+  if (escopo === 'producao') {
+    const refs = Array.isArray(jsonInput?.refs) ? jsonInput.refs : [];
+    return refs.length === 0;
+  }
+  if (escopo === 'marketplaces') {
+    const secoes = [
+      'canais_comparativo', 'contas_bling_7v7', 'concentracao_quedas',
+      'top_movers_unificado', 'top_movers_conta', 'top_movers_cruzamento',
+      'margens_urgencia', 'margens_atencao', 'plano_ajuste', 'oportunidades',
+    ];
+    const total = secoes.reduce((s, k) => s + (Array.isArray(jsonInput?.[k]) ? jsonInput[k].length : 0), 0);
+    return total === 0;
+  }
+  return true;
+}
+
+/**
+ * Fallback determinístico PRODUÇÃO — 1 insight por ref.
+ * Trata null gracioso (ref 2851 veio com descricao="", sala=null no smoke).
+ */
+function gerarFallbackProducao(ref) {
   const descricaoLimpa = (ref.descricao || `REF ${ref.ref}`).trim().slice(0, 50);
   const temSala = !!ref.sala_recomendada;
-
   const severityMap = { alta: 'critico', media: 'atencao', baixa: 'info' };
   const severity = severityMap[ref.severidade] || 'info';
 
@@ -123,7 +206,7 @@ function gerarFallback(ref) {
     escopo: 'producao',
     categoria,
     severity,
-    confidence: 'media',  // fallback nunca passa de media (regra do briefing)
+    confidence: 'media',
     titulo: `REF ${ref.ref} · ${descricaoLimpa}`,
     resumo: `${ref.qtd_variacoes_ativas || 0} variações ativas, ${ref.qtd_variacoes_criticas || 0} críticas. Vendas 30d: ${ref.vendas_30d_total || 0} peças.`,
     impacto: `Curva ${ref.curva || '—'}. Severidade ${ref.severidade || '—'}.`,
@@ -137,18 +220,110 @@ function gerarFallback(ref) {
 }
 
 /**
- * Valida um insight parseado do Claude. Retorna null se inválido.
- * Campos mínimos obrigatórios: escopo, severity, confidence, titulo.
+ * Fallback determinístico MARKETPLACES — gera insights high-level
+ * cobrindo os sinais mais críticos quando Claude não pode ser usado.
+ * Prioriza margens críticas, depois quedas acentuadas em canais.
  */
-function validarInsight(i) {
+function gerarFallbackMarketplaces(jsonInput) {
+  const insights = [];
+
+  // 1. Margens urgentes (1 insight agregado, não 1 por item)
+  const urgencias = jsonInput.margens_urgencia || [];
+  if (urgencias.length > 0) {
+    const ex = urgencias[0];
+    insights.push({
+      escopo: 'marketplaces',
+      categoria: 'margem_critica',
+      severity: 'critico',
+      confidence: 'media',
+      titulo: `${urgencias.length} produto${urgencias.length === 1 ? '' : 's'} com margem crítica`,
+      resumo: `${urgencias.length} pares ref×canal com lucro abaixo de R$ 8. Pior caso: ref ${ex.ref} no ${ex.canal}, lucro R$ ${ex.lucro_peca}.`,
+      impacto: 'Cada venda desses itens reduz a lucratividade total da operação.',
+      acao_sugerida: `Subir preços seguindo o plano de ajuste gradual pra atingir lucro mínimo R$ 10.`,
+      chaves: { ref: ex.ref, canal: ex.canal },
+    });
+  }
+
+  // 2. Canais em queda acentuada
+  const canais = jsonInput.canais_comparativo || [];
+  const emQueda = canais.filter(c => c.var_7v7_pct !== null && c.var_7v7_pct < -20);
+  if (emQueda.length > 0) {
+    const pior = emQueda.sort((a, b) => a.var_7v7_pct - b.var_7v7_pct)[0];
+    insights.push({
+      escopo: 'marketplaces',
+      categoria: 'canal_queda',
+      severity: 'atencao',
+      confidence: 'media',
+      titulo: `Canal ${pior.canal} caindo ${pior.var_7v7_pct}% em 7 dias`,
+      resumo: `${pior.canal}: ${pior.u_ult7} unidades nos últimos 7 dias vs ${pior.u_ant7} nos 7 dias anteriores (${pior.var_7v7_pct}%).`,
+      impacto: 'Se a tendência persistir, o mês fecha abaixo da meta.',
+      acao_sugerida: `Revisar campanhas e estoque dos top produtos no ${pior.canal}.`,
+      chaves: { canal: pior.canal },
+    });
+  }
+
+  // 3. Cruzamento de contas (refs com performance divergente)
+  const cruz = jsonInput.top_movers_cruzamento || [];
+  if (cruz.length > 0) {
+    const ex = cruz[0];
+    insights.push({
+      escopo: 'marketplaces',
+      categoria: 'cruzamento_contas',
+      severity: 'oportunidade',
+      confidence: 'media',
+      titulo: `REF ${ex.ref} com performance divergente entre contas`,
+      resumo: `Spread de ${ex.spread_var_pct} pontos percentuais entre contas Bling. Exitus ${ex.var_exitus}%, Lumia ${ex.var_lumia}%, Muniam ${ex.var_muniam}%.`,
+      impacto: 'Conta mais fraca pode estar subutilizando a mesma ref.',
+      acao_sugerida: 'Comparar títulos, fotos e ads da conta líder e replicar nas outras.',
+      chaves: { ref: ex.ref },
+    });
+  }
+
+  // 4. Oportunidades (margem alta + venda baixa)
+  const oports = jsonInput.oportunidades || [];
+  if (oports.length > 0) {
+    const ex = oports[0];
+    insights.push({
+      escopo: 'marketplaces',
+      categoria: 'oportunidade_trafego',
+      severity: 'oportunidade',
+      confidence: 'media',
+      titulo: `${oports.length} oportunidade${oports.length === 1 ? '' : 's'} de tráfego com margem boa`,
+      resumo: `Refs com margem ≥ R$ 10 mas vendendo < 10 un/30d. Ex: ref ${ex.ref} no ${ex.canal}, lucro R$ ${ex.lucro_peca} por peça.`,
+      impacto: 'Volume baixo em margem alta significa lucro potencial represado.',
+      acao_sugerida: 'Investir em ads ou revisar título/foto dos 3-5 itens de maior margem.',
+      chaves: { ref: ex.ref, canal: ex.canal },
+    });
+  }
+
+  // Se nada disparou alerta, gera 1 insight neutro
+  if (insights.length === 0) {
+    insights.push({
+      escopo: 'marketplaces',
+      categoria: 'marketplaces_saudaveis',
+      severity: 'info',
+      confidence: 'media',
+      titulo: 'Marketplaces dentro do esperado (fallback)',
+      resumo: 'Nenhum sinal forte de urgência. Fallback determinístico ativo por falta de orçamento ou erro do modelo.',
+      impacto: 'Recomendado rodar análise completa na próxima janela.',
+      acao_sugerida: 'Revisar no próximo cron.',
+      chaves: {},
+    });
+  }
+
+  return insights;
+}
+
+function validarInsight(i, escopoEsperado) {
   if (!i || typeof i !== 'object') return null;
   if (!i.escopo || !i.severity || !i.confidence || !i.titulo) return null;
   const severityValidos = ['critico', 'atencao', 'positiva', 'oportunidade', 'info'];
   const confidenceValidos = ['alta', 'media', 'baixa'];
   if (!severityValidos.includes(i.severity)) return null;
   if (!confidenceValidos.includes(i.confidence)) return null;
+
   return {
-    escopo: 'producao',  // sprint 3 só gera producao
+    escopo: escopoEsperado,
     categoria: i.categoria || null,
     severity: i.severity,
     confidence: i.confidence,
@@ -160,11 +335,7 @@ function validarInsight(i) {
   };
 }
 
-/**
- * Chama Claude Sonnet 4.6 com timeout. Retorna { ok, insights?, usage?, erro? }.
- * Tenta 1x. Quem orquestra retry é o handler principal.
- */
-async function chamarClaude({ jsonInput, modelo, temperature, max_tokens, timeoutMs }) {
+async function chamarClaude({ jsonInput, modelo, temperature, max_tokens, timeoutMs, systemPrompt }) {
   try {
     const r = await fetch(CLAUDE_API, {
       method: 'POST',
@@ -177,7 +348,7 @@ async function chamarClaude({ jsonInput, modelo, temperature, max_tokens, timeou
         model: modelo,
         max_tokens,
         temperature,
-        system: PROMPT_SISTEMA,
+        system: systemPrompt,
         messages: [{ role: 'user', content: JSON.stringify(jsonInput) }],
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -191,8 +362,6 @@ async function chamarClaude({ jsonInput, modelo, temperature, max_tokens, timeou
     const data = await r.json();
     const texto = data.content?.[0]?.text?.trim() || '';
     const usage = data.usage || { input_tokens: 0, output_tokens: 0 };
-
-    // Remove cercas de markdown se o modelo teimou em colocar
     const limpo = texto.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
 
     let arr;
@@ -213,42 +382,50 @@ async function chamarClaude({ jsonInput, modelo, temperature, max_tokens, timeou
   }
 }
 
-// ─── Handler principal ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// HANDLER PRINCIPAL
+// ═══════════════════════════════════════════════════════════════════════════
 
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Auth
   const auth = validarAuth(req);
   if (!auth.ok) return res.status(auth.status).json({ error: auth.erro });
+
+  // Escopo vem de query (cron do Vercel) OU body (ia-disparar POST).
+  // Default 'producao' preserva compatibilidade Sprint 3.
+  const escopo = (req.query?.escopo || req.body?.escopo || 'producao').toLowerCase();
+  if (!ESCOPOS[escopo]) {
+    return res.status(400).json({ error: `Escopo inválido: ${escopo}. Aceitos: producao, marketplaces.` });
+  }
+  const cfg = ESCOPOS[escopo];
 
   const janela = req.query?.janela || 'manual';
   const cronRunId = randomUUID();
   const t0 = Date.now();
 
   try {
-    // 1. Chama a função do Postgres
-    const { data: jsonInput, error: errFn } = await supabase.rpc('fn_ia_cortes_recomendados');
+    // 1. Chama a RPC do Postgres correspondente ao escopo
+    const { data: jsonInput, error: errFn } = await supabase.rpc(cfg.rpc);
     if (errFn) {
       return res.status(500).json({
-        error: `fn_ia_cortes_recomendados falhou: ${errFn.message}`,
+        error: `${cfg.rpc} falhou: ${errFn.message}`,
+        escopo,
         cron_run_id: cronRunId,
       });
     }
 
-    const refs = Array.isArray(jsonInput?.refs) ? jsonInput.refs : [];
-
-    // 2. Zero refs → tudo saudável
-    if (refs.length === 0) {
+    // 2. Payload vazio → tudo saudável
+    if (payloadVazio(jsonInput, escopo)) {
       const insight = {
-        escopo: 'producao',
-        categoria: 'tudo_saudavel',
+        escopo,
+        categoria: cfg.categoriaTudoSaudavel,
         severity: 'positiva',
         confidence: 'alta',
-        titulo: 'Nenhuma ref precisa de corte agora',
-        resumo: `Capacidade semanal: ${jsonInput?.capacidade_semanal?.status || 'normal'}. Nenhuma ref elegível passou pelo gatekeeper de demanda.`,
-        impacto: 'Operação em cobertura saudável nesta janela.',
+        titulo: cfg.tituloTudoSaudavel,
+        resumo: 'Nenhum item elegível passou pelos gatekeepers desta janela.',
+        impacto: 'Operação em estado saudável.',
         acao_sugerida: 'Revisar na próxima janela de cron.',
         chaves: { janela },
         payload: jsonInput,
@@ -259,7 +436,8 @@ export default async function handler(req, res) {
       await supabase.from('ia_insights').insert(insight);
       return res.json({
         ok: true,
-        modo: 'sem_refs',
+        modo: 'sem_itens',
+        escopo,
         total_insights_gerados: 1,
         custo_brl: 0,
         cron_run_id: cronRunId,
@@ -267,10 +445,10 @@ export default async function handler(req, res) {
       });
     }
 
-    // 3. Config da chamada
+    // 3. Configs
     const modelo = (await getConfig('claude_modelo', 'claude-sonnet-4-6')) || 'claude-sonnet-4-6';
     const temperatura = Number(await getConfig('claude_temperatura', 0.3));
-    const maxTokens = Number(await getConfig('claude_max_tokens', 1500));
+    const maxTokens = Number(await getConfig('claude_max_tokens', escopo === 'marketplaces' ? 2500 : 1500));
     const timeoutS = Number(await getConfig('claude_timeout_s', 30));
     const timeoutMs = timeoutS * 1000;
 
@@ -283,11 +461,14 @@ export default async function handler(req, res) {
 
     if (!orcamentoOk) {
       modo = 'fallback_orcamento';
-      insightsBrutos = refs.map(gerarFallback);
+      insightsBrutos = escopo === 'marketplaces'
+        ? gerarFallbackMarketplaces(jsonInput)
+        : (jsonInput.refs || []).map(gerarFallbackProducao);
     } else {
-      // Tenta Claude com temperatura padrão
       const tentativa1 = await chamarClaude({
-        jsonInput, modelo, temperature: temperatura, max_tokens: maxTokens, timeoutMs,
+        jsonInput, modelo,
+        temperature: temperatura, max_tokens: maxTokens, timeoutMs,
+        systemPrompt: cfg.prompt,
       });
 
       if (tentativa1.ok) {
@@ -295,9 +476,10 @@ export default async function handler(req, res) {
         usageClaude = tentativa1.usage;
       } else {
         erroClaude = tentativa1.erro;
-        // Retry 1× com temperatura mais determinística (0.1)
         const tentativa2 = await chamarClaude({
-          jsonInput, modelo, temperature: 0.1, max_tokens: maxTokens, timeoutMs,
+          jsonInput, modelo,
+          temperature: 0.1, max_tokens: maxTokens, timeoutMs,
+          systemPrompt: cfg.prompt,
         });
 
         if (tentativa2.ok) {
@@ -305,25 +487,26 @@ export default async function handler(req, res) {
           usageClaude = tentativa2.usage;
           modo = 'claude_retry';
         } else {
-          // Fallback determinístico
           modo = 'fallback_erro';
           erroClaude = `1ª: ${erroClaude} | 2ª: ${tentativa2.erro}`;
-          insightsBrutos = refs.map(gerarFallback);
+          insightsBrutos = escopo === 'marketplaces'
+            ? gerarFallbackMarketplaces(jsonInput)
+            : (jsonInput.refs || []).map(gerarFallbackProducao);
         }
       }
     }
 
-    // 5. Valida e prepara pra insert
+    // 5. Valida e prepara
     const usouClaude = modo === 'claude' || modo === 'claude_retry';
     const origemBanco = usouClaude ? 'cron' : 'fallback_deterministico';
     const modeloBanco = usouClaude ? modelo : 'fallback_deterministico';
 
     const insightsValidos = insightsBrutos
-      .map(validarInsight)
+      .map(i => validarInsight(i, escopo))
       .filter(Boolean)
       .map(i => ({
         ...i,
-        payload: { janela, cron_run_id: cronRunId },
+        payload: { janela, cron_run_id: cronRunId, escopo },
         origem: origemBanco,
         modelo: modeloBanco,
         cron_run_id: cronRunId,
@@ -332,13 +515,19 @@ export default async function handler(req, res) {
     // Se Claude passou mas validação descartou tudo, cai pro fallback
     if (insightsValidos.length === 0 && usouClaude) {
       modo = 'fallback_validacao';
-      const doFallback = refs.map(gerarFallback).map(validarInsight).filter(Boolean).map(i => ({
-        ...i,
-        payload: { janela, cron_run_id: cronRunId, erro_claude: 'validacao_falhou' },
-        origem: 'fallback_deterministico',
-        modelo: 'fallback_deterministico',
-        cron_run_id: cronRunId,
-      }));
+      const fallback = escopo === 'marketplaces'
+        ? gerarFallbackMarketplaces(jsonInput)
+        : (jsonInput.refs || []).map(gerarFallbackProducao);
+      const doFallback = fallback
+        .map(i => validarInsight(i, escopo))
+        .filter(Boolean)
+        .map(i => ({
+          ...i,
+          payload: { janela, cron_run_id: cronRunId, escopo, erro_claude: 'validacao_falhou' },
+          origem: 'fallback_deterministico',
+          modelo: 'fallback_deterministico',
+          cron_run_id: cronRunId,
+        }));
       insightsValidos.push(...doFallback);
     }
 
@@ -348,12 +537,13 @@ export default async function handler(req, res) {
       if (errIns) {
         return res.status(500).json({
           error: `Insert ia_insights falhou: ${errIns.message}`,
+          escopo,
           cron_run_id: cronRunId,
         });
       }
     }
 
-    // 7. Grava ia_usage
+    // 7. ia_usage
     let custoBRL = 0;
     let custoUSD = 0;
     const hoje = new Date().toISOString().slice(0, 10);
@@ -380,9 +570,6 @@ export default async function handler(req, res) {
         user_id: 'cron',
       });
     } else {
-      // Fallback: grava auditoria com custo 0.
-      // ⚠️ ia_usage.tipo tem CHECK IN ('cron','pergunta_livre','retry') — não aceita 'fallback'.
-      //    Marcamos como 'cron' e identificamos via modelo='fallback_deterministico'.
       await supabase.from('ia_usage').insert({
         data: hoje,
         ano_mes: anoMes,
@@ -399,18 +586,19 @@ export default async function handler(req, res) {
     return res.json({
       ok: true,
       modo,
+      escopo,
       janela,
-      total_refs_entrada: refs.length,
       total_insights_gerados: insightsValidos.length,
       custo_usd: custoUSD,
       custo_brl: custoBRL,
       cron_run_id: cronRunId,
-      erro_claude: erroClaude,  // null se tudo OK
+      erro_claude: erroClaude,
       duracao_ms: Date.now() - t0,
     });
   } catch (e) {
     return res.status(500).json({
       error: e.message || 'erro interno',
+      escopo,
       cron_run_id: cronRunId,
       duracao_ms: Date.now() - t0,
     });
