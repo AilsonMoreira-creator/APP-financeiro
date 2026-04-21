@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "api/ia-cron.js": { "maxDuration": 120 },
+    "api/ia-disparar.js": { "maxDuration": 120 }
+  },
   "crons": [
     {
       "path": "/api/bling-cron",

@@ -48,8 +48,9 @@ export default async function handler(req, res) {
         'X-Cron-Secret': cronSecret,
       },
       body: JSON.stringify({ escopo }),
-      // 65s margem: ia-cron tem timeout Claude de 30s + possível retry 30s
-      signal: AbortSignal.timeout(65000),
+      // Marketplaces pode ter runs mais pesados (input ~5k tokens + retry).
+      // Timeout generoso: Claude 40s x 2 tentativas = 80s + overhead = 100s.
+      signal: AbortSignal.timeout(100000),
     });
 
     const data = await r.json().catch(() => ({}));
@@ -71,7 +72,7 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     const msg = e.name === 'TimeoutError' || e.name === 'AbortError'
-      ? 'Timeout esperando ia-cron (> 65s)'
+      ? 'Timeout esperando ia-cron (> 100s)'
       : (e.message || 'erro interno');
     return res.status(500).json({ error: msg });
   }
