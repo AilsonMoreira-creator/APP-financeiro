@@ -101,16 +101,18 @@ SELECT
   prod->>'ref' AS ref_original,
   prod->>'descricao' AS descricao,
   prod->>'marca' AS marca,
+  -- Replica parseFloat(p[k]||0) do React: trata "" como 0.
+  -- NULLIF converte "" para NULL antes do cast; COALESCE finaliza em 0.
   ROUND((
-    COALESCE((prod->>'tecido')::NUMERIC, 0)     +
-    COALESCE((prod->>'forro')::NUMERIC, 0)      +
-    COALESCE((prod->>'oficina')::NUMERIC, 0)    +
-    COALESCE((prod->>'passadoria')::NUMERIC, 0) +
-    COALESCE((prod->>'ziper')::NUMERIC, 0)      +
-    COALESCE((prod->>'botao')::NUMERIC, 0)      +
-    COALESCE((prod->>'aviamentos')::NUMERIC, 0) +
-    COALESCE((prod->>'modelista')::NUMERIC, 0)  +
-    COALESCE((prod->>'salaCorte')::NUMERIC, 0)
+    COALESCE(NULLIF(prod->>'tecido',     '')::NUMERIC, 0) +
+    COALESCE(NULLIF(prod->>'forro',      '')::NUMERIC, 0) +
+    COALESCE(NULLIF(prod->>'oficina',    '')::NUMERIC, 0) +
+    COALESCE(NULLIF(prod->>'passadoria', '')::NUMERIC, 0) +
+    COALESCE(NULLIF(prod->>'ziper',      '')::NUMERIC, 0) +
+    COALESCE(NULLIF(prod->>'botao',      '')::NUMERIC, 0) +
+    COALESCE(NULLIF(prod->>'aviamentos', '')::NUMERIC, 0) +
+    COALESCE(NULLIF(prod->>'modelista',  '')::NUMERIC, 0) +
+    COALESCE(NULLIF(prod->>'salaCorte',  '')::NUMERIC, 0)
   )::NUMERIC, 2) AS custo_producao
 FROM amicia_data
 CROSS JOIN LATERAL jsonb_array_elements(
