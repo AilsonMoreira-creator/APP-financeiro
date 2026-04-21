@@ -1,7 +1,5 @@
--- =====================================================================
 -- OS Amícia · Sprint 2 · Função orquestradora do fluxo de corte
 -- Versão: 1.0 · Data: 21/04/2026
--- =====================================================================
 --
 -- RODAR DEPOIS de 05_views_corte.sql.
 -- Idempotente: usa CREATE OR REPLACE FUNCTION.
@@ -51,7 +49,6 @@
 -- amicia_data) que têm RLS — essa função é o "bypass controlado".
 --
 -- Caller esperado: /api/ia-cron (service role via SUPABASE_KEY).
--- =====================================================================
 
 CREATE OR REPLACE FUNCTION fn_ia_cortes_recomendados()
 RETURNS jsonb
@@ -134,20 +131,14 @@ COMMENT ON FUNCTION fn_ia_cortes_recomendados() IS
   'Ordem da saída: curva A → curva B → outras, peças DESC. '
   'Chamada pelo /api/ia-cron no Sprint 3.';
 
-
--- =====================================================================
 -- Permissões: service role pode executar. Anon não.
 -- RLS não se aplica a functions, mas o EXECUTE é controlado.
--- =====================================================================
 REVOKE ALL ON FUNCTION fn_ia_cortes_recomendados() FROM PUBLIC;
 REVOKE ALL ON FUNCTION fn_ia_cortes_recomendados() FROM anon;
 GRANT  EXECUTE ON FUNCTION fn_ia_cortes_recomendados() TO service_role;
 GRANT  EXECUTE ON FUNCTION fn_ia_cortes_recomendados() TO authenticated;
 
-
--- =====================================================================
 -- SMOKE TEST (rodar manualmente no SQL Editor depois de aplicar)
--- =====================================================================
 --
 -- 1) Função existe?
 --    SELECT proname, pg_get_function_result(oid)
@@ -167,4 +158,3 @@ GRANT  EXECUTE ON FUNCTION fn_ia_cortes_recomendados() TO authenticated;
 -- 5) Status de capacidade:
 --    SELECT (fn_ia_cortes_recomendados())->'capacidade_semanal';
 --
--- =====================================================================
