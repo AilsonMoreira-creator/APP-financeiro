@@ -37,7 +37,7 @@ SELECT
 
 Resultado esperado logo após o seed:
 ```
-configs_seedadas     | 44
+configs_seedadas     | 55
 datas_sazonais       | 5
 insights_ja_criados  | 0
 feedbacks_ja_registrados | 0

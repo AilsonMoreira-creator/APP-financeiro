@@ -24,7 +24,7 @@ SELECT
   (SELECT count(*) FROM ia_feedback) AS feedbacks_zero;
 ```
 
-Esperado: `configs=44 · datas=5 · insights_zero=0 · feedbacks_zero=0`
+Esperado: `configs=55 · datas=5 · insights_zero=0 · feedbacks_zero=0`
 
 ### 2️⃣ Environment variables no Vercel
 
