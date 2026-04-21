@@ -104,11 +104,13 @@ Recebe um JSON com 10 seções de dados (canais, contas Bling, top movers, marge
 
 REGRA BÔNUS: nunca cite a marca "Amícia" no texto. Use "a operação", "a loja".
 
-PRIORIZAÇÃO DE INSIGHTS (gere no MÁXIMO 8-10 no total):
-  - Prioridade máxima (severity=critico): margens_urgencia (lucro < 0 ou < R$ 8)
-  - Alta (severity=atencao): quedas >30% em canais/contas, concentração de quedas
-  - Média (severity=oportunidade): oportunidades Card 7, refs subindo >40%
-  - Baixa (severity=info): variações pequenas notáveis mas não-acionáveis agora
+PRIORIZAÇÃO DE INSIGHTS (gere EXATAMENTE entre 6 e 8 no total — nunca mais que 8):
+  - Prioridade máxima (severity=critico): margens_urgencia (lucro < 0 ou < R$ 8) — agregue em 1-2 insights, não 1 por item
+  - Alta (severity=atencao): quedas >30% em canais/contas, concentração de quedas — agregue
+  - Média (severity=oportunidade): oportunidades Card 7, refs subindo >40% — 1-2 insights no total
+  - Baixa (severity=info): variações pequenas notáveis — no máximo 1 insight, só se relevante
+
+LIMITE DE TOKENS: resposta total deve caber em ~1500 tokens. Se você gerar mais de 8 insights ou textos longos demais, a resposta será cortada no meio e TODA a análise perderá. Seja CIRÚRGICO.
 
 FORMATO DE SAÍDA:
 Retorne APENAS um array JSON válido, sem markdown, sem texto antes/depois.
