@@ -104,13 +104,14 @@ Recebe um JSON com 10 seções de dados (canais, contas Bling, top movers, marge
 
 REGRA BÔNUS: nunca cite a marca "Amícia" no texto. Use "a operação", "a loja".
 
-PRIORIZAÇÃO DE INSIGHTS (gere EXATAMENTE entre 6 e 8 no total — nunca mais que 8):
-  - Prioridade máxima (severity=critico): margens_urgencia (lucro < 0 ou < R$ 8) — agregue em 1-2 insights, não 1 por item
-  - Alta (severity=atencao): quedas >30% em canais/contas, concentração de quedas — agregue
-  - Média (severity=oportunidade): oportunidades Card 7, refs subindo >40% — 1-2 insights no total
-  - Baixa (severity=info): variações pequenas notáveis — no máximo 1 insight, só se relevante
+PRIORIZAÇÃO DE INSIGHTS (gere EXATAMENTE entre 3 e 5 no total — NUNCA mais que 5):
+  - Este é um briefing executivo, não um relatório exaustivo. Cada insight precisa merecer existir.
+  - Prioridade máxima (severity=critico): margens_urgencia (lucro < 0 ou < R$ 8) — AGREGUE em 1 insight único ("X produtos com margem crítica"), não 1 por item
+  - Alta (severity=atencao): a queda mais acentuada em canal OU conta Bling — 1 insight
+  - Média (severity=oportunidade): a melhor oportunidade detectável (cruzamento ou margem alta + venda baixa) — 1 insight
+  - Reservar 1-2 slots livres para o que for mais acionável no dia
 
-LIMITE DE TOKENS: resposta total deve caber em ~1500 tokens. Se você gerar mais de 8 insights ou textos longos demais, a resposta será cortada no meio e TODA a análise perderá. Seja CIRÚRGICO.
+LIMITE DE TOKENS: resposta total deve caber em ~1000 tokens. Se gerar mais de 5 insights, a resposta será cortada e TODA a análise perderá. Seja CIRÚRGICO — corte o que for ruído e mantenha só o que o Ailson precisa AGIR hoje.
 
 FORMATO DE SAÍDA:
 Retorne APENAS um array JSON válido, sem markdown, sem texto antes/depois.
@@ -420,6 +421,9 @@ export default async function handler(req, res) {
 
     // 2. Payload vazio → tudo saudável
     if (payloadVazio(jsonInput, escopo)) {
+      // Snapshot: apaga insights antigos do escopo antes de inserir o "tudo saudavel"
+      await supabase.from('ia_insights').delete().eq('escopo', escopo);
+
       const insight = {
         escopo,
         categoria: cfg.categoriaTudoSaudavel,
@@ -533,8 +537,20 @@ export default async function handler(req, res) {
       insightsValidos.push(...doFallback);
     }
 
-    // 6. Insert
+    // 6. SNAPSHOT: apaga insights anteriores DESTE escopo antes de inserir os novos.
+    //    Cada disparo substitui o estado atual (insights sao retrato do momento, nao log).
+    //    Nao afeta insights de outros escopos (producao e marketplaces sao independentes).
     if (insightsValidos.length > 0) {
+      const { error: errDel } = await supabase
+        .from('ia_insights')
+        .delete()
+        .eq('escopo', escopo);
+
+      if (errDel) {
+        // Nao fatal: loga mas prossegue. Pior caso: feed fica com duplicatas.
+        console.error('[ia-cron] delete snapshot falhou:', errDel.message);
+      }
+
       const { error: errIns } = await supabase.from('ia_insights').insert(insightsValidos);
       if (errIns) {
         return res.status(500).json({
