@@ -407,3 +407,67 @@ Antes de declarar Sprint 3 fechado:
 
 **Boa sorte, próximo Claude. A infra tá pronta, o cérebro tá construído,
 agora é acender a luz. 🧠💡**
+
+---
+
+## 13. Achados do smoke test REAL (Supabase, 21/04/2026 01:55)
+
+Ailson rodou `SELECT fn_ia_cortes_recomendados()` no Supabase e retornou
+**4 refs reais** (2277 Saia Linho, 2601 Vestido Midi Fenda, 2832 Macacão,
+2851 sem descrição). Capacidade: 4/15 🟢 normal.
+
+**Três achados que valem atenção no Sprint 3:**
+
+### Achado 1 — REF 2851 aparece sem `ml_estoque_ref_atual`
+
+JSON retornado tem `descricao=""`, `sala_recomendada=null`, `estoque_total=0`,
+mas tem `vendas_30d_total=288` e `qtd_variacoes_criticas=12`. Isso é o caminho
+`ruptura_disfarçada` / demanda ativa sem estoque listado.
+
+**Não é bug** — comportamento esperado quando uma ref vende no Bling mas
+não está mapeada no `ml_estoque_ref_atual` (anúncio ML sumiu, MLB pausado,
+ou SKU não mapeado). **O Claude precisa lidar com isso no prompt** — caso
+"demanda ativa sem estoque conhecido" é uma pista de ação (reativar anúncio?
+conferir SKU?), não um corte propriamente dito. Tratar no fallback
+determinístico também: se `sala_recomendada IS NULL`, insight é categoria
+"investigar_listagem" em vez de "produzir".
+
+### Achado 2 — Duplicata "Verde Água" vs "Verde Agua" (com/sem acento)
+
+Na REF 2601, duas linhas:
+- "Verde Agua": 1.8% participação, estável
+- "Verde Água": 0.1% participação, queda
+
+O `LOWER(TRIM())` da view 1 não remove acentos. Bug de qualidade, não
+funcional — duplica os 3 rolos/cor de piso (6 em vez de 3 na prática pra
+essa cor). **Correção proposta pro Sprint 3 ou 2.5:**
+
+```sql
+-- Adicionar unaccent ao cor_key (precisa extensão unaccent habilitada)
+CREATE EXTENSION IF NOT EXISTS unaccent;
+-- E trocar LOWER(TRIM(cor)) por LOWER(TRIM(unaccent(cor))) nas 3 views que
+-- normalizam cor: vw_variacoes_classificadas, vw_tendencia_cor_catalogo,
+-- vw_distribuicao_cores_por_ref
+```
+
+### Achado 3 — `confianca_ref = "media"` em todas as 3 refs com estoque
+
+Todas marcaram `confianca_ref: "media"` porque têm `alerta_duplicata=true`
+na `ml_estoque_ref_atual`. Nas refs 2277, 2601, 2832 — que são campeãs
+de venda. Pode ser legacy do bug antigo de MLBs duplicados (2782/2798/2773
+reportados no passado) que o cron já consolida mas a flag não é resetada.
+
+**Checar no Sprint 3:** o `ml-estoque-cron.js` atualiza `alerta_duplicata`
+a cada sync? Se sim, a flag é atual. Se não (flag "sticky"), vale resetar
+uma vez. Não bloqueia nada — só joga algumas refs pra confiança média
+sem necessidade.
+
+### Bônus — Tamanho "Único" não aparece em nenhum output ✅
+
+Confirmado que a decisão #3 (tamanho Único fora do OS) está funcionando:
+nas 4 refs retornadas, só aparecem P, M, G, GG nas grades. Zero "Único".
+
+---
+
+**Status real ao fechar Sprint 2:** 🟢 Views + função aplicadas em produção
+Supabase. 4 refs reais retornadas. Pipeline validado ponta a ponta.
