@@ -1,7 +1,5 @@
--- =====================================================================
 -- OS Amícia · Sprint 2 · 10 views do fluxo de corte
 -- Versão: 1.0 · Data: 21/04/2026
--- =====================================================================
 --
 -- RODAR DEPOIS de 01_tables.sql + 02_seed_ia_config.sql.
 -- Idempotente: usa CREATE OR REPLACE VIEW.
@@ -29,12 +27,8 @@
 --
 -- COLUNA confianca (alta|media|baixa):
 --   Incluída onde aplicável — requisito da regra #5 do prompt de sistema.
--- =====================================================================
 
-
--- =====================================================================
 -- VIEW 1 · vw_variacoes_classificadas
--- =====================================================================
 -- Base por ref+cor+tam com todas as métricas e 3 classificações:
 --   (a) demanda_status   = ativa | fraca | inativa | ruptura_disfarcada
 --   (b) cobertura_status = zerada | critica | atencao | saudavel | excesso
@@ -49,7 +43,6 @@
 --   - fraca:   vendas_15d BETWEEN 1 E 5
 --   - inativa: vendas_15d = 0
 --   - ruptura_disfarcada: vendas_15d = 0 E vendas_mes_ant >= 12
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_variacoes_classificadas AS
 WITH cfg AS (
@@ -178,16 +171,12 @@ COMMENT ON VIEW vw_variacoes_classificadas IS
   'velocidade_dia ajustada por devolução, cobertura_dias, e 3 classificações. '
   'Exclui Tamanho Único (decisão #3 HANDOFF). Fontes: bling_vendas_detalhe + ml_estoque_ref_atual.';
 
-
--- =====================================================================
 -- VIEW 2 · vw_refs_elegiveis_corte
--- =====================================================================
 -- Refs com pelo menos 1 variação em cobertura crítica/atenção E
 -- pelo menos 1 variação em demanda ativa (gatekeeper).
 --
 -- Exceção: ruptura_disfarcada também qualifica (ref zerada no mês mas
 -- vendia bem no mês anterior — pode ser sinal de listing problem).
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_refs_elegiveis_corte AS
 WITH por_ref AS (
@@ -233,16 +222,12 @@ COMMENT ON VIEW vw_refs_elegiveis_corte IS
   'Refs que passam no gatekeeper: >=1 variação ativa + >=1 crítica/atenção, '
   'OU ruptura disfarçada. Agrega métricas por ref.';
 
-
--- =====================================================================
 -- VIEW 3 · vw_tamanhos_em_gap_por_ref
--- =====================================================================
 -- Pra cada ref elegível, lista os tamanhos com problema e calcula a
 -- proporção esperada de cada tamanho baseado nas vendas totais.
 --
 -- Proporção esperada = participação do tamanho no total de vendas 90d
 -- (janela mais larga pra estabilidade estatística).
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_tamanhos_em_gap_por_ref AS
 WITH vendas_por_tam AS (
@@ -280,10 +265,7 @@ COMMENT ON VIEW vw_tamanhos_em_gap_por_ref IS
   'Tamanhos com problema (zerada/crítica/atenção) por ref elegível + '
   'proporção esperada baseada em vendas 90d. em_gap=true marca os que precisam repor.';
 
-
--- =====================================================================
 -- VIEW 4 · vw_grade_otimizada_por_ref
--- =====================================================================
 -- Aplica regra 6/8 módulos baseado em palavra-chave na descrição:
 --   - Se descricao contém "vestido" ou "macacão"/"macacao" → grande, máx 6
 --   - Caso contrário → pequena/média, máx 8
@@ -291,7 +273,6 @@ COMMENT ON VIEW vw_tamanhos_em_gap_por_ref IS
 -- Princípio de ouro: grade MÍNIMA que entrega a proporção.
 -- Algoritmo: ordena tamanhos por proporção_esperada desc, pega até o
 -- máximo de módulos permitido, renormaliza proporções.
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_grade_otimizada_por_ref AS
 WITH cfg AS (
@@ -372,17 +353,13 @@ COMMENT ON VIEW vw_grade_otimizada_por_ref IS
   'Grade 6/8 módulos por ref. Detecta vestido/macacão no descricao. '
   'Top-N tamanhos por proporção 90d, renormalizados.';
 
-
--- =====================================================================
 -- NOTA: View 9 foi movida pra antes da view 5 porque vw_distribuicao_cores_por_ref
 -- faz LEFT JOIN vw_tendencia_cor_catalogo. Numeração segue o Prompt Mestre.
 -- VIEW 9 · vw_tendencia_cor_catalogo (criada fora de ordem — ver nota acima)
--- =====================================================================
 -- Tendência agregada de cada cor somando todos os modelos onde aparece.
 -- Compara janela recente (últimos 30d) vs janela anterior (30-60d antes).
 -- Flag alta se >=tendencia_cor_alta_min_modelos (5) com +30%+.
 -- Flag queda se >=tendencia_cor_queda_min_modelos (3) com -30%+.
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_tendencia_cor_catalogo AS
 WITH cfg AS (
@@ -457,15 +434,11 @@ COMMENT ON VIEW vw_tendencia_cor_catalogo IS
   'Tendência de cor agregada em todos os modelos. Assimetria intencional: '
   '5 modelos pra alta (consistência), 3 pra queda (alerta sensível).';
 
-
--- =====================================================================
 -- VIEW 5 · vw_distribuicao_cores_por_ref
--- =====================================================================
 -- Participação de cada cor no total de vendas da ref + multiplicador
 -- de tendência (alta/estavel/queda) aplicado ao número de rolos.
 --
 -- Depende da view 9 (tendência da cor no catálogo).
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_distribuicao_cores_por_ref AS
 WITH cfg AS (
@@ -524,10 +497,7 @@ COMMENT ON VIEW vw_distribuicao_cores_por_ref IS
   'Participação de cada cor no catálogo da ref + tendência + multiplicador. '
   'Depende da view 9. Só cores que já venderam entram.';
 
-
--- =====================================================================
 -- VIEW 6 · vw_rendimento_sala_corte
--- =====================================================================
 -- Rendimento médio (peças/rolo) por ref × sala com fallback N1→N2:
 --   N1: ref com >=1 corte histórico concluído → rendimento próprio (alta)
 --   N2: ref sem histórico → busca palavra-chave no descricao e usa
@@ -539,7 +509,6 @@ COMMENT ON VIEW vw_distribuicao_cores_por_ref IS
 --               qtdPecas, rendimento, status, alerta, visto}
 --
 -- Saída: uma linha por (ref, sala) com rendimento recomendado.
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_rendimento_sala_corte AS
 WITH cfg AS (
@@ -653,17 +622,13 @@ COMMENT ON VIEW vw_rendimento_sala_corte IS
   'Rendimento por ref × sala com fallback N1→N2 (decisão #2 HANDOFF). '
   'Nunca N3. Confiança alta se N1, media se N2.';
 
-
--- =====================================================================
 -- VIEW 7 · vw_projecao_22_dias_por_ref
--- =====================================================================
 -- Projeção de saldo em 22 dias (lead time padrão) com 3 cenários:
 --   A (otimista):  velocidade atual × 0.85 (demanda cai 15%)
 --   B (base):      velocidade atual
 --   C (pessimista): velocidade atual × 1.15 (demanda sobe 15%)
 --
 -- Inclui cortes em andamento (amicia_data/salas-corte/cortes status=pendente).
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_projecao_22_dias_por_ref AS
 WITH cfg AS (
@@ -728,13 +693,9 @@ COMMENT ON VIEW vw_projecao_22_dias_por_ref IS
   'Saldo projetado em 22d com 3 cenários A/B/C. Inclui cortes pendentes '
   '(amicia_data/salas-corte). Usa rendimento_pecas_por_rolo_default pra estimar pendentes sem qtdPecas.';
 
-
--- =====================================================================
 -- VIEW 8 · vw_ranking_curvas_bling
--- =====================================================================
 -- Classifica refs em curva A/B/outras baseado em vendas dos últimos 30d,
 -- com tetos aplicados (curva_a_teto_pecas, curva_b_teto_pecas).
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_ranking_curvas_bling AS
 WITH cfg AS (
@@ -785,10 +746,7 @@ COMMENT ON VIEW vw_ranking_curvas_bling IS
   'Ranking por vendas 30d, classifica A (>=300), B (>=200) ou outras. '
   'Aplica tetos 750/450 pras estimativas do próximo corte.';
 
-
--- =====================================================================
 -- VIEW 10 · vw_cortes_recomendados_semana
--- =====================================================================
 -- CONSOLIDADORA FINAL. Junta as views 2, 4, 5, 6, 7, 8 numa linha por ref.
 -- Calcula rolos totais por cor (participação × rolos base estimados
 -- pelo rendimento + multiplicador de tendência), define sala recomendada
@@ -796,7 +754,6 @@ COMMENT ON VIEW vw_ranking_curvas_bling IS
 --
 -- NOTA: O detalhamento por tamanho (grade) e por cor fica nas views 4 e 5.
 --       Aqui é a visão ref-level pro Claude consumir.
--- =====================================================================
 
 CREATE OR REPLACE VIEW vw_cortes_recomendados_semana AS
 WITH cfg AS (
@@ -957,8 +914,5 @@ COMMENT ON VIEW vw_cortes_recomendados_semana IS
   'Consolidadora final do fluxo de corte. Uma linha por ref recomendada, '
   'com grade, cores, rolos, sala e curva. Base pro JSON de saída da função.';
 
-
--- =====================================================================
 -- FIM · 10 views criadas
 -- Validar com: SELECT COUNT(*) FROM vw_cortes_recomendados_semana;
--- =====================================================================
