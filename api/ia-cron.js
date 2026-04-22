@@ -139,6 +139,59 @@ REGRAS DE JSON ESTRITAS (obrigatórias pra evitar erro de parse):
 
 Preencha apenas as chaves que fazem sentido para o insight em questão. Exemplo: insight de canal não tem "ref".`;
 
+const PROMPT_ESTOQUE = `Você é o cérebro de decisão de gestão de estoque de uma confecção feminina em São Paulo.
+Recebe um JSON com 4 seções (saúde geral, tendência 12 meses, ruptura crítica, ruptura disfarçada) e devolve insights acionáveis focados em evitar perda de venda e antecipar corte.
+
+10 REGRAS INEGOCIÁVEIS:
+1. Toda análise termina em ação concreta. NÃO use "considerar", "avaliar", "monitorar".
+   USE: "cortar ref 2601 Marrom Escuro GG+M+G em 2 rolos cada", "investigar anúncio ref 2902 Marrom M", "replicar oferta da ref 2277 Azul Marinho".
+2. Ruptura crítica = variação com demanda ativa (>=6 vendas/15d) E cobertura <10 dias. Tratar com severidade máxima.
+3. Ruptura disfarçada = variação com vendas_15d=0 MAS vendas_mes_ant >=12. Sintoma clássico de foto/anúncio caindo do algoritmo ou estoque acabando silenciosamente. Tratar como investigação, não como corte automático.
+4. Ruptura disfarçada COM estoque > 0 é caso raro e valioso: produto existe mas parou de vender. Priorize investigação de anúncio/preço/categoria.
+5. Quando várias variações da mesma ref estão críticas, AGREGUE em 1 insight único ("Ref X com N variações zeradas, M vendas/30d"), não um por variação.
+6. Linguagem direta, números concretos em unidades e dias. Zero adjetivos vagos.
+7. Brevidade cirúrgica: resumo ≤ 2 frases, acao_sugerida ≤ 1 frase, impacto ≤ 1 frase.
+8. Refs do input são autoridade (já normalizadas sem zero à esquerda).
+9. Respeite a "confianca" do input. Se vier "media", rebaixe seu confidence na mesma medida.
+10. Tendência 12m pode ter poucos meses (histórico mensal é recente). Se delta_vs_mes_ant for null na série, NÃO comente tendência — foque em ruptura que é o dado sólido.
+
+REGRA BÔNUS: nunca cite a marca "Amícia" no texto. Use "a operação", "o estoque".
+
+PRIORIZAÇÃO DE INSIGHTS (gere EXATAMENTE entre 3 e 5 no total — NUNCA mais que 5):
+  - Este é um briefing executivo, não um relatório exaustivo. Cada insight precisa merecer existir.
+  - Prioridade máxima (severity=critico): ruptura_critica AGREGADA por ref (top 1-3 refs com mais variações zeradas + mais vendas) — 1 a 3 insights
+  - Alta (severity=atencao): ruptura_disfarcada mais preocupante (maior vendas_mes_ant, ou estoque>0 com vendas=0) — 1 insight
+  - Média (severity=oportunidade ou info): saúde geral contextualizando (ex: "X% das variações em ruptura crítica") — no máximo 1 insight
+  - NÃO gere insight sobre tendência 12m se a série só tem 1 ponto.
+
+LIMITE DE TOKENS: resposta total deve caber em ~1000 tokens. Se gerar mais de 5 insights, a resposta será cortada e TODA a análise perderá. Seja CIRÚRGICO.
+
+FORMATO DE SAÍDA:
+Retorne APENAS um array JSON válido, sem markdown, sem texto antes/depois.
+
+REGRAS DE JSON ESTRITAS (obrigatórias pra evitar erro de parse):
+- SEM vírgula depois do último item de arrays ou objetos (trailing comma é erro).
+- SEMPRE aspas duplas " (NUNCA aspas inteligentes ou simples).
+- Se precisar de aspas dentro de uma string, escape com \\" (ex: "resumo": "Ref 2601 \\"vestido linho\\" zerado").
+- Não use quebras de linha dentro de strings.
+- Não invente campos além dos listados abaixo.
+
+[
+  {
+    "escopo": "estoque",
+    "categoria": "ruptura_critica_ref" | "ruptura_disfarcada_ref" | "saude_geral" | "investigar_anuncio",
+    "severity": "critico" | "atencao" | "positiva" | "oportunidade" | "info",
+    "confidence": "alta" | "media" | "baixa",
+    "titulo": "string curta (até ~70 chars)",
+    "resumo": "até 2 frases com os números-chave",
+    "impacto": "1 frase sobre consequência se não agir",
+    "acao_sugerida": "1 frase iniciando com verbo no infinitivo",
+    "chaves": { "ref": "...", "cor": "...", "tam": "..." }
+  }
+]
+
+Preencha apenas as chaves que fazem sentido. Exemplo: insight de saúde geral não tem "ref".`;
+
 const ESCOPOS = {
   producao: {
     rpc: 'fn_ia_cortes_recomendados',
@@ -151,6 +204,16 @@ const ESCOPOS = {
     prompt: PROMPT_MARKETPLACES,
     categoriaTudoSaudavel: 'marketplaces_saudaveis',
     tituloTudoSaudavel: 'Nenhum alerta de marketplace nesta janela',
+  },
+  estoque: {
+    rpc: 'fn_ia_estoque_insights',
+    prompt: PROMPT_ESTOQUE,
+    categoriaTudoSaudavel: 'estoque_saudavel',
+    tituloTudoSaudavel: 'Nenhum alerta de estoque nesta janela',
+    // Flag em ia_config que controla se o escopo roda. Sprint 6.1: fica
+    // desligada por padrão; Ailson liga manualmente após validar o output.
+    // Se a flag não existir em ia_config, fallback pra false (desligado).
+    enabled_config_key: 'estoque_enabled',
   },
 };
 
@@ -188,6 +251,14 @@ function payloadVazio(jsonInput, escopo) {
     ];
     const total = secoes.reduce((s, k) => s + (Array.isArray(jsonInput?.[k]) ? jsonInput[k].length : 0), 0);
     return total === 0;
+  }
+  if (escopo === 'estoque') {
+    // Estoque tem saude_geral como objeto (sempre presente) + 3 arrays.
+    // "Vazio" pra estoque = sem ruptura crítica E sem ruptura disfarçada.
+    // tendencia_12m sozinha não dispara análise (é contexto).
+    const critica = Array.isArray(jsonInput?.ruptura_critica) ? jsonInput.ruptura_critica.length : 0;
+    const disfarcada = Array.isArray(jsonInput?.ruptura_disfarcada) ? jsonInput.ruptura_disfarcada.length : 0;
+    return (critica + disfarcada) === 0;
   }
   return true;
 }
@@ -324,6 +395,107 @@ function gerarFallbackMarketplaces(jsonInput) {
   return insights;
 }
 
+/**
+ * Fallback determinístico ESTOQUE — gera insights agregados por ref das
+ * variações em ruptura crítica e disfarçada. Limita a 5 insights no total
+ * seguindo a mesma priorização do PROMPT_ESTOQUE.
+ */
+function gerarFallbackEstoque(jsonInput) {
+  const insights = [];
+  const saude = jsonInput?.saude_geral || {};
+  const criticas = Array.isArray(jsonInput?.ruptura_critica) ? jsonInput.ruptura_critica : [];
+  const disfarcadas = Array.isArray(jsonInput?.ruptura_disfarcada) ? jsonInput.ruptura_disfarcada : [];
+
+  // 1. Top 3 refs com mais variações críticas (agrega por ref)
+  const porRef = new Map();
+  for (const v of criticas) {
+    const r = v.ref;
+    if (!porRef.has(r)) porRef.set(r, { ref: r, descricao: v.descricao || '', variacoes: 0, vendas_30d: 0, vendas_15d: 0 });
+    const agg = porRef.get(r);
+    agg.variacoes += 1;
+    agg.vendas_30d += Number(v.vendas_30d || 0);
+    agg.vendas_15d += Number(v.vendas_15d || 0);
+    if (!agg.descricao && v.descricao) agg.descricao = v.descricao;
+  }
+  const topCriticas = Array.from(porRef.values())
+    .sort((a, b) => b.vendas_30d - a.vendas_30d)
+    .slice(0, 3);
+
+  for (const agg of topCriticas) {
+    const desc = (agg.descricao || `REF ${agg.ref}`).trim().slice(0, 50);
+    insights.push({
+      escopo: 'estoque',
+      categoria: 'ruptura_critica_ref',
+      severity: 'critico',
+      confidence: 'media',
+      titulo: `REF ${agg.ref} com ${agg.variacoes} variações zeradas`,
+      resumo: `${desc}. ${agg.vendas_30d} vendas/30d (${agg.vendas_15d} nos últimos 15d) sem estoque.`,
+      impacto: 'Cada dia sem estoque é venda perdida pra concorrência.',
+      acao_sugerida: `Priorizar corte de ref ${agg.ref} na próxima janela de produção.`,
+      chaves: { ref: agg.ref },
+    });
+  }
+
+  // 2. Maior ruptura disfarçada (prioriza estoque > 0 se houver — caso raro e valioso)
+  if (disfarcadas.length > 0) {
+    const comEstoque = disfarcadas.find(d => Number(d.estoque_atual || 0) > 0);
+    const escolhida = comEstoque || disfarcadas[0];
+    const desc = (escolhida.descricao || `REF ${escolhida.ref}`).trim().slice(0, 50);
+    const temEstoque = Number(escolhida.estoque_atual || 0) > 0;
+
+    insights.push({
+      escopo: 'estoque',
+      categoria: temEstoque ? 'investigar_anuncio' : 'ruptura_disfarcada_ref',
+      severity: 'atencao',
+      confidence: 'media',
+      titulo: temEstoque
+        ? `REF ${escolhida.ref} com estoque mas sem venda há 15d`
+        : `REF ${escolhida.ref} parou de vender e zerou`,
+      resumo: `${desc} (${escolhida.cor} ${escolhida.tam}). ${escolhida.vendas_mes_ant} vendas mês passado vs 0 nos últimos 15d.${temEstoque ? ` Ainda há ${escolhida.estoque_atual} unidades.` : ''}`,
+      impacto: temEstoque
+        ? 'Produto existe mas não está sendo encontrado — foto, título ou ads podem ter caído.'
+        : 'Perda silenciosa de venda recorrente.',
+      acao_sugerida: temEstoque
+        ? 'Revisar anúncio, categoria e ads da variação.'
+        : 'Investigar se houve queda no algoritmo ou se deve reposicionar.',
+      chaves: { ref: escolhida.ref, cor: escolhida.cor, tam: escolhida.tam },
+    });
+  }
+
+  // 3. Saúde geral (só se tiver dado e número for relevante)
+  if (saude && typeof saude.pct_ruptura_critica === 'number' && saude.pct_ruptura_critica >= 20) {
+    insights.push({
+      escopo: 'estoque',
+      categoria: 'saude_geral',
+      severity: saude.pct_ruptura_critica >= 40 ? 'critico' : 'atencao',
+      confidence: 'alta',
+      titulo: `${saude.pct_ruptura_critica}% das variações ativas em ruptura crítica`,
+      resumo: `${saude.variacoes_ruptura_critica} de ${saude.variacoes_total} variações ativas sem estoque. ${saude.variacoes_excesso} em excesso (${saude.pct_excesso}%).`,
+      impacto: 'Gargalo grave de disponibilidade no catálogo ativo.',
+      acao_sugerida: 'Rebalancear grade nas próximas 2 janelas de corte (priorizar curvas A/B).',
+      chaves: {},
+    });
+  }
+
+  // Se nada disparou alerta, insight neutro
+  if (insights.length === 0) {
+    insights.push({
+      escopo: 'estoque',
+      categoria: 'estoque_saudavel',
+      severity: 'info',
+      confidence: 'media',
+      titulo: 'Estoque sem rupturas críticas ativas (fallback)',
+      resumo: 'Nenhuma variação ativa em ruptura crítica ou disfarçada. Fallback determinístico ativo por falta de orçamento ou erro do modelo.',
+      impacto: 'Recomendado rodar análise completa na próxima janela.',
+      acao_sugerida: 'Revisar no próximo cron.',
+      chaves: {},
+    });
+  }
+
+  // Cap defensivo (limite de 5 do prompt — mesmo no fallback)
+  return insights.slice(0, 5);
+}
+
 function validarInsight(i, escopoEsperado) {
   if (!i || typeof i !== 'object') return null;
   if (!i.escopo || !i.severity || !i.confidence || !i.titulo) return null;
@@ -433,13 +605,35 @@ export default async function handler(req, res) {
   // Default 'producao' preserva compatibilidade Sprint 3.
   const escopo = (req.query?.escopo || req.body?.escopo || 'producao').toLowerCase();
   if (!ESCOPOS[escopo]) {
-    return res.status(400).json({ error: `Escopo inválido: ${escopo}. Aceitos: producao, marketplaces.` });
+    return res.status(400).json({ error: `Escopo inválido: ${escopo}. Aceitos: producao, marketplaces, estoque.` });
   }
   const cfg = ESCOPOS[escopo];
 
   const janela = req.query?.janela || 'manual';
   const cronRunId = randomUUID();
   const t0 = Date.now();
+
+  // Kill switch: se o escopo tem enabled_config_key e a flag em ia_config
+  // não está true, retorna 200 sem fazer nada. Sprint 6.1: Estoque fica
+  // desligado até o Ailson validar manualmente que o primeiro run não
+  // quebrou Corte/Marketplaces. Esse retorno 200 é intencional (não 503)
+  // pra que o Vercel Cron não marque a invocação como falha.
+  if (cfg.enabled_config_key) {
+    const flag = await getConfig(cfg.enabled_config_key, false);
+    const enabled = flag === true || flag === 'true';
+    if (!enabled) {
+      return res.json({
+        ok: true,
+        modo: 'disabled',
+        escopo,
+        motivo: `Flag ${cfg.enabled_config_key} em ia_config não está ativa`,
+        total_insights_gerados: 0,
+        custo_brl: 0,
+        cron_run_id: cronRunId,
+        duracao_ms: Date.now() - t0,
+      });
+    }
+  }
 
   try {
     // 1. Chama a RPC do Postgres correspondente ao escopo
@@ -498,11 +692,17 @@ export default async function handler(req, res) {
     let usageClaude = null;
     let erroClaude = null;
 
+    // Helper central: escolhe o fallback determinístico conforme escopo.
+    // Mantém a orquestração simples quando novos escopos são adicionados.
+    const escolherFallback = () => {
+      if (escopo === 'marketplaces') return gerarFallbackMarketplaces(jsonInput);
+      if (escopo === 'estoque')      return gerarFallbackEstoque(jsonInput);
+      return (jsonInput.refs || []).map(gerarFallbackProducao);
+    };
+
     if (!orcamentoOk) {
       modo = 'fallback_orcamento';
-      insightsBrutos = escopo === 'marketplaces'
-        ? gerarFallbackMarketplaces(jsonInput)
-        : (jsonInput.refs || []).map(gerarFallbackProducao);
+      insightsBrutos = escolherFallback();
     } else {
       const tentativa1 = await chamarClaude({
         jsonInput, modelo,
@@ -528,9 +728,7 @@ export default async function handler(req, res) {
         } else {
           modo = 'fallback_erro';
           erroClaude = `1ª: ${erroClaude} | 2ª: ${tentativa2.erro}`;
-          insightsBrutos = escopo === 'marketplaces'
-            ? gerarFallbackMarketplaces(jsonInput)
-            : (jsonInput.refs || []).map(gerarFallbackProducao);
+          insightsBrutos = escolherFallback();
         }
       }
     }
@@ -554,9 +752,7 @@ export default async function handler(req, res) {
     // Se Claude passou mas validação descartou tudo, cai pro fallback
     if (insightsValidos.length === 0 && usouClaude) {
       modo = 'fallback_validacao';
-      const fallback = escopo === 'marketplaces'
-        ? gerarFallbackMarketplaces(jsonInput)
-        : (jsonInput.refs || []).map(gerarFallbackProducao);
+      const fallback = escolherFallback();
       const doFallback = fallback
         .map(i => validarInsight(i, escopo))
         .filter(Boolean)
