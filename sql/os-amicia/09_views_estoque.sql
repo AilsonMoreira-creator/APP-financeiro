@@ -33,52 +33,65 @@
 -- =====================================================================
 -- 1. vw_estoque_saude_geral (Card 1 do Tab Estoque)
 --
--- Agrega vw_variacoes_classificadas por ref (pior status entre variacoes
--- ganha) e produz contadores e percentuais pra os 4 mini-cards do header:
---   refs_ativas, pct_saudaveis, pct_atencao, pct_ruptura_critica
+-- Conta VARIACOES (ref+cor+tam) por status de cobertura. Nao agrega por
+-- ref: uma ref pode ter uma variacao zerada e outra saudavel, e isso
+-- importa - o Gatekeeper do Sprint 2 decide na mesma granularidade.
 --
--- TODO Sprint 6.2: faixa de alerta "N refs cruzaram pra ruptura nas
+-- Corrige o bug da v1 onde "pior status ganha" inflacionava a contagem
+-- de refs criticas: 1 variacao zerada em ref com 60 variacoes fazia a
+-- ref inteira contar como critica.
+--
+-- Denominador dos percentuais: total de variacoes ATIVAS OU EM RUPTURA
+-- DISFARCADA (sai o ruido de inativas sem demanda ha muito tempo). Essa
+-- linha e importante - sem ela, refs saidas de linha com estoque parado
+-- inflam o denominador e mascarram a saude real.
+--
+-- TODO Sprint 6.2: faixa de alerta "N variacoes cruzaram pra ruptura nas
 -- ultimas 24h" requer snapshot historico de cobertura_status por dia,
--- que ainda nao temos. Vai entrar quando o cron de estoque comecar a
--- gravar essa serie em amicia_data ou tabela nova.
+-- que ainda nao temos.
 -- =====================================================================
 
 DROP VIEW IF EXISTS vw_estoque_saude_geral CASCADE;
 
 CREATE VIEW vw_estoque_saude_geral AS
-WITH por_ref AS (
-  -- Consolida variacoes (ref+cor+tam) em ref. Pior status ganha.
-  -- Ordem de gravidade: critica/zerada > atencao > saudavel > excesso > sem_demanda
+WITH variacoes_relevantes AS (
+  -- Filtra so variacoes que importam pra saude do estoque:
+  -- ativas (tem venda recente) OU ruptura_disfarcada (vendiam e pararam).
+  -- Exclui inativas (saidas de linha / refs antigas) pra nao inflar base.
   SELECT
-    ref,
-    SUM(estoque_atual)                                       AS estoque_ref,
-    BOOL_OR(demanda_status = 'ativa')                        AS tem_demanda_ativa,
-    CASE
-      WHEN BOOL_OR(cobertura_status IN ('critica','zerada')) THEN 'critica'
-      WHEN BOOL_OR(cobertura_status = 'atencao')             THEN 'atencao'
-      WHEN BOOL_OR(cobertura_status = 'saudavel')            THEN 'saudavel'
-      WHEN BOOL_OR(cobertura_status = 'excesso')             THEN 'excesso'
-      ELSE 'sem_demanda'
-    END                                                      AS status_pior
+    ref, cor_key, tam,
+    estoque_atual,
+    cobertura_status,
+    demanda_status
   FROM vw_variacoes_classificadas
-  GROUP BY ref
+  WHERE demanda_status IN ('ativa','ruptura_disfarcada')
+),
+-- Contagem global de estoque: independente do filtro acima, soma tudo
+-- que existe em ml_estoque_ref_atual (inclusive refs inativas paradas
+-- no galpao). Esse numero tem que bater com o "Estoque total" do app.
+estoque_global AS (
+  SELECT SUM(vc.estoque_atual) AS unidades_total
+  FROM vw_variacoes_classificadas vc
 )
 SELECT
-  COUNT(*)                                                                       AS refs_total,
-  COUNT(*) FILTER (WHERE tem_demanda_ativa)                                      AS refs_ativas,
-  COUNT(*) FILTER (WHERE status_pior = 'saudavel')                               AS refs_saudaveis,
-  COUNT(*) FILTER (WHERE status_pior = 'atencao')                                AS refs_atencao,
-  COUNT(*) FILTER (WHERE status_pior = 'critica')                                AS refs_ruptura_critica,
-  COUNT(*) FILTER (WHERE status_pior = 'excesso')                                AS refs_excesso,
-  COUNT(*) FILTER (WHERE status_pior = 'sem_demanda')                            AS refs_sem_demanda,
-  -- Percentuais (denominador inclui todas as refs com status calculavel)
-  ROUND(100.0 * COUNT(*) FILTER (WHERE status_pior = 'saudavel')         / NULLIF(COUNT(*), 0), 1) AS pct_saudaveis,
-  ROUND(100.0 * COUNT(*) FILTER (WHERE status_pior = 'atencao')          / NULLIF(COUNT(*), 0), 1) AS pct_atencao,
-  ROUND(100.0 * COUNT(*) FILTER (WHERE status_pior = 'critica')          / NULLIF(COUNT(*), 0), 1) AS pct_ruptura_critica,
-  ROUND(100.0 * COUNT(*) FILTER (WHERE status_pior = 'excesso')          / NULLIF(COUNT(*), 0), 1) AS pct_excesso,
-  -- Total de unidades em estoque consolidado (todas refs)
-  SUM(estoque_ref)                                                               AS unidades_total
-FROM por_ref;
+  -- Contagens por status (so variacoes relevantes)
+  COUNT(*)                                                                  AS variacoes_total,
+  COUNT(*) FILTER (WHERE demanda_status = 'ativa')                          AS variacoes_ativas,
+  COUNT(*) FILTER (WHERE cobertura_status = 'saudavel')                     AS variacoes_saudaveis,
+  COUNT(*) FILTER (WHERE cobertura_status = 'atencao')                      AS variacoes_atencao,
+  COUNT(*) FILTER (WHERE cobertura_status IN ('critica','zerada'))          AS variacoes_ruptura_critica,
+  COUNT(*) FILTER (WHERE cobertura_status = 'excesso')                      AS variacoes_excesso,
+  COUNT(*) FILTER (WHERE demanda_status   = 'ruptura_disfarcada')           AS variacoes_ruptura_disfarcada,
+  -- Contagem auxiliar: quantas refs distintas tem variacoes relevantes
+  COUNT(DISTINCT ref)                                                       AS refs_com_atividade,
+  -- Percentuais sobre variacoes_total
+  ROUND(100.0 * COUNT(*) FILTER (WHERE cobertura_status = 'saudavel')              / NULLIF(COUNT(*), 0), 1) AS pct_saudaveis,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE cobertura_status = 'atencao')               / NULLIF(COUNT(*), 0), 1) AS pct_atencao,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE cobertura_status IN ('critica','zerada'))   / NULLIF(COUNT(*), 0), 1) AS pct_ruptura_critica,
+  ROUND(100.0 * COUNT(*) FILTER (WHERE cobertura_status = 'excesso')               / NULLIF(COUNT(*), 0), 1) AS pct_excesso,
+  -- Total global de unidades em estoque (todas refs, bate com app principal)
+  (SELECT unidades_total FROM estoque_global)                               AS unidades_total
+FROM variacoes_relevantes;
 
 
 
