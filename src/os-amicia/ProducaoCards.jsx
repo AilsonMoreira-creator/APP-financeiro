@@ -542,7 +542,7 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
 
       {/* Ações */}
       <Acoes
-        ref={ref_.ref}
+        refNum={ref_.ref}
         feedback={feedback}
         onFeedback={onFeedback}
         onAbrirModal={abrirModal}
@@ -1069,7 +1069,7 @@ function AvisoValidade({ C, CALIBRI }) {
   );
 }
 
-function Acoes({ ref, feedback, onFeedback, onAbrirModal, C, CALIBRI }) {
+function Acoes({ refNum, feedback, onFeedback, onAbrirModal, C, CALIBRI }) {
   const Btn = ({ onClick, bg, cor, border, children, flex }) => (
     <button
       onClick={onClick}
@@ -1089,11 +1089,11 @@ function Acoes({ ref, feedback, onFeedback, onAbrirModal, C, CALIBRI }) {
 
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      <Btn onClick={() => onFeedback(ref, 'sim')}
+      <Btn onClick={() => onFeedback(refNum, 'sim')}
            bg={C.success} cor='#fff' flex={1}>✓ Sim, vou cortar</Btn>
       <Btn onClick={() => onAbrirModal('editar')}
            bg={C.warning} cor='#fff'>✎ Editar</Btn>
-      <Btn onClick={() => onFeedback(ref, 'nao')}
+      <Btn onClick={() => onFeedback(refNum, 'nao')}
            bg='#eee' cor={C.text} border={`1px solid ${C.cream}`}>✗ Não</Btn>
       <Btn onClick={() => onAbrirModal('explicar')}
            bg='transparent' cor={C.blue} border={`1px dashed ${C.blue}`}>💬 Explicar</Btn>
