@@ -249,6 +249,7 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
             ref_={ref}
             feedback={feedbackPorRef[ref.ref]}
             onFeedback={onFeedback}
+            usuario={usuario}
             C={C} SERIF={SERIF} CALIBRI={CALIBRI}
           />
         ))
@@ -329,7 +330,7 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
 
 // ─── Card individual de uma sugestão de corte ────────────────────────
 
-function CardSugestaoCorte({ ref_, feedback, onFeedback, C, SERIF, CALIBRI }) {
+function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALIBRI }) {
   // Pills de severidade
   const sevConfig = {
     alta:  { texto: '🔴 Crítico',    bg: '#fdeaea', cor: C.critical },
@@ -401,6 +402,11 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, C, SERIF, CALIBRI }) {
     JSON.stringify(gradeEditada) !== JSON.stringify(gradeInicial) ||
     JSON.stringify(coresEditadas) !== JSON.stringify(coresIniciais)
   );
+
+  // Estado da geração de ordem
+  const [ordemStatus, setOrdemStatus] = useState({ tipo: 'idle' }); // 'idle' | 'gerando' | 'sucesso' | 'erro'
+  const [ordemId, setOrdemId] = useState(null);
+  const [ordemErro, setOrdemErro] = useState(null);
 
   return (
     <div style={{
@@ -502,6 +508,25 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, C, SERIF, CALIBRI }) {
 
       {/* Ações */}
       <Acoes ref={ref_.ref} feedback={feedback} onFeedback={onFeedback} C={C} CALIBRI={CALIBRI} />
+
+      {/* Bloco Gerar Ordem - aparece após feedback Sim ou Editar */}
+      {(feedback === 'sim' || feedback === 'editar') && (
+        <BlocoGerarOrdem
+          ref_={ref_.ref}
+          gradeModulos={gradeEditada}
+          coresEditadas={coresEditadas}
+          aprovacaoTipo={feedback}
+          validadeAte={ref_.expira_em}
+          usuario={usuario}
+          ordemStatus={ordemStatus}
+          setOrdemStatus={setOrdemStatus}
+          ordemId={ordemId}
+          setOrdemId={setOrdemId}
+          ordemErro={ordemErro}
+          setOrdemErro={setOrdemErro}
+          C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+        />
+      )}
     </div>
   );
 }
@@ -986,6 +1011,165 @@ function Acoes({ ref, feedback, onFeedback, C, CALIBRI }) {
            bg='#eee' cor={C.text} border={`1px solid ${C.cream}`}>✗ Não</Btn>
       <Btn onClick={() => alert('Modal Explicar virá na Fase 5')}
            bg='transparent' cor={C.blue} border={`1px dashed ${C.blue}`}>💬 Explicar</Btn>
+    </div>
+  );
+}
+
+// ─── Bloco Gerar Ordem (aparece após Sim/Editar) ────────────────────
+
+function BlocoGerarOrdem({
+  ref_, gradeModulos, coresEditadas, aprovacaoTipo, validadeAte, usuario,
+  ordemStatus, setOrdemStatus, ordemId, setOrdemId, ordemErro, setOrdemErro,
+  C, SERIF, CALIBRI,
+}) {
+  // Validacao client-side antes de habilitar o botao
+  const gradeValida = gradeModulos.filter(g => g.modulos > 0);
+  const coresValidas = coresEditadas.filter(c => c.rolos > 0 && (c.cor || '').trim());
+  const podeGerar = gradeValida.length > 0 && coresValidas.length > 0;
+
+  const totalRolos = coresValidas.reduce((s, c) => s + c.rolos, 0);
+  const totalPecas = gradeValida.reduce((s, g) => s + g.modulos, 0);
+
+  const gerarOrdem = async () => {
+    if (!podeGerar || !usuario) return;
+    setOrdemStatus({ tipo: 'gerando' });
+    setOrdemErro(null);
+
+    // Converte grade array -> objeto { "P": 1, "M": 2, ... }
+    const gradeObj = {};
+    gradeValida.forEach(g => { gradeObj[g.tam] = g.modulos; });
+
+    // Converte cores -> formato esperado [{nome, rolos, hex}]
+    const coresPayload = coresValidas.map(c => ({
+      nome: (c.cor || '').trim(),
+      rolos: c.rolos,
+      hex: corHex(c.cor),
+    }));
+
+    const body = {
+      ref: ref_,
+      grade: gradeObj,
+      cores: coresPayload,
+      origem: 'os_amicia',
+      aprovacao_tipo: aprovacaoTipo,         // 'sim' ou 'editar'
+      validade_ate: validadeAte || null,
+      criada_por: usuario,
+    };
+
+    try {
+      const r = await fetch('/api/ordens-corte-criar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User': usuario,
+        },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        throw new Error(j.error || `HTTP ${r.status}`);
+      }
+      // Sucesso: backend retorna { ordem: {...} }
+      setOrdemId(j.ordem?.id || j.ordem?.numero || 'criada');
+      setOrdemStatus({ tipo: 'sucesso' });
+    } catch (e) {
+      setOrdemErro(e.message || 'Erro ao gerar ordem');
+      setOrdemStatus({ tipo: 'erro' });
+    }
+  };
+
+  // Estados visuais
+  const isGerando = ordemStatus.tipo === 'gerando';
+  const isSucesso = ordemStatus.tipo === 'sucesso';
+  const isErro    = ordemStatus.tipo === 'erro';
+
+  return (
+    <div style={{
+      marginTop: 14, padding: 16,
+      background: isSucesso
+        ? 'linear-gradient(135deg, #eafbf0, #fff)'
+        : 'linear-gradient(135deg, #faf6ec, #fff)',
+      border: `2px solid ${isSucesso ? C.success : C.warning}`,
+      borderRadius: 10,
+      fontFamily: SERIF,
+    }}>
+      {isSucesso ? (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            fontSize: 14, fontWeight: 700, color: C.success,
+            fontFamily: CALIBRI, marginBottom: 4,
+          }}>
+            ✓ Ordem de corte criada
+          </div>
+          <div style={{ fontSize: 11, color: C.text, fontFamily: CALIBRI }}>
+            {ordemId && typeof ordemId === 'string' && ordemId.length > 20
+              ? `ID: ${ordemId.slice(0, 8)}...`
+              : `Ordem #${ordemId}`}
+            {' · '}veja em <strong>Ordens de Corte</strong>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{
+            fontSize: 12, fontWeight: 700, color: C.warning,
+            fontFamily: CALIBRI, marginBottom: 4,
+          }}>
+            {aprovacaoTipo === 'editar' ? '✎ Sugestão ajustada' : '✓ Sugestão aprovada'}
+          </div>
+          <div style={{ fontSize: 11, color: C.text, fontFamily: CALIBRI, marginBottom: 12 }}>
+            {totalRolos} rolo{totalRolos !== 1 ? 's' : ''} · {gradeValida.length} tamanho{gradeValida.length !== 1 ? 's' : ''} · enfesto de {totalPecas} peças
+          </div>
+
+          <button
+            onClick={gerarOrdem}
+            disabled={!podeGerar || isGerando}
+            style={{
+              background: !podeGerar || isGerando ? '#bbb' : C.success,
+              color: '#fff', border: 'none', borderRadius: 8,
+              padding: '12px 20px', fontFamily: CALIBRI,
+              fontSize: 13, fontWeight: 700, letterSpacing: 0.5,
+              cursor: (!podeGerar || isGerando) ? 'default' : 'pointer',
+              width: '100%',
+              transition: 'background 0.15s',
+            }}
+          >
+            {isGerando ? '… gerando ordem' : '📋 Gerar Ordem de Corte'}
+          </button>
+
+          {!podeGerar && (
+            <div style={{
+              marginTop: 8, fontSize: 10, color: C.muted,
+              fontFamily: CALIBRI, textAlign: 'center',
+            }}>
+              {gradeValida.length === 0
+                ? '⚠ adicione ao menos 1 tamanho na grade'
+                : '⚠ adicione ao menos 1 cor com rolos > 0'}
+            </div>
+          )}
+
+          {isErro && ordemErro && (
+            <div style={{
+              marginTop: 10, padding: '8px 12px',
+              background: '#fdeaea', border: `1px solid ${C.critical}`,
+              borderRadius: 6, color: C.critical, fontSize: 11,
+              fontFamily: CALIBRI,
+            }}>
+              <strong>Erro:</strong> {ordemErro}
+              <button
+                onClick={() => { setOrdemStatus({ tipo: 'idle' }); setOrdemErro(null); }}
+                style={{
+                  marginLeft: 8, background: 'transparent',
+                  border: `1px solid ${C.critical}`, color: C.critical,
+                  padding: '2px 8px', borderRadius: 4, fontSize: 10,
+                  cursor: 'pointer', fontFamily: CALIBRI,
+                }}
+              >
+                tentar novamente
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
