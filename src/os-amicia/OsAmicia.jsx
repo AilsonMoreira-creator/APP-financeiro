@@ -20,6 +20,7 @@ import {
   Card6Margens,
   Card7Oportunidades,
 } from './MarketplacesCards.jsx';
+import { TabEstoque } from './EstoqueCards.jsx';
 
 const SERIF = "Georgia,'Times New Roman',serif";
 const CALIBRI = "Calibri,'Segoe UI',Arial,sans-serif";
@@ -282,7 +283,32 @@ export default function OsAmicia({ supabase, usuarioLogado }) {
           <TabMarketplaces usuario={usuario} isAdmin={isAdmin} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
         )}
 
-        {area !== 'home' && area !== 'producao' && area !== 'marketplaces' && (
+        {area === 'estoque' && isAdmin && (
+          <TabEstoque usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+        )}
+
+        {area === 'estoque' && !isAdmin && (
+          <div
+            style={{
+              background: '#fff',
+              border: `1px dashed ${C.cream}`,
+              borderRadius: 12,
+              padding: 40,
+              textAlign: 'center',
+              color: C.muted,
+            }}
+          >
+            <div style={{ fontSize: 36, marginBottom: 8 }}>🔒</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.blueDark }}>
+              Tab Estoque é admin-only na v1.0
+            </div>
+            <div style={{ fontSize: 12, marginTop: 6 }}>
+              Visibilidade expandida está planejada para fases futuras.
+            </div>
+          </div>
+        )}
+
+        {area !== 'home' && area !== 'producao' && area !== 'marketplaces' && area !== 'estoque' && (
           <div
             style={{
               background: '#fff',
