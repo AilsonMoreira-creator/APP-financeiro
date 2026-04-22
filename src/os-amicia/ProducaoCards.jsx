@@ -408,6 +408,36 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
   const [ordemId, setOrdemId] = useState(null);
   const [ordemErro, setOrdemErro] = useState(null);
 
+  // Estado dos modais (Fase 5)
+  const [modalAberto, setModalAberto] = useState(null); // null | 'analise' | 'editar' | 'explicar'
+  const [motivoEdicao, setMotivoEdicao] = useState('');     // texto do modal Editar
+  const [contextoExplicacao, setContextoExplicacao] = useState(''); // texto do modal Explicar
+
+  // Wrapper: ao abrir modal Editar, pre-popula motivo se ja editou inline
+  const abrirModal = (qual) => {
+    if (qual === 'editar' && foiEditado && !motivoEdicao) {
+      setMotivoEdicao(''); // usuario preenche, mas indica que ja mexeu
+    }
+    setModalAberto(qual);
+  };
+  const fecharModal = () => setModalAberto(null);
+
+  // Confirma edicao com motivo: dispara feedback como 'editar'
+  const confirmarEdicao = () => {
+    if (motivoEdicao.trim().length < 3) return; // valida minimo
+    onFeedback(ref_.ref, 'editar');
+    fecharModal();
+    // motivo fica salvo no estado local; futuro POST em Sprint 6.2
+    console.log(`[ProducaoCards] motivo editar ref=${ref_.ref}: ${motivoEdicao}`);
+  };
+
+  // Confirma explicacao: salva texto, fecha modal, NAO muda feedback
+  const confirmarExplicacao = () => {
+    if (contextoExplicacao.trim().length < 3) return;
+    fecharModal();
+    console.log(`[ProducaoCards] explicacao ref=${ref_.ref}: ${contextoExplicacao}`);
+  };
+
   return (
     <div style={{
       background: '#fff', border: `1px solid ${C.cream}`, borderRadius: 12,
@@ -500,14 +530,24 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
 
       {/* Por quê (justificativa) */}
       {ref_.motivo && (
-        <BlocoPorque motivo={ref_.motivo} C={C} CALIBRI={CALIBRI} />
+        <BlocoPorque
+          motivo={ref_.motivo}
+          onAbrirAnalise={() => abrirModal('analise')}
+          C={C} CALIBRI={CALIBRI}
+        />
       )}
 
       {/* Aviso validade */}
       <AvisoValidade C={C} CALIBRI={CALIBRI} />
 
       {/* Ações */}
-      <Acoes ref={ref_.ref} feedback={feedback} onFeedback={onFeedback} C={C} CALIBRI={CALIBRI} />
+      <Acoes
+        ref={ref_.ref}
+        feedback={feedback}
+        onFeedback={onFeedback}
+        onAbrirModal={abrirModal}
+        C={C} CALIBRI={CALIBRI}
+      />
 
       {/* Bloco Gerar Ordem - aparece após feedback Sim ou Editar */}
       {(feedback === 'sim' || feedback === 'editar') && (
@@ -524,6 +564,36 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
           setOrdemId={setOrdemId}
           ordemErro={ordemErro}
           setOrdemErro={setOrdemErro}
+          C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+        />
+      )}
+
+      {/* Modais (Fase 5) - renderizam fora do fluxo, com overlay */}
+      {modalAberto === 'analise' && (
+        <ModalAnaliseCompleta
+          ref_={ref_}
+          onFechar={fecharModal}
+          C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+        />
+      )}
+      {modalAberto === 'editar' && (
+        <ModalEditar
+          ref_={ref_}
+          motivo={motivoEdicao}
+          setMotivo={setMotivoEdicao}
+          foiEditado={foiEditado}
+          onConfirmar={confirmarEdicao}
+          onFechar={fecharModal}
+          C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+        />
+      )}
+      {modalAberto === 'explicar' && (
+        <ModalExplicar
+          ref_={ref_}
+          contexto={contextoExplicacao}
+          setContexto={setContextoExplicacao}
+          onConfirmar={confirmarExplicacao}
+          onFechar={fecharModal}
           C={C} SERIF={SERIF} CALIBRI={CALIBRI}
         />
       )}
@@ -951,7 +1021,7 @@ function BlocoTotalDestaque({ rolos, pecas, cores, tamanhos, C, SERIF, CALIBRI }
   );
 }
 
-function BlocoPorque({ motivo, C, CALIBRI }) {
+function BlocoPorque({ motivo, onAbrirAnalise, C, CALIBRI }) {
   // Traduz motivo técnico em texto legível
   const motivoTexto = {
     demanda_ativa_e_critico: 'Demanda ativa com cobertura crítica',
@@ -966,6 +1036,22 @@ function BlocoPorque({ motivo, C, CALIBRI }) {
       fontSize: 11.5, lineHeight: 1.4, color: C.text, fontFamily: CALIBRI,
     }}>
       <strong style={{ color: C.iaDarker }}>Por quê:</strong> {motivoTexto}
+      {onAbrirAnalise && (
+        <>
+          <br />
+          <button
+            onClick={onAbrirAnalise}
+            style={{
+              background: 'transparent', border: 'none',
+              color: C.blue, textDecoration: 'underline',
+              padding: 0, marginTop: 6, fontSize: 11, cursor: 'pointer',
+              fontFamily: CALIBRI, fontWeight: 700,
+            }}
+          >
+            ver análise completa →
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -983,7 +1069,7 @@ function AvisoValidade({ C, CALIBRI }) {
   );
 }
 
-function Acoes({ ref, feedback, onFeedback, C, CALIBRI }) {
+function Acoes({ ref, feedback, onFeedback, onAbrirModal, C, CALIBRI }) {
   const Btn = ({ onClick, bg, cor, border, children, flex }) => (
     <button
       onClick={onClick}
@@ -1005,11 +1091,11 @@ function Acoes({ ref, feedback, onFeedback, C, CALIBRI }) {
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
       <Btn onClick={() => onFeedback(ref, 'sim')}
            bg={C.success} cor='#fff' flex={1}>✓ Sim, vou cortar</Btn>
-      <Btn onClick={() => onFeedback(ref, 'editar')}
+      <Btn onClick={() => onAbrirModal('editar')}
            bg={C.warning} cor='#fff'>✎ Editar</Btn>
       <Btn onClick={() => onFeedback(ref, 'nao')}
            bg='#eee' cor={C.text} border={`1px solid ${C.cream}`}>✗ Não</Btn>
-      <Btn onClick={() => alert('Modal Explicar virá na Fase 5')}
+      <Btn onClick={() => onAbrirModal('explicar')}
            bg='transparent' cor={C.blue} border={`1px dashed ${C.blue}`}>💬 Explicar</Btn>
     </div>
   );
@@ -1171,5 +1257,399 @@ function BlocoGerarOrdem({
         </>
       )}
     </div>
+  );
+}
+
+// ─── MODAIS (Fase 5) ──────────────────────────────────────────────────
+
+// Wrapper comum dos 3 modais (overlay + container)
+function ModalShell({ titulo, subtitulo, onFechar, children, C, SERIF, CALIBRI }) {
+  // Fechar com ESC
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onFechar(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onFechar]);
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onFechar(); }}
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999, padding: 16,
+        animation: 'modalFade 0.15s ease',
+      }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 12, padding: 22,
+        maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto',
+        fontFamily: SERIF, boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{
+          fontSize: 16, fontWeight: 700, color: C.iaDarker,
+          marginBottom: 4,
+        }}>
+          {titulo}
+        </div>
+        {subtitulo && (
+          <div style={{
+            fontSize: 11, color: C.muted, fontFamily: CALIBRI,
+            marginBottom: 16, paddingBottom: 10,
+            borderBottom: `1px solid ${C.cream}`,
+          }}>
+            {subtitulo}
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Linha de info pra modais (icone + label + valor)
+function LinhaInfo({ icone, label, valor, C, CALIBRI }) {
+  return (
+    <li style={{
+      listStyle: 'none', display: 'flex', alignItems: 'flex-start',
+      gap: 8, padding: '4px 0', fontFamily: CALIBRI, fontSize: 12,
+      color: C.text,
+    }}>
+      <span style={{ fontSize: 14, lineHeight: 1.3 }}>{icone}</span>
+      <span>
+        <strong style={{ color: C.iaDarker }}>{label}:</strong> {valor}
+      </span>
+    </li>
+  );
+}
+
+// MODAL 1: Análise completa - mostra justificativas detalhadas
+function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
+  const motivoTexto = {
+    demanda_ativa_e_critico: 'Demanda ativa com cobertura crítica',
+    ruptura_disfarcada:      'Ruptura disfarçada',
+    excesso_estoque:         'Excesso de estoque',
+  }[ref_.motivo] || ref_.motivo;
+
+  const vendasDia = ref_.vendas_30d_total ? (ref_.vendas_30d_total / 30).toFixed(1) : '—';
+  const minCob = (ref_.variacoes_em_ruptura || [])
+    .map(v => v.cobertura_projetada_dias)
+    .filter(v => v != null)
+    .reduce((m, v) => v < m ? v : m, Infinity);
+  const cobTexto = isFinite(minCob) ? `${minCob.toFixed(1)} dias (mínima)` : '—';
+
+  return (
+    <ModalShell
+      titulo='🔍 Análise completa'
+      subtitulo={`ref ${ref_.ref} · ${ref_.descricao || ''}`}
+      onFechar={onFechar}
+      C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+    >
+      {/* Situação atual */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Situação atual
+        </div>
+        <ul style={{ paddingLeft: 0, margin: 0 }}>
+          <LinhaInfo icone='📦' label='Estoque hoje'
+            valor={`${fmtInt(ref_.estoque_total || 0)} peças`} C={C} CALIBRI={CALIBRI} />
+          <LinhaInfo icone='🏭' label='Em produção'
+            valor={`${fmtInt(ref_.pecas_em_producao || 0)} peças nas oficinas`} C={C} CALIBRI={CALIBRI} />
+          <LinhaInfo icone='📈' label='Venda média'
+            valor={`${vendasDia} peças/dia (últimos 30d)`} C={C} CALIBRI={CALIBRI} />
+          <LinhaInfo icone='⏳' label='Cobertura'
+            valor={`${cobTexto} · lead time ${ref_.lead_time_dias || 22}d`} C={C} CALIBRI={CALIBRI} />
+        </ul>
+      </div>
+
+      {/* Por que recomendou */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Por que a IA recomendou
+        </div>
+        <ul style={{ paddingLeft: 0, margin: 0 }}>
+          <LinhaInfo icone='🎯' label='Motivo principal' valor={motivoTexto} C={C} CALIBRI={CALIBRI} />
+          <LinhaInfo icone='📊' label='Severidade'
+            valor={ref_.severidade || '—'} C={C} CALIBRI={CALIBRI} />
+          {ref_.curva && ref_.curva !== 'outras' && (
+            <LinhaInfo icone='📈' label='Curva'
+              valor={`${ref_.curva.toUpperCase()} (top vendas)`} C={C} CALIBRI={CALIBRI} />
+          )}
+          <LinhaInfo icone='🚨' label='Variações em ruptura'
+            valor={`${ref_.qtd_variacoes_em_ruptura || 0} de ${ref_.qtd_variacoes_ativas || '?'} ativas`}
+            C={C} CALIBRI={CALIBRI} />
+        </ul>
+      </div>
+
+      {/* Projeção 22 dias */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Projeção em {ref_.lead_time_dias || 22} dias (lead time)
+        </div>
+        <ul style={{ paddingLeft: 0, margin: 0 }}>
+          <LinhaInfo icone='❌' label='Sem cortar'
+            valor={
+              ref_.pecas_perdidas_se_nao_cortar > 0
+                ? `${fmtInt(ref_.projecao_22d_sem_corte || 0)} peças · perde ~${fmtInt(ref_.pecas_perdidas_se_nao_cortar)} vendas`
+                : `${fmtInt(ref_.projecao_22d_sem_corte || 0)} peças`
+            }
+            C={C} CALIBRI={CALIBRI} />
+          <LinhaInfo icone='✅' label='Com corte sugerido'
+            valor={`${fmtInt(ref_.projecao_22d_com_corte || 0)} peças (+${fmtInt(ref_.pecas_a_cortar || 0)} cortadas)`}
+            C={C} CALIBRI={CALIBRI} />
+        </ul>
+      </div>
+
+      {/* Variações específicas em ruptura */}
+      {ref_.variacoes_em_ruptura && ref_.variacoes_em_ruptura.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{
+            fontSize: 10, color: C.muted, letterSpacing: 1.2,
+            textTransform: 'uppercase', fontFamily: CALIBRI,
+            fontWeight: 700, marginBottom: 6,
+          }}>
+            Variações em ruptura ({ref_.variacoes_em_ruptura.length})
+          </div>
+          <div style={{
+            background: '#fdeaea', borderRadius: 6, padding: 8,
+            maxHeight: 180, overflowY: 'auto', fontFamily: CALIBRI, fontSize: 11,
+          }}>
+            {ref_.variacoes_em_ruptura.map((v, i) => (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '3px 0', borderBottom: i < ref_.variacoes_em_ruptura.length - 1
+                  ? '1px solid rgba(0,0,0,0.05)' : 'none',
+              }}>
+                <span>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: 2, background: corHex(v.cor),
+                    display: 'inline-block', marginRight: 6, verticalAlign: 'middle',
+                    border: '1px solid rgba(0,0,0,0.1)',
+                  }} />
+                  {v.cor} · {v.tam}
+                </span>
+                <span style={{ color: C.critical, fontWeight: 600 }}>
+                  {v.estoque_atual} pç · {v.vendas_30d}v/30d
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Botão fechar */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+        <button
+          onClick={onFechar}
+          style={{
+            background: C.iaDark, color: '#fff', border: 'none',
+            padding: '10px 20px', borderRadius: 6, fontFamily: CALIBRI,
+            fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          Fechar
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// MODAL 2: Editar - confirma com motivo do ajuste
+function ModalEditar({ ref_, motivo, setMotivo, foiEditado, onConfirmar, onFechar, C, SERIF, CALIBRI }) {
+  const motivosSugeridos = [
+    'sem tecido dessa cor essa semana',
+    'reforçar a cor que mais vende',
+    'tirei cor de teste, tento no próximo',
+    'mexi na grade pra ajustar tamanhos',
+    'oficinas estão cheias, cortei menos',
+    'mudei sala, oficina específica disponível',
+  ];
+
+  const podeConfirmar = motivo.trim().length >= 3;
+
+  return (
+    <ModalShell
+      titulo='✎ Confirmar ajustes'
+      subtitulo={
+        foiEditado
+          ? `ref ${ref_.ref} · seus ajustes estão salvos`
+          : `ref ${ref_.ref} · explique pra IA aprender`
+      }
+      onFechar={onFechar}
+      C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+    >
+      {/* Aviso */}
+      <div style={{
+        background: '#f0f4fa', borderLeft: `3px solid ${C.blue}`,
+        padding: '10px 12px', borderRadius: 6, marginBottom: 14,
+        fontFamily: CALIBRI, fontSize: 11, color: C.text,
+      }}>
+        💡 <strong>A IA aprende com seus ajustes.</strong>{' '}
+        Explicar por que mexeu ajuda a melhorar as próximas sugestões.
+      </div>
+
+      {/* Chips de motivos sugeridos */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Sugestões de motivo:
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {motivosSugeridos.map((m, i) => (
+            <button
+              key={i}
+              onClick={() => setMotivo(m)}
+              style={{
+                background: '#fff', border: `1px solid ${C.cream}`,
+                color: C.text, padding: '4px 10px', borderRadius: 12,
+                fontSize: 11, fontFamily: CALIBRI, cursor: 'pointer',
+              }}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Textarea */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Motivo do ajuste <span style={{ color: C.critical }}>*</span>
+        </div>
+        <textarea
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ex: 'tirei a Azul Serenity porque não tenho tecido dessa cor essa semana'"
+          rows={3}
+          style={{
+            width: '100%', padding: '8px 10px', border: `1px solid ${C.cream}`,
+            borderRadius: 6, fontSize: 12, fontFamily: CALIBRI,
+            color: C.iaDarker, resize: 'vertical', minHeight: 60,
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+
+      {/* Botões */}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button
+          onClick={onFechar}
+          style={{
+            background: 'transparent', color: C.muted,
+            border: `1px solid ${C.cream}`, padding: '10px 16px',
+            borderRadius: 6, fontFamily: CALIBRI, fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={onConfirmar}
+          disabled={!podeConfirmar}
+          style={{
+            background: podeConfirmar ? C.success : '#bbb',
+            color: '#fff', border: 'none', padding: '10px 20px',
+            borderRadius: 6, fontFamily: CALIBRI, fontSize: 12,
+            fontWeight: 700, cursor: podeConfirmar ? 'pointer' : 'default',
+          }}
+        >
+          Confirmar ajuste
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// MODAL 3: Explicar - contexto livre pra IA aprender
+function ModalExplicar({ ref_, contexto, setContexto, onConfirmar, onFechar, C, SERIF, CALIBRI }) {
+  const podeConfirmar = contexto.trim().length >= 3;
+
+  return (
+    <ModalShell
+      titulo='💬 Explicar para a IA'
+      subtitulo={`ref ${ref_.ref} · ajude a OS Amícia a entender o contexto`}
+      onFechar={onFechar}
+      C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+    >
+      {/* Aviso */}
+      <div style={{
+        background: '#f0f4fa', borderLeft: `3px solid ${C.blue}`,
+        padding: '10px 12px', borderRadius: 6, marginBottom: 14,
+        fontFamily: CALIBRI, fontSize: 11, color: C.text,
+      }}>
+        💡 Use este espaço pra contar à IA <strong>qualquer informação relevante</strong>{' '}
+        sobre essa sugestão — pode ser elogio, dúvida ou contexto que ela não enxerga.
+      </div>
+
+      {/* Textarea livre */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Sua explicação <span style={{ color: C.critical }}>*</span>
+        </div>
+        <textarea
+          value={contexto}
+          onChange={(e) => setContexto(e.target.value)}
+          placeholder="Ex: 'esta ref está saindo de linha no próximo mês, prefiro não cortar mais'"
+          rows={4}
+          style={{
+            width: '100%', padding: '8px 10px', border: `1px solid ${C.cream}`,
+            borderRadius: 6, fontSize: 12, fontFamily: CALIBRI,
+            color: C.iaDarker, resize: 'vertical', minHeight: 80,
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+
+      {/* Botões */}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button
+          onClick={onFechar}
+          style={{
+            background: 'transparent', color: C.muted,
+            border: `1px solid ${C.cream}`, padding: '10px 16px',
+            borderRadius: 6, fontFamily: CALIBRI, fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={onConfirmar}
+          disabled={!podeConfirmar}
+          style={{
+            background: podeConfirmar ? C.blue : '#bbb',
+            color: '#fff', border: 'none', padding: '10px 20px',
+            borderRadius: 6, fontFamily: CALIBRI, fontSize: 12,
+            fontWeight: 700, cursor: podeConfirmar ? 'pointer' : 'default',
+          }}
+        >
+          Enviar para IA
+        </button>
+      </div>
+    </ModalShell>
   );
 }
