@@ -114,21 +114,41 @@ function somarModulos(gradeModulos) {
 const TAMANHOS_DISPONIVEIS = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
 
 // Calcula matriz cor x tamanho a partir de modulos atuais (nao usa do payload).
-// Pecas[cor][tam] = rolos_da_cor * modulos_do_tam * rendimento
+//
+// FORMULA CORRETA:
+//   total_pecas_da_cor = rolos_da_cor * rendimento
+//   pecas[cor][tam]    = total_pecas_da_cor * (modulos_do_tam / total_modulos)
+//
+// Os modulos definem como DISTRIBUIR as pecas entre tamanhos, NAO multiplicar.
+//
+// Exemplo: Bege com 7 rolos, rendimento 55, enfesto 2G+2M+2GG+1P (7 modulos):
+//   total_bege = 7 * 55 = 385 pecas
+//   bege G  = 385 * (2/7) = 110
+//   bege M  = 385 * (2/7) = 110
+//   bege GG = 385 * (2/7) = 110
+//   bege P  = 385 * (1/7) =  55
+//   Total: 385 ✓ (igual ao total inicial)
+//
+// BUG ANTERIOR: usava rolos * modulos * rendimento, dando ~7x a mais.
 function calcularMatriz(coresEditadas, gradeModulos, rendimento) {
   const r = Number(rendimento) || 20;
+  const totalModulos = (gradeModulos || []).reduce((s, g) => s + (Number(g.modulos) || 0), 0);
+  if (totalModulos === 0) return [];
+
   const matriz = [];
   (coresEditadas || []).forEach(c => {
+    const rolos = Number(c.rolos) || 0;
+    if (rolos === 0) return;
+    const totalPecasCor = rolos * r;
+
     (gradeModulos || []).forEach(g => {
-      const rolos = Number(c.rolos) || 0;
-      const mods  = Number(g.modulos) || 0;
-      if (rolos > 0 && mods > 0) {
-        matriz.push({
-          cor: c.cor || c.nome,
-          tam: g.tam,
-          pecas: Math.round(rolos * mods * r),
-        });
-      }
+      const mods = Number(g.modulos) || 0;
+      if (mods === 0) return;
+      matriz.push({
+        cor: c.cor || c.nome,
+        tam: g.tam,
+        pecas: Math.round(totalPecasCor * (mods / totalModulos)),
+      });
     });
   });
   return matriz;
