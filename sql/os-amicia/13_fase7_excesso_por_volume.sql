@@ -1,52 +1,64 @@
 -- =====================================================================
 -- OS Amicia - Sprint 6.1 Fase 7 - Refinamento da faixa "excesso"
--- Versao: 1.0 - Data: 21/04/2026
+-- Versao: 2.0 - Data: 21/04/2026 (v2: preserva ordem de colunas)
 -- Grupo Amicia - App Financeiro v6.8
 -- =====================================================================
 --
 -- COMO RODAR:
 --   1. Supabase -> SQL Editor -> New query
---   2. Colar este arquivo INTEIRO (INSERT em ia_config + CREATE OR REPLACE)
+--   2. Colar este arquivo INTEIRO
 --   3. Run
 --
 -- IDEMPOTENTE: INSERT usa ON CONFLICT; CREATE OR REPLACE na view.
 -- ASCII PURO.
 --
--- DEPENDE DE:
---   - 12_fase6_cobertura_com_oficinas.sql (a view ja com pecas_em_corte)
+-- v2 (21/04 tarde): corrigido erro "cannot change name of view column".
+-- PostgreSQL exige que CREATE OR REPLACE VIEW mantenha ORDEM e tipo das
+-- colunas existentes. Colunas novas (pecas_em_corte, cobertura_projetada_dias)
+-- agora sao adicionadas no FINAL do SELECT.
 --
--- PROPOSITO:
--- Refinar a definicao de "excesso" na vw_variacoes_classificadas.
+-- Este arquivo e autocontido: inclui as regras da Fase 6 (pecas em corte)
+-- e da Fase 7 (threshold de excesso). Pode ser rodado diretamente sem
+-- precisar rodar a Fase 6 antes.
 --
--- REGRA ANTIGA (Sprint 2):
---   cobertura > 45 dias -> excesso
+-- REGRAS IMPLEMENTADAS:
 --
--- REGRA NOVA (decisao Ailson 21/04):
---   cobertura > 45 dias E (estoque + corte) >= 15 pecas -> excesso
+-- REGRA 1 (Fase 6): cobertura considera pecas em corte nas oficinas.
+--   cobertura_projetada_dias = (estoque_ml + pecas_em_corte) / velocidade
 --
--- RACIONAL: 8 pecas em uma variacao especifica nao e capital parado
--- relevante mesmo se a cobertura for alta (ex: 8 pecas vendendo 5/mes
--- da 48 dias de cobertura, mas o valor absoluto e pequeno demais pra
--- ser problema). Variacoes com <15 pecas caem em 'saudavel' mesmo que
--- a cobertura por dias exceda o teto.
+-- REGRA 2 (Fase 7): excesso so se volume >= threshold.
+--   excesso = cobertura_projetada_dias > 45 E total_pecas >= 15
 --
--- Granularidade: sempre ref+cor+tam (confirmado Ailson).
---
--- Threshold configuravel via ia_config.excesso_min_pecas (default 15).
+-- Granularidade: sempre ref+cor+tam (pecas_em_corte aberta via matriz
+-- detalhes.cores x detalhes.tamanhos em amicia_data/salas-corte).
 -- =====================================================================
 
--- 1. Adicionar threshold em ia_config (idempotente)
+
+-- ---------------------------------------------------------------------
+-- 1. Threshold em ia_config (idempotente)
+-- ---------------------------------------------------------------------
 INSERT INTO ia_config (chave, valor, descricao, tipo) VALUES
   (
     'excesso_min_pecas',
     '15'::jsonb,
-    'Minimo de pecas (estoque+corte) pra uma variacao ser classificada como excesso. Abaixo disso e saudavel mesmo se cobertura > 45d.',
+    'Minimo de pecas (estoque+corte) pra variacao ser classificada como excesso. Abaixo disso, saudavel mesmo com cobertura > 45d.',
     'number'
   )
 ON CONFLICT (chave) DO NOTHING;
 
 
--- 2. Recriar a view com a nova regra de excesso
+-- ---------------------------------------------------------------------
+-- 2. Recriar a view - ORDEM das colunas preservada vs Sprint 2
+-- ---------------------------------------------------------------------
+-- Ordem Sprint 2 (imutavel por limitacao do PG):
+--   ref, cor, cor_key, tam, descricao, estoque_atual,
+--   vendas_15d, vendas_30d, vendas_mes_ant, vendas_90d,
+--   ultima_venda, estoque_updated_at, alerta_duplicata,
+--   velocidade_dia, cobertura_dias,
+--   demanda_status, cobertura_status, confianca
+-- Colunas NOVAS (Fase 6/7) adicionadas no FINAL:
+--   pecas_em_corte, cobertura_projetada_dias
+
 CREATE OR REPLACE VIEW vw_variacoes_classificadas AS
 WITH cfg AS (
   SELECT
@@ -130,6 +142,7 @@ cortes_pendentes_agg AS (
   GROUP BY ref, cor_key, tam
 )
 SELECT
+  -- ORDEM SPRINT 2 (preservada):
   COALESCE(v.ref, e.ref, c.ref)                                   AS ref,
   COALESCE(v.cor_display, e.cor_display, c.cor_display,
            v.cor_key, e.cor_key, c.cor_key)                       AS cor,
@@ -137,7 +150,6 @@ SELECT
   COALESCE(v.tam, e.tam, c.tam)                                   AS tam,
   COALESCE(e.descricao, '')                                       AS descricao,
   COALESCE(e.estoque_atual, 0)                                    AS estoque_atual,
-  COALESCE(c.pecas_em_corte, 0)                                   AS pecas_em_corte,
   COALESCE(v.vendas_15d, 0)                                       AS vendas_15d,
   COALESCE(v.vendas_30d, 0)                                       AS vendas_30d,
   COALESCE(v.vendas_mes_ant, 0)                                   AS vendas_mes_ant,
@@ -151,7 +163,6 @@ SELECT
     3
   )::numeric AS velocidade_dia,
 
-  -- cobertura_dias original (estoque puro) mantida pra compat
   CASE
     WHEN COALESCE(v.vendas_30d, 0) = 0 THEN NULL
     ELSE ROUND(
@@ -161,16 +172,6 @@ SELECT
     )
   END AS cobertura_dias,
 
-  -- cobertura_projetada_dias = (estoque + corte) / velocidade
-  CASE
-    WHEN COALESCE(v.vendas_30d, 0) = 0 THEN NULL
-    ELSE ROUND(
-      (COALESCE(e.estoque_atual, 0) + COALESCE(c.pecas_em_corte, 0))::numeric
-      / NULLIF((COALESCE(v.vendas_30d, 0) / 30.0) * (1 - (cfg.devol_pct / 100.0)), 0),
-      1
-    )
-  END AS cobertura_projetada_dias,
-
   CASE
     WHEN COALESCE(v.vendas_15d, 0) >= cfg.gate_ativa                                           THEN 'ativa'
     WHEN COALESCE(v.vendas_15d, 0) BETWEEN cfg.gate_fraca_min AND cfg.gate_fraca_max           THEN 'fraca'
@@ -178,17 +179,13 @@ SELECT
     ELSE 'inativa'
   END AS demanda_status,
 
-  -- cobertura_status: usa cobertura_projetada (com oficinas). Fase 7 adiciona
-  -- regra de excesso_min_pecas: so e 'excesso' se total >= threshold.
-  -- Abaixo do threshold, cai em 'saudavel' mesmo com cobertura alta, porque
-  -- o valor absoluto de pecas parado e baixo demais pra ser capital parado.
+  -- cobertura_status: Fase 6 (estoque+corte) + Fase 7 (excesso >= 15 pc)
   CASE
     WHEN COALESCE(e.estoque_atual, 0) + COALESCE(c.pecas_em_corte, 0) = 0                                                     THEN 'zerada'
     WHEN COALESCE(v.vendas_30d, 0) = 0                                                                                        THEN 'sem_demanda'
     WHEN (COALESCE(e.estoque_atual, 0) + COALESCE(c.pecas_em_corte, 0)) / NULLIF((COALESCE(v.vendas_30d, 0) / 30.0) * (1 - (cfg.devol_pct / 100.0)), 0) < cfg.cob_critica       THEN 'critica'
     WHEN (COALESCE(e.estoque_atual, 0) + COALESCE(c.pecas_em_corte, 0)) / NULLIF((COALESCE(v.vendas_30d, 0) / 30.0) * (1 - (cfg.devol_pct / 100.0)), 0) < cfg.cob_saudavel_min  THEN 'atencao'
     WHEN (COALESCE(e.estoque_atual, 0) + COALESCE(c.pecas_em_corte, 0)) / NULLIF((COALESCE(v.vendas_30d, 0) / 30.0) * (1 - (cfg.devol_pct / 100.0)), 0) <= cfg.cob_saudavel_max THEN 'saudavel'
-    -- Acima do teto saudavel: so vira excesso se tem volume absoluto relevante
     WHEN (COALESCE(e.estoque_atual, 0) + COALESCE(c.pecas_em_corte, 0)) >= cfg.exc_min_pecas                                   THEN 'excesso'
     ELSE 'saudavel'
   END AS cobertura_status,
@@ -196,7 +193,19 @@ SELECT
   CASE
     WHEN e.alerta_duplicata = true THEN 'media'
     ELSE 'alta'
-  END AS confianca
+  END AS confianca,
+
+  -- COLUNAS NOVAS (Fase 6/7) no FINAL:
+  COALESCE(c.pecas_em_corte, 0)                                   AS pecas_em_corte,
+
+  CASE
+    WHEN COALESCE(v.vendas_30d, 0) = 0 THEN NULL
+    ELSE ROUND(
+      (COALESCE(e.estoque_atual, 0) + COALESCE(c.pecas_em_corte, 0))::numeric
+      / NULLIF((COALESCE(v.vendas_30d, 0) / 30.0) * (1 - (cfg.devol_pct / 100.0)), 0),
+      1
+    )
+  END AS cobertura_projetada_dias
 
 FROM vendas_agregadas v
 FULL OUTER JOIN estoque_expandido e
@@ -210,36 +219,37 @@ WHERE COALESCE(v.ref, e.ref, c.ref) <> ''
   AND COALESCE(v.tam, e.tam, c.tam) NOT IN ('UNICO','U');
 
 COMMENT ON VIEW vw_variacoes_classificadas IS
-  'Base ref+cor+tam com classificacoes demanda/cobertura. '
-  'Fase 6: cobertura_status considera pecas em corte (matriz detalhes). '
-  'Fase 7: excesso so se total >= excesso_min_pecas (ia_config, default 15).';
+  'Base ref+cor+tam com classificacoes. '
+  'Fase 6: cobertura considera pecas em corte (matriz detalhes). '
+  'Fase 7: excesso exige volume >= excesso_min_pecas (ia_config, default 15). '
+  'Ordem de colunas preservada vs Sprint 2.';
 
 -- =====================================================================
--- SMOKE TESTS
+-- SMOKE TESTS apos rodar
 --
--- 1) Ver como as contagens mudaram em vw_estoque_saude_geral:
+-- 1) Contagens (comparar com 148 criticas / 128 excesso antes):
 --    SELECT variacoes_ruptura_critica, pct_ruptura_critica,
 --           variacoes_saudaveis,       pct_saudaveis,
---           variacoes_excesso,         pct_excesso
+--           variacoes_atencao,         pct_atencao,
+--           variacoes_excesso,         pct_excesso,
+--           unidades_total
 --    FROM vw_estoque_saude_geral;
---    Esperado: excesso cai (variacoes com <15 pecas saem), saudavel sobe.
 --
--- 2) Inspecionar variacoes que estavam em "excesso" por pouco volume:
+-- 2) Sanity check: variacoes com cobertura >45d e <15 pecas devem ser saudaveis
 --    SELECT ref, cor, tam, estoque_atual, pecas_em_corte,
---           vendas_30d, cobertura_projetada_dias, cobertura_status
+--           cobertura_projetada_dias, cobertura_status
 --    FROM vw_variacoes_classificadas
 --    WHERE cobertura_projetada_dias > 45
 --      AND (estoque_atual + pecas_em_corte) < 15
 --    ORDER BY cobertura_projetada_dias DESC
---    LIMIT 20;
---    Esperado: todas devem vir com cobertura_status = 'saudavel'.
+--    LIMIT 10;
+--    Esperado: todas com cobertura_status = 'saudavel'.
 --
--- 3) Confirmar que excesso "real" ainda aparece:
---    SELECT ref, cor, tam, estoque_atual + pecas_em_corte AS total_pecas,
+-- 3) Ver ref 2601 (antes lider em critica) com corte:
+--    SELECT cor, tam, estoque_atual, pecas_em_corte,
 --           cobertura_projetada_dias, cobertura_status
 --    FROM vw_variacoes_classificadas
---    WHERE cobertura_status = 'excesso'
---    ORDER BY total_pecas DESC
---    LIMIT 20;
---    Esperado: todas com >= 15 pecas e cobertura > 45d.
+--    WHERE ref = '2601'
+--      AND pecas_em_corte > 0
+--    ORDER BY cor, tam;
 -- =====================================================================
