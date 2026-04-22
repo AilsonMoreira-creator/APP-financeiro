@@ -21,6 +21,7 @@ import {
   Card7Oportunidades,
 } from './MarketplacesCards.jsx';
 import { TabEstoque } from './EstoqueCards.jsx';
+import { TabProducao } from './ProducaoCards.jsx';
 
 const SERIF = "Georgia,'Times New Roman',serif";
 const CALIBRI = "Calibri,'Segoe UI',Arial,sans-serif";
@@ -335,7 +336,11 @@ export default function OsAmicia({ supabase, usuarioLogado }) {
   );
 }
 
-function TabProducao({ usuario, C, SERIF, CALIBRI }) {
+// ANTIGA TabProducao do Sprint 3 - PRESERVADA pra referência mas NÃO USADA.
+// O novo TabProducao vem importado de ./ProducaoCards.jsx (Sprint 6.5).
+// Pode ser removida em sprint futuro depois que a nova UI for validada.
+// eslint-disable-next-line no-unused-vars
+function TabProducaoAntiga({ usuario, C, SERIF, CALIBRI }) {
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(false);
   const [disparando, setDisparando] = useState(false);
@@ -554,6 +559,8 @@ function TabProducao({ usuario, C, SERIF, CALIBRI }) {
   );
 }
 
+// CardInsight: companheiro do TabProducaoAntiga - tambem PRESERVADO pra referência.
+// eslint-disable-next-line no-unused-vars
 function CardInsight({ insight, onFeedback, enviando, jaRespondido, C, SERIF, CALIBRI }) {
   const severityColor = {
     critico: C.critical,
