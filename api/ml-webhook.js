@@ -585,7 +585,6 @@ export default async function handler(req, res) {
           autoStatus = 'queued_absence';
           console.log(`[ml-webhook] ${brand} Q${question.id}: ausência enviada`);
         }
-        }
       }
 
       await supabase.from('ml_pending_questions').upsert({
