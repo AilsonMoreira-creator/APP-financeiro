@@ -316,8 +316,8 @@ export function Card2EstoqueRupturaCritica({ usuario, C, SERIF, CALIBRI }) {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '1fr auto auto auto',
-              gap: 10,
+              gridTemplateColumns: '1fr 90px 110px 24px',
+              gap: 12,
               fontSize: 10,
               color: C.muted,
               textTransform: 'uppercase',
@@ -329,7 +329,7 @@ export function Card2EstoqueRupturaCritica({ usuario, C, SERIF, CALIBRI }) {
             <div>Ref · Descrição</div>
             <div style={{ textAlign: 'right' }}>Variações</div>
             <div style={{ textAlign: 'right' }}>Vendas 30d</div>
-            <div style={{ textAlign: 'right', width: 24 }}>&nbsp;</div>
+            <div>&nbsp;</div>
           </div>
 
           {/* Lista agrupada */}
@@ -342,8 +342,8 @@ export function Card2EstoqueRupturaCritica({ usuario, C, SERIF, CALIBRI }) {
                   onClick={() => toggle(agg.ref)}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr auto auto auto',
-                    gap: 10,
+                    gridTemplateColumns: '1fr 90px 110px 24px',
+                    gap: 12,
                     padding: '10px 4px',
                     fontSize: 13,
                     cursor: 'pointer',
@@ -375,7 +375,6 @@ export function Card2EstoqueRupturaCritica({ usuario, C, SERIF, CALIBRI }) {
                   <div
                     style={{
                       textAlign: 'right',
-                      width: 24,
                       color: C.muted,
                       fontSize: 14,
                       transform: aberto ? 'rotate(90deg)' : 'none',
