@@ -226,6 +226,20 @@ export default async function handler(req, res) {
     resumo.total_anuncios = itemIds.length;
     console.log(`[estoque-cron] Lumia: ${itemIds.length} anúncios ativos`);
 
+    // DEBUG REF 2851 - investigacao
+    const DEBUG_MLB = 'MLB4253767015';
+    const debug2851 = {
+      mlb_alvo: DEBUG_MLB,
+      esta_em_itemIds: itemIds.includes(DEBUG_MLB),
+      total_itemIds: itemIds.length,
+      multiget_response: null,        // o que ML retornou pra esse anuncio
+      varList_resultado: null,        // como ficou apos o loop de variations
+      refDireta_resultado: null,      // o que a regex retornou
+      sellerField_recebido: null,     // o scf que veio
+      caiu_em_mlbInfo: null,          // se entrou no mlbInfo
+    };
+    resumo.debug_2851 = debug2851;
+
     // ═══ FASE 3.5: carregar mapa SCF→REF (código-pai Ideris → ref interna) ═══
     // É o caminho principal pra resolver anúncios antigos (95% da Lumia).
     // Populado manualmente via /api/ml-estoque-import-scf
@@ -297,6 +311,19 @@ export default async function handler(req, res) {
       for (const entry of arr) {
         if (entry.code !== 200 || !entry.body) { multigetErroCode++; continue; }
         const item = entry.body;
+
+        // DEBUG: capturar tudo do MLB alvo
+        if (item.id === DEBUG_MLB) {
+          debug2851.multiget_response = {
+            id: item.id,
+            status: item.status,
+            title: item.title,
+            seller_custom_field: item.seller_custom_field,
+            qtd_variations: (item.variations || []).length,
+            sample_variation: (item.variations || [])[0] || null,
+          };
+        }
+
         if (item.status !== 'active') { multigetSkippedNaoAtivo++; continue; }
         multigetOk++;
 
@@ -384,6 +411,14 @@ export default async function handler(req, res) {
 
         mlbInfo[itemId] = { title, variations: varList, total: totalEstoque, refDireta };
         if (varList.length === 0) anunciosSemSkuEmNenhumaVar++;
+
+        // DEBUG: capturar resultado final do MLB alvo
+        if (itemId === DEBUG_MLB) {
+          debug2851.sellerField_recebido = sellerField;
+          debug2851.refDireta_resultado = refDireta;
+          debug2851.varList_resultado = varList;
+          debug2851.caiu_em_mlbInfo = true;
+        }
       }
 
       await new Promise(r => setTimeout(r, DELAY_MS));
