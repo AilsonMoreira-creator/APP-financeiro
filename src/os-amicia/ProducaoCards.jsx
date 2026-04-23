@@ -252,13 +252,52 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
   const { dados, loading, erro, recarregar } = useCortesData(usuario);
 
   // Estado: feedback dado a cada ref (Sim/Editar/Não)
-  // Por enquanto local; Sprint 6.2 vai persistir em tabela ia_feedback_cortes
   const [feedbackPorRef, setFeedbackPorRef] = useState({});
+
+  // Refs localmente ocultadas apos arquivar (some da tela imediatamente;
+  // ao proximo reload da pagina ou recarregar ela ja vem filtrada pela view SQL).
+  const [refsOcultas, setRefsOcultas] = useState(new Set());
 
   const onFeedback = (ref, tipo) => {
     setFeedbackPorRef(prev => ({ ...prev, [ref]: tipo }));
-    // TODO Sprint 6.2: POST /api/ia-cortes-feedback
+    // Arquivamento automatico pro 'nao' (some 10 dias)
+    if (tipo === 'nao') {
+      arquivar(ref, 'nao', null).catch(() => { /* silencioso */ });
+      setTimeout(() => {
+        setRefsOcultas(prev => new Set([...prev, ref]));
+      }, 600); // pequena pausa pra UX perceber o "✗ Rejeitado"
+    }
     console.log(`[ProducaoCards] feedback ref=${ref} tipo=${tipo}`);
+  };
+
+  // Funcao centralizada de arquivamento - chama endpoint e oculta ref localmente
+  const arquivar = async (ref, tipoArquivo, tipoCorte) => {
+    try {
+      const r = await fetch('/api/ia-sugestao-arquivar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User': usuario,
+        },
+        body: JSON.stringify({
+          ref: String(ref),
+          tipo_arquivo: tipoArquivo,
+          tipo_corte_no_arquivo: tipoCorte,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        console.error('[arquivar] erro:', j.error);
+        alert(`Nao foi possivel arquivar: ${j.error || 'erro desconhecido'}`);
+        return;
+      }
+      // Some da tela imediatamente
+      setRefsOcultas(prev => new Set([...prev, String(ref)]));
+      console.log(`[arquivar] ref=${ref} tipo=${tipoArquivo} retorna_em=${j.retorna_em || 'indefinido'}`);
+    } catch (e) {
+      console.error('[arquivar] exception:', e);
+      alert(`Erro: ${e.message}`);
+    }
   };
 
   if (loading && !dados) {
@@ -292,6 +331,8 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
 
   const refs = dados?.refs || [];
   const totalCortes = dados?.capacidade_semanal?.total_cortes ?? refs.length;
+  const totalTradicionais = dados?.capacidade_semanal?.total_tradicionais;
+  const totalBalanceamento = dados?.capacidade_semanal?.total_balanceamento;
   const capacidadeStatus = dados?.capacidade_semanal?.status || 'normal';
   const limiteNormal = dados?.capacidade_semanal?.limite_normal;
   const validadeDias = dados?.validade_dias ?? 7;
@@ -302,6 +343,8 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
       {/* Header global da TabProdução */}
       <CapacidadeHeader
         totalCortes={totalCortes}
+        totalTradicionais={totalTradicionais}
+        totalBalanceamento={totalBalanceamento}
         status={capacidadeStatus}
         limiteNormal={limiteNormal}
         validadeDias={validadeDias}
@@ -322,16 +365,19 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
           Nenhuma sugestão de corte para a semana.
         </div>
       ) : (
-        refs.map(ref => (
-          <CardSugestaoCorte
-            key={ref.ref}
-            ref_={ref}
-            feedback={feedbackPorRef[ref.ref]}
-            onFeedback={onFeedback}
-            usuario={usuario}
-            C={C} SERIF={SERIF} CALIBRI={CALIBRI}
-          />
-        ))
+        refs
+          .filter(ref => !refsOcultas.has(String(ref.ref)))
+          .map(ref => (
+            <CardSugestaoCorte
+              key={ref.ref}
+              ref_={ref}
+              feedback={feedbackPorRef[ref.ref]}
+              onFeedback={onFeedback}
+              onArquivar={arquivar}
+              usuario={usuario}
+              C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+            />
+          ))
       )}
     </div>
   );
@@ -339,7 +385,7 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
 
 // ─── Header de capacidade semanal ─────────────────────────────────────
 
-function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, expiraEm, geradoEm, loading, onRefresh, usuario, C, SERIF, CALIBRI }) {
+function CapacidadeHeader({ totalCortes, totalTradicionais, totalBalanceamento, status, limiteNormal, validadeDias, expiraEm, geradoEm, loading, onRefresh, usuario, C, SERIF, CALIBRI }) {
   const dias = diasAteExpirar(expiraEm);
   const [iaMsg, setIaMsg] = useState(null);
   const [disparando, setDisparando] = useState(false);
@@ -433,6 +479,20 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
               </span>
             )}
           </div>
+          {/* Split tradicional vs balanceamento - Sprint 6.8 */}
+          {(totalTradicionais != null || totalBalanceamento != null) && (
+            <div style={{
+              fontSize: 11, color: C.muted, fontFamily: CALIBRI, marginTop: 2,
+            }}>
+              {totalTradicionais != null && <span>{totalTradicionais} tradicional{totalTradicionais !== 1 ? 'is' : ''}</span>}
+              {totalTradicionais != null && totalBalanceamento > 0 && <span> · </span>}
+              {totalBalanceamento > 0 && (
+                <span style={{ color: '#8a6d2b', fontWeight: 600 }}>
+                  ⚖ {totalBalanceamento} balanceamento
+                </span>
+              )}
+            </div>
+          )}
           {/* Timestamp de geracao - abaixo da contagem */}
           {geradoTexto && (
             <div style={{
@@ -500,7 +560,7 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
 
 // ─── Card individual de uma sugestão de corte ────────────────────────
 
-function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALIBRI }) {
+function CardSugestaoCorte({ ref_, feedback, onFeedback, onArquivar, usuario, C, SERIF, CALIBRI }) {
   // Pills de severidade
   const sevConfig = {
     alta:  { texto: '🔴 Crítico',    bg: '#fdeaea', cor: C.critical },
@@ -624,6 +684,12 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
         <Pill cor={conConfig.cor}>{conConfig.texto}</Pill>
         {ref_.curva && ref_.curva !== 'outras' && (
           <Pill cor={C.iaDark}>Curva {ref_.curva.toUpperCase()}</Pill>
+        )}
+        {/* Sprint 6.8: pill distinguindo tipo de corte */}
+        {ref_.tipo_corte === 'balanceamento' && (
+          <Pill bg='#f3ead8' cor='#8a6d2b'>
+            ⚖ Balanceamento
+          </Pill>
         )}
         {foiEditado && !feedback && (
           <Pill bg='#faf6ec' cor={C.warning}>✎ Editado</Pill>
@@ -756,8 +822,11 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
       {/* Ações */}
       <Acoes
         refNum={ref_.ref}
+        tipoCorte={ref_.tipo_corte}
+        fonteCortePendente={ref_.fonte_corte_pendente}
         feedback={feedback}
         onFeedback={onFeedback}
+        onArquivar={onArquivar}
         onAbrirModal={abrirModal}
         C={C} CALIBRI={CALIBRI}
       />
@@ -777,6 +846,8 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
           setOrdemId={setOrdemId}
           ordemErro={ordemErro}
           setOrdemErro={setOrdemErro}
+          onArquivar={onArquivar}
+          tipoCorte={ref_.tipo_corte}
           C={C} SERIF={SERIF} CALIBRI={CALIBRI}
         />
       )}
@@ -1366,11 +1437,14 @@ function AvisoValidade({ C, CALIBRI }) {
   );
 }
 
-function Acoes({ refNum, feedback, onFeedback, onAbrirModal, C, CALIBRI }) {
-  const Btn = ({ onClick, bg, cor, border, children, flex }) => (
+function Acoes({ refNum, tipoCorte, fonteCortePendente, feedback, onFeedback, onAbrirModal, onArquivar, C, CALIBRI }) {
+  const [modalTecido, setModalTecido] = useState(false);
+
+  const Btn = ({ onClick, bg, cor, border, children, flex, title }) => (
     <button
       onClick={onClick}
       disabled={!!feedback}
+      title={title}
       style={{
         background: bg, color: cor, border: border || 'none',
         padding: '10px 14px', borderRadius: 6, fontFamily: CALIBRI,
@@ -1384,17 +1458,123 @@ function Acoes({ refNum, feedback, onFeedback, onAbrirModal, C, CALIBRI }) {
     </button>
   );
 
+  // ESTADO ESPECIAL: sala_sem_matriz so tem 1 botao (OK) + Explicar.
+  // Nao gera ordem de corte, so confirma que usuario viu.
+  if (fonteCortePendente === 'sala_sem_matriz') {
+    return (
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{
+          fontSize: 11, color: C.muted, fontFamily: CALIBRI,
+          flex: 1, fontStyle: 'italic',
+        }}>
+          Ja existe corte na sala · apenas confirme que viu esta sugestao
+        </div>
+        <Btn onClick={() => onArquivar(refNum, 'ok_sala_sem_matriz', tipoCorte)}
+             bg={C.iaDarker} cor='#fff'
+             title='Marca como vista. Volta se situacao mudar em 3 dias ou se matriz for definida.'>
+          ✓ OK, entendi
+        </Btn>
+        <Btn onClick={() => onAbrirModal('explicar')}
+             bg='transparent' cor={C.blue} border={`1px dashed ${C.blue}`}>
+          💬 Explicar
+        </Btn>
+      </div>
+    );
+  }
+
+  // ESTADO NORMAL: botoes tradicionais para tradicional/balanceamento
   return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-      <Btn onClick={() => onFeedback(refNum, 'sim')}
-           bg={C.success} cor='#fff' flex={1}>✓ Sim, vou cortar</Btn>
-      <Btn onClick={() => onAbrirModal('editar')}
-           bg={C.warning} cor='#fff'>✎ Editar</Btn>
-      <Btn onClick={() => onFeedback(refNum, 'nao')}
-           bg='#eee' cor={C.text} border={`1px solid ${C.cream}`}>✗ Não</Btn>
-      <Btn onClick={() => onAbrirModal('explicar')}
-           bg='transparent' cor={C.blue} border={`1px dashed ${C.blue}`}>💬 Explicar</Btn>
-    </div>
+    <>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <Btn onClick={() => onFeedback(refNum, 'sim')}
+             bg={C.success} cor='#fff' flex={1}>
+          ✓ Sim, vou cortar
+        </Btn>
+
+        <Btn onClick={() => setModalTecido(true)}
+             bg={C.warning} cor='#fff'
+             title='Ref precisa de corte mas nao tem tecido. Lembrar em X dias.'>
+          🧵 Aguardando tecido
+        </Btn>
+
+        <Btn onClick={() => onArquivar(refNum, 'aguardar_demanda', tipoCorte)}
+             bg='#b59b7e' cor='#fff'
+             title='Ignorar por enquanto. Volta a sugerir quando virar corte tradicional (pra balanceamento) ou quando demanda aumentar.'>
+          ⏸ Aguardar demanda
+        </Btn>
+
+        <Btn onClick={() => onFeedback(refNum, 'nao')}
+             bg='#eee' cor={C.text} border={`1px solid ${C.cream}`}>
+          ✗ Não
+        </Btn>
+
+        <Btn onClick={() => onAbrirModal('explicar')}
+             bg='transparent' cor={C.blue} border={`1px dashed ${C.blue}`}>
+          💬 Explicar
+        </Btn>
+      </div>
+
+      {/* Modal inline: escolher 3/7/15 dias pro aguardando tecido */}
+      {modalTecido && (
+        <div
+          onClick={() => setModalTecido(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            zIndex: 9998, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', padding: 24, borderRadius: 12,
+              maxWidth: 420, width: '100%', fontFamily: CALIBRI,
+            }}
+          >
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.iaDarker, marginBottom: 8 }}>
+              Aguardando tecido
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 18, lineHeight: 1.5 }}>
+              Esta ref precisa de corte mas ainda nao tem tecido disponivel.
+              Quando quer ser lembrado de novo?
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+              {[3, 7, 15].map(d => (
+                <button
+                  key={d}
+                  onClick={() => {
+                    onArquivar(refNum, `aguardando_tecido_${d}d`, tipoCorte);
+                    setModalTecido(false);
+                  }}
+                  style={{
+                    flex: 1, minWidth: 100,
+                    padding: '12px 16px', borderRadius: 8,
+                    background: C.iaDarker, color: '#fff',
+                    border: 'none', cursor: 'pointer',
+                    fontFamily: CALIBRI, fontSize: 13, fontWeight: 700,
+                  }}
+                >
+                  {d} dias
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setModalTecido(false)}
+              style={{
+                width: '100%', padding: '10px 16px', borderRadius: 8,
+                background: 'transparent', color: C.muted,
+                border: `1px solid ${C.cream}`, cursor: 'pointer',
+                fontFamily: CALIBRI, fontSize: 11,
+              }}
+            >
+              cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1403,6 +1583,7 @@ function Acoes({ refNum, feedback, onFeedback, onAbrirModal, C, CALIBRI }) {
 function BlocoGerarOrdem({
   ref_, gradeModulos, coresEditadas, aprovacaoTipo, validadeAte, usuario,
   ordemStatus, setOrdemStatus, ordemId, setOrdemId, ordemErro, setOrdemErro,
+  onArquivar, tipoCorte,
   C, SERIF, CALIBRI,
 }) {
   // Validacao client-side antes de habilitar o botao
@@ -1455,6 +1636,10 @@ function BlocoGerarOrdem({
       // Sucesso: backend retorna { ordem: {...} }
       setOrdemId(j.ordem?.id || j.ordem?.numero || 'criada');
       setOrdemStatus({ tipo: 'sucesso' });
+      // Sprint 6.8: arquiva permanente (ordem foi gerada, nao reaparece)
+      if (onArquivar) {
+        onArquivar(ref_, 'sim_gerou_ordem', tipoCorte).catch(() => {});
+      }
     } catch (e) {
       setOrdemErro(e.message || 'Erro ao gerar ordem');
       setOrdemStatus({ tipo: 'erro' });
