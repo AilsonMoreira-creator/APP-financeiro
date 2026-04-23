@@ -57,51 +57,94 @@ const diasAteExpirar = (expiraIso) => {
   return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
 };
 
-// Mapeia nome de cor pra hex (swatch). Cores comuns do catálogo Amícia.
-// Pra cores não mapeadas, retorna cinza default.
+// Mapeia nome de cor pra hex (swatch). Mantido em sincronia com
+// BLING_COR_HEX em src/App.tsx linha 3252.
+// Quando entrar cor nova no Bling, atualizar nos 2 lugares.
 const corHex = (nome) => {
   if (!nome) return '#999';
   const k = String(nome).toLowerCase().trim();
   const map = {
-    'preto':         '#1a1a1a',
-    'branco':        '#f5f5f5',
-    'bege':          '#d4c5a9',
-    'marrom':        '#6b4423',
-    'marrom escuro': '#3e2818',
-    'marinho':       '#1a2845',
-    'azul marinho':  '#1a2845',
-    'azul':          '#3a5a8c',
-    'azul serenity': '#92b4d4',
-    'azul bebe':     '#a8c8e0',
-    'verde militar': '#4a5d3a',
-    'verde agua':    '#9dc8b9',
-    'verde água':    '#9dc8b9',
-    'vinho':         '#5e1f2c',
-    'vermelho':      '#b8242b',
-    'rosa':          '#d89aa3',
-    'figo':          '#5a3848',
-    'cappuccino':    '#a08568',
-    'capuccino':     '#a08568',
-    'cinza':         '#888',
-    'amarelo':       '#e8c547',
-    'laranja':       '#d8773b',
-    'lilas':         '#9b85b8',
-    'lilás':         '#9b85b8',
-    'roxo':          '#5a2e8c',
+    // Neutros
+    'preto':            '#1a1a1a',
+    'branco':           '#f5f5f5',
+    'off white':        '#f0e8d8',
+    'offwhite':         '#f0e8d8',
+    'creme':            '#e8d8c0',
+    'natural':          '#d4c8a8',
+    'areia':            '#c8b88a',
+    'cinza':            '#888888',
+    'nude':             '#c8a890',
+
+    // Beges/marrons
+    'bege':             '#d4c5a9',
+    'bege claro':       '#e8d8c0',
+    'caramelo':         '#b87a3a',
+    'caqui':            '#8a7a5a',
+    'cappuccino':       '#a08568',
+    'capuccino':        '#a08568',
+    'marrom':           '#6b4423',
+    'marrom escuro':    '#3e2818',
+    'terracota':        '#b85c38',
+
+    // Azuis
+    'azul':             '#3a5a8c',
+    'azul marinho':     '#1a2845',
+    'marinho':          '#1a2845',
+    'azul claro':       '#7ab0d4',
+    'azul bebe':        '#a8c8e0',
+    'azul bebê':        '#a8c8e0',
+    'azul serenity':    '#92b4d4',
+
+    // Verdes
+    'verde':            '#4a8a4a',
+    'verde agua':       '#9dc8b9',
+    'verde água':       '#9dc8b9',
+    'verde militar':    '#4a5d3a',
+    'verde salvia':     '#b5c99a',
+    'verde sálvia':     '#b5c99a',
+    'verde escuro':     '#2d5a2d',
+    'verde pistache':   '#bcd99c',
+
+    // Vermelhos/rosas
+    'vermelho':         '#b8242b',
+    'vinho':            '#5e1f2c',
+    'bordo':            '#6a1a2a',
+    'rosa':             '#d89aa3',
+    'rose':             '#d4a0a0',
+    'figo':             '#5a3848',
+
+    // Amarelos/laranjas
+    'amarelo':          '#e8c547',
+    'amarelo manteiga': '#e8d080',
+    'laranja':          '#d8773b',
+
+    // Roxos/lilás
+    'roxo':             '#5a2e8c',
+    'lilas':            '#9b85b8',
+    'lilás':            '#9b85b8',
   };
   return map[k] || '#999';
 };
 
-// Converte proporcao_pct (do SQL) em modulos absolutos do enfesto.
-// Regra: modulos = ROUND(proporcao_pct / 100 * max_modulos)
-// Ex: max=5, [P=20%, M=40%, G=20%, GG=20%] -> [1P, 2M, 1G, 1GG]
-// Garante minimo 1 modulo por tamanho que entra na grade (nunca 0).
-function gradeProporcaoParaModulos(grade, maxModulos) {
+// Le os modulos da grade que o SQL ja devolve calculados.
+//
+// IMPORTANTE: Ate Sprint 6.5, esta funcao recalculava modulos a partir
+// de proporcao_pct usando ROUND. Isso dava resultado ERRADO porque
+// ROUND nao garante que a soma bate com max_modulos.
+//
+// Exemplo REF 2832 (macacao, max=6, 4 tamanhos):
+//   SQL devolve:  P=1, M=2, G=1, GG=2  (total 6 ok)
+//   ROUND fazia:  P=2, M=2, G=1, GG=2  (total 7 ERRO - acima do limite)
+//
+// A funcao SQL v1.5-fixed (Sprint 6.7) usa metodo de Hamilton que
+// garante SUM(modulos) <= max_modulos. So precisamos usar o que vem.
+//
+// Parametro maxModulos mantido pra retrocompat de chamada (ignorado).
+function gradeProporcaoParaModulos(grade /*, maxModulos */) {
   if (!Array.isArray(grade) || grade.length === 0) return [];
-  const max = Number(maxModulos) || 5;
   return grade.map(g => ({
     tam: g.tam,
-    modulos: Math.max(1, Math.round((Number(g.proporcao_pct) || 0) / 100 * max)),
+    modulos: Math.max(0, Number(g.modulos) || 0),
   }));
 }
 
