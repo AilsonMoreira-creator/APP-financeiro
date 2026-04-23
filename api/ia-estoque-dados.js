@@ -37,6 +37,7 @@ import { supabase, validarAdmin, setCors } from './_ia-helpers.js';
 const LIMITS = {
   ruptura_critica: 50,
   ruptura_disfarcada: 30,
+  excesso_estoque: 100,
 };
 
 // Handlers por card. Cada um retorna { ...payload } ou throw.
@@ -74,6 +75,18 @@ const CARD_HANDLERS = {
       .select('ref, descricao, cor, tam, estoque_atual, vendas_15d, vendas_30d, vendas_mes_ant, vendas_90d, ultima_venda, cobertura_status, confianca')
       .limit(LIMITS.ruptura_disfarcada);
     if (error) throw new Error(`vw_estoque_ruptura_disfarcada: ${error.message}`);
+    return { variacoes: data || [] };
+  },
+
+  // Sprint 6.7: variacoes em excesso (cobertura > 60d AND estoque >= 20 pcs).
+  // View ja vem ordenada por curva A>B>outras, depois excedente DESC.
+  // Frontend agrupa por ref e calcula score de gravidade.
+  async excesso_estoque() {
+    const { data, error } = await supabase
+      .from('vw_estoque_excesso')
+      .select('ref, descricao, cor, tam, curva, estoque_atual, pecas_em_corte, pecas_excedentes, vendas_15d, vendas_30d, velocidade_dia, cobertura_dias, confianca')
+      .limit(LIMITS.excesso_estoque);
+    if (error) throw new Error(`vw_estoque_excesso: ${error.message}`);
     return { variacoes: data || [] };
   },
 };

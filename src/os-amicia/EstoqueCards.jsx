@@ -590,6 +590,239 @@ export function Card4EstoqueTendencia({ usuario, C, SERIF, CALIBRI }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Card 3 (NOVO Sprint 6.7) · Variações com Excesso · agrupado por ref
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Substitui o Card3EstoqueRupturaDisfarcada (mantido exportado por
+// retro-compat caso queira voltar). Mostra excesso financeiramente
+// relevante: cobertura > 60d AND estoque >= 20 pcs.
+//
+// Score de gravidade por ref:
+//   gravidade = pecas_excedentes_total * ln(cobertura_media + 1)
+// Combina volume parado (peças) com tempo parado (cob) sem deixar
+// cobertura altissima distorcer (log natural).
+//
+// Ordem: curva A primeiro (A>B>outras). Dentro de cada curva,
+// ordena por score DESC.
+// ═══════════════════════════════════════════════════════════════════════
+
+export function Card3EstoqueExcesso({ usuario, C, SERIF, CALIBRI }) {
+  const { dados, loading, erro, carregar } = useCardData('excesso_estoque', usuario);
+  const variacoes = dados?.variacoes || [];
+  const [expandido, setExpandido] = useState({});
+
+  // Agrupa por ref + calcula score de gravidade
+  const refsAgrupadas = useMemo(() => {
+    const mapa = new Map();
+    for (const v of variacoes) {
+      const k = v.ref;
+      if (!mapa.has(k)) {
+        mapa.set(k, {
+          ref: k,
+          descricao: v.descricao || '',
+          curva: v.curva || 'outras',
+          variacoes: [],
+          pecas_excedentes_total: 0,
+          cobertura_soma: 0,
+          cobertura_count: 0,
+        });
+      }
+      const agg = mapa.get(k);
+      agg.variacoes.push(v);
+      agg.pecas_excedentes_total += Number(v.pecas_excedentes || 0);
+      if (v.cobertura_dias != null) {
+        agg.cobertura_soma += Number(v.cobertura_dias);
+        agg.cobertura_count += 1;
+      }
+      if (!agg.descricao && v.descricao) agg.descricao = v.descricao;
+    }
+    // Calcula cobertura media + score de gravidade
+    const arr = Array.from(mapa.values()).map(agg => {
+      const cob_media = agg.cobertura_count > 0 ? (agg.cobertura_soma / agg.cobertura_count) : 0;
+      // gravidade = peças × ln(cob + 1) - log suaviza extremos de cob
+      const score = agg.pecas_excedentes_total * Math.log(cob_media + 1);
+      return { ...agg, cobertura_media: cob_media, score };
+    });
+    // Ordena: curva A > B > outras, dentro de cada curva por score DESC
+    const ordemCurva = (c) => c === 'A' ? 1 : c === 'B' ? 2 : 3;
+    arr.sort((a, b) => {
+      const dCurva = ordemCurva(a.curva) - ordemCurva(b.curva);
+      if (dCurva !== 0) return dCurva;
+      return b.score - a.score;
+    });
+    return arr;
+  }, [variacoes]);
+
+  const toggle = (ref) => setExpandido(prev => ({ ...prev, [ref]: !prev[ref] }));
+
+  return (
+    <CardShell
+      eyebrow={`Card 3 · ${variacoes.length} variações em excesso`}
+      titulo="Variações com excesso de estoque"
+      loading={loading} erro={erro} onRefresh={carregar}
+      C={C} SERIF={SERIF}
+    >
+      {refsAgrupadas.length === 0 ? (
+        <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>
+          {loading ? 'Carregando…' : 'Nenhuma variação em excesso no momento.'}
+        </div>
+      ) : (
+        <div style={{ fontFamily: CALIBRI }}>
+          {/* Header compacto */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '36px 1fr 110px 80px 24px',
+              gap: 10,
+              fontSize: 10,
+              color: C.muted,
+              textTransform: 'uppercase',
+              letterSpacing: 0.8,
+              padding: '6px 4px',
+              borderBottom: `1px solid ${C.cream}`,
+            }}
+          >
+            <div>Curva</div>
+            <div>Ref · Descrição</div>
+            <div style={{ textAlign: 'right' }}>Peças paradas</div>
+            <div style={{ textAlign: 'right' }}>Cob. média</div>
+            <div>&nbsp;</div>
+          </div>
+
+          {/* Lista agrupada */}
+          {refsAgrupadas.map(agg => {
+            const aberto = !!expandido[agg.ref];
+            const desc = agg.descricao ? agg.descricao.trim().slice(0, 40) : '—';
+            // Cor da pill da curva: A = azul forte (mais importante), B = azul médio, outras = cinza
+            const corCurva =
+              agg.curva === 'A' ? C.iaDarker :
+              agg.curva === 'B' ? C.blue || '#5b9bd5' :
+              C.muted;
+            return (
+              <div key={agg.ref} style={{ borderBottom: `1px solid ${C.cream}` }}>
+                <div
+                  onClick={() => toggle(agg.ref)}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '36px 1fr 110px 80px 24px',
+                    gap: 10,
+                    padding: '10px 4px',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    alignItems: 'center',
+                  }}
+                >
+                  {/* Pill da curva */}
+                  <div>
+                    <span style={{
+                      display: 'inline-block', padding: '2px 8px',
+                      borderRadius: 4, fontSize: 10, fontWeight: 700,
+                      background: corCurva, color: '#fff', letterSpacing: 0.5,
+                    }}>
+                      {agg.curva.toUpperCase()}
+                    </span>
+                  </div>
+
+                  {/* Ref + descrição + N variações */}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, color: C.iaDarker }}>
+                      REF {agg.ref}
+                      <span style={{
+                        fontSize: 10, color: C.muted, fontWeight: 500, marginLeft: 6,
+                      }}>
+                        · {agg.variacoes.length} {agg.variacoes.length === 1 ? 'variação' : 'variações'}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11, color: C.muted,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        marginTop: 1,
+                      }}
+                      title={agg.descricao}
+                    >
+                      {desc}
+                    </div>
+                  </div>
+
+                  {/* Peças paradas (excedente total) */}
+                  <div style={{
+                    textAlign: 'right',
+                    color: agg.curva === 'A' ? C.iaDarker : C.muted,
+                    fontWeight: 700,
+                  }}>
+                    {fmtInt(agg.pecas_excedentes_total)}
+                  </div>
+
+                  {/* Cobertura média */}
+                  <div style={{
+                    textAlign: 'right', color: C.muted, fontWeight: 600,
+                  }}>
+                    {Math.round(agg.cobertura_media)}d
+                  </div>
+
+                  {/* Chevron */}
+                  <div
+                    style={{
+                      textAlign: 'right',
+                      color: C.muted,
+                      fontSize: 14,
+                      transform: aberto ? 'rotate(90deg)' : 'none',
+                      transition: 'transform 0.15s',
+                    }}
+                  >
+                    ▸
+                  </div>
+                </div>
+
+                {/* Detalhe expandido: lista de variações ordenadas por excedente desc */}
+                {aberto && (
+                  <div style={{ padding: '4px 4px 10px 10px', background: '#faf8f5' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                      <thead>
+                        <tr style={{ color: C.muted, fontSize: 9, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+                          <th style={{ textAlign: 'left', padding: '4px 4px', fontWeight: 600 }}>Cor · Tam</th>
+                          <th style={{ textAlign: 'right', padding: '4px 4px', fontWeight: 600 }}>Estoque</th>
+                          <th style={{ textAlign: 'right', padding: '4px 4px', fontWeight: 600 }}>Cob. dias</th>
+                          <th style={{ textAlign: 'right', padding: '4px 4px', fontWeight: 600 }}>Excedente</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...agg.variacoes]
+                          .sort((a, b) => Number(b.pecas_excedentes || 0) - Number(a.pecas_excedentes || 0))
+                          .map((v, i) => (
+                            <tr key={i} style={{ borderTop: `1px solid ${C.cream}` }}>
+                              <td style={{ padding: '5px 4px', color: C.iaDarker }}>
+                                {v.cor} · <span style={{ fontWeight: 700 }}>{v.tam}</span>
+                                {v.confianca === 'media' && (
+                                  <span style={{ fontSize: 9, color: C.warning, marginLeft: 5 }}>(conf média)</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '5px 4px', textAlign: 'right', color: C.iaDarker, fontWeight: 600 }}>
+                                {fmtInt(v.estoque_atual)}
+                              </td>
+                              <td style={{ padding: '5px 4px', textAlign: 'right', color: C.muted }}>
+                                {v.cobertura_dias != null ? `${Math.round(v.cobertura_dias)}d` : '—'}
+                              </td>
+                              <td style={{ padding: '5px 4px', textAlign: 'right', color: C.iaDarker, fontWeight: 700 }}>
+                                {fmtInt(v.pecas_excedentes)}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </CardShell>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Componente agregador TabEstoque — ordem fixa (opção 1 do briefing)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -598,7 +831,7 @@ export function TabEstoque({ usuario, C, SERIF, CALIBRI }) {
     <div>
       <Card1EstoqueSaude              usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
       <Card2EstoqueRupturaCritica     usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
-      <Card3EstoqueRupturaDisfarcada  usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+      <Card3EstoqueExcesso            usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
       <Card4EstoqueTendencia          usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
     </div>
   );
