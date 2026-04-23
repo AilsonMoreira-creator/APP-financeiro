@@ -1417,11 +1417,27 @@ function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
   const valorDe = (campo) => a[campo]?.valor;
 
   const vendasDia = valorDe('velocidade_dia') ?? (ref_.vendas_30d_total ? (ref_.vendas_30d_total / 30).toFixed(2) : '—');
-  const minCob = (ref_.variacoes_em_ruptura || [])
-    .map(v => v.cobertura_projetada_dias)
-    .filter(v => v != null)
-    .reduce((m, v) => v < m ? v : m, Infinity);
-  const cobTexto = isFinite(minCob) ? `${minCob.toFixed(1)} dias (mínima)` : '—';
+
+  // Cobertura GERAL: (estoque_pronto + em_producao) / velocidade_dia
+  // Mostra quanto a ref aguenta no ritmo atual considerando producao em andamento.
+  const estoqueProntoNum  = Number(valorDe('estoque_pronto') ?? ref_.estoque_total ?? 0);
+  const emProducaoNum     = Number(valorDe('em_producao') ?? ref_.pecas_em_producao ?? 0);
+  const velocNum          = Number(valorDe('velocidade_dia') ?? (ref_.vendas_30d_total ? ref_.vendas_30d_total / 30 : 0));
+  const cobGeralDias      = velocNum > 0 ? ((estoqueProntoNum + emProducaoNum) / velocNum) : null;
+  const cobGeralTxt       = cobGeralDias != null
+    ? `${cobGeralDias.toFixed(0)} dias (estoque ${fmtInt(estoqueProntoNum)} + produção ${fmtInt(emProducaoNum)} ÷ ${velocNum.toFixed(1)}/dia)`
+    : '—';
+
+  // Cobertura da PIOR variação cor x tam (so as em ruptura, com cob projetada disponivel).
+  // Esta eh a urgencia REAL que justifica o corte - mesmo com estoque geral confortavel,
+  // se uma variacao especifica zera, perde-se vendas.
+  const ruptList = ref_.variacoes_em_ruptura || [];
+  const piorVar  = ruptList
+    .filter(v => v.cobertura_projetada_dias != null)
+    .reduce((pior, v) => (pior == null || v.cobertura_projetada_dias < pior.cobertura_projetada_dias ? v : pior), null);
+  const cobPiorTxt = piorVar
+    ? `${Number(piorVar.cobertura_projetada_dias).toFixed(1)} dias · ${piorVar.cor || ''} ${piorVar.tam || ''}`.trim()
+    : (ruptList.length > 0 ? `${ruptList.length} variação(ões) sem cob. calculada` : '—');
 
   const cores_excluidas = Array.isArray(ref_.cores_excluidas) ? ref_.cores_excluidas : [];
   const fila_espera     = Array.isArray(ref_.fila_espera)     ? ref_.fila_espera     : [];
@@ -1464,8 +1480,20 @@ function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
             C={C} CALIBRI={CALIBRI}
           />
           <LinhaInfoFonte
-            icone='⏳' label='Cobertura'
-            valor={`${cobTexto} · lead time ${valorDe('lead_time_dias') ?? ref_.lead_time_dias ?? 22}d`}
+            icone='⏳' label='Cobertura geral'
+            valor={cobGeralTxt}
+            fonte='(estoque pronto + em produção) ÷ velocidade'
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='🚨' label='Pior variação'
+            valor={cobPiorTxt}
+            fonte={piorVar ? 'variacoes_em_ruptura (menor cobertura projetada)' : '—'}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='⏱️' label='Lead time'
+            valor={`${valorDe('lead_time_dias') ?? ref_.lead_time_dias ?? 22} dias`}
             fonte={fonteOuCalc('lead_time_dias')}
             C={C} CALIBRI={CALIBRI}
           />
