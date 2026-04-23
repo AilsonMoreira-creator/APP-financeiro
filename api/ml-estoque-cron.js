@@ -170,7 +170,8 @@ function extractSellerSku(attrs) {
 // ── 5. EXTRAIR REF DO seller_custom_field ──
 // Hierarquia:
 //   1. Se scfMap tem esse scf exato, usa o ref do mapa (caminho principal — 95%)
-//   2. Se scf tem padrão "xxx(02277)", extrai os dígitos entre parênteses
+//   2. Se scf tem parenteses com digitos (com ou sem prefixo "ref"), extrai
+//      Ex: "(02277)", "(ref 02851)", "(REF 1500)", "(Ref 02361)"
 //   3. Se scf é só dígitos (ex: "02277"), usa direto
 //   4. null caso contrário
 function extractRefFromCustomField(scf, scfMap) {
@@ -178,8 +179,9 @@ function extractRefFromCustomField(scf, scfMap) {
   const scfTrim = String(scf).trim();
   // Caminho 1: match direto no mapa (produto-pai Ideris)
   if (scfMap && scfMap.has(scfTrim)) return scfMap.get(scfTrim);
-  // Caminho 2: regex parênteses "(02277)"
-  const m = scfTrim.match(/\((\d{3,5})\)/);
+  // Caminho 2: regex parenteses tolerante a "ref " antes dos digitos
+  // Aceita: "(02277)", "(ref 02851)", "(REF 1500)", "(Ref  02361)"
+  const m = scfTrim.match(/\(\s*(?:ref\s*)?(\d{3,5})\s*\)/i);
   if (m) return normRef(m[1]);
   // Caminho 3: campo inteiro é só a ref (ex: "02277")
   const m2 = scfTrim.match(/^\s*0*(\d{3,5})\s*$/);
@@ -295,6 +297,7 @@ export default async function handler(req, res) {
       for (const entry of arr) {
         if (entry.code !== 200 || !entry.body) { multigetErroCode++; continue; }
         const item = entry.body;
+
         if (item.status !== 'active') { multigetSkippedNaoAtivo++; continue; }
         multigetOk++;
 

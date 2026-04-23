@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>OS Amícia — Preview Navegável</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    /* Paleta existente do app */
+    --app-bg: #f7f4f0;
+    --app-cream: #e8e2da;
+    --app-blue-dark: #2c3e50;
+    --app-blue: #4a7fa5;
+    --app-blue-light: #a8c0d8;
+    --app-text: #2c3e50;
+    --app-text-soft: #4a4a4a;
+    --app-muted: #7a7a7a;
+
+    /* Nova paleta da IA (do ícone) */
+    --ia-bg: #EAE0D5;
+    --ia-dark: #373F51;
+    --ia-darker: #1C2533;
+
+    /* Semáforos */
+    --critical: #c0392b;
+    --critical-bg: #fdeaea;
+    --warning: #c8a040;
+    --warning-bg: #faf6ec;
+    --success: #27ae60;
+    --success-bg: #eafbf0;
+    --info: #4a7fa5;
+    --info-bg: #f0f4fa;
+  }
+
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: var(--app-bg);
+    color: var(--app-text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ============= BARRA DE MENU (SIMULANDO APP) ============= */
+  .app-menu {
+    background: #fff;
+    border-bottom: 1px solid var(--app-cream);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .app-logo {
+    font-size: 16pt;
+    font-weight: bold;
+    color: var(--app-blue-dark);
+    letter-spacing: -0.5px;
+    margin-right: 20px;
+    font-family: Georgia, serif;
+    font-style: italic;
+  }
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-family: 'Calibri', sans-serif;
+    font-size: 10.5pt;
+    color: var(--app-text-soft);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+    position: relative;
+  }
+  .menu-item:hover {
+    background: var(--app-bg);
+  }
+  .menu-item.ativo {
+    background: var(--ia-dark);
+    color: #fff;
+  }
+  .menu-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .badge-red {
+    background: var(--critical);
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 8.5pt;
+    font-weight: 700;
+    margin-left: 4px;
+  }
+  .menu-spacer { flex: 1; }
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--app-blue) 0%, var(--app-blue-dark) 100%);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Calibri, sans-serif;
+    font-weight: 700;
+    font-size: 11pt;
+  }
+
+  /* ============= CONTAINER PRINCIPAL ============= */
+  .main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  /* ============= TAB NAV DENTRO DO MODULO IA ============= */
+  .tabs-ia {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--app-cream);
+    padding-bottom: 0;
+  }
+  .tab {
+    padding: 10px 20px;
+    font-family: Calibri, sans-serif;
+    font-size: 11pt;
+    color: var(--app-muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    font-weight: 500;
+  }
+  .tab:hover { color: var(--ia-dark); }
+  .tab.ativo {
+    color: var(--ia-dark);
+    border-bottom-color: var(--ia-dark);
+    font-weight: 700;
+  }
+  .tab-counter {
+    background: var(--app-cream);
+    color: var(--app-text-soft);
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 9pt;
+    font-weight: 700;
+  }
+  .tab.ativo .tab-counter {
+    background: var(--ia-dark);
+    color: #fff;
+  }
+  .tab .tab-counter.critical {
+    background: var(--critical);
+    color: #fff;
+  }
+
+  /* ============= HEADER DO MODULO ============= */
+  .ia-header {
+    background: linear-gradient(135deg, var(--ia-dark) 0%, var(--ia-darker) 100%);
+    color: #fff;
+    border-radius: 12px;
+    padding: 20px 26px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 12px rgba(28, 37, 51, 0.15);
+    position: relative;
+    overflow: hidden;
+  }
+  .ia-header::after {
+    content: "";
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, var(--ia-bg) 0%, transparent 70%);
+    opacity: 0.15;
+  }
+  .saudacao { font-size: 18pt; font-weight: 600; color: #fff; margin-bottom: 2px; }
+  .data-hora { font-size: 10pt; color: var(--ia-bg); font-family: Calibri, sans-serif; }
+  .btn-ia {
+    background: var(--ia-bg);
+    color: var(--ia-darker);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-family: Calibri, sans-serif;
+    font-size: 10.5pt;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.15s;
+    position: relative;
+    z-index: 2;
+  }
+  .btn-ia:hover {
+    background: #fff;
+    transform: translateY(-1px);
+  }
+  .btn-ia-badge {
+    background: var(--ia-dark);
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-size: 8.5pt;
+  }
+
+  /* ============= BLOCOS DA HOME ============= */
+  .bloco {
+    background: #fff;
+    border: 1px solid var(--app-cream);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 14px;
+    transition: all 0.2s;
+  }
+  .bloco-titulo {
+    font-size: 8.5pt;
+    color: var(--ia-dark);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    font-family: Calibri, sans-serif;
+    font-weight: 700;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .bloco-titulo-meta {
+    font-size: 9pt;
+    color: var(--app-muted);
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 500;
+  }
+
+  /* Termometro */
+  .termometro-valor {
+    font-size: 32pt;
+    font-weight: 700;
+    font-family: Calibri, sans-serif;
+    color: var(--app-blue-dark);
+    line-height: 1;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .semaforo {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+  }
+  .semaforo.verde { background: var(--success); box-shadow: 0 0 0 4px rgba(39, 174, 96, 0.15); }
+  .semaforo.amarelo { background: var(--warning); box-shadow: 0 0 0 4px rgba(200, 160, 64, 0.15); }
+  .semaforo.vermelho { background: var(--critical); box-shadow: 0 0 0 4px rgba(192, 57, 43, 0.15); }
+  .termometro-sub {
+    font-size: 10pt;
+    color: var(--app-muted);
+    margin-bottom: 10px;
+  }
+  .termometro-linhas {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--app-cream);
+  }
+  .linha-info {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 10.5pt;
+  }
+  .linha-info .esq { color: var(--app-text-soft); }
+  .linha-info .dir { font-family: Calibri, sans-serif; font-weight: 600; color: var(--app-text); }
+  .linha-info .dir.verde { color: var(--success); }
+  .linha-info .dir.vermelho { color: var(--critical); }
+  .linha-info .dir.amarelo { color: var(--warning); }
+  .linha-info .dir.muted { color: var(--app-muted); font-style: italic; font-weight: 500; }
+
+  /* Resumo Operacional */
+  .resumo-linha {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px dotted var(--app-cream);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .resumo-linha:last-child { border-bottom: none; }
+  .resumo-linha:hover {
+    background: var(--app-bg);
+    margin: 0 -12px;
+    padding: 12px;
+    border-radius: 6px;
+  }
+  .resumo-esq {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .resumo-area-icone {
+    font-size: 16pt;
+  }
+  .resumo-area-nome {
+    font-weight: 700;
+    color: var(--app-text);
+    font-size: 11pt;
+  }
+  .resumo-msg {
+    font-family: Calibri, sans-serif;
+    font-size: 11pt;
+    font-weight: 600;
+  }
+  .resumo-msg.critical { color: var(--critical); }
+  .resumo-msg.warning { color: var(--warning); }
+  .resumo-msg.success { color: var(--success); }
+
+  /* Alertas e Oportunidades */
+  .alerta-item {
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    border-left: 3px solid;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .alerta-item:hover {
+    transform: translateX(2px);
+  }
+  .alerta-critico {
+    background: var(--critical-bg);
+    border-left-color: var(--critical);
+  }
+  .alerta-oportunidade {
+    background: var(--info-bg);
+    border-left-color: var(--info);
+  }
+  .alerta-positivo {
+    background: var(--success-bg);
+    border-left-color: var(--success);
+  }
+  .alerta-atencao {
+    background: var(--warning-bg);
+    border-left-color: var(--warning);
+  }
+  .alerta-titulo {
+    font-size: 10.5pt;
+    font-weight: 600;
+    color: var(--app-text);
+    line-height: 1.4;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .alerta-contexto {
+    font-size: 9.5pt;
+    color: var(--app-muted);
+    font-family: Calibri, sans-serif;
+    margin-top: 4px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: #fff;
+    font-family: Calibri, sans-serif;
+  }
+  .pill.estoque { background: #8b7355; }
+  .pill.producao { background: #6b8e9a; }
+  .pill.marketplaces { background: var(--ia-dark); }
+
+  .ver-mais {
+    text-align: center;
+    padding: 8px;
+    margin-top: 8px;
+    color: var(--app-blue);
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .ver-mais:hover {
+    background: var(--app-bg);
+  }
+
+  /* Destaque da semana */
+  .destaque-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .destaque-card {
+    padding: 12px 14px;
+    border-radius: 6px;
+    border-left: 3px solid;
+  }
+  .destaque-card.positivo {
+    background: var(--success-bg);
+    border-left-color: var(--success);
+  }
+  .destaque-card.negativo {
+    background: var(--warning-bg);
+    border-left-color: var(--warning);
+  }
+  .destaque-label {
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .destaque-positivo .destaque-label { color: var(--success); }
+  .destaque-negativo .destaque-label { color: var(--warning); }
+  .destaque-titulo {
+    font-size: 10.5pt;
+    line-height: 1.4;
+    color: var(--app-text);
+  }
+  .destaque-titulo strong {
+    color: var(--app-text);
+  }
+  .destaque-detalhe {
+    font-size: 9pt;
+    color: var(--app-muted);
+    margin-top: 4px;
+    font-family: Calibri, sans-serif;
+  }
+
+  /* ============= CARDS DAS ÁREAS ============= */
+  .area-header {
+    padding: 16px 20px;
+    background: #fff;
+    border: 1px solid var(--app-cream);
+    border-radius: 10px;
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .area-titulo {
+    font-size: 16pt;
+    font-weight: 600;
+    color: var(--app-blue-dark);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .area-descricao {
+    font-size: 10pt;
+    color: var(--app-muted);
+    font-style: italic;
+  }
+  .card-area {
+    background: #fff;
+    border: 1px solid var(--app-cream);
+    border-top: 3px solid var(--ia-dark);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .card-area-numero {
+    display: inline-block;
+    background: var(--ia-dark);
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .card-area-titulo {
+    font-size: 14pt;
+    font-weight: 600;
+    color: var(--app-blue-dark);
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+  .card-area-sub {
+    font-size: 10pt;
+    color: var(--app-muted);
+    margin-bottom: 14px;
+    font-style: italic;
+  }
+
+  /* Insight dentro do card */
+  .insight-card {
+    background: var(--app-bg);
+    border: 1px solid var(--app-cream);
+    border-left: 4px solid;
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+  }
+  .insight-card.critico { border-left-color: var(--critical); }
+  .insight-card.atencao { border-left-color: var(--warning); }
+  .insight-card.oportunidade { border-left-color: var(--info); }
+  .insight-card.positivo { border-left-color: var(--success); }
+  .insight-card.cinza { border-left-color: var(--app-muted); }
+
+  .insight-header {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .pill-severity {
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #fff;
+    font-family: Calibri, sans-serif;
+  }
+  .pill-severity.critico { background: var(--critical); }
+  .pill-severity.atencao { background: var(--warning); }
+  .pill-severity.oportunidade { background: var(--info); }
+  .pill-severity.positivo { background: var(--success); }
+  .pill-severity.cinza { background: var(--app-muted); }
+  .pill-severity.confidence { background: #fff; color: var(--app-muted); border: 1px solid var(--app-cream); }
+
+  .insight-score {
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    color: var(--app-muted);
+    margin-left: auto;
+  }
+
+  .insight-titulo {
+    font-size: 11.5pt;
+    font-weight: 700;
+    color: var(--app-text);
+    margin-bottom: 6px;
+    line-height: 1.35;
+  }
+  .insight-bloco {
+    font-size: 10pt;
+    color: var(--app-text-soft);
+    line-height: 1.55;
+    margin-bottom: 8px;
+  }
+  .insight-dados {
+    margin: 8px 0;
+    font-family: Calibri, sans-serif;
+    font-size: 9.5pt;
+  }
+  .dado-linha {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    border-bottom: 1px dotted var(--app-cream);
+  }
+  .dado-linha:last-child { border-bottom: none; }
+  .dado-linha .esq { color: var(--app-muted); }
+  .dado-linha .dir { font-weight: 700; color: var(--app-text); }
+  .dado-linha .dir.critical { color: var(--critical); }
+  .dado-linha .dir.success { color: var(--success); }
+
+  .insight-acao {
+    background: var(--ia-bg);
+    border-left: 3px solid var(--ia-dark);
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-top: 10px;
+    font-size: 10pt;
+    line-height: 1.5;
+  }
+  .insight-acao strong {
+    color: var(--ia-dark);
+    font-family: Calibri, sans-serif;
+    font-weight: 700;
+  }
+
+  .insight-feedback {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--app-cream);
+  }
+  .btn-feedback {
+    padding: 4px 12px;
+    background: #fff;
+    border: 1px solid var(--app-cream);
+    border-radius: 4px;
+    font-family: Calibri, sans-serif;
+    font-size: 9.5pt;
+    color: var(--app-text-soft);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-feedback:hover {
+    background: var(--ia-bg);
+    border-color: var(--ia-dark);
+    color: var(--ia-dark);
+  }
+  .btn-feedback.sim:hover { background: var(--success-bg); border-color: var(--success); color: var(--success); }
+  .btn-feedback.parcial:hover { background: var(--warning-bg); border-color: var(--warning); color: var(--warning); }
+  .btn-feedback.nao:hover { background: var(--critical-bg); border-color: var(--critical); color: var(--critical); }
+
+  .insight-meta {
+    font-size: 8.5pt;
+    color: var(--app-muted);
+    margin-top: 8px;
+    font-family: Calibri, sans-serif;
+    font-style: italic;
+  }
+
+  /* Tabs internas (p/ Marketplaces com 6 cards) */
+  .sub-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .sub-tab {
+    padding: 8px 14px;
+    background: #fff;
+    border: 1px solid var(--app-cream);
+    border-radius: 6px;
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    color: var(--app-text-soft);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .sub-tab:hover { border-color: var(--ia-dark); color: var(--ia-dark); }
+  .sub-tab.ativo {
+    background: var(--ia-dark);
+    color: #fff;
+    border-color: var(--ia-dark);
+    font-weight: 700;
+  }
+
+  /* Views */
+  .view { display: none; }
+  .view.ativo { display: block; animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Info banner */
+  .info-preview {
+    background: linear-gradient(135deg, var(--ia-bg) 0%, #fff 100%);
+    border: 1px solid var(--ia-dark);
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    font-size: 10pt;
+    color: var(--ia-darker);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .info-preview strong { font-family: Calibri, sans-serif; font-weight: 700; }
+
+  /* Grade table (para insight de corte) */
+  .grade-tabela {
+    width: 100%;
+    font-family: Calibri, sans-serif;
+    font-size: 9.5pt;
+    margin: 8px 0;
+    border-collapse: collapse;
+  }
+  .grade-tabela th {
+    background: var(--ia-dark);
+    color: #fff;
+    text-align: left;
+    padding: 4px 8px;
+    font-size: 9pt;
+    font-weight: 700;
+  }
+  .grade-tabela td {
+    padding: 4px 8px;
+    border-bottom: 1px dotted var(--app-cream);
+  }
+  .grade-tabela td.dir { text-align: right; font-weight: 600; }
+
+  .plano-degraus {
+    margin: 8px 0;
+    padding-left: 0;
+    list-style: none;
+  }
+  .plano-degraus li {
+    padding: 6px 0 6px 28px;
+    position: relative;
+    font-size: 10pt;
+    line-height: 1.5;
+  }
+  .plano-degraus li::before {
+    content: counter(degrau);
+    counter-increment: degrau;
+    position: absolute;
+    left: 0;
+    top: 6px;
+    width: 20px;
+    height: 20px;
+    background: var(--ia-dark);
+    color: #fff;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 20px;
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    font-weight: 700;
+  }
+  .plano-degraus { counter-reset: degrau; }
+
+  .top-mover-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    font-size: 10pt;
+    border-bottom: 1px dotted var(--app-cream);
+    font-family: Calibri, sans-serif;
+  }
+  .top-mover-item:last-child { border-bottom: none; }
+  .top-mover-qtd { font-weight: 700; color: var(--success); }
+  .top-mover-qtd.down { color: var(--critical); }
+
+  .footer-info {
+    text-align: center;
+    padding: 30px 0 20px;
+    color: var(--app-muted);
+    font-size: 9pt;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============= BARRA DE MENU DO APP ============= -->
+<div class="app-menu">
+  <div class="app-logo">App Amícia</div>
+
+  <a class="menu-item" onclick="return false">
+    <span class="menu-icon">📊</span>Lançamentos
+  </a>
+  <a class="menu-item" onclick="return false">
+    <span class="menu-icon">📄</span>Boletos
+  </a>
+  <a class="menu-item" onclick="return false">
+    <span class="menu-icon">✂️</span>Oficinas
+  </a>
+  <a class="menu-item" onclick="return false">
+    <span class="menu-icon">🧮</span>Calculadora
+  </a>
+  <a class="menu-item" onclick="return false">
+    <span class="menu-icon">💬</span>SAC<span class="badge-red">2</span>
+  </a>
+  <a class="menu-item ativo" onclick="return false">
+    <span class="menu-icon">
+      <!-- Ícone OS Amícia inline SVG (só geometria, sem texto) -->
+      <svg width="20" height="20" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx="20" fill="#EAE0D5"/>
+        <path d="M50 35V20H75" stroke="#373F51" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M50 65V80H25" stroke="#373F51" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M35 50H20V30" stroke="#373F51" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M65 50H80V70" stroke="#373F51" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="75" cy="20" r="5" fill="#373F51"/>
+        <circle cx="25" cy="80" r="5" fill="#373F51"/>
+        <circle cx="20" cy="30" r="5" fill="#373F51"/>
+        <circle cx="80" cy="70" r="5" fill="#373F51"/>
+        <rect x="35" y="35" width="30" height="30" rx="6" fill="#1C2533"/>
+      </svg>
+    </span>
+    OS<span class="badge-red">5</span>
+  </a>
+  <a class="menu-item" onclick="return false">
+    <span class="menu-icon">📦</span>Bling
+  </a>
+
+  <div class="menu-spacer"></div>
+  <div class="user-avatar">A</div>
+</div>
+
+<div class="main">
+
+  <div class="info-preview">
+    <span>💡</span>
+    <div>
+      <strong>Preview navegável</strong> — clique nas abas abaixo para ver como funciona a navegação entre a Home e as áreas. Os dados são ilustrativos.
+    </div>
+  </div>
+
+  <!-- ============= BRANDING OS AMÍCIA ============= -->
+  <div style="display:flex;align-items:center;gap:16px;padding:24px 28px;background:linear-gradient(135deg, var(--ia-bg) 0%, #fff 100%);border-radius:12px;margin-bottom:20px;border:1px solid var(--app-cream);box-shadow:0 2px 8px rgba(0,0,0,0.04)">
+    <div style="flex-shrink:0;width:56px;height:56px;display:flex;align-items:center;justify-content:center">
+      <svg width="56" height="56" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx="20" fill="#EAE0D5"/>
+        <path d="M50 35V20H75" stroke="#373F51" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M50 65V80H25" stroke="#373F51" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M35 50H20V30" stroke="#373F51" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M65 50H80V70" stroke="#373F51" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="75" cy="20" r="5" fill="#373F51"/>
+        <circle cx="25" cy="80" r="5" fill="#373F51"/>
+        <circle cx="20" cy="30" r="5" fill="#373F51"/>
+        <circle cx="80" cy="70" r="5" fill="#373F51"/>
+        <rect x="35" y="35" width="30" height="30" rx="6" fill="#1C2533"/>
+      </svg>
+    </div>
+    <div style="flex:1">
+      <div style="font-family:Georgia,serif;font-size:22pt;color:var(--ia-darker);font-weight:bold;letter-spacing:-0.5px;line-height:1">OS Amícia</div>
+      <div style="font-family:Calibri,sans-serif;font-size:10.5pt;color:var(--ia-dark);margin-top:4px;letter-spacing:0.3px">Sistema operacional de decisão · conecta · analisa · recomenda</div>
+    </div>
+    <div style="font-family:Calibri,sans-serif;font-size:9pt;color:var(--app-muted);padding:6px 12px;background:#fff;border-radius:6px;border:1px solid var(--app-cream)">
+      v1.0 · última análise 19/04 às 07:00
+    </div>
+  </div>
+
+  <!-- ============= TABS DO MÓDULO ============= -->
+  <div class="tabs-ia">
+    <button class="tab ativo" onclick="trocarView('home')">
+      <span>🏠</span> Home
+    </button>
+    <button class="tab" onclick="trocarView('estoque')">
+      <span>📦</span> Estoque
+      <span class="tab-counter critical">4</span>
+    </button>
+    <button class="tab" onclick="trocarView('producao')">
+      <span>✂️</span> Produção
+      <span class="tab-counter">17</span>
+    </button>
+    <button class="tab" onclick="trocarView('marketplaces')">
+      <span>🛒</span> Marketplaces
+      <span class="tab-counter critical">3</span>
+    </button>
+  </div>
+
+  <!-- ==================================================== -->
+  <!-- VIEW: HOME GERAL                                      -->
+  <!-- ==================================================== -->
+  <div id="view-home" class="view ativo">
+
+    <!-- Cabeçalho -->
+    <div class="ia-header">
+      <div>
+        <div class="saudacao">Bom dia, Ailson</div>
+        <div class="data-hora">19 de Abril · sexta-feira · 08:02</div>
+      </div>
+      <button class="btn-ia">
+        ❓ Perguntar à IA <span class="btn-ia-badge">5 restantes</span>
+      </button>
+    </div>
+
+    <!-- Bloco 1: Termômetro -->
+    <div class="bloco">
+      <div class="bloco-titulo">
+        <span>🌡️ Termômetro Marketplaces — Hoje</span>
+      </div>
+      <div class="termometro-valor">
+        R$ 42.300 <span class="semaforo verde"></span>
+      </div>
+      <div class="termometro-sub">Receita marketplace acumulada até agora (08:02)</div>
+      <div class="termometro-linhas">
+        <div class="linha-info">
+          <span class="esq">Média dia útil últimos 30d</span>
+          <span class="dir">R$ 38.500</span>
+        </div>
+        <div class="linha-info">
+          <span class="esq">Variação 7v7 (mesmo dia semana anterior)</span>
+          <span class="dir verde">+8%</span>
+        </div>
+        <div class="linha-info">
+          <span class="esq">Canais ativos</span>
+          <span class="dir">ML · Shein · Shopee · TikTok · Meluni</span>
+        </div>
+        <div class="linha-info">
+          <span class="esq">Lojas físicas</span>
+          <span class="dir muted">não analisadas nesta versão</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloco 2: Resumo Operacional -->
+    <div class="bloco">
+      <div class="bloco-titulo">Resumo Operacional</div>
+      <div class="resumo-linha" onclick="trocarView('estoque')">
+        <div class="resumo-esq">
+          <span class="resumo-area-icone">📦</span>
+          <span class="resumo-area-nome">Estoque</span>
+        </div>
+        <div class="resumo-msg critical">4 variações em ruptura crítica →</div>
+      </div>
+      <div class="resumo-linha" onclick="trocarView('producao')">
+        <div class="resumo-esq">
+          <span class="resumo-area-icone">✂️</span>
+          <span class="resumo-area-nome">Produção</span>
+        </div>
+        <div class="resumo-msg warning">17 cortes propostos · semana corrida →</div>
+      </div>
+      <div class="resumo-linha" onclick="trocarView('marketplaces')">
+        <div class="resumo-esq">
+          <span class="resumo-area-icone">🛒</span>
+          <span class="resumo-area-nome">Marketplaces</span>
+        </div>
+        <div class="resumo-msg warning">conta Lumia 17pp abaixo da média →</div>
+      </div>
+    </div>
+
+    <!-- Bloco 3: Alertas Críticos -->
+    <div class="bloco">
+      <div class="bloco-titulo">
+        <span>🔴 Alertas Críticos do Dia</span>
+        <span class="bloco-titulo-meta">5 de 8 totais</span>
+      </div>
+      <div class="alerta-item alerta-critico" onclick="trocarView('estoque')">
+        <div class="alerta-titulo">
+          <span class="pill estoque">Estoque</span>
+          Ruptura iminente — Saia Linho Bege M (ref 02277)
+        </div>
+        <div class="alerta-contexto">Estoque 12 · cobertura 5,8d · score 94</div>
+      </div>
+      <div class="alerta-item alerta-critico" onclick="trocarView('marketplaces')">
+        <div class="alerta-titulo">
+          <span class="pill marketplaces">Marketplaces</span>
+          Saia Midi Linho — última linha crítica (R$ 6,20 no ML)
+        </div>
+        <div class="alerta-contexto">Custo subiu 8% em 60d · score 87</div>
+      </div>
+      <div class="alerta-item alerta-critico" onclick="trocarView('marketplaces')">
+        <div class="alerta-titulo">
+          <span class="pill marketplaces">Marketplaces</span>
+          Conta Lumia caiu 32% em 7 dias
+        </div>
+        <div class="alerta-contexto">17pp abaixo da média das outras contas · score 85</div>
+      </div>
+      <div class="alerta-item alerta-critico" onclick="trocarView('estoque')">
+        <div class="alerta-titulo">
+          <span class="pill estoque">Estoque</span>
+          Vestido Couro Curto Preto M — ruptura em 5 dias
+        </div>
+        <div class="alerta-contexto">v15d=36 · cobertura 5,8d · score 83</div>
+      </div>
+      <div class="alerta-item alerta-critico" onclick="trocarView('estoque')">
+        <div class="alerta-titulo">
+          <span class="pill estoque">Estoque</span>
+          Ref 3150 GG Preto — possível ruptura disfarçada
+        </div>
+        <div class="alerta-contexto">Vendeu 28 peças há 30-60d, 0 nos últimos 15d · score 81</div>
+      </div>
+      <div class="ver-mais">Ver mais 3 críticos do dia →</div>
+    </div>
+
+    <!-- Bloco 4: Oportunidades -->
+    <div class="bloco">
+      <div class="bloco-titulo">
+        <span>🔵 Oportunidades do Dia</span>
+        <span class="bloco-titulo-meta">Top 3</span>
+      </div>
+      <div class="alerta-item alerta-oportunidade" onclick="trocarView('marketplaces')">
+        <div class="alerta-titulo">
+          <span class="pill marketplaces">Marketplaces</span>
+          Macacão Linho Bege — pegada R$ 760/mês
+        </div>
+        <div class="alerta-contexto">Margem 15,20 · vende 45% do top · score 82</div>
+      </div>
+      <div class="alerta-item alerta-oportunidade" onclick="trocarView('marketplaces')">
+        <div class="alerta-titulo">
+          <span class="pill marketplaces">Marketplaces</span>
+          Cor Marrom bombando +68% em 8 modelos
+        </div>
+        <div class="alerta-contexto">47→79 peças em 7d · maior salto +150% · score 84</div>
+      </div>
+      <div class="alerta-item alerta-oportunidade" onclick="trocarView('marketplaces')">
+        <div class="alerta-titulo">
+          <span class="pill marketplaces">Marketplaces</span>
+          TikTok Shop +85% em 7 dias
+        </div>
+        <div class="alerta-contexto">Desvio +72pp vs média · investigar causa · score 78</div>
+      </div>
+    </div>
+
+    <!-- Bloco 5: Destaque da Semana -->
+    <div class="bloco">
+      <div class="bloco-titulo">Destaque da Semana</div>
+      <div class="destaque-grid">
+        <div class="destaque-card positivo destaque-positivo">
+          <div class="destaque-label">👍 Melhor notícia</div>
+          <div class="destaque-titulo">Receita semana <strong>+12%</strong> vs mesma semana do mês anterior</div>
+          <div class="destaque-detalhe">Puxada por ML (+18%) e Shein (+9%)</div>
+        </div>
+        <div class="destaque-card negativo destaque-negativo">
+          <div class="destaque-label">👎 Pior notícia</div>
+          <div class="destaque-titulo">Conta Lumia acumula <strong>3ª semana</strong> abaixo da média</div>
+          <div class="destaque-detalhe">Tendência consistente exige investigação</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================================================== -->
+  <!-- VIEW: ESTOQUE                                         -->
+  <!-- ==================================================== -->
+  <div id="view-estoque" class="view">
+
+    <div class="area-header">
+      <div>
+        <div class="area-titulo">📦 Estoque</div>
+        <div class="area-descricao">Saúde geral, ruptura, cobertura e reposição sugerida · 6 cards</div>
+      </div>
+    </div>
+
+    <!-- Card 1: Saúde geral -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 1</span>
+      <div class="card-area-titulo">Saúde geral do estoque</div>
+      <div class="card-area-sub">Projeção de saldo fim do mês considerando produção e vendas</div>
+
+      <div class="insight-card atencao">
+        <div class="insight-header">
+          <span class="pill-severity atencao">Atenção</span>
+          <span class="pill-severity confidence">Confiança Alta</span>
+          <span class="insight-score">score 72</span>
+        </div>
+        <div class="insight-titulo">Tendência de alta no estoque total — considerar segurar cortes</div>
+        <div class="insight-dados">
+          <div class="dado-linha"><span class="esq">Estoque hoje</span><span class="dir">26.000 peças</span></div>
+          <div class="dado-linha"><span class="esq">Em produção (chegando em 22 dias)</span><span class="dir">14.000 peças</span></div>
+          <div class="dado-linha"><span class="esq">Vendas projetadas próximo mês</span><span class="dir">12.000 peças</span></div>
+          <div class="dado-linha"><span class="esq">Tendência fim do mês</span><span class="dir success">+2.000 (28.000)</span></div>
+          <div class="dado-linha"><span class="esq">Histórico abril médio</span><span class="dir">25.500 peças</span></div>
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> projeção 10% acima do histórico. Considerar segurar cortes de modelos com cobertura saudável e focar apenas em rupturas críticas.
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: Tendência mensal -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 2</span>
+      <div class="card-area-titulo">Tendência mês a mês</div>
+      <div class="card-area-sub">Evolução do estoque total últimos 12 meses considerando sazonalidade</div>
+
+      <div class="insight-card positivo">
+        <div class="insight-header">
+          <span class="pill-severity positivo">Positiva</span>
+          <span class="pill-severity confidence">Confiança Alta</span>
+        </div>
+        <div class="insight-titulo">Estoque em linha com padrão sazonal de abril</div>
+        <div class="insight-bloco">
+          Abril é historicamente mês de consolidação (coleção verão saindo, início de inverno). Estoque atual 26k está dentro da faixa esperada (24k–28k dos últimos 3 anos).
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: Ruptura crítica -->
+    <div class="card-area" style="border-top-color: var(--critical);">
+      <span class="card-area-numero" style="background: var(--critical);">Card 3 · Prioridade</span>
+      <div class="card-area-titulo">🔴 Ruptura crítica</div>
+      <div class="card-area-sub">Variações com cobertura &lt; 10 dias e demanda ativa · 4 casos</div>
+
+      <div class="insight-card critico">
+        <div class="insight-header">
+          <span class="pill-severity critico">Crítico</span>
+          <span class="pill-severity confidence">Confiança Alta</span>
+          <span class="insight-score">score 94</span>
+        </div>
+        <div class="insight-titulo">Saia Linho Bege M (ref 02277) — ruptura iminente</div>
+        <div class="insight-dados">
+          <div class="dado-linha"><span class="esq">Estoque hoje</span><span class="dir critical">12 peças</span></div>
+          <div class="dado-linha"><span class="esq">Vendas últimos 15 dias</span><span class="dir">32 peças</span></div>
+          <div class="dado-linha"><span class="esq">Média diária</span><span class="dir">2,1 peças/dia</span></div>
+          <div class="dado-linha"><span class="esq">Cobertura efetiva</span><span class="dir critical">5,8 dias</span></div>
+          <div class="dado-linha"><span class="esq">Produção chegando</span><span class="dir">0 peças</span></div>
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> priorizar corte desta variação esta semana. Cor Bege em alta no catálogo (+32% em 7v7) reforça urgência.
+        </div>
+        <div class="insight-feedback">
+          <button class="btn-feedback sim">✓ Sim</button>
+          <button class="btn-feedback parcial">~ Parcial</button>
+          <button class="btn-feedback nao">✗ Não</button>
+        </div>
+      </div>
+
+      <div class="insight-card critico">
+        <div class="insight-header">
+          <span class="pill-severity critico">Crítico</span>
+          <span class="pill-severity confidence">Confiança Alta</span>
+          <span class="insight-score">score 83</span>
+        </div>
+        <div class="insight-titulo">Vestido Couro Curto Preto M (ref 3150) — ruptura em 5 dias</div>
+        <div class="insight-dados">
+          <div class="dado-linha"><span class="esq">Estoque hoje</span><span class="dir critical">14 peças</span></div>
+          <div class="dado-linha"><span class="esq">Vendas últimos 15 dias</span><span class="dir">36 peças</span></div>
+          <div class="dado-linha"><span class="esq">Cobertura efetiva</span><span class="dir critical">5,8 dias</span></div>
+          <div class="dado-linha"><span class="esq">Produção chegando</span><span class="dir">0 peças</span></div>
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> incluir Preto M no próximo corte da ref 3150. Não há produção desta variação em andamento.
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: Ruptura disfarçada -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 4</span>
+      <div class="card-area-titulo">Ruptura disfarçada</div>
+      <div class="card-area-sub">Variações que vendiam bem há 30-60d e pararam junto com estoque zerando</div>
+
+      <div class="insight-card atencao">
+        <div class="insight-header">
+          <span class="pill-severity atencao">Atenção</span>
+          <span class="pill-severity confidence">Confiança Média</span>
+          <span class="insight-score">score 81</span>
+        </div>
+        <div class="insight-titulo">Ref 3150 GG Preto — possível ruptura disfarçada</div>
+        <div class="insight-bloco">
+          Vendeu 28 peças entre 30-60 dias atrás, zero nos últimos 15 dias. Estoque atual: zero.
+          Padrão sugere que a variação pode ter parado por falta de estoque, não por queda de demanda.
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> investigar histórico. Se confirmado, incluir GG Preto como teste no próximo corte (~20 peças).
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 5: Cobertura por tecido -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 5</span>
+      <div class="card-area-titulo">Cobertura média por tecido</div>
+      <div class="card-area-sub">Radar de saúde dos 5 tecidos principais dos marketplaces</div>
+
+      <div class="insight-card atencao">
+        <div class="insight-header">
+          <span class="pill-severity atencao">Atenção</span>
+          <span class="pill-severity confidence">Confiança Alta</span>
+        </div>
+        <div class="insight-titulo">Linho sem elastano apertado — cobertura 18 dias</div>
+        <div class="insight-dados">
+          <div class="dado-linha"><span class="esq">Linho sem elastano</span><span class="dir critical">18 dias (abaixo do lead time)</span></div>
+          <div class="dado-linha"><span class="esq">Linho com elastano</span><span class="dir success">32 dias (saudável)</span></div>
+          <div class="dado-linha"><span class="esq">Couro</span><span class="dir success">38 dias (saudável)</span></div>
+          <div class="dado-linha"><span class="esq">Verona</span><span class="dir">24 dias (limite)</span></div>
+          <div class="dado-linha"><span class="esq">Tricoline</span><span class="dir success">45 dias (excesso)</span></div>
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> priorizar cortes em linho sem elastano esta semana. Segurar tricoline se possível.
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 6: Reposição sugerida -->
+    <div class="card-area" style="border-top-color: var(--ia-dark);">
+      <span class="card-area-numero">Card 6 · Principal</span>
+      <div class="card-area-titulo">✂️ Reposição sugerida da semana</div>
+      <div class="card-area-sub">O que cortar esta semana, detalhado por cor + tamanho + rolos</div>
+
+      <div class="insight-card critico">
+        <div class="insight-header">
+          <span class="pill-severity critico">Crítico</span>
+          <span class="pill-severity confidence">Confiança Alta</span>
+          <span class="pill-severity atencao">Curva A</span>
+          <span class="insight-score">score 94</span>
+        </div>
+        <div class="insight-titulo">Saia Linho (ref 02277) — corte único com 4 cores</div>
+
+        <div class="insight-bloco">
+          <strong>Grade do enfesto:</strong> 2M · 1G · 1GG (4 módulos, peça pequena)
+        </div>
+
+        <table class="grade-tabela">
+          <thead>
+            <tr><th>Cor</th><th>Rolos</th><th>Tendência</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Bege</td><td class="dir">5 rolos</td><td style="color: var(--success);">📈 em alta +32%</td></tr>
+            <tr><td>Preto</td><td class="dir">4 rolos</td><td style="color: var(--app-muted);">➡️ estável</td></tr>
+            <tr><td>Azul Marinho</td><td class="dir">4 rolos</td><td style="color: var(--app-muted);">➡️ estável</td></tr>
+            <tr><td>Figo</td><td class="dir">3 rolos</td><td style="color: var(--success);">📈 em alta +28%</td></tr>
+            <tr><td><strong>Total</strong></td><td class="dir"><strong>16 rolos</strong></td><td></td></tr>
+          </tbody>
+        </table>
+
+        <div class="insight-bloco">
+          <strong>Rendimento estimado:</strong> ~320 peças (baseado em histórico de 5 cortes na sala Antonio)
+        </div>
+
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> enviar pra sala Antonio esta semana — 1 enfesto, 16 rolos. Urgente pra evitar ruptura.
+        </div>
+        <div class="insight-feedback">
+          <button class="btn-feedback sim">✓ Sim</button>
+          <button class="btn-feedback parcial">~ Parcial</button>
+          <button class="btn-feedback nao">✗ Não</button>
+        </div>
+        <div class="insight-meta">Fontes: Bling Produtos · Bling Estoque · Oficinas · Salas de Corte</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================================================== -->
+  <!-- VIEW: PRODUÇÃO                                        -->
+  <!-- ==================================================== -->
+  <div id="view-producao" class="view">
+
+    <div class="area-header">
+      <div>
+        <div class="area-titulo">✂️ Produção</div>
+        <div class="area-descricao">Oficinas, salas de corte e visão semanal · 5 cards</div>
+      </div>
+    </div>
+
+    <!-- Card destacado: Visão semanal -->
+    <div class="card-area" style="border-top-color: var(--warning);">
+      <span class="card-area-numero" style="background: var(--warning);">Visão da Semana</span>
+      <div class="card-area-titulo">🟡 Semana corrida · 17 cortes propostos</div>
+      <div class="card-area-sub">Dentro do limite (máx 20 antes de sala extra)</div>
+
+      <div class="insight-card atencao">
+        <div class="insight-bloco">
+          <strong>Distribuição dos 17 cortes:</strong>
+        </div>
+        <div class="insight-dados">
+          <div class="dado-linha"><span class="esq">Cortes principais Curva A (≥300 peças)</span><span class="dir">11 cortes</span></div>
+          <div class="dado-linha"><span class="esq">Cortes principais Curva B (≥200 peças)</span><span class="dir">4 cortes</span></div>
+          <div class="dado-linha"><span class="esq">Cortes de balanceamento</span><span class="dir">2 cortes</span></div>
+          <div class="dado-linha"><span class="esq"><strong>Total</strong></span><span class="dir"><strong>17 de 20 disponíveis</strong></span></div>
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Sugestão:</strong> priorizar os 11 da Curva A. Deixar os 2 de balanceamento pra próxima semana se apertar.
+        </div>
+      </div>
+    </div>
+
+    <!-- Card: Oficinas em queda -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 1</span>
+      <div class="card-area-titulo">Oficinas em queda</div>
+      <div class="card-area-sub">Entregando abaixo de 70% da média 12 meses</div>
+
+      <div class="insight-card atencao">
+        <div class="insight-header">
+          <span class="pill-severity atencao">Atenção</span>
+          <span class="pill-severity confidence">Confiança Alta</span>
+          <span class="insight-score">score 76</span>
+        </div>
+        <div class="insight-titulo">Oficina Rita entregou 58% da média 12m</div>
+        <div class="insight-dados">
+          <div class="dado-linha"><span class="esq">Média histórica 12m</span><span class="dir">480 peças/mês</span></div>
+          <div class="dado-linha"><span class="esq">Entregas últimos 30d</span><span class="dir critical">278 peças</span></div>
+          <div class="dado-linha"><span class="esq">% da média</span><span class="dir critical">58%</span></div>
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> contatar Rita para entender o motivo. Se problema estrutural, considerar distribuir cortes pra outras oficinas.
+        </div>
+      </div>
+    </div>
+
+    <!-- Card: Salas sobrecarregadas -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 2</span>
+      <div class="card-area-titulo">Oficinas sobrecarregadas</div>
+      <div class="card-area-sub">Acima de 120% da média — risco de atraso</div>
+
+      <div class="insight-card positivo">
+        <div class="insight-header">
+          <span class="pill-severity positivo">Positiva</span>
+        </div>
+        <div class="insight-titulo">Nenhuma oficina em sobrecarga</div>
+        <div class="insight-bloco">
+          Todas as 13 oficinas estão operando entre 70% e 120% da média histórica.
+        </div>
+      </div>
+    </div>
+
+    <!-- Card: Rendimento sala de corte -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 3</span>
+      <div class="card-area-titulo">Rendimento de tecido por sala</div>
+      <div class="card-area-sub">Metros consumidos × peças produzidas comparado à média histórica</div>
+
+      <div class="insight-card atencao">
+        <div class="insight-header">
+          <span class="pill-severity atencao">Atenção</span>
+          <span class="pill-severity confidence">Confiança Média</span>
+          <span class="insight-score">score 68</span>
+        </div>
+        <div class="insight-titulo">Sala Chico consumindo 8% mais tecido que média histórica</div>
+        <div class="insight-bloco">
+          Nos últimos 5 cortes da sala Chico, o consumo médio de tecido por peça ficou 8% acima da média histórica dela mesma. Pode ser ref específica difícil de encaixar ou desperdício no risco.
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> revisar últimos riscos da sala Chico. Se for problema de encaixe em uma ref específica, revisar modelagem.
+        </div>
+      </div>
+    </div>
+
+    <!-- Card: Tempo de entrega -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 4</span>
+      <div class="card-area-titulo">Tempo médio de entrega por oficina</div>
+      <div class="card-area-sub">Dentro ou fora do lead time padrão de 22 dias</div>
+
+      <div class="insight-card positivo">
+        <div class="insight-header">
+          <span class="pill-severity positivo">Positiva</span>
+        </div>
+        <div class="insight-titulo">11 de 13 oficinas dentro do lead time</div>
+        <div class="insight-dados">
+          <div class="dado-linha"><span class="esq">Média geral das oficinas</span><span class="dir">21,4 dias</span></div>
+          <div class="dado-linha"><span class="esq">Melhor: oficina Cleide</span><span class="dir success">17 dias</span></div>
+          <div class="dado-linha"><span class="esq">Pior: oficina Rita</span><span class="dir critical">28 dias</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card: Produção vs Demanda -->
+    <div class="card-area">
+      <span class="card-area-numero">Card 5</span>
+      <div class="card-area-titulo">Modelos em produção vs demanda</div>
+      <div class="card-area-sub">Está cortando na proporção certa?</div>
+
+      <div class="insight-card atencao">
+        <div class="insight-header">
+          <span class="pill-severity atencao">Atenção</span>
+          <span class="pill-severity confidence">Confiança Alta</span>
+          <span class="insight-score">score 71</span>
+        </div>
+        <div class="insight-titulo">Verona Plus (ref 2934) — produção insuficiente</div>
+        <div class="insight-dados">
+          <div class="dado-linha"><span class="esq">Em produção (chegando 22d)</span><span class="dir">380 peças</span></div>
+          <div class="dado-linha"><span class="esq">Demanda projetada</span><span class="dir">520 peças</span></div>
+          <div class="dado-linha"><span class="esq">Gap</span><span class="dir critical">-140 peças</span></div>
+        </div>
+        <div class="insight-acao">
+          <strong>📌 Ação:</strong> complementar corte com foco em G2 Marrom, G2 Figo e G3 Preta (concentração do gap).
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ==================================================== -->
+  <!-- VIEW: MARKETPLACES                                    -->
+  <!-- ==================================================== -->
+  <div id="view-marketplaces" class="view">
+
+    <div class="area-header">
+      <div>
+        <div class="area-titulo">🛒 Marketplaces</div>
+        <div class="area-descricao">5 canais · 3 contas Bling · 6 cards de análise</div>
+      </div>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div class="sub-tabs">
+      <button class="sub-tab ativo" onclick="trocarCardMkt(7, this)">Card 1 · 💰 Lucro do Mês <span style="font-size:9pt;color:var(--warning);font-weight:bold;margin-left:4px">🔒</span></button>
+      <button class="sub-tab" onclick="trocarCardMkt(1, this)">Card 2 · Crescimento 24m</button>
+      <button class="sub-tab" onclick="trocarCardMkt(2, this)">Card 3 · Canais</button>
+      <button class="sub-tab" onclick="trocarCardMkt(3, this)">Card 4 · Contas Bling</button>
+      <button class="sub-tab" onclick="trocarCardMkt(4, this)">Card 5 · Top Movers</button>
+      <button class="sub-tab" onclick="trocarCardMkt(5, this)">Card 6 · Margem</button>
+      <button class="sub-tab" onclick="trocarCardMkt(6, this)">Card 7 · Oportunidades</button>
+    </div>
+
+    <!-- Card 7 (NOVO · 1º na ordem): Lucro Líquido do Mês · ADMIN-ONLY -->
+    <div id="card-mkt-7" class="card-mkt-view ativo">
+      <div class="card-area" style="border-left:4px solid var(--warning)">
+        <span class="card-area-numero" style="background:var(--warning);color:#fff">Card 1 · Lucro do Mês · 🔒 Admin-Only</span>
+        <div class="card-area-titulo">💰 Lucro Líquido Marketplace do Mês</div>
+        <div class="card-area-sub">Quanto você realmente ganhou — já descontada a devolução estimada (10% global)</div>
+
+        <div class="insight-card" style="background:linear-gradient(135deg, #fff 0%, var(--success-bg) 100%);border-left:4px solid var(--success)">
+          <div class="insight-header">
+            <span class="pill-severity positivo">Resultado do Mês</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+          </div>
+          <div class="insight-titulo" style="font-size:28pt;font-family:Calibri,sans-serif;color:var(--success);letter-spacing:-1px;margin-bottom:4px">R$ 142.380</div>
+          <div style="color:var(--app-muted);font-size:10pt;margin-bottom:20px">Lucro líquido projetado — dia 17/30 · ritmo R$ 4.746/dia</div>
+
+          <div class="insight-dados">
+            <div class="dado-linha"><span class="esq">Receita bruta vendas marketplace</span><span class="dir">R$ 1.240.000</span></div>
+            <div class="dado-linha"><span class="esq">(+) Lucro bruto somado por produto</span><span class="dir">R$ 158.200</span></div>
+            <div class="dado-linha"><span class="esq">(−) Devoluções estimadas (10% global)</span><span class="dir critical">R$ 15.820</span></div>
+            <div class="dado-linha" style="border-top:2px solid var(--app-cream);padding-top:8px;margin-top:4px"><span class="esq"><strong>Lucro líquido projetado (mês corrente)</strong></span><span class="dir success"><strong>R$ 142.380</strong></span></div>
+          </div>
+
+          <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--app-cream)">
+            <div style="font-family:Calibri,sans-serif;text-transform:uppercase;font-size:9pt;letter-spacing:1.5px;color:var(--ia-dark);margin-bottom:12px">Comparação</div>
+            <div class="insight-dados">
+              <div class="dado-linha"><span class="esq">Mês anterior (mesmo dia 17)</span><span class="dir">R$ 128.500</span></div>
+              <div class="dado-linha"><span class="esq">Mês anterior (fechado)</span><span class="dir">R$ 138.200 · projetado está <span class="success">+3%</span></span></div>
+              <div class="dado-linha"><span class="esq">Mesmo mês ano anterior</span><span class="dir success">R$ 118.200 · estamos <span class="success">+20%</span></span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--app-cream)">
+            <div style="font-family:Calibri,sans-serif;text-transform:uppercase;font-size:9pt;letter-spacing:1.5px;color:var(--ia-dark);margin-bottom:12px">Lucro por Canal</div>
+            <div class="insight-dados">
+              <div class="dado-linha"><span class="esq">🛒 Mercado Livre</span><span class="dir"><strong>R$ 72.000</strong> · 50,6%</span></div>
+              <div class="dado-linha"><span class="esq">🛒 Shein</span><span class="dir">R$ 31.800 · 22,3%</span></div>
+              <div class="dado-linha"><span class="esq">🛒 Shopee</span><span class="dir">R$ 19.200 · 13,5%</span></div>
+              <div class="dado-linha"><span class="esq">🛒 TikTok Shop</span><span class="dir">R$ 12.400 · 8,7%</span></div>
+              <div class="dado-linha"><span class="esq">🛒 Meluni</span><span class="dir">R$ 6.500 · 4,6%</span></div>
+              <div class="dado-linha"><span class="esq">🛒 Outros (Magalu + restantes)</span><span class="dir muted">R$ 480 · 0,3%</span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--app-cream)">
+            <div style="font-family:Calibri,sans-serif;text-transform:uppercase;font-size:9pt;letter-spacing:1.5px;color:var(--ia-dark);margin-bottom:12px">Top 5 Produtos que Mais Lucraram este Mês</div>
+            <div class="insight-dados">
+              <div class="dado-linha"><span class="esq">1. Ref 02277 · Saia Midi Linho</span><span class="dir success"><strong>R$ 8.450</strong> · 5,9%</span></div>
+              <div class="dado-linha"><span class="esq">2. Ref 02601 · Vestido Midi Linho</span><span class="dir success"><strong>R$ 7.820</strong> · 5,5%</span></div>
+              <div class="dado-linha"><span class="esq">3. Ref 2934 · Verona Plus</span><span class="dir">R$ 6.990 · 4,9%</span></div>
+              <div class="dado-linha"><span class="esq">4. Ref 02782 · Vestido Longo Linho</span><span class="dir">R$ 5.640 · 4,0%</span></div>
+              <div class="dado-linha"><span class="esq">5. Ref 02798 · Vestido Feminino</span><span class="dir">R$ 4.820 · 3,4%</span></div>
+            </div>
+          </div>
+
+          <div class="insight-acao" style="margin-top:24px">
+            <strong>📌 Análise IA:</strong> ritmo saudável — projetando fechar o mês 3% acima do mês anterior e 20% acima do mesmo mês ano passado. ML representa 50% do lucro (concentração aceitável). Top 5 produtos geram 24% do lucro total — diversificação ok. Devolução de 10% aplicada é estimativa global; custo usado é o atual da Calculadora (para vendas do mês corrente é 100% preciso).
+          </div>
+          <div style="margin-top:12px;padding:10px 14px;background:var(--warning-bg);border-radius:6px;font-size:9.5pt;color:var(--app-text-soft)">
+            <strong>🔒 Visibilidade:</strong> este card só aparece para perfil <strong>admin</strong>. Em nenhuma circunstância será exposto a outros perfis, nem na Home, nem em telas derivadas.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 1 (agora 2º na ordem): Crescimento -->
+    <div id="card-mkt-1" class="card-mkt-view" style="display: none;">
+      <div class="card-area">
+        <span class="card-area-numero">Card 2</span>
+        <div class="card-area-titulo">Crescimento marketplace ao longo dos anos</div>
+        <div class="card-area-sub">Visão estratégica de longo prazo · 24 meses</div>
+
+        <div class="insight-card positivo">
+          <div class="insight-header">
+            <span class="pill-severity positivo">Positiva</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+          </div>
+          <div class="insight-titulo">Receita marketplace 24 meses — crescimento consistente</div>
+          <div class="insight-bloco">
+            Abril de 2026 projeta R$ 1.240.000 em receita marketplace. Crescimento de 18% vs abril de 2025.
+          </div>
+          <div class="insight-dados">
+            <div class="dado-linha"><span class="esq">Abril 2025</span><span class="dir">R$ 1.050.000</span></div>
+            <div class="dado-linha"><span class="esq">Abril 2026 projetado</span><span class="dir success">R$ 1.240.000 (+18%)</span></div>
+            <div class="dado-linha"><span class="esq">Pico histórico (Nov 2025)</span><span class="dir">R$ 1.485.000</span></div>
+            <div class="dado-linha"><span class="esq">Média móvel 6m atual</span><span class="dir success">R$ 1.195.000</span></div>
+            <div class="dado-linha"><span class="esq">Média móvel 6m anterior</span><span class="dir">R$ 1.040.000 (+15%)</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: Canais -->
+    <div id="card-mkt-2" class="card-mkt-view" style="display: none;">
+      <div class="card-area">
+        <span class="card-area-numero">Card 2</span>
+        <div class="card-area-titulo">Qual canal está subindo ou caindo acima da média</div>
+        <div class="card-area-sub">Comparação entre os 5 canais marketplace</div>
+
+        <div class="insight-card critico">
+          <div class="insight-header">
+            <span class="pill-severity critico">Crítico</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+            <span class="insight-score">score 92</span>
+          </div>
+          <div class="insight-titulo">Shopee caiu 28% em 7 dias — média geral caiu 6%</div>
+          <div class="insight-dados">
+            <div class="dado-linha"><span class="esq">Shopee (7d anteriores)</span><span class="dir">R$ 62.000</span></div>
+            <div class="dado-linha"><span class="esq">Shopee (últimos 7d)</span><span class="dir critical">R$ 44.000 (-28%)</span></div>
+            <div class="dado-linha"><span class="esq">Média geral dos canais</span><span class="dir">-6%</span></div>
+            <div class="dado-linha"><span class="esq">Desvio vs média</span><span class="dir critical">-22 pontos percentuais</span></div>
+          </div>
+          <div class="insight-acao">
+            <strong>📌 Ação:</strong> investigar Shopee. Possíveis causas: Devolução Fácil afetando ranqueamento, competidor com preço agressivo, ou campanha promocional não participada.
+          </div>
+        </div>
+
+        <div class="insight-card positivo">
+          <div class="insight-header">
+            <span class="pill-severity positivo">Positiva</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+            <span class="insight-score">score 78</span>
+          </div>
+          <div class="insight-titulo">TikTok Shop subiu 85% em 7 dias — oportunidade</div>
+          <div class="insight-dados">
+            <div class="dado-linha"><span class="esq">TikTok (7d anteriores)</span><span class="dir">R$ 28.000</span></div>
+            <div class="dado-linha"><span class="esq">TikTok (últimos 7d)</span><span class="dir success">R$ 52.000 (+85%)</span></div>
+            <div class="dado-linha"><span class="esq">Desvio vs média</span><span class="dir success">+72 pontos percentuais</span></div>
+          </div>
+          <div class="insight-acao">
+            <strong>📌 Ação:</strong> investigar causa. Se foi vídeo viral ou campanha orgânica, tentar replicar. Se produto específico, reforçar estoque.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: Contas Bling -->
+    <div id="card-mkt-3" class="card-mkt-view" style="display: none;">
+      <div class="card-area">
+        <span class="card-area-numero">Card 3</span>
+        <div class="card-area-titulo">Performance das 3 contas Bling</div>
+        <div class="card-area-sub">Exitus × Lumia × Muniam — 7v7</div>
+
+        <div class="insight-card atencao">
+          <div class="insight-header">
+            <span class="pill-severity atencao">Atenção</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+            <span class="insight-score">score 78</span>
+          </div>
+          <div class="insight-titulo">Conta Lumia com desempenho 18pp abaixo das outras 2</div>
+          <div class="insight-dados">
+            <div class="dado-linha"><span class="esq">Exitus (7v7)</span><span class="dir success">+14% (R$ 140k → 160k)</span></div>
+            <div class="dado-linha"><span class="esq">Lumia (7v7)</span><span class="dir critical">-4% (R$ 82k → 79k)</span></div>
+            <div class="dado-linha"><span class="esq">Muniam (7v7)</span><span class="dir success">+12% (R$ 75k → 84k)</span></div>
+            <div class="dado-linha"><span class="esq">Média Exitus + Muniam</span><span class="dir">+13%</span></div>
+            <div class="dado-linha"><span class="esq">Desvio Lumia</span><span class="dir critical">-17 pontos percentuais</span></div>
+          </div>
+          <div class="insight-acao">
+            <strong>📌 Ação:</strong> investigar top 10 produtos da Lumia. Comparar foto, título e descrição com versões Exitus/Muniam. Pode ser supressão, foto fraca ou SEO.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: Top Movers -->
+    <div id="card-mkt-4" class="card-mkt-view" style="display: none;">
+      <div class="card-area">
+        <span class="card-area-numero">Card 4 · Coração</span>
+        <div class="card-area-titulo">Top Movers em 3 camadas</div>
+        <div class="card-area-sub">Unificado · Por conta · Cruzamento</div>
+
+        <div class="insight-card positivo">
+          <div class="insight-header">
+            <span class="pill-severity positivo">Camada 1 · Unificado</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+            <span class="insight-score">score 84</span>
+          </div>
+          <div class="insight-titulo">Marrom é a cor que mais cresce — 8 produtos em alta</div>
+          <div class="insight-bloco">
+            Agregando as 3 contas Bling, Marrom subiu de 47 → 79 peças vendidas (7d vs 7 anteriores), em 8 modelos.
+          </div>
+          <div class="top-mover-item">
+            <span>Vestido Midi Couro Marrom M</span>
+            <span class="top-mover-qtd">+150% (4→10)</span>
+          </div>
+          <div class="top-mover-item">
+            <span>Verona Plus Marrom G2</span>
+            <span class="top-mover-qtd">+80% (5→9)</span>
+          </div>
+          <div class="top-mover-item">
+            <span>Macacão Linho Marrom G</span>
+            <span class="top-mover-qtd">+75% (4→7)</span>
+          </div>
+          <div class="insight-acao">
+            <strong>📌 Ação:</strong> verificar refs com Marrom sem destaque. Considerar foto promocional dedicada à cor. Reforçar Marrom nos próximos cortes.
+          </div>
+        </div>
+
+        <div class="insight-card atencao">
+          <div class="insight-header">
+            <span class="pill-severity atencao">Camada 3 · Cruzamento</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+            <span class="insight-score">score 74</span>
+          </div>
+          <div class="insight-titulo">Vestido Midi Couro Preto M — Lumia 70% abaixo das outras</div>
+          <div class="insight-dados">
+            <div class="dado-linha"><span class="esq">Exitus (últimos 7d)</span><span class="dir success">15 peças</span></div>
+            <div class="dado-linha"><span class="esq">Muniam (últimos 7d)</span><span class="dir success">12 peças</span></div>
+            <div class="dado-linha"><span class="esq">Lumia (últimos 7d)</span><span class="dir critical">4 peças</span></div>
+            <div class="dado-linha"><span class="esq">Média Exitus+Muniam</span><span class="dir">13,5 peças</span></div>
+          </div>
+          <div class="insight-acao">
+            <strong>📌 Ação:</strong> comparar anúncio da Lumia com os da Exitus/Muniam lado a lado. Checar: foto principal, primeira palavra do título, preço, atributos críticos.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 5: Margem com plano gradual -->
+    <div id="card-mkt-5" class="card-mkt-view" style="display: none;">
+      <div class="card-area">
+        <span class="card-area-numero">Card 5</span>
+        <div class="card-area-titulo">Margem por canal com plano de ajuste gradual</div>
+        <div class="card-area-sub">Pisos da casa: R$ 8 mínimo · R$ 10 bom · R$ 14 ótimo</div>
+
+        <div class="insight-card critico">
+          <div class="insight-header">
+            <span class="pill-severity critico">Crítico</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+            <span class="insight-score">score 87</span>
+          </div>
+          <div class="insight-titulo">Saia Midi Linho (ref 2812) — última linha crítica no ML</div>
+
+          <div class="insight-dados">
+            <div class="dado-linha"><span class="esq">Valor de venda atual</span><span class="dir">R$ 89,90</span></div>
+            <div class="dado-linha"><span class="esq">Custo da peça</span><span class="dir">R$ 38,40 (subiu 8% em 60d)</span></div>
+            <div class="dado-linha"><span class="esq">Margem atual</span><span class="dir critical">18%</span></div>
+            <div class="dado-linha"><span class="esq">Valor última linha</span><span class="dir critical">R$ 6,20 (abaixo do mínimo)</span></div>
+          </div>
+
+          <div class="insight-bloco"><strong>Plano de ajuste gradual:</strong></div>
+          <ol class="plano-degraus">
+            <li><strong>Agora:</strong> sair da zona crítica. Aumentar venda pra R$ 92,50 → última linha R$ 8,40. Acima do R$ 79 do ML.</li>
+            <li><strong>Em 30 dias:</strong> chegar à zona boa. Aumentar pra R$ 94,90 → última linha R$ 10,50.</li>
+            <li><strong>Em 60 dias:</strong> atingir o ótimo. Aumentar pra R$ 99,90 → última linha R$ 14,20.</li>
+          </ol>
+
+          <div class="insight-acao">
+            <strong>📌 Ação:</strong> executar Degrau 1 esta semana. Avaliar reação das vendas em 15 dias antes do próximo.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 6: Oportunidades -->
+    <div id="card-mkt-6" class="card-mkt-view" style="display: none;">
+      <div class="card-area">
+        <span class="card-area-numero">Card 6</span>
+        <div class="card-area-titulo">Produtos com margem alta e venda baixa</div>
+        <div class="card-area-sub">Top 5 oportunidades de investimento comercial</div>
+
+        <div class="insight-card oportunidade">
+          <div class="insight-header">
+            <span class="pill-severity oportunidade">Oportunidade</span>
+            <span class="pill-severity confidence">Confiança Alta</span>
+            <span class="insight-score">score 82</span>
+          </div>
+          <div class="insight-titulo">Macacão Linho Bege (ref 2750) — margem ótima, vende 45% do top</div>
+          <div class="insight-dados">
+            <div class="dado-linha"><span class="esq">Valor última linha (ML)</span><span class="dir success">R$ 15,20 (zona ÓTIMA)</span></div>
+            <div class="dado-linha"><span class="esq">Vendas últimos 30 dias</span><span class="dir">42 peças</span></div>
+            <div class="dado-linha"><span class="esq">Top vendedor categoria</span><span class="dir">92 peças/mês</span></div>
+            <div class="dado-linha"><span class="esq">Pegada perdida estimada</span><span class="dir success">R$ 760/mês</span></div>
+          </div>
+          <div class="insight-bloco">
+            <strong>Diagnóstico:</strong> produto bem precificado mas com apenas 2 fotos de catálogo e nunca entrou em campanha Meta Ads dedicada. Título genérico ("Macacão Feminino Linho"), poderia destacar ocasião e tipo de tecido.
+          </div>
+          <div class="insight-acao">
+            <strong>📌 Ação:</strong> agendar ensaio fotográfico. Revisar título pra "Macacão Linho Longo Feminino Soltinho Verão". Incluir em Meta C04 com R$ 300 teste. ROI esperado: R$ 760/mês.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer-info">
+    Grupo Amícia · App Financeiro v6.8 · OS Amícia v1.0 — Preview navegável
+  </div>
+
+</div>
+
+<script>
+  function trocarView(view) {
+    // Esconde todas as views
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('ativo'));
+    // Mostra a view escolhida
+    document.getElementById('view-' + view).classList.add('ativo');
+
+    // Atualiza tabs ativas
+    document.querySelectorAll('.tabs-ia .tab').forEach(t => t.classList.remove('ativo'));
+    event.target.closest('.tab').classList.add('ativo');
+
+    // Scroll suave pro topo
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function trocarCardMkt(num, btn) {
+    // Esconde todos os cards
+    document.querySelectorAll('.card-mkt-view').forEach(c => c.style.display = 'none');
+    // Mostra o card escolhido
+    document.getElementById('card-mkt-' + num).style.display = 'block';
+
+    // Atualiza sub-tabs ativas
+    document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('ativo'));
+    btn.classList.add('ativo');
+  }
+
+  // Ajustar o onclick das tabs pra usar o event corretamente
+  document.querySelectorAll('.tabs-ia .tab').forEach(tab => {
+    const originalOnclick = tab.getAttribute('onclick');
+    tab.removeAttribute('onclick');
+    tab.addEventListener('click', function(e) {
+      const viewName = originalOnclick.match(/'([^']+)'/)[1];
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('ativo'));
+      document.getElementById('view-' + viewName).classList.add('ativo');
+      document.querySelectorAll('.tabs-ia .tab').forEach(t => t.classList.remove('ativo'));
+      this.classList.add('ativo');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  // Ajustar resumo-linha pra trocar view tbm
+  document.querySelectorAll('.resumo-linha').forEach(linha => {
+    const originalOnclick = linha.getAttribute('onclick');
+    if (originalOnclick) {
+      const viewName = originalOnclick.match(/'([^']+)'/)[1];
+      linha.removeAttribute('onclick');
+      linha.addEventListener('click', function() {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('ativo'));
+        document.getElementById('view-' + viewName).classList.add('ativo');
+        document.querySelectorAll('.tabs-ia .tab').forEach(t => t.classList.remove('ativo'));
+        // Ativar a aba correspondente
+        document.querySelectorAll('.tabs-ia .tab').forEach(tab => {
+          if (tab.textContent.toLowerCase().includes(viewName)) {
+            tab.classList.add('ativo');
+          }
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+  });
+
+  // Ajustar alerta-item pra trocar view tbm
+  document.querySelectorAll('.alerta-item').forEach(item => {
+    const originalOnclick = item.getAttribute('onclick');
+    if (originalOnclick) {
+      const viewName = originalOnclick.match(/'([^']+)'/)[1];
+      item.removeAttribute('onclick');
+      item.addEventListener('click', function() {
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('ativo'));
+        document.getElementById('view-' + viewName).classList.add('ativo');
+        document.querySelectorAll('.tabs-ia .tab').forEach(t => t.classList.remove('ativo'));
+        document.querySelectorAll('.tabs-ia .tab').forEach(tab => {
+          if (tab.textContent.toLowerCase().includes(viewName)) {
+            tab.classList.add('ativo');
+          }
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+  });
+</script>
+
+</body>
+</html>

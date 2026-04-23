@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>OS Amícia · Sugestão de Corte · Ref 02277</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --app-bg: #f7f4f0;
+    --app-cream: #e8e2da;
+    --app-blue-dark: #2c3e50;
+    --app-blue: #4a7fa5;
+    --app-text: #2c3e50;
+    --app-text-soft: #4a4a4a;
+    --app-muted: #7a7a7a;
+    --ia-bg: #EAE0D5;
+    --ia-dark: #373F51;
+    --ia-darker: #1C2533;
+    --critical: #c0392b;
+    --critical-bg: #fdeaea;
+    --warning: #c8a040;
+    --warning-bg: #faf6ec;
+    --success: #27ae60;
+    --success-bg: #eafbf0;
+    --info: #4a7fa5;
+    --info-bg: #f0f4fa;
+  }
+
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: var(--app-bg);
+    color: var(--app-text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .page { max-width: 720px; margin: 0 auto; }
+
+  .breadcrumb {
+    font-family: Calibri, sans-serif;
+    font-size: 9.5pt;
+    color: var(--app-muted);
+    margin-bottom: 12px;
+  }
+  .breadcrumb .current { color: var(--app-blue-dark); font-weight: bold; }
+
+  /* Card único */
+  .card {
+    background: #fff;
+    border-left: 5px solid var(--critical);
+    border-radius: 10px;
+    padding: 22px 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+
+  .pills { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+  .pill {
+    padding: 3px 10px;
+    border-radius: 14px;
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    font-weight: bold;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .pill-critical { background: var(--critical); color: white; }
+  .pill-confidence { background: var(--success); color: white; }
+  .pill-score {
+    background: var(--ia-bg);
+    color: var(--ia-darker);
+    font-family: Calibri, sans-serif;
+  }
+
+  /* Contador 7 dias */
+  .validade {
+    margin-left: auto;
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    color: var(--app-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .validade strong { color: var(--warning); }
+
+  .title {
+    font-size: 17pt;
+    color: var(--app-blue-dark);
+    font-weight: bold;
+    margin-bottom: 2px;
+  }
+  .subtitle {
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    color: var(--app-muted);
+    margin-bottom: 14px;
+  }
+
+  /* Campo Grupo */
+  .grupo-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--ia-bg);
+    border-radius: 8px;
+    margin-bottom: 18px;
+  }
+  .grupo-label {
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    font-weight: bold;
+    color: var(--ia-darker);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .grupo-input {
+    width: 42px;
+    height: 42px;
+    border: 1.5px solid var(--ia-dark);
+    background: white;
+    border-radius: 6px;
+    text-align: center;
+    font-family: Calibri, sans-serif;
+    font-size: 18pt;
+    font-weight: bold;
+    color: var(--ia-darker);
+  }
+  .grupo-input:focus {
+    outline: none;
+    border-color: var(--critical);
+    box-shadow: 0 0 0 3px rgba(192,57,43,0.15);
+  }
+  .grupo-hint {
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    color: var(--app-muted);
+    font-style: italic;
+    flex: 1;
+  }
+
+  /* Blocos */
+  .bloco {
+    background: var(--app-bg);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--app-cream);
+  }
+  .bloco-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .bloco-label {
+    font-family: Calibri, sans-serif;
+    font-size: 8.5pt;
+    font-weight: bold;
+    color: var(--ia-dark);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .btn-edit-inline {
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    background: transparent;
+    border: 1px dashed var(--app-muted);
+    color: var(--app-muted);
+    padding: 3px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .btn-edit-inline:hover, .btn-edit-inline.ativo {
+    border-color: var(--ia-dark);
+    color: var(--ia-dark);
+    background: white;
+    border-style: solid;
+  }
+  .btn-edit-inline.ativo {
+    background: var(--ia-dark);
+    color: white;
+    border-color: var(--ia-dark);
+  }
+
+  /* Grade display */
+  .grade-display {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .grade-modulo {
+    background: white;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1.5px solid var(--app-cream);
+    font-family: Calibri, sans-serif;
+    font-weight: bold;
+    font-size: 13pt;
+    color: var(--ia-darker);
+    min-width: 48px;
+    text-align: center;
+  }
+  .grade-info {
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    color: var(--app-muted);
+    margin-left: auto;
+  }
+
+  /* Grade edit */
+  .grade-edit-wrapper {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .tam-slot {
+    position: relative;
+  }
+  .tam-label {
+    display: block;
+    font-family: Calibri, sans-serif;
+    font-size: 8.5pt;
+    font-weight: bold;
+    color: var(--ia-dark);
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .tam-qty {
+    width: 100%;
+    padding: 8px;
+    background: white;
+    border: 1.5px solid var(--app-cream);
+    border-radius: 6px;
+    font-family: Calibri, sans-serif;
+    font-size: 13pt;
+    font-weight: bold;
+    color: var(--ia-darker);
+    text-align: center;
+  }
+  .tam-qty:focus {
+    outline: none;
+    border-color: var(--ia-dark);
+  }
+  .tam-qty.incluido {
+    background: var(--success-bg);
+    border-color: var(--success);
+  }
+  .tam-qty.excluido {
+    background: #f5f5f5;
+    color: #ccc;
+  }
+  .tam-toggle {
+    position: absolute;
+    top: -6px;
+    right: -4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    font-size: 10pt;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+  .tam-toggle.add { background: var(--success); color: white; }
+  .tam-toggle.remove { background: var(--critical); color: white; }
+  .grade-edit-hint {
+    font-family: Calibri, sans-serif;
+    font-size: 9pt;
+    color: var(--app-muted);
+    font-style: italic;
+  }
+
+  /* Cores display */
+  .cores-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .cor-item {
+    background: white;
+    border: 1px solid var(--app-cream);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: Calibri, sans-serif;
+  }
+  .cor-nome {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: bold;
+    color: var(--app-blue-dark);
+    font-size: 11pt;
+  }
+  .cor-swatch {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.15);
+    flex-shrink: 0;
+  }
+  .swatch-preto { background: #1a1a1a; }
+  .swatch-marinho { background: #1c2d50; }
+  .swatch-bege { background: #c5a87a; }
+  .swatch-azulserenity { background: #8db5d6; }
+  .swatch-marrom { background: #6b4423; }
+  .swatch-figo { background: #4a2843; }
+  .swatch-verde { background: #6b8e4e; }
+
+  .cor-rolos {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 8px;
+    background: white;
+    border: 1.5px solid var(--app-cream);
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 14pt;
+    color: var(--ia-darker);
+  }
+  .cor-rolos-label {
+    font-size: 8.5pt;
+    color: var(--app-muted);
+    margin-left: 6px;
+    font-weight: normal;
+  }
+
+  /* Cores edit */
+  .cor-item-edit {
+    background: white;
+    border: 1px solid var(--app-cream);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .cor-item-edit .cor-nome { flex: 1; }
+  .cor-qty-input {
+    width: 56px;
+    padding: 5px 8px;
+    border: 1.5px solid var(--app-cream);
+    border-radius: 6px;
+    font-family: Calibri, sans-serif;
+    font-size: 12pt;
+    font-weight: bold;
+    text-align: center;
+    color: var(--ia-darker);
+  }
+  .cor-qty-input:focus {
+    outline: none;
+    border-color: var(--ia-dark);
+  }
+  .cor-remove {
+    background: var(--critical-bg);
+    color: var(--critical);
+    border: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12pt;
+    line-height: 1;
+  }
+  .cor-remove:hover { background: var(--critical); color: white; }
+
+  .add-cor-wrapper {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+    align-items: center;
+  }
+  .add-cor-input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1.5px dashed var(--app-muted);
+    border-radius: 6px;
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    background: white;
+  }
+  .add-cor-input:focus {
+    outline: none;
+    border-color: var(--ia-dark);
+    border-style: solid;
+  }
+  .btn-add-cor {
+    background: var(--ia-dark);
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    font-weight: bold;
+  }
+  .btn-add-cor:hover { background: var(--ia-darker); }
+
+  /* Matriz */
+  .matriz-est {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    background: white;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .matriz-est th {
+    background: var(--ia-bg);
+    color: var(--ia-darker);
+    padding: 8px 10px;
+    font-weight: bold;
+    text-align: center;
+    font-size: 9.5pt;
+  }
+  .matriz-est th:first-child { text-align: left; padding-left: 12px; }
+  .matriz-est td {
+    padding: 8px 10px;
+    text-align: center;
+    border-top: 1px solid var(--app-cream);
+    font-weight: bold;
+    color: var(--app-blue-dark);
+  }
+  .matriz-est td:first-child {
+    text-align: left;
+    padding-left: 12px;
+  }
+  .matriz-est .cor-cell-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Total em evidência */
+  .total-rolos-destaque {
+    background: linear-gradient(135deg, var(--ia-darker), var(--ia-dark));
+    color: white;
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: Calibri, sans-serif;
+  }
+  .total-label {
+    font-size: 10pt;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--ia-bg);
+  }
+  .total-valor {
+    font-size: 20pt;
+    font-weight: bold;
+    line-height: 1;
+  }
+  .total-sub {
+    font-size: 9pt;
+    color: var(--ia-bg);
+    opacity: 0.85;
+    margin-top: 4px;
+  }
+  .total-right { text-align: right; }
+
+  /* Porquê */
+  .porque {
+    background: var(--info-bg);
+    border-left: 3px solid var(--info);
+    padding: 12px 14px;
+    border-radius: 6px;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    color: var(--app-text-soft);
+    margin-top: 16px;
+  }
+  .porque strong { color: var(--ia-darker); }
+  .btn-ver-mais {
+    display: inline-block;
+    margin-top: 8px;
+    font-family: Calibri, sans-serif;
+    font-size: 9.5pt;
+    color: var(--info);
+    text-decoration: underline;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font-weight: bold;
+  }
+
+  /* Aviso de validade */
+  .aviso-validade {
+    margin-top: 16px;
+    padding: 10px 14px;
+    background: var(--warning-bg);
+    border-left: 3px solid var(--warning);
+    border-radius: 6px;
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    color: var(--app-text-soft);
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .aviso-validade strong { color: var(--warning); }
+
+  /* Ações */
+  .acoes {
+    margin-top: 18px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    font-family: Calibri, sans-serif;
+    font-size: 11pt;
+    font-weight: bold;
+    padding: 11px 20px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+  .btn-sim { background: var(--success); color: white; flex: 1; justify-content: center; min-width: 160px; }
+  .btn-editar { background: var(--warning); color: white; }
+  .btn-nao { background: #eee; color: var(--app-text-soft); border: 1px solid var(--app-cream); }
+  .btn-explicar {
+    background: transparent;
+    color: var(--info);
+    border: 1px dashed var(--info);
+    font-style: italic;
+  }
+
+  /* Bloco Gerar Ordem (aparece depois de Sim ou Editar) */
+  .bloco-gerar-ordem {
+    display: none;
+    margin-top: 16px;
+    padding: 18px 20px;
+    background: linear-gradient(135deg, var(--success-bg), #fff);
+    border: 2px solid var(--success);
+    border-radius: 10px;
+    animation: slideDown 0.3s ease;
+  }
+  .bloco-gerar-ordem.ativo { display: block; }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .gerar-titulo {
+    font-family: Calibri, sans-serif;
+    font-size: 11pt;
+    color: var(--success);
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+  .gerar-sub {
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    color: var(--app-text-soft);
+    margin-bottom: 14px;
+  }
+  .btn-gerar-ordem {
+    background: var(--success);
+    color: white;
+    border: none;
+    padding: 14px 24px;
+    border-radius: 8px;
+    font-family: Calibri, sans-serif;
+    font-size: 12pt;
+    font-weight: bold;
+    cursor: pointer;
+    width: 100%;
+    letter-spacing: 0.5px;
+    transition: background 0.15s;
+  }
+  .btn-gerar-ordem:hover { background: #229954; }
+
+  /* Modais */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(28,37,51,0.6);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+  .modal-overlay.ativo { display: flex; }
+  .modal {
+    background: white;
+    border-radius: 12px;
+    padding: 24px 26px;
+    max-width: 560px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+  .modal-title {
+    font-size: 16pt;
+    color: var(--app-blue-dark);
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+  .modal-sub {
+    font-family: Calibri, sans-serif;
+    font-size: 10pt;
+    color: var(--app-muted);
+    margin-bottom: 16px;
+  }
+  .modal-section {
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed var(--app-cream);
+  }
+  .modal-section:last-of-type { border-bottom: none; }
+  .modal-section-label {
+    font-family: Calibri, sans-serif;
+    font-size: 8.5pt;
+    font-weight: bold;
+    color: var(--ia-dark);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .modal-just-list {
+    list-style: none;
+    padding: 0;
+    font-size: 10.5pt;
+    line-height: 1.6;
+  }
+  .modal-just-list li {
+    padding: 6px 0;
+    display: flex;
+    gap: 8px;
+  }
+  .modal-just-list li strong { color: var(--ia-darker); }
+
+  textarea.motivo {
+    width: 100%;
+    min-height: 80px;
+    font-family: Georgia, serif;
+    font-size: 11pt;
+    padding: 10px 12px;
+    border: 1.5px solid var(--app-cream);
+    border-radius: 6px;
+    resize: vertical;
+  }
+  textarea.motivo:focus { outline: none; border-color: var(--ia-dark); }
+
+  .sugestoes-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .sugestao-chip {
+    font-family: Calibri, sans-serif;
+    font-size: 9.5pt;
+    padding: 5px 11px;
+    background: var(--ia-bg);
+    color: var(--ia-darker);
+    border-radius: 14px;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .sugestao-chip:hover { border-color: var(--ia-dark); }
+
+  .modal-acoes {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+    justify-content: flex-end;
+  }
+  .btn-modal-cancelar {
+    background: transparent;
+    border: 1px solid var(--app-cream);
+    color: var(--app-muted);
+    padding: 9px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: Calibri, sans-serif;
+    font-size: 10.5pt;
+  }
+  .btn-modal-confirmar {
+    background: var(--ia-dark);
+    color: white;
+    border: none;
+    padding: 9px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: Calibri, sans-serif;
+    font-size: 10.5pt;
+    font-weight: bold;
+  }
+  .btn-modal-confirmar:disabled { background: #ccc; cursor: not-allowed; }
+
+  .toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-family: Calibri, sans-serif;
+    font-size: 11pt;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    z-index: 200;
+    animation: slideIn 0.3s;
+    max-width: 360px;
+  }
+  @keyframes slideIn {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  .toast-sucesso { background: var(--success); color: white; }
+  .toast-neutro { background: var(--app-text-soft); color: white; }
+
+  .aviso-aprendizado {
+    background: var(--warning-bg);
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-family: Calibri, sans-serif;
+    font-size: 9.5pt;
+    color: var(--app-text-soft);
+    margin-bottom: 14px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .aviso-aprendizado strong { color: var(--warning); }
+
+  .required { color: var(--critical); font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="breadcrumb">
+    🏠 OS Amícia › ✂️ Produção › <span class="current">Sugestão de Corte</span>
+  </div>
+
+  <div class="card">
+
+    <div class="pills">
+      <span class="pill pill-critical">🔴 Crítico</span>
+      <span class="pill pill-confidence">Confiança Alta</span>
+      <span class="pill pill-score">score 94</span>
+      <span class="validade">⏳ válida por <strong>7 dias</strong> · expira 26/04</span>
+    </div>
+
+    <div class="title">ref 02277 · Saia Midi Linho</div>
+    <div class="subtitle">Cobertura 6,7 dias · ruptura em ~1 semana se nada for feito</div>
+
+    <!-- Campo Grupo -->
+    <div class="grupo-wrapper">
+      <span class="grupo-label">Grupo</span>
+      <input type="text" class="grupo-input" id="grupo-input" maxlength="1" placeholder="—"
+             oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+      <span class="grupo-hint">separa tecidos desta ordem pra manter tudo junto</span>
+    </div>
+
+    <!-- ===== GRADE ===== -->
+    <div class="bloco">
+      <div class="bloco-header">
+        <span class="bloco-label">Grade do enfesto</span>
+        <button class="btn-edit-inline" id="btn-edit-grade" onclick="toggleEditGrade()">✎ editar</button>
+      </div>
+
+      <!-- Display -->
+      <div class="grade-display" id="grade-display">
+        <div class="grade-modulo">1P</div>
+        <div class="grade-modulo">1G</div>
+        <div class="grade-modulo">2GG</div>
+        <span class="grade-info">4 módulos · peça pequena (limite 8)</span>
+      </div>
+
+      <!-- Edit -->
+      <div id="grade-edit" style="display:none">
+        <div class="grade-edit-wrapper" id="grade-edit-slots">
+          <!-- preenchido via JS -->
+        </div>
+        <div class="grade-edit-hint">Clique no ➕ pra incluir tamanho · ajuste qtd · ✕ remove</div>
+      </div>
+    </div>
+
+    <!-- ===== CORES ===== -->
+    <div class="bloco">
+      <div class="bloco-header">
+        <span class="bloco-label">Cores e rolos</span>
+        <button class="btn-edit-inline" id="btn-edit-cores" onclick="toggleEditCores()">✎ editar</button>
+      </div>
+
+      <!-- Display -->
+      <div id="cores-display" class="cores-grid">
+        <div class="cor-item">
+          <span class="cor-nome"><span class="cor-swatch swatch-preto"></span>Preto</span>
+          <span><span class="cor-rolos">3</span><span class="cor-rolos-label">rolos</span></span>
+        </div>
+        <div class="cor-item">
+          <span class="cor-nome"><span class="cor-swatch swatch-marinho"></span>Marinho</span>
+          <span><span class="cor-rolos">2</span><span class="cor-rolos-label">rolos</span></span>
+        </div>
+        <div class="cor-item">
+          <span class="cor-nome"><span class="cor-swatch swatch-bege"></span>Bege</span>
+          <span><span class="cor-rolos">4</span><span class="cor-rolos-label">rolos</span></span>
+        </div>
+        <div class="cor-item">
+          <span class="cor-nome"><span class="cor-swatch swatch-azulserenity"></span>Azul Serenity</span>
+          <span><span class="cor-rolos">1</span><span class="cor-rolos-label">rolo</span></span>
+        </div>
+      </div>
+
+      <!-- Edit -->
+      <div id="cores-edit" style="display:none">
+        <div id="cores-edit-list"></div>
+        <div class="add-cor-wrapper">
+          <input type="text" class="add-cor-input" id="nova-cor-nome" placeholder="Nome da nova cor (ex: Marrom)">
+          <input type="number" class="cor-qty-input" id="nova-cor-qtd" value="1" min="1" style="width:64px">
+          <button class="btn-add-cor" onclick="adicionarCor()">+ adicionar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MATRIZ ===== -->
+    <div class="bloco">
+      <div class="bloco-header">
+        <span class="bloco-label">Estimativa de peças · cor × tamanho</span>
+        <span style="font-family:Calibri,sans-serif;font-size:9pt;color:var(--app-muted)">≈ 20 peças/rolo</span>
+      </div>
+      <table class="matriz-est">
+        <thead id="matriz-thead"></thead>
+        <tbody id="matriz-tbody"></tbody>
+      </table>
+
+      <!-- Total em evidência -->
+      <div class="total-rolos-destaque">
+        <div>
+          <div class="total-label">Total</div>
+          <div class="total-sub"><span id="total-cores-count">4</span> cores · <span id="total-tam-count">3</span> tamanhos</div>
+        </div>
+        <div class="total-right">
+          <div class="total-valor"><span id="total-rolos">10</span> rolos</div>
+          <div class="total-sub">≈ <span id="total-pecas">200</span> peças estimadas</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PORQUÊ ===== -->
+    <div class="porque">
+      <strong>Por quê:</strong> ref na 2ª posição do ranking (Curva A) · estoque só cobre 6,7 dias · 0 em produção · Bege em alta (+38% no catálogo) · Azul Serenity como aposta nova.
+      <br>
+      <button class="btn-ver-mais" onclick="abrirModal('modal-vermais')">ver análise completa →</button>
+    </div>
+
+    <!-- ===== AVISO 7 DIAS ===== -->
+    <div class="aviso-validade">
+      <span>⏳</span>
+      <div><strong>Sugestão válida por 7 dias (até 26/04).</strong> Se você não decidir nesse prazo, a OS Amícia pode re-sugerir com dados atualizados no próximo ciclo.</div>
+    </div>
+
+    <!-- ===== AÇÕES ===== -->
+    <div class="acoes">
+      <button class="btn btn-sim" onclick="confirmarSim()">✓ Sim, vou cortar</button>
+      <button class="btn btn-editar" onclick="abrirModal('modal-editar')">✎ Editar</button>
+      <button class="btn btn-nao" onclick="confirmarNao()">✗ Não</button>
+      <button class="btn btn-explicar" onclick="abrirModal('modal-explicar')">💬 Explicar</button>
+    </div>
+
+    <!-- ===== GERAR ORDEM (aparece após Sim ou Editar com motivo) ===== -->
+    <div class="bloco-gerar-ordem" id="bloco-gerar-ordem">
+      <div class="gerar-titulo">✅ Sugestão aprovada</div>
+      <div class="gerar-sub">Crie a ordem de corte oficial pra enviar à Sala de Corte</div>
+      <button class="btn-gerar-ordem" onclick="gerarOrdemDeCorte()">
+        📋 Gerar Ordem de Corte
+      </button>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ===== MODAL: Análise completa ===== -->
+<div class="modal-overlay" id="modal-vermais" onclick="fecharModalSeOverlay(event)">
+  <div class="modal">
+    <div class="modal-title">🔍 Análise completa</div>
+    <div class="modal-sub">ref 02277 · Saia Midi Linho · cron das 07:00</div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Situação atual</div>
+      <ul class="modal-just-list">
+        <li>📦 <span><strong>Estoque hoje:</strong> 48 peças</span></li>
+        <li>🏭 <span><strong>Em produção:</strong> 0 peças nas oficinas</span></li>
+        <li>📈 <span><strong>Venda média:</strong> 7,2 peças/dia nos últimos 30 dias</span></li>
+        <li>⏳ <span><strong>Cobertura:</strong> 6,7 dias · abaixo do lead time de 22d</span></li>
+      </ul>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Por que a IA recomendou assim</div>
+      <ul class="modal-just-list">
+        <li>🔥 <span><strong>Demanda forte e consistente</strong> — 158 peças em 30d · posição 2 do ranking</span></li>
+        <li>🎨 <span><strong>Bege em alta no catálogo</strong> (+38% em 7 modelos) → ganhou mais rolos</span></li>
+        <li>🧪 <span><strong>Azul Serenity como teste</strong> (1 rolo) — tendência de mercado</span></li>
+        <li>📐 <span><strong>Grade 1P · 1G · 2GG</strong> — reflete proporção real de vendas</span></li>
+        <li>🏭 <span><strong>Sem produção em andamento</strong> · risco integral</span></li>
+      </ul>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Projeção em 22 dias</div>
+      <ul class="modal-just-list">
+        <li>❌ <span><strong>Sem cortar:</strong> −110 peças · RUPTURA</span></li>
+        <li>✅ <span><strong>Com corte sugerido:</strong> +72 peças · ~28d cobertura</span></li>
+      </ul>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Sala recomendada</div>
+      <ul class="modal-just-list">
+        <li>✂️ <span><strong>Sala Antonio</strong> · melhor rendimento histórico nesta ref + linho (5 cortes anteriores)</span></li>
+      </ul>
+    </div>
+
+    <div class="modal-acoes">
+      <button class="btn-modal-confirmar" onclick="fecharModal('modal-vermais')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Editar · só motivo (ajustes são inline) ===== -->
+<div class="modal-overlay" id="modal-editar" onclick="fecharModalSeOverlay(event)">
+  <div class="modal">
+    <div class="modal-title">✎ Confirmar ajustes</div>
+    <div class="modal-sub">Seus ajustes estão salvos. Só falta explicar pra IA aprender.</div>
+
+    <div class="aviso-aprendizado">
+      <span>💡</span>
+      <div><strong>A IA aprende com seus ajustes</strong> — explicar por que mexeu ajuda a melhorar as próximas sugestões.</div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Motivo do ajuste <span class="required">*</span></div>
+      <div class="sugestoes-list">
+        <span class="sugestao-chip" onclick="preencherMotivo('editar','sem tecido bege suficiente esta semana')">sem tecido bege</span>
+        <span class="sugestao-chip" onclick="preencherMotivo('editar','quero mais Preto, é o carro-chefe')">reforçar Preto</span>
+        <span class="sugestao-chip" onclick="preencherMotivo('editar','tirei a Azul Serenity, prefiro testar no próximo corte')">tirar cor de teste</span>
+        <span class="sugestao-chip" onclick="preencherMotivo('editar','grade melhor com mais G, menos GG')">mexer na grade</span>
+      </div>
+      <textarea id="motivo-editar" class="motivo" placeholder="Ex: 'tirei a Azul Serenity porque não tenho tecido dessa cor essa semana'" oninput="validarMotivoEditar()"></textarea>
+    </div>
+
+    <div class="modal-acoes">
+      <button class="btn-modal-cancelar" onclick="fecharModal('modal-editar')">Cancelar</button>
+      <button class="btn-modal-confirmar" id="btn-confirmar-editar" disabled onclick="confirmarEditar()">Confirmar ajuste</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Explicar ===== -->
+<div class="modal-overlay" id="modal-explicar" onclick="fecharModalSeOverlay(event)">
+  <div class="modal">
+    <div class="modal-title">💬 Explicar para a IA</div>
+    <div class="modal-sub">Ajude a OS Amícia a aprender com seu contexto</div>
+
+    <div class="aviso-aprendizado">
+      <span>💡</span>
+      <div>Campo <strong>opcional</strong> — use pra passar contexto que a IA não tem (falta de tecido, mudança de estação, estratégia). <strong>Isso gera aprendizado.</strong></div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">Sugestões rápidas</div>
+      <div class="sugestoes-list">
+        <span class="sugestao-chip" onclick="preencherMotivo('explicar','vai começar o verão, não vou mais investir em linho mais grosso')">mudança de estação</span>
+        <span class="sugestao-chip" onclick="preencherMotivo('explicar','falta tecido dessa cor na semana')">falta tecido</span>
+        <span class="sugestao-chip" onclick="preencherMotivo('explicar','oficina sobrecarregada, vou segurar essa semana')">capacidade oficina</span>
+        <span class="sugestao-chip" onclick="preencherMotivo('explicar','vou focar em cores novas da coleção nova')">coleção nova</span>
+        <span class="sugestao-chip" onclick="preencherMotivo('explicar','modelo vai sair de linha')">fim de linha</span>
+      </div>
+      <textarea id="motivo-explicar" class="motivo" placeholder="Ex: 'vai começar o verão e prefiro focar em outros tecidos'"></textarea>
+    </div>
+
+    <div class="modal-acoes">
+      <button class="btn-modal-cancelar" onclick="fecharModal('modal-explicar')">Fechar</button>
+      <button class="btn-modal-confirmar" onclick="confirmarExplicar()">Salvar explicação</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== ESTADO =====
+  const tamanhosDisponiveis = ['P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
+  let grade = { P: 1, G: 1, GG: 2 }; // inicial
+
+  const swatchMap = {
+    'Preto': 'swatch-preto',
+    'Marinho': 'swatch-marinho',
+    'Bege': 'swatch-bege',
+    'Azul Serenity': 'swatch-azulserenity',
+    'Marrom': 'swatch-marrom',
+    'Figo': 'swatch-figo',
+    'Verde': 'swatch-verde'
+  };
+
+  let cores = [
+    { nome: 'Preto', rolos: 3 },
+    { nome: 'Marinho', rolos: 2 },
+    { nome: 'Bege', rolos: 4 },
+    { nome: 'Azul Serenity', rolos: 1 }
+  ];
+
+  const PECAS_POR_ROLO = 20;
+
+  // ===== RENDERIZAÇÃO =====
+
+  function getSwatchClass(nome) {
+    return swatchMap[nome] || 'swatch-preto';
+  }
+
+  function renderGradeDisplay() {
+    const display = document.getElementById('grade-display');
+    const modulos = Object.entries(grade).filter(([t,q]) => q > 0);
+    const total = modulos.reduce((s,[t,q]) => s+q, 0);
+    display.innerHTML = modulos.map(([t,q]) => `<div class="grade-modulo">${q}${t}</div>`).join('')
+      + `<span class="grade-info">${total} módulos · peça pequena (limite 8)</span>`;
+  }
+
+  function renderGradeEdit() {
+    const slots = document.getElementById('grade-edit-slots');
+    slots.innerHTML = tamanhosDisponiveis.map(tam => {
+      const incluido = grade[tam] !== undefined && grade[tam] > 0;
+      const qtd = grade[tam] || 0;
+      return `
+        <div class="tam-slot">
+          <span class="tam-label">${tam}</span>
+          <input type="number" class="tam-qty ${incluido ? 'incluido' : 'excluido'}" value="${qtd}" min="0" max="9"
+            onchange="atualizarTamanho('${tam}', this.value)">
+          ${incluido
+            ? `<button class="tam-toggle remove" onclick="removerTamanho('${tam}')">×</button>`
+            : `<button class="tam-toggle add" onclick="adicionarTamanho('${tam}')">+</button>`}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderCoresDisplay() {
+    const container = document.getElementById('cores-display');
+    container.innerHTML = cores.map(c => `
+      <div class="cor-item">
+        <span class="cor-nome"><span class="cor-swatch ${getSwatchClass(c.nome)}"></span>${c.nome}</span>
+        <span><span class="cor-rolos">${c.rolos}</span><span class="cor-rolos-label">${c.rolos === 1 ? 'rolo' : 'rolos'}</span></span>
+      </div>
+    `).join('');
+  }
+
+  function renderCoresEdit() {
+    const container = document.getElementById('cores-edit-list');
+    container.innerHTML = cores.map((c, i) => `
+      <div class="cor-item-edit">
+        <span class="cor-nome"><span class="cor-swatch ${getSwatchClass(c.nome)}"></span>${c.nome}</span>
+        <input type="number" class="cor-qty-input" value="${c.rolos}" min="1" max="99"
+          onchange="atualizarRolosCor(${i}, this.value)">
+        <span style="font-family:Calibri,sans-serif;font-size:9pt;color:var(--app-muted)">${c.rolos === 1 ? 'rolo' : 'rolos'}</span>
+        <button class="cor-remove" onclick="removerCor(${i})" title="remover cor">×</button>
+      </div>
+    `).join('');
+  }
+
+  function renderMatriz() {
+    const tamanhos = Object.entries(grade).filter(([t,q]) => q > 0);
+    const thead = document.getElementById('matriz-thead');
+    const tbody = document.getElementById('matriz-tbody');
+
+    // cabeçalho
+    thead.innerHTML = `<tr><th>Cor</th>${tamanhos.map(([t,q]) => `<th>${t}</th>`).join('')}<th>Total</th></tr>`;
+
+    // linhas
+    const totalModulos = tamanhos.reduce((s, [t,q]) => s+q, 0) || 1;
+
+    tbody.innerHTML = cores.map(c => {
+      const totalPecasCor = c.rolos * PECAS_POR_ROLO;
+      const celulas = tamanhos.map(([t,q]) => {
+        const pecasTam = Math.round(totalPecasCor * q / totalModulos);
+        return `<td>${pecasTam}</td>`;
+      }).join('');
+      return `
+        <tr>
+          <td><div class="cor-cell-wrapper"><span class="cor-swatch ${getSwatchClass(c.nome)}"></span>${c.nome} · ${c.rolos} ${c.rolos === 1 ? 'rolo' : 'rolos'}</div></td>
+          ${celulas}
+          <td><strong>${totalPecasCor}</strong></td>
+        </tr>
+      `;
+    }).join('');
+
+    // totais
+    const totalRolos = cores.reduce((s, c) => s + c.rolos, 0);
+    const totalPecas = totalRolos * PECAS_POR_ROLO;
+    document.getElementById('total-rolos').textContent = totalRolos;
+    document.getElementById('total-pecas').textContent = totalPecas;
+    document.getElementById('total-cores-count').textContent = cores.length;
+    document.getElementById('total-tam-count').textContent = tamanhos.length;
+  }
+
+  function renderAll() {
+    renderGradeDisplay();
+    renderGradeEdit();
+    renderCoresDisplay();
+    renderCoresEdit();
+    renderMatriz();
+  }
+
+  // ===== GRADE =====
+  function toggleEditGrade() {
+    const display = document.getElementById('grade-display');
+    const edit = document.getElementById('grade-edit');
+    const btn = document.getElementById('btn-edit-grade');
+    const editando = edit.style.display !== 'none';
+    if (editando) {
+      edit.style.display = 'none';
+      display.style.display = 'flex';
+      btn.classList.remove('ativo');
+      btn.innerHTML = '✎ editar';
+    } else {
+      edit.style.display = 'block';
+      display.style.display = 'none';
+      btn.classList.add('ativo');
+      btn.innerHTML = '✓ concluir';
+      renderGradeEdit();
+    }
+  }
+
+  function atualizarTamanho(tam, valor) {
+    const v = parseInt(valor) || 0;
+    if (v <= 0) {
+      delete grade[tam];
+    } else {
+      grade[tam] = v;
+    }
+    renderAll();
+  }
+  function adicionarTamanho(tam) {
+    grade[tam] = 1;
+    renderAll();
+  }
+  function removerTamanho(tam) {
+    delete grade[tam];
+    renderAll();
+  }
+
+  // ===== CORES =====
+  function toggleEditCores() {
+    const display = document.getElementById('cores-display');
+    const edit = document.getElementById('cores-edit');
+    const btn = document.getElementById('btn-edit-cores');
+    const editando = edit.style.display !== 'none';
+    if (editando) {
+      edit.style.display = 'none';
+      display.style.display = 'grid';
+      btn.classList.remove('ativo');
+      btn.innerHTML = '✎ editar';
+    } else {
+      edit.style.display = 'block';
+      display.style.display = 'none';
+      btn.classList.add('ativo');
+      btn.innerHTML = '✓ concluir';
+      renderCoresEdit();
+    }
+  }
+
+  function atualizarRolosCor(i, valor) {
+    const v = parseInt(valor) || 1;
+    cores[i].rolos = Math.max(1, v);
+    renderAll();
+  }
+
+  function removerCor(i) {
+    cores.splice(i, 1);
+    renderAll();
+  }
+
+  function adicionarCor() {
+    const nome = document.getElementById('nova-cor-nome').value.trim();
+    const qtd = parseInt(document.getElementById('nova-cor-qtd').value) || 1;
+    if (!nome) { mostrarToast('Digite o nome da cor', 'neutro'); return; }
+    if (cores.some(c => c.nome.toLowerCase() === nome.toLowerCase())) {
+      mostrarToast('Essa cor já está na lista', 'neutro');
+      return;
+    }
+    cores.push({ nome, rolos: Math.max(1, qtd) });
+    document.getElementById('nova-cor-nome').value = '';
+    document.getElementById('nova-cor-qtd').value = '1';
+    renderAll();
+  }
+
+  // ===== MODAIS =====
+  function abrirModal(id) { document.getElementById(id).classList.add('ativo'); }
+  function fecharModal(id) { document.getElementById(id).classList.remove('ativo'); }
+  function fecharModalSeOverlay(event) {
+    if (event.target.classList.contains('modal-overlay')) event.target.classList.remove('ativo');
+  }
+
+  function preencherMotivo(qual, texto) {
+    const id = qual === 'editar' ? 'motivo-editar' : 'motivo-explicar';
+    const t = document.getElementById(id);
+    t.value = texto;
+    if (qual === 'editar') validarMotivoEditar();
+    t.focus();
+  }
+
+  function validarMotivoEditar() {
+    const motivo = document.getElementById('motivo-editar').value.trim();
+    document.getElementById('btn-confirmar-editar').disabled = motivo.length < 5;
+  }
+
+  // ===== AÇÕES =====
+  function confirmarSim() {
+    mostrarToast('✓ Sugestão aprovada · aprendizado positivo registrado', 'sucesso');
+    mostrarBlocoGerarOrdem();
+  }
+
+  function confirmarEditar() {
+    const motivo = document.getElementById('motivo-editar').value.trim();
+    if (motivo.length < 5) return;
+    mostrarToast('✎ Ajuste salvo · motivo registrado · IA vai aprender', 'sucesso');
+    fecharModal('modal-editar');
+    mostrarBlocoGerarOrdem();
+  }
+
+  function confirmarNao() {
+    mostrarToast('✗ Sugestão rejeitada', 'neutro');
+  }
+
+  function confirmarExplicar() {
+    const motivo = document.getElementById('motivo-explicar').value.trim();
+    if (motivo.length < 5) {
+      mostrarToast('Escreva pelo menos algumas palavras', 'neutro');
+      return;
+    }
+    mostrarToast('💬 Explicação registrada · aprendizado aplicado', 'sucesso');
+    fecharModal('modal-explicar');
+  }
+
+  function mostrarBlocoGerarOrdem() {
+    const bloco = document.getElementById('bloco-gerar-ordem');
+    bloco.classList.add('ativo');
+    bloco.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function gerarOrdemDeCorte() {
+    mostrarToast('📋 Ordem de corte criada', 'sucesso');
+  }
+
+  function mostrarToast(texto, tipo) {
+    const t = document.createElement('div');
+    t.className = 'toast toast-' + tipo;
+    t.textContent = texto;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+
+  // ===== INIT =====
+  renderAll();
+</script>
+
+</body>
+</html>

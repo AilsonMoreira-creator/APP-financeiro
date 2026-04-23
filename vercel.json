@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "api/ia-cron.js": { "maxDuration": 120 },
+    "api/ia-disparar.js": { "maxDuration": 120 }
+  },
   "crons": [
     {
       "path": "/api/bling-cron",
@@ -27,6 +31,30 @@
     {
       "path": "/api/bling-produtos-sync",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/ia-cron?janela=manha",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/ia-cron?janela=tarde",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/ia-cron?janela=manha&escopo=marketplaces",
+      "schedule": "15 10 * * *"
+    },
+    {
+      "path": "/api/ia-cron?janela=tarde&escopo=marketplaces",
+      "schedule": "15 17 * * *"
+    },
+    {
+      "path": "/api/ia-cron?janela=manha&escopo=estoque",
+      "schedule": "30 10 * * *"
+    },
+    {
+      "path": "/api/ia-cron?janela=tarde&escopo=estoque",
+      "schedule": "30 17 * * *"
     }
   ]
 }

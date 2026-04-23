@@ -1,0 +1,2141 @@
+/**
+ * ProducaoCards.jsx — Sugestões de Corte do TabProdução (Sprint 6.5).
+ *
+ * Substitui a versão simplificada do Sprint 3 (TabProdução com texto
+ * livre do Claude) pela UI rica do contrato visual em
+ * docs/pacote-os-amicia/05_Tela_Sugestao_Corte.html
+ *
+ * Cada card representa 1 sugestão de corte (1 ref) e mostra:
+ *   - Header: pills (Severidade + Confiança), validade, título, cobertura
+ *   - Bloco GRADE (1P · 1G · 2GG, peças por módulo)
+ *   - Bloco CORES E ROLOS (com swatch + tendência)
+ *   - Bloco MATRIZ (cor × tamanho, peças estimadas por célula)
+ *   - Bloco TOTAL em evidência (X rolos · Y peças)
+ *   - "Por quê" (justificativa textual gerada da IA)
+ *   - Aviso de validade (7 dias)
+ *   - Ações: Sim · Editar · Não · Explicar
+ *
+ * FASE 4a: estrutura base sem edição inline (botões "✎ editar" mostram
+ * mas ainda não funcionam — fica pra Fase 4b).
+ *
+ * FASE 5 (futura): modais de Análise / Editar / Explicar + botão
+ * "Gerar Ordem de Corte" que integra com OrdemDeCorte.jsx existente.
+ *
+ * ENDPOINT: GET /api/ia-cortes-dados (Sprint 6.5 Fase 3)
+ *   Header: X-User: <usuario admin>
+ *   Query: ?limite=30 (default)
+ *
+ * Padrão visual: idêntico a EstoqueCards.jsx + MarketplacesCards.jsx.
+ *   - useFetch com loading/erro/refresh
+ *   - CardShell wrapper
+ *   - Helpers fmtInt, fmtPct
+ */
+import { useEffect, useState, useCallback, useMemo } from 'react';
+
+// ─── Helpers de formato ───────────────────────────────────────────────
+
+const fmtInt = (v) => (Number(v) || 0).toLocaleString('pt-BR');
+
+const fmtPct = (v) => {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return (n >= 0 ? '+' : '') + n.toFixed(0) + '%';
+};
+
+const fmtData = (isoStr) => {
+  if (!isoStr) return '—';
+  try {
+    const [y, m, d] = String(isoStr).slice(0, 10).split('-');
+    return `${d}/${m}`;
+  } catch { return '—'; }
+};
+
+// Calcula dias entre agora e expira_em (truncado)
+const diasAteExpirar = (expiraIso) => {
+  if (!expiraIso) return null;
+  const ms = new Date(expiraIso).getTime() - Date.now();
+  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
+};
+
+// Mapeia nome de cor pra hex (swatch). Mantido em sincronia com
+// BLING_COR_HEX em src/App.tsx linha 3252.
+// Quando entrar cor nova no Bling, atualizar nos 2 lugares.
+const corHex = (nome) => {
+  if (!nome) return '#999';
+  const k = String(nome).toLowerCase().trim();
+  const map = {
+    // Neutros
+    'preto':            '#1a1a1a',
+    'branco':           '#f5f5f5',
+    'off white':        '#f0e8d8',
+    'offwhite':         '#f0e8d8',
+    'creme':            '#e8d8c0',
+    'natural':          '#d4c8a8',
+    'areia':            '#c8b88a',
+    'cinza':            '#888888',
+    'nude':             '#c8a890',
+
+    // Beges/marrons
+    'bege':             '#d4c5a9',
+    'bege claro':       '#e8d8c0',
+    'caramelo':         '#b87a3a',
+    'caqui':            '#8a7a5a',
+    'cappuccino':       '#a08568',
+    'capuccino':        '#a08568',
+    'marrom':           '#6b4423',
+    'marrom escuro':    '#3e2818',
+    'terracota':        '#b85c38',
+
+    // Azuis
+    'azul':             '#3a5a8c',
+    'azul marinho':     '#1a2845',
+    'marinho':          '#1a2845',
+    'azul claro':       '#7ab0d4',
+    'azul bebe':        '#a8c8e0',
+    'azul bebê':        '#a8c8e0',
+    'azul serenity':    '#92b4d4',
+
+    // Verdes
+    'verde':            '#4a8a4a',
+    'verde agua':       '#9dc8b9',
+    'verde água':       '#9dc8b9',
+    'verde militar':    '#4a5d3a',
+    'verde salvia':     '#b5c99a',
+    'verde sálvia':     '#b5c99a',
+    'verde escuro':     '#2d5a2d',
+    'verde pistache':   '#bcd99c',
+
+    // Vermelhos/rosas
+    'vermelho':         '#b8242b',
+    'vinho':            '#5e1f2c',
+    'bordo':            '#6a1a2a',
+    'rosa':             '#d89aa3',
+    'rose':             '#d4a0a0',
+    'figo':             '#5a3848',
+
+    // Amarelos/laranjas
+    'amarelo':          '#e8c547',
+    'amarelo manteiga': '#e8d080',
+    'laranja':          '#d8773b',
+
+    // Roxos/lilás
+    'roxo':             '#5a2e8c',
+    'lilas':            '#9b85b8',
+    'lilás':            '#9b85b8',
+  };
+  return map[k] || '#999';
+};
+
+// Le os modulos da grade que o SQL ja devolve calculados.
+//
+// IMPORTANTE: Ate Sprint 6.5, esta funcao recalculava modulos a partir
+// de proporcao_pct usando ROUND. Isso dava resultado ERRADO porque
+// ROUND nao garante que a soma bate com max_modulos.
+//
+// Exemplo REF 2832 (macacao, max=6, 4 tamanhos):
+//   SQL devolve:  P=1, M=2, G=1, GG=2  (total 6 ok)
+//   ROUND fazia:  P=2, M=2, G=1, GG=2  (total 7 ERRO - acima do limite)
+//
+// A funcao SQL v1.5-fixed (Sprint 6.7) usa metodo de Hamilton que
+// garante SUM(modulos) <= max_modulos. So precisamos usar o que vem.
+//
+// Parametro maxModulos mantido pra retrocompat de chamada (ignorado).
+function gradeProporcaoParaModulos(grade /*, maxModulos */) {
+  if (!Array.isArray(grade) || grade.length === 0) return [];
+  return grade.map(g => ({
+    tam: g.tam,
+    modulos: Math.max(0, Number(g.modulos) || 0),
+  }));
+}
+
+// Soma total de modulos do enfesto (1+2+1+1 = 5)
+function somarModulos(gradeModulos) {
+  return (gradeModulos || []).reduce((s, g) => s + (Number(g.modulos) || 0), 0);
+}
+
+// Tamanhos disponiveis pra adicionar a grade (padrao moda feminina)
+const TAMANHOS_DISPONIVEIS = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3'];
+
+// Calcula matriz cor x tamanho a partir de modulos atuais (nao usa do payload).
+//
+// FORMULA CORRETA:
+//   total_pecas_da_cor = rolos_da_cor * rendimento
+//   pecas[cor][tam]    = total_pecas_da_cor * (modulos_do_tam / total_modulos)
+//
+// Os modulos definem como DISTRIBUIR as pecas entre tamanhos, NAO multiplicar.
+//
+// Exemplo: Bege com 7 rolos, rendimento 55, enfesto 2G+2M+2GG+1P (7 modulos):
+//   total_bege = 7 * 55 = 385 pecas
+//   bege G  = 385 * (2/7) = 110
+//   bege M  = 385 * (2/7) = 110
+//   bege GG = 385 * (2/7) = 110
+//   bege P  = 385 * (1/7) =  55
+//   Total: 385 ✓ (igual ao total inicial)
+//
+// BUG ANTERIOR: usava rolos * modulos * rendimento, dando ~7x a mais.
+function calcularMatriz(coresEditadas, gradeModulos, rendimento) {
+  const r = Number(rendimento) || 20;
+  const totalModulos = (gradeModulos || []).reduce((s, g) => s + (Number(g.modulos) || 0), 0);
+  if (totalModulos === 0) return [];
+
+  const matriz = [];
+  (coresEditadas || []).forEach(c => {
+    const rolos = Number(c.rolos) || 0;
+    if (rolos === 0) return;
+    const totalPecasCor = rolos * r;
+
+    (gradeModulos || []).forEach(g => {
+      const mods = Number(g.modulos) || 0;
+      if (mods === 0) return;
+      matriz.push({
+        cor: c.cor || c.nome,
+        tam: g.tam,
+        pecas: Math.round(totalPecasCor * (mods / totalModulos)),
+      });
+    });
+  });
+  return matriz;
+}
+
+// ─── Hook de fetch ────────────────────────────────────────────────────
+
+function useCortesData(usuario) {
+  const [dados, setDados]     = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro]       = useState(null);
+
+  // force=true pula cache CDN e forca recalcular - usado no botao "recalcular".
+  const carregar = useCallback(async (force = false) => {
+    if (!usuario) {
+      setErro('Usuário admin não identificado');
+      return;
+    }
+    setLoading(true);
+    setErro(null);
+    try {
+      const url = force
+        ? `/api/ia-cortes-dados?limite=30&force=1&_=${Date.now()}`
+        : '/api/ia-cortes-dados?limite=30';
+      const r = await fetch(url, {
+        headers: { 'X-User': usuario },
+        cache: force ? 'no-store' : 'default',
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) {
+        throw new Error(j.error || `HTTP ${r.status}`);
+      }
+      setDados(j);
+    } catch (e) {
+      setErro(e.message || 'Erro ao carregar sugestões');
+    } finally {
+      setLoading(false);
+    }
+  }, [usuario]);
+
+  useEffect(() => { carregar(false); }, [carregar]);
+
+  return { dados, loading, erro, recarregar: carregar };
+}
+
+// ─── Componente raiz ──────────────────────────────────────────────────
+
+export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
+  const { dados, loading, erro, recarregar } = useCortesData(usuario);
+
+  // Estado: feedback dado a cada ref (Sim/Editar/Não)
+  // Por enquanto local; Sprint 6.2 vai persistir em tabela ia_feedback_cortes
+  const [feedbackPorRef, setFeedbackPorRef] = useState({});
+
+  const onFeedback = (ref, tipo) => {
+    setFeedbackPorRef(prev => ({ ...prev, [ref]: tipo }));
+    // TODO Sprint 6.2: POST /api/ia-cortes-feedback
+    console.log(`[ProducaoCards] feedback ref=${ref} tipo=${tipo}`);
+  };
+
+  if (loading && !dados) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center', color: C.muted, fontFamily: SERIF }}>
+        Carregando sugestões de corte…
+      </div>
+    );
+  }
+
+  if (erro && !dados) {
+    return (
+      <div style={{
+        padding: 18, background: '#fdeaea', border: `1px solid ${C.critical}`,
+        borderRadius: 8, color: C.critical, fontFamily: SERIF,
+      }}>
+        <strong>Erro:</strong> {erro}
+        <button
+          onClick={recarregar}
+          style={{
+            marginLeft: 12, background: 'transparent', border: `1px solid ${C.critical}`,
+            color: C.critical, padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+            fontFamily: CALIBRI, fontSize: 12,
+          }}
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+
+  const refs = dados?.refs || [];
+  const totalCortes = dados?.capacidade_semanal?.total_cortes ?? refs.length;
+  const capacidadeStatus = dados?.capacidade_semanal?.status || 'normal';
+  const limiteNormal = dados?.capacidade_semanal?.limite_normal;
+  const validadeDias = dados?.validade_dias ?? 7;
+  const expiraEm = dados?.expira_em;
+
+  return (
+    <div>
+      {/* Header global da TabProdução */}
+      <CapacidadeHeader
+        totalCortes={totalCortes}
+        status={capacidadeStatus}
+        limiteNormal={limiteNormal}
+        validadeDias={validadeDias}
+        expiraEm={expiraEm}
+        geradoEm={dados?.gerado_em}
+        loading={loading}
+        onRefresh={recarregar}
+        usuario={usuario}
+        C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+      />
+
+      {/* Lista de refs sugeridas */}
+      {refs.length === 0 ? (
+        <div style={{
+          padding: 18, background: '#f7f4f0', borderRadius: 8,
+          color: C.muted, fontFamily: SERIF, textAlign: 'center', marginTop: 12,
+        }}>
+          Nenhuma sugestão de corte para a semana.
+        </div>
+      ) : (
+        refs.map(ref => (
+          <CardSugestaoCorte
+            key={ref.ref}
+            ref_={ref}
+            feedback={feedbackPorRef[ref.ref]}
+            onFeedback={onFeedback}
+            usuario={usuario}
+            C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+// ─── Header de capacidade semanal ─────────────────────────────────────
+
+function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, expiraEm, geradoEm, loading, onRefresh, usuario, C, SERIF, CALIBRI }) {
+  const dias = diasAteExpirar(expiraEm);
+  const [iaMsg, setIaMsg] = useState(null);
+  const [disparando, setDisparando] = useState(false);
+
+  const statusLabel = {
+    normal:  { texto: 'Capacidade normal', cor: C.success },
+    corrida: { texto: 'Semana corrida',    cor: C.warning },
+    excesso: { texto: 'Excesso de cortes', cor: C.critical },
+  }[status] || { texto: status, cor: C.muted };
+
+  // Formata "gerado em" - se foi hoje mostra so hora, senao mostra data+hora
+  const geradoTexto = (() => {
+    if (!geradoEm) return null;
+    try {
+      const d = new Date(geradoEm);
+      const hoje = new Date();
+      const mesmoMes = d.getMonth() === hoje.getMonth()
+                    && d.getFullYear() === hoje.getFullYear();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      if (mesmoMes && d.getDate() === hoje.getDate()) {
+        return `hoje ${hh}:${mm}`;
+      }
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      return `${dd}/${mo} ${hh}:${mm}`;
+    } catch {
+      return null;
+    }
+  })();
+
+  // Botao unico: dispara o cron completo (Claude + funcao SQL) e recarrega
+  // os dados ao final. Leva ~40-80s e custa ~R$0,10-0,30 por execucao.
+  const handleRecalcular = async () => {
+    if (disparando || loading || !usuario) return;
+    if (!window.confirm('Recalcular sugestões agora?\n\nA IA (Claude) vai reanalisar os cortes com os dados mais recentes. Leva aproximadamente 1 minuto e custa em torno de R$ 0,20.\n\nContinuar?')) {
+      return;
+    }
+    setDisparando(true);
+    setIaMsg({ tipo: 'progresso', texto: '🤖 Claude processando… (~1min)' });
+    try {
+      const r = await fetch('/api/ia-disparar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User': usuario,
+        },
+        body: JSON.stringify({ escopo: 'producao' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        throw new Error(j.error || `HTTP ${r.status}`);
+      }
+      // Sucesso - forca recarregar dados depois do Claude rodar
+      setIaMsg({ tipo: 'sucesso', texto: '✓ IA completou · atualizando…' });
+      await onRefresh(true);
+      setIaMsg({ tipo: 'sucesso', texto: '✓ sugestões atualizadas' });
+      setTimeout(() => setIaMsg(null), 5000);
+    } catch (e) {
+      setIaMsg({ tipo: 'erro', texto: `✗ ${(e.message || 'erro').slice(0, 40)}` });
+      setTimeout(() => setIaMsg(null), 7000);
+    } finally {
+      setDisparando(false);
+    }
+  };
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #fff 0%, #f7f4f0 100%)',
+      border: `1px solid ${C.cream}`,
+      borderRadius: 12,
+      padding: '14px 18px',
+      marginBottom: 14,
+      fontFamily: SERIF,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 12,
+      flexWrap: 'wrap',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 10, color: C.muted, letterSpacing: 1.5, textTransform: 'uppercase' }}>
+            Sugestões da semana
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: C.iaDarker, marginTop: 2 }}>
+            {fmtInt(totalCortes)} cortes
+            {limiteNormal != null && (
+              <span style={{ fontSize: 13, color: C.muted, fontWeight: 400, marginLeft: 8 }}>
+                · limite {limiteNormal}/sem
+              </span>
+            )}
+          </div>
+          {/* Timestamp de geracao - abaixo da contagem */}
+          {geradoTexto && (
+            <div style={{
+              fontSize: 10, color: C.muted, fontFamily: CALIBRI,
+              marginTop: 3, fontStyle: 'italic',
+            }}>
+              calculado {geradoTexto}
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          padding: '4px 10px', borderRadius: 12,
+          background: statusLabel.cor + '22',
+          color: statusLabel.cor, fontFamily: CALIBRI, fontSize: 11, fontWeight: 700,
+        }}>
+          {statusLabel.texto}
+        </div>
+
+        {dias != null && (
+          <div style={{ fontFamily: CALIBRI, fontSize: 11, color: C.muted }}>
+            ⏳ válida por <strong style={{ color: C.warning }}>{dias} dia{dias !== 1 ? 's' : ''}</strong>
+          </div>
+        )}
+
+        {/* Feedback do disparo IA */}
+        {iaMsg && (
+          <div style={{
+            fontFamily: CALIBRI, fontSize: 11, fontWeight: 700,
+            padding: '3px 8px', borderRadius: 10,
+            background: iaMsg.tipo === 'sucesso' ? C.success + '22'
+                     : iaMsg.tipo === 'erro' ? C.critical + '22'
+                     : C.iaDarker + '22',
+            color: iaMsg.tipo === 'sucesso' ? C.success
+                 : iaMsg.tipo === 'erro' ? C.critical
+                 : C.iaDarker,
+          }}>
+            {iaMsg.texto}
+          </div>
+        )}
+      </div>
+
+      {/* Botao unico: dispara Claude + SQL e recarrega */}
+      <button
+        onClick={handleRecalcular}
+        disabled={loading || disparando}
+        title="Dispara IA (Claude) + recalcula sugestões. Leva ~1 minuto e custa ~R$ 0,20."
+        style={{
+          background: C.iaDarker,
+          border: `1px solid ${C.iaDarker}`,
+          color: '#fff',
+          borderRadius: 6, padding: '8px 16px',
+          fontSize: 12, fontFamily: CALIBRI, fontWeight: 600,
+          cursor: (loading || disparando) ? 'wait' : 'pointer',
+          opacity: loading ? 0.55 : 1,
+          transition: 'all 0.15s',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {disparando ? '🤖 processando…' : '🤖 recalcular com IA'}
+      </button>
+    </div>
+  );
+}
+
+// ─── Card individual de uma sugestão de corte ────────────────────────
+
+function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALIBRI }) {
+  // Pills de severidade
+  const sevConfig = {
+    alta:  { texto: '🔴 Crítico',    bg: '#fdeaea', cor: C.critical },
+    media: { texto: '🟡 Atenção',    bg: '#faf6ec', cor: C.warning },
+    baixa: { texto: '🟢 Normal',     bg: '#eafbf0', cor: C.success },
+  }[ref_.severidade] || { texto: ref_.severidade, bg: '#eee', cor: C.muted };
+
+  const conConfig = {
+    alta:  { texto: '✓ Confiança Alta',   cor: C.success },
+    media: { texto: '~ Confiança Média',  cor: C.warning },
+    baixa: { texto: '? Confiança Baixa',  cor: C.critical },
+  }[ref_.confianca_ref] || { texto: ref_.confianca_ref, cor: C.muted };
+
+  // Cobertura no subtitulo - mesma logica do Modal Analise Completa:
+  //   mostra cobertura geral (estoque + producao / velocidade), nao a pior
+  //   variacao (que podia zerar e assustar quando a ref geral ta ok).
+  //   Pior variacao aparece em "variacoes em ruptura" e dentro do modal.
+  const estoqueProntoH = Number(ref_.analise?.estoque_pronto?.valor ?? ref_.estoque_total ?? 0);
+  const emProducaoH    = Number(ref_.analise?.em_producao?.valor ?? ref_.pecas_em_producao ?? 0);
+  const velocH         = Number(ref_.analise?.velocidade_dia?.valor ?? (ref_.vendas_30d_total ? ref_.vendas_30d_total / 30 : 0));
+  const cobGeralH      = velocH > 0 ? ((estoqueProntoH + emProducaoH) / velocH) : null;
+  const qtdRupturaH    = Number(ref_.qtd_variacoes_em_ruptura || 0);
+  const coberturaTexto = cobGeralH != null
+    ? `Cobertura geral ${Math.round(cobGeralH)} dias${qtdRupturaH > 0 ? ` · ${qtdRupturaH} variação(ões) em ruptura` : ''}`
+    : (qtdRupturaH > 0 ? `${qtdRupturaH} variação(ões) em ruptura` : 'Sem ruptura crítica');
+
+  // Estado de edição da grade (modulos absolutos, calculados da proporcao_pct do SQL)
+  const gradeInicial = useMemo(
+    () => gradeProporcaoParaModulos(ref_.grade || [], ref_.max_modulos),
+    [ref_.grade, ref_.max_modulos]
+  );
+  const [gradeEditada, setGradeEditada] = useState(gradeInicial);
+  const [editandoGrade, setEditandoGrade] = useState(false);
+
+  // Estado de edição das cores (cor + rolos)
+  const coresIniciais = useMemo(
+    () => (ref_.cores || []).map(c => ({
+      cor: c.cor,
+      rolos: c.rolos,
+      tendencia_label: c.tendencia_label,
+      tendencia_pct: c.tendencia_pct,
+    })),
+    [ref_.cores]
+  );
+  const [coresEditadas, setCoresEditadas] = useState(coresIniciais);
+  const [editandoCores, setEditandoCores] = useState(false);
+
+  // Resetar estado se ref mudar (ex: após refresh da lista)
+  useEffect(() => {
+    setGradeEditada(gradeInicial);
+    setEditandoGrade(false);
+  }, [gradeInicial]);
+  useEffect(() => {
+    setCoresEditadas(coresIniciais);
+    setEditandoCores(false);
+  }, [coresIniciais]);
+
+  // Matriz recalculada dinamicamente (não usa do payload original)
+  const rendimento = ref_.rendimento_sala || 20;
+  const matrizDinamica = useMemo(
+    () => calcularMatriz(coresEditadas, gradeEditada, rendimento),
+    [coresEditadas, gradeEditada, rendimento]
+  );
+
+  // Total de rolos = soma de rolos de todas cores ativas
+  const totalRolosDinamico = (coresEditadas || []).reduce((s, c) => s + (Number(c.rolos) || 0), 0);
+
+  // Total de peças = soma da matriz
+  const totalPecasDinamico = (matrizDinamica || []).reduce((s, m) => s + (Number(m.pecas) || 0), 0);
+
+  // Detecta se foi editado vs sugestão original
+  const foiEditado = (
+    JSON.stringify(gradeEditada) !== JSON.stringify(gradeInicial) ||
+    JSON.stringify(coresEditadas) !== JSON.stringify(coresIniciais)
+  );
+
+  // Estado da geração de ordem
+  const [ordemStatus, setOrdemStatus] = useState({ tipo: 'idle' }); // 'idle' | 'gerando' | 'sucesso' | 'erro'
+  const [ordemId, setOrdemId] = useState(null);
+  const [ordemErro, setOrdemErro] = useState(null);
+
+  // Estado dos modais (Fase 5)
+  const [modalAberto, setModalAberto] = useState(null); // null | 'analise' | 'editar' | 'explicar'
+  const [motivoEdicao, setMotivoEdicao] = useState('');     // texto do modal Editar
+  const [contextoExplicacao, setContextoExplicacao] = useState(''); // texto do modal Explicar
+
+  // Wrapper: ao abrir modal Editar, pre-popula motivo se ja editou inline
+  const abrirModal = (qual) => {
+    if (qual === 'editar' && foiEditado && !motivoEdicao) {
+      setMotivoEdicao(''); // usuario preenche, mas indica que ja mexeu
+    }
+    setModalAberto(qual);
+  };
+  const fecharModal = () => setModalAberto(null);
+
+  // Confirma edicao com motivo: dispara feedback como 'editar'
+  const confirmarEdicao = () => {
+    if (motivoEdicao.trim().length < 3) return; // valida minimo
+    onFeedback(ref_.ref, 'editar');
+    fecharModal();
+    // motivo fica salvo no estado local; futuro POST em Sprint 6.2
+    console.log(`[ProducaoCards] motivo editar ref=${ref_.ref}: ${motivoEdicao}`);
+  };
+
+  // Confirma explicacao: salva texto, fecha modal, NAO muda feedback
+  const confirmarExplicacao = () => {
+    if (contextoExplicacao.trim().length < 3) return;
+    fecharModal();
+    console.log(`[ProducaoCards] explicacao ref=${ref_.ref}: ${contextoExplicacao}`);
+  };
+
+  return (
+    <div style={{
+      background: '#fff', border: `1px solid ${C.cream}`, borderRadius: 12,
+      padding: 18, marginBottom: 12, fontFamily: SERIF,
+      borderLeft: `4px solid ${sevConfig.cor}`,
+    }}>
+      {/* Pills + curva */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        <Pill bg={sevConfig.bg} cor={sevConfig.cor}>{sevConfig.texto}</Pill>
+        <Pill cor={conConfig.cor}>{conConfig.texto}</Pill>
+        {ref_.curva && ref_.curva !== 'outras' && (
+          <Pill cor={C.iaDark}>Curva {ref_.curva.toUpperCase()}</Pill>
+        )}
+        {foiEditado && !feedback && (
+          <Pill bg='#faf6ec' cor={C.warning}>✎ Editado</Pill>
+        )}
+        {feedback && (
+          <Pill bg='#eafbf0' cor={C.success}>
+            {feedback === 'sim' ? '✓ Aprovado' : feedback === 'editar' ? '✎ Editado' : '✗ Rejeitado'}
+          </Pill>
+        )}
+      </div>
+
+      {/* Título + cobertura */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: C.iaDarker }}>
+          ref {ref_.ref} · {ref_.descricao || 'Sem descrição'}
+        </div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+          {coberturaTexto}
+          {ref_.pecas_perdidas_se_nao_cortar > 0 && (
+            <span style={{ color: C.critical, fontWeight: 600, marginLeft: 8 }}>
+              · perde ~{fmtInt(ref_.pecas_perdidas_se_nao_cortar)} peças se não cortar
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Bloco GRADE - editável */}
+      <Bloco
+        label='Grade do enfesto'
+        editavel
+        editando={editandoGrade}
+        onToggleEdit={() => setEditandoGrade(v => !v)}
+        C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+      >
+        <BlocoGrade
+          gradeModulos={gradeEditada}
+          setGradeModulos={setGradeEditada}
+          editando={editandoGrade}
+          maxModulos={ref_.max_modulos || 5}
+          categoria={ref_.categoria_peca}
+          C={C} CALIBRI={CALIBRI}
+        />
+      </Bloco>
+
+      {/* Bloco CORES - editável */}
+      <Bloco
+        label='Cores e rolos'
+        editavel
+        editando={editandoCores}
+        onToggleEdit={() => setEditandoCores(v => !v)}
+        C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+      >
+        <BlocoCores
+          cores={coresEditadas}
+          setCores={setCoresEditadas}
+          editando={editandoCores}
+          C={C} CALIBRI={CALIBRI}
+        />
+      </Bloco>
+
+      {/* Bloco MATRIZ - calculada dinamicamente */}
+      <Bloco
+        label='Estimativa de peças · cor × tamanho'
+        rightExtra={`≈ ${rendimento} peças/rolo`}
+        C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+      >
+        <BlocoMatriz matriz={matrizDinamica} C={C} CALIBRI={CALIBRI} />
+      </Bloco>
+
+      {/* TOTAL em evidência - dinâmico */}
+      <BlocoTotalDestaque
+        rolos={totalRolosDinamico}
+        pecas={totalPecasDinamico}
+        cores={coresEditadas.length}
+        tamanhos={gradeEditada.length}
+        C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+      />
+
+      {/* Por quê (justificativa) */}
+      {ref_.motivo && (
+        <BlocoPorque
+          motivo={ref_.motivo}
+          onAbrirAnalise={() => abrirModal('analise')}
+          C={C} CALIBRI={CALIBRI}
+        />
+      )}
+
+      {/* Aviso validade */}
+      <AvisoValidade C={C} CALIBRI={CALIBRI} />
+
+      {/* Ações */}
+      <Acoes
+        refNum={ref_.ref}
+        feedback={feedback}
+        onFeedback={onFeedback}
+        onAbrirModal={abrirModal}
+        C={C} CALIBRI={CALIBRI}
+      />
+
+      {/* Bloco Gerar Ordem - aparece após feedback Sim ou Editar */}
+      {(feedback === 'sim' || feedback === 'editar') && (
+        <BlocoGerarOrdem
+          ref_={ref_.ref}
+          gradeModulos={gradeEditada}
+          coresEditadas={coresEditadas}
+          aprovacaoTipo={feedback}
+          validadeAte={ref_.expira_em}
+          usuario={usuario}
+          ordemStatus={ordemStatus}
+          setOrdemStatus={setOrdemStatus}
+          ordemId={ordemId}
+          setOrdemId={setOrdemId}
+          ordemErro={ordemErro}
+          setOrdemErro={setOrdemErro}
+          C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+        />
+      )}
+
+      {/* Modais (Fase 5) - renderizam fora do fluxo, com overlay */}
+      {modalAberto === 'analise' && (
+        <ModalAnaliseCompleta
+          ref_={ref_}
+          onFechar={fecharModal}
+          C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+        />
+      )}
+      {modalAberto === 'editar' && (
+        <ModalEditar
+          ref_={ref_}
+          motivo={motivoEdicao}
+          setMotivo={setMotivoEdicao}
+          foiEditado={foiEditado}
+          onConfirmar={confirmarEdicao}
+          onFechar={fecharModal}
+          C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+        />
+      )}
+      {modalAberto === 'explicar' && (
+        <ModalExplicar
+          ref_={ref_}
+          contexto={contextoExplicacao}
+          setContexto={setContextoExplicacao}
+          onConfirmar={confirmarExplicacao}
+          onFechar={fecharModal}
+          C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Sub-componentes de blocos ────────────────────────────────────────
+
+function Pill({ bg = '#eee', cor, children }) {
+  return (
+    <span style={{
+      padding: '3px 8px', borderRadius: 12, background: bg,
+      color: cor, fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+      fontFamily: 'Calibri, sans-serif', textTransform: 'uppercase',
+    }}>
+      {children}
+    </span>
+  );
+}
+
+function Bloco({ label, rightExtra, editavel, editando, onToggleEdit, children, C, SERIF, CALIBRI }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 6,
+      }}>
+        <span style={{
+          fontSize: 9.5, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI, fontWeight: 700,
+        }}>
+          {label}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {rightExtra && (
+            <span style={{ fontSize: 9, color: C.muted, fontFamily: CALIBRI }}>
+              {rightExtra}
+            </span>
+          )}
+          {editavel && (
+            <button
+              onClick={onToggleEdit}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${editando ? C.success : C.cream}`,
+                color: editando ? C.success : C.muted,
+                borderRadius: 4, padding: '2px 8px',
+                fontSize: 10, fontFamily: CALIBRI, cursor: 'pointer',
+                fontWeight: editando ? 700 : 400,
+              }}
+            >
+              {editando ? '✓ pronto' : '✎ editar'}
+            </button>
+          )}
+        </div>
+      </div>
+      <div style={{
+        background: editando ? '#fffbf0' : '#f7f4f0',
+        borderRadius: 6, padding: 10,
+        border: editando ? `1px dashed ${C.warning}` : 'none',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function BlocoGrade({ gradeModulos, setGradeModulos, editando, maxModulos, categoria, C, CALIBRI }) {
+  const totalModulos = somarModulos(gradeModulos);
+  const ultrapassou = totalModulos > maxModulos;
+
+  // MODO DISPLAY (não editando)
+  if (!editando) {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {gradeModulos.length === 0 ? (
+            <span style={{ color: C.muted, fontSize: 11, fontFamily: CALIBRI }}>
+              Sem grade definida
+            </span>
+          ) : (
+            gradeModulos.map((g, i) => (
+              <div key={i} style={{
+                background: '#fff', border: `1px solid ${C.cream}`, borderRadius: 6,
+                padding: '6px 10px', fontFamily: CALIBRI, fontSize: 13,
+                color: C.iaDarker, fontWeight: 700,
+              }}>
+                {g.modulos}{g.tam}
+              </div>
+            ))
+          )}
+          <span style={{ fontFamily: CALIBRI, fontSize: 10, color: C.muted, marginLeft: 'auto' }}>
+            enfesto: {totalModulos} peças · {categoria === 'pequena_media' ? 'peça pequena' : 'peça grande'} (padrão {maxModulos})
+          </span>
+        </div>
+        {ultrapassou && (
+          <div style={{ fontSize: 10, color: C.warning, fontFamily: CALIBRI, marginTop: 6 }}>
+            ⚠ enfesto de {totalModulos} módulos — acima do padrão {maxModulos}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // MODO EDITOR
+  // Tamanhos disponiveis pra adicionar = padrao - ja na grade
+  const tamsNaGrade = new Set(gradeModulos.map(g => g.tam));
+  const tamsDisponiveis = TAMANHOS_DISPONIVEIS.filter(t => !tamsNaGrade.has(t));
+
+  const adicionarTam = (tam) => {
+    setGradeModulos([...gradeModulos, { tam, modulos: 1 }]);
+  };
+
+  const removerTam = (tam) => {
+    setGradeModulos(gradeModulos.filter(g => g.tam !== tam));
+  };
+
+  const atualizarModulos = (tam, novoVal) => {
+    const v = Math.max(0, parseInt(novoVal, 10) || 0);
+    setGradeModulos(gradeModulos.map(g => g.tam === tam ? { ...g, modulos: v } : g));
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+        {gradeModulos.map((g, i) => (
+          <div key={i} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            background: '#fff', border: `1px solid ${C.cream}`, borderRadius: 6,
+            padding: '4px 6px', fontFamily: CALIBRI, fontSize: 12,
+          }}>
+            <input
+              type="number"
+              min="0"
+              value={g.modulos}
+              onChange={(e) => atualizarModulos(g.tam, e.target.value)}
+              style={{
+                width: 32, padding: '2px 4px', border: `1px solid ${C.cream}`,
+                borderRadius: 3, fontSize: 12, fontFamily: CALIBRI,
+                textAlign: 'center', fontWeight: 700, color: C.iaDarker,
+              }}
+            />
+            <span style={{ color: C.iaDarker, fontWeight: 700 }}>{g.tam}</span>
+            <button
+              onClick={() => removerTam(g.tam)}
+              style={{
+                background: 'transparent', border: 'none', color: C.critical,
+                cursor: 'pointer', fontSize: 14, padding: '0 2px', lineHeight: 1,
+              }}
+              title={`Remover ${g.tam}`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {tamsDisponiveis.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: CALIBRI }}>+ adicionar:</span>
+          {tamsDisponiveis.map(t => (
+            <button
+              key={t}
+              onClick={() => adicionarTam(t)}
+              style={{
+                background: '#fff', border: `1px dashed ${C.muted}`, borderRadius: 4,
+                padding: '2px 8px', fontFamily: CALIBRI, fontSize: 11,
+                color: C.muted, cursor: 'pointer',
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ marginTop: 8, fontSize: 10, fontFamily: CALIBRI, color: ultrapassou ? C.warning : C.muted }}>
+        {ultrapassou ? '⚠ ' : ''}enfesto: {totalModulos} peças (padrão {maxModulos})
+      </div>
+    </div>
+  );
+}
+
+function BlocoCores({ cores, setCores, editando, C, CALIBRI }) {
+  const [novaCorNome, setNovaCorNome] = useState('');
+  const [novaCorRolos, setNovaCorRolos] = useState(1);
+
+  // Le o ranking REAL do Bling salvo pelo BlingContent (top 16 cores por venda).
+  // Mesma logica do DetalhamentoModal em src/App.tsx ~3300.
+  // Fallback pra lista hardcoded se Bling ainda nao foi sincronizado.
+  const rankingBling = useMemo(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('amica_bling_cores_top') : null;
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d?.cores?.length > 0) return d.cores;
+      }
+    } catch { /* ignora */ }
+    // Fallback hardcoded (sincronizado com CORES_RANKING_INICIAL de App.tsx)
+    return [
+      { nome: 'Preto',        hex: '#1a1a1a' },
+      { nome: 'Bege',         hex: '#d4c4a4' },
+      { nome: 'Marrom',       hex: '#5c3a20' },
+      { nome: 'Figo',         hex: '#6b3a4c' },
+      { nome: 'Azul Marinho', hex: '#1c2e4a' },
+      { nome: 'Caramelo',     hex: '#a8743b' },
+      { nome: 'Verde Militar',hex: '#4a5d3a' },
+      { nome: 'Nude',         hex: '#e8c8b0' },
+      { nome: 'Azul Serenity',hex: '#91a8d0' },
+      { nome: 'Marrom Escuro',hex: '#3d2418' },
+      { nome: 'Verde Sálvia', hex: '#87a96b' },
+      { nome: 'Azul Claro',   hex: '#a8c8e0' },
+      { nome: 'Vinho',        hex: '#5c1a2e' },
+      { nome: 'Bege Claro',   hex: '#ebdcc0' },
+    ];
+  }, []);
+
+  // MODO DISPLAY
+  if (!editando) {
+    if (cores.length === 0) {
+      return <div style={{ color: C.muted, fontSize: 11, fontFamily: CALIBRI }}>Sem cores definidas</div>;
+    }
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6 }}>
+        {cores.map((c, i) => {
+          const tendCfg = {
+            alta:   { sigla: '↑', cor: C.success, label: 'em alta' },
+            baixa:  { sigla: '↓', cor: C.critical, label: 'em queda' },
+            nova:   { sigla: '★', cor: C.iaDark, label: 'aposta nova' },
+            normal: { sigla: '·', cor: C.muted, label: 'estável' },
+          }[c.tendencia_label] || { sigla: '·', cor: C.muted, label: '' };
+
+          return (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: '#fff', borderRadius: 6, padding: '6px 10px',
+              fontFamily: CALIBRI, fontSize: 12,
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{
+                  width: 14, height: 14, borderRadius: 3, background: corHex(c.cor),
+                  border: '1px solid rgba(0,0,0,0.1)', display: 'inline-block',
+                }} />
+                <span style={{ color: C.iaDarker, fontWeight: 600 }}>{c.cor}</span>
+                {c.tendencia_label && c.tendencia_label !== 'normal' && (
+                  <span style={{
+                    fontSize: 9, color: tendCfg.cor, fontWeight: 700,
+                    background: tendCfg.cor + '22', padding: '1px 4px', borderRadius: 3,
+                  }}>
+                    {tendCfg.sigla} {c.tendencia_pct != null ? fmtPct(c.tendencia_pct) : tendCfg.label}
+                  </span>
+                )}
+              </span>
+              <span style={{ color: C.muted, fontSize: 11 }}>
+                <strong style={{ color: C.iaDarker, fontSize: 13 }}>{c.rolos}</strong> rolo{c.rolos !== 1 ? 's' : ''}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // MODO EDITOR
+  const atualizarRolos = (idx, novoVal) => {
+    const v = Math.max(0, parseInt(novoVal, 10) || 0);
+    setCores(cores.map((c, i) => i === idx ? { ...c, rolos: v } : c));
+  };
+
+  const removerCor = (idx) => {
+    setCores(cores.filter((_, i) => i !== idx));
+  };
+
+  const adicionarCor = () => {
+    const nome = novaCorNome.trim();
+    const rolos = Math.max(1, parseInt(novaCorRolos, 10) || 1);
+    if (!nome) return;
+    // Evita duplicata
+    if (cores.some(c => (c.cor || '').toLowerCase() === nome.toLowerCase())) {
+      alert(`Cor "${nome}" já existe na lista`);
+      return;
+    }
+    setCores([...cores, { cor: nome, rolos, tendencia_label: 'nova', tendencia_pct: null }]);
+    setNovaCorNome('');
+    setNovaCorRolos(1);
+  };
+
+  // Quick-add de cor do ranking Bling: click adiciona com 1 rolo default.
+  // Se ja existe na lista atual, nao duplica (faz nada silenciosamente).
+  const adicionarCorDoRanking = (nome) => {
+    const n = (nome || '').trim();
+    if (!n) return;
+    if (cores.some(c => (c.cor || '').toLowerCase() === n.toLowerCase())) return;
+    setCores([...cores, { cor: n, rolos: 1, tendencia_label: 'normal', tendencia_pct: null }]);
+  };
+
+  // Filtra ranking pra mostrar so cores que NAO estao na lista atual
+  const coresJaNaLista = new Set(cores.map(c => (c.cor || '').toLowerCase()));
+  const sugestoesRanking = rankingBling.filter(r => !coresJaNaLista.has((r.nome || '').toLowerCase()));
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6, marginBottom: 10 }}>
+        {cores.map((c, idx) => (
+          <div key={idx} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: '#fff', borderRadius: 6, padding: '6px 8px',
+            fontFamily: CALIBRI, fontSize: 12,
+          }}>
+            <span style={{
+              width: 14, height: 14, borderRadius: 3, background: corHex(c.cor),
+              border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0,
+            }} />
+            <span style={{ color: C.iaDarker, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {c.cor}
+            </span>
+            <input
+              type="number" min="0" value={c.rolos}
+              onChange={(e) => atualizarRolos(idx, e.target.value)}
+              style={{
+                width: 44, padding: '2px 4px', border: `1px solid ${C.cream}`,
+                borderRadius: 3, fontSize: 12, fontFamily: CALIBRI,
+                textAlign: 'center', fontWeight: 700, color: C.iaDarker,
+              }}
+            />
+            <span style={{ fontSize: 10, color: C.muted }}>rolo{c.rolos !== 1 ? 's' : ''}</span>
+            <button
+              onClick={() => removerCor(idx)}
+              style={{
+                background: 'transparent', border: 'none', color: C.critical,
+                cursor: 'pointer', fontSize: 16, padding: '0 2px', lineHeight: 1,
+              }}
+              title={`Remover ${c.cor}`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Sugestoes do ranking Bling - quick add com 1 click */}
+      {sugestoesRanking.length > 0 && (
+        <div style={{
+          marginBottom: 10, padding: 8, background: '#faf8f5',
+          borderRadius: 6, border: `1px solid ${C.cream}`,
+        }}>
+          <div style={{
+            fontSize: 9, color: C.muted, fontFamily: CALIBRI,
+            textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
+            fontWeight: 700,
+          }}>
+            + cores do ranking Bling (click pra adicionar)
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {sugestoesRanking.map((r, i) => (
+              <button
+                key={i}
+                onClick={() => adicionarCorDoRanking(r.nome)}
+                title={`Adicionar ${r.nome} (1 rolo)`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: '#fff', border: `1px solid ${C.cream}`,
+                  borderRadius: 14, padding: '3px 9px 3px 4px',
+                  cursor: 'pointer', fontFamily: CALIBRI, fontSize: 11,
+                  color: C.iaDarker,
+                }}
+              >
+                <span style={{
+                  width: 12, height: 12, borderRadius: 2,
+                  background: r.hex || corHex(r.nome),
+                  border: '1px solid rgba(0,0,0,0.1)',
+                  display: 'inline-block', flexShrink: 0,
+                }} />
+                <span>{r.nome}</span>
+                <span style={{ color: C.muted, fontSize: 14, lineHeight: 1 }}>+</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{
+        display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
+        padding: 8, background: '#fff', borderRadius: 6,
+        border: `1px dashed ${C.muted}`,
+      }}>
+        <input
+          type="text"
+          placeholder="Nome da nova cor (ex: Marrom)"
+          value={novaCorNome}
+          onChange={(e) => setNovaCorNome(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') adicionarCor(); }}
+          style={{
+            flex: 1, minWidth: 140, padding: '4px 8px', border: `1px solid ${C.cream}`,
+            borderRadius: 4, fontSize: 12, fontFamily: CALIBRI, color: C.iaDarker,
+          }}
+        />
+        <input
+          type="number" min="1" value={novaCorRolos}
+          onChange={(e) => setNovaCorRolos(e.target.value)}
+          style={{
+            width: 50, padding: '4px 6px', border: `1px solid ${C.cream}`,
+            borderRadius: 4, fontSize: 12, fontFamily: CALIBRI, textAlign: 'center',
+          }}
+        />
+        <span style={{ fontSize: 10, color: C.muted, fontFamily: CALIBRI }}>rolos</span>
+        <button
+          onClick={adicionarCor}
+          disabled={!novaCorNome.trim()}
+          style={{
+            background: novaCorNome.trim() ? C.success : '#ddd',
+            color: '#fff', border: 'none', borderRadius: 4,
+            padding: '4px 12px', fontSize: 11, fontFamily: CALIBRI,
+            cursor: novaCorNome.trim() ? 'pointer' : 'default',
+            fontWeight: 700,
+          }}
+        >
+          + adicionar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BlocoMatriz({ matriz, C, CALIBRI }) {
+  if (matriz.length === 0) {
+    return <div style={{ color: C.muted, fontSize: 11, fontFamily: CALIBRI }}>Sem matriz disponível</div>;
+  }
+
+  // Pivot: linhas = cores, colunas = tamanhos
+  const cores = [...new Set(matriz.map(m => m.cor))];
+  const tams  = [...new Set(matriz.map(m => m.tam))];
+  const idx = {};
+  matriz.forEach(m => { idx[`${m.cor}|${m.tam}`] = m.pecas; });
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{
+        width: '100%', borderCollapse: 'collapse', fontFamily: CALIBRI, fontSize: 11,
+      }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '4px 6px', color: C.muted, fontWeight: 600 }}>Cor</th>
+            {tams.map(t => (
+              <th key={t} style={{ textAlign: 'right', padding: '4px 6px', color: C.muted, fontWeight: 600 }}>
+                {t}
+              </th>
+            ))}
+            <th style={{ textAlign: 'right', padding: '4px 6px', color: C.iaDarker, fontWeight: 700 }}>
+              Total
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {cores.map(cor => {
+            const total = tams.reduce((s, t) => s + (idx[`${cor}|${t}`] || 0), 0);
+            return (
+              <tr key={cor} style={{ borderTop: `1px solid ${C.cream}` }}>
+                <td style={{ padding: '4px 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: 2, background: corHex(cor),
+                    display: 'inline-block', border: '1px solid rgba(0,0,0,0.1)',
+                  }} />
+                  <span style={{ color: C.iaDarker }}>{cor}</span>
+                </td>
+                {tams.map(t => (
+                  <td key={t} style={{ textAlign: 'right', padding: '4px 6px', color: C.iaDarker }}>
+                    {idx[`${cor}|${t}`] || 0}
+                  </td>
+                ))}
+                <td style={{ textAlign: 'right', padding: '4px 6px', color: C.iaDarker, fontWeight: 700 }}>
+                  {fmtInt(total)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function BlocoTotalDestaque({ rolos, pecas, cores, tamanhos, C, SERIF, CALIBRI }) {
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${C.iaDarker}, ${C.iaDark})`,
+      color: '#fff', borderRadius: 8, padding: '12px 16px',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      fontFamily: CALIBRI, marginBottom: 12,
+    }}>
+      <div>
+        <div style={{ fontSize: 9, letterSpacing: 1, opacity: 0.8, textTransform: 'uppercase' }}>
+          Total
+        </div>
+        <div style={{ fontSize: 10, opacity: 0.8, marginTop: 2 }}>
+          {cores} cor{cores !== 1 ? 'es' : ''} · {tamanhos} tamanho{tamanhos !== 1 ? 's' : ''}
+        </div>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <div style={{ fontSize: 22, fontWeight: 700, lineHeight: 1 }}>
+          {fmtInt(rolos)} rolos
+        </div>
+        <div style={{ fontSize: 10, opacity: 0.8, marginTop: 2 }}>
+          ≈ {fmtInt(pecas)} peças estimadas
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlocoPorque({ motivo, onAbrirAnalise, C, CALIBRI }) {
+  // Traduz motivo técnico em texto legível
+  const motivoTexto = {
+    demanda_ativa_e_critico: 'Demanda ativa com cobertura crítica',
+    ruptura_disfarcada:      'Ruptura disfarçada (vendia e parou)',
+    excesso_estoque:         'Estoque em excesso prolongado',
+  }[motivo] || motivo;
+
+  return (
+    <div style={{
+      background: '#f0f4fa', borderLeft: `3px solid ${C.blue}`,
+      padding: '10px 12px', borderRadius: 6, marginBottom: 10,
+      fontSize: 11.5, lineHeight: 1.4, color: C.text, fontFamily: CALIBRI,
+    }}>
+      <strong style={{ color: C.iaDarker }}>Por quê:</strong> {motivoTexto}
+      {onAbrirAnalise && (
+        <>
+          <br />
+          <button
+            onClick={onAbrirAnalise}
+            style={{
+              background: 'transparent', border: 'none',
+              color: C.blue, textDecoration: 'underline',
+              padding: 0, marginTop: 6, fontSize: 11, cursor: 'pointer',
+              fontFamily: CALIBRI, fontWeight: 700,
+            }}
+          >
+            ver análise completa →
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AvisoValidade({ C, CALIBRI }) {
+  return (
+    <div style={{
+      background: '#faf6ec', borderLeft: `3px solid ${C.warning}`,
+      padding: '8px 12px', borderRadius: 6, marginBottom: 12,
+      fontSize: 10.5, color: C.text, fontFamily: CALIBRI,
+    }}>
+      ⏳ <strong style={{ color: C.warning }}>Sugestão válida por 7 dias.</strong>{' '}
+      Se você não decidir nesse prazo, a OS Amícia pode re-sugerir com dados atualizados.
+    </div>
+  );
+}
+
+function Acoes({ refNum, feedback, onFeedback, onAbrirModal, C, CALIBRI }) {
+  const Btn = ({ onClick, bg, cor, border, children, flex }) => (
+    <button
+      onClick={onClick}
+      disabled={!!feedback}
+      style={{
+        background: bg, color: cor, border: border || 'none',
+        padding: '10px 14px', borderRadius: 6, fontFamily: CALIBRI,
+        fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
+        cursor: feedback ? 'default' : 'pointer',
+        opacity: feedback ? 0.5 : 1,
+        flex: flex || 'initial',
+      }}
+    >
+      {children}
+    </button>
+  );
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <Btn onClick={() => onFeedback(refNum, 'sim')}
+           bg={C.success} cor='#fff' flex={1}>✓ Sim, vou cortar</Btn>
+      <Btn onClick={() => onAbrirModal('editar')}
+           bg={C.warning} cor='#fff'>✎ Editar</Btn>
+      <Btn onClick={() => onFeedback(refNum, 'nao')}
+           bg='#eee' cor={C.text} border={`1px solid ${C.cream}`}>✗ Não</Btn>
+      <Btn onClick={() => onAbrirModal('explicar')}
+           bg='transparent' cor={C.blue} border={`1px dashed ${C.blue}`}>💬 Explicar</Btn>
+    </div>
+  );
+}
+
+// ─── Bloco Gerar Ordem (aparece após Sim/Editar) ────────────────────
+
+function BlocoGerarOrdem({
+  ref_, gradeModulos, coresEditadas, aprovacaoTipo, validadeAte, usuario,
+  ordemStatus, setOrdemStatus, ordemId, setOrdemId, ordemErro, setOrdemErro,
+  C, SERIF, CALIBRI,
+}) {
+  // Validacao client-side antes de habilitar o botao
+  const gradeValida = gradeModulos.filter(g => g.modulos > 0);
+  const coresValidas = coresEditadas.filter(c => c.rolos > 0 && (c.cor || '').trim());
+  const podeGerar = gradeValida.length > 0 && coresValidas.length > 0;
+
+  const totalRolos = coresValidas.reduce((s, c) => s + c.rolos, 0);
+  const totalPecas = gradeValida.reduce((s, g) => s + g.modulos, 0);
+
+  const gerarOrdem = async () => {
+    if (!podeGerar || !usuario) return;
+    setOrdemStatus({ tipo: 'gerando' });
+    setOrdemErro(null);
+
+    // Converte grade array -> objeto { "P": 1, "M": 2, ... }
+    const gradeObj = {};
+    gradeValida.forEach(g => { gradeObj[g.tam] = g.modulos; });
+
+    // Converte cores -> formato esperado [{nome, rolos, hex}]
+    const coresPayload = coresValidas.map(c => ({
+      nome: (c.cor || '').trim(),
+      rolos: c.rolos,
+      hex: corHex(c.cor),
+    }));
+
+    const body = {
+      ref: ref_,
+      grade: gradeObj,
+      cores: coresPayload,
+      origem: 'os_amicia',
+      aprovacao_tipo: aprovacaoTipo,         // 'sim' ou 'editar'
+      validade_ate: validadeAte || null,
+      criada_por: usuario,
+    };
+
+    try {
+      const r = await fetch('/api/ordens-corte-criar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User': usuario,
+        },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        throw new Error(j.error || `HTTP ${r.status}`);
+      }
+      // Sucesso: backend retorna { ordem: {...} }
+      setOrdemId(j.ordem?.id || j.ordem?.numero || 'criada');
+      setOrdemStatus({ tipo: 'sucesso' });
+    } catch (e) {
+      setOrdemErro(e.message || 'Erro ao gerar ordem');
+      setOrdemStatus({ tipo: 'erro' });
+    }
+  };
+
+  // Estados visuais
+  const isGerando = ordemStatus.tipo === 'gerando';
+  const isSucesso = ordemStatus.tipo === 'sucesso';
+  const isErro    = ordemStatus.tipo === 'erro';
+
+  return (
+    <div style={{
+      marginTop: 14, padding: 16,
+      background: isSucesso
+        ? 'linear-gradient(135deg, #eafbf0, #fff)'
+        : 'linear-gradient(135deg, #faf6ec, #fff)',
+      border: `2px solid ${isSucesso ? C.success : C.warning}`,
+      borderRadius: 10,
+      fontFamily: SERIF,
+    }}>
+      {isSucesso ? (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            fontSize: 14, fontWeight: 700, color: C.success,
+            fontFamily: CALIBRI, marginBottom: 4,
+          }}>
+            ✓ Ordem de corte criada
+          </div>
+          <div style={{ fontSize: 11, color: C.text, fontFamily: CALIBRI }}>
+            {ordemId && typeof ordemId === 'string' && ordemId.length > 20
+              ? `ID: ${ordemId.slice(0, 8)}...`
+              : `Ordem #${ordemId}`}
+            {' · '}veja em <strong>Ordens de Corte</strong>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{
+            fontSize: 12, fontWeight: 700, color: C.warning,
+            fontFamily: CALIBRI, marginBottom: 4,
+          }}>
+            {aprovacaoTipo === 'editar' ? '✎ Sugestão ajustada' : '✓ Sugestão aprovada'}
+          </div>
+          <div style={{ fontSize: 11, color: C.text, fontFamily: CALIBRI, marginBottom: 12 }}>
+            {totalRolos} rolo{totalRolos !== 1 ? 's' : ''} · {gradeValida.length} tamanho{gradeValida.length !== 1 ? 's' : ''} · enfesto de {totalPecas} peças
+          </div>
+
+          <button
+            onClick={gerarOrdem}
+            disabled={!podeGerar || isGerando}
+            style={{
+              background: !podeGerar || isGerando ? '#bbb' : C.success,
+              color: '#fff', border: 'none', borderRadius: 8,
+              padding: '12px 20px', fontFamily: CALIBRI,
+              fontSize: 13, fontWeight: 700, letterSpacing: 0.5,
+              cursor: (!podeGerar || isGerando) ? 'default' : 'pointer',
+              width: '100%',
+              transition: 'background 0.15s',
+            }}
+          >
+            {isGerando ? '… gerando ordem' : '📋 Gerar Ordem de Corte'}
+          </button>
+
+          {!podeGerar && (
+            <div style={{
+              marginTop: 8, fontSize: 10, color: C.muted,
+              fontFamily: CALIBRI, textAlign: 'center',
+            }}>
+              {gradeValida.length === 0
+                ? '⚠ adicione ao menos 1 tamanho na grade'
+                : '⚠ adicione ao menos 1 cor com rolos > 0'}
+            </div>
+          )}
+
+          {isErro && ordemErro && (
+            <div style={{
+              marginTop: 10, padding: '8px 12px',
+              background: '#fdeaea', border: `1px solid ${C.critical}`,
+              borderRadius: 6, color: C.critical, fontSize: 11,
+              fontFamily: CALIBRI,
+            }}>
+              <strong>Erro:</strong> {ordemErro}
+              <button
+                onClick={() => { setOrdemStatus({ tipo: 'idle' }); setOrdemErro(null); }}
+                style={{
+                  marginLeft: 8, background: 'transparent',
+                  border: `1px solid ${C.critical}`, color: C.critical,
+                  padding: '2px 8px', borderRadius: 4, fontSize: 10,
+                  cursor: 'pointer', fontFamily: CALIBRI,
+                }}
+              >
+                tentar novamente
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── MODAIS (Fase 5) ──────────────────────────────────────────────────
+
+// Wrapper comum dos 3 modais (overlay + container)
+function ModalShell({ titulo, subtitulo, onFechar, children, C, SERIF, CALIBRI }) {
+  // Fechar com ESC
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onFechar(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onFechar]);
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onFechar(); }}
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999, padding: 16,
+        animation: 'modalFade 0.15s ease',
+      }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 12, padding: 22,
+        maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto',
+        fontFamily: SERIF, boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{
+          fontSize: 16, fontWeight: 700, color: C.iaDarker,
+          marginBottom: 4,
+        }}>
+          {titulo}
+        </div>
+        {subtitulo && (
+          <div style={{
+            fontSize: 11, color: C.muted, fontFamily: CALIBRI,
+            marginBottom: 16, paddingBottom: 10,
+            borderBottom: `1px solid ${C.cream}`,
+          }}>
+            {subtitulo}
+          </div>
+        )}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Linha de info pra modais (icone + label + valor)
+function LinhaInfo({ icone, label, valor, C, CALIBRI }) {
+  return (
+    <li style={{
+      listStyle: 'none', display: 'flex', alignItems: 'flex-start',
+      gap: 8, padding: '4px 0', fontFamily: CALIBRI, fontSize: 12,
+      color: C.text,
+    }}>
+      <span style={{ fontSize: 14, lineHeight: 1.3 }}>{icone}</span>
+      <span>
+        <strong style={{ color: C.iaDarker }}>{label}:</strong> {valor}
+      </span>
+    </li>
+  );
+}
+
+// MODAL 1: Análise completa - mostra justificativas detalhadas com fontes,
+// cores excluídas, fila de espera e critérios aplicados (Sprint 6.7).
+//
+// Consome os campos novos do payload v1.5-fixed da função SQL:
+//   - analise{} - cada métrica com {valor, fonte/calc} pra transparência
+//   - cores_excluidas[] - cores reprovadas em algum gate, com motivo
+//   - fila_espera[] - cores rank 7+ que vão pro próximo corte
+//   - criterios_aplicados{} - thresholds usados (cobertura max, top N, etc)
+function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
+  const motivoTexto = {
+    demanda_ativa_e_critico: 'Demanda ativa com cobertura crítica',
+    ruptura_disfarcada:      'Ruptura disfarçada',
+    excesso_estoque:         'Excesso de estoque',
+  }[ref_.motivo] || ref_.motivo;
+
+  const motivoExclusaoTexto = {
+    fora_top_catalogo:               'Fora do top do catálogo Bling',
+    variacoes_insuficientes:         'Menos de 2 variações vendendo',
+    estoque_ainda_cobre:             'Estoque ainda cobre a demanda',
+    sem_volume_nem_tendencia:        'Volume baixo e sem tendência de alta',
+    carro_chefe_estoque_excessivo:   'Carro-chefe com estoque > 2× média da ref',
+    outro:                           'Outro motivo',
+  };
+
+  // Pega valor de analise{} (que é {valor, fonte} ou {valor, calc})
+  const a = ref_.analise || {};
+  const fonteOuCalc = (campo) => a[campo]?.fonte || a[campo]?.calc || '—';
+  const valorDe = (campo) => a[campo]?.valor;
+
+  const vendasDia = valorDe('velocidade_dia') ?? (ref_.vendas_30d_total ? (ref_.vendas_30d_total / 30).toFixed(2) : '—');
+
+  // Cobertura GERAL: (estoque_pronto + em_producao) / velocidade_dia
+  // Mostra quanto a ref aguenta no ritmo atual considerando producao em andamento.
+  const estoqueProntoNum  = Number(valorDe('estoque_pronto') ?? ref_.estoque_total ?? 0);
+  const emProducaoNum     = Number(valorDe('em_producao') ?? ref_.pecas_em_producao ?? 0);
+  const velocNum          = Number(valorDe('velocidade_dia') ?? (ref_.vendas_30d_total ? ref_.vendas_30d_total / 30 : 0));
+  const cobGeralDias      = velocNum > 0 ? ((estoqueProntoNum + emProducaoNum) / velocNum) : null;
+  const cobGeralTxt       = cobGeralDias != null
+    ? `${cobGeralDias.toFixed(0)} dias (estoque ${fmtInt(estoqueProntoNum)} + produção ${fmtInt(emProducaoNum)} ÷ ${velocNum.toFixed(1)}/dia)`
+    : '—';
+
+  // Cobertura da PIOR variação cor x tam (so as em ruptura, com cob projetada disponivel).
+  // Esta eh a urgencia REAL que justifica o corte - mesmo com estoque geral confortavel,
+  // se uma variacao especifica zera, perde-se vendas.
+  const ruptList = ref_.variacoes_em_ruptura || [];
+  const piorVar  = ruptList
+    .filter(v => v.cobertura_projetada_dias != null)
+    .reduce((pior, v) => (pior == null || v.cobertura_projetada_dias < pior.cobertura_projetada_dias ? v : pior), null);
+  const cobPiorTxt = piorVar
+    ? `${Number(piorVar.cobertura_projetada_dias).toFixed(1)} dias · ${piorVar.cor || ''} ${piorVar.tam || ''}`.trim()
+    : (ruptList.length > 0 ? `${ruptList.length} variação(ões) sem cob. calculada` : '—');
+
+  const cores_excluidas = Array.isArray(ref_.cores_excluidas) ? ref_.cores_excluidas : [];
+  const fila_espera     = Array.isArray(ref_.fila_espera)     ? ref_.fila_espera     : [];
+  const criterios       = ref_.criterios_aplicados || {};
+
+  return (
+    <ModalShell
+      titulo='🔍 Análise completa'
+      subtitulo={`ref ${ref_.ref} · ${ref_.descricao || ''}`}
+      onFechar={onFechar}
+      C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+    >
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 1: Situação atual com fontes
+          ──────────────────────────────────────────────────────── */}
+      <SecaoModal titulo='Situação atual' C={C} CALIBRI={CALIBRI}>
+        <ul style={{ paddingLeft: 0, margin: 0 }}>
+          <LinhaInfoFonte
+            icone='📦' label='Estoque pronto'
+            valor={`${fmtInt(valorDe('estoque_pronto') ?? ref_.estoque_total ?? 0)} peças`}
+            fonte={fonteOuCalc('estoque_pronto')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='🏭' label='Em produção'
+            valor={`${fmtInt(valorDe('em_producao') ?? ref_.pecas_em_producao ?? 0)} peças nas oficinas`}
+            fonte={fonteOuCalc('em_producao')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='💰' label='Vendas 30d'
+            valor={`${fmtInt(valorDe('vendas_30d') ?? ref_.vendas_30d_total ?? 0)} peças`}
+            fonte={fonteOuCalc('vendas_30d')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='📈' label='Velocidade'
+            valor={`${vendasDia} peças/dia`}
+            fonte={fonteOuCalc('velocidade_dia')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='⏳' label='Cobertura geral'
+            valor={cobGeralTxt}
+            fonte='(estoque pronto + em produção) ÷ velocidade'
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='🚨' label='Pior variação'
+            valor={cobPiorTxt}
+            fonte={piorVar ? 'variacoes_em_ruptura (menor cobertura projetada)' : '—'}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='⏱️' label='Lead time'
+            valor={`${valorDe('lead_time_dias') ?? ref_.lead_time_dias ?? 22} dias`}
+            fonte={fonteOuCalc('lead_time_dias')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          {valorDe('curva') && (
+            <LinhaInfoFonte
+              icone='📊' label='Curva ABC'
+              valor={`${String(valorDe('curva')).toUpperCase()}`}
+              fonte={fonteOuCalc('curva')}
+              C={C} CALIBRI={CALIBRI}
+            />
+          )}
+        </ul>
+      </SecaoModal>
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 2: Por que recomendou
+          ──────────────────────────────────────────────────────── */}
+      <SecaoModal titulo='Por que a IA recomendou' C={C} CALIBRI={CALIBRI}>
+        <ul style={{ paddingLeft: 0, margin: 0 }}>
+          <LinhaInfo icone='🎯' label='Motivo principal' valor={motivoTexto} C={C} CALIBRI={CALIBRI} />
+          <LinhaInfo icone='🔥' label='Severidade'
+            valor={ref_.severidade || '—'} C={C} CALIBRI={CALIBRI} />
+          <LinhaInfo icone='🚨' label='Variações em ruptura'
+            valor={`${ref_.qtd_variacoes_em_ruptura || 0} de ${ref_.qtd_variacoes_ativas || '?'} ativas`}
+            C={C} CALIBRI={CALIBRI} />
+        </ul>
+      </SecaoModal>
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 3: Projeção 22 dias
+          ──────────────────────────────────────────────────────── */}
+      <SecaoModal titulo={`Projeção em ${ref_.lead_time_dias || 22} dias (lead time)`} C={C} CALIBRI={CALIBRI}>
+        <ul style={{ paddingLeft: 0, margin: 0 }}>
+          <LinhaInfo icone='❌' label='Sem cortar'
+            valor={
+              ref_.pecas_perdidas_se_nao_cortar > 0
+                ? `${fmtInt(ref_.projecao_22d_sem_corte || 0)} peças · perde ~${fmtInt(ref_.pecas_perdidas_se_nao_cortar)} vendas`
+                : `${fmtInt(ref_.projecao_22d_sem_corte || 0)} peças`
+            }
+            C={C} CALIBRI={CALIBRI} />
+          <LinhaInfo icone='✅' label='Com corte sugerido'
+            valor={`${fmtInt(ref_.projecao_22d_com_corte || 0)} peças (+${fmtInt(ref_.pecas_a_cortar || 0)} cortadas)`}
+            C={C} CALIBRI={CALIBRI} />
+        </ul>
+      </SecaoModal>
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 4: Variações específicas em ruptura
+          ──────────────────────────────────────────────────────── */}
+      {ref_.variacoes_em_ruptura && ref_.variacoes_em_ruptura.length > 0 && (
+        <SecaoModal titulo={`Variações em ruptura (${ref_.variacoes_em_ruptura.length})`}
+          C={C} CALIBRI={CALIBRI}>
+          <div style={{
+            background: '#fdeaea', borderRadius: 6, padding: 8,
+            maxHeight: 180, overflowY: 'auto', fontFamily: CALIBRI, fontSize: 11,
+          }}>
+            {ref_.variacoes_em_ruptura.map((v, i) => (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '3px 0', borderBottom: i < ref_.variacoes_em_ruptura.length - 1
+                  ? '1px solid rgba(0,0,0,0.05)' : 'none',
+              }}>
+                <span>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: 2, background: corHex(v.cor),
+                    display: 'inline-block', marginRight: 6, verticalAlign: 'middle',
+                    border: '1px solid rgba(0,0,0,0.1)',
+                  }} />
+                  {v.cor} · {v.tam}
+                </span>
+                <span style={{ color: C.critical, fontWeight: 600 }}>
+                  {v.estoque_atual} pç · {v.vendas_30d}v/30d
+                </span>
+              </div>
+            ))}
+          </div>
+        </SecaoModal>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 5: Cores excluídas (NOVA - Sprint 6.7)
+          ──────────────────────────────────────────────────────── */}
+      {cores_excluidas.length > 0 && (
+        <SecaoModal titulo={`Cores excluídas deste corte (${cores_excluidas.length})`}
+          C={C} CALIBRI={CALIBRI}>
+          <div style={{
+            background: '#f7f4f0', borderRadius: 6, padding: 8,
+            maxHeight: 200, overflowY: 'auto', fontFamily: CALIBRI, fontSize: 11,
+          }}>
+            {cores_excluidas.map((ce, i) => {
+              const cob = ce.cobertura_util_dias_cor;
+              const cobTxt = cob != null ? `cob ${Number(cob).toFixed(0)}d` : null;
+              const motivoTxt = motivoExclusaoTexto[ce.motivo] || ce.motivo || '—';
+              return (
+                <div key={i} style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'flex-start', gap: 8,
+                  padding: '4px 0',
+                  borderBottom: i < cores_excluidas.length - 1
+                    ? '1px solid rgba(0,0,0,0.05)' : 'none',
+                }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{
+                      width: 10, height: 10, borderRadius: 2, background: corHex(ce.cor),
+                      display: 'inline-block', marginRight: 6, verticalAlign: 'middle',
+                      border: '1px solid rgba(0,0,0,0.1)',
+                    }} />
+                    <strong>{ce.cor}</strong>
+                    {ce.rank_catalogo != null && (
+                      <span style={{ color: C.muted, marginLeft: 4 }}>
+                        · rank cat. #{ce.rank_catalogo}
+                      </span>
+                    )}
+                    <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>
+                      {motivoTxt}
+                      {cobTxt && ` · ${cobTxt}`}
+                      {ce.vendas_30d != null && ` · ${ce.vendas_30d}v/30d`}
+                    </div>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </SecaoModal>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 6: Fila de espera (NOVA - Sprint 6.7)
+          ──────────────────────────────────────────────────────── */}
+      {fila_espera.length > 0 && (
+        <SecaoModal
+          titulo={`Fila de espera (próximo corte) — ${fila_espera.length} cor(es)`}
+          C={C} CALIBRI={CALIBRI}
+        >
+          <div style={{
+            background: '#eef4f9', borderRadius: 6, padding: 8,
+            maxHeight: 140, overflowY: 'auto', fontFamily: CALIBRI, fontSize: 11,
+          }}>
+            {fila_espera.map((fe, i) => (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '3px 0',
+                borderBottom: i < fila_espera.length - 1
+                  ? '1px solid rgba(0,0,0,0.05)' : 'none',
+              }}>
+                <span>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: 2, background: corHex(fe.cor),
+                    display: 'inline-block', marginRight: 6, verticalAlign: 'middle',
+                    border: '1px solid rgba(0,0,0,0.1)',
+                  }} />
+                  {fe.cor}
+                  {fe.rank != null && (
+                    <span style={{ color: C.muted, marginLeft: 6 }}>rank #{fe.rank}</span>
+                  )}
+                </span>
+                <span style={{ color: C.iaDarker, fontWeight: 600 }}>
+                  {fe.score != null ? `score ${Number(fe.score).toFixed(0)}` : ''}
+                  {fe.vendas_30d_cor != null && ` · ${fe.vendas_30d_cor}v`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </SecaoModal>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 7: Critérios aplicados (NOVA - debug/transparência)
+          ──────────────────────────────────────────────────────── */}
+      {Object.keys(criterios).length > 0 && (
+        <SecaoModal titulo='Critérios aplicados' C={C} CALIBRI={CALIBRI}>
+          <div style={{
+            background: '#faf8f5', borderRadius: 6, padding: 8,
+            fontFamily: CALIBRI, fontSize: 10.5, color: C.muted,
+            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px',
+          }}>
+            {criterios.gate3_cobertura_max_dias != null && (
+              <Criterio label='Cobertura max (Gate 3)' valor={`${criterios.gate3_cobertura_max_dias} dias`} C={C} />
+            )}
+            {criterios.gate3_volume_min_pecas != null && (
+              <Criterio label='Volume min (Gate 3)' valor={`${criterios.gate3_volume_min_pecas} peças`} C={C} />
+            )}
+            {criterios.gate3_carro_chefe_top_n != null && (
+              <Criterio label='Carro-chefe top N' valor={`#${criterios.gate3_carro_chefe_top_n}`} C={C} />
+            )}
+            {criterios.gate3_carro_chefe_multiplicador_cobertura != null && (
+              <Criterio label='Carro-chefe mult. cob.' valor={`${criterios.gate3_carro_chefe_multiplicador_cobertura}×`} C={C} />
+            )}
+            {criterios.top_n_cores != null && (
+              <Criterio label='Top N cores' valor={`${criterios.top_n_cores}`} C={C} />
+            )}
+            {criterios.max_rolos_enfesto != null && (
+              <Criterio label='Max rolos enfesto' valor={`${criterios.max_rolos_enfesto}`} C={C} />
+            )}
+            {criterios.max_pecas_soft != null && (
+              <Criterio label='Max peças (soft)' valor={`${fmtInt(criterios.max_pecas_soft)}`} C={C} />
+            )}
+            {criterios.piso_curva_a != null && (
+              <Criterio label='Piso curva A' valor={`${criterios.piso_curva_a} pç`} C={C} />
+            )}
+            {criterios.piso_curva_b != null && (
+              <Criterio label='Piso curva B' valor={`${criterios.piso_curva_b} pç`} C={C} />
+            )}
+          </div>
+        </SecaoModal>
+      )}
+
+      {/* Botão fechar */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+        <button
+          onClick={onFechar}
+          style={{
+            background: C.iaDark, color: '#fff', border: 'none',
+            padding: '10px 20px', borderRadius: 6, fontFamily: CALIBRI,
+            fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          Fechar
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Helpers do modal de análise ──────────────────────────────────────
+
+// Cabeçalho de seção do modal (título uppercase pequeno + corpo)
+function SecaoModal({ titulo, children, C, CALIBRI }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{
+        fontSize: 10, color: C.muted, letterSpacing: 1.2,
+        textTransform: 'uppercase', fontFamily: CALIBRI,
+        fontWeight: 700, marginBottom: 6,
+      }}>
+        {titulo}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Linha de info COM fonte (microcopy de "fonte: ..." abaixo do valor)
+function LinhaInfoFonte({ icone, label, valor, fonte, C, CALIBRI }) {
+  return (
+    <li style={{
+      listStyle: 'none', display: 'flex', alignItems: 'flex-start',
+      gap: 8, padding: '4px 0', fontFamily: CALIBRI, fontSize: 12,
+      color: C.text,
+    }}>
+      <span style={{ fontSize: 14, lineHeight: 1.3 }}>{icone}</span>
+      <span>
+        <strong style={{ color: C.iaDarker }}>{label}:</strong> {valor}
+        {fonte && fonte !== '—' && (
+          <div style={{ fontSize: 9.5, color: C.muted, marginTop: 1, fontStyle: 'italic' }}>
+            fonte: {fonte}
+          </div>
+        )}
+      </span>
+    </li>
+  );
+}
+
+// Linha compacta de critério (label : valor) pra grid 2-colunas
+function Criterio({ label, valor, C }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+      <span>{label}</span>
+      <strong style={{ color: C.iaDarker }}>{valor}</strong>
+    </div>
+  );
+}
+
+// MODAL 2: Editar - confirma com motivo do ajuste
+function ModalEditar({ ref_, motivo, setMotivo, foiEditado, onConfirmar, onFechar, C, SERIF, CALIBRI }) {
+  const motivosSugeridos = [
+    'sem tecido dessa cor essa semana',
+    'reforçar a cor que mais vende',
+    'tirei cor de teste, tento no próximo',
+    'mexi na grade pra ajustar tamanhos',
+    'oficinas estão cheias, cortei menos',
+    'mudei sala, oficina específica disponível',
+  ];
+
+  const podeConfirmar = motivo.trim().length >= 3;
+
+  return (
+    <ModalShell
+      titulo='✎ Confirmar ajustes'
+      subtitulo={
+        foiEditado
+          ? `ref ${ref_.ref} · seus ajustes estão salvos`
+          : `ref ${ref_.ref} · explique pra IA aprender`
+      }
+      onFechar={onFechar}
+      C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+    >
+      {/* Aviso */}
+      <div style={{
+        background: '#f0f4fa', borderLeft: `3px solid ${C.blue}`,
+        padding: '10px 12px', borderRadius: 6, marginBottom: 14,
+        fontFamily: CALIBRI, fontSize: 11, color: C.text,
+      }}>
+        💡 <strong>A IA aprende com seus ajustes.</strong>{' '}
+        Explicar por que mexeu ajuda a melhorar as próximas sugestões.
+      </div>
+
+      {/* Chips de motivos sugeridos */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Sugestões de motivo:
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {motivosSugeridos.map((m, i) => (
+            <button
+              key={i}
+              onClick={() => setMotivo(m)}
+              style={{
+                background: '#fff', border: `1px solid ${C.cream}`,
+                color: C.text, padding: '4px 10px', borderRadius: 12,
+                fontSize: 11, fontFamily: CALIBRI, cursor: 'pointer',
+              }}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Textarea */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Motivo do ajuste <span style={{ color: C.critical }}>*</span>
+        </div>
+        <textarea
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ex: 'tirei a Azul Serenity porque não tenho tecido dessa cor essa semana'"
+          rows={3}
+          style={{
+            width: '100%', padding: '8px 10px', border: `1px solid ${C.cream}`,
+            borderRadius: 6, fontSize: 12, fontFamily: CALIBRI,
+            color: C.iaDarker, resize: 'vertical', minHeight: 60,
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+
+      {/* Botões */}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button
+          onClick={onFechar}
+          style={{
+            background: 'transparent', color: C.muted,
+            border: `1px solid ${C.cream}`, padding: '10px 16px',
+            borderRadius: 6, fontFamily: CALIBRI, fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={onConfirmar}
+          disabled={!podeConfirmar}
+          style={{
+            background: podeConfirmar ? C.success : '#bbb',
+            color: '#fff', border: 'none', padding: '10px 20px',
+            borderRadius: 6, fontFamily: CALIBRI, fontSize: 12,
+            fontWeight: 700, cursor: podeConfirmar ? 'pointer' : 'default',
+          }}
+        >
+          Confirmar ajuste
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// MODAL 3: Explicar - contexto livre pra IA aprender
+function ModalExplicar({ ref_, contexto, setContexto, onConfirmar, onFechar, C, SERIF, CALIBRI }) {
+  const podeConfirmar = contexto.trim().length >= 3;
+
+  return (
+    <ModalShell
+      titulo='💬 Explicar para a IA'
+      subtitulo={`ref ${ref_.ref} · ajude a OS Amícia a entender o contexto`}
+      onFechar={onFechar}
+      C={C} SERIF={SERIF} CALIBRI={CALIBRI}
+    >
+      {/* Aviso */}
+      <div style={{
+        background: '#f0f4fa', borderLeft: `3px solid ${C.blue}`,
+        padding: '10px 12px', borderRadius: 6, marginBottom: 14,
+        fontFamily: CALIBRI, fontSize: 11, color: C.text,
+      }}>
+        💡 Use este espaço pra contar à IA <strong>qualquer informação relevante</strong>{' '}
+        sobre essa sugestão — pode ser elogio, dúvida ou contexto que ela não enxerga.
+      </div>
+
+      {/* Textarea livre */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{
+          fontSize: 10, color: C.muted, letterSpacing: 1.2,
+          textTransform: 'uppercase', fontFamily: CALIBRI,
+          fontWeight: 700, marginBottom: 6,
+        }}>
+          Sua explicação <span style={{ color: C.critical }}>*</span>
+        </div>
+        <textarea
+          value={contexto}
+          onChange={(e) => setContexto(e.target.value)}
+          placeholder="Ex: 'esta ref está saindo de linha no próximo mês, prefiro não cortar mais'"
+          rows={4}
+          style={{
+            width: '100%', padding: '8px 10px', border: `1px solid ${C.cream}`,
+            borderRadius: 6, fontSize: 12, fontFamily: CALIBRI,
+            color: C.iaDarker, resize: 'vertical', minHeight: 80,
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+
+      {/* Botões */}
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button
+          onClick={onFechar}
+          style={{
+            background: 'transparent', color: C.muted,
+            border: `1px solid ${C.cream}`, padding: '10px 16px',
+            borderRadius: 6, fontFamily: CALIBRI, fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={onConfirmar}
+          disabled={!podeConfirmar}
+          style={{
+            background: podeConfirmar ? C.blue : '#bbb',
+            color: '#fff', border: 'none', padding: '10px 20px',
+            borderRadius: 6, fontFamily: CALIBRI, fontSize: 12,
+            fontWeight: 700, cursor: podeConfirmar ? 'pointer' : 'default',
+          }}
+        >
+          Enviar para IA
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
