@@ -1387,7 +1387,14 @@ function LinhaInfo({ icone, label, valor, C, CALIBRI }) {
   );
 }
 
-// MODAL 1: Análise completa - mostra justificativas detalhadas
+// MODAL 1: Análise completa - mostra justificativas detalhadas com fontes,
+// cores excluídas, fila de espera e critérios aplicados (Sprint 6.7).
+//
+// Consome os campos novos do payload v1.5-fixed da função SQL:
+//   - analise{} - cada métrica com {valor, fonte/calc} pra transparência
+//   - cores_excluidas[] - cores reprovadas em algum gate, com motivo
+//   - fila_espera[] - cores rank 7+ que vão pro próximo corte
+//   - criterios_aplicados{} - thresholds usados (cobertura max, top N, etc)
 function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
   const motivoTexto = {
     demanda_ativa_e_critico: 'Demanda ativa com cobertura crítica',
@@ -1395,12 +1402,30 @@ function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
     excesso_estoque:         'Excesso de estoque',
   }[ref_.motivo] || ref_.motivo;
 
-  const vendasDia = ref_.vendas_30d_total ? (ref_.vendas_30d_total / 30).toFixed(1) : '—';
+  const motivoExclusaoTexto = {
+    fora_top_catalogo:               'Fora do top do catálogo Bling',
+    variacoes_insuficientes:         'Menos de 2 variações vendendo',
+    estoque_ainda_cobre:             'Estoque ainda cobre a demanda',
+    sem_volume_nem_tendencia:        'Volume baixo e sem tendência de alta',
+    carro_chefe_estoque_excessivo:   'Carro-chefe com estoque > 2× média da ref',
+    outro:                           'Outro motivo',
+  };
+
+  // Pega valor de analise{} (que é {valor, fonte} ou {valor, calc})
+  const a = ref_.analise || {};
+  const fonteOuCalc = (campo) => a[campo]?.fonte || a[campo]?.calc || '—';
+  const valorDe = (campo) => a[campo]?.valor;
+
+  const vendasDia = valorDe('velocidade_dia') ?? (ref_.vendas_30d_total ? (ref_.vendas_30d_total / 30).toFixed(2) : '—');
   const minCob = (ref_.variacoes_em_ruptura || [])
     .map(v => v.cobertura_projetada_dias)
     .filter(v => v != null)
     .reduce((m, v) => v < m ? v : m, Infinity);
   const cobTexto = isFinite(minCob) ? `${minCob.toFixed(1)} dias (mínima)` : '—';
+
+  const cores_excluidas = Array.isArray(ref_.cores_excluidas) ? ref_.cores_excluidas : [];
+  const fila_espera     = Array.isArray(ref_.fila_espera)     ? ref_.fila_espera     : [];
+  const criterios       = ref_.criterios_aplicados || {};
 
   return (
     <ModalShell
@@ -1409,59 +1434,70 @@ function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
       onFechar={onFechar}
       C={C} SERIF={SERIF} CALIBRI={CALIBRI}
     >
-      {/* Situação atual */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{
-          fontSize: 10, color: C.muted, letterSpacing: 1.2,
-          textTransform: 'uppercase', fontFamily: CALIBRI,
-          fontWeight: 700, marginBottom: 6,
-        }}>
-          Situação atual
-        </div>
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 1: Situação atual com fontes
+          ──────────────────────────────────────────────────────── */}
+      <SecaoModal titulo='Situação atual' C={C} CALIBRI={CALIBRI}>
         <ul style={{ paddingLeft: 0, margin: 0 }}>
-          <LinhaInfo icone='📦' label='Estoque hoje'
-            valor={`${fmtInt(ref_.estoque_total || 0)} peças`} C={C} CALIBRI={CALIBRI} />
-          <LinhaInfo icone='🏭' label='Em produção'
-            valor={`${fmtInt(ref_.pecas_em_producao || 0)} peças nas oficinas`} C={C} CALIBRI={CALIBRI} />
-          <LinhaInfo icone='📈' label='Venda média'
-            valor={`${vendasDia} peças/dia (últimos 30d)`} C={C} CALIBRI={CALIBRI} />
-          <LinhaInfo icone='⏳' label='Cobertura'
-            valor={`${cobTexto} · lead time ${ref_.lead_time_dias || 22}d`} C={C} CALIBRI={CALIBRI} />
+          <LinhaInfoFonte
+            icone='📦' label='Estoque pronto'
+            valor={`${fmtInt(valorDe('estoque_pronto') ?? ref_.estoque_total ?? 0)} peças`}
+            fonte={fonteOuCalc('estoque_pronto')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='🏭' label='Em produção'
+            valor={`${fmtInt(valorDe('em_producao') ?? ref_.pecas_em_producao ?? 0)} peças nas oficinas`}
+            fonte={fonteOuCalc('em_producao')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='💰' label='Vendas 30d'
+            valor={`${fmtInt(valorDe('vendas_30d') ?? ref_.vendas_30d_total ?? 0)} peças`}
+            fonte={fonteOuCalc('vendas_30d')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='📈' label='Velocidade'
+            valor={`${vendasDia} peças/dia`}
+            fonte={fonteOuCalc('velocidade_dia')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          <LinhaInfoFonte
+            icone='⏳' label='Cobertura'
+            valor={`${cobTexto} · lead time ${valorDe('lead_time_dias') ?? ref_.lead_time_dias ?? 22}d`}
+            fonte={fonteOuCalc('lead_time_dias')}
+            C={C} CALIBRI={CALIBRI}
+          />
+          {valorDe('curva') && (
+            <LinhaInfoFonte
+              icone='📊' label='Curva ABC'
+              valor={`${String(valorDe('curva')).toUpperCase()}`}
+              fonte={fonteOuCalc('curva')}
+              C={C} CALIBRI={CALIBRI}
+            />
+          )}
         </ul>
-      </div>
+      </SecaoModal>
 
-      {/* Por que recomendou */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{
-          fontSize: 10, color: C.muted, letterSpacing: 1.2,
-          textTransform: 'uppercase', fontFamily: CALIBRI,
-          fontWeight: 700, marginBottom: 6,
-        }}>
-          Por que a IA recomendou
-        </div>
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 2: Por que recomendou
+          ──────────────────────────────────────────────────────── */}
+      <SecaoModal titulo='Por que a IA recomendou' C={C} CALIBRI={CALIBRI}>
         <ul style={{ paddingLeft: 0, margin: 0 }}>
           <LinhaInfo icone='🎯' label='Motivo principal' valor={motivoTexto} C={C} CALIBRI={CALIBRI} />
-          <LinhaInfo icone='📊' label='Severidade'
+          <LinhaInfo icone='🔥' label='Severidade'
             valor={ref_.severidade || '—'} C={C} CALIBRI={CALIBRI} />
-          {ref_.curva && ref_.curva !== 'outras' && (
-            <LinhaInfo icone='📈' label='Curva'
-              valor={`${ref_.curva.toUpperCase()} (top vendas)`} C={C} CALIBRI={CALIBRI} />
-          )}
           <LinhaInfo icone='🚨' label='Variações em ruptura'
             valor={`${ref_.qtd_variacoes_em_ruptura || 0} de ${ref_.qtd_variacoes_ativas || '?'} ativas`}
             C={C} CALIBRI={CALIBRI} />
         </ul>
-      </div>
+      </SecaoModal>
 
-      {/* Projeção 22 dias */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{
-          fontSize: 10, color: C.muted, letterSpacing: 1.2,
-          textTransform: 'uppercase', fontFamily: CALIBRI,
-          fontWeight: 700, marginBottom: 6,
-        }}>
-          Projeção em {ref_.lead_time_dias || 22} dias (lead time)
-        </div>
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 3: Projeção 22 dias
+          ──────────────────────────────────────────────────────── */}
+      <SecaoModal titulo={`Projeção em ${ref_.lead_time_dias || 22} dias (lead time)`} C={C} CALIBRI={CALIBRI}>
         <ul style={{ paddingLeft: 0, margin: 0 }}>
           <LinhaInfo icone='❌' label='Sem cortar'
             valor={
@@ -1474,18 +1510,14 @@ function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
             valor={`${fmtInt(ref_.projecao_22d_com_corte || 0)} peças (+${fmtInt(ref_.pecas_a_cortar || 0)} cortadas)`}
             C={C} CALIBRI={CALIBRI} />
         </ul>
-      </div>
+      </SecaoModal>
 
-      {/* Variações específicas em ruptura */}
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 4: Variações específicas em ruptura
+          ──────────────────────────────────────────────────────── */}
       {ref_.variacoes_em_ruptura && ref_.variacoes_em_ruptura.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{
-            fontSize: 10, color: C.muted, letterSpacing: 1.2,
-            textTransform: 'uppercase', fontFamily: CALIBRI,
-            fontWeight: 700, marginBottom: 6,
-          }}>
-            Variações em ruptura ({ref_.variacoes_em_ruptura.length})
-          </div>
+        <SecaoModal titulo={`Variações em ruptura (${ref_.variacoes_em_ruptura.length})`}
+          C={C} CALIBRI={CALIBRI}>
           <div style={{
             background: '#fdeaea', borderRadius: 6, padding: 8,
             maxHeight: 180, overflowY: 'auto', fontFamily: CALIBRI, fontSize: 11,
@@ -1510,7 +1542,135 @@ function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
               </div>
             ))}
           </div>
-        </div>
+        </SecaoModal>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 5: Cores excluídas (NOVA - Sprint 6.7)
+          ──────────────────────────────────────────────────────── */}
+      {cores_excluidas.length > 0 && (
+        <SecaoModal titulo={`Cores excluídas deste corte (${cores_excluidas.length})`}
+          C={C} CALIBRI={CALIBRI}>
+          <div style={{
+            background: '#f7f4f0', borderRadius: 6, padding: 8,
+            maxHeight: 200, overflowY: 'auto', fontFamily: CALIBRI, fontSize: 11,
+          }}>
+            {cores_excluidas.map((ce, i) => {
+              const cob = ce.cobertura_util_dias_cor;
+              const cobTxt = cob != null ? `cob ${Number(cob).toFixed(0)}d` : null;
+              const motivoTxt = motivoExclusaoTexto[ce.motivo] || ce.motivo || '—';
+              return (
+                <div key={i} style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'flex-start', gap: 8,
+                  padding: '4px 0',
+                  borderBottom: i < cores_excluidas.length - 1
+                    ? '1px solid rgba(0,0,0,0.05)' : 'none',
+                }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{
+                      width: 10, height: 10, borderRadius: 2, background: corHex(ce.cor),
+                      display: 'inline-block', marginRight: 6, verticalAlign: 'middle',
+                      border: '1px solid rgba(0,0,0,0.1)',
+                    }} />
+                    <strong>{ce.cor}</strong>
+                    {ce.rank_catalogo != null && (
+                      <span style={{ color: C.muted, marginLeft: 4 }}>
+                        · rank cat. #{ce.rank_catalogo}
+                      </span>
+                    )}
+                    <div style={{ color: C.muted, fontSize: 10, marginTop: 2 }}>
+                      {motivoTxt}
+                      {cobTxt && ` · ${cobTxt}`}
+                      {ce.vendas_30d != null && ` · ${ce.vendas_30d}v/30d`}
+                    </div>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </SecaoModal>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 6: Fila de espera (NOVA - Sprint 6.7)
+          ──────────────────────────────────────────────────────── */}
+      {fila_espera.length > 0 && (
+        <SecaoModal
+          titulo={`Fila de espera (próximo corte) — ${fila_espera.length} cor(es)`}
+          C={C} CALIBRI={CALIBRI}
+        >
+          <div style={{
+            background: '#eef4f9', borderRadius: 6, padding: 8,
+            maxHeight: 140, overflowY: 'auto', fontFamily: CALIBRI, fontSize: 11,
+          }}>
+            {fila_espera.map((fe, i) => (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '3px 0',
+                borderBottom: i < fila_espera.length - 1
+                  ? '1px solid rgba(0,0,0,0.05)' : 'none',
+              }}>
+                <span>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: 2, background: corHex(fe.cor),
+                    display: 'inline-block', marginRight: 6, verticalAlign: 'middle',
+                    border: '1px solid rgba(0,0,0,0.1)',
+                  }} />
+                  {fe.cor}
+                  {fe.rank != null && (
+                    <span style={{ color: C.muted, marginLeft: 6 }}>rank #{fe.rank}</span>
+                  )}
+                </span>
+                <span style={{ color: C.iaDarker, fontWeight: 600 }}>
+                  {fe.score != null ? `score ${Number(fe.score).toFixed(0)}` : ''}
+                  {fe.vendas_30d_cor != null && ` · ${fe.vendas_30d_cor}v`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </SecaoModal>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────
+          SEÇÃO 7: Critérios aplicados (NOVA - debug/transparência)
+          ──────────────────────────────────────────────────────── */}
+      {Object.keys(criterios).length > 0 && (
+        <SecaoModal titulo='Critérios aplicados' C={C} CALIBRI={CALIBRI}>
+          <div style={{
+            background: '#faf8f5', borderRadius: 6, padding: 8,
+            fontFamily: CALIBRI, fontSize: 10.5, color: C.muted,
+            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px',
+          }}>
+            {criterios.gate3_cobertura_max_dias != null && (
+              <Criterio label='Cobertura max (Gate 3)' valor={`${criterios.gate3_cobertura_max_dias} dias`} C={C} />
+            )}
+            {criterios.gate3_volume_min_pecas != null && (
+              <Criterio label='Volume min (Gate 3)' valor={`${criterios.gate3_volume_min_pecas} peças`} C={C} />
+            )}
+            {criterios.gate3_carro_chefe_top_n != null && (
+              <Criterio label='Carro-chefe top N' valor={`#${criterios.gate3_carro_chefe_top_n}`} C={C} />
+            )}
+            {criterios.gate3_carro_chefe_multiplicador_cobertura != null && (
+              <Criterio label='Carro-chefe mult. cob.' valor={`${criterios.gate3_carro_chefe_multiplicador_cobertura}×`} C={C} />
+            )}
+            {criterios.top_n_cores != null && (
+              <Criterio label='Top N cores' valor={`${criterios.top_n_cores}`} C={C} />
+            )}
+            {criterios.max_rolos_enfesto != null && (
+              <Criterio label='Max rolos enfesto' valor={`${criterios.max_rolos_enfesto}`} C={C} />
+            )}
+            {criterios.max_pecas_soft != null && (
+              <Criterio label='Max peças (soft)' valor={`${fmtInt(criterios.max_pecas_soft)}`} C={C} />
+            )}
+            {criterios.piso_curva_a != null && (
+              <Criterio label='Piso curva A' valor={`${criterios.piso_curva_a} pç`} C={C} />
+            )}
+            {criterios.piso_curva_b != null && (
+              <Criterio label='Piso curva B' valor={`${criterios.piso_curva_b} pç`} C={C} />
+            )}
+          </div>
+        </SecaoModal>
       )}
 
       {/* Botão fechar */}
@@ -1527,6 +1687,55 @@ function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
         </button>
       </div>
     </ModalShell>
+  );
+}
+
+// ─── Helpers do modal de análise ──────────────────────────────────────
+
+// Cabeçalho de seção do modal (título uppercase pequeno + corpo)
+function SecaoModal({ titulo, children, C, CALIBRI }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{
+        fontSize: 10, color: C.muted, letterSpacing: 1.2,
+        textTransform: 'uppercase', fontFamily: CALIBRI,
+        fontWeight: 700, marginBottom: 6,
+      }}>
+        {titulo}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// Linha de info COM fonte (microcopy de "fonte: ..." abaixo do valor)
+function LinhaInfoFonte({ icone, label, valor, fonte, C, CALIBRI }) {
+  return (
+    <li style={{
+      listStyle: 'none', display: 'flex', alignItems: 'flex-start',
+      gap: 8, padding: '4px 0', fontFamily: CALIBRI, fontSize: 12,
+      color: C.text,
+    }}>
+      <span style={{ fontSize: 14, lineHeight: 1.3 }}>{icone}</span>
+      <span>
+        <strong style={{ color: C.iaDarker }}>{label}:</strong> {valor}
+        {fonte && fonte !== '—' && (
+          <div style={{ fontSize: 9.5, color: C.muted, marginTop: 1, fontStyle: 'italic' }}>
+            fonte: {fonte}
+          </div>
+        )}
+      </span>
+    </li>
+  );
+}
+
+// Linha compacta de critério (label : valor) pra grid 2-colunas
+function Criterio({ label, valor, C }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+      <span>{label}</span>
+      <strong style={{ color: C.iaDarker }}>{valor}</strong>
+    </div>
   );
 }
 
