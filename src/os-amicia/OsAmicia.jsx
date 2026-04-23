@@ -17,8 +17,11 @@ import {
   Card3CanaisComp,
   Card4ContasBling,
   Card5TopMovers,
-  Card6Margens,
-  Card7Oportunidades,
+  // Card6Margens e Card7Oportunidades removidos do fluxo (23/04/2026):
+  // Ailson ja tem esses dados cruzados na Calculadora. OS Amicia deve
+  // focar em sugestoes acionaveis da IA, nao em relatorios redundantes.
+  // As funcoes continuam definidas em MarketplacesCards.jsx caso queira
+  // reativar - basta re-importar e adicionar de volta em TabMarketplaces.
 } from './MarketplacesCards.jsx';
 import { TabEstoque } from './EstoqueCards.jsx';
 import { TabProducao } from './ProducaoCards.jsx';
@@ -841,12 +844,13 @@ function TabMarketplaces({ usuario, isAdmin, C, SERIF, CALIBRI }) {
       {/* Card 1 — Lucro do mês (admin-only, dupla validação no backend) */}
       {isAdmin && <Card1LucroMes usuario={usuario} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />}
 
-      {/* Cards 2-7 — dashboard operacional visual (Sprint 5) */}
+      {/* Cards 2-5 — dashboard operacional visual (Sprint 5).
+          Card 6 (Margens) e Card 7 (Oportunidades) foram retirados em
+          23/04/2026: Ailson ja tem esses cruzamentos na Calculadora.
+          OS Amicia foca em sugestoes acionaveis, nao em relatorios. */}
       <Card3CanaisComp      C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
       <Card4ContasBling     C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
       <Card5TopMovers       C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
-      <Card6Margens         C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
-      <Card7Oportunidades   C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
       <Card2Vendas24m       C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
 
       {/* Barra de ação */}
