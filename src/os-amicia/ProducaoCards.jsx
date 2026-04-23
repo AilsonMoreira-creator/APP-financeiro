@@ -639,6 +639,45 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
             </span>
           )}
         </div>
+
+        {/* Sprint 6.7: Alertas de cortes pendentes (hierarquia 3 niveis).
+            Nivel 1 'oficina': ja foi descontado com qtd REAL. Informativo,
+              sem preocupacao.
+            Nivel 2 'sala_matriz': descontou com ESTIMATIVA de pecas. Avisa
+              pra o usuario saber que numero nao e 100% preciso.
+            Nivel 3 'sala_sem_matriz': NAO descontou (funcionario lancou
+              corte manual so com rolos, sem matriz). Alerta medio - tem
+              corte a caminho mas OS nao sabe quantas pecas. */}
+        {ref_.fonte_corte_pendente === 'oficina' && (
+          <div style={{
+            display: 'inline-block', marginTop: 6,
+            padding: '3px 8px', borderRadius: 4,
+            background: C.success + '18', color: C.success,
+            fontSize: 10, fontWeight: 600, fontFamily: CALIBRI,
+          }}>
+            ✓ Corte em produção na oficina (matriz real)
+          </div>
+        )}
+        {ref_.fonte_corte_pendente === 'sala_matriz' && (
+          <div style={{
+            display: 'inline-block', marginTop: 6,
+            padding: '3px 8px', borderRadius: 4,
+            background: C.iaDark + '18', color: C.iaDarker,
+            fontSize: 10, fontWeight: 600, fontFamily: CALIBRI,
+          }}>
+            ℹ Desconto baseado em estimativa (corte na sala com matriz)
+          </div>
+        )}
+        {ref_.fonte_corte_pendente === 'sala_sem_matriz' && (
+          <div style={{
+            display: 'inline-block', marginTop: 6,
+            padding: '3px 8px', borderRadius: 4,
+            background: C.warning + '22', color: C.warning,
+            fontSize: 10, fontWeight: 600, fontFamily: CALIBRI,
+          }}>
+            ⚠ Corte já lançado na sala (matriz pendente · qtd não descontada)
+          </div>
+        )}
       </div>
 
       {/* Bloco GRADE - editável */}
@@ -1649,8 +1688,20 @@ function ModalAnaliseCompleta({ ref_, onFechar, C, SERIF, CALIBRI }) {
           />
           <LinhaInfoFonte
             icone='🏭' label='Em produção'
-            valor={`${fmtInt(valorDe('em_producao') ?? ref_.pecas_em_producao ?? 0)} peças nas oficinas`}
-            fonte={fonteOuCalc('em_producao')}
+            valor={
+              ref_.fonte_corte_pendente === 'oficina'
+                ? `${fmtInt(valorDe('em_producao') ?? ref_.pecas_em_producao ?? 0)} peças (matriz real da oficina)`
+                : ref_.fonte_corte_pendente === 'sala_matriz'
+                ? `${fmtInt(valorDe('em_producao') ?? ref_.pecas_em_producao ?? 0)} peças (estimativa do corte na sala)`
+                : ref_.fonte_corte_pendente === 'sala_sem_matriz'
+                ? `0 peças contadas · tem corte na sala sem matriz`
+                : `${fmtInt(valorDe('em_producao') ?? ref_.pecas_em_producao ?? 0)} peças nas oficinas`
+            }
+            fonte={
+              ref_.fonte_corte_pendente === 'sala_sem_matriz'
+                ? 'funcionário lançou corte na sala só com rolos · qtd de peças ainda desconhecida'
+                : fonteOuCalc('em_producao')
+            }
             C={C} CALIBRI={CALIBRI}
           />
           <LinhaInfoFonte
