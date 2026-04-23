@@ -332,10 +332,8 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
 
 function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, expiraEm, geradoEm, loading, onRefresh, usuario, C, SERIF, CALIBRI }) {
   const dias = diasAteExpirar(expiraEm);
-  const [recalcMsg, setRecalcMsg] = useState(null);   // {tipo:'sucesso'|'erro', texto}
-  const [recalculando, setRecalculando] = useState(false);
-  const [disparandoIA, setDisparandoIA] = useState(false);
   const [iaMsg, setIaMsg] = useState(null);
+  const [disparando, setDisparando] = useState(false);
 
   const statusLabel = {
     normal:  { texto: 'Capacidade normal', cor: C.success },
@@ -364,32 +362,14 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
     }
   })();
 
+  // Botao unico: dispara o cron completo (Claude + funcao SQL) e recarrega
+  // os dados ao final. Leva ~40-80s e custa ~R$0,10-0,30 por execucao.
   const handleRecalcular = async () => {
-    if (recalculando || loading) return;
-    setRecalculando(true);
-    setRecalcMsg(null);
-    try {
-      await onRefresh(true);  // force=true bypassa cache CDN
-      setRecalcMsg({ tipo: 'sucesso', texto: '✓ sugestões atualizadas' });
-      setTimeout(() => setRecalcMsg(null), 4000);
-    } catch (e) {
-      setRecalcMsg({ tipo: 'erro', texto: '✗ erro ao atualizar' });
-      setTimeout(() => setRecalcMsg(null), 5000);
-    } finally {
-      setRecalculando(false);
-    }
-  };
-
-  // Dispara o cron completo (Claude + funcao SQL).
-  // Pesado: ~40-80s e custa ~R$0,10-0,30. Usar apenas quando:
-  //   - quiser forcar uma reavaliacao completa fora dos horarios 07h/14h
-  //   - apos mudanca importante (nova ref, ruptura critica surgida)
-  const handleDispararIA = async () => {
-    if (disparandoIA || loading || !usuario) return;
-    if (!window.confirm('Disparar IA completa (Claude)?\n\nEssa operação leva ~1 minuto e custa em torno de R$ 0,20. Use pra forçar uma reavaliação completa fora dos horários normais (07:00 e 14:00 BRT).\n\nContinuar?')) {
+    if (disparando || loading || !usuario) return;
+    if (!window.confirm('Recalcular sugestões agora?\n\nA IA (Claude) vai reanalisar os cortes com os dados mais recentes. Leva aproximadamente 1 minuto e custa em torno de R$ 0,20.\n\nContinuar?')) {
       return;
     }
-    setDisparandoIA(true);
+    setDisparando(true);
     setIaMsg({ tipo: 'progresso', texto: '🤖 Claude processando… (~1min)' });
     try {
       const r = await fetch('/api/ia-disparar', {
@@ -404,16 +384,16 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
       if (!r.ok) {
         throw new Error(j.error || `HTTP ${r.status}`);
       }
-      // Sucesso - forca recarregar os dados depois do Claude rodar
+      // Sucesso - forca recarregar dados depois do Claude rodar
       setIaMsg({ tipo: 'sucesso', texto: '✓ IA completou · atualizando…' });
       await onRefresh(true);
-      setIaMsg({ tipo: 'sucesso', texto: '✓ IA completou' });
+      setIaMsg({ tipo: 'sucesso', texto: '✓ sugestões atualizadas' });
       setTimeout(() => setIaMsg(null), 5000);
     } catch (e) {
       setIaMsg({ tipo: 'erro', texto: `✗ ${(e.message || 'erro').slice(0, 40)}` });
       setTimeout(() => setIaMsg(null), 7000);
     } finally {
-      setDisparandoIA(false);
+      setDisparando(false);
     }
   };
 
@@ -469,19 +449,7 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
           </div>
         )}
 
-        {/* Feedback da recalculacao - vira ao lado da validade, desaparece apos 4s */}
-        {recalcMsg && (
-          <div style={{
-            fontFamily: CALIBRI, fontSize: 11, fontWeight: 700,
-            padding: '3px 8px', borderRadius: 10,
-            background: recalcMsg.tipo === 'sucesso' ? C.success + '22' : C.critical + '22',
-            color: recalcMsg.tipo === 'sucesso' ? C.success : C.critical,
-          }}>
-            {recalcMsg.texto}
-          </div>
-        )}
-
-        {/* Feedback do disparo IA - distinto do recalcular pra nao confundir */}
+        {/* Feedback do disparo IA */}
         {iaMsg && (
           <div style={{
             fontFamily: CALIBRI, fontSize: 11, fontWeight: 700,
@@ -498,44 +466,25 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
         )}
       </div>
 
-      {/* Grupo de botoes: recalcular (rapido) + disparar IA (pesado) */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        <button
-          onClick={handleRecalcular}
-          disabled={loading || recalculando || disparandoIA}
-          title="Busca peças em produção atualizadas e recalcula sugestões (sem Claude, ~2s)"
-          style={{
-            background: recalculando ? C.iaDarker : 'transparent',
-            border: `1px solid ${recalculando ? C.iaDarker : C.cream}`,
-            color: recalculando ? '#fff' : C.muted,
-            borderRadius: 6, padding: '7px 14px',
-            fontSize: 11, fontFamily: CALIBRI, fontWeight: 600,
-            cursor: (loading || recalculando || disparandoIA) ? 'wait' : 'pointer',
-            transition: 'all 0.15s',
-          }}
-        >
-          {recalculando ? '⟳ recalculando…' : (loading ? '…' : '↻ recalcular')}
-        </button>
-
-        <button
-          onClick={handleDispararIA}
-          disabled={loading || recalculando || disparandoIA}
-          title="Dispara IA completa (Claude). Leva ~1min e custa ~R$0,20. Use fora dos horários 07:00 e 14:00 BRT."
-          style={{
-            background: disparandoIA ? C.iaDarker : C.iaDarker,
-            border: `1px solid ${C.iaDarker}`,
-            color: '#fff',
-            borderRadius: 6, padding: '7px 14px',
-            fontSize: 11, fontFamily: CALIBRI, fontWeight: 600,
-            cursor: (loading || recalculando || disparandoIA) ? 'wait' : 'pointer',
-            opacity: (loading || recalculando) ? 0.55 : 1,
-            transition: 'all 0.15s',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {disparandoIA ? '🤖 processando…' : '🤖 disparar IA'}
-        </button>
-      </div>
+      {/* Botao unico: dispara Claude + SQL e recarrega */}
+      <button
+        onClick={handleRecalcular}
+        disabled={loading || disparando}
+        title="Dispara IA (Claude) + recalcula sugestões. Leva ~1 minuto e custa ~R$ 0,20."
+        style={{
+          background: C.iaDarker,
+          border: `1px solid ${C.iaDarker}`,
+          color: '#fff',
+          borderRadius: 6, padding: '8px 16px',
+          fontSize: 12, fontFamily: CALIBRI, fontWeight: 600,
+          cursor: (loading || disparando) ? 'wait' : 'pointer',
+          opacity: loading ? 0.55 : 1,
+          transition: 'all 0.15s',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {disparando ? '🤖 processando…' : '🤖 recalcular com IA'}
+      </button>
     </div>
   );
 }
