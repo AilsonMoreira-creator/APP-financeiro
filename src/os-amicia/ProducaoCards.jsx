@@ -300,6 +300,7 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
         geradoEm={dados?.gerado_em}
         loading={loading}
         onRefresh={recarregar}
+        usuario={usuario}
         C={C} SERIF={SERIF} CALIBRI={CALIBRI}
       />
 
@@ -329,10 +330,12 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
 
 // ─── Header de capacidade semanal ─────────────────────────────────────
 
-function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, expiraEm, geradoEm, loading, onRefresh, C, SERIF, CALIBRI }) {
+function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, expiraEm, geradoEm, loading, onRefresh, usuario, C, SERIF, CALIBRI }) {
   const dias = diasAteExpirar(expiraEm);
   const [recalcMsg, setRecalcMsg] = useState(null);   // {tipo:'sucesso'|'erro', texto}
   const [recalculando, setRecalculando] = useState(false);
+  const [disparandoIA, setDisparandoIA] = useState(false);
+  const [iaMsg, setIaMsg] = useState(null);
 
   const statusLabel = {
     normal:  { texto: 'Capacidade normal', cor: C.success },
@@ -374,6 +377,43 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
       setTimeout(() => setRecalcMsg(null), 5000);
     } finally {
       setRecalculando(false);
+    }
+  };
+
+  // Dispara o cron completo (Claude + funcao SQL).
+  // Pesado: ~40-80s e custa ~R$0,10-0,30. Usar apenas quando:
+  //   - quiser forcar uma reavaliacao completa fora dos horarios 07h/14h
+  //   - apos mudanca importante (nova ref, ruptura critica surgida)
+  const handleDispararIA = async () => {
+    if (disparandoIA || loading || !usuario) return;
+    if (!window.confirm('Disparar IA completa (Claude)?\n\nEssa operação leva ~1 minuto e custa em torno de R$ 0,20. Use pra forçar uma reavaliação completa fora dos horários normais (07:00 e 14:00 BRT).\n\nContinuar?')) {
+      return;
+    }
+    setDisparandoIA(true);
+    setIaMsg({ tipo: 'progresso', texto: '🤖 Claude processando… (~1min)' });
+    try {
+      const r = await fetch('/api/ia-disparar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User': usuario,
+        },
+        body: JSON.stringify({ escopo: 'producao' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        throw new Error(j.error || `HTTP ${r.status}`);
+      }
+      // Sucesso - forca recarregar os dados depois do Claude rodar
+      setIaMsg({ tipo: 'sucesso', texto: '✓ IA completou · atualizando…' });
+      await onRefresh(true);
+      setIaMsg({ tipo: 'sucesso', texto: '✓ IA completou' });
+      setTimeout(() => setIaMsg(null), 5000);
+    } catch (e) {
+      setIaMsg({ tipo: 'erro', texto: `✗ ${(e.message || 'erro').slice(0, 40)}` });
+      setTimeout(() => setIaMsg(null), 7000);
+    } finally {
+      setDisparandoIA(false);
     }
   };
 
@@ -440,24 +480,62 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
             {recalcMsg.texto}
           </div>
         )}
+
+        {/* Feedback do disparo IA - distinto do recalcular pra nao confundir */}
+        {iaMsg && (
+          <div style={{
+            fontFamily: CALIBRI, fontSize: 11, fontWeight: 700,
+            padding: '3px 8px', borderRadius: 10,
+            background: iaMsg.tipo === 'sucesso' ? C.success + '22'
+                     : iaMsg.tipo === 'erro' ? C.critical + '22'
+                     : C.iaDarker + '22',
+            color: iaMsg.tipo === 'sucesso' ? C.success
+                 : iaMsg.tipo === 'erro' ? C.critical
+                 : C.iaDarker,
+          }}>
+            {iaMsg.texto}
+          </div>
+        )}
       </div>
 
-      <button
-        onClick={handleRecalcular}
-        disabled={loading || recalculando}
-        title="Busca os cortes mais recentes das oficinas e recalcula todas as sugestões"
-        style={{
-          background: recalculando ? C.iaDarker : 'transparent',
-          border: `1px solid ${recalculando ? C.iaDarker : C.cream}`,
-          color: recalculando ? '#fff' : C.muted,
-          borderRadius: 6, padding: '7px 14px',
-          fontSize: 11, fontFamily: CALIBRI, fontWeight: 600,
-          cursor: (loading || recalculando) ? 'wait' : 'pointer',
-          transition: 'all 0.15s',
-        }}
-      >
-        {recalculando ? '⟳ recalculando…' : (loading ? '…' : '↻ recalcular sugestões')}
-      </button>
+      {/* Grupo de botoes: recalcular (rapido) + disparar IA (pesado) */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button
+          onClick={handleRecalcular}
+          disabled={loading || recalculando || disparandoIA}
+          title="Busca peças em produção atualizadas e recalcula sugestões (sem Claude, ~2s)"
+          style={{
+            background: recalculando ? C.iaDarker : 'transparent',
+            border: `1px solid ${recalculando ? C.iaDarker : C.cream}`,
+            color: recalculando ? '#fff' : C.muted,
+            borderRadius: 6, padding: '7px 14px',
+            fontSize: 11, fontFamily: CALIBRI, fontWeight: 600,
+            cursor: (loading || recalculando || disparandoIA) ? 'wait' : 'pointer',
+            transition: 'all 0.15s',
+          }}
+        >
+          {recalculando ? '⟳ recalculando…' : (loading ? '…' : '↻ recalcular')}
+        </button>
+
+        <button
+          onClick={handleDispararIA}
+          disabled={loading || recalculando || disparandoIA}
+          title="Dispara IA completa (Claude). Leva ~1min e custa ~R$0,20. Use fora dos horários 07:00 e 14:00 BRT."
+          style={{
+            background: disparandoIA ? C.iaDarker : C.iaDarker,
+            border: `1px solid ${C.iaDarker}`,
+            color: '#fff',
+            borderRadius: 6, padding: '7px 14px',
+            fontSize: 11, fontFamily: CALIBRI, fontWeight: 600,
+            cursor: (loading || recalculando || disparandoIA) ? 'wait' : 'pointer',
+            opacity: (loading || recalculando) ? 0.55 : 1,
+            transition: 'all 0.15s',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {disparandoIA ? '🤖 processando…' : '🤖 disparar IA'}
+        </button>
+      </div>
     </div>
   );
 }
