@@ -7638,6 +7638,7 @@ export default function App(){
   const dadosRef=useRef(null); // ref pra flush/retry sem re-registrar listeners
   const lastSaveTs=useRef(0); // timestamp do último save pra detectar eco do Realtime
   const realtimeProcessing=useRef(false); // flag pra pular auto-save durante Realtime
+  const lastUserEditTs=useRef(0); // timestamp do ultimo edit do usuario (protege contra Realtime sobrescrever)
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
   const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
@@ -7961,6 +7962,13 @@ export default function App(){
         if(!d||!d._updated)return;
         // Ignora eco do próprio save (30s de margem — suficiente pra round-trip)
         if(Math.abs(d._updated-lastSaveTs.current)<30000){console.log("REALTIME: ignorando eco do próprio save, diff:",Math.abs(d._updated-lastSaveTs.current),"ms");return;}
+        // ⚡ GUARD CRÍTICO (Sprint 6.8.3): Ignora se houve edit local recente (<15s).
+        // Protege contra Realtime sobrescrever edits que ainda estão em debounce/memória.
+        const sinceLastEdit=Date.now()-lastUserEditTs.current;
+        if(lastUserEditTs.current>0&&sinceLastEdit<15000){
+          console.warn("REALTIME: BLOQUEADO — edit local recente ("+Math.round(sinceLastEdit/1000)+"s atrás). Protegendo contra sobrescrita. Realtime ts:",new Date(d._updated).toLocaleString("pt-BR"));
+          return;
+        }
         // Ignora se localStorage tem dados mais recentes (edits locais pendentes)
         try{
           const localRaw=localStorage.getItem("amica_financeiro");
@@ -8378,6 +8386,7 @@ export default function App(){
     }
     // Timestamp ÚNICO: mesmo valor vai pro localStorage e pro Supabase
     const ts=Date.now();
+    lastUserEditTs.current=ts; // marca que houve edit local - protege contra Realtime sobrescrever
     console.log("AUTO-SAVE: salvando —",boletosShared.length,"boletos,",Object.keys(receitasPorMes).length,"meses receitas, ts:",ts);
     // Camada 1: salva local na hora COM o timestamp que vai pro Supabase
     salvarLocal(dados,ts);
