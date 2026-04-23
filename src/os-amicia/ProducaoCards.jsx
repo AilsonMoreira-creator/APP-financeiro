@@ -140,12 +140,21 @@ const corHex = (nome) => {
 // garante SUM(modulos) <= max_modulos. So precisamos usar o que vem.
 //
 // Parametro maxModulos mantido pra retrocompat de chamada (ignorado).
+// Ordem fixa de tamanhos (menor -> maior). Backup caso SQL nao ordene.
+const ORDEM_TAMANHOS = { PP: 1, P: 2, M: 3, G: 4, GG: 5, G1: 6, G2: 7, G3: 8 };
+
 function gradeProporcaoParaModulos(grade /*, maxModulos */) {
   if (!Array.isArray(grade) || grade.length === 0) return [];
-  return grade.map(g => ({
-    tam: g.tam,
-    modulos: Math.max(0, Number(g.modulos) || 0),
-  }));
+  return grade
+    .map(g => ({
+      tam: g.tam,
+      modulos: Math.max(0, Number(g.modulos) || 0),
+    }))
+    .sort((a, b) => {
+      const oA = ORDEM_TAMANHOS[String(a.tam || '').toUpperCase().trim()] ?? 99;
+      const oB = ORDEM_TAMANHOS[String(b.tam || '').toUpperCase().trim()] ?? 99;
+      return oA - oB;
+    });
 }
 
 // Soma total de modulos do enfesto (1+2+1+1 = 5)
