@@ -643,8 +643,8 @@ export function Card3EstoqueExcesso({ usuario, C, SERIF, CALIBRI }) {
       const score = agg.pecas_excedentes_total * Math.log(cob_media + 1);
       return { ...agg, cobertura_media: cob_media, score };
     });
-    // Ordena: curva A > B > outras, dentro de cada curva por score DESC
-    const ordemCurva = (c) => c === 'A' ? 1 : c === 'B' ? 2 : 3;
+    // Ordena: curva A > B > C > outras, dentro de cada curva por score DESC
+    const ordemCurva = (c) => c === 'A' ? 1 : c === 'B' ? 2 : c === 'C' ? 3 : 4;
     arr.sort((a, b) => {
       const dCurva = ordemCurva(a.curva) - ordemCurva(b.curva);
       if (dCurva !== 0) return dCurva;
@@ -693,10 +693,12 @@ export function Card3EstoqueExcesso({ usuario, C, SERIF, CALIBRI }) {
           {refsAgrupadas.map(agg => {
             const aberto = !!expandido[agg.ref];
             const desc = agg.descricao ? agg.descricao.trim().slice(0, 40) : '—';
-            // Cor da pill da curva: A = azul forte (mais importante), B = azul médio, outras = cinza
+            // Cor da pill da curva: A = azul forte (top 1-10), B = azul médio (11-20),
+            // C = azul claro (21-30), outras = cinza
             const corCurva =
               agg.curva === 'A' ? C.iaDarker :
-              agg.curva === 'B' ? C.blue || '#5b9bd5' :
+              agg.curva === 'B' ? (C.blue || '#5b9bd5') :
+              agg.curva === 'C' ? '#a8c8e0' :
               C.muted;
             return (
               <div key={agg.ref} style={{ borderBottom: `1px solid ${C.cream}` }}>
