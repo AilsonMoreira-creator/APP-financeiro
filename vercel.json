@@ -33,27 +33,27 @@
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/ia-cron?token=$CRON_SECRET&janela=manha",
+      "path": "/api/ia-cron?janela=manha",
       "schedule": "0 10 * * *"
     },
     {
-      "path": "/api/ia-cron?token=$CRON_SECRET&janela=tarde",
+      "path": "/api/ia-cron?janela=tarde",
       "schedule": "0 17 * * *"
     },
     {
-      "path": "/api/ia-cron?token=$CRON_SECRET&janela=manha&escopo=marketplaces",
+      "path": "/api/ia-cron?janela=manha&escopo=marketplaces",
       "schedule": "15 10 * * *"
     },
     {
-      "path": "/api/ia-cron?token=$CRON_SECRET&janela=tarde&escopo=marketplaces",
+      "path": "/api/ia-cron?janela=tarde&escopo=marketplaces",
       "schedule": "15 17 * * *"
     },
     {
-      "path": "/api/ia-cron?token=$CRON_SECRET&janela=manha&escopo=estoque",
+      "path": "/api/ia-cron?janela=manha&escopo=estoque",
       "schedule": "30 10 * * *"
     },
     {
-      "path": "/api/ia-cron?token=$CRON_SECRET&janela=tarde&escopo=estoque",
+      "path": "/api/ia-cron?janela=tarde&escopo=estoque",
       "schedule": "30 17 * * *"
     }
   ]

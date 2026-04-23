@@ -228,8 +228,16 @@ function validarAuth(req) {
   const tokenQuery = req.query?.token;
   const tokenHeader = req.headers['x-cron-secret'];
 
-  if (tokenQuery === cronSecret) return { ok: true, via: 'query' };
-  if (tokenHeader === cronSecret) return { ok: true, via: 'header' };
+  // Vercel Cron (quando configurado em vercel.json sem query strings custom)
+  // envia automaticamente: Authorization: Bearer ${CRON_SECRET}
+  // Ref: https://vercel.com/docs/cron-jobs/manage-cron-jobs#securing-cron-jobs
+  const authHeader = req.headers['authorization'] || '';
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  const tokenBearer = bearerMatch ? bearerMatch[1].trim() : null;
+
+  if (tokenQuery === cronSecret)  return { ok: true, via: 'query' };
+  if (tokenHeader === cronSecret) return { ok: true, via: 'header_x_cron_secret' };
+  if (tokenBearer === cronSecret) return { ok: true, via: 'header_authorization_bearer' };
 
   return { ok: false, erro: 'Unauthorized', status: 401 };
 }
