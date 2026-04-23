@@ -513,163 +513,117 @@ export function Card4ContasBling({ C, SERIF, CALIBRI }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Card 5 · Top Movers · 3 abas (Geral / Por conta / Cruzamento)
+// Card 5 · Top Movers · ranking global 15d vs 15d
+// ═══════════════════════════════════════════════════════════════════════
+// Ordem: maior delta positivo primeiro, negativos no final (posicoes 25-30
+// tipicamente). Mostra 5 refs inicialmente, expand mostra ate 30.
 // ═══════════════════════════════════════════════════════════════════════
 
 export function Card5TopMovers({ C, SERIF, CALIBRI }) {
   const { dados, loading, erro, carregar } = useCardData('top_movers');
-  const [aba, setAba] = useState('geral');
-  const [dir, setDir] = useState('all'); // all | sobe | cai (só em geral/por_conta)
+  const [expandido, setExpandido] = useState(false);
 
-  const unificado  = dados?.unificado  || [];
-  const porConta   = dados?.por_conta   || [];
-  const cruzamento = dados?.cruzamento || [];
+  // Usa view 15d (nova). Fallback pra versao 7d antiga se API ainda nao
+  // foi atualizada (primeiras horas pos-deploy).
+  const rows = dados?.unificado_15d?.length > 0
+    ? dados.unificado_15d
+    : (dados?.unificado || []).map(r => ({
+        ...r,
+        u_ult15: r.u_ult7,
+        u_ant15: r.u_ant7,
+      }));
 
-  const filtrar = (rows) => {
-    if (dir === 'sobe') return rows.filter(r => (Number(r.delta) || 0) > 0);
-    if (dir === 'cai')  return rows.filter(r => (Number(r.delta) || 0) < 0);
-    return rows;
-  };
+  const LIMITE_COMPACTO = 5;
+  const LIMITE_EXPANDIDO = 30;
+
+  const totalDisponivel = rows.length;
+  const rowsVisiveis = expandido
+    ? rows.slice(0, LIMITE_EXPANDIDO)
+    : rows.slice(0, LIMITE_COMPACTO);
+
+  const podeExpandir = totalDisponivel > LIMITE_COMPACTO;
 
   return (
     <CardShell
-      eyebrow="Card 5 · Movimento 7 dias"
+      eyebrow="Card 5 · Movimento 15 dias"
       titulo="Top Movers"
       loading={loading} erro={erro} onRefresh={carregar}
       C={C} SERIF={SERIF}
     >
-      {/* Abas */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', fontFamily: CALIBRI }}>
-        {[
-          { id: 'geral', label: `Geral (${unificado.length})` },
-          { id: 'conta', label: `Por conta (${porConta.length})` },
-          { id: 'cruz',  label: `Cruzamento (${cruzamento.length})` },
-        ].map(t => {
-          const on = aba === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setAba(t.id)}
-              style={{
-                padding: '6px 12px', borderRadius: 6, fontSize: 11,
-                background: on ? C.iaDarker : 'transparent',
-                color:      on ? '#fff'     : C.iaDark,
-                border: `1px solid ${on ? C.iaDarker : C.cream}`,
-                cursor: 'pointer', fontFamily: CALIBRI, fontWeight: on ? 700 : 500,
-              }}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-
-        {aba !== 'cruz' && (
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-            {['all','sobe','cai'].map(d => (
-              <button
-                key={d}
-                onClick={() => setDir(d)}
-                style={{
-                  padding: '4px 8px', borderRadius: 4, fontSize: 10,
-                  background: dir === d ? C.blue : 'transparent',
-                  color:      dir === d ? '#fff' : C.muted,
-                  border: `1px solid ${dir === d ? C.blue : C.cream}`,
-                  cursor: 'pointer', fontFamily: CALIBRI,
-                }}
-              >
-                {d === 'all' ? 'todos' : d === 'sobe' ? '▲ subindo' : '▼ caindo'}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       {!dados ? (
         <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>Carregando…</div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          {aba === 'geral'   && <TableMovers rows={filtrar(unificado)}  tipo="geral"  C={C} CALIBRI={CALIBRI} />}
-          {aba === 'conta'   && <TableMovers rows={filtrar(porConta)}   tipo="conta"  C={C} CALIBRI={CALIBRI} />}
-          {aba === 'cruz'    && <TableCruzamento rows={cruzamento}      C={C} CALIBRI={CALIBRI} />}
+      ) : rowsVisiveis.length === 0 ? (
+        <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>
+          Sem dados de movimento nos últimos 15 dias.
         </div>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <TableMovers15d rows={rowsVisiveis} C={C} CALIBRI={CALIBRI} />
+          </div>
+
+          {podeExpandir && (
+            <div style={{ marginTop: 8, textAlign: 'center' }}>
+              <button
+                onClick={() => setExpandido(v => !v)}
+                style={{
+                  background: 'transparent',
+                  border: `1px solid ${C.cream}`,
+                  color: C.muted,
+                  borderRadius: 6,
+                  padding: '6px 16px',
+                  fontSize: 11,
+                  fontFamily: CALIBRI,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <span style={{
+                  display: 'inline-block',
+                  transform: expandido ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.15s',
+                }}>▼</span>
+                {expandido
+                  ? 'mostrar apenas top 5'
+                  : `ver top ${Math.min(LIMITE_EXPANDIDO, totalDisponivel)}`}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </CardShell>
   );
 }
 
-function TableMovers({ rows, tipo, C, CALIBRI }) {
-  if (rows.length === 0) {
-    return <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>Sem movimentos nesta seleção.</div>;
-  }
+function TableMovers15d({ rows, C, CALIBRI }) {
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: CALIBRI, minWidth: 420 }}>
       <thead>
         <tr style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>
-          {tipo === 'conta' && <th style={thL}>Conta</th>}
           <th style={thL}>Ref</th>
-          {tipo === 'geral' && <th style={thL}>Descrição</th>}
-          <th style={thR}>Ult 7</th>
-          <th style={thR}>Ant 7</th>
+          <th style={thL}>Descrição</th>
+          <th style={thR}>Últ 15</th>
+          <th style={thR}>Ant 15</th>
           <th style={thR}>Δ</th>
           <th style={thR}>Var%</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((r, i) => (
-          <tr key={`${r.conta || ''}-${r.ref_norm}-${i}`} style={{ borderTop: `1px solid ${C.cream}` }}>
-            {tipo === 'conta' && (
-              <td style={{ ...tdL, color: C.iaDarker, fontWeight: 600 }}>
-                {(r.conta || '').charAt(0).toUpperCase() + (r.conta || '').slice(1)}
-              </td>
-            )}
+          <tr key={`${r.ref_norm}-${i}`} style={{ borderTop: `1px solid ${C.cream}` }}>
             <td style={{ ...tdL, fontWeight: 700, color: C.iaDarker }}>{r.ref_norm}</td>
-            {tipo === 'geral' && (
-              <td style={{ ...tdL, color: C.muted, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {r.descricao || '—'}
-              </td>
-            )}
-            <td style={tdR}>{fmtInt(r.u_ult7)}</td>
-            <td style={{ ...tdR, color: C.muted }}>{fmtInt(r.u_ant7)}</td>
+            <td style={{ ...tdL, color: C.muted, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {r.descricao || '—'}
+            </td>
+            <td style={tdR}>{fmtInt(r.u_ult15)}</td>
+            <td style={{ ...tdR, color: C.muted }}>{fmtInt(r.u_ant15)}</td>
             <td style={{ ...tdR, color: corVar(r.delta, C), fontWeight: 700 }}>
               {Number(r.delta) > 0 ? '+' : ''}{fmtInt(r.delta)}
             </td>
             <td style={{ ...tdR, color: corVar(r.var_pct, C), fontWeight: 700 }}>{fmtPct(r.var_pct)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function TableCruzamento({ rows, C, CALIBRI }) {
-  if (rows.length === 0) {
-    return (
-      <div style={{ fontSize: 12, color: C.muted, padding: 10 }}>
-        Sem refs com divergência ≥ 40pp entre contas.
-      </div>
-    );
-  }
-  return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: CALIBRI, minWidth: 440 }}>
-      <thead>
-        <tr style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 }}>
-          <th style={thL}>Ref</th>
-          <th style={thR}>Exitus</th>
-          <th style={thR}>Lumia</th>
-          <th style={thR}>Muniam</th>
-          <th style={thR}>Spread</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={r.ref_norm || i} style={{ borderTop: `1px solid ${C.cream}` }}>
-            <td style={{ ...tdL, fontWeight: 700, color: C.iaDarker }}>{r.ref_norm}</td>
-            <td style={{ ...tdR, color: corVar(r.var_exitus, C), fontWeight: 600 }}>{fmtPct(r.var_exitus)}</td>
-            <td style={{ ...tdR, color: corVar(r.var_lumia, C),  fontWeight: 600 }}>{fmtPct(r.var_lumia)}</td>
-            <td style={{ ...tdR, color: corVar(r.var_muniam, C), fontWeight: 600 }}>{fmtPct(r.var_muniam)}</td>
-            <td style={{ ...tdR, color: C.warning, fontWeight: 700 }}>
-              {fmtPct(r.spread_var_pct)}
-            </td>
           </tr>
         ))}
       </tbody>

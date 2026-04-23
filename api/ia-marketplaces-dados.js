@@ -69,10 +69,16 @@ const CARD_HANDLERS = {
   },
 
   async top_movers() {
-    const [u, c, x] = await Promise.all([
+    const [u, u15, c, x] = await Promise.all([
       supabase
         .from('vw_top_movers_unificado')
         .select('ref_norm, descricao, u_ult7, u_ant7, delta, var_pct')
+        .limit(LIMITS.top_movers_unificado),
+      // Janela de 15d vs 15d - mais estavel, usada pelo Card 5 do frontend
+      supabase
+        .from('vw_top_movers_unificado_15d')
+        .select('ref_norm, descricao, u_ult15, u_ant15, delta, var_pct')
+        .order('delta', { ascending: false, nullsFirst: false })
         .limit(LIMITS.top_movers_unificado),
       supabase
         .from('vw_top_movers_por_conta')
@@ -84,13 +90,15 @@ const CARD_HANDLERS = {
         .order('spread_var_pct', { ascending: false })
         .limit(LIMITS.top_movers_cruzamento),
     ]);
-    if (u.error) throw new Error(`vw_top_movers_unificado: ${u.error.message}`);
-    if (c.error) throw new Error(`vw_top_movers_por_conta: ${c.error.message}`);
-    if (x.error) throw new Error(`vw_top_movers_cruzamento: ${x.error.message}`);
+    if (u.error)   throw new Error(`vw_top_movers_unificado: ${u.error.message}`);
+    if (u15.error) throw new Error(`vw_top_movers_unificado_15d: ${u15.error.message}`);
+    if (c.error)   throw new Error(`vw_top_movers_por_conta: ${c.error.message}`);
+    if (x.error)   throw new Error(`vw_top_movers_cruzamento: ${x.error.message}`);
     return {
-      unificado: u.data || [],
-      por_conta: c.data || [],
-      cruzamento: x.data || [],
+      unificado:     u.data   || [],
+      unificado_15d: u15.data || [],
+      por_conta:     c.data   || [],
+      cruzamento:    x.data   || [],
     };
   },
 
