@@ -488,10 +488,10 @@ const modules = [
   { id:"salascorte",   Icon:SvgSalasCorte,    label:"Salas Corte" },
   { id:"sac",          Icon:SvgSAC,           label:"SAC"         },
   { id:"bling",         Icon:SvgBling,         label:"Bling"       },
-  // OS Amícia — Fase 1 (feature flag VITE_OS_AMICIA_ENABLED)
-  ...(import.meta.env.VITE_OS_AMICIA_ENABLED === 'true'
-    ? [{ id:"osamicia", Icon:SvgOSAmicia, label:"OS" }]
-    : []),
+  // OS Amicia - controlado por permissao de usuario (modulos[]).
+  // Admin tem todos os modulos automaticamente. Outros users precisam
+  // ter "osamicia" adicionado em modulos[] no cadastro (tela Usuarios).
+  { id:"osamicia", Icon:SvgOSAmicia, label:"OS" },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -7497,7 +7497,7 @@ const FichaTecnicaContent=()=>{
 
 
 export default function App(){
-  const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);if((u.id===1||u.usuario==='admin')&&!u.admin){u.admin=true;try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}return u;}catch{return null;}});
+  const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);const ehAdmin=(u.id===1||u.usuario==='admin');if(ehAdmin){u.admin=true;/* Admin sempre recebe TODOS os modulos atualizados (inclui modulos novos como osamicia) */u.modulos=[...TODOS_MODULOS,"usuarios"];try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}return u;}catch{return null;}});
   const [active,setActive]=useState(()=>{
     try{const s=localStorage.getItem("amica_session");if(s){const u=JSON.parse(s);const mod=u.moduloPadrao||"home";if(u.admin||mod==="home"||u.modulos?.includes(mod))return mod;return u.modulos?.[0]||"home";}}catch{}return"lancamentos";
   });
@@ -8742,7 +8742,7 @@ export default function App(){
 
   if(!usuarioLogado){
     if(!dbCarregado)return <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f7f4f0",fontFamily:"Georgia,serif"}}><div style={{textAlign:"center"}}><div style={{fontSize:26,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Amícia</div><div style={{fontSize:13,color:"#a89f94"}}>Carregando...</div></div></div>;
-    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{const safeUser=(u.id===1||u.usuario==='admin')?{...u,admin:true}:u;setUsuarioLogado(safeUser);const defaultMod=safeUser.moduloPadrao||"home";const canAccess=safeUser.admin||defaultMod==="home"||safeUser.modulos.includes(defaultMod);setActive(canAccess?defaultMod:(safeUser.modulos[0]||"home"));try{localStorage.setItem("amica_session",JSON.stringify(safeUser));}catch{}}}/>;
+    return <LoginScreen usuarios={usuarios} onLogin={(u)=>{const ehAdmin=(u.id===1||u.usuario==='admin');const safeUser=ehAdmin?{...u,admin:true,modulos:[...TODOS_MODULOS,"usuarios"]}:u;setUsuarioLogado(safeUser);const defaultMod=safeUser.moduloPadrao||"home";const canAccess=safeUser.admin||defaultMod==="home"||safeUser.modulos.includes(defaultMod);setActive(canAccess?defaultMod:(safeUser.modulos[0]||"home"));try{localStorage.setItem("amica_session",JSON.stringify(safeUser));}catch{}}}/>;
   }
 
   const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id));
@@ -8850,7 +8850,7 @@ export default function App(){
             {id:"bling",label:"Bling",Icon:SvgBling,color:"#2c3e50",bg:"#f7f4f0",border:"#e8e2da",
               kpiValue:blingHoje>0?"R$ "+Math.round(blingHoje).toLocaleString("pt-BR"):"—",kpiLabel:"faturamento hoje",
               detail:blingPedidos>0?`${blingPedidos} pedidos · 3 contas`:"cron atualizando..."},
-            ...(import.meta.env.VITE_OS_AMICIA_ENABLED==='true'?[{
+            ...(usuarioLogado?.modulos?.includes('osamicia') ? [{
               id:"osamicia",label:"OS Amícia",Icon:SvgOSAmicia,color:"#1C2533",bg:"#EAE0D5",border:"#d4c8b8",
               kpiValue:"🧠",kpiLabel:"sistema operacional",
               detail:"Conecta · analisa · recomenda",
@@ -8924,7 +8924,7 @@ export default function App(){
         {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
-        {active==="osamicia"&&import.meta.env.VITE_OS_AMICIA_ENABLED==='true'&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={usuarioLogado}/></ModuleErrorBoundary>}
+        {active==="osamicia"&&usuarioLogado?.modulos?.includes('osamicia')&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={usuarioLogado}/></ModuleErrorBoundary>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
