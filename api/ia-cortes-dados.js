@@ -109,8 +109,15 @@ export default async function handler(req, res) {
 
     const ms = Date.now() - t0;
 
-    // Cache de 2min: funcao e mais pesada que views do Estoque
-    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=60');
+    // Cache de 2min (CDN): funcao e mais pesada que views do Estoque.
+    // Se ?force=1 passado, pula cache totalmente (botao Recalcular na UI).
+    const forceRefresh = String(req.query.force || '').toLowerCase() === '1'
+                         || String(req.query.force || '').toLowerCase() === 'true';
+    if (forceRefresh) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    } else {
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=60');
+    }
 
     return res.status(200).json({
       ok: true,

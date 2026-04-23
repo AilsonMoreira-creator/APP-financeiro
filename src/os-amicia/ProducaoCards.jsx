@@ -204,7 +204,8 @@ function useCortesData(usuario) {
   const [loading, setLoading] = useState(false);
   const [erro, setErro]       = useState(null);
 
-  const carregar = useCallback(async () => {
+  // force=true pula cache CDN e forca recalcular - usado no botao "recalcular".
+  const carregar = useCallback(async (force = false) => {
     if (!usuario) {
       setErro('Usuário admin não identificado');
       return;
@@ -212,8 +213,12 @@ function useCortesData(usuario) {
     setLoading(true);
     setErro(null);
     try {
-      const r = await fetch('/api/ia-cortes-dados?limite=30', {
+      const url = force
+        ? `/api/ia-cortes-dados?limite=30&force=1&_=${Date.now()}`
+        : '/api/ia-cortes-dados?limite=30';
+      const r = await fetch(url, {
         headers: { 'X-User': usuario },
+        cache: force ? 'no-store' : 'default',
       });
       const j = await r.json();
       if (!r.ok || !j.ok) {
@@ -227,7 +232,7 @@ function useCortesData(usuario) {
     }
   }, [usuario]);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { carregar(false); }, [carregar]);
 
   return { dados, loading, erro, recarregar: carregar };
 }
@@ -292,6 +297,7 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
         limiteNormal={limiteNormal}
         validadeDias={validadeDias}
         expiraEm={expiraEm}
+        geradoEm={dados?.gerado_em}
         loading={loading}
         onRefresh={recarregar}
         C={C} SERIF={SERIF} CALIBRI={CALIBRI}
@@ -323,14 +329,53 @@ export function TabProducao({ usuario, C, SERIF, CALIBRI }) {
 
 // ─── Header de capacidade semanal ─────────────────────────────────────
 
-function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, expiraEm, loading, onRefresh, C, SERIF, CALIBRI }) {
+function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, expiraEm, geradoEm, loading, onRefresh, C, SERIF, CALIBRI }) {
   const dias = diasAteExpirar(expiraEm);
+  const [recalcMsg, setRecalcMsg] = useState(null);   // {tipo:'sucesso'|'erro', texto}
+  const [recalculando, setRecalculando] = useState(false);
 
   const statusLabel = {
     normal:  { texto: 'Capacidade normal', cor: C.success },
     corrida: { texto: 'Semana corrida',    cor: C.warning },
     excesso: { texto: 'Excesso de cortes', cor: C.critical },
   }[status] || { texto: status, cor: C.muted };
+
+  // Formata "gerado em" - se foi hoje mostra so hora, senao mostra data+hora
+  const geradoTexto = (() => {
+    if (!geradoEm) return null;
+    try {
+      const d = new Date(geradoEm);
+      const hoje = new Date();
+      const mesmoMes = d.getMonth() === hoje.getMonth()
+                    && d.getFullYear() === hoje.getFullYear();
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      if (mesmoMes && d.getDate() === hoje.getDate()) {
+        return `hoje ${hh}:${mm}`;
+      }
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      return `${dd}/${mo} ${hh}:${mm}`;
+    } catch {
+      return null;
+    }
+  })();
+
+  const handleRecalcular = async () => {
+    if (recalculando || loading) return;
+    setRecalculando(true);
+    setRecalcMsg(null);
+    try {
+      await onRefresh(true);  // force=true bypassa cache CDN
+      setRecalcMsg({ tipo: 'sucesso', texto: '✓ sugestões atualizadas' });
+      setTimeout(() => setRecalcMsg(null), 4000);
+    } catch (e) {
+      setRecalcMsg({ tipo: 'erro', texto: '✗ erro ao atualizar' });
+      setTimeout(() => setRecalcMsg(null), 5000);
+    } finally {
+      setRecalculando(false);
+    }
+  };
 
   return (
     <div style={{
@@ -359,6 +404,15 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
               </span>
             )}
           </div>
+          {/* Timestamp de geracao - abaixo da contagem */}
+          {geradoTexto && (
+            <div style={{
+              fontSize: 10, color: C.muted, fontFamily: CALIBRI,
+              marginTop: 3, fontStyle: 'italic',
+            }}>
+              calculado {geradoTexto}
+            </div>
+          )}
         </div>
 
         <div style={{
@@ -374,18 +428,35 @@ function CapacidadeHeader({ totalCortes, status, limiteNormal, validadeDias, exp
             ⏳ válida por <strong style={{ color: C.warning }}>{dias} dia{dias !== 1 ? 's' : ''}</strong>
           </div>
         )}
+
+        {/* Feedback da recalculacao - vira ao lado da validade, desaparece apos 4s */}
+        {recalcMsg && (
+          <div style={{
+            fontFamily: CALIBRI, fontSize: 11, fontWeight: 700,
+            padding: '3px 8px', borderRadius: 10,
+            background: recalcMsg.tipo === 'sucesso' ? C.success + '22' : C.critical + '22',
+            color: recalcMsg.tipo === 'sucesso' ? C.success : C.critical,
+          }}>
+            {recalcMsg.texto}
+          </div>
+        )}
       </div>
 
       <button
-        onClick={onRefresh}
-        disabled={loading}
+        onClick={handleRecalcular}
+        disabled={loading || recalculando}
+        title="Busca os cortes mais recentes das oficinas e recalcula todas as sugestões"
         style={{
-          background: 'transparent', border: `1px solid ${C.cream}`,
-          color: C.muted, borderRadius: 6, padding: '6px 12px',
-          fontSize: 11, fontFamily: CALIBRI, cursor: loading ? 'wait' : 'pointer',
+          background: recalculando ? C.iaDarker : 'transparent',
+          border: `1px solid ${recalculando ? C.iaDarker : C.cream}`,
+          color: recalculando ? '#fff' : C.muted,
+          borderRadius: 6, padding: '7px 14px',
+          fontSize: 11, fontFamily: CALIBRI, fontWeight: 600,
+          cursor: (loading || recalculando) ? 'wait' : 'pointer',
+          transition: 'all 0.15s',
         }}
       >
-        {loading ? '…' : '↻ atualizar'}
+        {recalculando ? '⟳ recalculando…' : (loading ? '…' : '↻ recalcular sugestões')}
       </button>
     </div>
   );
@@ -407,14 +478,18 @@ function CardSugestaoCorte({ ref_, feedback, onFeedback, usuario, C, SERIF, CALI
     baixa: { texto: '? Confiança Baixa',  cor: C.critical },
   }[ref_.confianca_ref] || { texto: ref_.confianca_ref, cor: C.muted };
 
-  // Cobertura — pegar a menor entre as variações em ruptura
-  const minCobertura = (ref_.variacoes_em_ruptura || [])
-    .map(v => v.cobertura_projetada_dias)
-    .filter(v => v != null)
-    .reduce((min, v) => v < min ? v : min, Infinity);
-  const coberturaTexto = isFinite(minCobertura)
-    ? `Cobertura mínima ${minCobertura.toFixed(1)} dias · ${ref_.qtd_variacoes_em_ruptura || 0} variação(ões) em ruptura`
-    : 'Sem ruptura crítica';
+  // Cobertura no subtitulo - mesma logica do Modal Analise Completa:
+  //   mostra cobertura geral (estoque + producao / velocidade), nao a pior
+  //   variacao (que podia zerar e assustar quando a ref geral ta ok).
+  //   Pior variacao aparece em "variacoes em ruptura" e dentro do modal.
+  const estoqueProntoH = Number(ref_.analise?.estoque_pronto?.valor ?? ref_.estoque_total ?? 0);
+  const emProducaoH    = Number(ref_.analise?.em_producao?.valor ?? ref_.pecas_em_producao ?? 0);
+  const velocH         = Number(ref_.analise?.velocidade_dia?.valor ?? (ref_.vendas_30d_total ? ref_.vendas_30d_total / 30 : 0));
+  const cobGeralH      = velocH > 0 ? ((estoqueProntoH + emProducaoH) / velocH) : null;
+  const qtdRupturaH    = Number(ref_.qtd_variacoes_em_ruptura || 0);
+  const coberturaTexto = cobGeralH != null
+    ? `Cobertura geral ${Math.round(cobGeralH)} dias${qtdRupturaH > 0 ? ` · ${qtdRupturaH} variação(ões) em ruptura` : ''}`
+    : (qtdRupturaH > 0 ? `${qtdRupturaH} variação(ões) em ruptura` : 'Sem ruptura crítica');
 
   // Estado de edição da grade (modulos absolutos, calculados da proporcao_pct do SQL)
   const gradeInicial = useMemo(
@@ -845,6 +920,36 @@ function BlocoCores({ cores, setCores, editando, C, CALIBRI }) {
   const [novaCorNome, setNovaCorNome] = useState('');
   const [novaCorRolos, setNovaCorRolos] = useState(1);
 
+  // Le o ranking REAL do Bling salvo pelo BlingContent (top 16 cores por venda).
+  // Mesma logica do DetalhamentoModal em src/App.tsx ~3300.
+  // Fallback pra lista hardcoded se Bling ainda nao foi sincronizado.
+  const rankingBling = useMemo(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('amica_bling_cores_top') : null;
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d?.cores?.length > 0) return d.cores;
+      }
+    } catch { /* ignora */ }
+    // Fallback hardcoded (sincronizado com CORES_RANKING_INICIAL de App.tsx)
+    return [
+      { nome: 'Preto',        hex: '#1a1a1a' },
+      { nome: 'Bege',         hex: '#d4c4a4' },
+      { nome: 'Marrom',       hex: '#5c3a20' },
+      { nome: 'Figo',         hex: '#6b3a4c' },
+      { nome: 'Azul Marinho', hex: '#1c2e4a' },
+      { nome: 'Caramelo',     hex: '#a8743b' },
+      { nome: 'Verde Militar',hex: '#4a5d3a' },
+      { nome: 'Nude',         hex: '#e8c8b0' },
+      { nome: 'Azul Serenity',hex: '#91a8d0' },
+      { nome: 'Marrom Escuro',hex: '#3d2418' },
+      { nome: 'Verde Sálvia', hex: '#87a96b' },
+      { nome: 'Azul Claro',   hex: '#a8c8e0' },
+      { nome: 'Vinho',        hex: '#5c1a2e' },
+      { nome: 'Bege Claro',   hex: '#ebdcc0' },
+    ];
+  }, []);
+
   // MODO DISPLAY
   if (!editando) {
     if (cores.length === 0) {
@@ -915,6 +1020,19 @@ function BlocoCores({ cores, setCores, editando, C, CALIBRI }) {
     setNovaCorRolos(1);
   };
 
+  // Quick-add de cor do ranking Bling: click adiciona com 1 rolo default.
+  // Se ja existe na lista atual, nao duplica (faz nada silenciosamente).
+  const adicionarCorDoRanking = (nome) => {
+    const n = (nome || '').trim();
+    if (!n) return;
+    if (cores.some(c => (c.cor || '').toLowerCase() === n.toLowerCase())) return;
+    setCores([...cores, { cor: n, rolos: 1, tendencia_label: 'normal', tendencia_pct: null }]);
+  };
+
+  // Filtra ranking pra mostrar so cores que NAO estao na lista atual
+  const coresJaNaLista = new Set(cores.map(c => (c.cor || '').toLowerCase()));
+  const sugestoesRanking = rankingBling.filter(r => !coresJaNaLista.has((r.nome || '').toLowerCase()));
+
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 6, marginBottom: 10 }}>
@@ -954,6 +1072,47 @@ function BlocoCores({ cores, setCores, editando, C, CALIBRI }) {
           </div>
         ))}
       </div>
+
+      {/* Sugestoes do ranking Bling - quick add com 1 click */}
+      {sugestoesRanking.length > 0 && (
+        <div style={{
+          marginBottom: 10, padding: 8, background: '#faf8f5',
+          borderRadius: 6, border: `1px solid ${C.cream}`,
+        }}>
+          <div style={{
+            fontSize: 9, color: C.muted, fontFamily: CALIBRI,
+            textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
+            fontWeight: 700,
+          }}>
+            + cores do ranking Bling (click pra adicionar)
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {sugestoesRanking.map((r, i) => (
+              <button
+                key={i}
+                onClick={() => adicionarCorDoRanking(r.nome)}
+                title={`Adicionar ${r.nome} (1 rolo)`}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: '#fff', border: `1px solid ${C.cream}`,
+                  borderRadius: 14, padding: '3px 9px 3px 4px',
+                  cursor: 'pointer', fontFamily: CALIBRI, fontSize: 11,
+                  color: C.iaDarker,
+                }}
+              >
+                <span style={{
+                  width: 12, height: 12, borderRadius: 2,
+                  background: r.hex || corHex(r.nome),
+                  border: '1px solid rgba(0,0,0,0.1)',
+                  display: 'inline-block', flexShrink: 0,
+                }} />
+                <span>{r.nome}</span>
+                <span style={{ color: C.muted, fontSize: 14, lineHeight: 1 }}>+</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{
         display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
