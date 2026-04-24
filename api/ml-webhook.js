@@ -10,6 +10,147 @@ function greeting() {
   return 'Olá! Boa noite!';
 }
 
+// ── Forecast: prevê chegada de cor NÃO cadastrada via módulo Oficinas Cortes ──
+// Retorna { text, status } ou null se não houver produção ativa da cor pedida.
+const FORECAST_PRAZO_MEDIO = 22;
+const FORECAST_JANELA_DIAS = 30;
+
+function _normCor(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+function _refMatch(a, b) {
+  if (!a || !b) return false;
+  return String(a).replace(/^0+/, '').trim() === String(b).replace(/^0+/, '').trim();
+}
+function _corMatch(corCliente, coresArr) {
+  const norm = _normCor(corCliente);
+  if (!norm) return null;
+  for (const c of (coresArr || [])) {
+    const nO = _normCor(c.nome);
+    if (!nO) continue;
+    if (nO === norm || nO.includes(norm) || norm.includes(nO)) return c;
+  }
+  return null;
+}
+function _extractRefRegex(scf) {
+  if (!scf) return null;
+  const t = String(scf).trim();
+  const m = t.match(/\(\s*(?:ref\s*)?(\d{3,5})\s*\)/i);
+  if (m) return String(parseInt(m[1], 10)).padStart(5, '0');
+  const m2 = t.match(/^\s*0*(\d{3,5})\s*$/);
+  if (m2) return String(parseInt(m2[1], 10)).padStart(5, '0');
+  return null;
+}
+
+// Extrai primeira cor mencionada no texto que NÃO está nas 7 carro-chefe
+const FORECAST_CORES_AMPLAS = [
+  'azul bebe','azul bebê','azul claro','azul royal','azul escuro','azul',
+  'verde agua','verde água','verde militar','verde oliva','verde menta','verde',
+  'branco','branca','off white','off-white','natural','creme','nude','cru',
+  'rosa','rose','rosê','pink','salmao','salmão','coral',
+  'amarelo','mostarda','dourado',
+  'vermelho','terracota','tijolo',
+  'cinza','grafite','prata',
+  'caramelo','cappuccino','chocolate','caqui','areia',
+  'lilas','lilás','roxo','lavanda',
+];
+function _extrairCorNaoCadastrada(text, stockColorsNomes) {
+  const lower = _normCor(text);
+  const stockNorm = stockColorsNomes.map(_normCor);
+  // Tenta casar cores mais específicas primeiro (mais longas)
+  const ordered = [...FORECAST_CORES_AMPLAS].sort((a, b) => b.length - a.length);
+  for (const c of ordered) {
+    const cn = _normCor(c);
+    if (!lower.includes(cn)) continue;
+    // Se essa cor JÁ bate com uma cor cadastrada (ex: "azul" bate com "Azul Marinho"), pula
+    const isStockColor = stockNorm.some(s => s.includes(cn) || cn.includes(s));
+    if (isStockColor) continue;
+    return c;
+  }
+  return null;
+}
+
+async function tryStockForecast(text, itemId, brand, token, questionId) {
+  try {
+    const stockColors = await getStockColors();
+    const stockNomes = stockColors.map(c => c.nome);
+    const corPedida = _extrairCorNaoCadastrada(text, stockNomes);
+    if (!corPedida) return null;
+
+    // Pega SCF do item
+    const itemRes = await fetch(
+      `${ML_API}/items/${itemId}?attributes=seller_custom_field`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!itemRes.ok) return null;
+    const itemData = await itemRes.json();
+    const scfTrim = String(itemData.seller_custom_field || '').trim();
+
+    // Resolve REF: scf_map → regex
+    let ref = null;
+    if (scfTrim) {
+      const { data: scfRow } = await supabase
+        .from('ml_scf_ref_map').select('ref').eq('scf', scfTrim).maybeSingle();
+      if (scfRow?.ref) ref = String(scfRow.ref).replace(/^0+/, '').padStart(5, '0');
+    }
+    if (!ref) ref = _extractRefRegex(scfTrim);
+    if (!ref) return null;
+
+    // Busca ailson_cortes
+    const { data: row } = await supabase.from('amicia_data')
+      .select('payload').eq('user_id', 'ailson_cortes').maybeSingle();
+    const todosCortes = row?.payload?.cortes || [];
+
+    // Filtra ativos da REF
+    const desdeMs = Date.now() - FORECAST_JANELA_DIAS * 86400000;
+    const ativos = todosCortes.filter(c => {
+      if (!c || c.entregue) return false;
+      if (!_refMatch(c.ref, ref)) return false;
+      const dt = new Date(c.data).getTime();
+      return !isNaN(dt) && dt >= desdeMs;
+    }).sort((a, b) => new Date(b.data) - new Date(a.data));
+
+    // Procura corte que tem a cor na matriz
+    let escolhido = null;
+    for (const c of ativos) {
+      const coresM = c.detalhes?.cores;
+      if (!Array.isArray(coresM) || coresM.length === 0) continue;
+      const matched = _corMatch(corPedida, coresM);
+      if (matched) { escolhido = { ...c, _cor: matched }; break; }
+    }
+    if (!escolhido) return null;
+
+    const dec = Math.floor((Date.now() - new Date(escolhido.data).getTime()) / 86400000);
+    const rest = FORECAST_PRAZO_MEDIO - dec;
+    const corNome = escolhido._cor?.nome || corPedida;
+
+    // Se atrasado (passou dos 22 dias): não promete, deixa IA responder
+    if (rest <= 0) return null;
+
+    // Registra em stock_offers pra rastrear que oferecemos forecast
+    await supabase.from('ml_stock_offers').insert({
+      brand, item_id: itemId, question_id: String(questionId || ''),
+      cores: [corNome], tamanho: '',
+      status: 'forecast_informado',
+      detalhes: { ref, corte_id: escolhido.id, dias_decorridos: dec, dias_restantes: rest },
+    });
+
+    if (rest <= 7) {
+      return {
+        text: `${greeting()} Boa notícia: este modelo na cor ${corNome} está em fase final de produção e a previsão é chegar nos próximos dias (até 7 dias). Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`,
+        status: 'auto_stock_forecast_short',
+      };
+    }
+    return {
+      text: `${greeting()} Este modelo na cor ${corNome} está em produção e deve chegar nas próximas semanas. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`,
+      status: 'auto_stock_forecast_long',
+    };
+  } catch (e) {
+    console.error('[forecast] erro:', e.message);
+    return null;
+  }
+}
+
 // ── Stock flow: check pending offers and handle ──
 async function handleStockFlow(question, brand, token) {
   const buyerId = String(question.from?.id || '');
@@ -123,7 +264,19 @@ async function handleStockFlow(question, brand, token) {
         status: 'auto_stock_ask_color',
       };
     }
-    // Cliente já disse cor + tamanho mas cor não é do stock → deixa IA responder
+    // Cliente disse cor + tamanho mas cor NÃO é do stock → tenta forecast via Oficinas Cortes
+    const forecast = await tryStockForecast(text, itemId, brand, token, question.id);
+    if (forecast) return forecast;
+    // Sem produção ativa dessa cor → deixa IA Claude responder
+    return null;
+  }
+  // Cliente disse cor não-stock SEM tamanho → tenta forecast também
+  if (!size && matched.length === 0) {
+    const ALL_COLORS = /\b(azul|verde|branco|branca|creme|nude|rosa|amarelo|vermelho|cinza|caramelo|off\s*white|natural|terracota|caqui|areia|mostarda|lilas|lilás|roxo|coral|salmao|salmão)\b/i;
+    if (ALL_COLORS.test(text)) {
+      const forecast = await tryStockForecast(text, itemId, brand, token, question.id);
+      if (forecast) return forecast;
+    }
     return null;
   }
 }
