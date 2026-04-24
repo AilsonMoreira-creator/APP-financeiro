@@ -130,6 +130,102 @@ async function apiStats({ requester_id }) {
   return r.json();
 }
 
+async function apiTopSemana({ requester_id, limite = 10 }) {
+  const r = await fetch(`/api/ia-pergunta-admin?acao=top_semana&limite=${limite}`, {
+    headers: { 'X-User-Id': String(requester_id) },
+  });
+  return r.json();
+}
+
+async function apiUsersDuplicados({ requester_id }) {
+  const r = await fetch('/api/ia-pergunta-admin?acao=users_duplicados', {
+    headers: { 'X-User-Id': String(requester_id) },
+  });
+  return r.json();
+}
+
+async function apiBuscarConfig(supabase) {
+  const { data } = await supabase
+    .from('amicia_data')
+    .select('payload')
+    .eq('user_id', CONFIG_KEY)
+    .maybeSingle();
+  return data?.payload?.config || null;
+}
+
+async function apiSalvarConfig(supabase, config) {
+  const { error } = await supabase
+    .from('amicia_data')
+    .upsert({ user_id: CONFIG_KEY, payload: { config, updated_at: new Date().toISOString() } }, { onConflict: 'user_id' });
+  if (error) throw new Error(error.message);
+  return true;
+}
+
+
+// ══════════════════════════════════════════════════════════
+// DEFAULT_CONFIG (com seed das 25 Q&A aprovadas)
+// ══════════════════════════════════════════════════════════
+
+const GLOSSARIO_DEFAULT = `- "ref" = "referência" = "modelo" = "peça" (tudo vira código de 5 dígitos com zero à esquerda: 2277 == 02277)
+- "Silva Teles" = "Brás" = "ST" (loja atacado Brás, Rua Silva Teles)
+- "José Paulino" = "Bom Retiro" = "JP" (loja atacado Bom Retiro)
+- "Varejo" = loja física direto pro consumidor final (preço Bom Retiro + R$40)
+- "Curva A" = bestseller (≥300 peças/ciclo), "Curva B" = ≥200, "Curva C" = resto
+- "Matriz" = estrutura cor × tamanho × folhas do corte
+- "Carro-chefe" = top 10 cores mais vendidas no Bling
+- "Produção" = "produzindo" = "no costureiro" = "na costura" = "na oficina"
+- Oficinas externas: Dona Maria, Seu Zé, etc (costureiros que recebem peças cortadas)
+- Salas de corte internas: Antonio, Adalecio, Chico (cortam tecido)
+- Tamanhos: P, M, G, GG (regular) + G1, G2, G3 (plus size)
+- 3 marcas ML: Exitus, Lumia, Muniam (mesmo produto, contas diferentes — sempre somar)
+- NUNCA usar a palavra "lote" — usar "corte", "modelo", "ref"`;
+
+const QA_SEED = [
+  // ─── ESTOQUE (7) ───────────────────────────────────────────
+  { categoria: 'estoque', pergunta: 'Quais refs estão em ruptura?', resposta_esperada: 'Lista refs com qtd_total < 30 peças (cobertura crítica). Mostrar até top 10.' },
+  { categoria: 'estoque', pergunta: 'Quais variações da REF X tão zeradas?', resposta_esperada: 'Listar SKUs (cor × tam) com qtd = 0. Agrupar por cor.' },
+  { categoria: 'estoque', pergunta: 'Cobertura em dias da REF X?', resposta_esperada: 'Estoque atual / vendas média 30d. Resposta: "X dias de cobertura".' },
+  { categoria: 'estoque', pergunta: 'Quais refs vão zerar nos próximos 7 dias?', resposta_esperada: 'Cruzar cobertura < 7 com vendas atuais. Listar até 15 refs.' },
+  { categoria: 'estoque', pergunta: 'Cores zeradas da REF X?', resposta_esperada: 'Listar cores onde TODAS as variações estão zeradas. Não confundir com cor parcial.' },
+  { categoria: 'estoque', pergunta: 'Curva A com cores carro-chefe zeradas?', resposta_esperada: 'ADMIN ONLY. Cruzar refs curva A × top 10 cores Bling × variações zeradas.' },
+  { categoria: 'estoque', pergunta: 'Tem REF X cor Y tam Z em estoque?', resposta_esperada: 'Resposta direta com qtd. Se não acha, dizer "Sem dados ML pra essa variação".' },
+
+  // ─── PRODUÇÃO (7) ──────────────────────────────────────────
+  { categoria: 'producao', pergunta: 'Quanto tem em produção total?', resposta_esperada: 'Soma todos cortes ativos (entregue=false). Quebrar por oficina.' },
+  { categoria: 'producao', pergunta: 'Status da REF X em produção?', resposta_esperada: 'Data prevista (corte + 22d) + matriz visual completa. Se múltiplos cortes, listar todos.' },
+  { categoria: 'producao', pergunta: 'Qual oficina tá com a REF X?', resposta_esperada: 'Nome da oficina + nCorte + qtd. Se ainda não cortou, dizer "Programado na sala — estimativa".' },
+  { categoria: 'producao', pergunta: 'Prazo da REF X?', resposta_esperada: 'Dias restantes (22 - dias_decorridos). Se atrasado, sinalizar com ⚠.' },
+  { categoria: 'producao', pergunta: 'Matriz de cores da REF X?', resposta_esperada: 'SEMPRE responder com matriz_render no JSON, não em texto.' },
+  { categoria: 'producao', pergunta: 'Variação X (cor + tam) da REF Y em produção?', resposta_esperada: 'Qtd da combinação específica olhando matriz do corte ativo.' },
+  { categoria: 'producao', pergunta: 'Cortes atrasados?', resposta_esperada: 'Lista cortes com dias_restantes < 0. Mostrar oficina + REF + dias de atraso.' },
+
+  // ─── PRODUTO/VENDAS (7) ────────────────────────────────────
+  { categoria: 'produto', pergunta: 'Mais vendido do mês?', resposta_esperada: 'Top 1 por volume. Sem R$ pra func, com R$ pra admin.' },
+  { categoria: 'produto', pergunta: 'Top 10 mais vendidos?', resposta_esperada: 'Lista top 10 por qtd. Filtra R$ pra func.' },
+  { categoria: 'produto', pergunta: 'REF X tá em alta ou baixa?', resposta_esperada: 'Tendência: comparar últimos 30d com 30d anteriores. Resposta em %.' },
+  { categoria: 'produto', pergunta: 'Qual cor mais vende da REF X?', resposta_esperada: 'Cor top da REF nos últimos 30 dias.' },
+  { categoria: 'produto', pergunta: 'Qual tamanho mais sai?', resposta_esperada: 'Tam top geral ou da REF se especificada.' },
+  { categoria: 'produto', pergunta: 'A REF X vendia e parou?', resposta_esperada: 'Comparar 30d atuais com 30d anteriores. Se queda > 50%, alertar.' },
+  { categoria: 'produto', pergunta: 'Vendas da REF X esse mês?', resposta_esperada: 'Qtd vendida. Faturamento e ticket médio só pra admin.' },
+
+  // ─── FICHA TÉCNICA (4) ─────────────────────────────────────
+  { categoria: 'ficha', pergunta: 'Qual valor da REF X?', resposta_esperada: 'TODOS veem. Mostrar 3 preços: Silva Teles, Bom Retiro (+R$10), Varejo (+R$40 sobre BR).' },
+  { categoria: 'ficha', pergunta: 'Custo da REF X?', resposta_esperada: 'TODOS veem. Custo unitário. Não mostrar margem (essa fica pra admin).' },
+  { categoria: 'ficha', pergunta: 'Preço Silva Teles da REF X?', resposta_esperada: 'Só o preço ST específico. Se busca por descrição (sem REF), aceitar match parcial.' },
+  { categoria: 'ficha', pergunta: 'Compara preço REF X e REF Y?', resposta_esperada: 'Tabela compacta dos 3 preços de cada uma. ADMIN também vê custo e margem.' },
+];
+
+const DEFAULT_CONFIG = {
+  rate_limit_users: 15,
+  orcamento_brl_mensal: 80,
+  hard_stop_pct: 95,
+  alerta_pct: 70,
+  filtrar_monetario_naoadmin: true,
+  ficha_liberada_todos: true,
+  glossario_custom: null, // null = backend usa GLOSSARIO_DEFAULT
+  qa_seed: QA_SEED,
+};
+
 
 // ══════════════════════════════════════════════════════════
 // UI: BOTÃO DO CABEÇALHO (exportado pra App.tsx usar)
@@ -864,10 +960,10 @@ export function IAPerguntaAdminPanel({ supabase, usuarioLogado, onClose, onBackT
 
           {secao === 'visao' && <SecaoVisao stats={stats} />}
           {secao === 'historico' && <SecaoHistorico agrupado={historico} />}
-          {secao === 'limites' && <SecaoEmConstrucao titulo="Limites & orçamento" proximoCommit="Próximo commit: formulário de rate limit, orçamento mensal, hard-stop." />}
-          {secao === 'treinamento' && <SecaoEmConstrucao titulo="Treinamento (Q&A)" proximoCommit="Próximo commit: textarea pergunta + resposta + botão salvar. 25 Q&A seed." />}
-          {secao === 'glossario' && <SecaoEmConstrucao titulo="Glossário" proximoCommit="Próximo commit: editor do glossário (termos internos + sinônimos)." />}
-          {secao === 'alertas' && <SecaoEmConstrucao titulo="Bugs & alertas" proximoCommit="Próximo commit: alerta de nomes duplicados + sugestões de fix." />}
+          {secao === 'limites' && <SecaoLimites supabase={supabase} />}
+          {secao === 'treinamento' && <SecaoTreinamento supabase={supabase} />}
+          {secao === 'glossario' && <SecaoGlossario supabase={supabase} />}
+          {secao === 'alertas' && <SecaoAlertas requesterId={userId} />}
         </div>
       </div>
     </div>
@@ -1030,5 +1126,550 @@ const SecaoEmConstrucao = ({ titulo, proximoCommit }) => (
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Em construção</div>
       <div style={{ fontSize: 11, lineHeight: 1.5 }}>{proximoCommit}</div>
     </div>
+  </div>
+);
+
+
+// ══════════════════════════════════════════════════════════
+// SEÇÃO: Limites & orçamento
+// ══════════════════════════════════════════════════════════
+
+function SecaoLimites({ supabase }) {
+  const [config, setConfig] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    apiBuscarConfig(supabase).then(c => setConfig(c || { ...DEFAULT_CONFIG }));
+  }, [supabase]);
+
+  if (!config) {
+    return <div style={{ color: C.muted, fontFamily: SANS }}>Carregando configurações…</div>;
+  }
+
+  const updateField = (field, value) => setConfig({ ...config, [field]: value });
+
+  const salvar = async () => {
+    setSalvando(true);
+    setMsg(null);
+    try {
+      // Limpa qa_seed do config — ele fica só na constante (não vai pro banco a cada save)
+      const { qa_seed: _, ...semQa } = config;
+      await apiSalvarConfig(supabase, semQa);
+      setMsg({ tipo: 'ok', texto: '✓ Configurações salvas' });
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: 'Erro: ' + e.message });
+    } finally {
+      setSalvando(false);
+      setTimeout(() => setMsg(null), 3000);
+    }
+  };
+
+  const restaurar = () => {
+    if (!confirm('Restaurar valores padrão? As configurações atuais serão sobrescritas.')) return;
+    setConfig({ ...DEFAULT_CONFIG });
+    setMsg({ tipo: 'ok', texto: 'Valores padrão carregados — clique em Salvar pra confirmar' });
+  };
+
+  return (
+    <div style={{ fontFamily: SANS, maxWidth: 680 }}>
+      <h2 style={{ fontFamily: SERIF, color: C.blueDark, fontSize: 20, marginBottom: 4 }}>Limites & orçamento</h2>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 24 }}>
+        Configura quantas perguntas/dia o pool compartilhado de funcionários pode fazer e o teto mensal de gasto Anthropic.
+      </div>
+
+      <FieldGroup titulo="🧑‍🤝‍🧑 Pool de funcionários (compartilhado)">
+        <Field label="Perguntas/dia (não-admin)" sub="Reset à meia-noite BRT. Admin é ilimitado.">
+          <NumberInput value={config.rate_limit_users} onChange={v => updateField('rate_limit_users', v)} min={1} max={500} />
+        </Field>
+      </FieldGroup>
+
+      <FieldGroup titulo="💰 Orçamento mensal (Anthropic)">
+        <Field label="Teto mensal R$" sub="Gasto Anthropic por mês (Sonnet 4.6)">
+          <NumberInput value={config.orcamento_brl_mensal} onChange={v => updateField('orcamento_brl_mensal', v)} min={1} max={1000} prefix="R$" />
+        </Field>
+        <Field label="Alerta visual em (%)" sub="Mostra aviso amarelo no painel admin quando atinge isso">
+          <NumberInput value={config.alerta_pct} onChange={v => updateField('alerta_pct', v)} min={1} max={100} suffix="%" />
+        </Field>
+        <Field label="Hard-stop em (%)" sub="Trava TODAS as perguntas quando o gasto atinge esse %">
+          <NumberInput value={config.hard_stop_pct} onChange={v => updateField('hard_stop_pct', v)} min={1} max={100} suffix="%" />
+        </Field>
+      </FieldGroup>
+
+      <FieldGroup titulo="🔒 Filtros de privacidade">
+        <Toggle
+          label="Filtrar valores R$ pra não-admin"
+          sub="Funcionário não vê faturamento, lucro, margem, ticket médio nem custo de produção."
+          value={config.filtrar_monetario_naoadmin}
+          onChange={v => updateField('filtrar_monetario_naoadmin', v)}
+        />
+        <Toggle
+          label="Ficha técnica liberada pra todos"
+          sub="Exceção: na ficha, custo + 3 preços de venda ficam visíveis pra qualquer user."
+          value={config.ficha_liberada_todos}
+          onChange={v => updateField('ficha_liberada_todos', v)}
+        />
+      </FieldGroup>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
+        <button onClick={salvar} disabled={salvando} style={{
+          background: C.iaDarker, color: C.iaBg, border: 'none', borderRadius: 8,
+          padding: '10px 22px', cursor: salvando ? 'wait' : 'pointer',
+          fontFamily: SANS, fontSize: 13, fontWeight: 600,
+        }}>{salvando ? 'Salvando…' : '✓ Salvar configurações'}</button>
+        <button onClick={restaurar} style={{
+          background: 'transparent', color: C.muted, border: `1px solid ${C.border}`,
+          borderRadius: 8, padding: '10px 18px', cursor: 'pointer',
+          fontFamily: SANS, fontSize: 12,
+        }}>↺ Restaurar padrão</button>
+        {msg && (
+          <span style={{
+            fontFamily: SANS, fontSize: 12,
+            color: msg.tipo === 'ok' ? C.success : C.critical,
+          }}>{msg.texto}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════
+// SEÇÃO: Treinamento (Q&A)
+// ══════════════════════════════════════════════════════════
+
+function SecaoTreinamento({ supabase }) {
+  const [config, setConfig] = useState(null);
+  const [filtro, setFiltro] = useState('todos');
+  const [editando, setEditando] = useState(null); // null | 'novo' | índice
+  const [draft, setDraft] = useState({ categoria: 'estoque', pergunta: '', resposta_esperada: '' });
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    apiBuscarConfig(supabase).then(c => {
+      const conf = c || { ...DEFAULT_CONFIG };
+      // Se não tem qa salvo, usa o seed
+      if (!conf.qa || conf.qa.length === 0) conf.qa = [...QA_SEED];
+      setConfig(conf);
+    });
+  }, [supabase]);
+
+  if (!config) return <div style={{ color: C.muted, fontFamily: SANS }}>Carregando…</div>;
+
+  const qaList = filtro === 'todos' ? config.qa : config.qa.filter(q => q.categoria === filtro);
+
+  const salvarTudo = async (qaAtualizado) => {
+    setSalvando(true);
+    setMsg(null);
+    try {
+      const novoConfig = { ...config, qa: qaAtualizado };
+      const { qa_seed: _, ...persistir } = novoConfig;
+      await apiSalvarConfig(supabase, persistir);
+      setConfig(novoConfig);
+      setEditando(null);
+      setDraft({ categoria: 'estoque', pergunta: '', resposta_esperada: '' });
+      setMsg({ tipo: 'ok', texto: '✓ Q&A salvo' });
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: 'Erro: ' + e.message });
+    } finally {
+      setSalvando(false);
+      setTimeout(() => setMsg(null), 2500);
+    }
+  };
+
+  const adicionar = () => {
+    if (!draft.pergunta.trim() || !draft.resposta_esperada.trim()) {
+      setMsg({ tipo: 'erro', texto: 'Pergunta e resposta esperada são obrigatórias' });
+      return;
+    }
+    salvarTudo([...config.qa, { ...draft }]);
+  };
+
+  const remover = (idx) => {
+    if (!confirm(`Remover a Q&A "${config.qa[idx].pergunta}"?`)) return;
+    salvarTudo(config.qa.filter((_, i) => i !== idx));
+  };
+
+  const restaurarSeed = () => {
+    if (!confirm('Restaurar as 25 Q&A originais? Q&A customizadas que você adicionou serão perdidas.')) return;
+    salvarTudo([...QA_SEED]);
+  };
+
+  return (
+    <div style={{ fontFamily: SANS, maxWidth: 820 }}>
+      <h2 style={{ fontFamily: SERIF, color: C.blueDark, fontSize: 20, marginBottom: 4 }}>Treinamento (Q&A)</h2>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 18 }}>
+        Q&A de referência que ajudam a IA a entender padrões esperados de pergunta/resposta. Não são respostas fixas — a IA usa só como guia.
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        {['todos', 'estoque', 'producao', 'produto', 'ficha'].map(f => (
+          <button key={f} onClick={() => setFiltro(f)} style={{
+            padding: '5px 12px', borderRadius: 14, border: 'none',
+            background: filtro === f ? C.iaDarker : C.cream,
+            color: filtro === f ? C.iaBg : C.text,
+            cursor: 'pointer', fontSize: 11, fontWeight: 600,
+            letterSpacing: 0.3, textTransform: 'uppercase',
+          }}>{f === 'todos' ? `Todos (${config.qa.length})` : f}</button>
+        ))}
+        <button onClick={() => setEditando('novo')} style={{
+          marginLeft: 'auto', padding: '6px 14px', borderRadius: 8,
+          background: C.success, color: '#fff', border: 'none',
+          cursor: 'pointer', fontSize: 12, fontWeight: 600,
+        }}>+ Nova Q&A</button>
+        <button onClick={restaurarSeed} title="Restaura as 25 originais" style={{
+          padding: '6px 12px', borderRadius: 8, background: 'transparent',
+          color: C.muted, border: `1px solid ${C.border}`,
+          cursor: 'pointer', fontSize: 11,
+        }}>↺ Seed</button>
+      </div>
+
+      {editando === 'novo' && (
+        <div style={{
+          background: C.appBg, border: `2px dashed ${C.iaDarker}`, borderRadius: 10,
+          padding: 14, marginBottom: 14,
+        }}>
+          <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: C.iaDarker }}>+ Nova Q&A</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <select value={draft.categoria} onChange={e => setDraft({ ...draft, categoria: e.target.value })}
+              style={{ padding: '7px 10px', borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 12, fontFamily: SANS }}>
+              <option value="estoque">📦 Estoque</option>
+              <option value="producao">✂️ Produção</option>
+              <option value="produto">🛒 Produto</option>
+              <option value="ficha">💎 Ficha</option>
+            </select>
+            <input value={draft.pergunta} onChange={e => setDraft({ ...draft, pergunta: e.target.value })}
+              placeholder='Ex: "Quanto custa a REF X?"' style={{
+                flex: 1, padding: '7px 10px', borderRadius: 6,
+                border: `1px solid ${C.border}`, fontSize: 12, fontFamily: SANS,
+              }} />
+          </div>
+          <textarea value={draft.resposta_esperada} onChange={e => setDraft({ ...draft, resposta_esperada: e.target.value })}
+            placeholder="Como a IA deve responder esse padrão de pergunta..." rows={3} style={{
+              width: '100%', padding: 10, borderRadius: 6, border: `1px solid ${C.border}`,
+              fontSize: 12, fontFamily: SANS, resize: 'vertical',
+            }} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button onClick={adicionar} disabled={salvando} style={{
+              padding: '7px 16px', background: C.iaDarker, color: C.iaBg,
+              border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            }}>{salvando ? 'Salvando…' : '✓ Adicionar'}</button>
+            <button onClick={() => { setEditando(null); setDraft({ categoria: 'estoque', pergunta: '', resposta_esperada: '' }); }}
+              style={{ padding: '7px 14px', background: 'transparent', color: C.muted,
+                border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Cancelar</button>
+            {msg && <span style={{ fontSize: 11, color: msg.tipo === 'ok' ? C.success : C.critical, alignSelf: 'center' }}>{msg.texto}</span>}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {qaList.map((q, idx) => {
+          const realIdx = config.qa.indexOf(q);
+          return (
+            <div key={realIdx} style={{
+              background: '#fff', border: `1px solid ${C.cream}`, borderRadius: 8,
+              padding: '10px 12px', display: 'flex', gap: 12, alignItems: 'flex-start',
+            }}>
+              <CategoriaChip categoria={q.categoria} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12.5, color: C.text, fontWeight: 600, marginBottom: 4 }}>{q.pergunta}</div>
+                <div style={{ fontSize: 11.5, color: C.textSoft, lineHeight: 1.5 }}>{q.resposta_esperada}</div>
+              </div>
+              <button onClick={() => remover(realIdx)} title="Remover" style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                fontSize: 14, color: C.critical, opacity: 0.6, padding: '0 4px',
+              }}>✕</button>
+            </div>
+          );
+        })}
+      </div>
+
+      {msg && editando !== 'novo' && (
+        <div style={{
+          marginTop: 12, fontSize: 12, color: msg.tipo === 'ok' ? C.success : C.critical,
+        }}>{msg.texto}</div>
+      )}
+    </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════
+// SEÇÃO: Glossário
+// ══════════════════════════════════════════════════════════
+
+function SecaoGlossario({ supabase }) {
+  const [config, setConfig] = useState(null);
+  const [texto, setTexto] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    apiBuscarConfig(supabase).then(c => {
+      const conf = c || { ...DEFAULT_CONFIG };
+      setConfig(conf);
+      setTexto(conf.glossario_custom || GLOSSARIO_DEFAULT);
+    });
+  }, [supabase]);
+
+  if (!config) return <div style={{ color: C.muted, fontFamily: SANS }}>Carregando…</div>;
+
+  const usandoCustom = config.glossario_custom != null;
+
+  const salvar = async () => {
+    setSalvando(true);
+    setMsg(null);
+    try {
+      const novo = { ...config, glossario_custom: texto.trim() };
+      const { qa_seed: _, ...persistir } = novo;
+      await apiSalvarConfig(supabase, persistir);
+      setConfig(novo);
+      setMsg({ tipo: 'ok', texto: '✓ Glossário salvo' });
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: 'Erro: ' + e.message });
+    } finally {
+      setSalvando(false);
+      setTimeout(() => setMsg(null), 3000);
+    }
+  };
+
+  const restaurar = async () => {
+    if (!confirm('Voltar ao glossário padrão? Suas customizações serão perdidas.')) return;
+    setSalvando(true);
+    setMsg(null);
+    try {
+      const novo = { ...config, glossario_custom: null };
+      const { qa_seed: _, ...persistir } = novo;
+      await apiSalvarConfig(supabase, persistir);
+      setConfig(novo);
+      setTexto(GLOSSARIO_DEFAULT);
+      setMsg({ tipo: 'ok', texto: '✓ Glossário restaurado pro padrão' });
+    } catch (e) {
+      setMsg({ tipo: 'erro', texto: 'Erro: ' + e.message });
+    } finally {
+      setSalvando(false);
+      setTimeout(() => setMsg(null), 3000);
+    }
+  };
+
+  return (
+    <div style={{ fontFamily: SANS, maxWidth: 820 }}>
+      <h2 style={{ fontFamily: SERIF, color: C.blueDark, fontSize: 20, marginBottom: 4 }}>Glossário</h2>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 16, lineHeight: 1.6 }}>
+        Termos internos do Grupo Amícia que a IA precisa entender. A IA injeta esse texto no system prompt, então sinônimos e abreviações ajudam a responder corretamente quando o user usa linguagem informal. Use formato de lista com hífen.
+      </div>
+
+      <div style={{
+        marginBottom: 10, padding: '8px 12px', borderRadius: 6,
+        background: usandoCustom ? C.warningBg : C.successBg,
+        color: usandoCustom ? '#8a6500' : C.success,
+        fontSize: 11, fontFamily: SANS,
+      }}>
+        {usandoCustom
+          ? '⚠ Glossário customizado em uso (sobrescreve o padrão do backend)'
+          : '✓ Usando glossário padrão do backend'}
+      </div>
+
+      <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={20} style={{
+        width: '100%', padding: 14, borderRadius: 8,
+        border: `1px solid ${C.border}`, fontSize: 12, fontFamily: 'Consolas, Monaco, monospace',
+        lineHeight: 1.6, resize: 'vertical', background: '#fff', color: C.text,
+      }} />
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
+        <button onClick={salvar} disabled={salvando} style={{
+          background: C.iaDarker, color: C.iaBg, border: 'none', borderRadius: 8,
+          padding: '10px 22px', cursor: salvando ? 'wait' : 'pointer',
+          fontFamily: SANS, fontSize: 13, fontWeight: 600,
+        }}>{salvando ? 'Salvando…' : '✓ Salvar glossário'}</button>
+        <button onClick={restaurar} style={{
+          background: 'transparent', color: C.muted, border: `1px solid ${C.border}`,
+          borderRadius: 8, padding: '10px 18px', cursor: 'pointer',
+          fontFamily: SANS, fontSize: 12,
+        }}>↺ Restaurar padrão</button>
+        {msg && (
+          <span style={{
+            fontFamily: SANS, fontSize: 12,
+            color: msg.tipo === 'ok' ? C.success : C.critical,
+          }}>{msg.texto}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════
+// SEÇÃO: Bugs & alertas
+// ══════════════════════════════════════════════════════════
+
+function SecaoAlertas({ requesterId }) {
+  const [duplicados, setDuplicados] = useState([]);
+  const [topSemana, setTopSemana] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      apiUsersDuplicados({ requester_id: requesterId }),
+      apiTopSemana({ requester_id: requesterId, limite: 10 }),
+    ]).then(([dup, top]) => {
+      setDuplicados(dup.duplicados || []);
+      setTopSemana(top.top || []);
+    }).finally(() => setCarregando(false));
+  }, [requesterId]);
+
+  if (carregando) return <div style={{ color: C.muted, fontFamily: SANS }}>Carregando alertas…</div>;
+
+  return (
+    <div style={{ fontFamily: SANS, maxWidth: 820 }}>
+      <h2 style={{ fontFamily: SERIF, color: C.blueDark, fontSize: 20, marginBottom: 4 }}>Bugs & alertas</h2>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 24 }}>
+        Coisas que merecem sua atenção: usuários duplicados (bug conhecido) e padrões de uso da semana.
+      </div>
+
+      {/* Bug: nomes duplicados */}
+      <div style={{
+        background: '#fff', border: `1px solid ${C.cream}`, borderRadius: 10,
+        marginBottom: 18, overflow: 'hidden',
+      }}>
+        <div style={{
+          padding: '12px 16px', borderBottom: `1px solid ${C.cream}`,
+          background: duplicados.length > 0 ? C.warningBg : C.successBg,
+          fontFamily: SERIF, fontSize: 14, fontWeight: 700,
+          color: duplicados.length > 0 ? '#8a6500' : C.success,
+        }}>
+          {duplicados.length > 0 ? '⚠️' : '✓'} Usuários com nomes duplicados
+          {duplicados.length > 0 && (
+            <span style={{ fontFamily: SANS, fontSize: 11, marginLeft: 10, fontWeight: 400 }}>
+              {duplicados.length} caso{duplicados.length === 1 ? '' : 's'} detectado{duplicados.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+        {duplicados.length === 0 ? (
+          <div style={{ padding: 14, fontSize: 12, color: C.muted }}>
+            Nenhum nome duplicado no histórico. ✨
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: '10px 16px', fontSize: 11, color: C.textSoft, background: C.appBg, borderBottom: `1px solid ${C.cream}` }}>
+              💡 Como o histórico é isolado por user_id (numérico, não pelo nome), perguntas ficam corretamente separadas mesmo com nomes iguais. Mas o painel pode confundir. <strong>Sugestão:</strong> renomear os duplicados em "Usuários" pra algo distinto (ex: "ana", "ana.silva").
+            </div>
+            {duplicados.map((d, i) => (
+              <div key={i} style={{
+                padding: '10px 16px', borderBottom: i < duplicados.length - 1 ? `1px solid ${C.appBg}` : 'none',
+                fontSize: 12, display: 'flex', alignItems: 'center', gap: 12,
+              }}>
+                <strong style={{ color: C.text, fontFamily: SERIF, fontSize: 14 }}>{d.user_name}</strong>
+                <span style={{ color: C.muted, fontSize: 11 }}>{d.qtd} IDs distintos:</span>
+                <span style={{ fontFamily: 'Courier New, monospace', fontSize: 10.5, color: C.textSoft }}>
+                  {(d.ids || []).join(' · ')}
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* Top perguntas da semana */}
+      <div style={{
+        background: '#fff', border: `1px solid ${C.cream}`, borderRadius: 10, overflow: 'hidden',
+      }}>
+        <div style={{
+          padding: '12px 16px', borderBottom: `1px solid ${C.cream}`,
+          background: C.appBg, fontFamily: SERIF, fontSize: 14, fontWeight: 700,
+          color: C.blueDark,
+        }}>📈 Top perguntas da semana</div>
+        {topSemana.length === 0 ? (
+          <div style={{ padding: 14, fontSize: 12, color: C.muted }}>
+            Sem perguntas suficientes nos últimos 7 dias.
+          </div>
+        ) : topSemana.map((t, i) => (
+          <div key={i} style={{
+            padding: '10px 16px', borderBottom: i < topSemana.length - 1 ? `1px solid ${C.appBg}` : 'none',
+            display: 'grid', gridTemplateColumns: '30px 1fr 80px 70px',
+            gap: 10, alignItems: 'center', fontSize: 12,
+          }}>
+            <span style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 700, color: C.muted }}>{i + 1}</span>
+            <span style={{ color: C.text }}>{t.exemplo}</span>
+            {t.categoria && <CategoriaChip categoria={t.categoria} />}
+            <span style={{ textAlign: 'right', color: C.text, fontSize: 11 }}>
+              <strong>{t.vezes}×</strong>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════
+// HELPERS DE FORM (usados nas seções)
+// ══════════════════════════════════════════════════════════
+
+const FieldGroup = ({ titulo, children }) => (
+  <div style={{
+    background: '#fff', border: `1px solid ${C.cream}`, borderRadius: 10,
+    padding: '14px 18px', marginBottom: 14,
+  }}>
+    <div style={{
+      fontFamily: SERIF, fontSize: 14, fontWeight: 700, color: C.blueDark,
+      marginBottom: 12,
+    }}>{titulo}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
+  </div>
+);
+
+const Field = ({ label, sub, children }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{sub}</div>}
+    </div>
+    <div>{children}</div>
+  </div>
+);
+
+const NumberInput = ({ value, onChange, min, max, prefix, suffix }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+    {prefix && <span style={{ fontSize: 12, color: C.muted }}>{prefix}</span>}
+    <input
+      type="number"
+      value={value}
+      min={min}
+      max={max}
+      onChange={e => {
+        const v = e.target.value === '' ? '' : Number(e.target.value);
+        onChange(v);
+      }}
+      style={{
+        width: 80, padding: '6px 10px', textAlign: 'right',
+        border: `1px solid ${C.border}`, borderRadius: 6,
+        fontFamily: SANS, fontSize: 13, fontWeight: 600,
+        color: C.blueDark,
+      }}
+    />
+    {suffix && <span style={{ fontSize: 12, color: C.muted }}>{suffix}</span>}
+  </div>
+);
+
+const Toggle = ({ label, sub, value, onChange }) => (
+  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{sub}</div>}
+    </div>
+    <button onClick={() => onChange(!value)} style={{
+      width: 42, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+      background: value ? C.success : C.border,
+      position: 'relative', transition: 'background 0.15s',
+    }}>
+      <span style={{
+        position: 'absolute', top: 2, left: value ? 20 : 2,
+        width: 20, height: 20, borderRadius: '50%', background: '#fff',
+        transition: 'left 0.15s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+      }} />
+    </button>
   </div>
 );
