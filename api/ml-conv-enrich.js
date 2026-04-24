@@ -40,6 +40,16 @@ export default async function handler(req, res) {
 
     const token = await getValidToken(conv.brand);
 
+    const debug = {
+      had_pack_id: !!conv.pack_id,
+      had_order_id: !!conv.order_id,
+      had_item_id: !!conv.item_id,
+      token_ok: !!token,
+      pack_fetch: null,
+      order_fetch: null,
+      item_fetch: null,
+    };
+
     let itemId = conv.item_id || '';
     let itemTitle = conv.item_title || '';
     let itemThumb = conv.item_thumbnail || '';
@@ -53,11 +63,17 @@ export default async function handler(req, res) {
         const r = await fetch(`${ML_API}/packs/${conv.pack_id}?tag=post_sale`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        debug.pack_fetch = { status: r.status, ok: r.ok };
         if (r.ok) {
           const pack = await r.json();
           orderId = pack.orders?.[0]?.id || '';
+          debug.pack_fetch.got_order_id = !!orderId;
+        } else {
+          debug.pack_fetch.error_preview = (await r.text().catch(() => '')).slice(0, 150);
         }
-      } catch (e) { console.error('[enrich] pack fetch:', e.message); }
+      } catch (e) {
+        debug.pack_fetch = { status: 'exception', error: e.message };
+      }
     }
 
     // 2. Busca detalhes do order (buyer + first item)
@@ -66,6 +82,7 @@ export default async function handler(req, res) {
         const r = await fetch(`${ML_API}/orders/${orderId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        debug.order_fetch = { status: r.status, ok: r.ok };
         if (r.ok) {
           const order = await r.json();
           if (!buyerId) buyerId = String(order.buyer?.id || '');
@@ -75,8 +92,14 @@ export default async function handler(req, res) {
             if (!itemId) itemId = firstItem.id || '';
             if (!itemTitle) itemTitle = firstItem.title || '';
           }
+          debug.order_fetch.got_item_id = !!itemId;
+          debug.order_fetch.got_item_title = !!itemTitle;
+        } else {
+          debug.order_fetch.error_preview = (await r.text().catch(() => '')).slice(0, 150);
         }
-      } catch (e) { console.error('[enrich] order fetch:', e.message); }
+      } catch (e) {
+        debug.order_fetch = { status: 'exception', error: e.message };
+      }
     }
 
     // 3. Busca thumbnail do item
@@ -85,11 +108,17 @@ export default async function handler(req, res) {
         const r = await fetch(`${ML_API}/items/${itemId}?attributes=thumbnail,secure_thumbnail`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        debug.item_fetch = { status: r.status, ok: r.ok };
         if (r.ok) {
           const item = await r.json();
           itemThumb = item.secure_thumbnail || item.thumbnail || '';
+          debug.item_fetch.got_thumb = !!itemThumb;
+        } else {
+          debug.item_fetch.error_preview = (await r.text().catch(() => '')).slice(0, 150);
         }
-      } catch (e) { console.error('[enrich] item fetch:', e.message); }
+      } catch (e) {
+        debug.item_fetch = { status: 'exception', error: e.message };
+      }
     }
 
     // Monta updates só com os campos que mudaram
@@ -109,10 +138,21 @@ export default async function handler(req, res) {
         .eq('id', conversation_id);
     }
 
+    // Log completo do que aconteceu (capturado nos Vercel logs)
+    console.log('[ml-conv-enrich]', {
+      conv_id: conversation_id,
+      brand: conv.brand,
+      pack_id: conv.pack_id,
+      enriched: Object.keys(updates).length > 0,
+      updates_keys: Object.keys(updates),
+      debug,
+    });
+
     return res.json({
       ok: true,
       enriched: Object.keys(updates).length > 0,
       updates,
+      debug,
       conv: { ...conv, ...updates },
     });
   } catch (e) {

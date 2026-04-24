@@ -162,19 +162,40 @@ export default function MLPosVenda({ supabase, currentUser }) {
     setEnrichLoading(true);
     setEnrichProgress({ done: 0, total: pendentes.length });
 
-    const LIMIT = 3; // concorrência máxima
+    const LIMIT = 3;
     let done = 0;
+    let enriched = 0;
+    const falhas = []; // { pack_id, brand, motivo }
+
     for (let i = 0; i < pendentes.length; i += LIMIT) {
       const batch = pendentes.slice(i, i + LIMIT);
       await Promise.all(batch.map(async (conv) => {
         try {
-          await fetch('/api/ml-conv-enrich', {
+          const r = await fetch('/api/ml-conv-enrich', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ conversation_id: conv.id }),
           });
+          const data = await r.json().catch(() => ({}));
+          if (data.enriched) {
+            enriched++;
+          } else {
+            // Monta motivo a partir do debug
+            const d = data.debug || {};
+            let motivo = 'sem mudança';
+            if (!d.token_ok) motivo = 'token ML inválido';
+            else if (!d.had_pack_id && !d.had_order_id) motivo = 'sem pack_id/order_id no banco';
+            else if (d.pack_fetch && !d.pack_fetch.ok) motivo = `pack ML ${d.pack_fetch.status}`;
+            else if (d.order_fetch && !d.order_fetch.ok) motivo = `order ML ${d.order_fetch.status}`;
+            else if (d.item_fetch && !d.item_fetch.ok) motivo = `item ML ${d.item_fetch.status}`;
+            falhas.push({
+              pack_id: conv.pack_id || '(sem pack_id)',
+              brand: conv.brand,
+              motivo,
+            });
+          }
         } catch (e) {
-          console.error('[enrich batch]', conv.id, e.message);
+          falhas.push({ pack_id: conv.pack_id, brand: conv.brand, motivo: 'rede: ' + e.message });
         }
         done++;
         setEnrichProgress({ done, total: pendentes.length });
@@ -183,7 +204,28 @@ export default function MLPosVenda({ supabase, currentUser }) {
 
     setEnrichLoading(false);
     setEnrichProgress(null);
-    fetchConvs(); // recarrega a lista com as fotos/títulos novos
+    fetchConvs();
+
+    // Relatório do batch
+    if (enriched === pendentes.length) {
+      alert(`✓ ${enriched} conversa${enriched > 1 ? 's' : ''} enriquecida${enriched > 1 ? 's' : ''} com sucesso!`);
+    } else {
+      // Agrupa motivos
+      const motivosMap = {};
+      for (const f of falhas) {
+        motivosMap[f.motivo] = (motivosMap[f.motivo] || 0) + 1;
+      }
+      const motivosLinhas = Object.entries(motivosMap)
+        .map(([m, q]) => `  · ${q}× ${m}`)
+        .join('\n');
+
+      alert(
+        `Enriquecidas: ${enriched} de ${pendentes.length}\n` +
+        `Falharam: ${falhas.length}\n\n` +
+        `Motivos:\n${motivosLinhas}\n\n` +
+        `Ver logs do Vercel (function ml-conv-enrich) pra detalhes.`
+      );
+    }
   };
 
   // ── Update tag/notes/status ──
