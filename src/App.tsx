@@ -7897,12 +7897,14 @@ export default function App(){
       setDbCarregado(true);dbCarregadoTs.current=Date.now();clearTimeout(safetyTimer);
       // 🛡️ Snapshot pra detectar corrupção: registra tamanhos do que acabou de carregar.
       // Saves futuros serão bloqueados se o state local regredir pra VAZIO depois disso.
+      // FIX: usa df?.payload (escopo do .then) em vez de 'd' (so existia dentro do if)
+      const loaded=df?.payload||{};
       dbSnapshot.current={
-        receitasMesesCount:Object.keys(d.receitasPorMes||{}).length,
-        boletosCount:(d.boletosShared||[]).length,
-        cortesCount:(d.cortes||[]).length,
-        produtosCount:(d.produtos||[]).length,
-        auxMesesCount:Object.keys(d.auxDataPorMes||{}).length,
+        receitasMesesCount:Object.keys(loaded.receitasPorMes||{}).length,
+        boletosCount:(loaded.boletosShared||[]).length,
+        cortesCount:(loaded.cortes||[]).length,
+        produtosCount:(loaded.produtos||[]).length,
+        auxMesesCount:Object.keys(loaded.auxDataPorMes||{}).length,
       };
       console.log("LOAD: snapshot integridade —",dbSnapshot.current);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
