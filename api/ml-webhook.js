@@ -426,6 +426,9 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 - Rastreamento, status do pedido: "Acesse 'Minhas Compras' no seu perfil do Mercado Livre pra acompanhar em tempo real!"
 - TROCAS: o Mercado Livre não tem opção de troca direta. Se a cliente pede pra trocar (cor, tamanho, modelo), explique: "O Mercado Livre não tem a opção de troca. O processo é abrir uma devolução do pedido pelo Mercado Livre e, em seguida, fazer uma nova compra com a peça desejada. É só ir em 'Minhas Compras' e abrir a devolução por lá!"
 - Devoluções (sem ser troca): siga a política do Mercado Livre, oriente a cliente a abrir a devolução em 'Minhas Compras'.
+- 🚫 NUNCA mencione devolução, troca ou política de retorno em respostas de pré-venda (medidas, tamanho, cor, tecido, prazo, frete, disponibilidade). Devolução SÓ se a cliente perguntar EXPLICITAMENTE sobre troca/devolução/arrependimento. Não use devolução como "rede de segurança" pra fechar venda — isso estimula devoluções desnecessárias e prejudica a operação.
+- Exemplo PROIBIDO: "Pode comprar tranquila, se não servir você abre a devolução" ❌
+- Exemplo CORRETO: pergunta sobre tamanho → responda com a tabela de medidas, recomende o tamanho adequado, e finalize sem citar devolução.
 
 ───── F) PLUS SIZE ─────
 ${plusCrossSell ? `CROSS-SELL ATIVO: Este modelo TEM versão Plus Size! Termo de busca: "${plusCrossSell}"
