@@ -3,6 +3,11 @@
 > **PRÓXIMO CHAT: LEIA ESTE DOC COM CALMA ANTES DE MEXER EM QUALQUER COISA.**  
 > O código-fonte é massivo e o contexto do negócio é denso. Sem ler isso, você vai cometer erros que já foram feitos e desfeitos hoje.
 
+**📎 Docs relacionados (leitura obrigatória se for mexer na sugestão de corte):**
+- `HANDOFF_REGRAS_SUGESTAO_CORTE.md` — **anexo completo** sobre regras da IA de sugestão de corte: parâmetros, views, tabelas cruzadas, pipeline, problemas pendentes
+- `HANDOFF_SPRINT6_5.md` — contexto histórico + 3 problemas pendentes de qualidade da sugestão
+- `RUNBOOK.md` — procedimentos manuais recorrentes (cadastrar ref nova no scfMap, etc)
+
 ---
 
 ## 🎫 ACESSO
