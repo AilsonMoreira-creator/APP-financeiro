@@ -667,7 +667,7 @@ export default function IAPergunta({ supabase, usuarioLogado, onClose }) {
               background: '#fff', padding: '10px 12px',
               borderTop: `1px solid ${C.cream}`,
             }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', width: '100%' }}>
                 <textarea
                   value={input}
                   onChange={e => setInput(e.target.value)}
@@ -681,22 +681,24 @@ export default function IAPergunta({ supabase, usuarioLogado, onClose }) {
                   disabled={loading}
                   rows={1}
                   style={{
-                    flex: 1, border: `1px solid ${C.border}`, borderRadius: 10,
-                    padding: '9px 12px', fontFamily: SANS, fontSize: 14,
+                    flex: 1, minWidth: 0, width: '100%', boxSizing: 'border-box',
+                    border: `1px solid ${C.border}`, borderRadius: 10,
+                    padding: '9px 12px', fontFamily: SANS, fontSize: 16,
                     outline: 'none', resize: 'none',
                     background: loading ? '#eee' : C.appBg, color: C.text,
-                    minHeight: 38, maxHeight: 90,
+                    minHeight: 40, maxHeight: 120,
                   }}
                 />
                 <button
                   onClick={enviarPergunta}
                   disabled={loading || !input.trim()}
                   style={{
+                    flexShrink: 0,
                     background: loading || !input.trim() ? C.cream : C.iaDarker,
                     color: loading || !input.trim() ? C.muted : C.iaBg,
                     border: 'none', borderRadius: 10, padding: '10px 14px',
                     cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-                    fontSize: 16, minWidth: 42,
+                    fontSize: 18, minWidth: 44, height: 40,
                   }}
                 >➤</button>
               </div>
