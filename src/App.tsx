@@ -8287,6 +8287,8 @@ export default function App(){
   // ── SAVE FINANCEIRO (admin only — read-merge-write, NUNCA perde dados) ─────
   // 🛡️ GUARD DE INTEGRIDADE: detecta payload corrompido antes de salvar.
   // Retorna {ok, motivo} — se ok=false, o save DEVE ser abortado.
+  // Regra ÚNICA e conservadora: só bloqueia se state TOTALMENTE VAZIO quando load tinha dados.
+  // Perdas parciais (ate deleções legítimas de um mês) passam e são tratadas pelo merge profundo.
   const checarIntegridadePayload=useCallback((payload)=>{
     const snap=dbSnapshot.current;
     // Se nunca carregou dados, não tem como comparar — deixa passar
@@ -8294,12 +8296,15 @@ export default function App(){
     const locRec=Object.keys(payload.receitasPorMes||{}).length;
     const locBol=(payload.boletosShared||[]).length;
     const locAux=Object.keys(payload.auxDataPorMes||{}).length;
-    // REGRA CRÍTICA: state local completamente vazio quando load tinha dados = CORROMPIDO
-    if(snap.receitasMesesCount>0&&locRec===0)return{ok:false,motivo:`receitasPorMes VAZIO mas load tinha ${snap.receitasMesesCount} meses`};
-    if(snap.boletosCount>0&&locBol===0&&snap.boletosCount>3)return{ok:false,motivo:`boletosShared VAZIO mas load tinha ${snap.boletosCount} boletos`};
-    if(snap.auxMesesCount>0&&locAux===0)return{ok:false,motivo:`auxDataPorMes VAZIO mas load tinha ${snap.auxMesesCount} meses`};
-    // REGRA: perda grande (>50% dos meses de receitas) = suspeito
-    if(snap.receitasMesesCount>=3&&locRec<snap.receitasMesesCount*0.5)return{ok:false,motivo:`receitasPorMes regrediu de ${snap.receitasMesesCount} pra ${locRec} meses (>50% perda)`};
+    // REGRA ÚNICA: state local COMPLETAMENTE VAZIO quando load tinha dados = CORROMPIDO
+    // (snapshot >= 3 pra evitar edge cases iniciais — app novo pode ter pouca coisa)
+    if(snap.receitasMesesCount>=3&&locRec===0){
+      return{ok:false,motivo:`receitasPorMes VAZIO (snap tinha ${snap.receitasMesesCount} meses)`,debug:{locRec,locBol,locAux,snap}};
+    }
+    if(snap.auxMesesCount>=3&&locAux===0){
+      return{ok:false,motivo:`auxDataPorMes VAZIO (snap tinha ${snap.auxMesesCount} meses)`,debug:{locRec,locBol,locAux,snap}};
+    }
+    // (Removida a regra de <50% - era falso-positivo em demais cenarios legitimos)
     return{ok:true};
   },[]);
 
@@ -8308,7 +8313,7 @@ export default function App(){
     // 🛡️ Valida integridade antes de tudo
     const integridade=checarIntegridadePayload(payload);
     if(!integridade.ok){
-      console.error("🛡️ SUPABASE-SAVE: ABORTADO —",integridade.motivo,". State local parece corrompido. Limpando pending_sync pra evitar retries.");
+      console.error("🛡️ SUPABASE-SAVE: ABORTADO —",integridade.motivo,"\ndebug:",integridade.debug);
       localStorage.setItem("amica_pending_sync","false");
       setSyncStatus('error');setTimeout(()=>setSyncStatus(null),6000);
       return;
@@ -8539,15 +8544,11 @@ export default function App(){
         // Pode ser que o state não carregou direito. NÃO SALVAR (senão vai deletar tudo).
         const localCount=(cortes||[]).length;
         const remoteCount=(remoto.cortes||[]).length;
-        if(localCount===0&&remoteCount>0){
+        if(localCount===0&&remoteCount>=3){
           console.error("🛡️ SAVE CORTES: ABORTADO — state local tem 0 cortes mas remoto tem",remoteCount,". State pode estar corrompido. Deletar tudo seria perda irreversível.");
           return;
         }
-        // Protecao extra: se local tem menos de METADE dos cortes do remoto, suspeito
-        if(remoteCount>=4&&localCount<remoteCount*0.5){
-          console.error("🛡️ SAVE CORTES: ABORTADO — local",localCount,"cortes vs remoto",remoteCount,"(>50% perda). State pode estar corrompido.");
-          return;
-        }
+        // (Removida regra de 50% - era falso-positivo em casos legitimos de admin deletando varios)
         // Merge cortes: por ID, mais recente ganha (_mod timestamp)
         const now=Date.now();
         const localMap=new Map((cortes||[]).map(c=>[c.id,{...c,_mod:c._mod||now}]));
@@ -8649,7 +8650,7 @@ export default function App(){
       // (esse é o caminho mais perigoso — POST sem merge, sobrescreve tudo)
       const integFlush=checarIntegridadePayload(dadosRef.current);
       if(!integFlush.ok){
-        console.error("🛡️ FLUSH: ABORTADO —",integFlush.motivo,". Limpando pending_sync pra evitar retry com dados ruins.");
+        console.error("🛡️ FLUSH: ABORTADO —",integFlush.motivo,"\ndebug:",integFlush.debug);
         localStorage.setItem("amica_pending_sync","false");
         return;
       }
