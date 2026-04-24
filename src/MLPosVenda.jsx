@@ -185,6 +185,9 @@ export default function MLPosVenda({ supabase, currentUser }) {
     setEnrichProgress(null);
     fetchConvs(); // recarrega a lista com as fotos/títulos novos
   };
+
+  // ── Update tag/notes/status ──
+  const updateConv = async (field, value) => {
     if (!selected) return;
     const body = { conversation_id: selected.id, [field]: value };
     if (field === 'status' && value === 'resolvido') body.resolved_by = currentUser;
