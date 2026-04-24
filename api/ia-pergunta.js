@@ -166,13 +166,13 @@ export default async function handler(req, res) {
 Contexto (use APENAS isso pra responder):
 ${JSON.stringify(contexto, null, 2)}
 
-Retorne APENAS um JSON válido com esta estrutura:
+RESPONDA APENAS COM UM OBJETO JSON VÁLIDO, sem texto antes nem depois, sem markdown, sem \`\`\`json.
+Estrutura obrigatória:
 {
   "resposta_texto": "sua resposta em linguagem natural, 2-6 linhas",
-  "matriz_render": null OU { cores: [{nome,folhas,total}], tamanhos: [...], total_folhas, total_pecas, qtd_manual, qtd_calculada }
+  "matriz_render": null OU { "cores": [{"nome":"...","folhas":N,"total":N}], "tamanhos": ["P","M","G","GG"], "total_folhas": N, "total_pecas": N, "qtd_manual": N, "qtd_calculada": N }
 }`,
         },
-        { role: 'assistant', content: '{' }, // pre-fill pra garantir JSON
       ],
     };
 
@@ -196,8 +196,8 @@ Retorne APENAS um JSON válido com esta estrutura:
     tokensOut = data.usage?.output_tokens || 0;
 
     const bruto = (data.content?.[0]?.text || '').trim();
-    const jsonStr = '{' + bruto; // re-anexa o pre-fill
-    respostaIA = extrairJSON(jsonStr);
+    // Sonnet 4.6 pode retornar JSON puro ou com ```json wrapper — extrairJSON lida com ambos
+    respostaIA = extrairJSON(bruto);
   } catch (e) {
     console.error('[ia-pergunta] erro Sonnet:', e);
     return finalizarComErro(res, {
@@ -292,17 +292,30 @@ function extrairTermoBusca(pergunta) {
 
 
 /**
- * Tenta parsear JSON da resposta do Sonnet. Se vier com texto extra
- * antes/depois do JSON, extrai só o objeto.
+ * Tenta parsear JSON da resposta do Sonnet. Lida com 3 formatos comuns:
+ *   1. JSON puro: {"resposta":...}
+ *   2. Markdown block: ```json\n{...}\n```
+ *   3. Texto antes/depois: "Aqui está: {...} espero ter ajudado"
  */
 function extrairJSON(str) {
+  if (!str) return null;
+
+  // Tenta parse direto primeiro
   try { return JSON.parse(str); } catch {}
 
-  const start = str.indexOf('{');
-  const end = str.lastIndexOf('}');
+  // Remove wrapper markdown ```json ... ``` ou ``` ... ```
+  let cleaned = str
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/, '')
+    .trim();
+  try { return JSON.parse(cleaned); } catch {}
+
+  // Fallback: extrai do primeiro { até o último } balanceado
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) return null;
 
-  const candidate = str.slice(start, end + 1);
+  const candidate = cleaned.slice(start, end + 1);
   try { return JSON.parse(candidate); } catch {}
   return null;
 }

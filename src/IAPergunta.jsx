@@ -238,11 +238,11 @@ export const IABotaoCabecalho = ({ onClick }) => (
     style={{
       background: C.iaDarker, color: C.iaBg,
       border: 'none', borderRadius: 8,
-      padding: '7px 12px', cursor: 'pointer',
-      fontSize: 14, fontFamily: SERIF, fontWeight: 600,
-      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '5px 9px', cursor: 'pointer',
+      fontSize: 16, lineHeight: 1,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     }}
-  >🤖 <span style={{ fontSize: 11, fontFamily: SANS }}>Perguntar à IA</span></button>
+  >🤖</button>
 );
 
 
