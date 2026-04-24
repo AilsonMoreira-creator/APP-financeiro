@@ -1,32 +1,29 @@
 /**
- * ml-stock-forecast.js — Previsão de chegada baseada em ordens_corte
+ * ml-stock-forecast.js — Previsão de chegada baseada em ailson_cortes
+ *                        (módulo Oficinas Cortes — fonte 100% real)
  *
- * Quando cliente pergunta sobre cor NÃO cadastrada nas 7 carro-chefe,
- * busca em ordens_corte se há produção ativa daquela cor pra aquela REF.
+ * REGRA AILSON 22/04 (já documentada em 14_fase8_cortes_oficinas.sql):
+ *   "Sempre usar do módulo oficina cortes (com ou sem granularidade)"
  *
  * Lógica:
  *   - Pega item_id do anúncio ML
- *   - Extrai REF via seller_custom_field (mesmo método do ml-estoque-cron)
- *   - Busca em ordens_corte: REF + cor + status != concluido/cancelado
- *   - Calcula dias decorridos vs prazo médio (22 dias)
- *   - Retorna previsão formatada
+ *   - Extrai REF via seller_custom_field
+ *   - Busca em amicia_data user_id='ailson_cortes' → payload.cortes[]
+ *   - Filtra: ref=X, entregue=false, data dentro da janela (30 dias)
+ *   - Se corte tem detalhes.cores: bate por nome (case-insensitive, partial)
+ *   - Se corte SEM detalhes (sem matriz): considera "qualquer cor" — não
+ *     dá pra confirmar que aquela cor específica está nele (confiança baixa)
+ *   - Calcula 22 dias a partir do campo `data` do corte
  *
- * Uso (FASE 1 - teste):
+ * Uso:
  *   GET /api/ml-stock-forecast?item_id=MLB6302508314&cor=branco&tamanho=M
- *
- * Retorna:
- *   {
- *     ref, cor_buscada, encontrou,
- *     ordens_em_producao: [...],
- *     previsao: { dias_decorridos, dias_restantes, faixa, mensagem_sugerida }
- *   }
  */
 import { supabase, getValidToken, BRANDS, setCors } from './_ml-helpers.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 const PRAZO_MEDIO_DIAS = 22;
+const JANELA_BUSCA_DIAS = 30;
 
-// Mesma lógica do ml-estoque-cron.js linha 177
 function extractRefFromCustomField(scf) {
   if (!scf) return null;
   const scfTrim = String(scf).trim();
@@ -37,23 +34,28 @@ function extractRefFromCustomField(scf) {
   return null;
 }
 
-// Normaliza string pra comparar cores (sem acento, lowercase)
 function normCor(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
-// Verifica se uma cor (do cliente) bate com alguma cor da ordem
-// Ex: cliente "branco" bate com "Branco Off", "off white", etc se contiver
-function corMatch(corCliente, coresOrdem) {
+function corMatch(corCliente, coresArray) {
   const norm = normCor(corCliente);
   if (!norm) return null;
-  for (const c of (coresOrdem || [])) {
+  for (const c of (coresArray || [])) {
     const nomeOrdem = normCor(c.nome);
+    if (!nomeOrdem) continue;
     if (nomeOrdem === norm || nomeOrdem.includes(norm) || norm.includes(nomeOrdem)) {
       return c;
     }
   }
   return null;
+}
+
+function refMatch(refA, refB) {
+  if (!refA || !refB) return false;
+  const a = String(refA).replace(/^0+/, '').trim();
+  const b = String(refB).replace(/^0+/, '').trim();
+  return a === b;
 }
 
 export default async function handler(req, res) {
@@ -76,23 +78,18 @@ export default async function handler(req, res) {
     input: { item_id: itemId, cor, tamanho: tamanho || null },
   };
 
-  // ── 1. Pega item do ML pra extrair REF ──
-  // Tenta nas 3 marcas até funcionar (item pertence a uma das 3)
+  // ── 1. Pega item do ML ──
   let itemData = null;
   let usedBrand = null;
   for (const brand of BRANDS) {
     try {
       const token = await getValidToken(brand);
       const r = await fetch(
-        `${ML_API}/items/${itemId}?attributes=id,title,seller_id,seller_custom_field,variations`,
+        `${ML_API}/items/${itemId}?attributes=id,title,seller_custom_field,variations`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (r.ok) {
-        itemData = await r.json();
-        usedBrand = brand;
-        break;
-      }
-    } catch (e) {}
+      if (r.ok) { itemData = await r.json(); usedBrand = brand; break; }
+    } catch {}
   }
 
   if (!itemData) {
@@ -108,93 +105,133 @@ export default async function handler(req, res) {
 
   // ── 2. Extrai REF ──
   let ref = extractRefFromCustomField(itemData.seller_custom_field);
-
-  // Fallback: tenta pegar REF via SKU das variations + ml_sku_ref_map
   if (!ref) {
     const variations = itemData.variations || [];
     for (const v of variations) {
       const sku = v.seller_custom_field || (v.attributes || []).find(a => a.id === 'SELLER_SKU')?.value_name;
       if (!sku) continue;
       const { data: refRow } = await supabase
-        .from('ml_sku_ref_map')
-        .select('ref')
-        .eq('sku', sku)
-        .maybeSingle();
+        .from('ml_sku_ref_map').select('ref').eq('sku', sku).maybeSingle();
       if (refRow?.ref) { ref = refRow.ref; break; }
     }
   }
 
   out.ref_extraida = ref;
-
   if (!ref) {
-    out.error = 'Não conseguiu extrair REF do anúncio (sem seller_custom_field e SKU não mapeado)';
+    out.error = 'Não conseguiu extrair REF do anúncio';
     return res.status(200).json(out);
   }
 
-  // ── 3. Busca ordens_corte ativas com essa REF nos últimos 30 dias ──
-  const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: ordens, error: ordErr } = await supabase
-    .from('ordens_corte')
-    .select('id, ref, cores, grade, status, created_at, origem')
-    .eq('ref', ref)
-    .not('status', 'in', '(concluido,cancelado)')
-    .gte('created_at', desde)
-    .order('created_at', { ascending: false });
+  // ── 3. Busca payload ailson_cortes ──
+  const { data: row, error: payErr } = await supabase
+    .from('amicia_data').select('payload').eq('user_id', 'ailson_cortes').maybeSingle();
 
-  if (ordErr) {
-    out.error = 'Erro consulta ordens_corte: ' + ordErr.message;
+  if (payErr || !row?.payload) {
+    out.error = 'Payload ailson_cortes vazio: ' + (payErr?.message || 'sem dados');
     return res.status(500).json(out);
   }
 
-  out.ordens_ativas_total = (ordens || []).length;
+  const todosCortes = row.payload.cortes || [];
+  out.total_cortes_no_payload = todosCortes.length;
 
-  // ── 4. Filtra por cor (case-insensitive, partial match) ──
-  const ordensComCor = [];
-  for (const o of (ordens || [])) {
-    const corMatched = corMatch(cor, o.cores);
-    if (corMatched) {
-      ordensComCor.push({
-        id: o.id,
-        ref: o.ref,
-        status: o.status,
-        created_at: o.created_at,
-        origem: o.origem,
-        cor_matched: corMatched,
-        grade: o.grade,
-        // Verifica se o tamanho perguntado está na grade
-        tem_tamanho: tamanho ? Object.keys(o.grade || {}).includes(tamanho.toUpperCase()) : null,
+  // ── 4. Filtra cortes ativos da REF ──
+  const desdeMs = Date.now() - JANELA_BUSCA_DIAS * 86400000;
+  const cortesAtivos = todosCortes.filter(c => {
+    if (!c || c.entregue) return false;
+    if (!refMatch(c.ref, ref)) return false;
+    const dataCorte = new Date(c.data).getTime();
+    if (isNaN(dataCorte) || dataCorte < desdeMs) return false;
+    return true;
+  }).sort((a, b) => new Date(b.data) - new Date(a.data));
+
+  out.cortes_ativos_da_ref = cortesAtivos.length;
+
+  // ── 5. Filtra por cor ──
+  const candidatos = [];
+  let semMatrizCount = 0;
+
+  for (const c of cortesAtivos) {
+    const detalhes = c.detalhes;
+    const temMatriz = detalhes && Array.isArray(detalhes.cores) && detalhes.cores.length > 0;
+
+    if (!temMatriz) {
+      semMatrizCount++;
+      candidatos.push({
+        id: c.id,
+        nCorte: c.nCorte,
+        ref: c.ref,
+        descricao: c.descricao,
+        oficina: c.oficina,
+        data: c.data,
+        qtd: c.qtd,
+        qtdEntregue: c.qtdEntregue,
+        cor_match: null,
+        confianca: 'baixa',
+        nota: 'corte sem matriz preenchida — não dá pra confirmar se essa cor está nele',
       });
+      continue;
     }
+
+    const corMatched = corMatch(cor, detalhes.cores);
+    if (!corMatched) continue;
+
+    let temTamanho = null;
+    if (tamanho && Array.isArray(detalhes.tamanhos)) {
+      const tamUpper = tamanho.toUpperCase();
+      temTamanho = detalhes.tamanhos.some(t => String(t.tam).toUpperCase() === tamUpper && (t.grade || 0) > 0);
+    }
+
+    candidatos.push({
+      id: c.id,
+      nCorte: c.nCorte,
+      ref: c.ref,
+      descricao: c.descricao,
+      oficina: c.oficina,
+      data: c.data,
+      qtd: c.qtd,
+      qtdEntregue: c.qtdEntregue,
+      cor_match: corMatched,
+      tem_tamanho: temTamanho,
+      confianca: 'alta',
+    });
   }
 
-  out.ordens_em_producao = ordensComCor;
-  out.encontrou = ordensComCor.length > 0;
+  out.cortes_sem_matriz_total = semMatrizCount;
+  out.candidatos = candidatos;
 
-  // ── 5. Calcula previsão (usa a ordem mais recente) ──
-  if (ordensComCor.length > 0) {
-    const maisRecente = ordensComCor[0]; // já ordenado desc
-    const diasDecorridos = Math.floor((Date.now() - new Date(maisRecente.created_at).getTime()) / 86400000);
+  // ── 6. Decide previsão ──
+  const altaConfianca = candidatos.filter(c => c.confianca === 'alta');
+  const baixaConfianca = candidatos.filter(c => c.confianca === 'baixa');
+  const escolhido = altaConfianca[0] || baixaConfianca[0] || null;
+
+  out.encontrou = !!escolhido;
+
+  if (escolhido) {
+    const diasDecorridos = Math.floor((Date.now() - new Date(escolhido.data).getTime()) / 86400000);
     const diasRestantes = PRAZO_MEDIO_DIAS - diasDecorridos;
 
     let faixa, mensagem;
     if (diasRestantes <= 0) {
       faixa = 'ATRASADO';
-      mensagem = null; // deixa IA Claude responder, não promete prazo
+      mensagem = null;
     } else if (diasRestantes <= 7) {
       faixa = 'ATE_7_DIAS';
-      mensagem = `Olá! Boa notícia: este modelo na cor ${maisRecente.cor_matched.nome} está em fase final de produção e a previsão é chegar nos próximos dias (até 7 dias). Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
+      const corNome = escolhido.cor_match?.nome || cor;
+      mensagem = `Olá! Boa notícia: este modelo na cor ${corNome} está em fase final de produção e a previsão é chegar nos próximos dias (até 7 dias). Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
     } else {
       faixa = 'PROXIMAS_SEMANAS';
-      mensagem = `Olá! Este modelo na cor ${maisRecente.cor_matched.nome} está em produção e deve chegar nas próximas semanas. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
+      const corNome = escolhido.cor_match?.nome || cor;
+      mensagem = `Olá! Este modelo na cor ${corNome} está em produção e deve chegar nas próximas semanas. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
     }
 
     out.previsao = {
-      ordem_referencia_id: maisRecente.id,
-      created_at: maisRecente.created_at,
+      corte_referencia_id: escolhido.id,
+      data_corte: escolhido.data,
       dias_decorridos: diasDecorridos,
       dias_restantes_estimados: diasRestantes,
       prazo_medio_total: PRAZO_MEDIO_DIAS,
       faixa,
+      confianca: escolhido.confianca,
       mensagem_sugerida: mensagem,
     };
   }
