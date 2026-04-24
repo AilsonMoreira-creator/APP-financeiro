@@ -689,7 +689,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                 background: tab === t.id ? PALETTE.dark : PALETTE.sand,
                 color: tab === t.id ? '#fff' : PALETTE.text,
               }}>
-                {t.id === 'ia_resp' ? <><RobotIcon size={13} /> IA</> : t.label}
+                {t.id === 'ia_resp' ? <><img src="/robo-ia.png" alt="" style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 4 }} /> IA</> : t.label}
                 {t.badge > 0 && <Badge count={t.badge} color={t.badgeColor} />}
               </button>
             ))}

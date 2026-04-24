@@ -236,13 +236,15 @@ export const IABotaoCabecalho = ({ onClick }) => (
     onClick={onClick}
     title="Perguntar à IA"
     style={{
-      background: C.iaBg, color: C.iaDarker,
+      background: C.iaBg,
       border: 'none', borderRadius: 8,
-      padding: '5px 9px', cursor: 'pointer',
-      fontSize: 16, lineHeight: 1,
+      padding: '4px 6px', cursor: 'pointer',
+      lineHeight: 0,
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     }}
-  >🤖</button>
+  >
+    <img src="/robo-ia.png" alt="IA" style={{ width: 28, height: 28, display: 'block' }} />
+  </button>
 );
 
 
@@ -581,10 +583,12 @@ export default function IAPergunta({ supabase, usuarioLogado, onClose }) {
           padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10,
         }}>
           <div style={{
-            width: 32, height: 32, background: C.iaBg, color: C.iaDarker,
+            width: 40, height: 40, background: C.iaBg,
             borderRadius: '50%', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', fontSize: 17,
-          }}>🤖</div>
+            justifyContent: 'center', padding: 3, boxSizing: 'border-box',
+          }}>
+            <img src="/robo-ia.png" alt="IA" style={{ width: 32, height: 32, display: 'block' }} />
+          </div>
           <div>
             <div style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700 }}>Perguntar à IA</div>
             <div style={{ fontFamily: SANS, fontSize: 10, color: '#b0b8c8', marginTop: 1 }}>
@@ -918,7 +922,10 @@ export function IAPerguntaAdminPanel({ supabase, usuarioLogado, onClose, onBackT
           padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
           fontFamily: SANS, fontSize: 11,
         }}>‹ Voltar ao chat</button>
-        <div style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700 }}>🤖 Perguntar à IA · Painel admin</div>
+        <div style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <img src="/robo-ia.png" alt="" style={{ width: 22, height: 22, display: 'block' }} />
+          Perguntar à IA · Painel admin
+        </div>
         <button onClick={onClose} style={{
           marginLeft: 'auto', background: 'transparent', border: 'none',
           color: '#fff', cursor: 'pointer', fontSize: 22, padding: '2px 8px',
