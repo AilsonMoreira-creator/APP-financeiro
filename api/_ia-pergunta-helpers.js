@@ -136,6 +136,71 @@ export async function checarRateLimit(isAdmin) {
 
 
 // ═══════════════════════════════════════════════════════════════════════
+// 3.1. SAUDAÇÃO INTELIGENTE (primeira pergunta do dia + hora BRT)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Retorna o ISO string do início do dia atual em BRT (UTC-3, sem DST).
+ * Usado como filtro pra contar perguntas do dia corrente.
+ */
+function inicioDoDiaBRT_ISO() {
+  const agora = new Date();
+  const offsetMs = 3 * 3600000;
+  const brtNow = new Date(agora.getTime() - offsetMs);
+  brtNow.setUTCHours(0, 0, 0, 0);
+  return new Date(brtNow.getTime() + offsetMs).toISOString();
+}
+
+/**
+ * Calcula a saudação apropriada pro horário atual em BRT.
+ *   5h-11:59  → "Bom dia"
+ *   12h-17:59 → "Boa tarde"
+ *   18h-4:59  → "Boa noite"
+ */
+export function saudacaoBRT() {
+  const agora = new Date();
+  const utcHour = agora.getUTCHours();
+  const brtHour = (utcHour - 3 + 24) % 24;
+  if (brtHour >= 5 && brtHour < 12) return 'Bom dia';
+  if (brtHour >= 12 && brtHour < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+/**
+ * Verifica se é a primeira pergunta do dia desse user específico.
+ * Ignora perguntas com erro (não contam como interação real).
+ * Retorna true se ainda não falou com a IA hoje.
+ */
+export async function primeiraPerguntaDoDia(userId) {
+  const { count, error } = await supabase
+    .from('ia_pergunta_historico')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .is('erro', null)
+    .gte('created_at', inicioDoDiaBRT_ISO());
+
+  if (error) {
+    console.error('[primeiraPerguntaDoDia]', error.message);
+    return false; // na dúvida, não faz saudação (melhor que fazer sempre)
+  }
+  return (count || 0) === 0;
+}
+
+/**
+ * Capitaliza o nome do usuário pra exibição na saudação.
+ *   "admin" → "Admin"
+ *   "stefany" → "Stefany"
+ *   "maria.silva" → "Maria"  (pega só a primeira parte se tiver ponto)
+ */
+export function nomeExibicao(usuario) {
+  if (!usuario) return '';
+  const primeiro = String(usuario).trim().split(/[.\s_-]/)[0];
+  if (!primeiro) return '';
+  return primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
 // 4. CLASSIFICADOR DE INTENÇÃO (keywords rápido)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -511,7 +576,7 @@ export async function contextoFichaTecnica(refOuDesc) {
  *
  * Se `glossarioCustom` vier do painel admin, sobrescreve o default.
  */
-export function montarPromptSistema({ isAdmin, categoria, glossarioCustom = null }) {
+export function montarPromptSistema({ isAdmin, categoria, glossarioCustom = null, nomeUser = '', saudacao = '', primeiraDoDia = false }) {
   const glossario = glossarioCustom || GLOSSARIO_DEFAULT;
 
   const filtroMonetarioMsg = isAdmin
@@ -520,8 +585,27 @@ export function montarPromptSistema({ isAdmin, categoria, glossarioCustom = null
   EXCEÇÃO: na categoria "ficha", pode mostrar custo + 3 preços de venda.
   Se o user pedir valor R$ fora da ficha: responda "Posso te mostrar [alternativa em volume/qtd]. Valor em R$ fica com o admin."`;
 
+  // ── Regra de saudação ──────────────────────────────────
+  let regraSaudacao;
+  if (primeiraDoDia && nomeUser) {
+    regraSaudacao = `USUÁRIO: ${nomeUser}
+PRIMEIRA INTERAÇÃO DO DIA: sim
+SAUDAÇÃO OBRIGATÓRIA: "${saudacao}, ${nomeUser}!" no início da 1ª linha.
+Exemplo: "${saudacao}, ${nomeUser}! A 02601 está na oficina do Roberto Belém."
+Só faz saudação UMA vez (nesta resposta). Resto das respostas do dia são diretas.`;
+  } else if (nomeUser) {
+    regraSaudacao = `USUÁRIO: ${nomeUser}
+PRIMEIRA INTERAÇÃO DO DIA: não (já conversou hoje)
+NÃO use "Bom dia/tarde/noite" — vá direto ao ponto.
+Pode mencionar o nome ("${nomeUser}") ocasionalmente pra personalizar, mas não force.`;
+  } else {
+    regraSaudacao = 'USUÁRIO: desconhecido. Responda de forma neutra, sem saudação nem nome.';
+  }
+
   return `Você é uma assistente interna do Grupo Amícia (moda feminina, fabricação própria em SP).
 Responde perguntas sobre estoque, produção, produtos e ficha técnica em português brasileiro direto.
+
+${regraSaudacao}
 
 GLOSSÁRIO (termos internos que o user pode usar):
 ${glossario}
@@ -537,21 +621,26 @@ ESTRUTURA VISUAL DO TEXTO:
 - Bullets com os fatos-chave RESTANTES em linhas separadas (use "• " como marcador)
 - Máximo 3-4 bullets. Se precisa mais, é sinal que a matriz vai cobrir.
 
-EXEMPLO BOM (produção):
-"Sim! A 02601 (VESTIDO LINHO TRADICIONAL) está na oficina do Roberto Belém.
+EXEMPLO BOM (produção, primeira do dia):
+"${saudacao || 'Bom dia'}, ${nomeUser || 'Ana'}! A 02601 (VESTIDO LINHO TRADICIONAL) está na oficina do Roberto Belém.
 
 • Corte nº 9702
 • Entrou em 20/04 · prazo de 18 dias restantes"
 
-EXEMPLO RUIM #1 (muito seco, sem contexto):
+EXEMPLO BOM (produção, NÃO é primeira do dia):
+"A 02601 (VESTIDO LINHO TRADICIONAL) está na oficina do Roberto Belém.
+
+• Corte nº 9702
+• Entrou em 20/04 · prazo de 18 dias restantes"
+
+EXEMPLO RUIM #1 (muito seco):
 "Sim, a 02601 está em produção.
 • Corte nº 9702
 • Oficina: Roberto Belém"
-(faltou descrição da peça e a frase ficou telegráfica)
+(faltou descrição da peça)
 
-EXEMPLO RUIM #2 (tudo numa frase e duplicando matriz):
-"Sim! A ref 02601 está na oficina do Roberto Belém, corte nº 9702, entrou em 20/04, prazo de 18 dias. São 2 cores (Figo e Azul Marinho), grade P/M/G/GG, totalizando 252 peças."
-(tudo numa frase comprida + duplica info da matriz)
+EXEMPLO RUIM #2 (tudo numa frase, duplica matriz):
+"Sim! A ref 02601 está na oficina do Roberto Belém, corte nº 9702, entrou em 20/04, prazo 18 dias. São 2 cores (Figo e Azul Marinho), grade P/M/G/GG, totalizando 252 peças."
 
 NÃO REPITA DADOS QUE JÁ APARECEM NA MATRIZ:
 Se a pergunta for sobre produção e o contexto tem matriz_render, o frontend vai renderizar

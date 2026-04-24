@@ -54,6 +54,9 @@ import {
   montarPromptSistema,
   salvarHistorico,
   filtrarMonetarios,
+  primeiraPerguntaDoDia,
+  saudacaoBRT,
+  nomeExibicao,
 } from './_ia-pergunta-helpers.js';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -147,7 +150,14 @@ export default async function handler(req, res) {
   }
 
   // 6 — Monta prompt e chama Sonnet 4.6
-  const promptSistema = await buscarPromptSistema(user.admin, intent.categoria);
+  // Verifica se é primeira pergunta do dia desse user (pra incluir saudação)
+  const primeiraDoDia = await primeiraPerguntaDoDia(user.id);
+  const nomeUser = nomeExibicao(user.usuario);
+  const saudacao = saudacaoBRT();
+
+  const promptSistema = await buscarPromptSistema(user.admin, intent.categoria, {
+    nomeUser, saudacao, primeiraDoDia,
+  });
 
   let respostaIA = null;
   let tokensIn = 0, tokensOut = 0;
@@ -268,7 +278,7 @@ Estrutura obrigatória (só um campo):
  * Busca o prompt de sistema. Se admin customizou glossário no painel,
  * usa o custom; senão usa o default.
  */
-async function buscarPromptSistema(isAdmin, categoria) {
+async function buscarPromptSistema(isAdmin, categoria, extras = {}) {
   const { data } = await supabase
     .from('amicia_data')
     .select('payload')
@@ -276,7 +286,14 @@ async function buscarPromptSistema(isAdmin, categoria) {
     .maybeSingle();
 
   const glossario = data?.payload?.config?.glossario_custom || null;
-  return montarPromptSistema({ isAdmin, categoria, glossarioCustom: glossario });
+  return montarPromptSistema({
+    isAdmin,
+    categoria,
+    glossarioCustom: glossario,
+    nomeUser: extras.nomeUser || '',
+    saudacao: extras.saudacao || '',
+    primeiraDoDia: extras.primeiraDoDia || false,
+  });
 }
 
 
