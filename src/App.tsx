@@ -8576,6 +8576,13 @@ export default function App(){
         console.log("FLUSH: bloqueado —",!dadosRef.current?"dadosRef vazio":"não é admin",", usuarioLogado:",usuarioLogado?.usuario||"null");
         return;
       }
+      // ⚡ GUARD CRÍTICO (Sprint 6.8.3): não flusha se state não teve edit real do usuário
+      // desde o último load/save. Previne iPhone/aba-em-cache de UPSERT dados velhos
+      // quando usuário troca de app (pagehide dispara a cada troca no iPhone PWA).
+      if(lastUserEditTs.current===0||lastUserEditTs.current<dbCarregadoTs.current){
+        console.log("FLUSH: bloqueado — sem edit do usuário desde o último load/save (state pode estar stale)");
+        return;
+      }
       const dados=dadosRef.current;
       const ts=Date.now();
       lastSaveTs.current=ts;
@@ -8607,23 +8614,18 @@ export default function App(){
       if(!dadosRef.current||!supabase||!usuarioLogado?.admin)return;
       const pendente=localStorage.getItem("amica_pending_sync");
       if(pendente!=="true")return;
-      console.log("RETRY: dados pendentes encontrados, enviando pro Supabase...");
-      setSyncStatus('saving');
-      const ts=Date.now();
-      lastSaveTs.current=ts;
-      const payloadComTs={...dadosRef.current,_updated:ts};
-      supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'})
-        .then(({error})=>{
-          if(!error){
-            try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
-            localStorage.setItem("amica_pending_sync","false");
-            setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
-            console.log("RETRY: sucesso, ts:",ts);
-          }else{
-            console.error("RETRY: falhou:",error);
-            setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);
-          }
-        }).catch(e=>{console.error("RETRY: catch:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
+      // ⚡ GUARD CRÍTICO (Sprint 6.8.3): não retenta se state não teve edit real do usuário.
+      // Previne retry de 30s (ou retryInicial 3s) de salvar dados stale ao voltar pra tela.
+      if(lastUserEditTs.current===0||lastUserEditTs.current<dbCarregadoTs.current){
+        console.log("RETRY: bloqueado — sem edit do usuário desde o último load (state pode estar stale). Limpando pending_sync.");
+        localStorage.setItem("amica_pending_sync","false");
+        return;
+      }
+      console.log("RETRY: dados pendentes encontrados, enviando pro Supabase via salvarNoSupabase (com merge)...");
+      // Usa salvarNoSupabase que tem merge profundo + guard anti-stale
+      salvarNoSupabase(dadosRef.current).then(()=>{
+        console.log("RETRY: concluido");
+      }).catch(e=>{console.error("RETRY: catch:",e);setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);});
     };
     const onVisChange=()=>{
       if(document.visibilityState==="hidden")flushSave();
