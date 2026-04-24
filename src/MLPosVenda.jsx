@@ -44,6 +44,8 @@ export default function MLPosVenda({ supabase, currentUser }) {
   const [training, setTraining] = useState([]);
   const [trainQ, setTrainQ] = useState('');
   const [trainA, setTrainA] = useState('');
+  const [enrichLoading, setEnrichLoading] = useState(false);
+  const [enrichProgress, setEnrichProgress] = useState(null); // { done, total }
   const chatEndRef = useRef(null);
 
   // ── Fetch conversas ──
@@ -145,8 +147,44 @@ export default function MLPosVenda({ supabase, currentUser }) {
     setSending(false);
   };
 
-  // ── Update tag/notes/status ──
-  const updateConv = async (field, value) => {
+  // ── Batch enrich: busca fotos/títulos faltantes no ML pra conversas
+  //    antigas que vieram incompletas. Roda em paralelo com limit=3 pra
+  //    não estressar a API ML.
+  const enrichFaltantes = async () => {
+    if (enrichLoading) return;
+    const pendentes = convs.filter(c => !c.item_title || !c.item_thumbnail);
+    if (pendentes.length === 0) {
+      alert('Todas as conversas já têm foto e título 👌');
+      return;
+    }
+    if (!confirm(`Buscar foto/título no ML pra ${pendentes.length} conversa${pendentes.length > 1 ? 's' : ''}?\n\nPode demorar uns segundos.`)) return;
+
+    setEnrichLoading(true);
+    setEnrichProgress({ done: 0, total: pendentes.length });
+
+    const LIMIT = 3; // concorrência máxima
+    let done = 0;
+    for (let i = 0; i < pendentes.length; i += LIMIT) {
+      const batch = pendentes.slice(i, i + LIMIT);
+      await Promise.all(batch.map(async (conv) => {
+        try {
+          await fetch('/api/ml-conv-enrich', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversation_id: conv.id }),
+          });
+        } catch (e) {
+          console.error('[enrich batch]', conv.id, e.message);
+        }
+        done++;
+        setEnrichProgress({ done, total: pendentes.length });
+      }));
+    }
+
+    setEnrichLoading(false);
+    setEnrichProgress(null);
+    fetchConvs(); // recarrega a lista com as fotos/títulos novos
+  };
     if (!selected) return;
     const body = { conversation_id: selected.id, [field]: value };
     if (field === 'status' && value === 'resolvido') body.resolved_by = currentUser;
@@ -342,6 +380,21 @@ export default function MLPosVenda({ supabase, currentUser }) {
           }}>{b}</button>
         ))}
         <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>🔄</button>
+        {(() => {
+          const faltando = convs.filter(c => !c.item_title || !c.item_thumbnail).length;
+          if (faltando === 0 && !enrichLoading) return null;
+          return (
+            <button onClick={enrichFaltantes} disabled={enrichLoading} style={{
+              ...S, background: enrichLoading ? PALETTE.sand : PALETTE.blue, color: '#fff',
+              border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12,
+              cursor: enrichLoading ? 'wait' : 'pointer', fontWeight: 600,
+            }}>
+              {enrichLoading
+                ? `⏳ ${enrichProgress?.done || 0}/${enrichProgress?.total || 0}`
+                : `🖼️ Buscar fotos (${faltando})`}
+            </button>
+          );
+        })()}
       </div>
 
       {/* Conversation cards */}
