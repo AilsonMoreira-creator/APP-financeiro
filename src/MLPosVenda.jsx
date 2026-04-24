@@ -331,12 +331,36 @@ export default function MLPosVenda({ supabase, currentUser }) {
                   {m.text}
                 </div>
                 {m.attachments?.length > 0 && (
-                  <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
-                    {m.attachments.map((a, j) => (
-                      <span key={j} style={{ ...S, fontSize: 11, padding: '3px 8px', background: PALETTE.cream, border: `1px solid ${PALETTE.border}`, borderRadius: 4, color: PALETTE.blue, cursor: 'pointer' }}>
-                        {a.type === 'image' ? '🖼️' : '📄'} {a.filename || 'anexo'}
-                      </span>
-                    ))}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                    {m.attachments.map((a, j) => {
+                      const url = `/api/ml-attachment?filename=${encodeURIComponent(a.filename || a.id)}&conversation_id=${selected.id}`;
+                      const isImg = (a.type === 'image') || /\.(jpg|jpeg|png|gif|webp|heic|heif)$/i.test(a.filename || '');
+                      if (isImg) {
+                        // Thumbnail clicavel — abre em nova aba ao clicar
+                        return (
+                          <a key={j} href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', borderRadius: 8, overflow: 'hidden', border: `1px solid ${PALETTE.border}` }}>
+                            <img
+                              src={url} alt={a.filename || 'imagem'}
+                              style={{ display: 'block', maxWidth: 200, maxHeight: 200, objectFit: 'cover', cursor: 'pointer' }}
+                              onError={e => {
+                                // Se for HEIC, navegador não renderiza nativamente. Mostra fallback.
+                                e.target.style.display = 'none';
+                                const fallback = document.createElement('span');
+                                fallback.style.cssText = 'display:inline-block;padding:8px 12px;background:#eae0d5;color:#1c2533;font-size:12px';
+                                fallback.textContent = '🖼️ ' + (a.filename || 'imagem') + ' (clica pra abrir)';
+                                e.target.parentElement.appendChild(fallback);
+                              }}
+                            />
+                          </a>
+                        );
+                      }
+                      // Outros tipos (pdf, etc): chip de download
+                      return (
+                        <a key={j} href={url} target="_blank" rel="noopener noreferrer" style={{ ...S, fontSize: 12, padding: '5px 10px', background: PALETTE.cream, border: `1px solid ${PALETTE.border}`, borderRadius: 4, color: PALETTE.blue, textDecoration: 'none' }}>
+                          📄 {a.filename || 'anexo'}
+                        </a>
+                      );
+                    })}
                   </div>
                 )}
                 <div style={{ ...S, fontSize: 10, color: PALETTE.textLight, marginTop: 3, textAlign: m.from_type === 'seller' ? 'right' : 'left' }}>
@@ -402,20 +426,28 @@ export default function MLPosVenda({ supabase, currentUser }) {
     <div>
       {/* Filters — uma linha só */}
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
-        {[
-          { id: 'todos', label: 'Todas' },
-          { id: 'pendentes', label: '⏳ Pendentes', badge: openCount },
-          { id: 'urgente', label: '🔴 Urgente' },
-          { id: 'atencao', label: '🟡 Atenção' },
-          { id: 'resolvidas', label: '✅ Resolvidas' },
-        ].map(f => (
-          <button key={f.id} onClick={() => setFilter(f.id)} style={{
-            ...S, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', borderRadius: 5,
-            background: filter === f.id ? PALETTE.dark : PALETTE.sand, color: filter === f.id ? '#fff' : PALETTE.text,
-          }}>
-            {f.label} {f.badge > 0 && <span style={{ background: PALETTE.red, color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: 10, marginLeft: 3 }}>{f.badge}</span>}
-          </button>
-        ))}
+        {(() => {
+          // Conta cada categoria pra badges (ignora filter atual mas respeita brand filter)
+          const cb = (c) => brandFilter === 'Todas' || c.brand === brandFilter;
+          const urgenteCount = convs.filter(c => cb(c) && c.tag === 'urgente' && c.status !== 'resolvido').length;
+          const atencaoCount = convs.filter(c => cb(c) && c.tag === 'atencao' && c.status !== 'resolvido').length;
+          const resolvidasCount = convs.filter(c => cb(c) && c.status === 'resolvido').length;
+          const filterDefs = [
+            { id: 'todos', label: 'Todas', badge: 0 },
+            { id: 'pendentes', label: '⏳ Pendentes', badge: openCount, badgeColor: PALETTE.red },
+            { id: 'urgente', label: '🔴 Urgente', badge: urgenteCount, badgeColor: PALETTE.dark },
+            { id: 'atencao', label: '🟡 Atenção', badge: atencaoCount, badgeColor: PALETTE.dark },
+            { id: 'resolvidas', label: '✅ Resolvidas', badge: resolvidasCount, badgeColor: PALETTE.dark },
+          ];
+          return filterDefs.map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)} style={{
+              ...S, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', borderRadius: 5,
+              background: filter === f.id ? PALETTE.dark : PALETTE.sand, color: filter === f.id ? '#fff' : PALETTE.text,
+            }}>
+              {f.label} {f.badge > 0 && <span style={{ background: f.badgeColor || PALETTE.dark, color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: 10, marginLeft: 3 }}>{f.badge}</span>}
+            </button>
+          ));
+        })()}
         <span style={{ ...S, fontSize: 12, color: PALETTE.textLight, padding: '4px 2px' }}>│</span>
         {['Todas', 'Exitus', 'Lumia', 'Muniam'].map(b => (
           <button key={b} onClick={() => setBrandFilter(b)} style={{

@@ -242,6 +242,15 @@ Estrutura obrigatória (só um campo):
     matrizRender = primeiroCorte.matriz_render || null;
   }
 
+  // foto_url do produto (extrai do contexto que ja foi populado pelos helpers)
+  const fotoUrl =
+    contexto.estoque?.ref_cadastrada?.foto_url ||
+    contexto.estoque?.foto_url ||
+    contexto.produto?.foto_url ||
+    contexto.producao?.ref_cadastrada?.foto_url ||
+    contexto.ficha_tecnica?.foto_url ||
+    '';
+
   await salvarHistorico({
     user_id: user.id,
     user_name: user.usuario,
@@ -261,6 +270,7 @@ Estrutura obrigatória (só um campo):
     ok: true,
     resposta_texto: respostaIA.resposta_texto,
     matriz_render: matrizRender,
+    foto_url: refFoco ? fotoUrl : '',
     categoria: intent.categoria,
     ref_detectada: refFoco,
     r_bloqueado: rBloqueado,

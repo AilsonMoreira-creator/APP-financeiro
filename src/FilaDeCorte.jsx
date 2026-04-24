@@ -240,7 +240,10 @@ function ModalEditarTecido({ ordem, usuario, onClose, onSalvo }) {
   const [erro, setErro] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const setRolos = (i, v) => setCores(prev => prev.map((c, idx) => idx === i ? { ...c, rolos: Math.max(1, parseInt(v) || 1) } : c));
+  // Permite string vazia enquanto digita (UX: permite apagar e digitar de novo).
+  // Só normaliza pra >=1 quando sai do campo (onBlur) ou ao salvar.
+  const setRolos = (i, v) => setCores(prev => prev.map((c, idx) => idx === i ? { ...c, rolos: v === '' ? '' : (parseInt(v) || '') } : c));
+  const blurRolos = (i) => setCores(prev => prev.map((c, idx) => idx === i ? { ...c, rolos: Math.max(1, parseInt(c.rolos) || 1) } : c));
   const remover = (i) => setCores(prev => prev.filter((_, idx) => idx !== i));
   const addPreset = (c) => {
     if (cores.some(x => x.nome.toLowerCase() === c.nome.toLowerCase())) return;
@@ -285,7 +288,7 @@ function ModalEditarTecido({ ordem, usuario, onClose, onSalvo }) {
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px', background: '#f7f4f0', borderRadius: 8, marginBottom: 6 }}>
             <span style={{ width: 16, height: 16, borderRadius: '50%', background: c.hex || hexCor(c.nome) }} />
             <span style={{ flex: 1, fontSize: 13 }}>{c.nome}</span>
-            <input type="number" min="1" value={c.rolos} onChange={e => setRolos(i, e.target.value)} style={{ width: 50, padding: 6, border: '1px solid #e8e2da', borderRadius: 4, fontFamily: FN, fontSize: 13, textAlign: 'center' }} />
+            <input type="number" min="1" value={c.rolos} onChange={e => setRolos(i, e.target.value)} onBlur={() => blurRolos(i)} style={{ width: 50, padding: 6, border: '1px solid #e8e2da', borderRadius: 4, fontFamily: FN, fontSize: 13, textAlign: 'center' }} />
             <button onClick={() => remover(i)} style={{ background: 'none', border: 'none', color: '#c0392b', fontSize: 16, cursor: 'pointer' }}>×</button>
           </div>
         ))}

@@ -306,9 +306,19 @@ export function filtrarMonetarios(obj, excluirFicha = false) {
  * Verifica se uma REF existe no cadastro (produtos do app ou ficha técnica).
  * Usado quando NÃO encontra a REF em estoque/produção/vendas pra responder
  * com mais inteligência: "tá cadastrada mas sem corte" vs "nem existe".
+ * Também retorna URL pública da foto do produto se existir no Storage.
  */
 export async function buscarRefNoCadastro(ref) {
   if (!ref) return { encontrada: false };
+
+  // Tenta gerar URL pública da foto - bucket 'produtos', arquivo {REF}.jpg.
+  // Não checa se existe pra evitar 1 request a mais; se foto não existir,
+  // o <img onError> no frontend cuida do fallback.
+  let fotoUrl = '';
+  try {
+    const { data: pub } = supabase.storage.from('produtos').getPublicUrl(`${ref}.jpg`);
+    fotoUrl = pub?.publicUrl || '';
+  } catch (e) { /* sem foto, ok */ }
 
   // 1. Cadastro principal (amicia-admin.payload.produtos)
   const { data: adm } = await supabase
@@ -326,6 +336,7 @@ export async function buscarRefNoCadastro(ref) {
       descricao: prodMatch.descricao || '',
       marca: prodMatch.marca || '',
       tecido: prodMatch.tecido || '',
+      foto_url: fotoUrl,
     };
   }
 
@@ -343,10 +354,11 @@ export async function buscarRefNoCadastro(ref) {
       encontrada: true,
       fonte: 'ficha_tecnica',
       descricao: fichaMatch.descricao || '',
+      foto_url: fotoUrl,
     };
   }
 
-  return { encontrada: false };
+  return { encontrada: false, foto_url: fotoUrl };
 }
 
 
@@ -531,6 +543,15 @@ export function construirMatrizRender(detalhes, qtdManual = null) {
 export async function contextoProduto(ref = null, isAdmin = false) {
   const desde = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
+  // URL pública da foto do produto (se existir no bucket)
+  let fotoUrl = '';
+  if (ref) {
+    try {
+      const { data: pub } = supabase.storage.from('produtos').getPublicUrl(`${ref}.jpg`);
+      fotoUrl = pub?.publicUrl || '';
+    } catch (e) { /* sem foto, ok */ }
+  }
+
   if (ref) {
     const { data } = await supabase
       .from('bling_vendas_detalhe')
@@ -539,7 +560,7 @@ export async function contextoProduto(ref = null, isAdmin = false) {
       .gte('data', desde);
 
     if (!data || data.length === 0) {
-      return { ref_foco: null, msg: 'Sem vendas nos últimos 30 dias' };
+      return { ref_foco: null, foto_url: fotoUrl, msg: 'Sem vendas nos últimos 30 dias' };
     }
 
     // Agrega por cor e por tamanho
@@ -563,6 +584,7 @@ export async function contextoProduto(ref = null, isAdmin = false) {
         faturamento: Math.round(totalValor * 100) / 100,
         ticket_medio: totalQtd > 0 ? Math.round((totalValor / totalQtd) * 100) / 100 : 0,
       },
+      foto_url: fotoUrl,
     };
 
     return isAdmin ? ctx : filtrarMonetarios(ctx);

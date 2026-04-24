@@ -520,6 +520,7 @@ export default function IAPergunta({ supabase, usuarioLogado, onClose }) {
         role: 'ia',
         text: r.resposta_texto,
         matriz: r.matriz_render,
+        foto_url: r.foto_url || '',
         categoria: r.categoria,
         time: new Date().toISOString(),
       };
@@ -791,6 +792,18 @@ const MensagemRender = ({ msg }) => {
       }}>
         {msg.text}
         {msg.matriz && <MatrizRender matriz={msg.matriz} />}
+        {msg.foto_url && (
+          <div style={{ marginTop: 10 }}>
+            <a href={msg.foto_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.cream}` }}>
+              <img
+                src={msg.foto_url}
+                alt="foto do produto"
+                style={{ display: 'block', maxWidth: 220, maxHeight: 280, objectFit: 'cover' }}
+                onError={e => { e.target.parentElement.style.display = 'none'; }}
+              />
+            </a>
+          </div>
+        )}
       </div>
       <div style={{
         fontFamily: SANS, fontSize: 9.5, color: C.muted,
