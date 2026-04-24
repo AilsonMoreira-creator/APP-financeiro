@@ -111,8 +111,18 @@ export default function MLPosVenda({ supabase, currentUser }) {
         body: JSON.stringify({ conversation_id: selected.id, text: replyText.trim(), sent_via: 'manual' }),
       });
       if (r.ok) { setReplyText(''); fetchMsgs(selected); fetchConvs(); }
-      else { const e = await r.json(); alert('Erro: ' + (e.error || e.detail?.message || 'falha')); }
-    } catch (e) { alert('Erro: ' + e.message); }
+      else {
+        const e = await r.json().catch(() => ({}));
+        // Mostra detalhes completos do erro ML pra facilitar diagnóstico
+        const detalhe = e.detail?.message
+          || e.detail?.error
+          || (typeof e.detail === 'string' ? e.detail : null)
+          || (e.detail ? JSON.stringify(e.detail).slice(0, 200) : null)
+          || e.error
+          || `HTTP ${r.status}`;
+        alert(`Erro ao enviar pro ML:\n\n${detalhe}\n\nSe o erro persistir, fala com o Ailson.`);
+      }
+    } catch (e) { alert('Erro de rede: ' + e.message); }
     setSending(false);
   };
 
@@ -185,44 +195,53 @@ export default function MLPosVenda({ supabase, currentUser }) {
       <div>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <button onClick={() => { setSelected(null); fetchConvs(); }} style={{ ...S, background: 'none', border: `1px solid ${PALETTE.border}`, borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: PALETTE.blue }}>← Voltar</button>
+          <button onClick={() => { setSelected(null); fetchConvs(); }} style={{ ...S, background: 'none', border: `1px solid ${PALETTE.border}`, borderRadius: 6, padding: '5px 12px', fontSize: 13, cursor: 'pointer', color: PALETTE.blue }}>← Voltar</button>
+          {conv.item_thumbnail ? (
+            <img src={conv.item_thumbnail} alt="" style={{ width: 42, height: 42, borderRadius: 6, objectFit: 'cover', border: `1px solid ${PALETTE.sand}` }} onError={e => { e.target.style.display = 'none'; }} />
+          ) : (
+            <div style={{ width: 42, height: 42, borderRadius: 6, background: PALETTE.cream, border: `1px solid ${PALETTE.sand}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: PALETTE.textLight }}>📦</div>
+          )}
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <BrandTag brand={conv.brand} />
-              <span style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.dark }}>{(conv.item_title || 'Sem título').slice(0, 45)}{(conv.item_title || '').length > 45 ? '...' : ''}</span>
+              <span style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark }}>{conv.item_title ? (conv.item_title.length > 50 ? conv.item_title.slice(0, 50) + '...' : conv.item_title) : `Pedido #${conv.order_id || conv.pack_id}`}</span>
             </div>
-            <div style={{ ...S, fontSize: 11, color: PALETTE.textLight, marginTop: 2 }}>📦 #{conv.order_id || conv.pack_id} · 👤 {conv.buyer_nickname || conv.buyer_id || '—'}</div>
+            <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginTop: 2 }}>📦 #{conv.order_id || conv.pack_id} · 👤 {conv.buyer_nickname || conv.buyer_id || '—'}</div>
           </div>
         </div>
 
         {/* Messages */}
-        <div style={{ background: PALETTE.white, borderRadius: 12, border: `1px solid ${PALETTE.sand}`, padding: 16, marginBottom: 10, maxHeight: 400, overflowY: 'auto' }}>
+        <div style={{ background: PALETTE.white, borderRadius: 12, border: `1px solid ${PALETTE.sand}`, padding: 16, marginBottom: 10, maxHeight: 420, overflowY: 'auto' }}>
           {msgs.length === 0 ? (
-            <div style={{ ...S, textAlign: 'center', color: PALETTE.textLight, padding: 20, fontSize: 12 }}>Nenhuma mensagem carregada</div>
-          ) : msgs.map((m, i) => (
+            <div style={{ ...S, textAlign: 'center', color: PALETTE.textLight, padding: 20, fontSize: 14 }}>Nenhuma mensagem carregada</div>
+          ) : (
+            // Garantia de ordem cronológica crescente (buyer fala primeiro, seller responde depois)
+            [...msgs]
+              .sort((a, b) => new Date(a.date_created || 0) - new Date(b.date_created || 0))
+              .map((m, i) => (
             <div key={m.id || i} style={{ marginBottom: 14, display: 'flex', flexDirection: m.from_type === 'seller' ? 'row-reverse' : 'row', gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', flexShrink: 0, background: m.from_type === 'buyer' ? '#e3edf5' : '#e3f5ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: m.from_type === 'buyer' ? '#e3edf5' : '#e3f5ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
                 {m.from_type === 'buyer' ? '👤' : '🏪'}
               </div>
               <div style={{ maxWidth: '78%' }}>
-                <div style={{ ...S, fontSize: 13, color: PALETTE.dark, padding: '8px 12px', borderRadius: 10, background: m.from_type === 'buyer' ? '#f0f4f8' : '#e8f5e9', borderBottomLeftRadius: m.from_type === 'buyer' ? 3 : 10, borderBottomRightRadius: m.from_type === 'seller' ? 3 : 10 }}>
+                <div style={{ ...S, fontSize: 15, lineHeight: 1.5, color: PALETTE.dark, padding: '10px 14px', borderRadius: 10, background: m.from_type === 'buyer' ? '#f0f4f8' : '#e8f5e9', borderBottomLeftRadius: m.from_type === 'buyer' ? 3 : 10, borderBottomRightRadius: m.from_type === 'seller' ? 3 : 10 }}>
                   {m.text}
                 </div>
                 {m.attachments?.length > 0 && (
                   <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                     {m.attachments.map((a, j) => (
-                      <span key={j} style={{ ...S, fontSize: 10, padding: '3px 8px', background: PALETTE.cream, border: `1px solid ${PALETTE.border}`, borderRadius: 4, color: PALETTE.blue, cursor: 'pointer' }}>
+                      <span key={j} style={{ ...S, fontSize: 11, padding: '3px 8px', background: PALETTE.cream, border: `1px solid ${PALETTE.border}`, borderRadius: 4, color: PALETTE.blue, cursor: 'pointer' }}>
                         {a.type === 'image' ? '🖼️' : '📄'} {a.filename || 'anexo'}
                       </span>
                     ))}
                   </div>
                 )}
-                <div style={{ ...S, fontSize: 9, color: PALETTE.textLight, marginTop: 3, textAlign: m.from_type === 'seller' ? 'right' : 'left' }}>
+                <div style={{ ...S, fontSize: 10, color: PALETTE.textLight, marginTop: 3, textAlign: m.from_type === 'seller' ? 'right' : 'left' }}>
                   {m.date_created ? new Date(m.date_created).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
                 </div>
               </div>
             </div>
-          ))}
+          )))}
           <div ref={chatEndRef} />
         </div>
 
@@ -245,27 +264,27 @@ export default function MLPosVenda({ supabase, currentUser }) {
 
         {/* AI Suggestion */}
         {aiSuggest && (
-          <div style={{ background: '#f0f6fb', border: `1px solid ${PALETTE.blue}40`, borderRadius: 10, padding: '10px 14px', marginBottom: 10 }}>
-            <div style={{ ...S, fontSize: 11, fontWeight: 700, color: PALETTE.blue, marginBottom: 4 }}>✨ Sugestão IA (pós-venda)</div>
-            <div style={{ ...S, fontSize: 12, color: PALETTE.dark, padding: 8, background: PALETTE.white, borderRadius: 6, border: `1px solid ${PALETTE.border}` }}>{aiSuggest}</div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <button onClick={() => { setReplyText(aiSuggest); setAiSuggest(null); }} style={{ ...S, background: PALETTE.blue, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>Usar como base</button>
-              <button onClick={() => setAiSuggest(null)} style={{ ...S, background: 'transparent', color: PALETTE.textLight, border: `1px solid ${PALETTE.border}`, borderRadius: 5, padding: '4px 10px', fontSize: 10, cursor: 'pointer' }}>Descartar</button>
+          <div style={{ background: '#f0f6fb', border: `1px solid ${PALETTE.blue}40`, borderRadius: 10, padding: '12px 16px', marginBottom: 10 }}>
+            <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.blue, marginBottom: 6 }}>✨ Sugestão IA (pós-venda)</div>
+            <div style={{ ...S, fontSize: 14, lineHeight: 1.5, color: PALETTE.dark, padding: 10, background: PALETTE.white, borderRadius: 6, border: `1px solid ${PALETTE.border}` }}>{aiSuggest}</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button onClick={() => { setReplyText(aiSuggest); setAiSuggest(null); }} style={{ ...S, background: PALETTE.blue, color: '#fff', border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Usar como base</button>
+              <button onClick={() => setAiSuggest(null)} style={{ ...S, background: 'transparent', color: PALETTE.textLight, border: `1px solid ${PALETTE.border}`, borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}>Descartar</button>
             </div>
           </div>
         )}
 
         {/* Reply */}
         {conv.status === 'aberto' && (
-          <div style={{ background: PALETTE.white, borderRadius: 10, border: `1px solid ${PALETTE.sand}`, padding: '10px 14px' }}>
-            <div style={{ display: 'flex', gap: 5, marginBottom: 6 }}>
-              <button onClick={getAiSuggestion} disabled={aiLoading} style={{ ...S, background: '#f0f6fb', color: PALETTE.blue, border: `1px solid ${PALETTE.blue}40`, borderRadius: 5, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: 600, opacity: aiLoading ? 0.6 : 1 }}>{aiLoading ? '⏳...' : '✨ Sugestão IA'}</button>
+          <div style={{ background: PALETTE.white, borderRadius: 10, border: `1px solid ${PALETTE.sand}`, padding: '12px 16px' }}>
+            <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
+              <button onClick={getAiSuggestion} disabled={aiLoading} style={{ ...S, background: '#f0f6fb', color: PALETTE.blue, border: `1px solid ${PALETTE.blue}40`, borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: aiLoading ? 0.6 : 1 }}>{aiLoading ? '⏳ gerando…' : '✨ Sugestão IA'}</button>
               <div style={{ flex: 1 }} />
-              <button onClick={() => updateConv('status', 'resolvido')} style={{ ...S, background: PALETTE.green, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 10px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>✅ Resolvido</button>
+              <button onClick={() => updateConv('status', 'resolvido')} style={{ ...S, background: PALETTE.green, color: '#fff', border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>✅ Resolvido</button>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Digite sua resposta..." rows={3} style={{ ...S, flex: 1, border: `1px solid ${PALETTE.border}`, borderRadius: 6, padding: '6px 8px', fontSize: 12, outline: 'none', resize: 'vertical' }} />
-              <button onClick={sendReply} disabled={sending || !replyText.trim()} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontSize: 11, cursor: sending ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: sending ? 0.6 : 1, alignSelf: 'flex-end' }}>
+              <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Digite sua resposta..." rows={4} style={{ ...S, flex: 1, border: `1px solid ${PALETTE.border}`, borderRadius: 6, padding: '8px 10px', fontSize: 14, lineHeight: 1.4, outline: 'none', resize: 'vertical' }} />
+              <button onClick={sendReply} disabled={sending || !replyText.trim()} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 6, padding: '10px 18px', fontSize: 13, cursor: sending ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: sending ? 0.6 : 1, alignSelf: 'flex-end' }}>
                 {sending ? '⏳' : 'Enviar'}
               </button>
             </div>

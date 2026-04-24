@@ -41,7 +41,21 @@ export default async function handler(req, res) {
 
     if (!mlRes.ok) {
       const err = await mlRes.json().catch(() => ({}));
-      return res.status(mlRes.status).json({ error: 'ML API error', detail: err });
+      // Log completo pro Vercel capturar a causa raiz
+      console.error('[ml-messages-reply] ML API error:', {
+        status: mlRes.status,
+        pack_id: conv.pack_id,
+        seller_id: conv.seller_id,
+        buyer_id: conv.buyer_id,
+        brand: conv.brand,
+        conversation_id: conv.id,
+        error_body: err,
+      });
+      return res.status(mlRes.status).json({
+        error: 'ML API error',
+        status: mlRes.status,
+        detail: err,
+      });
     }
 
     const mlData = await mlRes.json();
