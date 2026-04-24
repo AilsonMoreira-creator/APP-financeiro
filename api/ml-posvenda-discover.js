@@ -41,8 +41,15 @@ async function discoverBrand(brand, dryRun) {
     // 2. Pra cada resultado, extrai pack_id (a estrutura pode variar)
     for (const item of results) {
       try {
-        // Possíveis caminhos do pack_id na resposta
-        const packId = item.pack_id
+        // Estrutura real: { resource: "/packs/PACK_ID/sellers/SELLER_ID", count: N }
+        let packId = null;
+        if (item.resource && typeof item.resource === 'string') {
+          const m = item.resource.match(/\/packs\/(\d+)\//);
+          if (m) packId = m[1];
+        }
+        // Fallbacks
+        packId = packId
+          || item.pack_id
           || item.id
           || item.resource_id
           || item.message_resources?.find(r => r.id_type === 'pack')?.id
