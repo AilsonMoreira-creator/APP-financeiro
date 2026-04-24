@@ -47,7 +47,7 @@ function extractRefFromCustomField(scf) {
   return null;
 }
 
-async function runForecast(itemId, cor, tamanho, ailsonCortes) {
+async function runForecast(itemId, cor, tamanho, ailsonCortes, scfMap) {
   const out = { input: { item_id: itemId, cor, tamanho }, encontrou: false };
 
   // Pega item ML
@@ -65,9 +65,19 @@ async function runForecast(itemId, cor, tamanho, ailsonCortes) {
 
   out.title = itemData.title;
   out.scf = itemData.seller_custom_field;
-  const ref = extractRefFromCustomField(itemData.seller_custom_field);
+
+  // Tenta extrair REF: 1) mapa scf→ref (caminho principal), 2) regex (fallback)
+  let ref = null;
+  const scfTrim = String(itemData.seller_custom_field || '').trim();
+  if (scfTrim && scfMap.has(scfTrim)) {
+    ref = scfMap.get(scfTrim);
+    out.ref_origem = 'scf_map';
+  } else {
+    ref = extractRefFromCustomField(itemData.seller_custom_field);
+    if (ref) out.ref_origem = 'regex';
+  }
   out.ref = ref;
-  if (!ref) { out.error = 'ref nao extraida'; return out; }
+  if (!ref) { out.error = 'ref nao extraida (scf nao esta no ml_scf_ref_map nem em formato regex)'; return out; }
 
   // Filtra cortes
   const desdeMs = Date.now() - JANELA_BUSCA_DIAS * 86400000;
@@ -130,6 +140,18 @@ export default async function handler(req, res) {
     .select('payload').eq('user_id', 'ailson_cortes').maybeSingle();
   const ailsonCortes = row?.payload?.cortes || [];
 
+  // Carrega ml_scf_ref_map 1 vez (mesma lógica do ml-estoque-cron)
+  const scfMap = new Map();
+  let scfPage = 0;
+  while (true) {
+    const { data: page } = await supabase
+      .from('ml_scf_ref_map').select('scf, ref').range(scfPage, scfPage + 999);
+    if (!page || page.length === 0) break;
+    for (const r of page) scfMap.set(String(r.scf).trim(), String(r.ref).replace(/^0+/, '').padStart(5, '0'));
+    if (page.length < 1000) break;
+    scfPage += 1000;
+  }
+
   // Pega cores cadastradas
   const stockColors = await getStockColors();
   const stockColorsNomes = stockColors.map(c => c.nome.toLowerCase());
@@ -163,13 +185,14 @@ export default async function handler(req, res) {
   // Roda forecast em paralelo (com cap pra não estourar rate limit)
   const resultados = [];
   for (const t of tarefas) {
-    const fc = await runForecast(t.item_id, t.cor, t.tamanho || '', ailsonCortes);
+    const fc = await runForecast(t.item_id, t.cor, t.tamanho || '', ailsonCortes, scfMap);
     resultados.push({ ...t, forecast: fc });
   }
 
   return res.status(200).json({
     timestamp: new Date().toISOString(),
     total_cortes_payload: ailsonCortes.length,
+    total_scf_map: scfMap.size,
     candidatas: tarefas.length,
     resultados,
   });

@@ -103,8 +103,25 @@ export default async function handler(req, res) {
     brand_match: usedBrand,
   };
 
-  // ── 2. Extrai REF ──
-  let ref = extractRefFromCustomField(itemData.seller_custom_field);
+  // ── 2. Extrai REF: 1) ml_scf_ref_map, 2) regex, 3) sku via variations ──
+  let ref = null;
+  let refOrigem = null;
+  const scfTrim = String(itemData.seller_custom_field || '').trim();
+
+  if (scfTrim) {
+    const { data: scfRow } = await supabase
+      .from('ml_scf_ref_map').select('ref').eq('scf', scfTrim).maybeSingle();
+    if (scfRow?.ref) {
+      ref = String(scfRow.ref).replace(/^0+/, '').padStart(5, '0');
+      refOrigem = 'scf_map';
+    }
+  }
+
+  if (!ref) {
+    ref = extractRefFromCustomField(itemData.seller_custom_field);
+    if (ref) refOrigem = 'regex';
+  }
+
   if (!ref) {
     const variations = itemData.variations || [];
     for (const v of variations) {
@@ -112,13 +129,14 @@ export default async function handler(req, res) {
       if (!sku) continue;
       const { data: refRow } = await supabase
         .from('ml_sku_ref_map').select('ref').eq('sku', sku).maybeSingle();
-      if (refRow?.ref) { ref = refRow.ref; break; }
+      if (refRow?.ref) { ref = refRow.ref; refOrigem = 'sku_map'; break; }
     }
   }
 
   out.ref_extraida = ref;
+  out.ref_origem = refOrigem;
   if (!ref) {
-    out.error = 'Não conseguiu extrair REF do anúncio';
+    out.error = 'Não conseguiu extrair REF do anúncio (scf/sku não mapeados)';
     return res.status(200).json(out);
   }
 
