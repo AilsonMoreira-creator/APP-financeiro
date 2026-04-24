@@ -7641,6 +7641,10 @@ export default function App(){
   const lastSaveTs=useRef(0); // timestamp do último save pra detectar eco do Realtime
   const realtimeProcessing=useRef(false); // flag pra pular auto-save durante Realtime
   const lastUserEditTs=useRef(0); // timestamp do ultimo edit do usuario (protege contra Realtime sobrescrever)
+  // 🛡️ SNAPSHOT DE INTEGRIDADE: tamanhos conhecidos do último load/save bem sucedido.
+  // Usado pra detectar state corrompido (ex: receitasPorMes={} depois de ter 12 meses)
+  // e ABORTAR o save antes de sobrescrever dados bons no Supabase.
+  const dbSnapshot=useRef({receitasMesesCount:0,boletosCount:0,cortesCount:0,produtosCount:0,auxMesesCount:0});
 
   // ── CHAVES PARA DETECTAR MUDANÇAS ──────────────────────────────────────────
   const chavesDados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
@@ -7891,6 +7895,16 @@ export default function App(){
         }
       }
       setDbCarregado(true);dbCarregadoTs.current=Date.now();clearTimeout(safetyTimer);
+      // 🛡️ Snapshot pra detectar corrupção: registra tamanhos do que acabou de carregar.
+      // Saves futuros serão bloqueados se o state local regredir pra VAZIO depois disso.
+      dbSnapshot.current={
+        receitasMesesCount:Object.keys(d.receitasPorMes||{}).length,
+        boletosCount:(d.boletosShared||[]).length,
+        cortesCount:(d.cortes||[]).length,
+        produtosCount:(d.produtos||[]).length,
+        auxMesesCount:Object.keys(d.auxDataPorMes||{}).length,
+      };
+      console.log("LOAD: snapshot integridade —",dbSnapshot.current);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }).catch((e)=>{console.error("Erro carregando Supabase:",e);setDbCarregado(true);clearTimeout(safetyTimer);setSyncStatus('error');});
 
@@ -8271,8 +8285,34 @@ export default function App(){
   },[cortes,dbCarregado]);
 
   // ── SAVE FINANCEIRO (admin only — read-merge-write, NUNCA perde dados) ─────
+  // 🛡️ GUARD DE INTEGRIDADE: detecta payload corrompido antes de salvar.
+  // Retorna {ok, motivo} — se ok=false, o save DEVE ser abortado.
+  const checarIntegridadePayload=useCallback((payload)=>{
+    const snap=dbSnapshot.current;
+    // Se nunca carregou dados, não tem como comparar — deixa passar
+    if(snap.receitasMesesCount===0&&snap.boletosCount===0)return{ok:true};
+    const locRec=Object.keys(payload.receitasPorMes||{}).length;
+    const locBol=(payload.boletosShared||[]).length;
+    const locAux=Object.keys(payload.auxDataPorMes||{}).length;
+    // REGRA CRÍTICA: state local completamente vazio quando load tinha dados = CORROMPIDO
+    if(snap.receitasMesesCount>0&&locRec===0)return{ok:false,motivo:`receitasPorMes VAZIO mas load tinha ${snap.receitasMesesCount} meses`};
+    if(snap.boletosCount>0&&locBol===0&&snap.boletosCount>3)return{ok:false,motivo:`boletosShared VAZIO mas load tinha ${snap.boletosCount} boletos`};
+    if(snap.auxMesesCount>0&&locAux===0)return{ok:false,motivo:`auxDataPorMes VAZIO mas load tinha ${snap.auxMesesCount} meses`};
+    // REGRA: perda grande (>50% dos meses de receitas) = suspeito
+    if(snap.receitasMesesCount>=3&&locRec<snap.receitasMesesCount*0.5)return{ok:false,motivo:`receitasPorMes regrediu de ${snap.receitasMesesCount} pra ${locRec} meses (>50% perda)`};
+    return{ok:true};
+  },[]);
+
   const salvarNoSupabase=useCallback(async(payload)=>{
     if(!supabase||!dbCarregado)return;
+    // 🛡️ Valida integridade antes de tudo
+    const integridade=checarIntegridadePayload(payload);
+    if(!integridade.ok){
+      console.error("🛡️ SUPABASE-SAVE: ABORTADO —",integridade.motivo,". State local parece corrompido. Limpando pending_sync pra evitar retries.");
+      localStorage.setItem("amica_pending_sync","false");
+      setSyncStatus('error');setTimeout(()=>setSyncStatus(null),6000);
+      return;
+    }
     setSyncStatus('saving');
     try{
       // READ: busca dados atuais do Supabase antes de salvar
@@ -8413,6 +8453,13 @@ export default function App(){
         try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
         localStorage.setItem("amica_pending_sync","false");
         dbCarregadoTs.current=ts; // marca o ts do save pra próximos guards compararem corretamente
+        // 🛡️ Atualiza snapshot com o que acabou de ser salvo (pra próximos guards)
+        dbSnapshot.current={
+          ...dbSnapshot.current,
+          receitasMesesCount:recMeses,
+          boletosCount:bolCount,
+          auxMesesCount:Object.keys(payloadComTs.auxDataPorMes||{}).length,
+        };
         setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
         console.log("SUPABASE-SAVE: sucesso, ts:",ts);
       }
@@ -8488,6 +8535,19 @@ export default function App(){
       try{
         const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
         const remoto=data?.payload||{};
+        // 🛡️ GUARD DE INTEGRIDADE: se local tem 0 cortes MAS remoto tem cortes, é anômalo.
+        // Pode ser que o state não carregou direito. NÃO SALVAR (senão vai deletar tudo).
+        const localCount=(cortes||[]).length;
+        const remoteCount=(remoto.cortes||[]).length;
+        if(localCount===0&&remoteCount>0){
+          console.error("🛡️ SAVE CORTES: ABORTADO — state local tem 0 cortes mas remoto tem",remoteCount,". State pode estar corrompido. Deletar tudo seria perda irreversível.");
+          return;
+        }
+        // Protecao extra: se local tem menos de METADE dos cortes do remoto, suspeito
+        if(remoteCount>=4&&localCount<remoteCount*0.5){
+          console.error("🛡️ SAVE CORTES: ABORTADO — local",localCount,"cortes vs remoto",remoteCount,"(>50% perda). State pode estar corrompido.");
+          return;
+        }
         // Merge cortes: por ID, mais recente ganha (_mod timestamp)
         const now=Date.now();
         const localMap=new Map((cortes||[]).map(c=>[c.id,{...c,_mod:c._mod||now}]));
@@ -8583,6 +8643,14 @@ export default function App(){
       // quando usuário troca de app (pagehide dispara a cada troca no iPhone PWA).
       if(lastUserEditTs.current===0||lastUserEditTs.current<dbCarregadoTs.current){
         console.log("FLUSH: bloqueado — sem edit do usuário desde o último load/save (state pode estar stale)");
+        return;
+      }
+      // 🛡️ GUARD DE INTEGRIDADE: se state parece corrompido, NÃO faz POST direto
+      // (esse é o caminho mais perigoso — POST sem merge, sobrescreve tudo)
+      const integFlush=checarIntegridadePayload(dadosRef.current);
+      if(!integFlush.ok){
+        console.error("🛡️ FLUSH: ABORTADO —",integFlush.motivo,". Limpando pending_sync pra evitar retry com dados ruins.");
+        localStorage.setItem("amica_pending_sync","false");
         return;
       }
       const dados=dadosRef.current;
