@@ -7,6 +7,7 @@ import FilaDeCorte from './FilaDeCorte';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
 import OsAmicia from './os-amicia/OsAmicia';
+import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -7503,6 +7504,7 @@ export default function App(){
   });
   const [sacResetTrigger,setSacResetTrigger]=useState(0);
   const [menuUser,setMenuUser]=useState(false);
+  const [iaOpen,setIaOpen]=useState(false); // Sprint 8: modal "Perguntar à IA" (global, qualquer módulo)
   const [usuarios,setUsuarios]=useState(USUARIOS_INICIAL);
   // Status do último save de usuários (exibido no UsuariosContent pra confirmação visual)
   const [usuariosSaveStatus,setUsuariosSaveStatus]=useState(null); // null | 'saving' | 'saved' | 'error'
@@ -8883,6 +8885,8 @@ export default function App(){
               {syncStatus==='loading'?"⏳ carregando…":syncStatus==='saving'?"☁ salvando…":syncStatus==='saved'?"☁ salvo":syncStatus==='local'?"💾 local":"✗ erro sync"}
             </span>
           )}
+          {/* Sprint 8: Botão global "Perguntar à IA" — visível em TODOS os módulos */}
+          <IABotaoCabecalho onClick={()=>setIaOpen(true)}/>
           <div onClick={()=>setMenuUser(p=>!p)} style={{width:30,height:30,borderRadius:"50%",background:"#2c3e50",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
             <SvgUsuarios size={20}/>
           </div>
@@ -9070,6 +9074,14 @@ export default function App(){
           }}
         />}
       </div>
+      {/* Sprint 8: modal Perguntar à IA — global, acessível de qualquer módulo */}
+      {iaOpen && (
+        <IAPergunta
+          supabase={supabase}
+          usuarioLogado={usuarioLogado}
+          onClose={()=>setIaOpen(false)}
+        />
+      )}
     </div>
   );
 }
