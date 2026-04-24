@@ -32,7 +32,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
   const [convs, setConvs] = useState([]);
   const [msgs, setMsgs] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [filter, setFilter] = useState('pendentes');
+  const [filter, setFilter] = useState('todos'); // default: mostra todas (antes era 'pendentes' — sumia conv não-aberta)
   const [brandFilter, setBrandFilter] = useState('Todas');
   const [loading, setLoading] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -235,7 +235,8 @@ export default function MLPosVenda({ supabase, currentUser }) {
 
   // ── Filtered list ──
   const filtered = convs.filter(c => {
-    if (filter === 'pendentes' && c.status !== 'aberto') return false;
+    // Pendentes: aberto OU tem mensagem nao lida (mesmo se status mudou por engano)
+    if (filter === 'pendentes' && c.status !== 'aberto' && !(c.unread_count > 0)) return false;
     if (filter === 'resolvidas' && c.status !== 'resolvido') return false;
     if (filter === 'urgente' && c.tag !== 'urgente') return false;
     if (filter === 'atencao' && c.tag !== 'atencao') return false;
