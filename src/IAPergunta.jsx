@@ -236,7 +236,7 @@ export const IABotaoCabecalho = ({ onClick }) => (
     onClick={onClick}
     title="Perguntar à IA"
     style={{
-      background: C.iaDarker, color: C.iaBg,
+      background: C.iaBg, color: C.iaDarker,
       border: 'none', borderRadius: 8,
       padding: '5px 9px', cursor: 'pointer',
       fontSize: 16, lineHeight: 1,

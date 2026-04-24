@@ -167,10 +167,9 @@ Contexto (use APENAS isso pra responder):
 ${JSON.stringify(contexto, null, 2)}
 
 RESPONDA APENAS COM UM OBJETO JSON VÁLIDO, sem texto antes nem depois, sem markdown, sem \`\`\`json.
-Estrutura obrigatória:
+Estrutura obrigatória (só um campo):
 {
-  "resposta_texto": "sua resposta em linguagem natural, 2-6 linhas",
-  "matriz_render": null OU { "cores": [{"nome":"...","folhas":N,"total":N}], "tamanhos": ["P","M","G","GG"], "total_folhas": N, "total_pecas": N, "qtd_manual": N, "qtd_calculada": N }
+  "resposta_texto": "sua resposta em linguagem natural seguindo a ESTRUTURA VISUAL DO TEXTO (1 frase + bullets)"
 }`,
         },
       ],
@@ -224,6 +223,15 @@ Estrutura obrigatória:
 
   const tempoMs = Date.now() - t0;
 
+  // Se a pergunta é sobre produção com REF específica e temos matriz pronta
+  // no contexto, injeta no response (backend já pré-calculou células via folhas × grade,
+  // não depende do Sonnet pra não errar valores)
+  let matrizRender = null;
+  if (intent.categoria === 'producao' && refFoco && contexto.producao?.cortes_reais?.length > 0) {
+    const primeiroCorte = contexto.producao.cortes_reais[0];
+    matrizRender = primeiroCorte.matriz_render || null;
+  }
+
   await salvarHistorico({
     user_id: user.id,
     user_name: user.usuario,
@@ -242,7 +250,7 @@ Estrutura obrigatória:
   return res.status(200).json({
     ok: true,
     resposta_texto: respostaIA.resposta_texto,
-    matriz_render: respostaIA.matriz_render || null,
+    matriz_render: matrizRender,
     categoria: intent.categoria,
     ref_detectada: refFoco,
     r_bloqueado: rBloqueado,

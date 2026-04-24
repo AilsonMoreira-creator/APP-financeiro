@@ -271,7 +271,8 @@ export async function contextoEstoque(ref = null) {
  *   1. ailson_cortes (REAL — peças já cortadas indo pra oficina)
  *   2. ordens_corte (ESTIMATIVA — programado na sala, pode mudar)
  * Retorna { cortes_reais[], estimativas_sala[] } já enriquecidos com
- * prazo = 22 dias a partir de `data`.
+ * prazo = 22 dias a partir de `data`, e matriz_render pré-montada
+ * (células calculadas via folhas × grade).
  */
 export async function contextoProducao(ref = null) {
   // 1. Cortes REAIS das oficinas
@@ -302,7 +303,7 @@ export async function contextoProducao(ref = null) {
         dias_decorridos,
         dias_restantes,
         atrasado: dias_restantes < 0,
-        matriz: c.detalhes || null, // { cores: [{nome, folhas}], tamanhos: [{tam, grade}] }
+        matriz_render: construirMatrizRender(c.detalhes, c.qtd),
       };
     });
 
@@ -327,6 +328,66 @@ export async function contextoProducao(ref = null) {
     cortes_reais: cortesAtivos.slice(0, 20),
     estimativas_sala: estimativasSala,
     total_reais: cortesAtivos.length,
+  };
+}
+
+
+/**
+ * Constrói a estrutura matriz_render pronta pro frontend a partir dos
+ * `detalhes` do corte (estrutura do módulo Oficina).
+ *
+ * Estrutura de entrada (do ailson_cortes):
+ *   detalhes = {
+ *     cores: [{nome: 'Figo', folhas: 33}, {nome: 'Azul Marinho', folhas: 30}],
+ *     tamanhos: [{tam: 'P', grade: 1}, {tam: 'M', grade: 1}, ...]
+ *   }
+ *
+ * Regra de cálculo: célula[cor][tam] = folhas[cor] × grade[tam]
+ * (confirmado nos dados reais: Figo 33f × 4 grades = 132 peças)
+ *
+ * Estrutura de saída (o frontend MatrizRender espera):
+ *   {
+ *     cores: [{nome, folhas, P, M, G, GG, total}, ...],
+ *     tamanhos: ['P','M','G','GG'],
+ *     total_folhas, total_pecas, qtd_manual, qtd_calculada
+ *   }
+ */
+export function construirMatrizRender(detalhes, qtdManual = null) {
+  if (!detalhes || !Array.isArray(detalhes.cores) || !Array.isArray(detalhes.tamanhos)) {
+    return null;
+  }
+
+  const tams = detalhes.tamanhos.map(t => t.tam);
+  const gradeMap = {};
+  for (const t of detalhes.tamanhos) gradeMap[t.tam] = Number(t.grade) || 0;
+
+  const cores = detalhes.cores.map(c => {
+    const folhas = Number(c.folhas) || 0;
+    const celulas = {};
+    let totalCor = 0;
+    for (const tam of tams) {
+      const qtd = folhas * (gradeMap[tam] || 0);
+      celulas[tam] = qtd;
+      totalCor += qtd;
+    }
+    return {
+      nome: c.nome,
+      folhas,
+      ...celulas,
+      total: totalCor,
+    };
+  });
+
+  const totalFolhas = cores.reduce((s, c) => s + (c.folhas || 0), 0);
+  const totalPecas = cores.reduce((s, c) => s + (c.total || 0), 0);
+
+  return {
+    cores,
+    tamanhos: tams,
+    total_folhas: totalFolhas,
+    total_pecas: totalPecas,
+    qtd_manual: qtdManual != null ? Number(qtdManual) : totalPecas,
+    qtd_calculada: totalPecas,
   };
 }
 
@@ -465,12 +526,32 @@ Responde perguntas sobre estoque, produção, produtos e ficha técnica em portu
 GLOSSÁRIO (termos internos que o user pode usar):
 ${glossario}
 
-TOM E FORMATO:
+TOM E FORMATO DA RESPOSTA:
 - Direto, sem preâmbulo ("Claro!", "Com certeza!")
 - Português brasileiro casual (tu/você sem formalidade)
-- Respostas curtas: 2-4 linhas pra resposta simples, até 10 linhas pra casos complexos
-- Se perguntou por REF sem especificar, peça a REF (pode ter 0 à esquerda ou não)
 - NUNCA use a palavra "lote" — use "corte", "modelo", "ref"
+
+ESTRUTURA VISUAL DO TEXTO:
+- 1ª linha: afirmação direta respondendo a pergunta (1 frase curta)
+- Linha em branco
+- Bullets com os fatos-chave em linhas separadas (use "• " como marcador)
+- Máximo 4-5 bullets. Se precisa mais, era pra ser matriz/tabela.
+
+EXEMPLO BOM (produção):
+"Sim, a 02601 está em produção.
+
+• Corte nº 9702
+• Entrou em 20/04 · prazo de 18 dias
+• Oficina: Roberto Belém"
+
+EXEMPLO RUIM (NÃO FAÇA ISSO):
+"Sim! A ref 02601 está na oficina do Roberto Belém, corte nº 9702, entrou em 20/04, prazo de 18 dias. São 2 cores (Figo e Azul Marinho), grade P/M/G/GG, totalizando 252 peças."
+(tudo numa frase comprida + duplica info da matriz)
+
+NÃO REPITA DADOS QUE JÁ APARECEM NA MATRIZ:
+Se a pergunta for sobre produção e o contexto tem matriz_render, o frontend vai renderizar
+uma tabela visual com cores, tamanhos, folhas e totais. NÃO escreva essa informação no texto.
+Foque só em: número do corte, data/prazo, oficina, situação (atrasado ou não).
 
 FILTRO MONETÁRIO:
 ${filtroMonetarioMsg}
@@ -478,13 +559,8 @@ ${filtroMonetarioMsg}
 PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04):
 1. "cortes_reais" (de ailson_cortes) = REAL, tem data e prazo concreto
 2. "estimativas_sala" (de ordens_corte) = ESTIMATIVA, ainda não virou corte
-Se achar REAL, responda com data + matriz. Se só achar ESTIMATIVA, diga:
+Se achar REAL, responda com data + fatos. Se só achar ESTIMATIVA, diga:
 "Programado na sala, estimativa de X peças — ainda pode mudar. Pergunta em 2 dias."
-
-MATRIZ DO CORTE (quando responder produção com matriz):
-Retorne um campo "matriz_render" no JSON de saída com a estrutura:
-  { cores: [{nome, folhas, total_pecas}], tamanhos: [...], total_folhas, total_pecas }
-O frontend renderiza visualmente — não tente desenhar tabela ASCII.
 
 CATEGORIA DA PERGUNTA: ${categoria}
 Use APENAS os dados fornecidos no contexto. Não invente números.`;
