@@ -25,11 +25,17 @@ export default async function handler(req, res) {
 
     const token = await getValidToken(conv.brand);
 
-    // Limpa caracteres de controle/zero-width que quebram o parse do ML
-    // (comum ao colar texto de outros apps ou teclado emoji)
+    // Sanitiza texto pra evitar 'Unexpected exception parsing json string' do ML:
+    // 1. Converte quebras de linha (\n \r) e tabs em espaco. ML as vezes
+    //    rejeita \n em text.plain de pos-venda. Preservar legibilidade
+    //    convertendo em espaco eh mais seguro que remover (vira "você?Fico").
+    // 2. Remove control chars que nao tem representacao textual.
+    // 3. Remove zero-width chars (vem colado do clipboard, teclado emoji iOS).
     const textoLimpo = String(text)
-      .replace(/[\u0000-\u001F\u007F]/g, '') // control chars
+      .replace(/\r\n/g, ' ').replace(/[\r\n\t]/g, ' ')   // line breaks -> space
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '') // outros control chars
       .replace(/[\u200B-\u200F\uFEFF]/g, '') // zero-width chars
+      .replace(/ {2,}/g, ' ')                // colapsa espacos duplicados gerados
       .trim();
 
     if (!textoLimpo) {
