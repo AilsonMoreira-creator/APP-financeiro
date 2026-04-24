@@ -95,10 +95,29 @@ export default function MLPosVenda({ supabase, currentUser }) {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs]);
 
   // ── Open conversation ──
-  const openConv = (conv) => {
+  const openConv = async (conv) => {
     setSelected(conv); setReplyText(''); setAiSuggest(null);
     setNotesEdit(conv.notes || '');
     fetchMsgs(conv);
+
+    // Se falta item_title ou thumbnail, tenta enriquecer no ML on-demand
+    // (caso o webhook original tenha vindo incompleto)
+    if (!conv.item_title || !conv.item_thumbnail) {
+      try {
+        const r = await fetch('/api/ml-conv-enrich', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversation_id: conv.id }),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          if (data.enriched && data.conv) {
+            setSelected(data.conv);
+            fetchConvs(); // atualiza a lista também pra ver a thumb/title novos
+          }
+        }
+      } catch (e) { console.error('[SAC] enrich:', e.message); }
+    }
   };
 
   // ── Send reply ──

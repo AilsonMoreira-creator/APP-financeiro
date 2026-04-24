@@ -303,6 +303,54 @@ export function filtrarMonetarios(obj, excluirFicha = false) {
 // ═══════════════════════════════════════════════════════════════════════
 
 /**
+ * Verifica se uma REF existe no cadastro (produtos do app ou ficha técnica).
+ * Usado quando NÃO encontra a REF em estoque/produção/vendas pra responder
+ * com mais inteligência: "tá cadastrada mas sem corte" vs "nem existe".
+ */
+export async function buscarRefNoCadastro(ref) {
+  if (!ref) return { encontrada: false };
+
+  // 1. Cadastro principal (amicia-admin.payload.produtos)
+  const { data: adm } = await supabase
+    .from('amicia_data')
+    .select('payload')
+    .eq('user_id', 'amicia-admin')
+    .maybeSingle();
+
+  const produtos = adm?.payload?.produtos || [];
+  const prodMatch = produtos.find(p => normalizarRef(p.ref) === ref);
+  if (prodMatch) {
+    return {
+      encontrada: true,
+      fonte: 'cadastro_produtos',
+      descricao: prodMatch.descricao || '',
+      marca: prodMatch.marca || '',
+      tecido: prodMatch.tecido || '',
+    };
+  }
+
+  // 2. Ficha técnica (amicia_data.user_id='ficha-tecnica')
+  const { data: ft } = await supabase
+    .from('amicia_data')
+    .select('payload')
+    .eq('user_id', 'ficha-tecnica')
+    .maybeSingle();
+
+  const fichas = ft?.payload?.fichas || [];
+  const fichaMatch = fichas.find(f => normalizarRef(f.ref) === ref);
+  if (fichaMatch) {
+    return {
+      encontrada: true,
+      fonte: 'ficha_tecnica',
+      descricao: fichaMatch.descricao || '',
+    };
+  }
+
+  return { encontrada: false };
+}
+
+
+/**
  * Carrega estado de estoque. Se `ref` informado, foca nela. Senão traz
  * resumo geral (top 20 ruptura + top 20 saudável).
  */
@@ -313,7 +361,18 @@ export async function contextoEstoque(ref = null) {
       .select('ref, qtd_total, sem_dados, variations, updated_at')
       .eq('ref', ref)
       .maybeSingle();
-    return data ? { ref_foco: data } : { ref_foco: null, msg: 'REF não tem dados ML' };
+
+    if (data) return { ref_foco: data };
+
+    // REF não tem dados ML — checa cadastro pra diferenciar "não existe" de "existe mas zero no ML"
+    const cad = await buscarRefNoCadastro(ref);
+    return {
+      ref_foco: null,
+      ref_cadastrada: cad,
+      msg: cad.encontrada
+        ? 'REF cadastrada mas sem dados ML (pode estar zerada ou só ainda não sincronizou)'
+        : 'REF não encontrada em nenhum cadastro',
+    };
   }
 
   // Resumo geral: top ruptura + saudaveis
@@ -389,10 +448,18 @@ export async function contextoProducao(ref = null) {
     }));
   }
 
+  // 3. Se pediu REF específica e NÃO achou em nenhuma fonte,
+  //    busca no cadastro pra saber se a ref existe (só não tem corte)
+  let refCadastrada = null;
+  if (ref && cortesAtivos.length === 0 && estimativasSala.length === 0) {
+    refCadastrada = await buscarRefNoCadastro(ref);
+  }
+
   return {
     cortes_reais: cortesAtivos.slice(0, 20),
     estimativas_sala: estimativasSala,
     total_reais: cortesAtivos.length,
+    ref_cadastrada: refCadastrada, // null se não foi checado, { encontrada: bool, descricao, ... } se foi
   };
 }
 
@@ -663,6 +730,24 @@ PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04):
 2. "estimativas_sala" (de ordens_corte) = ESTIMATIVA, ainda não virou corte
 Se achar REAL, responda com data + fatos. Se só achar ESTIMATIVA, diga:
 "Tá programado na sala, estimativa de X peças — ainda pode mudar. Pergunta em 2 dias."
+
+REF NÃO ENCONTRADA EM ESTOQUE/PRODUÇÃO/VENDAS:
+Quando o contexto inclui "ref_cadastrada", significa que a IA buscou no cadastro da empresa
+(produtos + ficha técnica) pra saber se a REF existe. Regras:
+
+SE ref_cadastrada.encontrada = true (REF existe no cadastro mas sem corte/venda):
+  Responda: "Não tem nenhum corte em produção da {REF} ({DESCRIÇÃO}), {nome}.
+
+  • Tá cadastrada no sistema mas sem peças sendo costuradas
+  • Se precisar dela, fala com o Ailson pra abrir um corte novo"
+
+SE ref_cadastrada.encontrada = false (REF não existe em lugar nenhum):
+  Responda: "Não achei a ref {REF} em nenhum lugar, {nome}.
+
+  • Pode ser que o número tá digitado errado
+  • Ou a peça não tá cadastrada — vale confirmar com o pessoal do cadastro"
+
+NUNCA responda só "não achei nada" sem diferenciar esses dois casos.
 
 CATEGORIA DA PERGUNTA: ${categoria}
 Use APENAS os dados fornecidos no contexto. Não invente números.`;
