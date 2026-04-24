@@ -37,22 +37,27 @@ export default async function handler(req, res) {
     }
 
     // user_id PRECISA ser number (int64) — se vier como string, ML falha com
-    // "Unexpected exception parsing json string"
-    const sellerIdNum = Number(conv.seller_id);
-    const buyerIdNum = Number(conv.buyer_id);
+    // FORMATO ML CORRETO (conforme documentacao oficial em PT-BR):
+    // - user_id: STRING (com aspas) — nao number
+    // - text: STRING direto (nao { plain: ... } como pensei antes)
+    // Erro 'Unexpected exception parsing json string' acontecia exatamente
+    // por enviar Number em vez de String em user_id.
+    // Ref: https://developers.mercadolivre.com.br/pt_br/mensagens-post-venda
+    const sellerIdStr = String(conv.seller_id);
+    const buyerIdStr = String(conv.buyer_id);
 
-    if (!Number.isFinite(sellerIdNum) || !Number.isFinite(buyerIdNum)) {
+    if (!sellerIdStr || !buyerIdStr) {
       return res.status(500).json({
-        error: 'seller_id ou buyer_id inválido na conversa',
+        error: 'seller_id ou buyer_id ausente na conversa',
         seller_id: conv.seller_id,
         buyer_id: conv.buyer_id,
       });
     }
 
     const mlBody = {
-      from: { user_id: sellerIdNum },
-      to: { user_id: buyerIdNum },
-      text: { plain: textoLimpo },
+      from: { user_id: sellerIdStr },
+      to: { user_id: buyerIdStr },
+      text: textoLimpo,
     };
 
     // Envia no ML
