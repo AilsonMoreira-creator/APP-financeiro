@@ -671,7 +671,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {[
               { id: 'pendentes', label: 'Pendentes', badge: pending.length, badgeColor: PALETTE.red },
-              { id: 'posvenda', label: '📦 Pós-Venda', badge: pvUnread, badgeColor: PALETTE.blue },
+              { id: 'posvenda', label: 'Pós-Venda', badge: pvUnread, badgeColor: PALETTE.blue },
               { id: 'respondidas', label: 'Respondidas (24h)', badge: answeredToday.length, badgeColor: PALETTE.textLight },
               ...(absenceResponses.length > 0 ? [{ id: 'ausencia', label: 'Ausência', badge: absenceResponses.length, badgeColor: PALETTE.textLight }] : []),
               { id: 'ia_resp', label: '✨ IA', badge: aiResponses.length, badgeColor: PALETTE.textLight },
@@ -689,7 +689,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                 background: tab === t.id ? PALETTE.dark : PALETTE.sand,
                 color: tab === t.id ? '#fff' : PALETTE.text,
               }}>
-                {t.id === 'ia_resp' ? <><img src="/robo-ia.png" alt="" style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 4 }} /> IA</> : t.label}
+                {t.id === 'ia_resp' ? <><img src="/robo-ia.png" alt="" style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 4 }} /> IA</>
+                  : t.id === 'posvenda' ? <><img src="/icone-posvenda.png" alt="" style={{ width: 18, height: 18, verticalAlign: 'middle', marginRight: 5 }} /> Pós-Venda</>
+                  : t.label}
                 {t.badge > 0 && <Badge count={t.badge} color={t.badgeColor} />}
               </button>
             ))}
