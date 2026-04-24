@@ -298,7 +298,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
   return (
     <div>
       {/* Filters — uma linha só */}
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
         {[
           { id: 'todos', label: 'Todas' },
           { id: 'pendentes', label: '⏳ Pendentes', badge: openCount },
@@ -307,22 +307,22 @@ export default function MLPosVenda({ supabase, currentUser }) {
           { id: 'resolvidas', label: '✅ Resolvidas' },
         ].map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)} style={{
-            ...S, padding: '4px 10px', fontSize: 10, fontWeight: 600, cursor: 'pointer', border: 'none', borderRadius: 5,
+            ...S, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', borderRadius: 5,
             background: filter === f.id ? PALETTE.dark : PALETTE.sand, color: filter === f.id ? '#fff' : PALETTE.text,
           }}>
-            {f.label} {f.badge > 0 && <span style={{ background: PALETTE.red, color: '#fff', borderRadius: 8, padding: '1px 5px', fontSize: 8, marginLeft: 2 }}>{f.badge}</span>}
+            {f.label} {f.badge > 0 && <span style={{ background: PALETTE.red, color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: 10, marginLeft: 3 }}>{f.badge}</span>}
           </button>
         ))}
-        <span style={{ ...S, fontSize: 10, color: PALETTE.textLight, padding: '4px 2px' }}>│</span>
+        <span style={{ ...S, fontSize: 12, color: PALETTE.textLight, padding: '4px 2px' }}>│</span>
         {['Todas', 'Exitus', 'Lumia', 'Muniam'].map(b => (
           <button key={b} onClick={() => setBrandFilter(b)} style={{
-            ...S, padding: '3px 10px', fontSize: 10, fontWeight: 600, cursor: 'pointer',
+            ...S, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
             border: brandFilter === b ? 'none' : `1px solid ${PALETTE.border}`,
             borderRadius: 4, background: brandFilter === b ? (b === 'Todas' ? PALETTE.dark : BRANDS[b]?.bg) : 'transparent',
             color: brandFilter === b ? (b === 'Muniam' || b === 'Todas' ? '#fff' : BRANDS[b]?.color) : PALETTE.text,
           }}>{b}</button>
         ))}
-        <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>🔄</button>
+        <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>🔄</button>
       </div>
 
       {/* Conversation cards */}
@@ -338,34 +338,38 @@ export default function MLPosVenda({ supabase, currentUser }) {
         return (
           <div key={conv.id} onClick={() => openConv(conv)} style={{
             background: PALETTE.white, borderRadius: 10, border: `1px solid ${isUnread ? PALETTE.blue + '60' : PALETTE.sand}`,
-            borderLeft: `4px solid ${tag.color}`, padding: '10px 14px', cursor: 'pointer', marginBottom: 8,
+            borderLeft: `4px solid ${tag.color}`, padding: '12px 16px', cursor: 'pointer', marginBottom: 8,
             boxShadow: isUnread ? `0 1px 6px ${PALETTE.blue}12` : 'none',
           }}>
-            <div style={{ display: 'flex', gap: 10 }}>
-              {/* Thumbnail */}
-              {conv.item_thumbnail && (
-                <div style={{ width: 44, height: 44, borderRadius: 6, overflow: 'hidden', flexShrink: 0, background: PALETTE.cream, border: `1px solid ${PALETTE.sand}` }}>
-                  <img src={conv.item_thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
+            <div style={{ display: 'flex', gap: 12 }}>
+              {/* Thumbnail ou placeholder (sempre aparece) */}
+              {conv.item_thumbnail ? (
+                <div style={{ width: 52, height: 52, borderRadius: 6, overflow: 'hidden', flexShrink: 0, background: PALETTE.cream, border: `1px solid ${PALETTE.sand}` }}>
+                  <img src={conv.item_thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;color:#a89f94">📦</div>'; }} />
+                </div>
+              ) : (
+                <div style={{ width: 52, height: 52, borderRadius: 6, flexShrink: 0, background: PALETTE.cream, border: `1px solid ${PALETTE.sand}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: PALETTE.textLight }}>
+                  📦
                 </div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                   <BrandTag brand={conv.brand} />
-                  <span style={{ ...S, fontSize: 11, fontWeight: 700, color: PALETTE.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(conv.item_title || 'Pedido #' + (conv.order_id || conv.pack_id)).slice(0, 35)}</span>
-                  <span style={{ ...S, fontSize: 8, color: tag.color, fontWeight: 700, background: tag.bg, padding: '2px 5px', borderRadius: 3, flexShrink: 0, marginLeft: 'auto' }}>{tag.emoji}</span>
+                  <span style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(conv.item_title || 'Pedido #' + (conv.order_id || conv.pack_id)).slice(0, 40)}</span>
+                  <span style={{ ...S, fontSize: 10, color: tag.color, fontWeight: 700, background: tag.bg, padding: '2px 6px', borderRadius: 3, flexShrink: 0, marginLeft: 'auto' }}>{tag.emoji}</span>
                 </div>
-                <div style={{ ...S, fontSize: 10, color: PALETTE.textLight, marginBottom: 3 }}>
+                <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 4 }}>
                   👤 {conv.buyer_nickname || conv.buyer_id || '—'} · 📦 #{conv.order_id || conv.pack_id}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ ...S, fontSize: 11, color: isUnread ? PALETTE.dark : PALETTE.textLight, fontWeight: isUnread ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                    {conv.last_message_from === 'buyer' ? '💬' : '↩️'} {(conv.last_message_text || '').slice(0, 50)}{(conv.last_message_text || '').length > 50 ? '...' : ''}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ ...S, fontSize: 13, color: isUnread ? PALETTE.dark : PALETTE.textLight, fontWeight: isUnread ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    {conv.last_message_from === 'buyer' ? '💬' : '↩️'} {(conv.last_message_text || '').slice(0, 60)}{(conv.last_message_text || '').length > 60 ? '...' : ''}
                   </span>
-                  <span style={{ ...S, fontSize: 9, color: PALETTE.textLight, flexShrink: 0 }}>🕐 {timeAgo(conv.last_message_at)}</span>
-                  {conv.unread_count > 0 && <span style={{ background: PALETTE.blue, color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{conv.unread_count}</span>}
+                  <span style={{ ...S, fontSize: 11, color: PALETTE.textLight, flexShrink: 0 }}>🕐 {timeAgo(conv.last_message_at)}</span>
+                  {conv.unread_count > 0 && <span style={{ background: PALETTE.blue, color: '#fff', borderRadius: 8, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{conv.unread_count}</span>}
                 </div>
                 {conv.notes && (
-                  <div style={{ ...S, fontSize: 9, color: PALETTE.orange, marginTop: 3, padding: '2px 6px', background: PALETTE.orangeLight, borderRadius: 3 }}>📝 {conv.notes}</div>
+                  <div style={{ ...S, fontSize: 11, color: PALETTE.orange, marginTop: 4, padding: '3px 8px', background: PALETTE.orangeLight, borderRadius: 3 }}>📝 {conv.notes}</div>
                 )}
               </div>
             </div>

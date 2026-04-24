@@ -567,8 +567,11 @@ export default function IAPergunta({ supabase, usuarioLogado, onClose }) {
         background: C.appBg,
         borderRadius: isMobile ? '16px 16px 0 0' : 12,
         width: isMobile ? '100%' : 600,
+        maxWidth: '100vw',
         height: isMobile ? '92%' : 640,
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden', overflowX: 'hidden',
+        boxSizing: 'border-box',
         boxShadow: '0 -10px 40px rgba(0,0,0,0.2)',
       }}>
         {/* Header */}
@@ -666,8 +669,13 @@ export default function IAPergunta({ supabase, usuarioLogado, onClose }) {
             <div style={{
               background: '#fff', padding: '10px 12px',
               borderTop: `1px solid ${C.cream}`,
+              boxSizing: 'border-box', maxWidth: '100vw',
             }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', width: '100%' }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                gap: 8, alignItems: 'end', width: '100%',
+              }}>
                 <textarea
                   value={input}
                   onChange={e => setInput(e.target.value)}
@@ -677,28 +685,28 @@ export default function IAPergunta({ supabase, usuarioLogado, onClose }) {
                       enviarPergunta();
                     }
                   }}
-                  placeholder={loading ? 'Aguarde...' : 'Pergunta o que quiser sobre estoque, produção, produtos...'}
+                  placeholder={loading ? 'Aguarde...' : 'Pergunta o que quiser...'}
                   disabled={loading}
                   rows={1}
                   style={{
-                    flex: 1, minWidth: 0, width: '100%', boxSizing: 'border-box',
+                    width: '100%', minWidth: 0, boxSizing: 'border-box',
                     border: `1px solid ${C.border}`, borderRadius: 10,
-                    padding: '9px 12px', fontFamily: SANS, fontSize: 16,
+                    padding: '10px 12px', fontFamily: SANS, fontSize: 16,
                     outline: 'none', resize: 'none',
                     background: loading ? '#eee' : C.appBg, color: C.text,
-                    minHeight: 40, maxHeight: 120,
+                    minHeight: 44, maxHeight: 120,
                   }}
                 />
                 <button
                   onClick={enviarPergunta}
                   disabled={loading || !input.trim()}
                   style={{
-                    flexShrink: 0,
                     background: loading || !input.trim() ? C.cream : C.iaDarker,
                     color: loading || !input.trim() ? C.muted : C.iaBg,
-                    border: 'none', borderRadius: 10, padding: '10px 14px',
+                    border: 'none', borderRadius: 10,
                     cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-                    fontSize: 18, minWidth: 44, height: 40,
+                    fontSize: 20, width: 48, height: 44,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
                 >➤</button>
               </div>
