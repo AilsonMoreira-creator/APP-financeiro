@@ -8277,34 +8277,105 @@ export default function App(){
       const {data:remoteData}=await supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single();
       const remote=remoteData?.payload||{};
 
-      // MERGE: protege contra perda de dados em receitas, auxData, categorias, boletos
+      // ⚡ GUARD CRÍTICO (Sprint 6.8.3): se remoto tem edits mais novos que este device nunca viu, ABORTA.
+      // Cenário que protege: device com cache stale (ex: iPhone em background) prestes a sobrescrever
+      // edits que outro device (MacBook) fez depois. dbCarregadoTs = quando ESTE device baixou remoto pela última vez.
+      const remoteTs=remote._updated||0;
+      if(remoteTs>0&&dbCarregadoTs.current>0&&remoteTs>dbCarregadoTs.current+2000){
+        // Remoto tem edits novos pós-load deste device. Recarrega state em vez de sobrescrever.
+        console.warn("SUPABASE-SAVE: ABORTADO — remoto ts:",new Date(remoteTs).toLocaleString("pt-BR"),"> último load deste device:",new Date(dbCarregadoTs.current).toLocaleString("pt-BR"),"(diff:",remoteTs-dbCarregadoTs.current,"ms). Recarregando state pra não sobrescrever edits de outro device.");
+        // Atualiza state com dados remotos (edits de outro device)
+        if(remote.receitasPorMes)setReceitasPorMes(remote.receitasPorMes);
+        if(remote.auxDataPorMes)setAuxDataPorMes(remote.auxDataPorMes);
+        if(remote.categoriasPorMes)setCategoriasPorMes(remote.categoriasPorMes);
+        if(remote.boletosShared&&remote.boletosShared.length>0)setBoletosShared(deduplicarBoletos(remote.boletosShared));
+        // Atualiza localStorage E marca dbCarregadoTs novo (para próximos saves saberem)
+        try{localStorage.setItem("amica_financeiro",JSON.stringify({...remote,_updated:remoteTs}));}catch(e){}
+        dbCarregadoTs.current=remoteTs;
+        setSyncStatus('error');
+        setTimeout(()=>setSyncStatus(null),5000);
+        return;
+      }
+
+      // MERGE PROFUNDO: protege contra perda de dados dia-a-dia, não só por mês inteiro
       const mergedPayload={...payload};
 
-      // Receitas: preserva meses que existem no remoto mas não no local
+      // Receitas: merge POR DIA (cada dia pode ter {silvaTeles, bomRetiro, marketplaces})
       if(remote.receitasPorMes){
         const localRec=payload.receitasPorMes||{};
         const remoteRec=remote.receitasPorMes||{};
-        const merged={...localRec};
-        let preserved=0;
-        Object.keys(remoteRec).forEach(m=>{
-          if(!localRec[m]||(typeof localRec[m]==='object'&&Object.keys(localRec[m]).length===0)){
-            merged[m]=remoteRec[m];preserved++;
+        const merged={};
+        let diasPreservados=0,mesesPreservados=0;
+        const todosMeses=new Set([...Object.keys(localRec),...Object.keys(remoteRec)]);
+        for(const m of todosMeses){
+          const localMes=localRec[m];
+          const remoteMes=remoteRec[m];
+          // Mês só no remoto: preserva integralmente
+          if(!localMes||(typeof localMes==='object'&&Object.keys(localMes).length===0)){
+            if(remoteMes&&Object.keys(remoteMes).length>0){merged[m]=remoteMes;mesesPreservados++;continue;}
           }
-        });
-        if(preserved>0)console.log("SUPABASE-SAVE: preservou",preserved,"meses do remoto que local não tinha");
+          // Mês só no local: mantém local
+          if(!remoteMes||Object.keys(remoteMes).length===0){merged[m]=localMes;continue;}
+          // Ambos têm o mês: merge dia a dia
+          const mergedMes={...localMes};
+          for(const diaKey of Object.keys(remoteMes)){
+            const localDia=localMes[diaKey];
+            const remoteDia=remoteMes[diaKey];
+            // Dia só no remoto → preserva
+            if(!localDia||(typeof localDia==='object'&&Object.keys(localDia).length===0)){
+              mergedMes[diaKey]=remoteDia;diasPreservados++;continue;
+            }
+            // Dia tem valores nos dois: usa local (edit do usuário neste device vence)
+            // Mas preserva CAMPOS do remoto que local não tem (ex: remoto tem marketplaces, local só silvaTeles)
+            if(typeof localDia==='object'&&typeof remoteDia==='object'){
+              const mergedDia={...remoteDia,...localDia};
+              // Preserva campos numericamente: se local tem valor 0/vazio mas remoto tem valor, usa remoto
+              for(const campo of Object.keys(remoteDia)){
+                const lv=localDia[campo];
+                const rv=remoteDia[campo];
+                const localVazio=lv===undefined||lv===null||lv===""||lv==="0"||Number(lv)===0;
+                if(localVazio&&rv!==undefined&&rv!==""&&Number(rv)>0){mergedDia[campo]=rv;diasPreservados++;}
+              }
+              mergedMes[diaKey]=mergedDia;
+            }
+          }
+          merged[m]=mergedMes;
+        }
+        if(mesesPreservados>0||diasPreservados>0)console.log("SUPABASE-SAVE: merge receitas preservou",mesesPreservados,"meses +",diasPreservados,"dias/campos do remoto");
         mergedPayload.receitasPorMes=merged;
       }
 
-      // AuxData: mesma proteção
+      // AuxData: merge POR CATEGORIA dentro do mês (cada mês tem {Funcionários:[], Tecidos:[], ...})
       if(remote.auxDataPorMes){
         const localAux=payload.auxDataPorMes||{};
         const remoteAux=remote.auxDataPorMes||{};
-        const merged={...localAux};
-        Object.keys(remoteAux).forEach(m=>{if(!localAux[m])merged[m]=remoteAux[m];});
+        const merged={};
+        let itensPreservados=0;
+        const todosMeses=new Set([...Object.keys(localAux),...Object.keys(remoteAux)]);
+        for(const m of todosMeses){
+          const localMes=localAux[m];
+          const remoteMes=remoteAux[m];
+          if(!localMes||Object.keys(localMes).length===0){if(remoteMes)merged[m]=remoteMes;continue;}
+          if(!remoteMes||Object.keys(remoteMes).length===0){merged[m]=localMes;continue;}
+          // Ambos têm mês: merge por CATEGORIA
+          const mergedMes={...localMes};
+          for(const cat of Object.keys(remoteMes)){
+            const localCat=localMes[cat];
+            const remoteCat=remoteMes[cat];
+            // Categoria só no remoto → preserva
+            if(!localCat||(Array.isArray(localCat)&&localCat.length===0)){
+              if(Array.isArray(remoteCat)&&remoteCat.length>0){mergedMes[cat]=remoteCat;itensPreservados+=remoteCat.length;}
+              continue;
+            }
+            // Ambos têm: mantém local (edit do usuário vence). auxData não tem IDs, merge por array é arriscado.
+          }
+          merged[m]=mergedMes;
+        }
+        if(itensPreservados>0)console.log("SUPABASE-SAVE: merge auxData preservou",itensPreservados,"itens do remoto");
         mergedPayload.auxDataPorMes=merged;
       }
 
-      // Categorias: mesma proteção
+      // Categorias: mesma proteção por mês (categorias é lista simples, não tem chave interna como dias)
       if(remote.categoriasPorMes){
         const localCats=payload.categoriasPorMes||{};
         const remoteCats=remote.categoriasPorMes||{};
@@ -8339,6 +8410,7 @@ export default function App(){
       }else{
         try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
         localStorage.setItem("amica_pending_sync","false");
+        dbCarregadoTs.current=ts; // marca o ts do save pra próximos guards compararem corretamente
         setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
         console.log("SUPABASE-SAVE: sucesso, ts:",ts);
       }
@@ -8359,6 +8431,13 @@ export default function App(){
     if(!usuarioLogado?.admin){return;}
     // Guard: não salva antes do Supabase load ter completado
     if(!dbCarregadoTs.current){console.log("AUTO-SAVE: bloqueado — load não completou");return;}
+    // ⚡ GUARD CRÍTICO (Sprint 6.8.3): não salva se o usuário ainda não editou nada
+    // após o load. Protege contra device com state stale sobrescrever Supabase.
+    // lastUserEditTs só é setado ao final deste efeito, então se é 0, é state inicial/load.
+    if(lastUserEditTs.current===0||lastUserEditTs.current<dbCarregadoTs.current){
+      console.log("AUTO-SAVE: bloqueado — sem edit do usuário desde o load (state pode estar stale)");
+      return;
+    }
     // Guard: não salva nos primeiros 5s após load (state pode não ter estabilizado)
     const sinceDload=Date.now()-dbCarregadoTs.current;
     if(sinceDload<5000){
