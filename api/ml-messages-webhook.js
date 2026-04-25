@@ -56,23 +56,37 @@ export default async function handler(req, res) {
         if (packRes.ok) {
           const pack = await packRes.json();
           orderId = pack.orders?.[0]?.id || '';
-          if (orderId) {
-            const orderRes = await fetch(`${ML_API}/orders/${orderId}`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (orderRes.ok) {
-              const order = await orderRes.json();
-              buyerId = String(order.buyer?.id || '');
-              buyerNick = order.buyer?.nickname || '';
-              const firstItem = order.order_items?.[0]?.item;
-              if (firstItem) {
-                itemId = firstItem.id || '';
-                itemTitle = firstItem.title || '';
-              }
+        }
+      } catch (e) { console.error('[ml-msg-webhook] pack fetch:', e.message); }
+
+      // FALLBACK: se /packs falhou ou nao retornou order_id, usa pack_id
+      // direto como order_id. Em ML pos-venda, sao quase sempre iguais.
+      // Sem isso, conversas novas entram vazias quando /packs da 404
+      // (mesma correcao aplicada em ml-conv-enrich.js).
+      if (!orderId) {
+        orderId = packId;
+      }
+
+      // Busca dados do order (buyer + first item + seller)
+      if (orderId) {
+        try {
+          const orderRes = await fetch(`${ML_API}/orders/${orderId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (orderRes.ok) {
+            const order = await orderRes.json();
+            buyerId = String(order.buyer?.id || '');
+            buyerNick = order.buyer?.nickname || '';
+            // Garante seller_id mesmo se ja tinha vindo de outra fonte
+            if (!sellerId) sellerId = String(order.seller?.id || '');
+            const firstItem = order.order_items?.[0]?.item;
+            if (firstItem) {
+              itemId = firstItem.id || '';
+              itemTitle = firstItem.title || '';
             }
           }
-        }
-      } catch (e) { console.error('[ml-msg-webhook] pack/order fetch:', e.message); }
+        } catch (e) { console.error('[ml-msg-webhook] order fetch:', e.message); }
+      }
 
       // Busca thumbnail
       if (itemId) {
