@@ -311,6 +311,24 @@ export function filtrarMonetarios(obj, excluirFicha = false) {
  * com mais inteligência: "tá cadastrada mas sem corte" vs "nem existe".
  * Também retorna URL pública da foto do produto se existir no Storage.
  */
+/**
+ * Gera a URL publica da foto da REF no bucket 'produtos' do Supabase
+ * Storage. Convencao: arquivo {REF}.jpg (REF sem zero a esquerda).
+ * Nao verifica se o arquivo existe - frontend tem onError pra esconder
+ * imagem quebrada. Centralizar aqui evita duplicar logica em varios
+ * helpers de contexto.
+ */
+export function resolverFotoUrl(ref) {
+  if (!ref) return '';
+  try {
+    const { data } = supabase.storage.from('produtos').getPublicUrl(`${ref}.jpg`);
+    return data?.publicUrl || '';
+  } catch {
+    return '';
+  }
+}
+
+
 export async function buscarRefNoCadastro(ref) {
   if (!ref) return { encontrada: false };
 

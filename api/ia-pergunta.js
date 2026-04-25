@@ -57,6 +57,7 @@ import {
   primeiraPerguntaDoDia,
   saudacaoBRT,
   nomeExibicao,
+  resolverFotoUrl,
 } from './_ia-pergunta-helpers.js';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -274,14 +275,20 @@ Estrutura obrigatória (só um campo):
     matrizRender = matrizesAtivas[0]?.matriz || null;
   }
 
-  // foto_url do produto (extrai do contexto que ja foi populado pelos helpers)
+  // foto_url do produto. Estrategia em 3 niveis:
+  // 1. Se algum contexto ja populou foto_url (caso da ref nao encontrada que
+  //    cai em buscarRefNoCadastro), usa esse.
+  // 2. Senao, gera URL diretamente do storage (bucket produtos/{ref}.jpg).
+  //    Garante que pergunta 'foto da REF X' funcione mesmo quando a ref
+  //    tem dados completos e nao caiu no fallback do buscarRefNoCadastro.
+  // 3. Frontend tem onError no <img> que esconde a imagem se 404 (ref sem foto).
   const fotoUrl =
     contexto.estoque?.ref_cadastrada?.foto_url ||
     contexto.estoque?.foto_url ||
     contexto.produto?.foto_url ||
     contexto.producao?.ref_cadastrada?.foto_url ||
     contexto.ficha_tecnica?.foto_url ||
-    '';
+    (refFoco ? resolverFotoUrl(refFoco) : '');
 
   await salvarHistorico({
     user_id: user.id,
