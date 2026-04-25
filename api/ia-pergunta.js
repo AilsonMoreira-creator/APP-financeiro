@@ -233,17 +233,15 @@ Estrutura obrigatória (só um campo):
 
   const tempoMs = Date.now() - t0;
 
-  // Se a pergunta é sobre produção com REF específica e temos matrizes prontas
-  // no contexto, injeta TODAS no response (backend já pré-calculou células via
-  // folhas × grade, não depende do Sonnet pra não errar valores).
-  // Inclui:
-  //   - cortes ativos (em produção, ainda não entregues)
-  //   - cortes entregues recentes (≤3 dias) com data de entrega
-  // Quando uma REF tem mais de um corte, mostra todas as matrizes empilhadas.
+  // Renderiza matrizes SEMPRE que o contexto de producao tiver cortes,
+  // independente da categoria. Antes esse bloco so rodava se categoria==='producao',
+  // o que perdia matrizes quando classificador caia em 'outros' (puxa todos os
+  // contextos mas nao mostrava matrizes). Agora qualquer pergunta que chega ao
+  // contextoProducao com cortes_reais ou entregues_recentes ja renderiza.
   let matrizRender = null;     // legado - primeira matriz (compat com versao antiga)
   let matrizesRender = null;   // novo - lista completa com header { titulo, matriz, oficina, data }
-  if (intent.categoria === 'producao' && refFoco) {
-    const matrizesAtivas = (contexto.producao?.cortes_reais || [])
+  if (refFoco && contexto.producao) {
+    const matrizesAtivas = (contexto.producao.cortes_reais || [])
       .filter(c => c.matriz_render)
       .map(c => ({
         titulo: `Corte nº ${c.nCorte || '?'}${c.atrasado ? ' ⚠ atrasado' : ''}`,
@@ -256,7 +254,7 @@ Estrutura obrigatória (só um campo):
       }));
 
     // Cortes entregues recentes (≤3 dias) também viram matrizes, marcadas como entregues
-    const matrizesEntregues = (contexto.producao?.cortes_entregues_recentes || [])
+    const matrizesEntregues = (contexto.producao.cortes_entregues_recentes || [])
       .filter(c => c.matriz_render)
       .map(c => ({
         titulo: `Corte nº ${c.nCorte || '?'} ✓ entregue ${c.data_entrega_fmt}`,
