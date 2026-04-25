@@ -1000,6 +1000,9 @@ Já entregue recente:
 REGRAS:
 - SÓ mencione cortes entregues se vierem em cortes_entregues_recentes (já filtrado ≤3 dias).
 - SEMPRE inclua a data de entrega (data_entrega_fmt).
+- NÃO renderiza matriz dos entregues - só do que ainda vai chegar. A matriz de
+  corte entregue confunde a equipe (eles pensam que ainda vem peça). Diga apenas
+  no texto, em uma linha por corte entregue.
 - Se cortes_entregues_recentes vier vazio, NUNCA invente "já entregue" - significa
   que não tem nenhum recente o suficiente pra valer mencionar.
 - Cortes entregues NÃO entram no "total entrando" - só conta cortes_reais (ativos).

@@ -233,11 +233,10 @@ Estrutura obrigatória (só um campo):
 
   const tempoMs = Date.now() - t0;
 
-  // Renderiza matrizes SEMPRE que o contexto de producao tiver cortes,
-  // independente da categoria. Antes esse bloco so rodava se categoria==='producao',
-  // o que perdia matrizes quando classificador caia em 'outros' (puxa todos os
-  // contextos mas nao mostrava matrizes). Agora qualquer pergunta que chega ao
-  // contextoProducao com cortes_reais ou entregues_recentes ja renderiza.
+  // Renderiza matrizes APENAS dos cortes ATIVOS (em produção).
+  // Cortes entregues recentes são mencionados pela IA no texto (com data),
+  // mas a matriz não vem - evita confundir a equipe que pode achar que
+  // ainda vai chegar essas peças.
   let matrizRender = null;     // legado - primeira matriz (compat com versao antiga)
   let matrizesRender = null;   // novo - lista completa com header { titulo, matriz, oficina, data }
   if (refFoco && contexto.producao) {
@@ -253,22 +252,8 @@ Estrutura obrigatória (só um campo):
         matriz: c.matriz_render,
       }));
 
-    // Cortes entregues recentes (≤3 dias) também viram matrizes, marcadas como entregues
-    const matrizesEntregues = (contexto.producao.cortes_entregues_recentes || [])
-      .filter(c => c.matriz_render)
-      .map(c => ({
-        titulo: `Corte nº ${c.nCorte || '?'} ✓ entregue ${c.data_entrega_fmt}`,
-        oficina: c.oficina || '',
-        data: c.data_entrega || '',
-        dias_restantes: null, // já entregue, prazo não faz sentido
-        qtd: c.qtd,
-        qtdEntregue: c.qtdEntregue,
-        matriz: c.matriz_render,
-      }));
-
-    const todas = [...matrizesAtivas, ...matrizesEntregues];
-    matrizesRender = todas.length > 0 ? todas : null;
-    matrizRender = matrizesAtivas[0]?.matriz || matrizesEntregues[0]?.matriz || null;
+    matrizesRender = matrizesAtivas.length > 0 ? matrizesAtivas : null;
+    matrizRender = matrizesAtivas[0]?.matriz || null;
   }
 
   // foto_url do produto (extrai do contexto que ja foi populado pelos helpers)
