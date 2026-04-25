@@ -254,6 +254,26 @@ export const IABotaoCabecalho = ({ onClick }) => (
 
 const MatrizRender = ({ matriz }) => {
   if (!matriz) return null;
+
+  // Caso especial: corte lancado sem detalhamento cor x tamanho.
+  // Mostra um card simples com qtd total + nota explicativa - melhor que sumir.
+  if (matriz.sem_matriz) {
+    return (
+      <div style={{
+        background: C.appBg, border: `1px dashed ${C.cream}`, borderRadius: 8,
+        padding: '10px 12px', margin: '8px 0', fontFamily: SANS,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ fontSize: 11, color: C.muted, fontStyle: 'italic' }}>
+          {matriz.nota || 'Corte sem detalhamento'}
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.blueDark }}>
+          {matriz.qtd_manual} pçs
+        </div>
+      </div>
+    );
+  }
+
   const { cores = [], tamanhos = [], total_folhas, total_pecas, qtd_manual, qtd_calculada } = matriz;
   const tams = Array.isArray(tamanhos) && tamanhos.length ? tamanhos : ['P','M','G','GG'];
   const qtdOk = qtd_manual != null && qtd_calculada != null && qtd_manual === qtd_calculada;

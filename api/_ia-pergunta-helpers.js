@@ -712,7 +712,24 @@ export async function contextoProducao(ref = null) {
  *   }
  */
 export function construirMatrizRender(detalhes, qtdManual = null) {
+  // Caso 1: corte SEM detalhamento de matriz (lancado direto com qtd total).
+  // Em vez de retornar null (que faz a matriz nem aparecer), devolve uma
+  // estrutura especial que o frontend interpreta como "matriz simples".
+  // Assim a equipe ainda ve que existe o corte e quanto vai entregar,
+  // mesmo sem o detalhe cor×tamanho.
   if (!detalhes || !Array.isArray(detalhes.cores) || !Array.isArray(detalhes.tamanhos)) {
+    if (qtdManual && Number(qtdManual) > 0) {
+      return {
+        sem_matriz: true,
+        qtd_manual: Number(qtdManual),
+        qtd_calculada: Number(qtdManual),
+        total_folhas: 0,
+        total_pecas: Number(qtdManual),
+        cores: [],
+        tamanhos: [],
+        nota: 'Corte lancado sem detalhamento cor x tamanho',
+      };
+    }
     return null;
   }
 
