@@ -74,22 +74,13 @@ const SvgBoletos = ({ size = 32 }) => (
 );
 
 const SvgOficinas = ({ size = 32 }) => (
-  <svg width={size} height={size} viewBox="0 0 36 32" fill="none">
-    <rect x="1" y="26" width="34" height="4" rx="1.5" fill="#9aabb8" stroke={_S} strokeWidth="1.2"/>
-    <path d="M5,25 L5,16 Q5,9 12,9 L28,9 Q31,9 31,12 L31,25 Z" fill="#f0ede8" stroke={_S} strokeWidth="1.4"/>
-    <path d="M12,9 Q7,9 7,14 L7,20" stroke={_S} strokeWidth="1.4" fill="none" strokeLinecap="round"/>
-    <rect x="4" y="19" width="9" height="6" rx="0.8" fill="#ddd8d0" stroke={_S} strokeWidth="1.1"/>
-    <line x1="9.5" y1="9" x2="9.5" y2="13" stroke={_S} strokeWidth="1.1" strokeLinecap="round"/>
-    <circle cx="9.5" cy="8" r="1.2" fill={_S}/>
-    <line x1="9.5" y1="25" x2="9.5" y2="28.5" stroke="#6b7c8a" strokeWidth="1.3" strokeLinecap="round"/>
-    <circle cx="25" cy="18" r="6.5" fill={_B} stroke={_S} strokeWidth="1.4"/>
-    <circle cx="25" cy="18" r="3" fill="#f0ede8" stroke={_S} strokeWidth="1.1"/>
-    <circle cx="25" cy="18" r="1.2" fill="#9aabb8"/>
-    <line x1="25" y1="11.5" x2="25" y2="15" stroke={_S} strokeWidth="0.9"/>
-    <line x1="25" y1="21" x2="25" y2="24.5" stroke={_S} strokeWidth="0.9"/>
-    <line x1="18.5" y1="18" x2="22" y2="18" stroke={_S} strokeWidth="0.9"/>
-    <line x1="28" y1="18" x2="31.5" y2="18" stroke={_S} strokeWidth="0.9"/>
-  </svg>
+  <img
+    src="/icone-oficinas.png"
+    alt="Oficinas"
+    width={size}
+    height={size}
+    style={{ objectFit: 'contain', display: 'block' }}
+  />
 );
 
 const SvgAgenda = ({ size = 32 }) => (
