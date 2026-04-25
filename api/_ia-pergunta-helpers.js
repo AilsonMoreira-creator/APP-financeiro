@@ -232,7 +232,9 @@ export function classificarIntencao(pergunta) {
       'estoque', 'ruptura', 'zerad', 'acabando', 'acabou', 'vai acabar',
       'cobertura', 'dias de', 'variação', 'variacao', 'sku', 'disponível',
       'disponivel', 'risco de zerar', 'faltando', 'sem cor', 'carro-chefe',
-      'curva a', 'curva b', 'curva c',
+      'curva a', 'curva b', 'curva c', 'parado', 'parada', 'parou', 'encalhad',
+      'gira', 'girando', 'nao gira', 'não gira', 'fim de semana', 'fds',
+      'best seller', 'best-seller', 'campeao', 'campeão',
     ],
     produto: [
       'mais vend', 'top', 'ranking', 'tendência', 'tendencia', 'subindo',
@@ -387,17 +389,85 @@ export async function contextoEstoque(ref = null) {
     };
   }
 
-  // Resumo geral: top ruptura + saudaveis
-  const { data: ruptura } = await supabase
+  // Resumo geral: cruza estoque + vendas pra classificar Curva ABC e priorizar
+  // refs realmente importantes (alta venda + baixo estoque), nao refs paradas
+  // que ja sao baixas naturalmente.
+  const desde90d = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+
+  // 1. Pega TODO o estoque atual
+  const { data: estoque } = await supabase
     .from('ml_estoque_ref_atual')
-    .select('ref, qtd_total')
-    .lt('qtd_total', 30)
-    .order('qtd_total', { ascending: true })
-    .limit(20);
+    .select('ref, qtd_total, sem_dados')
+    .order('qtd_total', { ascending: true });
+
+  // 2. Pega vendas dos ultimos 90 dias (90d eh padrao da industria pra classificar curva)
+  const { data: vendas90 } = await supabase
+    .from('bling_vendas_detalhe')
+    .select('ref, qtd')
+    .gte('data', desde90d);
+
+  // Agrega vendas por ref
+  const vendasPorRef = {};
+  for (const v of (vendas90 || [])) {
+    vendasPorRef[v.ref] = (vendasPorRef[v.ref] || 0) + (v.qtd || 0);
+  }
+
+  // 3. Faturamento total pra calcular % de Pareto (Curva A = top que faz 80% do volume)
+  const refsOrdenadas = Object.entries(vendasPorRef)
+    .map(([ref, qtd]) => ({ ref, qtd_90d: qtd }))
+    .sort((a, b) => b.qtd_90d - a.qtd_90d);
+
+  const totalQtd = refsOrdenadas.reduce((s, r) => s + r.qtd_90d, 0);
+  let acumulado = 0;
+  const curvaPorRef = {};
+  for (const r of refsOrdenadas) {
+    acumulado += r.qtd_90d;
+    const pctAcum = totalQtd > 0 ? (acumulado / totalQtd) * 100 : 0;
+    // Pareto: A = primeiros que somam 80%, B = ate 95%, C = resto
+    const curva = pctAcum <= 80 ? 'A' : pctAcum <= 95 ? 'B' : 'C';
+    curvaPorRef[r.ref] = { curva, qtd_90d: r.qtd_90d, vendas_dia: r.qtd_90d / 90 };
+  }
+
+  // 4. Cruza com estoque e calcula dias_ate_zerar pra cada ref
+  const refsAnalisadas = (estoque || []).map(e => {
+    const v = curvaPorRef[e.ref] || { curva: 'C', qtd_90d: 0, vendas_dia: 0 };
+    const diasAteZerar = v.vendas_dia > 0 ? Math.round(e.qtd_total / v.vendas_dia) : null;
+    return {
+      ref: e.ref,
+      qtd_total: e.qtd_total,
+      curva: v.curva,
+      vendas_90d: v.qtd_90d,
+      vendas_dia: Math.round(v.vendas_dia * 10) / 10,
+      dias_ate_zerar: diasAteZerar, // null = nao vende, nunca zera
+      sem_dados: e.sem_dados,
+    };
+  });
+
+  // 5. Tres listas separadas pra IA usar em respostas diferentes:
+  //    - risco_zerar_curvaA: refs Curva A com <= 14 dias de cobertura (URGENTE)
+  //    - risco_zerar_geral: qualquer curva com <= 7 dias e que vende
+  //    - paradas_alto_estoque: vende 0 ou pouco mas ta com estoque acumulado (problema oposto)
+  const riscoCurvaA = refsAnalisadas
+    .filter(r => r.curva === 'A' && r.dias_ate_zerar !== null && r.dias_ate_zerar <= 14)
+    .sort((a, b) => a.dias_ate_zerar - b.dias_ate_zerar)
+    .slice(0, 15);
+
+  const riscoGeralUrgente = refsAnalisadas
+    .filter(r => r.dias_ate_zerar !== null && r.dias_ate_zerar <= 7)
+    .sort((a, b) => a.dias_ate_zerar - b.dias_ate_zerar)
+    .slice(0, 15);
+
+  const paradas = refsAnalisadas
+    .filter(r => r.curva === 'C' && r.qtd_total > 50 && r.vendas_90d <= 5)
+    .sort((a, b) => b.qtd_total - a.qtd_total)
+    .slice(0, 10);
 
   return {
-    ruptura_top: ruptura || [],
-    observacao: 'Refs com qtd_total < 30 peças (cobertura crítica)',
+    risco_zerar_curva_a: riscoCurvaA,
+    risco_zerar_geral_urgente: riscoGeralUrgente,
+    paradas_alto_estoque: paradas,
+    total_refs_analisadas: refsAnalisadas.length,
+    observacao: 'Curva ABC calculada com vendas dos últimos 90 dias (Pareto: A=80% volume, B=95%, C=resto). dias_ate_zerar = qtd_total / (vendas_90d/90). Use risco_zerar_curva_a pra "modelos curva A em risco" e risco_zerar_geral_urgente pra "qualquer modelo prestes a zerar".',
   };
 }
 
@@ -752,6 +822,35 @@ PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04):
 2. "estimativas_sala" (de ordens_corte) = ESTIMATIVA, ainda não virou corte
 Se achar REAL, responda com data + fatos. Se só achar ESTIMATIVA, diga:
 "Tá programado na sala, estimativa de X peças — ainda pode mudar. Pergunta em 2 dias."
+
+ESTOQUE — REGRAS DE CURVA ABC E RISCO DE ZERAR:
+Quando o contexto.estoque inclui "risco_zerar_curva_a", "risco_zerar_geral_urgente"
+ou "paradas_alto_estoque", use a lista CERTA pra cada tipo de pergunta:
+
+- "modelo curva A em risco / curva A acabando / best-sellers prestes a zerar":
+   USE risco_zerar_curva_a (ja vem filtrado: curva A + ate 14 dias de cobertura)
+   NUNCA traga refs paradas. NUNCA traga curva B/C nessa pergunta.
+
+- "vai zerar esse fim de semana / acabando / urgente":
+   USE risco_zerar_geral_urgente (qualquer curva com <= 7 dias)
+   Esses ja vendem - sao risco real, nao "baixo porque parou".
+
+- "modelo parado / encalhado / nao gira":
+   USE paradas_alto_estoque (curva C com estoque > 50 e <= 5 vendas em 90d)
+
+- "estoque baixo" sem qualificador:
+   Pergunta ambigua. Responda perguntando: "Quer ver os curva A em risco
+   (best-sellers prestes a zerar) ou os parados com estoque encalhado?
+   Sao problemas diferentes."
+
+CONCEITO DE CURVA ABC (caso o user pergunte):
+- Curva A = top vendedores que somam 80% do volume (carro-chefe)
+- Curva B = ate 95% (vendem bem mas nao sao top)
+- Curva C = ultimos 5% do volume (paradas, sazonais, novidades)
+- Calculo: vendas dos ultimos 90 dias, ordenados por qtd, Pareto
+
+dias_ate_zerar no contexto = qtd_total atual / (vendas_dia media). Se for null,
+significa que a ref nao vendeu nada em 90d - nunca zera, ta encalhada.
 
 REF NÃO ENCONTRADA EM ESTOQUE/PRODUÇÃO/VENDAS:
 Quando o contexto inclui "ref_cadastrada", significa que a IA buscou no cadastro da empresa
