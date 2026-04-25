@@ -30,15 +30,21 @@ const _FS = 14;
 // SVG ICONS — NAVEGAÇÃO PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SvgDashboard = ({ size = 32 }) => (
-  <img
-    src="/icone-dashboard.png"
-    alt="Dashboard"
-    width={Math.round(size * 1.25)}
-    height={Math.round(size * 1.25)}
-    style={{ objectFit: 'contain', display: 'block', margin: `${-Math.round(size * 0.125)}px` }}
-  />
-);
+const SvgDashboard = ({ size = 32 }) => {
+  // T3+20%: renderiza a 2.4x do size com margin negativo pra encaixar
+  // no slot original sem empurrar layout. Aprovado em preview pelo Ailson 25/04.
+  const renderSize = Math.round(size * 2.4);
+  const marginPx = -Math.round((renderSize - size) / 2);
+  return (
+    <img
+      src="/icone-dashboard.png"
+      alt="Dashboard"
+      width={renderSize}
+      height={renderSize}
+      style={{ objectFit: 'contain', display: 'block', margin: `${marginPx}px` }}
+    />
+  );
+};
 
 const SvgLancamentos = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
@@ -73,15 +79,21 @@ const SvgBoletos = ({ size = 32 }) => (
   </svg>
 );
 
-const SvgOficinas = ({ size = 32 }) => (
-  <img
-    src="/icone-oficinas.png"
-    alt="Oficinas"
-    width={Math.round(size * 1.25)}
-    height={Math.round(size * 1.25)}
-    style={{ objectFit: 'contain', display: 'block', margin: `${-Math.round(size * 0.125)}px` }}
-  />
-);
+const SvgOficinas = ({ size = 32 }) => {
+  // T3+20%: renderiza a 2.4x do size com margin negativo pra encaixar
+  // no slot original sem empurrar layout. Aprovado em preview pelo Ailson 25/04.
+  const renderSize = Math.round(size * 2.4);
+  const marginPx = -Math.round((renderSize - size) / 2);
+  return (
+    <img
+      src="/icone-oficinas.png"
+      alt="Oficinas"
+      width={renderSize}
+      height={renderSize}
+      style={{ objectFit: 'contain', display: 'block', margin: `${marginPx}px` }}
+    />
+  );
+};
 
 const SvgAgenda = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 72 72" fill="none">
