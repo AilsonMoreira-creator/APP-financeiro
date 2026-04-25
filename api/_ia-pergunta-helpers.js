@@ -368,115 +368,199 @@ export async function buscarRefNoCadastro(ref) {
  * Carrega estado de estoque. Se `ref` informado, foca nela. Senão traz
  * resumo geral (top 20 ruptura + top 20 saudável).
  */
+/**
+ * contextoEstoque(ref?)
+ * ─────────────────────────────────────────────────────────────────────
+ * REF específica → granularidade fina cor+tam DAS CORES APROVADAS:
+ *   - Cruza vw_variacoes_classificadas (variação ativa/fraca/inativa, cobertura)
+ *     com vw_distribuicao_cores_por_ref (filtro top do catálogo + ≥2 var/cor)
+ *   - Filtro padrão classificacao = 'principal' (mesma regra que o card de
+ *     Sugestão de Corte usa) — fora dela, cor é considerada inativa pra fins
+ *     de decisão.
+ *   - Retorna lista granular ordenada por urgência (cobertura projetada ASC)
+ *     + agregados (qtd_ativa, qtd_critica, qtd_zerada).
+ *   - Se REF não existe no estoque ML, cai em buscarRefNoCadastro pra
+ *     diferenciar "REF errada" de "REF cadastrada mas sem corte agora".
+ *
+ * SEM ref → resumo geral via vw_ia_curva_abc_ranking (Curva A/B/C por
+ *   posição absoluta, janela 45d, dias_ate_zerar com vs sem oficinas).
+ *   Devolve 3 listas: risco_zerar_curva_a, risco_zerar_geral, paradas.
+ *
+ * Decisão chave: a REGRA DAS CORES APROVADAS já está implementada nas
+ * views `vw_distribuicao_cores_por_ref` (gate1=top do catálogo, gate2=≥2
+ * variações vendendo) — a IA só consome o resultado. NÃO duplica regra
+ * em JS.
+ */
 export async function contextoEstoque(ref = null) {
+  // ═══════════════════════════════════════════════════════════════════
+  // CASO 1: REF específica → granular por cor+tam (cores aprovadas)
+  // ═══════════════════════════════════════════════════════════════════
   if (ref) {
-    const { data } = await supabase
-      .from('ml_estoque_ref_atual')
-      .select('ref, qtd_total, sem_dados, variations, updated_at')
-      .eq('ref', ref)
-      .maybeSingle();
+    // Variações DAS CORES APROVADAS (classificacao='principal' do banco)
+    // RPC inline via SQL: como o supabase-js não suporta INNER JOIN direto,
+    // usa .rpc() não — usamos .from() na view de variações + .from() em
+    // distribuicao_cores e fazemos o cruzamento em memória.
+    const [
+      { data: variacoes },
+      { data: cores_aprovadas },
+      { data: cores_excluidas },
+      { data: ranking },
+    ] = await Promise.all([
+      supabase
+        .from('vw_variacoes_classificadas')
+        .select('cor, cor_key, tam, estoque_atual, vendas_15d, vendas_30d, vendas_mes_ant, vendas_90d, velocidade_dia, cobertura_dias, cobertura_projetada_dias, demanda_status, cobertura_status, pecas_em_corte, confianca')
+        .eq('ref', ref),
+      supabase
+        .from('vw_distribuicao_cores_por_ref')
+        .select('cor_key, cor, classificacao, rank_cor, rank_catalogo, vendas_30d_cor, participacao_pct, tendencia_cor, gate1_ok, gate2_ok')
+        .eq('ref', ref)
+        .eq('classificacao', 'principal'),
+      supabase
+        .from('vw_distribuicao_cores_por_ref')
+        .select('cor, classificacao, motivo_exclusao, rank_catalogo, vendas_30d_cor')
+        .eq('ref', ref)
+        .neq('classificacao', 'principal'),
+      supabase
+        .from('vw_ia_curva_abc_ranking')
+        .select('curva, posicao_ranking, vendas_45d, vendas_dia, qtd_total_estoque, pecas_em_corte, dias_ate_zerar_ml_atual, dias_ate_zerar_com_oficinas')
+        .eq('ref', ref)
+        .maybeSingle(),
+    ]);
 
-    if (data) return { ref_foco: data };
+    const aprovadas = new Set((cores_aprovadas || []).map(c => c.cor_key));
+    const todasVariacoes = variacoes || [];
 
-    // REF não tem dados ML — checa cadastro pra diferenciar "não existe" de "existe mas zero no ML"
-    const cad = await buscarRefNoCadastro(ref);
+    // Filtra variações cuja cor está aprovada (regra das cores corretas)
+    const variacoesAprovadas = todasVariacoes.filter(v => aprovadas.has(v.cor_key));
+
+    // Granularidade de risco: ordena por urgência (menor cobertura projetada primeiro)
+    const variacoes_em_ruptura = variacoesAprovadas
+      .filter(v => v.demanda_status === 'ativa' && ['critica', 'zerada'].includes(v.cobertura_status))
+      .sort((a, b) => {
+        const ca = a.cobertura_projetada_dias ?? -1;
+        const cb = b.cobertura_projetada_dias ?? -1;
+        return ca - cb;
+      })
+      .map(v => ({
+        cor: v.cor,
+        tam: v.tam,
+        estoque_atual: v.estoque_atual,
+        pecas_em_corte: v.pecas_em_corte,
+        vendas_15d: v.vendas_15d,
+        vendas_30d: v.vendas_30d,
+        cobertura_projetada_dias: v.cobertura_projetada_dias,
+        cobertura_status: v.cobertura_status,
+      }));
+
+    // Variações ativas que NÃO estão em ruptura (saudáveis ou em atenção)
+    const variacoes_ativas_ok = variacoesAprovadas
+      .filter(v => v.demanda_status === 'ativa' && !['critica', 'zerada'].includes(v.cobertura_status))
+      .map(v => ({
+        cor: v.cor,
+        tam: v.tam,
+        estoque_atual: v.estoque_atual,
+        cobertura_projetada_dias: v.cobertura_projetada_dias,
+        cobertura_status: v.cobertura_status,
+      }));
+
+    // Ruptura disfarçada (vendia e parou) — vale alertar mesmo em cor aprovada
+    const ruptura_disfarcada = variacoesAprovadas
+      .filter(v => v.demanda_status === 'ruptura_disfarcada')
+      .map(v => ({
+        cor: v.cor,
+        tam: v.tam,
+        estoque_atual: v.estoque_atual,
+        vendas_mes_ant: v.vendas_mes_ant,
+        vendas_15d: v.vendas_15d,
+      }));
+
+    // Se a ref não tem nenhum dado em nenhuma das views, busca cadastro
+    if (todasVariacoes.length === 0 && !ranking) {
+      const cad = await buscarRefNoCadastro(ref);
+      return {
+        ref_foco: null,
+        ref_cadastrada: cad,
+        msg: cad.encontrada
+          ? `REF ${ref} cadastrada mas sem dados ML/vendas. Pode ser ref nova sem histórico ou sem cadastro de cores no anúncio.`
+          : `REF ${ref} não encontrada em nenhum cadastro nem nas vendas ML.`,
+      };
+    }
+
     return {
-      ref_foco: null,
-      ref_cadastrada: cad,
-      msg: cad.encontrada
-        ? 'REF cadastrada mas sem dados ML (pode estar zerada ou só ainda não sincronizou)'
-        : 'REF não encontrada em nenhum cadastro',
+      ref_foco: ref,
+      ranking_geral: ranking || null, // posicao_ranking, curva, dias_ate_zerar_*
+      cores_aprovadas: (cores_aprovadas || []).map(c => ({
+        cor: c.cor,
+        rank_na_ref: c.rank_cor,
+        rank_catalogo: c.rank_catalogo,
+        participacao_pct: c.participacao_pct,
+        vendas_30d: c.vendas_30d_cor,
+        tendencia: c.tendencia_cor,
+      })),
+      cores_excluidas_resumo: {
+        total: (cores_excluidas || []).length,
+        amostra: (cores_excluidas || []).slice(0, 5).map(c => ({
+          cor: c.cor,
+          motivo: c.motivo_exclusao,
+        })),
+      },
+      qtd_variacoes_total: todasVariacoes.length,
+      qtd_variacoes_em_cores_aprovadas: variacoesAprovadas.length,
+      qtd_variacoes_ativas_ok: variacoes_ativas_ok.length,
+      qtd_variacoes_em_ruptura: variacoes_em_ruptura.length,
+      qtd_ruptura_disfarcada: ruptura_disfarcada.length,
+      variacoes_em_ruptura,        // ordenadas por urgência (menor cobertura primeiro)
+      variacoes_ativas_ok,         // saudáveis/atenção
+      ruptura_disfarcada,          // vendia e parou
+      observacao: 'Granularidade só conta variações em CORES APROVADAS (top do catálogo + ≥2 var. vendendo). Cores fora dessa lista são consideradas inativas. cobertura_projetada_dias = (estoque + peças_em_corte) / vendas_dia, devolução 10% já aplicada. demanda_status: ativa (≥6 vendas/15d) | fraca (1-5) | ruptura_disfarcada (vendia mês passado e parou) | inativa.',
     };
   }
 
-  // Resumo geral: cruza estoque + vendas pra classificar Curva ABC e priorizar
-  // refs realmente importantes (alta venda + baixo estoque), nao refs paradas
-  // que ja sao baixas naturalmente.
-  // Janela 45d: limite do detalhe de cor/tamanho disponivel no Bling
-  // (dados mais antigos so existem por ref, sem cor/tamanho).
-  const desde45d = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
+  // ═══════════════════════════════════════════════════════════════════
+  // CASO 2: SEM ref → resumo geral via vw_ia_curva_abc_ranking
+  // ═══════════════════════════════════════════════════════════════════
 
-  // 1. Pega TODO o estoque atual
-  const { data: estoque } = await supabase
-    .from('ml_estoque_ref_atual')
-    .select('ref, qtd_total, sem_dados')
-    .order('qtd_total', { ascending: true });
+  // Curva A em risco real considerando oficinas (mais relevante: já desconta produção)
+  const { data: riscoCurvaA } = await supabase
+    .from('vw_ia_curva_abc_ranking')
+    .select('ref, posicao_ranking, vendas_45d, vendas_dia, qtd_total_estoque, pecas_em_corte, dias_ate_zerar_ml_atual, dias_ate_zerar_com_oficinas')
+    .eq('curva', 'A')
+    .lte('dias_ate_zerar_com_oficinas', 14)
+    .order('dias_ate_zerar_com_oficinas', { ascending: true, nullsFirst: false })
+    .limit(15);
 
-  // 2. Pega vendas dos ultimos 45 dias (alinhado com Top Ranking 30 do Bling)
-  const { data: vendas45 } = await supabase
-    .from('bling_vendas_detalhe')
-    .select('ref, qtd')
-    .gte('data', desde45d);
+  // Risco geral urgente (≤7 dias com oficinas, qualquer curva)
+  const { data: riscoGeral } = await supabase
+    .from('vw_ia_curva_abc_ranking')
+    .select('ref, curva, posicao_ranking, vendas_dia, qtd_total_estoque, pecas_em_corte, dias_ate_zerar_com_oficinas')
+    .lte('dias_ate_zerar_com_oficinas', 7)
+    .order('dias_ate_zerar_com_oficinas', { ascending: true, nullsFirst: false })
+    .limit(15);
 
-  // Agrega vendas por ref
-  const vendasPorRef = {};
-  for (const v of (vendas45 || [])) {
-    vendasPorRef[v.ref] = (vendasPorRef[v.ref] || 0) + (v.qtd || 0);
-  }
+  // Paradas com estoque alto (problema oposto: vende pouco mas ocupa giro)
+  const { data: paradas } = await supabase
+    .from('vw_ia_curva_abc_ranking')
+    .select('ref, vendas_45d, qtd_total_estoque, pecas_em_corte')
+    .eq('curva', 'C')
+    .gt('qtd_total_estoque', 100)
+    .lte('vendas_45d', 5)
+    .order('qtd_total_estoque', { ascending: false })
+    .limit(10);
 
-  // 3. Curva ABC por POSICAO no ranking (regra Ailson 25/04):
-  //    Posicao 1-10  = Curva A (top 10 mais vendidos)
-  //    Posicao 11-20 = Curva B
-  //    Posicao 21+   = Curva C (incluindo refs sem venda)
-  //    Eh ranking absoluto, nao Pareto - ate uma ref "tipo C" pode estar
-  //    vendendo bem em volume, mas se nao ta no top 20, eh C.
-  const refsOrdenadas = Object.entries(vendasPorRef)
-    .map(([ref, qtd]) => ({ ref, qtd_45d: qtd }))
-    .sort((a, b) => b.qtd_45d - a.qtd_45d);
-
-  const curvaPorRef = {};
-  refsOrdenadas.forEach((r, idx) => {
-    const posicao = idx + 1; // 1-indexed
-    const curva = posicao <= 10 ? 'A' : posicao <= 20 ? 'B' : 'C';
-    curvaPorRef[r.ref] = {
-      curva,
-      posicao,
-      qtd_45d: r.qtd_45d,
-      vendas_dia: r.qtd_45d / 45,
-    };
-  });
-
-  // 4. Cruza com estoque e calcula dias_ate_zerar pra cada ref
-  const refsAnalisadas = (estoque || []).map(e => {
-    const v = curvaPorRef[e.ref] || { curva: 'C', posicao: null, qtd_45d: 0, vendas_dia: 0 };
-    const diasAteZerar = v.vendas_dia > 0 ? Math.round(e.qtd_total / v.vendas_dia) : null;
-    return {
-      ref: e.ref,
-      qtd_total: e.qtd_total,
-      curva: v.curva,
-      posicao_ranking: v.posicao,
-      vendas_45d: v.qtd_45d,
-      vendas_dia: Math.round(v.vendas_dia * 10) / 10,
-      dias_ate_zerar: diasAteZerar, // null = nao vende, nunca zera
-      sem_dados: e.sem_dados,
-    };
-  });
-
-  // 5. Tres listas separadas pra IA usar em respostas diferentes:
-  //    - risco_zerar_curva_a: refs Curva A com <= 14 dias de cobertura (URGENTE)
-  //    - risco_zerar_geral: qualquer curva com <= 7 dias e que vende
-  //    - paradas_alto_estoque: vende 0 ou pouco mas ta com estoque acumulado (problema oposto)
-  const riscoCurvaA = refsAnalisadas
-    .filter(r => r.curva === 'A' && r.dias_ate_zerar !== null && r.dias_ate_zerar <= 14)
-    .sort((a, b) => a.dias_ate_zerar - b.dias_ate_zerar)
-    .slice(0, 15);
-
-  const riscoGeralUrgente = refsAnalisadas
-    .filter(r => r.dias_ate_zerar !== null && r.dias_ate_zerar <= 7)
-    .sort((a, b) => a.dias_ate_zerar - b.dias_ate_zerar)
-    .slice(0, 15);
-
-  const paradas = refsAnalisadas
-    .filter(r => r.curva === 'C' && r.qtd_total > 50 && r.vendas_45d <= 5)
-    .sort((a, b) => b.qtd_total - a.qtd_total)
-    .slice(0, 10);
+  // Top 10 da Curva A (só pra IA ter contexto de quem manda no faturamento)
+  const { data: topA } = await supabase
+    .from('vw_ia_curva_abc_ranking')
+    .select('ref, posicao_ranking, vendas_45d, vendas_dia, qtd_total_estoque, dias_ate_zerar_com_oficinas')
+    .eq('curva', 'A')
+    .order('posicao_ranking', { ascending: true })
+    .limit(10);
 
   return {
-    risco_zerar_curva_a: riscoCurvaA,
-    risco_zerar_geral_urgente: riscoGeralUrgente,
-    paradas_alto_estoque: paradas,
-    total_refs_analisadas: refsAnalisadas.length,
-    observacao: 'Curva ABC por POSIÇÃO no ranking de vendas dos últimos 45 dias (alinhado com Top Ranking 30 do Bling): A = top 1-10, B = 11-20, C = 21+. dias_ate_zerar = qtd_total / (vendas_dia média). Use risco_zerar_curva_a pra "modelos curva A em risco" e risco_zerar_geral_urgente pra "qualquer modelo prestes a zerar".',
+    risco_zerar_curva_a: riscoCurvaA || [],
+    risco_zerar_geral_urgente: riscoGeral || [],
+    paradas_alto_estoque: paradas || [],
+    top_10_curva_a: topA || [],
+    observacao: 'Curva ABC por POSIÇÃO no ranking de vendas dos últimos 45 dias (Top Ranking 30 do Bling): A=1-10, B=11-20, C=21+. dias_ate_zerar_com_oficinas considera estoque ML + peças em produção. Use risco_zerar_curva_a pra "modelos curva A em risco" e risco_zerar_geral_urgente pra "qualquer modelo prestes a zerar".',
   };
 }
 
@@ -832,35 +916,72 @@ PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04):
 Se achar REAL, responda com data + fatos. Se só achar ESTIMATIVA, diga:
 "Tá programado na sala, estimativa de X peças — ainda pode mudar. Pergunta em 2 dias."
 
-ESTOQUE — REGRAS DE CURVA ABC E RISCO DE ZERAR:
+ESTOQUE — RESUMO GERAL (sem REF específica na pergunta):
 Quando o contexto.estoque inclui "risco_zerar_curva_a", "risco_zerar_geral_urgente"
 ou "paradas_alto_estoque", use a lista CERTA pra cada tipo de pergunta:
 
 - "modelo curva A em risco / curva A acabando / best-sellers prestes a zerar":
-   USE risco_zerar_curva_a (ja vem filtrado: curva A + ate 14 dias de cobertura)
+   USE risco_zerar_curva_a (já vem filtrado: curva A + até 14 dias considerando oficinas)
    NUNCA traga refs paradas. NUNCA traga curva B/C nessa pergunta.
 
-- "vai zerar esse fim de semana / acabando / urgente":
-   USE risco_zerar_geral_urgente (qualquer curva com <= 7 dias)
-   Esses ja vendem - sao risco real, nao "baixo porque parou".
+- "vai zerar essa semana / acabando / urgente":
+   USE risco_zerar_geral_urgente (qualquer curva com <= 7 dias COM oficinas)
+   Esses já vendem - são risco real, não "baixo porque parou".
 
-- "modelo parado / encalhado / nao gira":
-   USE paradas_alto_estoque (curva C com estoque > 50 e <= 5 vendas em 90d)
+- "modelo parado / encalhado / não gira":
+   USE paradas_alto_estoque (curva C com estoque > 100 e <= 5 vendas em 45d)
 
 - "estoque baixo" sem qualificador:
-   Pergunta ambigua. Responda perguntando: "Quer ver os curva A em risco
+   Pergunta ambígua. Responda perguntando: "Quer ver os curva A em risco
    (best-sellers prestes a zerar) ou os parados com estoque encalhado?
-   Sao problemas diferentes."
+   São problemas diferentes."
+
+ESTOQUE — REF ESPECÍFICA (quando a pergunta cita uma ref tipo "02277"):
+Contexto vem com granularidade fina por cor+tamanho, MAS já filtrado pelas
+CORES APROVADAS (top do catálogo + ≥2 variações vendendo). Cores fora dessa
+lista NÃO entram nas listas — elas aparecem só em "cores_excluidas_resumo".
+
+Campos importantes:
+- ranking_geral.curva, ranking_geral.posicao_ranking, ranking_geral.dias_ate_zerar_com_oficinas
+- cores_aprovadas[] = lista das cores que importam pra essa REF (em ordem de
+  participação). Cada cor tem rank_na_ref, rank_catalogo, vendas_30d, tendência.
+- variacoes_em_ruptura[] = variações ATIVAS com cobertura crítica/zerada,
+  ordenadas pela URGÊNCIA (menor cobertura primeiro). Cada item tem cor, tam,
+  estoque_atual, pecas_em_corte, cobertura_projetada_dias.
+- variacoes_ativas_ok[] = variações ativas saudáveis ou em atenção
+- ruptura_disfarcada[] = variações que VENDIAM no mês passado e PARARAM agora
+  (estoque pode tá zerado, perdeu venda — alertar mesmo)
+- cores_excluidas_resumo = quantas cores ficaram de fora e por quê
+
+Como responder:
+- "tem risco da REF X zerar?": olhe variacoes_em_ruptura. Se >0, dê a
+  granularidade: "REF X tem 3 variações em ruptura: Bege M (3d), Preto G (5d),
+  Caramelo P (7d). Outras 8 ativas em situação ok." Se =0 e ranking_geral.dias_ate_zerar
+  for confortável, diga que não tem risco imediato.
+- "qual a cobertura?": prefira o granular (pior variação) sobre o agregado.
+  "REF X aguenta uns 35d no agregado, mas Bege M já tá em 3 dias."
+- "ref vendia e parou?": olhe ruptura_disfarcada — sinaliza ruptura que o
+  cara nem percebeu porque o estoque cobre bem.
+
+CONCEITOS DO BANCO (vocabulário que aparece no contexto):
+- demanda_status: ativa (>=6 vendas/15d) | fraca (1-5) | ruptura_disfarcada
+  (vendia mês passado, parou agora) | inativa
+- cobertura_status: zerada | sem_demanda | critica (<10d) | atencao | saudavel | excesso
+- classificacao (das cores): principal (entra nos cortes) | overflow_cor
+  (fila de espera) | excluida (fora do top do catálogo OU <2 var. vendendo)
+- cobertura_projetada_dias = (estoque + peças em corte nas oficinas) / vendas_dia,
+  com devolução de 10% já descontada
+- "Cores aprovadas" = filtro top do catálogo + ≥2 variações vendendo.
+  Verde lima, amarelo, etc geralmente saem por esse filtro mesmo quando
+  têm uma venda esporádica.
 
 CONCEITO DE CURVA ABC (regra Ailson, alinhada com Top Ranking 30 do Bling):
-- Curva A = top 1 a 10 mais vendidos nos ultimos 45 dias (carro-chefe)
-- Curva B = posicao 11 a 20 nos ultimos 45 dias
-- Curva C = posicao 21+ ou nao vendeu (paradas, sazonais, novidades)
-- Janela: 45 dias (limite de detalhe cor/tamanho disponivel no Bling)
-- Cada ref no contexto vem com posicao_ranking (1 a N ou null se nao vendeu)
-
-dias_ate_zerar no contexto = qtd_total atual / (vendas_dia media). Se for null,
-significa que a ref nao vendeu nada em 45d - nunca zera, ta encalhada.
+- Curva A = top 1 a 10 mais vendidos nos últimos 45 dias (carro-chefe)
+- Curva B = posição 11 a 20
+- Curva C = posição 21+ ou não vendeu (paradas, sazonais, novidades)
+- Janela: 45 dias (limite de detalhe cor/tamanho do Bling)
+- dias_ate_zerar_com_oficinas considera estoque ML + peças em produção.
+  Se for null, ref não vende — não zera, tá encalhada.
 
 REF NÃO ENCONTRADA EM ESTOQUE/PRODUÇÃO/VENDAS:
 Quando o contexto inclui "ref_cadastrada", significa que a IA buscou no cadastro da empresa
