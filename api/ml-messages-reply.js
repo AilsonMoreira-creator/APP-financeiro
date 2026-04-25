@@ -165,17 +165,39 @@ export default async function handler(req, res) {
     };
 
     // Envia no ML (usa sellerIdStr que ja foi recuperado se preciso)
-    const mlRes = await fetch(
-      `${ML_API}/messages/packs/${conv.pack_id}/sellers/${sellerIdStr}?tag=post_sale`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json; charset=utf-8',
-        },
-        body: JSON.stringify(mlBody),
+    // Timeout de 25s pra nao deixar usuario travado se ML estiver lento
+    // (Vercel functions tem 30s max, deixamos 5s de margem pra processar erro).
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+
+    let mlRes;
+    try {
+      mlRes = await fetch(
+        `${ML_API}/messages/packs/${conv.pack_id}/sellers/${sellerIdStr}?tag=post_sale`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+          body: JSON.stringify(mlBody),
+          signal: controller.signal,
+        }
+      );
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      if (fetchErr.name === 'AbortError') {
+        return res.status(504).json({
+          error: 'Mercado Livre demorou muito pra responder (timeout 25s). Tente novamente em 1 minuto.',
+          codigo_ml: 'timeout',
+        });
       }
-    );
+      return res.status(502).json({
+        error: 'Falha de rede ao chamar Mercado Livre. Tente novamente.',
+        codigo_ml: fetchErr.message,
+      });
+    }
+    clearTimeout(timeoutId);
 
     if (!mlRes.ok) {
       const err = await mlRes.json().catch(() => ({}));
@@ -219,9 +241,13 @@ export default async function handler(req, res) {
 
     const mlData = await mlRes.json();
 
-    // Salva mensagem no Supabase (usando texto limpo, igual ao que foi enviado)
+    // Salva mensagem no Supabase (usando texto limpo, igual ao que foi enviado).
+    // Usa upsert em message_id pra ser idempotente: se o usuario clicar duas
+    // vezes ou houver retry de rede, nao gera duplicata na nossa base
+    // (mas o ML ja recebeu - duplicata no ML so dependeria de retry no fetch
+    // dele, que nao tem).
     const msgId = mlData.id || `sent_${Date.now()}`;
-    await supabase.from('ml_messages').insert({
+    await supabase.from('ml_messages').upsert({
       conversation_id: conv.id,
       pack_id: conv.pack_id,
       message_id: String(msgId),
@@ -231,7 +257,7 @@ export default async function handler(req, res) {
       text: textoLimpo,
       date_created: new Date().toISOString(),
       sent_via,
-    });
+    }, { onConflict: 'message_id' });
 
     // Atualiza conversa
     await supabase.from('ml_conversations').update({

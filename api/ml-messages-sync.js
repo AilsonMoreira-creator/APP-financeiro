@@ -143,23 +143,31 @@ export default async function handler(req, res) {
             if (packRes.ok) {
               const pack = await packRes.json();
               orderId = pack.orders?.[0]?.id || '';
-              if (orderId) {
-                const orderRes = await fetch(`${ML_API}/orders/${orderId}`, {
-                  headers: { Authorization: `Bearer ${token}` },
-                });
-                if (orderRes.ok) {
-                  const order = await orderRes.json();
-                  buyerId = String(order.buyer?.id || '');
-                  buyerNick = order.buyer?.nickname || '';
-                  const firstItem = order.order_items?.[0]?.item;
-                  if (firstItem) {
-                    itemId = firstItem.id || '';
-                    itemTitle = firstItem.title || '';
-                  }
-                }
-              }
             }
           } catch {}
+
+          // FALLBACK (mesmo dos outros endpoints): se /packs nao deu order_id,
+          // usa pack_id direto - em ML pos-venda sao quase sempre iguais.
+          if (!orderId) orderId = packId;
+
+          // Busca dados do order
+          if (orderId) {
+            try {
+              const orderRes = await fetch(`${ML_API}/orders/${orderId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (orderRes.ok) {
+                const order = await orderRes.json();
+                buyerId = String(order.buyer?.id || '');
+                buyerNick = order.buyer?.nickname || '';
+                const firstItem = order.order_items?.[0]?.item;
+                if (firstItem) {
+                  itemId = firstItem.id || '';
+                  itemTitle = firstItem.title || '';
+                }
+              }
+            } catch {}
+          }
           if (itemId) {
             try {
               const iRes = await fetch(`${ML_API}/items/${itemId}?attributes=thumbnail`, {
