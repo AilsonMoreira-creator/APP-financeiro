@@ -237,9 +237,20 @@ Estrutura obrigatória (só um campo):
   // Cortes entregues recentes são mencionados pela IA no texto (com data),
   // mas a matriz não vem - evita confundir a equipe que pode achar que
   // ainda vai chegar essas peças.
+  //
+  // Importante: matriz só vem se a pergunta for genuinamente sobre produção.
+  // Pra perguntas como "foto da REF X" ou "preco da REF X" nao tras matriz,
+  // mesmo que contextoProducao esteja populado (categoria pode ser 'outros'
+  // que puxa todos os contextos como fallback).
   let matrizRender = null;     // legado - primeira matriz (compat com versao antiga)
   let matrizesRender = null;   // novo - lista completa com header { titulo, matriz, oficina, data }
-  if (refFoco && contexto.producao) {
+
+  // Detecta se a pergunta tem intencao explicita de producao/corte.
+  // Mais conservador que o classificador: so olha keywords claras.
+  const perguntaLower = String(pergunta || '').toLowerCase();
+  const perguntaSobreCorte = /\b(corte|cortes|cortando|cortado|matriz|matrizes|oficina|oficinas|costureir|produção|producao|chegando|prazo|atrasad|entrega|entregue|pronta)\b/i.test(perguntaLower);
+
+  if (refFoco && contexto.producao && (intent.categoria === 'producao' || perguntaSobreCorte)) {
     const matrizesAtivas = (contexto.producao.cortes_reais || [])
       .filter(c => c.matriz_render)
       .map(c => ({
