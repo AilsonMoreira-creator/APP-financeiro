@@ -55,6 +55,7 @@ export default async function handler(req, res) {
     let itemThumb = conv.item_thumbnail || '';
     let buyerNick = conv.buyer_nickname || '';
     let buyerId = conv.buyer_id || '';
+    let sellerId = conv.seller_id || '';
     let orderId = conv.order_id || '';
 
     // 1. Se não tem order_id, descobre via pack
@@ -87,6 +88,7 @@ export default async function handler(req, res) {
           const order = await r.json();
           if (!buyerId) buyerId = String(order.buyer?.id || '');
           if (!buyerNick) buyerNick = order.buyer?.nickname || '';
+          if (!sellerId) sellerId = String(order.seller?.id || '');
           const firstItem = order.order_items?.[0]?.item;
           if (firstItem) {
             if (!itemId) itemId = firstItem.id || '';
@@ -94,6 +96,7 @@ export default async function handler(req, res) {
           }
           debug.order_fetch.got_item_id = !!itemId;
           debug.order_fetch.got_item_title = !!itemTitle;
+          debug.order_fetch.got_seller_id = !!sellerId;
         } else {
           debug.order_fetch.error_preview = (await r.text().catch(() => '')).slice(0, 150);
         }
@@ -128,6 +131,7 @@ export default async function handler(req, res) {
     if (itemThumb && itemThumb !== conv.item_thumbnail) updates.item_thumbnail = itemThumb;
     if (buyerNick && buyerNick !== conv.buyer_nickname) updates.buyer_nickname = buyerNick;
     if (buyerId && buyerId !== conv.buyer_id) updates.buyer_id = buyerId;
+    if (sellerId && String(sellerId) !== String(conv.seller_id || '')) updates.seller_id = String(sellerId);
     if (orderId && String(orderId) !== String(conv.order_id || '')) updates.order_id = String(orderId);
 
     if (Object.keys(updates).length > 0) {

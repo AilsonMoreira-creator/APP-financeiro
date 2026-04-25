@@ -102,9 +102,11 @@ export default function MLPosVenda({ supabase, currentUser }) {
     setNotesEdit(conv.notes || '');
     fetchMsgs(conv);
 
-    // Se falta item_title ou thumbnail, tenta enriquecer no ML on-demand
-    // (caso o webhook original tenha vindo incompleto)
-    if (!conv.item_title || !conv.item_thumbnail) {
+    // Se falta item_title, thumbnail OU seller_id/buyer_id, tenta enriquecer
+    // no ML on-demand (caso o webhook original tenha vindo incompleto).
+    // seller_id eh critico pra enviar resposta - sem ele, ml-messages-reply
+    // tem que fazer fallback.
+    if (!conv.item_title || !conv.item_thumbnail || !conv.seller_id || !conv.buyer_id) {
       try {
         const r = await fetch('/api/ml-conv-enrich', {
           method: 'POST',
@@ -152,12 +154,12 @@ export default function MLPosVenda({ supabase, currentUser }) {
   //    não estressar a API ML.
   const enrichFaltantes = async () => {
     if (enrichLoading) return;
-    const pendentes = convs.filter(c => !c.item_title || !c.item_thumbnail);
+    const pendentes = convs.filter(c => !c.item_title || !c.item_thumbnail || !c.seller_id || !c.buyer_id);
     if (pendentes.length === 0) {
-      alert('Todas as conversas já têm foto e título 👌');
+      alert('Todas as conversas já têm foto, título e IDs de seller/buyer 👌');
       return;
     }
-    if (!confirm(`Buscar foto/título no ML pra ${pendentes.length} conversa${pendentes.length > 1 ? 's' : ''}?\n\nPode demorar uns segundos.`)) return;
+    if (!confirm(`Buscar foto/título/IDs no ML pra ${pendentes.length} conversa${pendentes.length > 1 ? 's' : ''}?\n\nPode demorar uns segundos.`)) return;
 
     setEnrichLoading(true);
     setEnrichProgress({ done: 0, total: pendentes.length });
