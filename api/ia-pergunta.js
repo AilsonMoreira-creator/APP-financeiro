@@ -233,13 +233,26 @@ Estrutura obrigatória (só um campo):
 
   const tempoMs = Date.now() - t0;
 
-  // Se a pergunta é sobre produção com REF específica e temos matriz pronta
-  // no contexto, injeta no response (backend já pré-calculou células via folhas × grade,
-  // não depende do Sonnet pra não errar valores)
-  let matrizRender = null;
+  // Se a pergunta é sobre produção com REF específica e temos matrizes prontas
+  // no contexto, injeta TODAS no response (backend já pré-calculou células via
+  // folhas × grade, não depende do Sonnet pra não errar valores).
+  // Quando uma REF tem mais de um corte ativo, mostra todas as matrizes empilhadas.
+  let matrizRender = null;     // legado - primeira matriz (compat com versao antiga)
+  let matrizesRender = null;   // novo - lista completa com header { titulo, matriz, oficina, data }
   if (intent.categoria === 'producao' && refFoco && contexto.producao?.cortes_reais?.length > 0) {
-    const primeiroCorte = contexto.producao.cortes_reais[0];
-    matrizRender = primeiroCorte.matriz_render || null;
+    matrizesRender = contexto.producao.cortes_reais
+      .filter(c => c.matriz_render)
+      .map(c => ({
+        titulo: `Corte nº ${c.nCorte || '?'}${c.atrasado ? ' ⚠ atrasado' : ''}`,
+        oficina: c.oficina || '',
+        data: c.data || '',
+        dias_restantes: c.dias_restantes,
+        qtd: c.qtd,
+        qtdEntregue: c.qtdEntregue,
+        matriz: c.matriz_render,
+      }));
+    // Mantem matriz_render (singular) preenchido pra compat retroativa
+    matrizRender = matrizesRender[0]?.matriz || null;
   }
 
   // foto_url do produto (extrai do contexto que ja foi populado pelos helpers)
@@ -269,7 +282,8 @@ Estrutura obrigatória (só um campo):
   return res.status(200).json({
     ok: true,
     resposta_texto: respostaIA.resposta_texto,
-    matriz_render: matrizRender,
+    matriz_render: matrizRender,        // legado
+    matrizes_render: matrizesRender,    // novo - array completo de cortes ativos
     foto_url: refFoco ? fotoUrl : '',
     categoria: intent.categoria,
     ref_detectada: refFoco,

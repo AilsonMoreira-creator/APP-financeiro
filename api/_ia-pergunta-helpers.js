@@ -120,7 +120,7 @@ export async function checarRateLimit(isAdmin) {
     .eq('user_id', 'ia-pergunta-config')
     .maybeSingle();
 
-  const limite = Number(cfg?.payload?.config?.rate_limit_users ?? 15);
+  const limite = Number(cfg?.payload?.config?.rate_limit_users ?? 50);
 
   const { data: poolRow } = await supabase.rpc('fn_ia_pergunta_pool_hoje');
   const usado = Number(poolRow ?? 0);
@@ -929,6 +929,19 @@ NÃO REPITA DADOS QUE JÁ APARECEM NA MATRIZ:
 Se a pergunta for sobre produção e o contexto tem matriz_render, o frontend vai renderizar
 uma tabela visual com cores, tamanhos, folhas e totais. NÃO escreva essa informação no texto.
 Foque: descrição da peça, nome do corte, data/quanto tempo falta, oficina.
+
+QUANDO TEM MÚLTIPLOS CORTES ATIVOS DA MESMA REF (cortes_reais.length > 1):
+O frontend renderiza UMA matriz POR corte automaticamente (com cabeçalho titulo/oficina/data/dias).
+Você só precisa fazer um RESUMO no texto, exemplo:
+"A 02601 (VESTIDO LINHO TRADICIONAL) tem 3 cortes ativos, ${nomeUser || 'Ana'}:
+
+• Corte 9702 — Roberto Belém — chega em 18d
+• Corte 9710 — Antonio — chega em 15d
+• Corte 9715 — Adalecio — chega em 12d
+
+Total: ${'<somar c.qtd dos cortes>'} peças entrando."
+
+Não detalhe cores/tamanhos no texto — as matrizes mostram tudo abaixo.
 
 FILTRO MONETÁRIO:
 ${filtroMonetarioMsg}

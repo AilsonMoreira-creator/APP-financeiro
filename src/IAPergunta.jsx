@@ -521,7 +521,8 @@ export default function IAPergunta({ supabase, usuarioLogado, onClose }) {
       const msgIA = {
         role: 'ia',
         text: r.resposta_texto,
-        matriz: r.matriz_render,
+        matriz: r.matriz_render,           // legado - 1ª matriz
+        matrizes: r.matrizes_render || null, // novo - lista [{ titulo, oficina, data, dias_restantes, qtd, qtdEntregue, matriz }]
         foto_url: r.foto_url || '',
         categoria: r.categoria,
         time: new Date().toISOString(),
@@ -795,7 +796,34 @@ const MensagemRender = ({ msg }) => {
         whiteSpace: 'pre-wrap',
       }}>
         {msg.text}
-        {msg.matriz && <MatrizRender matriz={msg.matriz} />}
+        {/* Renderiza todas as matrizes quando há múltiplos cortes (formato novo).
+            Fallback pro singular pra compat com mensagens salvas no histórico antes do feature. */}
+        {msg.matrizes && msg.matrizes.length > 0 ? (
+          msg.matrizes.map((m, idx) => (
+            <div key={idx} style={{ marginTop: idx === 0 ? 8 : 16 }}>
+              <div style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: C.dark,
+                marginBottom: 4,
+                opacity: 0.8,
+                letterSpacing: 0.3,
+              }}>
+                {m.titulo}
+                {m.oficina ? ` · ${m.oficina}` : ''}
+                {m.data ? ` · cortado ${new Date(m.data).toLocaleDateString('pt-BR')}` : ''}
+                {typeof m.dias_restantes === 'number' ? (
+                  m.dias_restantes < 0
+                    ? ` · ${Math.abs(m.dias_restantes)}d de atraso`
+                    : ` · faltam ${m.dias_restantes}d`
+                ) : ''}
+              </div>
+              <MatrizRender matriz={m.matriz} />
+            </div>
+          ))
+        ) : (
+          msg.matriz && <MatrizRender matriz={msg.matriz} />
+        )}
         {msg.foto_url && (
           <div style={{ marginTop: 10 }}>
             <a href={msg.foto_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.cream}` }}>
