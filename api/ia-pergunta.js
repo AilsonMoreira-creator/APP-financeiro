@@ -236,11 +236,14 @@ Estrutura obrigatória (só um campo):
   // Se a pergunta é sobre produção com REF específica e temos matrizes prontas
   // no contexto, injeta TODAS no response (backend já pré-calculou células via
   // folhas × grade, não depende do Sonnet pra não errar valores).
-  // Quando uma REF tem mais de um corte ativo, mostra todas as matrizes empilhadas.
+  // Inclui:
+  //   - cortes ativos (em produção, ainda não entregues)
+  //   - cortes entregues recentes (≤3 dias) com data de entrega
+  // Quando uma REF tem mais de um corte, mostra todas as matrizes empilhadas.
   let matrizRender = null;     // legado - primeira matriz (compat com versao antiga)
   let matrizesRender = null;   // novo - lista completa com header { titulo, matriz, oficina, data }
-  if (intent.categoria === 'producao' && refFoco && contexto.producao?.cortes_reais?.length > 0) {
-    matrizesRender = contexto.producao.cortes_reais
+  if (intent.categoria === 'producao' && refFoco) {
+    const matrizesAtivas = (contexto.producao?.cortes_reais || [])
       .filter(c => c.matriz_render)
       .map(c => ({
         titulo: `Corte nº ${c.nCorte || '?'}${c.atrasado ? ' ⚠ atrasado' : ''}`,
@@ -251,8 +254,23 @@ Estrutura obrigatória (só um campo):
         qtdEntregue: c.qtdEntregue,
         matriz: c.matriz_render,
       }));
-    // Mantem matriz_render (singular) preenchido pra compat retroativa
-    matrizRender = matrizesRender[0]?.matriz || null;
+
+    // Cortes entregues recentes (≤3 dias) também viram matrizes, marcadas como entregues
+    const matrizesEntregues = (contexto.producao?.cortes_entregues_recentes || [])
+      .filter(c => c.matriz_render)
+      .map(c => ({
+        titulo: `Corte nº ${c.nCorte || '?'} ✓ entregue ${c.data_entrega_fmt}`,
+        oficina: c.oficina || '',
+        data: c.data_entrega || '',
+        dias_restantes: null, // já entregue, prazo não faz sentido
+        qtd: c.qtd,
+        qtdEntregue: c.qtdEntregue,
+        matriz: c.matriz_render,
+      }));
+
+    const todas = [...matrizesAtivas, ...matrizesEntregues];
+    matrizesRender = todas.length > 0 ? todas : null;
+    matrizRender = matrizesAtivas[0]?.matriz || matrizesEntregues[0]?.matriz || null;
   }
 
   // foto_url do produto (extrai do contexto que ja foi populado pelos helpers)

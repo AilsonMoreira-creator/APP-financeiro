@@ -225,7 +225,8 @@ export function classificarIntencao(pergunta) {
     producao: [
       'produção', 'producao', 'produzindo', 'produzida', 'produzido',
       'costureiro', 'costureira', 'costura', 'oficina', 'oficinas',
-      'cortando', 'corte da', 'corte de', 'cortado', 'matriz', 'folhas',
+      'cortando', 'cortado', 'matriz', 'folhas',
+      'corte ', 'cortes ', 'cortar', // pega "tem corte", "quantos cortes", "vai cortar"
       'entrega', 'prazo', 'chega', 'devolv', 'pronta', 'atrasad', 'lote',
     ],
     estoque: [
@@ -607,6 +608,7 @@ export async function contextoProducao(ref = null) {
   const todosCortes = ac?.payload?.cortes || [];
   const hoje = new Date();
 
+  // Cortes em aberto (não entregues, ou entregues parcialmente)
   const cortesAtivos = todosCortes
     .filter(c => c.entregue !== true)
     .filter(c => !ref || normalizarRef(c.ref) === ref)
@@ -628,6 +630,32 @@ export async function contextoProducao(ref = null) {
         matriz_render: construirMatrizRender(c.detalhes, c.qtd),
       };
     });
+
+  // Cortes ENTREGUES RECENTES (≤3 dias) - relevante pra equipe saber o que
+  // chegou ha pouco tempo. Mais antigo que isso polui a resposta.
+  const cortesEntreguesRecentes = todosCortes
+    .filter(c => c.entregue === true)
+    .filter(c => !ref || normalizarRef(c.ref) === ref)
+    .map(c => {
+      // Tenta achar a data de entrega real; se nao tiver, usa a ultima atualizacao
+      const dataEntrega = c.dataEntrega || c.dataConclusao || c.updatedAt || c.data;
+      const dataE = new Date(dataEntrega);
+      const dias_desde_entrega = Math.floor((hoje - dataE) / 86400000);
+      return {
+        ref: normalizarRef(c.ref),
+        nCorte: c.nCorte,
+        descricao: c.descricao,
+        oficina: c.oficina,
+        data_entrega: dataEntrega,
+        data_entrega_fmt: dataE.toLocaleDateString('pt-BR'),
+        dias_desde_entrega,
+        qtd: c.qtd,
+        qtdEntregue: c.qtdEntregue || c.qtd,
+        matriz_render: construirMatrizRender(c.detalhes, c.qtd),
+      };
+    })
+    .filter(c => c.dias_desde_entrega >= 0 && c.dias_desde_entrega <= 3) // só últimos 3 dias
+    .sort((a, b) => a.dias_desde_entrega - b.dias_desde_entrega);
 
   // 2. Estimativas da Sala de Corte (fallback se não achou real)
   let estimativasSala = [];
@@ -655,6 +683,7 @@ export async function contextoProducao(ref = null) {
 
   return {
     cortes_reais: cortesAtivos.slice(0, 20),
+    cortes_entregues_recentes: cortesEntreguesRecentes.slice(0, 5), // ≤3 dias, max 5
     estimativas_sala: estimativasSala,
     total_reais: cortesAtivos.length,
     ref_cadastrada: refCadastrada, // null se não foi checado, { encontrada: bool, descricao, ... } se foi
@@ -942,6 +971,21 @@ Você só precisa fazer um RESUMO no texto, exemplo:
 Total: ${'<somar c.qtd dos cortes>'} peças entrando."
 
 Não detalhe cores/tamanhos no texto — as matrizes mostram tudo abaixo.
+
+CORTES ENTREGUES RECENTES (cortes_entregues_recentes — só ≤3 dias):
+Quando o contexto tem cortes_entregues_recentes, mencione no texto SEMPRE com a data
+de entrega (campo data_entrega_fmt). Isso é importante pra equipe saber que peças
+chegaram ha pouco tempo. Exemplo após listar os ativos:
+"
+Já entregue recente:
+• Corte 9677 — Roberto Belém — entregue em 23/04 (456 pçs)"
+
+REGRAS:
+- SÓ mencione cortes entregues se vierem em cortes_entregues_recentes (já filtrado ≤3 dias).
+- SEMPRE inclua a data de entrega (data_entrega_fmt).
+- Se cortes_entregues_recentes vier vazio, NUNCA invente "já entregue" - significa
+  que não tem nenhum recente o suficiente pra valer mencionar.
+- Cortes entregues NÃO entram no "total entrando" - só conta cortes_reais (ativos).
 
 FILTRO MONETÁRIO:
 ${filtroMonetarioMsg}
