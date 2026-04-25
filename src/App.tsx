@@ -31,20 +31,13 @@ const _FS = 14;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const SvgDashboard = ({ size = 32 }) => (
-  <svg width={size} height={size} viewBox="0 0 56 56" fill="none">
-    <line x1="7" y1="5" x2="7" y2="46" stroke="#2d3f5e" strokeWidth="1.8" strokeLinecap="round"/>
-    <line x1="7" y1="46" x2="35" y2="46" stroke="#2d3f5e" strokeWidth="1.8" strokeLinecap="round"/>
-    <rect x="8.5" y="37" width="6.5" height="9" rx="0.5" fill="#7aabcc"/>
-    <rect x="17" y="29" width="6.5" height="17" rx="0.5" fill="white" stroke="#2d3f5e" strokeWidth="1"/>
-    <rect x="25.5" y="22" width="6.5" height="24" rx="0.5" fill="#c8a840"/>
-    <path d="M10,38 L18,29 L26,21 L31,15" stroke="#2d3f5e" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M29,13.5 L31,15 L33,14.2" stroke="#2d3f5e" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-    <path d="M31,15 C33,13 34,12 36.2,15" stroke="#2d3f5e" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
-    <circle cx="45" cy="10" r="10.3" fill="white"/>
-    <path d="M45,10 L45,0.5 A9.5,9.5,0,1,1,36.77,14.75 Z" fill="#4a6898"/>
-    <path d="M45,10 L36.77,14.75 A9.5,9.5,0,0,1,45,0.5 Z" fill="#9dbcd6"/>
-    <circle cx="45" cy="10" r="9.5" fill="none" stroke="#2d3f5e" strokeWidth="1.2"/>
-  </svg>
+  <img
+    src="/icone-dashboard.png"
+    alt="Dashboard"
+    width={size}
+    height={size}
+    style={{ objectFit: 'contain', display: 'block' }}
+  />
 );
 
 const SvgLancamentos = ({ size = 32 }) => (
