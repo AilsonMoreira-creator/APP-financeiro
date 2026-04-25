@@ -396,10 +396,14 @@ export async function contextoEstoque(ref = null) {
   // CASO 1: REF específica → granular por cor+tam (cores aprovadas)
   // ═══════════════════════════════════════════════════════════════════
   if (ref) {
+    // IMPORTANTE: as views (vw_variacoes_classificadas, vw_distribuicao_cores_por_ref,
+    // vw_ia_curva_abc_ranking, vw_ia_variacoes_em_ruptura) fazem LTRIM(...,'0')
+    // na origem e armazenam ref SEM zero à esquerda (ex: "2832", não "02832").
+    // O `ref` que chega aqui já vem normalizado em 5 dígitos pelo frontend.
+    // Pra bater nas queries, preciso da forma curta também.
+    const refSemZero = String(ref).replace(/^0+/, '') || '0';
+
     // Variações DAS CORES APROVADAS (classificacao='principal' do banco)
-    // RPC inline via SQL: como o supabase-js não suporta INNER JOIN direto,
-    // usa .rpc() não — usamos .from() na view de variações + .from() em
-    // distribuicao_cores e fazemos o cruzamento em memória.
     const [
       { data: variacoes },
       { data: cores_aprovadas },
@@ -409,21 +413,21 @@ export async function contextoEstoque(ref = null) {
       supabase
         .from('vw_variacoes_classificadas')
         .select('cor, cor_key, tam, estoque_atual, vendas_15d, vendas_30d, vendas_mes_ant, vendas_90d, velocidade_dia, cobertura_dias, cobertura_projetada_dias, demanda_status, cobertura_status, pecas_em_corte, confianca')
-        .eq('ref', ref),
+        .eq('ref', refSemZero),
       supabase
         .from('vw_distribuicao_cores_por_ref')
         .select('cor_key, cor, classificacao, rank_cor, rank_catalogo, vendas_30d_cor, participacao_pct, tendencia_cor, gate1_ok, gate2_ok')
-        .eq('ref', ref)
+        .eq('ref', refSemZero)
         .eq('classificacao', 'principal'),
       supabase
         .from('vw_distribuicao_cores_por_ref')
         .select('cor, classificacao, motivo_exclusao, rank_catalogo, vendas_30d_cor')
-        .eq('ref', ref)
+        .eq('ref', refSemZero)
         .neq('classificacao', 'principal'),
       supabase
         .from('vw_ia_curva_abc_ranking')
         .select('curva, posicao_ranking, vendas_45d, vendas_dia, qtd_total_estoque, pecas_em_corte, dias_ate_zerar_ml_atual, dias_ate_zerar_com_oficinas')
-        .eq('ref', ref)
+        .eq('ref', refSemZero)
         .maybeSingle(),
     ]);
 
