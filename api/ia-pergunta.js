@@ -293,12 +293,26 @@ Estrutura obrigatória (só um campo):
     fotoUrl = await resolverFotoUrl(refFoco);
   }
 
+  // SANITIZACAO: remove URLs do storage Supabase do texto. A IA recebe
+  // foto_url no contexto e as vezes copia no texto, mesmo o prompt
+  // mandando nao copiar. Como guard-rail, removemos no servidor.
+  // Pega tanto URLs nuas quanto markdown ![](...) ou [](...).
+  let respostaLimpa = String(respostaIA.resposta_texto || '');
+  respostaLimpa = respostaLimpa
+    // markdown image/link com URL do storage
+    .replace(/!?\[[^\]]*\]\(\s*https?:\/\/[^)\s]*supabase\.co\/storage[^)\s]*\)/gi, '')
+    // URL nua
+    .replace(/https?:\/\/[^\s)]*supabase\.co\/storage[^\s)]*/gi, '')
+    // limpa linhas que ficaram so com whitespace apos remocao
+    .replace(/^[ \t]*[\r\n]/gm, '')
+    .trim();
+
   await salvarHistorico({
     user_id: user.id,
     user_name: user.usuario,
     user_is_admin: user.admin,
     pergunta,
-    resposta: respostaIA.resposta_texto,
+    resposta: respostaLimpa,
     categoria: intent.categoria,
     ref_detectada: refFoco,
     tokens_in: tokensIn,
@@ -310,7 +324,7 @@ Estrutura obrigatória (só um campo):
 
   return res.status(200).json({
     ok: true,
-    resposta_texto: respostaIA.resposta_texto,
+    resposta_texto: respostaLimpa,
     matriz_render: matrizRender,        // legado
     matrizes_render: matrizesRender,    // novo - array completo de cortes ativos
     foto_url: refFoco ? fotoUrl : '',

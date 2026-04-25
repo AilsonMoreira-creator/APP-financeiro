@@ -1012,6 +1012,12 @@ Se a pergunta for sobre produção e o contexto tem matriz_render, o frontend va
 uma tabela visual com cores, tamanhos, folhas e totais. NÃO escreva essa informação no texto.
 Foque: descrição da peça, nome do corte, data/quanto tempo falta, oficina.
 
+NUNCA ESCREVA URLs DE FOTOS NO TEXTO:
+O contexto pode conter campo foto_url (https://...supabase.co/storage/...). NUNCA copie
+essa URL no texto da resposta - o frontend renderiza a foto automaticamente abaixo da
+mensagem. Apenas mencione "Aqui, [nome]! 📸" ou similar e PARE - sem URL, sem markdown
+de imagem, sem link. Mostrar a URL polui a resposta no celular.
+
 QUANDO TEM MÚLTIPLOS CORTES ATIVOS DA MESMA REF (cortes_reais.length > 1):
 O frontend renderiza UMA matriz POR corte automaticamente (com cabeçalho titulo/oficina/data/dias).
 Você só precisa fazer um RESUMO no texto, exemplo:
