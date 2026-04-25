@@ -33,15 +33,23 @@ const _FS = 14;
 const SvgDashboard = ({ size = 32 }) => {
   // T3+20%: renderiza a 2.4x do size com margin negativo pra encaixar
   // no slot original sem empurrar layout. Aprovado em preview pelo Ailson 25/04.
+  // Margin assimetrico: top reduzido em 2px e bottom aumentado em 2px pra
+  // descer o icone 2px e alinhar visualmente com os emojis vizinhos
+  // (opcao A do preview-alinhamento.html).
   const renderSize = Math.round(size * 2.4);
-  const marginPx = -Math.round((renderSize - size) / 2);
+  const overhang = Math.round((renderSize - size) / 2);
+  const offset = Math.round(size * 2 / 24); // 2px @ size=24, escala proporcional
   return (
     <img
       src="/icone-dashboard.png"
       alt="Dashboard"
       width={renderSize}
       height={renderSize}
-      style={{ objectFit: 'contain', display: 'block', margin: `${marginPx}px` }}
+      style={{
+        objectFit: 'contain',
+        display: 'block',
+        margin: `${-(overhang - offset)}px ${-overhang}px ${-(overhang + offset)}px ${-overhang}px`,
+      }}
     />
   );
 };
