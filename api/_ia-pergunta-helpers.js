@@ -563,13 +563,23 @@ export async function contextoEstoque(ref = null) {
     .order('rank_global', { ascending: true })
     .limit(20);
 
+  // Variações granulares (cor+tam) em ruptura — DE QUALQUER REF, mas só
+  // nas cores aprovadas. Resolve "tem variação prestes a zerar?" quando
+  // o user NÃO dá REF específica. Top 30 mais urgentes.
+  const { data: variacoesRupturaGeral } = await supabase
+    .from('vw_ia_variacoes_em_ruptura')
+    .select('ref, cor, tam, estoque_atual, pecas_em_corte, vendas_15d, vendas_30d, cobertura_projetada_dias, cobertura_status, rank_cor_na_ref, rank_catalogo')
+    .order('cobertura_projetada_dias', { ascending: true, nullsFirst: true })
+    .limit(30);
+
   return {
     risco_zerar_curva_a: riscoCurvaA || [],
     risco_zerar_geral_urgente: riscoGeral || [],
     paradas_alto_estoque: paradas || [],
     top_30_refs_mais_vendidas: top30Refs || [],
     top_cores_mais_vendidas: topCores || [],
-    observacao: 'Curva ABC por POSIÇÃO no ranking de vendas dos últimos 45 dias (Top Ranking 30 do Bling): A=1-10, B=11-20, C=21+. dias_ate_zerar_com_oficinas considera estoque ML + peças em produção. top_30_refs_mais_vendidas responde diretamente "quais modelos mais vendem". top_cores_mais_vendidas responde "quais cores mais vendem no catálogo todo".',
+    variacoes_em_ruptura_geral: variacoesRupturaGeral || [],
+    observacao: 'Curva ABC por POSIÇÃO no ranking de vendas dos últimos 45 dias (Top Ranking 30 do Bling): A=1-10, B=11-20, C=21+. dias_ate_zerar_com_oficinas considera estoque ML + peças em produção. variacoes_em_ruptura_geral lista variações cor+tam em ruptura de QUALQUER ref (já filtradas pelas cores aprovadas) — use quando o usuário perguntar de variações sem citar uma REF específica.',
   };
 }
 
@@ -954,6 +964,13 @@ ou "paradas_alto_estoque", use a lista CERTA pra cada tipo de pergunta:
    USE top_cores_mais_vendidas (ranking global do catálogo Bling — gate1 das
    cores aprovadas). Mostra top 5-10 cores. Diga o rank_global de cada uma.
    Essa é a fonte da verdade — NÃO use a lista do glossário (que pode estar desatualizada).
+
+- "tem alguma variação prestes a zerar / variação em risco / variação crítica" (SEM REF específica):
+   USE variacoes_em_ruptura_geral (já vem ordenado por urgência, top 30 do
+   catálogo, só cores aprovadas). Cada item tem ref, cor, tam, cobertura_projetada_dias.
+   Mostre top 5-10 mais urgentes. Exemplo: "Tem 12 variações em ruptura. As mais
+   urgentes: ref 02277 Bege M (3d), ref 02601 Preto G (4d)..."
+   NUNCA diga "não tenho esse detalhamento" — você TEM, está em variacoes_em_ruptura_geral.
 
 ESTOQUE — REF ESPECÍFICA (quando a pergunta cita uma ref tipo "02277"):
 Contexto vem com granularidade fina por cor+tamanho, MAS já filtrado pelas
