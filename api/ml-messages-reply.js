@@ -191,8 +191,27 @@ export default async function handler(req, res) {
         body_sent: mlBody,
         error_body: err,
       });
+
+      // Detecta erros de negocio do ML e devolve mensagem amigavel pro usuario
+      // em vez do codigo cru. Esses NAO sao bugs do app - sao regras do ML.
+      const errMsg = String(err.message || err.error || '').toLowerCase();
+      let mensagemAmigavel = null;
+
+      if (errMsg.includes('blocked_by_mediation') || errMsg.includes('mediation')) {
+        mensagemAmigavel = 'Conversa em Mediacao no ML - mensagens diretas estao bloqueadas. Responda pelo painel de Mediacoes do Mercado Livre.';
+      } else if (errMsg.includes('conversation_closed') || errMsg.includes('closed')) {
+        mensagemAmigavel = 'Conversa ja foi fechada pelo ML (passou do prazo de resposta ou foi encerrada).';
+      } else if (errMsg.includes('blocked') && errMsg.includes('user')) {
+        mensagemAmigavel = 'Comprador bloqueou ou foi bloqueado - nao da pra enviar mensagem.';
+      } else if (mlRes.status === 403) {
+        mensagemAmigavel = 'Sem permissao pra enviar mensagem nessa conversa (token expirou ou conversa nao pertence a essa conta).';
+      } else if (mlRes.status === 429) {
+        mensagemAmigavel = 'Limite de mensagens ML estourado - aguarde alguns minutos.';
+      }
+
       return res.status(mlRes.status).json({
-        error: 'ML API error',
+        error: mensagemAmigavel || 'Erro do Mercado Livre',
+        codigo_ml: errMsg || `HTTP ${mlRes.status}`,
         status: mlRes.status,
         detail: err,
       });
