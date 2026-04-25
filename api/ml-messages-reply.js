@@ -63,49 +63,85 @@ export default async function handler(req, res) {
         });
       }
 
-      try {
-        // Endpoint /packs/{pack_id}/sellers/{seller_id} retorna a conversa
-        // completa com sender/receiver. Mas se seller_id ta vazio, primeiro
-        // tenta /packs/{pack_id} que tambem expoe a info.
-        const packRes = await fetch(
-          `${ML_API}/packs/${conv.pack_id}` + (conv.seller_id ? `/sellers/${conv.seller_id}` : ''),
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+      // Tenta DOIS endpoints diferentes:
+      // 1. /packs/{pack_id} - estrutura de mensagens
+      // 2. /orders/{pack_id} - em ML, pack_id geralmente == order_id em pos-venda
+      // Se um falhar, tenta o outro. Loga JSON cru pra debug.
+      let recoveredSeller = null;
+      let recoveredBuyer = null;
+      const tentativasLog = [];
 
-        if (packRes.ok) {
-          const packData = await packRes.json();
-          // ML retorna estruturas diferentes em /packs/{id} vs /packs/{id}/sellers/{seller_id}.
-          // Tentamos varios caminhos:
-          const recoveredSeller = packData.seller_id
-            || packData.seller?.id
-            || packData.from?.user_id
-            || conv.seller_id;
-          const recoveredBuyer  = packData.buyer_id
-            || packData.buyer?.id
-            || packData.to?.user_id
-            || conv.buyer_id;
+      const endpoints = [
+        // Se ja temos seller_id, usa endpoint mais especifico:
+        ...(conv.seller_id ? [`${ML_API}/packs/${conv.pack_id}/sellers/${conv.seller_id}`] : []),
+        // Generico:
+        `${ML_API}/packs/${conv.pack_id}`,
+        // Em ML pos-venda, pack_id frequentemente == order_id:
+        `${ML_API}/orders/${conv.pack_id}`,
+      ];
 
+      for (const url of endpoints) {
+        if (recoveredSeller && recoveredBuyer) break;
+        try {
+          const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const body = await r.json().catch(() => ({}));
+          tentativasLog.push({ url, status: r.status, keys: Object.keys(body || {}).slice(0, 20) });
+
+          if (!r.ok) continue;
+
+          // Tenta MUITOS caminhos possiveis (ML retorna estruturas diferentes
+          // em /packs vs /orders vs /packs/sellers):
+          const trySeller = body.seller_id
+            || body.seller?.id
+            || body.from?.user_id
+            || body.user_id
+            || body.order?.seller?.id
+            || body.pack?.seller_id
+            || body.messages?.[0]?.from?.user_id
+            || body.messages?.[0]?.to?.user_id;
+
+          const tryBuyer = body.buyer_id
+            || body.buyer?.id
+            || body.to?.user_id
+            || body.order?.buyer?.id
+            || body.pack?.buyer_id
+            || body.messages?.[0]?.from?.user_id  // pode ser inverso
+            || body.messages?.[0]?.to?.user_id;
+
+          if (!recoveredSeller && trySeller) recoveredSeller = trySeller;
+          if (!recoveredBuyer && tryBuyer && tryBuyer !== recoveredSeller) recoveredBuyer = tryBuyer;
+
+          // Se conseguiu ambos, da pra parar
           if (recoveredSeller && recoveredBuyer) {
-            sellerId = recoveredSeller;
-            buyerId  = recoveredBuyer;
-
-            // Auto-corrige no banco pra nao precisar buscar de novo
-            await supabase.from('ml_conversations').update({
-              seller_id: String(recoveredSeller),
-              buyer_id:  String(recoveredBuyer),
-              updated_at: new Date().toISOString(),
-            }).eq('id', conv.id);
-
-            console.log('[ml-messages-reply] auto-corrigiu seller/buyer_id', {
-              conversation_id: conv.id,
-              pack_id: conv.pack_id,
-              seller: recoveredSeller,
-              buyer: recoveredBuyer,
-            });
+            tentativasLog.push({ sucesso: true, url_que_resolveu: url });
+            break;
           }
+        } catch (e) {
+          tentativasLog.push({ url, erro: e.message });
         }
-      } catch (recoverErr) {
-        console.error('[ml-messages-reply] fallback API ML falhou:', recoverErr.message);
+      }
+
+      // Log estruturado: vai aparecer no Vercel pra debug se ainda falhar
+      console.log('[ml-messages-reply] fallback API ML', {
+        conversation_id: conv.id,
+        pack_id: conv.pack_id,
+        seller_original: conv.seller_id,
+        buyer_original: conv.buyer_id,
+        recoveredSeller,
+        recoveredBuyer,
+        tentativas: tentativasLog,
+      });
+
+      if (recoveredSeller && recoveredBuyer) {
+        sellerId = recoveredSeller;
+        buyerId  = recoveredBuyer;
+
+        // Auto-corrige no banco pra nao precisar buscar de novo
+        await supabase.from('ml_conversations').update({
+          seller_id: String(recoveredSeller),
+          buyer_id:  String(recoveredBuyer),
+          updated_at: new Date().toISOString(),
+        }).eq('id', conv.id);
       }
     }
 
