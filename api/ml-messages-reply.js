@@ -42,21 +42,83 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Texto vazio depois da limpeza' });
     }
 
-    // user_id PRECISA ser number (int64) — se vier como string, ML falha com
-    // FORMATO ML CORRETO (conforme documentacao oficial em PT-BR):
-    // - user_id: STRING (com aspas) — nao number
-    // - text: STRING direto (nao { plain: ... } como pensei antes)
-    // Erro 'Unexpected exception parsing json string' acontecia exatamente
-    // por enviar Number em vez de String em user_id.
+    // user_id PRECISA ser STRING no body (com aspas) - documentacao ML PT-BR.
+    // Erro 'Unexpected exception parsing json string' acontecia por enviar
+    // Number em vez de String em user_id.
     // Ref: https://developers.mercadolivre.com.br/pt_br/mensagens-post-venda
-    const sellerIdStr = String(conv.seller_id);
-    const buyerIdStr = String(conv.buyer_id);
+    let sellerId = conv.seller_id;
+    let buyerId  = conv.buyer_id;
+
+    // FALLBACK (25/04): conversas antigas podem ter sido salvas sem seller_id
+    // ou buyer_id (campos vazios/null). Em vez de bloquear, buscamos via API
+    // ML pelo pack_id e auto-corrigimos no banco.
+    const sellerVazio = !sellerId || String(sellerId).trim() === '';
+    const buyerVazio  = !buyerId  || String(buyerId).trim() === '';
+
+    if (sellerVazio || buyerVazio) {
+      if (!conv.pack_id) {
+        return res.status(500).json({
+          error: 'seller_id/buyer_id ausentes E pack_id tambem - impossivel recuperar',
+          conversation_id: conv.id,
+        });
+      }
+
+      try {
+        // Endpoint /packs/{pack_id}/sellers/{seller_id} retorna a conversa
+        // completa com sender/receiver. Mas se seller_id ta vazio, primeiro
+        // tenta /packs/{pack_id} que tambem expoe a info.
+        const packRes = await fetch(
+          `${ML_API}/packs/${conv.pack_id}` + (conv.seller_id ? `/sellers/${conv.seller_id}` : ''),
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (packRes.ok) {
+          const packData = await packRes.json();
+          // ML retorna estruturas diferentes em /packs/{id} vs /packs/{id}/sellers/{seller_id}.
+          // Tentamos varios caminhos:
+          const recoveredSeller = packData.seller_id
+            || packData.seller?.id
+            || packData.from?.user_id
+            || conv.seller_id;
+          const recoveredBuyer  = packData.buyer_id
+            || packData.buyer?.id
+            || packData.to?.user_id
+            || conv.buyer_id;
+
+          if (recoveredSeller && recoveredBuyer) {
+            sellerId = recoveredSeller;
+            buyerId  = recoveredBuyer;
+
+            // Auto-corrige no banco pra nao precisar buscar de novo
+            await supabase.from('ml_conversations').update({
+              seller_id: String(recoveredSeller),
+              buyer_id:  String(recoveredBuyer),
+              updated_at: new Date().toISOString(),
+            }).eq('id', conv.id);
+
+            console.log('[ml-messages-reply] auto-corrigiu seller/buyer_id', {
+              conversation_id: conv.id,
+              pack_id: conv.pack_id,
+              seller: recoveredSeller,
+              buyer: recoveredBuyer,
+            });
+          }
+        }
+      } catch (recoverErr) {
+        console.error('[ml-messages-reply] fallback API ML falhou:', recoverErr.message);
+      }
+    }
+
+    // Se ainda assim continua faltando, ai sim retorna erro
+    const sellerIdStr = String(sellerId || '').trim();
+    const buyerIdStr  = String(buyerId  || '').trim();
 
     if (!sellerIdStr || !buyerIdStr) {
       return res.status(500).json({
-        error: 'seller_id ou buyer_id ausente na conversa',
+        error: 'seller_id ou buyer_id ausente na conversa (e fallback API ML nao recuperou)',
         seller_id: conv.seller_id,
         buyer_id: conv.buyer_id,
+        pack_id: conv.pack_id,
       });
     }
 
@@ -66,9 +128,9 @@ export default async function handler(req, res) {
       text: textoLimpo,
     };
 
-    // Envia no ML
+    // Envia no ML (usa sellerIdStr que ja foi recuperado se preciso)
     const mlRes = await fetch(
-      `${ML_API}/messages/packs/${conv.pack_id}/sellers/${conv.seller_id}?tag=post_sale`,
+      `${ML_API}/messages/packs/${conv.pack_id}/sellers/${sellerIdStr}?tag=post_sale`,
       {
         method: 'POST',
         headers: {
