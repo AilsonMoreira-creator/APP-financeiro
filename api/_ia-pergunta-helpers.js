@@ -313,29 +313,37 @@ export function filtrarMonetarios(obj, excluirFicha = false) {
  */
 /**
  * Gera a URL publica da foto da REF no bucket 'produtos' do Supabase Storage.
- * O upload de fotos (api/produto-foto.js) salva como {REF}.{jpg|png|webp},
- * com REF.toUpperCase(). Pra REFs numericas o case nao importa, mas a
- * extensao varia. Esta funcao busca o arquivo real no bucket pra achar
- * a extensao certa.
+ * O upload (api/produto-foto.js) usa REF.toUpperCase() + .{jpg|png|webp}, mas
+ * fotos antigas podem estar gravadas SEM zero a esquerda (ex: '2277.jpg' em
+ * vez de '02277.jpg') e/ou em outras extensoes.
  *
- * @param {string} ref REF normalizada (ex: "02277")
- * @returns {Promise<string>} URL publica ou string vazia se nao achou
+ * Mesma estrategia do componente FotoProdLarge no App.tsx (linha ~4154):
+ * lista o bucket UMA vez e procura match em qualquer das variantes possiveis.
  */
 export async function resolverFotoUrl(ref) {
   if (!ref) return '';
   try {
-    // Lista arquivos com nome batendo a REF (qualquer extensao)
+    const orig = String(ref).trim().toUpperCase();
+    const norm = orig.replace(/^0+/, ''); // sem zero a esquerda
+    const pad4 = norm.padStart(4, '0');
+    const pad5 = norm.padStart(5, '0');
+
+    // Set de basenames possiveis (case-insensitive comparado depois)
+    const candidatos = new Set([orig, norm, pad4, pad5]);
+
+    // Lista TODOS os arquivos cujo nome comeca com qualquer prefixo numerico
+    // batendo a REF. Como search no Supabase eh prefix-match, tentamos com
+    // norm (mais curto) que pega tanto '2277.jpg' quanto '02277.jpg'.
     const { data: files } = await supabase.storage
       .from('produtos')
-      .list('', { search: ref.trim() });
+      .list('', { search: norm, limit: 100 });
 
     if (!files || files.length === 0) return '';
 
-    // Pega o primeiro arquivo cujo nome (sem ext) eh exatamente a REF
-    const refUpper = ref.trim().toUpperCase();
+    // Procura arquivo cujo basename (sem extensao) esta nos candidatos
     const match = files.find(f => {
       const baseName = f.name.replace(/\.[^.]+$/, '').toUpperCase();
-      return baseName === refUpper;
+      return candidatos.has(baseName);
     });
 
     if (!match) return '';
