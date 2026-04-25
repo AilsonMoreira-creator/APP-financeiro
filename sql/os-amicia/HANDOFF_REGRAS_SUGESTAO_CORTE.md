@@ -3,6 +3,99 @@
 > **Anexo técnico do HANDOFF principal.**  
 > Documenta como a IA de sugestão de corte (OS Amícia) decide **quais REFs cortar, em quais cores, com qual grade**, e onde cada regra está implementada.
 
+---
+
+## ⚠️⚠️⚠️ AVISO CRÍTICO PRA PRÓXIMO CHAT — LEIA ANTES DE TUDO ⚠️⚠️⚠️
+
+**O SQL EM PRODUÇÃO ESTÁ ADIANTE DO REPOSITÓRIO.** Vários commits de SQL foram aplicados direto no banco e nunca voltaram ao repo. Isso causou erros graves em sessão anterior (Sprint 8 IA Pergunta, 25/04) — o assistente afirmou 3 VEZES que regras não estavam implementadas, baseado em arquivos `.sql` desatualizados, quando na verdade já estavam rodando em produção há tempos.
+
+### Discrepâncias conhecidas (estado em 25/04/2026):
+
+| Objeto | No repo | Em produção (real) |
+|---|---|---|
+| `fn_ia_cortes_recomendados()` | **v1.2** (hotfix cobertura) | **v1.7** (com `tipo_corte`, `fonte_corte_pendente`, limite 5 balanceamentos) |
+| `vw_distribuicao_cores_por_ref` | versão básica (linha 437 de `05_views_corte.sql`) | **versão com gates 1+2** (top catálogo + ≥2 var/cor + classificação principal/overflow_cor/excluida) |
+| `vw_cortes_recomendados_semana` | versão Sprint 2 | **versão com `tipo_corte`** (tradicional/balanceamento por curva+peças) e filtro `classificacao = 'principal'` |
+| `vw_ranking_cores_catalogo` | **NÃO EXISTE NO REPO** | Existe e é gate1 das cores aprovadas |
+| `vw_variacoes_vendidas_30d_ref_cor` | **NÃO EXISTE NO REPO** | Existe e é gate2 |
+| `ia_sugestoes_arquivadas` | não documentada | Existe, exclui refs arquivadas do corte |
+| Chaves `ia_config` | doc parcial | Tem `top_n_cor_principal`, `top_n_cor_overflow`, `boost_ruptura_pct` (não documentadas) |
+
+### REGRAS DE OURO PRA NOVA SESSÃO
+
+1. **NUNCA afirme que uma regra "não está implementada" baseado só nos arquivos do repo.** O Sprint 6.7 estava marcado "pendente" neste mesmo documento mas já tinha sido implementado.
+2. **ANTES de propor SQL novo ou afirmar que algo falta, RODE no banco:**
+   ```sql
+   -- Pra função:
+   SELECT pg_get_functiondef(oid)
+   FROM pg_proc WHERE proname = '<nome_da_funcao>';
+   
+   -- Pra view:
+   SELECT pg_get_viewdef('<nome_da_view>'::regclass, true);
+   
+   -- Pra ver chaves de config:
+   SELECT chave, valor #>> '{}' FROM ia_config ORDER BY chave;
+   ```
+3. **Output real do banco supera análise de código.** Se Ailson colar JSON da função, isso é a fonte da verdade.
+4. **Restrição inviolável do Ailson:** *"sem mexer em nada do q existe (e esta funcionando)"*. Sempre criar arquivos novos / editar só o que está quebrado.
+
+### O QUE JÁ FOI IMPLEMENTADO (apesar do repo dizer o contrário)
+
+- ✅ **Filtro top do catálogo (gate1):** `vw_distribuicao_cores_por_ref` cruza com `vw_ranking_cores_catalogo`. Verde lima/amarelo/etc saem com `classificacao='excluida'`, motivo `fora_top_catalogo`.
+- ✅ **Limite N cores principais:** controlado por `ia_config.top_n_cor_principal` (configurável). Cores de rank > N viram `excluida` com motivo `top_n_excedido`.
+- ✅ **Fila de espera (overflow_cor):** entre `top_n_cor_principal` e `top_n_cor_overflow` viram `overflow_cor` (próximo corte).
+- ✅ **Tipo de corte (tradicional/balanceamento):** Curva A + ≥300 peças → tradicional. Curva ≠A + ≥200 → tradicional. 80-199 → balanceamento. <80 → não vai.
+- ✅ **Limite 5 balanceamentos por janela** aplicado na função v1.7.
+
+### O QUE A IA PERGUNTA (Sprint 8) USA HOJE
+
+Nova view criada nesta sessão:
+- `sql/os-amicia/19_vw_ia_curva_abc_ranking.sql` — Curva ABC por POSIÇÃO (1-10=A, 11-20=B, 21+=C), janela 45d, com `dias_ate_zerar_ml_atual` e `dias_ate_zerar_com_oficinas`.
+
+`api/_ia-pergunta-helpers.js` `contextoEstoque(ref?)`:
+- **Com REF:** cruza `vw_variacoes_classificadas` (granular cor+tam) com `vw_distribuicao_cores_por_ref` filtrando `classificacao='principal'`. Devolve só variações de cores aprovadas. **Esse é o cruzamento certo — referência canônica de como consumir a regra.**
+- **Sem REF:** lê `vw_ia_curva_abc_ranking` direto + `vw_ranking_cores_catalogo` pra top cores.
+
+### COMO MANTER ESTE DOC ATUALIZADO
+
+Se mexer em SQL de produção sem commitar arquivo correspondente no repo, **adiciona uma linha aqui na tabela de discrepâncias acima** com a data e o que mudou. É a única forma de o próximo chat não cair no mesmo poço.
+
+---
+
+## 📌 Como dar dump do estado real (rápido)
+
+Pra próxima sessão começar com fonte da verdade, peça pro Ailson rodar uma vez:
+
+```sql
+-- Salva todas as views da OS Amícia em uma string única
+SELECT string_agg(
+  '-- ' || schemaname || '.' || viewname || E'\n' ||
+  'CREATE OR REPLACE VIEW ' || viewname || ' AS' || E'\n' ||
+  pg_get_viewdef(schemaname || '.' || viewname, true) || E'\n\n',
+  ''
+)
+FROM pg_views
+WHERE schemaname = 'public'
+  AND (viewname LIKE 'vw_ia_%'
+       OR viewname LIKE 'vw_cortes_%'
+       OR viewname LIKE 'vw_variacoes_%'
+       OR viewname LIKE 'vw_distribuicao_%'
+       OR viewname LIKE 'vw_ranking_%'
+       OR viewname LIKE 'vw_grade_%'
+       OR viewname LIKE 'vw_rendimento_%'
+       OR viewname LIKE 'vw_refs_%'
+       OR viewname LIKE 'vw_projecao_%');
+
+-- Salva todas as funções IA
+SELECT string_agg(pg_get_functiondef(oid), E'\n\n')
+FROM pg_proc
+WHERE proname LIKE 'fn_ia_%';
+```
+
+Cola o output em arquivos `99_snapshot_views_producao.sql` e `99_snapshot_functions_producao.sql` no repo. Próximo chat lê esses snapshots em vez dos arquivos originais.
+
+---
+
 **Versão atual:** Sprint 6.8 · `fn_ia_cortes_recomendados()` v1.2 (hotfix)  
 **Cron:** 2x por dia — 07:00 e 14:00 BRT (`ia-cron.js`)  
 **Modelo Claude:** `claude-sonnet-4-6`, temperatura 0.3, max 1500 tokens  
@@ -316,23 +409,23 @@ Atual: `fn_ia_cortes_recomendados()` v1.2.
 
 ---
 
-## 🚫 PROBLEMAS PENDENTES (Sprint 6.7 — não iniciado)
+## ✅ PROBLEMAS RESOLVIDOS (Sprint 6.7 — DONE em algum momento entre 22/04 e 25/04)
 
-Documentados em `HANDOFF_SPRINT6_5.md`, permanecem:
+> ⚠️ Esta seção dizia "PENDENTE não iniciado" até 25/04 quando descobrimos via `pg_get_functiondef` que tudo já tinha sido implementado em produção (função v1.7) sem o repo ter sido atualizado. Mantemos o histórico abaixo como referência, mas todos os 3 itens estão **resolvidos**.
 
-### Problema 1: Cores irrelevantes sendo sugeridas
+### ✅ Problema 1: Cores irrelevantes sendo sugeridas — RESOLVIDO
 
 REF 2277 estava sugerindo Amarelo, Vermelho, Azul Bebê, Verde Sálvia — cores em queda ou sem relevância. O ranking **geral** do catálogo não bate com o que aparece no app.
 
 **Onde investigar:** `vw_distribuicao_cores_por_ref` — provavelmente inclui todas as cores com ≥1 venda sem filtrar por relevância nem ordenar por volume específico da REF.
 
-### Problema 2: Limite de 6 cores não implementado
+### ✅ Problema 2: Limite de 6 cores não implementado — RESOLVIDO
 
-Regras estão travadas (mín 1, máx 6, overflow vira corte #2) mas ainda não implementadas em SQL. Precisa `ROW_NUMBER() OVER (PARTITION BY ref ORDER BY vendas DESC)` na view 5 e tratamento de overflow na fn.
+Foi implementado via `ia_config.top_n_cor_principal` (configurável). A view `vw_distribuicao_cores_por_ref` aplica `ROW_NUMBER() OVER (PARTITION BY ref ORDER BY (gate_ok, score DESC))` e classifica cores como `principal` (entram no corte), `overflow_cor` (fila pro próximo) ou `excluida`.
 
-### Problema 3: "Por quê" raso
+### ✅ Problema 3: "Por quê" raso — RESOLVIDO (frontend)
 
-Hoje o modal só diz "Demanda ativa com cobertura crítica". Ailson quer **fontes e números** visíveis: estoque atual, em produção, venda/dia, cobertura, curva, outras refs com mesmo problema, cores excluídas e motivo.
+O modal `ProducaoCards.jsx` (`ModalAnaliseCompleta`) já consome `ref_.analise{}` com `{valor, fonte/calc}` por campo, `cores_excluidas[]` com motivo, `fila_espera[]`, e `criterios_aplicados{}`. Todos os campos vêm da função SQL v1.7+.
 
 ---
 
