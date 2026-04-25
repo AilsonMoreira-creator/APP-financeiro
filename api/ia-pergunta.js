@@ -278,17 +278,20 @@ Estrutura obrigatória (só um campo):
   // foto_url do produto. Estrategia em 3 niveis:
   // 1. Se algum contexto ja populou foto_url (caso da ref nao encontrada que
   //    cai em buscarRefNoCadastro), usa esse.
-  // 2. Senao, gera URL diretamente do storage (bucket produtos/{ref}.jpg).
-  //    Garante que pergunta 'foto da REF X' funcione mesmo quando a ref
-  //    tem dados completos e nao caiu no fallback do buscarRefNoCadastro.
-  // 3. Frontend tem onError no <img> que esconde a imagem se 404 (ref sem foto).
-  const fotoUrl =
+  // 2. Senao, busca direto no storage (bucket produtos) o arquivo cujo nome
+  //    bate a REF (qualquer extensao: jpg/png/webp).
+  // 3. Frontend tem onError no <img> que esconde a imagem se 404.
+  let fotoUrl =
     contexto.estoque?.ref_cadastrada?.foto_url ||
     contexto.estoque?.foto_url ||
     contexto.produto?.foto_url ||
     contexto.producao?.ref_cadastrada?.foto_url ||
     contexto.ficha_tecnica?.foto_url ||
-    (refFoco ? resolverFotoUrl(refFoco) : '');
+    '';
+
+  if (!fotoUrl && refFoco) {
+    fotoUrl = await resolverFotoUrl(refFoco);
+  }
 
   await salvarHistorico({
     user_id: user.id,

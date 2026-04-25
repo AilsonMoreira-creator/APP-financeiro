@@ -312,16 +312,35 @@ export function filtrarMonetarios(obj, excluirFicha = false) {
  * Também retorna URL pública da foto do produto se existir no Storage.
  */
 /**
- * Gera a URL publica da foto da REF no bucket 'produtos' do Supabase
- * Storage. Convencao: arquivo {REF}.jpg (REF sem zero a esquerda).
- * Nao verifica se o arquivo existe - frontend tem onError pra esconder
- * imagem quebrada. Centralizar aqui evita duplicar logica em varios
- * helpers de contexto.
+ * Gera a URL publica da foto da REF no bucket 'produtos' do Supabase Storage.
+ * O upload de fotos (api/produto-foto.js) salva como {REF}.{jpg|png|webp},
+ * com REF.toUpperCase(). Pra REFs numericas o case nao importa, mas a
+ * extensao varia. Esta funcao busca o arquivo real no bucket pra achar
+ * a extensao certa.
+ *
+ * @param {string} ref REF normalizada (ex: "02277")
+ * @returns {Promise<string>} URL publica ou string vazia se nao achou
  */
-export function resolverFotoUrl(ref) {
+export async function resolverFotoUrl(ref) {
   if (!ref) return '';
   try {
-    const { data } = supabase.storage.from('produtos').getPublicUrl(`${ref}.jpg`);
+    // Lista arquivos com nome batendo a REF (qualquer extensao)
+    const { data: files } = await supabase.storage
+      .from('produtos')
+      .list('', { search: ref.trim() });
+
+    if (!files || files.length === 0) return '';
+
+    // Pega o primeiro arquivo cujo nome (sem ext) eh exatamente a REF
+    const refUpper = ref.trim().toUpperCase();
+    const match = files.find(f => {
+      const baseName = f.name.replace(/\.[^.]+$/, '').toUpperCase();
+      return baseName === refUpper;
+    });
+
+    if (!match) return '';
+
+    const { data } = supabase.storage.from('produtos').getPublicUrl(match.name);
     return data?.publicUrl || '';
   } catch {
     return '';
@@ -332,14 +351,8 @@ export function resolverFotoUrl(ref) {
 export async function buscarRefNoCadastro(ref) {
   if (!ref) return { encontrada: false };
 
-  // Tenta gerar URL pública da foto - bucket 'produtos', arquivo {REF}.jpg.
-  // Não checa se existe pra evitar 1 request a mais; se foto não existir,
-  // o <img onError> no frontend cuida do fallback.
-  let fotoUrl = '';
-  try {
-    const { data: pub } = supabase.storage.from('produtos').getPublicUrl(`${ref}.jpg`);
-    fotoUrl = pub?.publicUrl || '';
-  } catch (e) { /* sem foto, ok */ }
+  // Resolve foto via helper unificado (lista bucket pra achar extensao certa)
+  const fotoUrl = await resolverFotoUrl(ref);
 
   // 1. Cadastro principal (amicia-admin.payload.produtos)
   const { data: adm } = await supabase
@@ -796,10 +809,7 @@ export async function contextoProduto(ref = null, isAdmin = false) {
   // URL pública da foto do produto (se existir no bucket)
   let fotoUrl = '';
   if (ref) {
-    try {
-      const { data: pub } = supabase.storage.from('produtos').getPublicUrl(`${ref}.jpg`);
-      fotoUrl = pub?.publicUrl || '';
-    } catch (e) { /* sem foto, ok */ }
+    fotoUrl = await resolverFotoUrl(ref);
   }
 
   if (ref) {
