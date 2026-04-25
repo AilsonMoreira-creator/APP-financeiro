@@ -34,9 +34,9 @@ const SvgDashboard = ({ size = 32 }) => (
   <img
     src="/icone-dashboard.png"
     alt="Dashboard"
-    width={size}
-    height={size}
-    style={{ objectFit: 'contain', display: 'block' }}
+    width={Math.round(size * 1.25)}
+    height={Math.round(size * 1.25)}
+    style={{ objectFit: 'contain', display: 'block', margin: `${-Math.round(size * 0.125)}px` }}
   />
 );
 
@@ -77,9 +77,9 @@ const SvgOficinas = ({ size = 32 }) => (
   <img
     src="/icone-oficinas.png"
     alt="Oficinas"
-    width={size}
-    height={size}
-    style={{ objectFit: 'contain', display: 'block' }}
+    width={Math.round(size * 1.25)}
+    height={Math.round(size * 1.25)}
+    style={{ objectFit: 'contain', display: 'block', margin: `${-Math.round(size * 0.125)}px` }}
   />
 );
 
