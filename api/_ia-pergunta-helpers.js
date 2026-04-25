@@ -547,20 +547,29 @@ export async function contextoEstoque(ref = null) {
     .order('qtd_total_estoque', { ascending: false })
     .limit(10);
 
-  // Top 10 da Curva A (só pra IA ter contexto de quem manda no faturamento)
-  const { data: topA } = await supabase
+  // Top 30 refs (responde "quais refs mais vendem" diretamente)
+  const { data: top30Refs } = await supabase
     .from('vw_ia_curva_abc_ranking')
-    .select('ref, posicao_ranking, vendas_45d, vendas_dia, qtd_total_estoque, dias_ate_zerar_com_oficinas')
-    .eq('curva', 'A')
-    .order('posicao_ranking', { ascending: true })
-    .limit(10);
+    .select('ref, posicao_ranking, curva, vendas_45d, vendas_dia, qtd_total_estoque, dias_ate_zerar_com_oficinas')
+    .lte('posicao_ranking', 30)
+    .order('posicao_ranking', { ascending: true });
+
+  // Top cores do catálogo (responde "quais cores mais vendem" diretamente)
+  // Fonte: vw_ranking_cores_catalogo — mesma view usada como gate1 pra
+  // aprovar cor num corte. Limita 20 pra não inflar contexto.
+  const { data: topCores } = await supabase
+    .from('vw_ranking_cores_catalogo')
+    .select('*')
+    .order('rank_global', { ascending: true })
+    .limit(20);
 
   return {
     risco_zerar_curva_a: riscoCurvaA || [],
     risco_zerar_geral_urgente: riscoGeral || [],
     paradas_alto_estoque: paradas || [],
-    top_10_curva_a: topA || [],
-    observacao: 'Curva ABC por POSIÇÃO no ranking de vendas dos últimos 45 dias (Top Ranking 30 do Bling): A=1-10, B=11-20, C=21+. dias_ate_zerar_com_oficinas considera estoque ML + peças em produção. Use risco_zerar_curva_a pra "modelos curva A em risco" e risco_zerar_geral_urgente pra "qualquer modelo prestes a zerar".',
+    top_30_refs_mais_vendidas: top30Refs || [],
+    top_cores_mais_vendidas: topCores || [],
+    observacao: 'Curva ABC por POSIÇÃO no ranking de vendas dos últimos 45 dias (Top Ranking 30 do Bling): A=1-10, B=11-20, C=21+. dias_ate_zerar_com_oficinas considera estoque ML + peças em produção. top_30_refs_mais_vendidas responde diretamente "quais modelos mais vendem". top_cores_mais_vendidas responde "quais cores mais vendem no catálogo todo".',
   };
 }
 
@@ -936,6 +945,16 @@ ou "paradas_alto_estoque", use a lista CERTA pra cada tipo de pergunta:
    (best-sellers prestes a zerar) ou os parados com estoque encalhado?
    São problemas diferentes."
 
+- "qual modelo / quais refs mais vendem / top de vendas / mais vendidos":
+   USE top_30_refs_mais_vendidas (ranking 1-30 da janela 45d, soma 3 marcas).
+   Mostra top 5-10 com posição, vendas_45d e curva. Não precisa do top 30 todo
+   exceto se pedir explicitamente. Vendas_dia já vem com devolução 10% descontada.
+
+- "qual cor / quais cores mais vendem / cores top / cor mais saída":
+   USE top_cores_mais_vendidas (ranking global do catálogo Bling — gate1 das
+   cores aprovadas). Mostra top 5-10 cores. Diga o rank_global de cada uma.
+   Essa é a fonte da verdade — NÃO use a lista do glossário (que pode estar desatualizada).
+
 ESTOQUE — REF ESPECÍFICA (quando a pergunta cita uma ref tipo "02277"):
 Contexto vem com granularidade fina por cor+tamanho, MAS já filtrado pelas
 CORES APROVADAS (top do catálogo + ≥2 variações vendendo). Cores fora dessa
@@ -1009,9 +1028,9 @@ const GLOSSARIO_DEFAULT = `- "ref" = "referência" = "modelo" = "peça" (tudo vi
 - "Silva Teles" = "Brás" = "ST" (loja atacado Brás)
 - "José Paulino" = "Bom Retiro" = "JP" (loja atacado Bom Retiro)
 - "Varejo" = loja física direto pro consumidor final
-- "Curva A" = bestseller (≥300 peças/ciclo), "Curva B" = ≥200, "Curva C" = resto
+- "Curva A" = top 1-10 mais vendidos (45d), "Curva B" = posição 11-20, "Curva C" = 21+ ou parado
 - "Matriz" = estrutura cor × tamanho × folhas do corte
-- "Carro-chefe" = top 10 cores mais vendidas no Bling (Preto, Bege, Marrom, Figo, Azul Marinho, Caramelo, Verde Militar, Marrom Escuro, Nude, Azul Serenity)
+- "Carro-chefe" / "cores top" = top do ranking de cores do catálogo Bling. Quando perguntarem, USAR top_cores_mais_vendidas do contexto (sempre atualizado) — NÃO listar de memória.
 - "Produção" = "produzindo" = "no costureiro" = "na costura" = "na oficina"
 - Oficinas externas: Dona Maria, Seu Zé, etc (costureiros que pegam peças cortadas)
 - Salas de corte internas: Antonio, Adalecio, Chico (cortam tecido em peças)
