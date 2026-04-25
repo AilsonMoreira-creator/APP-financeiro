@@ -247,8 +247,15 @@ Estrutura obrigatória (só um campo):
 
   // Detecta se a pergunta tem intencao explicita de producao/corte.
   // Mais conservador que o classificador: so olha keywords claras.
+  // Lista expandida 25/04 (Ailson): cobrir variacoes de fala do dia-a-dia
+  // como "ta vindo", "pra vir", "sendo feito", "na costura", etc.
   const perguntaLower = String(pergunta || '').toLowerCase();
-  const perguntaSobreCorte = /\b(corte|cortes|cortando|cortado|matriz|matrizes|oficina|oficinas|costureir|produção|producao|chegando|prazo|atrasad|entrega|entregue|pronta)\b/i.test(perguntaLower);
+  const perguntaSobreCorte = /\b(corte|cortes|cortando|cortado|matriz|matrizes|oficina|oficinas|costura|costureir|prazo|atrasad\w*|entrega|entregue|pronta|prontas|prontinha|chega\w*|chegou|chegaram)\b/i.test(perguntaLower)
+    // Frases compostas / coloquiais (precisam ser palavras adjacentes pra evitar falso positivo)
+    || /\b(produção|producao|produzindo|produzido|produzida|produzir)\b/i.test(perguntaLower)
+    || /\b(sendo feit[oa]|sendo produzid[oa]|em produção|em producao)\b/i.test(perguntaLower)
+    || /\b(pra vir|pra chegar|vai chegar|esta vindo|está vindo|ta vindo|tá vindo|vindo)\b/i.test(perguntaLower)
+    || /\b(na oficina|nas oficinas|na costura|na produção|na producao|com a costureira|com o costureiro)\b/i.test(perguntaLower);
 
   if (refFoco && contexto.producao && (intent.categoria === 'producao' || perguntaSobreCorte)) {
     const matrizesAtivas = (contexto.producao.cortes_reais || [])
