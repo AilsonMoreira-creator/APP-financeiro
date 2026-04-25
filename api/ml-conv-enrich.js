@@ -75,6 +75,14 @@ export default async function handler(req, res) {
       } catch (e) {
         debug.pack_fetch = { status: 'exception', error: e.message };
       }
+
+      // FALLBACK: em ML pos-venda, pack_id frequentemente eh igual ao
+      // order_id. Quando /packs falha com 404 (pack_not_found) ou nao
+      // retorna order_id, tenta usar pack_id direto como order_id.
+      if (!orderId) {
+        orderId = conv.pack_id;
+        debug.pack_fetch_fallback = 'usando pack_id como order_id';
+      }
     }
 
     // 2. Busca detalhes do order (buyer + first item)
