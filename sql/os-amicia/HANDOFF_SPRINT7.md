@@ -12,7 +12,7 @@ A próxima sessão precisa abrir esses arquivos antes de tocar em qualquer linha
 2. **`sql/os-amicia/HANDOFF_SPRINT_6_8_FINAL.md`** — último handoff antes desse, contém o estado da OS Amícia (cortes, oficinas, IA insights).
 3. **`sql/os-amicia/HANDOFF_REGRAS_SUGESTAO_CORTE.md`** — regras vivas das sugestões da IA, atualizadas até 25/04.
 4. **Memórias do Claude** (já carregadas automaticamente) — tem todo o contexto de:
-   - Fluxo da confecção (Tecido → Enfesto → Corte → Oficina → Salas)
+   - Fluxo da confecção: Tecido → Enfesto → Corte (inclui ordens_corte + Salas Antonio/Adalecio/Chico) → Oficina (costureira externa, etapa final)
    - Regra REF com/sem zero à esquerda
    - Padrão de detecção mobile já existente
    - Decisões de design (paleta, tipografia, regras de UI)

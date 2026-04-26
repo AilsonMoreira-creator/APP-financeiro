@@ -66,7 +66,9 @@ A tabela `amicia_data` tem 2 colunas: `user_id` (chave) e `payload` (JSONB). Cad
 
 ## 2. Confecção
 
-Fluxo do produto: **TECIDO** (cadastro) → **ENFESTO** (camadas pra render) → **CORTE** (peças por REF, matriz tamanhos) → **OFICINA** (costureira externa, prazo) → **SALAS DE CORTE** (Antonio, Adalecio, Chico) → **ENTREGUE**.
+Fluxo do produto: **TECIDO** (cadastro) → **ENFESTO** (camadas pra render) → **CORTE** [engloba `ordens_corte` + **SALAS DE CORTE**: Antonio, Adalecio, Chico — peças cortadas por REF, matriz PMG/GG/G1-G3] → **OFICINA** (costureira externa monta a peça, prazo de entrega) → **ENTREGUE**.
+
+> ⚠️ **Importante:** Salas de Corte são **parte da etapa Corte** (não vêm depois). Oficina é a etapa **final** antes da entrega. Confundir essa ordem leva a erros nas queries de status e nos dashboards.
 
 ### Tabelas reais
 
