@@ -2009,7 +2009,14 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const setAuxData=auxProp!==undefined?setAuxProp:setAuxLocal;
   const categorias=catsProp!==undefined?catsProp:catsLocal;
   const setCategorias=catsProp!==undefined?setCatsProp:setCatsLocal;
-  const [aba,setAba]=useState("geral");
+  // Sprint 7 — detector mobile (mesmo padrão do Dashboard/SalasCorteContent). Desktop intocado.
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+  const mobile=w<640;
+  const cellFs=mobile?12:_FS;
+  const cellPad=mobile?"4px 4px":"5px 10px";
+  // Aba default no mobile = "receitas" (lazy init: usa window.innerWidth na hora do mount)
+  const [aba,setAba]=useState(()=>{const iw=typeof window!=="undefined"?window.innerWidth:900;return iw<640?"receitas":"geral";});
   const [novaCategoria,setNovaCategoria]=useState("");
   const [mostraCadastro,setMostraCadastro]=useState(false);
   const [editando,setEditando]=useState(null);
@@ -2112,7 +2119,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   return(
     <div>
       {!auxAberta&&(
-        <div style={{display:"flex",gap:8,marginBottom:8}}>
+        <div style={{display:"flex",gap:8,marginBottom:8,flexDirection:mobile?"column":"row"}}>
           <div style={{flex:1,background:"#fff",borderRadius:8,padding:"6px 14px",border:"1px solid #e8e2da",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{fontSize:10,color:"#a89f94",letterSpacing:1}}>RECEITA</span>
             <span style={{fontSize:16,fontWeight:800,color:"#4a7fa5",fontFamily:_FN}}>{fmt(totalGeral)}</span>
@@ -2158,9 +2165,9 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                     return(
                       <div key={canal} style={{display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
                         {editando===key?(
-                          <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:"5px 10px",fontSize:_FS,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal)}/>
+                          <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:cellPad,fontSize:cellFs,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal)}/>
                         ):(
-                          <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:"5px 10px",borderRadius:3,transition:"background 0.12s"}}>
+                          <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
                             {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                           </div>
                         )}
@@ -2246,7 +2253,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
         </div>
       )}
       {aba==="geral"&&!auxAberta&&(
-        <div style={{display:"flex",gap:24,alignItems:"flex-start",paddingTop:10}}>
+        <div style={{display:"flex",gap:mobile?12:24,alignItems:"flex-start",paddingTop:10,flexDirection:mobile?"column":"row"}}>
           {/* ── Receitas ── */}
           <div style={{flex:1,minWidth:0,background:"#fff",borderRadius:10,border:"1px solid #e8e2da",overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",background:"#4a7fa5",position:"sticky",top:0,zIndex:1}}>
@@ -2271,9 +2278,9 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                       return(
                         <div key={canal} style={{display:"flex",alignItems:"center",borderLeft:`1px solid ${sepCol}`}}>
                           {editando===key?(
-                            <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:"5px 10px",fontSize:_FS,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal,"g")}/>
+                            <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:cellPad,fontSize:cellFs,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal,"g")}/>
                           ):(
-                            <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:_FS,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:"5px 10px",borderRadius:3,transition:"background 0.12s"}}>
+                            <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
                               {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                             </div>
                           )}
@@ -4535,6 +4542,10 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const [filtroMarca,setFiltroMarca]=useState("todas");
   const [filtroCanal,setFiltroCanal]=useState("todos");
   const [prodFiltroData,setProdFiltroData]=useState("7dias");
+  // Sprint 7 — detector mobile. Desktop intocado.
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+  const mobile=w<640;
 
   // ── Escaneia blingVendas e salva o top 16 cores no localStorage pra o
   // modal de Detalhamento (em Oficinas) ler o ranking REAL do Bling. ─────
@@ -4920,7 +4931,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
             })}
 
             {/* Cards 3 contas */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+            <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr 1fr",gap:10,marginBottom:10}}>
               {CONTAS.map(c=>{
                 const tk=tokens[c];
                 const ok=!!tk&&!tokenExpirado(tk);
@@ -4945,7 +4956,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
               <div style={{fontSize:9,color:"rgba(255,255,255,0.5)",letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>
                 {resultado?`Sincronizado · ${hojeStr}`:"Sem dados — sync automático ao abrir"}
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr 1fr",gap:12}}>
                 <div>
                   <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginBottom:3}}>Total bruto mês</div>
                   <div style={{fontFamily:"Calibri,'Segoe UI',Arial",fontSize:18,fontWeight:800,color:"#fff"}}>{bruto?fmt2(bruto):"—"}</div>
@@ -6247,6 +6258,10 @@ const CalculadoraContent=()=>{
   const[syncStatus,setSyncStatus]=useState(null); // null | 'saving' | 'saved' | 'error'
   const prodsRef=useRef([]);
   const prsRef=useRef({});
+  // Sprint 7 — detector mobile. Desktop intocado.
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+  const mobile=w<640;
 
   // ── Carregar do Supabase ──────────────────────────────────────────────────
   useEffect(()=>{
@@ -6311,11 +6326,11 @@ const CalculadoraContent=()=>{
   if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
   const c=prod?calcCusto(prod):0;
   return(
-    <div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
+    <div style={{background:"#f7f4f0",minHeight:"100%",padding:mobile?12:20,fontFamily:"Georgia,serif"}}>
       <div style={{maxWidth:980,margin:"0 auto"}}>
-        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:18}}>
-          <div><div style={{fontSize:10,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Grupo Amícia</div><div style={{fontSize:22,fontWeight:700,color:"#2c3e50"}}>Calculadora de Preços</div><div style={{fontSize:11,color:"#8a9aa4",marginTop:2}}>Marketplaces · Ecommerce Meluni</div></div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:mobile?"stretch":"flex-start",justifyContent:"space-between",marginBottom:18,flexDirection:mobile?"column":"row",gap:mobile?12:0}}>
+          <div><div style={{fontSize:10,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Grupo Amícia</div><div style={{fontSize:mobile?20:22,fontWeight:700,color:"#2c3e50"}}>Calculadora de Preços</div><div style={{fontSize:11,color:"#8a9aa4",marginTop:2}}>Marketplaces · Ecommerce Meluni</div></div>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             {syncStatus==="saving"&&<span style={{fontSize:11,color:"#a89f94",fontFamily:"Georgia,serif"}}>⏳ Salvando...</span>}
             {syncStatus==="saved"&&<span style={{fontSize:11,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ Salvo</span>}
             {syncStatus==="error"&&<span style={{fontSize:11,color:"#c0392b",fontFamily:"Georgia,serif"}}>⚠ Erro ao salvar</span>}
@@ -6356,7 +6371,7 @@ const CalculadoraContent=()=>{
           <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:"#1a7a40"}}/><span style={{fontSize:12,color:"#6b7c8a"}}>Bom: <b style={{color:"#1a7a40",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(CALC_LBOM)}</b></span></div>
           <div style={{marginLeft:"auto",display:"flex",gap:10}}>{[["#c0392b","< R$ 8"],["#e67e22","R$ 8-9,99"],["#27ae60","R$ 10-13,99"],["#1a7a40","≥ R$ 14"]].map(([cor,l])=><div key={cor} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#8a9aa4"}}><div style={{width:10,height:10,borderRadius:2,background:cor}}/>{l}</div>)}</div>
         </div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:mobile?"repeat(2,1fr)":"repeat(5,1fr)",gap:12}}>
           {CALC_ORDEM.map(id=>{
             const r=CALC_PLATS[id];const Logo=CALC_LOGOS[id];
             const rm=prod?calcPreco(id,c,CALC_LMIN):null;const rb2=prod?calcPreco(id,c,CALC_LBOM):null;
