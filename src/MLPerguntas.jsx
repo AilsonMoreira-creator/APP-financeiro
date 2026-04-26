@@ -1028,8 +1028,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                   </span>
                 )}
                 {!isAnswered && !lockedByOther && queuedIds.has(q.id) && (
-                  <span style={{ ...S, fontSize: 12, color: '#27ae60', fontWeight: 600 }}>
-                    🤖 IA respondendo...
+                  <span style={{ ...S, fontSize: 12, color: '#27ae60', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <img src="/robo-ia.png" alt="" style={{ width: 16, height: 16, display: 'block' }} /> IA respondendo...
                   </span>
                 )}
                 {!isAnswered && !lockedByOther && !queuedIds.has(q.id) && iaLowIds.has(q.id) && (
