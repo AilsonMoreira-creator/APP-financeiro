@@ -1191,16 +1191,16 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         {/* KPI Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
           {[
-            { label: 'Recebidas', value: total, icon: '📩', color: PALETTE.blue },
-            { label: 'Respondidas', value: todayAnswered, icon: '✅', color: PALETTE.green },
-            { label: 'Pendentes', value: todayPending, icon: '⏳', color: todayPending > 5 ? PALETTE.red : PALETTE.orange },
-            { label: 'Tempo Médio', value: formatTime(avgTime), icon: '⚡', color: PALETTE.dark },
+            { label: 'Recebidas', value: total, icon: 'envelope', color: PALETTE.blue },
+            { label: 'Respondidas', value: todayAnswered, icon: 'resolvido', color: PALETTE.green },
+            { label: 'Pendentes', value: todayPending, icon: 'pendentes', color: todayPending > 5 ? PALETTE.red : PALETTE.orange },
+            { label: 'Tempo Médio', value: formatTime(avgTime), icon: 'relogio', color: PALETTE.dark },
           ].map((k, i) => (
             <div key={i} style={{
               background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8,
               padding: '10px 8px', textAlign: 'center',
             }}>
-              <div style={{ fontSize: 20 }}>{k.icon}</div>
+              <div style={{ height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><SacIcon name={k.icon} size={22}/></div>
               <div style={{ ...S, fontSize: 22, fontWeight: 700, color: k.color }}>{k.value}</div>
               <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, fontWeight: 600 }}>{k.label}</div>
             </div>
@@ -1223,7 +1223,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
 
         {/* Volume by brand */}
         <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12, marginBottom: 10 }}>
-          <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, marginBottom: 8 }}>📊 Volume por Marca</div>
+          <div style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="dashboard" size={16}/>Volume por Marca</div>
           {Object.entries(byBrand).map(([brand, count]) => (
             <div key={brand} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <BrandTag brand={brand} />
@@ -1239,11 +1239,11 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         </div>
 
         {/* Load dashboard data */}
-        <Btn small onClick={() => { fetchAnswered(); fetchConversions(); }} style={{ marginTop: 4 }}>📊 Atualizar Dashboard</Btn>
+        <Btn small onClick={() => { fetchAnswered(); fetchConversions(); }} style={{ marginTop: 4 }}><span style={{display:'inline-flex',alignItems:'center',gap:5}}><SacIcon name="dashboard" size={14}/>Atualizar Dashboard</span></Btn>
 
         {/* Conversions: perguntas que geraram vendas */}
         <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12, marginTop: 14 }}>
-          <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark, marginBottom: 8 }}>🛒 Conversão de Perguntas (7 dias)</div>
+          <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark, marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="carrinho" size={18}/>Conversão de Perguntas (7 dias)</div>
           {conversions.length === 0 ? (
             <div style={{ ...S, fontSize: 14, color: PALETTE.textLight, textAlign: 'center', padding: 16 }}>
               Nenhuma conversão detectada nos últimos 7 dias.
@@ -1263,13 +1263,13 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
               <div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
                   {[
-                    { icon: '🛒', value: totalConv, label: 'Vendas' },
-                    { icon: '💰', value: fmtR(totalValor), label: 'Faturado' },
-                    { icon: '✨', value: porIA, label: 'Via IA' },
-                    { icon: '⚡', value: fmtT(avgTime), label: 'Tempo médio' },
+                    { icon: 'carrinho', value: totalConv, label: 'Vendas' },
+                    { icon: 'saco_dinheiro', value: fmtR(totalValor), label: 'Faturado' },
+                    { icon: 'sugestao_ia', value: porIA, label: 'Via IA' },
+                    { icon: 'relogio', value: fmtT(avgTime), label: 'Tempo médio' },
                   ].map((k, i) => (
                     <div key={i} style={{ background: PALETTE.cream, borderRadius: 6, padding: '8px 4px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 16 }}>{k.icon}</div>
+                      <div style={{ height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><SacIcon name={k.icon} size={18}/></div>
                       <div style={{ ...S, fontSize: 17, fontWeight: 700, color: PALETTE.dark }}>{k.value}</div>
                       <div style={{ ...S, fontSize: 11, color: PALETTE.textLight }}>{k.label}</div>
                     </div>
@@ -1285,8 +1285,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                 <div style={{ marginTop: 8, borderTop: `1px solid ${PALETTE.sand}`, paddingTop: 8 }}>
                   <div style={{ ...S, fontSize: 13, fontWeight: 600, color: PALETTE.dark, marginBottom: 4 }}>Últimas conversões</div>
                   {conversions.slice(0, 5).map((c, i) => (
-                    <div key={i} style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 3, padding: '3px 0', borderBottom: `1px solid ${PALETTE.sand}` }}>
-                      <span style={{ color: PALETTE.green }}>✅</span> {c.item_title?.slice(0, 35) || c.item_id} — {fmtR(c.order_value)} <span style={{ color: PALETTE.textLight }}>({fmtT(c.time_to_buy_minutes)} depois · {c.answered_by?.startsWith('_auto_ia') ? '✨ IA' : c.answered_by || '?'})</span>
+                    <div key={i} style={{ ...S, fontSize: 13, color: PALETTE.text, marginBottom: 3, padding: '3px 0', borderBottom: `1px solid ${PALETTE.sand}`, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                      <SacIcon name="resolvido" size={14}/> {c.item_title?.slice(0, 35) || c.item_id} — {fmtR(c.order_value)} <span style={{ color: PALETTE.textLight, display: 'inline-flex', alignItems: 'center', gap: 3 }}>({fmtT(c.time_to_buy_minutes)} depois · {c.answered_by?.startsWith('_auto_ia') ? <><SacIcon name="sugestao_ia" size={12}/>IA</> : c.answered_by || '?'})</span>
                     </div>
                   ))}
                 </div>

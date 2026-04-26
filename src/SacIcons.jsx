@@ -45,6 +45,10 @@ const ICON_PATHS = {
   saudacao: '/sac-icons/saudacao.png',
   despedida: '/sac-icons/despedida.png',
   usuario_falando: '/sac-icons/usuario_falando.png',
+  // Novos (Dashboard SAC) - 26/04 noite
+  carrinho: '/sac-icons/carrinho.png',
+  saco_dinheiro: '/sac-icons/saco_dinheiro.png',
+  envelope: '/sac-icons/envelope.png',
 };
 
 export function SacIcon({ name, size = 16, style = {} }) {
