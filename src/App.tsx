@@ -7670,7 +7670,8 @@ export default function App(){
   const [homeSCPending,setHomeSCPending]=useState(0);
   const [homeAgendaHoje,setHomeAgendaHoje]=useState(0);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
-  const sessaoInicio=useRef(Date.now());
+  const ultimaAtividadeRef=useRef(Date.now()); // timestamp da última atividade do usuário (toque/click/scroll/keydown). Reseta o timeout de inatividade.
+  const ultimaSyncAtividadeRef=useRef(0); // throttle de localStorage
   const debounceRef=useRef(null);
   const debounceCortes=useRef(null);
   const dadosRef=useRef(null); // ref pra flush/retry sem re-registrar listeners
@@ -8753,10 +8754,24 @@ export default function App(){
     };
   },[dbCarregado,usuarioLogado]); // ← inclui usuarioLogado pra closure do flush sempre ter o valor correto
 
-  // ── SESSÃO EXPIRADA + VERSÃO DO APP (auto-update polling) ───────────────────
+  // ── SESSÃO EXPIRADA POR INATIVIDADE + VERSÃO DO APP (auto-update polling) ──
   useEffect(()=>{
-    const TIMEOUT_MS=6*60*60*1000; // 6 horas
-    const POLL_MS=3*60*1000; // 3 minutos
+    const TIMEOUT_MS=6*60*60*1000; // 6 horas de inatividade → desloga
+    const POLL_MS=60*1000; // checa elapsed a cada 1 minuto
+    const SYNC_MS=30*1000; // grava localStorage no máx a cada 30s (throttle)
+    const VERSAO_POLL_MS=3*60*1000; // checa versão remota a cada 3 min
+
+    // 1. CHECK NO MOUNT: se app abre e localStorage indica >6h de inatividade, expira agora
+    try{
+      const saved=parseInt(localStorage.getItem("amica_last_activity")||"0",10);
+      if(saved>0&&Date.now()-saved>TIMEOUT_MS){
+        console.log("Sessão expirada por inatividade no mount:",Math.round((Date.now()-saved)/3600000),"h");
+        try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");}catch{}
+        setSessaoExpirada(true);
+        return;
+      }
+    }catch{}
+
     // Verifica versão do app (deploy novo enquanto aba estava aberta)
     const versaoLocal=localStorage.getItem("amica_app_version");
     if(versaoLocal&&versaoLocal!==APP_VERSION){
@@ -8765,7 +8780,37 @@ export default function App(){
     }
     localStorage.setItem("amica_app_version",APP_VERSION);
 
-    // Checa versão remota: se diferente do APP_VERSION atual → forçar reload
+    // Marca atividade inicial
+    const agora=Date.now();
+    ultimaAtividadeRef.current=agora;
+    try{localStorage.setItem("amica_last_activity",String(agora));}catch{}
+    ultimaSyncAtividadeRef.current=agora;
+
+    // 2. LISTENER DE ATIVIDADE: reseta timer (cliques/touches/scroll/keydown)
+    const onActivity=()=>{
+      const now=Date.now();
+      ultimaAtividadeRef.current=now;
+      // Throttle do localStorage: grava no máximo a cada 30s
+      if(now-ultimaSyncAtividadeRef.current>SYNC_MS){
+        try{localStorage.setItem("amica_last_activity",String(now));}catch{}
+        ultimaSyncAtividadeRef.current=now;
+      }
+    };
+    const eventos=['mousedown','touchstart','keydown','scroll'];
+    eventos.forEach(ev=>window.addEventListener(ev,onActivity,{passive:true}));
+
+    // 3. POLL DE INATIVIDADE: checa elapsed a cada 1 min, independente de visibilitychange
+    const checkInatividade=()=>{
+      const elapsed=Date.now()-ultimaAtividadeRef.current;
+      if(elapsed>TIMEOUT_MS){
+        console.log("Sessão expirada por inatividade após",Math.round(elapsed/3600000),"h");
+        try{localStorage.removeItem("amica_session");localStorage.removeItem("amica_last_activity");}catch{}
+        setSessaoExpirada(true);
+      }
+    };
+    const inativPoll=setInterval(checkInatividade,POLL_MS);
+
+    // Versão remota: dispatch independente do timeout de inatividade
     const checkVersaoRemota=async()=>{
       try{
         const r=await fetch('/api/version',{cache:'no-store'});
@@ -8777,31 +8822,24 @@ export default function App(){
         }
       }catch(e){/* offline, ignora */}
     };
+    const versaoPoll=setInterval(checkVersaoRemota,VERSAO_POLL_MS);
+    const firstVersaoCheck=setTimeout(checkVersaoRemota,30000);
 
-    // Verifica timeout + versão ao voltar à aba
-    const checkSessao=()=>{
+    // 4. VISIBILITYCHANGE: ao voltar pra aba, checa inatividade na hora + versão remota
+    const onVisChange=()=>{
       if(document.visibilityState==="visible"){
-        const elapsed=Date.now()-sessaoInicio.current;
-        if(elapsed>TIMEOUT_MS){
-          console.log("Sessão expirada após",Math.round(elapsed/3600000),"horas");
-          setSessaoExpirada(true);
-          return;
-        }
-        // Checa versão remota ao voltar pra aba
-        checkVersaoRemota();
+        checkInatividade();
+        if(!sessaoExpirada)checkVersaoRemota();
       }
     };
+    document.addEventListener("visibilitychange",onVisChange);
 
-    // Poll a cada 3 minutos enquanto app está aberto
-    const pollInterval=setInterval(checkVersaoRemota,POLL_MS);
-    // Primeiro check 30s após abrir (dá tempo do app carregar)
-    const firstCheck=setTimeout(checkVersaoRemota,30000);
-
-    document.addEventListener("visibilitychange",checkSessao);
     return()=>{
-      document.removeEventListener("visibilitychange",checkSessao);
-      clearInterval(pollInterval);
-      clearTimeout(firstCheck);
+      eventos.forEach(ev=>window.removeEventListener(ev,onActivity));
+      document.removeEventListener("visibilitychange",onVisChange);
+      clearInterval(inativPoll);
+      clearInterval(versaoPoll);
+      clearTimeout(firstVersaoCheck);
     };
   },[]);
 
@@ -8919,19 +8957,24 @@ export default function App(){
 
   // ── MODAL SESSÃO EXPIRADA ────────────────────────────────────────────────────
   if(sessaoExpirada){
+    // Detecta motivo: se versão local !== APP_VERSION → atualização. Senão → inatividade (session foi limpa).
+    const ehAtualizacao=localStorage.getItem("amica_app_version")!==APP_VERSION;
+    const ehInatividade=!ehAtualizacao&&!localStorage.getItem("amica_session");
     return(
       <div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",background:"#f7f4f0"}}>
         <div style={{background:"#fff",borderRadius:16,padding:"40px 32px",textAlign:"center",maxWidth:360,boxShadow:"0 4px 24px rgba(0,0,0,0.1)",border:"1px solid #e8e2da"}}>
-          <div style={{fontSize:40,marginBottom:16}}>🔄</div>
-          <div style={{fontSize:18,fontWeight:700,color:"#2c3e50",marginBottom:8}}>Atualização necessária</div>
+          <div style={{fontSize:40,marginBottom:16}}>{ehInatividade?"🔒":"🔄"}</div>
+          <div style={{fontSize:18,fontWeight:700,color:"#2c3e50",marginBottom:8}}>{ehInatividade?"Sessão expirada":"Atualização necessária"}</div>
           <div style={{fontSize:13,color:"#6b7c8a",marginBottom:24,lineHeight:1.6}}>
-            {localStorage.getItem("amica_app_version")!==APP_VERSION
+            {ehAtualizacao
               ?"Uma nova versão do app está disponível. Recarregue para atualizar."
-              :"A sessão expirou após longo período. Recarregue para continuar com dados atualizados."}
+              :ehInatividade
+                ?"Sua sessão expirou por inatividade (6h). Por segurança, faça login novamente."
+                :"A sessão expirou após longo período. Recarregue para continuar com dados atualizados."}
           </div>
           <button onClick={()=>{localStorage.setItem("amica_app_version",APP_VERSION);window.location.reload();}}
             style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"12px 32px",fontSize:14,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>
-            Recarregar agora
+            {ehInatividade?"Ir para login":"Recarregar agora"}
           </button>
           <div style={{fontSize:10,color:"#a89f94",marginTop:16}}>v{APP_VERSION} · Seus dados estão salvos</div>
         </div>
