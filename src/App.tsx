@@ -8685,8 +8685,7 @@ export default function App(){
         console.log("FLUSH: bloqueado — sem edit do usuário desde o último load/save (state pode estar stale)");
         return;
       }
-      // 🛡️ GUARD DE INTEGRIDADE: se state parece corrompido, NÃO faz POST direto
-      // (esse é o caminho mais perigoso — POST sem merge, sobrescreve tudo)
+      // 🛡️ GUARD DE INTEGRIDADE: se state parece corrompido, NÃO marca pending
       const integFlush=checarIntegridadePayload(dadosRef.current);
       if(!integFlush.ok){
         console.error("🛡️ FLUSH: ABORTADO —",integFlush.motivo,"\ndebug:",integFlush.debug);
@@ -8695,30 +8694,24 @@ export default function App(){
       }
       const dados=dadosRef.current;
       const ts=Date.now();
-      lastSaveTs.current=ts;
       const payloadComTs={...dados,_updated:ts};
-      console.log("FLUSH: salvando —",dados.boletosShared?.length||0,"boletos,",Object.keys(dados.receitasPorMes||{}).length,"meses receitas, ts:",ts);
-      // localStorage com MESMO timestamp que vai pro Supabase
+      console.log("FLUSH: marcando pending_sync (sem POST direto) —",dados.boletosShared?.length||0,"boletos,",Object.keys(dados.receitasPorMes||{}).length,"meses receitas, ts:",ts);
+      // ⚡ FIX CRÍTICO (Sprint 7): NÃO faz mais POST keepalive direto.
+      // ANTES: flushSave fazia fetch POST direto via keepalive sem GET-MERGE-WRITE,
+      // sobrescrevendo o payload inteiro do Supabase. Isso causava perda de dados
+      // quando outro device (PC loja, iPhone) tinha salvado entre o último save deste
+      // device e o pagehide. O guard `lastUserEditTs<dbCarregadoTs` não cobria todos
+      // os casos (especialmente porque Bling cron a cada 5min atualizava lastUserEditTs
+      // como se fosse edit do usuário).
+      // AGORA: apenas grava localStorage + marca pending_sync=true. O retrySePendente
+      // chama salvarNoSupabase (com READ-MERGE-WRITE + guard anti-stale) quando a aba
+      // voltar, garantindo que nenhum dado de outro device seja sobrescrito.
+      // Trade-off: se a aba/app morrer permanentemente sem voltar, o save fica pendente
+      // — mas localStorage tem os dados, então retrieve acontece no próximo abrir.
       try{
         localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));
         localStorage.setItem("amica_pending_sync","true");
       }catch(e){console.error("FLUSH localStorage erro:",e);}
-      const sbUrl=localStorage.getItem("sb_url");
-      const sbKey=localStorage.getItem("sb_key");
-      if(sbUrl&&sbKey){
-        try{
-          const body=JSON.stringify({user_id:USER_ID,payload:payloadComTs});
-          const size=body.length;
-          if(size>65536)console.warn("⚠ Flush payload excede 64KB keepalive:",Math.round(size/1024),"KB — pode falhar silenciosamente");
-          // CRITICAL: NÃO setar pending_sync=false no .then() — página pode morrer antes
-          // O retry ao voltar vai resolver pendências que o keepalive salvou com sucesso
-          fetch(`${sbUrl}/rest/v1/amicia_data`,{
-            method:'POST',
-            headers:{'Content-Type':'application/json','apikey':sbKey,'Authorization':`Bearer ${sbKey}`,'Prefer':'resolution=merge-duplicates'},
-            body,keepalive:true
-          }).catch(()=>{});
-        }catch(e){console.error("Flush keepalive erro:",e);}
-      }
     };
     const retrySePendente=()=>{
       if(!dadosRef.current||!supabase||!usuarioLogado?.admin)return;
