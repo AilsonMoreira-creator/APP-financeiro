@@ -17,7 +17,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import MLPosVenda from './MLPosVenda';
 import { SacIcon } from './SacIcons';
-import { SacIcon } from './SacIcons';
 
 // ══════════════════════════════════════════════════════════
 // CONSTANTS

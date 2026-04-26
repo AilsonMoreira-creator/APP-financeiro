@@ -1760,6 +1760,17 @@ const ChannelEvolutionChart=({dadosMensais=DADOS_MENSAIS})=>{
 const DashboardContent=({dadosMensais=DADOS_MENSAIS,mesAtual=3})=>{
   const [modo,setModo]=useState("mes");
   const [mesSel,setMesSel]=useState(mesAtual-1);
+  // Sprint 7 — detector mobile (mesmo padrão do SalasCorteContent). Tudo gated por `mobile`. Desktop intocado.
+  const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+  const mobile=w<640;
+  const grid3=mobile?"1fr":"1fr 1fr 1fr";
+  const grid4=mobile?"1fr 1fr":"1fr 1fr 1fr 1fr";
+  const cardPad=mobile?16:22;
+  const fsPrincipal=mobile?22:24;
+  const fsSecundario=mobile?18:20;
+  const fsMedia=mobile?16:18;
+  const padMedia=mobile?14:20;
   const d=dadosMensais[mesSel]||{receita:0,despesa:0,silvaTeles:0,bomRetiro:0,marketplaces:0,prolabore:0,oficinas:0,tecidos:0};
   const ant=dadosMensais[mesSel-1];
   const saldo=d.receita-d.despesa;
@@ -1789,28 +1800,28 @@ const DashboardContent=({dadosMensais=DADOS_MENSAIS,mesAtual=3})=>{
       </div>
       {modo==="mes"&&(
         <>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:16}}>
-            <div style={{background:"#fff",borderRadius:12,padding:22,border:"1px solid #e8e2da"}}>
+          <div style={{display:"grid",gridTemplateColumns:grid3,gap:16,marginBottom:16}}>
+            <div style={{background:"#fff",borderRadius:12,padding:cardPad,border:"1px solid #e8e2da"}}>
               <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Receita</div>
-              <div style={{fontSize:24,fontWeight:700,color:"#4a7fa5",marginBottom:4}}>{fmt(d.receita)}</div>
+              <div style={{fontSize:fsPrincipal,fontWeight:700,color:"#4a7fa5",marginBottom:4}}>{fmt(d.receita)}</div>
               {varR&&<div style={{fontSize:12,color:Number(varR)>=0?"#27ae60":"#c0392b"}}>{Number(varR)>=0?"▲":"▼"} {Math.abs(Number(varR))}% vs mês ant.</div>}
             </div>
-            <div style={{background:"#fff",borderRadius:12,padding:22,border:"1px solid #e8e2da"}}>
+            <div style={{background:"#fff",borderRadius:12,padding:cardPad,border:"1px solid #e8e2da"}}>
               <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Despesa</div>
-              <div style={{fontSize:24,fontWeight:700,color:"#6b7c8a",marginBottom:4}}>{fmt(d.despesa)}</div>
+              <div style={{fontSize:fsPrincipal,fontWeight:700,color:"#6b7c8a",marginBottom:4}}>{fmt(d.despesa)}</div>
               {varD&&<div style={{fontSize:12,color:Number(varD)<=0?"#27ae60":"#c0392b"}}>{Number(varD)>=0?"▲":"▼"} {Math.abs(Number(varD))}% vs mês ant.</div>}
             </div>
-            <div style={{background:"#fff",borderRadius:12,padding:22,border:"1px solid "+(saldo>=0?"#b8dfc8":"#f4b8b8")}}>
+            <div style={{background:"#fff",borderRadius:12,padding:cardPad,border:"1px solid "+(saldo>=0?"#b8dfc8":"#f4b8b8")}}>
               <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Saldo</div>
-              <div style={{fontSize:24,fontWeight:700,color:saldo>=0?"#4a7fa5":"#c0392b",marginBottom:4}}>{fmt(saldo)}</div>
+              <div style={{fontSize:fsPrincipal,fontWeight:700,color:saldo>=0?"#4a7fa5":"#c0392b",marginBottom:4}}>{fmt(saldo)}</div>
               {d.receita>0&&<div style={{fontSize:12,color:"#8a9aa4"}}>Margem {margem}%</div>}
             </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:20}}>
+          <div style={{display:"grid",gridTemplateColumns:grid3,gap:16,marginBottom:20}}>
             {[{label:"Pro Labore",value:d.prolabore},{label:"Oficinas",value:d.oficinas},{label:"Tecidos",value:d.tecidos}].map(c=>(
-              <div key={c.label} style={{background:"#fff",borderRadius:12,padding:22,border:"1px solid #e8e2da"}}>
+              <div key={c.label} style={{background:"#fff",borderRadius:12,padding:cardPad,border:"1px solid #e8e2da"}}>
                 <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>{c.label}</div>
-                <div style={{fontSize:20,fontWeight:600,color:"#2c3e50"}}>{fmt(c.value)}</div>
+                <div style={{fontSize:fsSecundario,fontWeight:600,color:"#2c3e50"}}>{fmt(c.value)}</div>
               </div>
             ))}
           </div>
@@ -1819,32 +1830,38 @@ const DashboardContent=({dadosMensais=DADOS_MENSAIS,mesAtual=3})=>{
       )}
       {modo==="anual"&&(
         <>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:20}}>
+          <div style={{display:"grid",gridTemplateColumns:grid3,gap:16,marginBottom:20}}>
             {[{label:"Receita Acumulada",value:totalAnual.receita,color:"#4a7fa5"},{label:"Despesa Acumulada",value:totalAnual.despesa,color:"#6b7c8a"},{label:"Saldo Acumulado",value:totalAnual.receita-totalAnual.despesa,color:(totalAnual.receita-totalAnual.despesa)>=0?"#27ae60":"#c0392b"}].map(c=>(
-              <div key={c.label} style={{background:"#fff",borderRadius:12,padding:22,border:"1px solid #e8e2da"}}>
+              <div key={c.label} style={{background:"#fff",borderRadius:12,padding:cardPad,border:"1px solid #e8e2da"}}>
                 <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>{c.label}</div>
-                <div style={{fontSize:24,fontWeight:700,color:c.color}}>{fmt(c.value)}</div>
+                <div style={{fontSize:fsPrincipal,fontWeight:700,color:c.color}}>{fmt(c.value)}</div>
                 <div style={{fontSize:12,color:"#8a9aa4",marginTop:4}}>Jan — {MESES[n-1]} 2026</div>
               </div>
             ))}
           </div>
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}>
             <div style={{padding:"14px 20px",borderBottom:"1px solid #e8e2da",fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Média Mensal</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr"}}>
-              {[{label:"Total Geral",value:medias.total,bg:"#f9f7f5"},{label:"Silva Teles",value:medias.silvaTeles,bg:"#fff"},{label:"Bom Retiro",value:medias.bomRetiro,bg:"#fff"},{label:"Marketplaces",value:medias.marketplaces,bg:"#fff"}].map((c,i)=>(
-                <div key={c.label} style={{padding:20,background:c.bg,borderRight:i<3?"1px solid #e8e2da":"none"}}>
-                  <div style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>{c.label}</div>
-                  <div style={{fontSize:18,fontWeight:700,color:i===0?"#2c3e50":"#4a7fa5"}}>{fmt(c.value)}</div>
-                </div>
-              ))}
+            <div style={{display:"grid",gridTemplateColumns:grid4}}>
+              {[{label:"Total Geral",value:medias.total,bg:"#f9f7f5"},{label:"Silva Teles",value:medias.silvaTeles,bg:"#fff"},{label:"Bom Retiro",value:medias.bomRetiro,bg:"#fff"},{label:"Marketplaces",value:medias.marketplaces,bg:"#fff"}].map((c,i)=>{
+                const lastInRow=mobile?(i%2===1):(i===3);
+                const hasBottomBorder=mobile&&i<2;
+                return(
+                  <div key={c.label} style={{padding:padMedia,background:c.bg,borderRight:lastInRow?"none":"1px solid #e8e2da",borderBottom:hasBottomBorder?"1px solid #e8e2da":"none"}}>
+                    <div style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>{c.label}</div>
+                    <div style={{fontSize:fsMedia,fontWeight:700,color:i===0?"#2c3e50":"#4a7fa5"}}>{fmt(c.value)}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}>
-            <div style={{padding:"14px 16px",borderBottom:"1px solid #e8e2da",fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Detalhes por Mês</div>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr style={{background:"#f7f4f0"}}>{["Mês","Silva Teles","Bom Retiro","Marketplaces","Receita","Despesa","Saldo"].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"#a89f94",fontWeight:600}}>{h}</th>)}</tr></thead>
-              <tbody>{MESES.map((mes,i)=>{const d=dadosMensais[i]||{receita:0,despesa:0,silvaTeles:0,bomRetiro:0,marketplaces:0};const s=d.receita-d.despesa;return(<tr key={mes} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:600,color:"#2c3e50"}}>{mes}</td><td style={{padding:"8px 12px",color:"#4a7fa5"}}>{d.silvaTeles>0?fmt(d.silvaTeles):"—"}</td><td style={{padding:"8px 12px",color:"#27ae60"}}>{d.bomRetiro>0?fmt(d.bomRetiro):"—"}</td><td style={{padding:"8px 12px",color:"#e67e22"}}>{d.marketplaces>0?fmt(d.marketplaces):"—"}</td><td style={{padding:"8px 12px",fontWeight:600,color:"#2c3e50"}}>{d.receita>0?fmt(d.receita):"—"}</td><td style={{padding:"8px 12px",color:"#6b7c8a"}}>{d.despesa>0?fmt(d.despesa):"—"}</td><td style={{padding:"8px 12px",fontWeight:600,color:s>=0?"#27ae60":"#c0392b"}}>{d.receita>0?fmt(s):"—"}</td></tr>);})}</tbody>
-            </table>
+            <div style={{padding:"14px 16px",borderBottom:"1px solid #e8e2da",fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Detalhes por Mês{mobile&&<span style={{textTransform:"none",letterSpacing:0,color:"#c0b8b0",marginLeft:8,fontSize:10}}>(deslize →)</span>}</div>
+            <div style={{overflowX:mobile?"auto":"visible",WebkitOverflowScrolling:"touch"}}>
+              <table style={{width:mobile?"auto":"100%",minWidth:mobile?700:"auto",borderCollapse:"collapse",fontSize:13}}>
+                <thead><tr style={{background:"#f7f4f0"}}>{["Mês","Silva Teles","Bom Retiro","Marketplaces","Receita","Despesa","Saldo"].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:11,color:"#a89f94",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+                <tbody>{MESES.map((mes,i)=>{const d=dadosMensais[i]||{receita:0,despesa:0,silvaTeles:0,bomRetiro:0,marketplaces:0};const s=d.receita-d.despesa;return(<tr key={mes} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:600,color:"#2c3e50",whiteSpace:"nowrap"}}>{mes}</td><td style={{padding:"8px 12px",color:"#4a7fa5",whiteSpace:"nowrap"}}>{d.silvaTeles>0?fmt(d.silvaTeles):"—"}</td><td style={{padding:"8px 12px",color:"#27ae60",whiteSpace:"nowrap"}}>{d.bomRetiro>0?fmt(d.bomRetiro):"—"}</td><td style={{padding:"8px 12px",color:"#e67e22",whiteSpace:"nowrap"}}>{d.marketplaces>0?fmt(d.marketplaces):"—"}</td><td style={{padding:"8px 12px",fontWeight:600,color:"#2c3e50",whiteSpace:"nowrap"}}>{d.receita>0?fmt(d.receita):"—"}</td><td style={{padding:"8px 12px",color:"#6b7c8a",whiteSpace:"nowrap"}}>{d.despesa>0?fmt(d.despesa):"—"}</td><td style={{padding:"8px 12px",fontWeight:600,color:s>=0?"#27ae60":"#c0392b",whiteSpace:"nowrap"}}>{d.receita>0?fmt(s):"—"}</td></tr>);})}</tbody>
+              </table>
+            </div>
           </div>
           <BarChart dadosMensais={dadosMensais}/><ChannelEvolutionChart dadosMensais={dadosMensais}/>
         </>
