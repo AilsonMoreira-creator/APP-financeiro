@@ -3,6 +3,7 @@
  * Props: supabase, currentUser
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { SacIcon } from './SacIcons';
 
 const PALETTE = {
   dark: '#2c3e50', blue: '#4a7fa5', cream: '#f7f4f0', sand: '#e8e2da', white: '#fff',
@@ -15,10 +16,10 @@ const BRANDS = {
   Muniam: { color: '#fff', bg: '#8a7560' },
 };
 const TAGS = {
-  urgente: { emoji: '🔴', label: 'Urgente', color: '#c0392b', bg: '#c0392b15' },
-  atencao: { emoji: '🟡', label: 'Atenção', color: '#e67e22', bg: '#e67e2215' },
-  normal: { emoji: '⚪', label: 'Normal', color: '#7f8c8d', bg: '#7f8c8d10' },
-  resolvido: { emoji: '✅', label: 'Resolvido', color: '#27ae60', bg: '#27ae6015' },
+  urgente: { emoji: '🔴', icon: 'urgente', label: 'Urgente', color: '#c0392b', bg: '#c0392b15' },
+  atencao: { emoji: '🟡', icon: 'atencao', label: 'Atenção', color: '#e67e22', bg: '#e67e2215' },
+  normal: { emoji: '⚪', icon: null, label: 'Normal', color: '#7f8c8d', bg: '#7f8c8d10' },
+  resolvido: { emoji: '✅', icon: 'resolvido', label: 'Resolvido', color: '#27ae60', bg: '#27ae6015' },
 };
 const S = { fontFamily: "Georgia,'Times New Roman',serif" };
 const timeAgo = (d) => { if (!d) return ''; const diff = Date.now() - new Date(d).getTime(); const m = Math.floor(diff / 60000); if (m < 60) return `${m}min`; const h = Math.floor(m / 60); if (h < 24) return `${h}h`; return `${Math.floor(h / 24)}d`; };
@@ -311,7 +312,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
               <BrandTag brand={conv.brand} />
               <span style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark }}>{conv.item_title ? (conv.item_title.length > 50 ? conv.item_title.slice(0, 50) + '...' : conv.item_title) : `Pedido #${conv.order_id || conv.pack_id}`}</span>
             </div>
-            <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginTop: 2 }}>📦 #{conv.order_id || conv.pack_id} · 👤 {conv.buyer_nickname || conv.buyer_id || '—'}</div>
+            <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}><SacIcon name="estoque" size={12}/>#{conv.order_id || conv.pack_id} · <SacIcon name="usuario" size={12}/>{conv.buyer_nickname || conv.buyer_id || '—'}</div>
           </div>
         </div>
 
@@ -326,7 +327,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
               .map((m, i) => (
             <div key={m.id || i} style={{ marginBottom: 14, display: 'flex', flexDirection: m.from_type === 'seller' ? 'row-reverse' : 'row', gap: 8 }}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: m.from_type === 'buyer' ? '#e3edf5' : '#e3f5ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
-                {m.from_type === 'buyer' ? '👤' : '🏪'}
+                {m.from_type === 'buyer' ? <SacIcon name="usuario" size={20}/> : '🏪'}
               </div>
               <div style={{ maxWidth: '78%' }}>
                 <div style={{ ...S, fontSize: 15, lineHeight: 1.5, color: PALETTE.dark, padding: '10px 14px', borderRadius: 10, background: m.from_type === 'buyer' ? '#f0f4f8' : '#e8f5e9', borderBottomLeftRadius: m.from_type === 'buyer' ? 3 : 10, borderBottomRightRadius: m.from_type === 'seller' ? 3 : 10 }}>
@@ -377,7 +378,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
         {/* Notes + Tags */}
         <div style={{ background: PALETTE.white, borderRadius: 10, border: `1px solid ${PALETTE.sand}`, padding: '10px 14px', marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ ...S, fontSize: 11, fontWeight: 700, color: PALETTE.dark }}>📝 Observação</span>
+            <span style={{ ...S, fontSize: 11, fontWeight: 700, color: PALETTE.dark, display: 'inline-flex', alignItems: 'center', gap: 4 }}><SacIcon name="observacao" size={14}/>Observação</span>
             <div style={{ display: 'flex', gap: 3 }}>
               {Object.entries(TAGS).map(([k, t]) => (
                 <button key={k} onClick={() => updateConv('tag', k)} style={{ ...S, border: conv.tag === k ? `2px solid ${t.color}` : `1px solid ${PALETTE.border}`, borderRadius: 5, padding: '2px 7px', fontSize: 9, cursor: 'pointer', background: conv.tag === k ? t.bg : 'transparent', color: t.color, fontWeight: conv.tag === k ? 700 : 400 }}>
@@ -394,7 +395,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
         {/* AI Suggestion */}
         {aiSuggest && (
           <div style={{ background: '#f0f6fb', border: `1px solid ${PALETTE.blue}40`, borderRadius: 10, padding: '12px 16px', marginBottom: 10 }}>
-            <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.blue, marginBottom: 6 }}>✨ Sugestão IA (pós-venda)</div>
+            <div style={{ ...S, fontSize: 13, fontWeight: 700, color: PALETTE.blue, marginBottom: 6, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="sugestao_ia" size={16}/>Sugestão IA (pós-venda)</div>
             <div style={{ ...S, fontSize: 14, lineHeight: 1.5, color: PALETTE.dark, padding: 10, background: PALETTE.white, borderRadius: 6, border: `1px solid ${PALETTE.border}` }}>{aiSuggest}</div>
             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
               <button onClick={() => { setReplyText(aiSuggest); setAiSuggest(null); }} style={{ ...S, background: PALETTE.blue, color: '#fff', border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Usar como base</button>
@@ -407,9 +408,9 @@ export default function MLPosVenda({ supabase, currentUser }) {
         {conv.status === 'aberto' && (
           <div style={{ background: PALETTE.white, borderRadius: 10, border: `1px solid ${PALETTE.sand}`, padding: '12px 16px' }}>
             <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
-              <button onClick={getAiSuggestion} disabled={aiLoading} style={{ ...S, background: '#f0f6fb', color: PALETTE.blue, border: `1px solid ${PALETTE.blue}40`, borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: aiLoading ? 0.6 : 1 }}>{aiLoading ? '⏳ gerando…' : '✨ Sugestão IA'}</button>
+              <button onClick={getAiSuggestion} disabled={aiLoading} style={{ ...S, background: '#f0f6fb', color: PALETTE.blue, border: `1px solid ${PALETTE.blue}40`, borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: aiLoading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{aiLoading ? '⏳ gerando…' : <><SacIcon name="sugestao_ia" size={14}/>Sugestão IA</>}</button>
               <div style={{ flex: 1 }} />
-              <button onClick={() => updateConv('status', 'resolvido')} style={{ ...S, background: PALETTE.green, color: '#fff', border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>✅ Resolvido</button>
+              <button onClick={() => updateConv('status', 'resolvido')} style={{ ...S, background: PALETTE.green, color: '#fff', border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><SacIcon name="resolvido" size={14}/>Resolvido</button>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
               <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Digite sua resposta..." rows={4} style={{ ...S, flex: 1, border: `1px solid ${PALETTE.border}`, borderRadius: 6, padding: '8px 10px', fontSize: 14, lineHeight: 1.4, outline: 'none', resize: 'vertical' }} />
@@ -435,17 +436,19 @@ export default function MLPosVenda({ supabase, currentUser }) {
           const atencaoCount = convs.filter(c => cb(c) && c.tag === 'atencao' && c.status !== 'resolvido').length;
           const resolvidasCount = convs.filter(c => cb(c) && c.status === 'resolvido').length;
           const filterDefs = [
-            { id: 'todos', label: 'Todas', badge: 0 },
-            { id: 'pendentes', label: '⏳ Pendentes', badge: openCount, badgeColor: PALETTE.red },
-            { id: 'urgente', label: '🔴 Urgente', badge: urgenteCount, badgeColor: PALETTE.dark },
-            { id: 'atencao', label: '🟡 Atenção', badge: atencaoCount, badgeColor: PALETTE.dark },
-            { id: 'resolvidas', label: '✅ Resolvidas', badge: resolvidasCount, badgeColor: PALETTE.dark },
+            { id: 'todos', label: 'Todas', badge: 0, icon: null },
+            { id: 'pendentes', label: 'Pendentes', icon: 'pendentes', badge: openCount, badgeColor: PALETTE.red },
+            { id: 'urgente', label: 'Urgente', icon: 'urgente', badge: urgenteCount, badgeColor: PALETTE.dark },
+            { id: 'atencao', label: 'Atenção', icon: 'atencao', badge: atencaoCount, badgeColor: PALETTE.dark },
+            { id: 'resolvidas', label: 'Resolvidas', icon: 'resolvido', badge: resolvidasCount, badgeColor: PALETTE.dark },
           ];
           return filterDefs.map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)} style={{
               ...S, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', border: 'none', borderRadius: 5,
               background: filter === f.id ? PALETTE.dark : PALETTE.sand, color: filter === f.id ? '#fff' : PALETTE.text,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
             }}>
+              {f.icon && <SacIcon name={f.icon} size={14}/>}
               {f.label} {f.badge > 0 && <span style={{ background: f.badgeColor || PALETTE.dark, color: '#fff', borderRadius: 8, padding: '1px 6px', fontSize: 10, marginLeft: 3 }}>{f.badge}</span>}
             </button>
           ));
@@ -459,7 +462,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
             color: brandFilter === b ? (b === 'Muniam' || b === 'Todas' ? '#fff' : BRANDS[b]?.color) : PALETTE.text,
           }}>{b}</button>
         ))}
-        <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto' }}>🔄</button>
+        <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto', display: 'inline-flex', alignItems: 'center' }}><SacIcon name="sync" size={14} style={{filter:'brightness(0) invert(1)'}}/></button>
         {(() => {
           const faltando = convs.filter(c => !c.item_title || !c.item_thumbnail).length;
           if (faltando === 0 && !enrichLoading) return null;
@@ -508,20 +511,20 @@ export default function MLPosVenda({ supabase, currentUser }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                   <BrandTag brand={conv.brand} />
                   <span style={{ ...S, fontSize: 14, fontWeight: 700, color: PALETTE.dark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(conv.item_title || 'Pedido #' + (conv.order_id || conv.pack_id)).slice(0, 40)}</span>
-                  <span style={{ ...S, fontSize: 10, color: tag.color, fontWeight: 700, background: tag.bg, padding: '2px 6px', borderRadius: 3, flexShrink: 0, marginLeft: 'auto' }}>{tag.emoji}</span>
+                  <span style={{ ...S, fontSize: 10, color: tag.color, fontWeight: 700, background: tag.bg, padding: '2px 6px', borderRadius: 3, flexShrink: 0, marginLeft: 'auto', display: 'inline-flex', alignItems: 'center' }}>{tag.icon ? <SacIcon name={tag.icon} size={11}/> : tag.emoji}</span>
                 </div>
-                <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 4 }}>
-                  👤 {conv.buyer_nickname || conv.buyer_id || '—'} · 📦 #{conv.order_id || conv.pack_id}
+                <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  <SacIcon name="usuario" size={12}/> {conv.buyer_nickname || conv.buyer_id || '—'} · <SacIcon name="estoque" size={12}/> #{conv.order_id || conv.pack_id}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ ...S, fontSize: 13, color: isUnread ? PALETTE.dark : PALETTE.textLight, fontWeight: isUnread ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                    {conv.last_message_from === 'buyer' ? '💬' : '↩️'} {(conv.last_message_text || '').slice(0, 60)}{(conv.last_message_text || '').length > 60 ? '...' : ''}
+                  <span style={{ ...S, fontSize: 13, color: isUnread ? PALETTE.dark : PALETTE.textLight, fontWeight: isUnread ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {conv.last_message_from === 'buyer' ? <SacIcon name="perguntas" size={12}/> : '↩️'} {(conv.last_message_text || '').slice(0, 60)}{(conv.last_message_text || '').length > 60 ? '...' : ''}
                   </span>
-                  <span style={{ ...S, fontSize: 11, color: PALETTE.textLight, flexShrink: 0 }}>🕐 {timeAgo(conv.last_message_at)}</span>
+                  <span style={{ ...S, fontSize: 11, color: PALETTE.textLight, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3 }}><SacIcon name="relogio" size={11}/>{timeAgo(conv.last_message_at)}</span>
                   {conv.unread_count > 0 && <span style={{ background: PALETTE.blue, color: '#fff', borderRadius: 8, padding: '2px 7px', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{conv.unread_count}</span>}
                 </div>
                 {conv.notes && (
-                  <div style={{ ...S, fontSize: 11, color: PALETTE.orange, marginTop: 4, padding: '3px 8px', background: PALETTE.orangeLight, borderRadius: 3 }}>📝 {conv.notes}</div>
+                  <div style={{ ...S, fontSize: 11, color: PALETTE.orange, marginTop: 4, padding: '3px 8px', background: PALETTE.orangeLight, borderRadius: 3, display: 'inline-flex', alignItems: 'center', gap: 4 }}><SacIcon name="observacao" size={11}/>{conv.notes}</div>
                 )}
               </div>
             </div>

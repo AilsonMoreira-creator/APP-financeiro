@@ -1,0 +1,57 @@
+// Componente unificado dos icones do modulo SAC.
+// Cada icone e um <img> apontando pro PNG em /public/sac-icons/.
+//
+// Os PNGs foram cortados de uma imagem master com auto-detect (bounding box)
+// e padronizados em canvas 256x256 com padding ~14% pra ter mesmo tamanho
+// visual. Ver preview-icones-sac-final.html pro contexto.
+//
+// Uso:
+//   import { SacIcon } from './SacIcons';
+//   <SacIcon name="urgente" size={22} />
+//
+// 16 icones disponiveis: urgente, atencao, online, resolvido, sync, estoque,
+// pendentes, rapidas, dashboard, config, perguntas, posvenda, relogio,
+// sugestao_ia, usuario, observacao.
+
+import React from 'react';
+
+const ICON_PATHS = {
+  urgente: '/sac-icons/urgente.png',
+  atencao: '/sac-icons/atencao.png',
+  online: '/sac-icons/online.png',
+  resolvido: '/sac-icons/resolvido.png',
+  sync: '/sac-icons/sync.png',
+  estoque: '/sac-icons/estoque.png',
+  pendentes: '/sac-icons/pendentes.png',
+  rapidas: '/sac-icons/rapidas.png',
+  dashboard: '/sac-icons/dashboard.png',
+  config: '/sac-icons/config.png',
+  perguntas: '/sac-icons/perguntas.png',
+  posvenda: '/sac-icons/posvenda.png',
+  relogio: '/sac-icons/relogio.png',
+  sugestao_ia: '/sac-icons/sugestao_ia.png',
+  usuario: '/sac-icons/usuario.png',
+  observacao: '/sac-icons/observacao.png',
+};
+
+export function SacIcon({ name, size = 16, style = {} }) {
+  const src = ICON_PATHS[name];
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt={name}
+      width={size}
+      height={size}
+      style={{
+        display: 'inline-block',
+        verticalAlign: 'middle',
+        objectFit: 'contain',
+        flexShrink: 0,
+        ...style,
+      }}
+    />
+  );
+}
+
+export default SacIcon;

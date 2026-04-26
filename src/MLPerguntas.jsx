@@ -16,6 +16,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import MLPosVenda from './MLPosVenda';
+import { SacIcon } from './SacIcons';
 
 // ══════════════════════════════════════════════════════════
 // CONSTANTS
@@ -674,8 +675,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
               { id: 'posvenda', label: 'Pós-Venda', badge: pvUnread, badgeColor: PALETTE.blue },
               { id: 'respondidas', label: 'Respondidas (24h)', badge: answeredToday.length, badgeColor: PALETTE.textLight },
               ...(absenceResponses.length > 0 ? [{ id: 'ausencia', label: 'Ausência', badge: absenceResponses.length, badgeColor: PALETTE.textLight }] : []),
-              { id: 'ia_resp', label: '✨ IA', badge: aiResponses.length, badgeColor: PALETTE.textLight },
-              { id: 'estoque', label: '📦 Estoque', badge: stockAlerts.filter(a => a.status === 'pendente').length, badgeColor: PALETTE.red },
+              { id: 'ia_resp', label: 'IA', badge: aiResponses.length, badgeColor: PALETTE.textLight },
+              { id: 'estoque', label: 'Estoque', badge: stockAlerts.filter(a => a.status === 'pendente').length, badgeColor: PALETTE.red },
               { id: 'arquivo', label: 'Arquivo', badge: archived.length, badgeColor: PALETTE.textLight },
             ].map(t => (
               <button key={t.id} onClick={() => {
@@ -688,9 +689,11 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                 border: 'none', borderRadius: 5, cursor: 'pointer',
                 background: tab === t.id ? PALETTE.dark : PALETTE.sand,
                 color: tab === t.id ? '#fff' : PALETTE.text,
+                display: 'inline-flex', alignItems: 'center', gap: 5,
               }}>
-                {t.id === 'ia_resp' ? <><img src="/robo-ia.png" alt="" style={{ width: 16, height: 16, verticalAlign: 'middle', marginRight: 4 }} /> IA</>
-                  : t.id === 'posvenda' ? <><img src="/icone-posvenda.png" alt="" style={{ width: 18, height: 18, verticalAlign: 'middle', marginRight: 5 }} /> Pós-Venda</>
+                {t.id === 'ia_resp' ? <><img src="/robo-ia.png" alt="" style={{ width: 16, height: 16, verticalAlign: 'middle' }} /> IA</>
+                  : t.id === 'posvenda' ? <><SacIcon name="posvenda" size={16}/> Pós-Venda</>
+                  : t.id === 'estoque' ? <><SacIcon name="estoque" size={16}/> Estoque</>
                   : t.label}
                 {t.badge > 0 && <Badge count={t.badge} color={t.badgeColor} />}
               </button>
@@ -1780,9 +1783,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
   // ══════════════════════════════════════════════════════════
 
   const pages = [
-    { id: 'respostas', label: '💬 Perguntas', badge: 0 },
-    { id: 'dashboard', label: '📊 Dashboard', badge: 0 },
-    { id: 'config', label: '⚙️ Config', badge: 0 },
+    { id: 'respostas', icon: 'perguntas', label: 'Perguntas', badge: 0 },
+    { id: 'dashboard', icon: 'dashboard', label: 'Dashboard', badge: 0 },
+    { id: 'config', icon: 'config', label: 'Config', badge: 0 },
   ];
 
   return (
@@ -1803,10 +1806,10 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S, background: '#ffffff22', color: '#fff', border: '1px solid #ffffff33', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>⚡ Rápidas</button>
-          <button onClick={() => { fetchQuestions(); fetchLocks(); }} style={{ ...S, background: '#ffffff22', color: '#fff', border: '1px solid #ffffff33', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>🔄</button>
-          <span style={{ ...S, background: '#ffffff18', padding: '3px 8px', borderRadius: 10, fontSize: 12, color: '#fff' }}>
-          {Object.keys(locks).length > 0 ? `🔒 ${Object.keys(locks).length} em atendimento` : '🟢 Online'}
+          <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S, background: '#ffffff22', color: '#fff', border: '1px solid #ffffff33', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="rapidas" size={14}/>Rápidas</button>
+          <button onClick={() => { fetchQuestions(); fetchLocks(); }} style={{ ...S, background: '#ffffff22', color: '#fff', border: '1px solid #ffffff33', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}><SacIcon name="sync" size={14}/></button>
+          <span style={{ ...S, background: '#ffffff18', padding: '3px 8px', borderRadius: 10, fontSize: 12, color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          {Object.keys(locks).length > 0 ? `🔒 ${Object.keys(locks).length} em atendimento` : <><SacIcon name="online" size={12}/>Online</>}
           </span>
         </div>
       </div>
@@ -1823,7 +1826,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
             background: page === p.id ? PALETTE.cream : PALETTE.white,
             color: page === p.id ? PALETTE.dark : PALETTE.textLight,
             borderBottom: page === p.id ? `3px solid ${PALETTE.blue}` : '3px solid transparent',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}>
+            <SacIcon name={p.icon} size={16} />
             {p.label}
             {p.badge > 0 && <Badge count={p.badge} />}
           </button>
