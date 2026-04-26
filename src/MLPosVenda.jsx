@@ -18,7 +18,7 @@ const BRANDS = {
 const TAGS = {
   urgente: { emoji: '🔴', icon: 'urgente', label: 'Urgente', color: '#c0392b', bg: '#c0392b15' },
   atencao: { emoji: '🟡', icon: 'atencao', label: 'Atenção', color: '#e67e22', bg: '#e67e2215' },
-  normal: { emoji: '⚪', icon: null, label: 'Normal', color: '#7f8c8d', bg: '#7f8c8d10' },
+  normal: { emoji: '⚪', icon: 'normal', label: 'Normal', color: '#7f8c8d', bg: '#7f8c8d10' },
   resolvido: { emoji: '✅', icon: 'resolvido', label: 'Resolvido', color: '#27ae60', bg: '#27ae6015' },
 };
 const S = { fontFamily: "Georgia,'Times New Roman',serif" };
@@ -327,7 +327,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
               .map((m, i) => (
             <div key={m.id || i} style={{ marginBottom: 14, display: 'flex', flexDirection: m.from_type === 'seller' ? 'row-reverse' : 'row', gap: 8 }}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: m.from_type === 'buyer' ? '#e3edf5' : '#e3f5ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
-                {m.from_type === 'buyer' ? <SacIcon name="usuario" size={20}/> : '🏪'}
+                {m.from_type === 'buyer' ? <SacIcon name="usuario" size={20}/> : <SacIcon name="usuario_falando" size={20}/>}
               </div>
               <div style={{ maxWidth: '78%' }}>
                 <div style={{ ...S, fontSize: 15, lineHeight: 1.5, color: PALETTE.dark, padding: '10px 14px', borderRadius: 10, background: m.from_type === 'buyer' ? '#f0f4f8' : '#e8f5e9', borderBottomLeftRadius: m.from_type === 'buyer' ? 3 : 10, borderBottomRightRadius: m.from_type === 'seller' ? 3 : 10 }}>

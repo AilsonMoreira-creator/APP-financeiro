@@ -39,6 +39,12 @@ const ICON_PATHS = {
   lua: '/sac-icons/lua.png',
   sino: '/sac-icons/sino.png',
   disquete: '/sac-icons/disquete.png',
+  // Novos (templates, locks, avatar loja) - 26/04 tarde
+  normal: '/sac-icons/normal.png',
+  cadeado: '/sac-icons/cadeado.png',
+  saudacao: '/sac-icons/saudacao.png',
+  despedida: '/sac-icons/despedida.png',
+  usuario_falando: '/sac-icons/usuario_falando.png',
 };
 
 export function SacIcon({ name, size = 16, style = {} }) {

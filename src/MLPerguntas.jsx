@@ -954,8 +954,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         </div>
         {['saudacao', 'mensagem', 'despedida'].map(field => (
           <div key={field} style={{ marginBottom: 8 }}>
-            <div style={{ ...S, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: PALETTE.textLight, marginBottom: 3 }}>
-              {field === 'saudacao' ? '🌅 Saudação' : field === 'mensagem' ? '💬 Mensagem' : '👋 Despedida'}
+            <div style={{ ...S, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: PALETTE.textLight, marginBottom: 3, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {field === 'saudacao' ? <><SacIcon name="saudacao" size={14}/>Saudação</> : field === 'mensagem' ? <><SacIcon name="perguntas" size={14}/>Mensagem</> : <><SacIcon name="despedida" size={14}/>Despedida</>}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {(config.templates?.[field] || []).map(t => (
@@ -1024,8 +1024,8 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                 <BrandTag brand={q.brand} />
                 {!isAnswered && <TimeTag minutes={q.minutes_elapsed} config={config} />}
                 {lockedByOther && (
-                  <span style={{ ...S, fontSize: 12, color: PALETTE.orange, fontWeight: 600 }}>
-                    🔒 {lock.user} respondendo...
+                  <span style={{ ...S, fontSize: 12, color: PALETTE.orange, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <SacIcon name="cadeado" size={12}/>{lock.user} respondendo...
                   </span>
                 )}
                 {!isAnswered && !lockedByOther && queuedIds.has(q.id) && (
@@ -1097,13 +1097,13 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
 
             {/* 3 response fields */}
             {[
-              { key: 'saudacao', label: '🌅 Saudação', ph: '/sd /st /sn', rows: 1 },
-              { key: 'mensagem', label: '💬 Mensagem', ph: '/disp /prazo /tam ou digite', rows: 3 },
-              { key: 'despedida', label: '👋 Despedida', ph: '/dp /dd', rows: 1 },
+              { key: 'saudacao', icon: 'saudacao', label: 'Saudação', ph: '/sd /st /sn', rows: 1 },
+              { key: 'mensagem', icon: 'perguntas', label: 'Mensagem', ph: '/disp /prazo /tam ou digite', rows: 3 },
+              { key: 'despedida', icon: 'despedida', label: 'Despedida', ph: '/dp /dd', rows: 1 },
             ].map(f => (
               <div key={f.key} style={{ marginBottom: 4 }}>
-                <div style={{ ...S, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: PALETTE.textLight, marginBottom: 2 }}>
-                  {f.label}
+                <div style={{ ...S, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: PALETTE.textLight, marginBottom: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <SacIcon name={f.icon} size={14}/>{f.label}
                 </div>
                 {f.rows > 1 ? (
                   <textarea
@@ -1320,7 +1320,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
           {sections.map(s => (
             <button key={s.id} onClick={() => { setConfigSection(s.id); if (s.id === 'saude') fetchSacHealth(); }} style={{
-              ...S, padding: '5px 10px', fontSize: 13, fontWeight: 600,
+              ...S, padding: '5px 12px', fontSize: 14, fontWeight: 600,
               border: 'none', borderRadius: 5, cursor: 'pointer',
               background: configSection === s.id ? PALETTE.dark : PALETTE.sand,
               color: configSection === s.id ? '#fff' : PALETTE.text,
@@ -1475,7 +1475,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
             {['saudacao', 'mensagem', 'despedida'].map(field => (
               <div key={field} style={{ marginBottom: 12 }}>
                 <div style={{ ...S, fontSize: 13, fontWeight: 700, textTransform: 'uppercase', color: PALETTE.dark, marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{field === 'saudacao' ? '🌅 Saudação' : field === 'mensagem' ? '💬 Mensagem' : '👋 Despedida'}</span>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:4}}>{field === 'saudacao' ? <><SacIcon name="saudacao" size={15}/>Saudação</> : field === 'mensagem' ? <><SacIcon name="perguntas" size={15}/>Mensagem</> : <><SacIcon name="despedida" size={15}/>Despedida</>}</span>
                   <Btn small onClick={() => {
                     const text = prompt('Texto do template:');
                     const shortcut = prompt('Atalho (ex: /novo):');
@@ -1814,7 +1814,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
           <button onClick={() => setShowTemplates(!showTemplates)} style={{ ...S, background: '#ffffff22', color: '#fff', border: '1px solid #ffffff33', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="rapidas" size={14}/>Rápidas</button>
           <button onClick={() => { fetchQuestions(); fetchLocks(); }} style={{ ...S, background: '#ffffff22', color: '#fff', border: '1px solid #ffffff33', borderRadius: 6, padding: '4px 8px', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}><SacIcon name="sync" size={14}/></button>
           <span style={{ ...S, background: '#ffffff18', padding: '3px 8px', borderRadius: 10, fontSize: 12, color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-          {Object.keys(locks).length > 0 ? `🔒 ${Object.keys(locks).length} em atendimento` : <><SacIcon name="online" size={12}/>Online</>}
+          {Object.keys(locks).length > 0 ? <><SacIcon name="cadeado" size={12}/>{Object.keys(locks).length} em atendimento</> : <><SacIcon name="online" size={12}/>Online</>}
           </span>
         </div>
       </div>
