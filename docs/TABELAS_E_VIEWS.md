@@ -55,6 +55,7 @@ A tabela `amicia_data` tem 2 colunas: `user_id` (chave) e `payload` (JSONB). Cad
 | `ml-last-sync` | Marca temporal da última sync do ML (compatibilidade). | Cron | |
 | `ia-pergunta-config` | Config do módulo IA Pergunta: rate_limit_users (default 50/dia), modelo, prompt. | Admin | Padrão SAC: config como user_id pra evitar tabela extra. |
 | `backup-diario` | Backup completo do `amicia-admin.payload` rotacionado diariamente. | Cron | Recovery em caso de corrupção. |
+| `historico_vendas` | **Dados históricos importados manualmente via JSON** — vendas mês-a-mês jan/2025 a fev/2026 (14 meses), por canal, com qtd de produtos vendidos por REF. Usado pelo módulo Histórico Vendas (`HistoricoVendas.jsx`). | Importação manual (admin) | Estrutura: `{ _meta: {refsTotal, mesesTotal, periodo, canais}, refs: { "2601": { refDisplay, descricao, vendas: { "2025-01": {shein_lumia,...} } } } }`. **Snapshot estático** — não atualiza automaticamente. |
 | `cron` | Status genérico de execução de crons internos. | Cron | |
 
 **Regras importantes:**
