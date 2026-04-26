@@ -32,22 +32,35 @@ const ICON_PATHS = {
   sugestao_ia: '/sac-icons/sugestao_ia.png',
   usuario: '/sac-icons/usuario.png',
   observacao: '/sac-icons/observacao.png',
+  // Novos (tela Config) - 26/04
+  saude: '/sac-icons/saude.png',
+  contas: '/sac-icons/contas.png',
+  livros: '/sac-icons/livros.png',
+  lua: '/sac-icons/lua.png',
+  sino: '/sac-icons/sino.png',
+  disquete: '/sac-icons/disquete.png',
 };
 
 export function SacIcon({ name, size = 16, style = {} }) {
   const src = ICON_PATHS[name];
   if (!src) return null;
+  // Scale 1.2x aplicado em TODOS os icones SAC (aprovado pelo Ailson 26/04).
+  // Renderiza o <img> 20% maior que o size pedido, com margin negativo
+  // proporcional pra encaixar no slot original sem afetar layout dos vizinhos.
+  const renderSize = Math.round(size * 1.2);
+  const overhang = Math.round((renderSize - size) / 2);
   return (
     <img
       src={src}
       alt={name}
-      width={size}
-      height={size}
+      width={renderSize}
+      height={renderSize}
       style={{
         display: 'inline-block',
         verticalAlign: 'middle',
         objectFit: 'contain',
         flexShrink: 0,
+        margin: `${-overhang}px`,
         ...style,
       }}
     />

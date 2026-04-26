@@ -17,6 +17,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import MLPosVenda from './MLPosVenda';
 import { SacIcon } from './SacIcons';
+import { SacIcon } from './SacIcons';
 
 // ══════════════════════════════════════════════════════════
 // CONSTANTS
@@ -1303,15 +1304,15 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
   // ══════════════════════════════════════════════════════════
   function renderConfig() {
     const sections = [
-      { id: 'saude', label: '🩺 Saúde' },
-      { id: 'contas', label: '🔗 Contas' },
-      { id: 'templates', label: '⚡ Templates' },
-      { id: 'horario', label: '🕐 Horários' },
-      { id: 'ausencia', label: '🌙 Ausência' },
-      { id: 'ia', label: '✨ IA' },
-      { id: 'alertas', label: '🔔 Alertas' },
-      { id: 'treinamento', label: '📚 Treinar IA' },
-      { id: 'treinamento_pv', label: '📚 Pós-Venda' },
+      { id: 'saude', icon: 'saude', label: 'Saúde' },
+      { id: 'contas', icon: 'contas', label: 'Contas' },
+      { id: 'templates', icon: 'rapidas', label: 'Templates' },
+      { id: 'horario', icon: 'relogio', label: 'Horários' },
+      { id: 'ausencia', icon: 'lua', label: 'Ausência' },
+      { id: 'ia', icon: 'sugestao_ia', label: 'IA' },
+      { id: 'alertas', icon: 'sino', label: 'Alertas' },
+      { id: 'treinamento', icon: 'livros', label: 'Treinar IA' },
+      { id: 'treinamento_pv', icon: 'livros', label: 'Pós-Venda' },
     ];
 
     return (
@@ -1323,7 +1324,11 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
               border: 'none', borderRadius: 5, cursor: 'pointer',
               background: configSection === s.id ? PALETTE.dark : PALETTE.sand,
               color: configSection === s.id ? '#fff' : PALETTE.text,
-            }}>{s.label}</button>
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+            }}>
+              <SacIcon name={s.icon} size={14}/>
+              {s.label}
+            </button>
           ))}
         </div>
 
@@ -1331,7 +1336,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         {configSection === 'saude' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark }}>🩺 Saúde do SAC</div>
+              <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="saude" size={18}/>Saúde do SAC</div>
               <button onClick={fetchSacHealth} disabled={sacHealthLoading} style={{ ...S, background: PALETTE.blue, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: sacHealthLoading ? 0.6 : 1 }}>
                 {sacHealthLoading ? 'Carregando...' : '🔄 Atualizar'}
               </button>
@@ -1539,7 +1544,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         {/* AUSÊNCIA */}
         {configSection === 'ausencia' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
-            <div style={{ ...S, fontSize: 14, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>🌙 Resposta Automática de Ausência</div>
+            <div style={{ ...S, fontSize: 14, fontWeight: 700, marginBottom: 4, color: PALETTE.dark, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="lua" size={16}/>Resposta Automática de Ausência</div>
             <div style={{ ...S, fontSize: 14, color: PALETTE.textLight, marginBottom: 8 }}>
               Disparada automaticamente fora do horário configurado
             </div>
@@ -1560,7 +1565,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         {/* IA */}
         {configSection === 'ia' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
-            <div style={{ ...S, fontSize: 15, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>✨ Configuração da IA</div>
+            <div style={{ ...S, fontSize: 15, fontWeight: 700, marginBottom: 4, color: PALETTE.dark, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="sugestao_ia" size={18}/>Configuração da IA</div>
             <div style={{ ...S, fontSize: 14, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
               A IA aprende com cada resposta enviada. Lê a descrição do anúncio + histórico de Q&A.
             </div>
@@ -1586,7 +1591,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
 
             {/* Auto-resposta IA */}
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${PALETTE.sand}` }}>
-              <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark, marginBottom: 4 }}>✨ Resposta Automática da IA</div>
+              <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark, marginBottom: 4, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="sugestao_ia" size={18}/>Resposta Automática da IA</div>
               <div style={{ ...S, fontSize: 14, color: PALETTE.textLight, marginBottom: 8, lineHeight: 1.4 }}>
                 A IA responde automaticamente <b>fora do horário de atendimento</b> (configurado na aba Horários). Quando tem alta confiança, envia a resposta. Se não tiver confiança, envia a mensagem padrão abaixo.
               </div>
@@ -1614,7 +1619,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         {/* ALERTAS */}
         {configSection === 'alertas' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
-            <div style={{ ...S, fontSize: 14, fontWeight: 700, marginBottom: 8, color: PALETTE.dark }}>🔔 Thresholds de Alerta (minutos)</div>
+            <div style={{ ...S, fontSize: 14, fontWeight: 700, marginBottom: 8, color: PALETTE.dark, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="sino" size={16}/>Thresholds de Alerta (minutos)</div>
             {[
               { key: 'alert_warning', label: '⚠️ Atenção (amarelo)', def: 15 },
               { key: 'alert_urgent', label: '🔴 Urgente (vermelho)', def: 30 },
@@ -1634,7 +1639,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         {/* TREINAMENTO IA */}
         {configSection === 'treinamento' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
-            <div style={{ ...S, fontSize: 15, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>📚 Treinar IA — Adicionar Perguntas e Respostas</div>
+            <div style={{ ...S, fontSize: 15, fontWeight: 700, marginBottom: 4, color: PALETTE.dark, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="livros" size={18}/>Treinar IA — Adicionar Perguntas e Respostas</div>
             <div style={{ ...S, fontSize: 14, color: PALETTE.textLight, marginBottom: 10, lineHeight: 1.4 }}>
               Adicione perguntas e respostas reais pra IA aprender. Vale pra todas as lojas (Exitus, Lumia, Muniam).
             </div>
@@ -1666,7 +1671,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                   alert('✅ Salvo pra Exitus, Lumia e Muniam! A IA vai usar como referência.');
                 }
               } catch (err) { alert('Erro: ' + err.message); }
-            }}>💾 Salvar pra todas as lojas</Btn>
+            }}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><SacIcon name="disquete" size={14}/>Salvar pra todas as lojas</span></Btn>
 
             {/* Quiz: IA quer aprender */}
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${PALETTE.sand}` }}>
@@ -1741,7 +1746,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
         {/* TREINAMENTO PÓS-VENDA */}
         {configSection === 'treinamento_pv' && (
           <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
-            <div style={{ ...S, fontSize: 15, fontWeight: 700, marginBottom: 4, color: PALETTE.dark }}>📚 Treinar IA — Pós-Venda</div>
+            <div style={{ ...S, fontSize: 15, fontWeight: 700, marginBottom: 4, color: PALETTE.dark, display: 'inline-flex', alignItems: 'center', gap: 5 }}><SacIcon name="livros" size={18}/>Treinar IA — Pós-Venda</div>
             <div style={{ ...S, fontSize: 14, color: PALETTE.textLight, marginBottom: 10, lineHeight: 1.4 }}>
               Adicione situações reais de pós-venda e respostas ideais. A IA usa como referência nas sugestões.
             </div>
@@ -1771,7 +1776,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                 document.getElementById('qa-pv-resposta').value = '';
                 alert('✅ Salvo pra Exitus, Lumia e Muniam!');
               } catch (err) { alert('Erro: ' + err.message); }
-            }}>💾 Salvar pra todas as lojas</Btn>
+            }}><span style={{display:'inline-flex',alignItems:'center',gap:4}}><SacIcon name="disquete" size={14}/>Salvar pra todas as lojas</span></Btn>
           </div>
         )}
       </div>
