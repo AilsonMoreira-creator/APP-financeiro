@@ -110,8 +110,8 @@ Sequência ideal:
 - **Último commit:** `0afcab5` — `docs: cria referencia completa de tabelas/views/storage`
 - **Penúltimo:** `7342227` — `feat(sac): substitui emojis Templates/Lock/AvatarLoja`
 - **Deploy:** `app-financeiro-brown.vercel.app` (build ~1 min)
-- **Working dir local:** `/home/claude/repo`
-- **Token git:** disponível na memória / chats anteriores (não commitar em arquivo)
+- **Working dir local:** `/home/claude/repo` (filesystem reseta entre chats — sempre clonar)
+- **Token git:** Ailson cola no início de cada chat novo. Se ele esquecer e Claude precisar pushar, pedir gentilmente: "preciso do token git pra fazer push, pode colar?"
 
 ---
 
