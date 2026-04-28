@@ -240,17 +240,17 @@ const SvgUsuarios = ({ size = 32 }) => (
 );
 
 const SvgLojas = ({ size = 32 }) => {
-  // PNG icone fachada (similar ao SvgDashboard/SvgOficinas)
-  // Renderiza a 2.4x do size com margin negativo pra encaixar no slot original
-  const renderSize = Math.round(size * 2.4);
-  const marginPx = -Math.round((renderSize - size) / 2);
+  // PNG fachada (Ailson criou). Renderiza no tamanho natural (size x size),
+  // igual aos SVGs vizinhos (SvgUsuarios, SvgConfiguracoes).
+  // Antes estava em 2.4x (igual SvgDashboard/SvgOficinas que precisavam disso pra
+  // alinhar com emojis), mas o crop do PNG já tem proporção certa pro slot.
   return (
     <img
       src="/loja.png"
       alt="Lojas"
-      width={renderSize}
-      height={renderSize}
-      style={{ objectFit: 'contain', display: 'block', margin: `${marginPx}px` }}
+      width={size}
+      height={size}
+      style={{ objectFit: 'contain', display: 'block' }}
     />
   );
 };
