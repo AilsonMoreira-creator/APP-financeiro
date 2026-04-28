@@ -802,6 +802,7 @@ export const CATEGORIAS_PAGAMENTO = {
 
 export const USUARIOS_ACESSO_TOTAL = [
   'amicia-admin',   // admin original do app
+  'admin',          // alias do admin no login do app principal
   'ailson',         // dono
   'tamara',         // esposa do dono
 ];
