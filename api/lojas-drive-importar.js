@@ -288,23 +288,36 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
   const enriquecidos = registros.map(r => ({ ...r, importacao_id: importacaoId }));
 
   if (tipo === 'cadastro_clientes_futura') {
-    return upsertEmLotes('lojas_clientes', enriquecidos.map(r => {
-      // Remove campos auxiliares (com _ prefix)
+    const limpos = enriquecidos.map(r => {
       const { _kpis, _frase_amigavel, importacao_id, ...resto } = r;
       return resto;
-    }), 'documento');
+    });
+    // Dedup por documento (Cadastro Futura tem clientes cadastrados 2x com
+    // mesmo CPF/CNPJ; Postgres não permite ON CONFLICT na mesma linha 2x
+    // dentro de um upsert). Mantém o último (geralmente cadastro mais novo).
+    const dedup = new Map();
+    for (const r of limpos) {
+      if (r.documento) dedup.set(r.documento, r);
+    }
+    return upsertEmLotes('lojas_clientes', Array.from(dedup.values()), 'documento');
   }
 
   if (tipo.startsWith('vendas_clientes')) {
     // Esse parser produz registros pra lojas_clientes COM kpis embutidos.
     // Estratégia:
-    //   1. Upsert dos clientes (sem _kpis)
+    //   1. Upsert dos clientes (sem _kpis), dedupados por documento
     //   2. Pra cada cliente, busca o id e upsert em lojas_clientes_kpis
     const clientesRaw = enriquecidos.map(r => {
       const { _kpis, vendedora_nome, importacao_id, ...resto } = r;
       return resto;
     });
-    const upsertClientes = await upsertEmLotes('lojas_clientes', clientesRaw, 'documento');
+    // Dedup por documento (mesmo motivo do cadastro_clientes_futura)
+    const dedupClientes = new Map();
+    for (const r of clientesRaw) {
+      if (r.documento) dedupClientes.set(r.documento, r);
+    }
+    const clientesDedupados = Array.from(dedupClientes.values());
+    const upsertClientes = await upsertEmLotes('lojas_clientes', clientesDedupados, 'documento');
 
     // Buscar IDs por documento (em lote pra não fazer N queries)
     const documentos = enriquecidos.map(r => r.documento);
@@ -315,24 +328,30 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
 
     const docToId = new Map((clientes || []).map(c => [c.documento, c.id]));
 
-    const kpisRows = enriquecidos
-      .filter(r => docToId.has(r.documento))
-      .map(r => {
-        const ticket_medio = r._kpis.qtd_compras > 0
-          ? Math.round((r._kpis.lifetime_total / r._kpis.qtd_compras) * 100) / 100
-          : 0;
-        return {
-          cliente_id: docToId.get(r.documento),
-          qtd_compras: r._kpis.qtd_compras,
-          qtd_pecas: r._kpis.qtd_pecas,
-          lifetime_total: r._kpis.lifetime_total,
-          ticket_medio,
-          primeira_compra: r._kpis.primeira_compra,
-          ultima_compra: r._kpis.ultima_compra,
-          classificacao_abc: r._kpis.classificacao_abc,
-          ultima_atualizacao: new Date().toISOString(),
-        };
-      });
+    // KPIs também precisam dedup por documento (mesma razão)
+    const dedupKpis = new Map();
+    for (const r of enriquecidos) {
+      if (r.documento && docToId.has(r.documento)) {
+        dedupKpis.set(r.documento, r);
+      }
+    }
+
+    const kpisRows = Array.from(dedupKpis.values()).map(r => {
+      const ticket_medio = r._kpis.qtd_compras > 0
+        ? Math.round((r._kpis.lifetime_total / r._kpis.qtd_compras) * 100) / 100
+        : 0;
+      return {
+        cliente_id: docToId.get(r.documento),
+        qtd_compras: r._kpis.qtd_compras,
+        qtd_pecas: r._kpis.qtd_pecas,
+        lifetime_total: r._kpis.lifetime_total,
+        ticket_medio,
+        primeira_compra: r._kpis.primeira_compra,
+        ultima_compra: r._kpis.ultima_compra,
+        classificacao_abc: r._kpis.classificacao_abc,
+        ultima_atualizacao: new Date().toISOString(),
+      };
+    });
 
     if (kpisRows.length) {
       await upsertEmLotes('lojas_clientes_kpis', kpisRows, 'cliente_id');
