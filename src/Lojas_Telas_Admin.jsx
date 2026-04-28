@@ -46,12 +46,13 @@ import {
   Loader2, Flame,
 } from 'lucide-react';
 
-// Importa tudo da Parte 1
+// Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
+// não importa dos outros arquivos do módulo)
 import {
   palette, FONT, statusMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon,
   supabase,
-} from './Lojas.jsx';
+} from './Lojas_Shared.jsx';
 
 // Importa ModalMensagem da Parte 2a (usado em DetalheGrupoScreen)
 import { ModalMensagem } from './Lojas_Telas_Vendedora.jsx';

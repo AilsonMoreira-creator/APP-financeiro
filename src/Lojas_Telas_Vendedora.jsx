@@ -42,11 +42,12 @@ import {
   UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send,
 } from 'lucide-react';
 
-// Importa tudo da Parte 1
+// Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
+// não importa dos outros arquivos do módulo)
 import {
   palette, FONT, statusMap, subtipoSacolaMap, faseClienteNovaMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
-} from './Lojas.jsx';
+} from './Lojas_Shared.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS DE UI ESPECÍFICOS DAS TELAS VENDEDORA
