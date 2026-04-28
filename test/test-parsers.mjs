@@ -103,6 +103,37 @@ test('parseCSV cadastro_futura (com campos vazios)', () => {
   eq(r[1]['CPF/CNPJ'], '62.718.793/0001-36');
 });
 
+// Detecção automática de separador (bug real encontrado em produção:
+// arquivos CSV BR vinham com ';' mas parser assumia '\t')
+const csv_bbr = `Código;Razão Social;Fantasia;Fone;Celular;Cidade;CPF/CNPJ;UF\r
+39201; 3 S ARTIGOS; 3 S ARTIGOS;;(65) 9683-2091;LUCAS DO RIO VERDE;10.929.621/0001-08;MT\r
+216201; ADRIANA NEHME; ADRIANA NEHME;;;ITUIUTABA;62.718.793/0001-36;MG`;
+test('parseCSV detecta ; (CSV BR) automaticamente', () => {
+  const r = parseCSV(csv_bbr);
+  eq(r.length, 2);
+  eq(r[0]['Código'], '39201');
+  eq(r[0]['Razão Social'], '3 S ARTIGOS');  // trim funciona
+  eq(r[0]['CPF/CNPJ'], '10.929.621/0001-08');
+  eq(r[1]['UF'], 'MG');
+});
+
+const csv_virgula = `code,name,price
+A001,Produto X,12.50
+A002,Produto Y,30.00`;
+test('parseCSV detecta vírgula automaticamente', () => {
+  const r = parseCSV(csv_virgula);
+  eq(r.length, 2);
+  eq(r[0]['code'], 'A001');
+  eq(r[1]['price'], '30.00');
+});
+
+test('parseCSV separador forçado tem prioridade sobre detecção', () => {
+  // Mesmo conteúdo com ';', mas força TAB → vai virar 1 coluna gigante
+  const r = parseCSV('a;b;c\n1;2;3', { separador: '\t' });
+  eq(r.length, 1);
+  eq(Object.keys(r[0]).length, 1);  // só 1 coluna porque forçou TAB
+});
+
 console.log(`\n════════════════════════════════════════════════════════════════`);
 console.log(`  ✓ ${passed} passaram   |   ✗ ${failed} falharam   |   total: ${passed + failed}`);
 console.log(`════════════════════════════════════════════════════════════════\n`);

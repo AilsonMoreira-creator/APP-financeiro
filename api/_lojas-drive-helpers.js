@@ -369,17 +369,25 @@ export function tipoDocumento(doc) {
 
 /**
  * Parser de CSV simples que assume:
- *   - Separador: TAB (padrão Miré/Futura) — pode ser configurado
+ *   - Separador: detectado automaticamente da 1ª linha (TAB, ;, ou ,)
+ *     ou pode ser forçado via opts.separador
  *   - 1ª linha é cabeçalho
  *   - Sem aspas (Miré exporta sem)
+ *
+ * Ordem de detecção: TAB > ponto-vírgula > vírgula. Pega o que produz
+ * mais colunas na linha de cabeçalho (mínimo 2 colunas pra contar).
+ *
+ * Por que importa: arquivos exportados em formato CSV BR usam ';' como
+ * separador (pra evitar conflito com vírgula decimal); arquivos de
+ * sistemas mais antigos usam TAB; alguns sistemas modernos usam vírgula.
  *
  * Retorna array de objetos com chaves do header.
  *
  * @param {string} conteudo - texto bruto do CSV
- * @param {object} opts - { separador, pular_linhas }
+ * @param {object} opts - { separador (opcional), pular_linhas }
  */
 export function parseCSV(conteudo, opts = {}) {
-  const { separador = '\t', pular_linhas = 0 } = opts;
+  const { separador: separadorForcado, pular_linhas = 0 } = opts;
   if (!conteudo) return [];
 
   // Normaliza line endings (CRLF, CR, LF)
@@ -390,7 +398,12 @@ export function parseCSV(conteudo, opts = {}) {
 
   // Pula linhas iniciais (algumas exportações têm título)
   const linhasUteis = linhas.slice(pular_linhas);
-  const cabecalho = linhasUteis[0].split(separador).map(c => c.trim());
+  const linhaHeader = linhasUteis[0];
+
+  // Detecta separador se não foi forçado
+  const separador = separadorForcado || _detectarSeparador(linhaHeader);
+
+  const cabecalho = linhaHeader.split(separador).map(c => c.trim());
   const linhasDados = linhasUteis.slice(1);
 
   return linhasDados
@@ -405,6 +418,26 @@ export function parseCSV(conteudo, opts = {}) {
       return obj;
     })
     .filter(Boolean);
+}
+
+/**
+ * Detecta o separador mais provável testando TAB, ; e , na linha de cabeçalho.
+ * Retorna o que gera mais colunas (mínimo 2). Default: TAB (pra retro-compat
+ * com colagens diretas do Sheets/Numbers).
+ */
+function _detectarSeparador(linhaHeader) {
+  if (!linhaHeader) return '\t';
+  const candidatos = ['\t', ';', ','];
+  let melhor = '\t';
+  let melhorN = 1;
+  for (const c of candidatos) {
+    const n = linhaHeader.split(c).length;
+    if (n > melhorN) {
+      melhorN = n;
+      melhor = c;
+    }
+  }
+  return melhor;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
