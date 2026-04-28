@@ -146,17 +146,17 @@ export const Header = ({ title, subtitle, onBack, rightContent }) => (
             background: 'transparent', border: 'none', color: palette.bg,
             cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center',
           }}>
-            <ArrowLeft size={22} />
+            <ArrowLeft size={25} />
           </button>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-          {!onBack && <LojaIcon size={28} />}
+          {!onBack && <LojaIcon size={32} />}
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{
-              fontSize: 17, fontWeight: 600, letterSpacing: 0.3,
+              fontSize: 20, fontWeight: 600, letterSpacing: 0.3,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{title}</div>
-            {subtitle && (<div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{subtitle}</div>)}
+            {subtitle && (<div style={{ fontSize: 13, opacity: 0.7, marginTop: 2 }}>{subtitle}</div>)}
           </div>
         </div>
       </div>
@@ -194,13 +194,13 @@ export const TabBar = ({ tabs, activeTab, onChange }) => (
       return (
         <button key={tab.id} onClick={() => onChange(tab.id)} style={{
           background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: FONT,
-          padding: '14px 16px', fontSize: 14,
+          padding: '14px 16px', fontSize: 16,
           color: active ? palette.ink : palette.inkMuted,
           fontWeight: active ? 600 : 400,
           borderBottom: active ? `2.5px solid ${palette.accent}` : '2.5px solid transparent',
           display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'all 0.15s',
         }}>
-          <Icon size={16} />
+          <Icon size={18} />
           {tab.label}
         </button>
       );
@@ -215,10 +215,10 @@ export const TabBar = ({ tabs, activeTab, onChange }) => (
 export const SectionTitle = ({ icon: Icon, children }) => (
   <div style={{
     display: 'flex', alignItems: 'center', gap: 6,
-    fontSize: 11, fontWeight: 600, color: palette.inkSoft,
+    fontSize: 13, fontWeight: 600, color: palette.inkSoft,
     letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10,
   }}>
-    {Icon && <Icon size={13} />}
+    {Icon && <Icon size={15} />}
     {children}
   </div>
 );
@@ -247,17 +247,17 @@ export function LoadingScreen({ phase, error, online }) {
           width: 60, height: 60, borderRadius: '50%', background: palette.alertSoft,
           display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
         }}>
-          <AlertCircle size={30} color={palette.alert} />
+          <AlertCircle size={34} color={palette.alert} />
         </div>
-        <div style={{ fontSize: 17, fontWeight: 600, color: palette.ink, marginBottom: 8 }}>
+        <div style={{ fontSize: 20, fontWeight: 600, color: palette.ink, marginBottom: 8 }}>
           Não foi possível carregar
         </div>
-        <div style={{ fontSize: 13, color: palette.inkSoft, lineHeight: 1.5, maxWidth: 320 }}>
+        <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.5, maxWidth: 320 }}>
           {error || 'Erro desconhecido'}
         </div>
         <button onClick={() => window.location.reload()} style={{
           marginTop: 20, background: palette.accent, color: palette.bg, border: 'none',
-          borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 600,
+          borderRadius: 10, padding: '12px 24px', fontSize: 16, fontWeight: 600,
           cursor: 'pointer', fontFamily: FONT,
         }}>
           Tentar novamente
@@ -273,17 +273,17 @@ export function LoadingScreen({ phase, error, online }) {
       padding: 24, textAlign: 'center',
     }}>
       <div style={{ marginBottom: 16, animation: 'spin 1s linear infinite' }}>
-        <Loader2 size={40} color={palette.accent} />
+        <Loader2 size={46} color={palette.accent} />
       </div>
-      <div style={{ fontSize: 14, color: palette.inkSoft }}>
+      <div style={{ fontSize: 16, color: palette.inkSoft }}>
         {messages[phase] || 'Carregando…'}
       </div>
       {!online && (
         <div style={{
           marginTop: 16, padding: '8px 14px', background: palette.warnSoft,
-          color: palette.warn, borderRadius: 8, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6,
+          color: palette.warn, borderRadius: 8, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6,
         }}>
-          <WifiOff size={14} /> Sem conexão
+          <WifiOff size={16} /> Sem conexão
         </div>
       )}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
