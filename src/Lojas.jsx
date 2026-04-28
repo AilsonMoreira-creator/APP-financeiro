@@ -314,13 +314,21 @@ function lojasReducer(state, action) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function getUserIdFromStorage() {
-  // O app principal salva em 'amicia_user' como JSON {id: 'celia', ...}
-  // ou direto em 'user_id' string.
+  // Padrão real do app principal: 'amica_session' (sem o "i" depois do "m") com {usuario, admin, ...}
+  // Fallbacks: 'amicia_user', 'user_id', 'userId'
+  try {
+    const sess = localStorage.getItem('amica_session');
+    if (sess) {
+      const p = JSON.parse(sess);
+      if (p?.usuario) return p.usuario;
+      if (p?.id) return p.id;
+    }
+  } catch {}
   try {
     const json = localStorage.getItem('amicia_user');
     if (json) {
       const parsed = JSON.parse(json);
-      return parsed?.id || parsed?.user_id || null;
+      return parsed?.id || parsed?.user_id || parsed?.usuario || null;
     }
   } catch {}
   return localStorage.getItem('user_id') || localStorage.getItem('userId') || null;
@@ -1405,12 +1413,18 @@ function LoadingScreen({ phase, error, online }) {
 // COMPONENTES UTILITÁRIOS DE UI (reaproveitados do v5 + adições)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// LampIcon: usa o robô IA do app (mesmo padrão do SAC/IAPergunta).
+// Aparece nos botões "Pedir sugestão de mensagem" e indicadores de IA.
+// Lâmpada amarela ficou reservada pra contextos de "ideia gerada" (sac-icons/sugestao_ia.png)
 const LampIcon = ({ size = 16 }) => (
-  <Lightbulb size={size} fill={palette.yellow} color={palette.yellow} strokeWidth={1.8}
-    style={{ filter: 'drop-shadow(0 0 2px rgba(245,184,0,0.4))' }} />
+  <img src="/robo-ia.png" alt="IA" width={size} height={size} style={{ display: 'block', objectFit: 'contain' }} />
 );
 
 const LojaIcon = ({ size = 32 }) => (
+  <img src="/loja.png" alt="Loja" width={size} height={size} style={{ display: 'block', objectFit: 'contain', flexShrink: 0 }} />
+);
+
+const _LojaIconSvgLegacy = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 64 56" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
     <rect x="4" y="4" width="56" height="4" fill="#9ca3af" rx="1" />
     <rect x="6" y="6" width="52" height="14" fill={palette.beigeSoft} stroke={palette.ink} strokeWidth="0.8" />
@@ -1539,7 +1553,20 @@ import {
 // COMPONENTE PRINCIPAL — Router de telas
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function LojasModule() {
+export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdminProp = false, supabase: supabaseProp = null } = {}) {
+  // Se app principal passou userId via prop, registra em sessão temporária pra que
+  // o hook useLojasModule e os fetch /api/lojas-ia consigam pegar via getUserIdFromStorage()
+  if (userIdProp && typeof window !== 'undefined') {
+    try {
+      // Só sobreescreve se não houver amica_session ativa OU se for diferente
+      const cur = localStorage.getItem('amica_session');
+      const parsed = cur ? JSON.parse(cur) : null;
+      if (!parsed || parsed.usuario !== userIdProp) {
+        // Não cria sessão fake — só registra fallback
+        if (!localStorage.getItem('user_id')) localStorage.setItem('user_id', userIdProp);
+      }
+    } catch {}
+  }
   const lojas = useLojasModule();
   const { state, trocarVendedoraAtiva } = lojas;
   
