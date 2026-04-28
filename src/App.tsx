@@ -8265,7 +8265,7 @@ export default function App(){
     // Lojas: count sugestões pendentes do dia (admin vê todas, vendedora vê só as suas)
     const hojeStr=new Date().toISOString().slice(0,10);
     const usuarioAtual=usuarioLogado?.usuario||'';
-    const ehAdminLojas=['amicia-admin','ailson','tamara'].includes(String(usuarioAtual).toLowerCase());
+    const ehAdminLojas=['amicia-admin','admin','ailson','tamara'].includes(String(usuarioAtual).toLowerCase());
     if(ehAdminLojas){
       supabase.from('lojas_sugestoes_diarias').select('id',{count:'exact',head:true}).eq('data_geracao',hojeStr).eq('status','pendente').then(({count})=>{
         if(typeof count==='number')setHomeLojasPending(count);

@@ -40,7 +40,8 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
 
 // Admins do módulo Lojas (mesmo array do LojasInstrucoes.jsx, replicado aqui
 // pra Edge Function não precisar importar JSX)
-const USUARIOS_ACESSO_TOTAL_LOJAS = ['amicia-admin', 'ailson', 'tamara'];
+// 'admin' = login default do app principal (admin do amicia_data)
+const USUARIOS_ACESSO_TOTAL_LOJAS = ['amicia-admin', 'admin', 'ailson', 'tamara'];
 
 export function ehAdminLojas(userId) {
   if (!userId) return false;
