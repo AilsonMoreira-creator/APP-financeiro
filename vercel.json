@@ -4,7 +4,9 @@
     "api/ia-disparar.js": { "maxDuration": 120 },
     "api/lojas-ia.js": { "maxDuration": 90 },
     "api/lojas-drive-importar.js": { "maxDuration": 300 },
-    "api/lojas-drive-cron.js": { "maxDuration": 60 }
+    "api/lojas-drive-cron.js": { "maxDuration": 60 },
+    "api/lojas-ia-cron-diario.js": { "maxDuration": 300 },
+    "api/lojas-ia-cron-semanal.js": { "maxDuration": 300 }
   },
   "crons": [
     {
@@ -62,6 +64,14 @@
     {
       "path": "/api/lojas-drive-cron",
       "schedule": "0 9 * * 2"
+    },
+    {
+      "path": "/api/lojas-ia-cron-diario",
+      "schedule": "0 10 * * 1-5"
+    },
+    {
+      "path": "/api/lojas-ia-cron-semanal",
+      "schedule": "0 10 * * 2"
     }
   ]
 }

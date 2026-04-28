@@ -81,6 +81,9 @@ export default async function handler(req, res) {
     if (action === 'gerar_mensagem') {
       return await handleGerarMensagem(req, res, auth);
     }
+    if (action === 'gerar_resumo_semanal') {
+      return await handleGerarResumoSemanal(req, res, auth);
+    }
     return res.status(400).json({ error: `Action desconhecida: ${action}` });
   } catch (e) {
     console.error('[lojas-ia] erro fatal:', e);
@@ -766,4 +769,306 @@ function classificarProdutos(produtos, curadoria) {
 const TIPOS_VALIDOS = ['reativar', 'atencao', 'novidade', 'followup', 'followup_nova', 'sacola'];
 function validarTipo(t) {
   return TIPOS_VALIDOS.includes(t) ? t : 'followup';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AÇÃO 3: gerar_resumo_semanal (semana finalizada → resumo + motivacional)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Roda toda terça 07:00 BRT (cron). Pra cada vendedora ATIVA, calcula:
+//   • Mensagens enviadas na semana (seg-dom anterior)
+//   • Sugestões geradas / dispensadas
+//   • Conversões com sucesso (regra dos 30 dias):
+//     - mensagens enviadas em clientes "atenção" (45-90d sem comprar) ou
+//       "inativo" (180-365d) nas últimas 4 semanas
+//     - se cliente comprou da MESMA vendedora em até 30 dias após msg
+//     → conta como conversão de sucesso
+//   • Top 3 clientes que compraram da vendedora na semana
+//   • Mensagem motivacional gerada por Claude (tom otimista)
+//
+// Salva em lojas_resumos_semanais. Vendedora vê no app.
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function handleGerarResumoSemanal(req, res, auth) {
+  const vendedoraIdAlvo = req.body?.vendedora_id;
+  // Pode rodar pra 1 vendedora específica ou pra todas (modo cron)
+  const modoTodas = !vendedoraIdAlvo;
+
+  // Permissão: admin pode rodar pra qualquer uma. Vendedora só pra si mesma.
+  if (!modoTodas && !auth.isAdmin && auth.vendedoraId !== vendedoraIdAlvo) {
+    return res.status(403).json({ error: 'Sem permissão' });
+  }
+  if (modoTodas && !auth.isAdmin) {
+    return res.status(403).json({ error: 'Modo todas: apenas admin' });
+  }
+
+  // Carrega vendedoras alvo
+  let { data: vendedoras, error: errVend } = await supabase
+    .from('lojas_vendedoras')
+    .select('id, nome, loja, ativa, is_placeholder')
+    .eq('ativa', true);
+  if (errVend) {
+    return res.status(500).json({ error: errVend.message });
+  }
+  vendedoras = (vendedoras || []).filter(v => !v.is_placeholder);  // pula placeholders
+  if (!modoTodas) {
+    vendedoras = vendedoras.filter(v => v.id === vendedoraIdAlvo);
+  }
+  if (vendedoras.length === 0) {
+    return res.status(404).json({ error: 'Nenhuma vendedora ativa elegível' });
+  }
+
+  // Janela: segunda anterior → domingo anterior
+  const { semana_inicio, semana_fim } = calcularSemanaPassada();
+
+  const resultados = [];
+  for (const v of vendedoras) {
+    try {
+      const r = await gerarResumoVendedora(v, semana_inicio, semana_fim);
+      resultados.push({ vendedora_id: v.id, nome: v.nome, ...r });
+    } catch (e) {
+      console.error(`[resumo-semanal] erro ${v.nome}:`, e);
+      resultados.push({ vendedora_id: v.id, nome: v.nome, erro: e.message });
+    }
+  }
+
+  return res.status(200).json({
+    semana_inicio, semana_fim,
+    total: vendedoras.length,
+    sucessos: resultados.filter(r => !r.erro).length,
+    erros: resultados.filter(r => r.erro).length,
+    resultados,
+  });
+}
+
+/**
+ * Calcula segunda → domingo da semana ANTERIOR (não a atual).
+ * Ex: se hoje é terça 28/04, retorna { inicio: 21/04, fim: 27/04 }
+ */
+function calcularSemanaPassada() {
+  const hoje = new Date();
+  const diaDaSemana = hoje.getDay(); // 0=dom, 1=seg, ..., 6=sab
+  // Quantos dias voltar pra chegar na segunda anterior:
+  //   se hoje é seg(1) → voltar 7 dias
+  //   se hoje é ter(2) → voltar 8 dias
+  //   se hoje é dom(0) → voltar 6 dias
+  const diasParaSegundaAnterior = diaDaSemana === 0 ? 6 : diaDaSemana + 6;
+  const segAnterior = new Date(hoje);
+  segAnterior.setDate(hoje.getDate() - diasParaSegundaAnterior);
+  segAnterior.setHours(0, 0, 0, 0);
+
+  const domAnterior = new Date(segAnterior);
+  domAnterior.setDate(segAnterior.getDate() + 6);
+  domAnterior.setHours(23, 59, 59, 999);
+
+  return {
+    semana_inicio: segAnterior.toISOString().split('T')[0],
+    semana_fim: domAnterior.toISOString().split('T')[0],
+  };
+}
+
+async function gerarResumoVendedora(vendedora, semana_inicio, semana_fim) {
+  const inicioISO = `${semana_inicio}T00:00:00Z`;
+  const fimISO = `${semana_fim}T23:59:59Z`;
+
+  // ─── 1. Métricas brutas da semana ──────────────────────────────────────
+  const { data: acoesSemana } = await supabase
+    .from('lojas_acoes')
+    .select('tipo_acao, resultado')
+    .eq('vendedora_id', vendedora.id)
+    .gte('created_at', inicioISO)
+    .lte('created_at', fimISO);
+
+  const mensagens_enviadas = (acoesSemana || [])
+    .filter(a => a.tipo_acao === 'mensagem_enviada').length;
+  const sugestoes_dispensadas = (acoesSemana || [])
+    .filter(a => a.tipo_acao === 'dispensada').length;
+
+  const { count: sugestoes_geradas } = await supabase
+    .from('lojas_sugestoes_diarias')
+    .select('*', { count: 'exact', head: true })
+    .eq('vendedora_id', vendedora.id)
+    .gte('data_referencia', semana_inicio)
+    .lte('data_referencia', semana_fim);
+
+  // ─── 2. Conversões com sucesso (regra dos 30 dias) ────────────────────
+  // Pega mensagens enviadas nas últimas 4 semanas pra clientes atenção/inativo
+  const quatroSemanasAtras = new Date(inicioISO);
+  quatroSemanasAtras.setDate(quatroSemanasAtras.getDate() - 21); // semana_inicio - 21d = 4 semanas total
+
+  const { data: msgs4semanas } = await supabase
+    .from('lojas_acoes')
+    .select(`
+      id, cliente_id, created_at, observacao,
+      lojas_clientes!inner(id, razao_social, fantasia, status_atual)
+    `)
+    .eq('vendedora_id', vendedora.id)
+    .eq('tipo_acao', 'mensagem_enviada')
+    .gte('created_at', quatroSemanasAtras.toISOString())
+    .lte('created_at', fimISO);
+
+  const msgs_atencao_inativo = (msgs4semanas || []).filter(m => {
+    const status = m.lojas_clientes?.status_atual;
+    return status === 'atencao' || status === 'inativo';
+  });
+
+  const mensagens_atencao_inativo = msgs_atencao_inativo.length;
+
+  // Pra cada msg atenção/inativo, ver se houve compra em até 30d
+  const conversoes_detalhe = [];
+  for (const msg of msgs_atencao_inativo) {
+    const dataMsg = new Date(msg.created_at);
+    const data30dDepois = new Date(dataMsg);
+    data30dDepois.setDate(dataMsg.getDate() + 30);
+
+    const { data: vendasPosMsg } = await supabase
+      .from('lojas_vendas')
+      .select('id, data_venda, valor_liquido')
+      .eq('vendedora_id', vendedora.id)
+      .eq('cliente_id', msg.cliente_id)
+      .gte('data_venda', dataMsg.toISOString().split('T')[0])
+      .lte('data_venda', data30dDepois.toISOString().split('T')[0])
+      .order('data_venda', { ascending: true })
+      .limit(1);
+
+    if (vendasPosMsg && vendasPosMsg.length > 0) {
+      const venda = vendasPosMsg[0];
+      const dias = Math.round((new Date(venda.data_venda) - dataMsg) / 86400000);
+      conversoes_detalhe.push({
+        cliente_id: msg.cliente_id,
+        cliente_nome: msg.lojas_clientes?.fantasia || msg.lojas_clientes?.razao_social,
+        data_msg: msg.created_at.split('T')[0],
+        data_venda: venda.data_venda,
+        dias,
+        valor: Number(venda.valor_liquido),
+      });
+    }
+  }
+  const conversoes_sucesso = conversoes_detalhe.length;
+  const taxa_conversao = mensagens_atencao_inativo > 0
+    ? Math.round((conversoes_sucesso / mensagens_atencao_inativo) * 10000) / 100
+    : 0;
+
+  // ─── 3. Top 3 clientes da semana ──────────────────────────────────────
+  const { data: vendasSemana } = await supabase
+    .from('lojas_vendas')
+    .select(`
+      cliente_id, valor_liquido,
+      lojas_clientes!inner(id, razao_social, fantasia)
+    `)
+    .eq('vendedora_id', vendedora.id)
+    .gte('data_venda', semana_inicio)
+    .lte('data_venda', semana_fim);
+
+  const agregado = new Map();
+  for (const v of (vendasSemana || [])) {
+    const k = v.cliente_id;
+    if (!k) continue;
+    const cur = agregado.get(k) || {
+      cliente_id: k,
+      nome: v.lojas_clientes?.fantasia || v.lojas_clientes?.razao_social || 'Cliente sem nome',
+      qtd_pedidos: 0, total_comprado: 0,
+    };
+    cur.qtd_pedidos++;
+    cur.total_comprado += Number(v.valor_liquido) || 0;
+    agregado.set(k, cur);
+  }
+  const top_clientes = Array.from(agregado.values())
+    .sort((a, b) => b.total_comprado - a.total_comprado)
+    .slice(0, 3);
+
+  // ─── 4. Gera mensagem motivacional via Claude ─────────────────────────
+  const promptMotivacional = montarPromptMotivacional(vendedora, {
+    mensagens_enviadas, sugestoes_geradas, sugestoes_dispensadas,
+    mensagens_atencao_inativo, conversoes_sucesso, taxa_conversao,
+    top_clientes, semana_inicio, semana_fim,
+  });
+
+  const modeloIA = await getLojasConfig('modelo_ia', 'claude-sonnet-4-6');
+  let mensagem_motivacional = null;
+  let tokens_input = 0, tokens_output = 0, custo_brl = 0;
+  try {
+    const resp = await chamarClaude({
+      model: modeloIA,
+      max_tokens: 400,
+      system: 'Você é uma coach motivacional pra vendedoras de moda. Tom: otimista, próximo, brasileiro descontraído. Frases curtas (máximo 3-4 frases). Use emojis com moderação. Valoriza o esforço sem ser piegas.',
+      messages: [{ role: 'user', content: promptMotivacional }],
+    });
+    mensagem_motivacional = resp?.content?.[0]?.text?.trim() || null;
+    tokens_input = resp?.usage?.input_tokens || 0;
+    tokens_output = resp?.usage?.output_tokens || 0;
+    // logarChamadaIA já calcula custo
+    await logarChamadaIA({
+      contexto: 'lojas_resumo_semanal',
+      vendedora_id: vendedora.id,
+      modelo: modeloIA,
+      tokens_input, tokens_output,
+    });
+  } catch (e) {
+    console.error('[resumo-semanal] erro Claude:', e);
+    mensagem_motivacional = `Olá ${vendedora.nome}! Mais uma semana se foi. Bora pra próxima! 💪`;
+  }
+
+  // ─── 5. Salva (upsert pela chave única vendedora_id+semana_inicio) ────
+  const { data: salvo, error: errSalvar } = await supabase
+    .from('lojas_resumos_semanais')
+    .upsert({
+      vendedora_id: vendedora.id,
+      semana_inicio, semana_fim,
+      mensagens_enviadas: mensagens_enviadas || 0,
+      sugestoes_geradas: sugestoes_geradas || 0,
+      sugestoes_dispensadas: sugestoes_dispensadas || 0,
+      mensagens_atencao_inativo,
+      conversoes_sucesso,
+      taxa_conversao,
+      top_clientes,
+      conversoes_detalhe,
+      mensagem_motivacional,
+      modelo_ia: modeloIA,
+      tokens_input, tokens_output,
+      gerado_em: new Date().toISOString(),
+    }, { onConflict: 'vendedora_id,semana_inicio' })
+    .select()
+    .single();
+
+  if (errSalvar) throw new Error(`Erro salvando resumo: ${errSalvar.message}`);
+
+  return {
+    resumo_id: salvo.id,
+    metricas: {
+      mensagens_enviadas, sugestoes_geradas, sugestoes_dispensadas,
+      mensagens_atencao_inativo, conversoes_sucesso, taxa_conversao,
+    },
+    top_clientes_qtd: top_clientes.length,
+    mensagem_preview: mensagem_motivacional?.substring(0, 100),
+  };
+}
+
+function montarPromptMotivacional(vendedora, dados) {
+  const {
+    mensagens_enviadas, sugestoes_geradas, sugestoes_dispensadas,
+    mensagens_atencao_inativo, conversoes_sucesso, taxa_conversao,
+    top_clientes,
+  } = dados;
+
+  const topClientesTxt = top_clientes.length === 0
+    ? 'Nenhum.'
+    : top_clientes.map((c, i) =>
+      `${i + 1}. ${c.nome}: ${c.qtd_pedidos} pedido(s), R$ ${c.total_comprado.toFixed(2)}`
+    ).join('\n');
+
+  return `Vendedora: ${vendedora.nome} (${vendedora.loja})
+
+Métricas da semana passada:
+- Mensagens enviadas: ${mensagens_enviadas}
+- Sugestões geradas pra você pela IA: ${sugestoes_geradas}
+- Sugestões dispensadas: ${sugestoes_dispensadas}
+- Mensagens enviadas pra clientes em atenção/inativo (últimas 4 sem): ${mensagens_atencao_inativo}
+- Dessas, converteram em compra (até 30 dias): ${conversoes_sucesso}
+- Taxa de conversão: ${taxa_conversao}%
+
+Top clientes da semana:
+${topClientesTxt}
+
+Gere uma mensagem motivacional curta (3-4 frases máximo) chamando pelo nome dela. Use os números reais quando relevante. Tom otimista mas honesto — se foi uma semana fraca, encoraja sem fingir. Se foi forte, celebra com ela. Brasileiro descontraído, sem ser piegas.`;
 }
