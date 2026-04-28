@@ -830,9 +830,13 @@ async function gerarSugestoesIA(vendedoraId) {
   // Roda na Edge Function pra não expor API key.
   // A function recebe vendedora_id, monta payload com carteira/produtos/promoções,
   // chama Anthropic com SYSTEM_PROMPT_SUGESTOES, e grava em lojas_sugestoes_diarias.
+  const userId = getUserIdFromStorage();
   const res = await fetch('/api/lojas-ia', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User': userId || '',
+    },
     body: JSON.stringify({
       action: 'gerar_sugestoes',
       vendedora_id: vendedoraId,
@@ -846,9 +850,13 @@ async function gerarSugestoesIA(vendedoraId) {
 }
 
 async function gerarMensagemIA(sugestaoId, contextoExtra = {}) {
+  const userId = getUserIdFromStorage();
   const res = await fetch('/api/lojas-ia', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User': userId || '',
+    },
     body: JSON.stringify({
       action: 'gerar_mensagem',
       sugestao_id: sugestaoId,
