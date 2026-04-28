@@ -763,6 +763,66 @@ async function registrarAcao(acao, userId, vendedoraId) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// CONFIG E HISTÓRICO (helpers usados pelas telas admin — Parte 2b)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── lojas_config (key-value) ──────────────────────────────────────────────
+async function saveConfig(chave, valor, userId) {
+  const payload = {
+    chave,
+    valor,
+    updated_at: new Date().toISOString(),
+    updated_by: userId,
+  };
+  const { error } = await supabase
+    .from('lojas_config')
+    .upsert(payload, { onConflict: 'chave' });
+  if (error) throw error;
+}
+
+async function loadConfig() {
+  const { data, error } = await supabase
+    .from('lojas_config')
+    .select('chave, valor');
+  if (error) throw error;
+  return Object.fromEntries((data || []).map(r => [r.chave, r.valor]));
+}
+
+// ─── Histórico de promoções (expiradas/pausadas) ───────────────────────────
+async function loadPromocoesHistorico(limit = 20) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('lojas_promocoes')
+    .select('*')
+    .or(`ativo.eq.false,data_fim.lt.${hoje}`)
+    .order('data_fim', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+// ─── Upload manual de importação (Drive — UI only por enquanto) ────────────
+// MVP: apenas insere registro com status='iniciada'. Edge Function da Parte 5
+// vai puxar os arquivos das pastas Mire_Bom_Retiro / Mire_Silva_Teles do Drive.
+async function registrarImportacaoManual(tipoArquivo, loja, userId) {
+  const payload = {
+    tipo_arquivo: tipoArquivo,
+    loja: loja || null,
+    nome_arquivo: 'manual-' + Date.now(),
+    iniciada_em: new Date().toISOString(),
+    status: 'iniciada',
+    iniciada_por: userId,
+  };
+  const { data, error } = await supabase
+    .from('lojas_importacoes')
+    .insert(payload)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // IA: chamadas para Edge Function /api/lojas-ia
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1160,6 +1220,24 @@ function useLojasModule() {
     // Realtime vai entregar as novas sugestões automaticamente
   }, [state.vendedoraAtiva]);
   
+  // ─── Handlers de Config / Histórico / Importação (Parte 2b) ────────────
+  
+  const handleSaveConfig = useCallback(async (chave, valor) => {
+    await saveConfig(chave, valor, state.userId);
+  }, [state.userId]);
+  
+  const handleLoadConfig = useCallback(async () => {
+    return await loadConfig();
+  }, []);
+  
+  const handleLoadPromocoesHistorico = useCallback(async (limit = 20) => {
+    return await loadPromocoesHistorico(limit);
+  }, []);
+  
+  const handleRegistrarImportacaoManual = useCallback(async (tipoArquivo, loja) => {
+    return await registrarImportacaoManual(tipoArquivo, loja, state.userId);
+  }, [state.userId]);
+  
   // ─── Computed: clientes enriquecidos com KPIs + sub-tipo de sacola ─────
   const clientesEnriquecidos = useMemo(() => {
     return state.clientes.map(c => {
@@ -1238,6 +1316,12 @@ function useLojasModule() {
     handleDispensarSugestao,
     handleGerarMensagem,
     handleRegerarSugestoes,
+    
+    // config / histórico / importação (Parte 2b)
+    handleSaveConfig,
+    handleLoadConfig,
+    handleLoadPromocoesHistorico,
+    handleRegistrarImportacaoManual,
   };
 }
 
@@ -1431,17 +1515,17 @@ import {
   ModalMensagem,
 } from './Lojas_Telas_Vendedora.jsx';
 
-// Parte 2b — admin (será criada em chat separado, importações ficam comentadas até lá)
-// import {
-//   PromocoesScreen, NovaPromocaoScreen,
-//   RegrasScreen,
-//   VendedorasAdminScreen, NovaVendedoraScreen,
-//   TransferirCarteiraScreen,
-//   CuradoriaScreen,
-//   GruposListScreen, DetalheGrupoScreen,
-//   ImportacoesScreen,
-//   CriarGrupoModal, AdicionarCnpjModal,
-// } from './Lojas_Telas_Admin.jsx';
+// Parte 2b — telas admin
+import {
+  PromocoesScreen, NovaPromocaoScreen,
+  RegrasScreen,
+  VendedorasAdminScreen, NovaVendedoraScreen,
+  TransferirCarteiraScreen,
+  CuradoriaScreen,
+  GruposListScreen, DetalheGrupoScreen,
+  ImportacoesScreen,
+  CriarGrupoModal, AdicionarCnpjModal,
+} from './Lojas_Telas_Admin.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL — Router de telas
@@ -1461,6 +1545,9 @@ export default function LojasModule() {
   const [showCriarGrupo, setShowCriarGrupo] = useState(false);
   const [showAdicionarCnpj, setShowAdicionarCnpj] = useState(false);
   const [clienteParaGrupo, setClienteParaGrupo] = useState(null);
+  // Parte 2b — estados pra edição
+  const [promocaoEdit, setPromocaoEdit] = useState(null);
+  const [vendedoraEdit, setVendedoraEdit] = useState(null);
   
   // Loading inicial / erro
   if (state.phase !== LOAD_PHASES.READY) {
@@ -1580,35 +1667,79 @@ export default function LojasModule() {
         />
       )}
       
-      {/* ─── Telas admin (Parte 2b - placeholder até implementação) ──────── */}
-      
-      {['promocoes', 'novaPromocao', 'regras', 'vendedorasAdmin', 'novaVendedora',
-        'transferir', 'curadoria', 'grupos', 'gruposAdmin', 'grupo', 'importacoes'].includes(screen) && (
-        <div style={{ background: palette.bg, minHeight: '100vh', fontFamily: FONT }}>
-          <Header
-            title={`${screen.charAt(0).toUpperCase()}${screen.slice(1)}`}
-            subtitle="Tela admin — Parte 2b"
-            onBack={() => setScreen('home')}
-          />
-          <div style={{ padding: 24, textAlign: 'center' }}>
-            <div style={{
-              width: 60, height: 60, borderRadius: '50%', background: palette.warnSoft,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '24px auto 16px',
-            }}>
-              <Settings size={30} color={palette.warn} />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: palette.ink, marginBottom: 6 }}>
-              Tela admin em desenvolvimento
-            </div>
-            <div style={{ fontSize: 12, color: palette.inkSoft, lineHeight: 1.6, maxWidth: 320, margin: '0 auto' }}>
-              Esta tela faz parte da <strong>Parte 2b</strong> (telas administrativas).
-              Será implementada em chat separado pra preservar contexto.
-            </div>
-          </div>
-        </div>
+      {/* ─── Telas admin (Parte 2b) ──────────────────────────────────────── */}
+
+      {screen === 'promocoes' && (
+        <PromocoesScreen
+          lojas={lojas}
+          onBack={() => setScreen('home')}
+          onNovaPromocao={() => { setPromocaoEdit(null); setScreen('novaPromocao'); }}
+          onEditarPromocao={(p) => { setPromocaoEdit(p); setScreen('novaPromocao'); }}
+        />
       )}
-      
+
+      {screen === 'novaPromocao' && (
+        <NovaPromocaoScreen
+          lojas={lojas}
+          promocaoExistente={promocaoEdit}
+          onBack={() => { setPromocaoEdit(null); setScreen('promocoes'); }}
+          onSaved={() => { setPromocaoEdit(null); setScreen('promocoes'); }}
+        />
+      )}
+
+      {screen === 'regras' && (
+        <RegrasScreen lojas={lojas} onBack={() => setScreen('home')} />
+      )}
+
+      {screen === 'vendedorasAdmin' && (
+        <VendedorasAdminScreen
+          lojas={lojas}
+          onBack={() => setScreen('home')}
+          onNovaVendedora={() => { setVendedoraEdit(null); setScreen('novaVendedora'); }}
+          onEditarVendedora={(v) => { setVendedoraEdit(v); setScreen('novaVendedora'); }}
+        />
+      )}
+
+      {screen === 'novaVendedora' && (
+        <NovaVendedoraScreen
+          lojas={lojas}
+          vendedoraExistente={vendedoraEdit}
+          onBack={() => { setVendedoraEdit(null); setScreen('vendedorasAdmin'); }}
+          onSaved={() => { setVendedoraEdit(null); setScreen('vendedorasAdmin'); }}
+        />
+      )}
+
+      {screen === 'transferir' && (
+        <TransferirCarteiraScreen lojas={lojas} onBack={() => setScreen('home')} />
+      )}
+
+      {screen === 'curadoria' && (
+        <CuradoriaScreen lojas={lojas} onBack={() => setScreen('home')} />
+      )}
+
+      {(screen === 'grupos' || screen === 'gruposAdmin') && (
+        <GruposListScreen
+          lojas={lojas}
+          isAdmin={state.isAdmin}
+          onBack={() => setScreen(screen === 'gruposAdmin' ? 'home' : 'cardDia')}
+          onSelectGrupo={(g) => { setGrupoOrigem(screen); setGrupoAtivo(g); setScreen('grupo'); }}
+          onCriarGrupo={() => { setClienteParaGrupo(null); setShowCriarGrupo(true); }}
+        />
+      )}
+
+      {screen === 'grupo' && grupoAtivo && (
+        <DetalheGrupoScreen
+          lojas={lojas}
+          grupo={grupoAtivo}
+          onBack={() => setScreen(grupoOrigem || 'gruposAdmin')}
+          onAdicionarCnpj={() => setShowAdicionarCnpj(true)}
+        />
+      )}
+
+      {screen === 'importacoes' && (
+        <ImportacoesScreen lojas={lojas} onBack={() => setScreen('home')} />
+      )}
+
       {/* ─── Modais ──────────────────────────────────────────────────────── */}
       
       {showModal && sugestaoAtiva && (
@@ -1625,28 +1756,27 @@ export default function LojasModule() {
       )}
       
       {showCriarGrupo && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.55)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
-          padding: 16, fontFamily: FONT,
-        }} onClick={() => setShowCriarGrupo(false)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: palette.surface, borderRadius: 16, padding: 20,
-            width: '100%', maxWidth: 460,
-          }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: palette.ink, marginBottom: 8 }}>
-              Criar grupo
-            </div>
-            <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 16, lineHeight: 1.5 }}>
-              Funcionalidade da Parte 2b — em desenvolvimento.
-            </div>
-            <button onClick={() => setShowCriarGrupo(false)} style={{
-              width: '100%', background: palette.accent, color: palette.bg, border: 'none',
-              borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600,
-              cursor: 'pointer', fontFamily: FONT,
-            }}>OK</button>
-          </div>
-        </div>
+        <CriarGrupoModal
+          lojas={lojas}
+          clienteInicial={clienteParaGrupo}
+          onClose={() => { setShowCriarGrupo(false); setClienteParaGrupo(null); }}
+          onCriado={(grupo) => {
+            setShowCriarGrupo(false);
+            setClienteParaGrupo(null);
+            setGrupoOrigem(screen === 'gruposAdmin' || screen === 'grupos' ? screen : 'gruposAdmin');
+            setGrupoAtivo(grupo);
+            setScreen('grupo');
+          }}
+        />
+      )}
+
+      {showAdicionarCnpj && grupoAtivo && (
+        <AdicionarCnpjModal
+          lojas={lojas}
+          grupo={grupoAtivo}
+          onClose={() => setShowAdicionarCnpj(false)}
+          onAdicionado={() => setShowAdicionarCnpj(false)}
+        />
       )}
     </div>
   );
@@ -1678,6 +1808,9 @@ export {
   adicionarCuradoria, removerCuradoria,
   marcarSugestaoExecutada, dispensarSugestao,
   gerarSugestoesIA, gerarMensagemIA,
+  
+  // Parte 2b
+  saveConfig, loadConfig, loadPromocoesHistorico, registrarImportacaoManual,
   
   // supabase client (caso Parte 2 precise queries específicas)
   supabase,
