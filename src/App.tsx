@@ -8,7 +8,6 @@ import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
 import OsAmicia from './os-amicia/OsAmicia';
 import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
-import LojasModule from './Lojas';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -238,22 +237,6 @@ const SvgUsuarios = ({ size = 32 }) => (
     <path d="M6,64 Q6,42 32,42 Q58,42 58,64" fill={_B} stroke={_S} strokeWidth="2.2"/>
   </svg>
 );
-
-const SvgLojas = ({ size = 32 }) => {
-  // PNG icone fachada (similar ao SvgDashboard/SvgOficinas)
-  // Renderiza a 2.4x do size com margin negativo pra encaixar no slot original
-  const renderSize = Math.round(size * 2.4);
-  const marginPx = -Math.round((renderSize - size) / 2);
-  return (
-    <img
-      src="/loja.png"
-      alt="Lojas"
-      width={renderSize}
-      height={renderSize}
-      style={{ objectFit: 'contain', display: 'block', margin: `${marginPx}px` }}
-    />
-  );
-};
 
 const SvgConfiguracoes = ({ size = 32 }) => {
   const cx=32,cy=32,R=26,r=20,teeth=8,toothW=0.28;
@@ -514,10 +497,6 @@ const modules = [
   // Admin tem todos os modulos automaticamente. Outros users precisam
   // ter "osamicia" adicionado em modulos[] no cadastro (tela Usuarios).
   { id:"osamicia", Icon:SvgOSAmicia, label:"OS" },
-  // Lojas - co-piloto de vendas IA pras lojas físicas (Bom Retiro + Silva Teles).
-  // Admin tem acesso. Vendedoras precisam ter "lojas" em modulos[] e estar
-  // cadastradas em lojas_vendedoras (tabela do módulo).
-  { id:"lojas", Icon:SvgLojas, label:"Lojas" },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -3979,7 +3958,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia","lojas"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true,moduloPadrao:"home"},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas","salascorte"],admin:false,moduloPadrao:"oficinas"},
@@ -7690,7 +7669,6 @@ export default function App(){
   const [homeSacPending,setHomeSacPending]=useState(0);
   const [homeSCPending,setHomeSCPending]=useState(0);
   const [homeAgendaHoje,setHomeAgendaHoje]=useState(0);
-  const [homeLojasPending,setHomeLojasPending]=useState(0);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
   const ultimaAtividadeRef=useRef(Date.now()); // timestamp da última atividade do usuário (toque/click/scroll/keydown). Reseta o timeout de inatividade.
   const ultimaSyncAtividadeRef=useRef(0); // throttle de localStorage
@@ -8262,23 +8240,6 @@ export default function App(){
       const now=new Date();
       if(data?.payload?.itens&&data.payload.mes===now.getMonth()+1)setHomeAgendaHoje(data.payload.itens.filter(i=>!i.feito&&i.dia===hojeDia).length);
     }).catch(()=>{});
-    // Lojas: count sugestões pendentes do dia (admin vê todas, vendedora vê só as suas)
-    const hojeStr=new Date().toISOString().slice(0,10);
-    const usuarioAtual=usuarioLogado?.usuario||'';
-    const ehAdminLojas=['amicia-admin','ailson','tamara'].includes(String(usuarioAtual).toLowerCase());
-    if(ehAdminLojas){
-      supabase.from('lojas_sugestoes_diarias').select('id',{count:'exact',head:true}).eq('data_geracao',hojeStr).eq('status','pendente').then(({count})=>{
-        if(typeof count==='number')setHomeLojasPending(count);
-      }).catch(()=>{});
-    }else{
-      // Vendedora: busca ID dela primeiro, depois suas sugestões
-      supabase.from('lojas_vendedoras').select('id').eq('user_id',usuarioAtual).maybeSingle().then(({data:vd})=>{
-        if(!vd?.id)return;
-        supabase.from('lojas_sugestoes_diarias').select('id',{count:'exact',head:true}).eq('vendedora_id',vd.id).eq('data_geracao',hojeStr).eq('status','pendente').then(({count})=>{
-          if(typeof count==='number')setHomeLojasPending(count);
-        }).catch(()=>{});
-      }).catch(()=>{});
-    }
   },[dbCarregado]);
 
   // ── BACKUP DIÁRIO AUTOMÁTICO (1x por dia ao abrir) ─────────────────────────
@@ -9149,10 +9110,6 @@ export default function App(){
               kpiValue:boletosAbertosMes.length>0?`${boletosAbertosMes.length}`:"✓",
               kpiLabel:boletosAbertosMes.length>0?"a vencer este mês":"todos pagos ✓",
               detail:boletosHoje.length>0?`${boletosHoje.length} hoje · ${fmt(valorHoje)}`:"nenhum vencendo hoje"},
-            {id:"lojas",label:"Lojas",Icon:SvgLojas,color:"#8b6b50",bg:"#faf6f0",border:"#e8dcc8",
-              kpiValue:homeLojasPending>0?`${homeLojasPending}`:"✓",
-              kpiLabel:homeLojasPending>0?"sugestões hoje":"sem sugestões hoje",
-              detail:homeLojasPending>0?"Co-piloto IA pras lojas":"Bom Retiro · Silva Teles"},
           ].filter(m=>usuarioLogado.modulos.includes(m.id));
 
           return(
@@ -9205,7 +9162,6 @@ export default function App(){
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="osamicia"&&usuarioLogado?.modulos?.includes('osamicia')&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={usuarioLogado}/></ModuleErrorBoundary>}
-        {active==="lojas"&&<ModuleErrorBoundary><LojasModule supabase={supabase} userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent

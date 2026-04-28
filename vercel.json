@@ -1,8 +1,7 @@
 {
   "functions": {
     "api/ia-cron.js": { "maxDuration": 120 },
-    "api/ia-disparar.js": { "maxDuration": 120 },
-    "api/lojas-ia.js": { "maxDuration": 90 }
+    "api/ia-disparar.js": { "maxDuration": 120 }
   },
   "crons": [
     {
