@@ -91,37 +91,100 @@ export async function getGoogleAccessToken() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Lista arquivos de uma pasta do Drive (recursivamente em 1 nível: pega arquivos
- * direto na pasta + arquivos nas sub-pastas dela).
+ * Lista arquivos de uma pasta do Drive, descendo recursivamente até 3 níveis
+ * de profundidade. Suficiente pra estrutura:
+ *   lojas_app/                       (nível 0)
+ *   ├── _CARGA_INICIAL/              (nível 1)
+ *   │   ├── Bom_Retiro_Inicial/      (nível 2 — arquivos aqui)
+ *   │   ├── Silva_Teles_Inicial/     (nível 2 — arquivos aqui)
+ *   │   └── Geral_Inicial/           (nível 2 — arquivos aqui)
+ *   ├── Sacola_Bom_Retiro/           (nível 1 — arquivos aqui)
+ *   ├── Sacola_Silva_Teles/          (nível 1 — arquivos aqui)
+ *   └── Produtos/                    (nível 1 — arquivos aqui)
  *
- * Retorna array de { id, name, mimeType, parents, modifiedTime, parentName }.
+ * Retorna array de { id, name, mimeType, parents, modifiedTime, parentName,
+ *   parentPath }.
+ *
+ * Filtra automaticamente:
+ *   - Google Sheets (mimeType application/vnd.google-apps.spreadsheet) que
+ *     têm um CSV irmão de mesmo nome — usa só o CSV original
+ *   - Arquivos de lixeira (trashed=true)
  *
  * @param {string} folderId - ID da pasta raiz
- * @param {object} opts - { includeSubfolders: bool } (default true)
+ * @param {object} opts - { maxDepth: int (default 3), includeSubfolders: bool (default true) }
  */
 export async function listarArquivosDrive(folderId, opts = {}) {
-  const { includeSubfolders = true } = opts;
+  const { maxDepth = 3, includeSubfolders = true } = opts;
   const token = await getGoogleAccessToken();
 
-  // 1) Lista arquivos direto na pasta raiz
-  const arquivosRaiz = await _listarConteudoPasta(folderId, token);
-  let resultado = arquivosRaiz.filter(f => !f.isFolder).map(f => ({
-    ...f, parentName: 'raiz',
-  }));
+  const todosArquivos = [];
+  await _listarRecursivo(folderId, 'raiz', '', 0, maxDepth, includeSubfolders, token, todosArquivos);
 
-  if (!includeSubfolders) return resultado;
+  // Pós-processamento: dedup Google Sheets vs CSV irmão de mesmo nome
+  return _filtrarSheetsDuplicados(todosArquivos);
+}
 
-  // 2) Pra cada subpasta, lista o conteúdo dela também
-  const subpastas = arquivosRaiz.filter(f => f.isFolder);
-  for (const sp of subpastas) {
-    const filhos = await _listarConteudoPasta(sp.id, token);
-    const arquivos = filhos
-      .filter(f => !f.isFolder)
-      .map(f => ({ ...f, parentName: sp.name }));
-    resultado = resultado.concat(arquivos);
+async function _listarRecursivo(folderId, parentName, parentPath, depth, maxDepth, includeSubfolders, token, acc) {
+  const conteudo = await _listarConteudoPasta(folderId, token);
+
+  // Adiciona arquivos do nível atual
+  for (const item of conteudo) {
+    if (!item.isFolder) {
+      acc.push({
+        ...item,
+        parentName,
+        parentPath: parentPath || parentName,
+      });
+    }
   }
 
-  return resultado;
+  // Para se atingiu profundidade máxima ou se opts pede não descer
+  if (!includeSubfolders || depth >= maxDepth) return;
+
+  // Recursão nas subpastas
+  const subpastas = conteudo.filter(i => i.isFolder);
+  for (const sp of subpastas) {
+    const novoPath = parentPath ? `${parentPath}/${sp.name}` : sp.name;
+    await _listarRecursivo(sp.id, sp.name, novoPath, depth + 1, maxDepth, includeSubfolders, token, acc);
+  }
+}
+
+/**
+ * Remove Google Sheets que têm um CSV irmão de mesmo nome base na mesma pasta.
+ * Exemplo: se tem 'produtos.csv' (Google Sheet) e 'produtos.csv.csv' (text/csv)
+ * na mesma pasta, descarta o Sheet e mantém o CSV.
+ *
+ * Por que isso acontece: quando o usuário sobe um CSV via Drive web, o Google
+ * pode auto-converter em Sheets. Mas o original (com .csv.csv ou outro nome)
+ * fica também. Os Sheets não podem ser baixados via /alt=media (precisa
+ * /export, que é outra rota), então preferimos os CSVs originais.
+ */
+function _filtrarSheetsDuplicados(arquivos) {
+  // Agrupa por (parentPath, nomeBase normalizado)
+  const SHEETS_MIME = 'application/vnd.google-apps.spreadsheet';
+  const CSV_MIMES = ['text/csv', 'application/csv'];
+
+  const csvNamesPorPasta = new Map(); // key=parentPath, value=Set(nomeBase)
+  for (const f of arquivos) {
+    if (CSV_MIMES.includes(f.mimeType)) {
+      const k = f.parentPath || '';
+      if (!csvNamesPorPasta.has(k)) csvNamesPorPasta.set(k, new Set());
+      // Tira sufixo .csv (qualquer quantidade) pra comparar nome base
+      const base = f.name.replace(/(\.csv)+$/i, '');
+      csvNamesPorPasta.get(k).add(base);
+    }
+  }
+
+  return arquivos.filter(f => {
+    if (f.mimeType !== SHEETS_MIME) return true;
+    const base = f.name.replace(/(\.csv)+$/i, '');
+    const csvIrmaos = csvNamesPorPasta.get(f.parentPath || '');
+    if (csvIrmaos && csvIrmaos.has(base)) {
+      // Tem CSV irmão de mesmo nome base → descarta o Sheets
+      return false;
+    }
+    return true;
+  });
 }
 
 async function _listarConteudoPasta(folderId, token) {
