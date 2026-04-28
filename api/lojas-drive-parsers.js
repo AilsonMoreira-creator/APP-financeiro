@@ -560,7 +560,6 @@ export function parsePedidosEspera(textoPDF, loja, vendedorasCadastradas, hoje =
       numero_pedido,
       loja,
       documento_raw: documento,
-      cliente_razao_raw: clienteRaw,
       vendedor_nome_raw: vendedoraNome,
       vendedora_id: vendedora?.id || null,
 
