@@ -134,6 +134,33 @@ test('parseCSV separador forçado tem prioridade sobre detecção', () => {
   eq(Object.keys(r[0]).length, 1);  // só 1 coluna porque forçou TAB
 });
 
+// Arquivos com aspas envolvendo TODOS os campos (caso real Miré vendas)
+const csv_aspas = `"PEDIDO";"CLIENTE";"CNPJ/CPF";"TOTAL"\r
+"31844";"# ROSANELIA MARIA DE OLIVEIRA";="11059323000177";"422,00"\r
+"31843";"CARLA SIMONE VIEIRA DA SILVA";="45472799000157";"651,00"`;
+test('parseCSV remove aspas envolvendo nomes de coluna', () => {
+  const r = parseCSV(csv_aspas);
+  eq(r.length, 2);
+  // Header sem aspas: l['CLIENTE'], não l['"CLIENTE"']
+  eq(r[0]['PEDIDO'], '31844');
+  eq(r[0]['CLIENTE'], '# ROSANELIA MARIA DE OLIVEIRA');
+  eq(r[0]['TOTAL'], '422,00');
+});
+
+test('parseCSV remove prefixo = (truque Excel pra forçar texto)', () => {
+  const r = parseCSV(csv_aspas);
+  // CNPJ vem como =\"11059323000177\" no arquivo → deve virar só dígitos
+  eq(r[0]['CNPJ/CPF'], '11059323000177');
+  eq(r[1]['CNPJ/CPF'], '45472799000157');
+});
+
+test('parseCSV trata aspas duplas escapadas dentro de campo', () => {
+  const csv = `"a";"b"\n"x";"with""quote"`;
+  const r = parseCSV(csv);
+  eq(r[0]['a'], 'x');
+  eq(r[0]['b'], 'with"quote');
+});
+
 console.log(`\n════════════════════════════════════════════════════════════════`);
 console.log(`  ✓ ${passed} passaram   |   ✗ ${failed} falharam   |   total: ${passed + failed}`);
 console.log(`════════════════════════════════════════════════════════════════\n`);

@@ -403,7 +403,10 @@ export function parseCSV(conteudo, opts = {}) {
   // Detecta separador se não foi forçado
   const separador = separadorForcado || _detectarSeparador(linhaHeader);
 
-  const cabecalho = linhaHeader.split(separador).map(c => c.trim());
+  // Strip de aspas e prefixo '=' (truque Excel pra forçar texto).
+  // Trata casos: '"PEDIDO"' → 'PEDIDO', '=11059323' → '11059323',
+  // '=\"11059323\"' → '11059323'
+  const cabecalho = linhaHeader.split(separador).map(c => _limparCelulaCSV(c));
   const linhasDados = linhasUteis.slice(1);
 
   return linhasDados
@@ -413,11 +416,37 @@ export function parseCSV(conteudo, opts = {}) {
       const valores = linha.split(separador);
       const obj = {};
       cabecalho.forEach((coluna, i) => {
-        obj[coluna] = (valores[i] !== undefined ? valores[i] : '').trim();
+        const raw = valores[i] !== undefined ? valores[i] : '';
+        obj[coluna] = _limparCelulaCSV(raw);
       });
       return obj;
     })
     .filter(Boolean);
+}
+
+/**
+ * Limpa uma célula de CSV:
+ *   - Tira espaços nas pontas
+ *   - Tira prefixo '=' (truque Excel: =\"123\" pra forçar texto em CNPJs longos)
+ *   - Tira aspas duplas envolvendo a célula ("PEDIDO" → PEDIDO)
+ *   - Lida com aspas escapadas internas ("ABC""DEF" → ABC"DEF)
+ */
+function _limparCelulaCSV(valor) {
+  if (valor === null || valor === undefined) return '';
+  let s = String(valor).trim();
+  if (!s) return s;
+
+  // Tira prefixo '=' do Excel ANTES das aspas (formato: =\"123\")
+  if (s.startsWith('=')) s = s.substring(1).trim();
+
+  // Tira aspas duplas envolvendo a célula
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    s = s.substring(1, s.length - 1);
+    // Aspas duplas internas escapadas: "" → "
+    s = s.replace(/""/g, '"');
+  }
+
+  return s.trim();
 }
 
 /**
