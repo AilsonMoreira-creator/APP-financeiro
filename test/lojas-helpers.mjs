@@ -162,12 +162,13 @@ export function ehVendaVarejo(cliente, documento, vendedor) {
   const doc = String(documento || '').replace(/\D/g, '');
   const vend = String(vendedor || '').trim().toUpperCase();
 
+  // 1) Convertr sempre ignorada
   if (REGRAS_FILTRO_VAREJO.vendedores_ignorar.includes(vend)) {
     return { ignorar: true, motivo: 'teste_convertr' };
   }
-  if (REGRAS_FILTRO_VAREJO.nomes_ignorar.includes(nome)) {
-    return { ignorar: true, motivo: 'varejo_nome' };
-  }
+
+  // 2) Documento INVÁLIDO/PLACEHOLDER tem prioridade sobre nome
+  //    (Documento '13' SEMPRE é varejo balcão, mesmo se valor for alto)
   if (REGRAS_FILTRO_VAREJO.documentos_ignorar_exatos.includes(doc)) {
     return { ignorar: true, motivo: 'documento_placeholder' };
   }
@@ -177,6 +178,8 @@ export function ehVendaVarejo(cliente, documento, vendedor) {
   if (/^0+$/.test(doc) || /^(\d)\1+$/.test(doc)) {
     return { ignorar: true, motivo: 'documento_invalido' };
   }
+
+  // 3) Doc válido aqui — nome vazio não ignora (pode ser bug Miré)
   return { ignorar: false };
 }
 

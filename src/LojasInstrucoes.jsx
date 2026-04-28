@@ -1109,30 +1109,34 @@ export function ehVendaVarejo(cliente, documento, vendedor) {
   const doc = String(documento || '').replace(/\D/g, '');
   const vend = String(vendedor || '').trim().toUpperCase();
 
-  // 1. Vendas de teste do Convertr
+  // 1. Vendas de teste do Convertr (canal site, não atende pelo módulo Lojas)
   if (REGRAS_FILTRO_VAREJO.vendedores_ignorar.includes(vend)) {
     return { ignorar: true, motivo: 'teste_convertr' };
   }
 
-  // 2. Nome de varejo
-  if (REGRAS_FILTRO_VAREJO.nomes_ignorar.includes(nome)) {
-    return { ignorar: true, motivo: 'varejo_nome' };
-  }
-
-  // 3. Documento placeholder exato
+  // 2. Documento INVÁLIDO/PLACEHOLDER tem prioridade sobre nome
+  //    REGRA DE NEGÓCIO: documento '13' (placeholder Miré) SEMPRE é varejo
+  //    balcão, mesmo se valor for alto. Cliente pode comprar muitas peças
+  //    de uma vez mas se não cadastrou CNPJ, é balcão.
   if (REGRAS_FILTRO_VAREJO.documentos_ignorar_exatos.includes(doc)) {
     return { ignorar: true, motivo: 'documento_placeholder' };
   }
 
-  // 4. Documento muito curto
+  // 3. Documento muito curto (sem CPF/CNPJ válido)
   if (!doc || doc.length < REGRAS_FILTRO_VAREJO.documento_min_chars) {
     return { ignorar: true, motivo: 'documento_curto' };
   }
 
-  // 5. Documento todo igual (zeros, repetido)
+  // 4. Documento todo igual (zeros, repetido)
   if (/^0+$/.test(doc) || /^(\d)\1+$/.test(doc)) {
     return { ignorar: true, motivo: 'documento_invalido' };
   }
+
+  // 5. AQUI: documento É VÁLIDO. Nome vazio = bug Miré (atacado real onde
+  //    sistema não associou nome ao CNPJ). Importar mesmo assim — vai cruzar
+  //    com cadastro_clientes_futura via documento depois.
+  return { ignorar: false };
+}
 
   return { ignorar: false };
 }

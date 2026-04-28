@@ -194,10 +194,10 @@ test('Sem grupo nem marketplace → fisico (default)', () => {
 // ───────────────────────────────────────────────────────────────────────────
 suite('ehVendaVarejo');
 // ───────────────────────────────────────────────────────────────────────────
-test('CONSUMIDOR + doc 13: ignora (varejo_nome detecta antes do doc)', () => {
+test('CONSUMIDOR + doc 13: ignora (documento_placeholder, doc tem prioridade)', () => {
   const r = ehVendaVarejo('CONSUMIDOR', '13', 'JOELMA');
   assertEqual(r.ignorar, true);
-  assertEqual(r.motivo, 'varejo_nome');
+  assertEqual(r.motivo, 'documento_placeholder');
 });
 test('Cliente real + doc 13: ignora (documento_placeholder)', () => {
   const r = ehVendaVarejo('LOJA REAL', '13', 'JOELMA');
@@ -232,6 +232,18 @@ test('Doc todo zerado: ignora', () => {
   assertEqual(r.ignorar, true);
   // 00000000000 está em documentos_ignorar_exatos, então motivo é placeholder
   assertEqual(r.motivo, 'documento_placeholder');
+});
+// CASO REAL DESCOBERTO PELO USUÁRIO (28/abr/2026): bug do Miré que deixa
+// nome em branco quando atacadista vem com CNPJ válido. Antes ignorava
+// como varejo_nome, agora importa porque doc é prioridade.
+test('Nome VAZIO + CNPJ válido (bug Miré atacadista): NÃO ignora', () => {
+  const r = ehVendaVarejo('', '10466630000100', 'CLEIDE');
+  assertEqual(r.ignorar, false);
+});
+test('Nome CONSUMIDOR + CNPJ válido (caso edge): NÃO ignora', () => {
+  // Vendedora pode ter passado CONSUMIDOR mas digitou CNPJ certo. Doc vence.
+  const r = ehVendaVarejo('CONSUMIDOR', '10466630000100', 'CLEIDE');
+  assertEqual(r.ignorar, false);
 });
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -171,12 +171,23 @@ export function ehVendaVarejo(cliente, documento, vendedor) {
   const doc = String(documento || '').replace(/\D/g, '');
   const vend = String(vendedor || '').trim().toUpperCase();
 
+  // 1) Vendas via Convertr (canal site) sempre ignoradas — não atendem
+  // pelo módulo Lojas físico
   if (REGRAS_FILTRO_VAREJO.vendedores_ignorar.includes(vend)) {
     return { ignorar: true, motivo: 'teste_convertr' };
   }
-  if (REGRAS_FILTRO_VAREJO.nomes_ignorar.includes(nome)) {
-    return { ignorar: true, motivo: 'varejo_nome' };
-  }
+
+  // 2) Documento INVÁLIDO ou PLACEHOLDER (= varejo balcão sem cadastro)
+  //    Esses sempre são ignorados, INDEPENDENTE do nome.
+  //    Inclui:
+  //    - '13', '1', '00000000000', '11111111111' (placeholders Miré/Futura)
+  //    - Vazio ou < 11 dígitos (sem CPF/CNPJ válido)
+  //    - Sequências repetidas (000..., 111...)
+  //
+  //    REGRA DE NEGÓCIO (validada com Ailson 28/abr/2026):
+  //    - Documento '13' SEMPRE é varejo balcão, mesmo se valor for alto.
+  //      Cliente comum pode comprar muitas peças de uma vez (atacadinho)
+  //      mas se não cadastrou CNPJ, é balcão.
   if (REGRAS_FILTRO_VAREJO.documentos_ignorar_exatos.includes(doc)) {
     return { ignorar: true, motivo: 'documento_placeholder' };
   }
@@ -186,6 +197,18 @@ export function ehVendaVarejo(cliente, documento, vendedor) {
   if (/^0+$/.test(doc) || /^(\d)\1+$/.test(doc)) {
     return { ignorar: true, motivo: 'documento_invalido' };
   }
+
+  // 3) AGORA chegamos aqui: documento É VÁLIDO (CPF 11 ou CNPJ 14, sem ser placeholder).
+  //    Nome vazio aqui é BUG do Miré — venda atacado real onde sistema não
+  //    associou nome ao CNPJ. Importar mesmo assim, vai cruzar com
+  //    cadastro_clientes_futura via documento depois.
+  //    Também aceita NOME = CONSUMIDOR/CLIENTE PADRÃO se tem doc válido
+  //    (vendedora pode ter passado errado mas CNPJ está certo).
+  //
+  //    SÓ ignora se nome explicitamente sinaliza varejo E doc também é
+  //    suspeito... mas chegando aqui doc já é válido. Então NÃO ignoramos
+  //    por nome quando doc é válido.
+
   return { ignorar: false };
 }
 
