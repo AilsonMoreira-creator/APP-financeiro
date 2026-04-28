@@ -1142,13 +1142,30 @@ export function ehVendaVarejo(cliente, documento, vendedor) {
 /**
  * Detecta clientes marcados negativamente pela equipe (anotações no nome
  * tipo "FULANO ***GOLPE***", "BLOQUEAR", etc).
+ *
+ * Suporta variações como "GOOOOOL" (qualquer número de Os ≥ 3) — termo jocoso
+ * usado pelas vendedoras pra clientes que aplicaram golpe (referência a
+ * "marcou um gol"). Ex: "DAIANE CLOSET***GOOOOOLPISTA*" é detectado.
  */
 export function detectarClienteSinalizado(razao, fantasia) {
-  const palavrasAlerta = ['GOLPE', 'GOOOOL', 'BLOQUEAR', 'NAO VENDER', 'CALOTEIRO'];
+  // Cada padrão pode ser string literal OU regex. Strings são case-insensitive
+  // via .toUpperCase() do texto. Regexes são testadas direto contra o texto
+  // (já uppercase).
+  const padroes = [
+    { tipo: 'string', valor: 'GOLPE' },
+    { tipo: 'regex',  valor: /GO{3,}L/, label: 'GOOOOL' }, // GO + 3+ Os + L
+    { tipo: 'string', valor: 'BLOQUEAR' },
+    { tipo: 'string', valor: 'NAO VENDER' },
+    { tipo: 'string', valor: 'NÃO VENDER' },
+    { tipo: 'string', valor: 'CALOTEIRO' },
+  ];
   const texto = `${razao || ''} ${fantasia || ''}`.toUpperCase();
-  for (const palavra of palavrasAlerta) {
-    if (texto.includes(palavra)) {
-      return { flagado: true, motivo: 'sinalizado_negativamente', palavra };
+  for (const p of padroes) {
+    if (p.tipo === 'string' && texto.includes(p.valor)) {
+      return { flagado: true, motivo: 'sinalizado_negativamente', palavra: p.valor };
+    }
+    if (p.tipo === 'regex' && p.valor.test(texto)) {
+      return { flagado: true, motivo: 'sinalizado_negativamente', palavra: p.label };
     }
   }
   return { flagado: false };
@@ -1408,6 +1425,15 @@ export function nomeModeloPorRef(ref, fichaTecnica) {
  *   • lowercase
  *   • Mantém: categoria + tecido + caimento principal (1ª palavra após tecido)
  *   • Remove: detalhes (decote, manga, fivela, busto, etc) — fica longo demais
+ *
+ * Pegada do tecido: usa o que aparece PRIMEIRO na descrição (não o primeiro
+ * da lista). Isso garante que "CALÇA LINHO/ALGODÃO" → "calça linho" (linho
+ * é o material principal, vem antes na descrição).
+ *
+ * Caso especial: tecidos compostos (viscolinho contém "linho"). Como
+ * "viscolinho" aparece sempre ANTES de "linho" na string (mesmo offset, mais
+ * caracteres), e usamos indexOf, viscolinho sempre ganha quando ambos batem
+ * no mesmo ponto. ✓
  */
 export function construirFraseProduto(descricaoOriginal) {
   if (!descricaoOriginal) return null;
@@ -1415,22 +1441,30 @@ export function construirFraseProduto(descricaoOriginal) {
   const desc = String(descricaoOriginal).trim().toLowerCase();
   if (!desc) return null;
 
-  // Mapa de categorias conhecidas (em ordem de prioridade na string)
+  // Categoria: ainda usa primeira da lista (sem caso de bug reportado)
   const categorias = ['calça', 'calca', 'macacão', 'macacao', 'vestido', 'conjunto',
                       'blusa', 'saia', 'shorts', 'short', 'body', 't-shirt', 'tshirt',
                       'regata', 'pantalona'];
-  // ⚠️ Ordem importa: tecidos compostos primeiro (viscolinho contém "linho")
+  // Tecidos: pega o que aparece primeiro na descrição (não na lista)
   const tecidos = ['viscolinho', 'viscose', 'algodão', 'algodao',
                    'poliamida', 'crepe', 'malha', 'linho'];
 
   let categoria = '';
-  let tecido = '';
-
   for (const c of categorias) {
     if (desc.includes(c)) { categoria = c; break; }
   }
+
+  // Acha o tecido com menor indexOf (que aparece primeiro na descrição).
+  // Tecidos compostos como "viscolinho" sempre vencem "linho" no mesmo offset
+  // porque a checagem de "viscolinho" acontece e seu indexOf é menor ou igual.
+  let tecido = '';
+  let menorIdx = Infinity;
   for (const t of tecidos) {
-    if (desc.includes(t)) { tecido = t; break; }
+    const idx = desc.indexOf(t);
+    if (idx >= 0 && idx < menorIdx) {
+      menorIdx = idx;
+      tecido = t;
+    }
   }
 
   // Caso 1: tem ambos → "calça linho"
