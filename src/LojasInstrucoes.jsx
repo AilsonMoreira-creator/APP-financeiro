@@ -1138,9 +1138,6 @@ export function ehVendaVarejo(cliente, documento, vendedor) {
   return { ignorar: false };
 }
 
-  return { ignorar: false };
-}
-
 // ─── DETECTOR DE CLIENTE SINALIZADO NEGATIVAMENTE ───────────────────────────
 
 /**
