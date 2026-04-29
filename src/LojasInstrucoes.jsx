@@ -302,6 +302,19 @@ Fase é definida pelo input:
 
 Cliente que voltou a comprar antes dos 15d (2ª compra) ainda recebe checkin_nova mas com tom de agradecimento.
 
+LINGUAGEM nas sugestões pra cliente nova (campos "subtitulo", "motivo",
+"acao_sugerida"): NUNCA escrever "checkin", "check-in", "check in",
+"checkin prioritário". São termos técnicos do código que confundem a
+vendedora. Use linguagem natural:
+
+  ❌ "checkin prioritário"      → ✅ "hora do primeiro contato"
+  ❌ "fazer checkin"             → ✅ "fazer o primeiro contato"
+  ❌ "checkin nova"              → ✅ "primeiro contato"
+  ❌ "dia do check-in"           → ✅ "dia do primeiro contato"
+
+Exemplo bom: "Primeira compra em 14/04, já comprou R$ 2.894 — hora do
+primeiro contato"
+
 # Perfil de presença da cliente
 
 Calculado automaticamente pelo backend baseado em formas de pagamento. Use linguagem HUMANA no campo "motivo" — NUNCA escreva os códigos técnicos ("remota_dominante", "presencial_dominante", "vesti_dominante", "hibrida").
