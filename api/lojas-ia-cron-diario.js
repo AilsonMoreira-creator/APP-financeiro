@@ -45,11 +45,22 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, mensagem: 'Nenhuma vendedora ativa', total: 0 });
   }
 
-  // Dispara em paralelo (cuidado: rate limit interno do lojas-ia já cuida)
+  // Dispara em SÉRIE com delay (Anthropic rate limit: 30k input tokens/min).
+  // Cada vendedora consome ~70-90k tokens. Sem delay, 2ª vendedora em diante
+  // estoura limite (erro 429). Solução: 75s entre cada uma garante reset
+  // do contador por minuto.
   const baseUrl = `https://${req.headers.host}`;
   const resultados = [];
+  const DELAY_ENTRE_VENDEDORAS_MS = 75000; // 75s
 
-  for (const v of vendedoras) {
+  for (let i = 0; i < vendedoras.length; i++) {
+    const v = vendedoras[i];
+
+    // Delay antes de cada vendedora (exceto a 1ª)
+    if (i > 0) {
+      await new Promise(resolve => setTimeout(resolve, DELAY_ENTRE_VENDEDORAS_MS));
+    }
+
     try {
       const r = await fetch(`${baseUrl}/api/lojas-ia`, {
         method: 'POST',
