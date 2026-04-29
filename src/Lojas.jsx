@@ -1215,7 +1215,7 @@ function useLojasModule() {
       let diasSacola = null;
       if (sacolaAtiva) {
         diasSacola = calcularDiasSacola(sacolaAtiva.data_cadastro_sacola);
-        subtipoSacola = sacolaAtiva.subtipo_sugerido || classificarPedidoSacola(diasSacola, false, false);
+        subtipoSacola = sacolaAtiva.subtipo_sugerido || classificarPedidoSacola(diasSacola);
       }
       
       return {

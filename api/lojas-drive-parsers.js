@@ -554,7 +554,7 @@ export function parsePedidosEspera(textoPDF, loja, vendedorasCadastradas, hoje =
 
     // Calcula dias em sacola
     const dias = calcularDiasSacola(data_cadastro_sacola, hoje);
-    const subtipo_sugerido = dias != null ? classificarPedidoSacola(dias, false, false) : null;
+    const subtipo_sugerido = dias != null ? classificarPedidoSacola(dias) : null;
 
     registros.push({
       numero_pedido,

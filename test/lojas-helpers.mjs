@@ -238,19 +238,13 @@ export function calcularFaseCicloVida(diasDesde1aCompra) {
   return 'normal';
 }
 
-export function classificarPedidoSacola(diasSeparacao, temNovidadeMatch = false, temPromocaoAtiva = false) {
-  if (diasSeparacao < 0) return null;
-  if (diasSeparacao <= 7) {
-    if (temNovidadeMatch) return 'acrescentar_novidade';
-    if (temPromocaoAtiva) return 'acrescentar_promocao';
-    return 'lembrete_finalizacao';
-  }
-  if (diasSeparacao <= 15) {
-    if (temPromocaoAtiva) return 'acrescentar_promocao';
-    return 'lembrete_finalizacao';
-  }
-  if (diasSeparacao <= 25) return 'resgate_pedido';
-  return 'urgencia_admin';
+export function classificarPedidoSacola(diasSeparacao) {
+  if (diasSeparacao == null || diasSeparacao < 0) return null;
+  if (diasSeparacao <= 5) return null;
+  if (diasSeparacao <= 10) return 'incentivar_acrescentar';
+  if (diasSeparacao <= 15) return 'fechar_pedido';
+  if (diasSeparacao <= 23) return 'cobranca_incisiva';
+  return 'desfazer_sacola';
 }
 
 export function categorizarPagamento(formaPagamento) {

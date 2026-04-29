@@ -403,29 +403,48 @@ test('Sem data (null): normal', () => {
 // ───────────────────────────────────────────────────────────────────────────
 suite('classificarPedidoSacola');
 // ───────────────────────────────────────────────────────────────────────────
-test('0 dias + tem novidade: acrescentar_novidade', () => {
-  assertEqual(classificarPedidoSacola(0, true, false), 'acrescentar_novidade');
+// Atualizado 28/04/2026 (Ailson): novas regras
+//   0-5d  → null (filtro: muito recente, vendedora ainda monta)
+//   6-10d → incentivar_acrescentar
+//   11-15d→ fechar_pedido
+//   16-23d→ cobranca_incisiva
+//   24+d  → desfazer_sacola
+
+test('0 dias: null (muito recente)', () => {
+  assertEqual(classificarPedidoSacola(0), null);
 });
-test('5 dias + tem novidade: acrescentar_novidade', () => {
-  assertEqual(classificarPedidoSacola(5, true, false), 'acrescentar_novidade');
+test('5 dias: null (limite de muito recente)', () => {
+  assertEqual(classificarPedidoSacola(5), null);
 });
-test('5 dias + tem promo (sem novidade): acrescentar_promocao', () => {
-  assertEqual(classificarPedidoSacola(5, false, true), 'acrescentar_promocao');
+test('6 dias: incentivar_acrescentar', () => {
+  assertEqual(classificarPedidoSacola(6), 'incentivar_acrescentar');
 });
-test('5 dias + nada: lembrete_finalizacao', () => {
-  assertEqual(classificarPedidoSacola(5, false, false), 'lembrete_finalizacao');
+test('10 dias: incentivar_acrescentar', () => {
+  assertEqual(classificarPedidoSacola(10), 'incentivar_acrescentar');
 });
-test('10 dias + nada: lembrete_finalizacao', () => {
-  assertEqual(classificarPedidoSacola(10, false, false), 'lembrete_finalizacao');
+test('11 dias: fechar_pedido', () => {
+  assertEqual(classificarPedidoSacola(11), 'fechar_pedido');
 });
-test('20 dias: resgate_pedido', () => {
-  assertEqual(classificarPedidoSacola(20, false, false), 'resgate_pedido');
+test('15 dias: fechar_pedido', () => {
+  assertEqual(classificarPedidoSacola(15), 'fechar_pedido');
 });
-test('30 dias: urgencia_admin', () => {
-  assertEqual(classificarPedidoSacola(30, false, false), 'urgencia_admin');
+test('16 dias: cobranca_incisiva', () => {
+  assertEqual(classificarPedidoSacola(16), 'cobranca_incisiva');
+});
+test('23 dias: cobranca_incisiva', () => {
+  assertEqual(classificarPedidoSacola(23), 'cobranca_incisiva');
+});
+test('24 dias: desfazer_sacola', () => {
+  assertEqual(classificarPedidoSacola(24), 'desfazer_sacola');
+});
+test('30 dias: desfazer_sacola', () => {
+  assertEqual(classificarPedidoSacola(30), 'desfazer_sacola');
 });
 test('Dia negativo retorna null', () => {
   assertEqual(classificarPedidoSacola(-1), null);
+});
+test('null retorna null', () => {
+  assertEqual(classificarPedidoSacola(null), null);
 });
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -368,11 +368,26 @@ async function montarContextoSugestoes(vendedoraId) {
   }
 
   // Sacolas ativas dessa vendedora
-  const { data: sacolas } = await supabase
+  const { data: sacolasRaw } = await supabase
     .from('lojas_pedidos_sacola')
     .select('*')
     .eq('vendedora_id', vendedoraId)
     .eq('ativo', true);
+
+  // FILTRO SACOLAS (28/04/2026, decisão Ailson):
+  //   - valor_total <= 0 → dado faltante do PDF, descarta
+  //   - dias < 6 → muito recente, vendedora ainda monta a sacola
+  // Telemetria pra debug em metadados_ia
+  const sacolasDescartadas = { sem_valor: 0, muito_recente: 0 };
+  const hojeMs = Date.now();
+  const sacolas = (sacolasRaw || []).filter(s => {
+    const valor = Number(s.valor_total) || 0;
+    if (valor <= 0) { sacolasDescartadas.sem_valor++; return false; }
+    if (!s.data_cadastro_sacola) { sacolasDescartadas.sem_valor++; return false; }
+    const dias = Math.floor((hojeMs - new Date(s.data_cadastro_sacola).getTime()) / 86400000);
+    if (dias < 6) { sacolasDescartadas.muito_recente++; return false; }
+    return true;
+  });
 
   // Grupos da vendedora
   const { data: grupos } = await supabase
@@ -423,6 +438,7 @@ async function montarContextoSugestoes(vendedoraId) {
     clientes: clientes || [],
     kpis,
     sacolas: sacolas || [],
+    sacolasDescartadas,
     grupos: grupos || [],
     produtos: produtos || [],
     curadoria: curadoria || [],
@@ -598,20 +614,47 @@ function construirBlocoDinamico(r) {
  * exemplos de tipos diferentes pra IA pegar o vibe.
  */
 function montarMessagesSugestoes(ctx) {
-  // Constrói payload enxuto pra IA — só dados que ela usa
-  const userPayload = {
-    data_geracao: new Date().toISOString(),
-    vendedora: ctx.vendedora,
-    carteira: ctx.clientes.map(c => {
+  // Set de clientes com sacola ativa (preservar mesmo se KPI fraco)
+  const clientesComSacola = new Set((ctx.sacolas || []).map(s => s.cliente_id));
+
+  // FILTROS DE CARTEIRA (28/04/2026, decisão Ailson):
+  //   - Cliente sem dias_sem_comprar E sem ultima_compra → KPI inutilizável pra
+  //     reativar/atenção/followup. Remove (a menos que tenha sacola).
+  //   - pular_ate futuro → vendedora marcou pra pular agora
+  const carteiraFiltradaInfo = { sem_kpi: 0, pulando: 0, kpi_parcial: 0 };
+  const hojeISO = new Date().toISOString().slice(0, 10);
+
+  const carteira = ctx.clientes
+    .filter(c => {
+      // Pular_ate
+      if (c.pular_ate && c.pular_ate >= hojeISO) {
+        carteiraFiltradaInfo.pulando++;
+        return false;
+      }
+      // KPI inutilizável — descarta SE não tiver sacola ativa
       const k = ctx.kpis[c.id] || {};
+      const kpiInutil = (k.dias_sem_comprar == null && !k.ultima_compra);
+      if (kpiInutil && !clientesComSacola.has(c.id)) {
+        carteiraFiltradaInfo.sem_kpi++;
+        return false;
+      }
+      return true;
+    })
+    .map(c => {
+      const k = ctx.kpis[c.id] || {};
+      // Flag kpi_incompleto: cliente passou no filtro mas falta dado importante
+      const kpiIncompleto = (k.dias_sem_comprar == null || !k.ultima_compra);
+      if (kpiIncompleto) carteiraFiltradaInfo.kpi_parcial++;
       return {
         id: c.id,
         apelido: c.apelido || c.comprador_nome || c.razao_social?.split(' ').slice(0, 3).join(' '),
         documento_tipo: c.tipo_documento,
         grupo_id: c.grupo_id,
         pular_ate: c.pular_ate,
+        kpi_incompleto: kpiIncompleto, // ⚠️ NÃO use pra reativar/atenção/followup se true
         kpi: {
           dias_sem_comprar: k.dias_sem_comprar,
+          ultima_compra: k.ultima_compra,
           lifetime_total: k.lifetime_total,
           qtd_compras: k.qtd_compras,
           ticket_medio: k.ticket_medio,
@@ -624,7 +667,13 @@ function montarMessagesSugestoes(ctx) {
           tamanhos_frequentes: k.tamanhos_frequentes,
         },
       };
-    }),
+    });
+
+  // Constrói payload enxuto pra IA — só dados que ela usa
+  const userPayload = {
+    data_geracao: new Date().toISOString(),
+    vendedora: ctx.vendedora,
+    carteira,
     grupos: ctx.grupos,
     sacolas_ativas: ctx.sacolas.map(s => ({
       cliente_id: s.cliente_id,
@@ -644,6 +693,10 @@ function montarMessagesSugestoes(ctx) {
       desconto_pct: p.desconto_pct,
       pedido_minimo: p.pedido_minimo,
     })),
+    diagnostico_filtros: {
+      ...carteiraFiltradaInfo,
+      sacolas_descartadas: ctx.sacolasDescartadas || {},
+    },
     instrucao: 'Gere as 7 sugestões priorizadas conforme o schema do system prompt. Responda APENAS o JSON.',
   };
 

@@ -76,11 +76,10 @@ export const statusMap = {
 };
 
 export const subtipoSacolaMap = {
-  acrescentar_novidade: { cor: palette.accent, label: 'Tem novidade que combina', emoji: '✨' },
-  acrescentar_promocao: { cor: palette.warn, label: 'Tem promo ativa', emoji: '🎁' },
-  lembrete_finalizacao: { cor: palette.ok, label: 'Lembrar de finalizar', emoji: '💛' },
-  resgate_pedido: { cor: '#e67e22', label: 'Resgatar gentilmente', emoji: '⏰' },
-  urgencia_admin: { cor: palette.alert, label: 'Urgente — alinhar', emoji: '🚨' },
+  incentivar_acrescentar: { cor: palette.accent, label: 'Acrescentar peça (6-10d)', emoji: '✨' },
+  fechar_pedido: { cor: palette.ok, label: 'Fechar pedido (11-15d)', emoji: '💛' },
+  cobranca_incisiva: { cor: '#e67e22', label: 'Cobrar pagamento (16-23d)', emoji: '⏰' },
+  desfazer_sacola: { cor: palette.alert, label: 'Sugerir desfazer (24+d)', emoji: '🚨' },
 };
 
 export const faseClienteNovaMap = {

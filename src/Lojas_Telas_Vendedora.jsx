@@ -63,12 +63,11 @@ const TIPO_SUGESTAO_VISUAL = {
   atencao: { icone: AlertTriangle, cor: palette.warn, corSoft: palette.warnSoft },
   novidade: { icone: Sparkles, cor: palette.accent, corSoft: palette.accentSoft },
   followup: { icone: MessageCircle, cor: palette.ok, corSoft: palette.okSoft },
-  // sacola: roxo
-  acrescentar_novidade: { icone: Sparkles, cor: palette.purple, corSoft: palette.purpleSoft },
-  acrescentar_promocao: { icone: Gift, cor: palette.warn, corSoft: palette.warnSoft },
-  lembrete_finalizacao: { icone: Heart, cor: palette.ok, corSoft: palette.okSoft },
-  resgate_pedido: { icone: Clock, cor: '#e67e22', corSoft: '#fef0e6' },
-  urgencia_admin: { icone: AlertTriangle, cor: palette.alert, corSoft: palette.alertSoft },
+  // sacola: 4 sub-tipos atualizados (28/04/2026)
+  incentivar_acrescentar: { icone: Sparkles, cor: palette.purple, corSoft: palette.purpleSoft },
+  fechar_pedido: { icone: Heart, cor: palette.ok, corSoft: palette.okSoft },
+  cobranca_incisiva: { icone: Clock, cor: '#e67e22', corSoft: '#fef0e6' },
+  desfazer_sacola: { icone: AlertTriangle, cor: palette.alert, corSoft: palette.alertSoft },
 };
 
 function visualSugestao(tipo) {
@@ -119,11 +118,10 @@ function capitalizeTipo(tipo) {
     atencao: 'Atenção:',
     novidade: 'Novidade pra',
     followup: 'Follow-up com',
-    acrescentar_novidade: 'Sacola:',
-    acrescentar_promocao: 'Sacola:',
-    lembrete_finalizacao: 'Sacola:',
-    resgate_pedido: 'Sacola:',
-    urgencia_admin: '🚨 Urgente:',
+    incentivar_acrescentar: 'Sacola:',
+    fechar_pedido: 'Sacola:',
+    cobranca_incisiva: 'Sacola — cobrar:',
+    desfazer_sacola: '🚨 Sacola antiga:',
   };
   return map[tipo] || 'Sugestão pra';
 }

@@ -57,8 +57,11 @@ Se faltar candidato pra um tipo, use a categoria mais próxima como fallback (do
 ❌ NUNCA sugira a mesma cliente 2x no mesmo dia
 ❌ NUNCA cite documento (CNPJ/CPF) específico de um grupo na ação sugerida
 ❌ NUNCA mencione concorrente
+❌ NUNCA sugira REATIVAR ou ATENÇÃO sem ter "dias_sem_comprar" E "ultima_compra" no KPI da cliente. Se faltar qualquer um dos dois, NÃO escolha essa cliente pra esses tipos. Use outra ou marca fallback_used=true e escolha tipo diferente.
+❌ NUNCA invente justificativa tipo "kpi incompleto sugere ausência" — se o dado não está no input, a cliente NÃO entra como candidata pra reativar/atenção.
 
 ✅ SEMPRE liste os fatos que justificam a sugestão (campo "fatos")
+✅ SEMPRE inclua nos "fatos" o número exato de dias e a data da última compra quando o tipo for reativar, atenção ou followup
 ✅ SEMPRE deixe claro se é cliente individual OU grupo
 ✅ SEMPRE mencione a peça específica pelo REF (campo "produto_ref") + nome do modelo
 ✅ SEMPRE recalcule lifetime/dias quando for grupo (use os agregados do input)
@@ -82,6 +85,30 @@ Cliente em grupo (campo "grupo_id" preenchido) = trate o grupo como UMA unidade:
 - "alvo_tipo": "grupo"
 - Use os agregados: lifetime_grupo, ultima_compra_grupo, qtd_compras_grupo
 - Pode mencionar uma loja específica do grupo na ação se relevante (ex: "loja Jabaquara tá há 38d sem comprar")
+
+# Tratamento de SACOLA SEPARANDO
+
+Sacolas vêm pré-filtradas pelo backend: já chegam só as que têm valor_total > 0 E pelo menos 6 dias de aberta. Sacola muito recente (vendedora ainda monta) ou sem valor (dado faltante) NÃO aparecem no input. Se aparecer, use sempre.
+
+REGRAS POR IDADE DA SACOLA (campo "subtipo_sugerido" do input já vem calculado):
+
+- 6-10d  → tipo "sacola", subtipo "incentivar_acrescentar"
+  Foco: oferecer peça nova ou reposição que combina com o que ela já separou.
+  Tom casual, posicionando como complemento ao que ela já escolheu.
+
+- 11-15d → tipo "sacola", subtipo "fechar_pedido"
+  Foco: convite pra fechar pedido + alinhar pagamento. Se tiver promoção ativa, usa de gancho ("vence dia X").
+  Tom amigável mas com objetivo claro de finalizar.
+
+- 16-23d → tipo "sacola", subtipo "cobranca_incisiva"
+  Foco: ser mais firme em cobrar pagamento, sem perder o tom de parceria. Lembra que peças estão guardadas.
+
+- 24+d → tipo "sacola", subtipo "desfazer_sacola"
+  Foco: alertar que sacola muito antiga = peças paradas que poderiam estar vendendo pra outras clientes.
+  Sugerir vendedora desfazer ou alinhar prazo final com cliente. Pode marcar fatos.alerta_admin=true.
+
+✅ SEMPRE inclua nos "fatos" da sugestão de sacola: o valor R$ separado e a quantidade de peças (ex: "R$ 1.240 separados em 6 peças há 8 dias").
+❌ NUNCA invente o valor — se "valor_total" do input for 0 ou ausente, a sacola não deveria estar aqui (problema de dado, descarte).
 
 # Tratamento de CLIENTE NOVA (1ª compra recente)
 
@@ -115,7 +142,7 @@ Retorne APENAS um JSON válido com schema abaixo. Sem texto antes/depois, sem ma
     {
       "prioridade": 1,
       "tipo": "reativar" | "atencao" | "novidade" | "followup" | "followup_nova" | "sacola",
-      "subtipo_sacola": "acrescentar_novidade" | "lembrete_finalizacao" | "resgate_pedido" | "urgencia_admin" | null,
+      "subtipo_sacola": "incentivar_acrescentar" | "fechar_pedido" | "cobranca_incisiva" | "desfazer_sacola" | null,
       "alvo_tipo": "cliente" | "grupo",
       "alvo_id": "uuid",
       "alvo_nome_display": "Iara",
@@ -437,71 +464,87 @@ Se ficou alguma dúvida ou quer fotos pra postar no Instagram, me chama!`,
   },
 
   // ─── SACOLA SEPARANDO (PEDIDO EM ESPERA) ─────────────────────────────────
+  // Atualizado 28/04/2026: 4 sub-tipos novos (incentivar/fechar/cobrar/desfazer)
+  // SEMPRE menciona valor R$ e qtd peças nos fatos.
   {
     tipo: 'sacola',
-    subtipo: 'acrescentar_novidade',
-    cenario: 'Pedido recente (0-7d), tem novidade que combina',
+    subtipo: 'incentivar_acrescentar',
+    cenario: 'Sacola 6-10d, oferecer acrescentar peça nova',
     input: {
       apelido: 'Iara',
-      dias_sacola: 4,
-      produto: { nome: 'Calça linho preta' },
+      dias_sacola: 8,
+      valor_total: 1240,
+      qtd_pecas: 6,
+      produto: { nome: 'Calça linho' },
     },
-    output: `Oi Iara! 
+    output: `Oi Iara!
 
-Chegou hj a calça linho preta — combina muito com os modelos que vc separou.
+Tô com sua sacola separada aqui (6 peças, R$ 1.240). Chegou agora uma calça linho que combina muito com o que vc separou.
 
-Quer que eu acrescente na sua sacola?`,
+Quer que eu acrescente?`,
   },
   {
     tipo: 'sacola',
-    subtipo: 'acrescentar_promocao',
-    cenario: 'Pedido em janela 0-15d, oferecer promo',
+    subtipo: 'fechar_pedido',
+    cenario: 'Sacola 11-15d, hora de fechar + pagamento',
     input: {
       apelido: 'Iara',
-      dias_sacola: 9,
+      dias_sacola: 13,
+      valor_total: 2180,
+      qtd_pecas: 9,
       promocao: '20% no linho até dia 30',
     },
     output: `Oi Iara, tudo bem? 💛
 
-Tá rolando 20% no linho até dia 30. Se vc quiser acrescentar mais alguma peça na sua sacola, agora é uma boa.
+Sua sacola tá fechada em R$ 2.180 (9 peças). Quer aproveitar o 20% no linho que vai até dia 30 e a gente fecha essa semana?
 
-Posso te mandar o que chegou de novo?`,
+Posso te mandar o pix ou prefere link?`,
   },
   {
     tipo: 'sacola',
-    subtipo: 'lembrete_finalizacao',
-    cenario: 'Pedido 8-15d, sem novidade nova',
+    subtipo: 'fechar_pedido',
+    cenario: 'Sacola 11-15d sem promo ativa',
     input: {
       apelido: 'Iara',
-      dias_sacola: 12,
+      dias_sacola: 14,
+      valor_total: 1850,
+      qtd_pecas: 7,
     },
-    output: `Oi Iara! 
+    output: `Oi Iara!
 
-Tô com sua sacola separada aqui — quer fechar essa semana ou prefere acrescentar mais alguma coisa?`,
+Sua sacola tá em R$ 1.850 (7 peças) há 14 dias. Bora fechar essa semana? Te mando o pix pra agilizar.`,
   },
   {
     tipo: 'sacola',
-    subtipo: 'resgate_pedido',
-    cenario: 'Pedido 16-25d, gentil sem cobrança',
+    subtipo: 'cobranca_incisiva',
+    cenario: 'Sacola 16-23d, firme em pagamento',
     input: {
       apelido: 'Iara',
-      dias_sacola: 18,
+      dias_sacola: 19,
+      valor_total: 2450,
+      qtd_pecas: 11,
     },
-    output: `Oi Iara, tudo bem por aí?
+    output: `Oi Iara, tudo bem?
 
-Tô só passando aqui pra te lembrar que tô com suas peças separadas. Consegue dar uma passada essa semana?`,
+Sua sacola tá há 19 dias separada (R$ 2.450, 11 peças). Tô segurando aqui pra vc, mas preciso fechar o pagamento essa semana pra não acumular.
+
+Como vc prefere acertar?`,
   },
   {
     tipo: 'sacola',
-    subtipo: 'urgencia_admin',
-    cenario: 'Pedido 26+d, alinhamento sem pressão',
+    subtipo: 'desfazer_sacola',
+    cenario: 'Sacola 24+d, sugerir desfazer',
     input: {
       apelido: 'Iara',
       dias_sacola: 28,
+      valor_total: 1980,
+      qtd_pecas: 8,
     },
-    output: `Oi Iara! 
+    output: `Oi Iara!
 
-Tudo bem? Sua sacola tá separada há um tempinho — me avisa o que vc prefere fazer. Se precisar segurar mais um pouco, sem problema, mas tô só alinhando aqui.`,
+Sua sacola tá separada há quase um mês (R$ 1.980, 8 peças). Essas peças podiam tá girando pra outras clientes — preciso te alinhar: vc consegue fechar até sexta ou prefere que eu desfaça pra liberar?
+
+Sem problema qualquer caminho, só preciso definir.`,
   },
 
   // ─── GRUPOS (multi-CNPJ) ────────────────────────────────────────────────
