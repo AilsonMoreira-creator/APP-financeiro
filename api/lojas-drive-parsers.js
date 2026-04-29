@@ -811,10 +811,27 @@ export function parseRelatorioBI(linhasObj, loja, vendedorasCadastradas) {
     });
   }
 
+  // DEDUP: o Mire repete linhas idênticas (mesmo pedido + mesmo SKU) quando
+  // o pedido tem várias parcelas/grades. Mas a chave de upsert da tabela é
+  // (numero_pedido + loja + sku) — Postgres dá erro "ON CONFLICT DO UPDATE
+  // command cannot affect row a second time" se o mesmo lote tiver duplicatas.
+  // Solução: dedupa por essa chave antes de devolver. Mantém a primeira
+  // ocorrência (descarta repetidas).
+  const dedupMap = new Map();
+  for (const r of registros) {
+    const k = `${r.numero_pedido}|${r.loja}|${r.sku}`;
+    if (!dedupMap.has(k)) dedupMap.set(k, r);
+  }
+  const registrosDedup = Array.from(dedupMap.values());
+  const duplicatasRemovidas = registros.length - registrosDedup.length;
+  if (duplicatasRemovidas > 0) {
+    detalhes_ignorados.duplicatas_pedido_sku = duplicatasRemovidas;
+  }
+
   return {
-    registros,
+    registros: registrosDedup,
     total: linhasObj.length,
-    ignorados: linhasObj.length - registros.length,
+    ignorados: linhasObj.length - registrosDedup.length,
     detalhes_ignorados,
   };
 }

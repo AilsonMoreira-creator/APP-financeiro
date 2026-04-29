@@ -625,8 +625,21 @@ export async function finalizarLogImportacao(supabase, importacaoId, dados) {
 
 export async function extrairLinhasPDFComX(buffer) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  // No Vercel serverless o worker.mjs nao está disponível como arquivo
+  // imported (causa "Cannot find module pdf.worker.mjs"). Solução: usar
+  // worker fake (a lib roda tudo na main thread). É mais lento, mas pra
+  // PDFs de sacola (poucos KB) é instantâneo na prática.
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = false;
+  }
   const data = new Uint8Array(buffer);
-  const pdf = await pdfjs.getDocument({ data }).promise;
+  const pdf = await pdfjs.getDocument({
+    data,
+    // Garante que pdfjs não tente carregar worker
+    disableWorker: true,
+    isEvalSupported: false,
+    useSystemFonts: false,
+  }).promise;
 
   const todasLinhas = [];
   for (let p = 1; p <= pdf.numPages; p++) {
