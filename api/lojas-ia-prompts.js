@@ -86,6 +86,36 @@ Cliente em grupo (campo "grupo_id" preenchido) = trate o grupo como UMA unidade:
 - Use os agregados: lifetime_grupo, ultima_compra_grupo, qtd_compras_grupo
 - Pode mencionar uma loja específica do grupo na ação se relevante (ex: "loja Jabaquara tá há 38d sem comprar")
 
+# Tratamento do TÍTULO (campo "titulo")
+
+Pra REATIVAR / ATENÇÃO / FOLLOWUP, o título aparece no card da vendedora e tem que soar humano (vendedora pensando alto), NÃO robô de CRM. SEMPRE:
+- Inclui o nome (apelido ou primeiro nome)
+- Inclui referência aos dias OU expressão temporal ("3 meses", "quase 4 meses", "tempo")
+
+Varia entre estes 11 estilos pra não ficar repetitivo (escolhe diferente em cada sugestão da MESMA tanda):
+
+1. "Iara — 91 dias sem comprar"
+2. "Vamos ficar de olho na Iara, já tem 91 dias sem pedido"
+3. "Iara tá há quase 3 meses sem aparecer"
+4. "Não deixa a Iara esquecer da gente — 91d sem comprar"
+5. "Será que a Iara tá tudo bem? 91 dias sem pedido"
+6. "Iara sumiu — 91d sem comprar"
+7. "Cadê a Iara? 91 dias sem pedido"
+8. "Iara tá quietinha — 91 dias"
+9. "Lembra da Iara? Tá há 91d sem comprar"
+10. "Hora de puxar papo com a Iara — 91d sem comprar"
+11. "Iara meio sumida — 91 dias sem pedido"
+
+Pra GRUPOS, troca o nome por "loja X do grupo Y" ou só "grupo Y" se for sugestão pro grupo todo:
+- "Loja Jabaquara do grupo Camila — 50 dias sem pedido"
+- "Grupo Camila tá quietinho — 50 dias sem pedido"
+
+❌ NUNCA escreva títulos genéricos tipo "Ausência de contato detectada", "Cliente em risco", "Atenção necessária", "Reativação recomendada" — SEMPRE personaliza com o nome.
+❌ NUNCA repete o mesmo estilo 2x na mesma tanda de sugestões (vendedora vê todas juntas).
+✅ Pode usar dias_sem_comprar exato OU expressão temporal aproximada ("3 meses", "quase 4 meses", "umas semanas").
+
+Mesmo princípio pro campo "contexto" — não repete o título, complementa com 1 fato curto. Ex: "última compra em janeiro" ou "lifetime R$ 18k, costuma voltar mensalmente".
+
 # Tratamento de SACOLA SEPARANDO
 
 Sacolas vêm pré-filtradas pelo backend: já chegam só as que têm valor_total > 0 E pelo menos 6 dias de aberta. Sacola muito recente (vendedora ainda monta) ou sem valor (dado faltante) NÃO aparecem no input. Se aparecer, use sempre.
@@ -146,8 +176,8 @@ Retorne APENAS um JSON válido com schema abaixo. Sem texto antes/depois, sem ma
       "alvo_tipo": "cliente" | "grupo",
       "alvo_id": "uuid",
       "alvo_nome_display": "Iara",
-      "titulo": "Reativar Iara",
-      "contexto": "91 dias sem comprar",
+      "titulo": "Cadê a Iara? 91 dias sem pedido",
+      "contexto": "Última compra em janeiro, lifetime R$ 18k",
       "fatos": ["Última compra: 28/01/2026", "Lifetime: R$ 18.400", "Estilo: linho"],
       "acao_sugerida": "Mandar mensagem perguntando como tão as vendas e oferecer a calça linho REF 02832 que chegou.",
       "produto_ref": "02832",
