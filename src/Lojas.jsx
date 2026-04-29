@@ -965,6 +965,30 @@ function useLojasModule() {
         // 4. Carrega carteira
         dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_CARTEIRA });
         const filtroVendedoraCarteira = isAdmin ? null : vendedoraLogada.id;
+
+        // CACHE OPTIMÍSTICO (decisão Ailson 28/04/2026): mostra carteira do
+        // localStorage IMEDIATAMENTE, depois recarrega do Supabase em
+        // background. Vendedora não fica olhando "Carregando..." 3 segundos.
+        // Cache vale 24h (é refrescado sempre no Realtime e nessa carga).
+        const cacheKey = `lojas_cache_v1_${filtroVendedoraCarteira || 'admin'}`;
+        try {
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const { ts, clientes: cClis, grupos: cGrp, sacola: cSac, kpis: cKpis } = JSON.parse(cached);
+            const idadeMin = (Date.now() - ts) / 60000;
+            if (idadeMin < 1440 && Array.isArray(cClis)) { // 24h
+              dispatch({ type: 'SET_CLIENTES', clientes: cClis });
+              dispatch({ type: 'SET_GRUPOS', grupos: cGrp || [] });
+              dispatch({ type: 'SET_SACOLA', sacola: cSac || [] });
+              if (cKpis) dispatch({ type: 'SET_KPIS', kpis: cKpis });
+              dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.READY });
+            }
+          }
+        } catch (e) {
+          // Cache corrompido — ignora e segue load normal
+          console.warn('[lojas-cache] cache invalido:', e.message);
+        }
+
         const [clientes, grupos, sacola] = await Promise.all([
           loadClientes(filtroVendedoraCarteira),
           loadGrupos(filtroVendedoraCarteira),
@@ -973,10 +997,21 @@ function useLojasModule() {
         dispatch({ type: 'SET_CLIENTES', clientes });
         dispatch({ type: 'SET_GRUPOS', grupos });
         dispatch({ type: 'SET_SACOLA', sacola });
-        
+
         // 5. Carrega KPIs em paralelo
         const kpis = await loadKpis(clientes.map(c => c.id));
         dispatch({ type: 'SET_KPIS', kpis });
+
+        // Atualiza cache pra próxima carga
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            ts: Date.now(),
+            clientes, grupos, sacola, kpis,
+          }));
+        } catch (e) {
+          // localStorage cheio? só ignora
+          console.warn('[lojas-cache] save falhou:', e.message);
+        }
         
         // 6. Carrega produtos + curadoria + promoções
         dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_PRODUTOS });

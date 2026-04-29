@@ -69,13 +69,11 @@ export const CadastrarCompradorScreen = ({ lojas, onBack }) => {
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
       setResultado(data);
-      // Pré-preenche o input do nome com o que já tem cadastrado
-      if (data.encontrado) {
-        const atual = data.cliente.comprador_nome || data.cliente.apelido || '';
-        setNomeComprador(atual);
-      } else {
-        setNomeComprador('');
-      }
+      // Decisão Ailson 28/04/2026: campo SEMPRE vazio quando busca cliente.
+      // Mostra o nome atual cadastrado em outro lugar (linha "Comprador atual"
+      // dentro do card do cliente), e deixa o input em branco pra vendedora
+      // digitar do zero. Evita confusão de "será que devo apagar e digitar?"
+      setNomeComprador('');
     } catch (e) {
       setErro(e.message || 'Erro ao buscar cliente');
     } finally {
@@ -267,7 +265,7 @@ export const CadastrarCompradorScreen = ({ lojas, onBack }) => {
               <input
                 value={nomeComprador}
                 onChange={e => setNomeComprador(e.target.value)}
-                placeholder="Ex: Rosana Ruiva, Reginaldo Yuni"
+                placeholder=""
                 maxLength={100}
                 style={{
                   flex: 1, border: 'none', background: 'transparent', outline: 'none',

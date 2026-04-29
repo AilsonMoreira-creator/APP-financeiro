@@ -42,7 +42,7 @@ import {
   Pause, Calendar, Archive, Bot, Plus, Store, Gift, FileText,
   ArrowLeftRight, TrendingUp, BarChart3, UserCog, Heart,
   Save, Trash2, Edit3, Clock, CheckCircle2, AlertCircle, Check, X,
-  Upload, FileSpreadsheet, History, UsersRound, Link2, Crown,
+  Upload, Download, FileSpreadsheet, History, UsersRound, Link2, Crown,
   Loader2, Flame,
 } from 'lucide-react';
 

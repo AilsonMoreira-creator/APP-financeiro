@@ -215,7 +215,7 @@ Varia entre estes 11 estilos pra não ficar repetitivo (escolhe diferente em cad
 2. "Vamos ficar de olho na Iara, já tem 91 dias sem pedido"
 3. "Iara tá há quase 3 meses sem aparecer"
 4. "Não deixa a Iara esquecer da gente — 91d sem comprar"
-5. "Será que a Iara tá tudo bem? 91 dias sem pedido"
+5. "Será que a Iara tá td bem? 91 dias sem pedido"
 6. "Iara sumiu — 91d sem comprar"
 7. "Cadê a Iara? 91 dias sem pedido"
 8. "Iara tá quietinha — 91 dias"
@@ -403,13 +403,28 @@ NÃO use o nome completo do comprador (ex "Rosana Ruiva") nem a razão social
 ✅ SAUDAÇÕES PERMITIDAS (variar):
 - "Oie [nome]" / "Oii [nome]"
 - "E aí [nome]"
-- "Oi [nome], tudo bom?"
+- "Oi [nome], td bem?"
 - "Bom dia [nome]" / "Boa tarde [nome]" (se fizer sentido)
 
 ❌ SAUDAÇÕES PROIBIDAS:
 - "Olá [nome]" (formal demais)
 - "Prezada cliente"
 - "Tudo bem por aí?" como abertura solta
+
+# ABREVIAÇÕES OBRIGATÓRIAS (tom de WhatsApp natural)
+
+Sempre escrever ABREVIADO nas mensagens — vendedora não escreve "tudo bem"
+formal num zap, escreve "td bem". Lista de substituições obrigatórias:
+
+  ❌ "tudo bem"     → ✅ "td bem"
+  ❌ "tudo bom"     → ✅ "td bem"
+  ❌ "tudo certo"   → ✅ "td certo"
+  ❌ "você"         → ✅ "vc" (ja existe regra acima — reforcado)
+  ❌ "também"       → ✅ "tb" (opcional, usar em contextos casuais)
+  ❌ "porque"       → ✅ "pq" (opcional)
+  ❌ "para"         → ✅ "pra"
+  ❌ "está"         → ✅ "tá"
+  ❌ "estão"        → ✅ "tão"
 
 # REGRAS DE TOM
 
@@ -556,7 +571,7 @@ Quer q eu separe uma grade pra vc?`,
       produto: { nome: 'Calça linho' },
       cores_top_bling: ['Preto', 'Bege', 'Marrom', 'Caramelo', 'Nude', 'Vinho'],
     },
-    output: `Oii Sandra, tudo bom?
+    output: `Oii Sandra, td bem?
 
 Acabou de chegar uma calça linho q tá com cara das peças q vc levou. Tem na cor caramelo q vai amar 😍
 
@@ -570,7 +585,7 @@ Te mando umas fotos?`,
       dias_sem: 105,
       lifetime: 6800,
     },
-    output: `Oie, tudo bom por aí?
+    output: `Oie, td bem por aí?
 
 Faz um tempinho q a gente não conversa!! Como tão as vendas? 
 
@@ -618,7 +633,7 @@ Quer ver?`,
       dias_sem: 60,
       promocao: 'Linho 20% off até quinta',
     },
-    output: `Oii Patrícia, tudo bom?
+    output: `Oii Patrícia, td bem?
 
 Tô finalizando umas reservas de pantalona linho com 20% q vão até quinta. Se quiser, separo umas peças pra vc dar uma olhada.
 
@@ -671,7 +686,7 @@ Tem vídeo da modelo no Vesti dela, vc vai amar 😍 te mando o link?`,
       produto: { nome: 'Conjunto WPP' },
       promocao: 'Linho 20% até dia 30',
     },
-    output: `Oii, tudo bom?
+    output: `Oii, td bem?
 
 Chegou uma novidade de alfaiataria q tem cara da sua loja. Conjunto WPP super leve, tá saindo muito!
 
@@ -739,7 +754,7 @@ Quer q eu separe uma grade pra vc?`,
       apelido: 'Bia',
       dias_desde_compra: 18,
     },
-    output: `Oi Bia, tudo bem?
+    output: `Oi Bia, td bem?
 
 Queria saber como foram as vendas das peças que vc levou. Tá girando bem?
 
@@ -795,7 +810,7 @@ Se quiser fotos pra postar nas redes, me avisa que te mando.`,
       dias_desde_1a_compra: 15,
       perfil_presenca: 'remota_dominante',
     },
-    output: `Oi Larissa, tudo bem por aí?
+    output: `Oi Larissa, td bem por aí?
 
 Como tão saindo as peças que vc recebeu? Espero que tudo bem!
 
@@ -847,7 +862,7 @@ Quer que eu acrescente?`,
       qtd_pecas: 9,
       promocao: '20% no linho até dia 30',
     },
-    output: `Oi Iara, tudo bem? 💛
+    output: `Oi Iara, td bem? 💛
 
 Sua sacola tá fechada em R$ 2.180 (9 peças). Quer aproveitar o 20% no linho que vai até dia 30 e a gente fecha essa semana?
 
@@ -877,7 +892,7 @@ Sua sacola tá em R$ 1.850 (7 peças) há 14 dias. Bora fechar essa semana? Te m
       valor_total: 2450,
       qtd_pecas: 11,
     },
-    output: `Oi Iara, tudo bem?
+    output: `Oi Iara, td bem?
 
 Sua sacola tá há 19 dias separada (R$ 2.450, 11 peças). Tô segurando aqui pra vc, mas preciso fechar o pagamento essa semana pra não acumular.
 
@@ -912,7 +927,7 @@ Sem problema qualquer caminho, só preciso definir.`,
       estilo: ['linho', 'plus'],
       produto: { nome: 'Macacão linho preto' },
     },
-    output: `Oi Marisa, tudo bem? 💛
+    output: `Oi Marisa, td bem? 💛
 
 Chegou o macacão linho preto na grade plus que combina muito com o que vocês costumam levar. Já tô guardando uma grade aqui.
 
@@ -943,7 +958,7 @@ Se quiser, posso já separar uma reposição das peças que mais saíram nas out
       qtd_documentos: 3,
       promocao: '20% no linho até dia 30',
     },
-    output: `Oi Marisa, tudo bem por aí?
+    output: `Oi Marisa, td bem por aí?
 
 Como tão as vendas nas três unidades? Tô só passando pra avisar que tem promoção de linho 20% até dia 30, caso queira reforçar o estoque de alguma loja.
 
