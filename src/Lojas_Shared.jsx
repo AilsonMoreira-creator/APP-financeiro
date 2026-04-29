@@ -593,6 +593,10 @@ export function adminComSaudacao() {
   }
   return null;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FORMATAÇÃO DE TELEFONE + COMPONENTE COPIÁVEL
+// ═══════════════════════════════════════════════════════════════════════════
 //
 // Padrão Brasil:
 //   10 dígitos (fixo ou celular antigo): (DD)NNNN-NNNN
