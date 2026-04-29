@@ -859,16 +859,34 @@ function ModalOrdem({ ordemEditando, usuario, mediaRef = {}, onClose, onSalvo })
 
             {/* Motivo (edit only) */}
             {isEdit && (
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: '#373F51', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Motivo da edição *</label>
+              <div style={{ marginBottom: 12, padding: motivo.trim() ? 0 : 12, background: motivo.trim() ? 'transparent' : '#fffbe6', borderRadius: motivo.trim() ? 0 : 8, border: motivo.trim() ? 'none' : '1px solid #ffd966' }}>
+                <label style={{ display: 'block', fontFamily: FN, fontSize: 13, fontWeight: 'bold', color: motivo.trim() ? '#373F51' : '#7c5a00', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
+                  Motivo da edição * {!motivo.trim() && <span style={{ fontSize: 11, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— obrigatório pra salvar</span>}
+                </label>
                 <input type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
                   placeholder="ex: Adicionar cor Bege"
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid #e8e2da', borderRadius: 8, fontSize: 13, fontFamily: SERIF, boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '10px 12px', border: motivo.trim() ? '1px solid #e8e2da' : '1.5px solid #f5b800', borderRadius: 8, fontSize: 13, fontFamily: SERIF, boxSizing: 'border-box' }} />
               </div>
             )}
 
             {/* Erro */}
             {erro && <div style={{ padding: 10, background: '#fdeaea', color: '#c0392b', borderRadius: 6, marginBottom: 12, fontSize: 12 }}>{erro}</div>}
+
+            {/* Aviso do que falta pra habilitar Salvar (só aparece se desabilitado) */}
+            {!podeSalvar && (
+              <div style={{ padding: 10, background: '#fff8e1', color: '#7c5a00', border: '1px solid #ffe0a0', borderRadius: 6, marginBottom: 12, fontSize: 12 }}>
+                <strong>Pra {isEdit ? 'salvar a edição' : 'criar a ordem'}:</strong>{' '}
+                {(() => {
+                  const faltam = [];
+                  if (!produto?.ref) faltam.push('REF do produto');
+                  if (!produto?.tecido) faltam.push('tecido');
+                  if (tamsAtivos.length === 0) faltam.push('ao menos 1 tamanho');
+                  if (cores.length === 0) faltam.push('ao menos 1 cor');
+                  if (isEdit && !motivo.trim()) faltam.push('motivo da edição (campo logo acima)');
+                  return faltam.join(', ');
+                })()}
+              </div>
+            )}
 
             {/* Ações */}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>

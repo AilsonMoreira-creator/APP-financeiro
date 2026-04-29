@@ -3565,6 +3565,9 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
         <div style={{display:"flex",justifyContent:"flex-end",gap:8,alignItems:"center"}}>
           {ehLeitura?(
             <>
+              <button onClick={onClose} title="Fechar e voltar pra lista de cortes" style={{background:"#fff",color:C.muted,border:`1px solid ${C.sand}`,borderRadius:6,padding:"8px 22px",fontSize:12,fontFamily:FONT,cursor:"pointer",fontWeight:600}}>
+                ← Voltar
+              </button>
               <button onClick={()=>setConfirmDel(true)} title="Excluir os dados de detalhamento" style={{background:C.red,color:"#fff",border:"none",borderRadius:6,padding:"8px 14px",fontSize:12,fontFamily:FONT,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 3L13 13M13 3L3 13" stroke="#fff" strokeWidth="2" strokeLinecap="round"/></svg>
                 Excluir detalhes
