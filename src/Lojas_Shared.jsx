@@ -595,6 +595,84 @@ export function adminComSaudacao() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// HELPERS DE DOCUMENTO (CNPJ/CPF) E NOME DE COMPRADOR
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Tira tudo que não é dígito.
+ * Útil pra normalizar antes de salvar/buscar no banco (sempre só dígitos).
+ */
+export function limparDocumento(doc) {
+  return String(doc || '').replace(/\D/g, '');
+}
+
+/**
+ * Detecta tipo pelo número de dígitos.
+ * CPF = 11 dígitos, CNPJ = 14 dígitos.
+ * Retorna 'cpf' / 'cnpj' / null.
+ */
+export function detectarTipoDocumento(doc) {
+  const limpo = limparDocumento(doc);
+  if (limpo.length === 11) return 'cpf';
+  if (limpo.length === 14) return 'cnpj';
+  return null;
+}
+
+/**
+ * Formata pra exibição:
+ *   CPF  → 123.456.789-09
+ *   CNPJ → 12.345.678/0001-99
+ *   Sem padrão reconhecido → devolve o input limpo
+ */
+export function formatarDocumento(doc, tipo = null) {
+  const d = limparDocumento(doc);
+  const t = tipo || detectarTipoDocumento(d);
+  if (t === 'cnpj' && d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  if (t === 'cpf' && d.length === 11) {
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  return d;
+}
+
+/**
+ * Formata enquanto digita (vai colocando . - / conforme o user vai digitando).
+ * Decide CPF vs CNPJ pela quantidade de dígitos já digitados.
+ *   1-11 dígitos  → vai formatando como CPF
+ *   12-14 dígitos → vira CNPJ
+ */
+export function formatarDocumentoLive(input) {
+  const d = limparDocumento(input).slice(0, 14);
+  if (d.length <= 11) {
+    // Formata como CPF parcial
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+    if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  // 12-14 dígitos = CNPJ
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
+/**
+ * Pega só o primeiro nome (palavra) do nome do comprador.
+ * Usado pra mensagem WhatsApp ("Rosana Ruiva" → "Rosana").
+ *
+ * Regras:
+ *   - Trim e split por espaços
+ *   - Pega a 1ª palavra com pelo menos 2 letras (pula "Sra", "Dra" se for o caso)
+ *   - Se não achar nada útil, devolve a string original
+ */
+export function primeiroNome(nome) {
+  const s = String(nome || '').trim();
+  if (!s) return '';
+  const palavras = s.split(/\s+/).filter(p => p.length >= 2);
+  return palavras[0] || s;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // FORMATAÇÃO DE TELEFONE + COMPONENTE COPIÁVEL
 // ═══════════════════════════════════════════════════════════════════════════
 //

@@ -453,9 +453,17 @@ async function saveCliente(cliente, userId) {
 }
 
 async function saveApelidoCliente(clienteId, apelido, userId) {
+  // Decisão Ailson 28/04/2026: schema mantém apelido + comprador_nome separados,
+  // mas a UI escreve nas DUAS colunas com o mesmo valor. Compatibilidade total
+  // com importações antigas + novo fluxo unificado de "nome do comprador".
   const { data, error } = await supabase
     .from('lojas_clientes')
-    .update({ apelido, updated_at: new Date().toISOString(), updated_by: userId })
+    .update({
+      apelido,
+      comprador_nome: apelido,
+      updated_at: new Date().toISOString(),
+      updated_by: userId,
+    })
     .eq('id', clienteId)
     .select()
     .single();
@@ -1324,6 +1332,9 @@ import {
   CriarGrupoModal, AdicionarCnpjModal,
 } from './Lojas_Telas_Admin.jsx';
 
+// Tela compartilhada (vendedora E admin) pra cadastrar nome do comprador
+import { CadastrarCompradorScreen } from './Lojas_CadastrarComprador.jsx';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL — Router de telas
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1400,6 +1411,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
     else if (id === 'curadoria') setScreen('curadoria');
     else if (id === 'grupos') setScreen('gruposAdmin');
     else if (id === 'importacoes') setScreen('importacoes');
+    else if (id === 'cadastrarComprador') setScreen('cadastrarComprador');
   };
   
   const vendedoraAtiva = state.vendedoraAtiva;
@@ -1443,6 +1455,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
           onSelectCliente={handleSelectCliente}
           onSelectGrupo={handleSelectGrupo}
           onAbrirGrupos={() => setScreen('grupos')}
+          onAbrirCadastrarComprador={() => setScreen('cadastrarComprador')}
         />
       )}
       
@@ -1553,6 +1566,13 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
 
       {screen === 'importacoes' && (
         <ImportacoesScreen lojas={lojas} onBack={() => setScreen('home')} />
+      )}
+
+      {screen === 'cadastrarComprador' && (
+        <CadastrarCompradorScreen
+          lojas={lojas}
+          onBack={() => setScreen(state.isAdmin ? 'home' : 'carteira')}
+        />
       )}
 
       {/* ─── Modais ──────────────────────────────────────────────────────── */}

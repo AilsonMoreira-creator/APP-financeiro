@@ -39,7 +39,7 @@ import {
   TrendingUp, TrendingDown, BarChart3, UserCog, Maximize2, Filter,
   Save, Trash2, Edit3, MapPin, Clock, CheckCircle2, AlertCircle,
   Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown,
-  UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send,
+  UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send, User,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
@@ -447,6 +447,8 @@ const ConfigTab = ({ lojas, onNavegar }) => {
   const { state } = lojas;
 
   const items = [
+    { id: 'cadastrarComprador', icon: User, cor: palette.accent, corSoft: palette.accentSoft,
+      title: 'Cadastrar comprador', sub: 'Vincular nome do comprador a um CNPJ/CPF' },
     { id: 'promocoes', icon: Gift, cor: palette.warn, corSoft: palette.warnSoft,
       title: 'Promoções', sub: `${state.promocoes.length} ${state.promocoes.length === 1 ? 'ativa' : 'ativas'}` },
     { id: 'regras', icon: FileText, cor: palette.accent, corSoft: palette.accentSoft,
@@ -819,7 +821,7 @@ export const SugestaoScreen = ({
                     color: apelido ? palette.ink : palette.inkMuted,
                     fontStyle: apelido ? 'normal' : 'italic',
                   }}>
-                    {apelido ? `Apelido: ${apelido}` : 'Adicionar apelido'}
+                    {apelido ? `Comprador: ${apelido}` : 'Adicionar nome do comprador'}
                   </button>
                 )}
               </div>
@@ -992,6 +994,7 @@ export const SugestaoScreen = ({
 
 export const MinhaCarteiraScreen = ({
   lojas, vendedora, onBack, onSelectCliente, onAbrirGrupos, onSelectGrupo, onPedirMensagemRapida,
+  onAbrirCadastrarComprador,
 }) => {
   const { state, carteiraAtual } = lojas;
   const [filtroStatus, setFiltroStatus] = useState('todos');
@@ -1101,16 +1104,28 @@ export const MinhaCarteiraScreen = ({
         subtitle={`${vendedora?.loja || ''} · ${itensCarteira.length} ${itensCarteira.length === 1 ? 'item' : 'itens'} (${state.grupos.length} grupos)`}
         onBack={onBack}
         rightContent={
-          onAbrirGrupos && (
-            <button onClick={onAbrirGrupos} style={{
-              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
-              color: palette.bg, padding: '6px 10px', borderRadius: 8,
-              cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}>
-              <UsersRound size={sz(15)} /> Grupos
-            </button>
-          )
+          <div style={{ display: 'flex', gap: 6 }}>
+            {onAbrirCadastrarComprador && (
+              <button onClick={onAbrirCadastrarComprador} style={{
+                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
+                color: palette.bg, padding: '6px 10px', borderRadius: 8,
+                cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4,
+              }} title="Cadastrar nome do comprador">
+                <User size={sz(15)} /> Comprador
+              </button>
+            )}
+            {onAbrirGrupos && (
+              <button onClick={onAbrirGrupos} style={{
+                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
+                color: palette.bg, padding: '6px 10px', borderRadius: 8,
+                cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                <UsersRound size={sz(15)} /> Grupos
+              </button>
+            )}
+          </div>
         }
       />
       <div style={{ padding: 16, paddingBottom: 32 }}>
@@ -1430,7 +1445,7 @@ export const DetalheClienteScreen = ({
                 flex: 1, background: 'transparent', border: 'none', textAlign: 'left',
                 cursor: 'pointer', fontFamily: FONT, fontSize: fz(15), color: palette.ink,
               }}>
-                Apelido: <strong>{apelido || 'sem apelido'}</strong>
+                Comprador: <strong>{apelido || 'sem nome'}</strong>
               </button>
             )}
           </div>

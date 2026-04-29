@@ -750,17 +750,27 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       acao_sugerida: sug.acao_sugerida,
       alvo_tipo: sug.alvo_tipo,
     },
-    cliente: ctx.cliente ? {
-      apelido: ctx.cliente.apelido || ctx.cliente.comprador_nome,
-      razao_social: ctx.cliente.razao_social,
-      perfil_presenca: ctx.kpi?.perfil_presenca,
-      paga_com_cheque: ctx.kpi?.paga_com_cheque,
-      dias_sem_comprar: ctx.kpi?.dias_sem_comprar,
-      lifetime_total: ctx.kpi?.lifetime_total,
-      qtd_compras: ctx.kpi?.qtd_compras,
-      estilo_dominante: ctx.kpi?.estilo_dominante,
-      fase_ciclo_vida: ctx.kpi?.fase_ciclo_vida,
-    } : null,
+    cliente: ctx.cliente ? (() => {
+      // Decisão Ailson 28/04/2026: na mensagem WhatsApp, IA deve tratar a
+      // cliente pelo PRIMEIRO NOME (ex: "Rosana Ruiva" → "Rosana"). O nome
+      // completo fica na UI das 7 sugestões; mensagem fica mais próxima
+      // usando só o primeiro nome.
+      const nomeCompleto = (ctx.cliente.apelido || ctx.cliente.comprador_nome || '').trim();
+      const palavras = nomeCompleto.split(/\s+/).filter(p => p.length >= 2);
+      const apelidoCurto = palavras[0] || nomeCompleto || null;
+      return {
+        apelido: apelidoCurto,
+        nome_completo_comprador: nomeCompleto || null,
+        razao_social: ctx.cliente.razao_social,
+        perfil_presenca: ctx.kpi?.perfil_presenca,
+        paga_com_cheque: ctx.kpi?.paga_com_cheque,
+        dias_sem_comprar: ctx.kpi?.dias_sem_comprar,
+        lifetime_total: ctx.kpi?.lifetime_total,
+        qtd_compras: ctx.kpi?.qtd_compras,
+        estilo_dominante: ctx.kpi?.estilo_dominante,
+        fase_ciclo_vida: ctx.kpi?.fase_ciclo_vida,
+      };
+    })() : null,
     grupo: ctx.grupo ? {
       nome_grupo: ctx.grupo.nome_grupo,
       qtd_documentos: ctx.docsGrupo.length,
