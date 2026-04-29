@@ -411,59 +411,6 @@ async function montarContextoSugestoes(vendedoraId) {
     .eq('ativo', true)
     .or(`data_fim.is.null,data_fim.gte.${hoje}`);
 
-  // Best sellers e em_alta automáticos (fallback quando curadoria vazia).
-  // Decisão Ailson 28/04/2026: a IA estava só retornando novidades porque a
-  // curadoria manual está vazia. Solução: deriva best_sellers/em_alta da
-  // view vw_ia_curva_abc_ranking (top vendas Bling 45d).
-  //   Curva A (top 10 catálogo) → best_seller
-  //   Curva B (11-20)            → em_alta
-  // Só aplica se a curadoria manual não cobrir. Se admin marcar manualmente,
-  // a curadoria manual tem prioridade.
-  let bestSellersAuto = [];
-  let emAltaAuto = [];
-  let produtosExtras = []; // REFs auto que não estão na view oferecíveis
-  try {
-    const { data: curvaABC } = await supabase
-      .from('vw_ia_curva_abc_ranking')
-      .select('ref, curva, posicao_ranking')
-      .in('curva', ['a', 'b'])
-      .order('posicao_ranking', { ascending: true })
-      .limit(20);
-    bestSellersAuto = (curvaABC || []).filter(r => r.curva === 'a').map(r => r.ref);
-    emAltaAuto = (curvaABC || []).filter(r => r.curva === 'b').map(r => r.ref);
-
-    // A view vw_lojas_produtos_oferecveis filtra produtos por 'novidade OR
-    // curadoria OR estoque>100'. REFs top do Bling podem ter estoque baixo
-    // (curva A justamente porque estão vendendo MUITO). Buscamos elas direto
-    // em lojas_produtos pra IA enxergar.
-    const todasAuto = [...bestSellersAuto, ...emAltaAuto];
-    if (todasAuto.length > 0) {
-      const { data: extras } = await supabase
-        .from('lojas_produtos')
-        .select('ref, descricao, categoria, qtd_estoque')
-        .in('ref', todasAuto);
-      produtosExtras = (extras || [])
-        .filter(p => p.descricao)
-        .map(p => ({
-          ref: p.ref,
-          descricao: p.descricao,
-          categoria: p.categoria,
-          qtd_estoque: p.qtd_estoque,
-          motivo_oferta: bestSellersAuto.includes(p.ref) ? 'best_seller' : 'em_alta',
-        }));
-    }
-  } catch (e) {
-    console.warn('[lojas-ia] sem curva ABC (view ausente?):', e?.message);
-  }
-
-  // Junta produtos da view + extras da curva ABC. Dedup por REF (view tem
-  // precedência, depois extras preenchem buracos).
-  const refsView = new Set((produtos || []).map(p => p.ref));
-  const produtosFinal = [
-    ...(produtos || []),
-    ...produtosExtras.filter(p => !refsView.has(p.ref)),
-  ];
-
   // Promoções ativas
   const { data: promocoes } = await supabase
     .from('lojas_promocoes')
@@ -493,10 +440,8 @@ async function montarContextoSugestoes(vendedoraId) {
     sacolas: sacolas || [],
     sacolasDescartadas,
     grupos: grupos || [],
-    produtos: produtosFinal,
+    produtos: produtos || [],
     curadoria: curadoria || [],
-    bestSellersAuto,
-    emAltaAuto,
     promocoes: promocoes || [],
     regrasCustomizadas: {
       tomGeral, posicionamento, sempre, nunca,
@@ -740,9 +685,7 @@ function montarMessagesSugestoes(ctx) {
     });
 
   // Classifica produtos uma vez só (usado no payload e na telemetria)
-  const produtosClassificados = classificarProdutos(
-    ctx.produtos, ctx.curadoria, ctx.bestSellersAuto, ctx.emAltaAuto
-  );
+  const produtosClassificados = classificarProdutos(ctx.produtos, ctx.curadoria);
 
   // Constrói payload enxuto pra IA — só dados que ela usa
   const userPayload = {
@@ -776,8 +719,6 @@ function montarMessagesSugestoes(ctx) {
         best_sellers: produtosClassificados.best_sellers.length,
         em_alta: produtosClassificados.em_alta.length,
         estoque_geral: produtosClassificados.estoque_geral.length,
-        best_sellers_auto: ctx.bestSellersAuto?.length || 0,
-        em_alta_auto: ctx.emAltaAuto?.length || 0,
       },
       clientes_vesti_na_carteira: (ctx.clientes || [])
         .filter(c => (ctx.kpis[c.id]?.canal_dominante === 'vesti_dominante')
@@ -884,16 +825,10 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
  * Classifica produtos em listas: novidades, best_sellers, em_alta, estoque_geral.
  * A view vw_lojas_produtos_oferecveis já calcula motivo_oferta — só agrupar.
  */
-function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAuto = []) {
-  // Curadoria manual tem PRIORIDADE sobre o auto (admin pode promover REFs
-  // específicas em qualquer momento via CuradoriaScreen).
+function classificarProdutos(produtos, curadoria) {
   const curBs = new Set(curadoria.filter(c => c.tipo === 'best_seller').map(c => c.ref));
   const curAlta = new Set(curadoria.filter(c => c.tipo === 'em_alta').map(c => c.ref));
   const curNov = new Set(curadoria.filter(c => c.tipo === 'novidade_manual').map(c => c.ref));
-
-  // Auto (curva ABC do Bling 45d) — só aplica se a REF NÃO está em curadoria.
-  const autoBs = new Set(bestSellersAuto || []);
-  const autoAlta = new Set(emAltaAuto || []);
 
   const out = {
     novidades: [],
@@ -910,29 +845,15 @@ function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAu
       estoque: p.qtd_estoque,
     };
     const motivo = p.motivo_oferta;
-
-    // Ordem de prioridade:
-    // 1. Novidade (oficina ou curadoria manual) — mais urgente
-    // 2. Best seller (curadoria > auto curva A)
-    // 3. Em alta (curadoria > auto curva B)
-    // 4. Estoque geral (>100 peças)
     if (motivo === 'novidade_oficina' || curNov.has(p.ref)) {
       out.novidades.push(item);
-    } else if (curBs.has(p.ref) || motivo === 'best_seller' || autoBs.has(p.ref)) {
+    } else if (curBs.has(p.ref) || motivo === 'best_seller') {
       out.best_sellers.push(item);
-    } else if (curAlta.has(p.ref) || motivo === 'em_alta' || autoAlta.has(p.ref)) {
+    } else if (curAlta.has(p.ref) || motivo === 'em_alta') {
       out.em_alta.push(item);
     } else if (motivo === 'estoque') {
       out.estoque_geral.push(item);
     }
-  }
-
-  // Se ainda assim best_sellers ficou vazio (ex: nenhum REF do auto está na
-  // view oferecíveis), promove os top 5 de novidades pra best (com mesmo
-  // item, só pra IA enxergar a categoria não-vazia). Isto garante a regra de
-  // variedade do prompt.
-  if (out.best_sellers.length === 0 && out.novidades.length >= 5) {
-    out.best_sellers = out.novidades.slice(0, 3);
   }
 
   // Limita pra não estourar contexto
