@@ -511,6 +511,21 @@ async function montarContextoMensagem(sug, contextoExtra) {
     promocao = p;
   }
 
+  // Top 6 cores do ranking Bling — pra IA mencionar UMA cor real na mensagem
+  // (gancho do tipo "tem cor que tá acabando").
+  // Fonte: vw_ranking_cores_catalogo (mesma view usada pelo OS Amícia).
+  let coresTop = [];
+  try {
+    const { data: cores } = await supabase
+      .from('vw_ranking_cores_catalogo')
+      .select('cor, vendas_45d')
+      .order('vendas_45d', { ascending: false })
+      .limit(6);
+    coresTop = (cores || []).map(c => c.cor).filter(Boolean);
+  } catch (e) {
+    console.warn('[lojas-ia/mensagem] sem cores top:', e?.message);
+  }
+
   // Regras customizadas (mesmas que sugestões)
   const [tomGeral, posicionamento, sempre, nunca, saudacao, fechamento] = await Promise.all([
     getLojasConfig('regras_ia.tom_geral', null),
@@ -523,7 +538,7 @@ async function montarContextoMensagem(sug, contextoExtra) {
 
   return {
     cliente, grupo, kpi, docsGrupo,
-    produto, promocao,
+    produto, promocao, coresTop,
     regrasCustomizadas: { tomGeral, posicionamento, sempre, nunca, saudacao, fechamento },
   };
 }
@@ -754,6 +769,7 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       nome: ctx.produto.descricao,
       categoria: ctx.produto.categoria,
     } : null,
+    cores_top_bling: ctx.coresTop && ctx.coresTop.length > 0 ? ctx.coresTop : null,
     promocao: ctx.promocao ? {
       nome: ctx.promocao.nome_curto,
       descricao: ctx.promocao.descricao_completa,
