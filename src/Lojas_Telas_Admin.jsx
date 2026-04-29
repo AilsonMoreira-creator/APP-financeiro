@@ -2298,8 +2298,12 @@ function agregarGrupo(grupo, clientes, kpis, clientesEnriquecidos) {
     .filter(d => d != null);
   const diasUltima = diasArr.length > 0 ? Math.min(...diasArr) : null;
 
-  // Status agregado: pega o "pior" status entre os docs (prioridade: separandoSacola > inativo > semAtividade > atencao > ativo)
-  const ordemStatus = ['separandoSacola', 'inativo', 'semAtividade', 'atencao', 'ativo', 'arquivo'];
+  // Status agregado: pega o MELHOR (mais ativo). Se um único doc do grupo
+  // está ativo, o grupo todo é ativo — porque grupo é "mesmo dono comprando
+  // por CNPJs diferentes". Decisão Ailson 28/04/2026.
+  // Era 'separandoSacola' primeiro (pior status ganha), o que fazia grupo
+  // aparecer INATIVO mesmo com doc principal comprando há 5 dias.
+  const ordemStatus = ['ativo', 'separandoSacola', 'atencao', 'semAtividade', 'inativo', 'arquivo'];
   const docsStatuses = docs.map(c => {
     const enr = clientesEnriquecidos.find(ce => ce.id === c.id);
     return enr?.statusAtual || kpis[c.id]?.status_atual || 'arquivo';

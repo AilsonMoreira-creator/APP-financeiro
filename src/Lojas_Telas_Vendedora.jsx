@@ -1036,8 +1036,15 @@ export const MinhaCarteiraScreen = ({
         const compras = docsDoGrupo.reduce((s, c) => s + (c.kpi?.qtd_compras || 0), 0);
         const diasUltima = Math.min(...docsDoGrupo.map(c => c.kpi?.dias_sem_comprar ?? 999));
 
-        // Status agregado: pega o pior (mais "alarmante")
-        const ordemStatus = ['inativo', 'semAtividade', 'separandoSacola', 'atencao', 'ativo', 'arquivo'];
+        // Status agregado: pega o MELHOR (mais ativo). Se um único doc do
+        // grupo tá ativo, o grupo todo é ativo — porque grupo é "mesmo dono"
+        // e ele já comprou recente por algum CNPJ.
+        // Decisão Ailson 28/04/2026: era o contrario (pegava o pior status),
+        // resultando em grupo INATIVO mesmo com doc principal comprando 5d
+        // atras, so porque um CNPJ secundário tinha 0 compras.
+        // Ordem do MELHOR pro PIOR — find() pega o 1o que algum doc tem.
+        // 'arquivo' fica no fim porque so vale se TODOS estao arquivados.
+        const ordemStatus = ['ativo', 'separandoSacola', 'atencao', 'semAtividade', 'inativo', 'arquivo'];
         const statusGrupo = ordemStatus.find(s => docsDoGrupo.some(c => c.statusAtual === s)) || 'ativo';
 
         return {
