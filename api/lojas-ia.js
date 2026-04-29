@@ -131,11 +131,15 @@ async function handleGerarSugestoes(req, res, auth) {
   const modelo = String(await getLojasConfig('modelo_ia', 'claude-sonnet-4-6'));
 
   // 5. Chama Claude
+  // max_tokens=8000 (era 4000): com schema v2 (top_refs_cliente,
+  // mais_vendidos, refs_reposicao, parágrafos com \n\n), JSON de 7
+  // sugestoes pode passar de 4000 tokens facilmente. Sintoma: erro
+  // "Unterminated string in JSON" porque resposta foi truncada.
   const r = await chamarClaude({
     modelo,
     systemBlocks,
     messages,
-    max_tokens: 4000,
+    max_tokens: 8000,
     temperature: 0.7,
     timeoutMs: 75000,
   });
