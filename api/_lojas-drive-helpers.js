@@ -629,8 +629,9 @@ export async function extrairLinhasPDFComX(buffer) {
   // imported (causa "Cannot find module pdf.worker.mjs"). Solução: usar
   // worker fake (a lib roda tudo na main thread). É mais lento, mas pra
   // PDFs de sacola (poucos KB) é instantâneo na prática.
+  // workerSrc precisa ser STRING (vazia desabilita), não boolean false.
   if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = false;
+    pdfjs.GlobalWorkerOptions.workerSrc = '';
   }
   const data = new Uint8Array(buffer);
   const pdf = await pdfjs.getDocument({
