@@ -221,7 +221,7 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
     return grupos;
   }, [vendedoras, clientes]);
 
-  const ordemLojas = ['Bom Retiro', 'Silva Teles', ...Object.keys(porLoja).filter(l => l !== 'Bom Retiro' && l !== 'Silva Teles')];
+  const ordemLojas = ['Silva Teles', 'Bom Retiro', ...Object.keys(porLoja).filter(l => l !== 'Bom Retiro' && l !== 'Silva Teles')];
 
   const VendedoraCard = ({ v }) => {
     const isCurrent = !isAdmin && v.id === vendedoraLogadaId;

@@ -298,13 +298,37 @@ async function loadVendedoras() {
 
 async function loadVendedoraByUserId(userId) {
   if (!userId) return null;
-  const { data, error } = await supabase
+
+  // 1) Tenta match exato pelo user_id (case-insensitive)
+  // ilike com escape de % e _ pra evitar wildcards acidentais (improvável em
+  // userIds simples como "celia", mas seguro)
+  const userIdEscaped = String(userId).replace(/[%_]/g, '\\$&');
+  let { data, error } = await supabase
     .from('lojas_vendedoras')
     .select('*')
-    .eq('user_id', userId)
+    .ilike('user_id', userIdEscaped)
+    .limit(1)
     .maybeSingle();
   if (error && error.code !== 'PGRST116') throw error;
-  return data || null;
+  if (data) return data;
+
+  // 2) Fallback: tenta match pelo NOME (admin pode ter criado vendedora sem
+  // setar user_id explicitamente; usa o nome como referência).
+  // Normaliza removendo acento e fazendo lowercase pros 2 lados.
+  const norm = s => String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  const userIdNorm = norm(userId);
+
+  const { data: todasVendedoras } = await supabase
+    .from('lojas_vendedoras')
+    .select('*')
+    .eq('ativa', true);
+
+  const match = (todasVendedoras || []).find(v => norm(v.nome) === userIdNorm);
+  return match || null;
 }
 
 async function loadClientes(filtroVendedoraId = null) {

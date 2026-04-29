@@ -1216,7 +1216,7 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
             Loja
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {['Bom Retiro', 'Silva Teles'].map(l => (
+            {['Silva Teles', 'Bom Retiro'].map(l => (
               <button key={l} onClick={() => setLoja(l)} style={{
                 flex: 1, padding: '10px',
                 background: loja === l ? palette.accent : palette.surface,
