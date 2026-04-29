@@ -46,6 +46,7 @@ import {
   detectarTipoArquivo,
   criarLogImportacao,
   finalizarLogImportacao,
+  extrairLinhasPDFComX,
 } from './_lojas-drive-helpers.js';
 
 import {
@@ -207,9 +208,15 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
 
     // Pra PDF, extrai texto antes de chamar o parser
     let textoConteudo = conteudo;
+    let linhasComX = null;
     if (ehPDF) {
-      // Sacolas precisam preservar layout pra separar colunas (qtd/devol/total/frete)
-      textoConteudo = await extrairTextoPDF(conteudo, { preservarLayout: true });
+      // Sacolas (e outros PDFs tabulares) usam pdfjs-dist com coordenadas X/Y
+      // pra preservar separação de colunas. pdf-parse colapsava espaços e
+      // colava qtd+devol+total+frete num número só, fazendo valor_total cair
+      // pra 0 (bug 28/04/2026 — todas as 11 sacolas no banco estavam com 0).
+      linhasComX = await extrairLinhasPDFComX(conteudo);
+      // Mantém textoConteudo como fallback caso outro tipo de PDF use texto
+      textoConteudo = '';
     }
 
     // Chama parser correspondente
@@ -223,7 +230,8 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
     } else if (tipoInfo.tipo === 'produtos_semanal') {
       parseResult = parseProdutos(textoConteudo);
     } else if (tipoInfo.tipo.startsWith('sacola')) {
-      parseResult = parsePedidosEspera(textoConteudo, tipoInfo.loja, vendedoras);
+      // ⚠️ Sacolas usam linhasComX (estrutura nova com coordenadas)
+      parseResult = parsePedidosEspera(linhasComX, tipoInfo.loja, vendedoras);
     } else {
       throw new Error(`Tipo desconhecido: ${tipoInfo.tipo}`);
     }

@@ -598,6 +598,56 @@ export async function finalizarLogImportacao(supabase, importacaoId, dados) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// EXTRAÇÃO DE PDF COM COORDENADAS (pdfjs-dist)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// pdf-parse colapsa espaços e perde alinhamento de colunas, o que quebrava
+// o parser de pedidos em espera (qtd+devol+total+frete viravam um número
+// gigante e valor_total caía pra 0).
+//
+// Solução (28/04/2026): usar pdfjs-dist diretamente pra obter cada item
+// com coordenadas X/Y. Daí o parser identifica colunas pela ORDEM e
+// NATUREZA dos campos (datas, CNPJ, valores monetários).
+//
+// Uso típico:
+//   const linhas = await extrairLinhasPDFComX(buffer);
+//   // linhas = [[{x, text}, {x, text}, ...], ...]
+//   // ordenadas de cima pra baixo no documento.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function extrairLinhasPDFComX(buffer) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const data = new Uint8Array(buffer);
+  const pdf = await pdfjs.getDocument({ data }).promise;
+
+  const todasLinhas = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+
+    // Agrupa items pela coordenada Y (com tolerância de 1px pra ruído de PDF)
+    const linhasPorY = {};
+    for (const it of tc.items) {
+      const txt = (it.str || '').trim();
+      if (!txt) continue;
+      const y = Math.round(it.transform[5]);
+      const x = it.transform[4];
+      if (!linhasPorY[y]) linhasPorY[y] = [];
+      linhasPorY[y].push({ x, text: it.str });
+    }
+
+    // Y maior = topo da página, então ordena descendente (de cima pra baixo)
+    const ys = Object.keys(linhasPorY).map(Number).sort((a, b) => b - a);
+    for (const y of ys) {
+      const itensOrdenados = linhasPorY[y].sort((a, b) => a.x - b.x);
+      todasLinhas.push(itensOrdenados);
+    }
+  }
+  return todasLinhas;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CORS (mesmo padrão dos outros endpoints)
 // ═══════════════════════════════════════════════════════════════════════════
 

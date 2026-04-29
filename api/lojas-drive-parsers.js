@@ -443,72 +443,169 @@ export function parseProdutos(conteudo) {
 // PARSER 5: pedidos_espera_st_*.pdf / _br_*.pdf  (PDF tabular)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// PDF que o Miré gera. Texto é extraível (não é imagem). Este parser recebe
-// o TEXTO já extraído (orquestrador usa pdf-parse antes).
+// PDF que o Miré gera. Texto é extraível (não é imagem).
+//
+// VERSÃO 2.0 (28/04/2026): Recebe ESTRUTURA POSICIONADA em vez de texto.
+//   Antes: pdf-parse colapsava espaços e quebrava colunas (qtd+devol+total+
+//          frete viravam um número gigante e valor_total caía pra 0).
+//   Agora: orquestrador chama extrairLinhasPDFComX() (pdfjs-dist com X/Y)
+//          e passa Array<Array<{x, text}>>. Parser identifica campos pela
+//          NATUREZA (datas dd/mm/aaaa, CNPJ 11-14 dígitos, valores ,nn).
 //
 // Estrutura: 1 linha de header + N linhas de dados + linha de totais.
 // Snapshot atual: cada linha = 1 cliente atualmente em status SEPARANDO_SACOLA.
 //
 // Regras:
-//   - Agrupa por cliente (mesmo CNPJ): pega pedido mais antigo pra dias-em-sacola
+//   - Filtro varejo via ehVendaVarejo (CONSUMIDOR, doc=13, etc)
 //   - Sub-tipo via classificarPedidoSacola(dias)
-//
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function parsePedidosEspera(textoPDF, loja, vendedorasCadastradas, hoje = null) {
-  if (!textoPDF) return { registros: [], total: 0, ignorados: 0, detalhes_ignorados: {} };
+/**
+ * Parseia uma única linha (array de items {x, text}) e retorna campos
+ * estruturados, ou null se não for linha de pedido válida.
+ */
+function _parseLinhaPedidoEspera(itens) {
+  // Items vêm ordenados por x mas garantimos
+  const its = itens
+    .slice()
+    .sort((a, b) => a.x - b.x)
+    .map(i => i.text.trim())
+    .filter(Boolean);
+  if (its.length < 5) return null;
 
-  // O texto extraído de PDF tabular vem com colunas separadas por múltiplos
-  // espaços ou \t, mas o pdf-parse pode bagunçar. Estratégia: parsear por
-  // padrão de número de pedido (primeiro número da linha) seguido de campos.
-  //
-  // Ordem das colunas (do PDF visto): Pedido, Cliente, CNPJ/CPF, Qtde, Devol,
-  // Total, Frete, Cadastro, Atualizado, Hora, Vendedor, Representante,
-  // Migrado, Observação, Plataforma, Nº Pedido, ID Cliente, Tipo
+  const f = {};
+  let i = 0;
 
-  const linhas = textoPDF.split('\n').map(l => l.trim()).filter(Boolean);
+  // 1. Pedido = primeiro item, deve ser numérico 4-7 dígitos
+  if (!/^\d{4,7}$/.test(its[i])) return null;
+  f.pedido = its[i++];
 
-  const registros = [];
+  // 2. Cliente (+ fantasia opcional) até CNPJ.
+  //    CNPJ pode estar puro OU colado no fim do nome (PDFs do Miré fazem isso).
+  const partesNome = [];
+  let cnpjEncontrado = false;
+  while (i < its.length) {
+    const t = its[i];
+    if (/^\d{11,14}$/.test(t)) {
+      f.cnpj = t;
+      i++;
+      cnpjEncontrado = true;
+      break;
+    }
+    const colado = t.match(/^(.+?)\s+(\d{11,14})$/);
+    if (colado) {
+      partesNome.push(colado[1]);
+      f.cnpj = colado[2];
+      i++;
+      cnpjEncontrado = true;
+      break;
+    }
+    partesNome.push(t);
+    i++;
+  }
+  if (!cnpjEncontrado) return null;
+  f.cliente_raw = partesNome.join(' ').trim();
+
+  // 3. Valores até primeira data (qtde, devol, total, frete em ordem)
+  const valoresPreData = [];
+  while (i < its.length && !/^\d{2}\/\d{2}\/\d{4}/.test(its[i])) {
+    valoresPreData.push(its[i++]);
+  }
+
+  // Atribuição por TIPO (mais robusto que ordem posicional):
+  //   - monetários têm formato ",dd" no fim: total e frete
+  //   - inteiros até 5 dígitos: qtde e devol
+  //     (limite 5 dígitos descarta CPF/CNPJ secundário que cliente possa ter)
+  const monetarios = valoresPreData.filter(v => /,\d{2}$/.test(v));
+  const inteiros = valoresPreData.filter(v => /^\d{1,5}$/.test(v));
+
+  f.qtd_pecas = parseInt(inteiros[0], 10) || 0;
+  // devol = inteiros[1] — não usamos hoje
+  f.valor_total = parseNumeroBR(monetarios[0]) || 0;
+  // frete = monetarios[1] — não armazenado hoje
+
+  // 4. Datas (cadastro pode vir colado com atualizado)
+  if (i < its.length && /^\d{2}\/\d{2}\/\d{4}/.test(its[i])) {
+    const m = its[i].match(/(\d{2}\/\d{2}\/\d{4})\s*(\d{2}\/\d{2}\/\d{4})?/);
+    if (m) {
+      const [d, mes, ano] = m[1].split('/');
+      f.data_cadastro_sacola = parseDataBR(`${d}/${mes}/${ano}`);
+      if (m[2]) {
+        const [d2, mes2, ano2] = m[2].split('/');
+        f.data_ultima_atualizacao = parseDataBR(`${d2}/${mes2}/${ano2}`);
+      }
+    }
+    i++;
+  }
+  if (i < its.length && /^\d{2}\/\d{2}\/\d{4}$/.test(its[i])) {
+    if (!f.data_ultima_atualizacao) {
+      const [d, mes, ano] = its[i].split('/');
+      f.data_ultima_atualizacao = parseDataBR(`${d}/${mes}/${ano}`);
+    }
+    i++;
+  }
+  if (!f.data_ultima_atualizacao) f.data_ultima_atualizacao = f.data_cadastro_sacola;
+
+  // 5. Hora hh:mm:ss
+  if (i < its.length && /^\d{2}:\d{2}:\d{2}$/.test(its[i])) {
+    f.hora = its[i++];
+  }
+
+  // 6. Vendedor: blocos de texto ALL-CAPS consecutivos
+  const partesVendedor = [];
+  while (i < its.length && /^[A-ZÁÃÀÉÊÍÓÔÕÚÇ ]{3,}$/.test(its[i])) {
+    partesVendedor.push(its[i++]);
+  }
+  f.vendedor_nome_raw = partesVendedor.join(' ').trim();
+
+  return f;
+}
+
+/**
+ * @param {Array<Array<{x:number, text:string}>>} linhasComX  Saída de extrairLinhasPDFComX()
+ * @param {string} loja                                       'Bom Retiro' | 'Silva Teles'
+ * @param {Array} vendedorasCadastradas                       lista pra resolver vendedora_id
+ * @param {string|null} hoje                                  override pra testes (ISO date)
+ */
+export function parsePedidosEspera(linhasComX, loja, vendedorasCadastradas, hoje = null) {
   const detalhes_ignorados = {
     sem_loja: 0,
     consumidor: 0,
     documento_invalido: 0,
     parse_falhou: 0,
+    sem_valor: 0,
   };
 
-  if (!loja) {
-    return { registros: [], total: linhas.length, ignorados: linhas.length,
-      detalhes_ignorados: { ...detalhes_ignorados, sem_loja: linhas.length } };
+  if (!Array.isArray(linhasComX) || linhasComX.length === 0) {
+    return { registros: [], total: 0, ignorados: 0, detalhes_ignorados };
   }
 
-  for (const linha of linhas) {
-    // Linha tem que começar com número de pedido (5 dígitos típico do Miré)
-    const m = linha.match(/^(\d{4,7})\s+(.+)$/);
-    if (!m) continue;
+  if (!loja) {
+    return {
+      registros: [],
+      total: linhasComX.length,
+      ignorados: linhasComX.length,
+      detalhes_ignorados: { ...detalhes_ignorados, sem_loja: linhasComX.length },
+    };
+  }
 
-    const numero_pedido = m[1];
-    const resto = m[2];
+  const registros = [];
+  let totalLinhasPedido = 0;
 
-    // Tenta extrair: nome do cliente (até CNPJ), CNPJ (14 ou 11 dígitos),
-    // qtde, devol, total, frete, cadastro (dd/mm/aaaa), atualizado, hora,
-    // vendedor, ...
-    //
-    // Padrão: nome_cliente CNPJ\s+qtde\s+devol\s+total\s+frete\s+dd/mm/aaaa\s+dd/mm/aaaa\s+hh:mm:ss\s+vendedor\s+...
-    //
-    // Esse parser é heurístico — o PDF é tabular mas o pdf-parse colapsa
-    // espaços às vezes. Usa regex pra capturar os pivôs (CNPJ + datas).
+  for (const itens of linhasComX) {
+    // Só linhas que começam com pedido (número 4-7 dígitos numa posição inicial)
+    const primeiroItem = itens.slice().sort((a, b) => a.x - b.x)[0];
+    if (!primeiroItem || !/^\d{4,7}$/.test(primeiroItem.text.trim())) continue;
+    totalLinhasPedido++;
 
-    const cnpjMatch = resto.match(/(\d{11,14})/);
-    if (!cnpjMatch) {
+    const parsed = _parseLinhaPedidoEspera(itens);
+    if (!parsed) {
       detalhes_ignorados.parse_falhou++;
       continue;
     }
-    const documento = cnpjMatch[1];
-    const cnpjIdx = cnpjMatch.index;
-    const clienteRaw = resto.substring(0, cnpjIdx).trim();
 
-    // Filtro varejo
-    const filtro = ehVendaVarejo(clienteRaw, documento, '');
+    // Filtro varejo (CONSUMIDOR, doc=13, etc)
+    const filtro = ehVendaVarejo(parsed.cliente_raw, parsed.cnpj, '');
     if (filtro.ignorar) {
       if (filtro.motivo === 'varejo_nome' || filtro.motivo === 'documento_placeholder') {
         detalhes_ignorados.consumidor++;
@@ -518,57 +615,37 @@ export function parsePedidosEspera(textoPDF, loja, vendedorasCadastradas, hoje =
       continue;
     }
 
-    // Parte depois do CNPJ: pega valores numéricos e datas
-    const aposCnpj = resto.substring(cnpjIdx + documento.length);
+    // Resolve vendedora pelo nome
+    const vendedora = resolverVendedora(parsed.vendedor_nome_raw, loja, vendedorasCadastradas);
 
-    // Datas dd/mm/aaaa (são pelo menos 2 — Cadastro e Atualizado)
-    const datas = [...aposCnpj.matchAll(/(\d{2})\/(\d{2})\/(\d{4})/g)];
-    if (datas.length < 1) {
-      detalhes_ignorados.parse_falhou++;
-      continue;
-    }
-    const data_cadastro_sacola = parseDataBR(`${datas[0][1]}/${datas[0][2]}/${datas[0][3]}`);
-    const data_ultima_atualizacao = datas[1]
-      ? parseDataBR(`${datas[1][1]}/${datas[1][2]}/${datas[1][3]}`)
-      : data_cadastro_sacola;
-
-    // Hora hh:mm:ss
-    const horaMatch = aposCnpj.match(/(\d{2}:\d{2}:\d{2})/);
-    const hora = horaMatch ? horaMatch[1] : null;
-
-    // Vendedor: maiúsculas após a hora, antes de "Atacado"
-    const trecho = horaMatch ? aposCnpj.substring(horaMatch.index + 8) : aposCnpj;
-    // Pega palavra(s) maiúsculas como vendedor (até próxima quebra ou número)
-    const vendMatch = trecho.match(/^\s*([A-ZÁÃÀÉÊÍÓÔÕÚÇ ]{3,30})/);
-    const vendedoraNome = vendMatch ? vendMatch[1].trim() : '';
-    const vendedora = resolverVendedora(vendedoraNome, loja, vendedorasCadastradas);
-
-    // Valores numéricos: pega os primeiros 4 do trecho ANTES da primeira data
-    // (qtde, devol, total, frete)
-    const trechoAntesData = aposCnpj.substring(0, datas[0].index);
-    const numeros = [...trechoAntesData.matchAll(/[\d.]+,\d{2}|\d+/g)].map(x => x[0]);
-    // numeros[0]=qtde, [1]=devol, [2]=total, [3]=frete (ordem do PDF)
-
-    const qtd_pecas = parseInt(numeros[0]) || 0;
-    const valor_total = parseNumeroBR(numeros[2]) || 0;
-
-    // Calcula dias em sacola
-    const dias = calcularDiasSacola(data_cadastro_sacola, hoje);
+    // Calcula dias em sacola + sub-tipo
+    const dias = calcularDiasSacola(parsed.data_cadastro_sacola, hoje);
     const subtipo_sugerido = dias != null ? classificarPedidoSacola(dias) : null;
 
+    // ALARME: valor 0 é bug do parser, NÃO acontece na realidade
+    // (toda sacola tem peças com preço cadastrado no Miré)
+    if (parsed.valor_total <= 0) {
+      detalhes_ignorados.sem_valor++;
+      console.warn(
+        `[parsePedidosEspera] SACOLA SEM VALOR (bug parser?): pedido=${parsed.pedido} ` +
+        `qtd=${parsed.qtd_pecas} cliente="${parsed.cliente_raw}" doc=${parsed.cnpj}`
+      );
+      // Continua e salva mesmo assim — orçamento conhecer o problema
+    }
+
     registros.push({
-      numero_pedido,
+      numero_pedido: parsed.pedido,
       loja,
-      documento_raw: documento,
-      vendedor_nome_raw: vendedoraNome,
+      documento_raw: parsed.cnpj,
+      vendedor_nome_raw: parsed.vendedor_nome_raw,
       vendedora_id: vendedora?.id || null,
 
-      data_cadastro_sacola,
-      data_ultima_atualizacao,
-      hora,
+      data_cadastro_sacola: parsed.data_cadastro_sacola,
+      data_ultima_atualizacao: parsed.data_ultima_atualizacao,
+      hora: parsed.hora || null,
 
-      qtd_pecas,
-      valor_total,
+      qtd_pecas: parsed.qtd_pecas,
+      valor_total: parsed.valor_total,
 
       status: 'aberto',
       ativo: true,
@@ -576,17 +653,10 @@ export function parsePedidosEspera(textoPDF, loja, vendedorasCadastradas, hoje =
     });
   }
 
-  // Dedup por cliente: se mesmo CNPJ tem múltiplos pedidos abertos,
-  // mantém todos (não agrupa) — orquestrador pode optar por mostrar 1 por
-  // cliente na UI usando o pedido mais antigo, mas a tabela armazena tudo.
-  //
-  // (Decidido com o Ailson: "agrupar por cliente, usar pedido mais antigo"
-  // é uma view/lógica de leitura, não de gravação. Tabela tem tudo.)
-
   return {
     registros,
-    total: linhas.filter(l => /^\d{4,7}\s/.test(l)).length,
-    ignorados: linhas.filter(l => /^\d{4,7}\s/.test(l)).length - registros.length,
+    total: totalLinhasPedido,
+    ignorados: totalLinhasPedido - registros.length,
     detalhes_ignorados,
   };
 }

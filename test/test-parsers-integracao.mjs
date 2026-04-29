@@ -236,6 +236,145 @@ test('Preço médio é parseado: 73,76 → 73.76', () => {
   assertTrue(p.preco_medio === 73.76);
 });
 
+// ───────────────────────────────────────────────────────────────────────────
+// parsePedidosEspera — casos REAIS dos PDFs do Miré (regressão do bug 28/04)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Bug original: pdf-parse colapsava espaços e qtd+devol+total+frete
+// virava um número gigante. valor_total caía pra 0 em 100% das sacolas.
+// Fix: extrairLinhasPDFComX() (pdfjs-dist com X/Y) + parser que identifica
+// campos pela natureza (datas, CNPJ, valores ,nn).
+//
+// Cada teste simula a saída da nova função extrairLinhasPDFComX() com items
+// {x, text} pra um pedido específico.
+
+const VENDS = [
+  { id: 'v1', nome: 'JOELMA', loja: 'Silva Teles' },
+  { id: 'v2', nome: 'CLEIDE', loja: 'Silva Teles' },
+  { id: 'v3', nome: 'CELIA',  loja: 'Bom Retiro' },
+];
+
+function linhaTAMiranda() {
+  // Caso real do PDF BR (27/04/2026): valor_total era 0 no banco antes do fix.
+  return [
+    { x: 32,  text: '91569' },
+    { x: 53,  text: 'T A MIRANDA PASSOS' },
+    { x: 208, text: '86633278000111' },
+    { x: 268, text: '6' },
+    { x: 288, text: '0' },
+    { x: 351, text: '354,00' },
+    { x: 384, text: '0,00' },
+    { x: 398, text: '27/04/2026 27/04/2026' },
+    { x: 474, text: '12:22:15' },
+    { x: 503, text: 'CELIA' },
+    { x: 759, text: '344322' },
+    { x: 787, text: 'Atacado' },
+  ];
+}
+
+test('parsePedidosEspera: T A Miranda — valor_total 354 (não 0!)', () => {
+  const r = parsePedidosEspera([linhaTAMiranda()], 'Bom Retiro', VENDS, '2026-04-27');
+  assertTrue(r.registros.length === 1, `esperado 1 registro, veio ${r.registros.length}`);
+  const reg = r.registros[0];
+  assertTrue(reg.numero_pedido === '91569', `pedido errado: ${reg.numero_pedido}`);
+  assertTrue(reg.qtd_pecas === 6, `qtd errada: ${reg.qtd_pecas}`);
+  assertTrue(reg.valor_total === 354, `valor errado: ${reg.valor_total}`);
+  assertTrue(reg.documento_raw === '86633278000111', `cnpj errado: ${reg.documento_raw}`);
+});
+
+test('parsePedidosEspera: YUNI MODAS — qtd 185 (não 180936!)', () => {
+  // Caso real do PDF ST: qtd vinha como 180936 (concatenação 18+0+936)
+  const linha = [
+    { x: 24,  text: '31812' },
+    { x: 47,  text: 'YUNI MODAS LTDA' },
+    { x: 132, text: '04430106000186' },
+    { x: 199, text: '185' },
+    { x: 237, text: '0' },
+    { x: 295, text: '16.153,00' },
+    { x: 341, text: '0,00' },
+    { x: 356, text: '22/04/2026 24/04/2026' },
+    { x: 438, text: '09:03:57' },
+    { x: 470, text: 'CLEIDE' },
+  ];
+  const r = parsePedidosEspera([linha], 'Silva Teles', VENDS, '2026-04-27');
+  assertTrue(r.registros.length === 1);
+  const reg = r.registros[0];
+  assertTrue(reg.qtd_pecas === 185, `qtd errada: ${reg.qtd_pecas}`);
+  assertTrue(reg.valor_total === 16153, `valor errado: ${reg.valor_total}`);
+});
+
+test('parsePedidosEspera: MATHEUS — nome+CNPJ colado num único item', () => {
+  // Caso real do PDF ST: pdfjs juntou nome e CNPJ numa única string.
+  const linha = [
+    { x: 24,  text: '31835' },
+    { x: 47,  text: 'MATHEUS DE FARIA BESSA 03934172000120' },
+    { x: 204, text: '30' },
+    { x: 237, text: '0' },
+    { x: 299, text: '3.090,00' },
+    { x: 341, text: '0,00' },
+    { x: 356, text: '23/04/2026 27/04/2026' },
+    { x: 438, text: '11:32:34' },
+    { x: 470, text: 'JOELMA' },
+  ];
+  const r = parsePedidosEspera([linha], 'Silva Teles', VENDS, '2026-04-27');
+  assertTrue(r.registros.length === 1);
+  const reg = r.registros[0];
+  assertTrue(reg.documento_raw === '03934172000120', `cnpj errado: ${reg.documento_raw}`);
+  assertTrue(reg.qtd_pecas === 30, `qtd errada: ${reg.qtd_pecas}`);
+  assertTrue(reg.valor_total === 3090, `valor errado: ${reg.valor_total}`);
+});
+
+test('parsePedidosEspera: LUCIA CRISTINA — cliente com CPF E CNPJ secundário', () => {
+  // Caso real do PDF ST: cliente tem 2 documentos, antes qtd virava o CNPJ
+  const linha = [
+    { x: 24,  text: '31828' },
+    { x: 47,  text: 'LUCIA CRISTINA PEREIRA 16554155813' }, // CPF colado
+    { x: 132, text: '13888148000156' },                       // CNPJ secundário
+    { x: 206, text: '3' },
+    { x: 237, text: '0' },
+    { x: 305, text: '277,00' },
+    { x: 341, text: '0,00' },
+    { x: 356, text: '23/04/2026 23/04/2026' },
+    { x: 438, text: '11:55:02' },
+    { x: 470, text: 'CLEIDE' },
+  ];
+  const r = parsePedidosEspera([linha], 'Silva Teles', VENDS, '2026-04-27');
+  assertTrue(r.registros.length === 1);
+  const reg = r.registros[0];
+  assertTrue(reg.qtd_pecas === 3, `qtd errada (deveria ser 3, veio ${reg.qtd_pecas})`);
+  assertTrue(reg.valor_total === 277, `valor errado: ${reg.valor_total}`);
+});
+
+test('parsePedidosEspera: subtipo segue regras de dias', () => {
+  // hoje=27/04, sacola de 22/04 = 5 dias → null (filtra)
+  const linha = linhaTAMiranda(); // cad=27/04, hoje=27/04 → 0 dias
+  const r = parsePedidosEspera([linha], 'Bom Retiro', VENDS, '2026-04-27');
+  assertTrue(r.registros[0].subtipo_sugerido === null, 'sacola 0d deve ter subtipo null');
+
+  // Mesma linha mas hoje 7 dias depois → incentivar_acrescentar
+  const r2 = parsePedidosEspera([linha], 'Bom Retiro', VENDS, '2026-05-04');
+  assertTrue(r2.registros[0].subtipo_sugerido === 'incentivar_acrescentar',
+    `esperado incentivar_acrescentar, veio ${r2.registros[0].subtipo_sugerido}`);
+});
+
+test('parsePedidosEspera: filtra CONSUMIDOR (varejo)', () => {
+  // CONSUMIDOR tem doc=1 que é placeholder de varejo
+  const linha = [
+    { x: 32,  text: '91519' },
+    { x: 53,  text: 'CONSUMIDOR CONSUMIDOR 1' }, // nome+doc colados
+    { x: 268, text: '1' },
+    { x: 288, text: '0' },
+    { x: 354, text: '59,00' },
+    { x: 384, text: '0,00' },
+    { x: 398, text: '25/04/2026 25/04/2026' },
+    { x: 474, text: '12:28:42' },
+    { x: 504, text: 'LOJA BOM RETIRO' },
+  ];
+  const r = parsePedidosEspera([linha], 'Bom Retiro', VENDS, '2026-04-27');
+  // Sem CNPJ válido, parse falha (efeito final correto: não vai pro banco)
+  assertTrue(r.registros.length === 0, 'CONSUMIDOR não deveria entrar');
+});
+
 
 console.log(`\n════════════════════════════════════════════════════════════════`);
 console.log(`  ✓ ${passed} passaram   |   ✗ ${failed} falharam   |   total: ${passed + failed}`);
