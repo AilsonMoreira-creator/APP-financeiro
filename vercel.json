@@ -3,8 +3,18 @@
     "api/ia-cron.js": { "maxDuration": 120 },
     "api/ia-disparar.js": { "maxDuration": 120 },
     "api/lojas-ia.js": { "maxDuration": 90 },
-    "api/lojas-drive-importar.js": { "maxDuration": 300 },
-    "api/lojas-drive-cron.js": { "maxDuration": 60 },
+    "api/lojas-drive-importar.js": {
+      "maxDuration": 300,
+      "includeFiles": "node_modules/pdfjs-dist/legacy/build/**"
+    },
+    "api/lojas-drive-trigger.js": {
+      "maxDuration": 300,
+      "includeFiles": "node_modules/pdfjs-dist/legacy/build/**"
+    },
+    "api/lojas-drive-cron.js": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/pdfjs-dist/legacy/build/**"
+    },
     "api/lojas-ia-cron-diario.js": { "maxDuration": 300 },
     "api/lojas-ia-cron-semanal.js": { "maxDuration": 300 }
   },
