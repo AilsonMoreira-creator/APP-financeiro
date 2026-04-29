@@ -31,15 +31,26 @@ export default async function handler(req, res) {
     });
   }
 
-  // Busca UUID da vendedora
-  const { data: v, error } = await supabase
+  // Busca UUID da vendedora — comparação ignora acento E case
+  // (ex: 'Celia' bate com 'Célia', 'CELIA', 'célia')
+  const norm = s => String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  const alvoNorm = norm(nomeVendedora);
+
+  const { data: todas } = await supabase
     .from('lojas_vendedoras')
     .select('id, nome, loja, ativa')
-    .ilike('nome', nomeVendedora)
-    .eq('ativa', true)
-    .maybeSingle();
-  if (error || !v) {
-    return res.status(404).json({ error: `Vendedora "${nomeVendedora}" não encontrada` });
+    .eq('ativa', true);
+
+  const v = (todas || []).find(x => norm(x.nome) === alvoNorm);
+  if (!v) {
+    return res.status(404).json({
+      error: `Vendedora "${nomeVendedora}" não encontrada`,
+      vendedoras_disponiveis: (todas || []).map(x => x.nome),
+    });
   }
 
   // Dispara internamente via fetch
