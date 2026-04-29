@@ -980,8 +980,10 @@ BEGIN
   v_ticket := CASE WHEN v_qtd_compras > 0 THEN v_lifetime / v_qtd_compras ELSE 0 END;
   
   -- Dias sem comprar
+  -- BUG FIX (28/04/2026): EXTRACT(DAY FROM date-date) retorna NULL silencioso
+  -- porque date - date já é integer em Postgres. Subtração direta é o certo.
   v_dias_sem := CASE WHEN v_ultima IS NULL THEN NULL 
-                     ELSE EXTRACT(DAY FROM CURRENT_DATE - v_ultima)::int END;
+                     ELSE (CURRENT_DATE - v_ultima)::int END;
   
   -- Canal dominante (70%+)
   v_canal_dominante := CASE 
@@ -1021,8 +1023,9 @@ BEGIN
   END;
   
   -- Fase ciclo de vida
+  -- BUG FIX (28/04/2026): mesma causa do v_dias_sem acima
   v_dias_desde_1a := CASE WHEN v_primeira IS NULL THEN NULL
-                          ELSE EXTRACT(DAY FROM CURRENT_DATE - v_primeira)::int END;
+                          ELSE (CURRENT_DATE - v_primeira)::int END;
   v_fase := CASE
     WHEN v_dias_desde_1a IS NULL              THEN 'sem_compras_ainda'
     WHEN v_dias_desde_1a <= 14                THEN 'nova_aguardando'
