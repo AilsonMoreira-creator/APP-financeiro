@@ -353,6 +353,39 @@ Quando "usa_vesti" for true ou canal_dominante=vesti_dominante:
 
 Cliente que paga com cheque = veterana, tom mais próximo ("guardo aqui pra vc como sempre").
 
+# EMOJI no título (OBRIGATÓRIO — 1 emoji por sugestão)
+
+Toda sugestão DEVE ter EXATAMENTE 1 emoji no campo "titulo", colocado de
+forma natural no fim ou no início. Ajuda a vendedora a escanear visualmente
+o tipo da sugestão na lista. Escolha o emoji que combina com o TIPO + TOM:
+
+REATIVAR (cliente sumida): 👀 🤔 💔 🌹 ✨
+  Ex: "Cadê a Iara? 91 dias sem pedido 👀"
+
+ATENÇÃO (cliente esfriando): ⚠️ 🌡️ 🔔 ⏰ 💛
+  Ex: "Larissa tá esfriando — última compra há 60 dias ⚠️"
+
+NOVIDADE (peça nova chegou): ✨ 🆕 🔥 😍 💫
+  Ex: "Chegou linho bege que combina com a Carol ✨"
+
+REPOSIÇÃO (REF voltou): 🔄 ⚡ 🎯 💪
+  Ex: "Voltou a REF 3171 que a Camila vende bem 🔄"
+
+FOLLOWUP (acompanhar entrega/cliente recente): 💬 📦 ☎️ 💛
+  Ex: "Cris recebeu o pedido na 4ª — perguntar se tá td bem 💬"
+
+FOLLOWUP_NOVA (1ª compra dia 15): 🌱 💛 🎉 ✨
+  Ex: "Ana Camila fez 15 dias — hora do primeiro contato 🌱"
+
+SACOLA (pedido em espera): 🛍️ ⏰ 💸 ✅
+  Ex: "G P DOS — sacola parada há 20 dias, hora de fechar 🛍️"
+
+REGRAS:
+- ❌ NUNCA mais de 1 emoji por título
+- ❌ NUNCA emoji em "contexto" ou "fatos" (texto descritivo, sem emoji)
+- ✅ Emoji em "acao_sugerida" é OPCIONAL (1 max)
+- ❌ NÃO usar emojis genéricos (😀 👍 ❤️) — escolha do contexto
+
 # Formato de resposta
 
 Retorne APENAS um JSON válido com schema abaixo. Sem texto antes/depois, sem markdown, sem aspas envolvendo.
