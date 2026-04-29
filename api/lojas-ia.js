@@ -461,6 +461,70 @@ async function montarContextoSugestoes(vendedoraId) {
     ...produtosExtras.filter(p => !refsView.has(p.ref)),
   ];
 
+  // ─── TOP 3 REFs POR CLIENTE (decisão Ailson 28/04/2026) ───────────────
+  // Cliente compra "bem" uma REF se ela está no top 3 dela (score mesclado
+  // peças×0.7 + recorrência×3.0). Usado pra:
+  //   1. IA saber quando dizer "esse modelo vende bem pra você"
+  //   2. Detectar reposição: novidade da oficina cuja REF está no top da cliente
+  //   3. Alternar entre os 3 ao longo dos dias (anti-monotonia)
+  const topRefsPorCliente = {}; // { cliente_id: ['3171', '2783', '0050'] }
+  if (clienteIds.length > 0) {
+    try {
+      // Em chunks pra não estourar limite Supabase
+      for (let i = 0; i < clienteIds.length; i += 200) {
+        const chunk = clienteIds.slice(i, i + 200);
+        const { data: tops } = await supabase
+          .from('vw_lojas_top_refs_por_cliente')
+          .select('cliente_id, ref, posicao, pecas_total, vezes_comprou')
+          .in('cliente_id', chunk)
+          .order('posicao', { ascending: true });
+        for (const r of tops || []) {
+          if (!topRefsPorCliente[r.cliente_id]) topRefsPorCliente[r.cliente_id] = [];
+          topRefsPorCliente[r.cliente_id].push({
+            ref: r.ref,
+            posicao: r.posicao,
+            pecas_total: r.pecas_total,
+            vezes_comprou: r.vezes_comprou,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[lojas-ia] sem top refs por cliente (view ausente?):', e?.message);
+    }
+  }
+
+  // ─── MAIS VENDIDOS 45d (categoria de produtos no payload) ─────────────
+  // Decisão Ailson 28/04/2026: top 10 vendas 45d (loja física) entra como
+  // categoria PRÓPRIA no produtos_disponiveis (não vira slot, é só repertório).
+  // Texto sugerido: "Esse modelo tá saindo super bem na loja, quer ver?"
+  // Já temos bestSellersAuto = top 10 da view → usamos isso direto.
+  const maisVendidos45d = bestSellersAuto.slice(0, 10);
+
+  // ─── REPOSIÇÃO: novidades da oficina cuja REF já vendeu antes ─────────
+  // Decisão Ailson 28/04/2026: tipo NOVO de sugestão. Quando IA pega uma
+  // novidade da oficina e essa REF já existe em vendas anteriores, é
+  // REPOSIÇÃO (não novidade pura). Substitui 1 slot de novidade ou followup.
+  const novidadesRefs = (produtos || [])
+    .filter(p => p.motivo_oferta === 'novidade_oficina')
+    .map(p => p.ref);
+
+  let refsComVendaPassada = new Set();
+  if (novidadesRefs.length > 0) {
+    try {
+      const { data: vendaAnt } = await supabase
+        .from('lojas_vendas_itens')
+        .select('ref')
+        .in('ref', novidadesRefs)
+        .limit(500);
+      refsComVendaPassada = new Set((vendaAnt || []).map(v => v.ref));
+    } catch (e) {
+      console.warn('[lojas-ia] sem checagem repo (view ausente?):', e?.message);
+    }
+  }
+
+  // Lista de REFs que SÃO reposições (chegaram novas mas já tem histórico)
+  const refsReposicao = novidadesRefs.filter(r => refsComVendaPassada.has(r));
+
   // Promoções ativas
   const { data: promocoes } = await supabase
     .from('lojas_promocoes')
@@ -494,6 +558,9 @@ async function montarContextoSugestoes(vendedoraId) {
     curadoria: curadoria || [],
     bestSellersAuto,
     emAltaAuto,
+    maisVendidos45d,         // top 10 vendas 45d (categoria mais_vendidos)
+    topRefsPorCliente,       // { cliente_id: [{ref, posicao, pecas, vezes}] }
+    refsReposicao,           // [ref] — novidades que já tinham venda passada
     promocoes: promocoes || [],
     regrasCustomizadas: {
       tomGeral, posicionamento, sempre, nunca,
@@ -719,6 +786,10 @@ function montarMessagesSugestoes(ctx) {
         grupo_id: c.grupo_id,
         pular_ate: c.pular_ate,
         kpi_incompleto: kpiIncompleto, // ⚠️ NÃO use pra reativar/atenção/followup se true
+        // Top 3 REFs que essa cliente compra bem (score peças+recorrência).
+        // IA usa pra: detectar reposição, dizer "vende bem pra você",
+        // alternar recomendações sem repetir.
+        top_refs_cliente: ctx.topRefsPorCliente?.[c.id] || [],
         kpi: {
           dias_sem_comprar: k.dias_sem_comprar,
           ultima_compra: k.ultima_compra,
@@ -738,7 +809,7 @@ function montarMessagesSugestoes(ctx) {
 
   // Classifica produtos uma vez só (usado no payload e na telemetria)
   const produtosClassificados = classificarProdutos(
-    ctx.produtos, ctx.curadoria, ctx.bestSellersAuto, ctx.emAltaAuto
+    ctx.produtos, ctx.curadoria, ctx.bestSellersAuto, ctx.emAltaAuto, ctx.maisVendidos45d
   );
 
   // Constrói payload enxuto pra IA — só dados que ela usa
@@ -756,6 +827,11 @@ function montarMessagesSugestoes(ctx) {
       observacao: s.observacao,
     })),
     produtos_disponiveis: produtosClassificados,
+    // REFs que aparecem em "novidades" mas JÁ FORAM vendidas antes — são
+    // candidatas a sugestão tipo "reposicao" (decisão Ailson 28/04/2026).
+    // IA usa: se uma novidade da oficina está nessa lista E está no top 3 da
+    // cliente, vira sugestão de reposição (substitui novidade ou followup).
+    refs_reposicao: ctx.refsReposicao || [],
     promocoes_ativas: ctx.promocoes.map(p => ({
       id: p.id,
       nome: p.nome_curto,
@@ -772,10 +848,13 @@ function montarMessagesSugestoes(ctx) {
         novidades: produtosClassificados.novidades.length,
         best_sellers: produtosClassificados.best_sellers.length,
         em_alta: produtosClassificados.em_alta.length,
+        mais_vendidos: produtosClassificados.mais_vendidos.length,
         estoque_geral: produtosClassificados.estoque_geral.length,
         best_sellers_auto_loja_fisica: ctx.bestSellersAuto?.length || 0,
         em_alta_auto_loja_fisica: ctx.emAltaAuto?.length || 0,
+        refs_reposicao: ctx.refsReposicao?.length || 0,
       },
+      clientes_com_top_refs: Object.keys(ctx.topRefsPorCliente || {}).length,
       clientes_vesti_na_carteira: (ctx.clientes || [])
         .filter(c => (ctx.kpis[c.id]?.canal_dominante === 'vesti_dominante')
           || (ctx.kpis[c.id]?.qtd_compras_vesti || 0) > 0).length,
@@ -881,7 +960,7 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
  * Classifica produtos em listas: novidades, best_sellers, em_alta, estoque_geral.
  * A view vw_lojas_produtos_oferecveis já calcula motivo_oferta — só agrupar.
  */
-function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAuto = []) {
+function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAuto = [], maisVendidos45d = []) {
   // Curadoria manual tem PRIORIDADE sobre auto.
   const curBs = new Set(curadoria.filter(c => c.tipo === 'best_seller').map(c => c.ref));
   const curAlta = new Set(curadoria.filter(c => c.tipo === 'em_alta').map(c => c.ref));
@@ -891,11 +970,13 @@ function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAu
   // curadoria manual.
   const autoBs = new Set(bestSellersAuto || []);
   const autoAlta = new Set(emAltaAuto || []);
+  const setMaisVendidos = new Set(maisVendidos45d || []);
 
   const out = {
     novidades: [],
     best_sellers: [],
     em_alta: [],
+    mais_vendidos: [], // top 10 vendas 45d loja física (categoria nova)
     estoque_geral: [],
   };
 
@@ -917,12 +998,19 @@ function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAu
     } else if (motivo === 'estoque') {
       out.estoque_geral.push(item);
     }
+
+    // mais_vendidos é categoria PARALELA — uma REF pode estar em best_sellers
+    // E em mais_vendidos (são contextos diferentes pra IA usar).
+    if (setMaisVendidos.has(p.ref)) {
+      out.mais_vendidos.push(item);
+    }
   }
 
   // Limita pra não estourar contexto
   out.novidades = out.novidades.slice(0, 25);
   out.best_sellers = out.best_sellers.slice(0, 15);
   out.em_alta = out.em_alta.slice(0, 15);
+  out.mais_vendidos = out.mais_vendidos.slice(0, 10);
   out.estoque_geral = out.estoque_geral.slice(0, 30);
 
   return out;

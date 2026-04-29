@@ -65,6 +65,9 @@ const TIPO_SUGESTAO_VISUAL = {
   atencao: { icone: AlertTriangle, cor: palette.warn, corSoft: palette.warnSoft },
   novidade: { icone: Sparkles, cor: palette.accent, corSoft: palette.accentSoft },
   followup: { icone: MessageCircle, cor: palette.ok, corSoft: palette.okSoft },
+  // Reposição: REF que cliente compra bem voltou da oficina (28/04/2026)
+  // Verde-azul pra diferenciar de novidade pura — sinal de oportunidade conhecida
+  reposicao: { icone: TrendingUp, cor: palette.purple, corSoft: palette.purpleSoft },
   // sacola: 4 sub-tipos atualizados (28/04/2026)
   incentivar_acrescentar: { icone: Sparkles, cor: palette.purple, corSoft: palette.purpleSoft },
   fechar_pedido: { icone: Heart, cor: palette.ok, corSoft: palette.okSoft },
@@ -120,6 +123,7 @@ function capitalizeTipo(tipo) {
     atencao: 'Atenção:',
     novidade: 'Novidade pra',
     followup: 'Vamos acompanhar',
+    reposicao: 'Reposição pra',
     incentivar_acrescentar: 'Sacola:',
     fechar_pedido: 'Sacola:',
     cobranca_incisiva: 'Sacola — cobrar:',
