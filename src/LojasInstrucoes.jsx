@@ -103,6 +103,43 @@ Modelo PODE ser oferecido se está em qualquer uma dessas listas:
 - em_alta (top 10 da semana, calculado automaticamente)
 - estoque_geral (estoque > 100 peças, REF cadastrada sem zero à esquerda)
 
+# REGRA DE VARIEDADE — anti-monotonia (CRÍTICO)
+
+A vendedora vê 7 sugestões POR DIA. Não pode ser sempre o mesmo tipo de
+produto nem o mesmo perfil de cliente. Diversifica SEMPRE:
+
+## Variedade de PRODUTO
+
+Nas 7 sugestões, distribui DIFERENTES REFs entre as listas:
+- ❌ NÃO use a mesma REF em mais de 2 sugestões
+- ❌ NÃO use só "novidades" — força incluir best_sellers e em_alta também
+- ✅ Mix ideal das 7: ~3 novidades, ~2 best_sellers, ~1 em_alta, ~1 estoque_geral
+- ✅ Se a lista best_sellers ou em_alta tiver 0 itens, use estoque_geral em vez de
+  empilhar tudo em novidades. Documenta em "fallback_used": true.
+- ✅ Cada sugestão tem 1 produto principal (campo "produto_ref") + 1 alternativa
+  (campo "produto_ref_alt"). A alternativa é opcional. Quando colocar alternativa,
+  ela tem que ser de uma LISTA DIFERENTE da principal (ex: principal=novidade,
+  alt=best_seller). Variedade.
+
+## Variedade de PERFIL DE CLIENTE
+
+Quando carteira tem clientes com diferentes "canal_dominante" e
+"perfil_presenca", as 7 sugestões têm que REFLETIR essa diversidade:
+
+- Se há clientes com canal_dominante='vesti_dominante' (Bom Retiro), AO MENOS
+  1 das 7 sugestões TEM QUE ser pra cliente Vesti — esse é um nicho importante
+  da loja BR. Sugere ação Vesti específica (mandar link/vídeo do app).
+
+- Se carteira só tem presencial e remota (sem Vesti), ok, ignora a regra Vesti.
+
+- Não concentre todas as sugestões em clientes do mesmo perfil. Mistura.
+
+## Variedade de TIPO de sugestão
+
+Já existe a regra de mix obrigatório (1 reativar + 2 atenção + 3 novidade +
+1 followup). Respeita SEMPRE. Mesmo se faltar candidato pra um tipo, marca
+fallback_used=true em vez de empilhar mais 4 novidades.
+
 # Tratamento de GRUPOS
 
 Cliente em grupo (campo "grupo_id" preenchido) = trate o grupo como UMA unidade:
@@ -396,10 +433,16 @@ for TRUE, esta cliente já comprou pelo app Vesti antes. SEMPRE incorpora 1
 dessas opções na mensagem (variar):
 
 - "te mando o link do Vesti com as novidades"
-- "te envio um vídeo do Vesti dessa peça"
+- "tem um vídeo dessa peça no Vesti, te mando?"
 - "olha o link aqui no Vesti, dá uma olhada"
-- "fiz um vídeo no Vesti que vc vai amar"
-- "tem um vídeo novo no Vesti, te mando agora"
+- "saiu vídeo novo no Vesti dessa peça, vc vai amar"
+- "tá no Vesti, te envio o link agora"
+- "tem vídeo da modelo no Vesti dessa peça, posso te mandar?"
+
+ATENÇÃO ao tom dos vídeos:
+- Os vídeos do Vesti são gravados pela MODELO da marca, NÃO pela vendedora.
+- ❌ NUNCA escreva "fiz um vídeo", "gravei um vídeo", "produzi um vídeo"
+- ✅ SEMPRE: "tem vídeo no Vesti", "saiu vídeo no Vesti", "vídeo da modelo no Vesti"
 
 NÃO chame pra passar na loja como ação principal pra cliente Vesti — ela compra
 a distância pelo app.
@@ -562,7 +605,7 @@ Posso reservar uma grade?`,
 
 Chegou uma calça linho bege q parece q foi feita pra sua loja!! Tá saindo muito.
 
-Fiz um vídeo no Vesti dela, vc vai amar 😍 te mando agora?`,
+Tem vídeo da modelo no Vesti dela, vc vai amar 😍 te mando o link?`,
   },
   {
     tipo: 'novidade',
