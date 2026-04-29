@@ -208,7 +208,8 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
     // Pra PDF, extrai texto antes de chamar o parser
     let textoConteudo = conteudo;
     if (ehPDF) {
-      textoConteudo = await extrairTextoPDF(conteudo);
+      // Sacolas precisam preservar layout pra separar colunas (qtd/devol/total/frete)
+      textoConteudo = await extrairTextoPDF(conteudo, { preservarLayout: true });
     }
 
     // Chama parser correspondente
@@ -268,12 +269,49 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
 // Usa pdf-parse (lib npm). Adicionar ao package.json: "pdf-parse": "^1.1.1"
 //
 // Importante: pdf-parse é CommonJS, então usa import dinâmico.
+//
+// ⚠️ FIX 28/04/2026: pdf-parse default colapsa TODOS os espaços em branco.
+// Pra sacolas (PDFs tabulares), isso colava colunas e quebrava o parser:
+//   "18    0          936,00    0,00" virava "180936,000,00".
+// Solução: pagerender custom que reinsere espaços baseado em posição X
+// dos itens de texto. Total/frete/qtd ficam separáveis pela regex.
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function extrairTextoPDF(buffer) {
-  // Buffer pode ser Uint8Array — pdf-parse aceita ambos
+// Pagerender custom: preserva layout horizontal inserindo espaços
+// proporcionais aos gaps de posição X entre itens de texto consecutivos.
+function _pagerenderComLayout(pageData) {
+  const renderOptions = { normalizeWhitespace: false, disableCombineTextItems: false };
+  return pageData.getTextContent(renderOptions).then(textContent => {
+    let lastY = -1;
+    let lastX = -1;
+    let result = '';
+    for (const item of textContent.items) {
+      const x = item.transform[4];
+      const y = item.transform[5];
+      // Mudou de linha (Y diferente)
+      if (lastY !== -1 && Math.abs(y - lastY) > 2) {
+        result += '\n';
+        lastX = -1;
+      } else if (lastX !== -1) {
+        const gap = x - lastX;
+        if (gap > 3) {
+          // Insere espaços proporcionais ao gap (1 espaço a cada ~3px)
+          result += ' '.repeat(Math.max(1, Math.round(gap / 3)));
+        }
+      }
+      result += item.str;
+      lastY = y;
+      lastX = x + (item.width || 0);
+    }
+    return result;
+  });
+}
+
+async function extrairTextoPDF(buffer, opts = {}) {
+  const { preservarLayout = false } = opts;
   const pdfParse = (await import('pdf-parse')).default;
-  const data = await pdfParse(Buffer.from(buffer));
+  const parseOpts = preservarLayout ? { pagerender: _pagerenderComLayout } : {};
+  const data = await pdfParse(Buffer.from(buffer), parseOpts);
   return data.text || '';
 }
 
