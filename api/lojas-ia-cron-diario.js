@@ -19,11 +19,15 @@ export default async function handler(req, res) {
   setCors(res);
 
   // Defesa contra disparo manual direto (sem header de cron Vercel)
-  // Permite admin testar via X-User=ailson também
+  // Permite admin testar via X-User=ailson ou ?user=ailson na URL
   const ehCron = req.headers['x-vercel-cron'] !== undefined;
-  const ehAdmin = req.headers['x-user'] === 'ailson';
+  const userId = req.query?.user || req.headers['x-user'];
+  const ehAdmin = userId === 'ailson';
   if (!ehCron && !ehAdmin) {
-    return res.status(403).json({ error: 'Apenas cron Vercel ou admin' });
+    return res.status(403).json({
+      error: 'Apenas cron Vercel ou admin',
+      uso_manual: '/api/lojas-ia-cron-diario?user=ailson',
+    });
   }
 
   const inicio = Date.now();
