@@ -14,7 +14,6 @@
 
 import { supabase, setCors } from './_lojas-helpers.js';
 import {
-  getGoogleAccessToken,
   listarArquivosDrive,
   baixarArquivoDrive,
   detectarTipoArquivo,
@@ -52,9 +51,14 @@ export default async function handler(req, res) {
   // (mais simples que importar o handler interno)
 
   try {
-    // 1. Lista arquivos do Drive
-    const accessToken = await getGoogleAccessToken();
-    const arquivos = await listarArquivosDrive(accessToken);
+    // 1. Lista arquivos do Drive (a função busca o token internamente)
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    if (!folderId) {
+      return res.status(500).json({
+        error: 'GOOGLE_DRIVE_FOLDER_ID não configurado no Vercel',
+      });
+    }
+    const arquivos = await listarArquivosDrive(folderId);
 
     // 2. Carrega vendedoras (necessário pros parsers)
     const { data: vendedoras } = await supabase
