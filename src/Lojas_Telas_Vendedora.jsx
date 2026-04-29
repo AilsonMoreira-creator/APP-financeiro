@@ -294,9 +294,19 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
           background: `linear-gradient(135deg, ${palette.accentSoft} 0%, ${palette.bg} 100%)`,
           borderRadius: 12, padding: 14, marginBottom: 18,
           border: `1px solid ${palette.accent}30`,
-          fontSize: fz(15), color: palette.ink, lineHeight: 1.5,
+          color: palette.ink, lineHeight: 1.5,
         }}>
-          👋 Olá, <strong>{minhaVendedora.nome}</strong>! Toque no seu card pra ver suas sugestões de hoje.
+          <div style={{ fontSize: fz(18), fontWeight: 700, marginBottom: 4 }}>
+            {saudacaoHora()}, {minhaVendedora.nome.split(' ')[0]}! {emojiHora()}
+          </div>
+          <div style={{
+            fontSize: fz(15), color: palette.inkSoft, fontStyle: 'italic', marginBottom: 8,
+          }}>
+            {fraseDoDia(minhaVendedora.id || minhaVendedora.nome)}
+          </div>
+          <div style={{ fontSize: fz(14), color: palette.inkSoft }}>
+            Toque no seu card pra ver suas sugestões de hoje.
+          </div>
         </div>
       )}
 
@@ -569,24 +579,6 @@ export const CardDiaScreen = ({
         }
       />
       <div style={{ padding: 16 }}>
-        {/* Saudação motivacional do dia (Bom dia/tarde/noite + frase rotativa) */}
-        <div style={{
-          background: `linear-gradient(135deg, ${palette.warnSoft}, ${palette.beigeSoft})`,
-          border: `1px solid ${palette.warn}30`,
-          borderRadius: 14, padding: 14, marginBottom: 14,
-        }}>
-          <div style={{
-            fontSize: fz(18), fontWeight: 700, color: palette.ink, marginBottom: 4,
-          }}>
-            {saudacaoHora()}, {vendedora?.nome?.split(' ')[0] || 'vendedora'}! {emojiHora()}
-          </div>
-          <div style={{
-            fontSize: fz(15), color: palette.inkSoft, fontStyle: 'italic',
-          }}>
-            {fraseDoDia(vendedora?.id || vendedora?.nome || '')}
-          </div>
-        </div>
-
         <div style={{
           background: palette.surface, borderRadius: 14, padding: 16, marginBottom: 18,
           border: `1px solid ${palette.beige}`,
