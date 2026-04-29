@@ -396,6 +396,118 @@ export function emojiHora(date = new Date()) {
   return '🌙';
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FERIADOS 2026 (copiado de App.tsx — manter sincronizado anualmente)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const FERIADOS_2026 = {
+  '01/01': 'Confraternização Universal',
+  '03/03': 'Carnaval', '04/03': 'Carnaval', '05/03': 'Quarta de Cinzas',
+  '03/04': 'Sexta-feira Santa', '05/04': 'Páscoa',
+  '21/04': 'Tiradentes', '01/05': 'Dia do Trabalho',
+  '04/06': 'Corpus Christi', '07/09': 'Independência do Brasil',
+  '12/10': 'N. Sra. Aparecida', '02/11': 'Finados',
+  '15/11': 'Proclamação da República', '20/11': 'Consciência Negra',
+  '25/12': 'Natal',
+};
+
+function _ehFeriado(date) {
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  return Boolean(FERIADOS_2026[`${d}/${m}`]);
+}
+
+function _vesperaDeFeriado(date) {
+  const amanha = new Date(date);
+  amanha.setDate(amanha.getDate() + 1);
+  return _ehFeriado(amanha);
+}
+
+function _posFeriado(date) {
+  const ontem = new Date(date);
+  ontem.setDate(ontem.getDate() - 1);
+  return _ehFeriado(ontem);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// POOLS ESPECIAIS DE FRASES (sobrescrevem o pool geral em dias específicos)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Prioridade quando mais de uma condição bate (1 ganha):
+//   1. Dia 06 (pagamento) ou Dia 20 (vale) — dinheiro vence tudo
+//   2. Véspera de feriado
+//   3. Pós-feriado (dia depois)
+//   4. Reta final do mês (dia 25+) ou Mês novo (dia 1-2)
+//   5. Sexta ou Segunda (semanal)
+//   6. Terça / Quarta / Quinta (vibe da semana)
+//   7. Pool geral FRASES_MOTIVACIONAIS
+
+const FRASES_DIA_06 = [  // pagamento
+  'Nosso dinheiro já caiu na conta?? 😃🤑',
+  'Hoje é dia 6 — confere o saldo aí 💰',
+  'Dia 6, dia da alegria 🎉💸',
+];
+
+const FRASES_DIA_20 = [  // vale
+  'Cadê nosso vale?? 😂',
+  'Dia 20 chegou — vale gold 🤑',
+  'Bora aproveitar o vale!! 💸',
+];
+
+const FRASES_VESPERA_FERIADO = [
+  'Aguenta firme!!! Amanhã é feriado!!!! 🎉',
+  'Nem acredito que amanhã é feriado! 🥳',
+  'Tava precisando desse feriado de amanhã 😴',
+];
+
+const FRASES_POS_FERIADO = [
+  'Feriadão acabou — bora retomar! 💪',
+  'Recarregada do feriado, agora é trabalhar! ⚡',
+  'De volta com tudo! 🚀',
+];
+
+const FRASES_RETA_FINAL_MES = [  // dia 25+
+  'Reta final do mês — bora bater a meta! 🏁',
+  'Últimos dias do mês — cada venda conta dobrado! 💯',
+  'Fim do mês chegando — gás total! 🚀',
+];
+
+const FRASES_MES_NOVO = [  // dia 1-2
+  'Mês novo, meta nova! 🆕',
+  'Bora começar o mês com tudo! 🔥',
+  'Primeira venda do mês — quem vai ser? 🎯',
+];
+
+const FRASES_SEXTA = [
+  'Ebaaa sextou!!! 🎉',
+  'Sextou, mas vamos vender muito ainda hoje! 💸',
+  'Última chance da semana — sextou! 🍻',
+];
+
+const FRASES_SEGUNDA = [
+  'Bora pra mais uma semana!!! 💪',
+  'Preparada??? Essa semana vai bombar de vendas! 🚀',
+  'Segunda chegou — vamos com tudo! ⚡',
+];
+
+const FRASES_TERCA = [
+  'Bora subir o ritmo da semana 📈',
+  'Terça é dia de pegar embalo! ⚡',
+  'Segunda passou — agora é foco! 🎯',
+];
+
+const FRASES_QUARTA = [
+  'Metade da semana, foco total 🎯',
+  'Quarta-feira — cruzando o meio da semana 🚀',
+  'Bora manter o ritmo! 💪',
+];
+
+const FRASES_QUINTA = [
+  'Sexta tá batendo na porta, bora! 🚪',
+  'Quinta — última reta antes do fim de semana! 🏃‍♀️',
+  'Acelera que a semana tá quase acabando! ⚡',
+];
+
 /** Hash simples (djb2) pra gerar índice determinístico a partir de string. */
 function _hash(str) {
   let h = 5381;
@@ -403,12 +515,83 @@ function _hash(str) {
   return Math.abs(h);
 }
 
-/** Escolhe frase pelo dia + seed (nome da vendedora, normalmente).
- *  Mesma seed + mesma data = mesma frase o dia inteiro. */
+/** Escolhe pool de frases pelo dia (com prioridade) e retorna 1 frase
+ *  determinística por (data + seed). Mesma vendedora vê mesma frase o
+ *  dia inteiro; vendedoras diferentes veem frases diferentes. */
 export function fraseDoDia(seed = '', date = new Date()) {
-  const dia = date.toISOString().slice(0, 10); // "2026-04-28"
-  const idx = _hash(dia + '|' + String(seed)) % FRASES_MOTIVACIONAIS.length;
-  return FRASES_MOTIVACIONAIS[idx];
+  const dom = date.getDate();         // dia do mês 1-31
+  const dow = date.getDay();          // 0=dom, 1=seg, ..., 5=sex, 6=sab
+
+  let pool;
+  // 1. Pagamento (mais forte)
+  if (dom === 6) pool = FRASES_DIA_06;
+  else if (dom === 20) pool = FRASES_DIA_20;
+  // 2. Véspera de feriado
+  else if (_vesperaDeFeriado(date)) pool = FRASES_VESPERA_FERIADO;
+  // 3. Pós-feriado
+  else if (_posFeriado(date)) pool = FRASES_POS_FERIADO;
+  // 4. Início ou fim do mês
+  else if (dom >= 25) pool = FRASES_RETA_FINAL_MES;
+  else if (dom <= 2) pool = FRASES_MES_NOVO;
+  // 5. Sexta/Segunda
+  else if (dow === 5) pool = FRASES_SEXTA;
+  else if (dow === 1) pool = FRASES_SEGUNDA;
+  // 6. Meio de semana
+  else if (dow === 2) pool = FRASES_TERCA;
+  else if (dow === 3) pool = FRASES_QUARTA;
+  else if (dow === 4) pool = FRASES_QUINTA;
+  // 7. Padrão (sábado ou qualquer outro dia)
+  else pool = FRASES_MOTIVACIONAIS;
+
+  const dia = date.toISOString().slice(0, 10);
+  const idx = _hash(dia + '|' + String(seed)) % pool.length;
+  return pool[idx];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// USUÁRIO LOGADO (pra Tamara — admin que recebe a saudação)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Lê o nome do usuário logado do localStorage (mesmo padrão de App.tsx).
+ *  Retorna null se não houver sessão. */
+export function getNomeUsuarioLogado() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const sess = localStorage.getItem('amica_session');
+    if (sess) {
+      const p = JSON.parse(sess);
+      if (p?.usuario) return String(p.usuario);
+    }
+  } catch {}
+  try {
+    const json = localStorage.getItem('amicia_user');
+    if (json) {
+      const parsed = JSON.parse(json);
+      const u = parsed?.id || parsed?.user_id || parsed?.usuario;
+      if (u) return String(u);
+    }
+  } catch {}
+  return localStorage.getItem('user_id') || localStorage.getItem('userId') || null;
+}
+
+/** Lista de admins que devem ver o card de saudação motivacional na home,
+ *  apesar de serem admin (e não vendedora). Case-insensitive. */
+const ADMINS_QUE_VEEM_SAUDACAO = ['tamara'];
+
+/** Retorna info do admin se o usuário logado for um dos especiais (Tamara, etc).
+ *  Retorna null caso contrário. */
+export function adminComSaudacao() {
+  const nome = getNomeUsuarioLogado();
+  if (!nome) return null;
+  const lower = nome.toLowerCase();
+  for (const adm of ADMINS_QUE_VEEM_SAUDACAO) {
+    if (lower.includes(adm)) {
+      // Capitaliza primeira letra
+      const display = adm.charAt(0).toUpperCase() + adm.slice(1);
+      return { nome: display, seed: adm };
+    }
+  }
+  return null;
 }
 //
 // Padrão Brasil:

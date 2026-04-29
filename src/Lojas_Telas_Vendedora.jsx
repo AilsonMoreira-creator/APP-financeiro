@@ -48,6 +48,7 @@ import {
   palette, FONT, statusMap, subtipoSacolaMap, faseClienteNovaMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
   fz, sz, TelefoneCopiavel, FotoProdutoLojas, saudacaoHora, emojiHora, fraseDoDia,
+  adminComSaudacao,
 } from './Lojas_Shared.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -287,9 +288,17 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
 
   const minhaVendedora = vendedoras.find(v => v.id === vendedoraLogadaId);
 
+  // Tamara é admin mas vê o card de saudação (decisão Ailson 28/04/2026).
+  // Lista de admins que também recebem saudação fica em ADMINS_QUE_VEEM_SAUDACAO
+  // dentro de Lojas_Shared.jsx (hoje só Tamara).
+  const adminEspecial = isAdmin ? adminComSaudacao() : null;
+  const nomeExibicao = minhaVendedora?.nome || adminEspecial?.nome || null;
+  const seedSaudacao = minhaVendedora?.id || adminEspecial?.seed || null;
+  const mostrarSaudacao = (!isAdmin && minhaVendedora) || Boolean(adminEspecial);
+
   return (
     <div style={{ padding: 16 }}>
-      {!isAdmin && minhaVendedora && (
+      {mostrarSaudacao && nomeExibicao && (
         <div style={{
           background: `linear-gradient(135deg, ${palette.accentSoft} 0%, ${palette.bg} 100%)`,
           borderRadius: 12, padding: 14, marginBottom: 18,
@@ -297,12 +306,12 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
           color: palette.ink, lineHeight: 1.5,
         }}>
           <div style={{ fontSize: fz(18), fontWeight: 700, marginBottom: 4 }}>
-            {saudacaoHora()}, {minhaVendedora.nome.split(' ')[0]}! {emojiHora()}
+            {saudacaoHora()}, {nomeExibicao.split(' ')[0]}! {emojiHora()}
           </div>
           <div style={{
             fontSize: fz(15), color: palette.inkSoft, fontStyle: 'italic', marginBottom: 8,
           }}>
-            {fraseDoDia(minhaVendedora.id || minhaVendedora.nome)}
+            {fraseDoDia(seedSaudacao)}
           </div>
           <div style={{ fontSize: fz(14), color: palette.inkSoft }}>
             Toque no seu card pra ver suas sugestões de hoje.
