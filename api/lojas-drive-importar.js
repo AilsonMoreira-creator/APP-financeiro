@@ -339,6 +339,90 @@ async function extrairTextoPDF(buffer, opts = {}) {
 // UPSERT POR TIPO
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKFILL DE TELEFONE — fallback do WhatsApp do histórico
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Decisão Ailson 28/04/2026: planilha cadastro_clientes_futura nem sempre tem
+// telefone preenchido. Quando vendedora abre o app e clica em "ligar pra X",
+// fica sem opção. Solução: aproveitar o campo WHATSAPP da planilha
+// relatorio_vendas_historico (ST e BR) — a coluna existe nas vendas e o
+// próprio Mire registra esse número.
+//
+// Como funciona:
+//   1. Após upsert de vendas_historico (ST ou BR), pega TODOS os clientes
+//      desse lote que tinham WhatsApp preenchido.
+//   2. Pra cada cliente, query no Supabase: tem telefone_principal? Não.
+//   3. Usa o WhatsApp mais recente (1ª linha do lote tem data desc, normal-
+//      mente é a venda mais nova) como telefone_principal, marca origem
+//      'historico' pra rastreabilidade.
+//   4. Se já tem telefone, NÃO sobrescreve.
+//
+// Idempotente: toda vez que histórico é importado, o backfill verifica o
+// que mudou.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function backfillTelefoneClientes(registrosVendas) {
+  // Pega o WhatsApp mais recente por cliente_id (registros já vêm ordenados
+  // por data desc no CSV do histórico — primeira ocorrência = mais recente)
+  const whatsappPorCliente = new Map();
+  for (const r of registrosVendas) {
+    if (!r.cliente_id || !r.cliente_whatsapp_raw) continue;
+    const limpo = String(r.cliente_whatsapp_raw).replace(/\D/g, '');
+    // Aceita só telefones válidos: 10 (fixo) ou 11 (celular) dígitos
+    if (limpo.length !== 10 && limpo.length !== 11) continue;
+    if (!whatsappPorCliente.has(r.cliente_id)) {
+      whatsappPorCliente.set(r.cliente_id, limpo);
+    }
+  }
+
+  if (whatsappPorCliente.size === 0) {
+    return { backfill_clientes: 0 };
+  }
+
+  // Busca quais desses clientes ainda NÃO têm telefone_principal
+  const ids = Array.from(whatsappPorCliente.keys());
+  const { data: clientesSemTel } = await supabase
+    .from('lojas_clientes')
+    .select('id, telefone_principal')
+    .in('id', ids)
+    .or('telefone_principal.is.null,telefone_principal.eq.');
+
+  const idsParaAtualizar = (clientesSemTel || []).map(c => c.id);
+  if (idsParaAtualizar.length === 0) {
+    return { backfill_clientes: 0 };
+  }
+
+  // Atualiza um por um (Supabase não tem update em batch com valores diferentes
+  // sem upsert, e não queremos sobrescrever as outras colunas do cliente).
+  // Pra performance: faz Promise.all de até 50 em paralelo.
+  let atualizados = 0;
+  const lotes = [];
+  for (let i = 0; i < idsParaAtualizar.length; i += 50) {
+    lotes.push(idsParaAtualizar.slice(i, i + 50));
+  }
+  for (const lote of lotes) {
+    await Promise.all(lote.map(async (clienteId) => {
+      const wpp = whatsappPorCliente.get(clienteId);
+      if (!wpp) return;
+      const { error } = await supabase
+        .from('lojas_clientes')
+        .update({
+          telefone_principal: wpp,
+          telefone_principal_origem: 'historico',
+          telefone_principal_valido: true,
+        })
+        .eq('id', clienteId)
+        .or('telefone_principal.is.null,telefone_principal.eq.'); // double-check
+      if (!error) atualizados++;
+    }));
+  }
+
+  console.log(`[backfill_telefone] ${atualizados} clientes ganharam telefone do histórico`);
+  return { backfill_clientes: atualizados };
+}
+
 async function aplicarUpsert(tipo, registros, importacaoId) {
   if (!registros?.length) return { inseridos: 0, atualizados: 0 };
 
@@ -439,7 +523,16 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
     }
 
     // Upsert por (numero_pedido, loja)
-    return upsertEmLotes('lojas_vendas', filtrados, ['numero_pedido', 'loja']);
+    const stats = await upsertEmLotes('lojas_vendas', filtrados, ['numero_pedido', 'loja']);
+
+    // ─── BACKFILL DE TELEFONE A PARTIR DO WHATSAPP DO HISTÓRICO ─────────
+    // Decisão Ailson 28/04/2026: quando cliente não tem telefone_principal
+    // em lojas_clientes (planilha cadastro_clientes_futura veio sem ele),
+    // usa o WHATSAPP da venda mais recente do histórico (ST ou BR) como
+    // fallback. Isso roda toda vez que histórico é importado (idempotente).
+    await backfillTelefoneClientes(filtrados);
+
+    return stats;
   }
 
   if (tipo === 'produtos_semanal') {
