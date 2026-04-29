@@ -47,7 +47,7 @@ import {
 import {
   palette, FONT, statusMap, subtipoSacolaMap, faseClienteNovaMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
-  fz, sz,
+  fz, sz, TelefoneCopiavel, FotoProdutoLojas,
 } from './Lojas_Shared.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -118,7 +118,7 @@ function capitalizeTipo(tipo) {
     reativar: 'Reativar',
     atencao: 'Atenção:',
     novidade: 'Novidade pra',
-    followup: 'Follow-up com',
+    followup: 'Vamos acompanhar',
     incentivar_acrescentar: 'Sacola:',
     fechar_pedido: 'Sacola:',
     cobranca_incisiva: 'Sacola — cobrar:',
@@ -806,9 +806,8 @@ export const SugestaoScreen = ({
               </div>
 
               {cliente.telefone_principal && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${palette.beige}`, fontSize: fz(15), color: palette.inkSoft }}>
-                  <Phone size={sz(15)} />
-                  {cliente.telefone_principal}
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${palette.beige}` }}>
+                  <TelefoneCopiavel telefone={cliente.telefone_principal} />
                 </div>
               )}
             </div>
@@ -854,18 +853,7 @@ export const SugestaoScreen = ({
               background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10,
               padding: 12, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18,
             }}>
-              <div style={{
-                width: 56, height: 56, background: palette.beigeSoft, borderRadius: 8,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                overflow: 'hidden',
-              }}>
-                {produto.foto_url ? (
-                  <img src={produto.foto_url} alt={produto.descricao || produto.ref}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <Package size={sz(28)} color={palette.inkMuted} />
-                )}
-              </div>
+              <FotoProdutoLojas refProd={produto.ref} size={sz(56)} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: fz(13), color: palette.inkMuted, letterSpacing: 0.5 }}>REF {produto.ref}</div>
                 <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600, marginTop: 2 }}>
@@ -1147,7 +1135,7 @@ export const MinhaCarteiraScreen = ({
           }}>
             <option value="recentes">Compras recentes</option>
             <option value="antigos">Mais antigos</option>
-            <option value="lifetime">Maior lifetime</option>
+            <option value="lifetime">Quem já comprou mais</option>
             <option value="nome">Nome A-Z</option>
           </select>
         </div>
@@ -1430,9 +1418,8 @@ export const DetalheClienteScreen = ({
 
           {/* Telefone */}
           {cliente.telefone_principal && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}`, fontSize: fz(15), color: palette.inkSoft }}>
-              <Phone size={sz(15)} />
-              {cliente.telefone_principal}
+            <div style={{ padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}` }}>
+              <TelefoneCopiavel telefone={cliente.telefone_principal} />
             </div>
           )}
 
@@ -1504,7 +1491,7 @@ export const DetalheClienteScreen = ({
         <SectionTitle icon={BarChart3}>Histórico de compras</SectionTitle>
         <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
           <div style={{ fontSize: fz(16), color: palette.ink, lineHeight: 1.7 }}>
-            <strong>{kpi.qtd_compras || 0} {kpi.qtd_compras === 1 ? 'compra' : 'compras'}</strong> · <strong>{fmtMoeda(kpi.lifetime_total)}</strong> lifetime
+            <strong>{kpi.qtd_compras || 0} {kpi.qtd_compras === 1 ? 'compra' : 'compras'}</strong> · <strong>{fmtMoeda(kpi.lifetime_total)}</strong> já comprou
           </div>
           {ticketMedio && (
             <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7, marginTop: 2 }}>

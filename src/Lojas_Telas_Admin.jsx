@@ -2538,7 +2538,7 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
     reativar: { icone: Flame, cor: palette.alert, label: 'Reativar' },
     atencao: { icone: AlertTriangle, cor: palette.warn, label: 'Atenção' },
     novidade: { icone: Sparkles, cor: palette.accent, label: 'Novidade' },
-    followup: { icone: MessageCircle, cor: palette.ok, label: 'Follow-up' },
+    followup: { icone: MessageCircle, cor: palette.ok, label: 'Vamos acompanhar' },
     followup_nova: { icone: MessageCircle, cor: palette.purple, label: 'Check-in' },
     sacola: { icone: Heart, cor: palette.purple, label: 'Sacola' },
   };

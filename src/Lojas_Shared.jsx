@@ -29,7 +29,7 @@
 import { createClient } from '@supabase/supabase-js';
 import * as React from 'react';
 import {
-  ArrowLeft, Loader2, AlertCircle, WifiOff,
+  ArrowLeft, Loader2, AlertCircle, WifiOff, Phone, Copy, Check,
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -328,6 +328,183 @@ export function LoadingScreen({ phase, error, online }) {
         </div>
       )}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FORMATAÇÃO DE TELEFONE + COMPONENTE COPIÁVEL
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Padrão Brasil:
+//   10 dígitos (fixo ou celular antigo): (DD)NNNN-NNNN
+//   11 dígitos (celular atual c/ o 9):   (DD)NNNNN-NNNN
+//
+// Exemplo:
+//   "1374151597"  → "(13)7415-1597"
+//   "11987654321" → "(11)98765-4321"
+
+export function formatarTelefone(num) {
+  if (!num) return '';
+  const dig = String(num).replace(/\D/g, '');
+  if (dig.length === 11) return `(${dig.slice(0, 2)})${dig.slice(2, 7)}-${dig.slice(7)}`;
+  if (dig.length === 10) return `(${dig.slice(0, 2)})${dig.slice(2, 6)}-${dig.slice(6)}`;
+  // Fallback: número fora do padrão BR — devolve só os dígitos
+  return dig;
+}
+
+/**
+ * Mostra telefone formatado + botão pequeno de copiar.
+ * Uso: <TelefoneCopiavel telefone={cliente.telefone_principal} />
+ */
+export function TelefoneCopiavel({ telefone }) {
+  const [copiado, setCopiado] = React.useState(false);
+  if (!telefone) return null;
+  const formatado = formatarTelefone(telefone);
+  const copiar = async (e) => {
+    e.stopPropagation();
+    try {
+      // Copia só os dígitos (mais útil pra colar em discador / WhatsApp)
+      const dig = String(telefone).replace(/\D/g, '');
+      await navigator.clipboard.writeText(dig);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1500);
+    } catch {
+      // Fallback antigo
+      const ta = document.createElement('textarea');
+      ta.value = String(telefone).replace(/\D/g, '');
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1500);
+    }
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: fz(15), color: palette.inkSoft }}>
+      <Phone size={sz(15)} />
+      <span style={{ fontFamily: 'monospace', letterSpacing: 0.3 }}>{formatado}</span>
+      <button
+        onClick={copiar}
+        title={copiado ? 'Copiado!' : 'Copiar número'}
+        style={{
+          marginLeft: 4, width: sz(28), height: sz(28), borderRadius: 6,
+          background: copiado ? palette.okSoft : palette.beigeSoft,
+          border: `1px solid ${copiado ? palette.ok : palette.beige}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
+        }}
+      >
+        {copiado
+          ? <Check size={sz(14)} color={palette.ok} />
+          : <Copy size={sz(14)} color={palette.inkSoft} />
+        }
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FOTO DE PRODUTO (mesmo padrão FotoProdLarge do App.tsx)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Bucket: produtos/{REF}.{jpg|png|webp}
+// REF pode ter zero-padding diferente entre Bling/UI/storage. Tenta sequência:
+//   norm → orig (se diferente) → pad4 → pad5 → placeholder
+//
+// Uso:
+//   <FotoProdutoLojas refProd={produto.ref} size={56} />
+//   <FotoProdutoLojas refProd={produto.ref} aspectRatio /> (full width 3/4)
+
+const SBURL_LOJAS = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || '';
+const STORAGE_PRODUTOS = SBURL_LOJAS ? `${SBURL_LOJAS}/storage/v1/object/public/produtos/` : '';
+
+export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, onZoom = null }) {
+  const orig = String(refProd || '').toUpperCase();
+  const norm = orig.replace(/^0+/, '');
+
+  // Sem URL do supabase ou sem ref: placeholder
+  if (!STORAGE_PRODUTOS || !orig) {
+    return (
+      <div style={{
+        ...(aspectRatio
+          ? { width: '100%', aspectRatio: '3/4' }
+          : { width: size || 56, height: size || 56 }),
+        background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: '#c0b8b0', fontSize: fz(10), fontFamily: FONT, fontStyle: 'italic',
+        borderRadius: 8, flexShrink: 0,
+      }}>
+        foto ref {String(refProd)}
+      </div>
+    );
+  }
+
+  // Sequência de tentativas
+  const cb = '?v=' + new Date().toISOString().slice(0, 10);
+  const urls = [norm + '.jpg', norm + '.png', norm + '.webp'];
+  if (orig !== norm) urls.push(orig + '.jpg', orig + '.png', orig + '.webp');
+  const pad4 = norm.padStart(4, '0');
+  const pad5 = norm.padStart(5, '0');
+  if (pad4 !== norm && pad4 !== orig) urls.push(pad4 + '.jpg', pad4 + '.png', pad4 + '.webp');
+  if (pad5 !== norm && pad5 !== orig && pad5 !== pad4) urls.push(pad5 + '.jpg', pad5 + '.png', pad5 + '.webp');
+
+  const onError = (e) => {
+    const cur = e.target.src;
+    const idx = urls.findIndex(u => cur.includes(u));
+    if (idx >= 0 && idx < urls.length - 1) {
+      e.target.src = STORAGE_PRODUTOS + urls[idx + 1] + cb;
+    } else {
+      e.target.style.display = 'none';
+      const ph = e.target.nextSibling;
+      if (ph) ph.style.display = 'flex';
+    }
+  };
+
+  const onClick = (e) => {
+    e.stopPropagation();
+    if (onZoom) onZoom(e.target.src);
+  };
+
+  if (aspectRatio) {
+    return (
+      <div style={{
+        width: '100%', aspectRatio: '3/4', position: 'relative',
+        overflow: 'hidden', borderRadius: 8,
+        background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
+      }}>
+        <img src={STORAGE_PRODUTOS + urls[0] + cb} onError={onError} onClick={onClick}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />
+        <div style={{
+          display: 'none', width: '100%', height: '100%',
+          alignItems: 'center', justifyContent: 'center',
+          color: '#c0b8b0', fontSize: fz(10), fontFamily: FONT, fontStyle: 'italic',
+        }}>
+          foto ref {String(refProd)}
+        </div>
+      </div>
+    );
+  }
+
+  // Tamanho fixo
+  const s = size || 56;
+  return (
+    <div style={{
+      width: s, height: s, borderRadius: 8, overflow: 'hidden',
+      background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
+      flexShrink: 0, position: 'relative',
+    }}>
+      <img src={STORAGE_PRODUTOS + urls[0] + cb} onError={onError} onClick={onClick}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />
+      <div style={{
+        display: 'none', width: '100%', height: '100%',
+        alignItems: 'center', justifyContent: 'center',
+        color: '#c0b8b0', fontSize: fz(9), fontFamily: FONT, fontStyle: 'italic',
+        position: 'absolute', top: 0, left: 0,
+      }}>
+        ref {String(refProd)}
+      </div>
     </div>
   );
 }
