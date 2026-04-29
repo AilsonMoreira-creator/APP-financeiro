@@ -1,25 +1,21 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- LOJAS — Liberar RLS pra tabelas que vendedora precisa ESCREVER
+-- LOJAS — Liberar RLS pra TODAS tabelas Lojas (escrita via anon key)
 -- ═══════════════════════════════════════════════════════════════════════════
 --
 -- PROBLEMA: as policies criadas no schema usam auth.uid()::text, mas o app
 -- usa anon key (sem Supabase Auth próprio). Resultado: auth.uid() retorna
--- null, lojas_eh_admin(null) retorna false, e o INSERT é bloqueado.
+-- null, lojas_eh_admin(null) retorna false, e qualquer INSERT/UPDATE pelo
+-- frontend é bloqueado.
 --
--- Sintoma: 'new row violates row-level security policy for table "lojas_grupos"'
--- ao tentar criar grupo de cliente.
+-- Sintomas reportados:
+--   - 'new row violates row-level security policy for table "lojas_grupos"'
+--   - 'new row violates row-level security policy for table "lojas_promocoes"'
+--   - (e provavelmente outros que ainda nao testou)
 --
--- SOLUÇÃO: adicionar policy permissiva (USING true) pras tabelas que a
--- vendedora precisa CRIAR/ATUALIZAR via frontend. A segurança fica na
--- camada da aplicação (login + filtro de vendedora_id), igual já é hoje
--- pras tabelas que funcionam.
---
--- Tabelas afetadas:
---   - lojas_grupos: vendedora cria/edita grupo de clientes
---   - lojas_clientes: vendedora pode reatribuir cliente a grupo
---   - lojas_acoes: vendedora registra ações
---   - lojas_agenda: vendedora cria itens de agenda
---   - lojas_carteira_historico: log automático
+-- SOLUÇÃO: policy permissiva 'app_full_access' em TODAS tabelas Lojas.
+-- Segurança permanece na camada da aplicação (login + filtros explícitos
+-- de vendedora_id no código frontend), igual já era pras tabelas que
+-- funcionavam.
 --
 -- Idempotente.
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -28,15 +24,23 @@ DO $$
 DECLARE
   t text;
   tabelas text[] := ARRAY[
+    'lojas_admins',
+    'lojas_vendedoras',
     'lojas_grupos',
     'lojas_clientes',
     'lojas_clientes_kpis',
+    'lojas_vendas',
+    'lojas_pedidos_sacola',
+    'lojas_produtos',
+    'lojas_produtos_curadoria',
+    'lojas_promocoes',
+    'lojas_sugestoes_diarias',
+    'lojas_ia_chamadas_log',
+    'lojas_importacoes',
+    'lojas_carteira_historico',
     'lojas_acoes',
     'lojas_agenda',
-    'lojas_carteira_historico',
-    'lojas_pedidos_sacola',
-    'lojas_produtos_curadoria',
-    'lojas_sugestoes_diarias'
+    'lojas_config'
   ];
 BEGIN
   FOREACH t IN ARRAY tabelas LOOP
@@ -51,8 +55,7 @@ BEGIN
 END $$;
 
 -- Validação:
---   SELECT tablename, policyname, cmd, qual, with_check
+--   SELECT tablename, policyname, cmd
 --   FROM pg_policies
---   WHERE schemaname = 'public'
---     AND tablename IN ('lojas_grupos','lojas_clientes')
+--   WHERE schemaname = 'public' AND tablename LIKE 'lojas_%'
 --   ORDER BY tablename, policyname;

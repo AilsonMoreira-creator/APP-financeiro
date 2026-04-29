@@ -386,6 +386,29 @@ export const PromocoesScreen = ({ lojas, onBack, onNovaPromocao, onEditarPromoca
 //   - tom_especifico: se preenchido, é concatenado em descricao_completa
 // ═══════════════════════════════════════════════════════════════════════════
 
+// IMPORTANTE: Field e Checkbox DECLARADOS NO MODULE LEVEL (fora do componente).
+// Antes estavam dentro de NovaPromocaoScreen — a cada keystroke, o componente
+// re-renderizava, criava um Field NOVO, e React desmontava+remontava o input
+// → perdia foco a cada caractere digitado. Mover pra fora resolve.
+const PromoField = ({ label, children, hint }) => (
+  <div style={{ marginBottom: 14 }}>
+    <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>{label}</div>
+    {children}
+    {hint && <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>{hint}</div>}
+  </div>
+);
+
+const PromoCheckbox = ({ checked, onChange, label }) => (
+  <label style={{
+    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
+    cursor: 'pointer', fontSize: fz(15), color: palette.ink,
+  }}>
+    <input type="checkbox" checked={checked} onChange={onChange}
+      style={{ width: 16, height: 16, accentColor: palette.accent, cursor: 'pointer' }} />
+    {label}
+  </label>
+);
+
 export const NovaPromocaoScreen = ({ lojas, promocaoExistente = null, onBack, onSaved }) => {
   const { state, handleSavePromocao } = lojas;
   const ehEdicao = !!promocaoExistente;
@@ -424,26 +447,6 @@ export const NovaPromocaoScreen = ({ lojas, promocaoExistente = null, onBack, on
   );
 
   const [salvando, setSalvando] = useState(false);
-
-  // Helper component pra label + hint
-  const Field = ({ label, children, hint }) => (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>{label}</div>
-      {children}
-      {hint && <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>{hint}</div>}
-    </div>
-  );
-
-  const Checkbox = ({ checked, onChange, label }) => (
-    <label style={{
-      display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
-      cursor: 'pointer', fontSize: fz(15), color: palette.ink,
-    }}>
-      <input type="checkbox" checked={checked} onChange={onChange}
-        style={{ width: 16, height: 16, accentColor: palette.accent, cursor: 'pointer' }} />
-      {label}
-    </label>
-  );
 
   const salvar = async () => {
     if (!nome.trim()) {
@@ -508,28 +511,28 @@ export const NovaPromocaoScreen = ({ lojas, promocaoExistente = null, onBack, on
       />
       <div style={{ padding: 16, paddingBottom: 100 }}>
 
-        <Field label="Nome curto (vendedora vê)">
+        <PromoField label="Nome curto (vendedora vê)">
           <input value={nome} onChange={e => setNome(e.target.value)}
             placeholder="Ex: Linho 20% off" style={inputStyle} />
-        </Field>
+        </PromoField>
 
-        <Field label="Descrição completa (IA usa)" hint="Quanto mais detalhada, melhores as mensagens">
+        <PromoField label="Descrição completa (IA usa)" hint="Quanto mais detalhada, melhores as mensagens">
           <textarea value={descricao} onChange={e => setDescricao(e.target.value)}
             placeholder="Ex: Toda peça de linho com 20% de desconto. Pedido mínimo R$ 800. Pode combinar com frete grátis."
             rows={4}
             style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }} />
-        </Field>
+        </PromoField>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          <Field label="Início">
+          <PromoField label="Início">
             <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} style={inputStyle} />
-          </Field>
-          <Field label="Fim">
+          </PromoField>
+          <PromoField label="Fim">
             <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} style={inputStyle} />
-          </Field>
+          </PromoField>
         </div>
 
-        <Field label="Categorias">
+        <PromoField label="Categorias">
           <div style={{
             background: palette.surface, border: `1px solid ${palette.beige}`,
             borderRadius: 8, padding: '4px 12px',
@@ -541,14 +544,14 @@ export const NovaPromocaoScreen = ({ lojas, promocaoExistente = null, onBack, on
               { key: 'plus', label: 'Plus size' },
               { key: 'todos', label: 'Todos' },
             ].map(c => (
-              <Checkbox key={c.key} checked={categorias[c.key]}
+              <PromoCheckbox key={c.key} checked={categorias[c.key]}
                 onChange={() => setCategorias({ ...categorias, [c.key]: !categorias[c.key] })}
                 label={c.label} />
             ))}
           </div>
-        </Field>
+        </PromoField>
 
-        <Field label="Vendedoras participantes" hint="Padrão: todas. (Por enquanto não persiste — todas vendedoras participam)">
+        <PromoField label="Vendedoras participantes" hint="Padrão: todas. (Por enquanto não persiste — todas vendedoras participam)">
           <div style={{
             background: palette.surface, border: `1px solid ${palette.beige}`,
             borderRadius: 8, padding: '4px 12px',
@@ -559,30 +562,30 @@ export const NovaPromocaoScreen = ({ lojas, promocaoExistente = null, onBack, on
               </div>
             )}
             {vendedorasReais.map(v => (
-              <Checkbox key={v.id} checked={!!vendedorasIds[v.id]}
+              <PromoCheckbox key={v.id} checked={!!vendedorasIds[v.id]}
                 onChange={() => setVendedorasIds({ ...vendedorasIds, [v.id]: !vendedorasIds[v.id] })}
                 label={`${v.nome} (${v.loja})`} />
             ))}
           </div>
-        </Field>
+        </PromoField>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          <Field label="Pedido mínimo (R$)" hint="Opcional">
+          <PromoField label="Pedido mínimo (R$)" hint="Opcional">
             <input type="number" value={pedidoMinimo} onChange={e => setPedidoMinimo(e.target.value)}
               placeholder="Ex: 800" style={inputStyle} />
-          </Field>
-          <Field label="% de desconto" hint="Opcional">
+          </PromoField>
+          <PromoField label="% de desconto" hint="Opcional">
             <input type="number" value={desconto} onChange={e => setDesconto(e.target.value)}
               placeholder="Ex: 20" style={inputStyle} />
-          </Field>
+          </PromoField>
         </div>
 
-        <Field label="Tom da mensagem (opcional)" hint="Diretrizes específicas pra essa promoção. Vai pro briefing da IA.">
+        <PromoField label="Tom da mensagem (opcional)" hint="Diretrizes específicas pra essa promoção. Vai pro briefing da IA.">
           <textarea value={tom} onChange={e => setTom(e.target.value)}
             placeholder="Ex: Mais empolgado, criando urgência porque é por tempo limitado"
             rows={2}
             style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }} />
-        </Field>
+        </PromoField>
       </div>
 
       {/* Footer fixo */}
