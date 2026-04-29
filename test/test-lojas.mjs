@@ -10,6 +10,7 @@
 
 import {
   refSemZero,
+  refFromSku,
   normalizarTelefone,
   escolherTelefone,
   detectarLojaPorArquivo,
@@ -103,6 +104,59 @@ test('REF null retorna string vazia', () => {
 });
 test('REF número (não string) é convertida', () => {
   assertEqual(refSemZero(1871), '1871');
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+suite('refFromSku');
+// ───────────────────────────────────────────────────────────────────────────
+// Regra: 95% dos casos = primeiros 4 dígitos do SKU.
+// Exceções:
+//   - REFs 3 dígitos: 395 e 376
+//   - REFs com zero à esquerda: 0020 e 0050
+
+test('SKU normal 4 dígitos: 278301703 → 2783', () => {
+  assertEqual(refFromSku('278301703'), '2783');
+});
+test('SKU normal 4 dígitos: 318401205 → 3184', () => {
+  assertEqual(refFromSku('318401205'), '3184');
+});
+test('SKU normal: 291800202 → 2918', () => {
+  assertEqual(refFromSku('291800202'), '2918');
+});
+test('Exceção REF 3 dígitos 395: 39501202 → 395', () => {
+  assertEqual(refFromSku('39501202'), '395');
+});
+test('Exceção REF 3 dígitos 376: 37601205 → 376', () => {
+  assertEqual(refFromSku('37601205'), '376');
+});
+test('Exceção REF 0020 (zero preservado): 00201202 → 0020', () => {
+  assertEqual(refFromSku('00201202'), '0020');
+});
+test('Exceção REF 0050 (zero preservado): 00501203 → 0050', () => {
+  assertEqual(refFromSku('00501203'), '0050');
+});
+test('SKU curto (< 4 dígitos): 123 → null', () => {
+  assertEqual(refFromSku('123'), null);
+});
+test('SKU vazio retorna null', () => {
+  assertEqual(refFromSku(''), null);
+});
+test('SKU null retorna null', () => {
+  assertEqual(refFromSku(null), null);
+});
+test('SKU com não-dígitos é limpo: ABC1234 → 1234', () => {
+  assertEqual(refFromSku('ABC1234'), '1234');
+});
+test('REF que começa com 39 mas não é 395: 392501202 → 3925 (regra geral)', () => {
+  assertEqual(refFromSku('392501202'), '3925');
+});
+test('REF que começa com 37 mas não é 376: 377001205 → 3770 (regra geral)', () => {
+  assertEqual(refFromSku('377001205'), '3770');
+});
+test('REF que começa com 002 mas não é 0020: 002101202 → 0021... espera regra geral primeiros 4', () => {
+  // 002101202 — começa com 002 mas não 0020 → cai na regra geral (primeiros 4) = "0021"
+  // OBS: ref "0021" não está nas exceções de zero, então é tratada como 4 dígitos normais.
+  assertEqual(refFromSku('002101202'), '0021');
 });
 
 // ───────────────────────────────────────────────────────────────────────────

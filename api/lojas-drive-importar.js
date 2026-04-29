@@ -47,6 +47,7 @@ import {
   criarLogImportacao,
   finalizarLogImportacao,
   extrairLinhasPDFComX,
+  parseXLSX,
 } from './_lojas-drive-helpers.js';
 
 import {
@@ -55,6 +56,7 @@ import {
   parseRelatorioVendasHistorico,
   parseProdutos,
   parsePedidosEspera,
+  parseRelatorioBI,
 } from './lojas-drive-parsers.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -200,15 +202,18 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
   });
 
   try {
-    // Baixa conteúdo (PDF é binário, CSV é texto)
+    // Baixa conteúdo (PDF + XLSX são binários, CSV é texto)
     const ehPDF = tipoInfo.tipo.startsWith('sacola');
+    const ehXLSX = tipoInfo.tipo.startsWith('relatorio_bi');
     const conteudo = await baixarArquivoDrive(arq.id, {
-      encoding: ehPDF ? 'binary' : 'utf-8',
+      encoding: (ehPDF || ehXLSX) ? 'binary' : 'utf-8',
     });
 
     // Pra PDF, extrai texto antes de chamar o parser
+    // Pra XLSX, extrai linhas-objeto via SheetJS
     let textoConteudo = conteudo;
     let linhasComX = null;
+    let linhasXLSX = null;
     if (ehPDF) {
       // Sacolas (e outros PDFs tabulares) usam pdfjs-dist com coordenadas X/Y
       // pra preservar separação de colunas. pdf-parse colapsava espaços e
@@ -216,6 +221,10 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
       // pra 0 (bug 28/04/2026 — todas as 11 sacolas no banco estavam com 0).
       linhasComX = await extrairLinhasPDFComX(conteudo);
       // Mantém textoConteudo como fallback caso outro tipo de PDF use texto
+      textoConteudo = '';
+    } else if (ehXLSX) {
+      // Relatório BI Mire (xlsx) — 1 linha por SKU vendido.
+      linhasXLSX = await parseXLSX(conteudo);
       textoConteudo = '';
     }
 
@@ -232,6 +241,9 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
     } else if (tipoInfo.tipo.startsWith('sacola')) {
       // ⚠️ Sacolas usam linhasComX (estrutura nova com coordenadas)
       parseResult = parsePedidosEspera(linhasComX, tipoInfo.loja, vendedoras);
+    } else if (tipoInfo.tipo.startsWith('relatorio_bi')) {
+      // ⚠️ Relatório BI usa linhasXLSX (objetos do SheetJS)
+      parseResult = parseRelatorioBI(linhasXLSX, tipoInfo.loja, vendedoras);
     } else {
       throw new Error(`Tipo desconhecido: ${tipoInfo.tipo}`);
     }
@@ -477,6 +489,46 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
     // Re-upsert dos que estão no PDF (volta pra ativo)
     enriquecidos.forEach(r => { r.ativo = true; r.fechado_em = null; });
     return upsertEmLotes('lojas_pedidos_sacola', enriquecidos, ['numero_pedido', 'loja']);
+  }
+
+  if (tipo.startsWith('relatorio_bi')) {
+    // Resolve cliente_id e venda_id por documento + numero_pedido (busca em lote)
+    const documentos = [...new Set(enriquecidos.map(r => r.documento_cliente_raw).filter(Boolean))];
+    const pedidos = [...new Set(enriquecidos.map(r => r.numero_pedido).filter(Boolean))];
+
+    let docToClienteId = new Map();
+    let pedidoToVendaId = new Map();
+    let pedidoToVendedoraId = new Map();
+
+    if (documentos.length) {
+      const { data: clientes } = await supabase
+        .from('lojas_clientes')
+        .select('id, documento')
+        .in('documento', documentos);
+      docToClienteId = new Map((clientes || []).map(c => [c.documento, c.id]));
+    }
+
+    if (pedidos.length) {
+      // Busca pedidos da MESMA loja pra evitar conflito de numero_pedido
+      // (numero_pedido + loja é único)
+      const loja = enriquecidos[0]?.loja;
+      const { data: vendas } = await supabase
+        .from('lojas_vendas')
+        .select('id, numero_pedido, vendedora_id')
+        .eq('loja', loja)
+        .in('numero_pedido', pedidos);
+      pedidoToVendaId = new Map((vendas || []).map(v => [v.numero_pedido, v.id]));
+      pedidoToVendedoraId = new Map((vendas || []).map(v => [v.numero_pedido, v.vendedora_id]));
+    }
+
+    enriquecidos.forEach(r => {
+      r.cliente_id = docToClienteId.get(r.documento_cliente_raw) || null;
+      r.venda_id = pedidoToVendaId.get(r.numero_pedido) || null;
+      r.vendedora_id = pedidoToVendedoraId.get(r.numero_pedido) || null;
+    });
+
+    // Upsert por (numero_pedido, loja, sku). Re-importação substitui.
+    return upsertEmLotes('lojas_vendas_itens', enriquecidos, ['numero_pedido', 'loja', 'sku']);
   }
 
   throw new Error(`Tipo sem rota de upsert: ${tipo}`);

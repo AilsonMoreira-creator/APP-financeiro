@@ -24,6 +24,7 @@ import {
 
 import {
   refSemZero,
+  refFromSku,
   normalizarTelefone,
   escolherTelefone,
   ehVendaVarejo,
@@ -657,6 +658,163 @@ export function parsePedidosEspera(linhasComX, loja, vendedorasCadastradas, hoje
     registros,
     total: totalLinhasPedido,
     ignorados: totalLinhasPedido - registros.length,
+    detalhes_ignorados,
+  };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PARSER 6: relatorio_bi_st_*.xlsx / _br_*.xlsx (semanal a partir de 03/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Origem: planilha "RELATÓRIO PARA BI" do Mire — 1 linha = 1 SKU vendido.
+// Decisão Ailson 28/04/2026: alimentar 1x/semana, mesma cadência das outras.
+// Dados disponíveis desde 01/03/2026.
+//
+// Colunas relevantes (Mire pode variar nomes — usamos fallbacks):
+//   Pedido, Data Cadastro, Status, Data Pago, Nº NF, CNPJ/CPF, Nome,
+//   Desconto, Frete, Líquido,
+//   ID Produto, SKU, Descrição, Qtde, Frete Item, Custo, Preço,
+//   Desconto (item), Líquido (item),
+//   # Pedido Site, Rastreamento, UF, Forma de Pagamento, Prazo, Parcela
+//
+// REGRAS:
+//   - Status diferente de FATURADO → ignora (rascunho, cancelado etc)
+//   - CONSUMIDOR / CNPJ '13' → ignora (varejo balcão)
+//   - SKU vazio ou < 4 dígitos → ignora (item sem cadastro)
+//   - REF extraída via refFromSku() (regra 4 dígitos com 4 exceções)
+//   - Dedup natural por (numero_pedido + loja + sku) na DB
+//
+// Diferente de outros parsers, esse RECEBE LINHAS já parseadas (do parseXLSX),
+// não precisa decodificar CSV. Recebe um array de objetos.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Lê valor de coluna tentando vários nomes alternativos (Mire varia capitalização).
+function _col(linha, ...nomes) {
+  for (const n of nomes) {
+    if (linha[n] !== undefined && linha[n] !== '') return linha[n];
+  }
+  return null;
+}
+
+export function parseRelatorioBI(linhasObj, loja, vendedorasCadastradas) {
+  const registros = [];
+  const detalhes_ignorados = {
+    nao_faturado: 0,
+    consumidor: 0,
+    documento_invalido: 0,
+    sku_invalido: 0,
+    ref_invalida: 0,
+    sem_loja: 0,
+    sem_data: 0,
+  };
+
+  if (!loja) {
+    return {
+      registros: [],
+      total: linhasObj.length,
+      ignorados: linhasObj.length,
+      detalhes_ignorados: { ...detalhes_ignorados, sem_loja: linhasObj.length },
+    };
+  }
+
+  if (!Array.isArray(linhasObj)) {
+    return {
+      registros: [],
+      total: 0,
+      ignorados: 0,
+      detalhes_ignorados,
+    };
+  }
+
+  for (const l of linhasObj) {
+    // 1) Filtro por Status: só FATURADO entra
+    const status = String(_col(l, 'Status', 'STATUS', 'status') || '').trim().toUpperCase();
+    if (status && status !== 'FATURADO') {
+      detalhes_ignorados.nao_faturado++;
+      continue;
+    }
+
+    // 2) Filtro varejo (consumidor / cnpj placeholder)
+    const cliente = limparTexto(_col(l, 'Nome', 'NOME', 'CLIENTE'));
+    const docRaw = _col(l, 'CNPJ/CPF', 'CNPJ', 'CPF');
+    const filtro = ehVendaVarejo(cliente, docRaw, '');  // sem vendedor nessa planilha
+    if (filtro.ignorar) {
+      if (filtro.motivo === 'varejo_nome' || filtro.motivo === 'documento_placeholder') {
+        detalhes_ignorados.consumidor++;
+      } else {
+        detalhes_ignorados.documento_invalido++;
+      }
+      continue;
+    }
+
+    const documento = normalizarDocumento(docRaw);
+    if (!documento) {
+      detalhes_ignorados.documento_invalido++;
+      continue;
+    }
+
+    // 3) Pedido obrigatório
+    const numero_pedido = limparTexto(_col(l, 'Pedido', 'PEDIDO', '# Pedido'));
+    if (!numero_pedido) continue;
+
+    // 4) SKU + REF obrigatórios
+    const sku = String(_col(l, 'SKU', 'sku') || '').replace(/\D/g, '');
+    if (!sku || sku.length < 4) {
+      detalhes_ignorados.sku_invalido++;
+      continue;
+    }
+    const ref = refFromSku(sku);
+    if (!ref) {
+      detalhes_ignorados.ref_invalida++;
+      continue;
+    }
+
+    // 5) Data da venda (preferência: Data Pago > Data Cadastro)
+    const dataVenda = parseDataBR(
+      _col(l, 'Data Pago', 'DATA PAGO', 'Data Pago ', 'Data Cadasrto', 'Data Cadastro', 'DATA CADASTRO')
+    );
+    if (!dataVenda) {
+      detalhes_ignorados.sem_data++;
+      continue;
+    }
+
+    // 6) Vendedora (Mire BI nem sempre traz — fica null se ausente)
+    // OBS: planilha BI não tem coluna de vendedora explicitamente — vendedora_id
+    // será resolvida depois (cruzando numero_pedido com lojas_vendas existente).
+    // Aqui deixamos só o campo pra desnormalização.
+
+    registros.push({
+      numero_pedido,
+      loja,
+      sku,
+      ref,
+
+      documento_cliente_raw: documento,
+      cliente_razao_raw: cliente,
+
+      data_venda: dataVenda,
+
+      descricao: limparTexto(_col(l, 'Descrição', 'DESCRICAO', 'Descricao')),
+      qtd: Math.round(parseNumeroBR(_col(l, 'Qtde', 'QTDE', 'Qtd', 'QTD')) || 1),
+      custo_unit: parseNumeroBR(_col(l, 'Custo', 'CUSTO')) || 0,
+      preco_unit: parseNumeroBR(_col(l, 'Preço', 'PRECO', 'Preco')) || 0,
+      desconto_unit: parseNumeroBR(_col(l, 'Desconto', 'DESCONTO')) || 0,
+      // "Líquido" aparece 2 vezes na planilha (do pedido e do item).
+      // SheetJS serializa o segundo como "Líquido_1" — tentamos esse primeiro,
+      // depois fallback pra "Líquido" (item) ou nome alternativo.
+      liquido_unit: parseNumeroBR(
+        _col(l, 'Líquido_1', 'Liquido_1', 'LIQUIDO_1', 'Líquido item', 'Líquido')
+      ) || 0,
+      frete_unit: parseNumeroBR(_col(l, 'Frete Item', 'FRETE ITEM', 'Frete')) || 0,
+    });
+  }
+
+  return {
+    registros,
+    total: linhasObj.length,
+    ignorados: linhasObj.length - registros.length,
     detalhes_ignorados,
   };
 }

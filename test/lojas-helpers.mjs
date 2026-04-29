@@ -78,6 +78,25 @@ export function refSemZero(ref) {
   return String(ref).trim().replace(/^0+/, '') || '0';
 }
 
+// ─── EXTRAÇÃO DE REF A PARTIR DO SKU (Relatório BI Mire) ────────────────────
+// Espelho de api/lojas-helpers-business.js — manter sincronizado.
+// Veja docstring lá.
+
+const REFS_3_DIGITOS = ['395', '376'];
+const REFS_COM_ZERO  = ['0020', '0050'];
+
+export function refFromSku(sku) {
+  const s = String(sku || '').replace(/\D/g, '');
+  if (s.length < 4) return null;
+  for (const r of REFS_3_DIGITOS) {
+    if (s.startsWith(r)) return r;
+  }
+  for (const r of REFS_COM_ZERO) {
+    if (s.startsWith(r)) return r;
+  }
+  return s.slice(0, 4);
+}
+
 export function normalizarTelefone(ddd, telefone) {
   const dddLimpo = String(ddd || '').replace(/\D/g, '');
   let telLimpo = String(telefone || '').replace(/\D/g, '');

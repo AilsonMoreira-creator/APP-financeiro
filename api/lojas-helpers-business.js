@@ -87,6 +87,46 @@ export function refSemZero(ref) {
   return String(ref).trim().replace(/^0+/, '') || '0';
 }
 
+// ─── EXTRAÇÃO DE REF A PARTIR DO SKU (Relatório BI Mire) ────────────────────
+//
+// Decisão Ailson 28/04/2026: Mire exporta SKU concatenado (REF + cor + tam).
+// 95% dos casos: REF = primeiros 4 dígitos do SKU.
+//
+// Exceções (precisam de prefixo conhecido):
+//   - REFs de 3 dígitos:  395 e 376 (SKU começa com 395xxxxx ou 376xxxxx)
+//   - REFs com zero à esquerda: 0020 e 0050 (precisam preservar o zero)
+//
+// Outras REFs sempre seguem regra geral (4 dígitos, sem zero à esquerda).
+//
+// Exemplos:
+//   refFromSku('278301703') === '2783'
+//   refFromSku('318401205') === '3184'
+//   refFromSku('39501202')  === '395'    (3 dígitos)
+//   refFromSku('37601205')  === '376'    (3 dígitos)
+//   refFromSku('00201202')  === '0020'   (zero preservado)
+//   refFromSku('00501203')  === '0050'   (zero preservado)
+//   refFromSku('123')       === null     (curto demais)
+//   refFromSku('abc12345')  === '1234'   (limpa não-dígitos primeiro)
+
+const REFS_3_DIGITOS = ['395', '376'];
+const REFS_COM_ZERO  = ['0020', '0050'];
+
+export function refFromSku(sku) {
+  const s = String(sku || '').replace(/\D/g, '');
+  if (s.length < 4) return null;
+
+  // Exceção 1: REFs de 3 dígitos
+  for (const r of REFS_3_DIGITOS) {
+    if (s.startsWith(r)) return r;
+  }
+  // Exceção 2: REFs de 4 dígitos com zero à esquerda
+  for (const r of REFS_COM_ZERO) {
+    if (s.startsWith(r)) return r;
+  }
+  // Regra geral: primeiros 4 dígitos
+  return s.slice(0, 4);
+}
+
 export function normalizarTelefone(ddd, telefone) {
   const dddLimpo = String(ddd || '').replace(/\D/g, '');
   let telLimpo = String(telefone || '').replace(/\D/g, '');

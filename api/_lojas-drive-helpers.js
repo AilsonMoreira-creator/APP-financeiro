@@ -528,6 +528,14 @@ export function detectarTipoArquivo(nomeArquivo, parentName = '') {
   if (/relatorio[-_]vendas.*historico/i.test(n)) {
     return { tipo: `vendas_historico${sufixo}`, loja };
   }
+  // Relatório BI do Mire (xlsx) — granular por SKU. Decisão Ailson 28/04/2026.
+  // Aceita .xlsx e .csv (caso convertido). Padrão de nome:
+  //   relatorio_bi_st_30.04.2026.xlsx
+  //   relatorio-bi-br-30-04-2026.csv
+  //   bi_st_30042026.xlsx
+  if (/relatorio[-_]?bi|^bi[-_]/i.test(n)) {
+    return { tipo: `relatorio_bi${sufixo}`, loja };
+  }
   // Fallback: arquivo na pasta Silva_Teles/ ou Bom_Retiro/ que não deu match
   // específico, assume "vendas semanal"
   if (/silva.?teles|bom.?retiro/i.test(p) && !/_inicial/i.test(p)) {
@@ -644,6 +652,56 @@ export async function extrairLinhasPDFComX(buffer) {
     }
   }
   return todasLinhas;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PARSER DE EXCEL (.xlsx) — Relatório BI do Mire
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Diferente de CSV (texto), Excel é binário. Lê via SheetJS (xlsx).
+// Retorna o MESMO formato que parseCSV: array de objetos { COLUNA: valor }.
+//
+// O Mire exporta cabeçalhos na 1ª linha. Pegamos a 1ª aba.
+//
+// Trata datas Excel (números seriais) convertendo pra string DD/MM/YYYY pra
+// ficar compatível com parseDataBR (que já existe).
+//
+// Uso:
+//   const buffer = await baixarArquivoDrive(arq.id, { encoding: 'binary' });
+//   const linhas = parseXLSX(buffer);
+//   for (const l of linhas) {
+//     console.log(l['Pedido'], l['SKU'], l['Qtde']);
+//   }
+
+export async function parseXLSX(buffer) {
+  // Import dinâmico (xlsx é CommonJS pesada, só carrega quando precisa)
+  const XLSX = await import('xlsx');
+  const xlsx = XLSX.default || XLSX;
+
+  // Buffer pode vir como string binária, Buffer node, ou ArrayBuffer
+  let workbook;
+  if (typeof buffer === 'string') {
+    workbook = xlsx.read(buffer, { type: 'binary', cellDates: true });
+  } else if (Buffer.isBuffer(buffer)) {
+    workbook = xlsx.read(buffer, { type: 'buffer', cellDates: true });
+  } else {
+    workbook = xlsx.read(buffer, { type: 'array', cellDates: true });
+  }
+
+  // Pega a 1ª aba (Mire tem só 1)
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+
+  // Converte pra array de objetos. defval='' pra preencher células vazias.
+  // raw=false converte datas/numbers pra string formatada.
+  const linhas = xlsx.utils.sheet_to_json(sheet, {
+    defval: '',
+    raw: false,
+    dateNF: 'dd/mm/yyyy',  // datas saem como "30/03/2026"
+  });
+
+  return linhas;
 }
 
 
