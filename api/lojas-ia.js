@@ -758,11 +758,19 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       const nomeCompleto = (ctx.cliente.apelido || ctx.cliente.comprador_nome || '').trim();
       const palavras = nomeCompleto.split(/\s+/).filter(p => p.length >= 2);
       const apelidoCurto = palavras[0] || nomeCompleto || null;
+      // Vesti = app de vendas usado SÓ no Bom Retiro. Se cliente comprou via
+      // Vesti (canal_dominante=vesti_dominante OU misto com vendas vesti), IA
+      // deve oferecer enviar link/vídeo do app em vez de "passa na loja".
+      const usaVesti = ctx.kpi?.canal_dominante === 'vesti_dominante'
+        || (ctx.kpi?.qtd_compras_vesti || 0) > 0;
       return {
         apelido: apelidoCurto,
         nome_completo_comprador: nomeCompleto || null,
         razao_social: ctx.cliente.razao_social,
         perfil_presenca: ctx.kpi?.perfil_presenca,
+        canal_dominante: ctx.kpi?.canal_dominante,
+        usa_vesti: usaVesti,
+        loja_origem: ctx.cliente.loja_origem,
         paga_com_cheque: ctx.kpi?.paga_com_cheque,
         dias_sem_comprar: ctx.kpi?.dias_sem_comprar,
         lifetime_total: ctx.kpi?.lifetime_total,

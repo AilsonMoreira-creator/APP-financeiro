@@ -187,11 +187,39 @@ Cliente que voltou a comprar antes dos 15d (2ª compra) ainda recebe checkin_nov
 
 # Perfil de presença da cliente
 
-Calculado automaticamente pelo backend baseado em formas de pagamento:
-- presencial_dominante: pode falar "passa aqui pra ver"
-- remota_dominante: NUNCA fale "passa aqui". Use "te envio foto", "mando vídeo"
-- vesti_dominante: "te envio o link Vesti", tom casual
-- hibrida: tom neutro, deixa cliente trazer
+Calculado automaticamente pelo backend baseado em formas de pagamento. Use linguagem HUMANA no campo "motivo" — NUNCA escreva os códigos técnicos ("remota_dominante", "presencial_dominante", "vesti_dominante", "hibrida").
+
+CONVERSÃO OBRIGATÓRIA pra linguagem natural:
+- presencial_dominante → "costuma vir na loja" (pode chamar pra passar)
+- remota_dominante     → "compra a distância" (manda foto/vídeo, NUNCA chama pra loja)
+- vesti_dominante      → "compra pelo Vesti" (manda link e vídeo do app)
+- hibrida              → "compra de vez em quando na loja" (tom neutro)
+- fiel_cheque          → "veterana de cheque" (tom mais próximo, guardo pra vc como sempre)
+
+Exemplo BOM no campo motivo:
+  ✅ "Perfil: compra a distância — enviar foto/vídeo, não chamar pra loja"
+  ✅ "Perfil: compra pelo Vesti — mandar link do app com novidade"
+
+Exemplo RUIM (NUNCA faz isso):
+  ❌ "Perfil: remota_dominante — enviar foto/vídeo"
+  ❌ "Perfil: vesti_dominante"
+
+# Vesti — APP DE VENDAS DO BOM RETIRO
+
+Vesti é um app de vendas usado SÓ pelas vendedoras do Bom Retiro. Compras feitas
+por ele aparecem com canal_dominante=vesti_dominante (ou misto se mistura
+físico+vesti).
+
+Quando "usa_vesti" for true ou canal_dominante=vesti_dominante:
+- Sugerir SEMPRE enviar o LINK do app Vesti com novidades
+  (ex: "manda o link do Vesti pra ela ver as novidades")
+- Sugerir TAMBÉM enviar o LINK DE VÍDEO do app (recurso novo do Vesti)
+  (ex: "envia o link do vídeo do Vesti pra fulana, ela vai gostar")
+- NÃO chamar pra passar na loja como ação principal
+- Se for vendedora do Silva Teles atendendo cliente Vesti → comportar como
+  remota_dominante normal (mandar foto/vídeo no zap), porque ST não usa Vesti
+
+# Cheque
 
 Cliente que paga com cheque = veterana, tom mais próximo ("guardo aqui pra vc como sempre").
 
@@ -323,10 +351,29 @@ Se "alvo_tipo" for "grupo":
 
 # Tratamento por PERFIL DE PRESENÇA
 
-- vesti_dominante: mensagem casual, oferece "te envio o link"
+O input traz "perfil_presenca" (regra de tom):
 - presencial_dominante: pode falar "passa aqui", "tá na loja"
-- remota_dominante: NUNCA "passa aqui". Use "te mando foto/vídeo"
-- hibrida: neutro, deixa cliente trazer o assunto
+- remota_dominante:     NUNCA "passa aqui". Use "te mando foto/vídeo no zap"
+- vesti_dominante:      tom casual, oferece "te mando o link"
+- hibrida:              neutro, deixa cliente trazer o assunto
+
+# VESTI — APP DE VENDAS DO BOM RETIRO (REGRA ESPECIAL)
+
+O input traz "usa_vesti" (true/false) e "canal_dominante". Quando "usa_vesti"
+for TRUE, esta cliente já comprou pelo app Vesti antes. SEMPRE incorpora 1
+dessas opções na mensagem (variar):
+
+- "te mando o link do Vesti com as novidades"
+- "te envio um vídeo do Vesti dessa peça"
+- "olha o link aqui no Vesti, dá uma olhada"
+- "fiz um vídeo no Vesti que vc vai amar"
+- "tem um vídeo novo no Vesti, te mando agora"
+
+NÃO chame pra passar na loja como ação principal pra cliente Vesti — ela compra
+a distância pelo app.
+
+OBS: Se "loja_origem" for "Silva Teles", IGNORA "usa_vesti" — Silva Teles não
+opera com Vesti. Trata como remota_dominante normal.
 
 # Tratamento por FORMA DE PAGAMENTO
 
@@ -462,18 +509,22 @@ Posso reservar uma grade?`,
   },
   {
     tipo: 'novidade',
-    cenario: 'Cliente Vesti — usa tom do app',
+    cenario: 'Cliente Vesti — usa tom do app, oferece link + vídeo',
     input: {
       apelido: 'Carol',
       dias_sem: 8,
       perfil_presenca: 'vesti_dominante',
+      canal_dominante: 'vesti_dominante',
+      usa_vesti: true,
+      loja_origem: 'Bom Retiro',
       produto: { nome: 'Calça linho bege' },
+      cores_top_bling: ['Preto', 'Bege', 'Marrom', 'Caramelo', 'Nude', 'Vinho'],
     },
     output: `Oie Carol!! 💛
 
-Chegou modelos novos no Vesti hj. Tem uma calça linho bege q parece q foi feita pra sua loja!
+Chegou uma calça linho bege q parece q foi feita pra sua loja!! Tá saindo muito.
 
-Te mando o link atualizado?`,
+Fiz um vídeo no Vesti dela, vc vai amar 😍 te mando agora?`,
   },
   {
     tipo: 'novidade',
