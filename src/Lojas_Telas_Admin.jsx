@@ -3027,6 +3027,68 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
                 display: 'flex', flexDirection: 'column', gap: 6,
                 maxHeight: 300, overflowY: 'auto',
               }}>
+                {/* Já selecionados — mostra SEMPRE, não filtra pela busca.
+                    Decisão Ailson 28/04/2026: ao marcar 1º cliente e digitar
+                    pra buscar o 2º, o filtro escondia o já marcado, gerando
+                    confusão. Agora os marcados ficam fixos no topo, separados
+                    por uma linha sutil. */}
+                {docsSelecionados.length > 0 && busca.trim() && (
+                  <>
+                    <div style={{
+                      fontSize: fz(12), fontWeight: 600, color: palette.inkMuted,
+                      textTransform: 'uppercase', letterSpacing: 0.5,
+                      marginTop: 2, marginBottom: 2,
+                    }}>
+                      Já selecionados ({docsSelecionados.length})
+                    </div>
+                    {docsSelecionados.map(c => {
+                      const kpi = state.clientesKpis?.[c.id] || {};
+                      return (
+                        <button key={`sel-${c.id}`} onClick={() => {
+                          setSelecionados(selecionados.filter(id => id !== c.id));
+                        }} style={{
+                          background: palette.accentSoft,
+                          border: `1.5px solid ${palette.accent}`,
+                          borderRadius: 8, padding: '10px 12px', cursor: 'pointer',
+                          fontFamily: FONT, textAlign: 'left',
+                          display: 'flex', alignItems: 'center', gap: 8,
+                        }}>
+                          <div style={{
+                            width: 18, height: 18, borderRadius: 4,
+                            border: `1.5px solid ${palette.accent}`,
+                            background: palette.accent,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0,
+                          }}>
+                            <Check size={sz(14)} color={palette.bg} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              fontSize: fz(15), fontWeight: 600, color: palette.ink,
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {nomeCliente(c)}
+                            </div>
+                            <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
+                              {fmtMoeda(kpi.lifetime_total ?? 0)} · {kpi.qtd_compras ?? 0} compra{(kpi.qtd_compras ?? 0) !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    <div style={{
+                      height: 1, background: palette.beige, margin: '8px 0',
+                    }} />
+                    <div style={{
+                      fontSize: fz(12), fontWeight: 600, color: palette.inkMuted,
+                      textTransform: 'uppercase', letterSpacing: 0.5,
+                      marginBottom: 2,
+                    }}>
+                      Resultados da busca
+                    </div>
+                  </>
+                )}
+
                 {candidatos.length === 0 && (
                   <div style={{
                     padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
@@ -3035,7 +3097,11 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
                     {busca ? `Nenhum cliente encontrado pra "${busca}"` : 'Nenhum cliente disponível na sua carteira (todos já estão em grupos).'}
                   </div>
                 )}
-                {candidatos.map(c => {
+                {candidatos
+                  // Quando há busca + já selecionados, esconde os já-selecionados
+                  // do bloco "Resultados" pra não duplicar visualmente
+                  .filter(c => !(busca.trim() && selecionados.includes(c.id)))
+                  .map(c => {
                   const sel = selecionados.includes(c.id);
                   const kpi = state.clientesKpis?.[c.id] || {};
                   return (
