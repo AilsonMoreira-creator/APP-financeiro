@@ -2063,15 +2063,40 @@ export const ImportacoesScreen = ({ lojas, onBack }) => {
     produtos_semanal: 'Produtos (semanal)',
     sacola_st: 'Sacolas ST',
     sacola_br: 'Sacolas BR',
+    relatorio_bi_st: 'Relatório BI ST (SKUs)',
+    relatorio_bi_br: 'Relatório BI BR (SKUs)',
   };
 
-  const onUploadManualClick = () => {
-    alert(
-      'Importação manual via Google Drive será disponibilizada em breve.\n\n' +
-      'Por enquanto, as importações rodam automaticamente toda terça às 06:00 ' +
-      'a partir das pastas Mire_Bom_Retiro e Mire_Silva_Teles do Google Drive.'
-    );
+  // Estado do trigger manual
+  const [importando, setImportando] = useState(false);
+  const [erroImport, setErroImport] = useState(null);
+  const [resultadoImport, setResultadoImport] = useState(null);
+
+  const dispararImportacao = async () => {
+    if (importando) return;
+    if (!confirm('Buscar e importar TODOS os arquivos do Drive agora?\n\nLeva uns 30-60 segundos. Os crons já fazem isso automaticamente toda terça 6h, esse botão é pra rodar manual quando precisa.')) {
+      return;
+    }
+    setImportando(true);
+    setErroImport(null);
+    setResultadoImport(null);
+    try {
+      const r = await fetch('/api/lojas-drive-trigger?user=ailson', { method: 'GET' });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      setResultadoImport(data);
+      // Recarrega a lista de importações (usa hook do lojas se existir)
+      if (lojas?.recarregar?.importacoes) {
+        await lojas.recarregar.importacoes();
+      }
+    } catch (e) {
+      setErroImport(e.message || String(e));
+    } finally {
+      setImportando(false);
+    }
   };
+
+  const onUploadManualClick = dispararImportacao;
 
   return (
     <div style={{ background: palette.bg, minHeight: '100%', fontFamily: FONT }}>
@@ -2115,16 +2140,59 @@ export const ImportacoesScreen = ({ lojas, onBack }) => {
           </div>
         )}
 
-        {/* Botão upload manual */}
-        <button onClick={onUploadManualClick} style={{
-          width: '100%', background: palette.surface, border: `1.5px dashed ${palette.beige}`,
-          borderRadius: 12, padding: 16, cursor: 'pointer', fontFamily: FONT,
-          color: palette.accent, fontSize: fz(15), fontWeight: 600, marginBottom: 24,
+        {/* Botão buscar arquivos do Drive */}
+        <button onClick={dispararImportacao} disabled={importando} style={{
+          width: '100%',
+          background: importando ? palette.beige : palette.accent,
+          border: 'none',
+          borderRadius: 12, padding: 16,
+          cursor: importando ? 'default' : 'pointer',
+          fontFamily: FONT,
+          color: importando ? palette.inkMuted : '#fff',
+          fontSize: fz(15), fontWeight: 600, marginBottom: 12,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
-          <Upload size={sz(18)} />
-          Upload manual de planilha
+          {importando ? (
+            <>
+              <Loader2 size={sz(18)} style={{ animation: 'spin 1s linear infinite' }} />
+              Buscando arquivos do Drive…
+            </>
+          ) : (
+            <>
+              <Download size={sz(18)} />
+              Buscar todos arquivos agora
+            </>
+          )}
         </button>
+
+        {/* Resultado do disparo manual */}
+        {erroImport && (
+          <div style={{
+            background: palette.alertSoft, border: `1px solid ${palette.alert}40`,
+            borderRadius: 10, padding: 12, marginBottom: 16,
+            fontSize: fz(14), color: palette.alert,
+          }}>
+            <strong>Erro:</strong> {erroImport}
+          </div>
+        )}
+        {resultadoImport && (
+          <div style={{
+            background: resultadoImport.erros > 0 ? palette.warnSoft : palette.okSoft,
+            border: `1px solid ${(resultadoImport.erros > 0 ? palette.warn : palette.ok)}40`,
+            borderRadius: 10, padding: 12, marginBottom: 16,
+            fontSize: fz(14), color: palette.ink, lineHeight: 1.5,
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>
+              {resultadoImport.erros === 0 ? '✅ Importação concluída!' : '⚠️ Importação parcial'}
+            </div>
+            <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
+              {resultadoImport.sucessos || 0} sucesso{(resultadoImport.sucessos || 0) === 1 ? '' : 's'}
+              {resultadoImport.erros > 0 && ` · ${resultadoImport.erros} erro${resultadoImport.erros === 1 ? '' : 's'}`}
+              {resultadoImport.ignorados_tipo_nao_reconhecido > 0 && ` · ${resultadoImport.ignorados_tipo_nao_reconhecido} ignorados`}
+              <br />Atualize a página pra ver no histórico abaixo.
+            </div>
+          </div>
+        )}
 
         {/* Histórico */}
         {importacoes.length > 0 && (
