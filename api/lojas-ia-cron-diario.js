@@ -13,24 +13,65 @@
 
 import { supabase, setCors } from './_lojas-helpers.js';
 
-export const config = { maxDuration: 300 };
+export const config = { maxDuration: 600 };
 
 export default async function handler(req, res) {
   setCors(res);
 
-  // Defesa contra disparo manual direto (sem header de cron Vercel)
-  // Permite admin testar via X-User=ailson ou ?user=ailson na URL
+  // ═══ LOG DE INVOCAÇÃO (sempre, antes de qualquer guard) ═══
+  // Garante que conseguimos ver no Supabase se o Vercel chamou esse handler
+  // — independente de retornar 403, sucesso ou erro depois.
+  const userAgent = req.headers['user-agent'] || '';
   const ehCron = req.headers['x-vercel-cron'] !== undefined;
   const userId = req.query?.user || req.headers['x-user'];
+
+  let healthId = null;
+  try {
+    const { data: hl } = await supabase
+      .from('lojas_cron_health')
+      .insert({
+        cron_name: 'lojas-ia-cron-diario',
+        origem: ehCron ? 'vercel-cron' : (userId === 'ailson' ? 'manual-admin' : 'unknown'),
+        user_agent: userAgent,
+        triggered_by: userId || (ehCron ? 'vercel' : null),
+        status: 'iniciada',
+      })
+      .select('id')
+      .single();
+    healthId = hl?.id || null;
+  } catch (e) {
+    console.warn('[cron-health] insert falhou:', e?.message);
+  }
+
+  const inicio = Date.now();
+
+  // Helper pra finalizar log antes de retornar
+  const finalizar = async (status, detalhes = {}) => {
+    if (!healthId) return;
+    try {
+      await supabase
+        .from('lojas_cron_health')
+        .update({
+          finished_at: new Date().toISOString(),
+          duracao_ms: Date.now() - inicio,
+          status,
+          ...detalhes,
+        })
+        .eq('id', healthId);
+    } catch (e) {
+      console.warn('[cron-health] update falhou:', e?.message);
+    }
+  };
+
+  // ═══ Guard de auth ═══
   const ehAdmin = userId === 'ailson';
   if (!ehCron && !ehAdmin) {
+    await finalizar('erro', { erro_msg: 'auth-403: nao eh cron nem admin' });
     return res.status(403).json({
       error: 'Apenas cron Vercel ou admin',
       uso_manual: '/api/lojas-ia-cron-diario?user=ailson',
     });
   }
-
-  const inicio = Date.now();
 
   // Carrega vendedoras ativas (não placeholders)
   const { data: vendedoras, error } = await supabase
@@ -39,9 +80,11 @@ export default async function handler(req, res) {
     .eq('ativa', true)
     .eq('is_placeholder', false);
   if (error) {
+    await finalizar('erro', { erro_msg: `load-vendedoras: ${error.message}` });
     return res.status(500).json({ error: error.message });
   }
   if (!vendedoras || vendedoras.length === 0) {
+    await finalizar('sucesso', { total_alvos: 0, sucessos: 0, erros: 0, detalhes: { vazio: true } });
     return res.status(200).json({ ok: true, mensagem: 'Nenhuma vendedora ativa', total: 0 });
   }
 
@@ -87,12 +130,22 @@ export default async function handler(req, res) {
     }
   }
 
+  const sucessos = resultados.filter(r => r.ok).length;
+  const erros = resultados.filter(r => !r.ok).length;
+  await finalizar(erros > 0 ? (sucessos > 0 ? 'sucesso' : 'erro') : 'sucesso', {
+    total_alvos: vendedoras.length,
+    sucessos,
+    erros,
+    detalhes: { resultados: resultados.slice(0, 10) }, // primeiros 10 pra não inflar
+    erro_msg: erros > 0 ? `${erros}/${vendedoras.length} falharam` : null,
+  });
+
   return res.status(200).json({
     ok: true,
     duracao_ms: Date.now() - inicio,
     total: vendedoras.length,
-    sucessos: resultados.filter(r => r.ok).length,
-    erros: resultados.filter(r => !r.ok).length,
+    sucessos,
+    erros,
     resultados,
   });
 }
