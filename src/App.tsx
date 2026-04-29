@@ -5534,17 +5534,37 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     return()=>{try{supabase.removeChannel(ch);}catch{}};
   },[dbLoaded]);
   // ── Supabase: auto-save com merge (multi-usuário) ──
+  // Decisão Ailson 28/04/2026: usuário relatou "preencheu e não salvou".
+  // Causa: debounce de 2s, se trocar de tela ou fechar antes, save nunca
+  // dispara. Solução: ref guardando última versão pra flush imediato em
+  // pagehide/visibilitychange.
+  const ultimoEstadoRef=useRef(null);
   useEffect(()=>{
     if(!dbLoaded)return;
+    ultimoEstadoRef.current={cortesSala,salas,logSC};
     if(debRef.current)clearTimeout(debRef.current);
     debRef.current=setTimeout(async()=>{
       try{
         const remote=await scDb.load();
         const remoteCortes=remote?.cortes||[];
-        // Merge: mantém itens remotos que não existem localmente E que não foram excluídos
-        const localIds=new Set(cortesSala.map(c=>c.id));
-        const remoteOnly=remoteCortes.filter(c=>!localIds.has(c.id)&&!deletedIdsRef.current.has(c.id));
-        const merged=[...cortesSala,...remoteOnly];
+        // Merge POR ID com _mod (mais recente ganha) — antes só adicionava
+        // remote-only, mas se 2 usuários editavam o MESMO corte simultaneamente,
+        // last-write-wins-tudo perdia campos. Agora cada corte é mergeado.
+        const now=Date.now();
+        const localMap=new Map(cortesSala.map(c=>[c.id,{...c,_mod:c._mod||now}]));
+        const remoteMap=new Map(remoteCortes.map(c=>[c.id,c]));
+        const merged=[];
+        for(const [id,lc] of localMap){
+          const rc=remoteMap.get(id);
+          if(!rc){merged.push(lc);}
+          else{merged.push((lc._mod||0)>=(rc._mod||0)?lc:rc);}
+        }
+        // Remotos novos que ainda não estavam local (e não foram excluídos)
+        for(const [id,rc] of remoteMap){
+          if(!localMap.has(id)&&!deletedIdsRef.current.has(id)){
+            merged.push(rc);
+          }
+        }
         // Merge salas
         const mergedSalas=[...new Set([...salas,...(remote?.salas||[])])];
         // Merge logs
@@ -5559,6 +5579,28 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     },2000);
     return()=>clearTimeout(debRef.current);
   },[cortesSala,salas,logSC,dbLoaded]);
+
+  // Flush imediato quando usuário troca de tela / fecha app (sem debounce)
+  // Crucial pra multi-usuário: vendedora preenche e troca de aba antes dos 2s
+  useEffect(()=>{
+    if(!dbLoaded)return;
+    const flush=()=>{
+      if(!ultimoEstadoRef.current)return;
+      const {cortesSala:cs,salas:sl,logSC:lg}=ultimoEstadoRef.current;
+      // sendBeacon não rola pra Supabase com auth header, então usa fetch async-blocking
+      // (browser geralmente espera ~5s no pagehide pra completar fetches em curso)
+      try{
+        scDb.save({cortes:cs||[],salas:sl||[],logs:lg||[]});
+      }catch(e){console.error('flush salas-corte:',e);}
+    };
+    const onVis=()=>{if(document.visibilityState==='hidden')flush();};
+    window.addEventListener('pagehide',flush);
+    document.addEventListener('visibilitychange',onVis);
+    return()=>{
+      window.removeEventListener('pagehide',flush);
+      document.removeEventListener('visibilitychange',onVis);
+    };
+  },[dbLoaded]);
 
   // ── Sync descrições de produtos ──
   useEffect(()=>{
@@ -8708,6 +8750,59 @@ export default function App(){
     };
     document.addEventListener("visibilitychange",onVis);
     return()=>document.removeEventListener("visibilitychange",onVis);
+  },[dbCarregado]);
+
+  // ── Oficinas/Cortes: flush IMEDIATO em pagehide (multi-usuário) ──
+  // Decisão Ailson 28/04/2026: usuária da Oficina relatou "preencheu e nao
+  // salvou". Causa: debounce 1.5s — se trocar de tela ou fechar antes, save
+  // morre. Flush imediato salva o que tá em memória sem esperar.
+  const ultimoCortesRef=useRef(null);
+  useEffect(()=>{
+    ultimoCortesRef.current={cortes,produtos,oficinasCAD,logTroca,usuarioLogado};
+  },[cortes,produtos,oficinasCAD,logTroca,usuarioLogado]);
+
+  useEffect(()=>{
+    if(!dbCarregado||!supabase)return;
+    const flush=async()=>{
+      const snap=ultimoCortesRef.current;
+      if(!snap)return;
+      try{
+        // Lê remoto pra fazer merge (mesma lógica do save normal, mas síncrono)
+        const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
+        const remoto=data?.payload||{};
+        const localCount=(snap.cortes||[]).length;
+        const remoteCount=(remoto.cortes||[]).length;
+        // Guard: nao salva se local zerou (corrupto)
+        if(localCount===0&&remoteCount>=3)return;
+        const now=Date.now();
+        const localMap=new Map((snap.cortes||[]).map(c=>[c.id,{...c,_mod:c._mod||now}]));
+        const remoteMap=new Map((remoto.cortes||[]).map(c=>[c.id,c]));
+        const merged=[];
+        for(const [id,lc] of localMap){
+          const rc=remoteMap.get(id);
+          if(!rc)merged.push(lc);
+          else merged.push((lc._mod||0)>=(rc._mod||0)?lc:rc);
+        }
+        for(const [id,rc] of remoteMap){
+          if(!localMap.has(id)&&!snap.usuarioLogado?.admin)merged.push(rc);
+        }
+        const payload={
+          cortes:merged,
+          produtos:snap.produtos||[],
+          oficinasCAD:snap.usuarioLogado?.admin?(snap.oficinasCAD||[]):(remoto.oficinasCAD||snap.oficinasCAD||[]),
+          logTroca:snap.usuarioLogado?.admin?(snap.logTroca||[]):(remoto.logTroca||snap.logTroca||[]),
+        };
+        await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
+        console.log('🚪 PAGEHIDE flush cortes:',merged.length,'cortes salvos');
+      }catch(e){console.error('flush oficinas/cortes:',e);}
+    };
+    const onVis=()=>{if(document.visibilityState==='hidden')flush();};
+    window.addEventListener('pagehide',flush);
+    document.addEventListener('visibilitychange',onVis);
+    return()=>{
+      window.removeEventListener('pagehide',flush);
+      document.removeEventListener('visibilitychange',onVis);
+    };
   },[dbCarregado]);
 
   // ── SAVE AO SAIR + RETRY AO VOLTAR (SOMENTE ADMIN) ──
