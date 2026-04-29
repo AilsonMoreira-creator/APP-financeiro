@@ -47,6 +47,7 @@ import {
 import {
   palette, FONT, statusMap, subtipoSacolaMap, faseClienteNovaMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
+  fz, sz,
 } from './Lojas_Shared.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -163,7 +164,7 @@ export const HomeScreen = ({
           <>
             {!state.online && (
               <span style={{
-                fontSize: 12, padding: '3px 8px', borderRadius: 6,
+                fontSize: fz(12), padding: '3px 8px', borderRadius: 6,
                 background: palette.warnSoft, color: palette.warn, fontWeight: 600,
               }}>
                 Offline
@@ -173,7 +174,7 @@ export const HomeScreen = ({
               <button onClick={onTogglePerfil} style={{
                 background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
                 color: palette.bg, padding: '6px 10px', borderRadius: 8,
-                cursor: 'pointer', fontSize: 13, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.3,
+                cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600, letterSpacing: 0.3,
               }}>
                 {isAdmin ? '👤 Admin' : '👤 Vendedora'}
               </button>
@@ -229,9 +230,9 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
           background: 'transparent', border: `1.5px dashed ${palette.beige}`,
           borderRadius: 12, padding: 18, width: '100%', textAlign: 'center',
           cursor: isAdmin ? 'pointer' : 'default', fontFamily: FONT, color: palette.inkMuted,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 15,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: fz(15),
         }}>
-          <Plus size={18} />
+          <Plus size={sz(18)} />
           <span>Slot disponível ({v.loja})</span>
         </button>
       );
@@ -255,32 +256,32 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
           background: isCurrent ? palette.accentSoft : palette.beigeSoft,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
-          <Users size={25} color={isCurrent ? palette.accent : palette.inkSoft} />
+          <Users size={sz(25)} color={isCurrent ? palette.accent : palette.inkSoft} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-            <span style={{ fontSize: 18, fontWeight: 600, color: palette.ink }}>{v.nome}</span>
+            <span style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink }}>{v.nome}</span>
             <StatusDot status={status} />
-            {v.padrao && <Star size={14} color={palette.yellow} fill={palette.yellow} />}
+            {v.padrao && <Star size={sz(14)} color={palette.yellow} fill={palette.yellow} />}
             {isCurrent && (
-              <span style={{ fontSize: 12, color: palette.accent, fontWeight: 600, background: palette.accentSoft, padding: '2px 7px', borderRadius: 4, letterSpacing: 0.3 }}>VOCÊ</span>
+              <span style={{ fontSize: fz(12), color: palette.accent, fontWeight: 600, background: palette.accentSoft, padding: '2px 7px', borderRadius: 4, letterSpacing: 0.3 }}>VOCÊ</span>
             )}
           </div>
-          <div style={{ fontSize: 14, color: palette.inkMuted, marginBottom: 6 }}>{v.loja}</div>
-          <div style={{ fontSize: 15, color: palette.inkSoft }}>
+          <div style={{ fontSize: fz(14), color: palette.inkMuted, marginBottom: 6 }}>{v.loja}</div>
+          <div style={{ fontSize: fz(15), color: palette.inkSoft }}>
             {v.qtdClientes} {v.qtdClientes === 1 ? 'cliente' : 'clientes'}
           </div>
         </div>
-        {isClickable && <ChevronRight size={21} color={palette.inkMuted} />}
+        {isClickable && <ChevronRight size={sz(21)} color={palette.inkMuted} />}
       </button>
     );
   };
 
   const GroupHeader = ({ title, count }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px', marginBottom: 10 }}>
-      <LojaIcon size={23} />
-      <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink, letterSpacing: 0.5, textTransform: 'uppercase' }}>{title}</span>
-      <span style={{ fontSize: 13, color: palette.inkMuted, fontWeight: 400 }}>· {count} {count === 1 ? 'vendedora' : 'vendedoras'}</span>
+      <LojaIcon size={sz(23)} />
+      <span style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink, letterSpacing: 0.5, textTransform: 'uppercase' }}>{title}</span>
+      <span style={{ fontSize: fz(13), color: palette.inkMuted, fontWeight: 400 }}>· {count} {count === 1 ? 'vendedora' : 'vendedoras'}</span>
     </div>
   );
 
@@ -293,7 +294,7 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
           background: `linear-gradient(135deg, ${palette.accentSoft} 0%, ${palette.bg} 100%)`,
           borderRadius: 12, padding: 14, marginBottom: 18,
           border: `1px solid ${palette.accent}30`,
-          fontSize: 15, color: palette.ink, lineHeight: 1.5,
+          fontSize: fz(15), color: palette.ink, lineHeight: 1.5,
         }}>
           👋 Olá, <strong>{minhaVendedora.nome}</strong>! Toque no seu card pra ver suas sugestões de hoje.
         </div>
@@ -314,7 +315,7 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
 
       {vendedoras.length === 0 && (
         <div style={{
-          padding: 32, textAlign: 'center', color: palette.inkMuted, fontSize: 15,
+          padding: 32, textAlign: 'center', color: palette.inkMuted, fontSize: fz(15),
           background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12,
         }}>
           Nenhuma vendedora cadastrada ainda.
@@ -353,19 +354,19 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
         transition: 'all 0.15s',
       }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <Icon size={16} color={cor} />
-        <div style={{ fontSize: 13, color: palette.inkSoft, letterSpacing: 0.3, flex: 1 }}>{label}</div>
-        {expandable && <Maximize2 size={14} color={palette.inkMuted} />}
+        <Icon size={sz(16)} color={cor} />
+        <div style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, flex: 1 }}>{label}</div>
+        {expandable && <Maximize2 size={sz(14)} color={palette.inkMuted} />}
       </div>
-      <div style={{ fontSize: 25, fontWeight: 700, color: palette.ink, lineHeight: 1.1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 4 }}>{sub}</div>}
+      <div style={{ fontSize: fz(25), fontWeight: 700, color: palette.ink, lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 4 }}>{sub}</div>}
       {expandable && (
         <div style={{
           marginTop: 8, paddingTop: 8, borderTop: `1px solid ${palette.beigeSoft}`,
-          fontSize: 12, color: palette.accent, fontWeight: 600, letterSpacing: 0.3,
+          fontSize: fz(12), color: palette.accent, fontWeight: 600, letterSpacing: 0.3,
           display: 'flex', alignItems: 'center', gap: 4,
         }}>
-          Ver histórico <ChevronRight size={14} />
+          Ver histórico <ChevronRight size={sz(14)} />
         </div>
       )}
     </button>
@@ -405,12 +406,12 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
             const qtdAtencao = carteira.filter(c => c.statusAtual === 'atencao').length;
             return (
               <div key={v.id} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 14 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: palette.ink, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Users size={15} color={palette.inkSoft} />
+                <div style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Users size={sz(15)} color={palette.inkSoft} />
                   {v.nome}
-                  <span style={{ fontSize: 12, color: palette.inkMuted, fontWeight: 400 }}>· {v.loja}</span>
+                  <span style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 400 }}>· {v.loja}</span>
                 </div>
-                <div style={{ fontSize: 14, color: palette.inkSoft }}>
+                <div style={{ fontSize: fz(14), color: palette.inkSoft }}>
                   {carteira.length} clientes · {qtdAtivos} ativos · {qtdAtencao} em atenção
                 </div>
               </div>
@@ -459,20 +460,20 @@ const ConfigTab = ({ lojas, onNavegar }) => {
                 width: 44, height: 44, borderRadius: 10, background: it.corSoft,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>
-                <Icon size={25} color={it.cor} />
+                <Icon size={sz(25)} color={it.cor} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 17, fontWeight: 600, color: palette.ink, marginBottom: 2 }}>{it.title}</div>
-                <div style={{ fontSize: 14, color: palette.inkMuted }}>{it.sub}</div>
+                <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink, marginBottom: 2 }}>{it.title}</div>
+                <div style={{ fontSize: fz(14), color: palette.inkMuted }}>{it.sub}</div>
               </div>
-              <ChevronRight size={21} color={palette.inkMuted} />
+              <ChevronRight size={sz(21)} color={palette.inkMuted} />
             </button>
           );
         })}
       </div>
       <div style={{
         marginTop: 24, padding: 14, background: palette.beigeSoft, borderRadius: 10,
-        fontSize: 14, color: palette.inkSoft, lineHeight: 1.5,
+        fontSize: fz(14), color: palette.inkSoft, lineHeight: 1.5,
       }}>
         ℹ️ <strong>Promoções e Regras</strong> alimentam diretamente as sugestões da IA.
       </div>
@@ -530,21 +531,21 @@ export const CardDiaScreen = ({
           width: 36, height: 36, borderRadius: 9, background: visual.corSoft,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
-          <Icone size={21} color={visual.cor} />
+          <Icone size={sz(21)} color={visual.cor} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: 17, fontWeight: 600, color: palette.ink, marginBottom: 3,
+            fontSize: fz(17), fontWeight: 600, color: palette.ink, marginBottom: 3,
             textDecoration: riscada ? 'line-through' : 'none',
           }}>{titulo}</div>
-          <div style={{ fontSize: 14, color: palette.inkSoft }}>{s.contexto || ''}</div>
+          <div style={{ fontSize: fz(14), color: palette.inkSoft }}>{s.contexto || ''}</div>
           {riscada && (
-            <div style={{ marginTop: 6, fontSize: 13, color: palette.ok, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
-              <Check size={14} /> Enviada
+            <div style={{ marginTop: 6, fontSize: fz(13), color: palette.ok, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+              <Check size={sz(14)} /> Enviada
             </div>
           )}
         </div>
-        {!riscada && <ChevronRight size={21} color={palette.inkMuted} />}
+        {!riscada && <ChevronRight size={sz(21)} color={palette.inkMuted} />}
       </button>
     );
   };
@@ -559,10 +560,10 @@ export const CardDiaScreen = ({
           <button onClick={handleRegerar} disabled={regenerando} style={{
             background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
             color: palette.bg, padding: '6px 10px', borderRadius: 8,
-            cursor: regenerando ? 'wait' : 'pointer', fontSize: 13, fontFamily: FONT, fontWeight: 600,
+            cursor: regenerando ? 'wait' : 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
             display: 'flex', alignItems: 'center', gap: 4, opacity: regenerando ? 0.6 : 1,
           }}>
-            <RefreshCw size={14} style={regenerando ? { animation: 'spin 1s linear infinite' } : undefined} />
+            <RefreshCw size={sz(14)} style={regenerando ? { animation: 'spin 1s linear infinite' } : undefined} />
             {regenerando ? 'Gerando…' : 'Atualizar'}
           </button>
         }
@@ -577,13 +578,13 @@ export const CardDiaScreen = ({
             width: 50, height: 50, borderRadius: 12, background: palette.accentSoft,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Bot size={30} color={palette.accent} />
+            <Bot size={sz(30)} color={palette.accent} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, color: palette.ink, fontWeight: 600 }}>
+            <div style={{ fontSize: fz(17), color: palette.ink, fontWeight: 600 }}>
               {total > 0 ? 'Sugestões de hoje' : 'Nenhuma sugestão ainda'}
             </div>
-            <div style={{ fontSize: 15, color: palette.inkSoft, marginTop: 3 }}>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft, marginTop: 3 }}>
               {total > 0 ? `${executadas} de ${total} executadas` : 'Toque em "Atualizar" pra gerar'}
             </div>
             {total > 0 && (
@@ -612,7 +613,7 @@ export const CardDiaScreen = ({
         {dispensadas.length > 0 && (
           <details style={{ marginBottom: 16 }}>
             <summary style={{
-              cursor: 'pointer', fontSize: 14, color: palette.inkMuted, padding: 8,
+              cursor: 'pointer', fontSize: fz(14), color: palette.inkMuted, padding: 8,
               background: palette.beigeSoft, borderRadius: 8,
             }}>
               {dispensadas.length} dispensada{dispensadas.length > 1 ? 's' : ''} hoje
@@ -627,18 +628,18 @@ export const CardDiaScreen = ({
           <button onClick={onAbrirCarteira} style={{
             background: palette.surface, border: `1px solid ${palette.beige}`,
             borderRadius: 12, padding: 14, cursor: 'pointer', fontFamily: FONT,
-            fontSize: 16, color: palette.ink,
+            fontSize: fz(16), color: palette.ink,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 600,
           }}>
-            <Users size={20} color={palette.accent} /> Minha carteira
+            <Users size={sz(20)} color={palette.accent} /> Minha carteira
           </button>
           <button onClick={onAbrirDestaques} style={{
             background: palette.surface, border: `1px solid ${palette.beige}`,
             borderRadius: 12, padding: 14, cursor: 'pointer', fontFamily: FONT,
-            fontSize: 16, color: palette.ink,
+            fontSize: fz(16), color: palette.ink,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 600,
           }}>
-            <Star size={20} color={palette.warn} /> Destaques da semana
+            <Star size={sz(20)} color={palette.warn} /> Destaques da semana
           </button>
         </div>
       </div>
@@ -743,11 +744,11 @@ export const SugestaoScreen = ({
               width: 40, height: 40, borderRadius: 10, background: visual.corSoft,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Icone size={23} color={visual.cor} />
+              <Icone size={sz(23)} color={visual.cor} />
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 20, fontWeight: 600, color: palette.ink }}>{titulo}</div>
-              <div style={{ fontSize: 14, color: palette.inkSoft, marginTop: 2 }}>{sugestao.contexto}</div>
+              <div style={{ fontSize: fz(20), fontWeight: 600, color: palette.ink }}>{titulo}</div>
+              <div style={{ fontSize: fz(14), color: palette.inkSoft, marginTop: 2 }}>{sugestao.contexto}</div>
             </div>
           </div>
 
@@ -756,7 +757,7 @@ export const SugestaoScreen = ({
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
               background: subtipoMeta.cor + '15', color: subtipoMeta.cor,
-              borderRadius: 6, fontSize: 13, fontWeight: 600, marginBottom: 12,
+              borderRadius: 6, fontSize: fz(13), fontWeight: 600, marginBottom: 12,
             }}>
               <span>{subtipoMeta.emoji}</span>
               <span>{subtipoMeta.label}</span>
@@ -765,15 +766,15 @@ export const SugestaoScreen = ({
 
           {/* Dados do cliente */}
           {cliente && (
-            <div style={{ background: palette.beigeSoft, borderRadius: 8, padding: 12, fontSize: 15 }}>
+            <div style={{ background: palette.beigeSoft, borderRadius: 8, padding: 12, fontSize: fz(15) }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: palette.inkSoft, marginBottom: 4 }}>
-                <Store size={15} />
-                <span style={{ fontSize: 13 }}>RAZÃO SOCIAL</span>
+                <Store size={sz(15)} />
+                <span style={{ fontSize: fz(13) }}>RAZÃO SOCIAL</span>
               </div>
-              <div style={{ color: palette.ink, fontWeight: 600, fontSize: 15 }}>{cliente.razao_social}</div>
+              <div style={{ color: palette.ink, fontWeight: 600, fontSize: fz(15) }}>{cliente.razao_social}</div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${palette.beige}` }}>
-                <Pencil size={15} color={palette.inkSoft} />
+                <Pencil size={sz(15)} color={palette.inkSoft} />
                 {apelidoEdit ? (
                   <>
                     <input
@@ -788,14 +789,14 @@ export const SugestaoScreen = ({
                       disabled={salvandoApelido}
                       style={{
                         flex: 1, border: `1px solid ${palette.accent}`, background: palette.surface,
-                        padding: '4px 8px', borderRadius: 6, fontSize: 15, fontFamily: FONT, outline: 'none',
+                        padding: '4px 8px', borderRadius: 6, fontSize: fz(15), fontFamily: FONT, outline: 'none',
                       }} />
-                    {salvandoApelido && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: palette.accent }} />}
+                    {salvandoApelido && <Loader2 size={sz(16)} style={{ animation: 'spin 1s linear infinite', color: palette.accent }} />}
                   </>
                 ) : (
                   <button onClick={() => setApelidoEdit(true)} style={{
                     flex: 1, background: 'transparent', border: 'none', textAlign: 'left',
-                    cursor: 'pointer', fontFamily: FONT, fontSize: 15,
+                    cursor: 'pointer', fontFamily: FONT, fontSize: fz(15),
                     color: apelido ? palette.ink : palette.inkMuted,
                     fontStyle: apelido ? 'normal' : 'italic',
                   }}>
@@ -805,8 +806,8 @@ export const SugestaoScreen = ({
               </div>
 
               {cliente.telefone_principal && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${palette.beige}`, fontSize: 15, color: palette.inkSoft }}>
-                  <Phone size={15} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${palette.beige}`, fontSize: fz(15), color: palette.inkSoft }}>
+                  <Phone size={sz(15)} />
                   {cliente.telefone_principal}
                 </div>
               )}
@@ -821,7 +822,7 @@ export const SugestaoScreen = ({
             <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12, marginBottom: 18 }}>
               {fatos.map((f, i) => (
                 <div key={i} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 15, color: palette.ink,
+                  display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: fz(15), color: palette.ink,
                   padding: '5px 0',
                   borderBottom: i < fatos.length - 1 ? `1px solid ${palette.beigeSoft}` : 'none',
                 }}>
@@ -839,7 +840,7 @@ export const SugestaoScreen = ({
             <SectionTitle icon={Sparkles}>Ação sugerida</SectionTitle>
             <div style={{
               background: palette.accentSoft, border: `1px solid ${palette.accent}30`,
-              borderRadius: 10, padding: 14, fontSize: 15, color: palette.ink, lineHeight: 1.55,
+              borderRadius: 10, padding: 14, fontSize: fz(15), color: palette.ink, lineHeight: 1.55,
               marginBottom: 18,
             }}>{sugestao.acao_sugerida}</div>
           </>
@@ -862,16 +863,16 @@ export const SugestaoScreen = ({
                   <img src={produto.foto_url} alt={produto.descricao || produto.ref}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <Package size={28} color={palette.inkMuted} />
+                  <Package size={sz(28)} color={palette.inkMuted} />
                 )}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, color: palette.inkMuted, letterSpacing: 0.5 }}>REF {produto.ref}</div>
-                <div style={{ fontSize: 16, color: palette.ink, fontWeight: 600, marginTop: 2 }}>
+                <div style={{ fontSize: fz(13), color: palette.inkMuted, letterSpacing: 0.5 }}>REF {produto.ref}</div>
+                <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600, marginTop: 2 }}>
                   {produto.descricao || produto.modelo || `Produto ${produto.ref}`}
                 </div>
                 {produto.estoque_total != null && (
-                  <div style={{ fontSize: 14, color: produto.estoque_total > 10 ? palette.ok : palette.warn, marginTop: 4 }}>
+                  <div style={{ fontSize: fz(14), color: produto.estoque_total > 10 ? palette.ok : palette.warn, marginTop: 4 }}>
                     {produto.estoque_total} peças disponíveis
                   </div>
                 )}
@@ -886,14 +887,14 @@ export const SugestaoScreen = ({
             <SectionTitle icon={Tag}>Promoção ativa</SectionTitle>
             <div style={{
               background: palette.warnSoft, border: `1px solid ${palette.warn}40`, borderRadius: 10,
-              padding: 12, fontSize: 15, color: palette.ink,
+              padding: 12, fontSize: fz(15), color: palette.ink,
               display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18,
             }}>
-              <Tag size={17} color={palette.warn} />
+              <Tag size={sz(17)} color={palette.warn} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600 }}>{promocao.nome}</div>
                 {promocao.descricao && (
-                  <div style={{ fontSize: 13, color: palette.inkSoft, marginTop: 2 }}>{promocao.descricao}</div>
+                  <div style={{ fontSize: fz(13), color: palette.inkSoft, marginTop: 2 }}>{promocao.descricao}</div>
                 )}
               </div>
             </div>
@@ -911,27 +912,27 @@ export const SugestaoScreen = ({
         <button onClick={onPedirMensagem} style={{
           background: `linear-gradient(135deg, ${palette.accent} 0%, #3d6b8c 100%)`,
           color: palette.bg, border: 'none', borderRadius: 10,
-          padding: '13px 16px', fontSize: 16, fontWeight: 600,
+          padding: '13px 16px', fontSize: fz(16), fontWeight: 600,
           cursor: 'pointer', fontFamily: FONT,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           boxShadow: '0 2px 6px rgba(74,127,165,0.25)',
         }}>
-          <LampIcon size={21} />
+          <LampIcon size={sz(21)} />
           Pedir sugestão de mensagem
         </button>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={marcarEnviada} style={{
             flex: 1, background: palette.surface, color: palette.ok,
             border: `1.5px solid ${palette.ok}`, borderRadius: 10, padding: '11px',
-            fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+            fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          }}><Check size={17} /> Enviada</button>
+          }}><Check size={sz(17)} /> Enviada</button>
           <button onClick={() => setShowRecusa(true)} style={{
             flex: 1, background: palette.surface, color: palette.inkSoft,
             border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
-            fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+            fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          }}><X size={17} /> Não faz sentido</button>
+          }}><X size={sz(17)} /> Não faz sentido</button>
         </div>
       </div>
 
@@ -945,8 +946,8 @@ export const SugestaoScreen = ({
             background: palette.surface, borderRadius: '16px 16px 0 0',
             padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
           }}>
-            <div style={{ fontSize: 18, fontWeight: 600, color: palette.ink, marginBottom: 4 }}>Por que não faz sentido?</div>
-            <div style={{ fontSize: 14, color: palette.inkSoft, marginBottom: 16 }}>Escolha pra IA aprender o que melhor se encaixa</div>
+            <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>Por que não faz sentido?</div>
+            <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16 }}>Escolha pra IA aprender o que melhor se encaixa</div>
             {[
               { motivo: 'pular_hoje', icon: Pause, color: palette.inkSoft, label: 'Pular hoje', sub: 'Volta em 7 dias' },
               { motivo: 'pular_30d', icon: Calendar, color: palette.warn, label: 'Pular 30 dias', sub: 'Cliente sazonal' },
@@ -959,17 +960,17 @@ export const SugestaoScreen = ({
                   borderRadius: 10, padding: 14, marginBottom: 8, cursor: 'pointer', fontFamily: FONT,
                   display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
                 }}>
-                  <OpIcon size={23} color={op.color} />
+                  <OpIcon size={sz(23)} color={op.color} />
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{op.label}</div>
-                    <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 2 }}>{op.sub}</div>
+                    <div style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>{op.label}</div>
+                    <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 2 }}>{op.sub}</div>
                   </div>
                 </button>
               );
             })}
             <button onClick={() => setShowRecusa(false)} style={{
               width: '100%', background: 'transparent', color: palette.inkMuted,
-              border: 'none', padding: 12, fontSize: 15, cursor: 'pointer', fontFamily: FONT, marginTop: 4,
+              border: 'none', padding: 12, fontSize: fz(15), cursor: 'pointer', fontFamily: FONT, marginTop: 4,
             }}>Cancelar</button>
           </div>
         </div>
@@ -1080,8 +1081,8 @@ export const MinhaCarteiraScreen = ({
         borderRadius: 10, padding: '10px 6px', flex: 1, minWidth: 0, cursor: 'pointer',
         fontFamily: FONT, textAlign: 'center', transition: 'all 0.15s',
       }}>
-        <div style={{ fontSize: 21, fontWeight: 700, color: ativo ? meta.cor : palette.ink, lineHeight: 1 }}>{count}</div>
-        <div style={{ fontSize: 10, color: ativo ? meta.cor : palette.inkMuted, marginTop: 4, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontSize: fz(21), fontWeight: 700, color: ativo ? meta.cor : palette.ink, lineHeight: 1 }}>{count}</div>
+        <div style={{ fontSize: fz(10), color: ativo ? meta.cor : palette.inkMuted, marginTop: 4, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>{label}</div>
       </button>
     );
   };
@@ -1097,10 +1098,10 @@ export const MinhaCarteiraScreen = ({
             <button onClick={onAbrirGrupos} style={{
               background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
               color: palette.bg, padding: '6px 10px', borderRadius: 8,
-              cursor: 'pointer', fontSize: 13, fontFamily: FONT, fontWeight: 600,
+              cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
               display: 'flex', alignItems: 'center', gap: 4,
             }}>
-              <UsersRound size={15} /> Grupos
+              <UsersRound size={sz(15)} /> Grupos
             </button>
           )
         }
@@ -1122,27 +1123,27 @@ export const MinhaCarteiraScreen = ({
           borderRadius: 10, padding: '8px 12px', marginBottom: 10,
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <Search size={18} color={palette.inkMuted} />
+          <Search size={sz(18)} color={palette.inkMuted} />
           <input value={busca} onChange={e => setBusca(e.target.value)}
             placeholder="Buscar por nome, apelido ou razão social"
             style={{
               flex: 1, border: 'none', background: 'transparent', outline: 'none',
-              fontFamily: FONT, fontSize: 15, color: palette.ink,
+              fontFamily: FONT, fontSize: fz(15), color: palette.ink,
             }} />
           {busca && (
             <button onClick={() => setBusca('')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-              <X size={16} color={palette.inkMuted} />
+              <X size={sz(16)} color={palette.inkMuted} />
             </button>
           )}
         </div>
 
         {/* Ordenação */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontSize: 14, color: palette.inkSoft }}>
-          <Filter size={15} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontSize: fz(14), color: palette.inkSoft }}>
+          <Filter size={sz(15)} />
           <span>Ordenar:</span>
           <select value={ordenacao} onChange={e => setOrdenacao(e.target.value)} style={{
             flex: 1, padding: '6px 8px', borderRadius: 6, border: `1px solid ${palette.beige}`,
-            fontFamily: FONT, fontSize: 14, color: palette.ink, background: palette.surface,
+            fontFamily: FONT, fontSize: fz(14), color: palette.ink, background: palette.surface,
           }}>
             <option value="recentes">Compras recentes</option>
             <option value="antigos">Mais antigos</option>
@@ -1151,7 +1152,7 @@ export const MinhaCarteiraScreen = ({
           </select>
         </div>
 
-        <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 8 }}>
+        <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 8 }}>
           {itensFiltrados.length} {itensFiltrados.length === 1 ? 'item' : 'itens'}
         </div>
 
@@ -1171,22 +1172,22 @@ export const MinhaCarteiraScreen = ({
                 }}>
                   <div onClick={() => onSelectGrupo && onSelectGrupo(g)} style={{ cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                      <UsersRound size={16} color={palette.accent} />
-                      <span style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{g.nome_grupo}</span>
+                      <UsersRound size={sz(16)} color={palette.accent} />
+                      <span style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>{g.nome_grupo}</span>
                       <span style={{
-                        fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                        fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                         background: palette.accentSoft, color: palette.accent,
                         letterSpacing: 0.3, textTransform: 'uppercase',
                       }}>GRUPO</span>
                       <span style={{
-                        fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                        fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                         background: meta.soft, color: meta.cor, letterSpacing: 0.3, textTransform: 'uppercase',
                       }}>{meta.label}</span>
                     </div>
-                    <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 4 }}>
+                    <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 4 }}>
                       {item.qtdDocs} {item.qtdDocs === 1 ? 'documento' : 'documentos'}
                     </div>
-                    <div style={{ fontSize: 14, color: palette.inkSoft, marginBottom: 4 }}>
+                    <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 4 }}>
                       Última: {item.diasUltima} dias · {fmtMoeda(item.lifetime)} · {item.compras} compras
                     </div>
                   </div>
@@ -1194,10 +1195,10 @@ export const MinhaCarteiraScreen = ({
                     <button onClick={() => onSelectGrupo && onSelectGrupo(g)} style={{
                       flex: 1, background: palette.surface, color: palette.accent,
                       border: `1px solid ${palette.accent}40`, borderRadius: 6, padding: '8px',
-                      fontSize: 13, cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                      fontSize: fz(13), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                     }}>
-                      <UsersRound size={14} /> Ver grupo
+                      <UsersRound size={sz(14)} /> Ver grupo
                     </button>
                   </div>
                 </div>
@@ -1222,17 +1223,17 @@ export const MinhaCarteiraScreen = ({
               }}>
                 <div onClick={() => onSelectCliente(c)} style={{ cursor: 'pointer' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>
+                    <span style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>
                       {nomeCliente(c)}
                     </span>
                     <span style={{
-                      fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                      fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                       background: meta.soft, color: meta.cor, letterSpacing: 0.3, textTransform: 'uppercase',
                     }}>{meta.label}</span>
                     {/* Badge cliente nova */}
                     {eNovaCheckin && (
                       <span style={{
-                        fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                        fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                         background: palette.purpleSoft, color: palette.purple, letterSpacing: 0.3,
                         display: 'inline-flex', alignItems: 'center', gap: 3,
                       }}>
@@ -1241,7 +1242,7 @@ export const MinhaCarteiraScreen = ({
                     )}
                     {eNova && !eNovaCheckin && (
                       <span style={{
-                        fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                        fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                         background: palette.beigeSoft, color: palette.inkSoft, letterSpacing: 0.3,
                       }}>
                         {faseMeta?.emoji} Cliente nova
@@ -1249,9 +1250,9 @@ export const MinhaCarteiraScreen = ({
                     )}
                   </div>
                   {c.apelido && (
-                    <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 4 }}>{c.razao_social}</div>
+                    <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 4 }}>{c.razao_social}</div>
                   )}
-                  <div style={{ fontSize: 14, color: palette.inkSoft, marginBottom: 4 }}>
+                  <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 4 }}>
                     Última: {c.kpi?.dias_sem_comprar ?? '?'} dias · {fmtMoeda(c.kpi?.lifetime_total)} · {c.kpi?.qtd_compras ?? 0} compras
                   </div>
 
@@ -1262,12 +1263,12 @@ export const MinhaCarteiraScreen = ({
                       background: subtipoMeta.cor + '15',
                       border: `1px solid ${subtipoMeta.cor}40`,
                       borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6,
-                      fontSize: 13, fontWeight: 600, color: subtipoMeta.cor,
+                      fontSize: fz(13), fontWeight: 600, color: subtipoMeta.cor,
                     }}>
                       <span>{subtipoMeta.emoji}</span>
                       <span>{subtipoMeta.label}</span>
                       {c.diasSacola != null && (
-                        <span style={{ marginLeft: 'auto', fontSize: 12, color: palette.inkMuted, fontWeight: 400 }}>
+                        <span style={{ marginLeft: 'auto', fontSize: fz(12), color: palette.inkMuted, fontWeight: 400 }}>
                           {c.diasSacola}d
                         </span>
                       )}
@@ -1279,18 +1280,18 @@ export const MinhaCarteiraScreen = ({
                   <button onClick={() => onSelectCliente(c)} style={{
                     flex: 1, background: palette.surface, color: palette.accent,
                     border: `1px solid ${palette.accent}40`, borderRadius: 6, padding: '8px',
-                    fontSize: 13, cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                    fontSize: fz(13), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                   }}>
-                    <History size={14} /> Histórico
+                    <History size={sz(14)} /> Histórico
                   </button>
                   <button onClick={() => onPedirMensagemRapida && onPedirMensagemRapida(c)} style={{
                     flex: 1, background: `${palette.yellow}15`, color: palette.ink,
                     border: `1px solid ${palette.yellow}50`, borderRadius: 6, padding: '8px',
-                    fontSize: 13, cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                    fontSize: fz(13), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                   }}>
-                    <LampIcon size={14} /> Pedir mensagem
+                    <LampIcon size={sz(14)} /> Pedir mensagem
                   </button>
                 </div>
               </div>
@@ -1300,7 +1301,7 @@ export const MinhaCarteiraScreen = ({
 
         {itensFiltrados.length === 0 && (
           <div style={{
-            padding: 32, textAlign: 'center', color: palette.inkMuted, fontSize: 15,
+            padding: 32, textAlign: 'center', color: palette.inkMuted, fontSize: fz(15),
             background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12,
           }}>
             {busca ? 'Nenhum cliente encontrado pra essa busca.' : 'Nenhum cliente nessa categoria.'}
@@ -1372,7 +1373,7 @@ export const DetalheClienteScreen = ({
           <button onClick={() => setShowAcoes(true)} style={{
             background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
             color: palette.bg, padding: '6px 10px', borderRadius: 8,
-            cursor: 'pointer', fontSize: 13, fontFamily: FONT, fontWeight: 600,
+            cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
           }}>
             ⋯
           </button>
@@ -1386,21 +1387,21 @@ export const DetalheClienteScreen = ({
           borderLeft: `4px solid ${meta.cor}`, borderRadius: 12, padding: 14, marginBottom: 16,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: palette.inkSoft, marginBottom: 4 }}>
-            <Store size={15} />
-            <span style={{ fontSize: 12, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+            <Store size={sz(15)} />
+            <span style={{ fontSize: fz(12), letterSpacing: 0.5, textTransform: 'uppercase' }}>
               {cliente.cnpj ? 'CNPJ' : 'CPF'}
             </span>
           </div>
-          <div style={{ fontSize: 16, color: palette.ink, fontWeight: 600, marginBottom: 4 }}>{cliente.razao_social}</div>
+          <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600, marginBottom: 4 }}>{cliente.razao_social}</div>
           {cliente.cnpj && (
-            <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 12, fontFamily: 'monospace' }}>
+            <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 12, fontFamily: 'monospace' }}>
               {cliente.cnpj}
             </div>
           )}
 
           {/* Apelido editável */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}` }}>
-            <Pencil size={15} color={palette.inkSoft} />
+            <Pencil size={sz(15)} color={palette.inkSoft} />
             {apelidoEdit ? (
               <>
                 <input autoFocus value={apelido} onChange={e => setApelido(e.target.value)}
@@ -1413,14 +1414,14 @@ export const DetalheClienteScreen = ({
                   disabled={salvando}
                   style={{
                     flex: 1, border: `1px solid ${palette.accent}`, background: palette.surface,
-                    padding: '4px 8px', borderRadius: 6, fontSize: 15, fontFamily: FONT, outline: 'none',
+                    padding: '4px 8px', borderRadius: 6, fontSize: fz(15), fontFamily: FONT, outline: 'none',
                   }} />
-                {salvando && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: palette.accent }} />}
+                {salvando && <Loader2 size={sz(16)} style={{ animation: 'spin 1s linear infinite', color: palette.accent }} />}
               </>
             ) : (
               <button onClick={() => setApelidoEdit(true)} style={{
                 flex: 1, background: 'transparent', border: 'none', textAlign: 'left',
-                cursor: 'pointer', fontFamily: FONT, fontSize: 15, color: palette.ink,
+                cursor: 'pointer', fontFamily: FONT, fontSize: fz(15), color: palette.ink,
               }}>
                 Apelido: <strong>{apelido || 'sem apelido'}</strong>
               </button>
@@ -1429,16 +1430,16 @@ export const DetalheClienteScreen = ({
 
           {/* Telefone */}
           {cliente.telefone_principal && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}`, fontSize: 15, color: palette.inkSoft }}>
-              <Phone size={15} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}`, fontSize: fz(15), color: palette.inkSoft }}>
+              <Phone size={sz(15)} />
               {cliente.telefone_principal}
             </div>
           )}
 
           {/* Vendedora atual */}
           {vendedoraAtual && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}`, fontSize: 15, color: palette.inkSoft }}>
-              <Users size={15} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}`, fontSize: fz(15), color: palette.inkSoft }}>
+              <Users size={sz(15)} />
               <span>Carteira de <strong style={{ color: palette.ink }}>{vendedoraAtual.nome}</strong> · {vendedoraAtual.loja}</span>
             </div>
           )}
@@ -1446,10 +1447,10 @@ export const DetalheClienteScreen = ({
           {/* Grupo (se tiver) */}
           {grupoDoCliente && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}` }}>
-              <UsersRound size={15} color={palette.accent} />
+              <UsersRound size={sz(15)} color={palette.accent} />
               <button onClick={() => onAbrirGrupo && onAbrirGrupo(grupoDoCliente)} style={{
                 flex: 1, background: 'transparent', border: 'none', textAlign: 'left',
-                cursor: 'pointer', fontFamily: FONT, fontSize: 15, color: palette.accent, fontWeight: 600,
+                cursor: 'pointer', fontFamily: FONT, fontSize: fz(15), color: palette.accent, fontWeight: 600,
               }}>
                 Pertence ao grupo "{grupoDoCliente.nome_grupo}" →
               </button>
@@ -1465,18 +1466,18 @@ export const DetalheClienteScreen = ({
             borderRadius: 12, padding: 14, marginBottom: 16,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <ShoppingBag size={18} color={subtipoMeta.cor} />
-              <span style={{ fontSize: 15, fontWeight: 600, color: subtipoMeta.cor }}>
+              <ShoppingBag size={sz(18)} color={subtipoMeta.cor} />
+              <span style={{ fontSize: fz(15), fontWeight: 600, color: subtipoMeta.cor }}>
                 {subtipoMeta.emoji} {subtipoMeta.label}
               </span>
               {cliente.diasSacola != null && (
-                <span style={{ marginLeft: 'auto', fontSize: 13, color: palette.inkMuted }}>
+                <span style={{ marginLeft: 'auto', fontSize: fz(13), color: palette.inkMuted }}>
                   {cliente.diasSacola}d em espera
                 </span>
               )}
             </div>
             {sacolaAtiva.valor_total != null && (
-              <div style={{ fontSize: 14, color: palette.inkSoft }}>
+              <div style={{ fontSize: fz(14), color: palette.inkSoft }}>
                 Valor da sacola: <strong>{fmtMoeda(sacolaAtiva.valor_total)}</strong>
                 {sacolaAtiva.qtd_pecas && ` · ${sacolaAtiva.qtd_pecas} peças`}
               </div>
@@ -1490,7 +1491,7 @@ export const DetalheClienteScreen = ({
             background: fase === 'nova_checkin_pronto' ? palette.purpleSoft : palette.beigeSoft,
             border: `1px solid ${fase === 'nova_checkin_pronto' ? palette.purple : palette.beige}`,
             borderRadius: 10, padding: 12, marginBottom: 16,
-            fontSize: 14, color: palette.ink, lineHeight: 1.5,
+            fontSize: fz(14), color: palette.ink, lineHeight: 1.5,
           }}>
             {faseMeta.emoji} <strong>{faseMeta.label}</strong>
             {fase === 'nova_aguardando' && ' · não enviar mensagem ainda, deixar a cliente experimentar.'}
@@ -1502,21 +1503,21 @@ export const DetalheClienteScreen = ({
         {/* Resumo financeiro */}
         <SectionTitle icon={BarChart3}>Histórico de compras</SectionTitle>
         <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontSize: 16, color: palette.ink, lineHeight: 1.7 }}>
+          <div style={{ fontSize: fz(16), color: palette.ink, lineHeight: 1.7 }}>
             <strong>{kpi.qtd_compras || 0} {kpi.qtd_compras === 1 ? 'compra' : 'compras'}</strong> · <strong>{fmtMoeda(kpi.lifetime_total)}</strong> lifetime
           </div>
           {ticketMedio && (
-            <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.7, marginTop: 2 }}>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7, marginTop: 2 }}>
               Ticket médio {fmtMoeda(ticketMedio)}
             </div>
           )}
           {kpi.dias_sem_comprar != null && (
-            <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.7 }}>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7 }}>
               Última compra há <strong>{kpi.dias_sem_comprar} dias</strong>
             </div>
           )}
           {kpi.frequencia_media_dias && (
-            <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.7 }}>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7 }}>
               Compra a cada ~<strong>{Math.round(kpi.frequencia_media_dias)} dias</strong>
             </div>
           )}
@@ -1527,8 +1528,8 @@ export const DetalheClienteScreen = ({
           <>
             <SectionTitle icon={Heart}>Estilo dominante</SectionTitle>
             <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12, marginBottom: 16 }}>
-              <div style={{ fontSize: 16, color: palette.ink, fontWeight: 600 }}>{kpi.estilo_dominante}</div>
-              <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 4 }}>Calculado a partir das peças que mais comprou</div>
+              <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600 }}>{kpi.estilo_dominante}</div>
+              <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 4 }}>Calculado a partir das peças que mais comprou</div>
             </div>
           </>
         )}
@@ -1541,7 +1542,7 @@ export const DetalheClienteScreen = ({
               {kpi.tamanhos_frequentes.map(t => (
                 <span key={t} style={{
                   padding: '6px 14px', background: palette.beigeSoft, borderRadius: 6,
-                  fontSize: 15, fontWeight: 600, color: palette.ink,
+                  fontSize: fz(15), fontWeight: 600, color: palette.ink,
                 }}>{t}</span>
               ))}
             </div>
@@ -1553,10 +1554,10 @@ export const DetalheClienteScreen = ({
           <>
             <SectionTitle icon={Users}>Vendedora atual</SectionTitle>
             <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12, marginBottom: 16 }}>
-              <div style={{ fontSize: 15, color: palette.ink, padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: fz(15), color: palette.ink, padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{
                   padding: '2px 8px', background: palette.accentSoft, color: palette.accent,
-                  borderRadius: 4, fontSize: 12, fontWeight: 600, letterSpacing: 0.3,
+                  borderRadius: 4, fontSize: fz(12), fontWeight: 600, letterSpacing: 0.3,
                 }}>ATUAL</span>
                 {vendedoraAtual.nome} · desde {fmtData(cliente.data_atribuicao)}
               </div>
@@ -1574,12 +1575,12 @@ export const DetalheClienteScreen = ({
         <button onClick={() => onPedirMensagem && onPedirMensagem(cliente)} style={{
           background: `linear-gradient(135deg, ${palette.accent} 0%, #3d6b8c 100%)`,
           color: palette.bg, border: 'none', borderRadius: 10,
-          padding: '13px 16px', fontSize: 16, fontWeight: 600,
+          padding: '13px 16px', fontSize: fz(16), fontWeight: 600,
           cursor: 'pointer', fontFamily: FONT, width: '100%',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           boxShadow: '0 2px 6px rgba(74,127,165,0.25)',
         }}>
-          <LampIcon size={21} />
+          <LampIcon size={sz(21)} />
           Pedir sugestão de mensagem
         </button>
       </div>
@@ -1594,7 +1595,7 @@ export const DetalheClienteScreen = ({
             background: palette.surface, borderRadius: '16px 16px 0 0',
             padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
           }}>
-            <div style={{ fontSize: 18, fontWeight: 600, color: palette.ink, marginBottom: 14 }}>Ações</div>
+            <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 14 }}>Ações</div>
 
             {!grupoDoCliente && onCriarGrupo && (
               <button onClick={() => { onCriarGrupo(cliente); setShowAcoes(false); }} style={{
@@ -1602,10 +1603,10 @@ export const DetalheClienteScreen = ({
                 borderRadius: 10, padding: 14, marginBottom: 8, cursor: 'pointer', fontFamily: FONT,
                 display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
               }}>
-                <UsersRound size={23} color={palette.accent} />
+                <UsersRound size={sz(23)} color={palette.accent} />
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>Criar/adicionar a grupo</div>
-                  <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 2 }}>Agrupar com outros CNPJs do mesmo dono</div>
+                  <div style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>Criar/adicionar a grupo</div>
+                  <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 2 }}>Agrupar com outros CNPJs do mesmo dono</div>
                 </div>
               </button>
             )}
@@ -1623,10 +1624,10 @@ export const DetalheClienteScreen = ({
               borderRadius: 10, padding: 14, marginBottom: 8, cursor: 'pointer', fontFamily: FONT,
               display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
             }}>
-              <Pause size={23} color={palette.warn} />
+              <Pause size={sz(23)} color={palette.warn} />
               <div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>Pular 7 dias</div>
-                <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 2 }}>Não sugerir essa cliente por uma semana</div>
+                <div style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>Pular 7 dias</div>
+                <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 2 }}>Não sugerir essa cliente por uma semana</div>
               </div>
             </button>
 
@@ -1644,16 +1645,16 @@ export const DetalheClienteScreen = ({
               borderRadius: 10, padding: 14, marginBottom: 8, cursor: 'pointer', fontFamily: FONT,
               display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
             }}>
-              <Archive size={23} color={palette.alert} />
+              <Archive size={sz(23)} color={palette.alert} />
               <div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: palette.alert }}>Arquivar cliente</div>
-                <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 2 }}>Não sugerir mais (pode reverter no admin)</div>
+                <div style={{ fontSize: fz(16), fontWeight: 600, color: palette.alert }}>Arquivar cliente</div>
+                <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 2 }}>Não sugerir mais (pode reverter no admin)</div>
               </div>
             </button>
 
             <button onClick={() => setShowAcoes(false)} style={{
               width: '100%', background: 'transparent', color: palette.inkMuted,
-              border: 'none', padding: 12, fontSize: 15, cursor: 'pointer', fontFamily: FONT, marginTop: 4,
+              border: 'none', padding: 12, fontSize: fz(15), cursor: 'pointer', fontFamily: FONT, marginTop: 4,
             }}>Cancelar</button>
           </div>
         </div>
@@ -1704,10 +1705,10 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
       />
       <div style={{ padding: 16, paddingBottom: 32 }}>
         <div style={{
-          fontSize: 13, color: palette.inkMuted, marginBottom: 14,
+          fontSize: fz(13), color: palette.inkMuted, marginBottom: 14,
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
-          <Clock size={13} />
+          <Clock size={sz(13)} />
           Atualizado em tempo real
         </div>
 
@@ -1718,12 +1719,12 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
             border: `1px solid ${palette.ok}30`, borderRadius: 14, padding: 16, marginBottom: 14,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Sparkles size={21} color={palette.ok} />
-              <span style={{ fontSize: 17, fontWeight: 600, color: palette.ink }}>
+              <Sparkles size={sz(21)} color={palette.ok} />
+              <span style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>
                 {stats.enviadas} {stats.enviadas === 1 ? 'mensagem enviada' : 'mensagens enviadas'} hoje!
               </span>
             </div>
-            <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.5 }}>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.5 }}>
               Você executou <strong>{stats.taxaExecucao}%</strong> das sugestões.
               {stats.taxaExecucao >= 80 && ' Mandou bem! 👏'}
               {stats.taxaExecucao >= 50 && stats.taxaExecucao < 80 && ' Continue assim!'}
@@ -1732,7 +1733,7 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
         ) : (
           <div style={{
             background: palette.beigeSoft, borderRadius: 14, padding: 16, marginBottom: 14,
-            fontSize: 15, color: palette.inkSoft, textAlign: 'center',
+            fontSize: fz(15), color: palette.inkSoft, textAlign: 'center',
           }}>
             Sem mensagens enviadas ainda esta semana. Comece pelas sugestões do dia! 💪
           </div>
@@ -1755,14 +1756,14 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
                 borderTop: i > 0 ? `1px solid ${palette.beigeSoft}` : 'none',
               }}>
                 <span style={{ marginRight: 10 }}>{meta.emoji}</span>
-                <span style={{ flex: 1, fontSize: 15, color: palette.ink }}>{e.label}</span>
-                <span style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{e.count}</span>
+                <span style={{ flex: 1, fontSize: fz(15), color: palette.ink }}>{e.label}</span>
+                <span style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>{e.count}</span>
               </div>
             );
           })}
           <div style={{
             marginTop: 8, paddingTop: 10, borderTop: `2px solid ${palette.beige}`,
-            fontSize: 14, fontWeight: 600, color: palette.accent, textAlign: 'right',
+            fontSize: fz(14), fontWeight: 600, color: palette.accent, textAlign: 'right',
           }}>
             Total: {stats.carteiraTotal} clientes
           </div>
@@ -1781,8 +1782,8 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
               display: 'flex', alignItems: 'center', padding: '10px 0',
               borderTop: i > 0 ? `1px solid ${palette.beigeSoft}` : 'none',
             }}>
-              <span style={{ flex: 1, fontSize: 15, color: palette.inkSoft }}>{m.label}</span>
-              <span style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>{m.value}</span>
+              <span style={{ flex: 1, fontSize: fz(15), color: palette.inkSoft }}>{m.label}</span>
+              <span style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>{m.value}</span>
             </div>
           ))}
         </div>
@@ -1798,16 +1799,16 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               border: `2px solid ${palette.warn}`,
             }}>
-              <Award size={28} color={palette.warn} />
+              <Award size={sz(28)} color={palette.warn} />
             </div>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 600, color: palette.ink }}>Continue firme!</div>
-              <div style={{ fontSize: 13, color: palette.inkMuted }}>Cada mensagem conta</div>
+              <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>Continue firme!</div>
+              <div style={{ fontSize: fz(13), color: palette.inkMuted }}>Cada mensagem conta</div>
             </div>
           </div>
           <div style={{
             background: palette.surface, borderRadius: 8, padding: 10,
-            fontSize: 14, color: palette.inkSoft, fontStyle: 'italic',
+            fontSize: fz(14), color: palette.inkSoft, fontStyle: 'italic',
             border: `1px solid ${palette.warn}30`,
           }}>
             💛 "A relação com cliente se constrói no tempo, uma mensagem por vez."
@@ -1854,10 +1855,10 @@ export const HistoricoCarteiraScreen = ({ lojas, onBack }) => {
       />
       <div style={{ padding: 16, paddingBottom: 32 }}>
         <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: palette.inkMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>Atual</div>
+          <div style={{ fontSize: fz(13), color: palette.inkMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>Atual</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
-            <div style={{ fontSize: 41, fontWeight: 700, color: palette.ink, lineHeight: 1 }}>{valor}</div>
-            <div style={{ fontSize: 15, color: palette.inkSoft }}>clientes ativos</div>
+            <div style={{ fontSize: fz(41), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>{valor}</div>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft }}>clientes ativos</div>
           </div>
         </div>
 
@@ -1871,7 +1872,7 @@ export const HistoricoCarteiraScreen = ({ lojas, onBack }) => {
             <button key={f.id} onClick={() => setFiltroLoja(f.id)} style={{
               flex: 1, background: filtroLoja === f.id ? palette.surface : 'transparent',
               color: filtroLoja === f.id ? palette.ink : palette.inkSoft,
-              border: 'none', borderRadius: 8, padding: '8px 4px', fontSize: 14,
+              border: 'none', borderRadius: 8, padding: '8px 4px', fontSize: fz(14),
               fontWeight: filtroLoja === f.id ? 600 : 400, cursor: 'pointer', fontFamily: FONT,
               boxShadow: filtroLoja === f.id ? '0 1px 3px rgba(0,0,0,0.06)' : 'none', transition: 'all 0.15s',
             }}>{f.label}</button>
@@ -1881,20 +1882,20 @@ export const HistoricoCarteiraScreen = ({ lojas, onBack }) => {
         {/* Stats rápidas */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 12 }}>
-            <div style={{ fontSize: 12, color: palette.inkMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>Bom Retiro</div>
-            <div style={{ fontSize: 25, fontWeight: 700, color: palette.ink }}>{stats.br}</div>
-            <div style={{ fontSize: 13, color: palette.inkSoft, marginTop: 2 }}>clientes ativos</div>
+            <div style={{ fontSize: fz(12), color: palette.inkMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>Bom Retiro</div>
+            <div style={{ fontSize: fz(25), fontWeight: 700, color: palette.ink }}>{stats.br}</div>
+            <div style={{ fontSize: fz(13), color: palette.inkSoft, marginTop: 2 }}>clientes ativos</div>
           </div>
           <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 12 }}>
-            <div style={{ fontSize: 12, color: palette.inkMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>Silva Teles</div>
-            <div style={{ fontSize: 25, fontWeight: 700, color: palette.ink }}>{stats.st}</div>
-            <div style={{ fontSize: 13, color: palette.inkSoft, marginTop: 2 }}>clientes ativos</div>
+            <div style={{ fontSize: fz(12), color: palette.inkMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>Silva Teles</div>
+            <div style={{ fontSize: fz(25), fontWeight: 700, color: palette.ink }}>{stats.st}</div>
+            <div style={{ fontSize: fz(13), color: palette.inkSoft, marginTop: 2 }}>clientes ativos</div>
           </div>
         </div>
 
         <div style={{
           marginTop: 16, padding: 12, background: palette.beigeSoft,
-          borderRadius: 10, fontSize: 13, color: palette.inkSoft, lineHeight: 1.5,
+          borderRadius: 10, fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
         }}>
           ℹ️ Cliente ativo = comprou nos últimos 45 dias. Histórico mensal será populado conforme as importações forem rodando.
         </div>
@@ -1995,27 +1996,27 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               background: `${palette.yellow}25`, flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <LampIcon size={23} />
+              <LampIcon size={sz(23)} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 17, fontWeight: 600, color: palette.ink }}>Sugestão de mensagem</div>
+              <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>Sugestão de mensagem</div>
               <div style={{
-                fontSize: 13, color: palette.inkMuted,
+                fontSize: fz(13), color: palette.inkMuted,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>{tituloModal}</div>
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: palette.inkMuted, padding: 4 }}>
-            <X size={23} />
+            <X size={sz(23)} />
           </button>
         </div>
 
         {/* Step: pedir apelido */}
         {step === 'apelido' && (
           <div>
-            <div style={{ background: palette.beigeSoft, borderRadius: 10, padding: 14, marginBottom: 14, fontSize: 15, color: palette.inkSoft, lineHeight: 1.5 }}>
+            <div style={{ background: palette.beigeSoft, borderRadius: 10, padding: 14, marginBottom: 14, fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.5 }}>
               Antes de gerar a mensagem, você sabe o nome de quem atende?
-              <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 6 }}>
+              <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 6 }}>
                 A IA já lembra na próxima vez.
               </div>
             </div>
@@ -2024,17 +2025,17 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               onKeyDown={e => { if (e.key === 'Enter') setStep('gerando'); }}
               style={{
                 width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${palette.beige}`,
-                fontSize: 17, fontFamily: FONT, color: palette.ink, outline: 'none', boxSizing: 'border-box', marginBottom: 14,
+                fontSize: fz(17), fontFamily: FONT, color: palette.ink, outline: 'none', boxSizing: 'border-box', marginBottom: 14,
               }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => { setApelido(''); setStep('gerando'); }} style={{
                 flex: 1, background: palette.surface, color: palette.inkSoft,
                 border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
-                fontSize: 15, cursor: 'pointer', fontFamily: FONT,
+                fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
               }}>Pular</button>
               <button onClick={() => setStep('gerando')} style={{
                 flex: 2, background: palette.accent, color: palette.bg, border: 'none',
-                borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 600,
+                borderRadius: 10, padding: '12px', fontSize: fz(15), fontWeight: 600,
                 cursor: 'pointer', fontFamily: FONT,
               }}>Salvar e continuar</button>
             </div>
@@ -2049,12 +2050,12 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               margin: '0 auto 16px', animation: 'pulse 1.5s ease-in-out infinite',
             }}>
-              <Bot size={37} color={palette.accent} />
+              <Bot size={sz(37)} color={palette.accent} />
             </div>
-            <div style={{ fontSize: 16, color: palette.ink, fontWeight: 600 }}>
+            <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600 }}>
               Gerando mensagem{apelido ? ` para ${apelido}` : ''}…
             </div>
-            <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 8 }}>
+            <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 8 }}>
               A IA tá lendo o histórico da cliente
             </div>
             <style>{`@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.08); opacity: 0.85; } }`}</style>
@@ -2068,27 +2069,27 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               width: 60, height: 60, borderRadius: '50%', background: palette.alertSoft,
               display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
             }}>
-              <AlertCircle size={32} color={palette.alert} />
+              <AlertCircle size={sz(32)} color={palette.alert} />
             </div>
-            <div style={{ fontSize: 16, color: palette.ink, fontWeight: 600, marginBottom: 6 }}>
+            <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600, marginBottom: 6 }}>
               Não consegui gerar a mensagem
             </div>
-            <div style={{ fontSize: 14, color: palette.inkSoft, marginBottom: 16, lineHeight: 1.5 }}>
+            <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16, lineHeight: 1.5 }}>
               {erro}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={onClose} style={{
                 flex: 1, background: palette.surface, color: palette.inkSoft,
                 border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
-                fontSize: 15, cursor: 'pointer', fontFamily: FONT,
+                fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
               }}>Fechar</button>
               <button onClick={gerar} style={{
                 flex: 2, background: palette.accent, color: palette.bg, border: 'none',
-                borderRadius: 10, padding: '12px', fontSize: 15, fontWeight: 600,
+                borderRadius: 10, padding: '12px', fontSize: fz(15), fontWeight: 600,
                 cursor: 'pointer', fontFamily: FONT,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}>
-                <RefreshCw size={16} /> Tentar de novo
+                <RefreshCw size={sz(16)} /> Tentar de novo
               </button>
             </div>
           </div>
@@ -2098,13 +2099,13 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
         {step === 'pronta' && (
           <div>
             <div style={{
-              fontSize: 13, color: palette.inkSoft, letterSpacing: 0.5, textTransform: 'uppercase',
+              fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.5, textTransform: 'uppercase',
               marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
             }}>
-              <Sparkles size={14} /> Mensagem sugerida
+              <Sparkles size={sz(14)} /> Mensagem sugerida
             </div>
             <div style={{
-              background: palette.beigeSoft, borderRadius: 12, padding: 14, fontSize: 16,
+              background: palette.beigeSoft, borderRadius: 12, padding: 14, fontSize: fz(16),
               color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap',
               border: `1px solid ${palette.beige}`, marginBottom: 14, fontFamily: FONT,
             }}>{mensagem}</div>
@@ -2113,30 +2114,30 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               <button onClick={() => { setMensagem(''); gerar(); }} style={{
                 flex: 1, background: palette.surface, color: palette.inkSoft,
                 border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
-                fontSize: 15, cursor: 'pointer', fontFamily: FONT,
+                fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}><RefreshCw size={16} /> Gerar outra</button>
+              }}><RefreshCw size={sz(16)} /> Gerar outra</button>
               <button onClick={copiar} style={{
                 flex: 1, background: copiado ? palette.ok : palette.surface,
                 color: copiado ? palette.bg : palette.accent,
                 border: `1.5px solid ${copiado ? palette.ok : palette.accent}`,
-                borderRadius: 10, padding: '11px', fontSize: 15, fontWeight: 600,
+                borderRadius: 10, padding: '11px', fontSize: fz(15), fontWeight: 600,
                 cursor: 'pointer', fontFamily: FONT,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 gap: 6, transition: 'all 0.2s',
-              }}>{copiado ? <><Check size={16} /> Copiado!</> : <><Copy size={16} /> Copiar</>}</button>
+              }}>{copiado ? <><Check size={sz(16)} /> Copiado!</> : <><Copy size={sz(16)} /> Copiar</>}</button>
             </div>
 
             <button onClick={marcarEnviada} disabled={marcandoEnviada} style={{
               width: '100%', background: palette.ok, color: palette.bg, border: 'none',
-              borderRadius: 10, padding: '13px', fontSize: 16, fontWeight: 600,
+              borderRadius: 10, padding: '13px', fontSize: fz(16), fontWeight: 600,
               cursor: marcandoEnviada ? 'wait' : 'pointer', fontFamily: FONT,
               opacity: marcandoEnviada ? 0.7 : 1,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}>
               {marcandoEnviada
-                ? <><Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> Salvando…</>
-                : <><Send size={20} /> Enviei!</>
+                ? <><Loader2 size={sz(20)} style={{ animation: 'spin 1s linear infinite' }} /> Salvando…</>
+                : <><Send size={sz(20)} /> Enviei!</>
               }
             </button>
           </div>

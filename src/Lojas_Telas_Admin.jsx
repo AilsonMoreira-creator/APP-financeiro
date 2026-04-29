@@ -51,7 +51,7 @@ import {
 import {
   palette, FONT, statusMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon,
-  supabase,
+  supabase, fz, sz,
 } from './Lojas_Shared.jsx';
 
 // Importa ModalMensagem da Parte 2a (usado em DetalheGrupoScreen)
@@ -107,7 +107,7 @@ function nomeCliente(c) {
 /** Estilo padrão de input em forms admin. */
 const inputStyle = {
   width: '100%', padding: '10px 12px', borderRadius: 8,
-  border: `1.5px solid ${palette.beige}`, fontFamily: FONT, fontSize: 15,
+  border: `1.5px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(15),
   color: palette.ink, outline: 'none', boxSizing: 'border-box', background: palette.surface,
 };
 
@@ -115,7 +115,7 @@ const inputStyle = {
 const btnCancelar = {
   flex: 1, background: palette.surface, color: palette.inkSoft,
   border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
-  fontSize: 16, cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+  fontSize: fz(16), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
 };
 
 /** Estilo de botão primário do footer (cor configurável). */
@@ -123,7 +123,7 @@ function btnPrimario(cor, salvando = false) {
   return {
     flex: 2, background: salvando ? palette.beige : cor,
     color: palette.bg, border: 'none', borderRadius: 10, padding: '12px',
-    fontSize: 16, fontWeight: 600, fontFamily: FONT,
+    fontSize: fz(16), fontWeight: 600, fontFamily: FONT,
     cursor: salvando ? 'wait' : 'pointer', opacity: salvando ? 0.7 : 1,
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
   };
@@ -199,10 +199,10 @@ export const PromocoesScreen = ({ lojas, onBack, onNovaPromocao, onEditarPromoca
           <button onClick={onNovaPromocao} style={{
             background: palette.warn, border: 'none', color: palette.bg,
             padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 4, fontSize: 14,
+            display: 'flex', alignItems: 'center', gap: 4, fontSize: fz(14),
             fontFamily: FONT, fontWeight: 600,
           }}>
-            <Plus size={16} /> Nova
+            <Plus size={sz(16)} /> Nova
           </button>
         }
       />
@@ -213,10 +213,10 @@ export const PromocoesScreen = ({ lojas, onBack, onNovaPromocao, onEditarPromoca
         {ativas.length === 0 && (
           <div style={{
             padding: 24, textAlign: 'center', color: palette.inkMuted,
-            fontSize: 15, marginBottom: 16, background: palette.surface,
+            fontSize: fz(15), marginBottom: 16, background: palette.surface,
             border: `1px dashed ${palette.beige}`, borderRadius: 10, lineHeight: 1.5,
           }}>
-            <Gift size={41} color={palette.inkMuted} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
+            <Gift size={sz(41)} color={palette.inkMuted} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
             Nenhuma promoção ativa no momento.<br/>
             Crie uma pra IA usar nas sugestões!
           </div>
@@ -234,12 +234,12 @@ export const PromocoesScreen = ({ lojas, onBack, onNovaPromocao, onEditarPromoca
                 borderLeft: `4px solid ${palette.warn}`, borderRadius: 12, padding: 14,
               }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-                  <Gift size={21} color={palette.warn} style={{ marginTop: 2, flexShrink: 0 }} />
+                  <Gift size={sz(21)} color={palette.warn} style={{ marginTop: 2, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 17, fontWeight: 600, color: palette.ink, marginBottom: 2 }}>
+                    <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink, marginBottom: 2 }}>
                       {p.nome_curto}
                     </div>
-                    <div style={{ fontSize: 14, color: palette.inkSoft, lineHeight: 1.5 }}>
+                    <div style={{ fontSize: fz(14), color: palette.inkSoft, lineHeight: 1.5 }}>
                       {p.descricao_completa}
                     </div>
                   </div>
@@ -250,42 +250,42 @@ export const PromocoesScreen = ({ lojas, onBack, onNovaPromocao, onEditarPromoca
                   borderTop: `1px solid ${palette.beigeSoft}`, marginTop: 8,
                 }}>
                   <div>
-                    <div style={{ fontSize: 12, color: palette.inkMuted, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                    <div style={{ fontSize: fz(12), color: palette.inkMuted, letterSpacing: 0.3, textTransform: 'uppercase' }}>
                       Vigência
                     </div>
-                    <div style={{ fontSize: 14, color: palette.ink, fontWeight: 600, marginTop: 2 }}>
+                    <div style={{ fontSize: fz(14), color: palette.ink, fontWeight: 600, marginTop: 2 }}>
                       Até {fmtData(p.data_fim)}{' '}
                       <span style={{
                         color: diasRestantes != null && diasRestantes < 5 ? palette.alert : palette.inkSoft,
-                        fontWeight: 400, fontSize: 13,
+                        fontWeight: 400, fontSize: fz(13),
                       }}>
                         ({diasRestantes != null ? diasRestantes + 'd' : '—'})
                       </span>
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, color: palette.inkMuted, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                    <div style={{ fontSize: fz(12), color: palette.inkMuted, letterSpacing: 0.3, textTransform: 'uppercase' }}>
                       Categoria
                     </div>
-                    <div style={{ fontSize: 14, color: palette.ink, fontWeight: 600, marginTop: 2 }}>
+                    <div style={{ fontSize: fz(14), color: palette.ink, fontWeight: 600, marginTop: 2 }}>
                       {p.categoria || 'todos'}
                     </div>
                   </div>
                   {p.desconto_pct != null && (
                     <div>
-                      <div style={{ fontSize: 12, color: palette.inkMuted, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                      <div style={{ fontSize: fz(12), color: palette.inkMuted, letterSpacing: 0.3, textTransform: 'uppercase' }}>
                         Desconto
                       </div>
-                      <div style={{ fontSize: 14, color: palette.ink, fontWeight: 600, marginTop: 2 }}>
+                      <div style={{ fontSize: fz(14), color: palette.ink, fontWeight: 600, marginTop: 2 }}>
                         {p.desconto_pct}%
                       </div>
                     </div>
                   )}
                   <div>
-                    <div style={{ fontSize: 12, color: palette.inkMuted, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                    <div style={{ fontSize: fz(12), color: palette.inkMuted, letterSpacing: 0.3, textTransform: 'uppercase' }}>
                       Usada em
                     </div>
-                    <div style={{ fontSize: 14, color: palette.accent, fontWeight: 600, marginTop: 2 }}>
+                    <div style={{ fontSize: fz(14), color: palette.accent, fontWeight: 600, marginTop: 2 }}>
                       {usada} sugest{usada === 1 ? 'ão' : 'ões'}
                     </div>
                   </div>
@@ -295,21 +295,21 @@ export const PromocoesScreen = ({ lojas, onBack, onNovaPromocao, onEditarPromoca
                   <button onClick={() => onEditarPromocao(p)} style={{
                     flex: 1, background: palette.surface, color: palette.accent,
                     border: `1px solid ${palette.accent}40`, borderRadius: 6, padding: '8px',
-                    fontSize: 14, cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                    fontSize: fz(14), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                   }}>
-                    <Edit3 size={14} /> Editar
+                    <Edit3 size={sz(14)} /> Editar
                   </button>
                   <button onClick={() => pausar(p)} disabled={pausando} style={{
                     flex: 1, background: palette.surface, color: palette.inkSoft,
                     border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '8px',
-                    fontSize: 14, cursor: pausando ? 'wait' : 'pointer',
+                    fontSize: fz(14), cursor: pausando ? 'wait' : 'pointer',
                     fontFamily: FONT, fontWeight: 600, opacity: pausando ? 0.6 : 1,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                   }}>
                     {pausando
-                      ? <><Loader2 size={14} style={spinKeyframes} /> Pausando…</>
-                      : <><Pause size={14} /> Pausar</>}
+                      ? <><Loader2 size={sz(14)} style={spinKeyframes} /> Pausando…</>
+                      : <><Pause size={sz(14)} /> Pausar</>}
                   </button>
                 </div>
               </div>
@@ -320,31 +320,31 @@ export const PromocoesScreen = ({ lojas, onBack, onNovaPromocao, onEditarPromoca
         {/* Toggle do histórico */}
         <button onClick={() => setShowHistorico(!showHistorico)} style={{
           width: '100%', background: 'transparent', border: `1px solid ${palette.beige}`,
-          borderRadius: 10, padding: 12, cursor: 'pointer', fontFamily: FONT, fontSize: 15,
+          borderRadius: 10, padding: 12, cursor: 'pointer', fontFamily: FONT, fontSize: fz(15),
           color: palette.inkSoft,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Archive size={16} />
+            <Archive size={sz(16)} />
             Histórico {historico.length > 0 ? `(${historico.length})` : ''}
           </span>
-          {showHistorico ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          {showHistorico ? <ChevronUp size={sz(18)} /> : <ChevronDown size={sz(18)} />}
         </button>
 
         {showHistorico && (
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {carregandoHist && (
               <div style={{
-                padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: 14,
+                padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}>
-                <Loader2 size={16} style={spinKeyframes} /> Carregando…
+                <Loader2 size={sz(16)} style={spinKeyframes} /> Carregando…
               </div>
             )}
             {!carregandoHist && historico.length === 0 && (
               <div style={{
                 padding: 16, textAlign: 'center', color: palette.inkMuted,
-                fontSize: 14, fontStyle: 'italic',
+                fontSize: fz(14), fontStyle: 'italic',
               }}>
                 Nenhuma promoção no histórico ainda.
               </div>
@@ -352,13 +352,13 @@ export const PromocoesScreen = ({ lojas, onBack, onNovaPromocao, onEditarPromoca
             {historico.map((p) => (
               <div key={p.id} style={{
                 background: palette.beigeSoft, borderRadius: 8, padding: 10,
-                fontSize: 14, color: palette.inkSoft,
+                fontSize: fz(14), color: palette.inkSoft,
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
               }}>
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {p.nome_curto}
                 </span>
-                <span style={{ fontSize: 13, color: palette.inkMuted, flexShrink: 0 }}>
+                <span style={{ fontSize: fz(13), color: palette.inkMuted, flexShrink: 0 }}>
                   expirou {fmtData(p.data_fim)}
                 </span>
               </div>
@@ -428,16 +428,16 @@ export const NovaPromocaoScreen = ({ lojas, promocaoExistente = null, onBack, on
   // Helper component pra label + hint
   const Field = ({ label, children, hint }) => (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>{label}</div>
       {children}
-      {hint && <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 4 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>{hint}</div>}
     </div>
   );
 
   const Checkbox = ({ checked, onChange, label }) => (
     <label style={{
       display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
-      cursor: 'pointer', fontSize: 15, color: palette.ink,
+      cursor: 'pointer', fontSize: fz(15), color: palette.ink,
     }}>
       <input type="checkbox" checked={checked} onChange={onChange}
         style={{ width: 16, height: 16, accentColor: palette.accent, cursor: 'pointer' }} />
@@ -554,7 +554,7 @@ export const NovaPromocaoScreen = ({ lojas, promocaoExistente = null, onBack, on
             borderRadius: 8, padding: '4px 12px',
           }}>
             {vendedorasReais.length === 0 && (
-              <div style={{ fontSize: 14, color: palette.inkMuted, padding: 8, fontStyle: 'italic' }}>
+              <div style={{ fontSize: fz(14), color: palette.inkMuted, padding: 8, fontStyle: 'italic' }}>
                 Nenhuma vendedora cadastrada.
               </div>
             )}
@@ -594,8 +594,8 @@ export const NovaPromocaoScreen = ({ lojas, promocaoExistente = null, onBack, on
         <button onClick={onBack} disabled={salvando} style={btnCancelar}>Cancelar</button>
         <button onClick={salvar} disabled={salvando} style={btnPrimario(palette.warn, salvando)}>
           {salvando
-            ? <><Loader2 size={17} style={spinKeyframes} /> Salvando…</>
-            : <><Save size={17} /> {ehEdicao ? 'Salvar alterações' : 'Salvar promoção'}</>}
+            ? <><Loader2 size={sz(17)} style={spinKeyframes} /> Salvando…</>
+            : <><Save size={sz(17)} /> {ehEdicao ? 'Salvar alterações' : 'Salvar promoção'}</>}
         </button>
       </div>
     </div>
@@ -707,7 +707,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
       borderRadius: 10, padding: 10,
     }}>
       {items.length === 0 && (
-        <div style={{ fontSize: 14, color: palette.inkMuted, padding: 6, fontStyle: 'italic' }}>
+        <div style={{ fontSize: fz(14), color: palette.inkMuted, padding: 6, fontStyle: 'italic' }}>
           Nenhuma regra. Adicione abaixo.
         </div>
       )}
@@ -717,12 +717,12 @@ export const RegrasScreen = ({ lojas, onBack }) => {
           borderBottom: i < items.length - 1 ? `1px solid ${palette.beigeSoft}` : 'none',
         }}>
           <span style={{ color: cor, marginTop: 1 }}>•</span>
-          <span style={{ flex: 1, fontSize: 15, color: palette.ink }}>{item}</span>
+          <span style={{ flex: 1, fontSize: fz(15), color: palette.ink }}>{item}</span>
           <button onClick={() => onRemove(i)} style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             padding: 4, display: 'flex',
           }}>
-            <Trash2 size={16} color={palette.inkMuted} />
+            <Trash2 size={sz(16)} color={palette.inkMuted} />
           </button>
         </div>
       ))}
@@ -738,7 +738,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
               setNovoValor('');
             }
           }}
-          style={{ ...inputStyle, fontSize: 14, padding: '6px 8px' }} />
+          style={{ ...inputStyle, fontSize: fz(14), padding: '6px 8px' }} />
         <button onClick={() => {
           if (novoValor.trim()) {
             onAdd(novoValor.trim());
@@ -749,7 +749,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
           padding: '6px 10px', cursor: 'pointer',
           display: 'flex', alignItems: 'center',
         }}>
-          <Plus size={16} />
+          <Plus size={sz(16)} />
         </button>
       </div>
     </div>
@@ -760,10 +760,10 @@ export const RegrasScreen = ({ lojas, onBack }) => {
       <div style={{ background: palette.bg, minHeight: '100%', fontFamily: FONT }}>
         <Header title="Regras gerais" onBack={onBack} />
         <div style={{
-          padding: 40, textAlign: 'center', color: palette.inkMuted, fontSize: 15,
+          padding: 40, textAlign: 'center', color: palette.inkMuted, fontSize: fz(15),
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
-          <Loader2 size={18} style={spinKeyframes} /> Carregando configurações…
+          <Loader2 size={sz(18)} style={spinKeyframes} /> Carregando configurações…
         </div>
       </div>
     );
@@ -778,15 +778,15 @@ export const RegrasScreen = ({ lojas, onBack }) => {
           <button onClick={salvar} disabled={salvando} style={{
             background: salvouOk ? palette.ok : palette.accent, border: 'none', color: palette.bg,
             padding: '6px 12px', borderRadius: 8, cursor: salvando ? 'wait' : 'pointer',
-            display: 'flex', alignItems: 'center', gap: 4, fontSize: 14,
+            display: 'flex', alignItems: 'center', gap: 4, fontSize: fz(14),
             fontFamily: FONT, fontWeight: 600,
             opacity: salvando ? 0.7 : 1,
           }}>
             {salvando
-              ? <><Loader2 size={16} style={spinKeyframes} /> Salvando…</>
+              ? <><Loader2 size={sz(16)} style={spinKeyframes} /> Salvando…</>
               : salvouOk
-                ? <><Check size={16} /> Salvo!</>
-                : <><Save size={16} /> Salvar</>}
+                ? <><Check size={sz(16)} /> Salvo!</>
+                : <><Save size={sz(16)} /> Salvar</>}
           </button>
         }
       />
@@ -794,14 +794,14 @@ export const RegrasScreen = ({ lojas, onBack }) => {
 
         <SectionTitle icon={Bot}>Identidade da marca</SectionTitle>
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
             Tom de comunicação
           </div>
           <textarea value={tom} onChange={e => setTom(e.target.value)} rows={4}
             style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }} />
         </div>
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
             Posicionamento
           </div>
           <textarea value={posicionamento} onChange={e => setPosicionamento(e.target.value)} rows={3}
@@ -829,45 +829,45 @@ export const RegrasScreen = ({ lojas, onBack }) => {
         <SectionTitle icon={Settings}>Parâmetros padrão</SectionTitle>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+            <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
               Desconto reativação
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <input type="number" value={descontoReat}
                 onChange={e => setDescontoReat(e.target.value)} style={inputStyle} />
-              <span style={{ fontSize: 16, color: palette.inkSoft }}>%</span>
+              <span style={{ fontSize: fz(16), color: palette.inkSoft }}>%</span>
             </div>
-            <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 4 }}>
+            <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
               Cliente 90+ dias
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+            <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
               Desconto atenção
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <input type="number" value={descontoAten}
                 onChange={e => setDescontoAten(e.target.value)} style={inputStyle} />
-              <span style={{ fontSize: 16, color: palette.inkSoft }}>%</span>
+              <span style={{ fontSize: fz(16), color: palette.inkSoft }}>%</span>
             </div>
-            <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 4 }}>
+            <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
               Cliente 45-90 dias
             </div>
           </div>
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
             Saudação padrão
           </div>
           <input value={saudacao} onChange={e => setSaudacao(e.target.value)} style={inputStyle} />
-          <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 4 }}>
+          <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
             Use {'{nome}'} pra placeholder do nome do cliente
           </div>
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
             Fechamento padrão
           </div>
           <input value={fechamento} onChange={e => setFechamento(e.target.value)} style={inputStyle} />
@@ -875,7 +875,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
 
         <div style={{
           marginTop: 16, padding: 12, background: palette.beigeSoft,
-          borderRadius: 10, fontSize: 13, color: palette.inkSoft, lineHeight: 1.5,
+          borderRadius: 10, fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
         }}>
           ℹ️ Essas regras alimentam o prompt da IA. Quanto mais específico, melhor a aderência.
         </div>
@@ -959,10 +959,10 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
           <button onClick={onNovaVendedora} style={{
             background: palette.ok, border: 'none', color: palette.bg,
             padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 4, fontSize: 14,
+            display: 'flex', alignItems: 'center', gap: 4, fontSize: fz(14),
             fontFamily: FONT, fontWeight: 600,
           }}>
-            <Plus size={16} /> Nova
+            <Plus size={sz(16)} /> Nova
           </button>
         }
       />
@@ -973,7 +973,7 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
           {ativas.length === 0 && (
             <div style={{
               padding: 20, textAlign: 'center', color: palette.inkMuted,
-              fontSize: 15, background: palette.surface,
+              fontSize: fz(15), background: palette.surface,
               border: `1px dashed ${palette.beige}`, borderRadius: 10,
             }}>
               Nenhuma vendedora cadastrada ainda.
@@ -998,29 +998,29 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}>
-                    <Users size={23} color={palette.inkSoft} />
+                    <Users size={sz(23)} color={palette.inkSoft} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 17, fontWeight: 600, color: palette.ink }}>
+                      <span style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>
                         {v.nome}
                       </span>
                       {v.is_padrao_loja && (
                         <span style={{
-                          fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                          fontSize: fz(10), padding: '2px 6px', borderRadius: 4,
                           background: palette.warnSoft, color: palette.warn, fontWeight: 600,
                           letterSpacing: 0.3, textTransform: 'uppercase',
                         }}>⭐ Padrão</span>
                       )}
                       {ehPlaceholder && (
                         <span style={{
-                          fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                          fontSize: fz(10), padding: '2px 6px', borderRadius: 4,
                           background: palette.beigeSoft, color: palette.inkMuted, fontWeight: 600,
                           letterSpacing: 0.3, textTransform: 'uppercase',
                         }}>Placeholder</span>
                       )}
                     </div>
-                    <div style={{ fontSize: 14, color: palette.inkMuted }}>
+                    <div style={{ fontSize: fz(14), color: palette.inkMuted }}>
                       {v.loja} · {qtd} cliente{qtd !== 1 ? 's' : ''}
                     </div>
                   </div>
@@ -1030,7 +1030,7 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
                 {/* Variantes / aliases */}
                 {Array.isArray(v.aliases) && v.aliases.length > 0 && (
                   <div style={{
-                    fontSize: 13, color: palette.inkSoft, padding: '8px 0',
+                    fontSize: fz(13), color: palette.inkSoft, padding: '8px 0',
                     borderTop: `1px solid ${palette.beigeSoft}`,
                   }}>
                     <div style={{ marginBottom: 6 }}>Variantes do nome no Miré:</div>
@@ -1038,7 +1038,7 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
                       {v.aliases.map((alias, i) => (
                         <span key={i} style={{
                           padding: '2px 8px', background: palette.beigeSoft, borderRadius: 4,
-                          fontSize: 13, color: palette.ink,
+                          fontSize: fz(13), color: palette.ink,
                         }}>{alias}</span>
                       ))}
                     </div>
@@ -1049,23 +1049,23 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
                   <button onClick={() => onEditarVendedora(v)} style={{
                     flex: 1, background: palette.surface, color: palette.accent,
                     border: `1px solid ${palette.accent}40`, borderRadius: 6, padding: '8px',
-                    fontSize: 14, cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                    fontSize: fz(14), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                   }}>
-                    <Edit3 size={14} /> Editar
+                    <Edit3 size={sz(14)} /> Editar
                   </button>
                   <button onClick={() => inativar(v)} disabled={inativando || ehPlaceholder} style={{
                     flex: 1, background: palette.surface, color: palette.inkSoft,
                     border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '8px',
-                    fontSize: 14,
+                    fontSize: fz(14),
                     cursor: ehPlaceholder ? 'not-allowed' : (inativando ? 'wait' : 'pointer'),
                     fontFamily: FONT, fontWeight: 600,
                     opacity: (inativando || ehPlaceholder) ? 0.5 : 1,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                   }}>
                     {inativando
-                      ? <><Loader2 size={14} style={spinKeyframes} /> …</>
-                      : <><Pause size={14} /> Inativar</>}
+                      ? <><Loader2 size={sz(14)} style={spinKeyframes} /> …</>
+                      : <><Pause size={sz(14)} /> Inativar</>}
                   </button>
                 </div>
               </div>
@@ -1078,10 +1078,10 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
             <SectionTitle icon={Archive}>Inativas / ex-vendedoras</SectionTitle>
             {carregandoInat && (
               <div style={{
-                padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: 14,
+                padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}>
-                <Loader2 size={16} style={spinKeyframes} /> Carregando…
+                <Loader2 size={sz(16)} style={spinKeyframes} /> Carregando…
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1090,10 +1090,10 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
                   background: palette.beigeSoft, borderRadius: 10, padding: 12,
                   display: 'flex', alignItems: 'center', gap: 10,
                 }}>
-                  <Archive size={18} color={palette.archive} />
+                  <Archive size={sz(18)} color={palette.archive} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{v.nome}</div>
-                    <div style={{ fontSize: 13, color: palette.inkSoft }}>
+                    <div style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink }}>{v.nome}</div>
+                    <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
                       Saiu: {fmtData(v.updated_at)} · Loja {v.loja}
                     </div>
                   </div>
@@ -1204,7 +1204,7 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
       <div style={{ padding: 16, paddingBottom: 100 }}>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
             Nome principal
           </div>
           <input value={nome} onChange={e => setNome(e.target.value)}
@@ -1212,7 +1212,7 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
             Loja
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1222,7 +1222,7 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
                 background: loja === l ? palette.accent : palette.surface,
                 color: loja === l ? palette.bg : palette.ink,
                 border: `1.5px solid ${loja === l ? palette.accent : palette.beige}`,
-                borderRadius: 8, fontFamily: FONT, fontSize: 15, fontWeight: 600,
+                borderRadius: 8, fontFamily: FONT, fontSize: fz(15), fontWeight: 600,
                 cursor: 'pointer', transition: 'all 0.15s',
               }}>{l}</button>
             ))}
@@ -1230,10 +1230,10 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
             Variantes do nome no Miré
           </div>
-          <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(12), color: palette.inkMuted, marginBottom: 6 }}>
             Como o nome aparece nos relatórios. Use mais de uma se houver inconsistência (vão ser salvas em maiúsculas).
           </div>
           {variantes.map((v, i) => (
@@ -1246,7 +1246,7 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
                   background: palette.surface, border: `1px solid ${palette.beige}`,
                   borderRadius: 6, padding: 8, cursor: 'pointer', display: 'flex',
                 }}>
-                  <Trash2 size={16} color={palette.inkMuted} />
+                  <Trash2 size={sz(16)} color={palette.inkMuted} />
                 </button>
               )}
             </div>
@@ -1254,17 +1254,17 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
           <button onClick={() => setVariantes([...variantes, ''])} style={{
             background: 'transparent', border: `1px dashed ${palette.beige}`,
             borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontFamily: FONT,
-            fontSize: 14, color: palette.inkSoft,
+            fontSize: fz(14), color: palette.inkSoft,
             display: 'flex', alignItems: 'center', gap: 4,
           }}>
-            <Plus size={14} /> Adicionar variante
+            <Plus size={sz(14)} /> Adicionar variante
           </button>
         </div>
 
         {/* Herdar carteira (só em modo criar) */}
         {!ehEdicao && inativas.length > 0 && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+            <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
               Herdar carteira de
             </div>
             <div style={{
@@ -1274,20 +1274,20 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
               {inativas.map(v => (
                 <label key={v.id} style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0',
-                  cursor: 'pointer', fontSize: 15, color: palette.ink,
+                  cursor: 'pointer', fontSize: fz(15), color: palette.ink,
                   borderBottom: `1px solid ${palette.beigeSoft}`,
                 }}>
                   <input type="checkbox" checked={!!herda[v.id]}
                     onChange={() => setHerda({ ...herda, [v.id]: !herda[v.id] })}
                     style={{ width: 16, height: 16, accentColor: palette.accent, cursor: 'pointer' }} />
-                  <span>{v.nome} <span style={{ fontSize: 13, color: palette.inkMuted }}>(ex-vendedora)</span></span>
+                  <span>{v.nome} <span style={{ fontSize: fz(13), color: palette.inkMuted }}>(ex-vendedora)</span></span>
                 </label>
               ))}
             </div>
             {Object.values(herda).some(Boolean) && (
               <div style={{
                 marginTop: 8, padding: 10, background: palette.warnSoft,
-                borderRadius: 8, fontSize: 13, color: palette.ink, lineHeight: 1.5,
+                borderRadius: 8, fontSize: fz(13), color: palette.ink, lineHeight: 1.5,
               }}>
                 ⚠️ <strong>Ao herdar:</strong> todos os clientes que tinham essas vendedoras como última vendedora passam pra essa nova vendedora.
               </div>
@@ -1296,12 +1296,12 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
         )}
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
             Login / user_id
           </div>
           <input type="text" value={email} onChange={e => setEmail(e.target.value)}
             placeholder="luna ou luna@grupoamicia.com.br" style={inputStyle} />
-          <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 4 }}>
+          <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
             Como ela faz login no app. Pode preencher depois.
           </div>
         </div>
@@ -1316,8 +1316,8 @@ export const NovaVendedoraScreen = ({ lojas, vendedoraExistente = null, onBack, 
         <button onClick={onBack} disabled={salvando} style={btnCancelar}>Cancelar</button>
         <button onClick={salvar} disabled={salvando} style={btnPrimario(palette.ok, salvando)}>
           {salvando
-            ? <><Loader2 size={17} style={spinKeyframes} /> Salvando…</>
-            : <><Save size={17} /> {ehEdicao ? 'Salvar alterações' : 'Cadastrar'}</>}
+            ? <><Loader2 size={sz(17)} style={spinKeyframes} /> Salvando…</>
+            : <><Save size={sz(17)} /> {ehEdicao ? 'Salvar alterações' : 'Cadastrar'}</>}
         </button>
       </div>
     </div>
@@ -1453,12 +1453,12 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
                 flex: 1,
                 background: ativo ? palette.surface : 'transparent',
                 color: ativo ? palette.ink : palette.inkSoft,
-                border: 'none', borderRadius: 8, padding: '10px', fontSize: 15,
+                border: 'none', borderRadius: 8, padding: '10px', fontSize: fz(15),
                 fontWeight: ativo ? 600 : 400, cursor: 'pointer', fontFamily: FONT,
                 boxShadow: ativo ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}>
-                <Icon size={16} />
+                <Icon size={sz(16)} />
                 {m.label}
               </button>
             );
@@ -1468,7 +1468,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
         {modo === 'avulsa' && (
           <>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+              <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
                 Buscar cliente
               </div>
               <div style={{
@@ -1476,19 +1476,19 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
                 borderRadius: 10, padding: '8px 12px',
                 display: 'flex', alignItems: 'center', gap: 8,
               }}>
-                <Search size={18} color={palette.inkMuted} />
+                <Search size={sz(18)} color={palette.inkMuted} />
                 <input value={busca} onChange={e => setBusca(e.target.value)}
                   placeholder="Nome, apelido ou razão social"
                   style={{
                     flex: 1, border: 'none', background: 'transparent', outline: 'none',
-                    fontFamily: FONT, fontSize: 15, color: palette.ink,
+                    fontFamily: FONT, fontSize: fz(15), color: palette.ink,
                   }} />
                 {busca && (
                   <button onClick={() => { setBusca(''); setClienteSel(null); }} style={{
                     background: 'transparent', border: 'none', cursor: 'pointer',
                     padding: 0, display: 'flex',
                   }}>
-                    <X size={16} color={palette.inkMuted} />
+                    <X size={sz(16)} color={palette.inkMuted} />
                   </button>
                 )}
               </div>
@@ -1498,7 +1498,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
               <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {resultadosBusca.length === 0 && (
                   <div style={{
-                    padding: 12, textAlign: 'center', color: palette.inkMuted, fontSize: 14,
+                    padding: 12, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
                     background: palette.surface, border: `1px dashed ${palette.beige}`, borderRadius: 8,
                   }}>
                     Nenhum cliente encontrado
@@ -1515,15 +1515,15 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
                       borderRadius: 10, padding: 12, textAlign: 'left',
                       cursor: 'pointer', fontFamily: FONT,
                     }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: palette.ink, marginBottom: 2 }}>
+                      <div style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink, marginBottom: 2 }}>
                         {nomeCliente(c)}
                       </div>
                       {c.apelido && (
-                        <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 4 }}>
+                        <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 4 }}>
                           {c.razao_social}
                         </div>
                       )}
-                      <div style={{ fontSize: 13, color: palette.inkSoft }}>
+                      <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
                         Atual: <strong>{v ? `${v.nome} (${v.loja})` : 'sem vendedora'}</strong>
                         {kpi.dias_sem_comprar != null && ` · Última: ${kpi.dias_sem_comprar}d`}
                       </div>
@@ -1534,7 +1534,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
             )}
 
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+              <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
                 Transferir para
               </div>
               <select value={vendedoraDest} onChange={e => setVendedoraDest(e.target.value)} style={inputStyle}>
@@ -1546,7 +1546,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+              <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
                 Motivo (opcional)
               </div>
               <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
@@ -1559,7 +1559,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
         {modo === 'massa' && (
           <>
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+              <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
                 Transferir clientes que tinham como última vendedora:
               </div>
               <div style={{
@@ -1572,16 +1572,16 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
                   return (
                     <label key={v.id} style={{
                       display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0',
-                      cursor: 'pointer', fontSize: 15, color: palette.ink,
+                      cursor: 'pointer', fontSize: fz(15), color: palette.ink,
                       borderBottom: `1px solid ${palette.beigeSoft}`,
                     }}>
                       <input type="checkbox" checked={!!origens[v.id]}
                         onChange={() => setOrigens({ ...origens, [v.id]: !origens[v.id] })}
                         style={{ width: 16, height: 16, accentColor: palette.accent, cursor: 'pointer' }} />
-                      <span style={{ flex: 1 }}>{v.nome} <span style={{ fontSize: 13, color: palette.inkMuted }}>({qtd})</span></span>
+                      <span style={{ flex: 1 }}>{v.nome} <span style={{ fontSize: fz(13), color: palette.inkMuted }}>({qtd})</span></span>
                       {ehEx && (
                         <span style={{
-                          fontSize: 12, color: palette.archive, padding: '2px 6px',
+                          fontSize: fz(12), color: palette.archive, padding: '2px 6px',
                           background: palette.archiveSoft, borderRadius: 4, fontWeight: 600,
                           letterSpacing: 0.3, textTransform: 'uppercase',
                         }}>EX</span>
@@ -1593,7 +1593,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+              <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
                 Para a vendedora
               </div>
               <select value={vendedoraDest} onChange={e => setVendedoraDest(e.target.value)} style={inputStyle}>
@@ -1605,7 +1605,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+              <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
                 Motivo (opcional)
               </div>
               <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
@@ -1617,7 +1617,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
               <div style={{
                 padding: 14, background: palette.warnSoft,
                 border: `1.5px solid ${palette.warn}`, borderRadius: 10,
-                fontSize: 15, color: palette.ink, lineHeight: 1.5, marginBottom: 14,
+                fontSize: fz(15), color: palette.ink, lineHeight: 1.5, marginBottom: 14,
               }}>
                 ⚠️ <strong>Confirmação:</strong>
                 <div style={{ marginTop: 6 }}>
@@ -1638,8 +1638,8 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
         <button onClick={onBack} disabled={salvando} style={btnCancelar}>Cancelar</button>
         <button onClick={transferir} disabled={salvando} style={btnPrimario(palette.ok, salvando)}>
           {salvando
-            ? <><Loader2 size={17} style={spinKeyframes} /> Transferindo…</>
-            : <><ArrowLeftRight size={17} /> {modo === 'massa' ? 'Confirmar transferência' : 'Transferir'}</>}
+            ? <><Loader2 size={sz(17)} style={spinKeyframes} /> Transferindo…</>
+            : <><ArrowLeftRight size={sz(17)} /> {modo === 'massa' ? 'Confirmar transferência' : 'Transferir'}</>}
         </button>
       </div>
     </div>
@@ -1763,10 +1763,10 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
           <button onClick={abrirModalAdicionar} style={{
             width: '100%', background: 'transparent', border: `1.5px dashed ${palette.beige}`,
             borderRadius: 10, padding: 14, cursor: 'pointer', fontFamily: FONT,
-            color: palette.accent, fontSize: 15, fontWeight: 600, marginBottom: 16,
+            color: palette.accent, fontSize: fz(15), fontWeight: 600, marginBottom: 16,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           }}>
-            <Plus size={17} /> Adicionar produto
+            <Plus size={sz(17)} /> Adicionar produto
           </button>
 
           {/* Lista */}
@@ -1775,17 +1775,17 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
             return (
             <div style={{
               padding: 32, textAlign: 'center', color: palette.inkMuted,
-              fontSize: 15, background: palette.surface,
+              fontSize: fz(15), background: palette.surface,
               border: `1px dashed ${palette.beige}`, borderRadius: 10, lineHeight: 1.5,
             }}>
               {IconVazio && (
-                <IconVazio size={41} color={palette.inkMuted}
+                <IconVazio size={sz(41)} color={palette.inkMuted}
                   style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
               )}
               <div style={{ marginBottom: 6 }}>
                 Nenhum {LABEL_TIPO[activeTab]} cadastrado.
               </div>
-              <div style={{ fontSize: 13 }}>
+              <div style={{ fontSize: fz(13) }}>
                 Adicione produtos pra IA usar mesmo com estoque baixo.
               </div>
             </div>
@@ -1811,28 +1811,28 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}>
-                    <Package size={21} color={palette.inkSoft} />
+                    <Package size={sz(21)} color={palette.inkSoft} />
                   </div>
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, color: palette.inkMuted, fontWeight: 600 }}>
+                    <div style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
                       REF {item.ref}
                     </div>
                     <div style={{
-                      fontSize: 15, fontWeight: 600, color: palette.ink,
+                      fontSize: fz(15), fontWeight: 600, color: palette.ink,
                       marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {prod?.descricao || '(produto não encontrado no catálogo)'}
                     </div>
                     {item.motivo && (
                       <div style={{
-                        fontSize: 14, color: palette.inkSoft, fontStyle: 'italic', marginTop: 2,
+                        fontSize: fz(14), color: palette.inkSoft, fontStyle: 'italic', marginTop: 2,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
                         {item.motivo}
                       </div>
                     )}
-                    <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <span>Adicionado {fmtData(item.adicionado_em)}</span>
                       {item.data_fim && (
                         <span style={{
@@ -1854,8 +1854,8 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                     opacity: removendo ? 0.5 : 1,
                   }}>
                     {removendo
-                      ? <Loader2 size={18} style={spinKeyframes} color={palette.inkMuted} />
-                      : <Trash2 size={18} color={palette.inkMuted} />}
+                      ? <Loader2 size={sz(18)} style={spinKeyframes} color={palette.inkMuted} />
+                      : <Trash2 size={sz(18)} color={palette.inkMuted} />}
                   </button>
                 </div>
               );
@@ -1865,7 +1865,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
 
         <div style={{
           marginTop: 24, padding: 12, background: palette.beigeSoft,
-          borderRadius: 10, fontSize: 13, color: palette.inkSoft, lineHeight: 1.6,
+          borderRadius: 10, fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.6,
         }}>
           ℹ️ Produtos curados aparecem nas sugestões da IA mesmo com estoque baixo.
           <br/>
@@ -1892,10 +1892,10 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
               <div>
-                <div style={{ fontSize: 17, fontWeight: 600, color: palette.ink }}>
+                <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>
                   Adicionar como {LABEL_TIPO[activeTab]}
                 </div>
-                <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 2 }}>
+                <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 2 }}>
                   Busque pela REF ou pela descrição do produto
                 </div>
               </div>
@@ -1903,7 +1903,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                 background: 'transparent', border: 'none', cursor: 'pointer',
                 color: palette.inkMuted, padding: 4,
               }}>
-                <X size={23} />
+                <X size={sz(23)} />
               </button>
             </div>
 
@@ -1913,19 +1913,19 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                 borderRadius: 10, padding: '8px 12px', marginBottom: 12,
                 display: 'flex', alignItems: 'center', gap: 8,
               }}>
-                <Search size={16} color={palette.inkMuted} />
+                <Search size={sz(16)} color={palette.inkMuted} />
                 <input autoFocus value={refBusca} onChange={e => setRefBusca(e.target.value)}
                   placeholder="REF ou descrição"
                   style={{
                     flex: 1, border: 'none', background: 'transparent', outline: 'none',
-                    fontFamily: FONT, fontSize: 15, color: palette.ink,
+                    fontFamily: FONT, fontSize: fz(15), color: palette.ink,
                   }} />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
                 {refBusca.length >= 1 && resultadosBuscaProduto.length === 0 && (
                   <div style={{
-                    padding: 12, textAlign: 'center', color: palette.inkMuted, fontSize: 14,
+                    padding: 12, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
                     background: palette.beigeSoft, borderRadius: 8,
                   }}>
                     Nenhum produto encontrado pra "{refBusca}"
@@ -1947,19 +1947,19 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                         background: sel ? palette.accent : palette.surface,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                       }}>
-                        {sel && <Check size={14} color={palette.bg} />}
+                        {sel && <Check size={sz(14)} color={palette.bg} />}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, color: palette.inkMuted, fontWeight: 600 }}>
+                        <div style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
                           REF {p.ref}
                         </div>
                         <div style={{
-                          fontSize: 15, fontWeight: 600, color: palette.ink,
+                          fontSize: fz(15), fontWeight: 600, color: palette.ink,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {p.descricao}
                         </div>
-                        <div style={{ fontSize: 13, color: palette.inkSoft }}>
+                        <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
                           {p.categoria || '—'} · estoque {p.qtd_estoque ?? '—'}
                         </div>
                       </div>
@@ -1969,13 +1969,13 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
               </div>
 
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+                <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
                   Motivo (opcional)
                 </div>
                 <textarea value={motivoNovo} onChange={e => setMotivoNovo(e.target.value)} rows={2}
                   placeholder="Ex: Sucesso pós-publicação, vira queridinha do verão"
                   style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }} />
-                <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 4 }}>
+                <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
                   Visível pra IA — ajuda a contextualizar o porquê do destaque
                 </div>
               </div>
@@ -1983,7 +1983,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
               {activeTab === 'novidade_manual' && (
                 <div style={{
                   marginTop: 12, padding: 10, background: palette.accentSoft,
-                  borderRadius: 8, fontSize: 13, color: palette.ink, lineHeight: 1.5,
+                  borderRadius: 8, fontSize: fz(13), color: palette.ink, lineHeight: 1.5,
                 }}>
                   ✨ <strong>Novidade manual:</strong> esse produto fica como novidade por <strong>15 dias</strong> a partir de hoje.
                 </div>
@@ -2003,8 +2003,8 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                 cursor: !produtoSel ? 'not-allowed' : (salvando ? 'wait' : 'pointer'),
               }}>
                 {salvando
-                  ? <><Loader2 size={17} style={spinKeyframes} /> Salvando…</>
-                  : <><Plus size={17} /> Adicionar</>}
+                  ? <><Loader2 size={sz(17)} style={spinKeyframes} /> Salvando…</>
+                  : <><Plus size={sz(17)} /> Adicionar</>}
               </button>
             </div>
           </div>
@@ -2087,13 +2087,13 @@ export const ImportacoesScreen = ({ lojas, onBack }) => {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               {statusGeral === 'ok'
-                ? <CheckCircle2 size={21} color={palette.ok} />
-                : <AlertCircle size={21} color={palette.warn} />}
-              <span style={{ fontSize: 16, fontWeight: 600, color: palette.ink }}>
+                ? <CheckCircle2 size={sz(21)} color={palette.ok} />
+                : <AlertCircle size={sz(21)} color={palette.warn} />}
+              <span style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>
                 Última importação · {fmtDataHora(ultima.iniciada_em)}
               </span>
             </div>
-            <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.5 }}>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.5 }}>
               {ultimoLote.length} arquivo{ultimoLote.length !== 1 ? 's' : ''} processado{ultimoLote.length !== 1 ? 's' : ''} · {totalRegistrosLote.toLocaleString('pt-BR')} registros
               {totalAvisos > 0 && (
                 <span style={{ color: palette.warn, fontWeight: 600 }}>
@@ -2104,11 +2104,11 @@ export const ImportacoesScreen = ({ lojas, onBack }) => {
           </div>
         ) : (
           <div style={{
-            padding: 20, textAlign: 'center', color: palette.inkMuted, fontSize: 15,
+            padding: 20, textAlign: 'center', color: palette.inkMuted, fontSize: fz(15),
             background: palette.surface, border: `1px dashed ${palette.beige}`,
             borderRadius: 10, marginBottom: 16, lineHeight: 1.5,
           }}>
-            <FileSpreadsheet size={37} color={palette.inkMuted}
+            <FileSpreadsheet size={sz(37)} color={palette.inkMuted}
               style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
             Nenhuma importação ainda.<br/>
             A primeira roda automaticamente na próxima terça às 06:00.
@@ -2119,10 +2119,10 @@ export const ImportacoesScreen = ({ lojas, onBack }) => {
         <button onClick={onUploadManualClick} style={{
           width: '100%', background: palette.surface, border: `1.5px dashed ${palette.beige}`,
           borderRadius: 12, padding: 16, cursor: 'pointer', fontFamily: FONT,
-          color: palette.accent, fontSize: 15, fontWeight: 600, marginBottom: 24,
+          color: palette.accent, fontSize: fz(15), fontWeight: 600, marginBottom: 24,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
-          <Upload size={18} />
+          <Upload size={sz(18)} />
           Upload manual de planilha
         </button>
 
@@ -2143,24 +2143,24 @@ export const ImportacoesScreen = ({ lojas, onBack }) => {
                     borderRadius: 10, padding: 12,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <FileSpreadsheet size={16} color={palette.inkSoft} />
-                      <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink, flex: 1, minWidth: 0 }}>
+                      <FileSpreadsheet size={sz(16)} color={palette.inkSoft} />
+                      <span style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink, flex: 1, minWidth: 0 }}>
                         {LABEL_TIPO[imp.tipo_arquivo] || imp.tipo_arquivo}
                         {imp.loja && ` · ${imp.loja}`}
                       </span>
                       {ok
-                        ? <CheckCircle2 size={16} color={palette.ok} />
+                        ? <CheckCircle2 size={sz(16)} color={palette.ok} />
                         : erro
-                          ? <AlertCircle size={16} color={palette.alert} />
-                          : <AlertCircle size={16} color={palette.warn} />}
+                          ? <AlertCircle size={sz(16)} color={palette.alert} />
+                          : <AlertCircle size={sz(16)} color={palette.warn} />}
                     </div>
 
-                    <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 4 }}>
+                    <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 4 }}>
                       {fmtDataHora(imp.iniciada_em)}
                       {imp.duracao_ms != null && ` · ${(imp.duracao_ms / 1000).toFixed(1)}s`}
                     </div>
 
-                    <div style={{ fontSize: 14, color: palette.inkSoft }}>
+                    <div style={{ fontSize: fz(14), color: palette.inkSoft }}>
                       {(imp.registros_total ?? 0).toLocaleString('pt-BR')} registros
                       {imp.registros_inseridos != null && ` · ${imp.registros_inseridos} novos`}
                       {imp.registros_atualizados != null && ` · ${imp.registros_atualizados} atualizados`}
@@ -2173,7 +2173,7 @@ export const ImportacoesScreen = ({ lojas, onBack }) => {
                       <div style={{
                         marginTop: 6, padding: 8,
                         background: erro ? palette.alertSoft : palette.warnSoft,
-                        borderRadius: 6, fontSize: 13,
+                        borderRadius: 6, fontSize: fz(13),
                         color: erro ? palette.alert : palette.warn,
                         lineHeight: 1.4,
                       }}>
@@ -2189,7 +2189,7 @@ export const ImportacoesScreen = ({ lojas, onBack }) => {
 
         <div style={{
           marginTop: 16, padding: 12, background: palette.beigeSoft,
-          borderRadius: 10, fontSize: 13, color: palette.inkSoft, lineHeight: 1.5,
+          borderRadius: 10, fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
         }}>
           ℹ️ Importações automáticas rodam toda terça às 06:00, processando os arquivos do Drive nas pastas <strong>Mire_Bom_Retiro</strong> e <strong>Mire_Silva_Teles</strong>.
         </div>
@@ -2314,10 +2314,10 @@ export const GruposListScreen = ({ lojas, isAdmin, onBack, onSelectGrupo, onCria
           <button onClick={onCriarGrupo} style={{
             background: palette.accent, border: 'none', color: palette.bg,
             padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 4, fontSize: 14,
+            display: 'flex', alignItems: 'center', gap: 4, fontSize: fz(14),
             fontFamily: FONT, fontWeight: 600,
           }}>
-            <Plus size={16} /> Novo
+            <Plus size={sz(16)} /> Novo
           </button>
         }
       />
@@ -2327,7 +2327,7 @@ export const GruposListScreen = ({ lojas, isAdmin, onBack, onSelectGrupo, onCria
         {isAdmin && ativas.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <div style={{
-              fontSize: 13, color: palette.inkSoft, marginBottom: 6,
+              fontSize: fz(13), color: palette.inkSoft, marginBottom: 6,
               fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase',
             }}>
               Filtrar por vendedora
@@ -2347,25 +2347,25 @@ export const GruposListScreen = ({ lojas, isAdmin, onBack, onSelectGrupo, onCria
           borderRadius: 10, padding: '8px 12px', marginBottom: 14,
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <Search size={18} color={palette.inkMuted} />
+          <Search size={sz(18)} color={palette.inkMuted} />
           <input value={busca} onChange={e => setBusca(e.target.value)}
             placeholder="Buscar nome, CNPJ, CPF ou razão"
             style={{
               flex: 1, border: 'none', background: 'transparent', outline: 'none',
-              fontFamily: FONT, fontSize: 15, color: palette.ink,
+              fontFamily: FONT, fontSize: fz(15), color: palette.ink,
             }} />
           {busca && (
             <button onClick={() => setBusca('')} style={{
               background: 'transparent', border: 'none', cursor: 'pointer',
               padding: 0, display: 'flex',
             }}>
-              <X size={16} color={palette.inkMuted} />
+              <X size={sz(16)} color={palette.inkMuted} />
             </button>
           )}
         </div>
 
         {gruposFiltrados.length > 0 && (
-          <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 8 }}>
+          <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 8 }}>
             {gruposFiltrados.length} grupo{gruposFiltrados.length !== 1 ? 's' : ''}
           </div>
         )}
@@ -2387,40 +2387,40 @@ export const GruposListScreen = ({ lojas, isAdmin, onBack, onSelectGrupo, onCria
                   width: 40, height: 40, borderRadius: 10, background: palette.accentSoft,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                 }}>
-                  <UsersRound size={23} color={palette.accent} />
+                  <UsersRound size={sz(23)} color={palette.accent} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 17, fontWeight: 600, color: palette.ink }}>{g.nome_grupo}</span>
+                    <span style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>{g.nome_grupo}</span>
                     <span style={{
-                      fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                      fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                       background: palette.accentSoft, color: palette.accent,
                       letterSpacing: 0.3, textTransform: 'uppercase',
                     }}>Grupo</span>
                   </div>
                   {isAdmin && vendedora && (
                     <div style={{
-                      fontSize: 12, color: palette.inkMuted, marginBottom: 4,
+                      fontSize: fz(12), color: palette.inkMuted, marginBottom: 4,
                       display: 'flex', alignItems: 'center', gap: 4,
                     }}>
-                      <Users size={12} /> {vendedora.nome} · {vendedora.loja}
+                      <Users size={sz(12)} /> {vendedora.nome} · {vendedora.loja}
                     </div>
                   )}
-                  <div style={{ fontSize: 14, color: palette.inkSoft, marginBottom: 4 }}>
+                  <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 4 }}>
                     {g.qtdDocs} document{g.qtdDocs !== 1 ? 'os' : 'o'} · {fmtMoeda(g.lifetime)} · {g.compras} compra{g.compras !== 1 ? 's' : ''}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13, color: palette.inkMuted }}>
+                    <span style={{ fontSize: fz(13), color: palette.inkMuted }}>
                       Última: {g.diasUltima != null ? `${g.diasUltima}d` : '—'}
                     </span>
                     <span style={{
-                      fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                      fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                       background: meta.soft, color: meta.cor,
                       letterSpacing: 0.3, textTransform: 'uppercase',
                     }}>{meta.label}</span>
                   </div>
                 </div>
-                <ChevronRight size={21} color={palette.inkMuted} />
+                <ChevronRight size={sz(21)} color={palette.inkMuted} />
               </button>
             );
           })}
@@ -2430,7 +2430,7 @@ export const GruposListScreen = ({ lojas, isAdmin, onBack, onSelectGrupo, onCria
         {gruposFiltrados.length === 0 && busca && (
           <div style={{
             padding: 24, textAlign: 'center', color: palette.inkMuted,
-            fontSize: 15, marginTop: 12,
+            fontSize: fz(15), marginTop: 12,
           }}>
             Nenhum grupo encontrado pra "{busca}"
           </div>
@@ -2439,15 +2439,15 @@ export const GruposListScreen = ({ lojas, isAdmin, onBack, onSelectGrupo, onCria
         {gruposAgregados.length === 0 && !busca && (
           <div style={{
             padding: 32, textAlign: 'center', color: palette.inkMuted,
-            fontSize: 15, marginTop: 12, background: palette.surface,
+            fontSize: fz(15), marginTop: 12, background: palette.surface,
             border: `1px dashed ${palette.beige}`, borderRadius: 10, lineHeight: 1.5,
           }}>
-            <UsersRound size={41} color={palette.inkMuted}
+            <UsersRound size={sz(41)} color={palette.inkMuted}
               style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
             <div style={{ marginBottom: 8 }}>
               {isAdmin ? 'Nenhum grupo criado ainda' : 'Você ainda não tem grupos'}
             </div>
-            <div style={{ fontSize: 13 }}>
+            <div style={{ fontSize: fz(13) }}>
               Use grupos pra unificar CNPJs/CPFs do mesmo dono.<br/>
               A IA gera 1 sugestão pro grupo todo.
             </div>
@@ -2575,22 +2575,22 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
               width: 42, height: 42, borderRadius: 10, background: palette.accentSoft,
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}>
-              <UsersRound size={25} color={palette.accent} />
+              <UsersRound size={sz(25)} color={palette.accent} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 18, fontWeight: 600, color: palette.ink }}>{grupo.nome_grupo}</span>
+                <span style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink }}>{grupo.nome_grupo}</span>
                 <span style={{
-                  fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                  fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                   background: meta.soft, color: meta.cor,
                   letterSpacing: 0.3, textTransform: 'uppercase',
                 }}>{meta.label}</span>
               </div>
-              <div style={{ fontSize: 13, color: palette.inkSoft }}>
+              <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
                 Vendedora: {vendedora ? `${vendedora.nome} · ${vendedora.loja}` : '—'}
               </div>
               {grupo.created_at && (
-                <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2 }}>
+                <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
                   Criado em {fmtData(grupo.created_at)}
                 </div>
               )}
@@ -2604,20 +2604,20 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
           background: palette.surface, border: `1px solid ${palette.beige}`,
           borderRadius: 12, padding: 14, marginBottom: 16,
         }}>
-          <div style={{ fontSize: 16, color: palette.ink, lineHeight: 1.7 }}>
+          <div style={{ fontSize: fz(16), color: palette.ink, lineHeight: 1.7 }}>
             <strong>{grupo.compras} compra{grupo.compras !== 1 ? 's' : ''}</strong> · <strong>{fmtMoeda(grupo.lifetime)}</strong> lifetime
           </div>
           {grupo.ticketMedio > 0 && (
-            <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.7, marginTop: 2 }}>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7, marginTop: 2 }}>
               Ticket médio {fmtMoeda(grupo.ticketMedio)}
             </div>
           )}
           {frequencia != null && (
-            <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.7 }}>
+            <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7 }}>
               Frequência ~{frequencia} dias entre compras
             </div>
           )}
-          <div style={{ fontSize: 15, color: palette.inkSoft, lineHeight: 1.7 }}>
+          <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7 }}>
             Última compra do grupo {grupo.diasUltima != null ? <>há <strong>{grupo.diasUltima} dia{grupo.diasUltima !== 1 ? 's' : ''}</strong></> : '—'}
           </div>
         </div>
@@ -2641,30 +2641,30 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
                 background: ehPrincipal ? palette.accentSoft : 'transparent',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
-                  {ehPrincipal && <Crown size={16} color={palette.warn} style={{ flexShrink: 0 }} />}
-                  <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink, flex: 1, minWidth: 0 }}>
+                  {ehPrincipal && <Crown size={sz(16)} color={palette.warn} style={{ flexShrink: 0 }} />}
+                  <span style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink, flex: 1, minWidth: 0 }}>
                     {nomeCliente(d)}
                   </span>
                   <span style={{
-                    fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                    fontSize: fz(10), fontWeight: 600, padding: '2px 6px', borderRadius: 4,
                     background: docMeta.soft, color: docMeta.cor,
                     letterSpacing: 0.3, textTransform: 'uppercase',
                   }}>{docMeta.label}</span>
                 </div>
                 {d.razao_social && d.apelido && (
-                  <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 4 }}>
+                  <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 4 }}>
                     {d.razao_social}
                   </div>
                 )}
-                <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 4 }}>
+                <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 4 }}>
                   {d.tipo_documento === 'cnpj' ? 'CNPJ' : 'CPF'} {d.documento}
                 </div>
-                <div style={{ fontSize: 14, color: palette.inkSoft }}>
+                <div style={{ fontSize: fz(14), color: palette.inkSoft }}>
                   {kpi.qtd_compras ?? 0} compra{(kpi.qtd_compras ?? 0) !== 1 ? 's' : ''} · {fmtMoeda(kpi.lifetime_total ?? 0)} · última {kpi.dias_sem_comprar != null ? `${kpi.dias_sem_comprar}d` : '—'}
                 </div>
                 {ehPrincipal && (
                   <div style={{
-                    marginTop: 6, fontSize: 12, color: palette.warn, fontWeight: 600,
+                    marginTop: 6, fontSize: fz(12), color: palette.warn, fontWeight: 600,
                     letterSpacing: 0.3, textTransform: 'uppercase',
                   }}>⭐ Documento principal (maior lifetime)</div>
                 )}
@@ -2677,10 +2677,10 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
         <button onClick={onAdicionarCnpj} style={{
           width: '100%', background: 'transparent', border: `1.5px dashed ${palette.beige}`,
           borderRadius: 10, padding: 12, cursor: 'pointer', fontFamily: FONT,
-          color: palette.accent, fontSize: 15, fontWeight: 600, marginBottom: 16,
+          color: palette.accent, fontSize: fz(15), fontWeight: 600, marginBottom: 16,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
-          <Plus size={17} /> Adicionar CNPJ ao grupo
+          <Plus size={sz(17)} /> Adicionar CNPJ ao grupo
         </button>
 
         {/* Estilo dominante */}
@@ -2691,10 +2691,10 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
               background: palette.surface, border: `1px solid ${palette.beige}`,
               borderRadius: 10, padding: 12, marginBottom: 16,
             }}>
-              <div style={{ fontSize: 16, color: palette.ink, fontWeight: 600 }}>
+              <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600 }}>
                 {estiloDominante}
               </div>
-              <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 4 }}>
+              <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 4 }}>
                 Calculado das compras do documento principal
               </div>
             </div>
@@ -2705,14 +2705,14 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
         <SectionTitle icon={MessageCircle}>Mensagens enviadas (todas as lojas)</SectionTitle>
         {carregandoMsg ? (
           <div style={{
-            padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: 14,
+            padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}>
-            <Loader2 size={16} style={spinKeyframes} /> Carregando…
+            <Loader2 size={sz(16)} style={spinKeyframes} /> Carregando…
           </div>
         ) : mensagens.length === 0 ? (
           <div style={{
-            padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: 14,
+            padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
             background: palette.beigeSoft, borderRadius: 10, fontStyle: 'italic',
           }}>
             Nenhuma mensagem enviada ainda pros documentos desse grupo.
@@ -2731,17 +2731,17 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
                   borderRadius: 10, padding: 12,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <Icone size={16} color={visual.cor} />
-                    <span style={{ fontSize: 14, color: palette.inkSoft }}>
+                    <Icone size={sz(16)} color={visual.cor} />
+                    <span style={{ fontSize: fz(14), color: palette.inkSoft }}>
                       {fmtData(m.executada_em)} · {visual.label}
                     </span>
                   </div>
-                  <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 6 }}>
+                  <div style={{ fontSize: fz(12), color: palette.inkMuted, marginBottom: 6 }}>
                     → {nomeClientePorId(m.cliente_id)}
                   </div>
                   {preview && (
                     <div style={{
-                      fontSize: 15, color: palette.ink, lineHeight: 1.5,
+                      fontSize: fz(15), color: palette.ink, lineHeight: 1.5,
                       fontStyle: 'italic', marginBottom: 8,
                     }}>
                       "{preview}{m.mensagem_gerada?.length > 100 ? '…' : ''}"
@@ -2750,7 +2750,7 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
                   <div style={{
                     display: 'inline-flex', alignItems: 'center', padding: '3px 8px',
                     background: res.soft, color: res.cor, borderRadius: 4,
-                    fontSize: 13, fontWeight: 600,
+                    fontSize: fz(13), fontWeight: 600,
                   }}>
                     {res.label}
                   </div>
@@ -2770,12 +2770,12 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
         <button onClick={() => setShowModalMsg(true)} style={{
           background: `linear-gradient(135deg, ${palette.accent} 0%, #3d6b8c 100%)`,
           color: palette.bg, border: 'none', borderRadius: 10,
-          padding: '13px 16px', fontSize: 16, fontWeight: 600,
+          padding: '13px 16px', fontSize: fz(16), fontWeight: 600,
           cursor: 'pointer', fontFamily: FONT, width: '100%',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           boxShadow: '0 2px 6px rgba(74,127,165,0.25)',
         }}>
-          <LampIcon size={21} />
+          <LampIcon size={sz(21)} />
           Pedir sugestão de mensagem
         </button>
       </div>
@@ -2901,9 +2901,9 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
                 width: 32, height: 32, borderRadius: 8, background: palette.accentSoft,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <UsersRound size={21} color={palette.accent} />
+                <UsersRound size={sz(21)} color={palette.accent} />
               </div>
-              <div style={{ fontSize: 17, fontWeight: 600, color: palette.ink }}>
+              <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>
                 Criar grupo de cliente
               </div>
             </div>
@@ -2912,7 +2912,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
               cursor: salvando ? 'wait' : 'pointer',
               color: palette.inkMuted, padding: 4,
             }}>
-              <X size={23} />
+              <X size={sz(23)} />
             </button>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -2924,7 +2924,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
               }} />
             ))}
           </div>
-          <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 6 }}>
+          <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 6 }}>
             Passo {step} de 3 · {step === 1 ? 'Selecionar documentos' : step === 2 ? 'Nome do grupo' : 'Documento principal'}
           </div>
         </div>
@@ -2934,7 +2934,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
 
           {step === 1 && (
             <>
-              <div style={{ fontSize: 15, color: palette.inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
+              <div style={{ fontSize: fz(15), color: palette.inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
                 Marque os CNPJs/CPFs que pertencem ao mesmo dono. Eles vão virar 1 grupo.
               </div>
 
@@ -2943,12 +2943,12 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
                 borderRadius: 10, padding: '8px 12px', marginBottom: 12,
                 display: 'flex', alignItems: 'center', gap: 8,
               }}>
-                <Search size={16} color={palette.inkMuted} />
+                <Search size={sz(16)} color={palette.inkMuted} />
                 <input value={busca} onChange={e => setBusca(e.target.value)}
                   placeholder="Buscar nome, CNPJ ou razão"
                   style={{
                     flex: 1, border: 'none', background: 'transparent', outline: 'none',
-                    fontFamily: FONT, fontSize: 15, color: palette.ink,
+                    fontFamily: FONT, fontSize: fz(15), color: palette.ink,
                   }} />
               </div>
 
@@ -2958,7 +2958,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
               }}>
                 {candidatos.length === 0 && (
                   <div style={{
-                    padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: 14,
+                    padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
                     background: palette.beigeSoft, borderRadius: 8,
                   }}>
                     {busca ? `Nenhum cliente encontrado pra "${busca}"` : 'Nenhum cliente disponível na sua carteira (todos já estão em grupos).'}
@@ -2986,24 +2986,24 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         flexShrink: 0,
                       }}>
-                        {sel && <Check size={14} color={palette.bg} />}
+                        {sel && <Check size={sz(14)} color={palette.bg} />}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
-                          fontSize: 15, fontWeight: 600, color: palette.ink,
+                          fontSize: fz(15), fontWeight: 600, color: palette.ink,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {nomeCliente(c)}
                         </div>
                         {c.apelido && c.razao_social && (
                           <div style={{
-                            fontSize: 13, color: palette.inkMuted, marginTop: 1,
+                            fontSize: fz(13), color: palette.inkMuted, marginTop: 1,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
                             {c.razao_social}
                           </div>
                         )}
-                        <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2 }}>
+                        <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
                           {fmtMoeda(kpi.lifetime_total ?? 0)} · {kpi.qtd_compras ?? 0} compra{(kpi.qtd_compras ?? 0) !== 1 ? 's' : ''}
                         </div>
                       </div>
@@ -3015,7 +3015,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
               {selecionados.length > 0 && (
                 <div style={{
                   marginTop: 12, padding: 10, background: palette.accentSoft,
-                  borderRadius: 8, fontSize: 14, color: palette.ink,
+                  borderRadius: 8, fontSize: fz(14), color: palette.ink,
                 }}>
                   <strong>{selecionados.length}</strong> documento{selecionados.length !== 1 ? 's' : ''} selecionado{selecionados.length !== 1 ? 's' : ''}
                 </div>
@@ -3025,23 +3025,23 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
 
           {step === 2 && (
             <>
-              <div style={{ fontSize: 15, color: palette.inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
+              <div style={{ fontSize: fz(15), color: palette.inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
                 Como vc quer chamar esse grupo? Esse nome aparece pra vc na carteira e nas sugestões.
               </div>
               <input
                 autoFocus value={nomeGrupo} onChange={e => setNomeGrupo(e.target.value)}
                 placeholder="Ex: Marisa, Família Souza"
-                style={{ ...inputStyle, fontSize: 18, padding: '14px 16px', marginBottom: 12 }}
+                style={{ ...inputStyle, fontSize: fz(18), padding: '14px 16px', marginBottom: 12 }}
               />
 
               <div style={{
                 padding: 12, background: palette.beigeSoft, borderRadius: 8,
-                fontSize: 13, color: palette.inkSoft, lineHeight: 1.5,
+                fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
               }}>
                 💡 <strong>Dica:</strong> use o nome de quem atende, não o nome da loja (a loja varia).
               </div>
 
-              <div style={{ marginTop: 16, fontSize: 13, color: palette.inkMuted, marginBottom: 6 }}>
+              <div style={{ marginTop: 16, fontSize: fz(13), color: palette.inkMuted, marginBottom: 6 }}>
                 Documentos que vão pro grupo:
               </div>
               <div style={{
@@ -3050,10 +3050,10 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
               }}>
                 {docsSelecionados.map(d => (
                   <div key={d.id} style={{
-                    fontSize: 14, color: palette.inkSoft, padding: '4px 0',
+                    fontSize: fz(14), color: palette.inkSoft, padding: '4px 0',
                     display: 'flex', alignItems: 'center', gap: 6,
                   }}>
-                    <Store size={13} color={palette.inkMuted} />
+                    <Store size={sz(13)} color={palette.inkMuted} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {nomeCliente(d)}
                     </span>
@@ -3065,7 +3065,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
 
           {step === 3 && (
             <>
-              <div style={{ fontSize: 15, color: palette.inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
+              <div style={{ fontSize: fz(15), color: palette.inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
                 Qual documento é o "principal" do grupo? Geralmente é a matriz ou o que mais compra.
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -3080,21 +3080,21 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
                       fontFamily: FONT, textAlign: 'left',
                       display: 'flex', alignItems: 'center', gap: 10,
                     }}>
-                      <Crown size={18} color={isPadrao ? palette.warn : palette.beige} />
+                      <Crown size={sz(18)} color={isPadrao ? palette.warn : palette.beige} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
-                          fontSize: 15, fontWeight: 600, color: palette.ink,
+                          fontSize: fz(15), fontWeight: 600, color: palette.ink,
                           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         }}>
                           {nomeCliente(d)}
                         </div>
-                        <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2 }}>
+                        <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
                           {fmtMoeda(kpi.lifetime_total ?? 0)} · {kpi.qtd_compras ?? 0} compra{(kpi.qtd_compras ?? 0) !== 1 ? 's' : ''}
                         </div>
                       </div>
                       {isPadrao && (
                         <span style={{
-                          fontSize: 10, fontWeight: 600, padding: '3px 7px', borderRadius: 4,
+                          fontSize: fz(10), fontWeight: 600, padding: '3px 7px', borderRadius: 4,
                           background: palette.warn, color: palette.bg,
                           letterSpacing: 0.3, textTransform: 'uppercase', flexShrink: 0,
                         }}>Principal</span>
@@ -3106,7 +3106,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
 
               <div style={{
                 marginTop: 16, padding: 12, background: palette.accentSoft,
-                borderRadius: 8, fontSize: 14, color: palette.ink, lineHeight: 1.6,
+                borderRadius: 8, fontSize: fz(14), color: palette.ink, lineHeight: 1.6,
               }}>
                 ✨ <strong>Resumo:</strong><br/>
                 Grupo "<strong>{nomeGrupo}</strong>" com <strong>{docsSelecionados.length}</strong> documentos.<br/>
@@ -3115,7 +3115,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
 
               <div style={{
                 marginTop: 8, padding: 10, background: palette.beigeSoft, borderRadius: 8,
-                fontSize: 12, color: palette.inkMuted, lineHeight: 1.5,
+                fontSize: fz(12), color: palette.inkMuted, lineHeight: 1.5,
               }}>
                 ℹ️ Por enquanto, o documento principal é UX-only e calculado automaticamente como o de maior lifetime no DetalheGrupo.
               </div>
@@ -3132,7 +3132,7 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
             <button onClick={() => setStep(step - 1)} disabled={salvando} style={{
               flex: 1, background: palette.surface, color: palette.inkSoft,
               border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
-              fontSize: 15, cursor: salvando ? 'wait' : 'pointer',
+              fontSize: fz(15), cursor: salvando ? 'wait' : 'pointer',
               fontFamily: FONT, fontWeight: 600,
             }}>Voltar</button>
           )}
@@ -3141,27 +3141,27 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
               flex: 2,
               background: !podeAvancar ? palette.beige : palette.accent,
               color: palette.bg, border: 'none', borderRadius: 10, padding: '12px',
-              fontSize: 15, fontWeight: 600,
+              fontSize: fz(15), fontWeight: 600,
               cursor: !podeAvancar ? 'not-allowed' : 'pointer',
               fontFamily: FONT,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}>
-              Próximo <ChevronRight size={17} />
+              Próximo <ChevronRight size={sz(17)} />
             </button>
           ) : (
             <button onClick={criar} disabled={salvando} style={{
               ...btnPrimario(palette.ok, salvando), flex: 2,
             }}>
               {salvando
-                ? <><Loader2 size={17} style={spinKeyframes} /> Criando…</>
-                : <><Check size={17} /> Criar grupo</>}
+                ? <><Loader2 size={sz(17)} style={spinKeyframes} /> Criando…</>
+                : <><Check size={sz(17)} /> Criar grupo</>}
             </button>
           )}
         </div>
 
         {step === 1 && selecionados.length === 1 && (
           <div style={{
-            padding: '0 16px 12px', fontSize: 13, color: palette.inkMuted, textAlign: 'center',
+            padding: '0 16px 12px', fontSize: fz(13), color: palette.inkMuted, textAlign: 'center',
           }}>
             Selecione pelo menos 2 documentos pra formar um grupo
           </div>
@@ -3230,11 +3230,11 @@ export const AdicionarCnpjModal = ({ lojas, grupo, onClose, onAdicionado }) => {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 600, color: palette.ink }}>
+            <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>
               Adicionar CNPJ
             </div>
             <div style={{
-              fontSize: 13, color: palette.inkMuted, marginTop: 2,
+              fontSize: fz(13), color: palette.inkMuted, marginTop: 2,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
               Ao grupo "{grupo.nome_grupo}"
@@ -3245,7 +3245,7 @@ export const AdicionarCnpjModal = ({ lojas, grupo, onClose, onAdicionado }) => {
             cursor: salvando ? 'wait' : 'pointer',
             color: palette.inkMuted, padding: 4, flexShrink: 0,
           }}>
-            <X size={23} />
+            <X size={sz(23)} />
           </button>
         </div>
 
@@ -3255,23 +3255,23 @@ export const AdicionarCnpjModal = ({ lojas, grupo, onClose, onAdicionado }) => {
             borderRadius: 10, padding: '8px 12px', marginBottom: 12,
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            <Search size={16} color={palette.inkMuted} />
+            <Search size={sz(16)} color={palette.inkMuted} />
             <input autoFocus value={busca} onChange={e => setBusca(e.target.value)}
               placeholder="Buscar CNPJ, CPF ou razão"
               style={{
                 flex: 1, border: 'none', background: 'transparent', outline: 'none',
-                fontFamily: FONT, fontSize: 15, color: palette.ink,
+                fontFamily: FONT, fontSize: fz(15), color: palette.ink,
               }} />
           </div>
 
-          <div style={{ fontSize: 13, color: palette.inkMuted, marginBottom: 8 }}>
+          <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 8 }}>
             {candidatos.length} CNPJ{candidatos.length !== 1 ? 's' : ''} disponível{candidatos.length !== 1 ? 'is' : ''} na sua carteira
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {candidatos.length === 0 && (
               <div style={{
-                padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: 14,
+                padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(14),
                 background: palette.beigeSoft, borderRadius: 8,
               }}>
                 {busca ? `Nenhum cliente encontrado pra "${busca}"` : 'Todos os clientes da carteira já estão em grupos.'}
@@ -3299,24 +3299,24 @@ export const AdicionarCnpjModal = ({ lojas, grupo, onClose, onAdicionado }) => {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}>
-                    {sel && <Check size={14} color={palette.bg} />}
+                    {sel && <Check size={sz(14)} color={palette.bg} />}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
-                      fontSize: 15, fontWeight: 600, color: palette.ink,
+                      fontSize: fz(15), fontWeight: 600, color: palette.ink,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {nomeCliente(c)}
                     </div>
                     {c.apelido && c.razao_social && (
                       <div style={{
-                        fontSize: 13, color: palette.inkMuted, marginTop: 1,
+                        fontSize: fz(13), color: palette.inkMuted, marginTop: 1,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
                         {c.razao_social}
                       </div>
                     )}
-                    <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2 }}>
+                    <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
                       {fmtMoeda(kpi.lifetime_total ?? 0)} · {kpi.qtd_compras ?? 0} compra{(kpi.qtd_compras ?? 0) !== 1 ? 's' : ''}
                     </div>
                   </div>
@@ -3343,8 +3343,8 @@ export const AdicionarCnpjModal = ({ lojas, grupo, onClose, onAdicionado }) => {
                 : (salvando ? 'wait' : 'pointer'),
             }}>
             {salvando
-              ? <><Loader2 size={17} style={spinKeyframes} /> Adicionando…</>
-              : <><Link2 size={17} /> Adicionar{selecionados.length > 0 ? ` (${selecionados.length})` : ''}</>}
+              ? <><Loader2 size={sz(17)} style={spinKeyframes} /> Adicionando…</>
+              : <><Link2 size={sz(17)} /> Adicionar{selecionados.length > 0 ? ` (${selecionados.length})` : ''}</>}
           </button>
         </div>
       </div>

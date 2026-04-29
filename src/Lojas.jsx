@@ -58,6 +58,7 @@ import {
   LOAD_PHASES,
   LampIcon, LojaIcon,
   Header, StatusDot, TabBar, SectionTitle, LoadingScreen,
+  useLojasW,
 } from './Lojas_Shared.jsx';
 
 // Importa cérebro da IA + helpers puros
@@ -1343,6 +1344,11 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
   }
   const lojas = useLojasModule();
   const { state, trocarVendedoraAtiva } = lojas;
+
+  // Detector mobile (mesmo padrão SalasCorteContent no App.tsx).
+  // Mobile (<640px): maxWidth 460. Desktop (≥640px): maxWidth 900 + fz/sz add 1px.
+  const w = useLojasW();
+  const mobile = w < 640;
   
   // Estado de navegação
   const [screen, setScreen] = useState('home');
@@ -1400,7 +1406,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
   
   return (
     <div style={{
-      maxWidth: 460, margin: '0 auto', minHeight: '100vh',
+      maxWidth: mobile ? 460 : 900, margin: '0 auto', minHeight: '100vh',
       background: palette.bg, boxShadow: '0 0 40px rgba(0,0,0,0.06)', position: 'relative',
     }}>
       {/* ─── Telas vendedora (Parte 2a) ──────────────────────────────────── */}
