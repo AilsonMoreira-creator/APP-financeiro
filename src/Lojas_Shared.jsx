@@ -333,8 +333,83 @@ export function LoadingScreen({ phase, error, online }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FORMATAÇÃO DE TELEFONE + COMPONENTE COPIÁVEL
+// SAUDAÇÃO MOTIVACIONAL DO DIA (CardDiaScreen)
 // ═══════════════════════════════════════════════════════════════════════════
+//
+// Mostra "Bom dia/Boa tarde/Boa noite, [Nome]!" + frase motivacional escolhida
+// deterministicamente por (data + vendedora). Mesma frase o dia inteiro pra
+// mesma vendedora. Vendedoras diferentes veem frases diferentes. Próximo dia
+// → nova frase. Total de ~30 frases = ~1 mês sem repetir pra mesma vendedora.
+
+export const FRASES_MOTIVACIONAIS = [
+  // Engraçadas / casuais
+  'Reage mulher, boleto não espera 😂',
+  'Bora vender que o Pix não cai sozinho 💸',
+  'Cliente não entra sozinho, chama ele!',
+  'Parada aí por quê? A meta não bate sozinha 😅',
+  'Se não vender hoje, amanhã vende dobrado 👀',
+  'Mais conversa, mais comissão 😉',
+  'Olhar de vendedora, atitude de milionária 😎',
+  'Quem fica parada vira estoque 😂',
+  'Vamos trabalhar que o café já fez efeito ☕',
+  'Cliente entrou = sorriso automático 😁',
+  'Reage mulher!! 🚀',
+  'Bora trabalhar!!',
+  'Vamos estourar nas vendas hj!!! 🔥',
+  'Tô sentindo q hj vamos vender muito!!!',
+  'É hj q vamos vender muito!!!',
+  // Motivacionais (energia de resultado)
+  'Hoje é dia de vender MUITO',
+  'Bora fazer esse caixa girar',
+  'Meta na cabeça, foco na venda',
+  'Vamos fazer acontecer hoje',
+  'Dia fraco não existe pra gente',
+  'Venda é atitude',
+  'Confia no processo e vende',
+  'Hoje é dia de comissão boa 💸',
+  // Foco em meta
+  'Temos meta e vamos bater 💪',
+  'Falta pouco, acelera!',
+  'Cada venda conta',
+  'Não para até bater a meta',
+  'Ritmo de loja cheia',
+  'Vamos subir esse faturamento',
+  'Hora de virar o jogo 🎯',
+  'Foco total nas clientes',
+  'Hoje ninguém sai sem comprar 🛍️',
+  'Vamos q temos uma meta pra bater!!',
+];
+
+/** Retorna "Bom dia" / "Boa tarde" / "Boa noite" pela hora local. */
+export function saudacaoHora(date = new Date()) {
+  const h = date.getHours();
+  if (h >= 5 && h < 12) return 'Bom dia';
+  if (h >= 12 && h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+/** Emoji combinando com saudacaoHora — sol/café/lua. */
+export function emojiHora(date = new Date()) {
+  const h = date.getHours();
+  if (h >= 5 && h < 12) return '☀️';
+  if (h >= 12 && h < 18) return '☕';
+  return '🌙';
+}
+
+/** Hash simples (djb2) pra gerar índice determinístico a partir de string. */
+function _hash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h) ^ str.charCodeAt(i);
+  return Math.abs(h);
+}
+
+/** Escolhe frase pelo dia + seed (nome da vendedora, normalmente).
+ *  Mesma seed + mesma data = mesma frase o dia inteiro. */
+export function fraseDoDia(seed = '', date = new Date()) {
+  const dia = date.toISOString().slice(0, 10); // "2026-04-28"
+  const idx = _hash(dia + '|' + String(seed)) % FRASES_MOTIVACIONAIS.length;
+  return FRASES_MOTIVACIONAIS[idx];
+}
 //
 // Padrão Brasil:
 //   10 dígitos (fixo ou celular antigo): (DD)NNNN-NNNN
