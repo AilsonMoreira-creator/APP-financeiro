@@ -5487,14 +5487,26 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     return{custoRolo,custoTotal,custoPeca,tecido:tec.descricao};
   };
 
+  // Refs anti-sobrescrita (multi-usuário) — Decisão Ailson 28/04/2026
+  // Problema: admin com app aberto recebe Realtime, isso muda cortesSala,
+  // useEffect de save dispara e admin pode sobrescrever edição do funcionário.
+  // Solução: rastrear se o trigger veio de Realtime/load (não salva) ou de
+  // ação real do usuário (salva).
+  const lastLoadTsSC=useRef(0);              // quando esse device carregou remoto
+  const lastUserEditTsSC=useRef(0);          // ultimo edit DO USUÁRIO neste device
+  const realtimeProcessingSC=useRef(false);  // flag durante recebimento Realtime
+
   // ── Supabase: load com merge ──
   useEffect(()=>{
     (async()=>{
       const remote=await scDb.load();
       if(remote){
+        realtimeProcessingSC.current=true; // guard pra useEffect de save não disparar
         if(remote.cortes)setCortesSala(remote.cortes);
         if(remote.salas)setSalas(remote.salas);
         if(remote.logs)setLogSC(remote.logs);
+        lastLoadTsSC.current=Date.now();
+        setTimeout(()=>{realtimeProcessingSC.current=false;},2000); // libera após React processar
       }
       setDbLoaded(true);
     })();
@@ -5512,13 +5524,21 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
           try{
             const remote=payload?.new?.payload;
             if(!remote)return;
+            realtimeProcessingSC.current=true; // bloqueia auto-save
             const remoteCortes=remote.cortes||[];
-            // Merge: adiciona itens remotos que não estão no local (criados pelo backend)
+            // Merge POR ID: traz remote-only E atualiza locais que tem _mod menor
+            // (antes só adicionava remote-only, perdendo edits de outros usuários)
             setCortesSala(prev=>{
-              const localIds=new Set(prev.map(c=>c.id));
-              const novos=remoteCortes.filter(c=>!localIds.has(c.id)&&!deletedIdsRef.current.has(c.id));
-              if(novos.length===0)return prev;
-              return [...prev,...novos];
+              const localMap=new Map(prev.map(c=>[c.id,c]));
+              let mudou=false;
+              const merged=prev.map(lc=>{
+                const rc=remoteCortes.find(r=>r.id===lc.id);
+                if(rc&&(rc._mod||0)>(lc._mod||0)){mudou=true;return rc;}
+                return lc;
+              });
+              const novos=remoteCortes.filter(c=>!localMap.has(c.id)&&!deletedIdsRef.current.has(c.id));
+              if(novos.length>0)mudou=true;
+              return mudou?[...merged,...novos]:prev;
             });
             if(remote.logs){
               setLogSC(prev=>{
@@ -5528,7 +5548,9 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
                 return [...novosLogs,...prev].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,200);
               });
             }
-          }catch(e){console.error('realtime salas-corte erro:',e);}
+            lastLoadTsSC.current=Date.now();
+            setTimeout(()=>{realtimeProcessingSC.current=false;},2000);
+          }catch(e){console.error('realtime salas-corte erro:',e);realtimeProcessingSC.current=false;}
         })
       .subscribe();
     return()=>{try{supabase.removeChannel(ch);}catch{}};
@@ -5542,6 +5564,26 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   useEffect(()=>{
     if(!dbLoaded)return;
     ultimoEstadoRef.current={cortesSala,salas,logSC};
+
+    // ⚡ GUARD ANTI-SOBRESCRITA (Ailson 28/04/2026):
+    // Se o trigger desse useEffect veio de Realtime ou load (não de edit do
+    // usuário), NÃO SALVA. Caso contrário, admin com app aberto recebia edit
+    // do funcionário via Realtime, useEffect disparava e admin re-salvava
+    // o mesmo dado, com risco de perder campos por race.
+    if(realtimeProcessingSC.current){
+      console.log("SC AUTO-SAVE: bloqueado por realtimeProcessing");
+      return;
+    }
+    // Marca timestamp do edit do usuário SOMENTE se passou tempo desde o load
+    // (caso contrário, é o primeiro tick do useEffect logo após load — não é
+    // edit real do usuário). 1s é tempo suficiente pra React batched updates.
+    const sinceLoad=Date.now()-lastLoadTsSC.current;
+    if(lastLoadTsSC.current>0&&sinceLoad<1000){
+      console.log("SC AUTO-SAVE: bloqueado — primeiro tick após load (",sinceLoad,"ms)");
+      return;
+    }
+    lastUserEditTsSC.current=Date.now();
+
     if(debRef.current)clearTimeout(debRef.current);
     debRef.current=setTimeout(async()=>{
       try{
@@ -7742,6 +7784,16 @@ export default function App(){
   const lastSaveTs=useRef(0); // timestamp do último save pra detectar eco do Realtime
   const realtimeProcessing=useRef(false); // flag pra pular auto-save durante Realtime
   const lastUserEditTs=useRef(0); // timestamp do ultimo edit do usuario (protege contra Realtime sobrescrever)
+  // Anti-sobrescrita Cortes/Oficinas (Ailson 28/04/2026): Quando admin tem o
+  // app aberto e funcionário edita corte, Realtime faz `setCortes(novo)`, o
+  // useEffect de save dispara e admin re-salva — podendo perder edits do
+  // funcionário por race. Guards:
+  //   - lastCorteLoadTs: timestamp do ultimo load/Realtime (não salva nos
+  //     primeiros 1s após — é primeiro tick do useEffect)
+  //   - lastCorteEditTs: timestamp do ultimo edit DO USUÁRIO neste device
+  //     (se < lastCorteLoadTs, é trigger de load, não de edit do usuário)
+  const lastCorteLoadTs=useRef(0);
+  const lastCorteEditTs=useRef(0);
   // 🛡️ SNAPSHOT DE INTEGRIDADE: tamanhos conhecidos do último load/save bem sucedido.
   // Usado pra detectar state corrompido (ex: receitasPorMes={} depois de ter 12 meses)
   // e ABORTAR o save antes de sobrescrever dados bons no Supabase.
@@ -7972,7 +8024,7 @@ export default function App(){
       // Cortes (chave separada — cortes + produtos com merge por _mod)
       if(!ec&&dc?.payload){
         const d=dc.payload;
-        if(d.cortes){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
+        if(d.cortes){setCortes(d.cortes);lastCorteLoadTs.current=Date.now();try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
         if(d.oficinasCAD&&d.oficinasCAD.length>0)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
         // Merge produtos do cortes payload com os já carregados do payload principal
@@ -8655,6 +8707,17 @@ export default function App(){
   // ── SAVE CORTES com merge (múltiplos usuários) ────────────────────────────
   useEffect(()=>{
     if(!dbCarregado||!supabase||realtimeProcessing.current)return;
+    // ⚡ GUARD ANTI-SOBRESCRITA (Ailson 28/04/2026):
+    // Se trigger desse useEffect veio de load/Realtime (state mudou pq baixou
+    // do remoto), NÃO SALVA. Caso contrário, admin com app aberto recebe edit
+    // do funcionário via Realtime, useEffect dispara e admin re-salva o mesmo
+    // dado, sobrescrevendo edits que ainda não chegaram via Realtime.
+    const sinceLoad=Date.now()-lastCorteLoadTs.current;
+    if(lastCorteLoadTs.current>0&&sinceLoad<1500){
+      console.log("SAVE CORTES: bloqueado — primeiro tick após load (",sinceLoad,"ms)");
+      return;
+    }
+    lastCorteEditTs.current=Date.now();
     if(debounceCortes.current)clearTimeout(debounceCortes.current);
     debounceCortes.current=setTimeout(async()=>{
       try{
@@ -8726,8 +8789,9 @@ export default function App(){
     const onVis=async()=>{
       if(document.visibilityState!=="visible"||!supabase||!dbCarregado)return;
       try{
+        realtimeProcessing.current=true; // bloqueia auto-save até state estabilizar
         const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').single();
-        if(!data?.payload?.cortes)return;
+        if(!data?.payload?.cortes){realtimeProcessing.current=false;return;}
         const remoteCortes=data.payload.cortes;
         setCortes(prev=>{
           const localMap=new Map(prev.map(c=>[c.id,c]));
@@ -8746,7 +8810,9 @@ export default function App(){
           }
           return mudou?merged:prev;
         });
-      }catch(e){console.error("Oficinas reload:",e);}
+        lastCorteLoadTs.current=Date.now();
+        setTimeout(()=>{realtimeProcessing.current=false;},2000);
+      }catch(e){console.error("Oficinas reload:",e);realtimeProcessing.current=false;}
     };
     document.addEventListener("visibilitychange",onVis);
     return()=>document.removeEventListener("visibilitychange",onVis);
