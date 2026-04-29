@@ -859,7 +859,7 @@ export const SugestaoScreen = ({
             <div style={{
               background: palette.accentSoft, border: `1px solid ${palette.accent}30`,
               borderRadius: 10, padding: 14, fontSize: fz(15), color: palette.ink, lineHeight: 1.55,
-              marginBottom: 18,
+              marginBottom: 18, whiteSpace: 'pre-wrap', textAlign: 'left',
             }}>{sugestao.acao_sugerida}</div>
           </>
         )}

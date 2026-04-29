@@ -679,15 +679,33 @@ export function TelefoneCopiavel({ telefone }) {
 //   <FotoProdutoLojas refProd={produto.ref} size={56} />
 //   <FotoProdutoLojas refProd={produto.ref} aspectRatio /> (full width 3/4)
 
-const SBURL_LOJAS = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || '';
-const STORAGE_PRODUTOS = SBURL_LOJAS ? `${SBURL_LOJAS}/storage/v1/object/public/produtos/` : '';
+// Lê sbUrl dinamicamente (não cacheia em module-load) — mesmo padrão do
+// FotoProdLarge no App.tsx. Fallback pra localStorage caso env var não
+// esteja disponível em runtime.
+function _getSbUrl() {
+  let env = '';
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      env = import.meta.env.VITE_SUPABASE_URL || '';
+    }
+  } catch {}
+  if (env) return env;
+  try {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sb_url') || '';
+    }
+  } catch {}
+  return '';
+}
 
 export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, onZoom = null }) {
+  const sbUrl = _getSbUrl();
+  const storageBase = sbUrl ? `${sbUrl}/storage/v1/object/public/produtos/` : '';
   const orig = String(refProd || '').toUpperCase();
   const norm = orig.replace(/^0+/, '');
 
   // Sem URL do supabase ou sem ref: placeholder
-  if (!STORAGE_PRODUTOS || !orig) {
+  if (!storageBase || !orig) {
     return (
       <div style={{
         ...(aspectRatio
@@ -716,7 +734,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
     const cur = e.target.src;
     const idx = urls.findIndex(u => cur.includes(u));
     if (idx >= 0 && idx < urls.length - 1) {
-      e.target.src = STORAGE_PRODUTOS + urls[idx + 1] + cb;
+      e.target.src = storageBase + urls[idx + 1] + cb;
     } else {
       e.target.style.display = 'none';
       const ph = e.target.nextSibling;
@@ -736,7 +754,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
         overflow: 'hidden', borderRadius: 8,
         background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
       }}>
-        <img src={STORAGE_PRODUTOS + urls[0] + cb} onError={onError} onClick={onClick}
+        <img src={storageBase + urls[0] + cb} onError={onError} onClick={onClick}
           style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />
         <div style={{
           display: 'none', width: '100%', height: '100%',
@@ -757,7 +775,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
       background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
       flexShrink: 0, position: 'relative',
     }}>
-      <img src={STORAGE_PRODUTOS + urls[0] + cb} onError={onError} onClick={onClick}
+      <img src={storageBase + urls[0] + cb} onError={onError} onClick={onClick}
         style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />
       <div style={{
         display: 'none', width: '100%', height: '100%',
