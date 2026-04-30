@@ -1,24 +1,11 @@
 /**
- * lojas-drive-debug-backfill-vendedora.js
- *
- * GET /api/lojas-drive-debug-backfill-vendedora?user=ailson
- *
- * Roda o backfill de vendedora dominante MANUALMENTE, lendo TUDO
- * de lojas_vendas (sem depender de import). Diagnostica:
- *   - Se a logica funciona quando rodada isoladamente
- *   - Quantos clientes seriam atualizados
- *   - Quais erros aparecem
+ * lojas-drive-debug-backfill-vendedora.js — V2 com supabase do helpers
+ * Roda backfill em batch de 50 por vez, mostra erro detalhado
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { setCors } from './_lojas-helpers.js';
+import { supabase, setCors } from './_lojas-helpers.js';
 
 export const config = { maxDuration: 120 };
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
 
 export default async function handler(req, res) {
   setCors(res);
@@ -28,25 +15,28 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Apenas admin (?user=ailson)' });
   }
 
+  const debug = { etapa: 'inicio' };
+
   try {
-    // 1. Le TODAS as vendas com cliente_id e vendedora_id
+    debug.etapa = 'select_vendas';
     const { data: vendas, error: errV } = await supabase
       .from('lojas_vendas')
       .select('cliente_id, vendedora_id')
       .not('cliente_id', 'is', null)
       .not('vendedora_id', 'is', null);
 
-    if (errV) return res.status(500).json({ erro: 'select vendas', detail: errV.message });
+    if (errV) return res.status(500).json({ debug, erro: 'select vendas', detail: errV.message });
 
-    // 2. Conta vendedora por cliente
+    debug.total_vendas = vendas?.length || 0;
+
     const vendedoraCount = new Map();
     for (const v of vendas || []) {
       if (!vendedoraCount.has(v.cliente_id)) vendedoraCount.set(v.cliente_id, new Map());
       const inner = vendedoraCount.get(v.cliente_id);
       inner.set(v.vendedora_id, (inner.get(v.vendedora_id) || 0) + 1);
     }
+    debug.total_clientes_no_count = vendedoraCount.size;
 
-    // 3. Vendedora dominante
     const dominantePorCliente = new Map();
     for (const [cid, vends] of vendedoraCount) {
       let melhor = null, max = 0;
@@ -55,35 +45,48 @@ export default async function handler(req, res) {
       }
       if (melhor) dominantePorCliente.set(cid, melhor);
     }
+    debug.total_dominante = dominantePorCliente.size;
 
-    // 4. Quais desses ainda não tem vendedora
+    debug.etapa = 'select_clientes';
     const ids = Array.from(dominantePorCliente.keys());
     const { data: semVend, error: errC } = await supabase
       .from('lojas_clientes')
-      .select('id')
-      .in('id', ids)
-      .is('vendedora_id', null);
+      .select('id, documento, razao_social, vendedora_id')
+      .in('id', ids);
 
-    if (errC) return res.status(500).json({ erro: 'select sem vendedora', detail: errC.message });
+    if (errC) return res.status(500).json({ debug, erro: 'select clientes', detail: errC.message });
 
-    const idsParaAtualizar = (semVend || []).map(c => c.id);
+    debug.total_clientes_encontrados = semVend?.length || 0;
+    debug.total_clientes_sem_vendedora = (semVend || []).filter(c => !c.vendedora_id).length;
 
-    // 5. Loja de cada vendedora
+    const idsParaAtualizar = (semVend || []).filter(c => !c.vendedora_id).map(c => c.id);
+
+    debug.etapa = 'select_vendedoras';
     const vendedoraIds = [...new Set(idsParaAtualizar.map(id => dominantePorCliente.get(id)))];
-    const { data: vendoras } = await supabase
+    const { data: vends, error: errVd } = await supabase
       .from('lojas_vendedoras')
       .select('id, loja, nome')
       .in('id', vendedoraIds);
-    const vendIdToLoja = new Map((vendoras || []).map(v => [v.id, v.loja]));
-    const vendIdToNome = new Map((vendoras || []).map(v => [v.id, v.nome]));
 
-    // 6. Atualiza
+    if (errVd) return res.status(500).json({ debug, erro: 'select vendedoras', detail: errVd.message });
+
+    const vendIdToLoja = new Map((vends || []).map(v => [v.id, v.loja]));
+    const vendIdToNome = new Map((vends || []).map(v => [v.id, v.nome]));
+
+    debug.etapa = 'update_loop';
+    debug.total_para_atualizar = idsParaAtualizar.length;
+
     let atualizados = 0;
     let erros = [];
-    for (const cid of idsParaAtualizar) {
+    let zeroRows = 0;
+
+    const limite = parseInt(req.query.limite || '20');
+    const testIds = idsParaAtualizar.slice(0, limite);
+
+    for (const cid of testIds) {
       const vid = dominantePorCliente.get(cid);
       const loja = vendIdToLoja.get(vid);
-      const { error, count } = await supabase
+      const { error, data } = await supabase
         .from('lojas_clientes')
         .update({
           vendedora_id: vid,
@@ -91,31 +94,31 @@ export default async function handler(req, res) {
           vendedor_a_definir: false,
           fonte_atribuicao: 'vendedora_dominante_historico',
           data_atribuicao: new Date().toISOString(),
-        }, { count: 'exact' })
+        })
         .eq('id', cid)
-        .is('vendedora_id', null);
+        .is('vendedora_id', null)
+        .select('id');
 
       if (error) {
-        if (erros.length < 5) erros.push({ cid, msg: error.message });
-      } else if (count > 0) {
+        if (erros.length < 3) erros.push({ cid, vid, loja, msg: error.message });
+      } else if (data && data.length > 0) {
         atualizados++;
+      } else {
+        zeroRows++;
       }
     }
 
-    return res.status(200).json({
-      total_vendas_com_cliente_e_vendedora: vendas?.length || 0,
-      total_clientes_no_count: vendedoraCount.size,
-      total_clientes_dominante_definido: dominantePorCliente.size,
-      total_ids_para_atualizar_pre_check: idsParaAtualizar.length,
-      total_atualizados: atualizados,
-      primeiros_erros: erros,
-      sample_dominante: idsParaAtualizar.slice(0, 5).map(cid => ({
-        cliente_id: cid,
-        vendedora_dominante: vendIdToNome.get(dominantePorCliente.get(cid)),
-        loja: vendIdToLoja.get(dominantePorCliente.get(cid)),
-      })),
-    });
+    debug.atualizados = atualizados;
+    debug.zero_rows_returned = zeroRows;
+    debug.erros = erros;
+    debug.amostra = testIds.slice(0, 3).map(cid => ({
+      cliente_id: cid,
+      vendedora: vendIdToNome.get(dominantePorCliente.get(cid)),
+      loja: vendIdToLoja.get(dominantePorCliente.get(cid)),
+    }));
+
+    return res.status(200).json(debug);
   } catch (err) {
-    return res.status(500).json({ erro: err.message, stack: err.stack?.split('\n').slice(0, 5) });
+    return res.status(500).json({ debug, erro: err.message, stack: err.stack?.split('\n').slice(0, 8) });
   }
 }
