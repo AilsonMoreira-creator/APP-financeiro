@@ -504,28 +504,30 @@ async function selectInBatches(tabela, coluna, valores, opts = {}) {
 async function backfillVendedoraClientes(registrosVendas) {
   // Conta vendedora_id por cliente_id (só vendas que tem cliente_id resolvido
   // E vendedora_id resolvida pelo parser)
-  const vendedoraCount = new Map();  // cliente_id → Map(vendedora_id → count)
+  // REGRA (decisão Ailson 30/04/2026): vendedora da ÚLTIMA venda (mais recente)
+  // vence, NÃO a dominante. Razão: ex-vendedoras (REGILANIA, KELLY) foram
+  // absorvidas pela Joelma. Se cliente comprou 5x com REGILANIA e depois 1x
+  // com CARINA (Cleide atual), a CARINA herda. Dominante daria pra Joelma
+  // por causa do histórico antigo, errado pra atribuição atual.
+  //
+  // Como pegamos a última: mantemos só a vendedora_id da venda com data_venda
+  // MAIS ALTA por cliente. registrosVendas pode chegar em qualquer ordem,
+  // então ordenamos.
+  const ultimaPorCliente = new Map();  // cliente_id → { vendedora_id, data }
   for (const v of registrosVendas) {
-    if (!v.cliente_id || !v.vendedora_id) continue;
-    if (!vendedoraCount.has(v.cliente_id)) vendedoraCount.set(v.cliente_id, new Map());
-    const inner = vendedoraCount.get(v.cliente_id);
-    inner.set(v.vendedora_id, (inner.get(v.vendedora_id) || 0) + 1);
+    if (!v.cliente_id || !v.vendedora_id || !v.data_venda) continue;
+    const atual = ultimaPorCliente.get(v.cliente_id);
+    if (!atual || v.data_venda > atual.data) {
+      ultimaPorCliente.set(v.cliente_id, { vendedora_id: v.vendedora_id, data: v.data_venda });
+    }
   }
 
-  if (vendedoraCount.size === 0) return { backfill_vendedora: 0 };
+  if (ultimaPorCliente.size === 0) return { backfill_vendedora: 0 };
 
-  // Calcula a vendedora dominante por cliente
+  // Map cliente_id → vendedora_id da última venda
   const dominantePorCliente = new Map();
-  for (const [clienteId, vendedoras] of vendedoraCount) {
-    let melhorVendedora = null;
-    let maxCount = 0;
-    for (const [vid, count] of vendedoras) {
-      if (count > maxCount) {
-        maxCount = count;
-        melhorVendedora = vid;
-      }
-    }
-    if (melhorVendedora) dominantePorCliente.set(clienteId, melhorVendedora);
+  for (const [cid, info] of ultimaPorCliente) {
+    dominantePorCliente.set(cid, info.vendedora_id);
   }
 
   // Busca quais desses clientes AINDA não têm vendedora atribuida (particionado)
@@ -537,7 +539,7 @@ async function backfillVendedoraClientes(registrosVendas) {
   const idsParaAtualizar = semVendedoraTodos.map(c => c.id);
   if (idsParaAtualizar.length === 0) return { backfill_vendedora: 0 };
 
-  // Busca a loja de cada vendedora dominante (pra setar loja_origem também)
+  // Busca a loja de cada vendedora (pra setar loja_origem também)
   const vendedoraIds = [...new Set(idsParaAtualizar.map(id => dominantePorCliente.get(id)))];
   const vends = await selectInBatches('lojas_vendedoras', 'id', vendedoraIds, {
     select: 'id, loja',
