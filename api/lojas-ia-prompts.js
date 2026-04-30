@@ -141,6 +141,34 @@ tem campos: ref, posicao (1/2/3), pecas_total, vezes_comprou, em_estoque
 "a que ela compra bem".
 ❌ NUNCA ofereça reposicao com em_estoque=false (não temos a peça).
 
+# CATEGORIAS DOMINANTES DA CLIENTE (categorias_freq no input)
+
+Cada cliente tem um array "categorias_freq" com a distribuição de TODAS as
+compras dela por categoria de peça (CALÇA, BLUSA, VESTIDO, MACACÃO, SAIA,
+CONJUNTO etc). Cada item tem: categoria, pct (% das peças que ela comprou
+nessa categoria), pecas, dominante (true se pct>=30%).
+
+Use isso pra OFERECER PEÇAS NOVAS DA MESMA CATEGORIA QUE A CLIENTE COMPRA
+MUITO, mesmo quando a REF específica não está no top 3 dela:
+
+✅ Se cliente tem categoria com dominante=true E temos novidade ou
+   best_seller dessa MESMA categoria em produtos_disponiveis, prioriza essa
+   peça pra ela. Texto: "Chegou uma calça nova lindíssima — e vc compra
+   muito calça aqui (X% das compras)". Pode ser sugestão tipo "novidade",
+   "atencao" ou "followup", dependendo do dias_sem_comprar dela.
+
+✅ Empate de candidatos: entre duas peças disponíveis pra oferecer pra mesma
+   cliente, escolhe a que casa com a categoria_freq dominante dela.
+
+❌ NUNCA cite o pct exato no texto pra cliente (parece estranho falar
+   "32% das suas compras"). Use linguagem natural: "vc compra muito
+   [categoria]", "essa categoria é forte com vc", etc.
+
+Hierarquia de match (do mais forte pro mais fraco):
+1. REF está em top_refs_cliente E em_estoque=true → reposicao (gatilho mais forte)
+2. REF é da categoria dominante da cliente → novidade/atenção priorizada
+3. REF é qualquer novidade/best_seller compatível com perfil → fallback geral
+
 # REGRA DE VARIEDADE — anti-monotonia (CRÍTICO)
 
 A vendedora vê 7 sugestões POR DIA. Não pode ser sempre o mesmo tipo de

@@ -539,6 +539,41 @@ async function montarContextoSugestoes(vendedoraId) {
     }
   }
 
+  // ─── CATEGORIAS FREQUENTES POR CLIENTE (decisão Ailson 30/04/2026) ────
+  // Além das top 3 REFs específicas, IA também precisa saber em quais
+  // CATEGORIAS (calça, blusa, vestido, macacão...) cada cliente compra
+  // muito. Isso permite oferecer uma novidade/best_seller que é dessa
+  // categoria mesmo quando a REF não está no top 3 específico dela.
+  // Threshold "dominante" = pct >= 30% (config DOMINANTE_PCT_MIN).
+  const DOMINANTE_PCT_MIN = 30;
+  const categoriasFreqPorCliente = {}; // { cliente_id: [{categoria, pct, pecas}, ...] }
+  if (clienteIds.length > 0) {
+    try {
+      for (let i = 0; i < clienteIds.length; i += 200) {
+        const chunk = clienteIds.slice(i, i + 200);
+        const { data: cats } = await supabase
+          .from('vw_lojas_categorias_freq_por_cliente')
+          .select('cliente_id, categoria, pct, pecas')
+          .in('cliente_id', chunk)
+          .order('pct', { ascending: false });
+        for (const r of cats || []) {
+          if (!categoriasFreqPorCliente[r.cliente_id]) categoriasFreqPorCliente[r.cliente_id] = [];
+          categoriasFreqPorCliente[r.cliente_id].push({
+            categoria: r.categoria,
+            pct: Number(r.pct) || 0,
+            pecas: r.pecas,
+            // dominante = cliente compra MUITO essa categoria. Sinal pro
+            // prompt usar como gatilho de "oferecer novidade da categoria
+            // mesmo sem REF específica no top".
+            dominante: Number(r.pct) >= DOMINANTE_PCT_MIN,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[lojas-ia] sem categorias freq por cliente (view ausente?):', e?.message);
+    }
+  }
+
   // ─── MAIS VENDIDOS 45d (categoria de produtos no payload) ─────────────
   // Decisão Ailson 28/04/2026: top 10 vendas 45d (loja física) entra como
   // categoria PRÓPRIA no produtos_disponiveis (não vira slot, é só repertório).
@@ -606,6 +641,7 @@ async function montarContextoSugestoes(vendedoraId) {
     emAltaAuto,
     maisVendidos45d,         // top 10 vendas 45d (categoria mais_vendidos)
     topRefsPorCliente,       // { cliente_id: [{ref, posicao, pecas, vezes}] }
+    categoriasFreqPorCliente, // { cliente_id: [{categoria, pct, pecas, dominante}] }
     refsReposicao,           // [ref] — novidades que já tinham venda passada
     promocoes: promocoes || [],
     regrasCustomizadas: {
@@ -836,6 +872,12 @@ function montarMessagesSugestoes(ctx) {
         // IA usa pra: detectar reposição, dizer "vende bem pra você",
         // alternar recomendações sem repetir.
         top_refs_cliente: ctx.topRefsPorCliente?.[c.id] || [],
+        // Distribuicao de compras por CATEGORIA (calça, blusa, vestido,
+        // macacão...). Categoria com dominante=true (pct>=30%) sinaliza pra
+        // IA: pode oferecer novidade/best_seller dessa categoria mesmo sem
+        // REF específica no top 3 da cliente. Item: {categoria, pct,
+        // pecas, dominante}.
+        categorias_freq: ctx.categoriasFreqPorCliente?.[c.id] || [],
         kpi: {
           dias_sem_comprar: k.dias_sem_comprar,
           ultima_compra: k.ultima_compra,
@@ -901,6 +943,11 @@ function montarMessagesSugestoes(ctx) {
         refs_reposicao: ctx.refsReposicao?.length || 0,
       },
       clientes_com_top_refs: Object.keys(ctx.topRefsPorCliente || {}).length,
+      // Quantos clientes da carteira tem ao menos 1 categoria DOMINANTE
+      // (pct>=30%). Sinal pra IA poder oferecer novidade dessa categoria
+      // mesmo sem REF especifica no top 3 da cliente.
+      clientes_com_categoria_dominante: Object.values(ctx.categoriasFreqPorCliente || {})
+        .filter(arr => arr.some(c => c.dominante)).length,
       // Quantos clientes da carteira tem AO MENOS 1 REF do seu top em
       // estoque hoje — esses sao candidatos fortes pra sugestao tipo
       // "reposicao" ampla. Se esse numero for alto e a IA nao gerar
