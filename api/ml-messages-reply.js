@@ -219,7 +219,9 @@ export default async function handler(req, res) {
       const errMsg = String(err.message || err.error || '').toLowerCase();
       let mensagemAmigavel = null;
 
-      if (errMsg.includes('blocked_by_mediation') || errMsg.includes('mediation')) {
+      if (errMsg.includes('blocked_by_claim') || errMsg.includes('claim')) {
+        mensagemAmigavel = '⚠️ Pedido com Reclamacao aberta no ML - mensagens diretas estao bloqueadas. Responda pela aba "Reclamacoes" no painel do Mercado Livre ate a reclamacao ser encerrada.';
+      } else if (errMsg.includes('blocked_by_mediation') || errMsg.includes('mediation')) {
         mensagemAmigavel = 'Conversa em Mediacao no ML - mensagens diretas estao bloqueadas. Responda pelo painel de Mediacoes do Mercado Livre.';
       } else if (errMsg.includes('conversation_closed') || errMsg.includes('closed')) {
         mensagemAmigavel = 'Conversa ja foi fechada pelo ML (passou do prazo de resposta ou foi encerrada).';
