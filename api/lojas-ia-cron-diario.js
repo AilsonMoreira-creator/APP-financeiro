@@ -22,7 +22,11 @@ export default async function handler(req, res) {
   // Garante que conseguimos ver no Supabase se o Vercel chamou esse handler
   // — independente de retornar 403, sucesso ou erro depois.
   const userAgent = req.headers['user-agent'] || '';
-  const ehCron = req.headers['x-vercel-cron'] !== undefined;
+  // Vercel sempre envia user-agent 'vercel-cron/1.0' quando dispara cron.
+  // Header 'x-vercel-cron' foi descontinuado (não vem mais — bug 30/04/2026
+  // descoberto qdo cron retornou 403 todo dia 7h e nenhuma sugestão era gerada).
+  // Mantemos check do header legado por compatibilidade defensiva.
+  const ehCron = userAgent.startsWith('vercel-cron') || req.headers['x-vercel-cron'] !== undefined;
   const userId = req.query?.user || req.headers['x-user'];
 
   let healthId = null;

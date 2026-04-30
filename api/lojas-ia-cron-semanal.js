@@ -21,7 +21,10 @@ export const config = { maxDuration: 300 };
 export default async function handler(req, res) {
   setCors(res);
 
-  const ehCron = req.headers['x-vercel-cron'] !== undefined;
+  // Vercel envia user-agent 'vercel-cron/1.0' quando dispara cron (forma
+  // oficial atual). Header 'x-vercel-cron' foi descontinuado.
+  const userAgent = req.headers['user-agent'] || '';
+  const ehCron = userAgent.startsWith('vercel-cron') || req.headers['x-vercel-cron'] !== undefined;
   const ehAdmin = req.headers['x-user'] === 'ailson';
   if (!ehCron && !ehAdmin) {
     return res.status(403).json({ error: 'Apenas cron Vercel ou admin' });

@@ -76,7 +76,13 @@ export default async function handler(req, res) {
 
   try {
     // Modo cron (chamado pelo cron-handler) ou manual?
-    const ehCron = req.query?.modo === 'cron' || req.headers['x-vercel-cron'];
+    // - ?modo=cron: chamada interna do lojas-drive-cron
+    // - user-agent vercel-cron/1.0: chamada direta do Vercel cron (forma oficial)
+    // - x-vercel-cron header: forma legada (descontinuada, mantida por compatibilidade)
+    const userAgent = req.headers['user-agent'] || '';
+    const ehCron = req.query?.modo === 'cron'
+      || userAgent.startsWith('vercel-cron')
+      || req.headers['x-vercel-cron'];
     let acao, fileId;
 
     if (ehCron) {

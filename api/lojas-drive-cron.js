@@ -22,8 +22,10 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Cron do Vercel manda header x-vercel-cron — verifica que é mesmo o cron
-  const ehCron = !!req.headers['x-vercel-cron'];
+  // Cron do Vercel envia user-agent 'vercel-cron/1.0' (forma oficial atual).
+  // Header 'x-vercel-cron' foi descontinuado. Mantemos por compatibilidade.
+  const userAgent = req.headers['user-agent'] || '';
+  const ehCron = userAgent.startsWith('vercel-cron') || !!req.headers['x-vercel-cron'];
   if (!ehCron && req.query?.force !== '1') {
     return res.status(403).json({
       error: 'Endpoint só é chamado pelo cron Vercel. Use ?force=1 pra teste manual (admin).',
