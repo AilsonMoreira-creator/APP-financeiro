@@ -502,39 +502,44 @@ async function selectInBatches(tabela, coluna, valores, opts = {}) {
 }
 
 async function backfillVendedoraClientes(registrosVendas) {
-  // REGRA (decisão Ailson 30/04/2026 — versão final):
+  // REGRA (decisão Ailson 30/04/2026 — versão final v3):
   //
-  // 1. PASSO 1: Pra cada cliente, pega a vendedora da ULTIMA venda
-  // 2. PASSO 2: Mas se em ALGUM momento ele comprou com vendedora que
-  //    absorveu ex-vendedoras (KELLY/REGILANIA → Joelma), essa absorvente
-  //    GANHA prioridade — independente de quem fez a última venda.
+  // Hierarquia em camadas:
+  //   1. Cliente comprou com vendedora ABSORVENTE FORTE (KELLY/REGILANIA → Joelma)
+  //      → fica com ela PRA SEMPRE, mesmo se comprou depois com outra
+  //   2. Cliente comprou com vendedora ABSORVENTE FRACA (TATIANE/MARI/AMANDA → Cleide)
+  //      → fica com ela, MAS perde se houver venda com absorvente forte
+  //   3. Sem absorvente envolvida → vendedora da última venda vence
   //
-  // Razão: cliente que comprou com KELLY uma vez "pertence" pra Joelma
-  // pra sempre. Se depois comprou com Cleide, foi atendimento ocasional —
-  // a Joelma continua dona da carteira.
+  // Como classifica forte vs fraca: forte = ex-vendedora absorvida tinha
+  // carteira propria significativa (KELLY=164 clientes, REGILANIA=160).
+  // Fraca = TATIANE (45), MARI (19), AMANDA (16) — atendimento ocasional.
   //
-  // Como detectar "vendedora absorvente"? Olhamos a tabela
-  // lojas_vendedoras_absorventes (ou hardcoded por enquanto): vendedoras
-  // que tem aliases ALÉM do próprio nome, indicando que herdaram clientes
-  // de ex-funcionárias.
-  //
-  // Implementação: PRIMEIRO procura se cliente tem alguma venda com
-  // vendedora absorvente. Se sim, atribui pra ela. Se não, vai pra última.
+  // Marcacao: lojas_vendedoras tem campo `absorvente_forte` (boolean).
+  // Por enquanto hardcoded por nome até ter UI.
 
-  // Carrega lista de vendedoras absorventes (tem >1 alias e nome bate com 1 deles)
+  // Carrega vendedoras + absorventes
   const { data: vendedorasInfo } = await supabase
     .from('lojas_vendedoras')
     .select('id, nome, aliases')
     .eq('ativa', true);
-  const absorventes = new Set();
+
+  // Hardcoded por enquanto (decisão Ailson 30/04/2026)
+  const ABSORVENTES_FORTES = new Set(['Joelma']);  // herdaram carteiras inteiras
+
+  const absorventeFortes = new Set();
+  const absorventeFracas = new Set();
   for (const v of (vendedorasInfo || [])) {
     const aliases = v.aliases || [];
-    if (aliases.length > 1) absorventes.add(v.id);
+    if (aliases.length <= 1) continue;
+    if (ABSORVENTES_FORTES.has(v.nome)) absorventeFortes.add(v.id);
+    else absorventeFracas.add(v.id);
   }
 
   // Agrega: pra cada cliente, vendedoras com quem ele comprou + última venda
-  const ultimaPorCliente = new Map();  // cliente_id → { vendedora_id, data }
-  const absorventesPorCliente = new Map();  // cliente_id → Set(vendedora_id)
+  const ultimaPorCliente = new Map();   // cliente_id → { vendedora_id, data }
+  const fortesPorCliente = new Map();    // cliente_id → vendedora_id (a forte que apareceu)
+  const fracasPorCliente = new Map();    // cliente_id → vendedora_id (a fraca que apareceu)
   for (const v of registrosVendas) {
     if (!v.cliente_id || !v.vendedora_id || !v.data_venda) continue;
 
@@ -544,25 +549,24 @@ async function backfillVendedoraClientes(registrosVendas) {
       ultimaPorCliente.set(v.cliente_id, { vendedora_id: v.vendedora_id, data: v.data_venda });
     }
 
-    // Se vendedora desta venda é absorvente, registra
-    if (absorventes.has(v.vendedora_id)) {
-      if (!absorventesPorCliente.has(v.cliente_id)) absorventesPorCliente.set(v.cliente_id, new Set());
-      absorventesPorCliente.get(v.cliente_id).add(v.vendedora_id);
+    // Marca se passou por absorvente
+    if (absorventeFortes.has(v.vendedora_id)) {
+      fortesPorCliente.set(v.cliente_id, v.vendedora_id);
+    } else if (absorventeFracas.has(v.vendedora_id)) {
+      fracasPorCliente.set(v.cliente_id, v.vendedora_id);
     }
   }
 
   if (ultimaPorCliente.size === 0) return { backfill_vendedora: 0 };
 
-  // Decide vendedora final por cliente (absorvente vence sobre última)
+  // Decide vendedora final por cliente: forte > fraca > última
   const dominantePorCliente = new Map();
   for (const [cid, info] of ultimaPorCliente) {
-    const absSet = absorventesPorCliente.get(cid);
-    if (absSet && absSet.size > 0) {
-      // Cliente comprou com absorvente alguma vez → fica com a primeira absorvente
-      // (em geral só tem 1 absorvente por loja)
-      dominantePorCliente.set(cid, [...absSet][0]);
+    if (fortesPorCliente.has(cid)) {
+      dominantePorCliente.set(cid, fortesPorCliente.get(cid));
+    } else if (fracasPorCliente.has(cid)) {
+      dominantePorCliente.set(cid, fracasPorCliente.get(cid));
     } else {
-      // Sem absorvente envolvida → usa última venda
       dominantePorCliente.set(cid, info.vendedora_id);
     }
   }
