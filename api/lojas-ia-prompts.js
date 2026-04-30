@@ -347,11 +347,15 @@ Exemplo RUIM (NUNCA faz isso):
 
 # Vesti — APP DE VENDAS DO BOM RETIRO
 
-Vesti é um app de vendas usado SÓ pelas vendedoras do Bom Retiro. Compras feitas
-por ele aparecem com canal_dominante=vesti_dominante (ou misto se mistura
-físico+vesti).
+Vesti é um app de vendas usado SÓ pelas vendedoras do Bom Retiro. Cliente é
+considerada Vesti em DUAS situações:
+1. Comprou nas lojas físicas registradas como Vesti (canal_dominante=vesti_dominante
+   ou misto físico+vesti)
+2. Foi importada como contato Vesti (canal_cadastro='vesti'), mesmo SEM compras
+   nas lojas físicas — caso comum: cliente que só comprou pelo app, ainda não
+   passou na loja física
 
-Quando "usa_vesti" for true ou canal_dominante=vesti_dominante:
+A flag "usa_vesti" no input já combina as duas. Quando "usa_vesti" for true:
 - Sugerir SEMPRE enviar o LINK do app Vesti com novidades
   (ex: "manda o link do Vesti pra ela ver as novidades")
 - Sugerir TAMBÉM enviar o LINK DE VÍDEO do app (recurso novo do Vesti)
@@ -359,6 +363,12 @@ Quando "usa_vesti" for true ou canal_dominante=vesti_dominante:
 - NÃO chamar pra passar na loja como ação principal
 - Se for vendedora do Silva Teles atendendo cliente Vesti → comportar como
   remota_dominante normal (mandar foto/vídeo no zap), porque ST não usa Vesti
+
+ATENÇÃO ESPECIAL: cliente com canal_cadastro='vesti' E sem histórico de compras
+físicas (kpi_incompleto=true ou qtd_compras=0) é candidata FORTE pra ATIVAR —
+ela já tem afinidade com a marca via Vesti, vale apresentar a vendedora e
+mandar link do Vesti com novidades. Tom: "Olá! Vi que vc é cliente Vesti,
+chegaram peças novas — te mando o link?"
 
 # Cheque
 

@@ -354,7 +354,7 @@ async function montarContextoSugestoes(vendedoraId) {
   // Carteira (clientes ativos com KPIs)
   const { data: clientes } = await supabase
     .from('lojas_clientes')
-    .select('id, documento, tipo_documento, razao_social, nome_fantasia, apelido, comprador_nome, telefone_principal, vendedora_id, grupo_id, pular_ate')
+    .select('id, documento, tipo_documento, razao_social, nome_fantasia, apelido, comprador_nome, telefone_principal, vendedora_id, grupo_id, pular_ate, canal_cadastro')
     .eq('vendedora_id', vendedoraId)
     .is('arquivado_em', null);
 
@@ -861,6 +861,15 @@ function montarMessagesSugestoes(ctx) {
       // Flag kpi_incompleto: cliente passou no filtro mas falta dado importante
       const kpiIncompleto = (k.dias_sem_comprar == null || !k.ultima_compra);
       if (kpiIncompleto) carteiraFiltradaInfo.kpi_parcial++;
+      // Cliente usa Vesti se: comprou pelo Vesti antes (vendas físicas registram
+      // canal_dominante=vesti_dominante OU qtd_compras_vesti>0) OU foi importada
+      // como contato Vesti (canal_cadastro='vesti', mesmo sem vendas físicas).
+      // Decisão Ailson 30/04/2026: import de pedidos Vesti ultimos 75d gera
+      // clientes com canal_cadastro=vesti — IA precisa enxergar como Vesti pra
+      // sugerir mandar link/video do app.
+      const usaVestiCli = c.canal_cadastro === 'vesti'
+        || k.canal_dominante === 'vesti_dominante'
+        || (k.qtd_compras_vesti || 0) > 0;
       return {
         id: c.id,
         apelido: c.apelido || c.comprador_nome || c.razao_social?.split(' ').slice(0, 3).join(' '),
@@ -868,6 +877,10 @@ function montarMessagesSugestoes(ctx) {
         grupo_id: c.grupo_id,
         pular_ate: c.pular_ate,
         kpi_incompleto: kpiIncompleto, // ⚠️ NÃO use pra reativar/atenção/followup se true
+        // Cliente Vesti? Combina vendas físicas (KPIs) + cadastro Vesti
+        // (canal_cadastro). True = priorizar sugerir link/video do app.
+        usa_vesti: usaVestiCli,
+        canal_cadastro: c.canal_cadastro || null,
         // Top 3 REFs que essa cliente compra bem (score peças+recorrência).
         // IA usa pra: detectar reposição, dizer "vende bem pra você",
         // alternar recomendações sem repetir.
@@ -954,8 +967,16 @@ function montarMessagesSugestoes(ctx) {
       // nenhuma "reposicao", o prompt nao esta sendo seguido.
       clientes_com_top_ref_em_estoque: (carteira || [])
         .filter(c => (c.top_refs_cliente || []).some(t => t.em_estoque)).length,
+      // Vesti unificado: vendas físicas + import de cadastro Vesti
       clientes_vesti_na_carteira: (ctx.clientes || [])
-        .filter(c => (ctx.kpis[c.id]?.canal_dominante === 'vesti_dominante')
+        .filter(c => c.canal_cadastro === 'vesti'
+          || ctx.kpis[c.id]?.canal_dominante === 'vesti_dominante'
+          || (ctx.kpis[c.id]?.qtd_compras_vesti || 0) > 0).length,
+      // Detalhamento: quantos vieram de cada origem (debug do import 30/04)
+      clientes_vesti_por_canal_cadastro: (ctx.clientes || [])
+        .filter(c => c.canal_cadastro === 'vesti').length,
+      clientes_vesti_por_compras_fisicas: (ctx.clientes || [])
+        .filter(c => ctx.kpis[c.id]?.canal_dominante === 'vesti_dominante'
           || (ctx.kpis[c.id]?.qtd_compras_vesti || 0) > 0).length,
     },
     instrucao: 'Gere as 7 sugestões priorizadas conforme o schema do system prompt. Responda APENAS o JSON.',
@@ -1004,10 +1025,15 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       const nomeCompleto = (ctx.cliente.apelido || ctx.cliente.comprador_nome || '').trim();
       const palavras = nomeCompleto.split(/\s+/).filter(p => p.length >= 2);
       const apelidoCurto = palavras[0] || nomeCompleto || null;
-      // Vesti = app de vendas usado SÓ no Bom Retiro. Se cliente comprou via
-      // Vesti (canal_dominante=vesti_dominante OU misto com vendas vesti), IA
-      // deve oferecer enviar link/vídeo do app em vez de "passa na loja".
-      const usaVesti = ctx.kpi?.canal_dominante === 'vesti_dominante'
+      // Vesti = app de vendas usado SÓ no Bom Retiro. Cliente é Vesti se:
+      // 1. Comprou via Vesti (canal_dominante=vesti_dominante OU qtd>0) OU
+      // 2. Foi importada como contato Vesti (canal_cadastro='vesti', mesmo
+      //    sem vendas físicas — caso de cliente que só comprou pelo app).
+      // Decisão Ailson 30/04/2026: import de pedidos Vesti 75d gera contatos
+      // novos com canal_cadastro=vesti — IA precisa enxergar como Vesti pra
+      // sugerir link/video do app.
+      const usaVesti = ctx.cliente?.canal_cadastro === 'vesti'
+        || ctx.kpi?.canal_dominante === 'vesti_dominante'
         || (ctx.kpi?.qtd_compras_vesti || 0) > 0;
       return {
         apelido: apelidoCurto,
