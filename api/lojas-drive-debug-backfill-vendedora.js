@@ -49,17 +49,22 @@ export default async function handler(req, res) {
 
     debug.etapa = 'select_clientes';
     const ids = Array.from(dominantePorCliente.keys());
-    const { data: semVend, error: errC } = await supabase
-      .from('lojas_clientes')
-      .select('id, documento, razao_social, vendedora_id')
-      .in('id', ids);
 
-    if (errC) return res.status(500).json({ debug, erro: 'select clientes', detail: errC.message });
+    // Particiona pra evitar URL muito longa (PostgREST limita IN com ~1000+ ids)
+    const semVend = [];
+    for (let i = 0; i < ids.length; i += 200) {
+      const lote = ids.slice(i, i + 200);
+      const { data, error } = await supabase
+        .from('lojas_clientes')
+        .select('id, documento, razao_social, vendedora_id')
+        .in('id', lote);
+      if (error) return res.status(500).json({ debug, erro: 'select clientes lote ' + i, detail: error.message });
+      semVend.push(...(data || []));
+    }
+    debug.total_clientes_encontrados = semVend.length;
+    debug.total_clientes_sem_vendedora = semVend.filter(c => !c.vendedora_id).length;
 
-    debug.total_clientes_encontrados = semVend?.length || 0;
-    debug.total_clientes_sem_vendedora = (semVend || []).filter(c => !c.vendedora_id).length;
-
-    const idsParaAtualizar = (semVend || []).filter(c => !c.vendedora_id).map(c => c.id);
+    const idsParaAtualizar = semVend.filter(c => !c.vendedora_id).map(c => c.id);
 
     debug.etapa = 'select_vendedoras';
     const vendedoraIds = [...new Set(idsParaAtualizar.map(id => dominantePorCliente.get(id)))];

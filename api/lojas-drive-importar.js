@@ -497,14 +497,27 @@ async function backfillVendedoraClientes(registrosVendas) {
   }
 
   // Busca quais desses clientes AINDA não têm vendedora atribuida
+  // Particiona em lotes de 200 — PostgREST recusa Bad Request com IN > 1000 ids
+  // (descoberta Ailson 30/04/2026: backfill silenciosamente falhava com 1157
+  // clientes, retornando Bad Request, mas a chamada nao tinha try/catch
+  // explicito e error nao era tratado — entao 0 clientes eram atualizados sem
+  // ninguem perceber).
   const ids = Array.from(dominantePorCliente.keys());
-  const { data: semVendedora } = await supabase
-    .from('lojas_clientes')
-    .select('id, loja_origem')
-    .in('id', ids)
-    .is('vendedora_id', null);
-
-  const idsParaAtualizar = (semVendedora || []).map(c => c.id);
+  const semVendedoraTodos = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const lote = ids.slice(i, i + 200);
+    const { data, error } = await supabase
+      .from('lojas_clientes')
+      .select('id, loja_origem')
+      .in('id', lote)
+      .is('vendedora_id', null);
+    if (error) {
+      console.error(`[backfill_vendedora] Erro lote ${i}:`, error.message);
+      continue;
+    }
+    semVendedoraTodos.push(...(data || []));
+  }
+  const idsParaAtualizar = semVendedoraTodos.map(c => c.id);
   if (idsParaAtualizar.length === 0) return { backfill_vendedora: 0 };
 
   // Busca a loja de cada vendedora dominante (pra setar loja_origem também)
