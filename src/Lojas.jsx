@@ -425,11 +425,56 @@ async function loadProdutos() {
 // CuradoriaScreen pra resolver descrição/foto de REFs clássicas que ficam
 // fora da view oferecíveis (estoque baixo, peças antigas, etc).
 async function loadProdutosCadastro() {
-  const { data, error } = await supabase
-    .from('lojas_produtos')
-    .select('ref, descricao, categoria, qtd_estoque');
-  if (error) throw error;
-  return data || [];
+  // Decisão Ailson 30/04/2026: cadastro CANÔNICO está na Ficha Técnica
+  // (payload.produtos em amicia_data com user_id='ficha-tecnica'), não em
+  // lojas_produtos. Ficha tem TODAS as REFs históricas inclusive clássicas
+  // (376, 395, 1871...) que ficam fora da view oferecíveis.
+  //
+  // Fallback: se ficha estiver vazia, lê lojas_produtos paginado.
+  try {
+    const { data: ftRow, error: ftErr } = await supabase
+      .from('amicia_data')
+      .select('payload')
+      .eq('user_id', 'ficha-tecnica')
+      .maybeSingle();
+    if (ftErr) throw ftErr;
+
+    const fichaProdutos = ftRow?.payload?.produtos || [];
+    if (fichaProdutos.length > 0) {
+      // Normaliza pra estrutura { ref, descricao, categoria, qtd_estoque }
+      // (mesma shape que CuradoriaScreen espera)
+      return fichaProdutos
+        .filter(p => p?.ref)
+        .map(p => ({
+          ref: String(p.ref).trim(),
+          descricao: p.descricao || '',
+          categoria: p.categoria || null,
+          qtd_estoque: p.estoque || p.qtd_estoque || null,
+          // Mantém referência ao foto path se houver — FotoProdutoLojas
+          // resolve sozinho pelo bucket, mas guardamos pra debug.
+          foto: p.foto || null,
+        }));
+    }
+  } catch (e) {
+    console.warn('[lojas] ficha-tecnica indisponivel, fallback lojas_produtos:', e?.message);
+  }
+
+  // Fallback: lojas_produtos paginado (1000 por chunk pra contornar cap)
+  const PAGE = 1000;
+  let todos = [];
+  let offset = 0;
+  for (let i = 0; i < 20; i++) {
+    const { data, error } = await supabase
+      .from('lojas_produtos')
+      .select('ref, descricao, categoria, qtd_estoque')
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    todos = todos.concat(data);
+    if (data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return todos;
 }
 
 async function loadCuradoria() {
