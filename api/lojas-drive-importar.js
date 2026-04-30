@@ -590,13 +590,22 @@ async function backfillVendedoraClientes(registrosVendas) {
     }
   }
 
-  // Busca quais desses clientes AINDA não têm vendedora atribuida (particionado)
+  // Busca esses clientes (particionado). Antes filtrava vendedora_id IS NULL,
+  // mas isso impedia o backfill de CORRIGIR clientes onde o agregado do Mire
+  // tinha setado vendedora errada. Agora roda pra todos exceto atribuições
+  // manuais feitas pelo admin (transferencia_manual / transferencia_massa).
   const ids = Array.from(dominantePorCliente.keys());
-  const semVendedoraTodos = await selectInBatches('lojas_clientes', 'id', ids, {
-    select: 'id, loja_origem',
-    extraFilters: q => q.is('vendedora_id', null),
+  const clientesNoBanco = await selectInBatches('lojas_clientes', 'id', ids, {
+    select: 'id, loja_origem, fonte_atribuicao, vendedora_id',
   });
-  const idsParaAtualizar = semVendedoraTodos.map(c => c.id);
+  const FONTES_INTOCAVEIS = new Set(['transferencia_manual', 'transferencia_massa']);
+  const elegiveis = clientesNoBanco.filter(c => !FONTES_INTOCAVEIS.has(c.fonte_atribuicao));
+
+  // Filtra clientes onde a vendedora a aplicar é DIFERENTE da atual (evita
+  // updates desnecessários e mantém data_atribuicao só quando muda de fato)
+  const idsParaAtualizar = elegiveis
+    .filter(c => c.vendedora_id !== dominantePorCliente.get(c.id))
+    .map(c => c.id);
   if (idsParaAtualizar.length === 0) return { backfill_vendedora: 0 };
 
   // Busca a loja de cada vendedora (pra setar loja_origem também)
@@ -606,7 +615,9 @@ async function backfillVendedoraClientes(registrosVendas) {
   });
   const vendIdToLoja = new Map(vends.map(v => [v.id, v.loja]));
 
-  // Atualiza em lote (uma por uma porque cada cliente pode ter vendedora diferente)
+  // Atualiza em lote (uma por uma porque cada cliente pode ter vendedora diferente).
+  // Guard no UPDATE: protege contra race condition se admin transferir manualmente
+  // entre o select acima e este update.
   let atualizados = 0;
   await Promise.all(idsParaAtualizar.map(async clienteId => {
     const vid = dominantePorCliente.get(clienteId);
@@ -621,11 +632,11 @@ async function backfillVendedoraClientes(registrosVendas) {
         data_atribuicao: new Date().toISOString(),
       })
       .eq('id', clienteId)
-      .is('vendedora_id', null);  // double-check pra evitar sobrescrita
+      .not('fonte_atribuicao', 'in', '(transferencia_manual,transferencia_massa)');
     if (!error) atualizados++;
   }));
 
-  console.log(`[backfill_vendedora] ${atualizados} clientes ganharam vendedora dominante do histórico`);
+  console.log(`[backfill_vendedora] ${atualizados} clientes ganharam/corrigiram vendedora pela hierarquia de absorção`);
   return { backfill_vendedora: atualizados };
 }
 

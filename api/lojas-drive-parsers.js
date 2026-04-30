@@ -219,11 +219,23 @@ export function parseRelatorioVendasClientes(conteudo, loja, vendedorasCadastrad
         if (grupo === 'CONVERTR') return 'convertr';
         return 'fisico';
       })(),
-      vendedora_id: vendedora?.id || null,
-      vendedora_nome: vendedora?.nome || null,           // pra log
-      vendedor_a_definir: !vendedoraNome || !vendedora,  // sinalize aberto se sem nome
-      fonte_atribuicao: 'relatorio_vendas_clientes',
-      data_atribuicao: new Date().toISOString(),
+      // ATRIBUIÇÃO DE VENDEDORA: NÃO definida aqui (decisão Ailson 30/04/2026 v2).
+      //
+      // Por que: o agregado do Mire (coluna VENDEDOR) usa lógica "última vendedora"
+      // — se KELLY (ex-funcionária absorvida pela Joelma) atendeu o cliente em 2024
+      // e Cleide o atendeu em 2025, o Mire mostra Cleide como vendedora. Isso
+      // CONTRADIZ a regra de absorção do Ailson, onde clientes que passaram por
+      // KELLY/REGILANIA pertencem PRA SEMPRE à Joelma (absorvente forte).
+      //
+      // Setar vendedora_id aqui sobrescrevia o cliente ANTES do backfill rodar,
+      // e o backfill (que tem visão do histórico completo e aplica a hierarquia
+      // forte > fraca > última real) só atualizava clientes com vendedora_id IS NULL
+      // — ou seja, nunca corrigia o erro do agregado. Resultado: 215 clientes que
+      // passaram por KELLY/REGILANIA ficaram presos com a Cleide.
+      //
+      // Atribuição correta acontece em backfillVendedoraClientes (lojas-drive-importar.js).
+      // Aqui só setamos vendedor_a_definir=true como sinal inicial pra clientes novos.
+      vendedor_a_definir: true,
 
       // dados agregados (vão pra lojas_clientes_kpis)
       _kpis: {

@@ -112,29 +112,16 @@ test('Parsea 7 clientes (CONSUMIDOR é ignorado)', () => {
   assertTrue(r.detalhes_ignorados.consumidor === 1, `Esperava 1 consumidor ignorado`);
 });
 
-test('🎯 KELLY (alias) é resolvida pra Joelma (modelo de absorção)', () => {
+test('🎯 NÃO seta vendedora_id (decisão Ailson 30/04/2026 v2)', () => {
+  // O parser do agregado vendas_clientes deixou de atribuir vendedora porque
+  // a regra "última vendedora" do Mire conflita com a hierarquia de absorção
+  // (KELLY/REGILANIA → Joelma). Atribuição correta acontece em
+  // backfillVendedoraClientes que tem visão do histórico completo.
   const r = parseRelatorioVendasClientes(VENDAS_CLIENTES_ST_AMOSTRA, 'Silva Teles', VENDEDORAS_INICIAIS);
   const viviane = r.registros.find(x => x.razao_social.includes('VIVIANE PUCCINELLI'));
-  assertTrue(viviane.vendedora_nome === 'Joelma', `Esperava Joelma, recebeu ${viviane.vendedora_nome}`);
-});
-
-test('CLEIDE é resolvida pra Cleide diretamente', () => {
-  const r = parseRelatorioVendasClientes(VENDAS_CLIENTES_ST_AMOSTRA, 'Silva Teles', VENDEDORAS_INICIAIS);
-  const c = r.registros.find(x => x.razao_social.includes('H. PORTO MANCEBO'));
-  assertTrue(c.vendedora_nome === 'Cleide');
-});
-
-test('JOELMA é resolvida pra Joelma diretamente', () => {
-  const r = parseRelatorioVendasClientes(VENDAS_CLIENTES_ST_AMOSTRA, 'Silva Teles', VENDEDORAS_INICIAIS);
-  const matheus = r.registros.find(x => x.razao_social.includes('MATHEUS DE FARIA'));
-  assertTrue(matheus.vendedora_nome === 'Joelma');
-});
-
-test('VENDEDOR vazio: cai no padrão da loja (Cleide ST), vendedor_a_definir=true', () => {
-  const r = parseRelatorioVendasClientes(VENDAS_CLIENTES_ST_AMOSTRA, 'Silva Teles', VENDEDORAS_INICIAIS);
-  const dias = r.registros.find(x => x.razao_social.includes('DIAS & PUCCINELLI'));
-  assertTrue(dias.vendedora_nome === 'Cleide', `Esperava Cleide (padrão), recebeu ${dias.vendedora_nome}`);
-  assertTrue(dias.vendedor_a_definir === true);
+  assertTrue(viviane.vendedora_id === undefined, `Esperava vendedora_id undefined, recebeu ${viviane.vendedora_id}`);
+  assertTrue(viviane.fonte_atribuicao === undefined, `Esperava fonte_atribuicao undefined`);
+  assertTrue(viviane.vendedor_a_definir === true, `Esperava vendedor_a_definir=true sempre`);
 });
 
 test('KPIs agregados são extraídos: TICKETS, QTDE, TOTAL', () => {
