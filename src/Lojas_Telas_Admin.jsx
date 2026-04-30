@@ -3612,16 +3612,6 @@ const CoresPainel = ({ lojas }) => {
   const corAuto = state.coresAuto || [];
   const corManual = state.coresManuais || [];
 
-  // Set de cor_keys que estão "ativas pra IA" (na curadoria manual).
-  // Cor automática NÃO está ativa por padrão — vendedora precisa clicar.
-  // Quando clica, é adicionada como manual (mesmo mecanismo, garante que
-  // o backend passa a IA enxergar via lojas_cores_curadoria_manual).
-  const ativas = useMemo(() => {
-    const s = new Set();
-    for (const c of corManual) s.add(c.cor_key);
-    return s;
-  }, [corManual]);
-
   const adicionarManualLivre = async () => {
     const cor = novaCor.trim();
     if (cor.length < 2) {
@@ -3648,8 +3638,11 @@ const CoresPainel = ({ lojas }) => {
 
   // Toggle: se cor está ignorada, reativa; se não, ignora.
   const toggleCor = async (corObj) => {
-    const cor_key = corObj.cor_key || String(corObj.cor || '').toLowerCase().trim();
-    const cor_bonita = corObj.cor || corObj.cor_key;
+    if (!corObj) return;
+    const rawKey = corObj.cor_key || corObj.cor || '';
+    const cor_key = String(rawKey).toLowerCase().trim();
+    const cor_bonita = corObj.cor || corObj.cor_key || '';
+    if (!cor_key) return;
     const jaIgnorada = ignoradasSet.has(cor_key);
     try {
       await handleToggleCorIgnorada(cor_key, cor_bonita, jaIgnorada);
@@ -3662,8 +3655,11 @@ const CoresPainel = ({ lojas }) => {
   // Por padrão, ativa (cores Top Bling todas entram pra IA). Clicado:
   // semi-transparente / riscado pra mostrar que está IGNORADA.
   const renderChipCor = (cor, idx, fonte) => {
-    const cor_key = cor.cor_key || String(cor.cor || '').toLowerCase().trim();
-    const nomeBonito = cor.cor || cor.cor_key;
+    if (!cor) return null;
+    const rawKey = cor.cor_key || cor.cor || '';
+    const cor_key = String(rawKey).toLowerCase().trim();
+    const nomeBonito = cor.cor || cor.cor_key || '?';
+    if (!cor_key) return null;
     const ignorada = ignoradasSet.has(cor_key);
     const hex = hexDaCor(nomeBonito);
     const ehManual = fonte === 'manual';

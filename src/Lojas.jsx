@@ -1310,24 +1310,31 @@ function useLojasModule() {
         // 6b. Ações + Avisos + Cores + ProdutosCadastro (só admin precisa,
         // mas carrega pra todos pra que avisos do dia possam ser exibidos
         // no card)
-        try {
-          const [acoes, avisos, coresAuto, coresManuais, produtosCadastro, coresIgnoradas] = await Promise.all([
-            loadAcoes(),
-            loadAvisos(),
-            loadCoresAuto(),
-            loadCoresManuais(),
-            loadProdutosCadastro(),
-            loadCoresIgnoradas(),
-          ]);
-          dispatch({ type: 'SET_ACOES', acoes });
-          dispatch({ type: 'SET_AVISOS', avisos });
-          dispatch({ type: 'SET_CORES_AUTO', coresAuto });
-          dispatch({ type: 'SET_CORES_MANUAIS', coresManuais });
-          dispatch({ type: 'SET_PRODUTOS_CADASTRO', produtosCadastro });
-          dispatch({ type: 'SET_CORES_IGNORADAS', coresIgnoradas });
-        } catch (e) {
-          console.warn('[lojas] acoes/avisos/cores/produtos nao carregadas:', e?.message);
-        }
+        // Usa allSettled pra isolar falhas individuais — se uma tabela ainda
+        // nao foi criada no Supabase, os outros loaders continuam funcionando.
+        const resultados = await Promise.allSettled([
+          loadAcoes(),
+          loadAvisos(),
+          loadCoresAuto(),
+          loadCoresManuais(),
+          loadProdutosCadastro(),
+          loadCoresIgnoradas(),
+        ]);
+        const [rAcoes, rAvisos, rAuto, rManuais, rProdutos, rIgnoradas] = resultados;
+        const safeVal = (r, fallback) => r.status === 'fulfilled' ? (r.value ?? fallback) : fallback;
+        dispatch({ type: 'SET_ACOES',             acoes:            safeVal(rAcoes, []) });
+        dispatch({ type: 'SET_AVISOS',            avisos:           safeVal(rAvisos, []) });
+        dispatch({ type: 'SET_CORES_AUTO',        coresAuto:        safeVal(rAuto, []) });
+        dispatch({ type: 'SET_CORES_MANUAIS',     coresManuais:     safeVal(rManuais, []) });
+        dispatch({ type: 'SET_PRODUTOS_CADASTRO', produtosCadastro: safeVal(rProdutos, []) });
+        dispatch({ type: 'SET_CORES_IGNORADAS',   coresIgnoradas:   safeVal(rIgnoradas, []) });
+        // Loga falhas pra debug (nao bloqueia UI)
+        resultados.forEach((r, i) => {
+          if (r.status === 'rejected') {
+            const labels = ['acoes', 'avisos', 'coresAuto', 'coresManuais', 'produtosCadastro', 'coresIgnoradas'];
+            console.warn(`[lojas] loader ${labels[i]} falhou:`, r.reason?.message || r.reason);
+          }
+        });
         
         // 7. Carrega sugestões de hoje (só pra vendedora ativa)
         dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_SUGESTOES });
