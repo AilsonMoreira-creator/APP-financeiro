@@ -551,7 +551,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
   }
 
   // ── Send answer ──
-  async function handleSendAnswer(question) {
+  async function handleSendAnswer(question, comAcompanhamento = false) {
     const fullText = [fields.saudacao, fields.mensagem, fields.despedida]
       .filter(Boolean).join(' ');
 
@@ -574,6 +574,33 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
           answered_by: currentUser,
         }),
       });
+
+      // Acompanhamento manual: cria alerta na aba "Acompanhar" pra não perder
+      // a promessa feita pro cliente. Decisão Ailson 28/04/2026: fluxo IA
+      // já cria sozinho via webhook quando cliente confirma, mas resposta
+      // manual nunca registrava — agora com este botão vai pra mesma aba.
+      if (comAcompanhamento && supabase) {
+        try {
+          // Tenta pegar o título do item (se já tem em cache do question)
+          const itemTitle = question.item_title || question.title || '';
+          await supabase.from('ml_stock_alerts').insert({
+            brand: question.brand,
+            item_id: question.item_id,
+            item_title: itemTitle,
+            question_text: question.question_text,
+            answer_text: fullText,
+            detail: `Resposta manual marcada pra acompanhar`,
+            promised_by: currentUser || 'manual',
+            promised_at: new Date().toISOString(),
+            status: 'pendente',
+          });
+          // Refresh da lista pra badge atualizar
+          fetchStockAlerts();
+        } catch (alertErr) {
+          // Falha aqui não impede a resposta — só loga
+          console.error('[MLPerguntas] Erro ao criar acompanhamento:', alertErr);
+        }
+      }
 
       // Unlock e limpar
       await unlockQuestion(question.id);
@@ -676,7 +703,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
               { id: 'respondidas', label: 'Respondidas (24h)', badge: answeredToday.length, badgeColor: PALETTE.textLight },
               ...(absenceResponses.length > 0 ? [{ id: 'ausencia', label: 'Ausência', badge: absenceResponses.length, badgeColor: PALETTE.textLight }] : []),
               { id: 'ia_resp', label: 'IA', badge: aiResponses.length, badgeColor: PALETTE.textLight },
-              { id: 'estoque', label: 'Estoque', badge: stockAlerts.filter(a => a.status === 'pendente').length, badgeColor: PALETTE.red },
+              { id: 'estoque', label: 'Acompanhar', badge: stockAlerts.filter(a => a.status === 'pendente').length, badgeColor: PALETTE.red },
               { id: 'arquivo', label: 'Arquivo', badge: archived.length, badgeColor: PALETTE.textLight },
             ].map(t => (
               <button key={t.id} onClick={() => {
@@ -867,7 +894,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {stockAlerts.length === 0 ? (
               <div style={{ ...S, padding: 30, textAlign: 'center', color: PALETTE.green, fontSize: 16, fontWeight: 600 }}>
-                ✅ Nenhum alerta de estoque!
+                ✅ Nenhuma promessa pra acompanhar!
               </div>
             ) : stockAlerts.map(alert => (
               <div key={alert.id} style={{
@@ -890,7 +917,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                       {new Date(alert.promised_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </span>
                     <span style={{ ...S, fontSize: 15, color: PALETTE.textLight }}>
-                      por {alert.promised_by === '_auto_ia' ? '✨ IA' : alert.promised_by}
+                      por {alert.promised_by === '_auto_ia' ? '✨ IA'
+                          : alert.promised_by === '_stock_flow' ? '🤖 Auto'
+                          : `👤 ${alert.promised_by}`}
                     </span>
                   </div>
                   <div style={{ ...S, fontSize: 17, fontWeight: 700, color: PALETTE.dark, marginBottom: 2 }}>
@@ -1152,10 +1181,15 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
             })()}
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
               <Btn small onClick={() => handleExpand(null)}>Cancelar</Btn>
+              <Btn small disabled={sending || !fields.mensagem.trim()}
+                onClick={() => handleSendAnswer(q, true)}
+                title="Envia a resposta E adiciona na aba Acompanhar pra você lembrar de incluir a peça depois">
+                📦 Enviar e acompanhar
+              </Btn>
               <Btn primary small disabled={sending || !fields.mensagem.trim()}
-                onClick={() => handleSendAnswer(q)}>
+                onClick={() => handleSendAnswer(q, false)}>
                 {sending ? '⏳ Enviando...' : '✓ Enviar Resposta'}
               </Btn>
             </div>
@@ -1366,7 +1400,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                   {[
                     { label: 'Conversões 7d', value: sacHealth.conversoes_7d || 0, icon: '🛒' },
                     { label: 'Faturado', value: 'R$ ' + Number(sacHealth.conversoes_valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0 }), icon: '💰' },
-                    { label: 'Alertas estoque', value: sacHealth.alertas_pendentes || 0, icon: '📦' },
+                    { label: 'A acompanhar', value: sacHealth.alertas_pendentes || 0, icon: '📦' },
                     { label: 'Pós-venda abertas', value: sacHealth.posvenda_abertas || 0, icon: '💬' },
                   ].map((k, i) => (
                     <div key={i} style={{ flex: 1, minWidth: 80, background: PALETTE.cream, borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
