@@ -986,8 +986,21 @@ BEGIN
                      ELSE (CURRENT_DATE - v_ultima)::int END;
   
   -- Canal dominante (70%+)
+  -- Se cliente nao tem vendas registradas em lojas_vendas (carga inicial Futura
+  -- so trouxe agregados em lojas_clientes_kpis), usa o canal_cadastro do
+  -- proprio cliente como fallback. Decisao Ailson 28/04/2026: coluna GRUPO=VESTI
+  -- do CSV vendas_clientes_br marca clientes Vesti antigos cuja origem nao chegou
+  -- no historico granular.
   v_canal_dominante := CASE 
-    WHEN v_qtd_compras = 0 THEN NULL
+    WHEN v_qtd_compras = 0 THEN (
+      SELECT CASE canal_cadastro
+        WHEN 'vesti' THEN 'vesti_dominante'
+        WHEN 'convertr' THEN 'convertr_dominante'
+        WHEN 'fisico' THEN 'fisico_dominante'
+        ELSE NULL
+      END
+      FROM lojas_clientes WHERE id = p_cliente_id
+    )
     WHEN v_qtd_fisicas::float / v_qtd_compras >= 0.7 THEN 'fisico_dominante'
     WHEN v_qtd_vesti::float / v_qtd_compras >= 0.7 THEN 'vesti_dominante'
     WHEN v_qtd_convertr::float / v_qtd_compras >= 0.7 THEN 'convertr_dominante'

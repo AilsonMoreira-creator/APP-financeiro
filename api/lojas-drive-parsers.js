@@ -210,6 +210,15 @@ export function parseRelatorioVendasClientes(conteudo, loja, vendedorasCadastrad
       // origem e atribuição
       loja_origem: loja,
       sistema_origem: 'mire',
+      // Decisão Ailson 28/04/2026: coluna GRUPO do CSV do Futura marca clientes
+      // que vieram via app Vesti com 'VESTI'. Sem isso, todo histórico do
+      // Futura virava 'fisico' e perfil_presenca da IA nunca refletia Vesti.
+      canal_cadastro: (() => {
+        const grupo = (limparTexto(l['GRUPO']) || '').toUpperCase().trim();
+        if (grupo === 'VESTI' || grupo === 'VESTISHOP') return 'vesti';
+        if (grupo === 'CONVERTR') return 'convertr';
+        return 'fisico';
+      })(),
       vendedora_id: vendedora?.id || null,
       vendedora_nome: vendedora?.nome || null,           // pra log
       vendedor_a_definir: !vendedoraNome || !vendedora,  // sinalize aberto se sem nome
