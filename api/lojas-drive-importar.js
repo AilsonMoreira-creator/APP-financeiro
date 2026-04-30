@@ -466,7 +466,58 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
     for (const r of limpos) {
       if (r.documento) dedup.set(r.documento, r);
     }
-    return upsertEmLotes('lojas_clientes', Array.from(dedup.values()), 'documento');
+    const dedupados = Array.from(dedup.values());
+
+    // ⚠️ PROTECAO ANTI-SOBRESCRITA (descoberta Ailson 30/04/2026):
+    // Trigger Drive importa cadastro_clientes_futura POR ULTIMO. O upsert
+    // ON CONFLICT (documento) DO UPDATE estava sobrescrevendo TODOS os campos,
+    // incluindo vendedora_id, loja_origem, fonte_atribuicao, canal_cadastro
+    // etc — apagando o que vendas_clientes_st/br ja tinha gravado. Resultado:
+    // 5503 clientes ficaram com vendedora_id=null mesmo quando o agregado
+    // tinha atribuido vendedora.
+    //
+    // Solucao: pra cada documento, busca o cliente existente. Se ja existe,
+    // remove os campos sensiveis (vendedora_id, loja_origem, etc) do payload
+    // para nao sobrescrever. Inserts novos vao com tudo.
+    const documentos = dedupados.map(r => r.documento);
+    const { data: existentes } = await supabase
+      .from('lojas_clientes')
+      .select('documento, vendedora_id, loja_origem, sistema_origem, fonte_atribuicao, vendedor_a_definir, data_atribuicao, canal_cadastro, telefone_principal, telefone_principal_origem, apelido, comprador_nome')
+      .in('documento', documentos);
+    const existeMap = new Map((existentes || []).map(c => [c.documento, c]));
+
+    const protegidos = dedupados.map(r => {
+      const ja = existeMap.get(r.documento);
+      if (!ja) return r;  // novo cliente, vai com tudo
+
+      // Cliente JA existe: remove campos sensiveis (mantém o que ja tem)
+      // e tambem remove campos que cadastro_futura nao tem que preencher
+      // se outro parser ja preencheu (telefone, apelido).
+      const protegido = { ...r };
+      // Vendedora e atribuicao
+      delete protegido.vendedora_id;
+      delete protegido.loja_origem;
+      delete protegido.sistema_origem;
+      delete protegido.fonte_atribuicao;
+      delete protegido.vendedor_a_definir;
+      delete protegido.data_atribuicao;
+      // Canal/grupo (preservar marcacao Vesti/Convertr)
+      if (ja.canal_cadastro && ja.canal_cadastro !== 'fisico') {
+        delete protegido.canal_cadastro;
+      }
+      // Telefone (so preenche se vazio)
+      if (ja.telefone_principal) {
+        delete protegido.telefone_principal;
+        delete protegido.telefone_principal_origem;
+        delete protegido.telefone_principal_valido;
+      }
+      // Apelido/comprador (só sobrescreve se cadastro tem)
+      if (ja.apelido) delete protegido.apelido;
+      if (ja.comprador_nome) delete protegido.comprador_nome;
+      return protegido;
+    });
+
+    return upsertEmLotes('lojas_clientes', protegidos, 'documento');
   }
 
   if (tipo.startsWith('vendas_clientes')) {
