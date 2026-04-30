@@ -502,26 +502,24 @@ async function selectInBatches(tabela, coluna, valores, opts = {}) {
 }
 
 async function backfillVendedoraClientes(registrosVendas) {
-  // REGRA (decisão Ailson 30/04/2026 — versão final v3):
+  // REGRA (decisão Ailson 30/04/2026 — versão final v4):
   //
   // Hierarquia em camadas:
-  //   1. Cliente comprou com vendedora ABSORVENTE FORTE (KELLY/REGILANIA → Joelma)
-  //      → fica com ela PRA SEMPRE, mesmo se comprou depois com outra
-  //   2. Cliente comprou com vendedora ABSORVENTE FRACA (TATIANE/MARI/AMANDA → Cleide)
-  //      → fica com ela, MAS perde se houver venda com absorvente forte
-  //   3. Sem absorvente envolvida → vendedora da última venda vence
+  //   1. Cliente comprou com vendedora REAL (não placeholder) ALGUMA VEZ:
+  //      1a. Se passou por absorvente FORTE (Joelma) → ela ganha
+  //      1b. Senão se passou por absorvente FRACA (Cleide) → ela ganha
+  //      1c. Senão → vendedora da ÚLTIMA venda real
+  //   2. Cliente SÓ comprou com placeholders (Vendedora_3, Vendedora_4):
+  //      vai pra placeholder da loja (depósito de órfãos)
   //
-  // Como classifica forte vs fraca: forte = ex-vendedora absorvida tinha
-  // carteira propria significativa (KELLY=164 clientes, REGILANIA=160).
-  // Fraca = TATIANE (45), MARI (19), AMANDA (16) — atendimento ocasional.
-  //
-  // Marcacao: lojas_vendedoras tem campo `absorvente_forte` (boolean).
-  // Por enquanto hardcoded por nome até ter UI.
+  // Razão: Vendedora_3/4 são placeholders pra clientes "órfãos" — quem só
+  // comprou com vendedoras antigas que ninguém ativo absorveu (GISLENE,
+  // ROSANGELA, etc). Ficam ali até admin reatribuir manualmente.
 
-  // Carrega vendedoras + absorventes
+  // Carrega vendedoras + categoriza
   const { data: vendedorasInfo } = await supabase
     .from('lojas_vendedoras')
-    .select('id, nome, aliases')
+    .select('id, nome, aliases, is_placeholder, loja')
     .eq('ativa', true);
 
   // Hardcoded por enquanto (decisão Ailson 30/04/2026)
@@ -529,45 +527,66 @@ async function backfillVendedoraClientes(registrosVendas) {
 
   const absorventeFortes = new Set();
   const absorventeFracas = new Set();
+  const placeholders = new Set();
   for (const v of (vendedorasInfo || [])) {
+    if (v.is_placeholder) {
+      placeholders.add(v.id);
+      continue;
+    }
     const aliases = v.aliases || [];
     if (aliases.length <= 1) continue;
     if (ABSORVENTES_FORTES.has(v.nome)) absorventeFortes.add(v.id);
     else absorventeFracas.add(v.id);
   }
 
-  // Agrega: pra cada cliente, vendedoras com quem ele comprou + última venda
-  const ultimaPorCliente = new Map();   // cliente_id → { vendedora_id, data }
-  const fortesPorCliente = new Map();    // cliente_id → vendedora_id (a forte que apareceu)
-  const fracasPorCliente = new Map();    // cliente_id → vendedora_id (a fraca que apareceu)
+  // Agrega: pra cada cliente, vendedoras com quem ele comprou
+  const ultimaRealPorCliente = new Map();   // só vendedoras reais (NÃO placeholder)
+  const ultimaPlaceholderPorCliente = new Map();  // só placeholders
+  const fortesPorCliente = new Map();
+  const fracasPorCliente = new Map();
   for (const v of registrosVendas) {
     if (!v.cliente_id || !v.vendedora_id || !v.data_venda) continue;
 
-    // Última venda
-    const atual = ultimaPorCliente.get(v.cliente_id);
-    if (!atual || v.data_venda > atual.data) {
-      ultimaPorCliente.set(v.cliente_id, { vendedora_id: v.vendedora_id, data: v.data_venda });
-    }
-
-    // Marca se passou por absorvente
-    if (absorventeFortes.has(v.vendedora_id)) {
-      fortesPorCliente.set(v.cliente_id, v.vendedora_id);
-    } else if (absorventeFracas.has(v.vendedora_id)) {
-      fracasPorCliente.set(v.cliente_id, v.vendedora_id);
+    if (placeholders.has(v.vendedora_id)) {
+      const atual = ultimaPlaceholderPorCliente.get(v.cliente_id);
+      if (!atual || v.data_venda > atual.data) {
+        ultimaPlaceholderPorCliente.set(v.cliente_id, { vendedora_id: v.vendedora_id, data: v.data_venda });
+      }
+    } else {
+      // Vendedora real
+      const atual = ultimaRealPorCliente.get(v.cliente_id);
+      if (!atual || v.data_venda > atual.data) {
+        ultimaRealPorCliente.set(v.cliente_id, { vendedora_id: v.vendedora_id, data: v.data_venda });
+      }
+      if (absorventeFortes.has(v.vendedora_id)) {
+        fortesPorCliente.set(v.cliente_id, v.vendedora_id);
+      } else if (absorventeFracas.has(v.vendedora_id)) {
+        fracasPorCliente.set(v.cliente_id, v.vendedora_id);
+      }
     }
   }
 
-  if (ultimaPorCliente.size === 0) return { backfill_vendedora: 0 };
+  if (ultimaRealPorCliente.size === 0 && ultimaPlaceholderPorCliente.size === 0) {
+    return { backfill_vendedora: 0 };
+  }
 
-  // Decide vendedora final por cliente: forte > fraca > última
+  // Decide vendedora final por cliente
   const dominantePorCliente = new Map();
-  for (const [cid, info] of ultimaPorCliente) {
+  // Pra cada cliente que tem alguma venda (real ou placeholder)
+  const todosClientes = new Set([
+    ...ultimaRealPorCliente.keys(),
+    ...ultimaPlaceholderPorCliente.keys(),
+  ]);
+  for (const cid of todosClientes) {
     if (fortesPorCliente.has(cid)) {
       dominantePorCliente.set(cid, fortesPorCliente.get(cid));
     } else if (fracasPorCliente.has(cid)) {
       dominantePorCliente.set(cid, fracasPorCliente.get(cid));
+    } else if (ultimaRealPorCliente.has(cid)) {
+      dominantePorCliente.set(cid, ultimaRealPorCliente.get(cid).vendedora_id);
     } else {
-      dominantePorCliente.set(cid, info.vendedora_id);
+      // Só comprou com placeholder → vai pra placeholder
+      dominantePorCliente.set(cid, ultimaPlaceholderPorCliente.get(cid).vendedora_id);
     }
   }
 
