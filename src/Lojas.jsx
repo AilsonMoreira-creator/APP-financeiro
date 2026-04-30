@@ -128,7 +128,11 @@ const initialState = {
   grupos: [],
   produtos: [],
   curadoria: [],                // best_sellers, em_alta, novidades manuais
+  coresAuto: [],                // top cores Bling (vw_ranking_cores_catalogo)
+  coresManuais: [],             // cores adicionadas manualmente
   promocoes: [],
+  acoes: [],                    // mensagens contextuais por periodo (IA incorpora)
+  avisos: [],                   // disparos unicos pra vendedora (vira sugestao 1)
   
   // operacional
   sugestoesHoje: [],            // sugestões geradas hoje pra vendedora ativa
@@ -204,7 +208,19 @@ function lojasReducer(state, action) {
     
     case 'SET_PROMOCOES':
       return { ...state, promocoes: action.promocoes };
-    
+
+    case 'SET_ACOES':
+      return { ...state, acoes: action.acoes };
+
+    case 'SET_AVISOS':
+      return { ...state, avisos: action.avisos };
+
+    case 'SET_CORES_AUTO':
+      return { ...state, coresAuto: action.coresAuto };
+
+    case 'SET_CORES_MANUAIS':
+      return { ...state, coresManuais: action.coresManuais };
+
     case 'SET_SUGESTOES':
       return { ...state, sugestoesHoje: action.sugestoes };
     
@@ -417,6 +433,156 @@ async function loadPromocoes() {
     .order('data_fim');
   if (error) throw error;
   return data || [];
+}
+
+// ─── AÇÕES (mensagens contextuais por período) ─────────────────────────
+async function loadAcoes() {
+  const { data, error } = await supabase
+    .from('lojas_acoes')
+    .select('*')
+    .order('data_inicio', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function salvarAcao(acao) {
+  if (acao.id) {
+    const { error } = await supabase
+      .from('lojas_acoes')
+      .update({
+        texto: acao.texto,
+        data_inicio: acao.data_inicio,
+        data_fim: acao.data_fim,
+        ativa: acao.ativa,
+      })
+      .eq('id', acao.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('lojas_acoes')
+      .insert({
+        texto: acao.texto,
+        data_inicio: acao.data_inicio,
+        data_fim: acao.data_fim,
+        ativa: acao.ativa ?? true,
+        criado_por: acao.criado_por || null,
+      });
+    if (error) throw error;
+  }
+}
+
+async function removerAcao(acaoId) {
+  const { error } = await supabase
+    .from('lojas_acoes')
+    .delete()
+    .eq('id', acaoId);
+  if (error) throw error;
+}
+
+// ─── AVISOS (disparo único pra vendedora) ──────────────────────────────
+async function loadAvisos() {
+  const { data, error } = await supabase
+    .from('lojas_avisos')
+    .select('*')
+    .order('data_disparo', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data || [];
+}
+
+async function salvarAviso(aviso) {
+  if (aviso.id) {
+    const { error } = await supabase
+      .from('lojas_avisos')
+      .update({
+        texto: aviso.texto,
+        data_disparo: aviso.data_disparo,
+        vendedoras_ids: aviso.vendedoras_ids,
+        cliente_id: aviso.cliente_id || null,
+        status: aviso.status,
+      })
+      .eq('id', aviso.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from('lojas_avisos')
+      .insert({
+        texto: aviso.texto,
+        data_disparo: aviso.data_disparo,
+        vendedoras_ids: aviso.vendedoras_ids,
+        cliente_id: aviso.cliente_id || null,
+        status: 'pendente',
+        criado_por: aviso.criado_por || null,
+      });
+    if (error) throw error;
+  }
+}
+
+async function removerAviso(avisoId) {
+  const { error } = await supabase
+    .from('lojas_avisos')
+    .delete()
+    .eq('id', avisoId);
+  if (error) throw error;
+}
+
+// ─── CORES (auto Bling + manual) ───────────────────────────────────────
+async function loadCoresAuto() {
+  const { data, error } = await supabase
+    .from('vw_ranking_cores_catalogo')
+    .select('cor, cor_key, vendas_30d, rank_global, elegivel_gate1')
+    .eq('elegivel_gate1', true)
+    .order('rank_global', { ascending: true })
+    .limit(20);
+  if (error) {
+    console.warn('vw_ranking_cores_catalogo indisponivel:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+async function loadCoresManuais() {
+  const { data, error } = await supabase
+    .from('lojas_cores_curadoria_manual')
+    .select('*')
+    .eq('ativa', true)
+    .order('cor');
+  if (error) {
+    console.warn('lojas_cores_curadoria_manual indisponivel:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+async function adicionarCorManual({ cor, motivo, criado_por }) {
+  const cor_key = cor.toLowerCase().trim().replace(/\s+/g, ' ');
+  const cor_bonita = cor.trim();
+  const { error } = await supabase
+    .from('lojas_cores_curadoria_manual')
+    .insert({ cor_key, cor: cor_bonita, motivo: motivo || null, criado_por: criado_por || null });
+  if (error) throw error;
+}
+
+async function removerCorManual(corId) {
+  const { error } = await supabase
+    .from('lojas_cores_curadoria_manual')
+    .delete()
+    .eq('id', corId);
+  if (error) throw error;
+}
+
+// ─── LINKS VESTI da vendedora ──────────────────────────────────────────
+async function salvarLinksVesti(vendedoraId, { link_1, link_2, link_3, link_ativo }) {
+  const { error } = await supabase
+    .from('lojas_vendedoras')
+    .update({
+      vesti_link_1: link_1 || null,
+      vesti_link_2: link_2 || null,
+      vesti_link_3: link_3 || null,
+      vesti_link_ativo: link_ativo || null,
+    })
+    .eq('id', vendedoraId);
+  if (error) throw error;
 }
 
 async function loadSugestoesHoje(vendedoraId) {
@@ -1047,6 +1213,23 @@ function useLojasModule() {
         dispatch({ type: 'SET_PRODUTOS', produtos });
         dispatch({ type: 'SET_CURADORIA', curadoria });
         dispatch({ type: 'SET_PROMOCOES', promocoes });
+
+        // 6b. Ações + Avisos + Cores (só admin precisa, mas carrega pra todos
+        // pra que avisos do dia possam ser exibidos no card)
+        try {
+          const [acoes, avisos, coresAuto, coresManuais] = await Promise.all([
+            loadAcoes(),
+            loadAvisos(),
+            loadCoresAuto(),
+            loadCoresManuais(),
+          ]);
+          dispatch({ type: 'SET_ACOES', acoes });
+          dispatch({ type: 'SET_AVISOS', avisos });
+          dispatch({ type: 'SET_CORES_AUTO', coresAuto });
+          dispatch({ type: 'SET_CORES_MANUAIS', coresManuais });
+        } catch (e) {
+          console.warn('[lojas] acoes/avisos/cores nao carregadas:', e?.message);
+        }
         
         // 7. Carrega sugestões de hoje (só pra vendedora ativa)
         dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_SUGESTOES });
@@ -1221,6 +1404,53 @@ function useLojasModule() {
     const curadoria = await loadCuradoria();
     dispatch({ type: 'SET_CURADORIA', curadoria });
   }, []);
+
+  // ─── Ações ────────────────────────────────────────────────────────
+  const handleSalvarAcao = useCallback(async (acao) => {
+    await salvarAcao({ ...acao, criado_por: state.userId });
+    const acoes = await loadAcoes();
+    dispatch({ type: 'SET_ACOES', acoes });
+  }, [state.userId]);
+
+  const handleRemoverAcao = useCallback(async (acaoId) => {
+    await removerAcao(acaoId);
+    const acoes = await loadAcoes();
+    dispatch({ type: 'SET_ACOES', acoes });
+  }, []);
+
+  // ─── Avisos ───────────────────────────────────────────────────────
+  const handleSalvarAviso = useCallback(async (aviso) => {
+    await salvarAviso({ ...aviso, criado_por: state.userId });
+    const avisos = await loadAvisos();
+    dispatch({ type: 'SET_AVISOS', avisos });
+  }, [state.userId]);
+
+  const handleRemoverAviso = useCallback(async (avisoId) => {
+    await removerAviso(avisoId);
+    const avisos = await loadAvisos();
+    dispatch({ type: 'SET_AVISOS', avisos });
+  }, []);
+
+  // ─── Cores ────────────────────────────────────────────────────────
+  const handleAdicionarCorManual = useCallback(async ({ cor, motivo }) => {
+    await adicionarCorManual({ cor, motivo, criado_por: state.userId });
+    const coresManuais = await loadCoresManuais();
+    dispatch({ type: 'SET_CORES_MANUAIS', coresManuais });
+  }, [state.userId]);
+
+  const handleRemoverCorManual = useCallback(async (corId) => {
+    await removerCorManual(corId);
+    const coresManuais = await loadCoresManuais();
+    dispatch({ type: 'SET_CORES_MANUAIS', coresManuais });
+  }, []);
+
+  // ─── Vesti links ──────────────────────────────────────────────────
+  const handleSalvarLinksVesti = useCallback(async (vendedoraId, links) => {
+    await salvarLinksVesti(vendedoraId, links);
+    // Recarrega vendedoras pra refletir mudança no state
+    const vendedoras = await loadVendedoras();
+    dispatch({ type: 'SET_VENDEDORAS', vendedoras });
+  }, []);
   
   const handleMarcarSugestaoExecutada = useCallback(async (sugestaoId, mensagem) => {
     const sugestao = await marcarSugestaoExecutada(sugestaoId, mensagem);
@@ -1339,6 +1569,13 @@ function useLojasModule() {
     // curadoria
     handleAdicionarCuradoria,
     handleRemoverCuradoria,
+    handleSalvarAcao,
+    handleRemoverAcao,
+    handleSalvarAviso,
+    handleRemoverAviso,
+    handleAdicionarCorManual,
+    handleRemoverCorManual,
+    handleSalvarLinksVesti,
     
     // sugestões e IA
     handleMarcarSugestaoExecutada,
@@ -1386,6 +1623,8 @@ import {
   VendedorasAdminScreen, NovaVendedoraScreen,
   TransferirCarteiraScreen,
   CuradoriaScreen,
+  AcoesScreen,
+  AvisosScreen,
   GruposListScreen, DetalheGrupoScreen,
   ImportacoesScreen,
   CriarGrupoModal, AdicionarCnpjModal,
@@ -1468,6 +1707,8 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
     else if (id === 'vendedoras') setScreen('vendedorasAdmin');
     else if (id === 'transferir') setScreen('transferir');
     else if (id === 'curadoria') setScreen('curadoria');
+    else if (id === 'acoes') setScreen('acoes');
+    else if (id === 'avisos') setScreen('avisos');
     else if (id === 'grupos') setScreen('gruposAdmin');
     else if (id === 'importacoes') setScreen('importacoes');
     else if (id === 'cadastrarComprador') setScreen('cadastrarComprador');
@@ -1602,6 +1843,14 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
 
       {screen === 'curadoria' && (
         <CuradoriaScreen lojas={lojas} onBack={() => setScreen('home')} />
+      )}
+
+      {screen === 'acoes' && (
+        <AcoesScreen lojas={lojas} onBack={() => setScreen('home')} />
+      )}
+
+      {screen === 'avisos' && (
+        <AvisosScreen lojas={lojas} onBack={() => setScreen('home')} />
       )}
 
       {(screen === 'grupos' || screen === 'gruposAdmin') && (

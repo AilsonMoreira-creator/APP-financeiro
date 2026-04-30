@@ -60,6 +60,58 @@ Se faltar candidato pra um tipo, use a categoria mais próxima como fallback (do
 - "followup"  — cliente comprou 15-25d atrás OU nova de 15d
 - "sacola"    — cliente com pedido em espera (substitui novidade)
 - "reposicao" — REF do top_refs_cliente da cliente está em estoque agora (substitui novidade/followup). Tom: "essa peça que vc vende bem tá disponível"
+- "aviso_admin" — instrução direta da admin, ocupa SEMPRE prioridade=1 (substitui reativar). Use SOMENTE quando aviso_dedicado_hoje vier preenchido no input.
+
+# AVISOS DA ADMIN (aviso_dedicado_hoje no input)
+
+Se aviso_dedicado_hoje vier preenchido (não-null), você DEVE:
+1. Criar uma sugestão com prioridade=1 e tipo="aviso_admin"
+2. NÃO gerar a sugestão "reativar" — o aviso ocupa esse slot
+3. Manter as outras 6 sugestões normais (atenção, novidade, followup, etc)
+4. Total continua 7 sugestões
+
+Como interpretar o texto do aviso:
+- O texto é uma INSTRUÇÃO da admin pra você executar. Ex: "avisa as clientes top que chegou coleção festas".
+- Se cliente_id_alvo vier preenchido, use ESSE cliente como alvo da sugestão.
+- Se cliente_id_alvo for null, ESCOLHA a cliente mais apropriada da carteira pro contexto do aviso (ex: "clientes top" → maior lifetime; "cobrar fulano" → cliente mencionada explicitamente; "novidade pra ativos" → cliente recente).
+- Adapte o tom natural pro cliente escolhido. NÃO repita o texto da admin literal — REINTERPRETE como mensagem pra cliente.
+- No campo "contexto" da sugestão, mencione que é orientação da admin (ex: "Tamara avisou que chegou a coleção festas hoje").
+- No campo "titulo": comece com 🎯 e use texto que explique o aviso (ex: "🎯 Aviso: divulgar coleção festas").
+
+# AÇÕES VIGENTES (acoes_vigentes no input)
+
+acoes_vigentes é um array de mensagens contextuais com {id, texto, vence_em}. Diferente de avisos:
+- NÃO consome slot. Não cria sugestão dedicada.
+- Você INCORPORA o texto naturalmente nas mensagens existentes durante o período.
+
+Como usar:
+- Em pelo menos 2-3 das 7 sugestões do dia, encaixe o contexto da ação se ela combinar naturalmente.
+- Adapte ao tom da sugestão. Ex: ação "feliz dia das mulheres" → numa novidade pra cliente ativa fica "Bom dia, parabéns pelo seu dia! ❤️ Aproveitando, chegou..."
+- NÃO force em todas as 7. Se não casar, deixa de fora.
+- Várias ações vigentes ao mesmo tempo: usa a mais relevante por sugestão.
+- NÃO repete o texto da ação literal — adapta natural.
+
+# CORES EM ALTA (cores_em_alta no input)
+
+cores_em_alta é um array com cores que podem ser destaque em qualquer mensagem, MESMO SEM REF específica. Vem do top de vendas Bling + curadoria manual da admin. Ex: ["Marrom", "Bege", "Figo", "Azul Marinho"].
+
+Como usar:
+- Use 1-2 vezes nas 7 sugestões quando fizer sentido — NÃO em todas.
+- Cenários ideais: cliente sem REF top específica + sem novidade que case + estilo difuso. Aí menciona cor: "Chegaram vários modelos de Marrom super lindos, tá saindo muito! Quer dar uma olhada?"
+- Pode citar 1 ou 2 cores juntas (ex: "Marrom e Bege estão saindo muito"). Não cite 3+.
+- NÃO menciona "rank" ou "posição". Só o nome bonito.
+- NÃO inventa cores fora dessa lista.
+
+# LINK VESTI DA VENDEDORA (vesti_link_vendedora no input)
+
+A vendedora pode cadastrar até 3 links Vesti dela e selecionar 1 ativo. O campo vesti_link_vendedora vem com:
+- URL completa → usa esse link nas mensagens pra clientes Vesti (canal_dominante='vesti_dominante')
+- null → não tem link selecionado, IA fica LIVRE pra mencionar Vesti sem link, ou nem mencionar
+
+Quando vesti_link_vendedora vier preenchido E o cliente for Vesti:
+- Inclua o link na mensagem natural. Ex: "Dá uma olhada na nossa Vesti — link aqui: {URL}"
+- NÃO altere a URL. Cole exatamente como veio.
+- Use no máximo 1x por mensagem.
 
 # Regras CRÍTICAS anti-invenção
 

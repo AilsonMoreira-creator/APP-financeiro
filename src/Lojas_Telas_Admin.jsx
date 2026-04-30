@@ -43,7 +43,7 @@ import {
   ArrowLeftRight, TrendingUp, BarChart3, UserCog, Heart,
   Save, Trash2, Edit3, Clock, CheckCircle2, AlertCircle, Check, X,
   Upload, Download, FileSpreadsheet, History, UsersRound, Link2, Crown,
-  Loader2, Flame,
+  Loader2, Flame, Megaphone, Bell,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
@@ -897,12 +897,14 @@ export const RegrasScreen = ({ lojas, onBack }) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditarVendedora }) => {
-  const { state, handleInativarVendedora } = lojas;
+  const { state, handleInativarVendedora, handleSalvarLinksVesti } = lojas;
   const ativas = (state.vendedoras || []).filter(v => v.ativa);
 
   const [inativas, setInativas] = useState([]);
   const [carregandoInat, setCarregandoInat] = useState(true);
   const [inativandoId, setInativandoId] = useState(null);
+  // Qual vendedora está com painel Vesti aberto inline (null = nenhum)
+  const [vestiAbertoId, setVestiAbertoId] = useState(null);
 
   // Carrega ex-vendedoras (inativas) sob demanda
   const recarregarInativas = useCallback(async () => {
@@ -947,8 +949,7 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
       await recarregarInativas();
     } catch (e) {
       alert('Erro ao inativar: ' + (e.message || e));
-    } finally {
-      setInativandoId(null);
+    } finally {      setInativandoId(null);
     }
   };
 
@@ -1057,6 +1058,15 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
                   }}>
                     <Edit3 size={sz(14)} /> Editar
                   </button>
+                  <button onClick={() => setVestiAbertoId(vestiAbertoId === v.id ? null : v.id)} style={{
+                    flex: 1, background: vestiAbertoId === v.id ? palette.purple : palette.surface,
+                    color: vestiAbertoId === v.id ? 'white' : palette.purple,
+                    border: `1px solid ${palette.purple}40`, borderRadius: 6, padding: '8px',
+                    fontSize: fz(14), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                  }}>
+                    <Link2 size={sz(14)} /> Vesti{v.vesti_link_ativo ? ' ✓' : ''}
+                  </button>
                   <button onClick={() => inativar(v)} disabled={inativando || ehPlaceholder} style={{
                     flex: 1, background: palette.surface, color: palette.inkSoft,
                     border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '8px',
@@ -1071,6 +1081,15 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
                       : <><Pause size={sz(14)} /> Inativar</>}
                   </button>
                 </div>
+
+                {/* Painel Vesti inline */}
+                {vestiAbertoId === v.id && (
+                  <VestiLinksInline
+                    vendedora={v}
+                    onSalvar={handleSalvarLinksVesti}
+                    onFechar={() => setVestiAbertoId(null)}
+                  />
+                )}
               </div>
             );
           })}
@@ -1674,12 +1693,14 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
     { id: 'best_seller',     label: 'Best-sellers', icon: Star,        cor: palette.warn },
     { id: 'em_alta',         label: 'Em alta',      icon: TrendingUp,  cor: palette.alert },
     { id: 'novidade_manual', label: 'Novidades',    icon: Sparkles,    cor: palette.accent },
+    { id: 'cores',           label: 'Cores',        icon: Heart,       cor: palette.purple },
   ];
 
   const LABEL_TIPO = {
     best_seller: 'best-seller',
     em_alta: 'em alta',
     novidade_manual: 'novidade manual',
+    cores: 'cor',
   };
 
   const [activeTab, setActiveTab] = useState('best_seller');
@@ -1761,39 +1782,43 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
         {/* Tabs */}
         <TabBar tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 
-        <div style={{ marginTop: 16 }}>
-          {/* Botão adicionar */}
-          <button onClick={abrirModalAdicionar} style={{
-            width: '100%', background: 'transparent', border: `1.5px dashed ${palette.beige}`,
-            borderRadius: 10, padding: 14, cursor: 'pointer', fontFamily: FONT,
-            color: palette.accent, fontSize: fz(15), fontWeight: 600, marginBottom: 16,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          }}>
-            <Plus size={sz(17)} /> Adicionar produto
-          </button>
-
-          {/* Lista */}
-          {itensDaAba.length === 0 && (() => {
-            const IconVazio = tabAtiva?.icon;
-            return (
-            <div style={{
-              padding: 32, textAlign: 'center', color: palette.inkMuted,
-              fontSize: fz(15), background: palette.surface,
-              border: `1px dashed ${palette.beige}`, borderRadius: 10, lineHeight: 1.5,
+        {/* Aba Cores tem layout proprio (auto + manual) */}
+        {activeTab === 'cores' ? (
+          <CoresPainel lojas={lojas} />
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            {/* Botão adicionar */}
+            <button onClick={abrirModalAdicionar} style={{
+              width: '100%', background: 'transparent', border: `1.5px dashed ${palette.beige}`,
+              borderRadius: 10, padding: 14, cursor: 'pointer', fontFamily: FONT,
+              color: palette.accent, fontSize: fz(15), fontWeight: 600, marginBottom: 16,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}>
-              {IconVazio && (
-                <IconVazio size={sz(41)} color={palette.inkMuted}
-                  style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
-              )}
-              <div style={{ marginBottom: 6 }}>
-                Nenhum {LABEL_TIPO[activeTab]} cadastrado.
+              <Plus size={sz(17)} /> Adicionar produto
+            </button>
+
+            {/* Lista */}
+            {itensDaAba.length === 0 && (() => {
+              const IconVazio = tabAtiva?.icon;
+              return (
+              <div style={{
+                padding: 32, textAlign: 'center', color: palette.inkMuted,
+                fontSize: fz(15), background: palette.surface,
+                border: `1px dashed ${palette.beige}`, borderRadius: 10, lineHeight: 1.5,
+              }}>
+                {IconVazio && (
+                  <IconVazio size={sz(41)} color={palette.inkMuted}
+                    style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
+                )}
+                <div style={{ marginBottom: 6 }}>
+                  Nenhum {LABEL_TIPO[activeTab]} cadastrado.
+                </div>
+                <div style={{ fontSize: fz(13) }}>
+                  Adicione produtos pra IA usar mesmo com estoque baixo.
+                </div>
               </div>
-              <div style={{ fontSize: fz(13) }}>
-                Adicione produtos pra IA usar mesmo com estoque baixo.
-              </div>
-            </div>
-            );
-          })()}
+              );
+            })()}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {itensDaAba.map(item => {
@@ -1864,18 +1889,19 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
               );
             })}
           </div>
-        </div>
 
-        <div style={{
-          marginTop: 24, padding: 12, background: palette.beigeSoft,
-          borderRadius: 10, fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.6,
-        }}>
-          ℹ️ Produtos curados aparecem nas sugestões da IA mesmo com estoque baixo.
-          <br/>
-          • <strong>Best-sellers</strong>: produtos campeões de venda<br/>
-          • <strong>Em alta</strong>: tendência momentânea (ex: pós-publicação Instagram)<br/>
-          • <strong>Novidades manuais</strong>: lançamentos com janela de 15 dias
+          <div style={{
+            marginTop: 24, padding: 12, background: palette.beigeSoft,
+            borderRadius: 10, fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.6,
+          }}>
+            ℹ️ Produtos curados aparecem nas sugestões da IA mesmo com estoque baixo.
+            <br/>
+            • <strong>Best-sellers</strong>: produtos campeões de venda<br/>
+            • <strong>Em alta</strong>: tendência momentânea (ex: pós-publicação Instagram)<br/>
+            • <strong>Novidades manuais</strong>: lançamentos com janela de 15 dias
+          </div>
         </div>
+        )}
       </div>
 
       {/* Modal de adicionar */}
@@ -3488,6 +3514,794 @@ export const AdicionarCnpjModal = ({ lojas, grupo, onClose, onAdicionado }) => {
               : <><Link2 size={sz(17)} /> Adicionar{selecionados.length > 0 ? ` (${selecionados.length})` : ''}</>}
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CoresPainel — sub-painel da CuradoriaScreen quando aba=cores
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Mostra TOP cores Bling automáticas (vw_ranking_cores_catalogo) +
+// cores adicionadas manualmente. Auto não dá pra excluir, manual sim.
+const CoresPainel = ({ lojas }) => {
+  const { state, handleAdicionarCorManual, handleRemoverCorManual } = lojas;
+  const [novaCor, setNovaCor] = useState('');
+  const [novoMotivo, setNovoMotivo] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [removendoId, setRemovendoId] = useState(null);
+
+  const corAuto = state.coresAuto || [];
+  const corManual = state.coresManuais || [];
+
+  const adicionar = async () => {
+    const cor = novaCor.trim();
+    if (cor.length < 2) {
+      alert('Digite o nome da cor (ex: Bordô)');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await handleAdicionarCorManual({ cor, motivo: novoMotivo.trim() || null });
+      setNovaCor('');
+      setNovoMotivo('');
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const remover = async (item) => {
+    if (!confirm(`Remover cor "${item.cor}" da curadoria manual?`)) return;
+    setRemovendoId(item.id);
+    try {
+      await handleRemoverCorManual(item.id);
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setRemovendoId(null);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      {/* Box info topo */}
+      <div style={{
+        padding: 12, background: palette.purpleSoft, borderRadius: 8,
+        borderLeft: `3px solid ${palette.purple}`, marginBottom: 16,
+        fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
+      }}>
+        IA pode mencionar essas cores nas mensagens mesmo sem REF específica.
+        Ex: "Chegaram vários modelos de Marrom, tá saindo muito!"
+        <br/>
+        <strong>Top Bling</strong> atualiza automaticamente. <strong>Manual</strong> é a sua adição livre.
+      </div>
+
+      {/* Form adicionar manual */}
+      <div style={{
+        background: palette.beigeSoft, border: `1px solid ${palette.beige}`,
+        borderRadius: 10, padding: 14, marginBottom: 16,
+      }}>
+        <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.ink, marginBottom: 8 }}>
+          + Adicionar cor manual
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input
+            type="text"
+            value={novaCor}
+            onChange={(e) => setNovaCor(e.target.value)}
+            placeholder="Nome da cor (ex: Bordô, Oliva)"
+            style={{
+              flex: 1, padding: 10, border: `1px solid ${palette.beige}`,
+              borderRadius: 6, fontFamily: FONT, fontSize: fz(14), background: palette.surface,
+            }}
+          />
+          <button
+            onClick={adicionar}
+            disabled={salvando || novaCor.trim().length < 2}
+            style={{
+              background: salvando || novaCor.trim().length < 2 ? palette.beige : palette.ok,
+              color: 'white', border: 'none', padding: '10px 16px',
+              borderRadius: 6, cursor: salvando ? 'wait' : 'pointer',
+              fontFamily: FONT, fontSize: fz(13), fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            {salvando ? <><Loader2 size={sz(15)} style={spinKeyframes} /> Salvando…</> : <><Plus size={sz(15)} /> Adicionar</>}
+          </button>
+        </div>
+        <input
+          type="text"
+          value={novoMotivo}
+          onChange={(e) => setNovoMotivo(e.target.value)}
+          placeholder="Motivo opcional (ex: Lançamento estação)"
+          style={{
+            width: '100%', padding: 10, border: `1px solid ${palette.beige}`,
+            borderRadius: 6, fontFamily: FONT, fontSize: fz(13), background: palette.surface,
+          }}
+        />
+      </div>
+
+      {/* Lista cores manuais */}
+      {corManual.length > 0 && (
+        <>
+          <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.purple, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            ✋ Manual ({corManual.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+            {corManual.map(c => {
+              const removendo = removendoId === c.id;
+              return (
+                <div key={c.id} style={{
+                  background: palette.surface, border: `1px solid ${palette.beige}`,
+                  borderLeft: `3px solid ${palette.purple}`,
+                  borderRadius: 8, padding: 10,
+                  display: 'flex', alignItems: 'center', gap: 12,
+                }}>
+                  <Heart size={sz(16)} color={palette.purple} fill={palette.purpleSoft} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink }}>{c.cor}</div>
+                    {c.motivo && (
+                      <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2 }}>{c.motivo}</div>
+                    )}
+                  </div>
+                  <button onClick={() => remover(c)} disabled={removendo} style={{
+                    background: 'transparent', border: 'none', cursor: removendo ? 'wait' : 'pointer',
+                    padding: 6, opacity: removendo ? 0.5 : 1,
+                  }}>
+                    {removendo
+                      ? <Loader2 size={sz(16)} style={spinKeyframes} color={palette.inkMuted} />
+                      : <Trash2 size={sz(16)} color={palette.inkMuted} />}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Lista cores Bling auto */}
+      <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.accent, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        🤖 Top Bling — automático ({corAuto.length})
+      </div>
+      {corAuto.length === 0 ? (
+        <div style={{
+          padding: 24, textAlign: 'center', color: palette.inkMuted,
+          fontSize: fz(13), background: palette.surface,
+          border: `1px dashed ${palette.beige}`, borderRadius: 10,
+        }}>
+          Nenhuma cor disponível. Verifique vw_ranking_cores_catalogo no Supabase.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {corAuto.map(c => (
+            <div key={c.cor_key} style={{
+              background: palette.accentSoft, border: `1px solid ${palette.accent}`,
+              borderRadius: 16, padding: '5px 12px',
+              fontSize: fz(12), color: palette.accent, fontWeight: 600,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+            }}>
+              <span style={{ fontSize: fz(10), opacity: 0.7 }}>#{c.rank_global}</span>
+              {c.cor}
+              <span style={{ fontSize: fz(10), opacity: 0.7, fontWeight: 400 }}>· {c.vendas_30d} un</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AcoesScreen — Mensagens contextuais por período
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// IA INCORPORA o texto natural nas sugestões durante o período. Não
+// consome slot. Ex: "feliz dia das mulheres", "loja fecha mais cedo".
+//
+const PLACEHOLDER_ACAO = 'Ex: "Aproveita pra desejar Feliz Dia das Mulheres ❤️" · "Lembra que segunda é feriado, loja fecha mais cedo" · "Avisa que tem novidade na loja"';
+
+export const AcoesScreen = ({ lojas, onBack }) => {
+  const { state, handleSalvarAcao, handleRemoverAcao } = lojas;
+  const [texto, setTexto] = useState('');
+  const [dataInicio, setDataInicio] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dataFim, setDataFim] = useState(() => new Date().toISOString().slice(0, 10));
+  const [salvando, setSalvando] = useState(false);
+  const [removendoId, setRemovendoId] = useState(null);
+
+  const acoes = state.acoes || [];
+
+  const salvar = async () => {
+    if (texto.trim().length < 3) {
+      alert('Digite o texto da ação (mínimo 3 caracteres)');
+      return;
+    }
+    if (dataFim < dataInicio) {
+      alert('Data fim não pode ser antes da data início');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await handleSalvarAcao({
+        texto: texto.trim(),
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        ativa: true,
+      });
+      setTexto('');
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const remover = async (acao) => {
+    if (!confirm(`Remover ação "${acao.texto.slice(0, 60)}..."?`)) return;
+    setRemovendoId(acao.id);
+    try {
+      await handleRemoverAcao(acao.id);
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setRemovendoId(null);
+    }
+  };
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const acoesVigentes = acoes.filter(a => a.ativa && a.data_inicio <= hoje && a.data_fim >= hoje);
+  const acoesFuturas = acoes.filter(a => a.data_inicio > hoje);
+  const acoesPassadas = acoes.filter(a => a.data_fim < hoje);
+
+  const renderCard = (acao) => {
+    const removendo = removendoId === acao.id;
+    return (
+      <div key={acao.id} style={{
+        background: palette.surface, border: `1px solid ${palette.beige}`,
+        borderLeft: `3px solid ${palette.purple}`,
+        borderRadius: 10, padding: 12, marginBottom: 8,
+      }}>
+        <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          📅 {fmtData(acao.data_inicio)} → {fmtData(acao.data_fim)}
+        </div>
+        <div style={{ fontSize: fz(14), color: palette.ink, fontStyle: 'italic', marginBottom: 8 }}>
+          "{acao.texto}"
+        </div>
+        <button onClick={() => remover(acao)} disabled={removendo} style={{
+          background: 'transparent', border: `1px solid ${palette.alertSoft}`,
+          color: palette.alert, padding: '4px 10px', borderRadius: 4,
+          cursor: removendo ? 'wait' : 'pointer', fontFamily: FONT, fontSize: fz(11),
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+        }}>
+          {removendo ? <Loader2 size={sz(13)} style={spinKeyframes} /> : <Trash2 size={sz(13)} />}
+          Excluir
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: palette.bg, minHeight: '100%', fontFamily: FONT }}>
+      <Header
+        title="Ações & contextos"
+        subtitle="Mensagens que a IA incorpora nas sugestões"
+        onBack={onBack}
+      />
+      <div style={{ padding: 16, paddingBottom: 32 }}>
+
+        {/* Box explicativo */}
+        <div style={{
+          padding: 12, background: palette.purpleSoft, borderRadius: 8,
+          borderLeft: `3px solid ${palette.purple}`, marginBottom: 16,
+          fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
+        }}>
+          <strong>Ações</strong> são mensagens contextuais que a IA <em>incorpora</em> nas sugestões durante o período. Não consome slot.<br/>
+          Diferente de <strong>Avisos</strong> (disparo único pra UMA vendedora) e <strong>Promoções</strong> (preço/desconto).
+        </div>
+
+        {/* Form criar */}
+        <div style={{
+          background: palette.surface, border: `1px solid ${palette.beige}`,
+          borderRadius: 10, padding: 14, marginBottom: 20,
+        }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, marginBottom: 10 }}>
+            + Nova ação
+          </div>
+
+          <textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder={PLACEHOLDER_ACAO}
+            rows={3}
+            style={{
+              width: '100%', padding: 10, border: `1px solid ${palette.beige}`,
+              borderRadius: 6, fontFamily: FONT, fontSize: fz(14),
+              background: palette.surface, color: palette.ink,
+              resize: 'vertical', marginBottom: 10,
+            }}
+          />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: fz(11), color: palette.inkSoft, marginBottom: 4 }}>Data início</label>
+              <input
+                type="date"
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
+                style={{
+                  width: '100%', padding: 8, border: `1px solid ${palette.beige}`,
+                  borderRadius: 6, fontFamily: FONT, fontSize: fz(13), background: palette.surface,
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: fz(11), color: palette.inkSoft, marginBottom: 4 }}>Data fim</label>
+              <input
+                type="date"
+                value={dataFim}
+                onChange={(e) => setDataFim(e.target.value)}
+                style={{
+                  width: '100%', padding: 8, border: `1px solid ${palette.beige}`,
+                  borderRadius: 6, fontFamily: FONT, fontSize: fz(13), background: palette.surface,
+                }}
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={salvar}
+            disabled={salvando || texto.trim().length < 3}
+            style={{
+              width: '100%',
+              background: salvando || texto.trim().length < 3 ? palette.beige : palette.purple,
+              color: 'white', border: 'none', padding: 11, borderRadius: 6,
+              cursor: salvando ? 'wait' : 'pointer',
+              fontFamily: FONT, fontSize: fz(14), fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            {salvando ? <><Loader2 size={sz(15)} style={spinKeyframes} /> Salvando…</> : <><Megaphone size={sz(15)} /> Criar ação</>}
+          </button>
+        </div>
+
+        {/* Vigentes */}
+        <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.purple, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          ⏱ Vigentes hoje ({acoesVigentes.length})
+        </div>
+        {acoesVigentes.length === 0 ? (
+          <div style={{ padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(13), background: palette.surface, border: `1px dashed ${palette.beige}`, borderRadius: 8, marginBottom: 16 }}>
+            Nenhuma ação vigente
+          </div>
+        ) : (
+          <div style={{ marginBottom: 20 }}>{acoesVigentes.map(renderCard)}</div>
+        )}
+
+        {/* Futuras */}
+        {acoesFuturas.length > 0 && (
+          <>
+            <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              📆 Programadas ({acoesFuturas.length})
+            </div>
+            <div style={{ marginBottom: 20 }}>{acoesFuturas.map(renderCard)}</div>
+          </>
+        )}
+
+        {/* Passadas (collapsed) */}
+        {acoesPassadas.length > 0 && (
+          <details style={{ marginTop: 12 }}>
+            <summary style={{
+              cursor: 'pointer', fontSize: fz(13), color: palette.inkMuted,
+              padding: 8, userSelect: 'none',
+            }}>
+              📜 Histórico ({acoesPassadas.length})
+            </summary>
+            <div style={{ marginTop: 8 }}>{acoesPassadas.slice(0, 10).map(renderCard)}</div>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AvisosScreen — disparo único pra vendedora
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Vira a 1ª sugestão do dia da(s) vendedora(s) alvo. Após o cron daquele
+// dia, status muda pra consumido.
+//
+const PLACEHOLDER_AVISO = 'Ex: "Avisa as clientes top que chegou a coleção festas" · "Lembra a Carolina (CNPJ X) do pedido em aberto" · "Cobra a Maria do cheque vencido"';
+
+export const AvisosScreen = ({ lojas, onBack }) => {
+  const { state, handleSalvarAviso, handleRemoverAviso } = lojas;
+  const [texto, setTexto] = useState('');
+  const [dataDisparo, setDataDisparo] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1); // amanhã por padrão
+    return d.toISOString().slice(0, 10);
+  });
+  const [vendedorasIds, setVendedorasIds] = useState([]);  // [] = todas
+  const [salvando, setSalvando] = useState(false);
+  const [removendoId, setRemovendoId] = useState(null);
+
+  const avisos = state.avisos || [];
+  const vendedorasAtivas = (state.vendedoras || []).filter(v => v.ativa && !v.is_placeholder);
+
+  const toggleVend = (vid) => {
+    setVendedorasIds(prev =>
+      prev.includes(vid) ? prev.filter(x => x !== vid) : [...prev, vid]
+    );
+  };
+
+  const salvar = async () => {
+    if (texto.trim().length < 3) {
+      alert('Digite o texto do aviso (mínimo 3 caracteres)');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await handleSalvarAviso({
+        texto: texto.trim(),
+        data_disparo: dataDisparo,
+        vendedoras_ids: vendedorasIds.length > 0 ? vendedorasIds : null,
+      });
+      setTexto('');
+      setVendedorasIds([]);
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const remover = async (aviso) => {
+    if (!confirm(`Remover aviso "${aviso.texto.slice(0, 60)}..."?`)) return;
+    setRemovendoId(aviso.id);
+    try {
+      await handleRemoverAviso(aviso.id);
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setRemovendoId(null);
+    }
+  };
+
+  const nomeVendedora = (vid) => {
+    const v = vendedorasAtivas.find(v => v.id === vid);
+    return v ? v.nome : '?';
+  };
+
+  const pendentes = avisos.filter(a => a.status === 'pendente');
+  const consumidos = avisos.filter(a => a.status === 'consumido');
+
+  const renderCard = (aviso, mostrarStatus = false) => {
+    const removendo = removendoId === aviso.id;
+    const isPendente = aviso.status === 'pendente';
+    const corBorda = isPendente ? palette.warn : palette.ok;
+    return (
+      <div key={aviso.id} style={{
+        background: palette.surface, border: `1px solid ${palette.beige}`,
+        borderLeft: `3px solid ${corBorda}`,
+        borderRadius: 10, padding: 12, marginBottom: 8,
+        opacity: isPendente ? 1 : 0.65,
+      }}>
+        <div style={{
+          fontSize: fz(11), color: palette.inkMuted, marginBottom: 4,
+          textTransform: 'uppercase', letterSpacing: 0.5,
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        }}>
+          <span>📅 {fmtData(aviso.data_disparo)}</span>
+          <span>·</span>
+          <span>👥 {!aviso.vendedoras_ids || aviso.vendedoras_ids.length === 0 ? 'Todas' : aviso.vendedoras_ids.map(nomeVendedora).join(', ')}</span>
+          {mostrarStatus && (
+            <span style={{
+              padding: '2px 7px', borderRadius: 8, fontSize: fz(9),
+              background: isPendente ? palette.warnSoft : palette.okSoft,
+              color: isPendente ? palette.warn : palette.ok,
+            }}>
+              {aviso.status}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: fz(14), color: palette.ink, fontStyle: 'italic', marginBottom: 8 }}>
+          "{aviso.texto}"
+        </div>
+        {isPendente && (
+          <button onClick={() => remover(aviso)} disabled={removendo} style={{
+            background: 'transparent', border: `1px solid ${palette.alertSoft}`,
+            color: palette.alert, padding: '4px 10px', borderRadius: 4,
+            cursor: removendo ? 'wait' : 'pointer', fontFamily: FONT, fontSize: fz(11),
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+          }}>
+            {removendo ? <Loader2 size={sz(13)} style={spinKeyframes} /> : <Trash2 size={sz(13)} />}
+            Cancelar
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ background: palette.bg, minHeight: '100%', fontFamily: FONT }}>
+      <Header
+        title="Avisos pra vendedoras"
+        subtitle="Vira a 1ª sugestão do dia"
+        onBack={onBack}
+      />
+      <div style={{ padding: 16, paddingBottom: 32 }}>
+
+        {/* Box explicativo */}
+        <div style={{
+          padding: 12, background: palette.warnSoft, borderRadius: 8,
+          borderLeft: `3px solid ${palette.warn}`, marginBottom: 16,
+          fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
+        }}>
+          <strong>Avisos</strong> são disparos únicos pra uma ou mais vendedoras num dia específico. Vira a <strong>1ª sugestão do dia</strong>, no lugar do reativar.
+        </div>
+
+        {/* Form criar */}
+        <div style={{
+          background: palette.surface, border: `1px solid ${palette.beige}`,
+          borderRadius: 10, padding: 14, marginBottom: 20,
+        }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, marginBottom: 10 }}>
+            + Novo aviso
+          </div>
+
+          <textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder={PLACEHOLDER_AVISO}
+            rows={3}
+            style={{
+              width: '100%', padding: 10, border: `1px solid ${palette.beige}`,
+              borderRadius: 6, fontFamily: FONT, fontSize: fz(14),
+              background: palette.surface, color: palette.ink,
+              resize: 'vertical', marginBottom: 10,
+            }}
+          />
+
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: 'block', fontSize: fz(11), color: palette.inkSoft, marginBottom: 6 }}>
+              Vendedoras alvo {vendedorasIds.length === 0 && '(vazio = todas)'}
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {vendedorasAtivas.map(v => {
+                const sel = vendedorasIds.includes(v.id);
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => toggleVend(v.id)}
+                    style={{
+                      background: sel ? palette.accent : palette.surface,
+                      color: sel ? 'white' : palette.inkSoft,
+                      border: `1px solid ${sel ? palette.accent : palette.beige}`,
+                      borderRadius: 16, padding: '5px 12px',
+                      cursor: 'pointer', fontFamily: FONT, fontSize: fz(12),
+                      fontWeight: sel ? 600 : 400,
+                    }}
+                  >
+                    {sel && '✓ '}{v.nome} <span style={{ opacity: 0.7 }}>({v.loja === 'Bom Retiro' ? 'BR' : 'ST'})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ display: 'block', fontSize: fz(11), color: palette.inkSoft, marginBottom: 4 }}>Data do disparo</label>
+            <input
+              type="date"
+              value={dataDisparo}
+              onChange={(e) => setDataDisparo(e.target.value)}
+              min={new Date().toISOString().slice(0, 10)}
+              style={{
+                width: '100%', padding: 8, border: `1px solid ${palette.beige}`,
+                borderRadius: 6, fontFamily: FONT, fontSize: fz(13), background: palette.surface,
+              }}
+            />
+          </div>
+
+          <button
+            onClick={salvar}
+            disabled={salvando || texto.trim().length < 3}
+            style={{
+              width: '100%',
+              background: salvando || texto.trim().length < 3 ? palette.beige : palette.warn,
+              color: 'white', border: 'none', padding: 11, borderRadius: 6,
+              cursor: salvando ? 'wait' : 'pointer',
+              fontFamily: FONT, fontSize: fz(14), fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            {salvando ? <><Loader2 size={sz(15)} style={spinKeyframes} /> Salvando…</> : <><Bell size={sz(15)} /> Criar aviso</>}
+          </button>
+        </div>
+
+        {/* Pendentes */}
+        <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.warn, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          ⚡ Pendentes ({pendentes.length})
+        </div>
+        {pendentes.length === 0 ? (
+          <div style={{ padding: 16, textAlign: 'center', color: palette.inkMuted, fontSize: fz(13), background: palette.surface, border: `1px dashed ${palette.beige}`, borderRadius: 8, marginBottom: 16 }}>
+            Nenhum aviso pendente
+          </div>
+        ) : (
+          <div style={{ marginBottom: 20 }}>{pendentes.map(a => renderCard(a, false))}</div>
+        )}
+
+        {/* Histórico (collapsed) */}
+        {consumidos.length > 0 && (
+          <details>
+            <summary style={{
+              cursor: 'pointer', fontSize: fz(13), color: palette.inkMuted,
+              padding: 8, userSelect: 'none',
+            }}>
+              ✓ Já enviados ({consumidos.length})
+            </summary>
+            <div style={{ marginTop: 8 }}>{consumidos.slice(0, 10).map(a => renderCard(a, true))}</div>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VestiLinksInline — painel inline na tela de Vendedoras
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 3 campos pra colar links Vesti + radio pra escolher 1 ativo (ou nenhum).
+// IA usa o link ativo nas mensagens pra clientes Vesti. Se nenhum
+// selecionado, IA fica livre.
+//
+const VestiLinksInline = ({ vendedora, onSalvar, onFechar }) => {
+  const [link1, setLink1] = useState(vendedora.vesti_link_1 || '');
+  const [link2, setLink2] = useState(vendedora.vesti_link_2 || '');
+  const [link3, setLink3] = useState(vendedora.vesti_link_3 || '');
+  const [ativo, setAtivo] = useState(vendedora.vesti_link_ativo || null);
+  const [salvando, setSalvando] = useState(false);
+
+  const validarUrl = (s) => {
+    if (!s || !s.trim()) return true; // vazio é ok
+    try {
+      const u = new URL(s.trim());
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const podeAtivar = (n) => {
+    if (n === 1) return link1.trim().length > 0;
+    if (n === 2) return link2.trim().length > 0;
+    if (n === 3) return link3.trim().length > 0;
+    return false;
+  };
+
+  const salvar = async () => {
+    if (!validarUrl(link1) || !validarUrl(link2) || !validarUrl(link3)) {
+      alert('Algum link parece inválido (precisa começar com http:// ou https://)');
+      return;
+    }
+    // Se ativo aponta pra link vazio, desativa
+    let ativoFinal = ativo;
+    if (ativoFinal && !podeAtivar(ativoFinal)) ativoFinal = null;
+
+    setSalvando(true);
+    try {
+      await onSalvar(vendedora.id, {
+        link_1: link1.trim() || null,
+        link_2: link2.trim() || null,
+        link_3: link3.trim() || null,
+        link_ativo: ativoFinal,
+      });
+      onFechar();
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%', padding: 8, border: `1px solid ${palette.beige}`,
+    borderRadius: 6, fontFamily: FONT, fontSize: fz(13),
+    background: palette.surface, color: palette.ink,
+  };
+
+  const renderCampo = (n, valor, setValor) => {
+    const ehAtivo = ativo === n;
+    const temConteudo = valor.trim().length > 0;
+    return (
+      <div key={n} style={{
+        display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
+      }}>
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 4, cursor: temConteudo ? 'pointer' : 'not-allowed',
+          opacity: temConteudo ? 1 : 0.4, flexShrink: 0,
+        }}>
+          <input
+            type="radio"
+            name={`vesti-ativo-${vendedora.id}`}
+            checked={ehAtivo}
+            disabled={!temConteudo}
+            onChange={() => setAtivo(ehAtivo ? null : n)}
+          />
+          <span style={{ fontSize: fz(11), color: ehAtivo ? palette.purple : palette.inkMuted, fontWeight: ehAtivo ? 600 : 400 }}>
+            {n}
+          </span>
+        </label>
+        <input
+          type="url"
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          placeholder={`Link Vesti ${n} (cole aqui)`}
+          style={{
+            ...inputStyle,
+            borderColor: ehAtivo ? palette.purple : palette.beige,
+            borderWidth: ehAtivo ? 2 : 1,
+          }}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div style={{
+      marginTop: 12, padding: 12, background: palette.purpleSoft,
+      borderRadius: 8, border: `1px solid ${palette.purple}40`,
+    }}>
+      <div style={{
+        fontSize: fz(12), color: palette.purple, fontWeight: 600,
+        marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5,
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <Link2 size={sz(13)} /> Links Vesti — {vendedora.nome}
+      </div>
+
+      <div style={{ fontSize: fz(11), color: palette.inkSoft, marginBottom: 10, lineHeight: 1.4 }}>
+        Cole até 3 links que você gerou no Vesti. Marque o radio do link que a IA deve usar nas mensagens. Sem nenhum marcado, IA fica livre.
+      </div>
+
+      {renderCampo(1, link1, setLink1)}
+      {renderCampo(2, link2, setLink2)}
+      {renderCampo(3, link3, setLink3)}
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        <button onClick={() => setAtivo(null)} disabled={!ativo} style={{
+          background: palette.surface, color: palette.inkSoft,
+          border: `1px solid ${palette.beige}`, borderRadius: 6,
+          padding: '7px 12px', fontFamily: FONT, fontSize: fz(12),
+          cursor: ativo ? 'pointer' : 'not-allowed', opacity: ativo ? 1 : 0.4,
+        }}>
+          Nenhum ativo
+        </button>
+        <button onClick={onFechar} style={{
+          background: palette.surface, color: palette.inkSoft,
+          border: `1px solid ${palette.beige}`, borderRadius: 6,
+          padding: '7px 12px', fontFamily: FONT, fontSize: fz(12),
+          cursor: 'pointer',
+        }}>
+          Cancelar
+        </button>
+        <button onClick={salvar} disabled={salvando} style={{
+          flex: 1, background: salvando ? palette.beige : palette.purple,
+          color: 'white', border: 'none', borderRadius: 6,
+          padding: '7px 12px', fontFamily: FONT, fontSize: fz(12), fontWeight: 600,
+          cursor: salvando ? 'wait' : 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+        }}>
+          {salvando
+            ? <><Loader2 size={sz(13)} style={spinKeyframes} /> Salvando…</>
+            : <><Save size={sz(13)} /> Salvar links</>}
+        </button>
       </div>
     </div>
   );

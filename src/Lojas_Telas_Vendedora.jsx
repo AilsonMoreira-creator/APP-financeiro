@@ -40,6 +40,7 @@ import {
   Save, Trash2, Edit3, MapPin, Clock, CheckCircle2, AlertCircle,
   Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown,
   UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send, User,
+  Bell, Megaphone,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
@@ -455,6 +456,12 @@ const ConfigTab = ({ lojas, onNavegar }) => {
       title: 'Cadastrar comprador', sub: 'Vincular nome do comprador a um CNPJ/CPF' },
     { id: 'promocoes', icon: Gift, cor: palette.warn, corSoft: palette.warnSoft,
       title: 'Promoções', sub: `${state.promocoes.length} ${state.promocoes.length === 1 ? 'ativa' : 'ativas'}` },
+    { id: 'acoes', icon: Megaphone, cor: palette.purple, corSoft: palette.purpleSoft,
+      title: 'Ações', sub: `${(state.acoes || []).filter(a => a.ativa).length} vigentes — IA incorpora nas mensagens` },
+    { id: 'avisos', icon: Bell, cor: palette.warn, corSoft: palette.warnSoft,
+      title: 'Avisos', sub: `${(state.avisos || []).filter(a => a.status === 'pendente').length} pendentes — vira 1ª sugestão da vendedora` },
+    { id: 'curadoria', icon: Star, cor: palette.warn, corSoft: palette.warnSoft,
+      title: 'Curadoria de produtos', sub: `Best-sellers · em alta · novidades manuais (${(state.curadoria || []).filter(c => c.ativo).length})` },
     { id: 'regras', icon: FileText, cor: palette.accent, corSoft: palette.accentSoft,
       title: 'Regras gerais', sub: 'Tom, parâmetros, sempre/nunca' },
     { id: 'vendedoras', icon: UserCog, cor: palette.ok, corSoft: palette.okSoft,

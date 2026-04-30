@@ -220,6 +220,17 @@ async function handleGerarSugestoes(req, res, auth) {
     return res.status(500).json({ error: 'Erro ao salvar sugestões', detalhe: errIns.message });
   }
 
+  // ─── Marca aviso como consumido (se havia um) ─────────────────────────
+  // Decisão: só marca consumido APOS o INSERT das sugestoes ter dado certo.
+  // Se IA falhou ou banco recusou, aviso fica pendente pra retry.
+  if (ctx?.avisosDestaVendedora?.length > 0) {
+    const avisoId = ctx.avisosDestaVendedora[0].id;
+    await supabase
+      .from('lojas_avisos')
+      .update({ status: 'consumido', consumido_em: new Date().toISOString() })
+      .eq('id', avisoId);
+  }
+
   return res.json({
     ok: true,
     sugestoes_criadas: linhas.length,
@@ -614,6 +625,71 @@ async function montarContextoSugestoes(vendedoraId) {
     .gte('data_fim', hoje)
     .order('data_fim');
 
+  // ─── AÇÕES VIGENTES (Ailson 30/04/2026) ───────────────────────────────
+  // Mensagens contextuais que a IA INCORPORA nas sugestões (não consome
+  // slot). Ex: "feliz dia das mulheres", "loja fecha mais cedo na quinta".
+  const { data: acoesVigentes } = await supabase
+    .from('lojas_acoes')
+    .select('id, texto, data_inicio, data_fim')
+    .eq('ativa', true)
+    .lte('data_inicio', hoje)
+    .gte('data_fim', hoje);
+
+  // ─── AVISO DEDICADO PRO DIA ───────────────────────────────────────────
+  // Disparo único pra essa vendedora (ou todas) hoje. IA cria sugestão
+  // dedicada no slot 1 e marca como consumido após o cron.
+  // vendedoras_ids vazio/null = todas; senão filtra.
+  const { data: avisosHoje } = await supabase
+    .from('lojas_avisos')
+    .select('id, texto, vendedoras_ids, cliente_id')
+    .eq('status', 'pendente')
+    .eq('data_disparo', hoje);
+
+  // Filtra avisos que pertencem a essa vendedora (todas OU explicitamente
+  // selecionada). Pode ter mais de 1, mas só consideramos o primeiro como
+  // slot dedicado — outros viram "ver também" no contexto.
+  const avisosDestaVendedora = (avisosHoje || []).filter(a =>
+    !a.vendedoras_ids
+    || a.vendedoras_ids.length === 0
+    || a.vendedoras_ids.includes(vendedoraId)
+  );
+
+  // ─── CORES EM ALTA (Ailson 30/04/2026) ────────────────────────────────
+  // Mescla:
+  //   1. Top cores do Bling (vw_ranking_cores_catalogo, dinamico, sem janela)
+  //   2. Cores adicionadas manualmente em lojas_cores_curadoria_manual
+  // IA pode mencionar essas cores nas mensagens mesmo sem REF especifica
+  // (ex: "chegaram varios modelos de Marrom, ta super em alta").
+  const coresEmAlta = [];
+  try {
+    const { data: coresAuto } = await supabase
+      .from('vw_ranking_cores_catalogo')
+      .select('cor, cor_key, rank_global')
+      .eq('elegivel_gate1', true)
+      .order('rank_global', { ascending: true })
+      .limit(15);  // top 15 do Bling
+    for (const c of coresAuto || []) {
+      coresEmAlta.push({ cor: c.cor, cor_key: c.cor_key, fonte: 'bling_auto', rank: c.rank_global });
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] vw_ranking_cores_catalogo indisponivel:', e?.message);
+  }
+
+  try {
+    const { data: coresManuais } = await supabase
+      .from('lojas_cores_curadoria_manual')
+      .select('cor, cor_key, motivo')
+      .eq('ativa', true);
+    const keysJaPresentes = new Set(coresEmAlta.map(c => c.cor_key));
+    for (const c of coresManuais || []) {
+      if (!keysJaPresentes.has(c.cor_key)) {
+        coresEmAlta.push({ cor: c.cor, cor_key: c.cor_key, fonte: 'manual', motivo: c.motivo });
+      }
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] lojas_cores_curadoria_manual indisponivel (tabela ainda nao criada?):', e?.message);
+  }
+
   // Regras customizadas (do RegrasScreen)
   const [tomGeral, posicionamento, sempre, nunca, descontoReat, descontoAten, saudacao, fechamento] = await Promise.all([
     getLojasConfig('regras_ia.tom_geral', null),
@@ -644,6 +720,13 @@ async function montarContextoSugestoes(vendedoraId) {
     categoriasFreqPorCliente, // { cliente_id: [{categoria, pct, pecas, dominante}] }
     refsReposicao,           // [ref] — novidades que já tinham venda passada
     promocoes: promocoes || [],
+    acoesVigentes: acoesVigentes || [],
+    avisosDestaVendedora,
+    coresEmAlta,
+    // Link Vesti escolhido pela vendedora (pode ser null = livre)
+    vestiLinkAtivo: vendedora.vesti_link_ativo
+      ? (vendedora[`vesti_link_${vendedora.vesti_link_ativo}`] || null)
+      : null,
     regrasCustomizadas: {
       tomGeral, posicionamento, sempre, nunca,
       descontoReat, descontoAten, saudacao, fechamento,
@@ -942,6 +1025,32 @@ function montarMessagesSugestoes(ctx) {
       desconto_pct: p.desconto_pct,
       pedido_minimo: p.pedido_minimo,
     })),
+    // Mensagens contextuais admin pra incorporar nas sugestoes durante o
+    // periodo. NAO consome slot. Ex: "feliz dia das mulheres".
+    acoes_vigentes: (ctx.acoesVigentes || []).map(a => ({
+      id: a.id,
+      texto: a.texto,
+      vence_em: a.data_fim,
+    })),
+    // Aviso DEDICADO pra essa vendedora hoje. Se presente, IA DEVE criar a
+    // sugestao prioridade=1 baseada no texto, em vez do reativar usual.
+    aviso_dedicado_hoje: (ctx.avisosDestaVendedora || []).length > 0
+      ? {
+          id: ctx.avisosDestaVendedora[0].id,
+          texto: ctx.avisosDestaVendedora[0].texto,
+          cliente_id_alvo: ctx.avisosDestaVendedora[0].cliente_id || null,
+        }
+      : null,
+    // Cores em alta (top Bling + manuais). IA pode mencionar nas mensagens
+    // mesmo sem REF especifica. Ex: "chegou varios modelos de Marrom, ta
+    // super em alta!"
+    cores_em_alta: (ctx.coresEmAlta || []).map(c => ({
+      cor: c.cor,
+      fonte: c.fonte,  // 'bling_auto' ou 'manual'
+    })),
+    // Link Vesti que a vendedora cadastrou e marcou como ativo. Se null,
+    // IA fica livre pra mencionar Vesti sem link, ou nao mencionar.
+    vesti_link_vendedora: ctx.vestiLinkAtivo,
     diagnostico_filtros: {
       ...carteiraFiltradaInfo,
       sacolas_descartadas: ctx.sacolasDescartadas || {},
