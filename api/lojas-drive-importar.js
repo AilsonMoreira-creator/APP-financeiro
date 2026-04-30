@@ -448,6 +448,96 @@ async function backfillTelefoneClientes(registrosVendas) {
   return { backfill_clientes: atualizados };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BACKFILL DE VENDEDORA A PARTIR DO HISTÓRICO DE VENDAS
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Decisão Ailson 30/04/2026: o agregado relatorio_vendas_clientes_*.csv
+// (planilha pequena que ATRIBUI vendedora) está truncado/incompleto. Mas
+// o histórico granular (relatorio_vendas_*_historico.csv) tem 15k+ vendas
+// COM coluna VENDEDOR preenchida em cada uma. O parser do histórico já
+// resolve a vendedora_id por venda — só faltava propagar pra lojas_clientes.
+//
+// Como funciona:
+//   1. Após upsert de vendas_historico, agrega por cliente_id contando
+//      ocorrências de cada vendedora_id nas vendas dele
+//   2. Pega a VENDEDORA DOMINANTE (mais vendas) de cada cliente
+//   3. Pra cada cliente que TEM cliente_id e AINDA NÃO tem vendedora_id
+//      em lojas_clientes (vendedor_a_definir=true), atribui a dominante
+//   4. Marca fonte_atribuicao='vendedora_dominante_historico' pra rastrear
+//
+// Idempotente: roda toda vez que histórico é importado.
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function backfillVendedoraClientes(registrosVendas) {
+  // Conta vendedora_id por cliente_id (só vendas que tem cliente_id resolvido
+  // E vendedora_id resolvida pelo parser)
+  const vendedoraCount = new Map();  // cliente_id → Map(vendedora_id → count)
+  for (const v of registrosVendas) {
+    if (!v.cliente_id || !v.vendedora_id) continue;
+    if (!vendedoraCount.has(v.cliente_id)) vendedoraCount.set(v.cliente_id, new Map());
+    const inner = vendedoraCount.get(v.cliente_id);
+    inner.set(v.vendedora_id, (inner.get(v.vendedora_id) || 0) + 1);
+  }
+
+  if (vendedoraCount.size === 0) return { backfill_vendedora: 0 };
+
+  // Calcula a vendedora dominante por cliente
+  const dominantePorCliente = new Map();
+  for (const [clienteId, vendedoras] of vendedoraCount) {
+    let melhorVendedora = null;
+    let maxCount = 0;
+    for (const [vid, count] of vendedoras) {
+      if (count > maxCount) {
+        maxCount = count;
+        melhorVendedora = vid;
+      }
+    }
+    if (melhorVendedora) dominantePorCliente.set(clienteId, melhorVendedora);
+  }
+
+  // Busca quais desses clientes AINDA não têm vendedora atribuida
+  const ids = Array.from(dominantePorCliente.keys());
+  const { data: semVendedora } = await supabase
+    .from('lojas_clientes')
+    .select('id, loja_origem')
+    .in('id', ids)
+    .is('vendedora_id', null);
+
+  const idsParaAtualizar = (semVendedora || []).map(c => c.id);
+  if (idsParaAtualizar.length === 0) return { backfill_vendedora: 0 };
+
+  // Busca a loja de cada vendedora dominante (pra setar loja_origem também)
+  const vendedoraIds = [...new Set(idsParaAtualizar.map(id => dominantePorCliente.get(id)))];
+  const { data: vends } = await supabase
+    .from('lojas_vendedoras')
+    .select('id, loja')
+    .in('id', vendedoraIds);
+  const vendIdToLoja = new Map((vends || []).map(v => [v.id, v.loja]));
+
+  // Atualiza em lote (uma por uma porque cada cliente pode ter vendedora diferente)
+  let atualizados = 0;
+  await Promise.all(idsParaAtualizar.map(async clienteId => {
+    const vid = dominantePorCliente.get(clienteId);
+    const loja = vendIdToLoja.get(vid);
+    const { error } = await supabase
+      .from('lojas_clientes')
+      .update({
+        vendedora_id: vid,
+        loja_origem: loja,
+        vendedor_a_definir: false,
+        fonte_atribuicao: 'vendedora_dominante_historico',
+        data_atribuicao: new Date().toISOString(),
+      })
+      .eq('id', clienteId)
+      .is('vendedora_id', null);  // double-check pra evitar sobrescrita
+    if (!error) atualizados++;
+  }));
+
+  console.log(`[backfill_vendedora] ${atualizados} clientes ganharam vendedora dominante do histórico`);
+  return { backfill_vendedora: atualizados };
+}
+
 async function aplicarUpsert(tipo, registros, importacaoId) {
   if (!registros?.length) return { inseridos: 0, atualizados: 0 };
 
@@ -607,6 +697,11 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
     // usa o WHATSAPP da venda mais recente do histórico (ST ou BR) como
     // fallback. Isso roda toda vez que histórico é importado (idempotente).
     await backfillTelefoneClientes(filtrados);
+
+    // ─── BACKFILL DE VENDEDORA A PARTIR DO HISTÓRICO ────────────────────
+    // Decisão Ailson 30/04/2026: agregado vendas_clientes está truncado.
+    // Pra cada cliente sem vendedora, usa a vendedora dominante do histórico.
+    await backfillVendedoraClientes(filtrados);
 
     return stats;
   }
