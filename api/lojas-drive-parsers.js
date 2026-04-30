@@ -340,7 +340,15 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
       forma_pagamento_categoria: categoria_pag,
 
       // canal e NF
-      canal_origem: 'fisico',
+      // Decisão Ailson 28/04/2026: campo MARKETPLACE do Mire vem com 'VESTI'
+      // (e provavelmente outros valores conforme aparecerem). Sem isso, todas
+      // as vendas Vesti viravam 'fisico' e a IA nunca mencionava perfil Vesti.
+      canal_origem: (() => {
+        const mkt = (limparTexto(l['MARKETPLACE']) || '').toUpperCase().trim();
+        if (mkt === 'VESTI' || mkt === 'VESTISHOP' || mkt.startsWith('VESTI ')) return 'vesti';
+        if (mkt === 'CONVERTR' || mkt === 'CONVERTR.IO') return 'convertr';
+        return 'fisico';
+      })(),
       numero_nf: limparTexto(l['NF']),
       marketplace_raw: limparTexto(l['MARKETPLACE']),
 
