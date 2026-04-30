@@ -436,23 +436,49 @@ async function montarContextoSugestoes(vendedoraId) {
     emAltaAuto = (topVendas || []).filter(r => r.curva === 'b').map(r => r.ref);
 
     // A view vw_lojas_produtos_oferecveis filtra por estoque>100. REFs top
-    // que vendem muito podem ter estoque BAIXO justamente por isso. Buscamos
-    // direto em lojas_produtos pra IA enxergar.
-    const todasAuto = [...bestSellersAuto, ...emAltaAuto];
-    if (todasAuto.length > 0) {
+    // que vendem muito podem ter estoque BAIXO justamente por isso. Tambem
+    // REFs antigas (descontinuadas mas ainda em estoque) ficam fora da view.
+    // Buscamos direto em lojas_produtos pra IA enxergar.
+    //
+    // INCLUI tambem REFs da CURADORIA MANUAL (best_seller/em_alta/novidade_manual).
+    // Sem isso, REFs marcadas pelo Ailson como best_seller mas que cairam fora
+    // da view (peças classicas, sem destaque recente) ficavam invisiveis pra IA
+    // — bug detectado 30/04/2026: dos 8 best_sellers manuais cadastrados,
+    // todos estavam fora de vw_lojas_produtos_oferecveis.
+    const refsCuradoriaManual = (curadoria || []).map(c => c.ref);
+    const todasExtras = [...new Set([...bestSellersAuto, ...emAltaAuto, ...refsCuradoriaManual])];
+
+    // Map ref -> tipo de curadoria (pra setar motivo_oferta correto)
+    const curadoriaTipoPorRef = new Map(
+      (curadoria || []).map(c => [c.ref, c.tipo])
+    );
+
+    if (todasExtras.length > 0) {
       const { data: extras } = await supabase
         .from('lojas_produtos')
         .select('ref, descricao, categoria, qtd_estoque')
-        .in('ref', todasAuto);
+        .in('ref', todasExtras);
       produtosExtras = (extras || [])
         .filter(p => p.descricao)
-        .map(p => ({
-          ref: p.ref,
-          descricao: p.descricao,
-          categoria: p.categoria,
-          qtd_estoque: p.qtd_estoque,
-          motivo_oferta: bestSellersAuto.includes(p.ref) ? 'best_seller' : 'em_alta',
-        }));
+        .map(p => {
+          // Curadoria manual tem PRIORIDADE no motivo_oferta — mesma regra
+          // de classificarProdutos (linha ~996-1004).
+          const tipoCurMan = curadoriaTipoPorRef.get(p.ref);
+          let motivo;
+          if (tipoCurMan === 'novidade_manual') motivo = 'novidade_oficina';
+          else if (tipoCurMan === 'best_seller') motivo = 'best_seller';
+          else if (tipoCurMan === 'em_alta') motivo = 'em_alta';
+          else if (bestSellersAuto.includes(p.ref)) motivo = 'best_seller';
+          else motivo = 'em_alta';
+
+          return {
+            ref: p.ref,
+            descricao: p.descricao,
+            categoria: p.categoria,
+            qtd_estoque: p.qtd_estoque,
+            motivo_oferta: motivo,
+          };
+        });
     }
   } catch (e) {
     console.warn('[lojas-ia] sem top vendas loja fisica (view ausente?):', e?.message);
