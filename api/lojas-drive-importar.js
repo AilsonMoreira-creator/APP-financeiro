@@ -248,6 +248,31 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
       throw new Error(`Tipo desconhecido: ${tipoInfo.tipo}`);
     }
 
+    // Detector de arquivo truncado (decisao Ailson 28/04/2026):
+    // Se admin abre CSV no Sheets mobile, ele pode truncar e salvar so as
+    // linhas visiveis na tela. Aconteceu com vendas_clientes_br (de 6000+
+    // pra 132). Aviso (nao bloqueio) quando arquivo vier suspeitamente
+    // pequeno comparado ao ultimo import bem-sucedido do MESMO tipo.
+    try {
+      const { data: ultimoSucesso } = await supabase
+        .from('lojas_importacoes')
+        .select('registros_total')
+        .eq('tipo', tipoInfo.tipo)
+        .eq('status', 'sucesso')
+        .gt('registros_total', 0)
+        .order('iniciado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (ultimoSucesso?.registros_total
+          && parseResult.total < ultimoSucesso.registros_total * 0.5) {
+        console.warn(
+          `⚠️ ${arq.name} veio com ${parseResult.total} linhas — ` +
+          `ultimo import tinha ${ultimoSucesso.registros_total}. ` +
+          `Possivel truncamento (Sheets mobile?). Verifique antes de confiar nos dados.`
+        );
+      }
+    } catch { /* nao bloqueia se a checagem falhar */ }
+
     // Faz upsert no Supabase
     const upsertStats = await aplicarUpsert(tipoInfo.tipo, parseResult.registros, importacaoId);
 
