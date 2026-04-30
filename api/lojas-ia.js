@@ -495,9 +495,19 @@ async function montarContextoSugestoes(vendedoraId) {
   // Cliente compra "bem" uma REF se ela está no top 3 dela (score mesclado
   // peças×0.7 + recorrência×3.0). Usado pra:
   //   1. IA saber quando dizer "esse modelo vende bem pra você"
-  //   2. Detectar reposição: novidade da oficina cuja REF está no top da cliente
+  //   2. Detectar reposição: REF do top do cliente disponível em estoque
   //   3. Alternar entre os 3 ao longo dos dias (anti-monotonia)
-  const topRefsPorCliente = {}; // { cliente_id: ['3171', '2783', '0050'] }
+  //
+  // Mapa REF -> estoque (pra anotar em_estoque em cada top_ref do cliente).
+  // Decisão Ailson 30/04/2026: ampliar conceito de reposicao — não precisa
+  // ser novidade da oficina; basta a REF estar em estoque relevante hoje.
+  const ESTOQUE_MIN_REPOSICAO = 50;
+  const estoqueDisponivelPorRef = new Map();
+  for (const p of produtosFinal) {
+    estoqueDisponivelPorRef.set(p.ref, p.qtd_estoque || 0);
+  }
+
+  const topRefsPorCliente = {};
   if (clienteIds.length > 0) {
     try {
       // Em chunks pra não estourar limite Supabase
@@ -510,11 +520,17 @@ async function montarContextoSugestoes(vendedoraId) {
           .order('posicao', { ascending: true });
         for (const r of tops || []) {
           if (!topRefsPorCliente[r.cliente_id]) topRefsPorCliente[r.cliente_id] = [];
+          const estoqueAtual = estoqueDisponivelPorRef.get(r.ref) || 0;
           topRefsPorCliente[r.cliente_id].push({
             ref: r.ref,
             posicao: r.posicao,
             pecas_total: r.pecas_total,
             vezes_comprou: r.vezes_comprou,
+            // em_estoque=true → IA pode oferecer essa REF como REPOSICAO
+            // (cliente compra bem + temos estoque hoje). Sinal explícito
+            // pra IA não ter que cruzar listas mentalmente.
+            em_estoque: estoqueAtual >= ESTOQUE_MIN_REPOSICAO,
+            qtd_estoque: estoqueAtual,
           });
         }
       }
@@ -885,6 +901,12 @@ function montarMessagesSugestoes(ctx) {
         refs_reposicao: ctx.refsReposicao?.length || 0,
       },
       clientes_com_top_refs: Object.keys(ctx.topRefsPorCliente || {}).length,
+      // Quantos clientes da carteira tem AO MENOS 1 REF do seu top em
+      // estoque hoje — esses sao candidatos fortes pra sugestao tipo
+      // "reposicao" ampla. Se esse numero for alto e a IA nao gerar
+      // nenhuma "reposicao", o prompt nao esta sendo seguido.
+      clientes_com_top_ref_em_estoque: (carteira || [])
+        .filter(c => (c.top_refs_cliente || []).some(t => t.em_estoque)).length,
       clientes_vesti_na_carteira: (ctx.clientes || [])
         .filter(c => (ctx.kpis[c.id]?.canal_dominante === 'vesti_dominante')
           || (ctx.kpis[c.id]?.qtd_compras_vesti || 0) > 0).length,
