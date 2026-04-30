@@ -629,7 +629,7 @@ async function montarContextoSugestoes(vendedoraId) {
   // Mensagens contextuais que a IA INCORPORA nas sugestões (não consome
   // slot). Ex: "feliz dia das mulheres", "loja fecha mais cedo na quinta".
   const { data: acoesVigentes } = await supabase
-    .from('lojas_acoes')
+    .from('lojas_contextos_ia')
     .select('id, texto, data_inicio, data_fim')
     .eq('ativa', true)
     .lte('data_inicio', hoje)

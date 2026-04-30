@@ -21,7 +21,7 @@ END $$;
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 1. AÇÕES (mensagens contextuais por período)
 -- ═══════════════════════════════════════════════════════════════════════════
-CREATE TABLE IF NOT EXISTS lojas_acoes (
+CREATE TABLE IF NOT EXISTS lojas_contextos_ia (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   texto           text NOT NULL,
   data_inicio     date NOT NULL,
@@ -34,19 +34,19 @@ CREATE TABLE IF NOT EXISTS lojas_acoes (
   CHECK (length(trim(texto)) >= 3)
 );
 
-CREATE INDEX IF NOT EXISTS idx_lojas_acoes_periodo
-  ON lojas_acoes (data_inicio, data_fim) WHERE ativa = true;
+CREATE INDEX IF NOT EXISTS idx_lojas_contextos_ia_periodo
+  ON lojas_contextos_ia (data_inicio, data_fim) WHERE ativa = true;
 
-DROP TRIGGER IF EXISTS trg_lojas_acoes_timestamp ON lojas_acoes;
-CREATE TRIGGER trg_lojas_acoes_timestamp
-  BEFORE UPDATE ON lojas_acoes
+DROP TRIGGER IF EXISTS trg_lojas_contextos_ia_timestamp ON lojas_contextos_ia;
+CREATE TRIGGER trg_lojas_contextos_ia_timestamp
+  BEFORE UPDATE ON lojas_contextos_ia
   FOR EACH ROW EXECUTE FUNCTION lojas_atualizar_timestamp();
 
-ALTER TABLE lojas_acoes ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "lojas_acoes_select_all" ON lojas_acoes;
-DROP POLICY IF EXISTS "lojas_acoes_modify_all" ON lojas_acoes;
-CREATE POLICY "lojas_acoes_select_all" ON lojas_acoes FOR SELECT USING (true);
-CREATE POLICY "lojas_acoes_modify_all" ON lojas_acoes FOR ALL    USING (true) WITH CHECK (true);
+ALTER TABLE lojas_contextos_ia ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "lojas_contextos_ia_select_all" ON lojas_contextos_ia;
+DROP POLICY IF EXISTS "lojas_contextos_ia_modify_all" ON lojas_contextos_ia;
+CREATE POLICY "lojas_contextos_ia_select_all" ON lojas_contextos_ia FOR SELECT USING (true);
+CREATE POLICY "lojas_contextos_ia_modify_all" ON lojas_contextos_ia FOR ALL    USING (true) WITH CHECK (true);
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 2. AVISOS (disparo único pra vendedora)

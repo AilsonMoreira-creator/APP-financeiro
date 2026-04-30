@@ -438,7 +438,7 @@ async function loadPromocoes() {
 // ─── AÇÕES (mensagens contextuais por período) ─────────────────────────
 async function loadAcoes() {
   const { data, error } = await supabase
-    .from('lojas_acoes')
+    .from('lojas_contextos_ia')
     .select('*')
     .order('data_inicio', { ascending: false });
   if (error) throw error;
@@ -448,7 +448,7 @@ async function loadAcoes() {
 async function salvarAcao(acao) {
   if (acao.id) {
     const { error } = await supabase
-      .from('lojas_acoes')
+      .from('lojas_contextos_ia')
       .update({
         texto: acao.texto,
         data_inicio: acao.data_inicio,
@@ -459,7 +459,7 @@ async function salvarAcao(acao) {
     if (error) throw error;
   } else {
     const { error } = await supabase
-      .from('lojas_acoes')
+      .from('lojas_contextos_ia')
       .insert({
         texto: acao.texto,
         data_inicio: acao.data_inicio,
@@ -473,7 +473,7 @@ async function salvarAcao(acao) {
 
 async function removerAcao(acaoId) {
   const { error } = await supabase
-    .from('lojas_acoes')
+    .from('lojas_contextos_ia')
     .delete()
     .eq('id', acaoId);
   if (error) throw error;
