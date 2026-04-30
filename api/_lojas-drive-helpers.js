@@ -390,30 +390,28 @@ export function parseCSV(conteudo, opts = {}) {
   const { separador: separadorForcado, pular_linhas = 0 } = opts;
   if (!conteudo) return [];
 
-  // Normaliza line endings (CRLF, CR, LF)
+  // Normaliza CRLF → LF (mas NÃO removemos \n agora — pode estar dentro de aspas)
   const texto = conteudo.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const linhas = texto.split('\n').filter(l => l.length > 0);
 
+  // 1. PARSING RESPEITANDO ASPAS (RFC 4180)
+  // Bug pre 28/04/2026: split('\n') simples quebrava em \n dentro de
+  // aspas, perdendo ~98% dos registros em CSVs com texto multi-linha.
+  // Detectado quando relatorio_vendas_clientes_br.csv (6000+ linhas)
+  // chegava como 132 no banco.
+  const linhasBrutas = _splitCSVLinhas(texto);
+  const linhas = linhasBrutas.filter(l => l.length > 0);
   if (linhas.length <= pular_linhas) return [];
 
-  // Pula linhas iniciais (algumas exportações têm título)
   const linhasUteis = linhas.slice(pular_linhas);
   const linhaHeader = linhasUteis[0];
-
-  // Detecta separador se não foi forçado
   const separador = separadorForcado || _detectarSeparador(linhaHeader);
-
-  // Strip de aspas e prefixo '=' (truque Excel pra forçar texto).
-  // Trata casos: '"PEDIDO"' → 'PEDIDO', '=11059323' → '11059323',
-  // '=\"11059323\"' → '11059323'
-  const cabecalho = linhaHeader.split(separador).map(c => _limparCelulaCSV(c));
+  const cabecalho = _splitCSVCelulas(linhaHeader, separador).map(c => _limparCelulaCSV(c));
   const linhasDados = linhasUteis.slice(1);
 
   return linhasDados
     .map(linha => {
-      // Linha vazia ou só com separadores: ignora
       if (!linha.trim()) return null;
-      const valores = linha.split(separador);
+      const valores = _splitCSVCelulas(linha, separador);
       const obj = {};
       cabecalho.forEach((coluna, i) => {
         const raw = valores[i] !== undefined ? valores[i] : '';
@@ -422,6 +420,65 @@ export function parseCSV(conteudo, opts = {}) {
       return obj;
     })
     .filter(Boolean);
+}
+
+/**
+ * Quebra texto CSV em linhas RESPEITANDO aspas duplas.
+ * Quebras de linha dentro de aspas NAO quebram o registro.
+ */
+function _splitCSVLinhas(texto) {
+  const linhas = [];
+  let linhaAtual = '';
+  let dentroAspas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    if (c === '"') {
+      // Aspas escapada ("") fica como parte do conteudo
+      if (dentroAspas && texto[i + 1] === '"') {
+        linhaAtual += '""';
+        i++;
+        continue;
+      }
+      dentroAspas = !dentroAspas;
+      linhaAtual += c;
+    } else if (c === '\n' && !dentroAspas) {
+      linhas.push(linhaAtual);
+      linhaAtual = '';
+    } else {
+      linhaAtual += c;
+    }
+  }
+  if (linhaAtual.length > 0) linhas.push(linhaAtual);
+  return linhas;
+}
+
+/**
+ * Quebra uma linha CSV em celulas RESPEITANDO aspas duplas.
+ * Separadores dentro de aspas NAO quebram a celula.
+ */
+function _splitCSVCelulas(linha, separador) {
+  const celulas = [];
+  let celulaAtual = '';
+  let dentroAspas = false;
+  for (let i = 0; i < linha.length; i++) {
+    const c = linha[i];
+    if (c === '"') {
+      if (dentroAspas && linha[i + 1] === '"') {
+        celulaAtual += '""';
+        i++;
+        continue;
+      }
+      dentroAspas = !dentroAspas;
+      celulaAtual += c;
+    } else if (c === separador && !dentroAspas) {
+      celulas.push(celulaAtual);
+      celulaAtual = '';
+    } else {
+      celulaAtual += c;
+    }
+  }
+  celulas.push(celulaAtual);
+  return celulas;
 }
 
 /**
