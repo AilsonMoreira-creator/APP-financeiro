@@ -71,17 +71,19 @@ BEGIN
   v_ticket := CASE WHEN v_qtd_compras > 0 THEN v_lifetime / v_qtd_compras ELSE 0 END;
   v_dias_sem := CASE WHEN v_ultima IS NULL THEN NULL ELSE (CURRENT_DATE - v_ultima)::int END;
 
-  -- ⚡ NOVO: fallback pro canal_cadastro quando nao tem vendas granulares
+  -- Canal dominante — LOGICA EM CAMADAS (Opcao A, Ailson 28/04/2026):
+  --   1. canal_cadastro=vesti SEMPRE prioriza 'vesti_dominante' mesmo com
+  --      compras Mire mistas. Razao: cliente Vesti tende a continuar Vesti;
+  --      melhor IA mencionar Vesti com falso-positivo do que esquecer.
+  --   2. Mesma logica pra convertr.
+  --   3. Sem vendas em lojas_vendas → assume fisico (default).
+  --   4. Tem vendas → calcula 70%+ normalmente.
   v_canal_dominante := CASE 
-    WHEN v_qtd_compras = 0 THEN (
-      SELECT CASE canal_cadastro
-        WHEN 'vesti' THEN 'vesti_dominante'
-        WHEN 'convertr' THEN 'convertr_dominante'
-        WHEN 'fisico' THEN 'fisico_dominante'
-        ELSE NULL
-      END
-      FROM lojas_clientes WHERE id = p_cliente_id
-    )
+    WHEN EXISTS (SELECT 1 FROM lojas_clientes WHERE id = p_cliente_id AND canal_cadastro = 'vesti')
+      THEN 'vesti_dominante'
+    WHEN EXISTS (SELECT 1 FROM lojas_clientes WHERE id = p_cliente_id AND canal_cadastro = 'convertr')
+      THEN 'convertr_dominante'
+    WHEN v_qtd_compras = 0 THEN 'fisico_dominante'
     WHEN v_qtd_fisicas::float / v_qtd_compras >= 0.7 THEN 'fisico_dominante'
     WHEN v_qtd_vesti::float / v_qtd_compras >= 0.7 THEN 'vesti_dominante'
     WHEN v_qtd_convertr::float / v_qtd_compras >= 0.7 THEN 'convertr_dominante'

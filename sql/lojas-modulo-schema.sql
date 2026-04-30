@@ -986,21 +986,23 @@ BEGIN
                      ELSE (CURRENT_DATE - v_ultima)::int END;
   
   -- Canal dominante (70%+)
-  -- Se cliente nao tem vendas registradas em lojas_vendas (carga inicial Futura
-  -- so trouxe agregados em lojas_clientes_kpis), usa o canal_cadastro do
-  -- proprio cliente como fallback. Decisao Ailson 28/04/2026: coluna GRUPO=VESTI
-  -- do CSV vendas_clientes_br marca clientes Vesti antigos cuja origem nao chegou
-  -- no historico granular.
+  -- LOGICA EM CAMADAS (decisao Ailson 28/04/2026):
+  --   1. Cliente vesti antigo (canal_cadastro=vesti) — vesti_dominante mesmo
+  --      que tenha compras Mire mistas. Razao: cliente Vesti tende a continuar
+  --      usando Vesti; melhor IA mencionar perfil Vesti com 1 falso-positivo
+  --      do que esquecer de cliente Vesti real.
+  --   2. Cliente convertr antigo — mesma logica
+  --   3. Cliente sem vendas em lojas_vendas — usa canal_cadastro como fallback
+  --   4. Cliente normal — calcula 70%+ pelas vendas em lojas_vendas
   v_canal_dominante := CASE 
-    WHEN v_qtd_compras = 0 THEN (
-      SELECT CASE canal_cadastro
-        WHEN 'vesti' THEN 'vesti_dominante'
-        WHEN 'convertr' THEN 'convertr_dominante'
-        WHEN 'fisico' THEN 'fisico_dominante'
-        ELSE NULL
-      END
-      FROM lojas_clientes WHERE id = p_cliente_id
-    )
+    -- Camada 1: cliente Vesti antigo prevalece (mesmo se tem vendas Mire)
+    WHEN EXISTS (SELECT 1 FROM lojas_clientes WHERE id = p_cliente_id AND canal_cadastro = 'vesti')
+      THEN 'vesti_dominante'
+    WHEN EXISTS (SELECT 1 FROM lojas_clientes WHERE id = p_cliente_id AND canal_cadastro = 'convertr')
+      THEN 'convertr_dominante'
+    -- Camada 2: cliente sem vendas em lojas_vendas usa canal_cadastro
+    WHEN v_qtd_compras = 0 THEN 'fisico_dominante'
+    -- Camada 3: regra normal de 70%+ pelas vendas
     WHEN v_qtd_fisicas::float / v_qtd_compras >= 0.7 THEN 'fisico_dominante'
     WHEN v_qtd_vesti::float / v_qtd_compras >= 0.7 THEN 'vesti_dominante'
     WHEN v_qtd_convertr::float / v_qtd_compras >= 0.7 THEN 'convertr_dominante'
