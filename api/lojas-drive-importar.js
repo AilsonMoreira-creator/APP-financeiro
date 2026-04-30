@@ -406,15 +406,14 @@ async function backfillTelefoneClientes(registrosVendas) {
     return { backfill_clientes: 0 };
   }
 
-  // Busca quais desses clientes ainda NÃO têm telefone_principal
+  // Busca quais desses clientes ainda NÃO têm telefone_principal (particionado)
   const ids = Array.from(whatsappPorCliente.keys());
-  const { data: clientesSemTel } = await supabase
-    .from('lojas_clientes')
-    .select('id, telefone_principal')
-    .in('id', ids)
-    .or('telefone_principal.is.null,telefone_principal.eq.');
+  const clientesSemTel = await selectInBatches('lojas_clientes', 'id', ids, {
+    select: 'id, telefone_principal',
+    extraFilters: q => q.or('telefone_principal.is.null,telefone_principal.eq.'),
+  });
 
-  const idsParaAtualizar = (clientesSemTel || []).map(c => c.id);
+  const idsParaAtualizar = clientesSemTel.map(c => c.id);
   if (idsParaAtualizar.length === 0) {
     return { backfill_clientes: 0 };
   }
@@ -469,6 +468,39 @@ async function backfillTelefoneClientes(registrosVendas) {
 // Idempotente: roda toda vez que histórico é importado.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// HELPER: SELECT IN(...) PARTICIONADO
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// PostgREST retorna Bad Request quando o IN tem muitos itens (URL > 2KB,
+// roughly 500-1000 ids). Erro silencioso quando o caller nao trata error
+// corretamente. Este helper particiona em lotes de 200 e agrega resultados.
+//
+// Uso:
+//   const rows = await selectInBatches('lojas_clientes', 'id', ids, { select: 'id, documento' });
+//   const rows = await selectInBatches('lojas_clientes', 'documento', docs, {
+//     select: 'id, documento, vendedora_id',
+//     extraFilters: q => q.is('vendedora_id', null)
+//   });
+
+async function selectInBatches(tabela, coluna, valores, opts = {}) {
+  const { select = '*', extraFilters = null, tamanhoLote = 200 } = opts;
+  if (!valores?.length) return [];
+  const todos = [];
+  for (let i = 0; i < valores.length; i += tamanhoLote) {
+    const lote = valores.slice(i, i + tamanhoLote);
+    let q = supabase.from(tabela).select(select).in(coluna, lote);
+    if (extraFilters) q = extraFilters(q);
+    const { data, error } = await q;
+    if (error) {
+      console.error(`[selectInBatches] ${tabela}.${coluna} lote ${i}:`, error.message);
+      continue;
+    }
+    todos.push(...(data || []));
+  }
+  return todos;
+}
+
 async function backfillVendedoraClientes(registrosVendas) {
   // Conta vendedora_id por cliente_id (só vendas que tem cliente_id resolvido
   // E vendedora_id resolvida pelo parser)
@@ -496,37 +528,21 @@ async function backfillVendedoraClientes(registrosVendas) {
     if (melhorVendedora) dominantePorCliente.set(clienteId, melhorVendedora);
   }
 
-  // Busca quais desses clientes AINDA não têm vendedora atribuida
-  // Particiona em lotes de 200 — PostgREST recusa Bad Request com IN > 1000 ids
-  // (descoberta Ailson 30/04/2026: backfill silenciosamente falhava com 1157
-  // clientes, retornando Bad Request, mas a chamada nao tinha try/catch
-  // explicito e error nao era tratado — entao 0 clientes eram atualizados sem
-  // ninguem perceber).
+  // Busca quais desses clientes AINDA não têm vendedora atribuida (particionado)
   const ids = Array.from(dominantePorCliente.keys());
-  const semVendedoraTodos = [];
-  for (let i = 0; i < ids.length; i += 200) {
-    const lote = ids.slice(i, i + 200);
-    const { data, error } = await supabase
-      .from('lojas_clientes')
-      .select('id, loja_origem')
-      .in('id', lote)
-      .is('vendedora_id', null);
-    if (error) {
-      console.error(`[backfill_vendedora] Erro lote ${i}:`, error.message);
-      continue;
-    }
-    semVendedoraTodos.push(...(data || []));
-  }
+  const semVendedoraTodos = await selectInBatches('lojas_clientes', 'id', ids, {
+    select: 'id, loja_origem',
+    extraFilters: q => q.is('vendedora_id', null),
+  });
   const idsParaAtualizar = semVendedoraTodos.map(c => c.id);
   if (idsParaAtualizar.length === 0) return { backfill_vendedora: 0 };
 
   // Busca a loja de cada vendedora dominante (pra setar loja_origem também)
   const vendedoraIds = [...new Set(idsParaAtualizar.map(id => dominantePorCliente.get(id)))];
-  const { data: vends } = await supabase
-    .from('lojas_vendedoras')
-    .select('id, loja')
-    .in('id', vendedoraIds);
-  const vendIdToLoja = new Map((vends || []).map(v => [v.id, v.loja]));
+  const vends = await selectInBatches('lojas_vendedoras', 'id', vendedoraIds, {
+    select: 'id, loja',
+  });
+  const vendIdToLoja = new Map(vends.map(v => [v.id, v.loja]));
 
   // Atualiza em lote (uma por uma porque cada cliente pode ter vendedora diferente)
   let atualizados = 0;
@@ -583,11 +599,10 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
     // remove os campos sensiveis (vendedora_id, loja_origem, etc) do payload
     // para nao sobrescrever. Inserts novos vao com tudo.
     const documentos = dedupados.map(r => r.documento);
-    const { data: existentes } = await supabase
-      .from('lojas_clientes')
-      .select('documento, vendedora_id, loja_origem, sistema_origem, fonte_atribuicao, vendedor_a_definir, data_atribuicao, canal_cadastro, telefone_principal, telefone_principal_origem, apelido, comprador_nome')
-      .in('documento', documentos);
-    const existeMap = new Map((existentes || []).map(c => [c.documento, c]));
+    const existentes = await selectInBatches('lojas_clientes', 'documento', documentos, {
+      select: 'documento, vendedora_id, loja_origem, sistema_origem, fonte_atribuicao, vendedor_a_definir, data_atribuicao, canal_cadastro, telefone_principal, telefone_principal_origem, apelido, comprador_nome',
+    });
+    const existeMap = new Map(existentes.map(c => [c.documento, c]));
 
     const protegidos = dedupados.map(r => {
       const ja = existeMap.get(r.documento);
@@ -640,14 +655,12 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
     const clientesDedupados = Array.from(dedupClientes.values());
     const upsertClientes = await upsertEmLotes('lojas_clientes', clientesDedupados, 'documento');
 
-    // Buscar IDs por documento (em lote pra não fazer N queries)
+    // Buscar IDs por documento (em lote pra não fazer N queries) — particionado
     const documentos = enriquecidos.map(r => r.documento);
-    const { data: clientes } = await supabase
-      .from('lojas_clientes')
-      .select('id, documento')
-      .in('documento', documentos);
-
-    const docToId = new Map((clientes || []).map(c => [c.documento, c.id]));
+    const clientes = await selectInBatches('lojas_clientes', 'documento', documentos, {
+      select: 'id, documento',
+    });
+    const docToId = new Map(clientes.map(c => [c.documento, c.id]));
 
     // KPIs também precisam dedup por documento (mesma razão)
     const dedupKpis = new Map();
@@ -687,14 +700,15 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
       r.data_venda && r.data_venda >= HISTORICO_DATA_CORTE
     );
 
-    // Resolve cliente_id por documento (busca em lote)
+    // Resolve cliente_id por documento (busca em lote, particionado pra evitar
+    // Bad Request do PostgREST com IN > 1000 itens — bug descoberto Ailson
+    // 30/04/2026 que silenciosamente quebrava o backfill de vendedora).
     const documentos = [...new Set(filtrados.map(r => r.documento_cliente_raw).filter(Boolean))];
     if (documentos.length) {
-      const { data: clientes } = await supabase
-        .from('lojas_clientes')
-        .select('id, documento')
-        .in('documento', documentos);
-      const docToId = new Map((clientes || []).map(c => [c.documento, c.id]));
+      const clientes = await selectInBatches('lojas_clientes', 'documento', documentos, {
+        select: 'id, documento',
+      });
+      const docToId = new Map(clientes.map(c => [c.documento, c.id]));
 
       filtrados.forEach(r => {
         r.cliente_id = docToId.get(r.documento_cliente_raw) || null;
@@ -735,11 +749,10 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
     // Resolve cliente_id por documento (busca em lote)
     const documentos = [...new Set(enriquecidos.map(r => r.documento_raw).filter(Boolean))];
     if (documentos.length) {
-      const { data: clientes } = await supabase
-        .from('lojas_clientes')
-        .select('id, documento')
-        .in('documento', documentos);
-      const docToId = new Map((clientes || []).map(c => [c.documento, c.id]));
+      const clientes = await selectInBatches('lojas_clientes', 'documento', documentos, {
+        select: 'id, documento',
+      });
+      const docToId = new Map(clientes.map(c => [c.documento, c.id]));
 
       enriquecidos.forEach(r => {
         r.cliente_id = docToId.get(r.documento_raw) || null;
@@ -778,24 +791,21 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
     let pedidoToVendedoraId = new Map();
 
     if (documentos.length) {
-      const { data: clientes } = await supabase
-        .from('lojas_clientes')
-        .select('id, documento')
-        .in('documento', documentos);
-      docToClienteId = new Map((clientes || []).map(c => [c.documento, c.id]));
+      const clientes = await selectInBatches('lojas_clientes', 'documento', documentos, {
+        select: 'id, documento',
+      });
+      docToClienteId = new Map(clientes.map(c => [c.documento, c.id]));
     }
 
     if (pedidos.length) {
       // Busca pedidos da MESMA loja pra evitar conflito de numero_pedido
-      // (numero_pedido + loja é único)
       const loja = enriquecidos[0]?.loja;
-      const { data: vendas } = await supabase
-        .from('lojas_vendas')
-        .select('id, numero_pedido, vendedora_id')
-        .eq('loja', loja)
-        .in('numero_pedido', pedidos);
-      pedidoToVendaId = new Map((vendas || []).map(v => [v.numero_pedido, v.id]));
-      pedidoToVendedoraId = new Map((vendas || []).map(v => [v.numero_pedido, v.vendedora_id]));
+      const vendas = await selectInBatches('lojas_vendas', 'numero_pedido', pedidos, {
+        select: 'id, numero_pedido, vendedora_id',
+        extraFilters: q => q.eq('loja', loja),
+      });
+      pedidoToVendaId = new Map(vendas.map(v => [v.numero_pedido, v.id]));
+      pedidoToVendedoraId = new Map(vendas.map(v => [v.numero_pedido, v.vendedora_id]));
     }
 
     enriquecidos.forEach(r => {
