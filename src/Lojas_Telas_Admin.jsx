@@ -43,7 +43,7 @@ import {
   ArrowLeftRight, TrendingUp, BarChart3, UserCog, Heart,
   Save, Trash2, Edit3, Clock, CheckCircle2, AlertCircle, Check, X,
   Upload, Download, FileSpreadsheet, History, UsersRound, Link2, Crown,
-  Loader2, Flame, Megaphone, Bell,
+  Loader2, Flame, Megaphone, Bell, Palette,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
