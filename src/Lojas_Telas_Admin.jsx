@@ -3630,56 +3630,61 @@ const CoresPainel = ({ lojas }) => {
     }
   };
 
-  // Set de cor_keys que admin desmarcou (cores ignoradas).
-  // Por padrao, TODAS as cores Top Bling com elegivel_gate1=true estao
-  // ativas — clicar marca como ignorada (vira semi-transparente). Clica
-  // de novo, reativa.
-  const ignoradasSet = new Set((state.coresIgnoradas || []).map(c => c.cor_key));
+  // Set de cor_keys ATIVAS (opt-in). Cor do Top Bling NAO entra pra IA por
+  // padrao — admin precisa clicar pra ativar (vira entrada manual com
+  // motivo='top_bling_selecionada'). Clica de novo, remove.
+  const ativasSet = new Set((state.coresManuais || []).map(c => c.cor_key));
 
-  // Toggle: se cor está ignorada, reativa; se não, ignora.
+  // Toggle: se cor está ativa, remove; se não, adiciona como manual.
   const toggleCor = async (corObj) => {
     if (!corObj) return;
     const rawKey = corObj.cor_key || corObj.cor || '';
     const cor_key = String(rawKey).toLowerCase().trim();
     const cor_bonita = corObj.cor || corObj.cor_key || '';
     if (!cor_key) return;
-    const jaIgnorada = ignoradasSet.has(cor_key);
+
+    const jaAtiva = ativasSet.has(cor_key);
     try {
-      await handleToggleCorIgnorada(cor_key, cor_bonita, jaIgnorada);
+      if (jaAtiva) {
+        // Remove: acha o id na lista manual e deleta
+        const item = (state.coresManuais || []).find(c => c.cor_key === cor_key);
+        if (item) await handleRemoverCorManual(item.id);
+      } else {
+        // Adiciona: marker 'top_bling_selecionada' pra distinguir das
+        // cores manuais "livres" (digitadas pelo usuário com motivo proprio)
+        await handleAdicionarCorManual({ cor: cor_bonita, motivo: 'top_bling_selecionada' });
+      }
     } catch (e) {
       alert('Erro: ' + (e.message || e));
     }
   };
 
   // Renderiza chip de cor estilo OrdemDeCorte (bolinha + nome) — clicável.
-  // Por padrão, ativa (cores Top Bling todas entram pra IA). Clicado:
-  // semi-transparente / riscado pra mostrar que está IGNORADA.
+  // Default: desmarcada (chip neutro). Clicado: ativa (destacada com check).
   const renderChipCor = (cor, idx, fonte) => {
     if (!cor) return null;
     const rawKey = cor.cor_key || cor.cor || '';
     const cor_key = String(rawKey).toLowerCase().trim();
     const nomeBonito = cor.cor || cor.cor_key || '?';
     if (!cor_key) return null;
-    const ignorada = ignoradasSet.has(cor_key);
+    const ativa = ativasSet.has(cor_key);
     const hex = hexDaCor(nomeBonito);
-    const ehManual = fonte === 'manual';
+    const ehManualLivre = fonte === 'manual';
 
     return (
       <button
         key={cor_key}
         type="button"
         onClick={() => toggleCor(cor)}
-        title={ignorada ? 'Clique pra reativar (IA volta a usar)' : 'Clique pra desativar (IA não usa mais)'}
+        title={ativa ? 'Clique pra desativar (IA não usa mais)' : 'Clique pra ativar (IA pode usar)'}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '6px 11px', borderRadius: 18,
-          background: ignorada ? palette.beigeSoft : palette.purpleSoft,
-          border: `${ignorada ? 1 : 2}px solid ${ignorada ? palette.beige : palette.purple}`,
+          background: ativa ? palette.purpleSoft : palette.surface,
+          border: `${ativa ? 2 : 1}px solid ${ativa ? palette.purple : palette.beige}`,
           cursor: 'pointer', fontFamily: FONT, fontSize: fz(13),
-          color: ignorada ? palette.inkMuted : palette.ink,
-          fontWeight: ignorada ? 400 : 600,
-          textDecoration: ignorada ? 'line-through' : 'none',
-          opacity: ignorada ? 0.55 : 1,
+          color: palette.ink,
+          fontWeight: ativa ? 600 : 400,
           transition: 'all 0.15s ease',
         }}
       >
@@ -3687,7 +3692,6 @@ const CoresPainel = ({ lojas }) => {
           width: 12, height: 12, borderRadius: '50%',
           background: hex, flexShrink: 0,
           border: `1px solid ${palette.beige}`,
-          opacity: ignorada ? 0.5 : 1,
         }} />
         {nomeBonito}
         {idx != null && (
@@ -3695,8 +3699,8 @@ const CoresPainel = ({ lojas }) => {
             #{idx}
           </span>
         )}
-        {!ignorada && fonte === 'auto' && <Check size={sz(13)} color={palette.purple} />}
-        {ehManual && (
+        {ativa && <Check size={sz(13)} color={palette.purple} />}
+        {ehManualLivre && (
           <Trash2
             size={sz(11)}
             color={palette.inkMuted}
@@ -3713,6 +3717,7 @@ const CoresPainel = ({ lojas }) => {
     );
   };
 
+
   return (
     <div style={{ marginTop: 16 }}>
       {/* Box info topo */}
@@ -3724,7 +3729,7 @@ const CoresPainel = ({ lojas }) => {
         Clique nas cores que a IA pode usar nas mensagens (mesmo sem REF específica).
         Ex: "Chegaram vários modelos de Marrom, tá saindo muito!"
         <br />
-        <strong>Top Bling</strong> atualiza dinamicamente. <strong>Manual</strong> é a sua adição livre.
+        <strong>Top Bling</strong> traz cores em alta automaticamente — clique pra ativar as que quiser. <strong>Manual</strong> é sua adição livre.
       </div>
 
       {/* Form adicionar cor manual livre */}

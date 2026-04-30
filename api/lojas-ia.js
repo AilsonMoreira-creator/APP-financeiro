@@ -654,54 +654,30 @@ async function montarContextoSugestoes(vendedoraId) {
     || a.vendedoras_ids.includes(vendedoraId)
   );
 
-  // ─── CORES EM ALTA (Ailson 30/04/2026) ────────────────────────────────
-  // Mescla:
-  //   1. Top cores do Bling (vw_ranking_cores_catalogo, dinamico, sem janela)
-  //   2. Cores adicionadas manualmente em lojas_cores_curadoria_manual
-  //   3. SUBTRAI cores em lojas_cores_ignoradas (admin desmarcou)
-  // IA pode mencionar essas cores nas mensagens mesmo sem REF especifica
-  // (ex: "chegaram varios modelos de Marrom, ta super em alta").
-
-  // Set de cores que admin desmarcou (nao devem chegar pra IA)
-  let coresIgnoradasSet = new Set();
-  try {
-    const { data: ignoradas } = await supabase
-      .from('lojas_cores_ignoradas')
-      .select('cor_key');
-    coresIgnoradasSet = new Set((ignoradas || []).map(r => r.cor_key));
-  } catch (e) {
-    console.warn('[lojas-ia] lojas_cores_ignoradas indisponivel:', e?.message);
-  }
-
+  // ─── CORES EM ALTA (Ailson 30/04/2026, semantica opt-in) ──────────────
+  // IA usa APENAS cores em lojas_cores_curadoria_manual. Top Bling
+  // (vw_ranking_cores_catalogo) é so visualizacao na admin — admin precisa
+  // clicar pra ativar uma cor (que entra na tabela manual com
+  // motivo='top_bling_selecionada').
+  // Cores adicionadas livremente pela admin (sem motivo especial) tambem
+  // entram. Sem nada selecionado, IA nao menciona cores (so se pedido
+  // explicitamente em ações).
   const coresEmAlta = [];
-  try {
-    const { data: coresAuto } = await supabase
-      .from('vw_ranking_cores_catalogo')
-      .select('cor, cor_key, rank_global')
-      .eq('elegivel_gate1', true)
-      .order('rank_global', { ascending: true })
-      .limit(15);
-    for (const c of coresAuto || []) {
-      if (coresIgnoradasSet.has(c.cor_key)) continue; // admin desmarcou
-      coresEmAlta.push({ cor: c.cor, cor_key: c.cor_key, fonte: 'bling_auto', rank: c.rank_global });
-    }
-  } catch (e) {
-    console.warn('[lojas-ia] vw_ranking_cores_catalogo indisponivel:', e?.message);
-  }
-
   try {
     const { data: coresManuais } = await supabase
       .from('lojas_cores_curadoria_manual')
       .select('cor, cor_key, motivo')
       .eq('ativa', true);
-    const keysJaPresentes = new Set(coresEmAlta.map(c => c.cor_key));
     for (const c of coresManuais || []) {
-      if (!keysJaPresentes.has(c.cor_key)) {
-        coresEmAlta.push({ cor: c.cor, cor_key: c.cor_key, fonte: 'manual', motivo: c.motivo });
-      }
+      coresEmAlta.push({
+        cor: c.cor,
+        cor_key: c.cor_key,
+        fonte: c.motivo === 'top_bling_selecionada' ? 'bling_auto' : 'manual',
+        motivo: c.motivo,
+      });
     }
   } catch (e) {
-    console.warn('[lojas-ia] lojas_cores_curadoria_manual indisponivel (tabela ainda nao criada?):', e?.message);
+    console.warn('[lojas-ia] lojas_cores_curadoria_manual indisponivel:', e?.message);
   }
 
   // Regras customizadas (do RegrasScreen)
