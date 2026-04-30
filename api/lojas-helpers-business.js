@@ -283,10 +283,21 @@ export function resolverVendedora(nomeRaw, lojaArquivo, vendedorasCadastradas) {
   if (!nome || nome === 'CONVERTR') {
     return padraoLoja();
   }
+  // 1. Match exato na loja certa
   const match = vendedorasCadastradas.find(
     v => v.ativa && v.loja === loja && (v.aliases || []).includes(nome)
   );
   if (match) return match;
+
+  // 2. CROSS-LOJA (decisão Ailson 30/04/2026): se nome bate com vendedora
+  // ATIVA em OUTRA loja, atribui pra ela em vez de cair no padraoLoja errado.
+  // Ex: VANESSA aparecendo no histórico ST = Vanessa BR fez cobertura.
+  // Cliente fica com Vanessa BR, não com a Cleide ST por engano.
+  const matchOutraLoja = vendedorasCadastradas.find(
+    v => v.ativa && v.loja !== loja && (v.aliases || []).includes(nome)
+  );
+  if (matchOutraLoja) return matchOutraLoja;
+
   return padraoLoja();
 }
 
