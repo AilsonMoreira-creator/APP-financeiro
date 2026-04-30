@@ -502,32 +502,69 @@ async function selectInBatches(tabela, coluna, valores, opts = {}) {
 }
 
 async function backfillVendedoraClientes(registrosVendas) {
-  // Conta vendedora_id por cliente_id (só vendas que tem cliente_id resolvido
-  // E vendedora_id resolvida pelo parser)
-  // REGRA (decisão Ailson 30/04/2026): vendedora da ÚLTIMA venda (mais recente)
-  // vence, NÃO a dominante. Razão: ex-vendedoras (REGILANIA, KELLY) foram
-  // absorvidas pela Joelma. Se cliente comprou 5x com REGILANIA e depois 1x
-  // com CARINA (Cleide atual), a CARINA herda. Dominante daria pra Joelma
-  // por causa do histórico antigo, errado pra atribuição atual.
+  // REGRA (decisão Ailson 30/04/2026 — versão final):
   //
-  // Como pegamos a última: mantemos só a vendedora_id da venda com data_venda
-  // MAIS ALTA por cliente. registrosVendas pode chegar em qualquer ordem,
-  // então ordenamos.
+  // 1. PASSO 1: Pra cada cliente, pega a vendedora da ULTIMA venda
+  // 2. PASSO 2: Mas se em ALGUM momento ele comprou com vendedora que
+  //    absorveu ex-vendedoras (KELLY/REGILANIA → Joelma), essa absorvente
+  //    GANHA prioridade — independente de quem fez a última venda.
+  //
+  // Razão: cliente que comprou com KELLY uma vez "pertence" pra Joelma
+  // pra sempre. Se depois comprou com Cleide, foi atendimento ocasional —
+  // a Joelma continua dona da carteira.
+  //
+  // Como detectar "vendedora absorvente"? Olhamos a tabela
+  // lojas_vendedoras_absorventes (ou hardcoded por enquanto): vendedoras
+  // que tem aliases ALÉM do próprio nome, indicando que herdaram clientes
+  // de ex-funcionárias.
+  //
+  // Implementação: PRIMEIRO procura se cliente tem alguma venda com
+  // vendedora absorvente. Se sim, atribui pra ela. Se não, vai pra última.
+
+  // Carrega lista de vendedoras absorventes (tem >1 alias e nome bate com 1 deles)
+  const { data: vendedorasInfo } = await supabase
+    .from('lojas_vendedoras')
+    .select('id, nome, aliases')
+    .eq('ativa', true);
+  const absorventes = new Set();
+  for (const v of (vendedorasInfo || [])) {
+    const aliases = v.aliases || [];
+    if (aliases.length > 1) absorventes.add(v.id);
+  }
+
+  // Agrega: pra cada cliente, vendedoras com quem ele comprou + última venda
   const ultimaPorCliente = new Map();  // cliente_id → { vendedora_id, data }
+  const absorventesPorCliente = new Map();  // cliente_id → Set(vendedora_id)
   for (const v of registrosVendas) {
     if (!v.cliente_id || !v.vendedora_id || !v.data_venda) continue;
+
+    // Última venda
     const atual = ultimaPorCliente.get(v.cliente_id);
     if (!atual || v.data_venda > atual.data) {
       ultimaPorCliente.set(v.cliente_id, { vendedora_id: v.vendedora_id, data: v.data_venda });
+    }
+
+    // Se vendedora desta venda é absorvente, registra
+    if (absorventes.has(v.vendedora_id)) {
+      if (!absorventesPorCliente.has(v.cliente_id)) absorventesPorCliente.set(v.cliente_id, new Set());
+      absorventesPorCliente.get(v.cliente_id).add(v.vendedora_id);
     }
   }
 
   if (ultimaPorCliente.size === 0) return { backfill_vendedora: 0 };
 
-  // Map cliente_id → vendedora_id da última venda
+  // Decide vendedora final por cliente (absorvente vence sobre última)
   const dominantePorCliente = new Map();
   for (const [cid, info] of ultimaPorCliente) {
-    dominantePorCliente.set(cid, info.vendedora_id);
+    const absSet = absorventesPorCliente.get(cid);
+    if (absSet && absSet.size > 0) {
+      // Cliente comprou com absorvente alguma vez → fica com a primeira absorvente
+      // (em geral só tem 1 absorvente por loja)
+      dominantePorCliente.set(cid, [...absSet][0]);
+    } else {
+      // Sem absorvente envolvida → usa última venda
+      dominantePorCliente.set(cid, info.vendedora_id);
+    }
   }
 
   // Busca quais desses clientes AINDA não têm vendedora atribuida (particionado)
