@@ -658,8 +658,21 @@ async function montarContextoSugestoes(vendedoraId) {
   // Mescla:
   //   1. Top cores do Bling (vw_ranking_cores_catalogo, dinamico, sem janela)
   //   2. Cores adicionadas manualmente em lojas_cores_curadoria_manual
+  //   3. SUBTRAI cores em lojas_cores_ignoradas (admin desmarcou)
   // IA pode mencionar essas cores nas mensagens mesmo sem REF especifica
   // (ex: "chegaram varios modelos de Marrom, ta super em alta").
+
+  // Set de cores que admin desmarcou (nao devem chegar pra IA)
+  let coresIgnoradasSet = new Set();
+  try {
+    const { data: ignoradas } = await supabase
+      .from('lojas_cores_ignoradas')
+      .select('cor_key');
+    coresIgnoradasSet = new Set((ignoradas || []).map(r => r.cor_key));
+  } catch (e) {
+    console.warn('[lojas-ia] lojas_cores_ignoradas indisponivel:', e?.message);
+  }
+
   const coresEmAlta = [];
   try {
     const { data: coresAuto } = await supabase
@@ -667,8 +680,9 @@ async function montarContextoSugestoes(vendedoraId) {
       .select('cor, cor_key, rank_global')
       .eq('elegivel_gate1', true)
       .order('rank_global', { ascending: true })
-      .limit(15);  // top 15 do Bling
+      .limit(15);
     for (const c of coresAuto || []) {
+      if (coresIgnoradasSet.has(c.cor_key)) continue; // admin desmarcou
       coresEmAlta.push({ cor: c.cor, cor_key: c.cor_key, fonte: 'bling_auto', rank: c.rank_global });
     }
   } catch (e) {

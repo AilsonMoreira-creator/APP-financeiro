@@ -351,6 +351,25 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
 
 // ─── DashboardTab ──────────────────────────────────────────────────────────
 
+// Slice usado no strip horizontal "Carteira ativa total" — número grande
+// + cor + label, sem caixa propria (parte de uma linha)
+const KpiSlice = ({ cor, valor, label }) => (
+  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+    <span style={{
+      width: 8, height: 8, borderRadius: '50%', background: cor,
+      display: 'inline-block', alignSelf: 'center',
+    }} />
+    <div>
+      <div style={{ fontSize: fz(20), fontWeight: 600, color: palette.ink, lineHeight: 1 }}>
+        {valor}
+      </div>
+      <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2 }}>
+        {label}
+      </div>
+    </div>
+  </div>
+);
+
 const DashboardTab = ({ lojas, onAbrirHistorico }) => {
   const { state, clientesEnriquecidos } = lojas;
 
@@ -399,26 +418,41 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
   return (
     <div style={{ padding: 16 }}>
       <SectionTitle>Indicadores gerais</SectionTitle>
-      <div style={{ marginBottom: 10 }}>
-        <Indicator
-          label="Carteira ativa total" value={stats.total}
-          sub={`🟢 ${stats.ativos} ativos · 🟡 ${stats.atencao} atenção`}
-          icon={Users} cor={palette.accent} expandable onClick={onAbrirHistorico}
-        />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-        <Indicator label="Sugestões hoje" value={`${stats.executadas} / ${stats.sugestoes}`}
-          sub={stats.sugestoes ? `${Math.round((stats.executadas / stats.sugestoes) * 100)}% executadas` : 'sem sugestões'}
-          icon={Bot} cor={palette.accent} />
-        <Indicator label="Sacolas em espera" value={stats.sacola} sub="aguardando finalização"
-          icon={ShoppingBag} cor={palette.purple} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }}>
-        <Indicator label="Em atenção" value={stats.atencao} sub="🟡 45-90 dias"
-          icon={AlertTriangle} cor={palette.warn} />
-        <Indicator label="Sem atividade" value={stats.semAt} sub="🟠 90+ dias"
-          icon={Clock} cor="#e67e22" />
-      </div>
+
+      {/* Strip horizontal — todos os KPIs juntos */}
+      <button onClick={onAbrirHistorico} style={{
+        width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
+        borderRadius: 12, padding: '14px 18px', marginBottom: 12,
+        cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <Users size={sz(15)} color={palette.accent} />
+          <span style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, flex: 1 }}>
+            Carteira ativa total
+          </span>
+          <span style={{ fontSize: fz(11), color: palette.accent, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 2 }}>
+            histórico <ChevronRight size={sz(13)} />
+          </span>
+        </div>
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 18,
+          rowGap: 10,
+        }}>
+          <div>
+            <div style={{ fontSize: fz(28), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
+              {stats.total}
+            </div>
+            <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              total
+            </div>
+          </div>
+          <KpiSlice cor={palette.ok}     valor={stats.ativos}    label="ativos" />
+          <KpiSlice cor={palette.warn}   valor={stats.atencao}   label="atenção" />
+          <KpiSlice cor="#e67e22"         valor={stats.semAt}    label="90+ dias" />
+          <KpiSlice cor={palette.purple} valor={stats.sacola}    label="sacolas" />
+          <KpiSlice cor={palette.accent} valor={`${stats.executadas}/${stats.sugestoes}`} label="sugestões hoje" />
+        </div>
+      </button>
 
       <SectionTitle icon={Star}>Vendedoras ativas</SectionTitle>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1010,7 +1044,8 @@ export const MinhaCarteiraScreen = ({
   const { state, carteiraAtual } = lojas;
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [busca, setBusca] = useState('');
-  const [ordenacao, setOrdenacao] = useState('recentes');
+  const [ordenacao, setOrdenacao] = useState('lifetime');
+  const [mostrarVesti, setMostrarVesti] = useState(false);
 
   // Itens da carteira: clientes soltos + grupos agregados
   const itensCarteira = useMemo(() => {
@@ -1133,6 +1168,18 @@ export const MinhaCarteiraScreen = ({
                 <User size={sz(15)} /> Comprador
               </button>
             )}
+            {/* Botão Meus links Vesti — abre modal pra vendedora editar */}
+            {vendedora && (
+              <button onClick={() => setMostrarVesti(true)} style={{
+                background: vendedora.vesti_link_ativo ? palette.purple : 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: 'white', padding: '6px 10px', borderRadius: 8,
+                cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4,
+              }} title="Meus links Vesti">
+                <Link2 size={sz(15)} /> Vesti{vendedora.vesti_link_ativo ? ' ✓' : ''}
+              </button>
+            )}
             {onAbrirGrupos && (
               <button onClick={onAbrirGrupos} style={{
                 background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
@@ -1185,9 +1232,9 @@ export const MinhaCarteiraScreen = ({
             flex: 1, padding: '6px 8px', borderRadius: 6, border: `1px solid ${palette.beige}`,
             fontFamily: FONT, fontSize: fz(14), color: palette.ink, background: palette.surface,
           }}>
+            <option value="lifetime">Quem já comprou mais</option>
             <option value="recentes">Compras recentes</option>
             <option value="antigos">Mais antigos</option>
-            <option value="lifetime">Quem já comprou mais</option>
             <option value="nome">Nome A-Z</option>
           </select>
         </div>
@@ -1348,6 +1395,15 @@ export const MinhaCarteiraScreen = ({
           </div>
         )}
       </div>
+
+      {/* Modal Meus links Vesti */}
+      {mostrarVesti && vendedora && (
+        <ModalVestiLinks
+          lojas={lojas}
+          vendedora={vendedora}
+          onClose={() => setMostrarVesti(false)}
+        />
+      )}
     </div>
   );
 };
@@ -2181,6 +2237,181 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ModalVestiLinks — vendedora cadastra ate 3 links Vesti dela
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Acesso: botao "🔗 Vesti" no header da MinhaCarteiraScreen.
+// Funcionamento: 3 inputs URL + radio pra marcar 1 ativo (ou nenhum).
+// IA usa o link ativo nas mensagens pra clientes Vesti.
+//
+const ModalVestiLinks = ({ lojas, vendedora, onClose }) => {
+  const { handleSalvarLinksVesti } = lojas;
+  const [link1, setLink1] = useState(vendedora.vesti_link_1 || '');
+  const [link2, setLink2] = useState(vendedora.vesti_link_2 || '');
+  const [link3, setLink3] = useState(vendedora.vesti_link_3 || '');
+  const [ativo, setAtivo] = useState(vendedora.vesti_link_ativo || null);
+  const [salvando, setSalvando] = useState(false);
+
+  const validarUrl = (s) => {
+    if (!s || !s.trim()) return true;
+    try {
+      const u = new URL(s.trim());
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const podeAtivar = (n) => {
+    if (n === 1) return link1.trim().length > 0;
+    if (n === 2) return link2.trim().length > 0;
+    if (n === 3) return link3.trim().length > 0;
+    return false;
+  };
+
+  const salvar = async () => {
+    if (!validarUrl(link1) || !validarUrl(link2) || !validarUrl(link3)) {
+      alert('Algum link parece inválido (precisa começar com http:// ou https://)');
+      return;
+    }
+    let ativoFinal = ativo;
+    if (ativoFinal && !podeAtivar(ativoFinal)) ativoFinal = null;
+
+    setSalvando(true);
+    try {
+      await handleSalvarLinksVesti(vendedora.id, {
+        link_1: link1.trim() || null,
+        link_2: link2.trim() || null,
+        link_3: link3.trim() || null,
+        link_ativo: ativoFinal,
+      });
+      onClose();
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%', padding: 10, border: `1px solid ${palette.beige}`,
+    borderRadius: 6, fontFamily: FONT, fontSize: fz(14),
+    background: palette.surface, color: palette.ink,
+  };
+
+  const renderCampo = (n, valor, setValor) => {
+    const ehAtivo = ativo === n;
+    const temConteudo = valor.trim().length > 0;
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+      }}>
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          cursor: temConteudo ? 'pointer' : 'not-allowed',
+          opacity: temConteudo ? 1 : 0.4, flexShrink: 0, minWidth: 36,
+        }}>
+          <input
+            type="radio"
+            name="vesti-ativo-modal"
+            checked={ehAtivo}
+            disabled={!temConteudo}
+            onChange={() => setAtivo(ehAtivo ? null : n)}
+          />
+          <span style={{
+            fontSize: fz(13),
+            color: ehAtivo ? palette.purple : palette.inkMuted,
+            fontWeight: ehAtivo ? 600 : 400,
+          }}>{n}</span>
+        </label>
+        <input
+          type="url"
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          placeholder={`Link Vesti ${n} (cole aqui)`}
+          style={{
+            ...inputStyle,
+            borderColor: ehAtivo ? palette.purple : palette.beige,
+            borderWidth: ehAtivo ? 2 : 1,
+          }}
+        />
+      </div>
+    );
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 200, padding: 16, fontFamily: FONT,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.surface, borderRadius: 16,
+        width: '100%', maxWidth: 500, maxHeight: '85vh', overflow: 'auto',
+      }}>
+        <div style={{
+          padding: '14px 18px', borderBottom: `1px solid ${palette.beige}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div>
+            <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Link2 size={sz(18)} color={palette.purple} /> Meus links Vesti
+            </div>
+            <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
+              {vendedora.nome} — links que você gerou na app Vesti
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: palette.inkMuted, padding: 4,
+          }}>
+            <X size={sz(22)} />
+          </button>
+        </div>
+
+        <div style={{ padding: 18 }}>
+          <div style={{
+            padding: 10, background: palette.purpleSoft, borderRadius: 6,
+            borderLeft: `3px solid ${palette.purple}`, marginBottom: 14,
+            fontSize: fz(12), color: palette.inkSoft, lineHeight: 1.5,
+          }}>
+            Cole até 3 links. Marque o radio do link que a IA deve usar nas mensagens pras suas clientes Vesti. Se nenhum marcado, IA fica livre.
+          </div>
+
+          {renderCampo(1, link1, setLink1)}
+          {renderCampo(2, link2, setLink2)}
+          {renderCampo(3, link3, setLink3)}
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <button onClick={() => setAtivo(null)} disabled={!ativo} style={{
+              background: palette.surface, color: palette.inkSoft,
+              border: `1px solid ${palette.beige}`, borderRadius: 6,
+              padding: '9px 14px', fontFamily: FONT, fontSize: fz(13),
+              cursor: ativo ? 'pointer' : 'not-allowed',
+              opacity: ativo ? 1 : 0.4,
+            }}>
+              Nenhum ativo
+            </button>
+            <button onClick={salvar} disabled={salvando} style={{
+              flex: 1, background: salvando ? palette.beige : palette.purple,
+              color: 'white', border: 'none', borderRadius: 6,
+              padding: '9px 14px', fontFamily: FONT, fontSize: fz(13), fontWeight: 600,
+              cursor: salvando ? 'wait' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}>
+              {salvando
+                ? <><Loader2 size={sz(15)} style={spinKeyframes} /> Salvando…</>
+                : <><Save size={sz(15)} /> Salvar links</>}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

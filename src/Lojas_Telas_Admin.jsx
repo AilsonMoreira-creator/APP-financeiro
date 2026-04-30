@@ -51,7 +51,7 @@ import {
 import {
   palette, FONT, statusMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon,
-  supabase, fz, sz,
+  supabase, fz, sz, FotoProdutoLojas,
 } from './Lojas_Shared.jsx';
 
 // Importa ModalMensagem da Parte 2a (usado em DetalheGrupoScreen)
@@ -1763,10 +1763,29 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
     }
   };
 
-  // Helper pra pegar dados do produto a partir do ref (pra mostrar foto/desc)
+  // Helper pra pegar dados do produto a partir do ref (pra mostrar foto/desc).
+  // Tenta primeiro state.produtosCadastro (TODOS os produtos, inclui clássicos
+  // fora da view oferecíveis), depois state.produtos como fallback.
+  // REGRA leading zero: REF pode estar gravado como "376" ou "00376". Tenta
+  // ambas as formas (sem zero E com pad até 5).
   const produtoPorRef = useCallback((ref) => {
-    return (state.produtos || []).find(p => String(p.ref) === String(ref));
-  }, [state.produtos]);
+    if (!ref) return null;
+    const refStr = String(ref).trim();
+    const refSemZero = refStr.replace(/^0+/, '') || '0';
+    const refPad4 = refSemZero.padStart(4, '0');
+    const refPad5 = refSemZero.padStart(5, '0');
+
+    const acharEm = (lista) => {
+      if (!Array.isArray(lista)) return null;
+      return lista.find(p => {
+        if (!p?.ref) return false;
+        const pRefSem = String(p.ref).trim().replace(/^0+/, '') || '0';
+        return pRefSem === refSemZero;
+      });
+    };
+
+    return acharEm(state.produtosCadastro) || acharEm(state.produtos) || null;
+  }, [state.produtos, state.produtosCadastro]);
 
   const tabAtiva = TABS.find(t => t.id === activeTab);
 
@@ -1833,14 +1852,8 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                   borderRadius: 10, padding: 12,
                   display: 'flex', alignItems: 'center', gap: 12,
                 }}>
-                  {/* Foto / placeholder */}
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 8, background: palette.beigeSoft,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <Package size={sz(21)} color={palette.inkSoft} />
-                  </div>
+                  {/* Foto do produto direto do bucket Supabase */}
+                  <FotoProdutoLojas refProd={item.ref} size={48} />
 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
@@ -3524,10 +3537,73 @@ export const AdicionarCnpjModal = ({ lojas, grupo, onClose, onAdicionado }) => {
 // CoresPainel — sub-painel da CuradoriaScreen quando aba=cores
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Mostra TOP cores Bling automáticas (vw_ranking_cores_catalogo) +
-// cores adicionadas manualmente. Auto não dá pra excluir, manual sim.
+// Mostra cores do TOP BLING (vw_ranking_cores_catalogo) + cores manuais.
+// Cada cor é CLICAVEL: clicar marca como "ativa pra IA usar nas mensagens".
+// Padrao visual igual ao modulo Oficinas (chips com bolinha colorida real).
+//
+// Mapeamento de hex: tenta primeiro localStorage 'amica_bling_cores_top'
+// (sincronizado pelo Bling Produtos), depois fallback hardcoded baseado
+// no nome.
+
+// Fallback hardcoded — copia de CORES_RANKING_FALLBACK do OrdemDeCorte.jsx
+const COR_HEX_FALLBACK = {
+  'preto': '#1a1a1a',
+  'bege': '#d4c4a4',
+  'marrom': '#5c3a20',
+  'figo': '#6b3a4c',
+  'azul marinho': '#1c2e4a',
+  'caramelo': '#a8743b',
+  'verde militar': '#4a5d3a',
+  'nude': '#e8c8b0',
+  'azul serenity': '#91a8d0',
+  'marrom escuro': '#3d2418',
+  'verde sálvia': '#87a96b',
+  'verde salvia': '#87a96b',
+  'azul claro': '#a8c8e0',
+  'vinho': '#5c1a2e',
+  'bege claro': '#ebdcc0',
+  'mocaccino': '#6f4e37',
+  'creme': '#f5f0d6',
+  'branco': '#fafafa',
+  'verde água': '#9ce0d8',
+  'verde agua': '#9ce0d8',
+  'verde oliva': '#7a8b3a',
+  'amarelo': '#f5d040',
+  'vermelho': '#c0392b',
+  'rosa': '#e88aa3',
+  'rosê': '#d8a4b0',
+  'rose': '#d8a4b0',
+  'lilás': '#b89dd0',
+  'lilas': '#b89dd0',
+  'cinza': '#888888',
+  'azul': '#3a6bb5',
+  'verde': '#5a8a4a',
+  'laranja': '#e08a3a',
+  'roxo': '#7a3aa0',
+  'off-white': '#f5f1e8',
+  'off white': '#f5f1e8',
+  'pink': '#ee5599',
+  'turquesa': '#3ac0b8',
+};
+
+function hexDaCor(nome) {
+  if (!nome) return '#999';
+  const k = String(nome).toLowerCase().trim();
+  // Tenta localStorage primeiro (Bling Produtos sincronizado)
+  try {
+    const raw = localStorage.getItem('amica_bling_cores_top');
+    if (raw) {
+      const d = JSON.parse(raw);
+      const lista = d?.cores || [];
+      const found = lista.find(c => String(c.nome).toLowerCase().trim() === k);
+      if (found?.hex) return found.hex;
+    }
+  } catch {}
+  return COR_HEX_FALLBACK[k] || '#999';
+}
+
 const CoresPainel = ({ lojas }) => {
-  const { state, handleAdicionarCorManual, handleRemoverCorManual } = lojas;
+  const { state, handleAdicionarCorManual, handleRemoverCorManual, handleToggleCorIgnorada } = lojas;
   const [novaCor, setNovaCor] = useState('');
   const [novoMotivo, setNovoMotivo] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -3536,7 +3612,17 @@ const CoresPainel = ({ lojas }) => {
   const corAuto = state.coresAuto || [];
   const corManual = state.coresManuais || [];
 
-  const adicionar = async () => {
+  // Set de cor_keys que estão "ativas pra IA" (na curadoria manual).
+  // Cor automática NÃO está ativa por padrão — vendedora precisa clicar.
+  // Quando clica, é adicionada como manual (mesmo mecanismo, garante que
+  // o backend passa a IA enxergar via lojas_cores_curadoria_manual).
+  const ativas = useMemo(() => {
+    const s = new Set();
+    for (const c of corManual) s.add(c.cor_key);
+    return s;
+  }, [corManual]);
+
+  const adicionarManualLivre = async () => {
     const cor = novaCor.trim();
     if (cor.length < 2) {
       alert('Digite o nome da cor (ex: Bordô)');
@@ -3554,16 +3640,81 @@ const CoresPainel = ({ lojas }) => {
     }
   };
 
-  const remover = async (item) => {
-    if (!confirm(`Remover cor "${item.cor}" da curadoria manual?`)) return;
-    setRemovendoId(item.id);
+  // Set de cor_keys que admin desmarcou (cores ignoradas).
+  // Por padrao, TODAS as cores Top Bling com elegivel_gate1=true estao
+  // ativas — clicar marca como ignorada (vira semi-transparente). Clica
+  // de novo, reativa.
+  const ignoradasSet = new Set((state.coresIgnoradas || []).map(c => c.cor_key));
+
+  // Toggle: se cor está ignorada, reativa; se não, ignora.
+  const toggleCor = async (corObj) => {
+    const cor_key = corObj.cor_key || String(corObj.cor || '').toLowerCase().trim();
+    const cor_bonita = corObj.cor || corObj.cor_key;
+    const jaIgnorada = ignoradasSet.has(cor_key);
     try {
-      await handleRemoverCorManual(item.id);
+      await handleToggleCorIgnorada(cor_key, cor_bonita, jaIgnorada);
     } catch (e) {
       alert('Erro: ' + (e.message || e));
-    } finally {
-      setRemovendoId(null);
     }
+  };
+
+  // Renderiza chip de cor estilo OrdemDeCorte (bolinha + nome) — clicável.
+  // Por padrão, ativa (cores Top Bling todas entram pra IA). Clicado:
+  // semi-transparente / riscado pra mostrar que está IGNORADA.
+  const renderChipCor = (cor, idx, fonte) => {
+    const cor_key = cor.cor_key || String(cor.cor || '').toLowerCase().trim();
+    const nomeBonito = cor.cor || cor.cor_key;
+    const ignorada = ignoradasSet.has(cor_key);
+    const hex = hexDaCor(nomeBonito);
+    const ehManual = fonte === 'manual';
+
+    return (
+      <button
+        key={cor_key}
+        type="button"
+        onClick={() => toggleCor(cor)}
+        title={ignorada ? 'Clique pra reativar (IA volta a usar)' : 'Clique pra desativar (IA não usa mais)'}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '6px 11px', borderRadius: 18,
+          background: ignorada ? palette.beigeSoft : palette.purpleSoft,
+          border: `${ignorada ? 1 : 2}px solid ${ignorada ? palette.beige : palette.purple}`,
+          cursor: 'pointer', fontFamily: FONT, fontSize: fz(13),
+          color: ignorada ? palette.inkMuted : palette.ink,
+          fontWeight: ignorada ? 400 : 600,
+          textDecoration: ignorada ? 'line-through' : 'none',
+          opacity: ignorada ? 0.55 : 1,
+          transition: 'all 0.15s ease',
+        }}
+      >
+        <span style={{
+          width: 12, height: 12, borderRadius: '50%',
+          background: hex, flexShrink: 0,
+          border: `1px solid ${palette.beige}`,
+          opacity: ignorada ? 0.5 : 1,
+        }} />
+        {nomeBonito}
+        {idx != null && (
+          <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 400 }}>
+            #{idx}
+          </span>
+        )}
+        {!ignorada && fonte === 'auto' && <Check size={sz(13)} color={palette.purple} />}
+        {ehManual && (
+          <Trash2
+            size={sz(11)}
+            color={palette.inkMuted}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm(`Remover "${nomeBonito}" da lista manual?`)) {
+                const item = corManual.find(c => c.cor_key === cor_key);
+                if (item) handleRemoverCorManual(item.id);
+              }
+            }}
+          />
+        )}
+      </button>
+    );
   };
 
   return (
@@ -3574,13 +3725,13 @@ const CoresPainel = ({ lojas }) => {
         borderLeft: `3px solid ${palette.purple}`, marginBottom: 16,
         fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
       }}>
-        IA pode mencionar essas cores nas mensagens mesmo sem REF específica.
+        Clique nas cores que a IA pode usar nas mensagens (mesmo sem REF específica).
         Ex: "Chegaram vários modelos de Marrom, tá saindo muito!"
-        <br/>
-        <strong>Top Bling</strong> atualiza automaticamente. <strong>Manual</strong> é a sua adição livre.
+        <br />
+        <strong>Top Bling</strong> atualiza dinamicamente. <strong>Manual</strong> é a sua adição livre.
       </div>
 
-      {/* Form adicionar manual */}
+      {/* Form adicionar cor manual livre */}
       <div style={{
         background: palette.beigeSoft, border: `1px solid ${palette.beige}`,
         borderRadius: 10, padding: 14, marginBottom: 16,
@@ -3600,7 +3751,7 @@ const CoresPainel = ({ lojas }) => {
             }}
           />
           <button
-            onClick={adicionar}
+            onClick={adicionarManualLivre}
             disabled={salvando || novaCor.trim().length < 2}
             style={{
               background: salvando || novaCor.trim().length < 2 ? palette.beige : palette.ok,
@@ -3625,71 +3776,43 @@ const CoresPainel = ({ lojas }) => {
         />
       </div>
 
-      {/* Lista cores manuais */}
-      {corManual.length > 0 && (
-        <>
-          <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.purple, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            ✋ Manual ({corManual.length})
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-            {corManual.map(c => {
-              const removendo = removendoId === c.id;
-              return (
-                <div key={c.id} style={{
-                  background: palette.surface, border: `1px solid ${palette.beige}`,
-                  borderLeft: `3px solid ${palette.purple}`,
-                  borderRadius: 8, padding: 10,
-                  display: 'flex', alignItems: 'center', gap: 12,
-                }}>
-                  <Heart size={sz(16)} color={palette.purple} fill={palette.purpleSoft} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink }}>{c.cor}</div>
-                    {c.motivo && (
-                      <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2 }}>{c.motivo}</div>
-                    )}
-                  </div>
-                  <button onClick={() => remover(c)} disabled={removendo} style={{
-                    background: 'transparent', border: 'none', cursor: removendo ? 'wait' : 'pointer',
-                    padding: 6, opacity: removendo ? 0.5 : 1,
-                  }}>
-                    {removendo
-                      ? <Loader2 size={sz(16)} style={spinKeyframes} color={palette.inkMuted} />
-                      : <Trash2 size={sz(16)} color={palette.inkMuted} />}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {/* Lista cores Bling auto */}
-      <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.accent, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-        🤖 Top Bling — automático ({corAuto.length})
+      {/* Lista TOP Bling — clicável */}
+      <div style={{
+        fontSize: fz(13), fontWeight: 600, color: palette.accent,
+        marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5,
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <Palette size={sz(15)} /> Top Bling — automático ({corAuto.length})
       </div>
       {corAuto.length === 0 ? (
         <div style={{
           padding: 24, textAlign: 'center', color: palette.inkMuted,
           fontSize: fz(13), background: palette.surface,
-          border: `1px dashed ${palette.beige}`, borderRadius: 10,
+          border: `1px dashed ${palette.beige}`, borderRadius: 10, marginBottom: 16,
         }}>
           Nenhuma cor disponível. Verifique vw_ranking_cores_catalogo no Supabase.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {corAuto.map(c => (
-            <div key={c.cor_key} style={{
-              background: palette.accentSoft, border: `1px solid ${palette.accent}`,
-              borderRadius: 16, padding: '5px 12px',
-              fontSize: fz(12), color: palette.accent, fontWeight: 600,
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-            }}>
-              <span style={{ fontSize: fz(10), opacity: 0.7 }}>#{c.rank_global}</span>
-              {c.cor}
-              <span style={{ fontSize: fz(10), opacity: 0.7, fontWeight: 400 }}>· {c.vendas_30d} un</span>
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+          {corAuto.map((c, i) => renderChipCor(c, i + 1, 'auto'))}
         </div>
+      )}
+
+      {/* Lista manual (cores adicionadas livremente — não vêm do Bling) */}
+      {corManual.filter(c => c.motivo !== 'top_bling_selecionada').length > 0 && (
+        <>
+          <div style={{
+            fontSize: fz(13), fontWeight: 600, color: palette.purple,
+            marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5,
+          }}>
+            ✋ Manual ({corManual.filter(c => c.motivo !== 'top_bling_selecionada').length})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {corManual
+              .filter(c => c.motivo !== 'top_bling_selecionada')
+              .map(c => renderChipCor(c, null, 'manual'))}
+          </div>
+        </>
       )}
     </div>
   );
@@ -3703,7 +3826,7 @@ const CoresPainel = ({ lojas }) => {
 // IA INCORPORA o texto natural nas sugestões durante o período. Não
 // consome slot. Ex: "feliz dia das mulheres", "loja fecha mais cedo".
 //
-const PLACEHOLDER_ACAO = 'Ex: "Aproveita pra desejar Feliz Dia das Mulheres ❤️" · "Lembra que segunda é feriado, loja fecha mais cedo" · "Avisa que tem novidade na loja"';
+const PLACEHOLDER_ACAO = 'Digite a mensagem...';
 
 export const AcoesScreen = ({ lojas, onBack }) => {
   const { state, handleSalvarAcao, handleRemoverAcao } = lojas;
@@ -3915,7 +4038,7 @@ export const AcoesScreen = ({ lojas, onBack }) => {
 // Vira a 1ª sugestão do dia da(s) vendedora(s) alvo. Após o cron daquele
 // dia, status muda pra consumido.
 //
-const PLACEHOLDER_AVISO = 'Ex: "Avisa as clientes top que chegou a coleção festas" · "Lembra a Carolina (CNPJ X) do pedido em aberto" · "Cobra a Maria do cheque vencido"';
+const PLACEHOLDER_AVISO = 'Digite o aviso...';
 
 export const AvisosScreen = ({ lojas, onBack }) => {
   const { state, handleSalvarAviso, handleRemoverAviso } = lojas;

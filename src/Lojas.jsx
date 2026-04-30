@@ -127,9 +127,11 @@ const initialState = {
   clientesKpis: {},             // {cliente_id: kpis}
   grupos: [],
   produtos: [],
+  produtosCadastro: [],         // todos os produtos do cadastro (lojas_produtos), pra Curadoria mostrar peças clássicas que ficaram fora da view oferecíveis
   curadoria: [],                // best_sellers, em_alta, novidades manuais
   coresAuto: [],                // top cores Bling (vw_ranking_cores_catalogo)
   coresManuais: [],             // cores adicionadas manualmente
+  coresIgnoradas: [],           // cores Top Bling que admin desmarcou
   promocoes: [],
   acoes: [],                    // mensagens contextuais por periodo (IA incorpora)
   avisos: [],                   // disparos unicos pra vendedora (vira sugestao 1)
@@ -205,6 +207,9 @@ function lojasReducer(state, action) {
     
     case 'SET_CURADORIA':
       return { ...state, curadoria: action.curadoria };
+
+    case 'SET_PRODUTOS_CADASTRO':
+      return { ...state, produtosCadastro: action.produtosCadastro };
     
     case 'SET_PROMOCOES':
       return { ...state, promocoes: action.promocoes };
@@ -220,6 +225,9 @@ function lojasReducer(state, action) {
 
     case 'SET_CORES_MANUAIS':
       return { ...state, coresManuais: action.coresManuais };
+
+    case 'SET_CORES_IGNORADAS':
+      return { ...state, coresIgnoradas: action.coresIgnoradas };
 
     case 'SET_SUGESTOES':
       return { ...state, sugestoesHoje: action.sugestoes };
@@ -413,6 +421,17 @@ async function loadProdutos() {
   return data || [];
 }
 
+// Carrega TODOS os produtos do cadastro (não só os oferecíveis). Usado pela
+// CuradoriaScreen pra resolver descrição/foto de REFs clássicas que ficam
+// fora da view oferecíveis (estoque baixo, peças antigas, etc).
+async function loadProdutosCadastro() {
+  const { data, error } = await supabase
+    .from('lojas_produtos')
+    .select('ref, descricao, categoria, qtd_estoque');
+  if (error) throw error;
+  return data || [];
+}
+
 async function loadCuradoria() {
   const { data, error } = await supabase
     .from('lojas_produtos_curadoria')
@@ -569,6 +588,35 @@ async function removerCorManual(corId) {
     .delete()
     .eq('id', corId);
   if (error) throw error;
+}
+
+// ─── CORES IGNORADAS (chip Top Bling clicado pra desativar) ─────────────
+async function loadCoresIgnoradas() {
+  const { data, error } = await supabase
+    .from('lojas_cores_ignoradas')
+    .select('*');
+  if (error) {
+    console.warn('lojas_cores_ignoradas indisponivel:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+async function toggleCorIgnorada({ cor_key, cor, ja_ignorada, ignorado_por }) {
+  if (ja_ignorada) {
+    // Reativar (remover da lista de ignoradas)
+    const { error } = await supabase
+      .from('lojas_cores_ignoradas')
+      .delete()
+      .eq('cor_key', cor_key);
+    if (error) throw error;
+  } else {
+    // Ignorar (adicionar)
+    const { error } = await supabase
+      .from('lojas_cores_ignoradas')
+      .upsert({ cor_key, cor, ignorado_por: ignorado_por || null }, { onConflict: 'cor_key' });
+    if (error) throw error;
+  }
 }
 
 // ─── LINKS VESTI da vendedora ──────────────────────────────────────────
@@ -1214,21 +1262,26 @@ function useLojasModule() {
         dispatch({ type: 'SET_CURADORIA', curadoria });
         dispatch({ type: 'SET_PROMOCOES', promocoes });
 
-        // 6b. Ações + Avisos + Cores (só admin precisa, mas carrega pra todos
-        // pra que avisos do dia possam ser exibidos no card)
+        // 6b. Ações + Avisos + Cores + ProdutosCadastro (só admin precisa,
+        // mas carrega pra todos pra que avisos do dia possam ser exibidos
+        // no card)
         try {
-          const [acoes, avisos, coresAuto, coresManuais] = await Promise.all([
+          const [acoes, avisos, coresAuto, coresManuais, produtosCadastro, coresIgnoradas] = await Promise.all([
             loadAcoes(),
             loadAvisos(),
             loadCoresAuto(),
             loadCoresManuais(),
+            loadProdutosCadastro(),
+            loadCoresIgnoradas(),
           ]);
           dispatch({ type: 'SET_ACOES', acoes });
           dispatch({ type: 'SET_AVISOS', avisos });
           dispatch({ type: 'SET_CORES_AUTO', coresAuto });
           dispatch({ type: 'SET_CORES_MANUAIS', coresManuais });
+          dispatch({ type: 'SET_PRODUTOS_CADASTRO', produtosCadastro });
+          dispatch({ type: 'SET_CORES_IGNORADAS', coresIgnoradas });
         } catch (e) {
-          console.warn('[lojas] acoes/avisos/cores nao carregadas:', e?.message);
+          console.warn('[lojas] acoes/avisos/cores/produtos nao carregadas:', e?.message);
         }
         
         // 7. Carrega sugestões de hoje (só pra vendedora ativa)
@@ -1444,6 +1497,18 @@ function useLojasModule() {
     dispatch({ type: 'SET_CORES_MANUAIS', coresManuais });
   }, []);
 
+  // ─── Toggle cor Top Bling (ignorar/reativar) ──────────────────────
+  const handleToggleCorIgnorada = useCallback(async (corKey, corNome, jaIgnorada) => {
+    await toggleCorIgnorada({
+      cor_key: corKey,
+      cor: corNome,
+      ja_ignorada: jaIgnorada,
+      ignorado_por: state.userId,
+    });
+    const coresIgnoradas = await loadCoresIgnoradas();
+    dispatch({ type: 'SET_CORES_IGNORADAS', coresIgnoradas });
+  }, [state.userId]);
+
   // ─── Vesti links ──────────────────────────────────────────────────
   const handleSalvarLinksVesti = useCallback(async (vendedoraId, links) => {
     await salvarLinksVesti(vendedoraId, links);
@@ -1575,6 +1640,7 @@ function useLojasModule() {
     handleRemoverAviso,
     handleAdicionarCorManual,
     handleRemoverCorManual,
+    handleToggleCorIgnorada,
     handleSalvarLinksVesti,
     
     // sugestões e IA
