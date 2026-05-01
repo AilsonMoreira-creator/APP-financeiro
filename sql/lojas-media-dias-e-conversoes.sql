@@ -122,6 +122,7 @@ DECLARE
   v_limite_inativo int;
   v_limite_arquivo int;
   v_fator numeric;
+  v_qtd_datas_unicas int;
 BEGIN
   -- Agrega vendas
   SELECT
@@ -175,10 +176,13 @@ BEGIN
   ) INTO v_tem_sacola;
 
   -- ═══ MÉDIA PONDERADA DOS DIAS ENTRE COMPRAS ═══════════════════════════════
-  -- Usa últimas 5 compras ordenadas DESC. Pesos crescentes pras mais
-  -- recentes. Confiável quando >=5 compras totais.
-  WITH ultimas AS (
-    SELECT data_venda
+  -- IMPORTANTE: lojas_vendas pode ter MULTIPLAS linhas no mesmo dia
+  -- (pedido parcelado, divididos por loja/canal, etc). Pra contar VISITAS
+  -- reais, agrupamos por data_venda primeiro (DISTINCT data).
+  -- Usa as ultimas 5 DATAS distintas. Pesos crescentes pras mais recentes.
+  -- Confiavel quando >=5 datas distintas (= 5 visitas reais).
+  WITH datas_unicas AS (
+    SELECT DISTINCT data_venda
     FROM lojas_vendas
     WHERE cliente_id = p_cliente_id
     ORDER BY data_venda DESC
@@ -187,7 +191,7 @@ BEGIN
   ordenadas AS (
     SELECT data_venda,
            ROW_NUMBER() OVER (ORDER BY data_venda ASC) AS pos
-    FROM ultimas
+    FROM datas_unicas
   ),
   gaps AS (
     SELECT
@@ -202,7 +206,14 @@ BEGIN
   INTO v_media_dias
   FROM gaps;
 
-  v_media_confiavel := (v_qtd_compras >= 5 AND v_media_dias IS NOT NULL);
+  -- Quantidade de DATAS DISTINTAS, nao linhas. Cliente confiavel = >=5
+  -- visitas reais E media calculada com sucesso.
+  SELECT COUNT(DISTINCT data_venda)
+  INTO v_qtd_datas_unicas
+  FROM lojas_vendas
+  WHERE cliente_id = p_cliente_id;
+
+  v_media_confiavel := (v_qtd_datas_unicas >= 5 AND v_media_dias IS NOT NULL);
 
   -- ═══ STATUS COM FÓRMULA CUSTOM (quando média confiável) ═══════════════════
   IF v_tem_sacola THEN
