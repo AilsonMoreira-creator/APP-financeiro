@@ -175,18 +175,23 @@ BEGIN
     WHERE cliente_id = p_cliente_id AND ativo = true
   ) INTO v_tem_sacola;
 
-  -- ═══ MÉDIA PONDERADA DOS DIAS ENTRE COMPRAS ═══════════════════════════════
-  -- IMPORTANTE: lojas_vendas pode ter MULTIPLAS linhas no mesmo dia
-  -- (pedido parcelado, divididos por loja/canal, etc). Pra contar VISITAS
-  -- reais, agrupamos por data_venda primeiro (DISTINCT data).
-  -- Usa as ultimas 5 DATAS distintas. Pesos crescentes pras mais recentes.
-  -- Confiavel quando >=5 datas distintas (= 5 visitas reais).
+  -- ═══ MEDIA DIAS ENTRE COMPRAS ═══════════════════════════════════════════
+  -- Decisoes Ailson 01/05/2026:
+  -- (1) lojas_vendas pode ter MULTIPLAS linhas no mesmo dia (pedido
+  --     parcelado, dividido por loja/canal). DISTINCT data_venda agrupa
+  --     em VISITAS reais.
+  -- (2) Filtra gaps < 3 dias — sao compras parceladas/mesma ida a loja
+  --     que viraram registros separados (ex: cliente voltou no dia
+  --     seguinte pra trocar/complementar).
+  -- (3) Usa ultimas 10 datas distintas (nao 5) pra capturar tendencia
+  --     atual mas evitar comportamento muito antigo.
+  -- Confiavel quando >=8 datas distintas (= 8 visitas reais).
   WITH datas_unicas AS (
     SELECT DISTINCT data_venda
     FROM lojas_vendas
     WHERE cliente_id = p_cliente_id
     ORDER BY data_venda DESC
-    LIMIT 5
+    LIMIT 10
   ),
   ordenadas AS (
     SELECT data_venda,
@@ -199,21 +204,19 @@ BEGIN
       a.pos AS peso
     FROM ordenadas a
     JOIN ordenadas b ON b.pos = a.pos + 1
-    WHERE (b.data_venda - a.data_venda) > 0
+    WHERE (b.data_venda - a.data_venda) >= 3   -- filtra parcelados
   )
   SELECT
     CASE WHEN SUM(peso) > 0 THEN ROUND(SUM(dias * peso) / SUM(peso), 2) ELSE NULL END
   INTO v_media_dias
   FROM gaps;
 
-  -- Quantidade de DATAS DISTINTAS, nao linhas. Cliente confiavel = >=5
-  -- visitas reais E media calculada com sucesso.
   SELECT COUNT(DISTINCT data_venda)
   INTO v_qtd_datas_unicas
   FROM lojas_vendas
   WHERE cliente_id = p_cliente_id;
 
-  v_media_confiavel := (v_qtd_datas_unicas >= 5 AND v_media_dias IS NOT NULL);
+  v_media_confiavel := (v_qtd_datas_unicas >= 8 AND v_media_dias IS NOT NULL);
 
   -- ═══ STATUS COM FÓRMULA CUSTOM (quando média confiável) ═══════════════════
   IF v_tem_sacola THEN
