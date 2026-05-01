@@ -144,7 +144,7 @@ BEGIN
     v_lifetime_fisico, v_lifetime_marketplace,
     v_qtd_pres, v_qtd_dist, v_qtd_fiel
   FROM lojas_vendas
-  WHERE cliente_id = p_cliente_id AND cancelada = false;
+  WHERE cliente_id = p_cliente_id;
 
   v_ticket := CASE WHEN v_qtd_compras > 0 THEN v_lifetime / v_qtd_compras ELSE 0 END;
   v_dias_sem := CASE WHEN v_ultima IS NULL THEN NULL
@@ -180,7 +180,7 @@ BEGIN
   WITH ultimas AS (
     SELECT data_venda
     FROM lojas_vendas
-    WHERE cliente_id = p_cliente_id AND cancelada = false
+    WHERE cliente_id = p_cliente_id
     ORDER BY data_venda DESC
     LIMIT 5
   ),
