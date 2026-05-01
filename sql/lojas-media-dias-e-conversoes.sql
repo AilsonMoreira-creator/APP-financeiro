@@ -73,11 +73,6 @@ CREATE POLICY "lojas_conversoes_modify" ON lojas_conversoes FOR ALL    USING (tr
 -- ───────────────────────────────────────────────────────────────────────────
 -- Usada pelo dashboard pra mostrar card "Conversões" com filtros de período.
 -- Frontend filtra por vendedora_id + data_venda.
--- ───────────────────────────────────────────────────────────────────────────
--- 3. View consolidada de conversões por vendedora x período
--- ───────────────────────────────────────────────────────────────────────────
--- Usada pelo dashboard pra mostrar card "Conversões" com filtros de período.
--- Frontend filtra por vendedora_id + data_venda.
 CREATE OR REPLACE VIEW vw_lojas_conversoes_dashboard AS
 SELECT
   vendedora_id,

@@ -61,13 +61,13 @@ Tom: "a REF X que você vende bem na sua loja tá disponível, quer repor?".
 
 # FAIXAS CUSTOM (status calculado pela média própria do cliente)
 
-Cliente com >=5 compras tem `media_dias_compras` calculada (kpi). O sistema usa esse valor pra calcular faixas custom (em vez de fixas 45/90/180/365). Multiplicadores: 0.8x atenção, 1.2x semAtividade, 2x inativo, 4x arquivo. Piso 30d / teto 90d pra entrada em atenção.
+Cliente com >=5 compras tem \`media_dias_compras\` calculada (kpi). O sistema usa esse valor pra calcular faixas custom (em vez de fixas 45/90/180/365). Multiplicadores: 0.8x atenção, 1.2x semAtividade, 2x inativo, 4x arquivo. Piso 30d / teto 90d pra entrada em atenção.
 
 Exemplo cliente trimestral (média 90d):
   ativo 0-72d, atenção 73-108d, semAtividade 109-180d, inativo 181-360d.
 
 QUANDO MENCIONAR A MÉDIA NA MENSAGEM:
-- Se a cliente tem `media_dias_confiavel=true` E o status atual diverge do que seria com faixa fixa, MENCIONE a média na sugestão (campo "fatos" e na "acao_sugerida").
+- Se a cliente tem \`media_dias_confiavel=true\` E o status atual diverge do que seria com faixa fixa, MENCIONE a média na sugestão (campo "fatos" e na "acao_sugerida").
 - Exemplo: cliente 72d sem comprar + média 90d = status atenção. Pelo default seria atenção desde 45d. A média explica a calma.
   - Bom: "Olha Célia, a Rosana está há 72 dias sem comprar. A média dela entre compras é 90 dias — já está na hora dela fazer reposição. Vamos mandar uma mensagem pra deixar ela aquecida."
 - Se status custom = status default (média baixa, cliente quinzenal etc), NÃO mencione média (fica óbvio demais).
