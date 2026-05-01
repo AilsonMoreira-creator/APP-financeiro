@@ -84,6 +84,9 @@ export default async function handler(req, res) {
     if (action === 'gerar_resumo_semanal') {
       return await handleGerarResumoSemanal(req, res, auth);
     }
+    if (action === 'conversoes_dashboard') {
+      return await handleConversoesDashboard(req, res, auth);
+    }
     return res.status(400).json({ error: `Action desconhecida: ${action}` });
   } catch (e) {
     console.error('[lojas-ia] erro fatal:', e);
@@ -1240,7 +1243,7 @@ function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAu
   return out;
 }
 
-const TIPOS_VALIDOS = ['reativar', 'atencao', 'novidade', 'followup', 'followup_nova', 'sacola'];
+const TIPOS_VALIDOS = ['reativar', 'atencao', 'novidade', 'followup', 'followup_nova', 'sacola', 'reposicao', 'aviso_admin', 'inativo', 'semAtividade'];
 function validarTipo(t) {
   return TIPOS_VALIDOS.includes(t) ? t : 'followup';
 }
@@ -1252,10 +1255,10 @@ function validarTipo(t) {
 // Roda toda terça 07:00 BRT (cron). Pra cada vendedora ATIVA, calcula:
 //   • Mensagens enviadas na semana (seg-dom anterior)
 //   • Sugestões geradas / dispensadas
-//   • Conversões com sucesso (regra dos 30 dias):
+//   • Conversões com sucesso (regra dos 15 dias):
 //     - mensagens enviadas em clientes "atenção" (45-90d sem comprar) ou
 //       "inativo" (180-365d) nas últimas 4 semanas
-//     - se cliente comprou da MESMA vendedora em até 30 dias após msg
+//     - se cliente comprou da MESMA vendedora em até 15 dias após msg
 //     → conta como conversão de sucesso
 //   • Top 3 clientes que compraram da vendedora na semana
 //   • Mensagem motivacional gerada por Claude (tom otimista)
@@ -1365,7 +1368,7 @@ async function gerarResumoVendedora(vendedora, semana_inicio, semana_fim) {
     .gte('data_referencia', semana_inicio)
     .lte('data_referencia', semana_fim);
 
-  // ─── 2. Conversões com sucesso (regra dos 30 dias) ────────────────────
+  // ─── 2. Conversões com sucesso (regra dos 15 dias) ────────────────────
   // Pega mensagens enviadas nas últimas 4 semanas pra clientes atenção/inativo
   const quatroSemanasAtras = new Date(inicioISO);
   quatroSemanasAtras.setDate(quatroSemanasAtras.getDate() - 21); // semana_inicio - 21d = 4 semanas total
@@ -1383,17 +1386,20 @@ async function gerarResumoVendedora(vendedora, semana_inicio, semana_fim) {
 
   const msgs_atencao_inativo = (msgs4semanas || []).filter(m => {
     const status = m.lojas_clientes?.status_atual;
-    return status === 'atencao' || status === 'inativo';
+    // Inclui as 3 faixas que disparam mensagem de reativação
+    return status === 'atencao' || status === 'semAtividade' || status === 'inativo';
   });
 
   const mensagens_atencao_inativo = msgs_atencao_inativo.length;
 
-  // Pra cada msg atenção/inativo, ver se houve compra em até 30d
+  // Pra cada msg atenção/semAtividade/inativo, ver se houve compra em até 15d
+  // (regra Ailson 01/05/2026: era 30d, ajustada pra 15d).
+  const JANELA_CONVERSAO_DIAS = 15;
   const conversoes_detalhe = [];
   for (const msg of msgs_atencao_inativo) {
     const dataMsg = new Date(msg.created_at);
-    const data30dDepois = new Date(dataMsg);
-    data30dDepois.setDate(dataMsg.getDate() + 30);
+    const dataFimJanela = new Date(dataMsg);
+    dataFimJanela.setDate(dataMsg.getDate() + JANELA_CONVERSAO_DIAS);
 
     const { data: vendasPosMsg } = await supabase
       .from('lojas_vendas')
@@ -1401,21 +1407,47 @@ async function gerarResumoVendedora(vendedora, semana_inicio, semana_fim) {
       .eq('vendedora_id', vendedora.id)
       .eq('cliente_id', msg.cliente_id)
       .gte('data_venda', dataMsg.toISOString().split('T')[0])
-      .lte('data_venda', data30dDepois.toISOString().split('T')[0])
+      .lte('data_venda', dataFimJanela.toISOString().split('T')[0])
       .order('data_venda', { ascending: true })
       .limit(1);
 
     if (vendasPosMsg && vendasPosMsg.length > 0) {
       const venda = vendasPosMsg[0];
       const dias = Math.round((new Date(venda.data_venda) - dataMsg) / 86400000);
+      const statusEnvio = msg.lojas_clientes?.status_atual;
+      const clienteNome = msg.lojas_clientes?.fantasia || msg.lojas_clientes?.razao_social;
       conversoes_detalhe.push({
         cliente_id: msg.cliente_id,
-        cliente_nome: msg.lojas_clientes?.fantasia || msg.lojas_clientes?.razao_social,
+        cliente_nome: clienteNome,
         data_msg: msg.created_at.split('T')[0],
         data_venda: venda.data_venda,
         dias,
         valor: Number(venda.valor_liquido),
       });
+
+      // ─── Arquiva conversão (idempotente via unique key msg+venda) ──────
+      // Mesmo se a mensagem ou venda forem deletadas/arquivadas depois,
+      // o histórico de conversão fica preservado pra dashboard.
+      try {
+        await supabase
+          .from('lojas_conversoes')
+          .upsert({
+            vendedora_id: vendedora.id,
+            cliente_id: msg.cliente_id,
+            mensagem_id: msg.id,
+            data_mensagem: msg.created_at.split('T')[0],
+            status_no_envio: statusEnvio,
+            venda_id: venda.id,
+            data_venda: venda.data_venda,
+            dias_ate_compra: dias,
+            valor_venda: Number(venda.valor_liquido),
+            cliente_nome: clienteNome,
+          }, { onConflict: 'mensagem_id,venda_id' });
+      } catch (e) {
+        // Não bloqueia o fluxo se arquivamento falhar (tabela pode não existir
+        // antes do SQL ser rodado). Loga e segue.
+        console.warn('[lojas-conversao] erro arquivar:', e?.message);
+      }
     }
   }
   const conversoes_sucesso = conversoes_detalhe.length;
@@ -1538,11 +1570,128 @@ Métricas da semana passada:
 - Sugestões geradas pra você pela IA: ${sugestoes_geradas}
 - Sugestões dispensadas: ${sugestoes_dispensadas}
 - Mensagens enviadas pra clientes em atenção/inativo (últimas 4 sem): ${mensagens_atencao_inativo}
-- Dessas, converteram em compra (até 30 dias): ${conversoes_sucesso}
+- Dessas, converteram em compra (até 15 dias): ${conversoes_sucesso}
 - Taxa de conversão: ${taxa_conversao}%
 
 Top clientes da semana:
 ${topClientesTxt}
 
 Gere uma mensagem motivacional curta (3-4 frases máximo) chamando pelo nome dela. Use os números reais quando relevante. Tom otimista mas honesto — se foi uma semana fraca, encoraja sem fingir. Se foi forte, celebra com ela. Brasileiro descontraído, sem ser piegas.`;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AÇÃO 4: conversoes_dashboard (KPI card no Dashboard Lojas)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Retorna agregado de conversoes pra o card Conversoes.
+// Filtros suportados:
+//   - vendedora_id (opcional, default = todas)
+//   - periodo: 'mes_atual' (default) | '7d' | 'mes_passado' | 'all'
+//
+// Resposta: { periodo, periodo_label, total, valor_total, por_status,
+// por_vendedora, detalhe (top 50) }
+// ═══════════════════════════════════════════════════════════════════════════
+
+function _calcularRangeConversoes(periodo) {
+  const hoje = new Date();
+  const fim = hoje.toISOString().slice(0, 10);
+  let inicio;
+  let label;
+  switch (periodo) {
+    case '7d': {
+      const d = new Date(hoje);
+      d.setDate(d.getDate() - 7);
+      inicio = d.toISOString().slice(0, 10);
+      label = 'Últimos 7 dias';
+      break;
+    }
+    case 'mes_passado': {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth(), 0);
+      inicio = d.toISOString().slice(0, 10);
+      const fimMesStr = fimMes.toISOString().slice(0, 10);
+      label = 'Mês passado';
+      return { inicio, fim: fimMesStr, label };
+    }
+    case 'all': {
+      inicio = '2024-01-01';
+      label = 'Todo período';
+      break;
+    }
+    case 'mes_atual':
+    default: {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      inicio = d.toISOString().slice(0, 10);
+      label = 'Mês atual';
+      break;
+    }
+  }
+  return { inicio, fim, label };
+}
+
+async function handleConversoesDashboard(req, res, _auth) {
+  const vendedora_id = req.body?.vendedora_id || null;
+  const periodo = req.body?.periodo || 'mes_atual';
+  const { inicio, fim, label } = _calcularRangeConversoes(periodo);
+
+  let query = supabase
+    .from('lojas_conversoes')
+    .select('vendedora_id, cliente_id, cliente_nome, status_no_envio, dias_ate_compra, valor_venda, data_venda, data_mensagem')
+    .gte('data_venda', inicio)
+    .lte('data_venda', fim)
+    .order('data_venda', { ascending: false });
+
+  if (vendedora_id) {
+    query = query.eq('vendedora_id', vendedora_id);
+  }
+
+  const { data: conversoes, error } = await query;
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  // Carrega nomes das vendedoras (pra agregado)
+  const { data: vendedoras } = await supabase
+    .from('lojas_vendedoras')
+    .select('id, nome');
+  const nomeVendedora = (vid) => {
+    const v = (vendedoras || []).find(x => x.id === vid);
+    return v?.nome || '?';
+  };
+
+  const total = (conversoes || []).length;
+  const valor_total = (conversoes || []).reduce((s, c) => s + Number(c.valor_venda || 0), 0);
+
+  const por_status = { atencao: 0, semAtividade: 0, inativo: 0 };
+  for (const c of conversoes || []) {
+    if (por_status[c.status_no_envio] !== undefined) {
+      por_status[c.status_no_envio]++;
+    }
+  }
+
+  const mapaVendedora = new Map();
+  for (const c of conversoes || []) {
+    const k = c.vendedora_id;
+    if (!mapaVendedora.has(k)) {
+      mapaVendedora.set(k, { vendedora_id: k, vendedora_nome: nomeVendedora(k), total: 0, valor: 0 });
+    }
+    const v = mapaVendedora.get(k);
+    v.total++;
+    v.valor += Number(c.valor_venda || 0);
+  }
+  const por_vendedora = Array.from(mapaVendedora.values()).sort((a, b) => b.total - a.total);
+
+  return res.json({
+    periodo,
+    periodo_label: label,
+    data_inicio: inicio,
+    data_fim: fim,
+    vendedora_id: vendedora_id || null,
+    total,
+    valor_total: Math.round(valor_total * 100) / 100,
+    por_status,
+    por_vendedora,
+    detalhe: (conversoes || []).slice(0, 50),
+  });
 }

@@ -349,6 +349,111 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
   );
 };
 
+// ─── CardConversoes — KPI no Dashboard ─────────────────────────────────────
+//
+// Card mesmo tamanho/layout do "Carteira ativa total". Mostra:
+//   - Total de conversões no período (mensagens atencao/semAtividade/inativo
+//     que viraram venda em até 15 dias)
+//   - Valor total convertido
+//   - Breakdown por status (atenção / sem atividade / inativo)
+//   - Filtros: mês atual (default) | últimos 7d | mês passado
+//
+const CardConversoes = ({ lojas }) => {
+  const [periodo, setPeriodo] = useState('mes_atual');
+  const [data, setData] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    setCarregando(true);
+    setErro(null);
+    fetch('/api/lojas-ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'conversoes_dashboard', periodo }),
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelado) { setData(d); setCarregando(false); } })
+      .catch(e => { if (!cancelado) { setErro(e.message || 'Erro'); setCarregando(false); } });
+    return () => { cancelado = true; };
+  }, [periodo]);
+
+  const PERIODOS = [
+    { id: 'mes_atual',   label: 'Mês atual' },
+    { id: '7d',          label: 'Últimos 7d' },
+    { id: 'mes_passado', label: 'Mês passado' },
+  ];
+
+  const total = data?.total ?? 0;
+  const valor = data?.valor_total ?? 0;
+  const ps = data?.por_status || { atencao: 0, semAtividade: 0, inativo: 0 };
+  const fmtMoney = (v) => 'R$ ' + (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+  return (
+    <div style={{
+      width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
+      borderRadius: 12, padding: '14px 18px', marginBottom: 12, fontFamily: FONT,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <TrendingUp size={sz(15)} color={palette.ok} />
+        <span style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, flex: 1 }}>
+          Conversões
+        </span>
+        {/* Filtros de período */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {PERIODOS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setPeriodo(p.id)}
+              style={{
+                background: periodo === p.id ? palette.accent : 'transparent',
+                color: periodo === p.id ? 'white' : palette.inkSoft,
+                border: `1px solid ${periodo === p.id ? palette.accent : palette.beige}`,
+                borderRadius: 6, padding: '3px 9px',
+                fontSize: fz(11), fontFamily: FONT, fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {carregando ? (
+        <div style={{ fontSize: fz(13), color: palette.inkMuted, padding: '8px 0' }}>
+          <Loader2 size={sz(14)} style={{ ...spinKeyframes, marginRight: 6, verticalAlign: 'middle' }} />
+          Carregando...
+        </div>
+      ) : erro ? (
+        <div style={{ fontSize: fz(12), color: palette.alert, padding: '6px 0' }}>
+          {erro}
+        </div>
+      ) : (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 18,
+          rowGap: 10,
+        }}>
+          <div>
+            <div style={{ fontSize: fz(28), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
+              {total}
+            </div>
+            <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              total
+            </div>
+          </div>
+          <KpiSlice cor={palette.ok}     valor={fmtMoney(valor)}       label="convertido" />
+          <KpiSlice cor={palette.warn}   valor={ps.atencao || 0}       label="atenção" />
+          <KpiSlice cor="#e67e22"        valor={ps.semAtividade || 0}  label="90+ dias" />
+          <KpiSlice cor={palette.alert}  valor={ps.inativo || 0}       label="inativo" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 // ─── DashboardTab ──────────────────────────────────────────────────────────
 
 // Slice usado no strip horizontal "Carteira ativa total" — número grande
@@ -453,6 +558,9 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
           <KpiSlice cor={palette.accent} valor={`${stats.executadas}/${stats.sugestoes}`} label="sugestões hoje" />
         </div>
       </button>
+
+      {/* Card Conversões — mesmo tamanho da Carteira ativa */}
+      <CardConversoes lojas={lojas} />
 
       <SectionTitle icon={Star}>Vendedoras ativas</SectionTitle>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

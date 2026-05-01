@@ -479,3 +479,103 @@ export function calcularStatusCliente(diasSemComprar, temPedidoSacolaAtivo = fal
   if (diasSemComprar <= 365) return 'inativo';
   return 'arquivo';
 }
+
+// ─── MÉDIA PONDERADA DE DIAS ENTRE COMPRAS ────────────────────────────────
+//
+// Cliente com >=5 compras tem ritmo previsível. Usamos as últimas 5 compras
+// pra calcular o ritmo dele, com pesos maiores nas mais recentes (5,4,3,2,1).
+// Isso captura tendência atual sem ser distorcido por compras antigas.
+//
+// Retorna { media, confiavel }:
+//   - media: numero de dias (null se < 2 compras)
+//   - confiavel: true se >= 5 compras (aplica formula custom)
+//
+// Input: array de datas (string ou Date) das compras do cliente, ordem
+// crescente OU decrescente (a função ordena).
+//
+export function calcularMediaDiasEntreCompras(datasCompras) {
+  if (!Array.isArray(datasCompras) || datasCompras.length < 2) {
+    return { media: null, confiavel: false };
+  }
+  // Normaliza pra Date e ordena ASC
+  const datas = datasCompras
+    .map(d => d instanceof Date ? d : new Date(d))
+    .filter(d => !isNaN(d.getTime()))
+    .sort((a, b) => a - b);
+
+  if (datas.length < 2) return { media: null, confiavel: false };
+
+  // Calcula gaps em dias entre compras consecutivas
+  const gaps = [];
+  for (let i = 1; i < datas.length; i++) {
+    const dias = (datas[i] - datas[i - 1]) / 86400000;
+    if (dias > 0) gaps.push(dias);
+  }
+  if (gaps.length === 0) return { media: null, confiavel: false };
+
+  // Pega últimos 5 gaps (mais recentes) ou todos se houver menos
+  const ultimosGaps = gaps.slice(-5);
+  // Pesos crescentes: gap mais recente pesa mais
+  // Ex: 5 gaps -> pesos [1,2,3,4,5]; 3 gaps -> [1,2,3]
+  let somaPonderada = 0;
+  let somaPesos = 0;
+  for (let i = 0; i < ultimosGaps.length; i++) {
+    const peso = i + 1;
+    somaPonderada += ultimosGaps[i] * peso;
+    somaPesos += peso;
+  }
+  const media = somaPonderada / somaPesos;
+  const confiavel = datas.length >= 5;
+  return { media: Math.round(media * 100) / 100, confiavel };
+}
+
+// ─── STATUS COM FÓRMULA CUSTOM (quando média é confiável) ──────────────────
+//
+// Quando cliente tem >=5 compras, usa multiplicadores da média própria pra
+// definir as faixas. Senão, cai pra calcularStatusCliente() default.
+//
+// Faixas custom:
+//   ativo:        0   a (media × 0.8)
+//   atencao:    >0.8x a (media × 1.2)
+//   semAtividade>1.2x a (media × 2)
+//   inativo:    >2.0x a (media × 4)
+//   arquivo:    >4.0x
+//
+// Pisos/tetos:
+//   - Atenção nunca antes de 30d (mesmo com média muito baixa)
+//   - Atenção nunca depois de 90d (mesmo com média muito alta — clientes
+//     "raríssimos" não viram zumbis)
+//
+export function calcularStatusClienteCustom({
+  diasSemComprar,
+  temPedidoSacolaAtivo = false,
+  mediaDias = null,
+  mediaConfiavel = false,
+}) {
+  if (temPedidoSacolaAtivo) return 'separandoSacola';
+  if (diasSemComprar === null || diasSemComprar === undefined) return 'arquivo';
+
+  // Sem média confiável → usa default
+  if (!mediaConfiavel || !mediaDias || mediaDias <= 0) {
+    return calcularStatusCliente(diasSemComprar);
+  }
+
+  // Aplica fórmula custom com piso 30d / teto 90d pra entrada em atenção
+  let limiteAtencao = Math.round(mediaDias * 0.8);
+  if (limiteAtencao < 30) limiteAtencao = 30;
+  if (limiteAtencao > 90) limiteAtencao = 90;
+
+  // Demais limites proporcionais (mantém razão com a média efetiva)
+  // Recalcula multiplicadores em cima do limite atenção pra coerência
+  const fator = limiteAtencao / 0.8;       // "média efetiva"
+  const limiteSemAtividade = Math.round(fator * 1.2);
+  const limiteInativo      = Math.round(fator * 2);
+  const limiteArquivo      = Math.round(fator * 4);
+
+  if (diasSemComprar <= limiteAtencao)      return 'ativo';
+  if (diasSemComprar <= limiteSemAtividade) return 'atencao';
+  if (diasSemComprar <= limiteInativo)      return 'semAtividade';
+  if (diasSemComprar <= limiteArquivo)      return 'inativo';
+  return 'arquivo';
+}
+
