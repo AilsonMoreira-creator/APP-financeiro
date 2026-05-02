@@ -45,8 +45,10 @@ CREATE TABLE IF NOT EXISTS lojas_push_log (
 CREATE INDEX IF NOT EXISTS idx_push_log_vendedora_dia
   ON lojas_push_log(vendedora_id, enviado_em DESC);
 
-CREATE INDEX IF NOT EXISTS idx_push_log_dia_tipo
-  ON lojas_push_log(date_trunc('day', enviado_em), tipo);
+-- Indice (tipo, enviado_em DESC) — IMMUTABLE, performance equivalente
+-- pro caso de uso "buscar logs do tipo X no periodo Y" usado pelos crons
+CREATE INDEX IF NOT EXISTS idx_push_log_tipo_data
+  ON lojas_push_log(tipo, enviado_em DESC);
 
 ALTER TABLE lojas_push_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "lojas_push_log_select" ON lojas_push_log;
