@@ -82,6 +82,14 @@
     {
       "path": "/api/lojas-ia-cron-semanal",
       "schedule": "0 10 * * 2"
+    },
+    {
+      "path": "/api/lojas-push-cron-1030",
+      "schedule": "30 13 * * 1-5"
+    },
+    {
+      "path": "/api/lojas-push-cron-1400",
+      "schedule": "0 17 * * 1-5"
     }
   ]
 }

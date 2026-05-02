@@ -40,7 +40,7 @@ import {
   Save, Trash2, Edit3, MapPin, Clock, CheckCircle2, AlertCircle,
   Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown,
   UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send, User,
-  Bell, Megaphone,
+  Bell, Megaphone, BellOff,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
@@ -49,7 +49,7 @@ import {
   palette, FONT, statusMap, subtipoSacolaMap, faseClienteNovaMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
   fz, sz, TelefoneCopiavel, FotoProdutoLojas, saudacaoHora, emojiHora, fraseDoDia,
-  adminComSaudacao,
+  adminComSaudacao, supabase,
 } from './Lojas_Shared.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -561,6 +561,9 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
 
       {/* Card Conversões — mesmo tamanho da Carteira ativa */}
       <CardConversoes lojas={lojas} />
+
+      {/* Card Abertura do app (admin) — quem abriu hoje, quem precisa lembrete */}
+      {state.isAdmin && <CardAberturaApp lojas={lojas} />}
 
       <SectionTitle icon={Star}>Vendedoras ativas</SectionTitle>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1275,6 +1278,10 @@ export const MinhaCarteiraScreen = ({
               }} title="Cadastrar nome do comprador">
                 <User size={sz(15)} /> Comprador
               </button>
+            )}
+            {/* Botão sininho push — discreto, mostra status */}
+            {vendedora && (
+              <BotaoSinoPush vendedora={vendedora} />
             )}
             {/* Botão Meus links Vesti — abre modal pra vendedora editar */}
             {vendedora && (
@@ -2520,6 +2527,215 @@ const ModalVestiLinks = ({ lojas, vendedora, onClose }) => {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BotaoSinoPush — icone discreto pro vendedor ativar/desativar push
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Estados visuais:
+//   🔔 (cor solid) = ativo neste navegador, registrado pra ESTA vendedora
+//   🔕 (sem cor)   = nao ativo OU registrado pra outra vendedora
+//
+// Ao clicar:
+//   - Se nao ativo → ativa (pede permissao + registra)
+//   - Se ativo → desativa (confirma + limpa)
+//
+import {
+  pushSuportado, statusPush, ativarPush, desativarPush,
+} from './lojas-push-client.js';
+
+const BotaoSinoPush = ({ vendedora }) => {
+  const [status, setStatus] = useState('verificando');  // verificando | ativo | inativo | nao_suportado
+  const [ocupado, setOcupado] = useState(false);
+
+  // Verifica status do push neste navegador.
+  // OBS: status 'inscrito' do navegador NAO garante que esta inscrito pra
+  // ESTA vendedora — pode ser que login mudou e a inscricao ficou pra
+  // outra. Comparamos com vendedora.push_subscription do banco.
+  useEffect(() => {
+    let cancelado = false;
+    async function checar() {
+      if (!pushSuportado()) {
+        if (!cancelado) setStatus('nao_suportado');
+        return;
+      }
+      const s = await statusPush();
+      if (cancelado) return;
+      if (s !== 'inscrito') {
+        setStatus('inativo');
+        return;
+      }
+      // Confere se a subscription do navegador bate com a do banco
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        const enpNav = sub?.endpoint;
+        const enpBanco = vendedora?.push_subscription?.endpoint;
+        if (enpNav && enpBanco && enpNav === enpBanco) {
+          setStatus('ativo');
+        } else {
+          setStatus('inativo');  // mesmo navegador, registrado pra outra vendedora
+        }
+      } catch {
+        setStatus('inativo');
+      }
+    }
+    checar();
+    return () => { cancelado = true; };
+  }, [vendedora?.id, vendedora?.push_subscription?.endpoint]);
+
+  const ativar = async () => {
+    setOcupado(true);
+    const r = await ativarPush(vendedora.id);
+    setOcupado(false);
+    if (r.ok) {
+      setStatus('ativo');
+      alert('Notificações ativadas! 🔔\n\nVocê vai receber um lembrete de manhã se ainda não tiver aberto o app.');
+    } else {
+      alert('Não consegui ativar: ' + r.motivo);
+    }
+  };
+
+  const desativar = async () => {
+    if (!confirm('Desativar notificações neste celular?')) return;
+    setOcupado(true);
+    const r = await desativarPush(vendedora.id);
+    setOcupado(false);
+    if (r.ok) setStatus('inativo');
+    else alert('Erro: ' + r.motivo);
+  };
+
+  if (status === 'nao_suportado') return null;
+  if (status === 'verificando') return null;
+
+  const ativo = status === 'ativo';
+  const Icone = ativo ? Bell : BellOff;
+
+  return (
+    <button
+      onClick={ativo ? desativar : ativar}
+      disabled={ocupado}
+      title={ativo ? 'Notificações ativadas — toque pra desativar' : 'Toque pra ativar notificações'}
+      style={{
+        background: ativo ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.05)',
+        border: '1px solid rgba(255,255,255,0.15)',
+        color: 'white',
+        padding: 7, borderRadius: 8,
+        cursor: ocupado ? 'wait' : 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        opacity: ocupado ? 0.5 : 1,
+      }}
+    >
+      <Icone size={sz(15)} />
+    </button>
+  );
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CardAberturaApp — admin ve quem abriu o app hoje
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Le da view vw_lojas_acesso_hoje (criada no SQL push). Mostra status:
+//   ✅ abriu hoje
+//   ⏳ ainda nao abriu
+//   🔕 push nao ativado no celular
+//
+const CardAberturaApp = ({ lojas }) => {
+  const [linhas, setLinhas] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    let cancelado = false;
+    async function carregar() {
+      try {
+        const { data, error } = await supabase
+          .from('vw_lojas_acesso_hoje')
+          .select('vendedora_id, vendedora_nome, loja, push_ativo, abriu_hoje, ultimo_acesso_em, status_acesso');
+        if (cancelado) return;
+        if (error) {
+          console.warn('[abertura-app] view indisponivel:', error.message);
+          setLinhas([]);
+        } else {
+          setLinhas(data || []);
+        }
+      } catch (e) {
+        if (!cancelado) setLinhas([]);
+      } finally {
+        if (!cancelado) setCarregando(false);
+      }
+    }
+    carregar();
+    return () => { cancelado = true; };
+  }, []);
+
+  if (carregando) {
+    return (
+      <div style={{
+        background: palette.surface, border: `1px solid ${palette.beige}`,
+        borderRadius: 12, padding: 14, marginBottom: 16,
+      }}>
+        <div style={{ fontSize: fz(13), color: palette.inkMuted }}>Carregando abertura do app…</div>
+      </div>
+    );
+  }
+
+  if (!linhas.length) return null;
+
+  const horaUltimo = (iso) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+  };
+
+  const visualPorStatus = {
+    abriu_hoje:      { icone: '✅', cor: palette.ok,        label: 'abriu' },
+    sem_acesso_hoje: { icone: '⏳', cor: palette.warn,      label: 'sem acesso' },
+    nunca_abriu:     { icone: '⏳', cor: palette.warn,      label: 'sem acesso' },
+    sem_push:        { icone: '🔕', cor: palette.inkMuted,  label: 'push off' },
+  };
+
+  return (
+    <div style={{
+      background: palette.surface, border: `1px solid ${palette.beige}`,
+      borderRadius: 12, padding: 14, marginBottom: 16,
+    }}>
+      <div style={{
+        fontSize: fz(13), color: palette.inkSoft, fontWeight: 600,
+        marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5,
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        📲 Abertura do app — hoje
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {linhas.map(l => {
+          const v = visualPorStatus[l.status_acesso] || visualPorStatus.sem_acesso_hoje;
+          return (
+            <div key={l.vendedora_id} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              fontSize: fz(13), color: palette.ink,
+              padding: '4px 0',
+            }}>
+              <span style={{ fontSize: fz(15) }}>{v.icone}</span>
+              <span style={{ flex: 1, fontWeight: 500 }}>
+                {l.vendedora_nome}
+                <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 400, marginLeft: 6 }}>
+                  · {l.loja === 'Bom Retiro' ? 'BR' : 'ST'}
+                </span>
+              </span>
+              <span style={{ fontSize: fz(12), color: v.cor, fontWeight: 600 }}>
+                {l.status_acesso === 'abriu_hoje' && l.ultimo_acesso_em
+                  ? horaUltimo(l.ultimo_acesso_em)
+                  : v.label}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
