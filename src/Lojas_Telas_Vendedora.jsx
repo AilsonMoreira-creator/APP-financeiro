@@ -2553,6 +2553,13 @@ const BotaoSinoPush = ({ vendedora }) => {
   const [status, setStatus] = useState('verificando');  // verificando | ativo | inativo | nao_suportado
   const [ocupado, setOcupado] = useState(false);
 
+  // Le userId do localStorage. Se for 'tamara' (admin), backend redireciona
+  // o push pra placeholder Tamara_admin em vez de salvar pra vendedora atual.
+  const userId = (typeof localStorage !== 'undefined'
+    ? (localStorage.getItem('user_id') || localStorage.getItem('userId'))
+    : null) || null;
+  const ehTamara = String(userId || '').toLowerCase().trim() === 'tamara';
+
   // Verifica status do push neste navegador.
   // OBS: status 'inscrito' do navegador NAO garante que esta inscrito pra
   // ESTA vendedora — pode ser que login mudou e a inscricao ficou pra
@@ -2571,6 +2578,16 @@ const BotaoSinoPush = ({ vendedora }) => {
         return;
       }
       // Confere se a subscription do navegador bate com a do banco
+      // ATENCAO: pra Tamara (admin), comparar com Tamara_admin nao com a
+      // vendedora atual da carteira aberta. Como nao temos a row da
+      // Tamara_admin facilmente aqui, simplificamos: se navegador inscrito,
+      // mostra 🔔. Se ela trocar de celular, vai aparecer 🔔 mas o banco
+      // estara com subscription antiga — clicar 🔔 (desativar) e 🔕 (ativar)
+      // resolve.
+      if (ehTamara) {
+        setStatus('ativo');
+        return;
+      }
       try {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
@@ -2587,15 +2604,18 @@ const BotaoSinoPush = ({ vendedora }) => {
     }
     checar();
     return () => { cancelado = true; };
-  }, [vendedora?.id, vendedora?.push_subscription?.endpoint]);
+  }, [vendedora?.id, vendedora?.push_subscription?.endpoint, ehTamara]);
 
   const ativar = async () => {
     setOcupado(true);
-    const r = await ativarPush(vendedora.id);
+    const r = await ativarPush(vendedora.id, userId);
     setOcupado(false);
     if (r.ok) {
       setStatus('ativo');
-      alert('Notificações ativadas! 🔔\n\nVocê vai receber um lembrete de manhã se ainda não tiver aberto o app.');
+      const msg = r.redirecionado_admin
+        ? 'Notificações ativadas pra você (Tamara)! 🔔\n\nVai receber lembrete de manhã pra revisar o app.'
+        : 'Notificações ativadas! 🔔\n\nVocê vai receber um lembrete de manhã se ainda não tiver aberto o app.';
+      alert(msg);
     } else {
       alert('Não consegui ativar: ' + r.motivo);
     }
@@ -2604,7 +2624,7 @@ const BotaoSinoPush = ({ vendedora }) => {
   const desativar = async () => {
     if (!confirm('Desativar notificações neste celular?')) return;
     setOcupado(true);
-    const r = await desativarPush(vendedora.id);
+    const r = await desativarPush(vendedora.id, userId);
     setOcupado(false);
     if (r.ok) setStatus('inativo');
     else alert('Erro: ' + r.motivo);

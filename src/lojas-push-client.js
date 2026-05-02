@@ -59,17 +59,23 @@ export async function statusPush() {
  * Pede permissao + cria subscription + envia pro backend pra associar
  * com vendedora_id. Chamado quando vendedora clica no icone 🔕.
  *
+ * Args:
+ *   vendedoraId — id da vendedora atual (carteira aberta)
+ *   userId     — opcional, user logado. Se for "tamara", backend redireciona
+ *                pro placeholder Tamara_admin (admin recebe push proprio)
+ *
  * Retorna { ok: true } ou { ok: false, motivo: string }
  */
-export async function ativarPush(vendedoraId) {
+export async function ativarPush(vendedoraId, userId) {
   if (!pushSuportado()) {
     return { ok: false, motivo: 'Navegador nao suporta push' };
   }
   if (!VAPID_PUBLIC_KEY) {
     return { ok: false, motivo: 'VAPID public key nao configurada' };
   }
-  if (!vendedoraId) {
-    return { ok: false, motivo: 'Nenhuma vendedora selecionada' };
+  // Se nao tem nem vendedoraId nem userId, nao tem alvo
+  if (!vendedoraId && !userId) {
+    return { ok: false, motivo: 'Sem alvo (vendedora ou user)' };
   }
 
   try {
@@ -96,12 +102,14 @@ export async function ativarPush(vendedoraId) {
       });
     }
 
-    // Envia pro backend associar com vendedora_id
+    // Envia pro backend associar com vendedora_id (ou redirecionar pra
+    // Tamara_admin se userId='tamara')
     const res = await fetch('/api/lojas-push-register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         vendedora_id: vendedoraId,
+        user_id: userId,
         subscription: subscription.toJSON(),
       }),
     });
@@ -120,19 +128,20 @@ export async function ativarPush(vendedoraId) {
 
 /**
  * Desativa push neste celular. Remove subscription do navegador E do backend.
+ * userId opcional — quando 'tamara', backend remove de Tamara_admin.
  */
-export async function desativarPush(vendedoraId) {
+export async function desativarPush(vendedoraId, userId) {
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
     if (sub) {
       await sub.unsubscribe();
     }
-    if (vendedoraId) {
+    if (vendedoraId || userId) {
       await fetch('/api/lojas-push-register', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vendedora_id: vendedoraId }),
+        body: JSON.stringify({ vendedora_id: vendedoraId, user_id: userId }),
       });
     }
     return { ok: true };
@@ -145,17 +154,15 @@ export async function desativarPush(vendedoraId) {
 /**
  * Tracking de acesso — registra "vendedora abriu o app por >=1 min hoje".
  *
- * Como funciona:
- *   - Quando o app abre, comeca timer de 60s.
- *   - Se aba perde foco (visibilitychange ou blur), pausa o timer.
- *   - Se volta foco, retoma de onde parou.
- *   - Quando atinge 60s acumulados, envia POST /api/lojas-push-touch.
- *   - Apos isso para de contar (1x por dia basta).
+ * Args:
+ *   vendedoraId — id da vendedora atual
+ *   userId      — opcional, user logado. Se "tamara", backend redireciona
+ *                 pra placeholder Tamara_admin
  *
  * Retorna funcao de cleanup pra desinstalar listeners.
  */
-export function instalarTrackingAcesso(vendedoraId) {
-  if (!vendedoraId) return () => {};
+export function instalarTrackingAcesso(vendedoraId, userId) {
+  if (!vendedoraId && !userId) return () => {};
 
   let acumulado = 0;        // ms acumulados de foco
   let inicioFoco = null;    // timestamp do inicio do foco atual
@@ -190,7 +197,7 @@ export function instalarTrackingAcesso(vendedoraId) {
       await fetch('/api/lojas-push-touch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vendedora_id: vendedoraId }),
+        body: JSON.stringify({ vendedora_id: vendedoraId, user_id: userId }),
         keepalive: true,  // garante envio mesmo se aba fechar
       });
     } catch (e) {

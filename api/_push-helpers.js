@@ -33,10 +33,25 @@ const MENSAGENS_LEMBRETE = [
   (nome) => `Bom dia, ${nome}! 🌞 Suas clientes top tão querendo novidade — abre o app ✨`,
 ];
 
+// Mensagens admin (Tamara) — tom de gestao, "ver o que ta rolando"
+const MENSAGENS_ADMIN = [
+  (nome) => `Bom dia ${nome}! 📊 Dá uma olhada no que tá chegando pras meninas hoje 👀`,
+  (nome) => `${nome}, bom dia! 🌞 Hora de revisar o app e ver o movimento das vendedoras ☕`,
+  (nome) => `Oi ${nome}! 👋 Abre o app e dá uma conferida nas sugestões do dia 📋`,
+  (nome) => `Bom dia, ${nome}! ✨ Vamos ver como tão as carteiras hoje? Abre o app 💼`,
+  (nome) => `${nome}! ☀️ Café passado? Abre o app pra ver o que tá pintando pras meninas 📲`,
+];
+
 export function escolherMensagem(nome) {
-  const fn = MENSAGENS_LEMBRETE[Math.floor(Math.random() * MENSAGENS_LEMBRETE.length)];
-  // Pega so primeiro nome (limpa razao social longa)
-  const nomeBonito = String(nome || '').trim().split(/\s+/)[0] || 'vendedora';
+  // Detecta admin pelo nome (placeholder Tamara_admin ou qualquer "_admin")
+  const nomeLower = String(nome || '').toLowerCase();
+  const ehAdmin = nomeLower.includes('admin') || nomeLower.includes('tamara');
+  const lista = ehAdmin ? MENSAGENS_ADMIN : MENSAGENS_LEMBRETE;
+  const fn = lista[Math.floor(Math.random() * lista.length)];
+  // Pega so primeiro nome (limpa "_admin" ou razao social longa)
+  let nomeBonito = String(nome || '').trim().split(/[\s_]+/)[0] || 'vendedora';
+  // Capitaliza
+  nomeBonito = nomeBonito.charAt(0).toUpperCase() + nomeBonito.slice(1).toLowerCase();
   return fn(nomeBonito);
 }
 

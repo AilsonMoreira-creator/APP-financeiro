@@ -83,3 +83,16 @@ SELECT
 FROM lojas_vendedoras v
 WHERE v.ativa = true AND v.is_placeholder = false
 ORDER BY v.nome;
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 4. Placeholder Tamara_admin pra receber push de admin
+-- ───────────────────────────────────────────────────────────────────────────
+-- Tamara e admin (acesso total), mas precisa receber lembrete de abrir o app
+-- igual as vendedoras. Solucao: criar uma "vendedora" placeholder so pra ela.
+-- is_placeholder=true → nao aparece nas listagens normais, nao recebe vendas,
+-- nao tem carteira. Fica so como alvo de push.
+-- Backend (api/lojas-push-register, api/lojas-push-touch) detecta user_id='tamara'
+-- e redireciona automaticamente pra esta row.
+INSERT INTO lojas_vendedoras (nome, loja, ativa, is_placeholder, is_padrao_loja, aliases, ordem_display)
+VALUES ('Tamara_admin', 'Bom Retiro', true, true, false, ARRAY['TAMARA'], 99)
+ON CONFLICT DO NOTHING;
