@@ -25,11 +25,13 @@ export default async function handler(req, res) {
   const inicioHojeUTC = new Date(inicioHojeBRT.getTime() + 3 * 60 * 60 * 1000).toISOString();
 
   // Busca vendedoras ativas com push ativado que NAO abriram hoje
+  // OBS: NAO filtra is_placeholder pq Tamara_admin (placeholder) tem que
+  // receber push tambem. Filtro real e push_subscription IS NOT NULL —
+  // outras placeholders (Vendedora_3, Vendedora_4) nao tem push ativado.
   const { data: candidatas, error } = await supabase
     .from('lojas_vendedoras')
     .select('id, nome, push_subscription, ultimo_acesso_em')
     .eq('ativa', true)
-    .eq('is_placeholder', false)
     .not('push_subscription', 'is', null);
 
   if (error) {
