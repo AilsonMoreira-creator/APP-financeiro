@@ -279,8 +279,14 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
       }
     } catch { /* nao bloqueia se a checagem falhar */ }
 
-    // Faz upsert no Supabase
-    const upsertStats = await aplicarUpsert(tipoInfo.tipo, parseResult.registros, importacaoId);
+    // Faz upsert no Supabase. Passa varejo separado (Sprint A — só para
+    // tipos vendas_historico/semanal). Outros tipos ignoram varejo.
+    const upsertStats = await aplicarUpsert(
+      tipoInfo.tipo,
+      parseResult.registros,
+      importacaoId,
+      { varejo: parseResult.varejo || [] },
+    );
 
     await finalizarLogImportacao(supabase, importacaoId, {
       status: 'sucesso',
@@ -646,7 +652,7 @@ async function backfillVendedoraClientes(registrosVendas) {
   return { backfill_vendedora: atualizados };
 }
 
-async function aplicarUpsert(tipo, registros, importacaoId) {
+async function aplicarUpsert(tipo, registros, importacaoId, extras = {}) {
   if (!registros?.length) return { inseridos: 0, atualizados: 0 };
 
   // Adiciona importacao_id em registros que tem essa coluna
@@ -796,6 +802,25 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
 
     // Upsert por (numero_pedido, loja)
     const stats = await upsertEmLotes('lojas_vendas', filtrados, ['numero_pedido', 'loja']);
+
+    // ─── VAREJO PARALELO (Sprint A 04/05/2026) ──────────────────────────
+    // Salva linhas de varejo em lojas_vendas_varejo. Mesma logica de filtro
+    // por data (HISTORICO_DATA_CORTE) e mesmo upsert idempotente.
+    // Independente do atacado: se um falhar, outro continua.
+    const varejoArr = extras.varejo || [];
+    if (varejoArr.length) {
+      const varejoFiltrado = varejoArr.filter(r =>
+        r.data_venda && r.data_venda >= HISTORICO_DATA_CORTE
+      );
+      if (varejoFiltrado.length) {
+        try {
+          await upsertEmLotes('lojas_vendas_varejo', varejoFiltrado, ['numero_pedido', 'loja']);
+          console.log(`[varejo] importadas ${varejoFiltrado.length} linhas`);
+        } catch (e) {
+          console.warn('[varejo] erro upsert (nao bloqueia atacado):', e?.message);
+        }
+      }
+    }
 
     // ─── BACKFILL DE TELEFONE A PARTIR DO WHATSAPP DO HISTÓRICO ─────────
     // Decisão Ailson 28/04/2026: quando cliente não tem telefone_principal
