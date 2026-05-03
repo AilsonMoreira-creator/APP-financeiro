@@ -87,6 +87,9 @@ export default async function handler(req, res) {
     if (action === 'conversoes_dashboard') {
       return await handleConversoesDashboard(req, res, auth);
     }
+    if (action === 'metas_dashboard') {
+      return await handleMetasDashboard(req, res, auth);
+    }
     return res.status(400).json({ error: `Action desconhecida: ${action}` });
   } catch (e) {
     console.error('[lojas-ia] erro fatal:', e);
@@ -1761,5 +1764,165 @@ async function handleConversoesDashboard(req, res, _auth) {
     por_status,
     por_vendedora,
     detalhe: (conversoes || []).slice(0, 50),
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AÇÃO 5: metas_dashboard (Card de metas vendedora — Sprint A 04/05/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Retorna progresso da meta de cada vendedora ATIVA no período (default: mes
+// corrente em BRT, mas aceita filtros).
+//
+// Uso:
+//   POST /api/lojas-ia { action: 'metas_dashboard', periodo: 'mes_atual' | '2026-04' }
+//
+// Lê de vw_lojas_vendas_completo (UNION atacado + varejo). Soma agrupado
+// por vendedora_id + categoria. Filtra mês corrente em BRT. Calcula
+// checkpoints batidos (sem dispara push, só info pro frontend).
+//
+// Estrutura de resposta:
+//   {
+//     periodo: '2026-05',
+//     periodo_label: 'Maio/2026',
+//     data_inicio: '2026-05-01',
+//     data_fim: '2026-05-31',
+//     vendedoras: [
+//       { vendedora_id, nome, loja, atacado, varejo, total,
+//         meta_principal, percentual, checkpoints_batidos: [35000, 50000] }
+//     ],
+//     loja_BR: { total, vendedoras_ativas },
+//     loja_ST: { total, vendedoras_ativas },
+//   }
+
+const METAS_BR = {
+  // Bom Retiro: 70/80/90/100k metas, com checkpoints intermediários
+  meta_principal: 100000,
+  checkpoints: [35000, 50000, 60000, 70000, 80000, 90000, 100000],
+  metas: [70000, 80000, 90000, 100000],  // metas que dão bônus
+};
+
+const METAS_ST = {
+  // Silva Teles: 70k 1ª meta (contida) / 140k grande
+  meta_principal: 140000,
+  checkpoints: [60000, 70000, 80000, 90000, 100000, 140000],
+  metas: [70000, 140000],
+};
+
+function metasDaLoja(loja) {
+  if (loja === 'Bom Retiro') return METAS_BR;
+  if (loja === 'Silva Teles') return METAS_ST;
+  return METAS_BR;  // fallback
+}
+
+async function handleMetasDashboard(req, res, _auth) {
+  const { periodo = 'mes_atual', vendedora_id } = req.body || {};
+
+  // Calcula intervalo de datas em BRT
+  const agora = new Date();
+  const agoraBRT = new Date(agora.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  let ano, mes;  // 1-indexed
+  if (periodo === 'mes_atual') {
+    ano = agoraBRT.getFullYear();
+    mes = agoraBRT.getMonth() + 1;
+  } else if (/^\d{4}-\d{2}$/.test(periodo)) {
+    [ano, mes] = periodo.split('-').map(Number);
+  } else {
+    return res.status(400).json({ error: 'periodo invalido (use "mes_atual" ou "AAAA-MM")' });
+  }
+
+  const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+  // Ultimo dia do mes:
+  const fimDate = new Date(ano, mes, 0);  // dia 0 do mês seguinte = último dia do mês
+  const fim = `${ano}-${String(mes).padStart(2, '0')}-${String(fimDate.getDate()).padStart(2, '0')}`;
+  const periodo_label = fimDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+    .replace(/^\w/, c => c.toUpperCase());
+
+  // Busca vendas no periodo (atacado + varejo via view)
+  let query = supabase
+    .from('vw_lojas_vendas_completo')
+    .select('vendedora_id, categoria, valor_liquido, loja')
+    .gte('data_venda', inicio)
+    .lte('data_venda', fim);
+
+  if (vendedora_id) {
+    query = query.eq('vendedora_id', vendedora_id);
+  }
+
+  const { data: vendas, error } = await query;
+  if (error) {
+    return res.status(500).json({ error: 'erro buscar vendas', detalhe: error.message });
+  }
+
+  // Busca vendedoras ativas (filtra placeholders)
+  const { data: vendedorasRaw } = await supabase
+    .from('lojas_vendedoras')
+    .select('id, nome, loja')
+    .eq('ativa', true)
+    .eq('is_placeholder', false)
+    .order('loja')
+    .order('nome');
+
+  const vendedoras = vendedorasRaw || [];
+
+  // Agrupa vendas por vendedora_id + categoria
+  const mapa = new Map();  // vendedora_id → { atacado, varejo, total }
+  for (const v of vendas || []) {
+    if (!v.vendedora_id) continue;  // venda sem vendedora não conta meta
+    if (!mapa.has(v.vendedora_id)) {
+      mapa.set(v.vendedora_id, { atacado: 0, varejo: 0, total: 0 });
+    }
+    const valor = Number(v.valor_liquido || 0);
+    const acc = mapa.get(v.vendedora_id);
+    if (v.categoria === 'atacado') acc.atacado += valor;
+    else if (v.categoria === 'varejo') acc.varejo += valor;
+    acc.total += valor;
+  }
+
+  // Monta resposta vendedora a vendedora
+  const respVend = vendedoras.map(vd => {
+    const totais = mapa.get(vd.id) || { atacado: 0, varejo: 0, total: 0 };
+    const cfg = metasDaLoja(vd.loja);
+    const checkpointsBatidos = cfg.checkpoints.filter(c => totais.total >= c);
+    const percentual = cfg.meta_principal > 0
+      ? Math.round((totais.total / cfg.meta_principal) * 100)
+      : 0;
+    return {
+      vendedora_id: vd.id,
+      nome: vd.nome,
+      loja: vd.loja,
+      atacado: Math.round(totais.atacado * 100) / 100,
+      varejo: Math.round(totais.varejo * 100) / 100,
+      total: Math.round(totais.total * 100) / 100,
+      meta_principal: cfg.meta_principal,
+      checkpoints_loja: cfg.checkpoints,
+      checkpoints_batidos: checkpointsBatidos,
+      percentual,
+    };
+  });
+
+  // Totais por loja
+  const lojaBR = {
+    total: respVend.filter(r => r.loja === 'Bom Retiro').reduce((s, r) => s + r.total, 0),
+    vendedoras_ativas: respVend.filter(r => r.loja === 'Bom Retiro').length,
+    meta_principal_individual: METAS_BR.meta_principal,
+  };
+  lojaBR.total = Math.round(lojaBR.total * 100) / 100;
+
+  const lojaST = {
+    total: respVend.filter(r => r.loja === 'Silva Teles').reduce((s, r) => s + r.total, 0),
+    vendedoras_ativas: respVend.filter(r => r.loja === 'Silva Teles').length,
+    meta_principal_individual: METAS_ST.meta_principal,
+  };
+  lojaST.total = Math.round(lojaST.total * 100) / 100;
+
+  return res.json({
+    periodo: `${ano}-${String(mes).padStart(2, '0')}`,
+    periodo_label,
+    data_inicio: inicio,
+    data_fim: fim,
+    vendedoras: respVend,
+    loja_BR: lojaBR,
+    loja_ST: lojaST,
   });
 }
