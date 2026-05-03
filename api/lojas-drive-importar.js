@@ -279,8 +279,10 @@ async function processarArquivo(arq, tipoInfo, vendedoras) {
       }
     } catch { /* nao bloqueia se a checagem falhar */ }
 
-    // Faz upsert no Supabase
-    const upsertStats = await aplicarUpsert(tipoInfo.tipo, parseResult.registros, importacaoId);
+    // Faz upsert no Supabase. Passa parseResult inteiro pra que types
+    // que tem registros adicionais (ex: vendas_historico tem registrosVarejo
+    // alem de registros) consigam acessar.
+    const upsertStats = await aplicarUpsert(tipoInfo.tipo, parseResult.registros, importacaoId, parseResult);
 
     await finalizarLogImportacao(supabase, importacaoId, {
       status: 'sucesso',
@@ -646,7 +648,7 @@ async function backfillVendedoraClientes(registrosVendas) {
   return { backfill_vendedora: atualizados };
 }
 
-async function aplicarUpsert(tipo, registros, importacaoId) {
+async function aplicarUpsert(tipo, registros, importacaoId, parseResult = null) {
   if (!registros?.length) return { inseridos: 0, atualizados: 0 };
 
   // Adiciona importacao_id em registros que tem essa coluna
@@ -796,6 +798,26 @@ async function aplicarUpsert(tipo, registros, importacaoId) {
 
     // Upsert por (numero_pedido, loja)
     const stats = await upsertEmLotes('lojas_vendas', filtrados, ['numero_pedido', 'loja']);
+
+    // ─── UPSERT DE VAREJO (Ailson 04/05/2026) ────────────────────────────
+    // Tabela paralela lojas_vendas_varejo. Mesmo HISTORICO_DATA_CORTE
+    // pra consistencia. Cliente_id NAO e populado (varejo nao tem cliente
+    // cadastrado em lojas_clientes — decisao do Ailson).
+    if (parseResult?.registrosVarejo?.length) {
+      const varejoFiltrados = parseResult.registrosVarejo
+        .filter(r => r.data_venda && r.data_venda >= HISTORICO_DATA_CORTE)
+        .map(r => ({ ...r, importacao_id: importacaoId }));
+      if (varejoFiltrados.length) {
+        try {
+          await upsertEmLotes('lojas_vendas_varejo', varejoFiltrados, ['numero_pedido', 'loja']);
+          console.log(`[varejo] ${varejoFiltrados.length} vendas de varejo upsertadas.`);
+        } catch (e) {
+          // Nao quebra o import principal — log apenas. Provavel causa: tabela
+          // ainda nao foi criada no Supabase.
+          console.warn('[varejo] erro ao upsertar (tabela ainda nao criada?):', e?.message);
+        }
+      }
+    }
 
     // ─── BACKFILL DE TELEFONE A PARTIR DO WHATSAPP DO HISTÓRICO ─────────
     // Decisão Ailson 28/04/2026: quando cliente não tem telefone_principal

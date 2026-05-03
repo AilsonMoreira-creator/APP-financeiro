@@ -279,6 +279,7 @@ export function parseRelatorioVendasClientes(conteudo, loja, vendedorasCadastrad
 export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastradas) {
   const linhas = parseCSV(conteudo);
   const registros = [];
+  const registrosVarejo = [];   // Ailson 04/05/2026: nova tabela paralela
   const detalhes_ignorados = {
     consumidor: 0,
     documento_invalido: 0,
@@ -286,7 +287,7 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
   };
 
   if (!loja) {
-    return { registros: [], total: linhas.length, ignorados: linhas.length,
+    return { registros: [], registrosVarejo: [], total: linhas.length, ignorados: linhas.length,
       detalhes_ignorados: { ...detalhes_ignorados, sem_loja: linhas.length } };
   }
 
@@ -302,7 +303,40 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
       } else {
         detalhes_ignorados.documento_invalido++;
       }
-      continue;
+
+      // ═══ COLETA VAREJO PRA TABELA PARALELA (Ailson 04/05/2026) ═══════════
+      // Antes era 'continue' e descartava tudo. Agora extrai os campos
+      // minimos pra tabela lojas_vendas_varejo (vendedora + valores + data).
+      // Atacado segue inalterado abaixo.
+      const numero_pedido_var = limparTexto(l['PEDIDO']);
+      const data_venda_var = parseDataBR(l['DATA|FINALIZADO']);
+      if (numero_pedido_var && data_venda_var) {
+        const vendedoraNomeVar = limparTexto(l['VENDEDOR']);
+        const vendedoraVar = resolverVendedora(vendedoraNomeVar, loja, vendedorasCadastradas);
+        const formaPgVar = limparTexto(l['PAGAMENTO']);
+        const pctRawVar = String(l['%'] || '').replace('%', '').trim();
+        registrosVarejo.push({
+          numero_pedido: numero_pedido_var,
+          loja,
+          data_venda: data_venda_var,
+          vendedora_id: vendedoraVar?.id || null,
+          vendedora_nome_raw: vendedoraNomeVar,
+          qtd_pecas: Math.round(parseNumeroBR(l['QTDE']) || 0),
+          qtd_devolvida: Math.round(parseNumeroBR(l['DEVOL']) || 0),
+          valor_total: parseNumeroBR(l['TOTAL']) || 0,
+          valor_devolucao: parseNumeroBR(l['DEVOLUÇÃO']) || 0,
+          valor_liquido: parseNumeroBR(l['LÍQUIDO']) || 0,
+          valor_desconto: parseNumeroBR(l['DESCONTO']) || 0,
+          pct_desconto: parseNumeroBR(pctRawVar) || 0,
+          valor_custo: parseNumeroBR(l['CUSTO']) || 0,
+          forma_pagamento_raw: formaPgVar,
+          forma_pagamento_categoria: categorizarPagamento(formaPgVar),
+          hora_venda: limparTexto(l['HORA']) || null,
+          cidade: limparTexto(l['CIDADE']),
+          uf: limparTexto(l['UF']),
+        });
+      }
+      continue;  // mantem fluxo: varejo nao entra em lojas_vendas (atacado)
     }
 
     const documento = normalizarDocumento(docRaw);
@@ -380,6 +414,7 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
 
   return {
     registros,
+    registrosVarejo,
     total: linhas.length,
     ignorados: linhas.length - registros.length,
     detalhes_ignorados,
