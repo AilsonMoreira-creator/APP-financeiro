@@ -1645,11 +1645,40 @@ export const MinhaCarteiraScreen = ({
 export const DetalheClienteScreen = ({
   lojas, cliente, onBack, onAbrirGrupo, onCriarGrupo, onPedirMensagem,
 }) => {
-  const { state, handleEditarApelido, handleArquivarCliente, handlePularCliente } = lojas;
+  const { state, handleEditarApelido, handleEditarTelefone, handleArquivarCliente, handlePularCliente } = lojas;
   const [apelidoEdit, setApelidoEdit] = useState(false);
   const [apelido, setApelido] = useState(cliente.apelido || '');
   const [salvando, setSalvando] = useState(false);
   const [showAcoes, setShowAcoes] = useState(false);
+
+  // Modal editar/cadastrar WhatsApp (telefone_principal)
+  const [showEditTel, setShowEditTel] = useState(false);
+  const [telInput, setTelInput] = useState('');
+  const [salvandoTel, setSalvandoTel] = useState(false);
+
+  const abrirEditTelefone = () => {
+    // Pre-preenche com o telefone atual (so digitos)
+    const atual = String(cliente.telefone_principal || '').replace(/\D/g, '');
+    setTelInput(atual);
+    setShowEditTel(true);
+  };
+
+  const salvarTelefone = async () => {
+    const limpo = telInput.replace(/\D/g, '');
+    if (limpo && (limpo.length < 10 || limpo.length > 11)) {
+      alert('Telefone deve ter 10 ou 11 dígitos (com DDD)');
+      return;
+    }
+    setSalvandoTel(true);
+    try {
+      await handleEditarTelefone(cliente.id, limpo);
+      setShowEditTel(false);
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    } finally {
+      setSalvandoTel(false);
+    }
+  };
 
   // Atualiza local quando cliente muda
   useEffect(() => {
@@ -1754,12 +1783,34 @@ export const DetalheClienteScreen = ({
             )}
           </div>
 
-          {/* Telefone */}
-          {cliente.telefone_principal && (
-            <div style={{ padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}` }}>
-              <TelefoneCopiavel telefone={cliente.telefone_principal} />
-            </div>
-          )}
+          {/* Telefone (WhatsApp) — sempre visivel pra editar / cadastrar */}
+          <div style={{ padding: '8px 0', borderTop: `1px solid ${palette.beigeSoft}`,
+            display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Phone size={sz(15)} color={palette.inkSoft} />
+            {cliente.telefone_principal ? (
+              <>
+                <div style={{ flex: 1 }}>
+                  <TelefoneCopiavel telefone={cliente.telefone_principal} />
+                </div>
+                <button onClick={() => abrirEditTelefone()} style={{
+                  background: 'transparent', border: 'none',
+                  cursor: 'pointer', padding: 4,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }} title="Editar WhatsApp">
+                  <Pencil size={sz(15)} color={palette.inkSoft} />
+                </button>
+              </>
+            ) : (
+              <button onClick={() => abrirEditTelefone()} style={{
+                flex: 1, background: 'transparent', border: 'none',
+                cursor: 'pointer', textAlign: 'left', fontFamily: FONT,
+                fontSize: fz(14), color: palette.accent, padding: 0,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <Plus size={sz(14)} /> Adicionar WhatsApp
+              </button>
+            )}
+          </div>
 
           {/* Vendedora atual */}
           {vendedoraAtual && (
@@ -1909,6 +1960,54 @@ export const DetalheClienteScreen = ({
           Pedir sugestão de mensagem
         </button>
       </div>
+
+      {/* Modal editar/cadastrar WhatsApp */}
+      {showEditTel && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.5)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100,
+        }} onClick={() => setShowEditTel(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: palette.surface, borderRadius: '16px 16px 0 0',
+            padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
+          }}>
+            <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>
+              📱 {cliente.telefone_principal ? 'Editar' : 'Cadastrar'} WhatsApp
+            </div>
+            <div style={{ fontSize: fz(13), color: palette.inkSoft, marginBottom: 14 }}>
+              {nomeCliente(cliente)}
+            </div>
+            <input
+              type="tel"
+              inputMode="numeric"
+              autoFocus
+              value={telInput}
+              onChange={(e) => setTelInput(e.target.value)}
+              placeholder="DDD + número (ex: 11987654321)"
+              style={{
+                width: '100%', padding: 12, fontSize: fz(16), fontFamily: FONT,
+                border: `1.5px solid ${palette.beige}`, borderRadius: 8,
+                marginBottom: 14, boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowEditTel(false)} style={{
+                flex: 1, background: palette.surface, color: palette.inkSoft,
+                border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
+                fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+              }}>Cancelar</button>
+              <button onClick={salvarTelefone} disabled={salvandoTel} style={{
+                flex: 2, background: palette.accent, color: 'white',
+                border: 'none', borderRadius: 10, padding: '12px',
+                fontSize: fz(15), fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+                opacity: salvandoTel ? 0.6 : 1,
+              }}>
+                {salvandoTel ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de ações secundárias */}
       {showAcoes && (
