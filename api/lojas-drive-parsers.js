@@ -279,6 +279,10 @@ export function parseRelatorioVendasClientes(conteudo, loja, vendedorasCadastrad
 export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastradas) {
   const linhas = parseCSV(conteudo);
   const registros = [];
+  // Decisão Ailson 04/05/2026 (Sprint A — card metas vendedora):
+  // Varejo nao e mais descartado — vai pra array paralelo que sera salvo
+  // em lojas_vendas_varejo. Atacado continua igual (vai em registros[]).
+  const varejo = [];
   const detalhes_ignorados = {
     consumidor: 0,
     documento_invalido: 0,
@@ -286,7 +290,7 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
   };
 
   if (!loja) {
-    return { registros: [], total: linhas.length, ignorados: linhas.length,
+    return { registros: [], varejo: [], total: linhas.length, ignorados: linhas.length,
       detalhes_ignorados: { ...detalhes_ignorados, sem_loja: linhas.length } };
   }
 
@@ -297,6 +301,38 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
     const docRaw = l['CNPJ/CPF'];
     const filtro = ehVendaVarejo(cliente, docRaw, l['VENDEDOR']);
     if (filtro.ignorar) {
+      // Varejo: salva no array varejo[] em vez de descartar.
+      // Pra Sprint A (card metas vendedora). Tabela paralela.
+      const numeroPedidoVarejo = limparTexto(l['PEDIDO']);
+      if (numeroPedidoVarejo) {
+        const dataVendaVarejo = parseDataBR(l['DATA|FINALIZADO'] || l['DATA|CADASTRO']);
+        if (dataVendaVarejo) {
+          const vendedoraNomeVarejo = limparTexto(l['VENDEDOR']);
+          const vendedoraVarejo = resolverVendedora(vendedoraNomeVarejo, loja, vendedorasCadastradas);
+          let pctDescVarejo = 0;
+          const pctRawV = String(l['%'] || '').replace('%', '').trim();
+          pctDescVarejo = parseNumeroBR(pctRawV) || 0;
+
+          varejo.push({
+            numero_pedido: numeroPedidoVarejo,
+            loja,
+            data_venda: dataVendaVarejo,
+            vendedora_id: vendedoraVarejo?.id || null,
+            vendedora_nome_raw: vendedoraNomeVarejo || null,
+            valor_liquido: parseNumeroBR(l['LÍQUIDO']) || 0,
+            valor_bruto: parseNumeroBR(l['TOTAL BRUTO']) || null,
+            qtd_pecas: parseInt(l['QTDE'], 10) || null,
+            pct_desconto: pctDescVarejo,
+            forma_pagamento: limparTexto(l['PAGAMENTO']) || null,
+            hora_venda: limparTexto(l['HORA']) || null,
+            documento_raw: limparTexto(docRaw) || null,
+            cliente_raw: cliente || null,
+            whatsapp_raw: limparTexto(l['WHATSAPP']) || null,
+          });
+        }
+      }
+      // Continua contando como ignorado pra estatistica do importer
+      // (atacado nao recebe essa linha — ela e varejo)
       if (filtro.motivo === 'varejo_nome' || filtro.motivo === 'documento_placeholder') {
         detalhes_ignorados.consumidor++;
       } else {
@@ -380,6 +416,7 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
 
   return {
     registros,
+    varejo,                                            // Sprint A 04/05/2026
     total: linhas.length,
     ignorados: linhas.length - registros.length,
     detalhes_ignorados,
