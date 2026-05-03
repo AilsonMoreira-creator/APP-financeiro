@@ -1959,6 +1959,13 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
           onBack={() => setScreen('carteira')}
           onAbrirGrupo={handleSelectGrupo}
           onCriarGrupo={(c) => { setClienteParaGrupo(c); setShowCriarGrupo(true); }}
+          onPedirMensagem={() => alert(
+            'Geração de mensagem avulsa: recurso em breve! 🛠️\n\n' +
+            'Por enquanto, pra gerar mensagem desse cliente:\n' +
+            '1. Volta na home\n' +
+            '2. Aguarda esse cliente aparecer nas 7 sugestões do dia\n' +
+            '3. Clica nele e usa "Pedir sugestão de mensagem"'
+          )}
         />
       )}
       
