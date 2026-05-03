@@ -837,6 +837,9 @@ export const SugestaoScreen = ({
   const [showCadTelefone, setShowCadTelefone] = useState(false);  // modal cadastrar tel
   const [telefoneInput, setTelefoneInput] = useState('');
   const [salvandoTelefone, setSalvandoTelefone] = useState(false);
+  // Origem do modal: 'whats' = abre WhatsApp depois de salvar (fluxo do botao
+  // WhatsApp). 'edicao' = so salva e fecha (fluxo do lapis/Adicionar no card)
+  const [origemModalTel, setOrigemModalTel] = useState('whats');
 
   // Cliente da sugestão
   const cliente = state.clientes.find(c => c.id === sugestao.cliente_id);
@@ -897,6 +900,7 @@ export const SugestaoScreen = ({
     const tel = (cliente.telefone_principal || '').trim();
     if (!tel) {
       setTelefoneInput('');
+      setOrigemModalTel('whats');
       setShowCadTelefone(true);
       return;
     }
@@ -918,25 +922,35 @@ export const SugestaoScreen = ({
     }
   };
 
-  // Salva telefone e abre WhatsApp na sequencia
-  const salvarTelefoneEAbrirWhats = async () => {
+  // Salva telefone do cliente. Comportamento depende da origem:
+  //   'whats'  → veio do botao WhatsApp (cliente sem tel) → marca sugestao
+  //              enviada e abre wa.me
+  //   'edicao' → veio do lapis ou 'Adicionar WhatsApp' no card → so salva e
+  //              fecha (vendedora pode clicar WhatsApp depois se quiser)
+  const salvarTelefoneCliente = async () => {
     const tel = telefoneInput.replace(/\D/g, '');
-    if (tel.length < 10 || tel.length > 11) {
+    // Permite vazio so se origem='edicao' (vendedora pode estar limpando)
+    if (tel && (tel.length < 10 || tel.length > 11)) {
       alert('Digite um número válido (10 ou 11 dígitos)');
+      return;
+    }
+    if (!tel && origemModalTel === 'whats') {
+      alert('Digite o WhatsApp pra abrir a conversa');
       return;
     }
     setSalvandoTelefone(true);
     try {
-      // Salva telefone do cliente
       if (handleEditarTelefone) {
         await handleEditarTelefone(cliente.id, tel);
       }
       setShowCadTelefone(false);
-      // Marca enviada e abre WhatsApp
-      await handleMarcarSugestaoExecutada(sugestao.id, null);
-      const numero = tel.length === 11 || tel.length === 10 ? '55' + tel : tel;
-      window.location.href = `https://wa.me/${numero}`;
-      onMarcarEnviada && onMarcarEnviada();
+      // So abre WhatsApp se a origem foi o botao WhatsApp
+      if (origemModalTel === 'whats') {
+        await handleMarcarSugestaoExecutada(sugestao.id, null);
+        const numero = tel.length === 11 || tel.length === 10 ? '55' + tel : tel;
+        window.location.href = `https://wa.me/${numero}`;
+        onMarcarEnviada && onMarcarEnviada();
+      }
     } catch (e) {
       alert('Erro ao salvar telefone: ' + e.message);
     } finally {
@@ -1038,11 +1052,43 @@ export const SugestaoScreen = ({
                 )}
               </div>
 
-              {cliente.telefone_principal && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${palette.beige}` }}>
-                  <TelefoneCopiavel telefone={cliente.telefone_principal} />
-                </div>
-              )}
+              {/* WhatsApp — sempre visivel, mesma logica da carteira do cliente */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+                marginTop: 8, paddingTop: 8, borderTop: `1px solid ${palette.beige}` }}>
+                <Phone size={sz(15)} color={palette.inkSoft} />
+                {cliente.telefone_principal ? (
+                  <>
+                    <div style={{ flex: 1 }}>
+                      <TelefoneCopiavel telefone={cliente.telefone_principal} />
+                    </div>
+                    <button onClick={() => {
+                      setTelefoneInput(String(cliente.telefone_principal || '').replace(/\D/g, ''));
+                      setOrigemModalTel('edicao');
+                      setShowCadTelefone(true);
+                    }} style={{
+                      background: 'transparent', border: 'none',
+                      cursor: 'pointer', padding: 4,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }} title="Editar WhatsApp">
+                      <Pencil size={sz(15)} color={palette.inkSoft} />
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => {
+                    setTelefoneInput('');
+                    setOrigemModalTel('edicao');
+                    setShowCadTelefone(true);
+                  }} style={{
+                    flex: 1, background: 'transparent', border: 'none',
+                    cursor: 'pointer', textAlign: 'left', fontFamily: FONT,
+                    fontSize: fz(14), color: palette.accent, padding: 0,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    fontStyle: 'italic',
+                  }}>
+                    <Plus size={sz(14)} /> Adicionar WhatsApp
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1169,8 +1215,9 @@ export const SugestaoScreen = ({
         </div>
       </div>
 
-      {/* Modal cadastrar telefone — quando cliente nao tem telefone e
-          vendedora quer mandar WhatsApp */}
+      {/* Modal editar/cadastrar WhatsApp.
+          origem='whats': salva e abre WhatsApp na sequencia (botao verde)
+          origem='edicao': so salva e fecha (botao azul) */}
       {showCadTelefone && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.5)',
@@ -1181,10 +1228,10 @@ export const SugestaoScreen = ({
             padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
           }}>
             <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>
-              📱 Cadastrar WhatsApp
+              📱 {cliente?.telefone_principal && origemModalTel === 'edicao' ? 'Editar' : 'Cadastrar'} WhatsApp
             </div>
             <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16 }}>
-              {cliente?.razao_social || cliente?.nome_fantasia || 'Cliente'} ainda não tem telefone cadastrado.
+              {cliente?.razao_social || cliente?.nome_fantasia || 'Cliente'}
             </div>
             <input
               type="tel"
@@ -1205,15 +1252,19 @@ export const SugestaoScreen = ({
                 border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
                 fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
               }}>Cancelar</button>
-              <button onClick={salvarTelefoneEAbrirWhats} disabled={salvandoTelefone} style={{
-                flex: 2, background: '#25D366', color: 'white',
+              <button onClick={salvarTelefoneCliente} disabled={salvandoTelefone} style={{
+                flex: 2,
+                background: origemModalTel === 'whats' ? '#25D366' : palette.accent,
+                color: 'white',
                 border: 'none', borderRadius: 10, padding: '12px',
                 fontSize: fz(15), fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 opacity: salvandoTelefone ? 0.6 : 1,
               }}>
-                <MessageCircle size={sz(18)} />
-                {salvandoTelefone ? 'Salvando…' : 'Salvar e abrir'}
+                {origemModalTel === 'whats' && <MessageCircle size={sz(18)} />}
+                {salvandoTelefone
+                  ? 'Salvando…'
+                  : (origemModalTel === 'whats' ? 'Salvar e abrir' : 'Salvar')}
               </button>
             </div>
           </div>
