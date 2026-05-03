@@ -813,10 +813,53 @@ async function montarContextoMensagem(sug, contextoExtra) {
     getLojasConfig('parametros.fechamento_padrao', null),
   ]);
 
+  // Estilo aprendido da vendedora (Ailson 04/05/2026): IA usa as edicoes
+  // anteriores dela como referencia pra gerar mensagem mais parecida com o
+  // jeito dela escrever. So entra no prompt se houver pelo menos 1 edicao.
+  let estiloVendedora = null;
+  try {
+    const { data: estilo } = await supabase
+      .from('lojas_estilo_vendedora')
+      .select('*')
+      .eq('vendedora_id', sug.vendedora_id)
+      .maybeSingle();
+
+    if (estilo && (estilo.qtd_edicoes || 0) > 0) {
+      // Pega top 3 de cada categoria
+      const top3 = (counterObj) => {
+        const entries = Object.entries(counterObj || {});
+        return entries
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([k]) => k);
+      };
+
+      // Ultimas 3 edicoes (few-shot pra IA "imitar" o tom)
+      const { data: edicoes } = await supabase
+        .from('lojas_edicoes_mensagens')
+        .select('texto_original, texto_editado')
+        .eq('vendedora_id', sug.vendedora_id)
+        .order('criado_em', { ascending: false })
+        .limit(3);
+
+      estiloVendedora = {
+        qtd_edicoes: estilo.qtd_edicoes,
+        saudacao_inicial_top: top3(estilo.saudacao_inicial),
+        saudacao_final_top: top3(estilo.saudacao_final),
+        tratamento_top: top3(estilo.tratamento),
+        emojis_top: top3(estilo.emojis),
+        ultimas_edicoes: edicoes || [],
+      };
+    }
+  } catch (e) {
+    console.warn('[ia-mensagem] estilo vendedora indisponivel:', e?.message);
+  }
+
   return {
     cliente, grupo, kpi, docsGrupo,
     produto, promocao, coresTop,
     regrasCustomizadas: { tomGeral, posicionamento, sempre, nunca, saudacao, fechamento },
+    estiloVendedora,
   };
 }
 
@@ -1167,9 +1210,34 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       descricao: ctx.promocao.descricao_completa,
       vence_em: ctx.promocao.data_fim,
     } : null,
+    // Estilo aprendido da vendedora (Ailson 04/05/2026): aprende com edicoes
+    // anteriores. Inclui top tratamentos, saudacoes e emojis preferidos.
+    estilo_vendedora: ctx.estiloVendedora ? {
+      qtd_edicoes_aprendidas: ctx.estiloVendedora.qtd_edicoes,
+      saudacao_inicial_preferida: ctx.estiloVendedora.saudacao_inicial_top,
+      saudacao_final_preferida: ctx.estiloVendedora.saudacao_final_top,
+      tratamento_preferido: ctx.estiloVendedora.tratamento_top,
+      emojis_preferidos: ctx.estiloVendedora.emojis_top,
+      instrucao: 'IMITE o estilo desta vendedora — use os tratamentos, saudações e emojis preferidos dela quando fizer sentido.',
+    } : null,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };
+
+  // Few-shot REAL: ultimas edicoes da vendedora (mostra original->editada
+  // pra IA "ver" o que ela costuma mudar)
+  if (ctx.estiloVendedora?.ultimas_edicoes?.length > 0) {
+    for (const ed of ctx.estiloVendedora.ultimas_edicoes.slice(0, 2)) {
+      messages.push({
+        role: 'user',
+        content: 'Exemplo: a IA havia gerado esta mensagem...\n\n' + ed.texto_original,
+      });
+      messages.push({
+        role: 'assistant',
+        content: ed.texto_editado,
+      });
+    }
+  }
 
   messages.push({
     role: 'user',
