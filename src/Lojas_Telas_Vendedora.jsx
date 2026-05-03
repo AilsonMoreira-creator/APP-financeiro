@@ -2333,7 +2333,7 @@ export const HistoricoCarteiraScreen = ({ lojas, onBack }) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) => {
-  const { state, handleGerarMensagem, handleEditarApelido, handleMarcarSugestaoExecutada } = lojas;
+  const { state, handleGerarMensagem, handleEditarApelido, handleEditarTelefone, handleMarcarSugestaoExecutada, handleDispensarSugestao, handleSalvarEdicaoMensagem } = lojas;
 
   // Cliente vem direto OU buscado pela sugestão
   const clienteEfetivo = cliente || (sugestao ? state.clientes.find(c => c.id === sugestao.cliente_id) : null);
@@ -2342,9 +2342,23 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   const [step, setStep] = useState(apelidoInicial ? 'gerando' : 'apelido');
   const [apelido, setApelido] = useState(apelidoInicial);
   const [mensagem, setMensagem] = useState('');
+  const [mensagemOriginal, setMensagemOriginal] = useState('');  // pra comparar e salvar edicao
   const [copiado, setCopiado] = useState(false);
   const [erro, setErro] = useState(null);
   const [marcandoEnviada, setMarcandoEnviada] = useState(false);
+
+  // Edicao da mensagem com lapis (Ailson 04/05): vendedora ajusta pra IA aprender
+  const [editandoMsg, setEditandoMsg] = useState(false);
+  const [msgRascunho, setMsgRascunho] = useState('');
+
+  // Botao WhatsApp (envia COM mensagem) + modal cadastrar tel se vazio
+  const [enviandoWhats, setEnviandoWhats] = useState(false);
+  const [showCadTel, setShowCadTel] = useState(false);
+  const [telInput, setTelInput] = useState('');
+  const [salvandoTel, setSalvandoTel] = useState(false);
+
+  // Modal de recusa "Nao faz sentido"
+  const [showRecusa, setShowRecusa] = useState(false);
 
   const gerar = useCallback(async () => {
     if (!sugestao && !clienteEfetivo) return;
@@ -2364,6 +2378,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
         : '(geração avulsa ainda não disponível — gere a partir de uma sugestão)';
 
       setMensagem(msg);
+      setMensagemOriginal(msg);  // guarda pra comparar com a versao editada
       setStep('pronta');
     } catch (e) {
       setErro(e.message || 'Erro ao gerar mensagem');
@@ -2395,6 +2410,117 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       alert('Erro ao marcar como enviada: ' + e.message);
     } finally {
       setMarcandoEnviada(false);
+    }
+  };
+
+  // Inicia edicao da mensagem com lapis. Pre-popula com a versao atual.
+  const iniciarEdicao = () => {
+    setMsgRascunho(mensagem);
+    setEditandoMsg(true);
+  };
+
+  // Salva edicao: substitui mensagem visivel + manda backend pra IA aprender
+  const salvarEdicao = async () => {
+    const novaMsg = msgRascunho.trim();
+    if (!novaMsg) {
+      alert('Mensagem nao pode ficar vazia');
+      return;
+    }
+    if (novaMsg === mensagem) {
+      setEditandoMsg(false);
+      return;
+    }
+    setMensagem(novaMsg);
+    setEditandoMsg(false);
+    // Salva edicao em background pra IA aprender o estilo da vendedora.
+    // Nao bloqueia a UI — vendedora pode mandar WhatsApp imediatamente.
+    if (sugestao && handleSalvarEdicaoMensagem) {
+      try {
+        await handleSalvarEdicaoMensagem({
+          sugestao_id: sugestao.id,
+          vendedora_id: sugestao.vendedora_id,
+          original: mensagemOriginal,
+          editada: novaMsg,
+        });
+      } catch (e) {
+        console.warn('[edicao] erro salvar (nao bloqueia):', e?.message);
+      }
+    }
+  };
+
+  // Abre WhatsApp Business COM mensagem pre-preenchida + marca enviada.
+  // Se cliente nao tem telefone, abre modal pra cadastrar primeiro.
+  const abrirWhatsAppComMsg = async () => {
+    if (!clienteEfetivo) return;
+    const tel = (clienteEfetivo.telefone_principal || '').trim();
+    if (!tel) {
+      setTelInput('');
+      setShowCadTel(true);
+      return;
+    }
+    setEnviandoWhats(true);
+    try {
+      // Marca enviada (idempotente) com a mensagem que vai ser enviada
+      if (sugestao) {
+        await handleMarcarSugestaoExecutada(sugestao.id, mensagem);
+      }
+      const numeroLimpo = tel.replace(/\D/g, '');
+      const numero = numeroLimpo.length === 11 || numeroLimpo.length === 10
+        ? '55' + numeroLimpo
+        : numeroLimpo;
+      // Mensagem pre-preenchida, encoded
+      const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;
+      window.location.href = url;
+      onEnviada && onEnviada();
+    } catch (e) {
+      alert('Erro ao abrir WhatsApp: ' + e.message);
+    } finally {
+      setEnviandoWhats(false);
+    }
+  };
+
+  // Salva telefone novo + abre WhatsApp na sequencia
+  const salvarTelEAbrirWhats = async () => {
+    const tel = telInput.replace(/\D/g, '');
+    if (tel.length < 10 || tel.length > 11) {
+      alert('Digite um número válido (10 ou 11 dígitos)');
+      return;
+    }
+    setSalvandoTel(true);
+    try {
+      if (handleEditarTelefone) {
+        await handleEditarTelefone(clienteEfetivo.id, tel);
+      }
+      setShowCadTel(false);
+      if (sugestao) {
+        await handleMarcarSugestaoExecutada(sugestao.id, mensagem);
+      }
+      const numero = tel.length === 11 || tel.length === 10 ? '55' + tel : tel;
+      const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;
+      window.location.href = url;
+      onEnviada && onEnviada();
+    } catch (e) {
+      alert('Erro ao salvar telefone: ' + e.message);
+    } finally {
+      setSalvandoTel(false);
+    }
+  };
+
+  // Recusa sugestao via "Nao faz sentido"
+  const dispensar = async (motivo) => {
+    if (!sugestao) {
+      setShowRecusa(false);
+      onClose && onClose();
+      return;
+    }
+    try {
+      if (handleDispensarSugestao) {
+        await handleDispensarSugestao(sugestao.id, motivo);
+      }
+      setShowRecusa(false);
+      onClose && onClose();
+    } catch (e) {
+      alert('Erro ao dispensar: ' + e.message);
     }
   };
 
@@ -2524,46 +2650,204 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
           <div>
             <div style={{
               fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.5, textTransform: 'uppercase',
-              marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+              marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
-              <Sparkles size={sz(14)} /> Mensagem sugerida
-            </div>
-            <div style={{
-              background: palette.beigeSoft, borderRadius: 12, padding: 14, fontSize: fz(16),
-              color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap',
-              border: `1px solid ${palette.beige}`, marginBottom: 14, fontFamily: FONT,
-            }}>{mensagem}</div>
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <button onClick={() => { setMensagem(''); gerar(); }} style={{
-                flex: 1, background: palette.surface, color: palette.inkSoft,
-                border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
-                fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}><RefreshCw size={sz(16)} /> Gerar outra</button>
-              <button onClick={copiar} style={{
-                flex: 1, background: copiado ? palette.ok : palette.surface,
-                color: copiado ? palette.bg : palette.accent,
-                border: `1.5px solid ${copiado ? palette.ok : palette.accent}`,
-                borderRadius: 10, padding: '11px', fontSize: fz(15), fontWeight: 600,
-                cursor: 'pointer', fontFamily: FONT,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: 6, transition: 'all 0.2s',
-              }}>{copiado ? <><Check size={sz(16)} /> Copiado!</> : <><Copy size={sz(16)} /> Copiar</>}</button>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={sz(14)} /> Mensagem sugerida
+              </span>
+              {!editandoMsg && (
+                <button onClick={iniciarEdicao} title="Editar mensagem (a IA aprende com seu estilo)" style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: palette.inkSoft, padding: 4, display: 'flex', alignItems: 'center', gap: 4,
+                  fontSize: fz(12), fontFamily: FONT,
+                }}>
+                  <Pencil size={sz(13)} /> Editar
+                </button>
+              )}
             </div>
 
-            <button onClick={marcarEnviada} disabled={marcandoEnviada} style={{
-              width: '100%', background: palette.ok, color: palette.bg, border: 'none',
-              borderRadius: 10, padding: '13px', fontSize: fz(16), fontWeight: 600,
-              cursor: marcandoEnviada ? 'wait' : 'pointer', fontFamily: FONT,
-              opacity: marcandoEnviada ? 0.7 : 1,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            {/* Modo visualizacao OU edicao */}
+            {editandoMsg ? (
+              <>
+                <textarea
+                  value={msgRascunho}
+                  onChange={(e) => setMsgRascunho(e.target.value)}
+                  autoFocus
+                  rows={6}
+                  style={{
+                    width: '100%', padding: 12, fontSize: fz(15), fontFamily: FONT,
+                    border: `1.5px solid ${palette.accent}`, borderRadius: 10,
+                    color: palette.ink, lineHeight: 1.6, resize: 'vertical',
+                    boxSizing: 'border-box', marginBottom: 8,
+                  }}
+                />
+                <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 10, fontStyle: 'italic' }}>
+                  💡 Suas edições ajudam a IA a aprender seu jeito de escrever
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <button onClick={() => setEditandoMsg(false)} style={{
+                    flex: 1, background: palette.surface, color: palette.inkSoft,
+                    border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
+                    fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
+                  }}>Cancelar</button>
+                  <button onClick={salvarEdicao} style={{
+                    flex: 2, background: palette.accent, color: 'white',
+                    border: 'none', borderRadius: 10, padding: '11px',
+                    fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}>
+                    <Save size={sz(15)} /> Salvar edição
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{
+                  background: palette.beigeSoft, borderRadius: 12, padding: 14, fontSize: fz(16),
+                  color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+                  border: `1px solid ${palette.beige}`, marginBottom: 14, fontFamily: FONT,
+                }}>{mensagem}</div>
+
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <button onClick={() => { setMensagem(''); setMensagemOriginal(''); gerar(); }} style={{
+                    flex: 1, background: palette.surface, color: palette.inkSoft,
+                    border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
+                    fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}><RefreshCw size={sz(16)} /> Gerar outra</button>
+                  <button onClick={copiar} style={{
+                    flex: 1, background: copiado ? palette.ok : palette.surface,
+                    color: copiado ? palette.bg : palette.accent,
+                    border: `1.5px solid ${copiado ? palette.ok : palette.accent}`,
+                    borderRadius: 10, padding: '11px', fontSize: fz(15), fontWeight: 600,
+                    cursor: 'pointer', fontFamily: FONT,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: 6, transition: 'all 0.2s',
+                  }}>{copiado ? <><Check size={sz(16)} /> Copiado!</> : <><Copy size={sz(16)} /> Copiar</>}</button>
+                </div>
+              </>
+            )}
+
+            {/* 3 botoes de acao — so aparecem fora do modo edicao */}
+            {!editandoMsg && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={abrirWhatsAppComMsg} disabled={enviandoWhats} style={{
+                  flex: '1 1 100%',
+                  background: '#25D366', color: 'white',
+                  border: 'none', borderRadius: 10, padding: '13px',
+                  fontSize: fz(16), fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  boxShadow: '0 2px 6px rgba(37,211,102,0.35)',
+                  opacity: enviandoWhats ? 0.6 : 1,
+                }}>
+                  <MessageCircle size={sz(20)} /> {enviandoWhats ? 'Abrindo…' : 'WhatsApp'}
+                </button>
+                <button onClick={marcarEnviada} disabled={marcandoEnviada} style={{
+                  flex: 1, background: palette.surface, color: palette.accent,
+                  border: `1.5px solid ${palette.accent}`, borderRadius: 10, padding: '11px',
+                  fontSize: fz(15), fontWeight: 600,
+                  cursor: marcandoEnviada ? 'wait' : 'pointer', fontFamily: FONT,
+                  opacity: marcandoEnviada ? 0.6 : 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}>
+                  {marcandoEnviada
+                    ? <><Loader2 size={sz(15)} style={{ animation: 'spin 1s linear infinite' }} /> Salvando…</>
+                    : <><Check size={sz(17)} /> Já enviei</>}
+                </button>
+                <button onClick={() => setShowRecusa(true)} style={{
+                  flex: 1, background: palette.surface, color: palette.inkSoft,
+                  border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
+                  fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}><X size={sz(17)} /> Não faz sentido</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Modal cadastrar telefone (cliente sem WhatsApp) */}
+        {showCadTel && (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.6)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300,
+          }} onClick={() => setShowCadTel(false)}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: palette.surface, borderRadius: '16px 16px 0 0',
+              padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
             }}>
-              {marcandoEnviada
-                ? <><Loader2 size={sz(20)} style={{ animation: 'spin 1s linear infinite' }} /> Salvando…</>
-                : <><Send size={sz(20)} /> Enviei!</>
-              }
-            </button>
+              <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>
+                📱 Cadastrar WhatsApp
+              </div>
+              <div style={{ fontSize: fz(13), color: palette.inkSoft, marginBottom: 14 }}>
+                {clienteEfetivo?.razao_social || clienteEfetivo?.nome_fantasia || 'Cliente'} ainda não tem telefone.
+              </div>
+              <input
+                type="tel"
+                inputMode="numeric"
+                autoFocus
+                value={telInput}
+                onChange={(e) => setTelInput(e.target.value)}
+                placeholder="DDD + número (ex: 11987654321)"
+                style={{
+                  width: '100%', padding: 12, fontSize: fz(16), fontFamily: FONT,
+                  border: `1.5px solid ${palette.beige}`, borderRadius: 8,
+                  marginBottom: 14, boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setShowCadTel(false)} style={{
+                  flex: 1, background: palette.surface, color: palette.inkSoft,
+                  border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
+                  fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+                }}>Cancelar</button>
+                <button onClick={salvarTelEAbrirWhats} disabled={salvandoTel} style={{
+                  flex: 2, background: '#25D366', color: 'white',
+                  border: 'none', borderRadius: 10, padding: '12px',
+                  fontSize: fz(15), fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  opacity: salvandoTel ? 0.6 : 1,
+                }}>
+                  <MessageCircle size={sz(18)} />
+                  {salvandoTel ? 'Salvando…' : 'Salvar e abrir'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de recusa "Nao faz sentido" */}
+        {showRecusa && (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.6)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300,
+          }} onClick={() => setShowRecusa(false)}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: palette.surface, borderRadius: '16px 16px 0 0',
+              padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
+            }}>
+              <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>Por que não faz sentido?</div>
+              <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16 }}>Escolha pra IA aprender o que melhor se encaixa</div>
+              {[
+                { motivo: 'pular_hoje', icon: Pause, color: palette.inkSoft, label: 'Pular hoje', sub: 'Volta em 7 dias' },
+                { motivo: 'pular_30d', icon: Calendar, color: palette.warn, label: 'Pular 30 dias', sub: 'Cliente sazonal' },
+                { motivo: 'arquivar', icon: Archive, color: palette.archive, label: 'Arquivar cliente', sub: 'Não sugerir mais' },
+              ].map((op, i) => {
+                const OpIcon = op.icon;
+                return (
+                  <button key={i} onClick={() => dispensar(op.motivo)} style={{
+                    width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
+                    borderRadius: 10, padding: 14, marginBottom: 8, cursor: 'pointer', fontFamily: FONT,
+                    display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+                  }}>
+                    <OpIcon size={sz(23)} color={op.color} />
+                    <div>
+                      <div style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>{op.label}</div>
+                      <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 2 }}>{op.sub}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

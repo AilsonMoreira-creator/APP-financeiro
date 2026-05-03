@@ -1623,6 +1623,24 @@ function useLojasModule() {
   const handleGerarMensagem = useCallback(async (sugestaoId, contextoExtra) => {
     return await gerarMensagemIA(sugestaoId, contextoExtra);
   }, []);
+
+  // Salva edicao de mensagem feita pela vendedora pra IA aprender o estilo
+  // dela. Se o endpoint ainda nao existir (commit 4), apenas loga warning
+  // sem quebrar o fluxo do WhatsApp.
+  const handleSalvarEdicaoMensagem = useCallback(async (payload) => {
+    try {
+      const res = await fetch('/api/lojas-edicao-mensagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, user_id: state.userId }),
+      });
+      if (!res.ok) {
+        console.warn('[edicao-mensagem] endpoint ainda nao implementado:', res.status);
+      }
+    } catch (e) {
+      console.warn('[edicao-mensagem] falhou (nao bloqueia):', e?.message);
+    }
+  }, [state.userId]);
   
   const handleRegerarSugestoes = useCallback(async () => {
     if (!state.vendedoraAtiva) return;
@@ -1733,6 +1751,7 @@ function useLojasModule() {
     // sugestões e IA
     handleMarcarSugestaoExecutada,
     handleDispensarSugestao,
+    handleSalvarEdicaoMensagem,
     handleGerarMensagem,
     handleRegerarSugestoes,
     
