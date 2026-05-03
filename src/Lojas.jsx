@@ -754,6 +754,31 @@ async function saveApelidoCliente(clienteId, apelido, userId) {
   return data;
 }
 
+// Decisão Ailson 04/05/2026: vendedoras podem editar/cadastrar telefone do
+// cliente direto na carteira ou no fluxo de WhatsApp da sugestão. Recebe
+// somente dígitos (10 ou 11), salva em telefone_principal (= WhatsApp).
+async function saveTelefoneCliente(clienteId, telefone, userId) {
+  const limpo = String(telefone || '').replace(/\D/g, '');
+  if (!limpo) {
+    throw new Error('Telefone vazio');
+  }
+  if (limpo.length !== 10 && limpo.length !== 11) {
+    throw new Error('Telefone deve ter 10 ou 11 dígitos');
+  }
+  const { data, error } = await supabase
+    .from('lojas_clientes')
+    .update({
+      telefone_principal: limpo,
+      updated_at: new Date().toISOString(),
+      updated_by: userId,
+    })
+    .eq('id', clienteId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 async function arquivarCliente(clienteId, motivo, userId) {
   const { data, error } = await supabase
     .from('lojas_clientes')
@@ -1414,6 +1439,15 @@ function useLojasModule() {
     dispatch({ type: 'UPDATE_CLIENTE', cliente });
     return cliente;
   }, [state.userId]);
+
+  // Edita telefone (= WhatsApp) do cliente. Usado pelo modal de cadastro
+  // quando vendedora vai mandar WhatsApp e cliente nao tem telefone, e
+  // tambem pelo botao de editar telefone na carteira.
+  const handleEditarTelefone = useCallback(async (clienteId, telefone) => {
+    const cliente = await saveTelefoneCliente(clienteId, telefone, state.userId);
+    dispatch({ type: 'UPDATE_CLIENTE', cliente });
+    return cliente;
+  }, [state.userId]);
   
   const handleArquivarCliente = useCallback(async (clienteId, motivo) => {
     await arquivarCliente(clienteId, motivo, state.userId);
@@ -1665,6 +1699,7 @@ function useLojasModule() {
     
     // edição cliente
     handleEditarApelido,
+    handleEditarTelefone,
     handleArquivarCliente,
     handlePularCliente,
     handleTransferirCliente,
@@ -2061,7 +2096,7 @@ export {
   LOAD_PHASES,
   
   // operações pra UI chamar diretamente
-  saveCliente, saveApelidoCliente, arquivarCliente, pularCliente,
+  saveCliente, saveApelidoCliente, saveTelefoneCliente, arquivarCliente, pularCliente,
   transferirCliente, transferirCarteiraEmMassa,
   saveVendedora, inativarVendedora,
   savePromocao, pausarPromocao,

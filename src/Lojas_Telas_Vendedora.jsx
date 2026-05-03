@@ -829,10 +829,14 @@ export const CardDiaScreen = ({
 export const SugestaoScreen = ({
   lojas, sugestao, vendedora, onBack, onPedirMensagem, onMarcarEnviada,
 }) => {
-  const { state, handleEditarApelido, handleMarcarSugestaoExecutada, handleDispensarSugestao } = lojas;
+  const { state, handleEditarApelido, handleMarcarSugestaoExecutada, handleDispensarSugestao, handleEditarTelefone } = lojas;
   const [showRecusa, setShowRecusa] = useState(false);
   const [apelidoEdit, setApelidoEdit] = useState(false);
   const [salvandoApelido, setSalvandoApelido] = useState(false);
+  const [enviandoWhats, setEnviandoWhats] = useState(false);
+  const [showCadTelefone, setShowCadTelefone] = useState(false);  // modal cadastrar tel
+  const [telefoneInput, setTelefoneInput] = useState('');
+  const [salvandoTelefone, setSalvandoTelefone] = useState(false);
 
   // Cliente da sugestão
   const cliente = state.clientes.find(c => c.id === sugestao.cliente_id);
@@ -882,6 +886,61 @@ export const SugestaoScreen = ({
       onMarcarEnviada && onMarcarEnviada();
     } catch (e) {
       alert('Erro ao marcar como enviada: ' + e.message);
+    }
+  };
+
+  // Abre WhatsApp Business com a conversa do cliente. Marca como enviada
+  // automaticamente (Ailson 04/05/2026: clicar WhatsApp = enviou).
+  // Se cliente nao tem telefone, abre modal pra cadastrar antes.
+  const abrirWhatsApp = async () => {
+    if (!cliente) return;
+    const tel = (cliente.telefone_principal || '').trim();
+    if (!tel) {
+      setTelefoneInput('');
+      setShowCadTelefone(true);
+      return;
+    }
+    setEnviandoWhats(true);
+    try {
+      // Marca como enviada antes de redirecionar (idempotente)
+      await handleMarcarSugestaoExecutada(sugestao.id, null);
+      // Abre WhatsApp sem mensagem pre-definida (so atalho pra conversa)
+      const numeroLimpo = tel.replace(/\D/g, '');
+      const numero = numeroLimpo.length === 11 || numeroLimpo.length === 10
+        ? '55' + numeroLimpo  // celular brasileiro sem 55
+        : numeroLimpo;
+      window.location.href = `https://wa.me/${numero}`;
+      onMarcarEnviada && onMarcarEnviada();
+    } catch (e) {
+      alert('Erro ao abrir WhatsApp: ' + e.message);
+    } finally {
+      setEnviandoWhats(false);
+    }
+  };
+
+  // Salva telefone e abre WhatsApp na sequencia
+  const salvarTelefoneEAbrirWhats = async () => {
+    const tel = telefoneInput.replace(/\D/g, '');
+    if (tel.length < 10 || tel.length > 11) {
+      alert('Digite um número válido (10 ou 11 dígitos)');
+      return;
+    }
+    setSalvandoTelefone(true);
+    try {
+      // Salva telefone do cliente
+      if (handleEditarTelefone) {
+        await handleEditarTelefone(cliente.id, tel);
+      }
+      setShowCadTelefone(false);
+      // Marca enviada e abre WhatsApp
+      await handleMarcarSugestaoExecutada(sugestao.id, null);
+      const numero = tel.length === 11 || tel.length === 10 ? '55' + tel : tel;
+      window.location.href = `https://wa.me/${numero}`;
+      onMarcarEnviada && onMarcarEnviada();
+    } catch (e) {
+      alert('Erro ao salvar telefone: ' + e.message);
+    } finally {
+      setSalvandoTelefone(false);
     }
   };
 
@@ -1082,13 +1141,25 @@ export const SugestaoScreen = ({
           <LampIcon size={sz(21)} />
           Pedir sugestão de mensagem
         </button>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={abrirWhatsApp} disabled={enviandoWhats} style={{
+            flex: '1 1 100%',
+            background: '#25D366',  // verde WhatsApp oficial
+            color: 'white',
+            border: 'none', borderRadius: 10, padding: '13px',
+            fontSize: fz(16), fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            boxShadow: '0 2px 6px rgba(37,211,102,0.35)',
+            opacity: enviandoWhats ? 0.6 : 1,
+          }}>
+            <MessageCircle size={sz(20)} /> {enviandoWhats ? 'Abrindo…' : 'WhatsApp'}
+          </button>
           <button onClick={marcarEnviada} style={{
-            flex: 1, background: palette.surface, color: palette.ok,
-            border: `1.5px solid ${palette.ok}`, borderRadius: 10, padding: '11px',
+            flex: 1, background: palette.surface, color: palette.accent,
+            border: `1.5px solid ${palette.accent}`, borderRadius: 10, padding: '11px',
             fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          }}><Check size={sz(17)} /> Enviada</button>
+          }}><Check size={sz(17)} /> Já enviei</button>
           <button onClick={() => setShowRecusa(true)} style={{
             flex: 1, background: palette.surface, color: palette.inkSoft,
             border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
@@ -1097,6 +1168,57 @@ export const SugestaoScreen = ({
           }}><X size={sz(17)} /> Não faz sentido</button>
         </div>
       </div>
+
+      {/* Modal cadastrar telefone — quando cliente nao tem telefone e
+          vendedora quer mandar WhatsApp */}
+      {showCadTelefone && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.5)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100,
+        }} onClick={() => setShowCadTelefone(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: palette.surface, borderRadius: '16px 16px 0 0',
+            padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
+          }}>
+            <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>
+              📱 Cadastrar WhatsApp
+            </div>
+            <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16 }}>
+              {cliente?.razao_social || cliente?.nome_fantasia || 'Cliente'} ainda não tem telefone cadastrado.
+            </div>
+            <input
+              type="tel"
+              inputMode="numeric"
+              autoFocus
+              value={telefoneInput}
+              onChange={(e) => setTelefoneInput(e.target.value)}
+              placeholder="DDD + número (ex: 11987654321)"
+              style={{
+                width: '100%', padding: 12, fontSize: fz(16), fontFamily: FONT,
+                border: `1.5px solid ${palette.beige}`, borderRadius: 8,
+                marginBottom: 14, boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowCadTelefone(false)} style={{
+                flex: 1, background: palette.surface, color: palette.inkSoft,
+                border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
+                fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+              }}>Cancelar</button>
+              <button onClick={salvarTelefoneEAbrirWhats} disabled={salvandoTelefone} style={{
+                flex: 2, background: '#25D366', color: 'white',
+                border: 'none', borderRadius: 10, padding: '12px',
+                fontSize: fz(15), fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                opacity: salvandoTelefone ? 0.6 : 1,
+              }}>
+                <MessageCircle size={sz(18)} />
+                {salvandoTelefone ? 'Salvando…' : 'Salvar e abrir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de recusa */}
       {showRecusa && (
