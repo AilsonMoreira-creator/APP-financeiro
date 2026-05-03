@@ -61,6 +61,9 @@ import {
   useLojasW,
 } from './Lojas_Shared.jsx';
 
+// Push notifications (tracking de acesso pra cron lembrete)
+import { instalarTrackingAcesso } from './lojas-push-client.js';
+
 // Importa cérebro da IA + helpers puros
 import {
   // prompts e exemplos
@@ -1401,6 +1404,24 @@ function useLojasModule() {
     });
     return unsubscribe;
   }, [state.phase, state.vendedoraAtiva?.id, state.isAdmin]);
+
+  // ─── Tracking de acesso pra push notifications ─────────────────────────
+  // Registra "vendedora ficou >=1min com app em foco hoje" pra cron 10:30
+  // saber quem precisa lembrar.
+  // OBS: admin tambem rodava antes, mas agora a Tamara recebe push proprio
+  // (placeholder Tamara_admin). Se userId='tamara', backend redireciona o
+  // touch pra ela. Outros admins (ailson, amicia-admin) nao trackeiam.
+  useEffect(() => {
+    const userIdLower = String(state.userId || '').toLowerCase().trim();
+    const ehTamara = userIdLower === 'tamara';
+    // Vendedora normal: precisa de vendedoraAtiva
+    // Tamara admin: nao precisa de vendedoraAtiva (backend resolve)
+    if (!state.vendedoraAtiva?.id && !ehTamara) return;
+    if (state.isAdmin && !ehTamara) return;  // outros admins nao trackeiam
+
+    const cleanup = instalarTrackingAcesso(state.vendedoraAtiva?.id, state.userId);
+    return cleanup;
+  }, [state.vendedoraAtiva?.id, state.isAdmin, state.userId]);
   
   // ─── Online/offline detection ──────────────────────────────────────────
   useEffect(() => {
