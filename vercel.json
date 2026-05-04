@@ -73,7 +73,7 @@
     },
     {
       "path": "/api/lojas-drive-cron",
-      "schedule": "0 9 * * 2"
+      "schedule": "0 8 * * 1-5"
     },
     {
       "path": "/api/lojas-ia-cron-diario",
