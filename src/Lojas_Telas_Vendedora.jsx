@@ -40,7 +40,7 @@ import {
   Save, Trash2, Edit3, MapPin, Clock, CheckCircle2, AlertCircle,
   Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown,
   UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send, User,
-  Bell, Megaphone, BellOff,
+  Bell, Megaphone, BellOff, Trophy, Coins,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
@@ -349,6 +349,388 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
   );
 };
 
+// ─── BarraMetaVendedora — barra com escala fixa em R$ + checkpoints ────────
+//
+// Sprint A 04/05/2026. Barra horizontal com escala absoluta (não %):
+//   - BR: 0 → 100k, marcas em 35/50/60/70/80/90/100k
+//   - ST: 0 → 140k, marcas em 60/70/80/90/100/140k
+//   - Estrelas ⭐ nos checkpoints com bônus (BR: 70/80/90; ST: 70)
+//   - Saco de ouro 💰 na meta máxima (BR 100k, ST 140k)
+//   - Quando passa da meta, mostra "+R$ X mil acima da meta 🚀"
+//
+// Props:
+//   - vendedora: { nome, total, meta_principal, checkpoints_loja,
+//                  checkpoints_batidos }
+//   - METAS_BONUS: array de checkpoints que dão bônus (pra estrela)
+//
+const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
+  const fmtK = (n) => 'R$ ' + Math.round(n / 1000) + 'k';
+  const fmtMoney = (n) => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
+  const meta = v.meta_principal;
+  const total = v.total;
+  const pct = Math.min(100, (total / meta) * 100);
+  const passouMeta = total > meta;
+  const excedente = total - meta;
+  // Checkpoints excluindo o final (que vira 💰)
+  const intermediarios = (v.checkpoints_loja || []).filter(c => c < meta);
+  return (
+    <div style={{ marginBottom: 18 }}>
+      {/* Linha do nome + valor atual */}
+      {mostrarNome && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+          <span style={{ fontSize: fz(14), fontWeight: 700, color: palette.ink }}>{v.nome}</span>
+          <span style={{ fontSize: fz(14), fontWeight: 700, color: passouMeta ? palette.ok : palette.accent }}>
+            {fmtMoney(total)}
+          </span>
+        </div>
+      )}
+      {/* Barra com escala fixa */}
+      <div style={{ position: 'relative', height: 22, background: palette.beigeSoft,
+        borderRadius: 11, overflow: 'visible', border: `1px solid ${palette.beige}` }}>
+        {/* Preenchimento */}
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: `${pct}%`,
+          background: passouMeta
+            ? `linear-gradient(90deg, ${palette.ok} 0%, #34a96f 100%)`
+            : `linear-gradient(90deg, ${palette.accent} 0%, #6a9bc0 100%)`,
+          borderRadius: 11, transition: 'width 0.4s ease',
+        }} />
+        {/* Marcadores intermediários */}
+        {intermediarios.map(cp => {
+          const x = (cp / meta) * 100;
+          const batido = total >= cp;
+          const ehBonus = (metasBonus || []).includes(cp);
+          return (
+            <div key={cp} style={{
+              position: 'absolute', left: `${x}%`, top: -2, bottom: -2,
+              transform: 'translateX(-50%)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+            }}>
+              <div style={{
+                width: 2, height: 26, background: batido ? palette.ok : palette.beige,
+                opacity: batido ? 0.9 : 0.6,
+              }} />
+              {ehBonus && (
+                <div style={{
+                  position: 'absolute', top: -14, fontSize: 11,
+                  filter: batido ? 'none' : 'grayscale(60%) opacity(0.5)',
+                }}>⭐</div>
+              )}
+            </div>
+          );
+        })}
+        {/* Marcador da meta máxima (saco de ouro) */}
+        <div style={{
+          position: 'absolute', right: 0, top: -2, bottom: -2,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+        }}>
+          <div style={{
+            width: 3, height: 26, background: passouMeta ? palette.ok : palette.warn,
+          }} />
+          <div style={{
+            position: 'absolute', top: -16, right: -4, fontSize: 14,
+            filter: passouMeta ? 'none' : 'grayscale(50%) opacity(0.6)',
+          }}>💰</div>
+        </div>
+      </div>
+      {/* Labels embaixo dos checkpoints */}
+      <div style={{ position: 'relative', height: 14, marginTop: 4 }}>
+        {intermediarios.map(cp => {
+          const x = (cp / meta) * 100;
+          const batido = total >= cp;
+          return (
+            <span key={cp} style={{
+              position: 'absolute', left: `${x}%`, transform: 'translateX(-50%)',
+              fontSize: fz(9), color: batido ? palette.ok : palette.inkMuted,
+              fontWeight: batido ? 700 : 500,
+            }}>{fmtK(cp)}</span>
+          );
+        })}
+        <span style={{
+          position: 'absolute', right: 0, fontSize: fz(9),
+          color: passouMeta ? palette.ok : palette.warn,
+          fontWeight: 700,
+        }}>{fmtK(meta)}</span>
+      </div>
+      {/* Indicador acima da meta */}
+      {passouMeta && (
+        <div style={{ marginTop: 4, fontSize: fz(11), color: palette.ok, fontWeight: 600 }}>
+          +{fmtMoney(excedente)} acima da meta 🚀
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── CardMetas — Dashboard admin (Sprint A 04/05/2026) ─────────────────────
+//
+// Card admin no Dashboard que mostra progresso de meta de TODAS as
+// vendedoras ativas no mês corrente. Le de /api/lojas-ia action='metas_dashboard'.
+// Atualiza ao abrir o Dashboard (montagem do componente).
+//
+const CardMetas = ({ lojas }) => {
+  const [periodo, setPeriodo] = useState('mes_atual');
+  const [data, setData] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(null);
+  const [verHistorico, setVerHistorico] = useState(false);
+  const userId = lojas?.state?.userId || '';
+  // Constantes de bonus (espelho do backend api/lojas-ia.js handleMetasDashboard)
+  const BONUS_BR = [70000, 80000, 90000, 100000];
+  const BONUS_ST = [70000, 140000];
+
+  useEffect(() => {
+    let cancelado = false;
+    setCarregando(true);
+    setErro(null);
+    fetch('/api/lojas-ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-User': userId },
+      body: JSON.stringify({ action: 'metas_dashboard', periodo }),
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelado) { setData(d); setCarregando(false); } })
+      .catch(e => { if (!cancelado) { setErro(e.message || 'Erro'); setCarregando(false); } });
+    return () => { cancelado = true; };
+  }, [periodo, userId]);
+
+  // Gera lista de meses anteriores (ate 6 meses pra tras a partir de mes corrente)
+  const mesesAnteriores = useMemo(() => {
+    const lista = [];
+    const hoje = new Date();
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const ano = d.getFullYear();
+      const mes = String(d.getMonth() + 1).padStart(2, '0');
+      const label = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+        .replace(/^\w/, c => c.toUpperCase());
+      lista.push({ id: `${ano}-${mes}`, label });
+    }
+    return lista;
+  }, []);
+
+  const vendedorasBR = (data?.vendedoras || []).filter(v => v.loja === 'Bom Retiro');
+  const vendedorasST = (data?.vendedoras || []).filter(v => v.loja === 'Silva Teles');
+
+  return (
+    <div style={{
+      width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
+      borderRadius: 12, padding: '14px 18px', marginBottom: 12, fontFamily: FONT,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+        <Trophy size={sz(15)} color={palette.warn} />
+        <span style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, flex: 1 }}>
+          Metas das vendedoras · {data?.periodo_label || '...'}
+        </span>
+        <button
+          onClick={() => setVerHistorico(v => !v)}
+          style={{
+            background: 'transparent', color: palette.accent,
+            border: `1px solid ${palette.beige}`, borderRadius: 6,
+            padding: '3px 9px', fontSize: fz(11), fontFamily: FONT,
+            fontWeight: 500, cursor: 'pointer',
+          }}
+        >
+          {verHistorico ? '✕ Fechar' : 'Ver meses anteriores'}
+        </button>
+      </div>
+
+      {/* Seletor de meses anteriores (só quando aberto) */}
+      {verHistorico && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
+          <button
+            onClick={() => setPeriodo('mes_atual')}
+            style={{
+              background: periodo === 'mes_atual' ? palette.accent : 'transparent',
+              color: periodo === 'mes_atual' ? 'white' : palette.inkSoft,
+              border: `1px solid ${periodo === 'mes_atual' ? palette.accent : palette.beige}`,
+              borderRadius: 6, padding: '3px 9px',
+              fontSize: fz(11), fontFamily: FONT, fontWeight: 500, cursor: 'pointer',
+            }}
+          >Mês atual</button>
+          {mesesAnteriores.map(m => (
+            <button
+              key={m.id}
+              onClick={() => setPeriodo(m.id)}
+              style={{
+                background: periodo === m.id ? palette.accent : 'transparent',
+                color: periodo === m.id ? 'white' : palette.inkSoft,
+                border: `1px solid ${periodo === m.id ? palette.accent : palette.beige}`,
+                borderRadius: 6, padding: '3px 9px',
+                fontSize: fz(11), fontFamily: FONT, fontWeight: 500, cursor: 'pointer',
+              }}
+            >{m.label}</button>
+          ))}
+        </div>
+      )}
+
+      {carregando ? (
+        <div style={{ fontSize: fz(13), color: palette.inkMuted, padding: '8px 0' }}>
+          <Loader2 size={sz(14)} style={{ ...spinKeyframes, marginRight: 6, verticalAlign: 'middle' }} />
+          Carregando...
+        </div>
+      ) : erro ? (
+        <div style={{ fontSize: fz(13), color: palette.alert, padding: '8px 0' }}>
+          Erro: {erro}
+        </div>
+      ) : (
+        <div>
+          {/* Bom Retiro */}
+          {vendedorasBR.length > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <div style={{
+                fontSize: fz(12), fontWeight: 700, color: palette.inkSoft,
+                marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              }}>
+                <span>🏪 Bom Retiro</span>
+                <span style={{ fontWeight: 600, color: palette.ink, textTransform: 'none', letterSpacing: 0 }}>
+                  Total: R$ {Math.round(data.loja_BR?.total || 0).toLocaleString('pt-BR')}
+                </span>
+              </div>
+              {vendedorasBR.map(v => (
+                <BarraMetaVendedora key={v.vendedora_id} v={v} metasBonus={BONUS_BR} />
+              ))}
+            </div>
+          )}
+          {/* Silva Teles */}
+          {vendedorasST.length > 0 && (
+            <div>
+              <div style={{
+                fontSize: fz(12), fontWeight: 700, color: palette.inkSoft,
+                marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              }}>
+                <span>🏪 Silva Teles</span>
+                <span style={{ fontWeight: 600, color: palette.ink, textTransform: 'none', letterSpacing: 0 }}>
+                  Total: R$ {Math.round(data.loja_ST?.total || 0).toLocaleString('pt-BR')}
+                </span>
+              </div>
+              {vendedorasST.map(v => (
+                <BarraMetaVendedora key={v.vendedora_id} v={v} metasBonus={BONUS_ST} />
+              ))}
+            </div>
+          )}
+          {vendedorasBR.length === 0 && vendedorasST.length === 0 && (
+            <div style={{ fontSize: fz(13), color: palette.inkMuted, padding: '8px 0' }}>
+              Sem vendas registradas no período.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── ModalMetaIndividual — botão 💰 na carteira da vendedora ───────────────
+//
+// Quando vendedora clica 💰 no header da carteira, vê o progresso DELA.
+// Sprint A 04/05/2026.
+//
+const ModalMetaIndividual = ({ vendedora, userId, onClose }) => {
+  const [data, setData] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(null);
+  const BONUS_BR = [70000, 80000, 90000, 100000];
+  const BONUS_ST = [70000, 140000];
+  const bonus = vendedora?.loja === 'Silva Teles' ? BONUS_ST : BONUS_BR;
+
+  useEffect(() => {
+    let cancelado = false;
+    fetch('/api/lojas-ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+      body: JSON.stringify({
+        action: 'metas_dashboard',
+        periodo: 'mes_atual',
+        vendedora_id: vendedora?.id,
+      }),
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelado) { setData(d); setCarregando(false); } })
+      .catch(e => { if (!cancelado) { setErro(e.message || 'Erro'); setCarregando(false); } });
+    return () => { cancelado = true; };
+  }, [vendedora?.id, userId]);
+
+  // Aqui filtra a vendedora especifica (a API retorna lista mas filtramos local)
+  const minhaVenda = (data?.vendedoras || []).find(v => v.vendedora_id === vendedora?.id);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.5)',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 100,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.surface, borderRadius: '16px 16px 0 0',
+        padding: 20, width: '100%', maxWidth: 500, maxHeight: '85vh',
+        overflowY: 'auto', fontFamily: FONT,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Coins size={sz(20)} color={palette.warn} />
+            <div>
+              <div style={{ fontSize: fz(17), fontWeight: 700, color: palette.ink }}>
+                Sua meta · {data?.periodo_label || '...'}
+              </div>
+              <div style={{ fontSize: fz(12), color: palette.inkSoft }}>
+                {vendedora?.loja}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: palette.inkSoft, padding: 4,
+          }}><X size={sz(20)} /></button>
+        </div>
+
+        {carregando ? (
+          <div style={{ fontSize: fz(13), color: palette.inkMuted, padding: '8px 0' }}>
+            <Loader2 size={sz(14)} style={{ ...spinKeyframes, marginRight: 6, verticalAlign: 'middle' }} />
+            Carregando seus dados...
+          </div>
+        ) : erro ? (
+          <div style={{ fontSize: fz(13), color: palette.alert, padding: '8px 0' }}>
+            Erro: {erro}
+          </div>
+        ) : !minhaVenda ? (
+          <div style={{ fontSize: fz(13), color: palette.inkMuted, padding: '8px 0' }}>
+            Sem vendas registradas neste mês.
+          </div>
+        ) : (
+          <div>
+            {/* Resumo numerico */}
+            <div style={{
+              background: palette.beigeSoft, borderRadius: 10, padding: 12, marginBottom: 16,
+              display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8,
+            }}>
+              <div>
+                <div style={{ fontSize: fz(10), color: palette.inkSoft, textTransform: 'uppercase' }}>Atacado</div>
+                <div style={{ fontSize: fz(14), fontWeight: 700, color: palette.ink }}>
+                  R$ {Math.round(minhaVenda.atacado).toLocaleString('pt-BR')}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: fz(10), color: palette.inkSoft, textTransform: 'uppercase' }}>Varejo</div>
+                <div style={{ fontSize: fz(14), fontWeight: 700, color: palette.ink }}>
+                  R$ {Math.round(minhaVenda.varejo).toLocaleString('pt-BR')}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: fz(10), color: palette.inkSoft, textTransform: 'uppercase' }}>Total</div>
+                <div style={{ fontSize: fz(14), fontWeight: 700, color: palette.accent }}>
+                  R$ {Math.round(minhaVenda.total).toLocaleString('pt-BR')}
+                </div>
+              </div>
+            </div>
+            <BarraMetaVendedora v={minhaVenda} metasBonus={bonus} mostrarNome={false} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ─── CardConversoes — KPI no Dashboard ─────────────────────────────────────
 //
 // Card mesmo tamanho/layout do "Carteira ativa total". Mostra:
@@ -558,6 +940,9 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
           <KpiSlice cor={palette.accent} valor={`${stats.executadas}/${stats.sugestoes}`} label="sugestões hoje" />
         </div>
       </button>
+
+      {/* Card de Metas (admin) — mostra progresso das vendedoras */}
+      {state.isAdmin && <CardMetas lojas={lojas} />}
 
       {/* Card Conversões — mesmo tamanho da Carteira ativa */}
       <CardConversoes lojas={lojas} />
@@ -1330,6 +1715,7 @@ export const MinhaCarteiraScreen = ({
   const [busca, setBusca] = useState('');
   const [ordenacao, setOrdenacao] = useState('lifetime');
   const [mostrarVesti, setMostrarVesti] = useState(false);
+  const [mostrarMeta, setMostrarMeta] = useState(false);
 
   // Itens da carteira: clientes soltos + grupos agregados
   const itensCarteira = useMemo(() => {
@@ -1465,6 +1851,16 @@ export const MinhaCarteiraScreen = ({
               {/* Botão sininho push — discreto, mostra status */}
               {vendedora && (
                 <BotaoSinoPush vendedora={vendedora} />
+              )}
+              {/* Botão 💰 Meta — vendedora ve seu progresso individual (Sprint A) */}
+              {vendedora && (
+                <button onClick={() => setMostrarMeta(true)} style={{
+                  ...btnStyle,
+                  background: 'rgba(212,160,23,0.25)',  // dourado suave
+                  color: 'white',
+                }} title="Minha meta">
+                  <Coins size={sz(15)} /> {!mobile && 'Meta'}
+                </button>
               )}
               {/* Botão Meus links Vesti — abre modal pra vendedora editar */}
               {vendedora && (
@@ -1694,6 +2090,15 @@ export const MinhaCarteiraScreen = ({
           lojas={lojas}
           vendedora={vendedora}
           onClose={() => setMostrarVesti(false)}
+        />
+      )}
+
+      {/* Modal Meta individual (Sprint A 04/05/2026) */}
+      {mostrarMeta && vendedora && (
+        <ModalMetaIndividual
+          vendedora={vendedora}
+          userId={state?.userId || ''}
+          onClose={() => setMostrarMeta(false)}
         />
       )}
     </div>
