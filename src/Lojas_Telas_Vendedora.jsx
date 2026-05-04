@@ -1440,46 +1440,50 @@ export const MinhaCarteiraScreen = ({
         title={`Carteira de ${vendedora?.nome || ''}`}
         subtitle={`${vendedora?.loja || ''} · ${itensCarteira.length} ${itensCarteira.length === 1 ? 'item' : 'itens'} (${state.grupos.length} grupos)`}
         onBack={onBack}
-        rightContent={
-          <div style={{ display: 'flex', gap: 6 }}>
-            {onAbrirCadastrarComprador && (
-              <button onClick={onAbrirCadastrarComprador} style={{
-                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
-                color: palette.bg, padding: '6px 10px', borderRadius: 8,
-                cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }} title="Cadastrar nome do comprador">
-                <User size={sz(15)} /> Comprador
-              </button>
-            )}
-            {/* Botão sininho push — discreto, mostra status */}
-            {vendedora && (
-              <BotaoSinoPush vendedora={vendedora} />
-            )}
-            {/* Botão Meus links Vesti — abre modal pra vendedora editar */}
-            {vendedora && (
-              <button onClick={() => setMostrarVesti(true)} style={{
-                background: vendedora.vesti_link_ativo ? palette.purple : 'rgba(255,255,255,0.1)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                color: 'white', padding: '6px 10px', borderRadius: 8,
-                cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }} title="Meus links Vesti">
-                <Link2 size={sz(15)} /> Vesti{vendedora.vesti_link_ativo ? ' ✓' : ''}
-              </button>
-            )}
-            {onAbrirGrupos && (
-              <button onClick={onAbrirGrupos} style={{
-                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
-                color: palette.bg, padding: '6px 10px', borderRadius: 8,
-                cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}>
-                <UsersRound size={sz(15)} /> Grupos
-              </button>
-            )}
-          </div>
-        }
+        rightContent={(() => {
+          const mobile = typeof window !== 'undefined' && window.innerWidth < 640;
+          // Em mobile, botoes ficam so com icone (texto oculto) pra caber 4
+          // botoes em telas estreitas. Em telas medias+ mostra texto.
+          const btnStyle = {
+            background: 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: palette.bg,
+            padding: mobile ? '8px 8px' : '6px 10px',
+            borderRadius: 8,
+            cursor: 'pointer',
+            fontSize: fz(13), fontFamily: FONT, fontWeight: 600,
+            display: 'flex', alignItems: 'center', gap: mobile ? 0 : 4,
+            flexShrink: 0,
+          };
+          return (
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              {onAbrirCadastrarComprador && (
+                <button onClick={onAbrirCadastrarComprador} style={btnStyle} title="Cadastrar nome do comprador">
+                  <User size={sz(15)} /> {!mobile && 'Comprador'}
+                </button>
+              )}
+              {/* Botão sininho push — discreto, mostra status */}
+              {vendedora && (
+                <BotaoSinoPush vendedora={vendedora} />
+              )}
+              {/* Botão Meus links Vesti — abre modal pra vendedora editar */}
+              {vendedora && (
+                <button onClick={() => setMostrarVesti(true)} style={{
+                  ...btnStyle,
+                  background: vendedora.vesti_link_ativo ? palette.purple : 'rgba(255,255,255,0.1)',
+                  color: 'white',
+                }} title="Meus links Vesti">
+                  <Link2 size={sz(15)} /> {!mobile && `Vesti${vendedora.vesti_link_ativo ? ' ✓' : ''}`}
+                </button>
+              )}
+              {onAbrirGrupos && (
+                <button onClick={onAbrirGrupos} style={btnStyle} title="Grupos">
+                  <UsersRound size={sz(15)} /> {!mobile && 'Grupos'}
+                </button>
+              )}
+            </div>
+          );
+        })()}
       />
       <div style={{ padding: 16, paddingBottom: 32 }}>
         {/* Contadores - inclui SACOLA novo */}

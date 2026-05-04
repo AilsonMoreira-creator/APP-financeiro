@@ -197,7 +197,10 @@ export const Header = ({ title, subtitle, onBack, rightContent }) => (
               fontSize: fz(20), fontWeight: 600, letterSpacing: 0.3,
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{title}</div>
-            {subtitle && (<div style={{ fontSize: fz(13), opacity: 0.7, marginTop: 2 }}>{subtitle}</div>)}
+            {subtitle && (<div style={{
+              fontSize: fz(13), opacity: 0.7, marginTop: 2,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{subtitle}</div>)}
           </div>
         </div>
       </div>
