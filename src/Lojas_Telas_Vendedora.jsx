@@ -49,7 +49,7 @@ import {
   palette, FONT, statusMap, subtipoSacolaMap, faseClienteNovaMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
   fz, sz, TelefoneCopiavel, FotoProdutoLojas, saudacaoHora, emojiHora, fraseDoDia,
-  adminComSaudacao, supabase,
+  adminComSaudacao, supabase, spinKeyframes,
 } from './Lojas_Shared.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════

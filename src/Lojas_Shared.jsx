@@ -104,6 +104,9 @@ export const fz = (n) => _lojasW < 640 ? n : n + 1;
 /** Icon-size: mesma regra. */
 export const sz = (n) => _lojasW < 640 ? n : n + 1;
 
+/** CSS de animação spin. Compartilhado entre Admin/Vendedora screens. */
+export const spinKeyframes = { animation: 'spin 1s linear infinite' };
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MAPAS DE STATUS / SUBTIPOS / FASES (visuais — cor + label + emoji)
 // ═══════════════════════════════════════════════════════════════════════════

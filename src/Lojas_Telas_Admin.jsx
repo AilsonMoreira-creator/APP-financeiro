@@ -51,7 +51,7 @@ import {
 import {
   palette, FONT, statusMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon,
-  supabase, fz, sz, FotoProdutoLojas,
+  supabase, fz, sz, FotoProdutoLojas, spinKeyframes,
 } from './Lojas_Shared.jsx';
 
 // Importa ModalMensagem da Parte 2a (usado em DetalheGrupoScreen)
@@ -128,9 +128,6 @@ function btnPrimario(cor, salvando = false) {
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
   };
 }
-
-/** CSS de animação spin. Só usar em LoadingIcon. */
-const spinKeyframes = { animation: 'spin 1s linear infinite' };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. PromocoesScreen — Listagem de promoções ativas + histórico
