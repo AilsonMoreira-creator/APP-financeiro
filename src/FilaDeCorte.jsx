@@ -38,9 +38,41 @@ export default function FilaDeCorte({ supabase, usuarioLogado }) {
   const [aba, setAba] = useState('aguardando'); // aguardando | separado
   const [editandoTecido, setEditandoTecido] = useState(null);
   const [definindoSala, setDefinindoSala] = useState(null);
+  // Salas dinamicas (lidas do payload salas-corte.salas) — admin pode
+  // adicionar salas no modulo Salas de Corte e elas precisam aparecer aqui.
+  // Fallback pra SALAS_PADRAO se query falhar.
+  const [salasDisponiveis, setSalasDisponiveis] = useState(SALAS_PADRAO);
 
   const usuario = usuarioLogado?.usuario || '';
   const isAdmin = usuarioLogado?.admin === true;
+
+  // Carrega salas do payload + escuta atualizacoes via Realtime
+  useEffect(() => {
+    if (!supabase) return;
+    const carregarSalas = async () => {
+      try {
+        const { data } = await supabase
+          .from('amicia_data')
+          .select('payload')
+          .eq('user_id', 'salas-corte')
+          .single();
+        const salas = data?.payload?.salas;
+        if (Array.isArray(salas) && salas.length > 0) {
+          setSalasDisponiveis(salas);
+        }
+      } catch { /* mantem fallback */ }
+    };
+    carregarSalas();
+    const ch = supabase.channel('sync-salas-fila')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'amicia_data', filter: 'user_id=eq.salas-corte' },
+        (payload) => {
+          const salas = payload?.new?.payload?.salas;
+          if (Array.isArray(salas) && salas.length > 0) setSalasDisponiveis(salas);
+        })
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, [supabase]);
 
   const carregar = useCallback(async () => {
     try {
@@ -146,6 +178,7 @@ export default function FilaDeCorte({ supabase, usuarioLogado }) {
         <ModalDefinirSala
           ordem={definindoSala}
           usuario={usuario}
+          salas={salasDisponiveis}
           onClose={() => setDefinindoSala(null)}
           onSalvo={() => { setDefinindoSala(null); carregar(); }}
         />
@@ -341,10 +374,12 @@ function ModalEditarTecido({ ordem, usuario, onClose, onSalvo }) {
 // MODAL DEFINIR SALA
 // ════════════════════════════════════════════════════════════════════════════
 
-function ModalDefinirSala({ ordem, usuario, onClose, onSalvo }) {
+function ModalDefinirSala({ ordem, usuario, salas, onClose, onSalvo }) {
   const [salaSel, setSalaSel] = useState(null);
   const [erro, setErro] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Lista de salas: prop dinamica ou fallback hardcoded
+  const salasLista = (Array.isArray(salas) && salas.length > 0) ? salas : SALAS_PADRAO;
 
   const confirmar = async () => {
     if (!salaSel) { setErro('Selecione uma sala'); return; }
@@ -372,7 +407,7 @@ function ModalDefinirSala({ ordem, usuario, onClose, onSalvo }) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-          {SALAS_PADRAO.map(sala => {
+          {salasLista.map(sala => {
             const ativo = salaSel === sala;
             return (
               <button
