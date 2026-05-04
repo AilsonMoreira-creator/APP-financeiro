@@ -3642,7 +3642,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     if(!form.ref||!form.oficina||!form.qtd||!form.valorUnit)return;
     const qtd=parseFloat(form.qtd)||0,vu=parseFloat(form.valorUnit)||0;
     const item={id:editId||Date.now(),nCorte:form.nCorte,ref:form.ref,descricao:form.descricao,marca:form.marca,qtd,valorUnit:vu,valorTotal:Math.round(qtd*vu*100)/100,oficina:form.oficina,data:form.data,qtdEntregue:qtd,entregue:false,dataEntrega:null,pago:false,dataPagamento:null,obs:"",_mod:Date.now()};
-    if(editId)setCortes(prev=>prev.map(c=>c.id===editId?item:c));
+    if(editId)setCortes(prev=>prev.map(c=>c.id===editId?{...c,...item}:c));
     else setCortes(prev=>[...prev,item]);
     setForm({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});
     setRefBusca("");setMostraForm(false);setEditId(null);
