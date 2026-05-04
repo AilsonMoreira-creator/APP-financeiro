@@ -40,7 +40,7 @@ import {
   Save, Trash2, Edit3, MapPin, Clock, CheckCircle2, AlertCircle,
   Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown,
   UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send, User,
-  Bell, Megaphone, BellOff, Trophy, Coins,
+  Bell, Megaphone, BellOff, Trophy, Coins, Eye, EyeOff,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
@@ -195,6 +195,7 @@ export const HomeScreen = ({
           vendedoras={vendedoras}
           clientes={clientes}
           vendedoraLogadaId={vendedoraLogada?.id}
+          userId={state?.userId}
           onSelectVendedora={onSelectVendedora}
         />
       )}
@@ -210,7 +211,7 @@ export const HomeScreen = ({
 
 // ─── VendedorasTab ─────────────────────────────────────────────────────────
 
-const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSelectVendedora }) => {
+const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, userId, onSelectVendedora }) => {
   const porLoja = useMemo(() => {
     const grupos = {};
     for (const v of vendedoras) {
@@ -324,6 +325,12 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
         </div>
       )}
 
+      {/* Card "Minha meta" — só pra vendedora (admin já vê tudo no Dashboard).
+          Sprint A 04/05/2026. */}
+      {!isAdmin && minhaVendedora && (
+        <CardMinhaMetaHome vendedora={minhaVendedora} userId={userId || ''} />
+      )}
+
       {ordemLojas.map(loja => {
         const lista = porLoja[loja];
         if (!lista || lista.length === 0) return null;
@@ -346,6 +353,148 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, onSel
         </div>
       )}
     </div>
+  );
+};
+
+// ─── CardMinhaMetaHome — visível só pra vendedora na HomeScreen ────────────
+//
+// Sprint A 04/05/2026. Linha clicável abaixo da saudação, com:
+//   - Barra de meta com checkpoints (mesmo visual do CardMetas admin)
+//   - Botão olho 👁️ pra esconder/mostrar (preferência salva em localStorage)
+//   - Click na linha abre ModalMetaIndividual completo
+//
+// Visível só pra vendedoras (NÃO pra admin — admin já vê tudo no Dashboard).
+//
+const CardMinhaMetaHome = ({ vendedora, userId }) => {
+  // Preferência persistida: ela fechou alguma vez? Se sim, fica fechado.
+  const STORAGE_KEY = `lojas_meta_home_visivel_${vendedora?.id || 'x'}`;
+  const [visivel, setVisivel] = useState(() => {
+    try {
+      const v = localStorage.getItem(STORAGE_KEY);
+      return v === null ? true : v === '1';
+    } catch { return true; }
+  });
+  const [mostrarModal, setMostrarModal] = useState(false);
+  const [data, setData] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+
+  const BONUS_BR = [70000, 80000, 90000, 100000];
+  const BONUS_ST = [70000, 140000];
+  const bonus = vendedora?.loja === 'Silva Teles' ? BONUS_ST : BONUS_BR;
+
+  // Toggle visibilidade — salva pra próximas sessões
+  const toggleVisivel = (e) => {
+    e.stopPropagation();
+    const novo = !visivel;
+    setVisivel(novo);
+    try { localStorage.setItem(STORAGE_KEY, novo ? '1' : '0'); } catch {}
+  };
+
+  // Carrega dados quando visivel
+  useEffect(() => {
+    if (!visivel || !vendedora?.id) return;
+    let cancelado = false;
+    setCarregando(true);
+    fetch('/api/lojas-ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+      body: JSON.stringify({
+        action: 'metas_dashboard',
+        periodo: 'mes_atual',
+        vendedora_id: vendedora.id,
+      }),
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelado) { setData(d); setCarregando(false); } })
+      .catch(() => { if (!cancelado) setCarregando(false); });
+    return () => { cancelado = true; };
+  }, [visivel, vendedora?.id, userId]);
+
+  // Modo escondido: linha super fina só com olho fechado pra reabrir
+  if (!visivel) {
+    return (
+      <div
+        onClick={toggleVisivel}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: '10px 14px', marginBottom: 14,
+          background: palette.surface, border: `1px dashed ${palette.beige}`,
+          borderRadius: 10, fontFamily: FONT, cursor: 'pointer',
+          color: palette.inkMuted, fontSize: fz(12),
+        }}
+        title="Mostrar minha meta"
+      >
+        <EyeOff size={sz(14)} />
+        <span>Minha meta (oculta — toque pra mostrar)</span>
+      </div>
+    );
+  }
+
+  const minhaVenda = (data?.vendedoras || []).find(v => v.vendedora_id === vendedora?.id);
+  const total = minhaVenda?.total ?? 0;
+
+  return (
+    <>
+      <div
+        onClick={() => setMostrarModal(true)}
+        style={{
+          background: palette.surface, border: `1px solid ${palette.beige}`,
+          borderRadius: 12, padding: '12px 16px', marginBottom: 14,
+          fontFamily: FONT, cursor: 'pointer',
+          transition: 'transform 0.1s',
+        }}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: carregando || !minhaVenda ? 0 : 8,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Coins size={sz(16)} color={palette.warn} />
+            <span style={{ fontSize: fz(14), fontWeight: 700, color: palette.inkSoft, letterSpacing: 0.3 }}>
+              Minha meta
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {!carregando && minhaVenda && (
+              <span style={{
+                fontSize: fz(15), fontWeight: 700,
+                color: total >= (minhaVenda.meta_principal || 0) ? palette.ok : palette.accent,
+              }}>
+                R$ {Math.round(total).toLocaleString('pt-BR')}
+              </span>
+            )}
+            <button
+              onClick={toggleVisivel}
+              style={{
+                background: 'transparent', border: 'none',
+                cursor: 'pointer', padding: 4, marginLeft: 4,
+                color: palette.inkMuted, display: 'flex', alignItems: 'center',
+              }}
+              title="Esconder minha meta"
+            >
+              <Eye size={sz(15)} />
+            </button>
+            <ChevronRight size={sz(16)} color={palette.inkMuted} />
+          </div>
+        </div>
+        {/* Barra de meta inline (compacta — mesmo visual do CardMetas) */}
+        {carregando ? (
+          <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: '4px 0' }}>
+            <Loader2 size={sz(12)} style={{ ...spinKeyframes, marginRight: 4, verticalAlign: 'middle' }} />
+            Carregando...
+          </div>
+        ) : minhaVenda && (
+          <BarraMetaVendedora v={minhaVenda} metasBonus={bonus} mostrarNome={false} />
+        )}
+      </div>
+      {mostrarModal && (
+        <ModalMetaIndividual
+          vendedora={vendedora}
+          userId={userId}
+          onClose={() => setMostrarModal(false)}
+        />
+      )}
+    </>
   );
 };
 
