@@ -525,7 +525,7 @@ const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
   // Checkpoints excluindo o final (que vira 💰)
   const intermediarios = (v.checkpoints_loja || []).filter(c => c < meta);
   return (
-    <div style={{ marginBottom: 22, paddingLeft: 12, paddingRight: 18, overflow: 'hidden' }}>
+    <div style={{ marginBottom: 22, paddingLeft: 12, paddingRight: 30, overflow: 'visible' }}>
       {/* Linha do nome + valor atual */}
       {mostrarNome && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
@@ -605,7 +605,8 @@ const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
           );
         })}
         <span style={{
-          position: 'absolute', right: 0, fontSize: fz(9),
+          position: 'absolute', right: 0, transform: 'translateX(50%)',
+          fontSize: fz(9),
           color: passouMeta ? palette.ok : '#b0a89c',
           fontWeight: passouMeta ? 700 : 500, whiteSpace: 'nowrap',
         }}>{fmtK(meta)}</span>
@@ -961,13 +962,18 @@ const CardConversoes = ({ lojas }) => {
       width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
       borderRadius: 12, padding: '14px 18px', marginBottom: 12, fontFamily: FONT,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+      {/* Header: titulo + filtros. Em telas estreitas, filtros vao pra
+          linha de baixo automaticamente (flexWrap). */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
+        flexWrap: 'wrap', rowGap: 6,
+      }}>
         <TrendingUp size={sz(15)} color={palette.ok} />
-        <span style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, flex: 1 }}>
+        <span style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, flex: '1 1 auto', minWidth: 100 }}>
           Conversões
         </span>
         {/* Filtros de período */}
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {PERIODOS.map(p => (
             <button
               key={p.id}
