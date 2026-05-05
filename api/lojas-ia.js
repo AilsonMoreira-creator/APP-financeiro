@@ -432,25 +432,53 @@ async function montarContextoSugestoes(vendedoraId) {
     .eq('ativo', true)
     .or(`data_fim.is.null,data_fim.gte.${hoje}`);
 
-  // Best sellers e em_alta automáticos (fallback quando curadoria vazia).
+  // Best sellers e em_alta automáticos.
   // Decisão Ailson 28/04/2026: derivado das vendas REAIS da loja física Amícia
   // (lojas_vendas_itens, populado pelo Relatório BI do Mire). NÃO MISTURAR com
   // vendas Bling (marketplaces, fonte completamente diferente).
-  //   Curva A (top 10) → best_sellers
-  //   Curva B (11-20)  → em_alta
-  // Curadoria manual tem PRIORIDADE.
+  //
+  // REGRA REVISADA Ailson 04/05/2026 (sprint curadoria):
+  //   • best_sellers = SO MANUAL (Ailson cadastra) — sem auto
+  //   • em_alta automatico = curva A (top 10) — não curva B
+  //   • curva B nao entra em nada
+  //
+  // Plus: novidades automaticas (5-12 dias apos entrega da oficina) tambem
+  // entram, lidas da view vw_lojas_novidades_auto.
+  //
+  // Plus: refs em lojas_curadoria_exclusoes nao entram (admin "vetou").
   let bestSellersAuto = [];
   let emAltaAuto = [];
+  let novidadesAuto = [];
   let produtosExtras = [];
   try {
+    // Carrega exclusoes do admin pra filtrar todos os automaticos
+    const { data: excluidasRaw } = await supabase
+      .from('lojas_curadoria_exclusoes')
+      .select('ref, tipo');
+    const excluidas = excluidasRaw || [];
+    const setExclEm = new Set(excluidas.filter(e => e.tipo === 'em_alta').map(e => e.ref));
+    const setExclNov = new Set(excluidas.filter(e => e.tipo === 'novidade_manual').map(e => e.ref));
+
+    // Em alta = curva A (top 10) — REVISADO 04/05/2026
     const { data: topVendas } = await supabase
       .from('vw_lojas_top_vendas_loja_fisica')
       .select('ref, curva, posicao_ranking, pecas_45d')
-      .in('curva', ['a', 'b'])
+      .eq('curva', 'a')
       .order('posicao_ranking', { ascending: true })
-      .limit(20);
-    bestSellersAuto = (topVendas || []).filter(r => r.curva === 'a').map(r => r.ref);
-    emAltaAuto = (topVendas || []).filter(r => r.curva === 'b').map(r => r.ref);
+      .limit(10);
+    emAltaAuto = (topVendas || [])
+      .map(r => r.ref)
+      .filter(ref => !setExclEm.has(ref));
+    // bestSellersAuto fica vazio — best_seller e SO manual agora
+
+    // Novidades automaticas — refs entregues pela oficina ha 5-12 dias.
+    // View criada em sql/lojas-curadoria-exclusoes.sql.
+    const { data: novidadesRaw } = await supabase
+      .from('vw_lojas_novidades_auto')
+      .select('ref');
+    novidadesAuto = (novidadesRaw || [])
+      .map(n => n.ref)
+      .filter(ref => !setExclNov.has(ref));
 
     // A view vw_lojas_produtos_oferecveis filtra por estoque>100. REFs top
     // que vendem muito podem ter estoque BAIXO justamente por isso. Tambem
@@ -463,7 +491,11 @@ async function montarContextoSugestoes(vendedoraId) {
     // — bug detectado 30/04/2026: dos 8 best_sellers manuais cadastrados,
     // todos estavam fora de vw_lojas_produtos_oferecveis.
     const refsCuradoriaManual = (curadoria || []).map(c => c.ref);
-    const todasExtras = [...new Set([...bestSellersAuto, ...emAltaAuto, ...refsCuradoriaManual])];
+    const todasExtras = [...new Set([
+      ...emAltaAuto,
+      ...novidadesAuto,
+      ...refsCuradoriaManual,
+    ])];
 
     // Map ref -> tipo de curadoria (pra setar motivo_oferta correto)
     const curadoriaTipoPorRef = new Map(
@@ -478,14 +510,14 @@ async function montarContextoSugestoes(vendedoraId) {
       produtosExtras = (extras || [])
         .filter(p => p.descricao)
         .map(p => {
-          // Curadoria manual tem PRIORIDADE no motivo_oferta — mesma regra
-          // de classificarProdutos (linha ~996-1004).
+          // Curadoria manual tem PRIORIDADE no motivo_oferta.
           const tipoCurMan = curadoriaTipoPorRef.get(p.ref);
           let motivo;
           if (tipoCurMan === 'novidade_manual') motivo = 'novidade_oficina';
           else if (tipoCurMan === 'best_seller') motivo = 'best_seller';
           else if (tipoCurMan === 'em_alta') motivo = 'em_alta';
-          else if (bestSellersAuto.includes(p.ref)) motivo = 'best_seller';
+          else if (novidadesAuto.includes(p.ref)) motivo = 'novidade_oficina';
+          else if (emAltaAuto.includes(p.ref)) motivo = 'em_alta';
           else motivo = 'em_alta';
 
           return {
@@ -595,8 +627,9 @@ async function montarContextoSugestoes(vendedoraId) {
   // Decisão Ailson 28/04/2026: top 10 vendas 45d (loja física) entra como
   // categoria PRÓPRIA no produtos_disponiveis (não vira slot, é só repertório).
   // Texto sugerido: "Esse modelo tá saindo super bem na loja, quer ver?"
-  // Já temos bestSellersAuto = top 10 da view → usamos isso direto.
-  const maisVendidos45d = bestSellersAuto.slice(0, 10);
+  // ATUALIZADO 04/05/2026: emAltaAuto agora e o top 10 curva A (era curva B
+  // antes da correcao da regra). Usamos emAltaAuto que tem o top 10 real.
+  const maisVendidos45d = emAltaAuto.slice(0, 10);
 
   // ─── REPOSIÇÃO: novidades da oficina cuja REF já vendeu antes ─────────
   // Decisão Ailson 28/04/2026: tipo NOVO de sugestão. Quando IA pega uma
