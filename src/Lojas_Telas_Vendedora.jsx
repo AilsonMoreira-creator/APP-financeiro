@@ -1062,7 +1062,7 @@ const CardVestiAuditoria = () => {
     return () => { cancelado = true; };
   }, []);
 
-  const mobile = useIsMobile();
+  const mobile = typeof window !== 'undefined' && window.innerWidth < 640;
   const fz = (n) => mobile ? Math.max(10, n - 1) : n;
   const sz = (n) => mobile ? Math.max(12, n - 2) : n;
 
