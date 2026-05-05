@@ -209,3 +209,40 @@ COMMENT ON MATERIALIZED VIEW mv_lojas_matches_90d IS
 --   REFRESH MATERIALIZED VIEW mv_lojas_matches_90d;
 --   SELECT * FROM mv_lojas_matches_90d WHERE ref_top = '2920' LIMIT 10;
 --
+
+
+-- ───────────────────────────────────────────────────────────────────────────
+-- 5. FUNCTION: refresh_matches_raiox()
+-- ───────────────────────────────────────────────────────────────────────────
+-- Function que o endpoint /api/lojas-produtos-raiox-refresh chama via .rpc()
+-- (supabase-js nao tem execucao SQL direto, precisa de RPC).
+--
+-- SECURITY DEFINER pra rodar com permissao do owner (refresh exige owner).
+-- search_path explicito pra evitar ataque de path injection.
+--
+CREATE OR REPLACE FUNCTION refresh_matches_raiox()
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  start_ts timestamptz;
+  duracao_ms int;
+BEGIN
+  start_ts := clock_timestamp();
+  REFRESH MATERIALIZED VIEW CONCURRENTLY mv_lojas_matches_90d;
+  duracao_ms := EXTRACT(EPOCH FROM (clock_timestamp() - start_ts)) * 1000;
+  RETURN json_build_object(
+    'ok', true,
+    'duracao_ms', duracao_ms,
+    'refreshed_at', clock_timestamp()
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION refresh_matches_raiox IS
+  'Refresh diario da mv_lojas_matches_90d. Chamada via .rpc() pelo endpoint cron. SECURITY DEFINER.';
+
+-- Permissao pra service_role chamar
+GRANT EXECUTE ON FUNCTION refresh_matches_raiox TO service_role;

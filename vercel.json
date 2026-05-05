@@ -16,7 +16,8 @@
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/**"
     },
     "api/lojas-ia-cron-diario.js": { "maxDuration": 600 },
-    "api/lojas-ia-cron-semanal.js": { "maxDuration": 600 }
+    "api/lojas-ia-cron-semanal.js": { "maxDuration": 600 },
+    "api/lojas-produtos-raiox-refresh.js": { "maxDuration": 60 }
   },
   "crons": [
     {
@@ -90,6 +91,10 @@
     {
       "path": "/api/lojas-push-cron-1400",
       "schedule": "0 17 * * 1-5"
+    },
+    {
+      "path": "/api/lojas-produtos-raiox-refresh",
+      "schedule": "0 6 * * *"
     }
   ]
 }
