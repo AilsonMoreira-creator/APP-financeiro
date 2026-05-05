@@ -6035,13 +6035,16 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
               {salas.map(s=><button key={s} onClick={()=>setFiltroSala(s)} style={sty.tab(filtroSala===s)}>{s}</button>)}
             </div>
             <div style={{fontSize:11,color:"#a89f94",marginBottom:8}}>{cortesFiltrados.length} corte(s)</div>
-            {cortesFiltrados.map(c=>{const custo=custoCorte(c);const aberto=custoAberto===c.id;return(<div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:c.alerta?"2px solid #f4b8b8":"1px solid #e8e2da",marginBottom:6}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:12,fontWeight:800,fontFamily:_FN,color:c.alerta?"#c0392b":"#2c3e50"}}>{c.rendimento} pç/r</span>{c.alerta&&<span>🔴</span>}
-                  {c.ordemId&&<span onClick={()=>setMatrixOrdemId(c.ordemId)} title="Ver ordem original" style={{cursor:"pointer",color:"#4a7fa5",fontSize:14,padding:"2px 4px",borderRadius:4,background:"#f0f4fa",border:"1px solid #c8d8e8"}}>📋</span>}
-                  <span onClick={()=>iniciarEdicao(c)} style={{cursor:"pointer",color:"#4a7fa5",fontSize:14}}>✏</span>
-                  <span onClick={()=>excluirCorte(c.id)} style={{cursor:"pointer",color:"#d0c8c0",fontSize:16}}>×</span>
+            {cortesFiltrados.map(c=>{const custo=custoCorte(c);const aberto=custoAberto===c.id;const refMedia=mediaRef[c.ref];const diffPct=refMedia&&refMedia.media>0?Math.round((1-c.rendimento/refMedia.media)*100):null;return(<div key={c.id} style={{background:"#fff",borderRadius:10,padding:"10px 14px",border:c.alerta?"2px solid #f4b8b8":"1px solid #e8e2da",marginBottom:6}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div><span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>{c.sala}</span><span style={{fontSize:11,color:"#a89f94",marginLeft:8}}>{new Date(c.data+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}</span></div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:12,fontWeight:800,fontFamily:_FN,color:c.alerta?"#c0392b":"#2c3e50"}}>{c.rendimento} pç/r</span>{c.alerta&&<span>🔴</span>}
+                    {c.ordemId&&<span onClick={()=>setMatrixOrdemId(c.ordemId)} title="Ver ordem original" style={{cursor:"pointer",color:"#4a7fa5",fontSize:14,padding:"2px 4px",borderRadius:4,background:"#f0f4fa",border:"1px solid #c8d8e8"}}>📋</span>}
+                    <span onClick={()=>iniciarEdicao(c)} style={{cursor:"pointer",color:"#4a7fa5",fontSize:14}}>✏</span>
+                    <span onClick={()=>excluirCorte(c.id)} style={{cursor:"pointer",color:"#d0c8c0",fontSize:16}}>×</span>
+                  </div>
+                  {refMedia&&refMedia.media>0&&(<span style={{fontSize:10,color:c.alerta?"#c0392b":"#8a9aa4",fontFamily:_FN,fontWeight:c.alerta?700:500}}>média {refMedia.media}{diffPct!==null&&diffPct>0?` · −${diffPct}%`:""}{diffPct!==null&&diffPct<0?` · +${-diffPct}%`:""}</span>)}
                 </div></div>
               <div style={{fontSize:13,fontWeight:600,color:"#2c3e50",marginTop:3}}>REF {c.ref}{descCorte(c)?` — ${descCorte(c)}`:""}</div>
               <div style={{display:"flex",gap:6,marginTop:3,alignItems:"center"}}>{tecCorte(c)&&<span style={{fontSize:10,color:"#fff",background:"#e67e22",borderRadius:3,padding:"1px 6px"}}>🧵 {tecCorte(c)}</span>}<span style={{fontSize:11,color:"#6b7c8a"}}>{c.qtdRolos} rolos → {fmt(c.qtdPecas)} peças</span></div>
