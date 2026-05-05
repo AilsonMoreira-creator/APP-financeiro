@@ -14,6 +14,22 @@ import OrdemMatrixModal from './OrdemMatrixModal';
 const FN = "Calibri,'Segoe UI',Arial,sans-serif";
 const SERIF = "Georgia,'Times New Roman',serif";
 
+// Ordem canonica dos tamanhos: P → M → G → GG → G1 → G2 → G3 → ...
+// Usado pra exibir grade ordenada (Ailson 05/05/2026: a IA gerava ordem
+// aleatoria, ex: '1M 1P 2GG 1G' — fica ilegivel. Ordem fixa = leitura
+// natural da menor pra maior).
+const ORDEM_TAM_CANONICA = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5', 'XG', 'XGG'];
+function indiceTamanho(t) {
+  if (t == null) return 999;
+  const tup = String(t).toUpperCase().trim();
+  const idx = ORDEM_TAM_CANONICA.indexOf(tup);
+  return idx === -1 ? 999 : idx;
+}
+// Recebe array tipo Object.entries({M:1, P:1}) → reordena pela ORDEM_TAM_CANONICA
+function ordenarTamanhos(entries) {
+  return [...entries].sort((a, b) => indiceTamanho(a[0]) - indiceTamanho(b[0]));
+}
+
 // Thumbnail do produto a partir do bucket `produtos` do Supabase.
 // Tenta jpg → png → webp (ref normalizada e com zero-padding).
 // Fallback: placeholder cinza com 📷.
@@ -339,7 +355,7 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
             REF {ordem.ref}{ordem.descricao ? ` · ${ordem.descricao}` : ''}
           </div>
           <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 2 }}>
-            🧵 {ordem.tecido} · Grade {Object.entries(ordem.grade || {}).map(([t, v]) => `${v}${t}`).join(' · ')}
+            🧵 {ordem.tecido} · <span style={{ color: '#5a6470', fontWeight: 600 }}>Grade {ordenarTamanhos(Object.entries(ordem.grade || {})).map(([t, v]) => `${v}${t}`).join(' · ')}</span>
           </div>
         </div>
 

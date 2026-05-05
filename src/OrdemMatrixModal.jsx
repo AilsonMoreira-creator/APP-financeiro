@@ -86,7 +86,13 @@ export default function OrdemMatrixModal({ ordem: ordemProp, ordemId, onClose })
   const status = STATUS_LABEL[ordem.status] || { txt: ordem.status, bg: '#eee', color: '#666', border: '#ccc' };
   const grade = ordem.grade || {};
   const cores = ordem.cores || [];
-  const tamanhos = Object.keys(grade);
+  // Ordena tamanhos pela ordem canonica P→M→G→GG→G1→G2→... (Ailson 05/05/2026)
+  const ORDEM_TAM = ['PP', 'P', 'M', 'G', 'GG', 'G1', 'G2', 'G3', 'G4', 'G5', 'XG', 'XGG'];
+  const idxTam = (t) => {
+    const idx = ORDEM_TAM.indexOf(String(t).toUpperCase().trim());
+    return idx === -1 ? 999 : idx;
+  };
+  const tamanhos = Object.keys(grade).sort((a, b) => idxTam(a) - idxTam(b));
   const totalModulos = Object.values(grade).reduce((s, v) => s + Number(v || 0), 0);
 
   // Matriz cor × tamanho: pra cada cor (rolos × módulo do tamanho)
