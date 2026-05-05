@@ -58,6 +58,9 @@ COMMENT ON TABLE lojas_vendas_varejo IS
 -- ───────────────────────────────────────────────────────────────────────────
 -- Usada pelo card de metas. Filtros tipicos: vendedora_id + data_venda + loja
 -- O campo "categoria" diferencia atacado/varejo.
+-- Decisao Ailson 04/05/2026: Vesti tambem conta como atacado (e venda B2B
+-- legitima da vendedora). canal_origem original e mantido pra rastrear
+-- origem (util pra IA, sugestoes, etc), mas categoria=atacado pra meta.
 CREATE OR REPLACE VIEW vw_lojas_vendas_completo AS
 SELECT
   v.numero_pedido,
@@ -69,7 +72,7 @@ SELECT
   v.canal_origem,
   v.cliente_id
 FROM lojas_vendas v
-WHERE v.canal_origem = 'fisico'                       -- Sprint A so olha vendas fisicas
+WHERE v.canal_origem IN ('fisico', 'vesti')           -- atacado fisico balcao OU vesti app
 
 UNION ALL
 
@@ -85,4 +88,4 @@ SELECT
 FROM lojas_vendas_varejo vr;
 
 COMMENT ON VIEW vw_lojas_vendas_completo IS
-  'Une atacado (lojas_vendas) + varejo (lojas_vendas_varejo) pro card de metas. Sprint A.';
+  'Une atacado (lojas_vendas: fisico + vesti) + varejo (lojas_vendas_varejo) pro card de metas. Sprint A.';
