@@ -968,7 +968,8 @@ const CardConversoes = ({ lojas }) => {
   return (
     <div style={{
       width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
-      borderRadius: 12, padding: '14px 18px', marginBottom: 12, fontFamily: FONT,
+      borderRadius: 12, padding: '14px 16px', marginBottom: 12, fontFamily: FONT,
+      boxSizing: 'border-box', overflow: 'hidden', maxWidth: '100%',
     }}>
       {/* Header: titulo + filtros. Em telas estreitas, filtros vao pra
           linha de baixo automaticamente (flexWrap). */}
@@ -1012,7 +1013,7 @@ const CardConversoes = ({ lojas }) => {
         </div>
       ) : (
         <div style={{
-          display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 18,
+          display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 14,
           rowGap: 10,
         }}>
           <div>
@@ -1094,6 +1095,7 @@ const CardVestiAuditoria = ({ userId }) => {
       background: palette.surface, borderRadius: 12,
       border: `1px solid ${palette.beige}`, padding: '14px 16px',
       marginBottom: 14,
+      boxSizing: 'border-box', overflow: 'hidden', maxWidth: '100%',
     }}>
       {/* Header clicavel */}
       <div onClick={() => setExpandido(e => !e)} style={{
@@ -1319,8 +1321,9 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
       {/* Strip horizontal — todos os KPIs juntos */}
       <button onClick={onAbrirHistorico} style={{
         width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
-        borderRadius: 12, padding: '14px 18px', marginBottom: 12,
+        borderRadius: 12, padding: '14px 16px', marginBottom: 12,
         cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+        boxSizing: 'border-box', overflow: 'hidden', maxWidth: '100%',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
           <Users size={sz(15)} color={palette.accent} />
