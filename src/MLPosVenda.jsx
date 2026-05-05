@@ -24,6 +24,10 @@ const TAGS = {
 const S = { fontFamily: "Georgia,'Times New Roman',serif" };
 const timeAgo = (d) => { if (!d) return ''; const diff = Date.now() - new Date(d).getTime(); const m = Math.floor(diff / 60000); if (m < 60) return `${m}min`; const h = Math.floor(m / 60); if (h < 24) return `${h}h`; return `${Math.floor(h / 24)}d`; };
 
+// Anexos: ML aceita esses formatos (verificado na doc oficial 04/05/2026)
+const ACCEPTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'heif', 'pdf', 'doc', 'xls', 'txt', 'xml'];
+const MAX_ATTACH_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
+
 const BrandTag = ({ brand }) => {
   const b = BRANDS[brand] || { color: '#888', bg: '#88815' };
   return <span style={{ ...S, fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, color: b.color, background: b.bg }}>{brand}</span>;
@@ -47,6 +51,9 @@ export default function MLPosVenda({ supabase, currentUser }) {
   const [trainA, setTrainA] = useState('');
   const [enrichLoading, setEnrichLoading] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState(null); // { done, total }
+  // Sprint anexos 04/05/2026: lista de anexos pendentes pra enviar junto da mensagem
+  const [pendingAttachments, setPendingAttachments] = useState([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const chatEndRef = useRef(null);
 
   // ── Fetch conversas ──
@@ -100,6 +107,7 @@ export default function MLPosVenda({ supabase, currentUser }) {
   // ── Open conversation ──
   const openConv = async (conv) => {
     setSelected(conv); setReplyText(''); setAiSuggest(null);
+    setPendingAttachments([]); // limpa anexos pendentes ao trocar de conversa
     setNotesEdit(conv.notes || '');
     fetchMsgs(conv);
 
@@ -126,28 +134,95 @@ export default function MLPosVenda({ supabase, currentUser }) {
   };
 
   // ── Send reply ──
+  // Sprint anexos 04/05/2026: aceita enviar anexos junto da mensagem.
+  // Permite tambem enviar SO anexo (sem texto) e SO texto (sem anexo).
   const sendReply = async () => {
-    if (!replyText.trim() || !selected || sending) return;
+    const temTexto = !!replyText.trim();
+    const temAnexo = pendingAttachments.length > 0;
+    if ((!temTexto && !temAnexo) || !selected || sending) return;
     setSending(true);
     try {
       const r = await fetch('/api/ml-messages-reply', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_id: selected.id, text: replyText.trim(), sent_via: 'manual' }),
+        body: JSON.stringify({
+          conversation_id: selected.id,
+          text: replyText.trim(),
+          sent_via: temAnexo ? 'manual_attach' : 'manual',
+          attachments: pendingAttachments.map(a => a.attachment_id),
+        }),
       });
-      if (r.ok) { setReplyText(''); fetchMsgs(selected); fetchConvs(); }
-      else {
+      if (r.ok) {
+        setReplyText('');
+        setPendingAttachments([]);
+        fetchMsgs(selected);
+        fetchConvs();
+      } else {
         const e = await r.json().catch(() => ({}));
-        // Mostra detalhes completos do erro ML pra facilitar diagnóstico
-        const detalhe = e.detail?.message
-          || e.detail?.error
-          || (typeof e.detail === 'string' ? e.detail : null)
-          || (e.detail ? JSON.stringify(e.detail).slice(0, 200) : null)
-          || e.error
-          || `HTTP ${r.status}`;
-        alert(`Erro ao enviar pro ML:\n\n${detalhe}\n\nSe o erro persistir, fala com o Ailson.`);
+        // Tratamento especial: ML pode ter rejeitado anexos (validations)
+        if (e.validations) {
+          const erros = [];
+          if (e.validations.invalid_size?.length) erros.push('Tamanho invalido');
+          if (e.validations.invalid_extension?.length) erros.push('Extensao nao aceita');
+          if (e.validations.forbidden?.length) erros.push('Anexo proibido');
+          if (e.validations.internal_error?.length) erros.push('Erro interno ML');
+          alert('ML rejeitou anexo:\n' + erros.join('\n'));
+        } else {
+          // Mostra detalhes completos do erro ML pra facilitar diagnóstico
+          const detalhe = e.detail?.message
+            || e.detail?.error
+            || (typeof e.detail === 'string' ? e.detail : null)
+            || (e.detail ? JSON.stringify(e.detail).slice(0, 200) : null)
+            || e.error
+            || `HTTP ${r.status}`;
+          alert(`Erro ao enviar pro ML:\n\n${detalhe}\n\nSe o erro persistir, fala com o Ailson.`);
+        }
       }
     } catch (e) { alert('Erro de rede: ' + e.message); }
     setSending(false);
+  };
+
+  // ── Anexar arquivo ──
+  // Sprint anexos 04/05/2026. Upload pro endpoint ml-upload-attachment, retorna
+  // ID do ML que vai junto na proxima mensagem enviada.
+  const handleAttachFile = async (file) => {
+    if (!file || !selected) return;
+    // Valida client-side ANTES de subir (poupa banda do celular)
+    const ext = (file.name || '').split('.').pop().toLowerCase();
+    if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+      alert(`Formato .${ext} nao aceito.\n\nFormatos aceitos:\n${ACCEPTED_EXTENSIONS.join(', ').toUpperCase()}`);
+      return;
+    }
+    if (file.size > MAX_ATTACH_SIZE_BYTES) {
+      const sizeMb = (file.size / 1024 / 1024).toFixed(1);
+      alert(`Arquivo muito grande: ${sizeMb} MB.\n\nLimite ML: 25 MB.`);
+      return;
+    }
+    setUploadingFile(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('conversation_id', selected.id);
+    try {
+      const r = await fetch('/api/ml-upload-attachment', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) {
+        alert('Erro upload: ' + (data.error || `HTTP ${r.status}`));
+      } else {
+        setPendingAttachments(prev => [...prev, {
+          attachment_id: data.attachment_id,
+          filename: data.filename,
+          size: data.size,
+          mime: data.mime,
+        }]);
+      }
+    } catch (e) {
+      alert('Erro de rede: ' + e.message);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const removeAttachment = (id) => {
+    setPendingAttachments(prev => prev.filter(a => a.attachment_id !== id));
   };
 
   // ── Batch enrich: busca fotos/títulos faltantes no ML pra conversas
@@ -407,14 +482,45 @@ export default function MLPosVenda({ supabase, currentUser }) {
         {/* Reply */}
         {conv.status === 'aberto' && (
           <div style={{ background: PALETTE.white, borderRadius: 10, border: `1px solid ${PALETTE.sand}`, padding: '12px 16px' }}>
-            <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
               <button onClick={getAiSuggestion} disabled={aiLoading} style={{ ...S, background: '#f0f6fb', color: PALETTE.blue, border: `1px solid ${PALETTE.blue}40`, borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: aiLoading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{aiLoading ? '⏳ gerando…' : <><SacIcon name="sugestao_ia" size={14}/>Sugestão IA</>}</button>
+              {/* Botao Anexar: input file escondido + label estilizado */}
+              <label style={{ ...S, background: PALETTE.cream, color: PALETTE.dark, border: `1px solid ${PALETTE.border}`, borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: uploadingFile ? 'wait' : 'pointer', fontWeight: 600, opacity: uploadingFile ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {uploadingFile ? '⏳ enviando…' : '📎 Anexar'}
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.heic,.heif,.pdf,.doc,.xls,.txt,.xml"
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (f) handleAttachFile(f);
+                    e.target.value = ''; // permite re-anexar mesmo arquivo depois
+                  }}
+                  style={{ display: 'none' }}
+                  disabled={uploadingFile}
+                />
+              </label>
               <div style={{ flex: 1 }} />
               <button onClick={() => updateConv('status', 'resolvido')} style={{ ...S, background: PALETTE.green, color: '#fff', border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><SacIcon name="resolvido" size={14}/>Resolvido</button>
             </div>
+            {/* Chips de anexos pendentes (acima do textarea) */}
+            {pendingAttachments.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, padding: 8, background: PALETTE.cream, borderRadius: 6 }}>
+                {pendingAttachments.map(a => {
+                  const sizeKb = (a.size / 1024).toFixed(0);
+                  const isImg = (a.mime || '').startsWith('image/');
+                  return (
+                    <div key={a.attachment_id} style={{ ...S, display: 'flex', alignItems: 'center', gap: 6, background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 6, padding: '4px 8px', fontSize: 12 }}>
+                      <span>{isImg ? '🖼️' : '📎'} {a.filename}</span>
+                      <span style={{ color: PALETTE.textLight, fontSize: 10 }}>{sizeKb}KB</span>
+                      <button onClick={() => removeAttachment(a.attachment_id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: PALETTE.red, padding: 0, marginLeft: 2, fontWeight: 700, fontSize: 14 }} title="Remover">✕</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 6 }}>
               <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Digite sua resposta..." rows={4} style={{ ...S, flex: 1, border: `1px solid ${PALETTE.border}`, borderRadius: 6, padding: '8px 10px', fontSize: 14, lineHeight: 1.4, outline: 'none', resize: 'vertical' }} />
-              <button onClick={sendReply} disabled={sending || !replyText.trim()} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 6, padding: '10px 18px', fontSize: 13, cursor: sending ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: sending ? 0.6 : 1, alignSelf: 'flex-end' }}>
+              <button onClick={sendReply} disabled={sending || (!replyText.trim() && pendingAttachments.length === 0)} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 6, padding: '10px 18px', fontSize: 13, cursor: sending ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: sending ? 0.6 : 1, alignSelf: 'flex-end' }}>
                 {sending ? '⏳' : 'Enviar'}
               </button>
             </div>

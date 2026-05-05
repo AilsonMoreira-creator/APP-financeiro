@@ -11,8 +11,12 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).end();
 
-    const { conversation_id, text, sent_via = 'manual' } = req.body;
-    if (!conversation_id || !text) return res.status(400).json({ error: 'Falta conversation_id ou text' });
+    const { conversation_id, text, sent_via = 'manual', attachments = [] } = req.body;
+    if (!conversation_id) return res.status(400).json({ error: 'Falta conversation_id' });
+    // Permite mensagem so com anexo (sem texto)
+    if (!text && (!Array.isArray(attachments) || attachments.length === 0)) {
+      return res.status(400).json({ error: 'Falta text ou attachments' });
+    }
 
     // Busca conversa
     const { data: conv, error: convErr } = await supabase
@@ -31,16 +35,20 @@ export default async function handler(req, res) {
     //    convertendo em espaco eh mais seguro que remover (vira "você?Fico").
     // 2. Remove control chars que nao tem representacao textual.
     // 3. Remove zero-width chars (vem colado do clipboard, teclado emoji iOS).
-    const textoLimpo = String(text)
+    const textoLimpo = String(text || '')
       .replace(/\r\n/g, ' ').replace(/[\r\n\t]/g, ' ')   // line breaks -> space
       .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '') // outros control chars
       .replace(/[\u200B-\u200F\uFEFF]/g, '') // zero-width chars
       .replace(/ {2,}/g, ' ')                // colapsa espacos duplicados gerados
       .trim();
 
-    if (!textoLimpo) {
+    // Permite texto vazio se tiver anexo (ML aceita, mas usamos 1 espaco
+    // pra garantir — algumas integrations relataram erro com text:"" puro).
+    const temAnexo = Array.isArray(attachments) && attachments.length > 0;
+    if (!textoLimpo && !temAnexo) {
       return res.status(400).json({ error: 'Texto vazio depois da limpeza' });
     }
+    const textoFinal = textoLimpo || ' ';
 
     // user_id PRECISA ser STRING no body (com aspas) - documentacao ML PT-BR.
     // Erro 'Unexpected exception parsing json string' acontecia por enviar
@@ -161,8 +169,11 @@ export default async function handler(req, res) {
     const mlBody = {
       from: { user_id: sellerIdStr },
       to: { user_id: buyerIdStr },
-      text: textoLimpo,
+      text: textoFinal,
     };
+    if (temAnexo) {
+      mlBody.attachments = attachments;
+    }
 
     // Envia no ML (usa sellerIdStr que ja foi recuperado se preciso)
     // Timeout de 25s pra nao deixar usuario travado se ML estiver lento
