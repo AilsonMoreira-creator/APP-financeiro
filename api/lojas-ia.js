@@ -631,13 +631,26 @@ async function montarContextoSugestoes(vendedoraId) {
   // antes da correcao da regra). Usamos emAltaAuto que tem o top 10 real.
   const maisVendidos45d = emAltaAuto.slice(0, 10);
 
-  // ─── REPOSIÇÃO: novidades da oficina cuja REF já vendeu antes ─────────
+  // ─── REPOSIÇÃO: novidades cuja REF já vendeu antes ─────────
   // Decisão Ailson 28/04/2026: tipo NOVO de sugestão. Quando IA pega uma
   // novidade da oficina e essa REF já existe em vendas anteriores, é
   // REPOSIÇÃO (não novidade pura). Substitui 1 slot de novidade ou followup.
-  const novidadesRefs = (produtos || [])
-    .filter(p => p.motivo_oferta === 'novidade_oficina')
-    .map(p => p.ref);
+  //
+  // BUG CRITICO CORRIGIDO 04/05/2026:
+  // Codigo anterior lia de 'produtos' (vw_lojas_produtos_oferecveis) filtrando
+  // motivo_oferta='novidade_oficina'. MAS:
+  //   - lojas_produtos.data_entrega_oficina NUNCA foi populado (NULL pra todos)
+  //   - lojas_produtos.motivo_pode_oferecer NUNCA recebeu 'novidade_oficina'
+  // Resultado: novidadesRefs ficava SEMPRE vazio → reposicao nunca era
+  // sugerida (mesmo com refs validas no estoque + historico de vendas).
+  // Auditoria Ailson 04/05/2026: 528 produtos, 0 com data, 0 marcados.
+  //
+  // Solucao: usa fonte CANONICA — vw_lojas_novidades_auto (5-12d apos
+  // entrega oficina, marca='Amícia') + curadoria manual tipo='novidade_manual'.
+  const refsCuradoriaNovidade = (curadoria || [])
+    .filter(c => c.tipo === 'novidade_manual')
+    .map(c => c.ref);
+  const novidadesRefs = [...new Set([...novidadesAuto, ...refsCuradoriaNovidade])];
 
   let refsComVendaPassada = new Set();
   if (novidadesRefs.length > 0) {
