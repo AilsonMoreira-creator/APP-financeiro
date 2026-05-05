@@ -43,7 +43,7 @@ import {
   ArrowLeftRight, TrendingUp, BarChart3, UserCog, Heart,
   Save, Trash2, Edit3, Clock, CheckCircle2, AlertCircle, Check, X,
   Upload, Download, FileSpreadsheet, History, UsersRound, Link2, Crown,
-  Loader2, Flame, Megaphone, Bell, Palette,
+  Loader2, Flame, Megaphone, Bell, Palette, EyeOff, RotateCcw,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
@@ -1685,6 +1685,7 @@ export const TransferirCarteiraScreen = ({ lojas, onBack }) => {
 
 export const CuradoriaScreen = ({ lojas, onBack }) => {
   const { state, handleAdicionarCuradoria, handleRemoverCuradoria } = lojas;
+  const userId = state.userId;
 
   const TABS = [
     { id: 'best_seller',     label: 'Best-sellers', icon: Star,        cor: palette.warn },
@@ -1708,10 +1709,42 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
   const [salvando, setSalvando] = useState(false);
   const [removendoId, setRemovendoId] = useState(null);
 
-  const itensDaAba = useMemo(
-    () => (state.curadoria || []).filter(c => c.tipo === activeTab),
-    [state.curadoria, activeTab]
-  );
+  // Sprint curadoria 04/05/2026: itens vem da API (manual + auto misturados)
+  const [itensApi, setItensApi] = useState([]);
+  const [carregandoApi, setCarregandoApi] = useState(false);
+  const [excluindoRef, setExcluindoRef] = useState(null);
+  const [showExcluidas, setShowExcluidas] = useState(false);
+  const [excluidas, setExcluidas] = useState([]);
+  const [carregandoExcluidas, setCarregandoExcluidas] = useState(false);
+  const [reativandoRef, setReativandoRef] = useState(null);
+
+  // Carrega itens da API quando muda de aba (so pra abas que tem auto)
+  const carregarItens = useCallback(async () => {
+    if (activeTab === 'cores') return;
+    setCarregandoApi(true);
+    try {
+      const r = await fetch(`/api/lojas-curadoria-listar?tipo=${activeTab}`, {
+        headers: { 'X-User': userId || '' },
+      });
+      const data = await r.json();
+      if (r.ok) setItensApi(data.itens || []);
+      else {
+        console.error('curadoria-listar:', data);
+        setItensApi([]);
+      }
+    } catch (e) {
+      console.error('curadoria-listar:', e);
+      setItensApi([]);
+    } finally {
+      setCarregandoApi(false);
+    }
+  }, [activeTab, userId]);
+
+  useEffect(() => { carregarItens(); }, [carregarItens]);
+  // Recarrega quando state.curadoria muda (alguem adicionou/removeu manual)
+  useEffect(() => { carregarItens(); }, [state.curadoria, carregarItens]);
+
+  const itensDaAba = itensApi;
 
   const resultadosBuscaProduto = useMemo(() => {
     if (refBusca.trim().length < 1) return [];
@@ -1741,6 +1774,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
     try {
       await handleAdicionarCuradoria(produtoSel.ref, activeTab, motivoNovo.trim() || null);
       setShowAdicionar(false);
+      // useEffect [state.curadoria] vai recarregar automaticamente
     } catch (e) {
       alert('Erro: ' + (e.message || e));
     } finally {
@@ -1750,13 +1784,78 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
 
   const remover = async (item) => {
     if (!confirm(`Remover REF ${item.ref} da curadoria?`)) return;
-    setRemovendoId(item.id);
+    setRemovendoId(item.id_curadoria);
     try {
-      await handleRemoverCuradoria(item.id);
+      await handleRemoverCuradoria(item.id_curadoria);
     } catch (e) {
       alert('Erro: ' + (e.message || e));
     } finally {
       setRemovendoId(null);
+    }
+  };
+
+  // Excluir auto (admin "vetou")
+  const excluirAuto = async (item) => {
+    if (!confirm(`Excluir REF ${item.ref} desta lista automática?\n\nEla some até você reativar.`)) return;
+    setExcluindoRef(item.ref);
+    try {
+      const r = await fetch('/api/lojas-curadoria-excluir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+        body: JSON.stringify({ ref: item.ref, tipo: activeTab }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        alert('Erro: ' + (e.error || `HTTP ${r.status}`));
+        return;
+      }
+      await carregarItens();
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    } finally {
+      setExcluindoRef(null);
+    }
+  };
+
+  // Modal "Ver excluidas"
+  const abrirExcluidas = async () => {
+    setShowExcluidas(true);
+    setCarregandoExcluidas(true);
+    try {
+      const r = await fetch(`/api/lojas-curadoria-listar-excluidas?tipo=${activeTab}`, {
+        headers: { 'X-User': userId || '' },
+      });
+      const data = await r.json();
+      if (r.ok) setExcluidas(data.itens || []);
+      else setExcluidas([]);
+    } catch {
+      setExcluidas([]);
+    } finally {
+      setCarregandoExcluidas(false);
+    }
+  };
+
+  // Reativar
+  const reativar = async (ref) => {
+    setReativandoRef(ref);
+    try {
+      const r = await fetch('/api/lojas-curadoria-reativar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+        body: JSON.stringify({ ref, tipo: activeTab }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        alert('Erro: ' + (e.error || `HTTP ${r.status}`));
+        return;
+      }
+      // Remove da lista local + recarrega itens
+      setExcluidas(prev => prev.filter(e => e.ref !== ref));
+      await carregarItens();
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    } finally {
+      setReativandoRef(null);
     }
   };
 
@@ -1769,8 +1868,6 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
     if (!ref) return null;
     const refStr = String(ref).trim();
     const refSemZero = refStr.replace(/^0+/, '') || '0';
-    const refPad4 = refSemZero.padStart(4, '0');
-    const refPad5 = refSemZero.padStart(5, '0');
 
     const acharEm = (lista) => {
       if (!Array.isArray(lista)) return null;
@@ -1803,18 +1900,40 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
           <CoresPainel lojas={lojas} />
         ) : (
           <div style={{ marginTop: 16 }}>
-            {/* Botão adicionar */}
-            <button onClick={abrirModalAdicionar} style={{
-              width: '100%', background: 'transparent', border: `1.5px dashed ${palette.beige}`,
-              borderRadius: 10, padding: 14, cursor: 'pointer', fontFamily: FONT,
-              color: palette.accent, fontSize: fz(15), fontWeight: 600, marginBottom: 16,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}>
-              <Plus size={sz(17)} /> Adicionar produto
-            </button>
+            {/* Botão adicionar + Ver excluidas */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              <button onClick={abrirModalAdicionar} style={{
+                flex: 1, background: 'transparent', border: `1.5px dashed ${palette.beige}`,
+                borderRadius: 10, padding: 14, cursor: 'pointer', fontFamily: FONT,
+                color: palette.accent, fontSize: fz(15), fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}>
+                <Plus size={sz(17)} /> Adicionar produto
+              </button>
+              <button onClick={abrirExcluidas} style={{
+                background: 'transparent', border: `1px solid ${palette.beige}`,
+                borderRadius: 10, padding: '0 14px', cursor: 'pointer', fontFamily: FONT,
+                color: palette.inkSoft, fontSize: fz(13), fontWeight: 500,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              }} title="Ver REFs excluídas">
+                <EyeOff size={sz(15)} /> Excluídas
+              </button>
+            </div>
 
-            {/* Lista */}
-            {itensDaAba.length === 0 && (() => {
+            {/* Loading */}
+            {carregandoApi && itensDaAba.length === 0 && (
+              <div style={{
+                padding: 20, textAlign: 'center', color: palette.inkMuted,
+                fontSize: fz(14), background: palette.surface,
+                border: `1px solid ${palette.beige}`, borderRadius: 10,
+              }}>
+                <Loader2 size={sz(18)} style={spinKeyframes} color={palette.inkMuted} />
+                <div style={{ marginTop: 6 }}>Carregando…</div>
+              </div>
+            )}
+
+            {/* Lista vazia */}
+            {!carregandoApi && itensDaAba.length === 0 && (() => {
               const IconVazio = tabAtiva?.icon;
               return (
               <div style={{
@@ -1827,40 +1946,73 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                     style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
                 )}
                 <div style={{ marginBottom: 6 }}>
-                  Nenhum {LABEL_TIPO[activeTab]} cadastrado.
+                  Nenhum {LABEL_TIPO[activeTab]} disponível.
                 </div>
                 <div style={{ fontSize: fz(13) }}>
-                  Adicione produtos pra IA usar mesmo com estoque baixo.
+                  {activeTab === 'best_seller'
+                    ? 'Adicione manualmente os campeões de venda.'
+                    : activeTab === 'em_alta'
+                    ? 'Em alta entra automático (top 10 vendas) ou manual.'
+                    : 'Novidades entram automático (5-12d oficina) ou manual.'}
                 </div>
               </div>
               );
             })()}
 
+            {/* Contador manual + auto */}
+            {itensDaAba.length > 0 && (
+              <div style={{
+                fontSize: fz(13), color: palette.inkMuted, marginBottom: 8, padding: '0 4px',
+                display: 'flex', gap: 12, flexWrap: 'wrap',
+              }}>
+                <span>{itensDaAba.filter(i => i.origem === 'manual').length} manuais</span>
+                <span>·</span>
+                <span>{itensDaAba.filter(i => i.origem === 'automatica').length} automáticas</span>
+              </div>
+            )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {itensDaAba.map(item => {
-              const prod = produtoPorRef(item.ref);
-              const removendo = removendoId === item.id;
+              const isManual = item.origem === 'manual';
+              const isAuto = item.origem === 'automatica';
+              const removendo = removendoId === item.id_curadoria;
+              const excluindo = excluindoRef === item.ref;
               const diasRestantes = item.data_fim ? diasAte(item.data_fim) : null;
 
               return (
-                <div key={item.id} style={{
+                <div key={`${item.origem}-${item.ref}`} style={{
                   background: palette.surface, border: `1px solid ${palette.beige}`,
                   borderLeft: `3px solid ${tabAtiva.cor}`,
                   borderRadius: 10, padding: 12,
                   display: 'flex', alignItems: 'center', gap: 12,
+                  opacity: isAuto ? 0.92 : 1, // auto fica levemente mais clara
                 }}>
                   {/* Foto do produto direto do bucket Supabase */}
                   <FotoProdutoLojas refProd={item.ref} size={48} />
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
-                      REF {item.ref}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
+                        REF {item.ref}
+                      </span>
+                      {/* Badge origem */}
+                      <span style={{
+                        fontSize: fz(10), fontWeight: 700,
+                        padding: '1px 6px', borderRadius: 3,
+                        background: isManual ? tabAtiva.cor + '20' : palette.beigeSoft,
+                        color: isManual ? tabAtiva.cor : palette.inkSoft,
+                        textTransform: 'uppercase', letterSpacing: 0.3,
+                      }}>
+                        {isManual ? 'manual' : 'auto'}
+                      </span>
                     </div>
                     <div style={{
                       fontSize: fz(15), fontWeight: 600, color: palette.ink,
                       marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
-                      {prod?.descricao || '(produto não encontrado no catálogo)'}
+                      {item.descricao || '(produto não encontrado no catálogo)'}
                     </div>
                     {item.motivo && (
                       <div style={{
@@ -1871,30 +2023,56 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                       </div>
                     )}
                     <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <span>Adicionado {fmtData(item.adicionado_em)}</span>
-                      {item.data_fim && (
-                        <span style={{
-                          padding: '1px 6px', borderRadius: 3,
-                          background: diasRestantes != null && diasRestantes < 3 ? palette.alertSoft : palette.beigeSoft,
-                          color: diasRestantes != null && diasRestantes < 3 ? palette.alert : palette.inkSoft,
-                          fontWeight: 600,
-                        }}>
-                          Termina {fmtData(item.data_fim)}
-                          {diasRestantes != null && ` (${diasRestantes}d)`}
-                        </span>
+                      {/* Manual: data adicionado + termina */}
+                      {isManual && (
+                        <>
+                          <span>Adicionado {fmtData(item.adicionado_em)}</span>
+                          {item.data_fim && (
+                            <span style={{
+                              padding: '1px 6px', borderRadius: 3,
+                              background: diasRestantes != null && diasRestantes < 3 ? palette.alertSoft : palette.beigeSoft,
+                              color: diasRestantes != null && diasRestantes < 3 ? palette.alert : palette.inkSoft,
+                              fontWeight: 600,
+                            }}>
+                              Termina {fmtData(item.data_fim)}
+                              {diasRestantes != null && ` (${diasRestantes}d)`}
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {/* Auto novidade: dias após oficina */}
+                      {isAuto && item.dias_apos_entrega !== undefined && (
+                        <span>{item.dias_apos_entrega}d da oficina</span>
+                      )}
+                      {/* Auto em_alta: posição ranking */}
+                      {isAuto && item.posicao !== undefined && (
+                        <span>#{item.posicao} do top · {item.pecas_45d || 0} peças/45d</span>
                       )}
                     </div>
                   </div>
 
-                  <button onClick={() => remover(item)} disabled={removendo} style={{
-                    background: 'transparent', border: 'none', cursor: removendo ? 'wait' : 'pointer',
-                    padding: 6, display: 'flex', flexShrink: 0,
-                    opacity: removendo ? 0.5 : 1,
-                  }}>
-                    {removendo
-                      ? <Loader2 size={sz(18)} style={spinKeyframes} color={palette.inkMuted} />
-                      : <Trash2 size={sz(18)} color={palette.inkMuted} />}
-                  </button>
+                  {/* Botão remover (manual) ou excluir (auto) */}
+                  {isManual ? (
+                    <button onClick={() => remover(item)} disabled={removendo} style={{
+                      background: 'transparent', border: 'none', cursor: removendo ? 'wait' : 'pointer',
+                      padding: 6, display: 'flex', flexShrink: 0,
+                      opacity: removendo ? 0.5 : 1,
+                    }} title="Remover da curadoria manual">
+                      {removendo
+                        ? <Loader2 size={sz(18)} style={spinKeyframes} color={palette.inkMuted} />
+                        : <Trash2 size={sz(18)} color={palette.inkMuted} />}
+                    </button>
+                  ) : (
+                    <button onClick={() => excluirAuto(item)} disabled={excluindo} style={{
+                      background: 'transparent', border: 'none', cursor: excluindo ? 'wait' : 'pointer',
+                      padding: 6, display: 'flex', flexShrink: 0,
+                      opacity: excluindo ? 0.5 : 1,
+                    }} title="Excluir desta lista (até reativar)">
+                      {excluindo
+                        ? <Loader2 size={sz(18)} style={spinKeyframes} color={palette.inkMuted} />
+                        : <EyeOff size={sz(18)} color={palette.inkMuted} />}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -1906,9 +2084,11 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
           }}>
             ℹ️ Produtos curados aparecem nas sugestões da IA mesmo com estoque baixo.
             <br/>
-            • <strong>Best-sellers</strong>: produtos campeões de venda<br/>
-            • <strong>Em alta</strong>: tendência momentânea (ex: pós-publicação Instagram)<br/>
-            • <strong>Novidades manuais</strong>: lançamentos com janela de 15 dias
+            • <strong>Best-sellers</strong>: só manual (campeões de venda)<br/>
+            • <strong>Em alta</strong>: manual + top 10 vendas automático<br/>
+            • <strong>Novidades</strong>: manual (15d) + 5-12d da oficina automático<br/>
+            <br/>
+            Use <EyeOff size={sz(13)} style={{ display: 'inline', verticalAlign: 'middle' }} /> pra excluir uma sugestão automática que não faz sentido.
           </div>
         </div>
         )}
@@ -2045,6 +2225,99 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                   ? <><Loader2 size={sz(17)} style={spinKeyframes} /> Salvando…</>
                   : <><Plus size={sz(17)} /> Adicionar</>}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Excluídas — REFs vetadas pelo admin */}
+      {showExcluidas && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(44,62,80,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+          padding: 16, fontFamily: FONT,
+        }} onClick={() => setShowExcluidas(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: palette.surface, borderRadius: 16, padding: 0,
+            width: '100%', maxWidth: 460, maxHeight: '85vh', overflow: 'hidden',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              padding: '16px 20px', borderBottom: `1px solid ${palette.beige}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>
+                  Excluídas — {LABEL_TIPO[activeTab]}
+                </div>
+                <div style={{ fontSize: fz(13), color: palette.inkMuted, marginTop: 2 }}>
+                  REFs que você vetou da curadoria automática
+                </div>
+              </div>
+              <button onClick={() => setShowExcluidas(false)} style={{
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: palette.inkMuted, padding: 4,
+              }}>
+                <X size={sz(23)} />
+              </button>
+            </div>
+
+            <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
+              {carregandoExcluidas && (
+                <div style={{ textAlign: 'center', padding: 20, color: palette.inkMuted }}>
+                  <Loader2 size={sz(18)} style={spinKeyframes} color={palette.inkMuted} />
+                </div>
+              )}
+              {!carregandoExcluidas && excluidas.length === 0 && (
+                <div style={{
+                  padding: 24, textAlign: 'center', color: palette.inkMuted,
+                  fontSize: fz(14), background: palette.beigeSoft, borderRadius: 10,
+                }}>
+                  Nenhuma REF excluída.
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {excluidas.map(item => {
+                  const reativando = reativandoRef === item.ref;
+                  return (
+                    <div key={item.ref} style={{
+                      background: palette.surface, border: `1px solid ${palette.beige}`,
+                      borderRadius: 8, padding: 10,
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}>
+                      <FotoProdutoLojas refProd={item.ref} size={40} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
+                          REF {item.ref}
+                        </div>
+                        <div style={{
+                          fontSize: fz(14), fontWeight: 600, color: palette.ink,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {item.descricao}
+                        </div>
+                        <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2 }}>
+                          Excluída {fmtData(item.excluida_em)}
+                          {item.motivo ? ` · ${item.motivo}` : ''}
+                        </div>
+                      </div>
+                      <button onClick={() => reativar(item.ref)} disabled={reativando} style={{
+                        background: palette.accentSoft, border: 'none',
+                        borderRadius: 6, padding: '6px 10px',
+                        cursor: reativando ? 'wait' : 'pointer', fontFamily: FONT,
+                        fontSize: fz(12), fontWeight: 600, color: palette.accent,
+                        display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+                        opacity: reativando ? 0.6 : 1,
+                      }}>
+                        {reativando
+                          ? <Loader2 size={sz(14)} style={spinKeyframes} />
+                          : <RotateCcw size={sz(14)} />}
+                        Reativar
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
