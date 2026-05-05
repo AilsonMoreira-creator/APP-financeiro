@@ -669,16 +669,16 @@ async function toggleCorIgnorada({ cor_key, cor, ja_ignorada, ignorado_por }) {
 
 // ─── LINKS VESTI da vendedora ──────────────────────────────────────────
 async function salvarLinksVesti(vendedoraId, { link_1, link_2, link_3, link_ativo }) {
-  const { error } = await supabase
-    .from('lojas_vendedoras')
-    .update({
-      vesti_link_1: link_1 || null,
-      vesti_link_2: link_2 || null,
-      vesti_link_3: link_3 || null,
-      vesti_link_ativo: link_ativo || null,
-    })
-    .eq('id', vendedoraId);
-  if (error) throw error;
+  // Bug fix 05/05/2026: vendedora loga com header customizado (auth.role='anon'),
+  // RLS bloqueia UPDATE direto via anon key. Rota pelo backend que usa
+  // service_role e bypassa RLS.
+  const r = await fetch('/api/lojas-vesti-salvar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vendedora_id: vendedoraId, link_1, link_2, link_3, link_ativo }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
 }
 
 async function loadSugestoesHoje(vendedoraId) {
