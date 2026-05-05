@@ -1048,7 +1048,7 @@ const CardConversoes = ({ lojas }) => {
 //
 // Card eh fechado por default; clica pra expandir.
 //
-const CardVestiAuditoria = () => {
+const CardVestiAuditoria = ({ userId }) => {
   const [data, setData] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
@@ -1059,13 +1059,28 @@ const CardVestiAuditoria = () => {
     let cancelado = false;
     setCarregando(true);
     fetch('/api/lojas-vesti-auditoria', {
-      headers: {
-        'x-user-id': (typeof window !== 'undefined' && window.localStorage)
-          ? (window.localStorage.getItem('lojas_user_id') || 'ailson') : 'ailson',
-      },
+      headers: { 'X-User': userId || 'ailson' },
     })
-      .then(r => r.json())
-      .then(d => { if (!cancelado) { setData(d); setCarregando(false); } })
+      .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
+      .then(({ ok, status, data: d }) => {
+        if (cancelado) return;
+        if (!ok) {
+          setErro(d?.error || `HTTP ${status}`);
+          setCarregando(false);
+          return;
+        }
+        // Garante que estrutura sempre existe (defesa contra resposta parcial)
+        setData({
+          total_clientes: d?.total_clientes || 0,
+          por_loja: d?.por_loja || {},
+          por_vendedora: d?.por_vendedora || [],
+          por_status: d?.por_status || {},
+          clientes: d?.clientes || [],
+          sugestoes_30d: d?.sugestoes_30d || { total: 0, com_link_ou_catalogo: 0, executadas: 0, pct_com_link: 0 },
+          mensagens_enviadas_30d: d?.mensagens_enviadas_30d || 0,
+        });
+        setCarregando(false);
+      })
       .catch(e => { if (!cancelado) { setErro(e.message || 'Erro'); setCarregando(false); } });
     return () => { cancelado = true; };
   }, []);
@@ -1344,7 +1359,7 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
 
       {/* Card Auditoria Vesti (admin) — quantos clientes Vesti tem,
           se IA está usando link/catalogo, mensagens enviadas */}
-      {state.isAdmin && <CardVestiAuditoria />}
+      {state.isAdmin && <CardVestiAuditoria userId={state.userId} />}
 
       {/* Card Abertura do app (admin) — quem abriu hoje, quem precisa lembrete */}
       {state.isAdmin && <CardAberturaApp lojas={lojas} />}

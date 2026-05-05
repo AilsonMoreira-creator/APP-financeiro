@@ -34,7 +34,7 @@ const ProdutosTab = ({ userId }) => {
     setCarregando(true);
     setErro(null);
     fetch(`/api/lojas-produtos-raiox?loja=${loja}`, {
-      headers: { 'x-user-id': userId || 'ailson' },
+      headers: { 'X-User': userId || 'ailson' },
     })
       .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
       .then(({ ok, data: d }) => {
