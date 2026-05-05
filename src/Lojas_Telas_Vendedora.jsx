@@ -52,6 +52,10 @@ import {
   adminComSaudacao, supabase, spinKeyframes,
 } from './Lojas_Shared.jsx';
 
+// Aba 'Produtos' (admin only) — raio-x de produtos. Isolado em arquivo
+// proprio pra nao impactar arquivos de vendedora. Sprint 05/05/2026.
+import ProdutosTab from './Lojas_Telas_Produtos.jsx';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS DE UI ESPECÍFICOS DAS TELAS VENDEDORA
 // ═══════════════════════════════════════════════════════════════════════════
@@ -153,6 +157,7 @@ export const HomeScreen = ({
     ? [
         { id: 'vendedoras', label: 'Vendedoras', icon: Users },
         { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+        { id: 'produtos', label: 'Produtos', icon: Package },
         { id: 'config', label: 'Config', icon: Settings },
       ]
     : [{ id: 'vendedoras', label: 'Vendedoras', icon: Users }];
@@ -201,6 +206,9 @@ export const HomeScreen = ({
       )}
       {activeTab === 'dashboard' && isAdmin && (
         <DashboardTab lojas={lojas} onAbrirHistorico={onAbrirHistorico} />
+      )}
+      {activeTab === 'produtos' && isAdmin && (
+        <ProdutosTab userId={state?.userId} />
       )}
       {activeTab === 'config' && isAdmin && (
         <ConfigTab lojas={lojas} onNavegar={onNavegarConfig} />
