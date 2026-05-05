@@ -2085,9 +2085,11 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
             ℹ️ Produtos curados aparecem nas sugestões da IA mesmo com estoque baixo.
             <br/>
             • <strong>Best-sellers</strong>: só manual (campeões de venda)<br/>
-            • <strong>Em alta</strong>: manual + top 10 vendas automático<br/>
-            • <strong>Novidades</strong>: manual (15d) + 5-12d da oficina automático<br/>
+            • <strong>Em alta</strong>: manual + top 10 vendas reais (curva A)<br/>
+            • <strong>Novidades</strong>: manual (15d) + 5-12d da oficina (7-14d se tem caseado)<br/>
             <br/>
+            🔁 <strong>Reposição</strong> (auto, sem aba aqui): refs entregues 5-10d (ou 7-12d com caseado) que já venderam antes — IA prioriza pra clientes que compraram a mesma REF ou estilo similar.
+            <br/><br/>
             Use <EyeOff size={sz(13)} style={{ display: 'inline', verticalAlign: 'middle' }} /> pra excluir uma sugestão automática que não faz sentido.
           </div>
         </div>
