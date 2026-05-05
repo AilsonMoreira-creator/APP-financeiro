@@ -593,3 +593,30 @@ Tudo isso resolve o pedido de hoje. Pra completar a curadoria automática 100%, 
 - Materializar view se ficar lenta
 
 Mas isso é v2. V1 entrega o que Ailson pediu: **visibilidade + controle de exclusão** sobre os automáticos.
+
+---
+
+## 📌 ATUALIZAÇÃO 04/05/2026 noite (Ailson)
+
+**Decisão revista:** manter `vw_lojas_top_vendas_loja_fisica` existente (45d, top 10 curva A + top 10 curva B). View já está rodando bem:
+- 84 REFs distintos vendidos em 45d
+- Bom Retiro 1.563 vendas + Silva Teles 1.439 = só físico ✅
+- REF 376 lidera com 407 peças
+
+**O que muda no plano:**
+1. ❌ NÃO criar `vw_lojas_em_alta_auto` — usar `vw_lojas_top_vendas_loja_fisica` direto
+2. **Em alta** = curva B (10 REFs) — não 30
+3. **Best-seller** = curva A (10 REFs) — não 10 (mantém igual)
+4. Endpoint `lojas-curadoria-listar` busca da view existente:
+   ```js
+   const { data: topVendas } = await supabase
+     .from('vw_lojas_top_vendas_loja_fisica')
+     .select('ref, curva, posicao_ranking, pecas_45d')
+     .in('curva', ['a', 'b']);
+   if (tipo === 'best_seller') {
+     automaticos = topVendas.filter(d => d.curva === 'a');
+   } else if (tipo === 'em_alta') {
+     automaticos = topVendas.filter(d => d.curva === 'b');
+   }
+   ```
+5. **Info contextual no card auto:** "10º mais vendida · 119 peças (45d)"
