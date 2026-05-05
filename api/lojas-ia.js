@@ -631,7 +631,8 @@ async function montarContextoSugestoes(vendedoraId) {
   // antes da correcao da regra). Usamos emAltaAuto que tem o top 10 real.
   const maisVendidos45d = emAltaAuto.slice(0, 10);
 
-  // ─── REPOSIÇÃO: novidades cuja REF já vendeu antes ─────────
+  // ─── REPOSIÇÃO: REFs ja vendidas, em janela de reposicao ─────────
+  //
   // Decisão Ailson 28/04/2026: tipo NOVO de sugestão. Quando IA pega uma
   // novidade da oficina e essa REF já existe em vendas anteriores, é
   // REPOSIÇÃO (não novidade pura). Substitui 1 slot de novidade ou followup.
@@ -641,33 +642,43 @@ async function montarContextoSugestoes(vendedoraId) {
   // motivo_oferta='novidade_oficina'. MAS:
   //   - lojas_produtos.data_entrega_oficina NUNCA foi populado (NULL pra todos)
   //   - lojas_produtos.motivo_pode_oferecer NUNCA recebeu 'novidade_oficina'
-  // Resultado: novidadesRefs ficava SEMPRE vazio → reposicao nunca era
-  // sugerida (mesmo com refs validas no estoque + historico de vendas).
-  // Auditoria Ailson 04/05/2026: 528 produtos, 0 com data, 0 marcados.
+  // Resultado: refsReposicao=[] sempre.
   //
-  // Solucao: usa fonte CANONICA — vw_lojas_novidades_auto (5-12d apos
-  // entrega oficina, marca='Amícia') + curadoria manual tipo='novidade_manual'.
-  const refsCuradoriaNovidade = (curadoria || [])
-    .filter(c => c.tipo === 'novidade_manual')
-    .map(c => c.ref);
-  const novidadesRefs = [...new Set([...novidadesAuto, ...refsCuradoriaNovidade])];
+  // SOLUCAO 04/05/2026: view vw_lojas_reposicoes_auto faz tudo:
+  //   - Cortes Amícia entregues
+  //   - Janela 5-10d (sem caseado) ou 7-12d (com caseado, lido da ficha técnica)
+  //   - REF tem que ter vendido alguma vez antes (EXISTS lojas_vendas_itens)
+  // Plus: refs em curadoria manual 'novidade_manual' que ja venderam tambem
+  // entram (admin marcou como novidade, mas ja tinha historico → reposição).
+  let refsReposicao = [];
+  try {
+    const { data: repoRaw } = await supabase
+      .from('vw_lojas_reposicoes_auto')
+      .select('ref');
+    refsReposicao = (repoRaw || []).map(r => r.ref);
 
-  let refsComVendaPassada = new Set();
-  if (novidadesRefs.length > 0) {
-    try {
+    // Inclui curadoria manual de novidade que ja vendeu antes.
+    const refsCuradoriaNovidade = (curadoria || [])
+      .filter(c => c.tipo === 'novidade_manual')
+      .map(c => c.ref);
+    if (refsCuradoriaNovidade.length > 0) {
       const { data: vendaAnt } = await supabase
         .from('lojas_vendas_itens')
         .select('ref')
-        .in('ref', novidadesRefs)
+        .in('ref', refsCuradoriaNovidade)
         .limit(500);
-      refsComVendaPassada = new Set((vendaAnt || []).map(v => v.ref));
-    } catch (e) {
-      console.warn('[lojas-ia] sem checagem repo (view ausente?):', e?.message);
+      const refsManualComVenda = new Set((vendaAnt || []).map(v => v.ref));
+      // Adiciona sem duplicar
+      const setRepo = new Set(refsReposicao);
+      for (const r of refsCuradoriaNovidade) {
+        if (refsManualComVenda.has(r) && !setRepo.has(r)) {
+          refsReposicao.push(r);
+        }
+      }
     }
+  } catch (e) {
+    console.warn('[lojas-ia] sem reposicoes (view ausente?):', e?.message);
   }
-
-  // Lista de REFs que SÃO reposições (chegaram novas mas já tem histórico)
-  const refsReposicao = novidadesRefs.filter(r => refsComVendaPassada.has(r));
 
   // Promoções ativas
   const { data: promocoes } = await supabase
