@@ -1628,8 +1628,20 @@ function useLojasModule() {
     const sugestao = await marcarSugestaoExecutada(sugestaoId, mensagem);
     dispatch({ type: 'UPDATE_SUGESTAO', sugestao });
     if (state.vendedoraAtiva) {
+      // Bug critico corrigido 05/05/2026: cliente_id nao era passado pra
+      // registrarAcao, fazendo com que TODAS as mensagens enviadas ficassem
+      // com cliente_id NULL. O handleHealthcheck (calculo de conversoes)
+      // usa INNER JOIN com lojas_clientes — sem cliente_id, INNER JOIN
+      // descarta a linha. Resultado: 100% (90/90) das mensagens sumiam,
+      // card de conversoes ficava sempre zerado.
       registrarAcao(
-        { sugestao_id: sugestaoId, tipo_acao: 'mensagem_enviada', resultado: 'sucesso' },
+        {
+          sugestao_id: sugestaoId,
+          cliente_id: sugestao?.cliente_id || null,
+          grupo_id: sugestao?.grupo_id || null,
+          tipo_acao: 'mensagem_enviada',
+          resultado: 'sucesso',
+        },
         state.userId,
         state.vendedoraAtiva.id,
       );
