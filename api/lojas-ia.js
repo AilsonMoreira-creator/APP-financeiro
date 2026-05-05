@@ -395,11 +395,28 @@ async function montarContextoSugestoes(vendedoraId) {
     .eq('vendedora_id', vendedoraId)
     .eq('ativo', true);
 
+  // ANTI-REPETIÇÃO sacola: cliente_id sugerido como sacola nos ULTIMOS 5 DIAS
+  // fica em cooldown. Decisao Ailson 05/05/2026: 'voltar com sugestao intervalo
+  // de 5 dias'. Se vendedora ainda nao resolveu, IA da espaco e volta depois.
+  // Sem isso, mesmo cliente aparecia todo dia (ex: Gildelucia 35d na sacola).
+  const data5dias = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
+  const { data: sacolasRecentes } = await supabase
+    .from('lojas_sugestoes_diarias')
+    .select('cliente_id')
+    .eq('vendedora_id', vendedoraId)
+    .eq('tipo', 'sacola')
+    .gte('data_geracao', data5dias)
+    .not('cliente_id', 'is', null);
+  const clientesEmCooldownSacola = new Set(
+    (sacolasRecentes || []).map(s => s.cliente_id)
+  );
+
   // FILTRO SACOLAS (28/04/2026, decisão Ailson):
   //   - valor_total <= 0 → dado faltante do PDF, descarta
   //   - dias < 6 → muito recente, vendedora ainda monta a sacola
+  //   - cliente em cooldown sacola (5 dias) → descarta (decisao 05/05)
   // Telemetria pra debug em metadados_ia
-  const sacolasDescartadas = { sem_valor: 0, muito_recente: 0 };
+  const sacolasDescartadas = { sem_valor: 0, muito_recente: 0, em_cooldown: 0 };
   const hojeMs = Date.now();
   const sacolas = (sacolasRaw || []).filter(s => {
     const valor = Number(s.valor_total) || 0;
@@ -407,6 +424,10 @@ async function montarContextoSugestoes(vendedoraId) {
     if (!s.data_cadastro_sacola) { sacolasDescartadas.sem_valor++; return false; }
     const dias = Math.floor((hojeMs - new Date(s.data_cadastro_sacola).getTime()) / 86400000);
     if (dias < 6) { sacolasDescartadas.muito_recente++; return false; }
+    if (s.cliente_id && clientesEmCooldownSacola.has(s.cliente_id)) {
+      sacolasDescartadas.em_cooldown++;
+      return false;
+    }
     return true;
   });
 

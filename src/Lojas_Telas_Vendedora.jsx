@@ -513,7 +513,9 @@ const CardMinhaMetaHome = ({ vendedora, userId }) => {
 //   - METAS_BONUS: array de checkpoints que dão bônus (pra estrela)
 //
 const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
-  const fmtK = (n) => 'R$ ' + Math.round(n / 1000) + 'k';
+  // fmtK pra labels dos checkpoints na barra (curto, sem R$, ja contextual).
+  // Decisao Ailson 05/05/2026: tirar 'R$' das labels — sobrepunham no celular.
+  const fmtK = (n) => Math.round(n / 1000) + 'k';
   const fmtMoney = (n) => 'R$ ' + Math.round(n).toLocaleString('pt-BR');
   const meta = v.meta_principal;
   const total = v.total;
@@ -586,9 +588,12 @@ const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
           }}>💰</div>
         </div>
       </div>
-      {/* Labels embaixo dos checkpoints */}
+      {/* Labels embaixo dos checkpoints — somente nos checkpoints com BONUS
+          (decisao Ailson 05/05/2026: tirar valores sobrepostos no mobile.
+          Bom Retiro tem 7 checkpoints num espaco pequeno → labels apertados.
+          Solucao: tick na barra pra todos, label so nos com bonus). */}
       <div style={{ position: 'relative', height: 14, marginTop: 4 }}>
-        {intermediarios.map(cp => {
+        {intermediarios.filter(cp => (metasBonus || []).includes(cp)).map(cp => {
           const x = (cp / meta) * 100;
           const batido = total >= cp;
           return (
