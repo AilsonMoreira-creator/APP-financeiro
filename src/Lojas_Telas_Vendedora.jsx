@@ -1025,6 +1025,203 @@ const CardConversoes = ({ lojas }) => {
   );
 };
 
+// ─── CardVestiAuditoria — admin Dashboard ──────────────────────────────────
+//
+// Sprint Ailson 05/05/2026: 'fico no escuro... qtos clientes ela encontrou,
+// ta chamando mesmo, o filtro ta certo'.
+//
+// Mostra:
+//   - Total clientes Vesti (canal_dominante='vesti_dominante')
+//   - Por loja BR/ST
+//   - Por vendedora (com indicador se ela tem link Vesti cadastrado)
+//   - Por status (ativo, atencao, semAtividade, inativo)
+//   - Sugestoes IA dos ultimos 30d pra clientes Vesti (total + % com link)
+//   - Mensagens enviadas dos ultimos 30d
+//
+// Card eh fechado por default; clica pra expandir.
+//
+const CardVestiAuditoria = () => {
+  const [data, setData] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(null);
+  const [expandido, setExpandido] = useState(false);
+  const [aba, setAba] = useState('vendedoras'); // 'vendedoras' | 'clientes'
+
+  useEffect(() => {
+    let cancelado = false;
+    setCarregando(true);
+    fetch('/api/lojas-vesti-auditoria', {
+      headers: {
+        'x-user-id': (typeof window !== 'undefined' && window.localStorage)
+          ? (window.localStorage.getItem('lojas_user_id') || 'ailson') : 'ailson',
+      },
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelado) { setData(d); setCarregando(false); } })
+      .catch(e => { if (!cancelado) { setErro(e.message || 'Erro'); setCarregando(false); } });
+    return () => { cancelado = true; };
+  }, []);
+
+  const mobile = useIsMobile();
+  const fz = (n) => mobile ? Math.max(10, n - 1) : n;
+  const sz = (n) => mobile ? Math.max(12, n - 2) : n;
+
+  return (
+    <div style={{
+      background: palette.surface, borderRadius: 12,
+      border: `1px solid ${palette.beige}`, padding: '14px 16px',
+      marginBottom: 14,
+    }}>
+      {/* Header clicavel */}
+      <div onClick={() => setExpandido(e => !e)} style={{
+        display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+        flexWrap: 'wrap', rowGap: 6,
+      }}>
+        <Link2 size={sz(15)} color={palette.purple || '#8b5cf6'} />
+        <span style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, flex: '1 1 auto', minWidth: 100 }}>
+          Auditoria Vesti
+        </span>
+        {!carregando && data && (
+          <span style={{ fontSize: fz(13), fontWeight: 700, color: palette.ink, fontFamily: FONT }}>
+            {data.total_clientes} clientes
+          </span>
+        )}
+        <span style={{ fontSize: fz(11), color: palette.inkMuted }}>
+          {expandido ? '▲' : '▼'}
+        </span>
+      </div>
+
+      {expandido && (
+        <div style={{ marginTop: 12 }}>
+          {carregando && <div style={{ fontSize: fz(12), color: palette.inkMuted }}>Carregando...</div>}
+          {erro && <div style={{ fontSize: fz(12), color: palette.alert }}>Erro: {erro}</div>}
+          {data && (
+            <>
+              {/* Strip de KPIs principais */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+                gap: 10, marginBottom: 14,
+              }}>
+                <div>
+                  <div style={{ fontSize: fz(20), fontWeight: 800, fontFamily: FONT, color: palette.ink }}>
+                    {data.total_clientes}
+                  </div>
+                  <div style={{ fontSize: fz(10), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Total Vesti
+                  </div>
+                </div>
+                {Object.entries(data.por_loja).map(([loja, qtd]) => (
+                  <div key={loja}>
+                    <div style={{ fontSize: fz(20), fontWeight: 800, fontFamily: FONT, color: palette.ink }}>
+                      {qtd}
+                    </div>
+                    <div style={{ fontSize: fz(10), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {loja}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Sugestoes IA */}
+              <div style={{
+                background: palette.beigeSoft, borderRadius: 8, padding: 10, marginBottom: 12,
+              }}>
+                <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  IA — últimos 30 dias
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: fz(13), color: palette.ink }}>
+                  <div>
+                    <strong>{data.sugestoes_30d.total}</strong> sugestões pra Vesti
+                  </div>
+                  <div style={{ color: data.sugestoes_30d.pct_com_link >= 50 ? palette.ok : palette.alert }}>
+                    <strong>{data.sugestoes_30d.com_link_ou_catalogo}</strong> ({data.sugestoes_30d.pct_com_link}%) com link/catálogo
+                  </div>
+                  <div>
+                    <strong>{data.sugestoes_30d.executadas}</strong> mensagens enviadas
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                <button onClick={() => setAba('vendedoras')} style={{
+                  background: aba === 'vendedoras' ? palette.accent : 'transparent',
+                  color: aba === 'vendedoras' ? 'white' : palette.inkSoft,
+                  border: `1px solid ${aba === 'vendedoras' ? palette.accent : palette.beige}`,
+                  borderRadius: 6, padding: '4px 10px', fontSize: fz(11), fontFamily: FONT, cursor: 'pointer',
+                }}>Por vendedora</button>
+                <button onClick={() => setAba('clientes')} style={{
+                  background: aba === 'clientes' ? palette.accent : 'transparent',
+                  color: aba === 'clientes' ? 'white' : palette.inkSoft,
+                  border: `1px solid ${aba === 'clientes' ? palette.accent : palette.beige}`,
+                  borderRadius: 6, padding: '4px 10px', fontSize: fz(11), fontFamily: FONT, cursor: 'pointer',
+                }}>Lista clientes</button>
+              </div>
+
+              {/* Aba: por vendedora */}
+              {aba === 'vendedoras' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {data.por_vendedora.map(v => (
+                    <div key={v.vendedora_id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: 8, borderRadius: 6, background: palette.beigeSoft,
+                      flexWrap: 'wrap',
+                    }}>
+                      <span style={{ fontSize: fz(13), fontWeight: 600, color: palette.ink, flex: '1 1 100px' }}>
+                        {v.vendedora_nome}
+                      </span>
+                      <span style={{ fontSize: fz(10), color: palette.inkMuted }}>
+                        {v.loja}
+                      </span>
+                      {v.tem_link
+                        ? <span style={{ fontSize: fz(10), color: palette.ok, fontWeight: 600 }} title="Link Vesti cadastrado">🔗 link ✓</span>
+                        : <span style={{ fontSize: fz(10), color: palette.alert, fontWeight: 600 }} title="SEM link Vesti cadastrado">🔗 sem link</span>}
+                      <span style={{ fontSize: fz(13), fontWeight: 700, color: palette.ink, fontFamily: FONT }}>
+                        {v.qtd_clientes}
+                      </span>
+                      <span style={{ fontSize: fz(10), color: palette.inkMuted }}>
+                        {v.ativo > 0 && `${v.ativo} ativos`}
+                        {v.atencao > 0 && ` · ${v.atencao} atenção`}
+                        {v.semAtividade > 0 && ` · ${v.semAtividade} s/ativ`}
+                        {v.inativo > 0 && ` · ${v.inativo} inat`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Aba: lista clientes */}
+              {aba === 'clientes' && (
+                <div style={{ maxHeight: 400, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {data.clientes.map(c => (
+                    <div key={c.cliente_id} style={{
+                      display: 'flex', gap: 8, padding: '6px 8px', borderRadius: 4,
+                      background: palette.surface, border: `1px solid ${palette.beigeSoft}`,
+                      fontSize: fz(11), alignItems: 'center', flexWrap: 'wrap',
+                    }}>
+                      <span style={{ flex: '1 1 150px', fontWeight: 600, color: palette.ink }}>{c.nome}</span>
+                      <span style={{ color: palette.inkMuted, fontSize: fz(10) }}>{c.vendedora_nome}</span>
+                      <span style={{ color: palette.inkMuted, fontSize: fz(10) }}>{c.status_atual}</span>
+                      <span style={{ fontFamily: FONT, color: palette.ink, fontWeight: 600 }}>
+                        {c.lifetime_total ? `R$ ${Math.round(c.lifetime_total).toLocaleString('pt-BR')}` : '—'}
+                      </span>
+                      {c.dias_sem_comprar != null && (
+                        <span style={{ color: palette.inkMuted, fontSize: fz(10) }}>
+                          {c.dias_sem_comprar}d
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 // ─── DashboardTab ──────────────────────────────────────────────────────────
 
@@ -1136,6 +1333,10 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
 
       {/* Card Conversões — mesmo tamanho da Carteira ativa */}
       <CardConversoes lojas={lojas} />
+
+      {/* Card Auditoria Vesti (admin) — quantos clientes Vesti tem,
+          se IA está usando link/catalogo, mensagens enviadas */}
+      {state.isAdmin && <CardVestiAuditoria />}
 
       {/* Card Abertura do app (admin) — quem abriu hoje, quem precisa lembrete */}
       {state.isAdmin && <CardAberturaApp lojas={lojas} />}
