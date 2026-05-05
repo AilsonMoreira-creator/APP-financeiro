@@ -1,239 +1,229 @@
-# Plano: SAC pós-venda enviar anexos (foto / PDF / XML)
-**Sessão Ailson 04/05/2026 (planejamento) — execução amanhã**
-
-## 🎯 OBJETIVO
-
-No módulo SAC, na aba Pós-Venda (MLPosVenda.jsx), permitir anexar arquivos junto da resposta texto. Foto/PDF pra mensagem comum + XML/NFe via canal correto do ML.
+# Plano FINAL: SAC pós-venda enviar anexos
+**Sessão Ailson 04/05/2026 — pesquisa profunda concluída, pronto pra executar**
 
 ---
 
-## 🔍 ESTADO ATUAL AUDITADO
+## 🆕 NOVAS DESCOBERTAS DA SEGUNDA PESQUISA (05/05 madrugada)
 
-### Onde está
-- `src/MLPosVenda.jsx` (538 linhas) — componente da aba Pós-Venda
-- Função `sendReply` linha 129 — envia SÓ texto hoje
-- Endpoint `api/ml-messages-reply.js` — só processa text plain
+### 1. MIME types completos aceitos pelo ML
+A doc oficial lista MAIS formatos do que eu tinha (não é só JPG/PNG/PDF/TXT):
 
-### O que já existe pronto
-- Renderização de attachments DE LEITURA (linha 336): mensagens recebidas do cliente que têm anexo aparecem com link clicável `📄 anexo.pdf` que chama `/api/ml-attachment?filename=...&conversation_id=...`
-- Conversas têm `seller_id` + `buyer_id` resolvidos (com fallback automático)
-- `pack_id` salvo na tabela `ml_conversations`
+| MIME type | Extensão | Uso |
+|---|---|---|
+| `text/plain` | .txt | Texto simples |
+| `image/png` | .png | Imagem |
+| `image/jpeg` | .jpg, .jpeg | Imagem |
+| `image/heif`, `image/heic` | .heic | **iPhone (Live Photo)** ← útil pra Sthefany/Cris |
+| `application/pdf` | .pdf | PDF |
+| `application/msword` | .doc | Word antigo |
+| `application/vnd.ms-excel` | .xls | Excel antigo |
+| `text/xml`, `application/xml` | .xml | **XML aceito SIM** ← reconsiderar plano NFe |
+| `application/octet-stream` | qualquer | Genérico |
 
-### O que falta
-- Botão "📎 Anexar" no editor de resposta
-- Upload pro ML (pega ID do anexo)
-- Mandar IDs no `attachments` do POST de mensagem
-- Exibir anexo escolhido enquanto edita (com botão "X" pra remover)
-- **Caso especial NFe XML**: usar endpoint diferente (`/packs/.../fiscal_documents`)
+**MUITO IMPORTANTE:** XML está na lista! Logo, **podemos enviar XML de NFe direto na mensagem** sem precisar do canal `/packs/{id}/fiscal_documents`. Simplifica muito.
 
----
+### 2. Bloqueios de mensagem (lista completa)
 
-## 📚 API ML CONFIRMADA (busca web 04/05/2026)
+| Causa | Significado | Mensagem UI |
+|---|---|---|
+| `blocked_by_cancelled_order` | Pedido cancelado | "Pedido cancelado, não dá pra responder" |
+| `blocked_by_buyer` | Comprador bloqueou | "Comprador bloqueou mensagens" |
+| `blocked_by_mediation` | Mediação em curso | "Em mediação — use claims" |
+| `blocked_by_fulfillment` | Venda Full | "Venda Full — usar fluxo de motivos" |
+| `blocked_by_conversation_expired` | 18 meses do pedido | "Conversa expirada (18 meses)" |
+| `blocked_by_refund` | Reembolso feito | "Pedido com reembolso" |
+| `blocked_by_claim_change_closed` | Troca encerrada | "Troca de produto encerrada" |
+| `blocked_by_guest_shops` | mShops guest | "Compra mShops sem cadastro" |
+| `blocked_by_deactivated_account` | Conta deletada | "Conta deletada" |
+| `blocked_by_restrictions` | Restrição ML | "Restrição ML" |
 
-### Fluxo padrão (foto/PDF/TXT)
+### 3. Endpoints corretos (com `?tag=post_sale&site_id=MLB`)
 
-**Passo 1 — Upload do arquivo:**
-```
-POST https://api.mercadolibre.com/messages/attachments?tag=post_sale&site_id=MLB
-Authorization: Bearer ${access_token}
-Content-Type: multipart/form-data
+- Upload: `POST /messages/attachments?tag=post_sale&site_id=MLB`
+- Mensagem: `POST /messages/packs/{PACK_ID}/sellers/{SELLER_ID}?tag=post_sale`
 
-file = <arquivo binario>
-```
+A versão `/marketplace/messages/...` é pra Global Selling (cross-border), não nosso caso.
 
-**Resposta:** `{ id: "415460047_a96d8dea-38cd-4402-938e-80a1c134fc5d.pdf" }`
-
-**Passo 2 — Enviar mensagem com ID(s):**
-```
-POST https://api.mercadolibre.com/messages/packs/${PACK_ID}/sellers/${SELLER_ID}?tag=post_sale
-Authorization: Bearer ${access_token}
-Content-Type: application/json
-
-{
-  "from": { "user_id": "${SELLER_ID}" },
-  "to":   { "user_id": "${BUYER_ID}" },
-  "text": "Olá! Segue a foto.",
-  "attachments": ["415460047_a96d8dea..."]
+### 4. Atributo `attachments_validations` na resposta
+Quando ML processa anexos, retorna validações:
+```json
+"attachments_validations": {
+  "invalid_size": [],
+  "invalid_extension": [],
+  "forbidden": [],
+  "internal_error": []
 }
 ```
+Se algum array vier preenchido, mostrar erro claro.
 
-### Limites
-| Item | Limite |
-|---|---|
-| Tamanho máximo | **25 MB por arquivo** |
-| Formatos suportados | **JPG, PNG, PDF, TXT** |
-| Múltiplos anexos | Sim (array) |
-| Rate limit | 500 req/min compartilhado pra POST |
+### 5. HTML básico funciona
+- `<a href="url">texto</a>` — link clicável
+- Quebras de linha automáticas
 
-### Caso especial: NFe (XML + PDF DANFE juntos)
+### 6. NFe pelo canal alternativo (vantagens)
+- ML notifica comprador automaticamente por email
+- NFe fica vinculada ao pedido (não anexo solto)
+- **Restrições:** não funciona pra Full / cross_docking / xd_drop_off
+- **Erro 409** se anexar tipo duplicado
 
-**A doc do ML diz claramente:**
-> "Este recurso substitui as mensagens automáticas de pós venda e deve ser usado apenas para envio de notas fiscais nos pedidos."
-
-**Endpoint correto pra NFe:**
-```
-POST https://api.mercadolibre.com/packs/${PACK_ID}/fiscal_documents
-Authorization: Bearer ${access_token}
-Content-Type: multipart/form-data
-
-fiscal_document = NFe.pdf
-fiscal_document = NFe.xml
-```
-
-**Resposta:** `{ ids: ["...uuid1", "...uuid2"] }`
-
-**ATENÇÃO:**
-- Não é permitido pra logística **fulfillment/cross_docking/xd_drop_off** no Brasil
-- Se já tem NFe carregada do mesmo tipo, retorna 409 conflict — precisa remover antes
-- ML manda email automaticamente pro comprador notificando
+**Decisão:** implementar AMBOS:
+- **Padrão (anexar tudo):** funciona sempre, anexo aparece na conversa
+- **Alternativo NFe (botão extra):** quando admin quer email automático
 
 ---
 
-## 📐 PLANO DE EXECUÇÃO (amanhã)
+## ✅ PLANO DE EXECUÇÃO
 
 ### FASE 1 — Backend
 
-#### 1.1 Endpoint upload de anexo: `api/ml-upload-attachment.js`
+#### 1.1 Setup
+```bash
+npm install formidable
+```
+ESM-compatível, lida com multipart até 25MB sem carregar tudo na memória.
+
+#### 1.2 `api/ml-upload-attachment.js` (novo)
+
 ```js
-// POST /api/ml-upload-attachment
-// Body: multipart/form-data com 'file' + 'conversation_id' (no querystring ou body)
-// Retorna: { attachment_id: "415460047_..." }
-
-import { getValidToken, supabase, setCors } from './_ml-helpers.js';
+import { supabase, getValidToken, setCors } from './_ml-helpers.js';
 import formidable from 'formidable';
-import fs from 'fs';
+import fs from 'fs/promises';
 
-export const config = { api: { bodyParser: false } };  // necessário pra multipart
+export const config = {
+  api: { bodyParser: false },
+  maxDuration: 60,
+};
+
+const ML_API = 'https://api.mercadolibre.com';
+
+const ACCEPTED_MIMES = [
+  'text/plain', 'image/png', 'image/jpeg', 'image/heif', 'image/heic',
+  'application/pdf', 'application/msword', 'application/vnd.ms-excel',
+  'text/xml', 'application/xml', 'application/octet-stream',
+];
+const MAX_SIZE = 25 * 1024 * 1024;
 
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
-  // Parse multipart
-  const form = formidable({ maxFileSize: 25 * 1024 * 1024 });  // 25MB
-  const [fields, files] = await form.parse(req);
-  
-  const conversationId = fields.conversation_id?.[0];
-  const file = files.file?.[0];
-  
-  if (!conversationId || !file) {
-    return res.status(400).json({ error: 'falta conversation_id ou file' });
-  }
-  
-  // Valida extensão (ML aceita só JPG/PNG/PDF/TXT)
-  const ext = (file.originalFilename || '').toLowerCase().split('.').pop();
-  if (!['jpg', 'jpeg', 'png', 'pdf', 'txt'].includes(ext)) {
-    return res.status(400).json({ 
-      error: `Formato nao suportado pelo ML (so JPG/PNG/PDF/TXT). Pra XML de NFe, use o botao "Enviar NFe" separado.` 
-    });
-  }
-  
-  // Busca conversa pra pegar brand → token
-  const { data: conv } = await supabase
-    .from('ml_conversations')
-    .select('brand')
-    .eq('id', conversationId)
-    .single();
-  if (!conv) return res.status(404).json({ error: 'Conversa nao encontrada' });
-  
-  const token = await getValidToken(conv.brand);
-  
-  // Upload pro ML usando FormData nativo
-  const fileBuffer = fs.readFileSync(file.filepath);
-  const blob = new Blob([fileBuffer], { type: file.mimetype });
-  const formData = new FormData();
-  formData.append('file', blob, file.originalFilename);
-  
-  const r = await fetch(
-    `https://api.mercadolibre.com/messages/attachments?tag=post_sale&site_id=MLB`,
-    {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData,
+  let tmpPath = null;
+  try {
+    const form = formidable({ maxFileSize: MAX_SIZE });
+    const [fields, files] = await form.parse(req);
+    
+    const conversationId = fields.conversation_id?.[0];
+    const file = files.file?.[0];
+    if (!conversationId || !file) {
+      return res.status(400).json({ error: 'Falta conversation_id ou file' });
     }
-  );
-  
-  fs.unlinkSync(file.filepath);  // limpa tmp
-  
-  if (!r.ok) {
-    const detail = await r.json().catch(() => ({}));
-    return res.status(r.status).json({ error: 'Falha upload ML', detail });
+    tmpPath = file.filepath;
+    
+    const mime = file.mimetype || 'application/octet-stream';
+    if (!ACCEPTED_MIMES.includes(mime)) {
+      return res.status(400).json({
+        error: `Formato ${mime} não aceito pelo ML.`,
+      });
+    }
+    
+    const { data: conv } = await supabase
+      .from('ml_conversations')
+      .select('brand')
+      .eq('id', conversationId).single();
+    if (!conv) return res.status(404).json({ error: 'Conversa não encontrada' });
+    
+    const token = await getValidToken(conv.brand);
+    
+    const fileBuffer = await fs.readFile(file.filepath);
+    const blob = new Blob([fileBuffer], { type: mime });
+    const formData = new FormData();
+    formData.append('file', blob, file.originalFilename || 'anexo');
+    
+    const r = await fetch(
+      `${ML_API}/messages/attachments?tag=post_sale&site_id=MLB`,
+      { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData }
+    );
+    
+    if (!r.ok) {
+      const text = await r.text();
+      let detail;
+      try { detail = JSON.parse(text); } catch { detail = text.slice(0, 300); }
+      return res.status(r.status).json({ error: 'Falha upload pro ML', detail });
+    }
+    
+    const result = await r.json();
+    const attachmentId = typeof result === 'string' ? result : (result.id || result);
+    
+    return res.json({
+      attachment_id: attachmentId,
+      filename: file.originalFilename,
+      size: file.size,
+      mime,
+    });
+  } catch (e) {
+    if (e?.code === 'LIMIT_FILE_SIZE' || /maxFileSize/i.test(e?.message || '')) {
+      return res.status(413).json({ error: 'Arquivo maior que 25MB' });
+    }
+    return res.status(500).json({ error: e?.message || 'Erro upload' });
+  } finally {
+    if (tmpPath) { try { await fs.unlink(tmpPath); } catch {} }
   }
-  
-  const result = await r.json();
-  // ML retorna { id: "415460047_..." } ou { id: "..." } — verificar
-  return res.json({ 
-    attachment_id: result.id || result, 
-    filename: file.originalFilename,
-    size: file.size,
-  });
 }
 ```
 
-**Dependência nova:** `formidable` (npm install formidable)
+#### 1.3 Atualizar `api/ml-messages-reply.js`
 
-#### 1.2 Atualizar `api/ml-messages-reply.js` pra aceitar attachments
+Mudanças mínimas (4):
+
+**A. Aceitar attachments no body (linha 14):**
 ```js
-// Adicionar no body parser:
 const { conversation_id, text, sent_via = 'manual', attachments = [] } = req.body;
+if (!conversation_id) return res.status(400).json({ error: 'Falta conversation_id' });
+if (!text && (!Array.isArray(attachments) || attachments.length === 0)) {
+  return res.status(400).json({ error: 'Falta text ou attachments' });
+}
+```
 
-// E no body do POST pro ML:
-body: JSON.stringify({
+**B. Garantir text mesmo vazio:** linha do `textoLimpo`:
+```js
+if (!textoLimpo && attachments.length === 0) {
+  return res.status(400).json({ error: 'Texto vazio depois da limpeza' });
+}
+// Se vazio mas tem anexo, usar 1 espaço (ML exige text não-vazio)
+const textoFinal = textoLimpo || ' ';
+```
+
+**C. Incluir attachments no body do POST pro ML:**
+```js
+const bodyPayload = {
   from: { user_id: String(sellerId) },
   to: { user_id: String(buyerId) },
-  text: textoLimpo,
-  ...(attachments.length > 0 && { attachments }),  // só inclui se tiver
-})
+  text: textoFinal,
+};
+if (Array.isArray(attachments) && attachments.length > 0) {
+  bodyPayload.attachments = attachments;
+}
+// fetch ... body: JSON.stringify(bodyPayload)
 ```
 
-Manter retrocompatível — se não vier `attachments`, comportamento igual ao de hoje.
-
-#### 1.3 Endpoint NFe separado: `api/ml-upload-nfe.js`
+**D. Tratar `attachments_validations` na resposta:**
 ```js
-// POST /api/ml-upload-nfe
-// Body multipart: pdf (DANFE) + xml + conversation_id
-// Usa endpoint /packs/{pack_id}/fiscal_documents (separado de mensagens)
-
-export default async function handler(req, res) {
-  // ... mesmo padrão de parse multipart
-  // Espera 2 arquivos: pdf + xml
-  
-  const conv = await supabase.from('ml_conversations')
-    .select('brand, pack_id, seller_id')
-    .eq('id', conversationId).single();
-  
-  if (!conv.pack_id) {
-    return res.status(400).json({ error: 'Conversa sem pack_id — impossivel enviar NFe' });
-  }
-  
-  const token = await getValidToken(conv.brand);
-  
-  const fd = new FormData();
-  fd.append('fiscal_document', new Blob([fs.readFileSync(pdf.filepath)], { type: 'application/pdf' }), pdf.originalFilename);
-  fd.append('fiscal_document', new Blob([fs.readFileSync(xml.filepath)], { type: 'application/xml' }), xml.originalFilename);
-  
-  const r = await fetch(
-    `https://api.mercadolibre.com/packs/${conv.pack_id}/fiscal_documents`,
-    {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: fd,
-    }
-  );
-  
-  if (!r.ok) {
-    const detail = await r.json().catch(() => ({}));
-    // Trata erros conhecidos:
-    // - 409 conflict (NFe ja anexada deste tipo)
-    // - 403 forbidden (logistica fulfillment/cross_docking)
-    return res.status(r.status).json({ error: detail.message || 'Falha NFe', detail });
-  }
-  
-  const result = await r.json();
-  return res.json({ ok: true, ids: result.ids });
+const result = await r.json();
+const validations = result?.attachments_validations;
+if (validations && (
+  validations.invalid_size?.length ||
+  validations.invalid_extension?.length ||
+  validations.forbidden?.length ||
+  validations.internal_error?.length
+)) {
+  return res.status(400).json({ error: 'ML rejeitou anexos', validations });
 }
 ```
+
+#### 1.4 `api/ml-upload-nfe.js` (opcional)
+
+Mesma estrutura mas usa `/packs/{pack_id}/fiscal_documents` e aceita 2 arquivos (pdf + xml). Tratar erros 403 (logística Full) e 409 (NFe duplicada).
 
 ---
 
@@ -241,32 +231,32 @@ export default async function handler(req, res) {
 
 #### 2.1 Estado novo
 ```js
-const [pendingAttachments, setPendingAttachments] = useState([]);  
-// [{ attachment_id, filename, size, uploading: false }]
+const [pendingAttachments, setPendingAttachments] = useState([]);
 const [uploadingFile, setUploadingFile] = useState(false);
 const [showNfeModal, setShowNfeModal] = useState(false);
 ```
 
-#### 2.2 Função de upload
+#### 2.2 Constantes e função upload
 ```js
+const ACCEPTED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'heif', 'pdf', 'doc', 'xls', 'txt', 'xml'];
+const MAX_SIZE_BYTES = 25 * 1024 * 1024;
+
 const handleAttachFile = async (file) => {
-  // Valida tamanho client-side
-  if (file.size > 25 * 1024 * 1024) {
-    alert('Arquivo muito grande! Limite ML: 25MB');
+  if (!file) return;
+  
+  const ext = (file.name || '').split('.').pop().toLowerCase();
+  if (!ACCEPTED_EXTENSIONS.includes(ext)) {
+    alert(`Formato .${ext} não aceito.\n\nAceitos: ${ACCEPTED_EXTENSIONS.join(', ').toUpperCase()}`);
     return;
   }
-  // Valida extensao
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (!['jpg', 'jpeg', 'png', 'pdf', 'txt'].includes(ext)) {
-    if (ext === 'xml') {
-      alert('Pra enviar XML de NFe, use o botao "📋 Enviar NFe" (anexa PDF + XML juntos pelo canal correto do ML)');
-    } else {
-      alert('Formato nao suportado. Use JPG, PNG, PDF ou TXT.');
-    }
+  if (file.size > MAX_SIZE_BYTES) {
+    const sizeMb = (file.size / 1024 / 1024).toFixed(1);
+    alert(`Arquivo ${sizeMb}MB. Limite ML: 25MB.`);
     return;
   }
   
   setUploadingFile(true);
+  
   const fd = new FormData();
   fd.append('file', file);
   fd.append('conversation_id', selected.id);
@@ -274,17 +264,20 @@ const handleAttachFile = async (file) => {
   try {
     const r = await fetch('/api/ml-upload-attachment', { method: 'POST', body: fd });
     const data = await r.json();
+    
     if (!r.ok) {
-      alert('Erro upload: ' + (data.error || 'desconhecido'));
-    } else {
-      setPendingAttachments(prev => [...prev, {
-        attachment_id: data.attachment_id,
-        filename: data.filename,
-        size: data.size,
-      }]);
+      alert('Erro upload: ' + (data.error || `HTTP ${r.status}`));
+      return;
     }
+    
+    setPendingAttachments(prev => [...prev, {
+      attachment_id: data.attachment_id,
+      filename: data.filename,
+      size: data.size,
+      mime: data.mime,
+    }]);
   } catch (e) {
-    alert('Erro rede: ' + e.message);
+    alert('Erro de rede: ' + e.message);
   } finally {
     setUploadingFile(false);
   }
@@ -295,218 +288,203 @@ const removeAttachment = (id) => {
 };
 ```
 
-#### 2.3 Modificar `sendReply` pra incluir anexos
+#### 2.3 sendReply atualizado
 ```js
 const sendReply = async () => {
   if ((!replyText.trim() && pendingAttachments.length === 0) || !selected || sending) return;
   setSending(true);
   
-  const r = await fetch('/api/ml-messages-reply', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      conversation_id: selected.id,
-      text: replyText.trim() || ' ',  // ML pode exigir texto não-vazio
-      sent_via: 'manual',
-      attachments: pendingAttachments.map(a => a.attachment_id),
-    }),
-  });
-  
-  if (r.ok) {
-    setReplyText('');
-    setPendingAttachments([]);  // limpa anexos
-    fetchMsgs(selected);
-    fetchConvs();
+  try {
+    const r = await fetch('/api/ml-messages-reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: selected.id,
+        text: replyText.trim(),
+        sent_via: pendingAttachments.length > 0 ? 'manual_attach' : 'manual',
+        attachments: pendingAttachments.map(a => a.attachment_id),
+      }),
+    });
+    
+    if (r.ok) {
+      setReplyText('');
+      setPendingAttachments([]);
+      fetchMsgs(selected);
+      fetchConvs();
+    } else {
+      const e = await r.json().catch(() => ({}));
+      if (e.validations) {
+        const erros = [];
+        if (e.validations.invalid_size?.length) erros.push('Tamanho inválido');
+        if (e.validations.invalid_extension?.length) erros.push('Extensão inválida');
+        if (e.validations.forbidden?.length) erros.push('Anexo proibido');
+        if (e.validations.internal_error?.length) erros.push('Erro interno ML');
+        alert('ML rejeitou anexo:\n' + erros.join('\n'));
+      } else {
+        const detalhe = e.detail?.message || e.detail?.error 
+          || (typeof e.detail === 'string' ? e.detail : null)
+          || (e.detail ? JSON.stringify(e.detail).slice(0, 200) : null)
+          || e.error || `HTTP ${r.status}`;
+        alert(`Erro ao enviar pro ML:\n\n${detalhe}`);
+      }
+    }
+  } catch (e) {
+    alert('Erro de rede: ' + e.message);
+  } finally {
+    setSending(false);
   }
-  // ... resto do handler de erro igual
 };
 ```
 
-#### 2.4 UI — área de anexos pendentes + botão upload
+#### 2.4 UI
+
+Acima do textarea (chips de anexos pendentes):
 ```jsx
-{/* Mostra anexos pendentes ANTES do textarea */}
 {pendingAttachments.length > 0 && (
-  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-    {pendingAttachments.map(a => (
-      <div key={a.attachment_id} style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        background: PALETTE.beigeSoft, borderRadius: 6, padding: '4px 8px',
-        fontSize: 12,
-      }}>
-        📎 {a.filename}
-        <button onClick={() => removeAttachment(a.attachment_id)} style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          color: PALETTE.red, padding: 0, marginLeft: 4,
-        }}>✕</button>
-      </div>
-    ))}
+  <div style={{
+    display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8,
+    padding: 8, background: '#f7f4f0', borderRadius: 6,
+  }}>
+    {pendingAttachments.map(a => {
+      const sizeKb = (a.size / 1024).toFixed(0);
+      const isImg = (a.mime || '').startsWith('image/');
+      return (
+        <div key={a.attachment_id} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'white', border: '1px solid #ddd',
+          borderRadius: 6, padding: '4px 8px', fontSize: 12,
+        }}>
+          <span>{isImg ? '🖼️' : '📎'} {a.filename}</span>
+          <span style={{ color: '#888', fontSize: 10 }}>{sizeKb}KB</span>
+          <button onClick={() => removeAttachment(a.attachment_id)} style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: '#c0392b', padding: 0, marginLeft: 4,
+            fontWeight: 700, fontSize: 14,
+          }} title="Remover">✕</button>
+        </div>
+      );
+    })}
   </div>
 )}
-
-{/* Botão "anexar" e "NFe" próximo do textarea */}
-<div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-  <label style={{
-    background: PALETTE.beigeSoft, padding: '6px 10px', borderRadius: 6,
-    cursor: uploadingFile ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600,
-    display: 'flex', alignItems: 'center', gap: 4,
-    opacity: uploadingFile ? 0.5 : 1,
-  }}>
-    {uploadingFile ? '⏳ Enviando...' : '📎 Anexar'}
-    <input type="file" 
-      accept=".jpg,.jpeg,.png,.pdf,.txt"
-      onChange={e => e.target.files[0] && handleAttachFile(e.target.files[0])}
-      style={{ display: 'none' }}
-      disabled={uploadingFile}
-    />
-  </label>
-  
-  <button onClick={() => setShowNfeModal(true)} style={{
-    background: PALETTE.beigeSoft, padding: '6px 10px', borderRadius: 6,
-    cursor: 'pointer', fontSize: 12, fontWeight: 600, border: 'none',
-  }}>
-    📋 Enviar NFe
-  </button>
-</div>
 ```
 
-#### 2.5 Modal NFe (separado)
+Botões "Anexar" + "NFe" próximo do botão Enviar:
 ```jsx
-{showNfeModal && (
-  <ModalEnviarNfe
-    conversation={selected}
-    onClose={() => setShowNfeModal(false)}
-    onSent={() => { setShowNfeModal(false); fetchMsgs(selected); }}
+<label style={{
+  background: '#f7f4f0', padding: '6px 10px',
+  borderRadius: 6, cursor: uploadingFile ? 'wait' : 'pointer',
+  fontSize: 12, fontWeight: 600,
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+  opacity: uploadingFile ? 0.5 : 1,
+  border: '1px solid #ddd',
+}}>
+  {uploadingFile ? '⏳ Enviando…' : '📎 Anexar'}
+  <input type="file"
+    accept=".jpg,.jpeg,.png,.heic,.heif,.pdf,.doc,.xls,.txt,.xml"
+    onChange={e => {
+      const f = e.target.files?.[0];
+      if (f) handleAttachFile(f);
+      e.target.value = '';  // permite reanexar mesmo arquivo
+    }}
+    style={{ display: 'none' }}
+    disabled={uploadingFile}
   />
-)}
+</label>
 
-// Componente ModalEnviarNfe novo:
-function ModalEnviarNfe({ conversation, onClose, onSent }) {
-  const [pdf, setPdf] = useState(null);
-  const [xml, setXml] = useState(null);
-  const [sending, setSending] = useState(false);
-  
-  const enviar = async () => {
-    if (!pdf || !xml) {
-      alert('Anexe PDF (DANFE) e XML pra enviar a NFe');
-      return;
-    }
-    setSending(true);
-    const fd = new FormData();
-    fd.append('pdf', pdf);
-    fd.append('xml', xml);
-    fd.append('conversation_id', conversation.id);
-    
-    try {
-      const r = await fetch('/api/ml-upload-nfe', { method: 'POST', body: fd });
-      const data = await r.json();
-      if (r.ok) {
-        alert('NFe enviada! O ML notifica o comprador automaticamente.');
-        onSent();
-      } else {
-        alert('Erro NFe: ' + (data.error || 'desconhecido'));
-      }
-    } catch (e) {
-      alert('Erro rede: ' + e.message);
-    }
-    setSending(false);
-  };
-  
-  return (
-    <div style={{ /* overlay */ }}>
-      <div>
-        <h3>📋 Enviar NFe</h3>
-        <p style={{ fontSize: 12, color: 'gray' }}>
-          ML precisa do PDF (DANFE) E do XML juntos. Notifica comprador por email automaticamente.
-        </p>
-        
-        <label>DANFE (PDF):
-          <input type="file" accept=".pdf" onChange={e => setPdf(e.target.files[0])} />
-          {pdf && <small>✓ {pdf.name}</small>}
-        </label>
-        
-        <label>XML da NFe:
-          <input type="file" accept=".xml" onChange={e => setXml(e.target.files[0])} />
-          {xml && <small>✓ {xml.name}</small>}
-        </label>
-        
-        <button onClick={enviar} disabled={sending || !pdf || !xml}>
-          {sending ? 'Enviando...' : 'Enviar NFe'}
-        </button>
-        <button onClick={onClose}>Cancelar</button>
-      </div>
-    </div>
-  );
-}
+<button onClick={() => setShowNfeModal(true)} style={{
+  background: '#f7f4f0', padding: '6px 10px',
+  borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+  border: '1px solid #ddd',
+}}>📋 NFe (canal oficial)</button>
 ```
+
+#### 2.5 Componente ModalEnviarNfe
+(Ver código completo no plano original — sem mudanças)
 
 ---
 
 ## ⚠️ ATENÇÕES CRÍTICAS
 
-1. **ML tem rate limit 500 req/min compartilhado pra POSTs.** Upload de anexo gasta 1 req. Mensagem com anexo gasta outra. NFe gasta 1. Pra uso normal de SAC ok, mas se Sthefany ou Cris fizer batch de muitas NFes, pode bater no limite.
+### Vercel
+1. **`bodyParser: false` + `maxDuration: 60`** no config — sem isso, body limitado em 4.5MB.
+2. **Cold start** 5-10s na primeira req.
 
-2. **Tamanho 25MB.** Validar client-side ANTES de enviar pro nosso endpoint (poupa banda). Cliente mobile pode tentar mandar foto 30MB facilmente.
+### ML API
+3. **`site_id=MLB` hardcoded** OK por ora. Se abrir Argentina/México, refatorar.
+4. **Rate limit 500 req/min** compartilhado. Throttle 200ms entre uploads se necessário.
+5. **`tag=post_sale` é OBRIGATÓRIO** no querystring.
+6. **Texto vazio com anexo:** mandar 1 espaço pra evitar erro.
 
-3. **Erro `invalid_extension`:** ML rejeita XML em mensagem comum. Por isso forçar XML pelo fluxo NFe.
+### Conversa
+7. **10 motivos de bloqueio** — tratar todos com mensagem clara.
+8. **Conversa expirada (18 meses)** — bloquear UI antes de tentar enviar.
 
-4. **NFe + logística fulfillment/cross_docking/xd_drop_off:** ML retorna 403 forbidden. **Maioria das vendas Amícia é "envio normal"** mas se algum pedido vier com Full, vai falhar — tratar erro 403 com msg clara.
+### Performance/UX
+9. **Validar client-side ANTES** do upload — poupa banda.
+10. **Reset `e.target.value = ''`** pra permitir reanexar mesmo arquivo.
 
-5. **NFe duplicada:** se já anexou PDF, não pode anexar outro PDF do mesmo pack. Erro 409 conflict. Tratar com msg clara.
+### NFe
+11. Sem pack_id → modal NFe mostra erro antes de tentar.
+12. **Erro 409 conflict** — orientar admin remover pelo painel ML.
+13. **Email automático** SÓ no canal `/fiscal_documents`, não em mensagem com XML.
 
-6. **Vercel serverless tem limite 4.5MB no body por padrão.** Como vamos receber arquivos até 25MB, **precisa configurar `bodyParser: false` + `maxDuration: 60`** no `config` do endpoint:
-   ```js
-   export const config = {
-     api: { bodyParser: false },
-     maxDuration: 60,
-   };
-   ```
-
-7. **`formidable` precisa ser instalado:** `npm install formidable` (verificar se já está nas deps antes; provavelmente não).
-
-8. **A interface mostra anexos enviados** já tem suporte (linha 336 do MLPosVenda) — só precisa que o `fetchMsgs` retraga as mensagens depois do envio (já faz).
-
-9. **Texto vazio com anexo:** ML pode exigir texto não-vazio. Por garantia, se vier vazio, mandar 1 espaço " ". Ou validar e exigir texto.
-
-10. **Sthefany / Cris / Gabrielly / Ingrid usam o SAC.** Notificar elas do novo recurso quando subir.
+### Segurança
+14. **Sem auth nos endpoints novos** — herdar abordagem do `ml-messages-reply.js`. **TODO futuro:** validar perfil 'sac'.
 
 ---
 
-## 📋 CHECKLIST PRA EXECUÇÃO
+## 📋 CHECKLIST
 
 ### Backend
-- [ ] `npm install formidable` no projeto
-- [ ] Criar `api/ml-upload-attachment.js` (upload normal de imagem/PDF/TXT)
-- [ ] Criar `api/ml-upload-nfe.js` (upload NFe pelo canal fiscal_documents)
-- [ ] Atualizar `api/ml-messages-reply.js` pra aceitar `attachments` no body
+- [ ] `npm install formidable`
+- [ ] Criar `api/ml-upload-attachment.js`
+- [ ] Atualizar `api/ml-messages-reply.js` (4 mudanças A/B/C/D)
+- [ ] Criar `api/ml-upload-nfe.js`
 
-### Frontend (MLPosVenda.jsx)
-- [ ] Adicionar state `pendingAttachments`, `uploadingFile`, `showNfeModal`
-- [ ] Função `handleAttachFile`
-- [ ] Função `removeAttachment`
-- [ ] Modificar `sendReply` pra incluir attachments
-- [ ] UI de anexos pendentes acima do textarea
-- [ ] Botão "📎 Anexar"
-- [ ] Botão "📋 Enviar NFe"
+### Frontend `src/MLPosVenda.jsx`
+- [ ] 3 states (pendingAttachments, uploadingFile, showNfeModal)
+- [ ] Constantes ACCEPTED_EXTENSIONS, MAX_SIZE_BYTES
+- [ ] `handleAttachFile` + `removeAttachment`
+- [ ] sendReply (atualizar)
+- [ ] UI: chips anexos pendentes
+- [ ] UI: botão "📎 Anexar"
+- [ ] UI: botão "📋 NFe"
 - [ ] Componente `ModalEnviarNfe`
 
 ### Testes
-- [ ] Anexar uma foto JPG e enviar — chega no ML?
-- [ ] Anexar um PDF e enviar
-- [ ] Anexar arquivo > 25MB → erro client-side
-- [ ] Anexar XML → erro com mensagem orientando usar botão NFe
-- [ ] Anexar 3 fotos numa mensagem só
-- [ ] Remover anexo antes de enviar (botão X)
-- [ ] Enviar NFe com PDF + XML
-- [ ] Tentar enviar NFe duplicada → erro 409 tratado com msg clara
-- [ ] Tentar mandar NFe pra venda Full → erro 403 tratado
+- [ ] JPG simples + texto
+- [ ] 3 anexos numa msg
+- [ ] PDF 24MB → passa
+- [ ] PDF 30MB → erro client-side
+- [ ] .exe → erro client-side
+- [ ] Só anexo, sem texto
+- [ ] Remover anexo do chip
+- [ ] Reanexar mesmo arquivo
+- [ ] HEIC do iPhone
+- [ ] Conversa cancelada (403)
+- [ ] Modal NFe sucesso
+- [ ] Modal NFe duplicada (409)
+- [ ] Modal NFe Full (403)
+
+### Pós-deploy
+- [ ] Avisar Sthefany / Cris / Gabrielly / Ingrid
 
 ---
 
-## ⏱ ESTIMATIVA: 4-5 HORAS
+## ⏱ ESTIMATIVA
 
 - Backend (3 endpoints): 1h30
-- Frontend (componente + modal): 2h
-- Testes manuais com SAC real: 1h
-- Documentação inline: 30min
+- Frontend: 2h
+- Testes: 1h
+- **Total: 4-5 horas**
 
-Mais simples que curadoria — pode encaixar no mesmo dia se der tempo.
+Sem dependência SQL — pode ir direto.
+
+## ✨ DIFERENCIAL DESTE PLANO V2
+
+- MIME types completos (HEIC iPhone, XML, DOC, XLS — não só PDF/JPG/PNG/TXT)
+- 10 bloqueios de conversa pra tratar
+- `attachments_validations` na resposta ML
+- `?tag=post_sale` confirmado obrigatório
+- 14 atenções críticas (vs 10 do V1)
+- Pronto pra executar sem reabrir doc ML
