@@ -523,7 +523,7 @@ const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
   // Checkpoints excluindo o final (que vira 💰)
   const intermediarios = (v.checkpoints_loja || []).filter(c => c < meta);
   return (
-    <div style={{ marginBottom: 18 }}>
+    <div style={{ marginBottom: 22, paddingLeft: 12, paddingRight: 18, overflow: 'hidden' }}>
       {/* Linha do nome + valor atual */}
       {mostrarNome && (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
@@ -533,9 +533,9 @@ const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
           </span>
         </div>
       )}
-      {/* Barra com escala fixa */}
-      <div style={{ position: 'relative', height: 22, background: palette.beigeSoft,
-        borderRadius: 11, overflow: 'visible', border: `1px solid ${palette.beige}` }}>
+      {/* Barra com escala fixa — altura compacta (14px) */}
+      <div style={{ position: 'relative', height: 14, background: palette.beigeSoft,
+        borderRadius: 7, border: `1px solid ${palette.beige}` }}>
         {/* Preenchimento */}
         <div style={{
           position: 'absolute', left: 0, top: 0, bottom: 0,
@@ -543,7 +543,7 @@ const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
           background: passouMeta
             ? `linear-gradient(90deg, ${palette.ok} 0%, #34a96f 100%)`
             : `linear-gradient(90deg, ${palette.accent} 0%, #6a9bc0 100%)`,
-          borderRadius: 11, transition: 'width 0.4s ease',
+          borderRadius: 7, transition: 'width 0.4s ease',
         }} />
         {/* Marcadores intermediários */}
         {intermediarios.map(cp => {
@@ -555,31 +555,34 @@ const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
               position: 'absolute', left: `${x}%`, top: -2, bottom: -2,
               transform: 'translateX(-50%)',
               display: 'flex', flexDirection: 'column', alignItems: 'center',
+              pointerEvents: 'none',
             }}>
               <div style={{
-                width: 2, height: 26, background: batido ? palette.ok : palette.beige,
+                width: 2, height: 18, background: batido ? palette.ok : '#d4cabd',
                 opacity: batido ? 0.9 : 0.6,
               }} />
               {ehBonus && (
                 <div style={{
                   position: 'absolute', top: -14, fontSize: 11,
-                  filter: batido ? 'none' : 'grayscale(60%) opacity(0.5)',
+                  filter: batido ? 'none' : 'grayscale(60%) opacity(0.45)',
                 }}>⭐</div>
               )}
             </div>
           );
         })}
-        {/* Marcador da meta máxima (saco de ouro) */}
+        {/* Marcador da meta máxima (saco de ouro) — apagado se nao bateu */}
         <div style={{
           position: 'absolute', right: 0, top: -2, bottom: -2,
           display: 'flex', flexDirection: 'column', alignItems: 'center',
+          pointerEvents: 'none',
         }}>
           <div style={{
-            width: 3, height: 26, background: passouMeta ? palette.ok : palette.warn,
+            width: 3, height: 18, background: passouMeta ? palette.ok : '#d4cabd',
+            opacity: passouMeta ? 1 : 0.7,
           }} />
           <div style={{
             position: 'absolute', top: -16, right: -4, fontSize: 14,
-            filter: passouMeta ? 'none' : 'grayscale(50%) opacity(0.6)',
+            filter: passouMeta ? 'none' : 'grayscale(60%) opacity(0.45)',
           }}>💰</div>
         </div>
       </div>
@@ -591,15 +594,15 @@ const BarraMetaVendedora = ({ v, metasBonus, mostrarNome = true }) => {
           return (
             <span key={cp} style={{
               position: 'absolute', left: `${x}%`, transform: 'translateX(-50%)',
-              fontSize: fz(9), color: batido ? palette.ok : palette.inkMuted,
-              fontWeight: batido ? 700 : 500,
+              fontSize: fz(9), color: batido ? palette.ok : '#b0a89c',
+              fontWeight: batido ? 700 : 500, whiteSpace: 'nowrap',
             }}>{fmtK(cp)}</span>
           );
         })}
         <span style={{
           position: 'absolute', right: 0, fontSize: fz(9),
-          color: passouMeta ? palette.ok : palette.warn,
-          fontWeight: 700,
+          color: passouMeta ? palette.ok : '#b0a89c',
+          fontWeight: passouMeta ? 700 : 500, whiteSpace: 'nowrap',
         }}>{fmtK(meta)}</span>
       </div>
       {/* Indicador acima da meta */}
@@ -624,6 +627,7 @@ const CardMetas = ({ lojas }) => {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
   const [verHistorico, setVerHistorico] = useState(false);
+  const [expandido, setExpandido] = useState(false);  // card comeca FECHADO
   const userId = lojas?.state?.userId || '';
   // Constantes de bonus (espelho do backend api/lojas-ia.js handleMetasDashboard)
   const BONUS_BR = [70000, 80000, 90000, 100000];
@@ -661,29 +665,53 @@ const CardMetas = ({ lojas }) => {
 
   const vendedorasBR = (data?.vendedoras || []).filter(v => v.loja === 'Bom Retiro');
   const vendedorasST = (data?.vendedoras || []).filter(v => v.loja === 'Silva Teles');
+  const totalGeral = (data?.loja_BR?.total || 0) + (data?.loja_ST?.total || 0);
 
   return (
     <div style={{
       width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
-      borderRadius: 12, padding: '14px 18px', marginBottom: 12, fontFamily: FONT,
+      borderRadius: 12, marginBottom: 12, fontFamily: FONT, overflow: 'hidden',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+      {/* Cabecalho clicavel (expande/colapsa) */}
+      <div
+        onClick={() => setExpandido(e => !e)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+          padding: '14px 18px',
+          borderBottom: expandido ? `1px solid ${palette.beige}` : 'none',
+        }}
+      >
         <Trophy size={sz(15)} color={palette.warn} />
-        <span style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, flex: 1 }}>
-          Metas das vendedoras · {data?.periodo_label || '...'}
-        </span>
-        <button
-          onClick={() => setVerHistorico(v => !v)}
-          style={{
-            background: 'transparent', color: palette.accent,
-            border: `1px solid ${palette.beige}`, borderRadius: 6,
-            padding: '3px 9px', fontSize: fz(11), fontFamily: FONT,
-            fontWeight: 500, cursor: 'pointer',
-          }}
-        >
-          {verHistorico ? '✕ Fechar' : 'Ver meses anteriores'}
-        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: fz(13), color: palette.inkSoft, letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Metas das vendedoras · {data?.periodo_label || '...'}
+          </div>
+          {!carregando && !erro && (
+            <div style={{ fontSize: fz(15), fontWeight: 700, color: palette.ink, marginTop: 2 }}>
+              R$ {Math.round(totalGeral).toLocaleString('pt-BR')}
+            </div>
+          )}
+        </div>
+        {expandido ? <ChevronUp size={sz(18)} color={palette.inkMuted} /> : <ChevronDown size={sz(18)} color={palette.inkMuted} />}
       </div>
+
+      {/* Corpo (so quando expandido) */}
+      {expandido && (
+      <div style={{ padding: '14px 18px' }}>
+        {/* Botao Ver meses anteriores */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setVerHistorico(v => !v); }}
+            style={{
+              background: 'transparent', color: palette.accent,
+              border: `1px solid ${palette.beige}`, borderRadius: 6,
+              padding: '3px 9px', fontSize: fz(11), fontFamily: FONT,
+              fontWeight: 500, cursor: 'pointer',
+            }}
+          >
+            {verHistorico ? '✕ Fechar' : 'Ver meses anteriores'}
+          </button>
+        </div>
 
       {/* Seletor de meses anteriores (só quando aberto) */}
       {verHistorico && (
@@ -767,6 +795,8 @@ const CardMetas = ({ lojas }) => {
             </div>
           )}
         </div>
+      )}
+      </div>
       )}
     </div>
   );
