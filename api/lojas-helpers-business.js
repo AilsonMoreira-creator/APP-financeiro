@@ -65,13 +65,15 @@ export const REGRAS_FILTRO_VAREJO = {
 };
 
 export const VENDEDORAS_INICIAIS = [
-  { nome: 'Joelma',      loja: 'Silva Teles', ativa: true, is_placeholder: false, is_padrao_loja: false, aliases: ['JOELMA', 'REGILANIA', 'KELLY'] },
-  { nome: 'Cleide',      loja: 'Silva Teles', ativa: true, is_placeholder: false, is_padrao_loja: true,  aliases: ['CLEIDE', 'CARINA', 'KARINA'] },
-  { nome: 'Vendedora_3', loja: 'Silva Teles', ativa: true, is_placeholder: true,  is_padrao_loja: false, aliases: ['PERLA', 'GISLENE', 'GI', 'POLYANA', 'POLI', 'POLLY'] },
-  { nome: 'Célia',       loja: 'Bom Retiro',  ativa: true, is_placeholder: false, is_padrao_loja: true,  aliases: ['CELIA', 'CÉLIA'] },
-  { nome: 'Vanessa',     loja: 'Bom Retiro',  ativa: true, is_placeholder: false, is_padrao_loja: false, aliases: ['VANESSA', 'VANESSA BOM', 'VANESSA BOM RETIRO'] },
-  { nome: 'Fran',        loja: 'Bom Retiro',  ativa: true, is_placeholder: false, is_padrao_loja: false, aliases: ['FRAN'] },
-  { nome: 'Vendedora_4', loja: 'Bom Retiro',  ativa: true, is_placeholder: true,  is_padrao_loja: false, aliases: ['ROSANGELA', 'ROSÂNGELA', 'MAIRLA', 'MAILA', 'LUCIA'] },
+  { nome: 'Joelma',           loja: 'Silva Teles', ativa: true, is_placeholder: false, is_padrao_loja: false, aliases: ['JOELMA', 'REGILANIA', 'KELLY'] },
+  { nome: 'Cleide',           loja: 'Silva Teles', ativa: true, is_placeholder: false, is_padrao_loja: true,  aliases: ['CLEIDE', 'CARINA', 'KARINA'] },
+  { nome: 'Vendedora_3',      loja: 'Silva Teles', ativa: true, is_placeholder: true,  is_padrao_loja: false, aliases: ['PERLA', 'GISLENE', 'GI', 'POLYANA', 'POLI', 'POLLY'] },
+  { nome: 'Loja Silva Teles', loja: 'Silva Teles', ativa: true, is_placeholder: false, is_padrao_loja: false, aliases: ['LOJA SILVA TELES', 'LOJA ST'] },
+  { nome: 'Célia',            loja: 'Bom Retiro',  ativa: true, is_placeholder: false, is_padrao_loja: true,  aliases: ['CELIA', 'CÉLIA'] },
+  { nome: 'Vanessa',          loja: 'Bom Retiro',  ativa: true, is_placeholder: false, is_padrao_loja: false, aliases: ['VANESSA', 'VANESSA BOM', 'VANESSA BOM RETIRO'] },
+  { nome: 'Fran',             loja: 'Bom Retiro',  ativa: true, is_placeholder: false, is_padrao_loja: false, aliases: ['FRAN'] },
+  { nome: 'Vendedora_4',      loja: 'Bom Retiro',  ativa: true, is_placeholder: true,  is_padrao_loja: false, aliases: ['ROSANGELA', 'ROSÂNGELA', 'MAIRLA', 'MAILA', 'LUCIA'] },
+  { nome: 'Loja Bom Retiro',  loja: 'Bom Retiro',  ativa: true, is_placeholder: false, is_padrao_loja: false, aliases: ['LOJA BOM RETIRO', 'LOJA BR'] },
 ];
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -299,6 +301,52 @@ export function resolverVendedora(nomeRaw, lojaArquivo, vendedorasCadastradas) {
   if (matchOutraLoja) return matchOutraLoja;
 
   return padraoLoja();
+}
+
+// ─── resolverVendedoraVenda — Ailson 06/05/2026 ──────────────────────────
+// Usado SO pra atribuir vendedora_id a uma VENDA (lojas_vendas / lojas_vendas_varejo).
+// Diferente de resolverVendedora() (que continua sendo usado pra CLIENTE).
+//
+// REGRA:
+//   - Vendedor identificado e cadastrado (ex: JOELMA, VANESSA, FRAN, etc) →
+//     vai pra ela (recebe comissao)
+//   - Vendedor desconhecido (vazio, "LOJA BOM RETIRO", "LOJA SILVA TELES",
+//     "JULIA" sem cadastro, etc) → vai pra vendedora FAKE da loja
+//     (Loja Bom Retiro / Loja Silva Teles)
+//   - Cliente continua absorvido por Celia/Cleide via resolverVendedora().
+//   - Comissao da Celia/Cleide fica limpa (nao recebe vendas que nao foram
+//     dela).
+//
+// IMPORTANTE: as fakes precisam estar cadastradas em lojas_vendedoras
+// (ver sql/criar-vendedoras-fake-loja.sql). Nomes exatos:
+//   - 'Loja Bom Retiro'
+//   - 'Loja Silva Teles'
+export function resolverVendedoraVenda(nomeRaw, lojaArquivo, vendedorasCadastradas) {
+  const nome = String(nomeRaw || '').trim().toUpperCase();
+  const loja = lojaArquivo;
+
+  // Fake da loja eh o fallback final (se nada bater)
+  const fakeLoja = () => vendedorasCadastradas.find(
+    v => v.loja === loja && v.nome.toLowerCase().startsWith('loja ')
+  );
+
+  // 1. Match exato na loja certa (vendedora cadastrada real)
+  if (nome && nome !== 'CONVERTR') {
+    const match = vendedorasCadastradas.find(
+      v => v.ativa && v.loja === loja && (v.aliases || []).includes(nome)
+    );
+    if (match) return match;
+
+    // 2. Cross-loja (vendedora cobertura)
+    const matchOutraLoja = vendedorasCadastradas.find(
+      v => v.ativa && v.loja !== loja && (v.aliases || []).includes(nome)
+    );
+    if (matchOutraLoja) return matchOutraLoja;
+  }
+
+  // 3. Fallback: fake da loja (vez de padrao Celia/Cleide)
+  // Cobre: vazio, CONVERTR, "LOJA BOM RETIRO", vendedora teste sem cadastro
+  return fakeLoja();
 }
 
 export function importarApelidoComprador(comprador) {

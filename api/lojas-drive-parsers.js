@@ -29,6 +29,7 @@ import {
   escolherTelefone,
   ehVendaVarejo,
   resolverVendedora,
+  resolverVendedoraVenda,
   detectarClienteSinalizado,
   importarApelidoComprador,
   classificarPedidoSacola,
@@ -308,7 +309,12 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
         const dataVendaVarejo = parseDataBR(l['DATA|FINALIZADO'] || l['DATA|CADASTRO']);
         if (dataVendaVarejo) {
           const vendedoraNomeVarejo = limparTexto(l['VENDEDOR']);
-          const vendedoraVarejo = resolverVendedora(vendedoraNomeVarejo, loja, vendedorasCadastradas);
+          // FIX 06/05/2026: vendas vao pra resolverVendedoraVenda (nao
+          // resolverVendedora). Vendedor desconhecido cai em FAKE da loja
+          // (Loja Bom Retiro / Loja Silva Teles), nao em Celia/Cleide.
+          // Cliente continua absorvido por Celia/Cleide separado (la em
+          // cadastro_clientes_futura).
+          const vendedoraVarejo = resolverVendedoraVenda(vendedoraNomeVarejo, loja, vendedorasCadastradas);
           let pctDescVarejo = 0;
           const pctRawV = String(l['%'] || '').replace('%', '').trim();
           pctDescVarejo = parseNumeroBR(pctRawV) || 0;
@@ -351,7 +357,8 @@ export function parseRelatorioVendasHistorico(conteudo, loja, vendedorasCadastra
     if (!numero_pedido) continue;  // pedido sem número, dado corrompido
 
     const vendedoraNome = limparTexto(l['VENDEDOR']);
-    const vendedora = resolverVendedora(vendedoraNome, loja, vendedorasCadastradas);
+    // FIX 06/05/2026: VENDA usa resolverVendedoraVenda (FAKE pra desconhecidos)
+    const vendedora = resolverVendedoraVenda(vendedoraNome, loja, vendedorasCadastradas);
 
     const formaPagamento = limparTexto(l['PAGAMENTO']);
     const categoria_pag = categorizarPagamento(formaPagamento);
@@ -683,6 +690,10 @@ export function parsePedidosEspera(linhasComX, loja, vendedorasCadastradas, hoje
     }
 
     // Resolve vendedora pelo nome
+    // OBS 06/05/2026: sacola eh "futuro relacionamento de cliente" (nao
+    // venda concreta ainda), entao usa resolverVendedora() (que cai em
+    // Celia/Cleide pra desconhecidos), nao resolverVendedoraVenda (FAKE).
+    // Quando virar venda concreta, vai pro caminho certo.
     const vendedora = resolverVendedora(parsed.vendedor_nome_raw, loja, vendedorasCadastradas);
 
     // Calcula dias em sacola + sub-tipo
