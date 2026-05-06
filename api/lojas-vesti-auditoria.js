@@ -28,24 +28,34 @@ export default async function handler(req, res) {
     const dataLimite = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
     // 1. Clientes Vesti — KPI canal_dominante='vesti_dominante'
+    // BUG FIX 06/05/2026: vendedora_id vive em lojas_clientes, NAO em
+    // lojas_clientes_kpis. Erro: 'column lojas_clientes_kpis.vendedora_id
+    // does not exist'. Corrigido buscando vendedora_id em lojas_clientes
+    // junto com os outros campos.
     const { data: kpisVesti, error: errK } = await supabase
       .from('lojas_clientes_kpis')
-      .select('cliente_id, vendedora_id, lifetime_total, ultima_compra_data, dias_sem_comprar')
+      .select('cliente_id, lifetime_total, ultima_compra_data, dias_sem_comprar')
       .eq('canal_dominante', 'vesti_dominante');
     if (errK) return res.status(500).json({ error: errK.message });
 
     const refsClientes = (kpisVesti || []).map(k => k.cliente_id);
-    const refsVendedoras = [...new Set((kpisVesti || []).map(k => k.vendedora_id).filter(Boolean))];
 
-    // Hidrata cliente
+    // Hidrata cliente — TRAZ vendedora_id daqui
     let mapCliente = new Map();
     if (refsClientes.length > 0) {
       const { data: clientes } = await supabase
         .from('lojas_clientes')
-        .select('id, razao_social, fantasia, status_atual, canal_cadastro, loja_origem')
+        .select('id, razao_social, fantasia, status_atual, canal_cadastro, loja_origem, vendedora_id')
         .in('id', refsClientes);
       mapCliente = new Map((clientes || []).map(c => [c.id, c]));
     }
+
+    // Agora deriva vendedora_id de cada cliente (via mapCliente)
+    const refsVendedoras = [...new Set(
+      (kpisVesti || [])
+        .map(k => mapCliente.get(k.cliente_id)?.vendedora_id)
+        .filter(Boolean)
+    )];
 
     // Hidrata vendedora
     let mapVendedora = new Map();
@@ -65,14 +75,15 @@ export default async function handler(req, res) {
     // Lista enriquecida de clientes
     const clientesEnriquecidos = (kpisVesti || []).map(k => {
       const cli = mapCliente.get(k.cliente_id) || {};
-      const vd = mapVendedora.get(k.vendedora_id);
+      const vendedoraId = cli.vendedora_id || null;
+      const vd = mapVendedora.get(vendedoraId);
       return {
         cliente_id: k.cliente_id,
         nome: cli.fantasia || cli.razao_social || '(sem nome)',
         status_atual: cli.status_atual,
         canal_cadastro: cli.canal_cadastro,
         loja: vd?.loja || cli.loja_origem,
-        vendedora_id: k.vendedora_id,
+        vendedora_id: vendedoraId,
         vendedora_nome: vd?.nome || '(sem vendedora)',
         vendedora_tem_link: !!vd?.link_ativo_url,
         lifetime_total: k.lifetime_total,
