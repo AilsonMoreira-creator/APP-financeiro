@@ -776,6 +776,68 @@ async function montarContextoSugestoes(vendedoraId) {
     getLojasConfig('parametros.fechamento_padrao', null),
   ]);
 
+  // ─── RAIO-X PRODUTOS — acrescimos no cardapio (Ailson 06/05/2026) ─────
+  // Carrega dados das views do raio-x pra IA usar como gatilhos extras:
+  //   1. top_recompra: refs com mais ocorrencias (90d) — usar em followup_nova
+  //      (cliente que comprou 1a vez ha 15d)
+  //   2. matches_por_ref: pra cada uma das top 30 refs, suas top 5 matches
+  //      (a IA usa pra reposicao + cliente ativa + match dos top 3 do cliente)
+  //
+  // Essas views sao admin-only no endpoint /api/lojas-produtos-raiox, mas
+  // aqui estamos no backend com service_role — pode ler direto.
+  let topRecompra = [];
+  let matchesPorRef = {};
+  try {
+    // Top 10 refs em recompra (agregado todas lojas)
+    const { data: recRows } = await supabase
+      .from('vw_lojas_recompra_90d')
+      .select('ref, ocorrencias');
+    if (recRows) {
+      const aggMap = new Map();
+      for (const r of recRows) {
+        aggMap.set(r.ref, (aggMap.get(r.ref) || 0) + Number(r.ocorrencias || 0));
+      }
+      topRecompra = [...aggMap.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([ref, ocorr]) => {
+          const p = produtosFinal.find(pp => pp.ref === ref);
+          return {
+            ref,
+            ocorrencias: ocorr,
+            descricao: p?.descricao || null,
+            categoria: p?.categoria || null,
+            qtd_estoque: p?.qtd_estoque || 0,
+          };
+        });
+    }
+
+    // Matches da materialized view (top 5 por ref)
+    const { data: matchRows } = await supabase
+      .from('mv_lojas_matches_90d')
+      .select('ref_top, ref_match, pct, coocorrencias')
+      .order('ref_top')
+      .order('pct', { ascending: false });
+    if (matchRows) {
+      for (const m of matchRows) {
+        if (!matchesPorRef[m.ref_top]) matchesPorRef[m.ref_top] = [];
+        if (matchesPorRef[m.ref_top].length < 5) {
+          const p = produtosFinal.find(pp => pp.ref === m.ref_match);
+          matchesPorRef[m.ref_top].push({
+            ref_match: m.ref_match,
+            pct: m.pct,
+            coocorrencias: m.coocorrencias,
+            descricao: p?.descricao || null,
+            categoria: p?.categoria || null,
+            qtd_estoque: p?.qtd_estoque || 0,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] sem dados raiox (views ausentes?):', e?.message);
+  }
+
   return {
     vendedoraNome: vendedora.nome,
     vendedoraId,
@@ -793,6 +855,8 @@ async function montarContextoSugestoes(vendedoraId) {
     topRefsPorCliente,       // { cliente_id: [{ref, posicao, pecas, vezes}] }
     categoriasFreqPorCliente, // { cliente_id: [{categoria, pct, pecas, dominante}] }
     refsReposicao,           // [ref] — novidades que já tinham venda passada
+    topRecompra,             // top 10 refs com mais ocorrencias (90d) — Ailson 06/05/2026
+    matchesPorRef,           // { ref: [{ref_match, pct, coocorrencias, ...}] } — Ailson 06/05/2026
     promocoes: promocoes || [],
     acoesVigentes: acoesVigentes || [],
     avisosDestaVendedora,
@@ -1084,7 +1148,13 @@ function montarMessagesSugestoes(ctx) {
         // Top 3 REFs que essa cliente compra bem (score peças+recorrência).
         // IA usa pra: detectar reposição, dizer "vende bem pra você",
         // alternar recomendações sem repetir.
-        top_refs_cliente: ctx.topRefsPorCliente?.[c.id] || [],
+        // ACRESCIMO 06/05/2026: cada top_ref vem com .matches[] (top 5 refs
+        // que aparecem juntas com ela em outras compras). IA pode oferecer
+        // o match em vez de buscar peca da mesma categoria.
+        top_refs_cliente: (ctx.topRefsPorCliente?.[c.id] || []).map(tr => ({
+          ...tr,
+          matches: ctx.matchesPorRef?.[tr.ref] || [],
+        })),
         // Distribuicao de compras por CATEGORIA (calça, blusa, vestido,
         // macacão...). Categoria com dominante=true (pct>=30%) sinaliza pra
         // IA: pode oferecer novidade/best_seller dessa categoria mesmo sem
@@ -1133,6 +1203,12 @@ function montarMessagesSugestoes(ctx) {
     // IA usa: se uma novidade da oficina está nessa lista E está no top 3 da
     // cliente, vira sugestão de reposição (substitui novidade ou followup).
     refs_reposicao: ctx.refsReposicao || [],
+    // Top 10 refs com MAIS RECOMPRA (90d, agregado todas lojas).
+    // ACRESCIMO 06/05/2026: IA usa em followup_nova (cliente que comprou 1a
+    // vez ha 15d) pra oferecer "recompra certeira" — peca que outros clientes
+    // levam de volta toda hora. Cada item tem ref, ocorrencias, descricao,
+    // categoria, qtd_estoque.
+    top_recompra: ctx.topRecompra || [],
     promocoes_ativas: ctx.promocoes.map(p => ({
       id: p.id,
       nome: p.nome_curto,
