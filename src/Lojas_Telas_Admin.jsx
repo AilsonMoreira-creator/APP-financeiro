@@ -43,7 +43,7 @@ import {
   ArrowLeftRight, TrendingUp, BarChart3, UserCog, Heart,
   Save, Trash2, Edit3, Clock, CheckCircle2, AlertCircle, Check, X,
   Upload, Download, FileSpreadsheet, History, UsersRound, Link2, Crown,
-  Loader2, Flame, Megaphone, Bell, Palette, EyeOff, RotateCcw,
+  Loader2, Flame, Megaphone, Bell, Palette, EyeOff, RotateCcw, RefreshCw,
 } from 'lucide-react';
 
 // Importa primitives e tokens compartilhados (sem ciclo — Lojas_Shared.jsx
@@ -1691,6 +1691,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
     { id: 'best_seller',     label: 'Best-sellers', icon: Star,        cor: palette.warn },
     { id: 'em_alta',         label: 'Em alta',      icon: TrendingUp,  cor: palette.alert },
     { id: 'novidade_manual', label: 'Novidades',    icon: Sparkles,    cor: palette.accent },
+    { id: 'reposicao',       label: 'Reposições',   icon: RefreshCw,   cor: palette.purple },
     { id: 'cores',           label: 'Cores',        icon: Heart,       cor: palette.purple },
   ];
 
@@ -1698,6 +1699,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
     best_seller: 'best-seller',
     em_alta: 'em alta',
     novidade_manual: 'novidade manual',
+    reposicao: 'reposição',
     cores: 'cor',
   };
 

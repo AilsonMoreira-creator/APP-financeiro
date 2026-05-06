@@ -40,7 +40,7 @@ export default async function handler(req, res) {
   if (!auth.isAdmin) return res.status(403).json({ error: 'Apenas admin' });
 
   const tipo = req.query.tipo || 'novidade_manual';
-  if (!['best_seller', 'em_alta', 'novidade_manual'].includes(tipo)) {
+  if (!['best_seller', 'em_alta', 'novidade_manual', 'reposicao'].includes(tipo)) {
     return res.status(400).json({ error: 'tipo invalido' });
   }
 
@@ -85,9 +85,22 @@ export default async function handler(req, res) {
         pecas_45d: a.pecas_45d,
       }));
     } else if (tipo === 'novidade_manual') {
-      // 5-12 dias da oficina
+      // 5-12 dias da oficina, ref nunca foi vendida antes (novidade real)
       const { data } = await supabase
         .from('vw_lojas_novidades_auto')
+        .select('ref, data_entrega, dias_apos_entrega, qtd_entregue');
+      automaticos = (data || []).map(a => ({
+        ref: a.ref,
+        origem: 'automatica',
+        data_entrega: a.data_entrega,
+        dias_apos_entrega: a.dias_apos_entrega,
+        qtd_entregue: a.qtd_entregue,
+      }));
+    } else if (tipo === 'reposicao') {
+      // 5-12 dias da oficina, ref JA FOI vendida antes (reposicao)
+      // Ailson 06/05/2026: separado de novidade pra IA tratar diferente
+      const { data } = await supabase
+        .from('vw_lojas_reposicoes_auto')
         .select('ref, data_entrega, dias_apos_entrega, qtd_entregue');
       automaticos = (data || []).map(a => ({
         ref: a.ref,
@@ -103,7 +116,12 @@ export default async function handler(req, res) {
       a => !refsManuais.has(a.ref) && !refsExcluidas.has(a.ref)
     );
 
-    // ─── 5. Hidrata com descricao do produto (lojas_produtos) ─────────
+    // ─── 5. Hidrata com descricao do produto ───────────────────────────
+    // Fonte primaria: lojas_produtos (catalogo Mire)
+    // Fallback: ficha tecnica (amicia_data user_id='ficha-tecnica')
+    // Ailson 06/05/2026: produto pode estar so na ficha (ainda nao virou
+    // SKU no Mire), ex: 3202 que entregou da oficina mas nao tem cadastro
+    // no Mire.
     const todasRefs = [
       ...(manuais || []).map(m => m.ref),
       ...automaticosFiltrados.map(a => a.ref),
@@ -115,6 +133,30 @@ export default async function handler(req, res) {
         .select('ref, descricao, categoria, qtd_estoque')
         .in('ref', todasRefs);
       prodMap = new Map((produtos || []).map(p => [p.ref, p]));
+
+      // Fallback: pra refs que nao acharam em lojas_produtos, busca em
+      // amicia_data.payload.fichas[]
+      const refsFaltando = todasRefs.filter(r => !prodMap.has(r));
+      if (refsFaltando.length > 0) {
+        const { data: ftRow } = await supabase
+          .from('amicia_data')
+          .select('payload')
+          .eq('user_id', 'ficha-tecnica')
+          .maybeSingle();
+        const fichas = ftRow?.payload?.fichas || [];
+        const setFaltando = new Set(refsFaltando.map(r => String(r).replace(/^0+/, '') || '0'));
+        for (const f of fichas) {
+          const refNorm = String(f.ref || '').replace(/^0+/, '') || '0';
+          if (setFaltando.has(refNorm) && !prodMap.has(refNorm)) {
+            prodMap.set(refNorm, {
+              ref: refNorm,
+              descricao: f.descricao || '',
+              categoria: f.categoria || null,
+              qtd_estoque: 0, // ficha tecnica nao tem estoque
+            });
+          }
+        }
+      }
     }
 
     // ─── 6. Resposta unificada ─────────────────────────────────────────
