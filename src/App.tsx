@@ -5442,6 +5442,12 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
   const mobile=w<640;
 
+  // Liberacao de acesso ao botao "Ordem" pra funcionarios alem do admin.
+  // Decisao Ailson 06/05/2026: pedro e corte tambem podem acessar Ordem
+  // de Corte. Usuarios sao normalizados pra lowercase pra match seguro.
+  const usuarioNorm = String(usuario || "").trim().toLowerCase();
+  const podeOrdem = isAdmin || usuarioNorm === "pedro" || usuarioNorm === "corte";
+
   // Fotos: mesma lógica do Bling (FotoProd + zoom DOM)
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
   const handleZoom=(src)=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer';const img=document.createElement('img');img.src=src;img.style.cssText='width:200px;height:280px;object-fit:cover;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.3);border:3px solid #fff';ov.appendChild(img);ov.onclick=()=>document.body.removeChild(ov);document.body.appendChild(ov);};
@@ -5835,7 +5841,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
           {alertas.length>0&&tela==="analise"&&isAdmin&&<span style={{background:"#c0392b",color:"#fff",borderRadius:10,padding:"2px 8px",fontSize:11,fontWeight:700}}>{alertas.length}</span>}
           <button onClick={()=>setTela("lancamento")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="lancamento"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="lancamento"?"#2c3e50":"#fff",color:tela==="lancamento"?"#fff":"#2c3e50"}}>✏️ Lançar</button>
           {isAdmin&&<button onClick={()=>setTela("analise")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="analise"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="analise"?"#2c3e50":"#fff",color:tela==="analise"?"#fff":"#2c3e50"}}>📊 Análise</button>}
-          {isAdmin&&<button onClick={()=>setTela("ordem")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="ordem"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="ordem"?"#2c3e50":"#fff",color:tela==="ordem"?"#fff":"#2c3e50"}}>📋 Ordem</button>}
+          {podeOrdem&&<button onClick={()=>setTela("ordem")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="ordem"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="ordem"?"#2c3e50":"#fff",color:tela==="ordem"?"#fff":"#2c3e50"}}>📋 Ordem</button>}
           <button onClick={()=>setTela("fila")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="fila"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="fila"?"#2c3e50":"#fff",color:tela==="fila"?"#fff":"#2c3e50"}}>✂️ Fila</button>
         </div>
       </div>
@@ -6091,8 +6097,8 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
 
         </div>)}
 
-        {/* ═══ ORDEM DE CORTE (admin only) ═══ */}
-        {tela==="ordem"&&isAdmin&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}} mediaRef={mediaRef}/>)}
+        {/* ═══ ORDEM DE CORTE (admin + pedro + corte) ═══ */}
+        {tela==="ordem"&&podeOrdem&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}} mediaRef={mediaRef}/>)}
 
         {/* ═══ FILA DE CORTE (admin + funcionário) ═══ */}
         {tela==="fila"&&(<FilaDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}}/>)}
