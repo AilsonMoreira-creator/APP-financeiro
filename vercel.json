@@ -99,7 +99,7 @@
     },
     {
       "path": "/api/lojas-receitas-cron-diario",
-      "schedule": "0 7 * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
