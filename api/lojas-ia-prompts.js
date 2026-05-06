@@ -308,6 +308,24 @@ match, vai ser via categoria. EQUILIBRIO.
 A vendedora vê 7 sugestões POR DIA. Não pode ser sempre o mesmo tipo de
 produto nem o mesmo perfil de cliente. Diversifica SEMPRE:
 
+## Variedade de CLIENTE — força a busca na carteira (06/05/2026)
+
+A carteira já vem PRÉ-FILTRADA pelo backend pra remover clientes em cooldown
+(sugeridos nos últimos 7-10 dias). Logo, todos os clientes que você vê na
+lista PODEM ser sugeridos hoje.
+
+REGRAS:
+- ❌ NÃO sugira o mesmo cliente em 2 sugestões da mesma rodada (7 do dia)
+- ✅ Distribua entre diferentes clientes — vendedoras com 200+ clientes têm
+  variedade pra dar e vender
+- ✅ Vendedoras com carteira pequena (<100, ex: Fran com 78) têm cooldown
+  reduzido pra 7 dias — mas mesmo assim, prioriza o que tem MAIOR PROBABILIDADE
+  DE CONVERSÃO:
+  * Atenção (cliente esfriando): probabilidade alta — preferência
+  * SemAtividade (60-180d): média — usa
+  * Inativo (180-365d): baixa — só se faltar opção melhor
+- ✅ Não force tipo se nem tem cliente — nesse caso usa fallback documentado
+
 ## Variedade de PRODUTO
 
 Nas 7 sugestões, distribui DIFERENTES REFs entre as listas:

@@ -395,21 +395,50 @@ async function montarContextoSugestoes(vendedoraId) {
     .eq('vendedora_id', vendedoraId)
     .eq('ativo', true);
 
-  // ANTI-REPETIÇÃO sacola: cliente_id sugerido como sacola nos ULTIMOS 5 DIAS
-  // fica em cooldown. Decisao Ailson 05/05/2026: 'voltar com sugestao intervalo
-  // de 5 dias'. Se vendedora ainda nao resolveu, IA da espaco e volta depois.
-  // Sem isso, mesmo cliente aparecia todo dia (ex: Gildelucia 35d na sacola).
-  const data5dias = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
+  // ANTI-REPETIÇÃO sacola: cliente_id sugerido como sacola nos ULTIMOS 7 DIAS
+  // fica em cooldown. Decisao Ailson 06/05/2026: ajustado de 5→7d pra alinhar
+  // com os outros tipos. Sem isso, mesmo cliente aparecia todo dia.
+  const data7diasSacola = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const { data: sacolasRecentes } = await supabase
     .from('lojas_sugestoes_diarias')
     .select('cliente_id')
     .eq('vendedora_id', vendedoraId)
     .eq('tipo', 'sacola')
-    .gte('data_geracao', data5dias)
+    .gte('data_geracao', data7diasSacola)
     .not('cliente_id', 'is', null);
   const clientesEmCooldownSacola = new Set(
     (sacolasRecentes || []).map(s => s.cliente_id)
   );
+
+  // ANTI-REPETIÇÃO geral (Ailson 06/05/2026): cliente sugerido em qualquer
+  // tipo (exceto sacola — tem regra propria) nos ULTIMOS N DIAS fica em
+  // cooldown.
+  //
+  // N varia conforme tamanho da carteira:
+  //   - Carteira >= 100 clientes ativos: cooldown = 10 dias
+  //   - Carteira < 100  (ex: Fran tem 78): cooldown = 7 dias
+  //     (caso contrario fica sem opcoes pra variar)
+  //
+  // Conta carteira ANTES dos filtros de pular_ate/kpi_inutil porque o que
+  // importa eh o pool disponivel da vendedora, nao o filtrado naquele dia.
+  const totalCarteira = (clientes || []).filter(c => !c.arquivado_em).length;
+  const cooldownGeralDias = totalCarteira < 100 ? 7 : 10;
+  const dataCooldownGeral = new Date(Date.now() - cooldownGeralDias * 86400000).toISOString().slice(0, 10);
+
+  const { data: sugestoesRecentes } = await supabase
+    .from('lojas_sugestoes_diarias')
+    .select('cliente_id, tipo')
+    .eq('vendedora_id', vendedoraId)
+    .neq('tipo', 'sacola')
+    .gte('data_geracao', dataCooldownGeral)
+    .not('cliente_id', 'is', null);
+  const clientesEmCooldownGeral = new Set(
+    (sugestoesRecentes || []).map(s => s.cliente_id)
+  );
+
+  console.log('[lojas-ia]', vendedora.nome, 'carteira=' + totalCarteira,
+    'cooldown_geral=' + cooldownGeralDias + 'd',
+    'em_cooldown=' + clientesEmCooldownGeral.size);
 
   // FILTRO SACOLAS (28/04/2026, decisão Ailson):
   //   - valor_total <= 0 → dado faltante do PDF, descarta
@@ -857,6 +886,9 @@ async function montarContextoSugestoes(vendedoraId) {
     refsReposicao,           // [ref] — novidades que já tinham venda passada
     topRecompra,             // top 10 refs com mais ocorrencias (90d) — Ailson 06/05/2026
     matchesPorRef,           // { ref: [{ref_match, pct, coocorrencias, ...}] } — Ailson 06/05/2026
+    clientesEmCooldownGeral, // Set<cliente_id> sugeridos nos ultimos N dias (nao-sacola) — Ailson 06/05/2026
+    cooldownGeralDias,       // 7 ou 10 dependendo do tamanho da carteira
+    totalCarteira,           // tamanho da carteira da vendedora (pra IA priorizar conversao em carteiras pequenas)
     promocoes: promocoes || [],
     acoesVigentes: acoesVigentes || [],
     avisosDestaVendedora,
@@ -1101,7 +1133,11 @@ function montarMessagesSugestoes(ctx) {
   //   - Cliente sem dias_sem_comprar E sem ultima_compra → KPI inutilizável pra
   //     reativar/atenção/followup. Remove (a menos que tenha sacola).
   //   - pular_ate futuro → vendedora marcou pra pular agora
-  const carteiraFiltradaInfo = { sem_kpi: 0, pulando: 0, kpi_parcial: 0 };
+  //
+  // ACRESCIMO 06/05/2026: cooldown geral
+  //   - Cliente sugerido nos ultimos N dias (10 padrao, 7 pra carteiras <100):
+  //     remove. Excecao: cliente com sacola ativa passa (sacola tem regra propria)
+  const carteiraFiltradaInfo = { sem_kpi: 0, pulando: 0, kpi_parcial: 0, em_cooldown: 0 };
   const hojeISO = new Date().toISOString().slice(0, 10);
 
   const carteira = ctx.clientes
@@ -1116,6 +1152,12 @@ function montarMessagesSugestoes(ctx) {
       const kpiInutil = (k.dias_sem_comprar == null && !k.ultima_compra);
       if (kpiInutil && !clientesComSacola.has(c.id)) {
         carteiraFiltradaInfo.sem_kpi++;
+        return false;
+      }
+      // Cooldown geral — descarta SE não tiver sacola ativa
+      // (sacolas têm cooldown próprio mais curto via clientesEmCooldownSacola)
+      if (ctx.clientesEmCooldownGeral?.has(c.id) && !clientesComSacola.has(c.id)) {
+        carteiraFiltradaInfo.em_cooldown++;
         return false;
       }
       return true;
@@ -1247,6 +1289,11 @@ function montarMessagesSugestoes(ctx) {
     diagnostico_filtros: {
       ...carteiraFiltradaInfo,
       sacolas_descartadas: ctx.sacolasDescartadas || {},
+      cooldown_geral: {
+        dias: ctx.cooldownGeralDias || null,
+        clientes_em_cooldown: ctx.clientesEmCooldownGeral?.size || 0,
+        carteira_total: ctx.totalCarteira || null,
+      },
       produtos: {
         novidades: produtosClassificados.novidades.length,
         best_sellers: produtosClassificados.best_sellers.length,
