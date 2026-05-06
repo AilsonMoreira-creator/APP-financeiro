@@ -65,15 +65,19 @@ const ProdutosTab = ({ userId }) => {
       <Tabs aba={aba} setAba={setAba} />
       <div style={{ marginTop: 14 }}>
         {aba === 'vendidas' && (
-          <ListaProdutos
-            itens={data.top_vendidas}
-            metricaLabel="peças vendidas"
-            metricaCampo="pecas"
-            mostrarPosicao
-          />
+          <>
+            <SubtitleJanela texto="📅 Últimos 45 dias · top 30 refs" />
+            <ListaProdutos
+              itens={data.top_vendidas}
+              metricaLabel="peças vendidas"
+              metricaCampo="pecas"
+              mostrarPosicao
+            />
+          </>
         )}
         {aba === 'primeira' && (
           <>
+            <SubtitleJanela texto={`📅 Últimos 45 dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'}`} />
             <ToggleGeralVesti tipo={primeiraTipo} setTipo={setPrimeiraTipo} />
             <ListaProdutos
               itens={data.primeira_compra[primeiraTipo]}
@@ -84,24 +88,41 @@ const ProdutosTab = ({ userId }) => {
           </>
         )}
         {aba === 'recompra' && (
-          <ListaProdutos
-            itens={data.recompra}
-            metricaLabel="ocorrências"
-            metricaCampo="ocorrencias"
-            mostrarPosicao
-          />
+          <>
+            <SubtitleJanela texto="📅 Últimos 90 dias · top 15 refs" />
+            <ListaProdutos
+              itens={data.recompra}
+              metricaLabel="ocorrências"
+              metricaCampo="ocorrencias"
+              mostrarPosicao
+            />
+          </>
         )}
         {aba === 'matches' && (
-          <PainelMatches
-            data={data}
-            refSel={refSelMatch}
-            setRefSel={setRefSelMatch}
-          />
+          <>
+            <SubtitleJanela texto="📅 Últimos 90 dias · top 30 refs · mín. 5 co-ocorrências" />
+            <PainelMatches
+              data={data}
+              refSel={refSelMatch}
+              setRefSel={setRefSelMatch}
+            />
+          </>
         )}
       </div>
     </div>
   );
 };
+
+// ─── Subtitle com janela aplicada (Ailson 05/05/2026) ─────────────────────
+const SubtitleJanela = ({ texto }) => (
+  <div style={{
+    fontSize: 11, color: palette.inkMuted, fontFamily: FONT,
+    background: palette.beigeSoft, padding: '6px 10px', borderRadius: 6,
+    marginBottom: 10, display: 'inline-block',
+  }}>
+    {texto}
+  </div>
+);
 
 // ─── Header (filtro de loja) ───────────────────────────────────────────────
 const Header = ({ loja, setLoja }) => {
@@ -251,12 +272,25 @@ const CardProduto = ({ item, posicao, metricaLabel, metricaValor }) => (
   </div>
 );
 
-// ─── Painel Matches (dropdown + lista) ─────────────────────────────────────
+// ─── Painel Matches (busca + lista filtrada) ──────────────────────────────
 const PainelMatches = ({ data, refSel, setRefSel }) => {
+  const [busca, setBusca] = useState('');
+
   const refsDisponiveis = useMemo(() => {
     const setRefs = new Set(Object.keys(data.matches || {}));
     return (data.top_vendidas || []).filter(t => setRefs.has(t.ref));
   }, [data]);
+
+  // Filtro de busca: aceita ref ou descrição (case insensitive)
+  const refsFiltradas = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return refsDisponiveis;
+    return refsDisponiveis.filter(t =>
+      String(t.ref).toLowerCase().includes(q) ||
+      String(t.descricao || '').toLowerCase().includes(q) ||
+      String(t.categoria || '').toLowerCase().includes(q)
+    );
+  }, [refsDisponiveis, busca]);
 
   if (refsDisponiveis.length === 0) {
     return <Vazio msg="Nenhum match encontrado (precisa de pelo menos 5 co-ocorrências)." />;
@@ -269,25 +303,63 @@ const PainelMatches = ({ data, refSel, setRefSel }) => {
     <>
       <div style={{ marginBottom: 12 }}>
         <label style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 4, display: 'block' }}>
-          Selecione uma ref:
+          Buscar uma ref:
         </label>
-        <select
-          value={refSel || ''}
-          onChange={e => setRefSel(e.target.value)}
-          style={{
-            width: '100%', maxWidth: 400,
-            padding: '8px 12px', borderRadius: 6,
-            border: `1px solid ${palette.beige}`,
-            fontSize: 13, fontFamily: FONT,
-            background: palette.surface, color: palette.ink,
-          }}
-        >
-          {refsDisponiveis.map(t => (
-            <option key={t.ref} value={t.ref}>
-              REF {t.ref}{t.descricao ? ` — ${t.descricao}` : ''}
-            </option>
-          ))}
-        </select>
+        {/* Campo de busca com lupa (Ailson 05/05/2026) */}
+        <div style={{ position: 'relative', maxWidth: 400, marginBottom: 8 }}>
+          <span style={{
+            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+            fontSize: 14, color: palette.inkMuted, pointerEvents: 'none',
+          }}>🔍</span>
+          <input
+            type="text"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Digite ref, descrição ou categoria..."
+            style={{
+              width: '100%', padding: '8px 12px 8px 32px', borderRadius: 6,
+              border: `1px solid ${palette.beige}`,
+              fontSize: 13, fontFamily: FONT,
+              background: palette.surface, color: palette.ink,
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* Lista filtrada de refs (clica pra selecionar) */}
+        <div style={{
+          maxHeight: 200, overflowY: 'auto',
+          border: `1px solid ${palette.beige}`, borderRadius: 6,
+          background: palette.surface, maxWidth: 400,
+        }}>
+          {refsFiltradas.length === 0 ? (
+            <div style={{ padding: 12, fontSize: 12, color: palette.inkMuted, textAlign: 'center' }}>
+              Nenhuma ref encontrada com "{busca}"
+            </div>
+          ) : (
+            refsFiltradas.map(t => (
+              <div
+                key={t.ref}
+                onClick={() => setRefSel(t.ref)}
+                style={{
+                  padding: '8px 12px', cursor: 'pointer',
+                  borderBottom: `1px solid ${palette.beigeSoft}`,
+                  background: refSel === t.ref ? palette.accentSoft || palette.beigeSoft : 'transparent',
+                  fontSize: 12, color: palette.ink,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}
+              >
+                <span style={{ fontWeight: 700, minWidth: 60 }}>REF {t.ref}</span>
+                {t.descricao && (
+                  <span style={{ flex: 1, color: palette.inkSoft, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {t.descricao}
+                  </span>
+                )}
+                {refSel === t.ref && <span style={{ color: palette.accent, fontSize: 12 }}>✓</span>}
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {refSelInfo && matches.length > 0 && (
@@ -302,13 +374,20 @@ const PainelMatches = ({ data, refSel, setRefSel }) => {
         </div>
       )}
 
-      {matches.length === 0 ? (
+      {refSel && matches.length === 0 ? (
         <Vazio msg="Sem matches pra essa ref (mín. 5 co-ocorrências)." />
-      ) : (
+      ) : matches.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {matches.map((m, idx) => (
             <CardMatch key={m.ref_match} match={m} posicao={idx + 1} />
           ))}
+        </div>
+      ) : (
+        <div style={{
+          padding: 16, textAlign: 'center', fontSize: 12,
+          color: palette.inkMuted, fontStyle: 'italic',
+        }}>
+          Selecione uma ref acima pra ver os matches.
         </div>
       )}
     </>
