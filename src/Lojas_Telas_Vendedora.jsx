@@ -1548,6 +1548,41 @@ export const CardDiaScreen = ({
         }
       />
       <div style={{ padding: 16 }}>
+        {/* Card especial de TERCA-FEIRA (Ailson 06/05/2026):
+            Resumo motivacional da semana anterior + CTA pra abrir Destaques.
+            Aparece SO no dia 2 (terca) e SO se a vendedora tem sugestoes hoje
+            (evita aparecer em fins-de-semana ou dia sem cron rodado). */}
+        {new Date().getDay() === 2 && total > 0 && (
+          <button
+            onClick={onAbrirDestaques}
+            style={{
+              width: '100%',
+              background: `linear-gradient(135deg, ${palette.purpleSoft} 0%, ${palette.bg} 100%)`,
+              border: `1px solid ${palette.purple}40`,
+              borderRadius: 14, padding: 14, marginBottom: 12,
+              cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <div style={{
+              width: 44, height: 44, borderRadius: '50%', background: palette.surface,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: `2px solid ${palette.purple}`, flexShrink: 0,
+            }}>
+              <Award size={sz(24)} color={palette.purple} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: fz(15), fontWeight: 700, color: palette.ink, marginBottom: 2 }}>
+                Resumo da sua semana 🚀
+              </div>
+              <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
+                Toque pra ver suas conversões e destaques
+              </div>
+            </div>
+            <ChevronRight size={sz(20)} color={palette.purple} />
+          </button>
+        )}
+
         <div style={{
           background: palette.surface, borderRadius: 14, padding: 16, marginBottom: 18,
           border: `1px solid ${palette.beige}`,
