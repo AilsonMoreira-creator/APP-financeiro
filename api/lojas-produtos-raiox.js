@@ -63,8 +63,8 @@ export default async function handler(req, res) {
   const lojaFiltro = ['todas', 'BR', 'ST'].includes(req.query.loja) ? req.query.loja : 'todas';
 
   try {
-    // ─── 1. TOP VENDIDAS (45d) ─────────────────────────────────────────
-    let qVend = supabase.from('vw_lojas_top_vendidas_45d')
+    // ─── 1. TOP VENDIDAS (60d) ─────────────────────────────────────────
+    let qVend = supabase.from('vw_lojas_top_vendidas_60d')
       .select('ref, loja, pecas, clientes_distintos, pedidos_distintos');
     qVend = aplicarFiltroLoja(qVend, lojaFiltro);
     const { data: vendRows, error: errVend } = await qVend;
@@ -75,27 +75,45 @@ export default async function handler(req, res) {
       .slice(0, 30)
       .map((r, i) => ({ ...r, posicao: i + 1 }));
 
-    // ─── 2. PRIMEIRA COMPRA (45d) ──────────────────────────────────────
-    let qPrim = supabase.from('vw_lojas_primeira_compra_45d')
+    // ─── 2. COMPRAS DO PERIODO (60d) — antiga 'primeira compra' ────────
+    // Pra cada cliente, primeira venda DENTRO da janela. Cliente pode ser antigo.
+    let qComp = supabase.from('vw_lojas_compras_periodo_60d')
       .select('ref, canal_origem, loja, clientes, pecas');
-    qPrim = aplicarFiltroLoja(qPrim, lojaFiltro);
-    const { data: primRows, error: errPrim } = await qPrim;
-    if (errPrim) return res.status(500).json({ error: errPrim.message, where: 'primeira_compra' });
+    qComp = aplicarFiltroLoja(qComp, lojaFiltro);
+    const { data: compRows, error: errComp } = await qComp;
+    if (errComp) return res.status(500).json({ error: errComp.message, where: 'compras_periodo' });
 
-    // Geral = todas linhas (todos canais)
-    const primGeral = agregarPorRef(primRows || [], ['clientes', 'pecas'])
+    const compGeral = agregarPorRef(compRows || [], ['clientes', 'pecas'])
       .sort((a, b) => b.clientes - a.clientes)
       .slice(0, 15);
 
-    // Vesti = só canal_origem='vesti'
-    const primVesti = agregarPorRef(
-      (primRows || []).filter(r => r.canal_origem === 'vesti'),
+    const compVesti = agregarPorRef(
+      (compRows || []).filter(r => r.canal_origem === 'vesti'),
       ['clientes', 'pecas']
     )
       .sort((a, b) => b.clientes - a.clientes)
       .slice(0, 15);
 
-    // ─── 3. RECOMPRA (90d) ─────────────────────────────────────────────
+    // ─── 3. PRIMEIRA COMPRA REAL (60d) — clientes verdadeiramente novos ─
+    // Sem nenhuma venda anterior a 60d (lookback ate 01/01/2025)
+    let qNovo = supabase.from('vw_lojas_clientes_novos_60d')
+      .select('ref, canal_origem, loja, clientes, pecas');
+    qNovo = aplicarFiltroLoja(qNovo, lojaFiltro);
+    const { data: novoRows, error: errNovo } = await qNovo;
+    if (errNovo) return res.status(500).json({ error: errNovo.message, where: 'clientes_novos' });
+
+    const novoGeral = agregarPorRef(novoRows || [], ['clientes', 'pecas'])
+      .sort((a, b) => b.clientes - a.clientes)
+      .slice(0, 15);
+
+    const novoVesti = agregarPorRef(
+      (novoRows || []).filter(r => r.canal_origem === 'vesti'),
+      ['clientes', 'pecas']
+    )
+      .sort((a, b) => b.clientes - a.clientes)
+      .slice(0, 15);
+
+    // ─── 4. RECOMPRA (90d) ─────────────────────────────────────────────
     let qRec = supabase.from('vw_lojas_recompra_90d')
       .select('ref, loja, ocorrencias, clientes_distintos');
     qRec = aplicarFiltroLoja(qRec, lojaFiltro);
@@ -106,7 +124,7 @@ export default async function handler(req, res) {
       .sort((a, b) => b.ocorrencias - a.ocorrencias)
       .slice(0, 15);
 
-    // ─── 4. MATCHES (90d, sempre agregado) ─────────────────────────────
+    // ─── 5. MATCHES (90d, sempre agregado) ─────────────────────────────
     const { data: matchRows, error: errM } = await supabase
       .from('mv_lojas_matches_90d')
       .select('ref_top, ref_match, coocorrencias, total_compras, pct')
@@ -124,8 +142,10 @@ export default async function handler(req, res) {
     // ─── HIDRATAR com lojas_produtos (descricao, categoria, qtd_estoque) ─
     const refsPraHidratar = new Set([
       ...vendAgg.map(r => r.ref),
-      ...primGeral.map(r => r.ref),
-      ...primVesti.map(r => r.ref),
+      ...compGeral.map(r => r.ref),
+      ...compVesti.map(r => r.ref),
+      ...novoGeral.map(r => r.ref),
+      ...novoVesti.map(r => r.ref),
       ...recAgg.map(r => r.ref),
       ...Object.keys(matchesPorRef),
       ...(matchRows || []).map(m => m.ref_match),
@@ -159,22 +179,22 @@ export default async function handler(req, res) {
       matchesHidratados[refTop] = lista.map(hidratarMatch);
     }
 
-    // ─── ULTIMA ATUALIZACAO DA MATERIALIZED VIEW ─────────────────────
-    // pg_stat_all_tables.last_analyze nao funciona pra matview. Buscar em
-    // pg_class.relfrozenxid eh complexo. Simplificacao: backend assume que
-    // refresh aconteceu. Frontend pode mostrar 'atualizado: hoje 03:00'.
-    // Pra v1, vamos buscar do log do refresh quando o cron rodar.
-
     return res.json({
       loja: lojaFiltro,
       top_vendidas: vendAgg.map(hidratar),
+      // Aba 'Compras' — antiga 'primeira compra', renomeada conceitualmente
+      compras_periodo: {
+        geral: compGeral.map(hidratar),
+        vesti: compVesti.map(hidratar),
+      },
+      // Aba 'Primeira compra' — clientes verdadeiramente novos (sem venda anterior a 60d)
       primeira_compra: {
-        geral: primGeral.map(hidratar),
-        vesti: primVesti.map(hidratar),
+        geral: novoGeral.map(hidratar),
+        vesti: novoVesti.map(hidratar),
       },
       recompra: recAgg.map(hidratar),
       matches: matchesHidratados,
-      ultima_atualizacao_matches: null, // preenchido pelo cron-refresh em iteracoes futuras
+      ultima_atualizacao_matches: null,
     });
   } catch (e) {
     console.error('[lojas-produtos-raiox] erro:', e?.message);

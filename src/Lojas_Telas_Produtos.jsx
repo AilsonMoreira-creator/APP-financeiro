@@ -66,7 +66,7 @@ const ProdutosTab = ({ userId }) => {
       <div style={{ marginTop: 14 }}>
         {aba === 'vendidas' && (
           <>
-            <SubtitleJanela texto="📅 Últimos 45 dias · top 30 refs" />
+            <SubtitleJanela texto="📅 Últimos 60 dias · top 30 refs · peças vendidas" />
             <ListaProdutos
               itens={data.top_vendidas}
               metricaLabel="peças vendidas"
@@ -75,13 +75,25 @@ const ProdutosTab = ({ userId }) => {
             />
           </>
         )}
+        {aba === 'compras' && (
+          <>
+            <SubtitleJanela texto={`📅 Últimos 60 dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'} · primeira compra do período (cliente pode ser antigo)`} />
+            <ToggleGeralVesti tipo={primeiraTipo} setTipo={setPrimeiraTipo} />
+            <ListaProdutos
+              itens={data.compras_periodo[primeiraTipo]}
+              metricaLabel="clientes"
+              metricaCampo="clientes"
+              mostrarPosicao
+            />
+          </>
+        )}
         {aba === 'primeira' && (
           <>
-            <SubtitleJanela texto={`📅 Últimos 45 dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'}`} />
+            <SubtitleJanela texto={`📅 Últimos 60 dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'} · clientes que NUNCA compraram antes (lookback até jan/2025)`} />
             <ToggleGeralVesti tipo={primeiraTipo} setTipo={setPrimeiraTipo} />
             <ListaProdutos
               itens={data.primeira_compra[primeiraTipo]}
-              metricaLabel="clientes"
+              metricaLabel="clientes novos"
               metricaCampo="clientes"
               mostrarPosicao
             />
@@ -89,7 +101,7 @@ const ProdutosTab = ({ userId }) => {
         )}
         {aba === 'recompra' && (
           <>
-            <SubtitleJanela texto="📅 Últimos 90 dias · top 15 refs" />
+            <SubtitleJanela texto="📅 Últimos 90 dias · top 15 refs · refs em múltiplas compras" />
             <ListaProdutos
               itens={data.recompra}
               metricaLabel="ocorrências"
@@ -162,6 +174,7 @@ const Header = ({ loja, setLoja }) => {
 const Tabs = ({ aba, setAba }) => {
   const tabs = [
     { id: 'vendidas', label: 'Top 30 vendidas' },
+    { id: 'compras', label: 'Compras' },
     { id: 'primeira', label: 'Primeira compra' },
     { id: 'recompra', label: 'Recompra' },
     { id: 'matches', label: 'Top matches' },
