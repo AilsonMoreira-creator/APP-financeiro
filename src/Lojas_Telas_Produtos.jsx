@@ -478,73 +478,111 @@ const PainelMatches = ({ data, refSel, setRefSel }) => {
     return <Vazio msg="Nenhum match encontrado (precisa de pelo menos 5 co-ocorrências)." />;
   }
 
+  const [listaAberta, setListaAberta] = useState(false);
+
   const matches = (data.matches || {})[refSel] || [];
   const refSelInfo = (data.top_vendidas || []).find(t => t.ref === refSel);
 
+  const selecionar = (ref) => {
+    setRefSel(ref);
+    setBusca('');
+    setListaAberta(false);
+  };
+
   return (
     <>
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 4, display: 'block' }}>
-          Buscar uma ref:
-        </label>
-        {/* Campo de busca com lupa (Ailson 05/05/2026) */}
-        <div style={{ position: 'relative', maxWidth: 400, marginBottom: 8 }}>
-          <span style={{
-            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
-            fontSize: 14, color: palette.inkMuted, pointerEvents: 'none',
-          }}>🔍</span>
-          <input
-            type="text"
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            placeholder="Digite ref, descrição ou categoria..."
-            style={{
-              width: '100%', padding: '8px 12px 8px 32px', borderRadius: 6,
-              border: `1px solid ${palette.beige}`,
-              fontSize: 13, fontFamily: FONT,
-              background: palette.surface, color: palette.ink,
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
-
-        {/* Lista filtrada de refs (clica pra selecionar) */}
+      {/* Linha 1: ref selecionada (tag) + botão pra trocar */}
+      {refSelInfo && !listaAberta && (
         <div style={{
-          maxHeight: 200, overflowY: 'auto',
-          border: `1px solid ${palette.beige}`, borderRadius: 6,
-          background: palette.surface, maxWidth: 400,
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+          padding: '8px 12px', background: palette.beigeSoft, borderRadius: 8,
+          flexWrap: 'wrap',
         }}>
-          {refsFiltradas.length === 0 ? (
-            <div style={{ padding: 12, fontSize: 12, color: palette.inkMuted, textAlign: 'center' }}>
-              Nenhuma ref encontrada com "{busca}"
-            </div>
-          ) : (
-            refsFiltradas.map(t => (
-              <div
-                key={t.ref}
-                onClick={() => setRefSel(t.ref)}
-                style={{
-                  padding: '8px 12px', cursor: 'pointer',
-                  borderBottom: `1px solid ${palette.beigeSoft}`,
-                  background: refSel === t.ref ? palette.accentSoft || palette.beigeSoft : 'transparent',
-                  fontSize: 12, color: palette.ink,
-                  display: 'flex', alignItems: 'center', gap: 8,
-                }}
-              >
-                <span style={{ fontWeight: 700, minWidth: 60 }}>REF {t.ref}</span>
-                {t.descricao && (
-                  <span style={{ flex: 1, color: palette.inkSoft, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t.descricao}
-                  </span>
-                )}
-                {refSel === t.ref && <span style={{ color: palette.accent, fontSize: 12 }}>✓</span>}
-              </div>
-            ))
+          <span style={{ fontSize: 12, color: palette.inkSoft }}>Ref selecionada:</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: palette.ink }}>
+            REF {refSelInfo.ref}
+          </span>
+          {refSelInfo.descricao && (
+            <span style={{ fontSize: 12, color: palette.inkSoft, flex: '1 1 100px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              — {refSelInfo.descricao}
+            </span>
           )}
+          <button
+            onClick={() => setListaAberta(true)}
+            style={{
+              background: 'transparent', border: `1px solid ${palette.beige}`,
+              borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+              fontSize: 11, color: palette.accent, fontFamily: FONT, fontWeight: 600,
+            }}
+          >🔍 Trocar ref</button>
         </div>
-      </div>
+      )}
 
-      {refSelInfo && matches.length > 0 && (
+      {/* Linha 2: busca + lista (só aparece se nada selecionado OU clicou em trocar) */}
+      {(!refSelInfo || listaAberta) && (
+        <div style={{ marginBottom: 12, position: 'relative' }}>
+          {/* Input busca */}
+          <div style={{ position: 'relative', marginBottom: 6 }}>
+            <span style={{
+              position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+              fontSize: 14, color: palette.inkMuted, pointerEvents: 'none',
+            }}>🔍</span>
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              autoFocus={listaAberta}
+              placeholder="Buscar por ref, descrição ou categoria..."
+              style={{
+                width: '100%', padding: '10px 12px 10px 32px', borderRadius: 8,
+                border: `1px solid ${palette.accent}`,
+                fontSize: 13, fontFamily: FONT,
+                background: palette.surface, color: palette.ink,
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          {/* Lista filtrada */}
+          <div style={{
+            maxHeight: 280, overflowY: 'auto',
+            border: `1px solid ${palette.beige}`, borderRadius: 8,
+            background: palette.surface,
+          }}>
+            {refsFiltradas.length === 0 ? (
+              <div style={{ padding: 14, fontSize: 12, color: palette.inkMuted, textAlign: 'center' }}>
+                Nenhuma ref encontrada com "{busca}"
+              </div>
+            ) : (
+              refsFiltradas.map(t => (
+                <div
+                  key={t.ref}
+                  onClick={() => selecionar(t.ref)}
+                  style={{
+                    padding: '10px 14px', cursor: 'pointer',
+                    borderBottom: `1px solid ${palette.beigeSoft}`,
+                    background: refSel === t.ref ? palette.beigeSoft : 'transparent',
+                    fontSize: 12, color: palette.ink,
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = palette.beigeSoft}
+                  onMouseLeave={e => e.currentTarget.style.background = refSel === t.ref ? palette.beigeSoft : 'transparent'}
+                >
+                  <span style={{ fontWeight: 700, minWidth: 70, color: palette.ink }}>REF {t.ref}</span>
+                  {t.descricao && (
+                    <span style={{ flex: 1, color: palette.inkSoft, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.descricao}
+                    </span>
+                  )}
+                  {refSel === t.ref && <span style={{ color: palette.accent, fontSize: 13 }}>✓</span>}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {refSelInfo && matches.length > 0 && !listaAberta && (
         <div style={{
           background: palette.beigeSoft, borderRadius: 8, padding: 10, marginBottom: 12,
           fontSize: 13, color: palette.inkSoft,
@@ -556,15 +594,15 @@ const PainelMatches = ({ data, refSel, setRefSel }) => {
         </div>
       )}
 
-      {refSel && matches.length === 0 ? (
+      {!listaAberta && refSel && matches.length === 0 ? (
         <Vazio msg="Sem matches pra essa ref (mín. 5 co-ocorrências)." />
-      ) : matches.length > 0 ? (
+      ) : !listaAberta && matches.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {matches.map((m, idx) => (
             <CardMatch key={m.ref_match} match={m} posicao={idx + 1} />
           ))}
         </div>
-      ) : (
+      ) : !listaAberta && (
         <div style={{
           padding: 16, textAlign: 'center', fontSize: 12,
           color: palette.inkMuted, fontStyle: 'italic',
