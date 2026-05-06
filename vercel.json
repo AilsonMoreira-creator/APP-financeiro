@@ -17,7 +17,8 @@
     },
     "api/lojas-ia-cron-diario.js": { "maxDuration": 600 },
     "api/lojas-ia-cron-semanal.js": { "maxDuration": 600 },
-    "api/lojas-produtos-raiox-refresh.js": { "maxDuration": 60 }
+    "api/lojas-produtos-raiox-refresh.js": { "maxDuration": 60 },
+    "api/lojas-receitas-cron-diario.js": { "maxDuration": 60 }
   },
   "crons": [
     {
@@ -95,6 +96,10 @@
     {
       "path": "/api/lojas-produtos-raiox-refresh",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/lojas-receitas-cron-diario",
+      "schedule": "0 7 * * *"
     }
   ]
 }
