@@ -2103,19 +2103,31 @@ async function handleMetasDashboard(req, res, _auth) {
   });
 
   // Totais por loja
+  // FIX 06/05/2026 (Ailson): somar direto da `vendas` (view) em vez de
+  // somar de respVend.filter(...). Razao: respVend so tem vendedoras
+  // fixas (is_placeholder=false). Vendas que caem em:
+  //   - placeholders Vendedora_3/Vendedora_4 (vendedoras antigas absorvidas)
+  //   - vendedora_id=NULL (caso extremo)
+  //   - vendedora teste com nome novo que cair na padrao da loja (ja entra,
+  //     mas eh redundancia ok)
+  // ficavam fora do total. Agora o total da loja eh a soma REAL daquele
+  // dia/mes, batendo com o relatorio Mire.
+  // Card de metas individual continua mostrando so as fixas.
+  const somarLoja = (nomeLoja) => (vendas || [])
+    .filter(v => v.loja === nomeLoja)
+    .reduce((s, v) => s + Number(v.valor_liquido || 0), 0);
+
   const lojaBR = {
-    total: respVend.filter(r => r.loja === 'Bom Retiro').reduce((s, r) => s + r.total, 0),
+    total: Math.round(somarLoja('Bom Retiro') * 100) / 100,
     vendedoras_ativas: respVend.filter(r => r.loja === 'Bom Retiro').length,
     meta_principal_individual: METAS_BR.meta_principal,
   };
-  lojaBR.total = Math.round(lojaBR.total * 100) / 100;
 
   const lojaST = {
-    total: respVend.filter(r => r.loja === 'Silva Teles').reduce((s, r) => s + r.total, 0),
+    total: Math.round(somarLoja('Silva Teles') * 100) / 100,
     vendedoras_ativas: respVend.filter(r => r.loja === 'Silva Teles').length,
     meta_principal_individual: METAS_ST.meta_principal,
   };
-  lojaST.total = Math.round(lojaST.total * 100) / 100;
 
   return res.json({
     periodo: `${ano}-${String(mes).padStart(2, '0')}`,
