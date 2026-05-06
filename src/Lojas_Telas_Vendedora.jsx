@@ -38,7 +38,7 @@ import {
   Archive, Bot, Plus, Store, Gift, FileText, ArrowLeftRight, Download,
   TrendingUp, TrendingDown, BarChart3, UserCog, Maximize2, Filter,
   Save, Trash2, Edit3, MapPin, Clock, CheckCircle2, AlertCircle,
-  Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown,
+  Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown, Target,
   UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send, User,
   Bell, Megaphone, BellOff, Trophy, Coins, Eye, EyeOff,
 } from 'lucide-react';
@@ -2971,12 +2971,101 @@ export const DetalheClienteScreen = ({
   );
 };
 
+// ─── ConversoesVendedora — feedback motivacional (Ailson 06/05/2026) ──────
+// Card que mostra clientes resgatados (atencao/semAtividade/inativo que
+// viraram venda em ate 15d apos receber mensagem). Quando tem >0,
+// parabeniza e detalha. Quando 0, encoraja sem desmotivar.
+const ConversoesVendedora = ({ conversoes, fz, sz }) => {
+  const total = conversoes?.total || 0;
+  const valor = conversoes?.valor_total || 0;
+  const porStatus = conversoes?.por_status || { atencao: 0, semAtividade: 0, inativo: 0 };
+
+  // Sem conversões ainda — encorajamento
+  if (total === 0) {
+    return (
+      <div style={{
+        background: palette.beigeSoft, border: `1px solid ${palette.beige}`,
+        borderRadius: 14, padding: 16, marginBottom: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <Target size={sz(20)} color={palette.inkSoft} />
+          <span style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink }}>
+            Nenhuma conversão ainda este mês
+          </span>
+        </div>
+        <div style={{ fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5 }}>
+          Toda venda de cliente em atenção, sem atividade ou inativo após enviar mensagem
+          conta como conversão. Continue mandando! Cada mensagem aumenta sua chance. 💪
+        </div>
+      </div>
+    );
+  }
+
+  const fmtR = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  // Frase motivacional baseada no volume
+  let parabens = '👏 Mandou bem!';
+  if (total >= 10) parabens = '🔥 Você está em chamas!';
+  else if (total >= 5) parabens = '🌟 Excelente trabalho!';
+  else if (total >= 3) parabens = '💪 Continua assim!';
+
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${palette.purpleSoft} 0%, ${palette.bg} 100%)`,
+      border: `1px solid ${palette.purple}40`,
+      borderRadius: 14, padding: 16, marginBottom: 14,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: '50%', background: palette.surface,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: `2px solid ${palette.purple}`,
+        }}>
+          <Award size={sz(24)} color={palette.purple} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: fz(20), fontWeight: 700, color: palette.ink }}>
+            {total} {total === 1 ? 'cliente resgatada' : 'clientes resgatadas'}
+          </div>
+          <div style={{ fontSize: fz(12), color: palette.inkMuted }}>
+            {fmtR(valor)} em vendas · {parabens}
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        background: palette.surface, borderRadius: 8, padding: 10,
+        fontSize: fz(13), color: palette.inkSoft,
+      }}>
+        Resgatadas por status crítico:
+        <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap', fontFamily: FONT }}>
+          {porStatus.atencao > 0 && (
+            <span><strong style={{ color: palette.warn, fontSize: fz(15) }}>{porStatus.atencao}</strong>
+              <span style={{ fontSize: fz(11), marginLeft: 4, color: palette.inkMuted }}>em atenção</span></span>
+          )}
+          {porStatus.semAtividade > 0 && (
+            <span><strong style={{ color: '#e67e22', fontSize: fz(15) }}>{porStatus.semAtividade}</strong>
+              <span style={{ fontSize: fz(11), marginLeft: 4, color: palette.inkMuted }}>sem atividade</span></span>
+          )}
+          {porStatus.inativo > 0 && (
+            <span><strong style={{ color: palette.alert, fontSize: fz(15) }}>{porStatus.inativo}</strong>
+              <span style={{ fontSize: fz(11), marginLeft: 4, color: palette.inkMuted }}>inativas</span></span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 6. DestaquesScreen — KPIs da semana da vendedora
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
   const { state, clientesEnriquecidos } = lojas;
+  const [composicaoExpandida, setComposicaoExpandida] = useState(false);
+  const [conversoes, setConversoes] = useState(null);
+  const [carregandoConv, setCarregandoConv] = useState(true);
 
   // KPIs da semana
   const stats = useMemo(() => {
@@ -2996,6 +3085,28 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
 
     return { ativos, atencao, semAt, inativo, sacola, enviadas, totalSugestoes, dispensadas, taxaExecucao, carteiraTotal: carteira.length };
   }, [clientesEnriquecidos, vendedora, state.sugestoesHoje]);
+
+  // Conversões da vendedora (mês atual) — Ailson 06/05/2026
+  // Mostra clientes em status critico (atencao/semAtividade/inativo) que
+  // viraram venda apos receber mensagem da vendedora. Janela 15d apos envio.
+  useEffect(() => {
+    if (!vendedora?.id) return;
+    let cancelado = false;
+    setCarregandoConv(true);
+    fetch('/api/lojas-ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-User': state.userId || 'ailson' },
+      body: JSON.stringify({
+        action: 'conversoes_dashboard',
+        periodo: 'mes_atual',
+        vendedora_id: vendedora.id,
+      }),
+    })
+      .then(r => r.json())
+      .then(d => { if (!cancelado) { setConversoes(d); setCarregandoConv(false); } })
+      .catch(() => { if (!cancelado) setCarregandoConv(false); });
+    return () => { cancelado = true; };
+  }, [vendedora?.id, state.userId]);
 
   // Hoje
   const hoje = new Date();
@@ -3047,34 +3158,71 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
           </div>
         )}
 
-        {/* Composição da carteira */}
+        {/* CONVERSÕES — clientes resgatados (Ailson 06/05/2026) */}
+        {/* Mostra primeiro porque eh o feedback motivacional principal pra
+            vendedora ver que o trabalho de reativacao deu resultado. */}
+        <SectionTitle icon={Award}>Suas conversões do mês</SectionTitle>
+        {carregandoConv ? (
+          <div style={{
+            background: palette.surface, border: `1px solid ${palette.beige}`,
+            borderRadius: 12, padding: 14, marginBottom: 14,
+            fontSize: fz(13), color: palette.inkMuted, textAlign: 'center',
+          }}>Carregando…</div>
+        ) : (
+          <ConversoesVendedora conversoes={conversoes} fz={fz} sz={sz} />
+        )}
+
+        {/* Composição da carteira — RETRAIDA (Ailson 06/05/2026) */}
+        {/* Vendedora ja sabe carteira dela, prioridade eh ver conversao.
+            Mantemos so a primeira linha (Ativos) visivel + botao expandir. */}
         <SectionTitle icon={TrendingUp}>Composição da carteira</SectionTitle>
         <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 14, marginBottom: 14 }}>
-          {[
-            { status: 'ativo', label: 'Ativos', count: stats.ativos },
-            { status: 'separandoSacola', label: 'Sacola em espera', count: stats.sacola },
-            { status: 'atencao', label: 'Em atenção', count: stats.atencao },
-            { status: 'semAtividade', label: 'Sem atividade', count: stats.semAt },
-            { status: 'inativo', label: 'Inativos', count: stats.inativo },
-          ].map((e, i) => {
-            const meta = statusMap[e.status];
+          {(() => {
+            const linhas = [
+              { status: 'ativo', label: 'Ativos', count: stats.ativos },
+              { status: 'separandoSacola', label: 'Sacola em espera', count: stats.sacola },
+              { status: 'atencao', label: 'Em atenção', count: stats.atencao },
+              { status: 'semAtividade', label: 'Sem atividade', count: stats.semAt },
+              { status: 'inativo', label: 'Inativos', count: stats.inativo },
+            ];
+            // Quando retraido, mostra so a primeira linha (Ativos)
+            const visiveis = composicaoExpandida ? linhas : linhas.slice(0, 1);
             return (
-              <div key={e.status} style={{
-                display: 'flex', alignItems: 'center', padding: '10px 0',
-                borderTop: i > 0 ? `1px solid ${palette.beigeSoft}` : 'none',
-              }}>
-                <span style={{ marginRight: 10 }}>{meta.emoji}</span>
-                <span style={{ flex: 1, fontSize: fz(15), color: palette.ink }}>{e.label}</span>
-                <span style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>{e.count}</span>
-              </div>
+              <>
+                {visiveis.map((e, i) => {
+                  const meta = statusMap[e.status];
+                  return (
+                    <div key={e.status} style={{
+                      display: 'flex', alignItems: 'center', padding: '10px 0',
+                      borderTop: i > 0 ? `1px solid ${palette.beigeSoft}` : 'none',
+                    }}>
+                      <span style={{ marginRight: 10 }}>{meta.emoji}</span>
+                      <span style={{ flex: 1, fontSize: fz(15), color: palette.ink }}>{e.label}</span>
+                      <span style={{ fontSize: fz(16), fontWeight: 600, color: palette.ink }}>{e.count}</span>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={() => setComposicaoExpandida(v => !v)}
+                  style={{
+                    width: '100%', marginTop: 8, padding: '8px 0',
+                    background: 'transparent', border: 'none',
+                    fontSize: fz(12), color: palette.accent, fontFamily: FONT,
+                    fontWeight: 600, cursor: 'pointer',
+                    borderTop: `1px solid ${palette.beigeSoft}`,
+                  }}
+                >
+                  {composicaoExpandida ? '▲ Ver menos' : '▼ Ver detalhes da carteira'}
+                </button>
+                <div style={{
+                  marginTop: 4, paddingTop: 6, borderTop: `1px solid ${palette.beige}`,
+                  fontSize: fz(13), fontWeight: 600, color: palette.accent, textAlign: 'right',
+                }}>
+                  Total: {stats.carteiraTotal} clientes
+                </div>
+              </>
             );
-          })}
-          <div style={{
-            marginTop: 8, paddingTop: 10, borderTop: `2px solid ${palette.beige}`,
-            fontSize: fz(14), fontWeight: 600, color: palette.accent, textAlign: 'right',
-          }}>
-            Total: {stats.carteiraTotal} clientes
-          </div>
+          })()}
         </div>
 
         {/* Engajamento com IA */}
