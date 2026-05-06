@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     // junto com os outros campos.
     const { data: kpisVesti, error: errK } = await supabase
       .from('lojas_clientes_kpis')
-      .select('cliente_id, lifetime_total, ultima_compra_data, dias_sem_comprar')
+      .select('cliente_id, lifetime_total, ultima_compra, dias_sem_comprar')
       .eq('canal_dominante', 'vesti_dominante');
     if (errK) return res.status(500).json({ error: errK.message });
 
@@ -87,7 +87,7 @@ export default async function handler(req, res) {
         vendedora_nome: vd?.nome || '(sem vendedora)',
         vendedora_tem_link: !!vd?.link_ativo_url,
         lifetime_total: k.lifetime_total,
-        ultima_compra: k.ultima_compra_data,
+        ultima_compra: k.ultima_compra,
         dias_sem_comprar: k.dias_sem_comprar,
       };
     });
