@@ -64,9 +64,15 @@ export default async function handler(req, res) {
     const dataFimISO = hoje.toISOString().slice(0, 10);
 
     // 2. Busca vendas agregadas por (loja, data_venda)
-    // SELECT loja, data_venda, SUM(valor_liquido) FROM lojas_vendas WHERE ...
+    // FIX 06/05/2026: usar vw_lojas_vendas_completo em vez de lojas_vendas.
+    // Razao: lojas_vendas tem so atacado (clientes com CNPJ valido). Vendas
+    // balcao 'CONSUMIDOR' sem CPF vao pra lojas_vendas_varejo. A view une
+    // os 2 pra dar o total real do dia (que bate com o relatorio Mire).
+    // Soma 'fisico' + 'vesti' (atacado) + tudo de lojas_vendas_varejo.
+    // Vendedora teste/nova: entra normalmente porque a view nao filtra
+    // por vendedora, so por loja+data.
     const { data: vendas, error: errV } = await supabase
-      .from('lojas_vendas')
+      .from('vw_lojas_vendas_completo')
       .select('loja, data_venda, valor_liquido')
       .gte('data_venda', dataInicioISO)
       .lte('data_venda', dataFimISO);
