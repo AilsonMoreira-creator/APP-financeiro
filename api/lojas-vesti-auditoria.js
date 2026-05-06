@@ -27,33 +27,61 @@ export default async function handler(req, res) {
   try {
     const dataLimite = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
-    // 1. Clientes Vesti — KPI canal_dominante='vesti_dominante'
-    // BUG FIX 06/05/2026: vendedora_id vive em lojas_clientes, NAO em
-    // lojas_clientes_kpis. Erro: 'column lojas_clientes_kpis.vendedora_id
-    // does not exist'. Corrigido buscando vendedora_id em lojas_clientes
-    // junto com os outros campos.
-    const { data: kpisVesti, error: errK } = await supabase
+    // 1. Clientes Vesti — fonte primaria eh lojas_clientes.canal_cadastro
+    // FIX 06/05/2026: antes buscava so via lojas_clientes_kpis.canal_dominante,
+    // mas KPIs nao recalcula automaticamente quando canal_cadastro eh
+    // atualizado em massa (ex: planilha de 56 clientes Vesti).
+    // Resultado: planilha tem 56 clientes Vesti mas card mostrava 15.
+    //
+    // SOLUCAO: comecar de lojas_clientes (fonte de verdade do cadastro) e
+    // enriquecer com KPI opcional. Captura ambos:
+    //   - canal_cadastro='vesti' (fonte: importer/planilha)
+    //   - canal_dominante='vesti_dominante' em KPI (fonte: vendas mire)
+    const { data: clientesVesti, error: errC } = await supabase
+      .from('lojas_clientes')
+      .select('id, razao_social, fantasia, status_atual, canal_cadastro, loja_origem, vendedora_id')
+      .eq('canal_cadastro', 'vesti')
+      .is('arquivado_em', null);
+    if (errC) return res.status(500).json({ error: errC.message });
+
+    // Tambem busca os que estao em vesti_dominante via KPI mas talvez nao
+    // tenham canal_cadastro='vesti' (UNIAO)
+    const { data: kpisVestiDominante } = await supabase
       .from('lojas_clientes_kpis')
-      .select('cliente_id, lifetime_total, ultima_compra, dias_sem_comprar')
+      .select('cliente_id')
       .eq('canal_dominante', 'vesti_dominante');
-    if (errK) return res.status(500).json({ error: errK.message });
 
-    const refsClientes = (kpisVesti || []).map(k => k.cliente_id);
+    const idsViaKpi = new Set((kpisVestiDominante || []).map(k => k.cliente_id));
+    const idsViaCadastro = new Set((clientesVesti || []).map(c => c.id));
+    const refsClientes = [...new Set([...idsViaCadastro, ...idsViaKpi])];
 
-    // Hidrata cliente — TRAZ vendedora_id daqui
-    let mapCliente = new Map();
-    if (refsClientes.length > 0) {
-      const { data: clientes } = await supabase
+    // Garante que tem todos os clientes (mesmo os que so vieram via KPI)
+    let mapCliente = new Map((clientesVesti || []).map(c => [c.id, c]));
+    const idsExtras = refsClientes.filter(id => !mapCliente.has(id));
+    if (idsExtras.length > 0) {
+      const { data: extras } = await supabase
         .from('lojas_clientes')
         .select('id, razao_social, fantasia, status_atual, canal_cadastro, loja_origem, vendedora_id')
-        .in('id', refsClientes);
-      mapCliente = new Map((clientes || []).map(c => [c.id, c]));
+        .in('id', idsExtras)
+        .is('arquivado_em', null);
+      for (const c of (extras || [])) mapCliente.set(c.id, c);
+    }
+
+    // Carrega KPIs (opcional — alguns clientes Vesti recem-importados podem
+    // nao ter KPI ainda)
+    let mapKpi = new Map();
+    if (refsClientes.length > 0) {
+      const { data: kpis } = await supabase
+        .from('lojas_clientes_kpis')
+        .select('cliente_id, lifetime_total, ultima_compra, dias_sem_comprar')
+        .in('cliente_id', refsClientes);
+      mapKpi = new Map((kpis || []).map(k => [k.cliente_id, k]));
     }
 
     // Agora deriva vendedora_id de cada cliente (via mapCliente)
     const refsVendedoras = [...new Set(
-      (kpisVesti || [])
-        .map(k => mapCliente.get(k.cliente_id)?.vendedora_id)
+      refsClientes
+        .map(id => mapCliente.get(id)?.vendedora_id)
         .filter(Boolean)
     )];
 
@@ -73,12 +101,13 @@ export default async function handler(req, res) {
     }
 
     // Lista enriquecida de clientes
-    const clientesEnriquecidos = (kpisVesti || []).map(k => {
-      const cli = mapCliente.get(k.cliente_id) || {};
+    const clientesEnriquecidos = refsClientes.map(id => {
+      const cli = mapCliente.get(id) || {};
+      const k = mapKpi.get(id) || {};
       const vendedoraId = cli.vendedora_id || null;
       const vd = mapVendedora.get(vendedoraId);
       return {
-        cliente_id: k.cliente_id,
+        cliente_id: id,
         nome: cli.fantasia || cli.razao_social || '(sem nome)',
         status_atual: cli.status_atual,
         canal_cadastro: cli.canal_cadastro,
@@ -86,9 +115,9 @@ export default async function handler(req, res) {
         vendedora_id: vendedoraId,
         vendedora_nome: vd?.nome || '(sem vendedora)',
         vendedora_tem_link: !!vd?.link_ativo_url,
-        lifetime_total: k.lifetime_total,
-        ultima_compra: k.ultima_compra,
-        dias_sem_comprar: k.dias_sem_comprar,
+        lifetime_total: k.lifetime_total || 0,
+        ultima_compra: k.ultima_compra || null,
+        dias_sem_comprar: k.dias_sem_comprar ?? null,
       };
     });
 
