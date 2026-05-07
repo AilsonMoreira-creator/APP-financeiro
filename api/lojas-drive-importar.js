@@ -910,6 +910,41 @@ async function aplicarUpsert(tipo, registros, importacaoId, extras = {}) {
     // Pra cada cliente sem vendedora, usa a vendedora dominante do histórico.
     await backfillVendedoraClientes(filtrados);
 
+    // ─── RECALCULA KPIs dos clientes afetados (Ailson 07/05/2026) ───────
+    // BUG REAL: Mari Sheila comprou 28/04 mas IA mostrava "93 dias sem pedido".
+    // Causa: KPI nunca era recalculado depois de venda nova entrar.
+    // ultima_compra ficava preso na compra anterior (28/01). IA usava
+    // status_atual='semAtividade' errado e mandava mensagens em momento ruim.
+    //
+    // Fix: depois de upsert em lojas_vendas, chama lojas_recalcular_kpis_cliente
+    // pra cada cliente afetado. Set dedupa pra evitar recalc multiplo (ex: 100
+    // vendas de 80 clientes = 80 RPCs, nao 100).
+    const clientesAfetados = [...new Set(
+      filtrados.map(r => r.cliente_id).filter(Boolean)
+    )];
+    let recalcOk = 0;
+    let recalcErro = 0;
+    for (const cid of clientesAfetados) {
+      try {
+        const { error } = await supabase.rpc('lojas_recalcular_kpis_cliente', { p_cliente_id: cid });
+        if (error) {
+          recalcErro++;
+          if (recalcErro <= 3) console.warn(`[recalc-kpi] erro cliente ${cid}:`, error.message);
+        } else {
+          recalcOk++;
+        }
+      } catch (e) {
+        recalcErro++;
+        if (recalcErro <= 3) console.warn(`[recalc-kpi] excecao cliente ${cid}:`, e?.message);
+      }
+    }
+    if (clientesAfetados.length) {
+      console.log(`[recalc-kpi] ${recalcOk} clientes recalculados, ${recalcErro} erros (de ${clientesAfetados.length} afetados)`);
+    }
+    stats.recalc_kpi_ok = recalcOk;
+    stats.recalc_kpi_erro = recalcErro;
+    stats.recalc_kpi_total = clientesAfetados.length;
+
     return stats;
   }
 
