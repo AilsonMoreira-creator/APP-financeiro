@@ -457,7 +457,6 @@ async function montarContextoSugestoes(vendedoraId) {
       .eq('vendedora_id', vendedoraId)
       .gte('data_venda', dataLimite);
 
-    const hoje = new Date().toISOString().slice(0, 10);
     const data30d = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
     (convData || []).forEach(c => {
@@ -485,6 +484,42 @@ async function montarContextoSugestoes(vendedoraId) {
     conversoesGeral.valor_60d = Math.round(conversoesGeral.valor_60d * 100) / 100;
   } catch (e) {
     console.error('[lojas-ia] erro carregar conversoes:', e.message);
+  }
+
+  // HISTORICO DE SUGESTOES EXECUTADAS — Ailson 07/05/2026 (auditoria GAP 4)
+  // Ultimas 28 dias por cliente — IA usa pra NAO REPETIR conteudo:
+  //   - mesma REF que ja foi oferecida ha 5 dias
+  //   - mesmo tipo (followup, novidade) repetido em sequencia
+  //   - mesmo titulo/tema
+  // Cooldown geral (7-10d) ja existia mas era binario (pulava cliente).
+  // Agora a IA pode SUGERIR a cliente de novo MAS com conteudo DIFERENTE.
+  const historicoSugestoes = {};
+  try {
+    const dataLimiteHist = new Date(Date.now() - 28 * 86400000).toISOString().slice(0, 10);
+    const { data: histData } = await supabase
+      .from('lojas_sugestoes_diarias')
+      .select('cliente_id, grupo_id, data_geracao, tipo, titulo, produto_ref, status')
+      .eq('vendedora_id', vendedoraId)
+      .gte('data_geracao', dataLimiteHist)
+      .in('status', ['executada', 'pendente']) // ignora dispensadas/expiradas
+      .order('data_geracao', { ascending: false });
+
+    (histData || []).forEach(h => {
+      const key = h.cliente_id || h.grupo_id;
+      if (!key) return;
+      if (!historicoSugestoes[key]) historicoSugestoes[key] = [];
+      // Limita a 5 mais recentes por cliente — suficiente pra IA evitar repetir
+      if (historicoSugestoes[key].length < 5) {
+        historicoSugestoes[key].push({
+          data: h.data_geracao,
+          tipo: h.tipo,
+          ref: h.produto_ref || null,
+          titulo: h.titulo,
+        });
+      }
+    });
+  } catch (e) {
+    console.error('[lojas-ia] erro carregar historico sugestoes:', e.message);
   }
 
   // Sacolas ativas dessa vendedora
@@ -1064,6 +1099,7 @@ async function montarContextoSugestoes(vendedoraId) {
     janela,                  // { cliente_id: {dias_ate_janela_atencao, dentro_janela_compra, media_confiavel} } — Ailson 07/05/2026 (auditoria GAP 1)
     conversoesPorCliente,    // { cliente_id: {total, ultima_data_venda, ultimo_dias_ate_compra, ultimo_valor} } — Ailson 07/05/2026 (auditoria GAP 2)
     conversoesGeral,         // { qtd_60d, valor_60d, qtd_30d } — agregado da vendedora
+    historicoSugestoes,      // { cliente_id|grupo_id: [{data, tipo, ref, titulo}, ...max 5] } — Ailson 07/05/2026 GAP 4
     sacolas: sacolas || [],
     sacolasDescartadas,
     grupos: grupos || [],
@@ -1442,6 +1478,12 @@ function montarMessagesSugestoes(ctx) {
           ultimo_dias_ate_compra: ctx.conversoesPorCliente[c.id].ultimo_dias_ate_compra,
           ultimo_valor: ctx.conversoesPorCliente[c.id].ultimo_valor,
         } : null,
+        // HISTORICO recente de sugestoes (28 dias) — Ailson 07/05/2026 GAP 4.
+        // IA usa pra evitar repetir conteudo: mesma REF, mesmo tipo, mesmo
+        // tema. Lista vem ordenada (mais recente primeiro). Maximo 5 itens.
+        // Vazio = cliente novo no fluxo IA OU nao foi sugerido nos ultimos
+        // 28 dias.
+        historico_sugestoes: ctx.historicoSugestoes?.[c.id] || [],
         // Cliente Vesti? Combina vendas físicas (KPIs) + cadastro Vesti
         // (canal_cadastro). True = priorizar sugerir link/video do app.
         usa_vesti: usaVestiCli,
