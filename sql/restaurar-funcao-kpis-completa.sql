@@ -23,7 +23,8 @@
 -- ✅ Camada 4: regra 70% normal
 -- ✅ media_dias_compras: media ponderada das ultimas 10 datas distintas
 --    (filtro gap >=3d pra ignorar parcelados)
--- ✅ media_dias_confiavel: TRUE quando >=8 datas distintas
+-- ✅ media_dias_confiavel: TRUE quando >=5 datas distintas (Ailson 06/05/2026:
+--    relaxado de 8 pra 5 — com 8 so 1.3% dos clientes (84/6231) eram cobertos.
 -- ✅ Status custom quando confiavel: limite_atencao = GREATEST(30, LEAST(90,
 --    media * 0.8)) e demais limites proporcionais (1.2x sem ativ, 2x inativo,
 --    4x arquivo). Fallback 45/90/180/365 quando nao confiavel.
@@ -141,7 +142,7 @@ BEGIN
   --     que viraram registros separados.
   -- (3) Usa ultimas 10 datas distintas pra capturar tendencia atual mas
   --     evitar comportamento muito antigo.
-  -- Confiavel quando >=8 datas distintas.
+  -- Confiavel quando >=5 datas distintas (Ailson 06/05/2026: relaxado de 8 pra 5).
   WITH datas_unicas AS (
     SELECT DISTINCT data_venda
     FROM lojas_vendas
@@ -172,7 +173,7 @@ BEGIN
   FROM lojas_vendas
   WHERE cliente_id = p_cliente_id;
 
-  v_media_confiavel := (v_qtd_datas_unicas >= 8 AND v_media_dias IS NOT NULL);
+  v_media_confiavel := (v_qtd_datas_unicas >= 5 AND v_media_dias IS NOT NULL);
 
   -- ─── STATUS COM FORMULA CUSTOM (quando media confiavel) ───────────────
   IF v_tem_sacola THEN
