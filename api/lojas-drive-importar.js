@@ -148,10 +148,41 @@ export default async function handler(req, res) {
       );
     }
 
+    // ─── DEDUPE PDFs DE SACOLA por loja (Ailson 07/05/2026) ────────────────
+    // BUG REAL: Vanessa marcou cliente como pago, mas no dia seguinte sacola
+    // voltou ativa. Causa: tinha 2 PDFs de sacola da mesma loja no Drive
+    // (versao antiga + nova). Importer processava OS DOIS em ordem aleatoria.
+    // Resultado: ultimo processado vence — se o antigo viesse depois,
+    // ressuscitava sacolas ja pagas.
+    // Fix: pra cada loja+tipo (sacola_atacado_BR, sacola_varejo_BR, etc),
+    // mantem APENAS o PDF com modifiedTime mais recente. Outros sao ignorados.
+    let pdfsDescartados = 0;
+    if (acao === 'sync_semanal' || acao === 'sync_arquivo' || acao === undefined) {
+      const sacolasPorChave = new Map(); // 'sacola_atacado|Bom Retiro' -> arquivo mais recente
+      const naoPdfs = [];
+      for (const arq of arquivosParaProcessar) {
+        const t = detectarTipoArquivo(arq.name, arq.parentName);
+        if (!t || !t.tipo.startsWith('sacola')) {
+          naoPdfs.push(arq);
+          continue;
+        }
+        const chave = `${t.tipo}|${t.loja || ''}`;
+        const atual = sacolasPorChave.get(chave);
+        if (!atual || (arq.modifiedTime > atual.modifiedTime)) {
+          if (atual) pdfsDescartados++;
+          sacolasPorChave.set(chave, arq);
+        } else {
+          pdfsDescartados++;
+        }
+      }
+      arquivosParaProcessar = [...naoPdfs, ...sacolasPorChave.values()];
+    }
+
     // Processa cada arquivo em sequência
     const resultado = {
       acao,
       total_arquivos: arquivosParaProcessar.length,
+      pdfs_sacola_descartados: pdfsDescartados, // PDFs antigos ignorados — Ailson 07/05/2026
       processados: 0,
       sucessos: 0,
       erros: 0,
