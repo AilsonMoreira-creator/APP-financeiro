@@ -5463,6 +5463,19 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
   const [qtdRolos,setQtdRolos]=useState("");
   const [saveMsg,setSaveMsg]=useState("");
   const [scSync,setScSync]=useState(null); // null | 'saving' | 'saved' | 'error'
+
+  // FIX 06/05/2026: Reflete status REAL de save no feedback visual.
+  // Antes mostrava "✓ Corte registrado" assim que clicava (so estado local),
+  // sem confirmacao do servidor. Pedro perdeu 2 cortes em 06/05/2026 — o
+  // usuario via "salvo" mas o save tinha falhado/sobrescrito silenciosamente.
+  // Agora: usuario ve "⏳ Salvando" enquanto o auto-save de 2s nao terminou,
+  // e so vira "✓ Corte salvo" quando o servidor confirma.
+  useEffect(()=>{
+    if(saveMsg.startsWith("⏳")){
+      if(scSync==='saved'){setSaveMsg("✓ Corte salvo");setTimeout(()=>setSaveMsg(""),2500);}
+      else if(scSync==='error'){setSaveMsg("✗ Erro ao salvar — tente de novo");setTimeout(()=>setSaveMsg(""),5000);}
+    }
+  },[scSync,saveMsg]);
   const [editandoPecas,setEditandoPecas]=useState(null);
   const [pecasInput,setPecasInput]=useState("");
   const [abaAnalise,setAbaAnalise]=useState("ranking");
@@ -5772,10 +5785,19 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
 
   const salvarCorte=()=>{
     if(!salaSelected||(!prodFound&&!refBusca.trim())||!qtdRolos){setSaveMsg("⚠ Preencha todos os campos");setTimeout(()=>setSaveMsg(""),2000);return;}
-    const novo={id:Date.now(),data:new Date().toISOString().slice(0,10),sala:salaSelected,ref:prodFound?prodFound.ref:refBusca.trim(),descricao:prodFound?prodFound.descricao:"",marca:prodFound?prodFound.marca:"",qtdRolos:Number(qtdRolos),qtdPecas:null,rendimento:null,status:"pendente",alerta:false,visto:true};
-    setCortesSala(prev=>[novo,...prev]);
+    // FIX 06/05/2026 (Ailson): adicionado _mod pra blindar contra race no
+    // merge. Sem _mod, qualquer remoto antigo vencia o local recem-criado.
+    // Bug reportado: 2 cortes do Pedro sumiram em 06/05/2026.
+    const novo={id:Date.now(),data:new Date().toISOString().slice(0,10),sala:salaSelected,ref:prodFound?prodFound.ref:refBusca.trim(),descricao:prodFound?prodFound.descricao:"",marca:prodFound?prodFound.marca:"",qtdRolos:Number(qtdRolos),qtdPecas:null,rendimento:null,status:"pendente",alerta:false,visto:true,_mod:Date.now()};
+    const novoArray=[novo,...cortesSala];
+    setCortesSala(novoArray);
+    // FIX 06/05/2026: atualiza ultimoEstadoRef SINCRONAMENTE pra que pagehide
+    // flush (se usuario fechar em <2s) tenha o estado novo. Antes, ref so
+    // atualizava no proximo tick do useEffect — race condition.
+    ultimoEstadoRef.current={cortesSala:novoArray,salas,logSC};
+    lastUserEditTsSC.current=Date.now();
     setSalaSelected("");setRefBusca("");setProdFound(null);setQtdRolos("");
-    setSaveMsg("✓ Corte registrado!");setTimeout(()=>setSaveMsg(""),2500);
+    setSaveMsg("⏳ Salvando...");
     addLog("criar",`REF ${novo.ref} · ${salaSelected} · ${qtdRolos}r`);
   };
 
@@ -5786,14 +5808,19 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     const rend=Math.round((pecas/corte.qtdRolos)*100)/100;
     const ref=mediaRef[corte.ref];
     const temAlerta=ref&&ref.media>0&&rend<ref.media*0.95;
-    setCortesSala(prev=>prev.map(c=>c.id===editandoPecas?{...c,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:temAlerta,visto:!temAlerta}:c));
+    // FIX 06/05/2026: _mod garante que esse update vence remotos antigos
+    const novoArray=cortesSala.map(c=>c.id===editandoPecas?{...c,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:temAlerta,visto:!temAlerta,_mod:Date.now()}:c);
+    setCortesSala(novoArray);
+    ultimoEstadoRef.current={cortesSala:novoArray,salas,logSC};
+    lastUserEditTsSC.current=Date.now();
+    setSaveMsg("⏳ Salvando...");
     addLog("fechar",`REF ${corte.ref} · ${corte.sala} · ${corte.qtdRolos}r → ${pecas}pç (${rend} pç/r)`);
     setEditandoPecas(null);setPecasInput("");
     // Auto-fecha ordem vinculada (se houver)
     fecharOrdemSeVinculada(corte);
   };
 
-  const marcarVisto=(id)=>{setCortesSala(prev=>prev.map(c=>c.id===id?{...c,visto:true}:c));addLog("visto",`Alerta corte ${id}`);};
+  const marcarVisto=(id)=>{setCortesSala(prev=>prev.map(c=>c.id===id?{...c,visto:true,_mod:Date.now()}:c));addLog("visto",`Alerta corte ${id}`);};
 
   const addHistorico=()=>{
     if(!prodCardRef||!histForm.sala||!histForm.qtdRolos||!histForm.qtdPecas)return;
@@ -5801,8 +5828,12 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
     const rend=Math.round((pecas/rolos)*100)/100;
     const prod=buscarProd(prodCardRef);
     const dataCorte=histForm.data||new Date().toISOString().slice(0,10);
-    const novo={id:Date.now(),data:dataCorte,sala:histForm.sala,ref:prodCardRef,descricao:prod?.descricao||"",marca:prod?.marca||"",qtdRolos:rolos,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:false,visto:true};
-    setCortesSala(prev=>[novo,...prev]);
+    // FIX 06/05/2026: _mod garante que vence remotos antigos no merge
+    const novo={id:Date.now(),data:dataCorte,sala:histForm.sala,ref:prodCardRef,descricao:prod?.descricao||"",marca:prod?.marca||"",qtdRolos:rolos,qtdPecas:pecas,rendimento:rend,status:"concluido",alerta:false,visto:true,_mod:Date.now()};
+    const novoArray=[novo,...cortesSala];
+    setCortesSala(novoArray);
+    ultimoEstadoRef.current={cortesSala:novoArray,salas,logSC};
+    lastUserEditTsSC.current=Date.now();
     addLog("manual",`REF ${prodCardRef} · ${histForm.sala} · ${rolos}r → ${pecas}pç`);
     setHistForm({sala:"",qtdRolos:"",qtdPecas:"",data:""});setAddHist(false);
   };
@@ -5873,7 +5904,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
               </div>
             </div>
           </div>
-          {saveMsg&&<div style={{textAlign:"center",padding:"8px",fontSize:14,color:saveMsg.startsWith("⚠")?"#c0392b":"#27ae60",fontWeight:600}}>{saveMsg}</div>}
+          {saveMsg&&<div style={{textAlign:"center",padding:"8px",fontSize:14,color:saveMsg.startsWith("⚠")||saveMsg.startsWith("✗")?"#c0392b":saveMsg.startsWith("⏳")?"#e67e22":"#27ae60",fontWeight:600}}>{saveMsg}</div>}
           <button onClick={salvarCorte} style={{width:"100%",padding:mobile?"18px":"16px",borderRadius:12,border:"none",fontSize:mobile?18:16,fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif",background:(salaSelected&&(prodFound||refBusca.trim())&&qtdRolos)?"#4a7fa5":"#c8d8e4",color:"#fff",marginBottom:20}}>✓ Registrar Corte</button>
 
           {/* Alerta tecido parado */}
