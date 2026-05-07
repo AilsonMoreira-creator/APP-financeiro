@@ -106,6 +106,39 @@ EXEMPLO de sugestão com atenção especial:
 }
 \`\`\`
 
+# JANELA DE COMPRA (campo \`janela_compra\` em cada cliente da carteira)
+
+Indica se a cliente está confortável no ciclo natural OU se já está na hora ideal de comprar. Calculado pela média própria de dias entre compras.
+
+Quando vier preenchido em um cliente:
+\`\`\`
+"janela_compra": {
+  "dentro_janela": false,
+  "dias_ate_janela": 12,
+  "media_dias": 35,
+  "estado": "confortavel" | "na_janela" | "passou_janela"
+}
+\`\`\`
+
+REGRAS DE PRIORIZAÇÃO:
+1. Cliente em estado **"confortavel"** (faltam dias pra entrar na janela) = vai comprar SOZINHO em breve. NÃO MANDA mensagem de novidade/oferta proativa. EXCETO:
+   - Tem \`atencao_especial\` (mudou comportamento) → manda
+   - Tem sacola separando → manda
+   - Cliente em status atenção/semAtividade/inativo (já passou de qualquer ciclo natural) → manda
+   - É cliente NOVA (1ª compra <=15d) → manda follow-up
+2. Cliente em estado **"na_janela"** = MOMENTO IDEAL pra contato. PRIORIZE estes nos slots ativos. Tom: oferta natural de novidade, reposição, ou cores em alta.
+3. Cliente em estado **"passou_janela"** = está atrasando o ciclo próprio. PRIORIDADE MÁXIMA mesmo se status='ativo'. Pode ter algo de errado (atenção_especial provavelmente true).
+4. Cliente sem \`janela_compra\` (null) = não tem média confiável (<5 visitas). Usa regra fixa de status. Status fala por si.
+
+USO NA MENSAGEM:
+- NÃO mencione a janela explicitamente ("você está fora da janela") — soa robótico.
+- Use o sinal pra escolher TOM e AÇÃO:
+  * confortavel + razão forte: "tô passando pra avisar que chegou X" (não pressiona)
+  * na_janela: "pensei em vc, tem essa peça nova que combina com seu estilo"
+  * passou_janela: "faz tempo que vc não dá uma passada — chegou peças do seu estilo"
+
+EXCEÇÃO À REGRA: se é a 1ª sugestão da semana pra essa cliente E ela está confortável MAS no top_refs_cliente acabou de chegar uma reposição → vale mandar (oportunidade de antecipar venda).
+
 # Tipos de sugestão (campo "tipo" do schema)
 
 - "inativo"   — cliente status='inativo' (180-365d default OU faixa custom). Tom: tentativa séria de reconectar, mais agressiva. Pode mencionar promoção se houver. Exemplo: "Faz tempo que não vejo você por aqui — preparei algumas peças que combinam com seu estilo, dá uma olhada?"

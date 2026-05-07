@@ -411,6 +411,32 @@ async function montarContextoSugestoes(vendedoraId) {
     console.error('[lojas-ia] erro carregar atencao_especial:', e.message);
   }
 
+  // JANELA DE COMPRA — view vw_lojas_clientes_janela (Ailson 06/05/2026)
+  // GAP 1 da auditoria 07/05/2026: IA precisa saber quem esta CONFORTAVEL
+  // no ciclo natural (faltam X dias pra entrar na janela = nao precisa mensagem)
+  // vs quem PASSOU da janela (esta atrasando o ciclo proprio = ja precisa).
+  //
+  // Antes da auditoria a IA recebia status_atual mas nao sabia diferenciar:
+  //   - cliente media 90d, 60 dias sem comprar = ATIVO (faltam 12d pra atencao)
+  //     → NAO mandar mensagem, vai comprar naturalmente
+  //   - cliente media 30d, 35 dias sem comprar = ATIVO (passou 5d da janela)
+  //     → MANDAR, ele esta atrasando
+  //
+  // View ja calcula:
+  //   - dentro_janela_compra (true/false)
+  //   - dias_ate_janela_atencao (positivo = ainda confortavel, negativo = passou)
+  //   - media_confiavel
+  const janela = {};
+  try {
+    const { data: jData } = await supabase
+      .from('vw_lojas_clientes_janela')
+      .select('cliente_id, dias_ate_janela_atencao, dentro_janela_compra, media_confiavel, media_dias_compras')
+      .eq('vendedora_id', vendedoraId);
+    (jData || []).forEach(j => { janela[j.cliente_id] = j; });
+  } catch (e) {
+    console.error('[lojas-ia] erro carregar janela:', e.message);
+  }
+
   // Sacolas ativas dessa vendedora
   const { data: sacolasRaw } = await supabase
     .from('lojas_pedidos_sacola')
@@ -985,6 +1011,7 @@ async function montarContextoSugestoes(vendedoraId) {
     clientes: clientes || [],
     kpis,
     atencaoEspecial,         // { cliente_id: {score, motivos, tem_atraso_ciclo, ...} } — Ailson 06/05/2026
+    janela,                  // { cliente_id: {dias_ate_janela_atencao, dentro_janela_compra, media_confiavel} } — Ailson 07/05/2026 (auditoria GAP 1)
     sacolas: sacolas || [],
     sacolasDescartadas,
     grupos: grupos || [],
@@ -1303,6 +1330,24 @@ function montarMessagesSugestoes(ctx) {
         atencao_especial: ctx.atencaoEspecial?.[c.id] ? {
           score: ctx.atencaoEspecial[c.id].score,
           motivos: ctx.atencaoEspecial[c.id].motivos,
+        } : null,
+        // JANELA DE COMPRA — Ailson 07/05/2026 (auditoria GAP 1).
+        // Indica se cliente esta confortavel no ciclo natural ou se passou
+        // do prazo. IA deve usar pra DESPRIORIZAR cliente que vai comprar
+        // sozinho. NAO eh filtro absoluto — IA ainda pode sugerir se houver
+        // razao forte (sacola, atencao_especial, novidade do top_ref).
+        // null = cliente sem media confiavel (<5 visitas) — usa regra fixa.
+        janela_compra: ctx.janela?.[c.id]?.media_confiavel ? {
+          dentro_janela: ctx.janela[c.id].dentro_janela_compra,
+          dias_ate_janela: ctx.janela[c.id].dias_ate_janela_atencao,
+          media_dias: Math.round(ctx.janela[c.id].media_dias_compras || 0),
+          // Estado humano-legivel pra IA usar:
+          //   'confortavel'   = ainda no ciclo natural (faltam dias pra janela)
+          //   'na_janela'     = entrou na janela ideal de compra
+          //   'passou_janela' = ja passou da janela (atrasando ciclo proprio)
+          estado: ctx.janela[c.id].dentro_janela_compra
+            ? 'na_janela'
+            : (ctx.janela[c.id].dias_ate_janela_atencao > 0 ? 'confortavel' : 'passou_janela'),
         } : null,
         // Cliente Vesti? Combina vendas físicas (KPIs) + cadastro Vesti
         // (canal_cadastro). True = priorizar sugerir link/video do app.
