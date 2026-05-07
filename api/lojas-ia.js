@@ -186,13 +186,22 @@ async function handleGerarSugestoes(req, res, auth) {
     });
   }
 
-  // 9. Persiste (idempotente: apaga as do dia da vendedora primeiro)
+  // 9. Persiste (idempotente: apaga as PENDENTES do dia da vendedora primeiro)
+  // FIX 07/05/2026 (Ailson): adicionado .eq('status', 'pendente') pra
+  // PRESERVAR sugestoes que a vendedora ja executou ou dispensou. Antes,
+  // qualquer regerar (botao 'Atualizar' clicado pela vendedora durante o
+  // dia) apagava TUDO incluindo trabalho concluido. Caso real Celia 06/05:
+  // ela executou 7 sugestoes ao longo do dia e clicou 'Atualizar' por
+  // engano 3 vezes — cada clique apagava as executadas e gerava 7 novas
+  // pendentes. Vendedora pensava que 'nao salvou'.
+  // Com este fix, executadas/dispensadas ficam imutaveis no historico.
   const hoje = new Date().toISOString().slice(0, 10);
   await supabase
     .from('lojas_sugestoes_diarias')
     .delete()
     .eq('vendedora_id', vendedoraIdAlvo)
-    .eq('data_geracao', hoje);
+    .eq('data_geracao', hoje)
+    .eq('status', 'pendente');
 
   // 10. Insere as novas
   const linhas = sugestoesIA.map((s, idx) => ({
@@ -449,6 +458,22 @@ async function montarContextoSugestoes(vendedoraId) {
   const clientesEmCooldownGeral = new Set(
     (sugestoesRecentes || []).map(s => s.cliente_id)
   );
+
+  // FIX 07/05/2026: garantir que clientes ja TRABALHADOS hoje
+  // (executada ou dispensada) NAO voltem em regerar do mesmo dia.
+  // Caso real: vendedora executa 6 sugestoes, clica 'Atualizar' por
+  // engano, e a IA podia sugerir os mesmos 6 clientes de novo. Com este
+  // bloco, os clientes ja contatados/dispensados HOJE entram em cooldown
+  // forte.
+  const hojeData = new Date().toISOString().slice(0, 10);
+  const { data: sugestoesTrabalhadas } = await supabase
+    .from('lojas_sugestoes_diarias')
+    .select('cliente_id')
+    .eq('vendedora_id', vendedoraId)
+    .eq('data_geracao', hojeData)
+    .in('status', ['executada', 'dispensada'])
+    .not('cliente_id', 'is', null);
+  (sugestoesTrabalhadas || []).forEach(s => clientesEmCooldownGeral.add(s.cliente_id));
 
   console.log('[lojas-ia]', vendedora.nome, 'carteira=' + totalCarteira,
     'cooldown_geral=' + cooldownGeralDias + 'd',

@@ -1480,6 +1480,16 @@ export const CardDiaScreen = ({
   const pct = total ? Math.round((executadas / total) * 100) : 0;
 
   const handleRegerar = async () => {
+    // FIX 07/05/2026 (Ailson): confirmacao obrigatoria antes de regerar.
+    // Caso real Celia 06/05: clicava 'Atualizar' achando que era refresh
+    // da pagina e perdia (aparentemente) o trabalho do dia. Agora explica
+    // o que vai acontecer + confirma.
+    // Aproveita pra mostrar quantas ja foram enviadas (que ficam preservadas).
+    const msgConfirma = executadas > 0
+      ? `Você já enviou ${executadas} mensagem${executadas > 1 ? 's' : ''} hoje. Atualizar vai gerar NOVAS sugestões pendentes (as enviadas ficam guardadas). Continuar?`
+      : `Atualizar vai gerar novas sugestões pra você. Isso usa IA e demora ~30 segundos. Continuar?`;
+    if (!confirm(msgConfirma)) return;
+
     setRegenerando(true);
     try {
       await handleRegerarSugestoes();

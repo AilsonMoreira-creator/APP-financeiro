@@ -100,6 +100,36 @@ export default async function handler(req, res) {
   const resultados = [];
   const DELAY_ENTRE_VENDEDORAS_MS = 75000; // 75s
 
+  // FIX 07/05/2026 (Ailson): atualizar progresso INCREMENTAL no health.
+  // Antes: finalizar() so era chamado no fim. Cron com 5 vendedoras + 75s
+  // delay leva 6-9min, perto do timeout 10min do Vercel. Quando timeoutava,
+  // processo morria sem chamar finalizar() — todos os registros ficavam
+  // 'iniciada' pra sempre. Sem visibilidade do que rodou.
+  // Agora: cada vendedora processada atualiza o status com sucessos parciais,
+  // entao se timeoutar conseguimos ver ate onde foi.
+  const atualizarProgresso = async () => {
+    if (!healthId) return;
+    const sucessosAteAgora = resultados.filter(r => r.ok).length;
+    const errosAteAgora = resultados.filter(r => !r.ok).length;
+    try {
+      await supabase
+        .from('lojas_cron_health')
+        .update({
+          duracao_ms: Date.now() - inicio,
+          total_alvos: vendedoras.length,
+          sucessos: sucessosAteAgora,
+          erros: errosAteAgora,
+          detalhes: {
+            processadas: resultados.length,
+            ultimo_resultado: resultados[resultados.length - 1] || null,
+          },
+        })
+        .eq('id', healthId);
+    } catch (e) {
+      console.warn('[cron-health] progresso falhou:', e?.message);
+    }
+  };
+
   for (let i = 0; i < vendedoras.length; i++) {
     const v = vendedoras[i];
 
@@ -132,6 +162,9 @@ export default async function handler(req, res) {
     } catch (e) {
       resultados.push({ vendedora: v.nome, ok: false, erro: e.message });
     }
+
+    // Atualiza health depois de cada vendedora — visibilidade incremental
+    await atualizarProgresso();
   }
 
   const sucessos = resultados.filter(r => r.ok).length;
