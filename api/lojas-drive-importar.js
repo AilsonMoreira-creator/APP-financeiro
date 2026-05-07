@@ -148,41 +148,86 @@ export default async function handler(req, res) {
       );
     }
 
-    // ─── DEDUPE PDFs DE SACOLA por loja (Ailson 07/05/2026) ────────────────
-    // BUG REAL: Vanessa marcou cliente como pago, mas no dia seguinte sacola
-    // voltou ativa. Causa: tinha 2 PDFs de sacola da mesma loja no Drive
-    // (versao antiga + nova). Importer processava OS DOIS em ordem aleatoria.
-    // Resultado: ultimo processado vence — se o antigo viesse depois,
-    // ressuscitava sacolas ja pagas.
-    // Fix: pra cada loja+tipo (sacola_atacado_BR, sacola_varejo_BR, etc),
-    // mantem APENAS o PDF com modifiedTime mais recente. Outros sao ignorados.
-    let pdfsDescartados = 0;
+    // ─── DEDUPE de arquivos duplicados (Ailson 07/05/2026) ─────────────────
+    //
+    // BUGS REAIS:
+    // 1. Vanessa: cliente pagou sacola mas no dia seguinte voltou ativa.
+    //    Tinha 2 PDFs da mesma loja, importer processava os 2 — ultimo
+    //    vencia. Antigo veio depois, ressuscitou sacola.
+    // 2. Mesmo padrao pra outros tipos: cadastro, produtos, vendas
+    //    semanal, etc. Se Ailson tem 2 versoes no Drive, ultimo vence —
+    //    pode ser o antigo.
+    //
+    // ESTRATEGIA por tipo:
+    //
+    //   - sacola_*, cadastro_clientes_futura, produtos_semanal,
+    //     vendas_clientes_*, vendas_historico_*, vendas_semanal_*:
+    //       DEDUPE — mantem so o arquivo com modifiedTime mais recente.
+    //       Esses tipos sao "snapshot completo" — nao precisa processar
+    //       multiplas versoes. Ailson disse que tambem vai apagando os
+    //       antigos manualmente, mas o dedupe e blindagem.
+    //
+    //   - relatorio_bi_*:
+    //       NAO DEDUP — cada XLSX cobre periodo diferente (data no nome),
+    //       precisa processar TODOS pra historico completo. Mas ORDENA
+    //       por modifiedTime ASC pra garantir que o mais recente eh
+    //       processado por ULTIMO. Assim se houver correcao manual no
+    //       Mire, o XLSX recente sobrescreve o antigo (e nao ao contrario).
+    //
+    // Aplica em sync_semanal, sync_arquivo, undefined.
+    let arquivosDescartados = 0;
+    let arquivosBiOrdenados = 0;
     if (acao === 'sync_semanal' || acao === 'sync_arquivo' || acao === undefined) {
-      const sacolasPorChave = new Map(); // 'sacola_atacado|Bom Retiro' -> arquivo mais recente
-      const naoPdfs = [];
+      // Tipos que devem ter so 1 arquivo (snapshot completo)
+      const TIPOS_DEDUP = new Set([
+        'cadastro_clientes_futura',
+        'produtos_semanal',
+      ]);
+      // Tipos com prefixo (sacola_atacado_BR, vendas_clientes_st, etc)
+      const PREFIXOS_DEDUP = ['sacola_', 'vendas_clientes_', 'vendas_historico_', 'vendas_semanal_'];
+
+      const ehTipoDedup = (tipo) => TIPOS_DEDUP.has(tipo) || PREFIXOS_DEDUP.some(p => tipo.startsWith(p));
+      const ehTipoBI = (tipo) => tipo.startsWith('relatorio_bi');
+
+      const dedupMap = new Map();   // 'tipo|loja' -> arquivo mais recente
+      const biList = [];            // todos os BI
+      const outros = [];            // demais
+
       for (const arq of arquivosParaProcessar) {
         const t = detectarTipoArquivo(arq.name, arq.parentName);
-        if (!t || !t.tipo.startsWith('sacola')) {
-          naoPdfs.push(arq);
+        if (!t) {
+          outros.push(arq);
           continue;
         }
-        const chave = `${t.tipo}|${t.loja || ''}`;
-        const atual = sacolasPorChave.get(chave);
-        if (!atual || (arq.modifiedTime > atual.modifiedTime)) {
-          if (atual) pdfsDescartados++;
-          sacolasPorChave.set(chave, arq);
+        if (ehTipoDedup(t.tipo)) {
+          const chave = `${t.tipo}|${t.loja || ''}`;
+          const atual = dedupMap.get(chave);
+          if (!atual || arq.modifiedTime > atual.modifiedTime) {
+            if (atual) arquivosDescartados++;
+            dedupMap.set(chave, arq);
+          } else {
+            arquivosDescartados++;
+          }
+        } else if (ehTipoBI(t.tipo)) {
+          biList.push(arq);
         } else {
-          pdfsDescartados++;
+          outros.push(arq);
         }
       }
-      arquivosParaProcessar = [...naoPdfs, ...sacolasPorChave.values()];
+
+      // BI: ordena ASC por modifiedTime — antigo primeiro, novo por ultimo
+      biList.sort((a, b) => (a.modifiedTime || '').localeCompare(b.modifiedTime || ''));
+      arquivosBiOrdenados = biList.length;
+
+      arquivosParaProcessar = [...outros, ...dedupMap.values(), ...biList];
     }
 
     // Processa cada arquivo em sequência
     const resultado = {
       acao,
       total_arquivos: arquivosParaProcessar.length,
-      pdfs_sacola_descartados: pdfsDescartados, // PDFs antigos ignorados — Ailson 07/05/2026
+      arquivos_duplicados_descartados: arquivosDescartados, // Ailson 07/05/2026
+      arquivos_bi_ordenados: arquivosBiOrdenados,           // BI processados em ordem cronologica
       processados: 0,
       sucessos: 0,
       erros: 0,
