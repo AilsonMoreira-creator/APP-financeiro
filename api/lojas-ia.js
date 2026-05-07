@@ -1367,6 +1367,35 @@ function montarMessagesSugestoes(ctx) {
       const usaVestiCli = c.canal_cadastro === 'vesti'
         || k.canal_dominante === 'vesti_dominante'
         || (k.qtd_compras_vesti || 0) > 0;
+
+      // PERFIL DE CANAL CONSOLIDADO — Ailson 07/05/2026 (auditoria GAP 3)
+      // Combina qtd_compras_fisicas/vesti/convertr pra escolher tom/canal:
+      //   so_presencial: 90%+ veio na loja — fala "passa aqui pra ver"
+      //   so_vesti:      90%+ comprou Vesti — sempre manda link Vesti
+      //   so_online:     90%+ Convertr/sacola — manda fotos+link, nao convida loja
+      //   hibrido_loja_vesti: vai na loja MAS tambem usa Vesti
+      //   hibrido_loja_online: vai na loja MAS tambem compra online
+      //   so_cadastro_vesti: tem canal_cadastro=vesti mas ZERO compra (nova)
+      //   sem_dados: cliente sem compras — usa canal_cadastro raw
+      const fis = k.qtd_compras_fisicas || 0;
+      const ves = k.qtd_compras_vesti || 0;
+      const con = k.qtd_compras_convertr || 0;
+      const totalCompras = fis + ves + con;
+      let perfilCanal;
+      if (totalCompras === 0) {
+        perfilCanal = c.canal_cadastro === 'vesti' ? 'so_cadastro_vesti' : 'sem_dados';
+      } else {
+        const pctFis = fis / totalCompras;
+        const pctVes = ves / totalCompras;
+        const pctCon = con / totalCompras;
+        if (pctFis >= 0.9) perfilCanal = 'so_presencial';
+        else if (pctVes >= 0.9) perfilCanal = 'so_vesti';
+        else if (pctCon >= 0.9) perfilCanal = 'so_online';
+        else if (pctFis >= 0.5 && pctVes > 0) perfilCanal = 'hibrido_loja_vesti';
+        else if (pctFis >= 0.5 && pctCon > 0) perfilCanal = 'hibrido_loja_online';
+        else perfilCanal = 'misto';
+      }
+
       return {
         id: c.id,
         apelido: c.apelido || c.comprador_nome || c.razao_social?.split(' ').slice(0, 3).join(' '),
@@ -1417,6 +1446,7 @@ function montarMessagesSugestoes(ctx) {
         // (canal_cadastro). True = priorizar sugerir link/video do app.
         usa_vesti: usaVestiCli,
         canal_cadastro: c.canal_cadastro || null,
+        perfil_canal: perfilCanal,    // Ailson 07/05/2026 GAP 3 — granularidade Vesti/presencial/online/hibrido
         // Top 3 REFs que essa cliente compra bem (score peças+recorrência).
         // IA usa pra: detectar reposição, dizer "vende bem pra você",
         // alternar recomendações sem repetir.

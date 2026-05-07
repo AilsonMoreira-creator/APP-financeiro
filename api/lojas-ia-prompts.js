@@ -163,6 +163,52 @@ REGRAS:
 - Se vendedora teve >5 conversões em 60d = está engajada, IA pode pedir mais ousadia (ex: tentar reativar inativos com tom mais firme)
 - Se 0 conversões = pode estar mandando mensagens fracas. IA prioriza candidatos com sinais MUITO claros (sacola, atenção_especial). Não tenta longshots.
 
+# PERFIL DE CANAL (campo \`perfil_canal\` em cada cliente)
+
+Indica como a cliente PREFERE comprar — usado pra escolher TOM e CANAL da mensagem:
+
+\`\`\`
+"perfil_canal": "so_presencial" | "so_vesti" | "so_online" |
+                "hibrido_loja_vesti" | "hibrido_loja_online" | "misto" |
+                "so_cadastro_vesti" | "sem_dados"
+\`\`\`
+
+REGRAS POR PERFIL (ação_sugerida deve refletir):
+
+**so_presencial** (90%+ vai na loja):
+- Convida pra passar na loja: "passa aqui essa semana, chegou peças do seu estilo"
+- NÃO oferece Vesti nem link (ela não usa)
+- Reposição de top_ref: "guardei separado pra você dar uma olhada"
+
+**so_vesti** (90%+ compra Vesti):
+- SEMPRE manda link Vesti se \`vesti_link_vendedora\` está disponível
+- Tom remoto: "tô te mandando o link com as novidades, dá uma olhada"
+- NÃO convida pra loja (provavelmente longe ou prefere remoto)
+
+**so_online** (90%+ Convertr/sacola):
+- Manda fotos das peças + link
+- NÃO convida pra loja
+- Pode oferecer migrar pro Vesti se ainda não usa: "se preferir, tem nosso app pra ver tudo"
+
+**hibrido_loja_vesti** (mistura — maioria loja mas usa Vesti):
+- Pergunta o canal: "vou te mandar pelo Vesti ou prefere passar aqui?"
+- Mais flexível, segue o tom natural da conversa
+
+**hibrido_loja_online** (mistura — maioria loja mas compra online):
+- Tom de loja com fotos: "guardei umas peças aqui pra você, vou te mandar foto"
+
+**misto** (sem dominante clara):
+- Tom neutro. Deixa cliente escolher o canal.
+
+**so_cadastro_vesti** (cadastro Vesti mas ZERO compra):
+- Cliente NOVA Vesti — incentiva primeira compra com link + boas-vindas
+- "Oi! Vc é nova por aqui. Te mando o link com nossas novidades pra dar uma olhada"
+
+**sem_dados** (sem compras nem cadastro Vesti):
+- Trata como presencial (default histórico Amícia)
+
+REGRA TRANSVERSAL: se \`vesti_link_vendedora\` é null E perfil tem componente Vesti, NÃO pode mencionar link específico. Apenas "te mando o link" (vendedora cadastra/manda depois).
+
 # Tipos de sugestão (campo "tipo" do schema)
 
 - "inativo"   — cliente status='inativo' (180-365d default OU faixa custom). Tom: tentativa séria de reconectar, mais agressiva. Pode mencionar promoção se houver. Exemplo: "Faz tempo que não vejo você por aqui — preparei algumas peças que combinam com seu estilo, dá uma olhada?"
