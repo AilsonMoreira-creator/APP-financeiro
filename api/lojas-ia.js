@@ -437,6 +437,56 @@ async function montarContextoSugestoes(vendedoraId) {
     console.error('[lojas-ia] erro carregar janela:', e.message);
   }
 
+  // CONVERSOES — Ailson 07/05/2026 (auditoria GAP 2)
+  // Cliente que recebeu mensagem em status atencao/semAtividade/inativo e
+  // voltou a comprar em ate 15d. Pra IA saber:
+  //   1) por cliente: ja converteu antes? quanto tempo demorou?
+  //   2) geral da vendedora: total de conversoes ultimos 60d (numero/valor)
+  // Usa pra:
+  //   - priorizar clientes que historicamente convertem
+  //   - tom diferente pra quem ja teve historico de mensagem→compra
+  //     ('boa, voltei pra dar uma olhada nas novidades — tem aquele estilo
+  //      que vc gosta' em vez de 'oi sumida').
+  const conversoesPorCliente = {};
+  let conversoesGeral = { qtd_60d: 0, valor_60d: 0, qtd_30d: 0 };
+  try {
+    const dataLimite = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+    const { data: convData } = await supabase
+      .from('lojas_conversoes')
+      .select('cliente_id, data_mensagem, data_venda, dias_ate_compra, valor_venda, status_no_envio')
+      .eq('vendedora_id', vendedoraId)
+      .gte('data_venda', dataLimite);
+
+    const hoje = new Date().toISOString().slice(0, 10);
+    const data30d = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+
+    (convData || []).forEach(c => {
+      // Por cliente
+      if (!conversoesPorCliente[c.cliente_id]) {
+        conversoesPorCliente[c.cliente_id] = {
+          total: 0,
+          ultima_data_venda: null,
+          ultimo_dias_ate_compra: null,
+          ultimo_valor: null,
+        };
+      }
+      const slot = conversoesPorCliente[c.cliente_id];
+      slot.total++;
+      if (!slot.ultima_data_venda || c.data_venda > slot.ultima_data_venda) {
+        slot.ultima_data_venda = c.data_venda;
+        slot.ultimo_dias_ate_compra = c.dias_ate_compra;
+        slot.ultimo_valor = c.valor_venda;
+      }
+      // Geral
+      conversoesGeral.qtd_60d++;
+      conversoesGeral.valor_60d += parseFloat(c.valor_venda || 0);
+      if (c.data_venda >= data30d) conversoesGeral.qtd_30d++;
+    });
+    conversoesGeral.valor_60d = Math.round(conversoesGeral.valor_60d * 100) / 100;
+  } catch (e) {
+    console.error('[lojas-ia] erro carregar conversoes:', e.message);
+  }
+
   // Sacolas ativas dessa vendedora
   const { data: sacolasRaw } = await supabase
     .from('lojas_pedidos_sacola')
@@ -1012,6 +1062,8 @@ async function montarContextoSugestoes(vendedoraId) {
     kpis,
     atencaoEspecial,         // { cliente_id: {score, motivos, tem_atraso_ciclo, ...} } — Ailson 06/05/2026
     janela,                  // { cliente_id: {dias_ate_janela_atencao, dentro_janela_compra, media_confiavel} } — Ailson 07/05/2026 (auditoria GAP 1)
+    conversoesPorCliente,    // { cliente_id: {total, ultima_data_venda, ultimo_dias_ate_compra, ultimo_valor} } — Ailson 07/05/2026 (auditoria GAP 2)
+    conversoesGeral,         // { qtd_60d, valor_60d, qtd_30d } — agregado da vendedora
     sacolas: sacolas || [],
     sacolasDescartadas,
     grupos: grupos || [],
@@ -1349,6 +1401,18 @@ function montarMessagesSugestoes(ctx) {
             ? 'na_janela'
             : (ctx.janela[c.id].dias_ate_janela_atencao > 0 ? 'confortavel' : 'passou_janela'),
         } : null,
+        // CONVERSOES — Ailson 07/05/2026 (auditoria GAP 2).
+        // Indica se cliente ja respondeu a mensagem com compra antes (60d).
+        // total: quantas vezes converteu
+        // ultima_dias_ate_compra: tempo de resposta (0-15d)
+        // ultimo_valor: valor da ultima conversao
+        // null = nunca converteu (ou nao tem registro nos ultimos 60d)
+        conversoes: ctx.conversoesPorCliente?.[c.id] ? {
+          total: ctx.conversoesPorCliente[c.id].total,
+          ultima_data: ctx.conversoesPorCliente[c.id].ultima_data_venda,
+          ultimo_dias_ate_compra: ctx.conversoesPorCliente[c.id].ultimo_dias_ate_compra,
+          ultimo_valor: ctx.conversoesPorCliente[c.id].ultimo_valor,
+        } : null,
         // Cliente Vesti? Combina vendas físicas (KPIs) + cadastro Vesti
         // (canal_cadastro). True = priorizar sugerir link/video do app.
         usa_vesti: usaVestiCli,
@@ -1495,6 +1559,9 @@ function montarMessagesSugestoes(ctx) {
           || (ctx.kpis[c.id]?.qtd_compras_vesti || 0) > 0).length,
     },
     instrucao: 'Gere as 7 sugestões priorizadas conforme o schema do system prompt. Responda APENAS o JSON.',
+    // CONVERSOES da vendedora ultimos 60d — Ailson 07/05/2026 (auditoria GAP 2)
+    // Sinal pra IA calibrar tom geral (vendedora produtiva ou nao).
+    conversoes_vendedora: ctx.conversoesGeral || { qtd_60d: 0, valor_60d: 0, qtd_30d: 0 },
   };
 
   return [

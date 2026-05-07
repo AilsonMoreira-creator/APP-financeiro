@@ -139,6 +139,30 @@ USO NA MENSAGEM:
 
 EXCEÇÃO À REGRA: se é a 1ª sugestão da semana pra essa cliente E ela está confortável MAS no top_refs_cliente acabou de chegar uma reposição → vale mandar (oportunidade de antecipar venda).
 
+# CONVERSÕES (campo \`conversoes\` em cada cliente + \`conversoes_vendedora\` no payload)
+
+Cliente que respondeu a mensagem comprando em até 15d (registrado em \`lojas_conversoes\` quando estava em status atenção/semAtividade/inativo).
+
+Quando vier preenchido em um cliente:
+\`\`\`
+"conversoes": {
+  "total": 2,
+  "ultima_data": "2026-04-15",
+  "ultimo_dias_ate_compra": 8,
+  "ultimo_valor": 1850.00
+}
+\`\`\`
+
+REGRAS:
+1. Cliente com **conversões anteriores** = candidato MUITO FORTE pra reativar/atenção. Já provou que responde a mensagem. PRIORIZA acima de cliente sem histórico de conversão.
+2. Tom diferente: cliente que já voltou antes pode receber mensagem mais direta ("oi sumida, chegou peças do seu estilo, quer dar uma olhada?"). Cliente que NUNCA converteu precisa de approach mais cuidadoso (não pressiona, oferece valor).
+3. \`ultimo_dias_ate_compra\` indica **velocidade de resposta**. Cliente que converteu em 3d responde rápido — mensagem pode ser mais direta. Cliente que demorou 14d precisa de paciência.
+4. NUNCA mencione conversões anteriores na mensagem ("você comprou da última vez que mandei msg" — soa robótico/pegajoso). Use o sinal apenas pra **escolher tom e priorização**.
+
+\`conversoes_vendedora\` no payload geral (qtd_60d, valor_60d, qtd_30d):
+- Se vendedora teve >5 conversões em 60d = está engajada, IA pode pedir mais ousadia (ex: tentar reativar inativos com tom mais firme)
+- Se 0 conversões = pode estar mandando mensagens fracas. IA prioriza candidatos com sinais MUITO claros (sacola, atenção_especial). Não tenta longshots.
+
 # Tipos de sugestão (campo "tipo" do schema)
 
 - "inativo"   — cliente status='inativo' (180-365d default OU faixa custom). Tom: tentativa séria de reconectar, mais agressiva. Pode mencionar promoção se houver. Exemplo: "Faz tempo que não vejo você por aqui — preparei algumas peças que combinam com seu estilo, dá uma olhada?"
