@@ -2977,6 +2977,39 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
               <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
                 Vendedora: {vendedora ? `${vendedora.nome} · ${vendedora.loja}` : '—'}
               </div>
+              {/* WhatsApp do responsavel — Ailson 07/05/2026.
+                  Pega de qualquer doc do grupo (prioriza o principal,
+                  fallback pro 1o que tiver telefone). Util pra abrir
+                  conversa com 1 toque. */}
+              {(() => {
+                const docPrincipal = grupo.documentos.find(d => d.id === grupo.docPrincipalId);
+                const docComTel = (docPrincipal?.telefone_principal ? docPrincipal : null)
+                  || grupo.documentos.find(d => d.telefone_principal);
+                if (!docComTel?.telefone_principal) return null;
+                const tel = docComTel.telefone_principal;
+                const telLimpo = String(tel).replace(/\D/g, '');
+                const compradorNome = docComTel.comprador_nome || docComTel.apelido;
+                return (
+                  <div style={{ fontSize: fz(13), color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                    <span>Responsável:</span>
+                    <a
+                      href={`https://wa.me/55${telLimpo}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        color: '#25D366', fontWeight: 600, textDecoration: 'none',
+                        display: 'inline-flex', alignItems: 'center', gap: 3,
+                      }}
+                      title={`Abrir WhatsApp${compradorNome ? ' de ' + compradorNome : ''}`}
+                    >
+                      💬 {tel}
+                    </a>
+                    {compradorNome && (
+                      <span style={{ color: palette.inkMuted, fontSize: fz(12) }}>({compradorNome})</span>
+                    )}
+                  </div>
+                );
+              })()}
               {grupo.created_at && (
                 <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
                   Criado em {fmtData(grupo.created_at)}

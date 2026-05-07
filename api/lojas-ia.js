@@ -499,12 +499,84 @@ async function montarContextoSugestoes(vendedoraId) {
     return true;
   });
 
-  // Grupos da vendedora
-  const { data: grupos } = await supabase
+  // Grupos da vendedora — Ailson 07/05/2026:
+  // Carrega grupos + AGREGADOS calculados a partir dos KPIs dos CNPJs do grupo.
+  // BUG REAL ANTERIOR: backend mandava so id+nome+apelido. IA recebia grupo
+  // sem dados (sem lifetime, sem ultima_compra, sem qtd_compras, sem status)
+  // e nao conseguia gerar sugestao tipo 'grupo'. Resultado: cada CNPJ do
+  // grupo virava sugestao separada — Vanessa reportou 4 sugestoes do grupo
+  // Sandra em vez de 1.
+  // Mesmos calculos que o frontend (Lojas_Telas_Vendedora.jsx linha 2224).
+  const { data: gruposRaw } = await supabase
     .from('lojas_grupos')
-    .select('id, nome_grupo, apelido, vendedora_id')
+    .select('id, nome_grupo, apelido, vendedora_id, observacao')
     .eq('vendedora_id', vendedoraId)
     .is('arquivado_em', null);
+
+  // Mapa de cliente_id → kpi pra calcular agregados rapido
+  const clientePorId = new Map((clientes || []).map(c => [c.id, c]));
+
+  const grupos = (gruposRaw || []).map(g => {
+    const docsDoGrupo = (clientes || []).filter(c => c.grupo_id === g.id);
+    if (docsDoGrupo.length === 0) return null;
+
+    const docsKpi = docsDoGrupo.map(c => ({
+      cliente_id: c.id,
+      apelido: c.apelido || c.comprador_nome || c.razao_social?.split(' ').slice(0, 3).join(' '),
+      documento: c.documento,
+      kpi: kpis[c.id] || {},
+    }));
+
+    const lifetimeGrupo = docsKpi.reduce((s, d) => s + (d.kpi.lifetime_total || 0), 0);
+    const qtdComprasGrupo = docsKpi.reduce((s, d) => s + (d.kpi.qtd_compras || 0), 0);
+    const qtdPecasGrupo = docsKpi.reduce((s, d) => s + (d.kpi.qtd_pecas || 0), 0);
+
+    // Dias da compra mais recente do grupo (= MIN dos dias_sem_comprar)
+    const diasArr = docsKpi.map(d => d.kpi.dias_sem_comprar).filter(v => v != null);
+    const diasSemGrupo = diasArr.length ? Math.min(...diasArr) : null;
+
+    // Ultima compra do grupo (= MAX das ultimas_compras)
+    const ultimasArr = docsKpi.map(d => d.kpi.ultima_compra).filter(Boolean);
+    const ultimaCompraGrupo = ultimasArr.length ? ultimasArr.sort().reverse()[0] : null;
+
+    // Status agregado: pega o MELHOR (mais ativo) dos status individuais
+    // Mesma logica do frontend (Ailson 28/04/2026)
+    const ordemStatus = ['ativo', 'separandoSacola', 'atencao', 'semAtividade', 'inativo', 'arquivo'];
+    const statusGrupo = ordemStatus.find(s =>
+      docsKpi.some(d => d.kpi.status_atual === s)
+    ) || 'ativo';
+
+    // Doc principal: o que tem maior lifetime
+    const docPrincipal = [...docsKpi].sort((a, b) =>
+      (b.kpi.lifetime_total || 0) - (a.kpi.lifetime_total || 0)
+    )[0];
+
+    return {
+      id: g.id,
+      nome_grupo: g.nome_grupo,
+      apelido: g.apelido,
+      observacao: g.observacao,
+      // Agregados — mesmo nome dos campos que o prompt usa
+      lifetime_grupo: Math.round(lifetimeGrupo * 100) / 100,
+      qtd_compras_grupo: qtdComprasGrupo,
+      qtd_pecas_grupo: qtdPecasGrupo,
+      ticket_medio_grupo: qtdComprasGrupo > 0 ? Math.round(lifetimeGrupo / qtdComprasGrupo) : 0,
+      dias_sem_grupo: diasSemGrupo,
+      ultima_compra_grupo: ultimaCompraGrupo,
+      status_grupo: statusGrupo,
+      doc_principal_id: docPrincipal?.cliente_id,
+      doc_principal_apelido: docPrincipal?.apelido,
+      // Lista de docs (pra IA poder mencionar uma loja especifica se quiser)
+      docs: docsKpi.map(d => ({
+        cliente_id: d.cliente_id,
+        apelido: d.apelido,
+        dias_sem_comprar: d.kpi.dias_sem_comprar,
+        status: d.kpi.status_atual,
+        lifetime: Math.round((d.kpi.lifetime_total || 0) * 100) / 100,
+        qtd_compras: d.kpi.qtd_compras || 0,
+      })),
+    };
+  }).filter(Boolean);
 
   // Produtos oferecíveis (view já filtrada)
   const { data: produtos } = await supabase
