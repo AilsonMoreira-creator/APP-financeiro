@@ -32,6 +32,10 @@ import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
 export default async function handler(req, res) {
   setCors(res);
+  // Cache off — Ailson 07/05/2026: cadastros novos em ficha tecnica
+  // precisam aparecer imediato. Com cache, mudancas demoravam minutos
+  // pra refletir.
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Use GET' });
 
@@ -119,20 +123,45 @@ export default async function handler(req, res) {
     // ─── 5. Hidrata com descricao do produto ───────────────────────────
     // Fonte primaria: lojas_produtos (catalogo Mire)
     // Fallback: ficha tecnica (amicia_data user_id='ficha-tecnica')
-    // Ailson 06/05/2026: produto pode estar so na ficha (ainda nao virou
-    // SKU no Mire), ex: 3202 que entregou da oficina mas nao tem cadastro
-    // no Mire.
+    //
+    // BUG REAL Ailson 07/05/2026: REF '0020' vinha da view (que le
+    // lojas_vendas_itens BI, formato '0020') mas Mire grava como '20'.
+    // Lookup direto falhava. Solucao: busca BOTH formatos (com e sem
+    // leading zero) e mapeia AMBOS pra mesma descricao.
+    //
+    // Tambem: REF cadastrada na ficha tecnica DEPOIS de aparecer na
+    // curadoria continuava mostrando '(produto não encontrado)' por
+    // cache HTTP. Fix B (linha 38) adiciona Cache-Control: no-store.
     const todasRefs = [
       ...(manuais || []).map(m => m.ref),
       ...automaticosFiltrados.map(a => a.ref),
     ];
     let prodMap = new Map();
     if (todasRefs.length > 0) {
+      // Gera ambas variantes (com e sem leading zero) pra busca tolerante
+      const refsExpanded = new Set();
+      for (const r of todasRefs) {
+        const s = String(r);
+        refsExpanded.add(s);
+        const semZero = s.replace(/^0+/, '') || '0';
+        refsExpanded.add(semZero);
+        // Pad pra 4 e 5 dígitos (formatos comuns do Mire)
+        if (semZero.length < 4) refsExpanded.add(semZero.padStart(4, '0'));
+        if (semZero.length < 5) refsExpanded.add(semZero.padStart(5, '0'));
+      }
+
       const { data: produtos } = await supabase
         .from('lojas_produtos')
         .select('ref, descricao, categoria, qtd_estoque')
-        .in('ref', todasRefs);
-      prodMap = new Map((produtos || []).map(p => [p.ref, p]));
+        .in('ref', [...refsExpanded]);
+
+      // Indexa AMBOS formatos (raw + sem zero) pra match com qualquer ref
+      // que vier dos automaticos/manuais
+      for (const p of produtos || []) {
+        prodMap.set(p.ref, p);
+        const semZero = String(p.ref).replace(/^0+/, '') || '0';
+        if (!prodMap.has(semZero)) prodMap.set(semZero, p);
+      }
 
       // Fallback: pra refs que nao acharam em lojas_produtos, busca em
       // amicia_data.payload.fichas[]
@@ -144,16 +173,25 @@ export default async function handler(req, res) {
           .eq('user_id', 'ficha-tecnica')
           .maybeSingle();
         const fichas = ftRow?.payload?.fichas || [];
-        const setFaltando = new Set(refsFaltando.map(r => String(r).replace(/^0+/, '') || '0'));
+        // Set inclui forma normalizada DAS faltantes pra match flexivel
+        const setFaltando = new Set();
+        for (const r of refsFaltando) {
+          setFaltando.add(String(r));
+          setFaltando.add(String(r).replace(/^0+/, '') || '0');
+        }
         for (const f of fichas) {
-          const refNorm = String(f.ref || '').replace(/^0+/, '') || '0';
-          if (setFaltando.has(refNorm) && !prodMap.has(refNorm)) {
-            prodMap.set(refNorm, {
-              ref: refNorm,
+          const refRaw = String(f.ref || '');
+          const refSemZero = refRaw.replace(/^0+/, '') || '0';
+          if (setFaltando.has(refRaw) || setFaltando.has(refSemZero)) {
+            const fichaData = {
+              ref: refRaw,
               descricao: f.descricao || '',
               categoria: f.categoria || null,
-              qtd_estoque: 0, // ficha tecnica nao tem estoque
-            });
+              qtd_estoque: 0,
+            };
+            // Indexa AMBOS formatos pra que lookup posterior nao falhe
+            if (!prodMap.has(refRaw)) prodMap.set(refRaw, fichaData);
+            if (!prodMap.has(refSemZero)) prodMap.set(refSemZero, fichaData);
           }
         }
       }
