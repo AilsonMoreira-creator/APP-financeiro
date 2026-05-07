@@ -41,7 +41,11 @@ export default async function handler(req, res) {
           .from('ml_messages')
           .select('*')
           .eq('conversation_id', conversation_id)
-          .order('date_created', { ascending: true });
+          // FIX 06/05/2026: mensagens antigas tem date_created=NULL.
+          // nullsFirst pra trazer NULL primeiro, dai segunda ordenacao
+          // por created_at desempata. Frontend tambem tem sort defensivo.
+          .order('date_created', { ascending: true, nullsFirst: true })
+          .order('created_at', { ascending: true });
 
         if (error) return res.status(500).json({ error: error.message });
 

@@ -52,7 +52,7 @@ async function syncBrand(brand) {
             from_id: String(m.from?.user_id || ''),
             text: m.text?.plain || m.text || '',
             attachments,
-            date_created: m.date_created,
+            date_created: m.date_created || new Date().toISOString(),
           }, { onConflict: 'message_id,brand' });
 
           if (!error) result.newMessages++;

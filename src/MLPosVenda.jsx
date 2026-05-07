@@ -383,9 +383,29 @@ export default function MLPosVenda({ supabase, currentUser }) {
             <div style={{ width: 42, height: 42, borderRadius: 6, background: PALETTE.cream, border: `1px solid ${PALETTE.sand}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: PALETTE.textLight }}>📦</div>
           )}
           <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <BrandTag brand={conv.brand} />
               <span style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark }}>{conv.item_title ? (conv.item_title.length > 50 ? conv.item_title.slice(0, 50) + '...' : conv.item_title) : `Pedido #${conv.order_id || conv.pack_id}`}</span>
+              {/* Link pro anuncio no ML — Ailson 06/05/2026.
+                  Ajuda a tirar duvidas sobre detalhes do produto durante
+                  o atendimento (mesma func que tinha no Ideris). */}
+              {conv.item_id && (
+                <a
+                  href={`https://produto.mercadolivre.com.br/${conv.item_id.startsWith('MLB-') || conv.item_id.startsWith('MLB') ? conv.item_id.replace(/^MLB(?!-)/, 'MLB-') : 'MLB-' + conv.item_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    ...S, fontSize: 11, fontWeight: 600,
+                    color: PALETTE.blue, textDecoration: 'none',
+                    border: `1px solid ${PALETTE.blue}`, borderRadius: 4,
+                    padding: '2px 8px', display: 'inline-flex', alignItems: 'center',
+                    gap: 4, background: PALETTE.white,
+                  }}
+                  title="Abrir anúncio no Mercado Livre"
+                >
+                  🔗 Ver anúncio
+                </a>
+              )}
             </div>
             <div style={{ ...S, fontSize: 12, color: PALETTE.textLight, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}><SacIcon name="estoque" size={12}/>#{conv.order_id || conv.pack_id} · <SacIcon name="usuario" size={12}/>{conv.buyer_nickname || conv.buyer_id || '—'}</div>
           </div>
@@ -396,9 +416,15 @@ export default function MLPosVenda({ supabase, currentUser }) {
           {msgs.length === 0 ? (
             <div style={{ ...S, textAlign: 'center', color: PALETTE.textLight, padding: 20, fontSize: 14 }}>Nenhuma mensagem carregada</div>
           ) : (
-            // Garantia de ordem cronológica crescente (buyer fala primeiro, seller responde depois)
+            // Garantia de ordem cronológica crescente. Fallback robusto
+            // pra mensagens antigas com date_created NULL: usa created_at
+            // (data de gravação no banco). Ailson 06/05/2026.
             [...msgs]
-              .sort((a, b) => new Date(a.date_created || 0) - new Date(b.date_created || 0))
+              .sort((a, b) => {
+                const ta = new Date(a.date_created || a.created_at || 0).getTime();
+                const tb = new Date(b.date_created || b.created_at || 0).getTime();
+                return ta - tb;
+              })
               .map((m, i) => (
             <div key={m.id || i} style={{ marginBottom: 14, display: 'flex', flexDirection: m.from_type === 'seller' ? 'row-reverse' : 'row', gap: 8 }}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, background: m.from_type === 'buyer' ? '#e3edf5' : '#e3f5ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>
