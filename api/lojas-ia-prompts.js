@@ -72,6 +72,40 @@ QUANDO MENCIONAR A MÉDIA NA MENSAGEM:
   - Bom: "Olha Célia, a Rosana está há 72 dias sem comprar. A média dela entre compras é 90 dias — já está na hora dela fazer reposição. Vamos mandar uma mensagem pra deixar ela aquecida."
 - Se status custom = status default (média baixa, cliente quinzenal etc), NÃO mencione média (fica óbvio demais).
 
+# ATENÇÃO ESPECIAL (campo \`atencao_especial\` em cada cliente da carteira)
+
+Cliente ATIVO com sinais de mudança de comportamento. NÃO está em atenção oficial ainda, mas algo mudou e a vendedora deve agir CEDO antes de virar atenção real.
+
+Quando vier preenchido em um cliente da carteira:
+\`\`\`
+"atencao_especial": {
+  "score": 5,
+  "motivos": ["atrasou ciclo (52d vs 35d usual)", "menos pecas (3 vs 8 usual)"]
+}
+\`\`\`
+
+REGRAS:
+1. Cliente com \`atencao_especial\` é candidato FORTE pra slot ATIVO (não inativo/atenção). Tom diferenciado: cuidado discreto, sem alarmismo.
+2. Score 3-4 = sinal moderado. Score 5+ = sinal forte. Quando 2+ clientes têm atenção especial, prioriza maior score.
+3. MENCIONE 1 motivo discretamente em "fatos" (não os 4 motivos juntos — fica robótico). Foco no motivo MAIS RELEVANTE pra ação:
+   - Devolução → mensagem reconcilia: "Tudo bem com a peça que devolveu?"
+   - Atrasou ciclo → "Faz mais tempo que vc costuma deixar passar entre uma compra e outra"
+   - Queda volume → "Notei que a última levou menos peças que o normal"
+   - Queda ticket → mais sutil, talvez não mencionar
+4. NÃO use linguagem alarmante ("estou preocupada", "achei que sumiu"). Tom natural de quem ACOMPANHA a cliente.
+5. AÇÃO_SUGERIDA pode ser: oferecer novidade da categoria favorita, mostrar reposição da REF top, ou simplesmente check-in.
+
+EXEMPLO de sugestão com atenção especial:
+\`\`\`json
+{
+  "tipo": "novidade",
+  "cliente_id": "...",
+  "prioridade": 3,
+  "fatos": "Cliente vende bem viscolinho. Notei que a última levou 3 peças (média dela é 8) — vale um cuidado especial.",
+  "acao_sugerida": "Mostra a REF 1871 que chegou da oficina (viscolinho, top dela), pergunta se ela quer ver mais cores"
+}
+\`\`\`
+
 # Tipos de sugestão (campo "tipo" do schema)
 
 - "inativo"   — cliente status='inativo' (180-365d default OU faixa custom). Tom: tentativa séria de reconectar, mais agressiva. Pode mencionar promoção se houver. Exemplo: "Faz tempo que não vejo você por aqui — preparei algumas peças que combinam com seu estilo, dá uma olhada?"

@@ -388,6 +388,20 @@ async function montarContextoSugestoes(vendedoraId) {
     (kpisChunk || []).forEach(k => { kpis[k.cliente_id] = k; });
   }
 
+  // ATENCAO ESPECIAL — view vw_lojas_clientes_atencao_especial (Ailson 06/05/2026)
+  // Cliente ativo+confiavel com sinais de mudanca de comportamento (score>=3).
+  // IA usa pra priorizar e personalizar mensagem com motivos.
+  const atencaoEspecial = {};
+  try {
+    const { data: aeData } = await supabase
+      .from('vw_lojas_clientes_atencao_especial')
+      .select('cliente_id, score, motivos, tem_atraso_ciclo, tem_queda_volume, tem_queda_ticket, tem_devolucao')
+      .eq('vendedora_id', vendedoraId);
+    (aeData || []).forEach(a => { atencaoEspecial[a.cliente_id] = a; });
+  } catch (e) {
+    console.error('[lojas-ia] erro carregar atencao_especial:', e.message);
+  }
+
   // Sacolas ativas dessa vendedora
   const { data: sacolasRaw } = await supabase
     .from('lojas_pedidos_sacola')
@@ -873,6 +887,7 @@ async function montarContextoSugestoes(vendedoraId) {
     vendedora: { id: vendedora.id, nome: vendedora.nome, loja: vendedora.loja },
     clientes: clientes || [],
     kpis,
+    atencaoEspecial,         // { cliente_id: {score, motivos, tem_atraso_ciclo, ...} } — Ailson 06/05/2026
     sacolas: sacolas || [],
     sacolasDescartadas,
     grupos: grupos || [],
@@ -1183,6 +1198,15 @@ function montarMessagesSugestoes(ctx) {
         grupo_id: c.grupo_id,
         pular_ate: c.pular_ate,
         kpi_incompleto: kpiIncompleto, // ⚠️ NÃO use pra reativar/atenção/followup se true
+        // ATENCAO ESPECIAL — Ailson 06/05/2026.
+        // Cliente ATIVO mas com mudanca de comportamento (atrasou ciclo,
+        // queda volume, queda ticket, devolucao). IA deve PRIORIZAR este
+        // cliente e MENCIONAR motivos discretamente na mensagem.
+        // null = cliente nao tem score >=3.
+        atencao_especial: ctx.atencaoEspecial?.[c.id] ? {
+          score: ctx.atencaoEspecial[c.id].score,
+          motivos: ctx.atencaoEspecial[c.id].motivos,
+        } : null,
         // Cliente Vesti? Combina vendas físicas (KPIs) + cadastro Vesti
         // (canal_cadastro). True = priorizar sugerir link/video do app.
         usa_vesti: usaVestiCli,
