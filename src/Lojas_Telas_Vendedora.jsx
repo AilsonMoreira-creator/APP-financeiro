@@ -2164,6 +2164,27 @@ export const MinhaCarteiraScreen = ({
 }) => {
   const { state, carteiraAtual } = lojas;
   const [filtroStatus, setFiltroStatus] = useState('todos');
+
+  // Filtro "na janela de compra" — Ailson 06/05/2026.
+  // Lê IDs de clientes dentro da janela via endpoint (calc em tempo real
+  // da view vw_lojas_clientes_janela). Quando ativo, filtra a lista.
+  const [idsNaJanela, setIdsNaJanela] = useState(null); // null = nao carregado
+  const [filtroJanela, setFiltroJanela] = useState(false);
+  useEffect(() => {
+    if (!vendedora?.id) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/lojas-janela-cliente?vendedora_id=${vendedora.id}&filtro=na_janela`, {
+          headers: { 'X-User': state.userId || '' },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!cancelado) setIdsNaJanela(new Set((d.itens || []).map(i => i.cliente_id)));
+      } catch {}
+    })();
+    return () => { cancelado = true; };
+  }, [vendedora?.id, state.userId]);
   const [busca, setBusca] = useState('');
   const [ordenacao, setOrdenacao] = useState('lifetime');
   const [mostrarVesti, setMostrarVesti] = useState(false);
@@ -2238,6 +2259,14 @@ export const MinhaCarteiraScreen = ({
 
   const itensFiltrados = itensCarteira
     .filter(i => filtroStatus === 'todos' || i.statusAtual === filtroStatus)
+    .filter(i => {
+      // Filtro "Na janela" — quando ativo, mostra so cliente cujo id esta no Set
+      // Pra grupo, mostra se algum doc do grupo esta na janela
+      if (!filtroJanela || !idsNaJanela) return true;
+      if (i.tipo === 'cliente') return idsNaJanela.has(i.cliente.id);
+      // grupo: algum cliente do grupo na janela
+      return (i.docsDoGrupo || []).some(c => idsNaJanela.has(c.id));
+    })
     .filter(i => {
       if (!busca) return true;
       const termo = busca.toLowerCase();
@@ -2334,7 +2363,7 @@ export const MinhaCarteiraScreen = ({
         })()}
       />
       <div style={{ padding: 16, paddingBottom: 32 }}>
-        {/* Contadores - inclui SACOLA novo */}
+        {/* Contadores - inclui SACOLA novo + JANELA (Ailson 06/05/2026) */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 14, overflowX: 'auto' }}>
           <Contador statusKey="ativo" label="Ativos" count={contadores.ativo} />
           <Contador statusKey="separandoSacola" label="Sacola" count={contadores.separandoSacola} />
@@ -2342,6 +2371,22 @@ export const MinhaCarteiraScreen = ({
           <Contador statusKey="semAtividade" label="S/Ativ" count={contadores.semAtividade} />
           <Contador statusKey="inativo" label="Inativ" count={contadores.inativo} />
           <Contador statusKey="arquivo" label="Arq" count={contadores.arquivo} />
+          {/* Filtro extra: clientes dentro da janela de compra */}
+          {idsNaJanela && (
+            <button
+              onClick={() => setFiltroJanela(v => !v)}
+              style={{
+                background: filtroJanela ? '#eafbf0' : palette.surface,
+                border: `1.5px solid ${filtroJanela ? '#27ae60' : palette.beige}`,
+                borderRadius: 10, padding: '10px 6px', flex: 1, minWidth: 0, cursor: 'pointer',
+                fontFamily: FONT, textAlign: 'center', transition: 'all 0.15s',
+              }}
+              title="Clientes dentro da janela ideal de compra (entre 70-100% do ciclo)"
+            >
+              <div style={{ fontSize: fz(21), fontWeight: 700, color: filtroJanela ? '#27ae60' : palette.ink, lineHeight: 1 }}>{idsNaJanela.size}</div>
+              <div style={{ fontSize: fz(10), color: filtroJanela ? '#27ae60' : palette.inkMuted, marginTop: 4, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>🎯 Janela</div>
+            </button>
+          )}
         </div>
 
         {/* Busca */}
@@ -2604,6 +2649,27 @@ export const DetalheClienteScreen = ({
     setApelido(cliente.apelido || '');
   }, [cliente.apelido]);
 
+  // Fetch dados da janela de compra (view vw_lojas_clientes_janela)
+  // Ailson 06/05/2026 noite. Mostra media de dias + dias ate janela
+  // SO se cliente tem >=5 visitas (media_confiavel=true). Caso contrario
+  // omite (decisao Ailson 3a).
+  const [janela, setJanela] = useState(null);
+  useEffect(() => {
+    if (!cliente?.id) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/lojas-janela-cliente?cliente_id=${cliente.id}`, {
+          headers: { 'X-User': state.userId || '' },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!cancelado) setJanela(d);
+      } catch {}
+    })();
+    return () => { cancelado = true; };
+  }, [cliente?.id, state.userId]);
+
   const kpi = cliente.kpi || state.clientesKpis[cliente.id] || {};
   const meta = statusMap[cliente.statusAtual] || statusMap.ativo;
   const ticketMedio = kpi.ticket_medio_total || (kpi.lifetime_total && kpi.qtd_compras ? Math.round(kpi.lifetime_total / kpi.qtd_compras) : null);
@@ -2811,11 +2877,43 @@ export const DetalheClienteScreen = ({
               Última compra há <strong>{kpi.dias_sem_comprar} dias</strong>
             </div>
           )}
-          {kpi.frequencia_media_dias && (
+          {/* Media de dias entre compras + dias ate janela
+              Mostrado SO se cliente tem >=5 visitas distintas (media_confiavel).
+              Decisao Ailson 06/05/2026 (3a): omitir quando nao confiavel. */}
+          {janela?.media_confiavel && janela?.media_dias_compras && (
             <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7 }}>
-              Compra a cada ~<strong>{Math.round(kpi.frequencia_media_dias)} dias</strong>
+              Compra a cada <strong>{Math.round(janela.media_dias_compras)} dias</strong>
+              {' '}<span style={{ fontSize: fz(13), color: palette.inkSoft }}>(média de {janela.qtd_datas_unicas} compras)</span>
             </div>
           )}
+          {janela?.media_confiavel && janela?.dias_ate_janela_atencao != null && (() => {
+            const d = janela.dias_ate_janela_atencao;
+            const dentro = janela.dentro_janela_compra;
+            // 3 estados visuais:
+            //   d > 0  → "Faltam X dias pra entrar na janela" (cinza)
+            //   dentro=true → "Está na janela agora!" (verde)
+            //   d < 0 sem dentro → "Passou da janela há X dias" (vermelho leve)
+            if (dentro) {
+              return (
+                <div style={{ fontSize: fz(15), fontWeight: 600, color: '#27ae60', lineHeight: 1.7, marginTop: 4, padding: '4px 10px', background: '#eafbf0', borderRadius: 6, display: 'inline-block' }}>
+                  🎯 Está na janela de compra agora
+                </div>
+              );
+            }
+            if (d > 0) {
+              return (
+                <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.7 }}>
+                  Faltam <strong>{d} dias</strong> pra entrar na janela
+                </div>
+              );
+            }
+            // d <= 0 e nao dentro = passou
+            return (
+              <div style={{ fontSize: fz(15), fontWeight: 600, color: '#c0392b', lineHeight: 1.7, marginTop: 4, padding: '4px 10px', background: '#fdeaea', borderRadius: 6, display: 'inline-block' }}>
+                ⚠ Passou da janela há {Math.abs(d)} dias
+              </div>
+            );
+          })()}
         </div>
 
         {/* Estilo dominante */}
