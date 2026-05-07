@@ -164,7 +164,12 @@ export default async function handler(req, res) {
       }
 
       // Fallback: pra refs que nao acharam em lojas_produtos, busca em
-      // amicia_data.payload.fichas[]
+      // amicia_data.payload.produtos[] (Ficha Tecnica, fonte canonica).
+      // FIX 07/05/2026: estava buscando em payload.fichas[] que NAO existe!
+      // Estrutura real eh payload.produtos[] (confirmado em src/Lojas.jsx
+      // linha 445 — loadProdutosCadastro). Por isso o fallback nunca
+      // achava nada — REFs como 3202 ja cadastradas continuavam mostrando
+      // '(produto não encontrado)'.
       const refsFaltando = todasRefs.filter(r => !prodMap.has(r));
       if (refsFaltando.length > 0) {
         const { data: ftRow } = await supabase
@@ -172,22 +177,23 @@ export default async function handler(req, res) {
           .select('payload')
           .eq('user_id', 'ficha-tecnica')
           .maybeSingle();
-        const fichas = ftRow?.payload?.fichas || [];
+        const produtosFicha = ftRow?.payload?.produtos || [];
         // Set inclui forma normalizada DAS faltantes pra match flexivel
         const setFaltando = new Set();
         for (const r of refsFaltando) {
           setFaltando.add(String(r));
           setFaltando.add(String(r).replace(/^0+/, '') || '0');
         }
-        for (const f of fichas) {
-          const refRaw = String(f.ref || '');
+        for (const p of produtosFicha) {
+          const refRaw = String(p.ref || '').trim();
+          if (!refRaw) continue;
           const refSemZero = refRaw.replace(/^0+/, '') || '0';
           if (setFaltando.has(refRaw) || setFaltando.has(refSemZero)) {
             const fichaData = {
               ref: refRaw,
-              descricao: f.descricao || '',
-              categoria: f.categoria || null,
-              qtd_estoque: 0,
+              descricao: p.descricao || '',
+              categoria: p.categoria || null,
+              qtd_estoque: p.estoque || p.qtd_estoque || 0,
             };
             // Indexa AMBOS formatos pra que lookup posterior nao falhe
             if (!prodMap.has(refRaw)) prodMap.set(refRaw, fichaData);

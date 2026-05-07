@@ -383,13 +383,15 @@ export async function buscarRefNoCadastro(ref) {
   }
 
   // 2. Ficha técnica (amicia_data.user_id='ficha-tecnica')
+  // FIX 07/05/2026: estrutura real eh payload.produtos[], nao payload.fichas[]
+  // (confirmado em src/Lojas.jsx linha 445).
   const { data: ft } = await supabase
     .from('amicia_data')
     .select('payload')
     .eq('user_id', 'ficha-tecnica')
     .maybeSingle();
 
-  const fichas = ft?.payload?.fichas || [];
+  const fichas = ft?.payload?.produtos || [];
   const fichaMatch = fichas.find(f => normalizarRef(f.ref) === ref);
   if (fichaMatch) {
     return {
@@ -884,13 +886,14 @@ export async function contextoProduto(ref = null, isAdmin = false) {
  * Se não achou por REF, tenta buscar por descrição (match parcial).
  */
 export async function contextoFichaTecnica(refOuDesc) {
+  // FIX 07/05/2026: estrutura real eh payload.produtos[], nao payload.fichas[]
   const { data } = await supabase
     .from('amicia_data')
     .select('payload')
     .eq('user_id', 'ficha-tecnica')
     .maybeSingle();
 
-  const fichas = data?.payload?.fichas || [];
+  const fichas = data?.payload?.produtos || [];
   if (fichas.length === 0) return { msg: 'Nenhuma ficha cadastrada' };
 
   // Tenta como REF primeiro
