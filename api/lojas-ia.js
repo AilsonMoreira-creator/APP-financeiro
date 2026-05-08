@@ -2174,24 +2174,28 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
   }
 
   // 3. Cria sugestao avulsa em lojas_sugestoes_diarias
-  // Marca subtipo='avulsa' pra distinguir das 7 diarias geradas pelo cron
+  // Marca origem='avulsa' em metadados_ia pra distinguir das 7 diarias do cron
+  // FIX 08/05/2026 (Ailson): INSERT estava usando 3 nomes de coluna errados
+  // que nao existem no schema (ordem→prioridade, subtipo→nao existe), e
+  // faltava alvo_tipo NOT NULL. Resultado: erro 500 PostgREST schema cache.
   const hoje = new Date().toISOString().slice(0, 10);
   const { data: sugCriada, error: errCriar } = await supabase
     .from('lojas_sugestoes_diarias')
     .insert({
       vendedora_id: cliente.vendedora_id,
+      alvo_tipo: 'cliente',                      // NOT NULL no schema
       cliente_id: clienteId,
       grupo_id: null,
       data_geracao: hoje,
       tipo: tipoSug,
-      subtipo: 'avulsa', // diferenciar pro relatório
       titulo: refEscolhida
         ? `Mensagem avulsa — REF ${refEscolhida}`
         : 'Mensagem avulsa',
       produto_ref: refEscolhida,
       status: 'pendente',
-      ordem: 99, // não interfere nas 7 do dia
+      prioridade: 99,                             // 99 = avulsa, fora das 7 do dia
       fatos: { origem: 'avulsa', escolhida_via: refEscolhida ? 'cascata' : 'sem_peca' },
+      metadados_ia: { origem: 'avulsa' },        // marca pra relatorios filtrarem
     })
     .select()
     .single();

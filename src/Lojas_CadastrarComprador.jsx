@@ -168,6 +168,7 @@ export const CadastrarCompradorScreen = ({ lojas, onBack }) => {
             style={{
               flex: 1, border: 'none', background: 'transparent', outline: 'none',
               fontFamily: FONT, fontSize: fz(16), color: palette.ink,
+              colorScheme: 'light',
             }}
           />
           {buscando && (
@@ -270,6 +271,7 @@ export const CadastrarCompradorScreen = ({ lojas, onBack }) => {
                 style={{
                   flex: 1, border: 'none', background: 'transparent', outline: 'none',
                   fontFamily: FONT, fontSize: fz(16), color: palette.ink,
+                  colorScheme: 'light',
                 }}
               />
             </div>

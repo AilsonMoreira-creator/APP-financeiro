@@ -4037,8 +4037,14 @@ function renderMensagemComLinks(texto) {
 export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) => {
   const { state, handleGerarMensagem, handleEditarApelido, handleEditarTelefone, handleMarcarSugestaoExecutada, handleDispensarSugestao, handleSalvarEdicaoMensagem } = lojas;
 
-  // Cliente vem direto OU buscado pela sugestão
-  const clienteEfetivo = cliente || (sugestao ? state.clientes.find(c => c.id === sugestao.cliente_id) : null);
+  // Cliente vem direto OU buscado pela sugestão.
+  // FIX 08/05/2026 (Ailson): memoiza pra nao rodar state.clientes.find()
+  // a cada keystroke do input apelido (causava lentidao perceptivel em
+  // carteiras grandes — search linear em ~6k clientes a cada render).
+  const clienteEfetivo = useMemo(
+    () => cliente || (sugestao ? state.clientes.find(c => c.id === sugestao.cliente_id) : null),
+    [cliente, sugestao, state.clientes]
+  );
   const apelidoInicial = clienteEfetivo?.apelido || '';
 
   const [step, setStep] = useState(apelidoInicial ? 'gerando' : 'apelido');
@@ -4286,7 +4292,9 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               onKeyDown={e => { if (e.key === 'Enter') setStep('gerando'); }}
               style={{
                 width: '100%', padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${palette.beige}`,
-                fontSize: fz(17), fontFamily: FONT, color: palette.ink, outline: 'none', boxSizing: 'border-box', marginBottom: 14,
+                fontSize: fz(17), fontFamily: FONT, color: palette.ink,
+                background: palette.bg, colorScheme: 'light',
+                outline: 'none', boxSizing: 'border-box', marginBottom: 14,
               }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => { setApelido(''); setStep('gerando'); }} style={{
