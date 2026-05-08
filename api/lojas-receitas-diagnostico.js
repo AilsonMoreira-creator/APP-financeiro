@@ -104,16 +104,16 @@ export default async function handler(req, res) {
     ];
     const { data: imports, error: errI } = await supabase
       .from('lojas_importacoes')
-      .select('id, tipo, arquivo_nome, status, qtd_inseridos, qtd_atualizados, qtd_ignorados, detalhes_ignorados, drive_modified_at, iniciada_em, finalizada_em, duracao_ms, mensagem_erro')
-      .in('tipo', tipos)
+      .select('id, tipo_arquivo, nome_arquivo, loja, drive_file_id, status, registros_total, registros_inseridos, registros_atualizados, registros_ignorados, detalhes_ignorados, iniciada_em, finalizada_em, duracao_ms, iniciada_por, erro')
+      .in('tipo_arquivo', tipos)
       .order('iniciada_em', { ascending: false })
-      .limit(15);
+      .limit(20);
     if (errI) throw new Error('imports: ' + errI.message);
 
     // Agrupa por tipo, mostra o mais recente de cada
     const ultimoPorTipo = {};
     for (const imp of (imports || [])) {
-      if (!ultimoPorTipo[imp.tipo]) ultimoPorTipo[imp.tipo] = imp;
+      if (!ultimoPorTipo[imp.tipo_arquivo]) ultimoPorTipo[imp.tipo_arquivo] = imp;
     }
 
     // 5. Diagnostico textual
