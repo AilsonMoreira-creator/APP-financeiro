@@ -1666,8 +1666,75 @@ export const CardDiaScreen = ({
             <Star size={sz(20)} color={palette.warn} /> Destaques da semana
           </button>
         </div>
+
+        {/* Footer versao + hard-reload — Ailson 08/05/2026
+            Mostra build pra diagnostico (vendedoras pdem mandar print).
+            Tap 5x ativa hard reload (limpa SW + caches + reload). */}
+        <FooterVersao />
       </div>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+};
+
+// Footer com versao + hard-reload escondido (5 taps no 'v')
+// Permite vendedora forcar atualizacao quando cache do iOS prende
+const FooterVersao = () => {
+  const [taps, setTaps] = useState(0);
+  const [hardReloading, setHardReloading] = useState(false);
+
+  const versao = (typeof __APP_BUILD__ !== 'undefined') ? __APP_BUILD__ : 'dev';
+  const versaoCurta = versao.replace(/[-:]/g, '').slice(0, 13);
+
+  const onTap = () => {
+    const novo = taps + 1;
+    setTaps(novo);
+    if (novo >= 5) {
+      hardReload();
+    } else {
+      setTimeout(() => setTaps(0), 1500);
+    }
+  };
+
+  const hardReload = async () => {
+    setHardReloading(true);
+    try {
+      // 1. Unregister todos os service workers
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      // 2. Limpa todos os caches
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      // 3. Reload com bypass de cache
+      window.location.href = window.location.href.split('?')[0] + '?v=' + Date.now();
+    } catch (e) {
+      alert('Erro ao recarregar: ' + (e?.message || e));
+      setHardReloading(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onTap}
+      style={{
+        marginTop: 32, marginBottom: 8, padding: 8,
+        textAlign: 'center', fontSize: fz(11), color: palette.inkMuted,
+        cursor: 'pointer', userSelect: 'none',
+      }}
+    >
+      {hardReloading ? (
+        <span>🔄 Atualizando…</span>
+      ) : taps >= 3 ? (
+        <span style={{ color: palette.accent }}>
+          {5 - taps} toque{5 - taps !== 1 ? 's' : ''} pra atualizar app
+        </span>
+      ) : (
+        <span>v {versaoCurta}</span>
+      )}
     </div>
   );
 };
