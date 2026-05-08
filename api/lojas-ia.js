@@ -1277,11 +1277,191 @@ async function montarContextoMensagem(sug, contextoExtra) {
     console.warn('[ia-mensagem] estilo vendedora indisponivel:', e?.message);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CONTEXTO RICO — Ailson 07/05/2026
+  // Dados que ja existem mas nao estavam indo pra geracao individual de
+  // mensagem. Trazendo paridade com as sugestoes diarias.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  let janelaCompra = null;
+  let conversoesCliente = null;
+  let historicoSugestoes = [];
+  let topCategorias = [];
+  let ultimaCompra = null;
+  let perfilCanal = null;
+  let statusEfetivo = null;
+  let pecaInfo = null; // novidade? reposição? combina com estilo dela?
+
+  if (cliente && cliente.id) {
+    // 1. JANELA DE COMPRA
+    try {
+      const { data: jData } = await supabase
+        .from('vw_lojas_clientes_janela')
+        .select('dias_ate_janela_atencao, dentro_janela_compra, media_confiavel, media_dias_compras')
+        .eq('cliente_id', cliente.id)
+        .maybeSingle();
+      if (jData?.media_confiavel) {
+        janelaCompra = {
+          estado: jData.dentro_janela_compra
+            ? 'na_janela'
+            : (jData.dias_ate_janela_atencao > 0 ? 'confortavel' : 'passou_janela'),
+          media_dias: Math.round(jData.media_dias_compras || 0),
+          dias_ate_janela: jData.dias_ate_janela_atencao,
+        };
+      }
+    } catch (e) { /* silent */ }
+
+    // 2. CONVERSOES anteriores (60d)
+    try {
+      const dataLimite = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+      const { data: conv } = await supabase
+        .from('lojas_conversoes')
+        .select('data_venda, dias_ate_compra, valor_venda')
+        .eq('cliente_id', cliente.id)
+        .gte('data_venda', dataLimite)
+        .order('data_venda', { ascending: false });
+      if (conv?.length > 0) {
+        conversoesCliente = {
+          total: conv.length,
+          ultima_data: conv[0].data_venda,
+          ultimo_dias_ate_compra: conv[0].dias_ate_compra,
+          ultimo_valor: conv[0].valor_venda,
+        };
+      }
+    } catch (e) { /* silent */ }
+
+    // 3. HISTORICO de sugestoes (28d, max 5) — anti-repeticao
+    try {
+      const dataLimiteHist = new Date(Date.now() - 28 * 86400000).toISOString().slice(0, 10);
+      const { data: hist } = await supabase
+        .from('lojas_sugestoes_diarias')
+        .select('data_geracao, tipo, titulo, produto_ref')
+        .eq('cliente_id', cliente.id)
+        .gte('data_geracao', dataLimiteHist)
+        .in('status', ['executada', 'pendente'])
+        .order('data_geracao', { ascending: false })
+        .limit(5);
+      historicoSugestoes = (hist || []).map(h => ({
+        data: h.data_geracao,
+        tipo: h.tipo,
+        ref: h.produto_ref || null,
+        titulo: h.titulo,
+      }));
+    } catch (e) { /* silent */ }
+
+    // 4. TOP CATEGORIAS — o que cliente mais compra
+    try {
+      const { data: itens } = await supabase
+        .from('lojas_vendas_itens')
+        .select('categoria, qtd, lojas_vendas!inner(cliente_id)')
+        .eq('lojas_vendas.cliente_id', cliente.id);
+      if (itens?.length) {
+        const counts = {};
+        itens.forEach(i => {
+          const cat = i.categoria || 'outros';
+          counts[cat] = (counts[cat] || 0) + (i.qtd || 1);
+        });
+        topCategorias = Object.entries(counts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 4)
+          .map(([cat, qtd]) => ({ categoria: cat, qtd }));
+      }
+    } catch (e) { /* silent */ }
+
+    // 5. ULTIMA COMPRA — data + REFs principais
+    try {
+      const { data: ultima } = await supabase
+        .from('lojas_vendas')
+        .select('id, data_venda, valor_total')
+        .eq('cliente_id', cliente.id)
+        .order('data_venda', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (ultima) {
+        const { data: itensUlt } = await supabase
+          .from('lojas_vendas_itens')
+          .select('ref, descricao, categoria')
+          .eq('venda_id', ultima.id)
+          .limit(5);
+        const diasAtras = Math.round((Date.now() - new Date(ultima.data_venda).getTime()) / 86400000);
+        ultimaCompra = {
+          data: ultima.data_venda,
+          dias_atras: diasAtras,
+          valor: parseFloat(ultima.valor_total || 0),
+          itens: (itensUlt || []).map(i => ({
+            ref: i.ref,
+            descricao: (i.descricao || '').slice(0, 50),
+            categoria: i.categoria,
+          })),
+        };
+      }
+    } catch (e) { /* silent */ }
+
+    // 6. PERFIL CANAL — granular (igual gap 3)
+    if (kpi) {
+      const fis = kpi.qtd_compras_fisicas || 0;
+      const ves = kpi.qtd_compras_vesti || 0;
+      const con = kpi.qtd_compras_convertr || 0;
+      const total = fis + ves + con;
+      if (total === 0) {
+        perfilCanal = cliente.canal_cadastro === 'vesti' ? 'so_cadastro_vesti' : 'sem_dados';
+      } else {
+        const pctF = fis / total, pctV = ves / total, pctC = con / total;
+        if (pctF >= 0.9) perfilCanal = 'so_presencial';
+        else if (pctV >= 0.9) perfilCanal = 'so_vesti';
+        else if (pctC >= 0.9) perfilCanal = 'so_online';
+        else if (pctF >= 0.5 && pctV > 0) perfilCanal = 'hibrido_loja_vesti';
+        else if (pctF >= 0.5 && pctC > 0) perfilCanal = 'hibrido_loja_online';
+        else perfilCanal = 'misto';
+      }
+    }
+
+    // 7. STATUS EFETIVO (dias_sem_comprar -> categoria)
+    if (kpi?.dias_sem_comprar != null) {
+      const d = kpi.dias_sem_comprar;
+      if (d <= 30) statusEfetivo = 'ativo';
+      else if (d <= 60) statusEfetivo = 'atencao';
+      else if (d <= 120) statusEfetivo = 'sem_atividade';
+      else statusEfetivo = 'inativo';
+    }
+
+    // 8. PECA INFO — a peca da sugestao eh novidade? reposicao? combina?
+    if (sug.produto_ref) {
+      const refSemZ = String(sug.produto_ref).replace(/^0+/, '') || '0';
+      try {
+        // Verifica se eh novidade
+        const { data: nov } = await supabase
+          .from('vw_lojas_novidades_auto')
+          .select('ref')
+          .eq('ref', refSemZ)
+          .maybeSingle();
+        // Verifica se eh reposicao
+        const { data: rep } = await supabase
+          .from('vw_lojas_reposicoes_auto')
+          .select('ref')
+          .eq('ref', refSemZ)
+          .maybeSingle();
+        // Cruza com top categorias da cliente
+        const categoriaSug = produto?.categoria || null;
+        const combinaEstilo = categoriaSug && topCategorias.some(t => t.categoria === categoriaSug);
+        pecaInfo = {
+          eh_novidade: !!nov,
+          eh_reposicao: !!rep,
+          combina_estilo_cliente: !!combinaEstilo,
+          categoria: categoriaSug,
+        };
+      } catch (e) { /* silent */ }
+    }
+  }
+
   return {
     cliente, grupo, kpi, docsGrupo,
     produto, promocao, coresTop,
     regrasCustomizadas: { tomGeral, posicionamento, sempre, nunca, saudacao, fechamento },
     estiloVendedora,
+    // Contexto rico — Ailson 07/05/2026
+    janelaCompra, conversoesCliente, historicoSugestoes,
+    topCategorias, ultimaCompra, perfilCanal, statusEfetivo, pecaInfo,
   };
 }
 
@@ -1747,6 +1927,17 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       emojis_preferidos: ctx.estiloVendedora.emojis_top,
       instrucao: 'IMITE o estilo desta vendedora — use os tratamentos, saudações e emojis preferidos dela quando fizer sentido.',
     } : null,
+    // CONTEXTO RICO — Ailson 07/05/2026 (auditoria mensagem individual)
+    // Mesmos sinais que a IA das sugestoes diarias usa — agora disponiveis
+    // pra geracao de mensagem individual tambem.
+    status_cliente: ctx.statusEfetivo, // 'ativo' | 'atencao' | 'sem_atividade' | 'inativo' | null
+    perfil_canal: ctx.perfilCanal,     // 'so_presencial' | 'so_vesti' | 'so_online' | 'hibrido_*' | 'misto' | 'so_cadastro_vesti' | 'sem_dados'
+    janela_compra: ctx.janelaCompra,   // {estado, media_dias, dias_ate_janela}
+    top_categorias_cliente: ctx.topCategorias?.length > 0 ? ctx.topCategorias : null,
+    ultima_compra: ctx.ultimaCompra,
+    conversoes_anteriores: ctx.conversoesCliente,
+    historico_sugestoes_28d: ctx.historicoSugestoes,
+    peca_info: ctx.pecaInfo, // { eh_novidade, eh_reposicao, combina_estilo_cliente }
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };
