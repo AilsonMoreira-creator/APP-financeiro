@@ -972,6 +972,316 @@ export const RegrasScreen = ({ lojas, onBack }) => {
 // Escreve: handleInativarVendedora
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// EstiloIAInline — painel de estilo IA por vendedora (admin)
+// Sessao Ailson 07/05/2026.
+// ═══════════════════════════════════════════════════════════════════════════
+// Responsavel por:
+//   - Mostrar perfil de estilo agregado (qtd edicoes, ultima edicao)
+//   - Botao "Analisar com IA" (gera analise textual)
+//   - Mostrar analise quando ja existe (texto livre + estruturado)
+//   - Definir vendedora referencia ("aprende com X")
+//   - Mostrar quem aprende dela (aprendizes)
+const EstiloIAInline = ({ vendedora, estilo, todasVendedoras, estilosMap, userId, onAtualizar, onFechar }) => {
+  const [analisando, setAnalisando] = useState(false);
+  const [erroAnalise, setErroAnalise] = useState(null);
+  const [salvandoRef, setSalvandoRef] = useState(false);
+
+  const qtdEd = estilo?.qtd_edicoes || 0;
+  const analise = estilo?.analise;
+  const aprendeCom = estilo?.aprende_com;
+  const aprendeComVendedora = aprendeCom ? todasVendedoras.find(x => x.id === aprendeCom) : null;
+  const aprendizes = estilo?.aprendizes || [];
+
+  const podeAnalisar = qtdEd >= 5;
+  const possiveisRef = todasVendedoras.filter(x =>
+    x.id !== vendedora.id && (estilosMap[x.id]?.qtd_edicoes || 0) >= 5
+  );
+
+  const analisar = async () => {
+    setAnalisando(true);
+    setErroAnalise(null);
+    try {
+      const r = await fetch('/api/lojas-analisar-estilo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+        body: JSON.stringify({ vendedora_id: vendedora.id }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setErroAnalise(d.error || `HTTP ${r.status}`);
+      } else {
+        await onAtualizar();
+      }
+    } catch (e) {
+      setErroAnalise(e.message || String(e));
+    } finally {
+      setAnalisando(false);
+    }
+  };
+
+  const salvarRef = async (refId) => {
+    setSalvandoRef(true);
+    try {
+      const r = await fetch('/api/lojas-definir-aprende-com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+        body: JSON.stringify({ vendedora_id: vendedora.id, aprende_com: refId || null }),
+      });
+      if (!r.ok) {
+        const d = await r.json();
+        alert('Erro: ' + (d.error || `HTTP ${r.status}`));
+      } else {
+        await onAtualizar();
+      }
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    } finally {
+      setSalvandoRef(false);
+    }
+  };
+
+  const fmtData = (s) => {
+    if (!s) return '—';
+    try { return new Date(s).toLocaleDateString('pt-BR'); } catch { return s; }
+  };
+
+  const Pill = ({ children, color = '#7c4dff' }) => (
+    <span style={{
+      display: 'inline-block',
+      padding: '3px 10px',
+      borderRadius: 12,
+      background: `${color}15`,
+      color,
+      fontSize: fz(12),
+      fontWeight: 600,
+      marginRight: 4,
+      marginBottom: 4,
+    }}>{children}</span>
+  );
+
+  return (
+    <div style={{
+      marginTop: 10, padding: 12,
+      background: '#f7f4fa', borderRadius: 10,
+      border: `1px solid #7c4dff30`,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: fz(13), fontWeight: 700, color: '#7c4dff' }}>
+          🎨 Estilo aprendido pela IA
+        </div>
+        <button onClick={onFechar} style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          fontSize: fz(16), color: palette.inkMuted, padding: '0 4px',
+        }}>×</button>
+      </div>
+
+      {/* Stats */}
+      <div style={{ fontSize: fz(13), color: palette.inkSoft, marginBottom: 10 }}>
+        <strong>{qtdEd}</strong> mensagem{qtdEd !== 1 ? 's' : ''} editada{qtdEd !== 1 ? 's' : ''}
+        {estilo?.ultima_edicao_em && <> · última: {fmtData(estilo.ultima_edicao_em)}</>}
+      </div>
+
+      {/* Status de aprendizado */}
+      {aprendeComVendedora && (
+        <div style={{
+          fontSize: fz(13), padding: 8, borderRadius: 6,
+          background: '#fff3cd', color: '#856404', marginBottom: 10,
+        }}>
+          ↳ Está usando estilo de <strong>{aprendeComVendedora.nome}</strong>.
+          Edições próprias estão pausadas (não atualizam contadores).
+        </div>
+      )}
+      {aprendizes.length > 0 && (
+        <div style={{
+          fontSize: fz(13), padding: 8, borderRadius: 6,
+          background: '#fff8e1', color: '#7d5a00', marginBottom: 10,
+        }}>
+          ⭐ É referência de: <strong>{aprendizes.map(a => a.nome).join(', ')}</strong>
+        </div>
+      )}
+
+      {/* Botão analisar */}
+      {!analise && (
+        <div style={{ marginBottom: 10 }}>
+          {!podeAnalisar ? (
+            <div style={{ fontSize: fz(13), color: palette.inkMuted, fontStyle: 'italic' }}>
+              Mínimo 5 edições pra análise IA. {qtdEd === 0 ? 'Vendedora ainda não editou nenhuma mensagem.' : `Faltam ${5 - qtdEd}.`}
+            </div>
+          ) : (
+            <button
+              onClick={analisar}
+              disabled={analisando}
+              style={{
+                background: '#7c4dff', color: 'white', border: 'none',
+                borderRadius: 6, padding: '8px 14px',
+                fontSize: fz(14), cursor: analisando ? 'wait' : 'pointer',
+                fontFamily: FONT, fontWeight: 600,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {analisando
+                ? <><Loader2 size={sz(14)} style={spinKeyframes} /> Analisando…</>
+                : <>🔍 Analisar estilo com IA (custo ~R$0,10)</>}
+            </button>
+          )}
+          {erroAnalise && (
+            <div style={{ marginTop: 6, fontSize: fz(13), color: palette.alert }}>
+              {erroAnalise}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Análise existente */}
+      {analise && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.ink }}>
+              📖 Análise da IA
+            </div>
+            <button
+              onClick={analisar}
+              disabled={analisando}
+              style={{
+                background: 'transparent', border: `1px solid #7c4dff40`,
+                color: '#7c4dff', borderRadius: 4, padding: '3px 8px',
+                fontSize: fz(11), cursor: analisando ? 'wait' : 'pointer',
+                fontFamily: FONT, fontWeight: 600,
+              }}
+            >
+              {analisando ? '…' : '↻ Regerar'}
+            </button>
+          </div>
+          <div style={{ fontSize: fz(12), color: palette.inkMuted, marginBottom: 8 }}>
+            Gerada em {fmtData(analise.geradoEm)} · {analise.qtd_edicoes_analisadas} edições analisadas
+          </div>
+
+          {/* Texto livre */}
+          {analise.texto_livre && (
+            <div style={{
+              fontSize: fz(14), color: palette.ink, lineHeight: 1.5,
+              padding: 10, background: 'white', borderRadius: 6, marginBottom: 10,
+              fontStyle: 'italic',
+            }}>
+              "{analise.texto_livre}"
+            </div>
+          )}
+
+          {/* Estruturado expandível */}
+          {analise.estruturado && (
+            <details style={{ fontSize: fz(13) }}>
+              <summary style={{ cursor: 'pointer', color: '#7c4dff', fontWeight: 600, marginBottom: 6 }}>
+                Ver detalhes estruturados
+              </summary>
+              <div style={{ padding: 10, background: 'white', borderRadius: 6 }}>
+                {analise.estruturado.tom_geral && (
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>Tom geral:</strong> {analise.estruturado.tom_geral}
+                  </div>
+                )}
+                {analise.estruturado.saudacoes_iniciais?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>Saudações iniciais:</strong><br/>
+                    {analise.estruturado.saudacoes_iniciais.map((s, i) => <Pill key={i}>{s}</Pill>)}
+                  </div>
+                )}
+                {analise.estruturado.saudacoes_finais?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>Fechamentos:</strong><br/>
+                    {analise.estruturado.saudacoes_finais.map((s, i) => <Pill key={i}>{s}</Pill>)}
+                  </div>
+                )}
+                {analise.estruturado.tratamentos?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>Tratamentos:</strong><br/>
+                    {analise.estruturado.tratamentos.map((s, i) => <Pill key={i}>{s}</Pill>)}
+                  </div>
+                )}
+                {analise.estruturado.emojis_frequentes?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>Emojis:</strong> {analise.estruturado.emojis_frequentes.join(' ')}
+                  </div>
+                )}
+                {analise.estruturado.padroes_de_edicao && (
+                  <>
+                    {analise.estruturado.padroes_de_edicao.adiciona?.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <strong>Adiciona:</strong>
+                        <ul style={{ margin: '4px 0 0 20px', padding: 0 }}>
+                          {analise.estruturado.padroes_de_edicao.adiciona.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {analise.estruturado.padroes_de_edicao.remove?.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <strong>Remove:</strong>
+                        <ul style={{ margin: '4px 0 0 20px', padding: 0 }}>
+                          {analise.estruturado.padroes_de_edicao.remove.map((s, i) => <li key={i}>{s}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                )}
+                {analise.estruturado.comprimento_medio && (
+                  <div style={{ marginBottom: 8 }}>
+                    <strong>Comprimento médio:</strong> {analise.estruturado.comprimento_medio}
+                  </div>
+                )}
+                {analise.estruturado.linguagem?.length > 0 && (
+                  <div>
+                    <strong>Linguagem:</strong><br/>
+                    {analise.estruturado.linguagem.map((s, i) => <Pill key={i} color={palette.accent}>{s}</Pill>)}
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+
+      {/* Definir vendedora referência */}
+      <div style={{
+        borderTop: `1px solid ${palette.beige}`, paddingTop: 10, marginTop: 10,
+        fontSize: fz(13),
+      }}>
+        <div style={{ marginBottom: 6, fontWeight: 600, color: palette.ink }}>
+          📥 Aprender estilo de outra vendedora
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={aprendeCom || ''}
+            onChange={e => salvarRef(e.target.value || null)}
+            disabled={salvandoRef}
+            style={{
+              padding: '6px 10px', borderRadius: 6,
+              border: `1px solid ${palette.beige}`,
+              fontSize: fz(13), fontFamily: FONT,
+              background: palette.surface,
+              cursor: salvandoRef ? 'wait' : 'pointer',
+              flex: 1, minWidth: 0,
+            }}
+          >
+            <option value="">— usar estilo próprio —</option>
+            {possiveisRef.map(x => (
+              <option key={x.id} value={x.id}>
+                {x.nome} ({x.loja}) · {estilosMap[x.id]?.qtd_edicoes || 0} edições
+              </option>
+            ))}
+          </select>
+          {salvandoRef && <Loader2 size={sz(14)} style={spinKeyframes} />}
+        </div>
+        {possiveisRef.length === 0 && (
+          <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4, fontStyle: 'italic' }}>
+            Nenhuma outra vendedora tem 5+ edições ainda.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
 export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditarVendedora }) => {
   const { state, handleInativarVendedora, handleSalvarLinksVesti } = lojas;
   const ativas = (state.vendedoras || []).filter(v => v.ativa);
@@ -981,6 +1291,31 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
   const [inativandoId, setInativandoId] = useState(null);
   // Qual vendedora está com painel Vesti aberto inline (null = nenhum)
   const [vestiAbertoId, setVestiAbertoId] = useState(null);
+  // Qual vendedora está com painel Estilo IA aberto inline — Ailson 07/05/2026
+  const [estiloAbertoId, setEstiloAbertoId] = useState(null);
+  // Mapa de estilos { vendedora_id: {qtd_edicoes, analise, aprende_com, ...} }
+  const [estilosMap, setEstilosMap] = useState({});
+  const [carregandoEstilos, setCarregandoEstilos] = useState(false);
+
+  const recarregarEstilos = useCallback(async () => {
+    setCarregandoEstilos(true);
+    try {
+      const r = await fetch('/api/lojas-estilos-vendedoras', {
+        headers: { 'X-User': lojas.state.userId || '' },
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      const mapa = {};
+      for (const v of d.vendedoras || []) mapa[v.id] = v;
+      setEstilosMap(mapa);
+    } catch (e) {
+      console.warn('[estilos] erro carregar:', e?.message);
+    } finally {
+      setCarregandoEstilos(false);
+    }
+  }, [lojas.state.userId]);
+
+  useEffect(() => { recarregarEstilos(); }, [recarregarEstilos]);
 
   // Carrega ex-vendedoras (inativas) sob demanda
   const recarregarInativas = useCallback(async () => {
@@ -1158,12 +1493,63 @@ export const VendedorasAdminScreen = ({ lojas, onBack, onNovaVendedora, onEditar
                   </button>
                 </div>
 
+                {/* 2ª linha: Estilo IA — Ailson 07/05/2026 */}
+                {(() => {
+                  const e = estilosMap[v.id];
+                  const qtdEd = e?.qtd_edicoes || 0;
+                  const aprendeCom = e?.aprende_com;
+                  const aprendizes = e?.aprendizes || [];
+                  const ehRef = aprendizes.length > 0;
+                  return (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <button
+                        onClick={() => setEstiloAbertoId(estiloAbertoId === v.id ? null : v.id)}
+                        style={{
+                          flex: 1,
+                          background: estiloAbertoId === v.id ? '#7c4dff' : palette.surface,
+                          color: estiloAbertoId === v.id ? 'white' : '#7c4dff',
+                          border: `1px solid #7c4dff40`, borderRadius: 6, padding: '8px',
+                          fontSize: fz(14), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        🎨 Estilo IA
+                        {qtdEd > 0 && (
+                          <span style={{
+                            fontSize: fz(11), padding: '1px 6px', borderRadius: 8,
+                            background: estiloAbertoId === v.id ? 'rgba(255,255,255,0.2)' : '#7c4dff20',
+                            color: estiloAbertoId === v.id ? 'white' : '#7c4dff',
+                          }}>
+                            {qtdEd} ed
+                          </span>
+                        )}
+                        {ehRef && <span style={{ fontSize: fz(12) }}>⭐</span>}
+                        {aprendeCom && <span style={{ fontSize: fz(12) }}>↳</span>}
+                      </button>
+                    </div>
+                  );
+                })()}
+
                 {/* Painel Vesti inline */}
                 {vestiAbertoId === v.id && (
                   <VestiLinksInline
                     vendedora={v}
                     onSalvar={handleSalvarLinksVesti}
                     onFechar={() => setVestiAbertoId(null)}
+                  />
+                )}
+
+                {/* Painel Estilo IA inline — Ailson 07/05/2026 */}
+                {estiloAbertoId === v.id && (
+                  <EstiloIAInline
+                    vendedora={v}
+                    estilo={estilosMap[v.id]}
+                    todasVendedoras={ativas}
+                    estilosMap={estilosMap}
+                    userId={lojas.state.userId}
+                    onAtualizar={recarregarEstilos}
+                    onFechar={() => setEstiloAbertoId(null)}
                   />
                 )}
               </div>
