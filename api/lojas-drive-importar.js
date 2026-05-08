@@ -222,12 +222,71 @@ export default async function handler(req, res) {
       arquivosParaProcessar = [...outros, ...dedupMap.values(), ...biList];
     }
 
+    // ─── DETECTOR MD5: mesma planilha em pastas de lojas diferentes ─────
+    // Ailson 08/05/2026 — caso real 04/05/2026: planilha BR foi colocada
+    // tambem na pasta ST por engano. Drive cron processou ambas, criando
+    // ~209 vendas espurias. Detector usa md5Checksum (Drive API) pra pegar
+    // arquivos com conteudo IDENTICO em lojas diferentes — colisao MD5
+    // acidental tem probabilidade desprezivel, entao detecta sem falso positivo.
+    // Quando detecta: SKIP ambos os arquivos (nao processa) e loga em
+    // resultado.conflitos_md5 + cria registro 'erro' em lojas_importacoes.
+    // Ailson ve o warning, corrige no Drive, proxima execucao processa.
+    const md5Map = new Map();   // md5 -> [{arq, loja}, ...]
+    const arquivosBloqueadosPorMd5 = new Set();  // arq.id
+
+    for (const arq of arquivosParaProcessar) {
+      if (!arq.md5Checksum) continue;  // Sheets nativo nao tem md5, ja foi filtrado
+      const t = detectarTipoArquivo(arq.name, arq.parentName);
+      if (!t || !t.loja) continue;     // sem loja detectada, nao da pra comparar
+      const lista = md5Map.get(arq.md5Checksum) || [];
+      lista.push({ arq, loja: t.loja, tipo: t.tipo });
+      md5Map.set(arq.md5Checksum, lista);
+    }
+
+    const conflitosMd5 = [];
+    for (const [md5, lista] of md5Map) {
+      const lojasDistintas = new Set(lista.map(x => x.loja));
+      if (lojasDistintas.size > 1) {
+        // Mesmo arquivo em lojas diferentes → bloquear todos
+        for (const x of lista) arquivosBloqueadosPorMd5.add(x.arq.id);
+        conflitosMd5.push({
+          md5,
+          arquivos: lista.map(x => ({
+            id: x.arq.id, nome: x.arq.name, pasta: x.arq.parentName, loja: x.loja, tipo: x.tipo,
+          })),
+        });
+
+        // Loga 1 registro de erro em lojas_importacoes pra cada arquivo bloqueado
+        // (visivel no painel admin de importacoes)
+        for (const x of lista) {
+          await supabase.from('lojas_importacoes').insert({
+            nome_arquivo: x.arq.name,
+            tipo_arquivo: x.tipo,
+            loja: x.loja,
+            drive_file_id: x.arq.id,
+            status: 'erro',
+            erro: `Conteudo identico (MD5 ${md5.slice(0, 8)}) presente em pastas de lojas diferentes: ${lista.map(y => y.loja).join(' + ')}. Verifique se a planilha foi colocada na pasta errada do Drive. Ate corrigir, nenhum dos arquivos com este MD5 sera processado.`,
+            iniciada_em: new Date().toISOString(),
+            finalizada_em: new Date().toISOString(),
+            iniciada_por: 'detector-md5',
+            duracao_ms: 0,
+          }).then(() => {}, () => {});  // ignora erro de log (nao bloqueia)
+        }
+      }
+    }
+
+    if (arquivosBloqueadosPorMd5.size > 0) {
+      arquivosParaProcessar = arquivosParaProcessar.filter(a => !arquivosBloqueadosPorMd5.has(a.id));
+    }
+
     // Processa cada arquivo em sequência
     const resultado = {
       acao,
       total_arquivos: arquivosParaProcessar.length,
       arquivos_duplicados_descartados: arquivosDescartados, // Ailson 07/05/2026
       arquivos_bi_ordenados: arquivosBiOrdenados,           // BI processados em ordem cronologica
+      arquivos_bloqueados_md5: arquivosBloqueadosPorMd5.size,  // Ailson 08/05/2026
+      conflitos_md5: conflitosMd5,
       processados: 0,
       sucessos: 0,
       erros: 0,

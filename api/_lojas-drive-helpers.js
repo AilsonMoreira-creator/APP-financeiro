@@ -188,7 +188,11 @@ function _filtrarSheetsDuplicados(arquivos) {
 }
 
 async function _listarConteudoPasta(folderId, token) {
-  const fields = 'files(id,name,mimeType,parents,modifiedTime)';
+  // md5Checksum + size: usados pra detectar planilhas duplicadas em pastas
+  // de lojas diferentes (Ailson 08/05/2026 — caso real do upload errado).
+  // md5Checksum so vem pra arquivos binarios (CSV/PDF/XLSX), nao pra Google
+  // Sheets nativos — mas Sheets sao filtrados antes via removerSheetsComCsvIrmao.
+  const fields = 'files(id,name,mimeType,parents,modifiedTime,md5Checksum,size)';
   // Drive query: parents in folderId AND not trashed
   const q = `'${folderId}' in parents and trashed = false`;
   const url = `${GOOGLE_DRIVE_API}/files?q=${encodeURIComponent(q)}&fields=${encodeURIComponent(fields)}&pageSize=1000`;
@@ -210,6 +214,8 @@ async function _listarConteudoPasta(folderId, token) {
     name: f.name,
     mimeType: f.mimeType,
     modifiedTime: f.modifiedTime,
+    md5Checksum: f.md5Checksum || null,
+    size: f.size ? parseInt(f.size, 10) : null,
     isFolder: f.mimeType === 'application/vnd.google-apps.folder',
   }));
 }
