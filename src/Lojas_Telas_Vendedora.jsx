@@ -1471,11 +1471,28 @@ export const CardDiaScreen = ({
   const [regenerando, setRegenerando] = useState(false);
 
   const sugestoes = state.sugestoesHoje;
-  const ativas = sugestoes.filter(s => s.status === 'pendente' || !s.status);
-  const enviadas = sugestoes.filter(s => s.status === 'executada');
-  const dispensadas = sugestoes.filter(s => s.status === 'dispensada');
 
-  const total = sugestoes.length;
+  // Separa avulsas (prioridade 99, geradas via "Pedir mensagem" da carteira)
+  // das 7 oficiais do dia. Avulsas vao em secao propria abaixo.
+  // Detector defensivo: cobre sugestoes antigas sem metadados_ia preenchido.
+  // Ailson 08/05/2026.
+  const ehAvulsa = (s) =>
+    s.prioridade === 99 ||
+    s.metadados_ia?.origem === 'avulsa' ||
+    s.fatos?.origem === 'avulsa';
+
+  const oficiais = sugestoes.filter(s => !ehAvulsa(s));
+  const avulsas = sugestoes.filter(ehAvulsa);
+
+  const ativas = oficiais.filter(s => s.status === 'pendente' || !s.status);
+  const enviadas = oficiais.filter(s => s.status === 'executada');
+  const dispensadas = oficiais.filter(s => s.status === 'dispensada');
+
+  const ativasAvulsas = avulsas.filter(s => s.status === 'pendente' || !s.status);
+  const enviadasAvulsas = avulsas.filter(s => s.status === 'executada');
+
+  // Contador conta SO oficiais (X de 7). Avulsas tem contador proprio.
+  const total = oficiais.length;
   const executadas = enviadas.length;
   const pct = total ? Math.round((executadas / total) * 100) : 0;
 
@@ -1646,6 +1663,38 @@ export const CardDiaScreen = ({
               {dispensadas.map(s => <SugestaoCard key={s.id} s={s} riscada />)}
             </div>
           </details>
+        )}
+
+        {/* Mensagens avulsas (Ailson 08/05/2026): geradas via "Pedir mensagem"
+            no card da carteira ou no detalhe do cliente. Ficam separadas
+            das 7 oficiais do dia pra nao poluir o contador. */}
+        {(ativasAvulsas.length > 0 || enviadasAvulsas.length > 0) && (
+          <>
+            <div style={{
+              marginTop: 24, marginBottom: 10,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <Send size={sz(16)} color={palette.inkMuted} />
+              <div style={{ fontSize: fz(14), color: palette.inkMuted, fontWeight: 600, letterSpacing: 0.3 }}>
+                MENSAGENS AVULSAS
+                {ativasAvulsas.length + enviadasAvulsas.length > 0 && (
+                  <span style={{ marginLeft: 6, fontWeight: 400 }}>
+                    · {enviadasAvulsas.length} de {ativasAvulsas.length + enviadasAvulsas.length}
+                  </span>
+                )}
+              </div>
+            </div>
+            {ativasAvulsas.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                {ativasAvulsas.map(s => <SugestaoCard key={s.id} s={s} />)}
+              </div>
+            )}
+            {enviadasAvulsas.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                {enviadasAvulsas.map(s => <SugestaoCard key={s.id} s={s} riscada />)}
+              </div>
+            )}
+          </>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 24 }}>
