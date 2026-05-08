@@ -1462,6 +1462,8 @@ async function montarContextoMensagem(sug, contextoExtra) {
     // Contexto rico — Ailson 07/05/2026
     janelaCompra, conversoesCliente, historicoSugestoes,
     topCategorias, ultimaCompra, perfilCanal, statusEfetivo, pecaInfo,
+    // Observações da vendedora — Ailson 07/05/2026 (etapa B)
+    observacoesVendedora: cliente?.observacoes_ia || null,
   };
 }
 
@@ -1938,6 +1940,11 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     conversoes_anteriores: ctx.conversoesCliente,
     historico_sugestoes_28d: ctx.historicoSugestoes,
     peca_info: ctx.pecaInfo, // { eh_novidade, eh_reposicao, combina_estilo_cliente }
+    // Observacoes da vendedora — Ailson 07/05/2026 (etapa B)
+    // Persistidas em lojas_clientes.observacoes_ia. Vendedora preenche modal
+    // (perguntas guiadas + texto livre). IA usa pra calibrar TOM e CONTEUDO,
+    // mas NUNCA menciona o conteudo na mensagem.
+    observacoes_vendedora: ctx.observacoesVendedora,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };
