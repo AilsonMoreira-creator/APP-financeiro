@@ -98,7 +98,13 @@ export default async function handler(req, res) {
   // do contador por minuto.
   const baseUrl = `https://${req.headers.host}`;
   const resultados = [];
-  const DELAY_ENTRE_VENDEDORAS_MS = 75000; // 75s
+  const DELAY_ENTRE_VENDEDORAS_MS = 30000; // 30s
+  // Ailson 07/05/2026: reduzido de 75s pra 30s. Margem de 600s do Vercel
+  // estava apertada (~8min com prompt maior dos GAPs 1-4 da auditoria).
+  // Anthropic Sonnet 4.6 permite ~50 chamadas/min — 30s entre 5 vendedoras
+  // = 10 chamadas em ~3min, bem dentro do limite.
+  // Calculo: 5 vendedoras × (30s delay + ~50s IA) = ~7min, sobra ~3min
+  // de folga vs 8min anterior que so deixava 2min.
 
   // FIX 07/05/2026 (Ailson): atualizar progresso INCREMENTAL no health.
   // Antes: finalizar() so era chamado no fim. Cron com 5 vendedoras + 75s
