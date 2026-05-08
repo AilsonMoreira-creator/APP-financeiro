@@ -2184,6 +2184,29 @@ export const MinhaCarteiraScreen = ({
   // visiveis sempre. Resto via "+" expand.
   const [contadoresExpandidos, setContadoresExpandidos] = useState(false);
   const [showInfoJanela, setShowInfoJanela] = useState(false);
+  // Modal observações cliente — Ailson 07/05/2026 (etapa B)
+  const [obsModalCliente, setObsModalCliente] = useState(null);
+  const [obsCliente, setObsCliente] = useState({}); // cache local: {cliente_id: {observacoes ou null}}
+
+  // Carrega observação ao abrir modal — Ailson 07/05/2026
+  useEffect(() => {
+    if (!obsModalCliente?.id) return;
+    if (obsCliente[obsModalCliente.id] !== undefined) return; // ja tem em cache
+    (async () => {
+      try {
+        const r = await fetch(`/api/lojas-cliente-observacoes?cliente_id=${obsModalCliente.id}`, {
+          headers: { 'X-User': state.userId || '' },
+        });
+        if (r.ok) {
+          const d = await r.json();
+          setObsCliente(prev => ({ ...prev, [obsModalCliente.id]: d.observacoes || null }));
+        }
+      } catch (e) {
+        console.warn('[obs] erro carregar:', e?.message);
+      }
+    })();
+  }, [obsModalCliente?.id, state.userId, obsCliente]);
+
   useEffect(() => {
     if (!vendedora?.id) return;
     let cancelado = false;
@@ -2716,6 +2739,33 @@ export const MinhaCarteiraScreen = ({
                   }}>
                     <LampIcon size={sz(14)} /> Pedir mensagem
                   </button>
+                  {/* Botao observacoes IA — Ailson 07/05/2026 etapa B
+                      Vendedora abre modal pra anotar contexto sobre cliente
+                      (personalidade, evento recente, preferencias). Notas
+                      ficam salvas e influenciam IA na proxima geracao. */}
+                  {(() => {
+                    // Detecta se cliente eh do tipo cliente (pra grupos nao mostra)
+                    if (c.tipo !== 'cliente') return null;
+                    const obs = obsCliente[c.cliente.id];
+                    const temObs = obs && (obs.personalidade || obs.evento_recente
+                      || obs.preferencias || obs.observacao_livre);
+                    return (
+                      <button
+                        onClick={() => setObsModalCliente(c.cliente)}
+                        title={temObs ? 'Editar observações sobre essa cliente' : 'Adicionar observações sobre essa cliente'}
+                        style={{
+                          background: temObs ? '#7c4dff15' : palette.surface,
+                          color: temObs ? '#7c4dff' : palette.inkMuted,
+                          border: `1px solid ${temObs ? '#7c4dff60' : palette.beige}`,
+                          borderRadius: 6, padding: '8px 10px',
+                          fontSize: fz(14), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                          minWidth: 38,
+                        }}
+                      >
+                        {temObs ? '📝' : '💡'}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -2747,6 +2797,23 @@ export const MinhaCarteiraScreen = ({
           vendedora={vendedora}
           userId={state?.userId || ''}
           onClose={() => setMostrarMeta(false)}
+        />
+      )}
+
+      {/* Modal Observações IA sobre cliente — Ailson 07/05/2026 (etapa B)
+          Vendedora preenche perguntas guiadas + texto livre. Persiste em
+          lojas_clientes.observacoes_ia. IA usa pra calibrar mensagens. */}
+      {obsModalCliente && (
+        <ModalObservacoesCliente
+          cliente={obsModalCliente}
+          userId={state?.userId || ''}
+          observacoesAtuais={obsCliente[obsModalCliente.id] || null}
+          onSalvar={(novaObs) => {
+            // Atualiza cache local pra UI refletir imediato
+            setObsCliente(prev => ({ ...prev, [obsModalCliente.id]: novaObs }));
+            setObsModalCliente(null);
+          }}
+          onClose={() => setObsModalCliente(null)}
         />
       )}
     </div>
@@ -3638,6 +3705,218 @@ export const HistoricoCarteiraScreen = ({ lojas, onBack }) => {
           borderRadius: 10, fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
         }}>
           ℹ️ Cliente ativo = comprou nos últimos 45 dias. Histórico mensal será populado conforme as importações forem rodando.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ModalObservacoesCliente — vendedora anota contexto sobre cliente (etapa B)
+// ═══════════════════════════════════════════════════════════════════════════
+// Sessao Ailson 07/05/2026.
+//
+// Vendedora preenche perguntas guiadas + texto livre. Persiste em
+// lojas_clientes.observacoes_ia. IA usa pra calibrar mensagens (sem citar
+// na mensagem em si). Notas continuam valendo pra proximas sugestoes.
+
+const PERSONALIDADES = [
+  { v: '', label: '— não definir —' },
+  { v: 'doce', label: '🌸 Doce / acolhedora' },
+  { v: 'briguenta', label: '⚔️ Briguenta / direta' },
+  { v: 'indecisa', label: '🤔 Indecisa' },
+  { v: 'divertida', label: '😄 Divertida' },
+  { v: 'discreta', label: '🤫 Discreta / reservada' },
+  { v: 'apressada', label: '⏱️ Apressada' },
+  { v: 'detalhista', label: '🔍 Detalhista' },
+];
+const EVENTOS = [
+  { v: '', label: '— sem evento específico —' },
+  { v: 'gravidez', label: '🤰 Gravidez' },
+  { v: 'viagem', label: '✈️ Viajando' },
+  { v: 'festa', label: '🎉 Tem festa/evento próximo' },
+  { v: 'mudanca_loja', label: '🏪 Loja nova / mudança' },
+  { v: 'dificuldade_financeira', label: '💸 Dificuldade financeira' },
+  { v: 'momento_bom', label: '📈 Em fase positiva' },
+];
+
+export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, onSalvar, onClose }) => {
+  const [personalidade, setPersonalidade] = useState(observacoesAtuais?.personalidade || '');
+  const [eventoRecente, setEventoRecente] = useState(observacoesAtuais?.evento_recente || '');
+  const [preferencias, setPreferencias] = useState(observacoesAtuais?.preferencias || '');
+  const [obsLivre, setObsLivre] = useState(observacoesAtuais?.observacao_livre || '');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  // Sincroniza quando observacoesAtuais carrega async
+  useEffect(() => {
+    if (observacoesAtuais) {
+      setPersonalidade(observacoesAtuais.personalidade || '');
+      setEventoRecente(observacoesAtuais.evento_recente || '');
+      setPreferencias(observacoesAtuais.preferencias || '');
+      setObsLivre(observacoesAtuais.observacao_livre || '');
+    }
+  }, [observacoesAtuais]);
+
+  const nome = (cliente?.apelido || cliente?.comprador_nome || '').split(/\s+/)[0] || 'Cliente';
+
+  const salvar = async () => {
+    setSalvando(true);
+    setErro(null);
+    try {
+      const payload = {
+        personalidade: personalidade || null,
+        evento_recente: eventoRecente || null,
+        preferencias: preferencias.trim(),
+        observacao_livre: obsLivre.trim(),
+      };
+      const r = await fetch('/api/lojas-cliente-observacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+        body: JSON.stringify({ cliente_id: cliente.id, payload }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setErro(d.error || `HTTP ${r.status}`);
+        return;
+      }
+      onSalvar(d.observacoes);
+    } catch (e) {
+      setErro(e.message || String(e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%', padding: '10px 12px',
+    borderRadius: 8, border: `1.5px solid ${palette.beige}`,
+    fontFamily: FONT, fontSize: fz(14), background: palette.surface,
+    color: palette.ink,
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        zIndex: 9999,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: palette.surface, borderRadius: '14px 14px 0 0',
+          padding: 18, width: '100%', maxWidth: 540,
+          maxHeight: '92vh', overflowY: 'auto', fontFamily: FONT,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <span style={{ fontSize: fz(24) }}>💡</span>
+          <div style={{ fontSize: fz(17), fontWeight: 700, color: palette.ink }}>
+            Observações sobre {nome}
+          </div>
+        </div>
+        <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 14, lineHeight: 1.4 }}>
+          Quanto mais detalhes sobre essa cliente, mais personalizada fica a mensagem da IA.
+          Essas notas <strong>NÃO aparecem</strong> no que vc envia — só ajustam o tom e o conteúdo.
+        </div>
+
+        {/* Personalidade */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+            Como ela é? (personalidade)
+          </div>
+          <select value={personalidade} onChange={e => setPersonalidade(e.target.value)} style={inputStyle}>
+            {PERSONALIDADES.map(p => (
+              <option key={p.v} value={p.v}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Evento recente */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+            Tem algum evento ou momento recente?
+          </div>
+          <select value={eventoRecente} onChange={e => setEventoRecente(e.target.value)} style={inputStyle}>
+            {EVENTOS.map(p => (
+              <option key={p.v} value={p.v}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Preferências */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+            Preferências fortes (livre, max 500 caract)
+          </div>
+          <input
+            value={preferencias}
+            onChange={e => setPreferencias(e.target.value.slice(0, 500))}
+            placeholder='ex: "só linho, odeia preto", "fã de plus size"'
+            style={inputStyle}
+          />
+          <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 4 }}>
+            {preferencias.length}/500
+          </div>
+        </div>
+
+        {/* Observação livre */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
+            Outras observações (livre, max 1000 caract)
+          </div>
+          <textarea
+            value={obsLivre}
+            onChange={e => setObsLivre(e.target.value.slice(0, 1000))}
+            rows={3}
+            placeholder='ex: "pediu pra avisar quando chegar verde militar", "compra muito pra revender"'
+            style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }}
+          />
+          <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 4 }}>
+            {obsLivre.length}/1000
+          </div>
+        </div>
+
+        {erro && (
+          <div style={{
+            padding: 10, background: '#fee', borderRadius: 6, marginBottom: 12,
+            fontSize: fz(13), color: palette.alert,
+          }}>
+            {erro}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button
+            onClick={onClose}
+            disabled={salvando}
+            style={{
+              flex: 1, background: palette.surface, color: palette.inkSoft,
+              border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '12px',
+              fontSize: fz(15), fontWeight: 600, cursor: salvando ? 'wait' : 'pointer',
+              fontFamily: FONT,
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            style={{
+              flex: 2, background: '#7c4dff', color: 'white',
+              border: 'none', borderRadius: 8, padding: '12px',
+              fontSize: fz(15), fontWeight: 600, cursor: salvando ? 'wait' : 'pointer',
+              fontFamily: FONT,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            {salvando
+              ? <><Loader2 size={sz(15)} style={spinKeyframes} /> Salvando…</>
+              : <>💾 Salvar observações</>}
+          </button>
         </div>
       </div>
     </div>
