@@ -652,6 +652,12 @@ export const RegrasScreen = ({ lojas, onBack }) => {
   const [salvando, setSalvando] = useState(false);
   const [salvouOk, setSalvouOk] = useState(false);
 
+  // Tracking: quais chaves estao SALVAS no banco (vs apenas default visual)
+  // Ailson 07/05/2026: descoberto que admin nunca clicou 'Salvar' achando
+  // que defaults estavam ativos. IA estava rodando sem regras customizadas
+  // por semanas. Esse mapa indica visualmente o estado real.
+  const [salvoMap, setSalvoMap] = useState({});
+
   // Carrega config existente do banco
   useEffect(() => {
     let cancelado = false;
@@ -659,14 +665,40 @@ export const RegrasScreen = ({ lojas, onBack }) => {
       try {
         const config = await handleLoadConfig();
         if (cancelado) return;
-        if (config['regras_ia.tom_geral'] != null) setTom(String(config['regras_ia.tom_geral']));
-        if (config['regras_ia.posicionamento'] != null) setPosicionamento(String(config['regras_ia.posicionamento']));
-        if (Array.isArray(config['regras_ia.sempre'])) setSempre(config['regras_ia.sempre']);
-        if (Array.isArray(config['regras_ia.nunca'])) setNunca(config['regras_ia.nunca']);
-        if (config['parametros.desconto_reativacao'] != null) setDescontoReat(String(config['parametros.desconto_reativacao']));
-        if (config['parametros.desconto_atencao'] != null) setDescontoAten(String(config['parametros.desconto_atencao']));
-        if (config['parametros.saudacao_padrao'] != null) setSaudacao(String(config['parametros.saudacao_padrao']));
-        if (config['parametros.fechamento_padrao'] != null) setFechamento(String(config['parametros.fechamento_padrao']));
+        const novoSalvo = {};
+        if (config['regras_ia.tom_geral'] != null) {
+          setTom(String(config['regras_ia.tom_geral']));
+          novoSalvo['tom_geral'] = true;
+        }
+        if (config['regras_ia.posicionamento'] != null) {
+          setPosicionamento(String(config['regras_ia.posicionamento']));
+          novoSalvo['posicionamento'] = true;
+        }
+        if (Array.isArray(config['regras_ia.sempre'])) {
+          setSempre(config['regras_ia.sempre']);
+          novoSalvo['sempre'] = true;
+        }
+        if (Array.isArray(config['regras_ia.nunca'])) {
+          setNunca(config['regras_ia.nunca']);
+          novoSalvo['nunca'] = true;
+        }
+        if (config['parametros.desconto_reativacao'] != null) {
+          setDescontoReat(String(config['parametros.desconto_reativacao']));
+          novoSalvo['desconto_reat'] = true;
+        }
+        if (config['parametros.desconto_atencao'] != null) {
+          setDescontoAten(String(config['parametros.desconto_atencao']));
+          novoSalvo['desconto_aten'] = true;
+        }
+        if (config['parametros.saudacao_padrao'] != null) {
+          setSaudacao(String(config['parametros.saudacao_padrao']));
+          novoSalvo['saudacao'] = true;
+        }
+        if (config['parametros.fechamento_padrao'] != null) {
+          setFechamento(String(config['parametros.fechamento_padrao']));
+          novoSalvo['fechamento'] = true;
+        }
+        setSalvoMap(novoSalvo);
       } catch (e) {
         console.error('[Lojas] erro carregar config', e);
         // Mantém defaults
@@ -691,6 +723,11 @@ export const RegrasScreen = ({ lojas, onBack }) => {
         handleSaveConfig('parametros.saudacao_padrao', saudacao),
         handleSaveConfig('parametros.fechamento_padrao', fechamento),
       ]);
+      // Apos salvar, todos os campos viram 'salvo'
+      setSalvoMap({
+        tom_geral: true, posicionamento: true, sempre: true, nunca: true,
+        desconto_reat: true, desconto_aten: true, saudacao: true, fechamento: true,
+      });
       setSalvouOk(true);
       setTimeout(() => setSalvouOk(false), 2500);
     } catch (e) {
@@ -699,6 +736,30 @@ export const RegrasScreen = ({ lojas, onBack }) => {
       setSalvando(false);
     }
   };
+
+  // Helper: badge de status de salvamento por campo
+  const StatusBadge = ({ campo }) => {
+    if (carregando) return null;
+    const salvo = salvoMap[campo];
+    return (
+      <span style={{
+        display: 'inline-block',
+        marginLeft: 8,
+        fontSize: fz(11),
+        padding: '2px 8px',
+        borderRadius: 10,
+        fontWeight: 600,
+        background: salvo ? '#eafbf0' : '#fff3cd',
+        color: salvo ? '#1e7e34' : '#856404',
+        border: `1px solid ${salvo ? '#c3e6cb' : '#ffeeba'}`,
+      }}>
+        {salvo ? '✓ Ativo na IA' : '⚠ Só default — não salvou'}
+      </span>
+    );
+  };
+
+  // Verifica se NADA foi salvo (todos os campos estao em default)
+  const nadaSalvo = !carregando && Object.keys(salvoMap).length === 0;
 
   // Sub-componente reutilizado pra "Sempre" e "Nunca"
   const ListaRegras = ({ items, onAdd, onRemove, novoValor, setNovoValor, placeholder, cor }) => (
@@ -793,22 +854,40 @@ export const RegrasScreen = ({ lojas, onBack }) => {
       <div style={{ padding: 16, paddingBottom: 32 }}>
 
         <SectionTitle icon={Bot}>Identidade da marca</SectionTitle>
+        {nadaSalvo && (
+          <div style={{
+            background: '#fff3cd',
+            border: '1.5px solid #ffc107',
+            borderRadius: 10,
+            padding: 14,
+            marginBottom: 16,
+            fontSize: fz(14),
+            color: '#856404',
+            lineHeight: 1.5,
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>⚠ Nenhuma regra está ativa na IA</div>
+            Os textos abaixo são <strong>defaults visuais</strong> — você nunca clicou em "Salvar".
+            A IA está rodando apenas com o prompt fixo do sistema.
+            <br/>
+            <strong>Revise e clique em "Salvar configurações" no fim da página</strong> pra que a IA passe a usar essas regras.
+          </div>
+        )}
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
-            Tom de comunicação
+            Tom de comunicação <StatusBadge campo="tom_geral" />
           </div>
           <textarea value={tom} onChange={e => setTom(e.target.value)} rows={4}
             style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }} />
         </div>
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
-            Posicionamento
+            Posicionamento <StatusBadge campo="posicionamento" />
           </div>
           <textarea value={posicionamento} onChange={e => setPosicionamento(e.target.value)} rows={3}
             style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }} />
         </div>
 
-        <SectionTitle icon={CheckCircle2}>A IA sempre deve</SectionTitle>
+        <SectionTitle icon={CheckCircle2}>A IA sempre deve <StatusBadge campo="sempre" /></SectionTitle>
         <div style={{ marginBottom: 24 }}>
           <ListaRegras items={sempre}
             onAdd={(v) => setSempre([...sempre, v])}
@@ -817,7 +896,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
             placeholder="Adicionar regra…" cor={palette.ok} />
         </div>
 
-        <SectionTitle icon={AlertCircle}>A IA nunca deve</SectionTitle>
+        <SectionTitle icon={AlertCircle}>A IA nunca deve <StatusBadge campo="nunca" /></SectionTitle>
         <div style={{ marginBottom: 24 }}>
           <ListaRegras items={nunca}
             onAdd={(v) => setNunca([...nunca, v])}
@@ -830,7 +909,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
-              Desconto reativação
+              Desconto reativação <StatusBadge campo="desconto_reat" />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <input type="number" value={descontoReat}
@@ -843,7 +922,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
           </div>
           <div>
             <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
-              Desconto atenção
+              Desconto atenção <StatusBadge campo="desconto_aten" />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <input type="number" value={descontoAten}
@@ -858,7 +937,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
-            Saudação padrão
+            Saudação padrão <StatusBadge campo="saudacao" />
           </div>
           <input value={saudacao} onChange={e => setSaudacao(e.target.value)} style={inputStyle} />
           <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
@@ -868,7 +947,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
 
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
-            Fechamento padrão
+            Fechamento padrão <StatusBadge campo="fechamento" />
           </div>
           <input value={fechamento} onChange={e => setFechamento(e.target.value)} style={inputStyle} />
         </div>
