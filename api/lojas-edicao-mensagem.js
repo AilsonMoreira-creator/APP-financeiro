@@ -58,9 +58,22 @@ export default async function handler(req, res) {
     const padroes = extrairPadroes(editada);
 
     // 4. Atualiza perfil de estilo (incrementa counters)
-    await atualizarEstilo(vendedora_id, padroes);
+    //    APENAS se vendedora NAO esta aprendendo com outra.
+    //    Decisao Ailson 07/05/2026 (3b): quando aprende_com != null, IA
+    //    busca estilo da REFERENCIA e nao da vendedora. Atualizar contadores
+    //    proprios seria desperdicio. Audit (lojas_edicoes_mensagens)
+    //    continua gravando pra historico.
+    const { data: aprendeRow } = await supabase
+      .from('lojas_config')
+      .select('valor')
+      .eq('chave', `aprende_com.${vendedora_id}`)
+      .maybeSingle();
+    const aprendeCom = aprendeRow?.valor || null;
+    if (!aprendeCom) {
+      await atualizarEstilo(vendedora_id, padroes);
+    }
 
-    return res.json({ ok: true, padroes });
+    return res.json({ ok: true, padroes, aprende_com: aprendeCom, contadores_atualizados: !aprendeCom });
   } catch (e) {
     console.error('[edicao-mensagem] erro:', e);
     return res.status(500).json({ error: e.message });

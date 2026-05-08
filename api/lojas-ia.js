@@ -1220,12 +1220,28 @@ async function montarContextoMensagem(sug, contextoExtra) {
   // Estilo aprendido da vendedora (Ailson 04/05/2026): IA usa as edicoes
   // anteriores dela como referencia pra gerar mensagem mais parecida com o
   // jeito dela escrever. So entra no prompt se houver pelo menos 1 edicao.
+  //
+  // REFERENCIA VIVA — Ailson 07/05/2026:
+  // Se vendedora B tem chave aprende_com.<B> = <A>, IA busca estilo de A
+  // em vez de B. Permite admin definir vendedora top como referencia
+  // pra outras imitarem. Estilo de A continua evoluindo (A continua
+  // editando), B sempre acompanha automaticamente.
   let estiloVendedora = null;
+  let estiloVendedoraOrigemId = sug.vendedora_id; // por default usa o proprio
   try {
+    const { data: aprendeRow } = await supabase
+      .from('lojas_config')
+      .select('valor')
+      .eq('chave', `aprende_com.${sug.vendedora_id}`)
+      .maybeSingle();
+    if (aprendeRow?.valor) {
+      estiloVendedoraOrigemId = aprendeRow.valor; // redireciona pra referencia
+    }
+
     const { data: estilo } = await supabase
       .from('lojas_estilo_vendedora')
       .select('*')
-      .eq('vendedora_id', sug.vendedora_id)
+      .eq('vendedora_id', estiloVendedoraOrigemId)
       .maybeSingle();
 
     if (estilo && (estilo.qtd_edicoes || 0) > 0) {
@@ -1239,10 +1255,11 @@ async function montarContextoMensagem(sug, contextoExtra) {
       };
 
       // Ultimas 3 edicoes (few-shot pra IA "imitar" o tom)
+      // Usa estiloVendedoraOrigemId (proprio OU referencia, conforme aprende_com)
       const { data: edicoes } = await supabase
         .from('lojas_edicoes_mensagens')
         .select('texto_original, texto_editado')
-        .eq('vendedora_id', sug.vendedora_id)
+        .eq('vendedora_id', estiloVendedoraOrigemId)
         .order('criado_em', { ascending: false })
         .limit(3);
 
@@ -1253,6 +1270,7 @@ async function montarContextoMensagem(sug, contextoExtra) {
         tratamento_top: top3(estilo.tratamento),
         emojis_top: top3(estilo.emojis),
         ultimas_edicoes: edicoes || [],
+        eh_de_referencia: estiloVendedoraOrigemId !== sug.vendedora_id, // sinaliza se vem de outra vendedora
       };
     }
   } catch (e) {
