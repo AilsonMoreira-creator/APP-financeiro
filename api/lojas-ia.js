@@ -81,6 +81,11 @@ export default async function handler(req, res) {
     if (action === 'gerar_mensagem') {
       return await handleGerarMensagem(req, res, auth);
     }
+    // Geracao avulsa — cliente_id direto, sem precisar de sugestao_id pre-existente
+    // Ailson 08/05/2026: pra vendedora pedir mensagem direto do card da carteira
+    if (action === 'gerar_mensagem_avulsa') {
+      return await handleGerarMensagemAvulsa(req, res, auth);
+    }
     if (action === 'gerar_resumo_semanal') {
       return await handleGerarResumoSemanal(req, res, auth);
     }
@@ -2039,6 +2044,167 @@ function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAu
 const TIPOS_VALIDOS = ['reativar', 'atencao', 'novidade', 'followup', 'followup_nova', 'sacola', 'reposicao', 'aviso_admin', 'inativo', 'semAtividade'];
 function validarTipo(t) {
   return TIPOS_VALIDOS.includes(t) ? t : 'followup';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AÇÃO 2.5: gerar_mensagem_avulsa (Ailson 08/05/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Vendedora pede mensagem direto do card da carteira, sem ter sugestao
+// pre-existente das 7 diarias. Backend:
+//   1. Cria sugestao "fantasma" em lojas_sugestoes_diarias com tipo='avulsa'
+//   2. Escolhe peca via cascata:
+//      a. Novidade que combina com categoria dominante da cliente (preferida)
+//      b. Reposicao que combina com categoria dominante
+//      c. Novidade qualquer da semana
+//      d. Followup sem peca (fallback final)
+//   3. Reusa handleGerarMensagem normal
+//
+// Decisao Ailson 08/05/2026:
+//   Q1=A (IA escolhe peca sozinha)
+//   Q2=2 (novidade na categoria dominante prioridade)
+//   Q3=C (salva como tipo='avulsa', entra no anti-repeticao)
+
+async function handleGerarMensagemAvulsa(req, res, auth) {
+  const clienteId = req.body?.cliente_id;
+  const contextoExtra = req.body?.contexto || {};
+
+  if (!clienteId) {
+    return res.status(400).json({ error: 'cliente_id obrigatório' });
+  }
+
+  // 1. Carrega cliente + KPIs
+  const { data: cliente, error: errCli } = await supabase
+    .from('lojas_clientes')
+    .select('*')
+    .eq('id', clienteId)
+    .maybeSingle();
+  if (errCli) return res.status(500).json({ error: errCli.message });
+  if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
+
+  // Permissão: vendedora dona OU admin
+  if (!auth.isAdmin && cliente.vendedora_id !== auth.vendedoraId) {
+    return res.status(403).json({ error: 'Sem permissão pra esse cliente' });
+  }
+
+  // 2. Cascata pra escolher peça
+  // Top categorias da cliente (mesmo calculo do montarContextoMensagem)
+  let topCategoria = null;
+  try {
+    const { data: itens } = await supabase
+      .from('lojas_vendas_itens')
+      .select('categoria, qtd, lojas_vendas!inner(cliente_id)')
+      .eq('lojas_vendas.cliente_id', clienteId);
+    if (itens?.length) {
+      const counts = {};
+      itens.forEach(i => {
+        const cat = i.categoria || 'outros';
+        counts[cat] = (counts[cat] || 0) + (i.qtd || 1);
+      });
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      topCategoria = sorted[0]?.[0] || null;
+    }
+  } catch (e) { /* silent */ }
+
+  // Helper: pega 1 ref de view + filtra por categoria se categoria_alvo informada
+  async function escolherDaView(viewName, categoriaAlvo) {
+    try {
+      const { data } = await supabase
+        .from(viewName)
+        .select('ref')
+        .limit(50);
+      if (!data?.length) return null;
+      // Cruza com lojas_produtos pra ter categoria + estoque
+      const refs = data.map(r => r.ref);
+      const { data: prods } = await supabase
+        .from('lojas_produtos')
+        .select('ref, categoria, qtd_estoque')
+        .in('ref', refs);
+      if (!prods?.length) return null;
+      // Filtra: tem estoque > 5 (vai dar pra falar com tranquilidade)
+      let candidatos = prods.filter(p => (p.qtd_estoque || 0) > 5);
+      // Se categoria_alvo, prefere ela
+      if (categoriaAlvo) {
+        const matchCat = candidatos.filter(p => p.categoria === categoriaAlvo);
+        if (matchCat.length) candidatos = matchCat;
+      }
+      return candidatos[0]?.ref || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Cascata
+  let refEscolhida = null;
+  let tipoSug = 'followup'; // default fallback
+  // (a) Novidade na categoria dominante
+  if (topCategoria) {
+    refEscolhida = await escolherDaView('vw_lojas_novidades_auto', topCategoria);
+    if (refEscolhida) tipoSug = 'novidade';
+  }
+  // (b) Reposicao na categoria dominante
+  if (!refEscolhida && topCategoria) {
+    refEscolhida = await escolherDaView('vw_lojas_reposicoes_auto', topCategoria);
+    if (refEscolhida) tipoSug = 'reposicao';
+  }
+  // (c) Novidade qualquer
+  if (!refEscolhida) {
+    refEscolhida = await escolherDaView('vw_lojas_novidades_auto', null);
+    if (refEscolhida) tipoSug = 'novidade';
+  }
+  // (d) Sem peça — followup puro
+
+  // Status da cliente pra ajustar tipo
+  const dias = cliente.kpi_dias_sem_comprar; // pode não existir; usa fallback
+  // Vou usar lojas_clientes_kpis pra precisão
+  let diasSemComprar = null;
+  try {
+    const { data: kpi } = await supabase
+      .from('lojas_clientes_kpis')
+      .select('dias_sem_comprar')
+      .eq('cliente_id', clienteId)
+      .maybeSingle();
+    diasSemComprar = kpi?.dias_sem_comprar;
+  } catch (e) { /* silent */ }
+
+  // Se cliente está em atenção/inativo e não pegou peça, vira reativar
+  if (!refEscolhida && diasSemComprar != null) {
+    if (diasSemComprar > 60) tipoSug = 'reativar';
+    else if (diasSemComprar > 30) tipoSug = 'atencao';
+  }
+
+  // 3. Cria sugestao avulsa em lojas_sugestoes_diarias
+  // Marca subtipo='avulsa' pra distinguir das 7 diarias geradas pelo cron
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { data: sugCriada, error: errCriar } = await supabase
+    .from('lojas_sugestoes_diarias')
+    .insert({
+      vendedora_id: cliente.vendedora_id,
+      cliente_id: clienteId,
+      grupo_id: null,
+      data_geracao: hoje,
+      tipo: tipoSug,
+      subtipo: 'avulsa', // diferenciar pro relatório
+      titulo: refEscolhida
+        ? `Mensagem avulsa — REF ${refEscolhida}`
+        : 'Mensagem avulsa',
+      produto_ref: refEscolhida,
+      status: 'pendente',
+      ordem: 99, // não interfere nas 7 do dia
+      fatos: { origem: 'avulsa', escolhida_via: refEscolhida ? 'cascata' : 'sem_peca' },
+    })
+    .select()
+    .single();
+
+  if (errCriar) {
+    console.error('[avulsa] erro criar sugestao:', errCriar);
+    return res.status(500).json({ error: 'Erro ao criar sugestão: ' + errCriar.message });
+  }
+
+  // 4. Reusa handleGerarMensagem injetando o sugestao_id criado
+  // Modifica req.body em place pra reaproveitar a logica
+  req.body = { ...req.body, sugestao_id: sugCriada.id, contexto: contextoExtra };
+  return await handleGerarMensagem(req, res, auth);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

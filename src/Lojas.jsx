@@ -1144,6 +1144,30 @@ async function gerarMensagemIA(sugestaoId, contextoExtra = {}) {
   return json.mensagem;
 }
 
+// AVULSA — Ailson 08/05/2026
+// Pede mensagem direto pra cliente (sem ter sugestao das 7 do dia)
+// Backend cria sugestao tipo='avulsa' e retorna mensagem + sugestao_id
+async function gerarMensagemAvulsa(clienteId, contextoExtra = {}) {
+  const userId = getUserIdFromStorage();
+  const res = await fetch('/api/lojas-ia', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User': userId || '',
+    },
+    body: JSON.stringify({
+      action: 'gerar_mensagem_avulsa',
+      cliente_id: clienteId,
+      contexto: contextoExtra,
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`IA erro ${res.status}: ${txt}`);
+  }
+  return await res.json(); // { ok, mensagem, sugestao_id, ... }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // REALTIME: subscrições
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1657,6 +1681,12 @@ function useLojasModule() {
     return await gerarMensagemIA(sugestaoId, contextoExtra);
   }, []);
 
+  // Mensagem avulsa direto da carteira — Ailson 08/05/2026
+  // Recebe cliente_id, retorna { mensagem, sugestao_id }
+  const handleGerarMensagemAvulsa = useCallback(async (clienteId, contextoExtra) => {
+    return await gerarMensagemAvulsa(clienteId, contextoExtra);
+  }, []);
+
   // Salva edicao de mensagem feita pela vendedora pra IA aprender o estilo
   // dela. Se o endpoint ainda nao existir (commit 4), apenas loga warning
   // sem quebrar o fluxo do WhatsApp.
@@ -1786,6 +1816,7 @@ function useLojasModule() {
     handleDispensarSugestao,
     handleSalvarEdicaoMensagem,
     handleGerarMensagem,
+    handleGerarMensagemAvulsa,
     handleRegerarSugestoes,
     
     // config / histórico / importação (Parte 2b)
@@ -1871,6 +1902,9 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
   const [grupoAtivo, setGrupoAtivo] = useState(null);
   const [grupoOrigem, setGrupoOrigem] = useState('grupos');
   const [showModal, setShowModal] = useState(false);
+  // Modal de mensagem avulsa (cliente sem sugestao das 7 do dia)
+  // Ailson 08/05/2026
+  const [clienteAvulso, setClienteAvulso] = useState(null);
   const [showCriarGrupo, setShowCriarGrupo] = useState(false);
   const [showAdicionarCnpj, setShowAdicionarCnpj] = useState(false);
   const [clienteParaGrupo, setClienteParaGrupo] = useState(null);
@@ -1961,6 +1995,13 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
           onSelectGrupo={handleSelectGrupo}
           onAbrirGrupos={() => setScreen('grupos')}
           onAbrirCadastrarComprador={() => setScreen('cadastrarComprador')}
+          onPedirMensagemRapida={(item) => {
+            // item pode ser tipo='cliente' (com .cliente) ou tipo='grupo'
+            // Avulsa so funciona pra cliente individual (1 cliente_id direto)
+            const cli = item?.cliente || item;
+            if (!cli?.id) return;
+            setClienteAvulso(cli);
+          }}
         />
       )}
       
@@ -1971,13 +2012,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
           onBack={() => setScreen('carteira')}
           onAbrirGrupo={handleSelectGrupo}
           onCriarGrupo={(c) => { setClienteParaGrupo(c); setShowCriarGrupo(true); }}
-          onPedirMensagem={() => alert(
-            'Geração de mensagem avulsa: recurso em breve! 🛠️\n\n' +
-            'Por enquanto, pra gerar mensagem desse cliente:\n' +
-            '1. Volta na home\n' +
-            '2. Aguarda esse cliente aparecer nas 7 sugestões do dia\n' +
-            '3. Clica nele e usa "Pedir sugestão de mensagem"'
-          )}
+          onPedirMensagem={() => setClienteAvulso(clienteAtivo)}
         />
       )}
       
@@ -2107,6 +2142,21 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
             setShowModal(false);
             setScreen('cardDia');
           }}
+        />
+      )}
+
+      {/* Modal mensagem avulsa — Ailson 08/05/2026
+          Vendedora pediu mensagem direto pelo card da carteira ou
+          tela de detalhe do cliente. Backend cria sugestao tipo='avulsa'
+          automaticamente e gera mensagem. ModalMensagem detecta sugestao=null
+          + cliente preenchido e chama handler avulsa. */}
+      {clienteAvulso && (
+        <ModalMensagem
+          lojas={lojas}
+          sugestao={null}
+          cliente={clienteAvulso}
+          onClose={() => setClienteAvulso(null)}
+          onEnviada={() => setClienteAvulso(null)}
         />
       )}
       

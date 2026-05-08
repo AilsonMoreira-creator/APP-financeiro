@@ -3968,9 +3968,18 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       // Chama IA
       const sugestaoId = sugestao?.id;
       const ctx = { apelido_atual: apelido || null };
-      const msg = sugestaoId
-        ? await handleGerarMensagem(sugestaoId, ctx)
-        : '(geração avulsa ainda não disponível — gere a partir de uma sugestão)';
+      let msg;
+      if (sugestaoId) {
+        // Modo padrao: tem sugestao das 7 do dia
+        msg = await handleGerarMensagem(sugestaoId, ctx);
+      } else if (clienteEfetivo && lojas.handleGerarMensagemAvulsa) {
+        // Modo avulso (Ailson 08/05/2026): cria sugestao tipo='avulsa'
+        // e gera mensagem. Backend faz tudo.
+        const r = await lojas.handleGerarMensagemAvulsa(clienteEfetivo.id, ctx);
+        msg = r.mensagem;
+      } else {
+        msg = '(não foi possível gerar mensagem — cliente não identificado)';
+      }
 
       setMensagem(msg);
       setMensagemOriginal(msg);  // guarda pra comparar com a versao editada
@@ -3979,7 +3988,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       setErro(e.message || 'Erro ao gerar mensagem');
       setStep('erro');
     }
-  }, [sugestao, clienteEfetivo, apelido, apelidoInicial, handleGerarMensagem, handleEditarApelido]);
+  }, [sugestao, clienteEfetivo, apelido, apelidoInicial, handleGerarMensagem, handleEditarApelido, lojas]);
 
   // Auto-gera quando entra direto em 'gerando'
   useEffect(() => {
