@@ -863,6 +863,33 @@ Linha final: Pergunta aberta
 
 Use \\n\\n entre parágrafos pra criar respiro visual.
 
+# COMPRIMENTO TOTAL DA MENSAGEM (Ailson 08/05/2026)
+
+A mensagem precisa ser CONCISA — direto ao ponto. WhatsApp lojista lê rápido.
+
+ALVO: **3-5 frases curtas**, total entre 200-330 caracteres (sem contar URL).
+
+REGRAS DE ENCURTAMENTO:
+- Cada frase deve fazer 1 trabalho só. Sem rodeio.
+- Evite frases redundantes ("espero que tenha gostado das peças que comprou comigo" → "espero que tejam saindo bem")
+- Corte adjetivos demais ("novidades lindas, fresquinhas, que acabaram de chegar" → "novidades q acabaram de chegar")
+- Nada de introdução longa ("Passando pra te perguntar como você tem estado e..." → "Oi [nome], td bem?")
+- 1 gancho de produto BASTA (não acumula novidade + reposição + cor + promo)
+
+EXEMPLO CURTO (BOM):
+\`\`\`
+Oi Denise, td bem? 😊
+Chegou novidade aqui que combina muito com seu estilo.
+Te mando o link do catálogo no Vesti pra dar uma olhada:
+https://vesti.co/amicia/...
+O que vc acha?
+\`\`\`
+
+EXEMPLO LONGO (RUIM — evitar):
+\`\`\`
+Oi Denise, td bem? Passando pra saber como vc tá com as peças que chegaram aí, espero que teja voando nas suas clientes. Acabaram de chegar novidades lindas aqui, e tem umas blusas que eu acho que vão combinar muito com o que vc já levou. Te mando o link do catálogo no Vesti pra vc dar uma olhada com calma...
+\`\`\`
+
 # REGRAS CRÍTICAS
 
 ❌ NUNCA prometa prazo de entrega

@@ -1970,7 +1970,8 @@ export const SugestaoScreen = ({
               background: palette.accentSoft, border: `1px solid ${palette.accent}30`,
               borderRadius: 10, padding: 14, fontSize: fz(15), color: palette.ink, lineHeight: 1.55,
               marginBottom: 18, whiteSpace: 'pre-wrap', textAlign: 'left',
-            }}>{sugestao.acao_sugerida}</div>
+              overflowWrap: 'anywhere', // Ailson 08/05/2026
+            }}>{renderMensagemComLinks(sugestao.acao_sugerida)}</div>
           </>
         )}
 
@@ -3927,6 +3928,45 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
 // 8. ModalMensagem — gera mensagem com IA real
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// renderMensagemComLinks — Ailson 08/05/2026
+// ═══════════════════════════════════════════════════════════════════════════
+// Renderiza texto da mensagem detectando URLs e formatando-as:
+//   • URLs em azul (palette.accent)
+//   • word-break: anywhere (link grande nao vaza do container)
+//   • Decoration underline so na URL pra destacar como link
+//
+// Uso: <div>{renderMensagemComLinks(texto)}</div>
+
+function renderMensagemComLinks(texto) {
+  if (!texto) return null;
+  // Sem flag /g pra evitar problema de lastIndex.
+  // Cria nova regex em cada chamada de teste pra ser seguro.
+  const URL_PATTERN = /(https?:\/\/[^\s]+)/g;
+  const partes = String(texto).split(URL_PATTERN);
+  return partes.map((parte, i) => {
+    // Detecta URL via fresh regex (sem flag /g pra .test estavel)
+    const ehUrl = /^https?:\/\//.test(parte);
+    if (ehUrl) {
+      return (
+        <span
+          key={i}
+          style={{
+            color: palette.accent,
+            wordBreak: 'break-all',
+            overflowWrap: 'anywhere',
+            textDecoration: 'underline',
+          }}
+        >
+          {parte}
+        </span>
+      );
+    }
+    return <span key={i}>{parte}</span>;
+  });
+}
+
+
 export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) => {
   const { state, handleGerarMensagem, handleEditarApelido, handleEditarTelefone, handleMarcarSugestaoExecutada, handleDispensarSugestao, handleSalvarEdicaoMensagem } = lojas;
 
@@ -4310,7 +4350,8 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
                   background: palette.beigeSoft, borderRadius: 12, padding: 14, fontSize: fz(16),
                   color: palette.ink, lineHeight: 1.6, whiteSpace: 'pre-wrap',
                   border: `1px solid ${palette.beige}`, marginBottom: 14, fontFamily: FONT,
-                }}>{mensagem}</div>
+                  overflowWrap: 'anywhere', // Ailson 08/05/2026: links grandes nao vazam
+                }}>{renderMensagemComLinks(mensagem)}</div>
 
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                   <button onClick={() => { setMensagem(''); setMensagemOriginal(''); gerar(); }} style={{
