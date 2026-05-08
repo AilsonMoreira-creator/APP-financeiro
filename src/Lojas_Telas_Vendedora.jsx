@@ -2180,6 +2180,10 @@ export const MinhaCarteiraScreen = ({
   // da view vw_lojas_clientes_janela). Quando ativo, filtra a lista.
   const [idsNaJanela, setIdsNaJanela] = useState(null); // null = nao carregado
   const [filtroJanela, setFiltroJanela] = useState(false);
+  // Contadores compactos — Ailson 07/05/2026: so Ativos+Atencao+Janela
+  // visiveis sempre. Resto via "+" expand.
+  const [contadoresExpandidos, setContadoresExpandidos] = useState(false);
+  const [showInfoJanela, setShowInfoJanela] = useState(false);
   useEffect(() => {
     if (!vendedora?.id) return;
     let cancelado = false;
@@ -2373,31 +2377,168 @@ export const MinhaCarteiraScreen = ({
         })()}
       />
       <div style={{ padding: 16, paddingBottom: 32 }}>
-        {/* Contadores - inclui SACOLA novo + JANELA (Ailson 06/05/2026) */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 14, overflowX: 'auto' }}>
-          <Contador statusKey="ativo" label="Ativos" count={contadores.ativo} />
-          <Contador statusKey="separandoSacola" label="Sacola" count={contadores.separandoSacola} />
-          <Contador statusKey="atencao" label="Atenção" count={contadores.atencao} />
-          <Contador statusKey="semAtividade" label="S/Ativ" count={contadores.semAtividade} />
-          <Contador statusKey="inativo" label="Inativ" count={contadores.inativo} />
-          <Contador statusKey="arquivo" label="Arq" count={contadores.arquivo} />
-          {/* Filtro extra: clientes dentro da janela de compra */}
-          {idsNaJanela && (
-            <button
-              onClick={() => setFiltroJanela(v => !v)}
-              style={{
-                background: filtroJanela ? '#eafbf0' : palette.surface,
-                border: `1.5px solid ${filtroJanela ? '#27ae60' : palette.beige}`,
-                borderRadius: 10, padding: '10px 6px', flex: 1, minWidth: 0, cursor: 'pointer',
-                fontFamily: FONT, textAlign: 'center', transition: 'all 0.15s',
-              }}
-              title="Clientes dentro da janela ideal de compra (entre 70-100% do ciclo)"
-            >
-              <div style={{ fontSize: fz(21), fontWeight: 700, color: filtroJanela ? '#27ae60' : palette.ink, lineHeight: 1 }}>{idsNaJanela.size}</div>
-              <div style={{ fontSize: fz(10), color: filtroJanela ? '#27ae60' : palette.inkMuted, marginTop: 4, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>🎯 Janela</div>
-            </button>
+        {/* Contadores — Ailson 07/05/2026: compactos, mostra so essenciais
+            + Janela em destaque com tooltip explicativo. Click "+" expande
+            o resto (Sacola, S/Ativ, Inativ, Arq).
+            Decisao: ATIVOS, ATENÇÃO e JANELA visiveis sempre. Resto via expand. */}
+        <>
+          {/* Linha 1: Janela em destaque (se carregou) */}
+          {idsNaJanela && idsNaJanela.size > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <button
+                onClick={() => setFiltroJanela(v => !v)}
+                style={{
+                  width: '100%',
+                  background: filtroJanela ? '#eafbf0' : 'linear-gradient(90deg, #f0fdf4, #ecfdf5)',
+                  border: `2px solid ${filtroJanela ? '#27ae60' : '#a7f3d0'}`,
+                  borderRadius: 12, padding: '12px 14px',
+                  cursor: 'pointer', fontFamily: FONT,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                  transition: 'all 0.15s',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: fz(22) }}>🎯</span>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: fz(13), fontWeight: 700, color: '#15803d', letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                      Janela ideal de compra
+                    </div>
+                    <div style={{ fontSize: fz(12), color: '#166534', marginTop: 2 }}>
+                      {idsNaJanela.size} cliente{idsNaJanela.size !== 1 ? 's' : ''} pront{idsNaJanela.size !== 1 ? 'os' : 'o'} pra contato
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowInfoJanela(true);
+                    }}
+                    style={{
+                      width: 24, height: 24, borderRadius: 12,
+                      background: '#27ae60', color: 'white',
+                      fontSize: fz(13), fontWeight: 700,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer',
+                    }}
+                    title="Como funciona"
+                  >?</span>
+                  <span style={{
+                    fontSize: fz(11), padding: '4px 10px', borderRadius: 8,
+                    background: filtroJanela ? '#27ae60' : 'rgba(39, 174, 96, 0.15)',
+                    color: filtroJanela ? 'white' : '#15803d',
+                    fontWeight: 700,
+                  }}>
+                    {filtroJanela ? '✓ Filtrado' : 'Ver lista'}
+                  </span>
+                </div>
+              </button>
+            </div>
           )}
-        </div>
+
+          {/* Linha 2: Contadores principais (Ativos + Atencao) + botao + */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            <Contador statusKey="ativo" label="Ativos" count={contadores.ativo} />
+            <Contador statusKey="atencao" label="Atenção" count={contadores.atencao} />
+            <button
+              onClick={() => setContadoresExpandidos(!contadoresExpandidos)}
+              style={{
+                background: contadoresExpandidos ? palette.beigeSoft : palette.surface,
+                border: `1px solid ${palette.beige}`,
+                borderRadius: 10, padding: '10px 6px',
+                minWidth: 60, cursor: 'pointer', fontFamily: FONT,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 4,
+              }}
+              title={contadoresExpandidos ? 'Recolher' : 'Ver mais filtros'}
+            >
+              <span style={{ fontSize: fz(20), fontWeight: 700, color: palette.inkSoft }}>
+                {contadoresExpandidos ? '−' : '+'}
+              </span>
+              <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>
+                {contadoresExpandidos ? 'menos' : 'mais'}
+              </span>
+            </button>
+          </div>
+
+          {/* Linha 3 (expandida): Sacola, S/Ativ, Inativ, Arquivo */}
+          {contadoresExpandidos && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto' }}>
+              <Contador statusKey="separandoSacola" label="Sacola" count={contadores.separandoSacola} />
+              <Contador statusKey="semAtividade" label="S/Ativ" count={contadores.semAtividade} />
+              <Contador statusKey="inativo" label="Inativ" count={contadores.inativo} />
+              <Contador statusKey="arquivo" label="Arq" count={contadores.arquivo} />
+            </div>
+          )}
+
+          {/* Modal info Janela */}
+          {showInfoJanela && (
+            <div
+              onClick={() => setShowInfoJanela(false)}
+              style={{
+                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 9999, padding: 20,
+              }}
+            >
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: palette.surface, borderRadius: 14,
+                  padding: 20, maxWidth: 420, width: '100%',
+                  maxHeight: '80vh', overflowY: 'auto',
+                  fontFamily: FONT,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                  <span style={{ fontSize: fz(28) }}>🎯</span>
+                  <div style={{ fontSize: fz(18), fontWeight: 700, color: palette.ink }}>
+                    Janela ideal de compra
+                  </div>
+                </div>
+
+                <div style={{ fontSize: fz(14), color: palette.inkSoft, lineHeight: 1.6, marginBottom: 14 }}>
+                  A IA calcula a <strong>média de dias</strong> que cada cliente costuma levar entre uma compra e outra.
+                  Quando ela está perto desse intervalo natural, é o <strong>melhor momento</strong> pra você dar um alô.
+                </div>
+
+                <div style={{
+                  background: '#eafbf0', border: '1px solid #a7f3d0',
+                  borderRadius: 8, padding: 12, marginBottom: 14,
+                  fontSize: fz(13), color: '#166534',
+                }}>
+                  <strong>Por que vale priorizar quem está na janela?</strong><br/>
+                  <span style={{ color: '#1e7e34' }}>
+                    Cliente fora da janela ainda está no ciclo natural — ela vai comprar sozinha em alguns dias. Mensagem agora pode soar invasiva.
+                  </span><br/>
+                  <span style={{ color: '#1e7e34' }}>
+                    Cliente <strong>NA janela</strong> está no momento ideal — uma novidade, foto, ou simples lembrete pode acelerar a compra.
+                  </span>
+                </div>
+
+                <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 14, lineHeight: 1.5 }}>
+                  <strong>Detalhes técnicos:</strong><br/>
+                  • Calculado com base nas últimas 10 compras da cliente<br/>
+                  • Só aparece pra clientes com <strong>5+ compras</strong> distintas (média confiável)<br/>
+                  • Janela = entre 70% e 100% do ciclo médio dela
+                </div>
+
+                <button
+                  onClick={() => setShowInfoJanela(false)}
+                  style={{
+                    width: '100%',
+                    background: '#27ae60', color: 'white',
+                    border: 'none', borderRadius: 8, padding: '12px',
+                    fontSize: fz(15), fontWeight: 600, cursor: 'pointer',
+                    fontFamily: FONT,
+                  }}
+                >
+                  Entendi
+                </button>
+              </div>
+            </div>
+          )}
+        </>
 
         {/* Busca */}
         <div style={{
