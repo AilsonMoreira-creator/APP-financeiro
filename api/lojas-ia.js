@@ -2178,6 +2178,12 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
   // FIX 08/05/2026 (Ailson): INSERT estava usando 3 nomes de coluna errados
   // que nao existem no schema (ordem→prioridade, subtipo→nao existe), e
   // faltava alvo_tipo NOT NULL. Resultado: erro 500 PostgREST schema cache.
+  // FIX 08/05/2026 (Ailson 2a leva): inclui nome do cliente no titulo e
+  // popula alvo_nome_display — antes saia "Mensagem avulsa" anonimo na
+  // lista de sugestoes do dia.
+  const nomeCliente = cliente.apelido
+    || cliente.comprador_nome
+    || (cliente.razao_social ? cliente.razao_social.split(' ').slice(0, 3).join(' ') : 'Cliente');
   const hoje = new Date().toISOString().slice(0, 10);
   const { data: sugCriada, error: errCriar } = await supabase
     .from('lojas_sugestoes_diarias')
@@ -2186,11 +2192,12 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
       alvo_tipo: 'cliente',                      // NOT NULL no schema
       cliente_id: clienteId,
       grupo_id: null,
+      alvo_nome_display: nomeCliente,
       data_geracao: hoje,
       tipo: tipoSug,
       titulo: refEscolhida
-        ? `Mensagem avulsa — REF ${refEscolhida}`
-        : 'Mensagem avulsa',
+        ? `Mensagem avulsa — ${nomeCliente} · REF ${refEscolhida}`
+        : `Mensagem avulsa — ${nomeCliente}`,
       produto_ref: refEscolhida,
       status: 'pendente',
       prioridade: 99,                             // 99 = avulsa, fora das 7 do dia
