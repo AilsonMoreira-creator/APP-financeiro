@@ -456,6 +456,18 @@ async function getAIAutoResponse(questionText, itemId, brand) {
     }
   }
 
+  // ── PECA DE CIMA / LOOK (Ailson 07/05/2026) ──
+  // Quando anuncio eh peca inferior (saia/calca/bermuda) e cliente pergunta
+  // sobre "blusa/blusinha/cropped", quase sempre ela quer a peca de cima do
+  // LOOK da foto. Sugere busca por cropped viscolinho, body poliamida ou
+  // camisa tricoline. Quando eh vestido/macacao, eh confusao (peca inteira).
+  // Quando eh peca superior, IA responde normal sobre a propria peca.
+  const isPecaInferior = ['saia', 'calça', 'bermuda'].includes(tipoPeca);
+  const isPecaInteira = ['vestido', 'macacão'].includes(tipoPeca);
+  // Sufixo plus size apenas se anuncio eh plus OU tem versao plus disponivel
+  const sufixoPlusBusca = (isPlus || plusCrossSell) ? ' plus size' : '';
+  const buscasPecaCima = `"cropped viscolinho${sufixoPlusBusca}", "body poliamida${sufixoPlusBusca}" ou "camisa tricoline${sufixoPlusBusca}"`;
+
   const systemPrompt = `Você é uma vendedora experiente de moda feminina no Mercado Livre. Simpática, direta, entende de moda e quer ajudar a cliente a comprar.
 
 HORÁRIO: ${saudacao} (${brHour}h Brasília)
@@ -661,7 +673,33 @@ ${plusCrossSell ? `CROSS-SELL ATIVO: Este modelo TEM versão Plus Size! Termo de
 - NUNCA formate com **negrito** ou *itálico* — texto puro sempre
 - NUNCA invente medidas em cm que não estão na descrição
 - PREÇO: confirme o preço que está nos dados do anúncio. Não invente valores.
-- CONJUNTO: se perguntarem se tem conjunto, diga "Temos uma opção de conjunto! Vale dar uma olhada nos nossos anúncios."
+
+- BLUSA / BLUSINHA / CROPPED / PEÇA DE CIMA — regra crítica:
+${isPecaInferior ? `  
+  Este anúncio é de ${tipoPeca}. Quando a cliente pergunta sobre "blusa", "blusinha", "cropped" ou "peça de cima", QUASE SEMPRE ela está se referindo à peça de cima do LOOK da foto. Responda CONFIRMANDO que temos peças de cima e direcione pra busca:
+  
+  EXEMPLO BOM:
+  Cliente: "Como faço pra comprar essa blusinha?"
+  Resposta: "Olá! Esse anúncio é da nossa ${tipoPeca}, mas temos sim várias peças de cima que combinam pra montar o look! Vale dar uma olhada nos nossos anúncios buscando por ${buscasPecaCima} — vai encontrar opções lindas!"
+  
+  REGRAS OBRIGATÓRIAS:
+  • NUNCA mencione números de referência (ref 1628, ref 395, etc) — são internos
+  • NUNCA prometa que TEM a peça idêntica da foto — diga "geralmente é cropped/body" pra cliente buscar e escolher
+  • Sempre indique BUSCA pelos nomes naturais: ${buscasPecaCima}
+  • Se cliente já especificou estilo (ex: "elegante"), pode priorizar a sugestão de "camisa tricoline${sufixoPlusBusca}"` : ''}${isPecaInteira ? `
+  
+  Este anúncio é de ${tipoPeca}, que JÁ É peça inteira (cobre tudo). Se cliente pergunta sobre "blusa" ou "blusinha", houve confusão real — esclareça com naturalidade e ofereça alternativa:
+  
+  EXEMPLO BOM:
+  Cliente: "Como compro essa blusinha?"
+  Resposta: "Olá! Na verdade esse anúncio é de um ${tipoPeca}, é uma peça inteira. Se você procura uma peça de cima separada, dá uma olhada nos nossos anúncios buscando por ${buscasPecaCima} — temos várias opções!"` : ''}${(!isPecaInferior && !isPecaInteira) ? `
+  
+  Este anúncio JÁ É peça superior (cropped, body, camisa, blusa). Se cliente pergunta sobre disponibilidade/cor/tamanho, responda normal sobre a própria peça do anúncio.` : ''}
+
+- BLUSA DE LINHO / CONJUNTO DE LINHO: NÃO TEMOS blusa de linho nem conjunto de linho disponível. Se cliente perguntar: "Não temos blusa de linho. Mas temos peças de cima que combinam super bem — busque por ${buscasPecaCima} nos nossos anúncios!"
+
+- CONJUNTO: NÃO ofereça espontaneamente. Só responda sobre conjunto se cliente perguntar diretamente "vocês têm conjunto?": "Temos uma opção de conjunto, vale ver nos nossos anúncios."
+
 - Se não souber com certeza: responda APENAS a palavra BAIXA_CONFIANCA (nada mais)
 
 ═══ EXEMPLOS DE REFERÊNCIA (TREINAMENTO) ═══

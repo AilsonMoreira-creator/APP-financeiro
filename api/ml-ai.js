@@ -204,6 +204,14 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── PECA DE CIMA / LOOK (Ailson 07/05/2026) ──
+    // Mesma logica do ml-webhook.js: detecta peca inferior vs inteira
+    // pra IA saber o contexto da pergunta sobre "blusa/cropped".
+    const isPecaInferior = ['saia', 'calça', 'bermuda'].includes(tipoPeca);
+    const isPecaInteira = ['vestido', 'macacão'].includes(tipoPeca);
+    const sufixoPlusBusca = (isPlus || plusCrossSell) ? ' plus size' : '';
+    const buscasPecaCima = `"cropped viscolinho${sufixoPlusBusca}", "body poliamida${sufixoPlusBusca}" ou "camisa tricoline${sufixoPlusBusca}"`;
+
     const claudeRes = await fetch(CLAUDE_API, {
       method: 'POST',
       headers: {
@@ -253,7 +261,8 @@ TROCAS: ML não tem opção de troca. Cliente pede troca → explicar: "O Mercad
 NUNCA "ideal dias quentes/frio" — versátil pra todas as estações.
 FORMATO: "Olá! ${saudacao}!" + 100-380 chars + despedida variada. Se múltiplas perguntas, responda TODAS. Emoji max 1. NUNCA **negrito**.
 GANCHOS (1, natural): "dos mais vendidos!", "clientes elogiam!", "vai ficar ótima!". Não em entrega/pós-venda.
-PROIBIÇÕES: "Amícia", "desvestir", inventar, telefone/WhatsApp, enviar fotos, prometer desconto/cupom, inventar medidas em cm. Conjunto → "Temos uma opção de conjunto nos nossos anúncios!" Se não souber: BAIXA_CONFIANCA.
+PROIBIÇÕES: "Amícia", "desvestir", inventar, telefone/WhatsApp, enviar fotos, prometer desconto/cupom, inventar medidas em cm, mencionar refs/numeros internos. Conjunto → NÃO oferte espontaneamente; se cliente perguntar direto: "Temos uma opção de conjunto, vale ver nos anúncios". Blusa de linho → NÃO TEMOS, sugira ${buscasPecaCima}. Se não souber: BAIXA_CONFIANCA.
+BLUSA/BLUSINHA/CROPPED ${isPecaInferior ? `(este anúncio é ${tipoPeca}, peça INFERIOR): cliente quase sempre quer peça do LOOK da foto. Confirme que temos peças de cima: "Esse anúncio é da ${tipoPeca}, mas temos peças de cima que combinam pra montar o look! Busque por ${buscasPecaCima} nos nossos anúncios". NUNCA prometa peça idêntica da foto, NUNCA mencione ref.` : isPecaInteira ? `(este anúncio é ${tipoPeca}, peça INTEIRA): houve confusão. Esclareça: "Esse anúncio é de um ${tipoPeca}, peça inteira. Pra peça de cima separada, busque ${buscasPecaCima} nos anúncios."` : `(este anúncio JÁ É peça superior): responda normal sobre a peça do anúncio.`}
 EXEMPLOS: ${qaExamples}`,
         messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${ctx.itemContext || 'TÍTULO: ' + ctx.title}\n\n═══ DESCRIÇÃO ═══\n${ctx.desc || 'Sem descrição'}\n\n═══ PERGUNTA ═══\n"${question_text}"\n\nResponda APENAS com o texto final (sem passos nem classificação):` }],
       }),
