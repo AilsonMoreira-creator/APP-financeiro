@@ -126,30 +126,30 @@ const REGRAS_INICIAIS = {
   stefany: [
     { id: rid(), tipo: 'salario_fixo',          config: { valor: 1655 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 1104 },                                      ordem: 2, ativo: true },
-    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.12, fonte: 'mktplc_liquido' },        ordem: 3, ativo: true },
+    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.12, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.20, fonte: 'muniam' },                ordem: 4, ativo: true },
   ],
   gabrielly: [
     { id: rid(), tipo: 'salario_fixo',          config: { valor: 1400.86 },                                   ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 934 },                                       ordem: 2, ativo: true },
-    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.12, fonte: 'mktplc_liquido' },        ordem: 3, ativo: true },
+    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.10, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.20, fonte: 'muniam' },                ordem: 4, ativo: true },
   ],
   ingrid: [
     { id: rid(), tipo: 'salario_fixo',          config: { valor: 1136 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 892 },                                       ordem: 2, ativo: true },
-    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.12, fonte: 'mktplc_liquido' },        ordem: 3, ativo: true },
+    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.10, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.20, fonte: 'muniam' },                ordem: 4, ativo: true },
   ],
   lucia: [
     { id: rid(), tipo: 'salario_fixo',          config: { valor: 1380 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 920 },                                       ordem: 2, ativo: true },
-    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.07, fonte: 'mktplc_liquido' },        ordem: 3, ativo: true },
+    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.70, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
   ],
   igor: [
     { id: rid(), tipo: 'salario_fixo',          config: { valor: 1140 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 848 },                                       ordem: 2, ativo: true },
-    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.1, fonte: 'mktplc_liquido' },         ordem: 3, ativo: true },
+    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.10, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
     { id: rid(), tipo: 'desconto',              config: { descricao: 'Empréstimo', valor: 0 },                ordem: 4, ativo: true },
   ],
 };
@@ -368,26 +368,32 @@ async function carregarContexto(competencia, vendedoras) {
     else if (v.loja === 'Silva Teles') lojaST += val;
   }
 
-  // 2. Marketplaces — lê do payload financeiro (amica-admin)
+  // 2. Marketplaces — lê de bling_resultados (fonte primária Bling)
+  //    bling_resultados tem por dia: exitus, lumia, muniam (BRUTO de cada conta) + valor_liquido
+  let mktplcBruto = 0;
   let mktplcLiquido = 0;
+  let muniam = 0;
   try {
-    const { data } = await supabase
-      .from('amicia_data')
-      .select('payload')
-      .eq('user_id', 'amicia-admin')
-      .maybeSingle();
-    const dias = data?.payload?.receitasPorMes?.[mes] || {};
-    for (const dia of Object.values(dias)) {
-      mktplcLiquido += Number(dia?.marketplaces || 0);
+    const { data: bling } = await supabase
+      .from('bling_resultados')
+      .select('exitus, lumia, muniam, valor_liquido')
+      .gte('data', inicio)
+      .lte('data', fim);
+    for (const r of (bling || [])) {
+      const ex = Number(r.exitus || 0);
+      const lu = Number(r.lumia || 0);
+      const mu = Number(r.muniam || 0);
+      mktplcBruto += ex + lu + mu;
+      mktplcLiquido += Number(r.valor_liquido || 0);
+      muniam += mu;
+    }
+    // Fallback: se valor_liquido não foi populado em algum dia, deduz 10% do bruto
+    if (mktplcBruto > 0 && mktplcLiquido === 0) {
+      mktplcLiquido = mktplcBruto * 0.9;
     }
   } catch (e) {
-    console.warn('[folha] erro ao buscar mktplc', e?.message);
+    console.warn('[folha] erro ao buscar bling_resultados', e?.message);
   }
-  const mktplcBruto = mktplcLiquido / 0.9;
-
-  // 3. Muniam — TODO: integrar com Bling pra pegar só Muniam
-  // Por enquanto: zero (admin edita manualmente no card)
-  const muniam = 0;
 
   return {
     competencia,
