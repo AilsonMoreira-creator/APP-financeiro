@@ -374,39 +374,37 @@ async function carregarContexto(competencia, vendedoras) {
     else if (v.loja === 'Silva Teles') lojaST += val;
   }
 
-  // 2. Marketplaces — bling_resultados é SNAPSHOT ACUMULADO MENSAL.
-  //    Cada linha tem o total desde o dia 1 do mês até a data salva.
-  //    Logo: pegamos APENAS o registro mais recente do mês — esse já tem
-  //    o total acumulado final (ou parcial, se mês corrente).
-  //    Colunas: exitus, lumia, muniam (BRUTO de cada conta) + total_bruto + valor_liquido.
+  // 2. Marketplaces — lê de bling_vendas_detalhe (pedido a pedido).
+  //    Esta tabela é populada automaticamente pelo cron `bling-cron`
+  //    a cada 10min, cobrindo os últimos 45 dias com filtro situacaoId=9
+  //    (Atendido). Logo: pedidos do mes passado que vão sendo atendidos
+  //    em Maio são capturados sem ação manual.
+  //    Colunas: conta (exitus/lumia/muniam), data_pedido, total_produtos.
   let mktplcBruto = 0;
-  let mktplcLiquido = 0;
   let muniam = 0;
   try {
-    const { data: bling } = await supabase
-      .from('bling_resultados')
-      .select('exitus, lumia, muniam, total_bruto, valor_liquido')
-      .gte('data', inicio)
-      .lte('data', fim)
-      .order('data', { ascending: false })
-      .limit(1);
-    const ultimo = bling?.[0];
-    if (ultimo) {
-      mktplcBruto = Number(ultimo.total_bruto || 0);
-      mktplcLiquido = Number(ultimo.valor_liquido || 0);
-      muniam = Number(ultimo.muniam || 0);
-      // Fallback se total_bruto vier zerado (versões antigas): soma exitus+lumia+muniam
-      if (mktplcBruto === 0) {
-        mktplcBruto = Number(ultimo.exitus || 0) + Number(ultimo.lumia || 0) + muniam;
+    let from = 0; const PAGE = 1000;
+    while (true) {
+      const { data: pedidos, error } = await supabase
+        .from('bling_vendas_detalhe')
+        .select('conta, total_produtos')
+        .gte('data_pedido', inicio)
+        .lte('data_pedido', fim)
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!pedidos || pedidos.length === 0) break;
+      for (const p of pedidos) {
+        const v = Number(p.total_produtos || 0);
+        mktplcBruto += v;
+        if (p.conta === 'muniam') muniam += v;
       }
-      // Fallback se valor_liquido vier zerado: deduz 10% do bruto
-      if (mktplcBruto > 0 && mktplcLiquido === 0) {
-        mktplcLiquido = mktplcBruto * 0.9;
-      }
+      if (pedidos.length < PAGE) break;
+      from += PAGE;
     }
   } catch (e) {
-    console.warn('[folha] erro ao buscar bling_resultados', e?.message);
+    console.warn('[folha] erro ao buscar bling_vendas_detalhe', e?.message);
   }
+  const mktplcLiquido = mktplcBruto * 0.9; // -10% devoluções (regra Ailson)
 
   return {
     competencia,

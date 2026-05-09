@@ -84,27 +84,39 @@ export default async function handler(req, res) {
       else if (v.loja === 'Silva Teles') lojaST += val;
     }
 
-    // 4. Bling — bling_resultados é SNAPSHOT ACUMULADO MENSAL (cada linha tem
-    //    o total desde dia 1 até a data salva). Pegar apenas o mais recente.
-    let mktplcBruto = 0, mktplcLiquido = 0, muniam = 0;
-    const { data: blingTodos } = await supabase
-      .from('bling_resultados')
-      .select('data, exitus, lumia, muniam, total_bruto, valor_liquido')
-      .gte('data', inicio).lte('data', fim)
-      .order('data', { ascending: false });
-    const ultimo = blingTodos?.[0];
-    if (ultimo) {
-      mktplcBruto = Number(ultimo.total_bruto || 0);
-      mktplcLiquido = Number(ultimo.valor_liquido || 0);
-      muniam = Number(ultimo.muniam || 0);
-      if (mktplcBruto === 0) mktplcBruto = Number(ultimo.exitus || 0) + Number(ultimo.lumia || 0) + muniam;
-      if (mktplcBruto > 0 && mktplcLiquido === 0) mktplcLiquido = mktplcBruto * 0.9;
+    // 4. Bling — bling_vendas_detalhe é populado automaticamente pelo
+    //    cron bling-cron a cada 10min (45 dias retroativos, situacaoId=9).
+    //    Soma direta dos pedidos do mês.
+    let mktplcBruto = 0, muniam = 0;
+    let totalPedidosNoMes = 0;
+    const porConta = { exitus: { qtd: 0, total: 0 }, lumia: { qtd: 0, total: 0 }, muniam: { qtd: 0, total: 0 }, outros: { qtd: 0, total: 0 } };
+    let from = 0; const PAGE = 1000;
+    while (true) {
+      const { data: pedidos } = await supabase
+        .from('bling_vendas_detalhe')
+        .select('conta, total_produtos')
+        .gte('data_pedido', inicio)
+        .lte('data_pedido', fim)
+        .range(from, from + PAGE - 1);
+      if (!pedidos || pedidos.length === 0) break;
+      for (const p of pedidos) {
+        const v = Number(p.total_produtos || 0);
+        mktplcBruto += v;
+        totalPedidosNoMes++;
+        const c = p.conta || 'outros';
+        if (porConta[c]) { porConta[c].qtd++; porConta[c].total += v; }
+        else { porConta.outros.qtd++; porConta.outros.total += v; }
+        if (p.conta === 'muniam') muniam += v;
+      }
+      if (pedidos.length < PAGE) break;
+      from += PAGE;
     }
+    const mktplcLiquido = mktplcBruto * 0.9;
     const blingDiagnostico = {
-      total_snapshots_no_mes: blingTodos?.length || 0,
-      ultimo_snapshot_usado: ultimo || null,
-      observacao: 'bling_resultados eh snapshot ACUMULADO desde dia 1. Usamos apenas o mais recente.',
-      todos_snapshots_curva_crescente: (blingTodos || []).slice(0, 5),
+      fonte: 'bling_vendas_detalhe (cron auto 10min, 45 dias retroativos, situacaoId=9)',
+      total_pedidos_no_mes: totalPedidosNoMes,
+      por_conta: porConta,
+      observacao: 'mktplc_liquido = bruto * 0.9 (-10% devolucoes, regra Ailson)',
     };
 
     // 5. Planilha competência + seguinte
