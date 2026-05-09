@@ -84,33 +84,27 @@ export default async function handler(req, res) {
       else if (v.loja === 'Silva Teles') lojaST += val;
     }
 
-    // 4. Bling
+    // 4. Bling — bling_resultados é SNAPSHOT ACUMULADO MENSAL (cada linha tem
+    //    o total desde dia 1 até a data salva). Pegar apenas o mais recente.
     let mktplcBruto = 0, mktplcLiquido = 0, muniam = 0;
-    let sumExitus = 0, sumLumia = 0, sumMuniam = 0, sumTotalBruto = 0;
-    const { data: bling } = await supabase
+    const { data: blingTodos } = await supabase
       .from('bling_resultados')
       .select('data, exitus, lumia, muniam, total_bruto, valor_liquido')
       .gte('data', inicio).lte('data', fim)
-      .order('data', { ascending: true });
-    for (const r of (bling || [])) {
-      const ex = Number(r.exitus || 0), lu = Number(r.lumia || 0), mu = Number(r.muniam || 0);
-      mktplcBruto += ex + lu + mu;
-      mktplcLiquido += Number(r.valor_liquido || 0);
-      muniam += mu;
-      sumExitus += ex;
-      sumLumia += lu;
-      sumMuniam += mu;
-      sumTotalBruto += Number(r.total_bruto || 0);
+      .order('data', { ascending: false });
+    const ultimo = blingTodos?.[0];
+    if (ultimo) {
+      mktplcBruto = Number(ultimo.total_bruto || 0);
+      mktplcLiquido = Number(ultimo.valor_liquido || 0);
+      muniam = Number(ultimo.muniam || 0);
+      if (mktplcBruto === 0) mktplcBruto = Number(ultimo.exitus || 0) + Number(ultimo.lumia || 0) + muniam;
+      if (mktplcBruto > 0 && mktplcLiquido === 0) mktplcLiquido = mktplcBruto * 0.9;
     }
-    if (mktplcBruto > 0 && mktplcLiquido === 0) mktplcLiquido = mktplcBruto * 0.9;
     const blingDiagnostico = {
-      total_linhas: bling?.length || 0,
-      data_min: bling?.[0]?.data || null,
-      data_max: bling?.[bling.length - 1]?.data || null,
-      soma_por_marca: { exitus: sumExitus, lumia: sumLumia, muniam: sumMuniam },
-      soma_total_bruto_coluna: sumTotalBruto,
-      sample_primeiras_3: (bling || []).slice(0, 3),
-      sample_ultimas_3: (bling || []).slice(-3),
+      total_snapshots_no_mes: blingTodos?.length || 0,
+      ultimo_snapshot_usado: ultimo || null,
+      observacao: 'bling_resultados eh snapshot ACUMULADO desde dia 1. Usamos apenas o mais recente.',
+      todos_snapshots_curva_crescente: (blingTodos || []).slice(0, 5),
     };
 
     // 5. Planilha competência + seguinte

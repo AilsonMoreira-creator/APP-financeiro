@@ -374,28 +374,35 @@ async function carregarContexto(competencia, vendedoras) {
     else if (v.loja === 'Silva Teles') lojaST += val;
   }
 
-  // 2. Marketplaces — lê de bling_resultados (fonte primária Bling)
-  //    bling_resultados tem por dia: exitus, lumia, muniam (BRUTO de cada conta) + valor_liquido
+  // 2. Marketplaces — bling_resultados é SNAPSHOT ACUMULADO MENSAL.
+  //    Cada linha tem o total desde o dia 1 do mês até a data salva.
+  //    Logo: pegamos APENAS o registro mais recente do mês — esse já tem
+  //    o total acumulado final (ou parcial, se mês corrente).
+  //    Colunas: exitus, lumia, muniam (BRUTO de cada conta) + total_bruto + valor_liquido.
   let mktplcBruto = 0;
   let mktplcLiquido = 0;
   let muniam = 0;
   try {
     const { data: bling } = await supabase
       .from('bling_resultados')
-      .select('exitus, lumia, muniam, valor_liquido')
+      .select('exitus, lumia, muniam, total_bruto, valor_liquido')
       .gte('data', inicio)
-      .lte('data', fim);
-    for (const r of (bling || [])) {
-      const ex = Number(r.exitus || 0);
-      const lu = Number(r.lumia || 0);
-      const mu = Number(r.muniam || 0);
-      mktplcBruto += ex + lu + mu;
-      mktplcLiquido += Number(r.valor_liquido || 0);
-      muniam += mu;
-    }
-    // Fallback: se valor_liquido não foi populado em algum dia, deduz 10% do bruto
-    if (mktplcBruto > 0 && mktplcLiquido === 0) {
-      mktplcLiquido = mktplcBruto * 0.9;
+      .lte('data', fim)
+      .order('data', { ascending: false })
+      .limit(1);
+    const ultimo = bling?.[0];
+    if (ultimo) {
+      mktplcBruto = Number(ultimo.total_bruto || 0);
+      mktplcLiquido = Number(ultimo.valor_liquido || 0);
+      muniam = Number(ultimo.muniam || 0);
+      // Fallback se total_bruto vier zerado (versões antigas): soma exitus+lumia+muniam
+      if (mktplcBruto === 0) {
+        mktplcBruto = Number(ultimo.exitus || 0) + Number(ultimo.lumia || 0) + muniam;
+      }
+      // Fallback se valor_liquido vier zerado: deduz 10% do bruto
+      if (mktplcBruto > 0 && mktplcLiquido === 0) {
+        mktplcLiquido = mktplcBruto * 0.9;
+      }
     }
   } catch (e) {
     console.warn('[folha] erro ao buscar bling_resultados', e?.message);
