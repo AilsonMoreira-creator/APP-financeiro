@@ -144,7 +144,7 @@ const REGRAS_INICIAIS = {
   lucia: [
     { id: rid(), tipo: 'salario_fixo',          config: { valor: 1380 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 920 },                                       ordem: 2, ativo: true },
-    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.70, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
+    { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.07, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
   ],
   igor: [
     { id: rid(), tipo: 'salario_fixo',          config: { valor: 1140 },                                      ordem: 1, ativo: true },
