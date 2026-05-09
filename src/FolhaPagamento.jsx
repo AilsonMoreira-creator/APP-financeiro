@@ -37,7 +37,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowLeft, X, Plus, Edit2, Trash2, Check, FileText, Settings,
   AlertCircle, CheckCircle2, Archive, RotateCcw, ChevronDown,
-  TrendingUp, Receipt, Wallet, Users, Tag, Minus, Save, Printer,
+  TrendingUp, Receipt, Wallet, Users, Tag, Minus, Save, Printer, Coffee,
 } from 'lucide-react';
 import { supabase, palette, FONT } from './Lojas_Shared.jsx';
 
@@ -54,9 +54,18 @@ const TIPO_INFO = {
   comissao_loja:          { label: 'Comissão sobre loja',    icon: Users,     cor: palette.accent },
   bonus_meta_individual:  { label: 'Bônus por meta',         icon: Tag,       cor: palette.ok },
   comissao_marketplace:   { label: 'Comissão marketplace',   icon: TrendingUp, cor: palette.accent },
+  acrescimo:              { label: 'Acréscimo (alimentação, etc)', icon: Coffee, cor: palette.ok },
   valor_fixo:             { label: 'Valor extra',            icon: Plus,      cor: palette.ok },
   desconto:               { label: 'Desconto',               icon: Minus,     cor: palette.alert },
 };
+
+// Colunas disponíveis em auxDataPorMes[mes]['Funcionários'][linha] pra Acréscimo
+const COLUNAS_PLANILHA_ACRESCIMO = [
+  { key: 'alimentacao', label: 'Alimentação' },
+  { key: 'extra',       label: 'Extra' },
+  { key: 'ferias',      label: 'Férias' },
+  { key: 'rescisao',    label: 'Rescisão' },
+];
 
 // Funcionários iniciais — pré-cadastrados na primeira carga
 const FUNCIONARIOS_INICIAIS = [
@@ -117,37 +126,37 @@ const REGRAS_INICIAIS = {
     { id: rid(), tipo: 'bonus_meta_individual', config: { base: 'total', faixas: [...FAIXAS_META_PADRAO] },   ordem: 5, ativo: true },
   ],
   cristiane: [
-    { id: rid(), tipo: 'salario_fixo',          config: { valor: 1501 },                                      ordem: 1, ativo: true },
+    { id: rid(), tipo: 'salario_fixo',          config: { valor: 2503 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 1002 },                                      ordem: 2, ativo: true },
     { id: rid(), tipo: 'comissao_loja',         config: { loja: 'Bom Retiro', percentual: 0.3 },              ordem: 3, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.1, fonte: 'mktplc_bruto' },           ordem: 4, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.1, fonte: 'mktplc_liquido' },         ordem: 5, ativo: true },
   ],
   stefany: [
-    { id: rid(), tipo: 'salario_fixo',          config: { valor: 1655 },                                      ordem: 1, ativo: true },
+    { id: rid(), tipo: 'salario_fixo',          config: { valor: 2759 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 1104 },                                      ordem: 2, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.12, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.20, fonte: 'muniam' },                ordem: 4, ativo: true },
   ],
   gabrielly: [
-    { id: rid(), tipo: 'salario_fixo',          config: { valor: 1400.86 },                                   ordem: 1, ativo: true },
+    { id: rid(), tipo: 'salario_fixo',          config: { valor: 2334.86 },                                   ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 934 },                                       ordem: 2, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.10, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.20, fonte: 'muniam' },                ordem: 4, ativo: true },
   ],
   ingrid: [
-    { id: rid(), tipo: 'salario_fixo',          config: { valor: 1136 },                                      ordem: 1, ativo: true },
+    { id: rid(), tipo: 'salario_fixo',          config: { valor: 2028 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 892 },                                       ordem: 2, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.10, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.20, fonte: 'muniam' },                ordem: 4, ativo: true },
   ],
   lucia: [
-    { id: rid(), tipo: 'salario_fixo',          config: { valor: 1380 },                                      ordem: 1, ativo: true },
-    { id: rid(), tipo: 'vale_pago',             config: { valor: 920 },                                       ordem: 2, ativo: true },
+    { id: rid(), tipo: 'salario_fixo',          config: { valor: 2112 },                                      ordem: 1, ativo: true },
+    { id: rid(), tipo: 'vale_pago',             config: { valor: 845 },                                       ordem: 2, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.07, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
   ],
   igor: [
-    { id: rid(), tipo: 'salario_fixo',          config: { valor: 1140 },                                      ordem: 1, ativo: true },
+    { id: rid(), tipo: 'salario_fixo',          config: { valor: 1988 },                                      ordem: 1, ativo: true },
     { id: rid(), tipo: 'vale_pago',             config: { valor: 848 },                                       ordem: 2, ativo: true },
     { id: rid(), tipo: 'comissao_marketplace',  config: { percentual: 0.10, fonte: 'mktplc_bruto' },          ordem: 3, ativo: true },
     { id: rid(), tipo: 'desconto',              config: { descricao: 'Empréstimo', valor: 0 },                ordem: 4, ativo: true },
@@ -306,6 +315,20 @@ function calcularUmaRegra(regra, funcionario, ctx, valeValor) {
         id: regra.id, tipo: regra.tipo, titulo: `Comissão ${label}`,
         descricao_calculo: `${cfg.percentual}% × ${fmtBRL(v)} (${label})`,
         valor, mes_destino: 'competencia',
+      };
+    }
+
+    case 'acrescimo': {
+      const colInfo = (typeof COLUNAS_PLANILHA_ACRESCIMO !== 'undefined' ? COLUNAS_PLANILHA_ACRESCIMO : [])
+        .find(c => c.key === cfg.coluna_planilha);
+      const labelCol = colInfo?.label || cfg.descricao || 'Acréscimo';
+      return {
+        id: regra.id, tipo: regra.tipo,
+        titulo: cfg.descricao || labelCol,
+        descricao_calculo: `Acréscimo fixo → coluna ${labelCol} da planilha`,
+        valor: Number(cfg.valor || 0),
+        mes_destino: cfg.mes_destino === 'competencia' ? 'competencia' : 'seguinte',
+        coluna_planilha: cfg.coluna_planilha,
       };
     }
 
@@ -743,9 +766,27 @@ export default function FolhaPagamento({ onVoltar }) {
     // Soma por mes_destino
     let salarioTotal = 0;
     let comissaoTotal = 0;
+    // Acréscimos vão pra coluna específica (alimentacao, extra, etc), não somam no salário/comissão
+    const acrescimos = []; // { mes_destino, coluna, descricao, valor }
     for (const l of linhas) {
-      if (l.mes_destino === 'seguinte') salarioTotal += Number(l.valor);
-      else comissaoTotal += Number(l.valor);
+      if (l.tipo === 'acrescimo' && l.coluna_planilha) {
+        acrescimos.push({
+          mes_destino: l.mes_destino,
+          coluna: l.coluna_planilha,
+          descricao: l.titulo,
+          valor: Number(l.valor),
+        });
+      } else if (l.mes_destino === 'seguinte') {
+        salarioTotal += Number(l.valor);
+      } else {
+        comissaoTotal += Number(l.valor);
+      }
+    }
+    // Agrupa acréscimos da mesma coluna+mes (ex: 2 acréscimos em "alimentacao" mês seguinte)
+    const acrescimosAgrupados = {};
+    for (const a of acrescimos) {
+      const k = `${a.mes_destino}|${a.coluna}`;
+      acrescimosAgrupados[k] = (acrescimosAgrupados[k] || 0) + a.valor;
     }
 
     // Vale (do regras base)
@@ -756,12 +797,17 @@ export default function FolhaPagamento({ onVoltar }) {
     const [, mesComp] = competencia.split('-').map(Number);
     const [, mesSeg] = compSeguinte.split('-').map(Number);
 
+    const acrescimosResumo = acrescimos
+      .map(a => `• ${a.descricao} R$ ${a.valor.toFixed(2).replace('.',',')} → ${a.mes_destino === 'seguinte' ? nomeMes(compSeguinte) : nomeMes(competencia)} (coluna ${a.coluna})`)
+      .join('\n');
+
     if (!confirm(
       `Marcar ${f.nome_display} como pago — ${nomeMes(competencia)}?\n\n` +
       `Vai escrever na planilha:\n` +
       `• Salário R$ ${salarioTotal.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} (mês de pagamento)\n` +
       `• Comissão R$ ${comissaoTotal.toFixed(2).replace('.',',')} → ${nomeMes(competencia)} (competência)\n` +
       (valeValor > 0 ? `• Vale R$ ${valeValor.toFixed(2).replace('.',',')} → ${nomeMes(competencia)} (se ainda não estiver lá)\n` : '') +
+      (acrescimosResumo ? acrescimosResumo + '\n' : '') +
       `\nContinuar?`
     )) return;
 
@@ -796,6 +842,13 @@ export default function FolhaPagamento({ onVoltar }) {
 
       const r1 = escrever(mesSeg, { salario: salarioTotal.toFixed(2) });
       const r2 = escrever(mesComp, { comissao: comissaoTotal.toFixed(2) });
+
+      // Acréscimos: cada um vai pra coluna específica do mês escolhido
+      for (const [k, valor] of Object.entries(acrescimosAgrupados)) {
+        const [mesDestino, coluna] = k.split('|');
+        const mesNum = mesDestino === 'seguinte' ? mesSeg : mesComp;
+        escrever(mesNum, { [coluna]: valor.toFixed(2) });
+      }
 
       // Vale: só preenche se não estiver lá ainda (cron dia 20 normalmente põe)
       if (valeValor > 0) {
@@ -865,13 +918,22 @@ export default function FolhaPagamento({ onVoltar }) {
         padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 10,
       }}>
         <button onClick={tela === 'home' ? onVoltar : () => setTela('home')}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: palette.accent, fontFamily: FONT, fontSize: 13 }}>
-          <ArrowLeft size={16} strokeWidth={1.5} />
+          onMouseEnter={e=>{ e.currentTarget.style.background = palette.accent; e.currentTarget.style.color = '#fff'; }}
+          onMouseLeave={e=>{ e.currentTarget.style.background = palette.accentSoft; e.currentTarget.style.color = palette.accent; }}
+          style={{
+            background: palette.accentSoft, color: palette.accent,
+            border: `1px solid ${palette.accent}`,
+            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontFamily: FONT, fontSize: 14, fontWeight: 600,
+            padding: '7px 16px', borderRadius: 20,
+            transition: 'all 0.15s',
+          }}>
+          <ArrowLeft size={17} strokeWidth={2} />
           {tela === 'home' ? 'Voltar' : 'Folha'}
         </button>
         <div style={{ flex: 1 }} />
         {syncStatus && (
-          <span style={{ fontSize: 11, color: syncStatus === 'error' ? palette.alert : palette.ok }}>
+          <span style={{ fontSize: 12, color: syncStatus === 'error' ? palette.alert : palette.ok }}>
             {syncStatus === 'saving' ? 'salvando...' : syncStatus === 'saved' ? '✓ salvo' : '✕ erro'}
           </span>
         )}
@@ -1003,11 +1065,11 @@ function HomeFolha({
       {/* Cabeçalho */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: palette.inkMuted }}>Grupo Amícia</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: palette.ink }}>Folha de Pagamento</div>
+          <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: palette.inkMuted }}>Grupo Amícia</div>
+          <div style={{ fontSize: 23, fontWeight: 700, color: palette.ink }}>Folha de Pagamento</div>
         </div>
         <select value={competencia} onChange={e => setCompetencia(e.target.value)}
-          style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '8px 14px', fontFamily: FONT, fontSize: 13, color: palette.ink, cursor: 'pointer', colorScheme: 'light' }}>
+          style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '8px 14px', fontFamily: FONT, fontSize: 14, color: palette.ink, cursor: 'pointer', colorScheme: 'light' }}>
           {opcoes.map(c => <option key={c} value={c}>{nomeMes(c)}</option>)}
         </select>
       </div>
@@ -1022,7 +1084,7 @@ function HomeFolha({
       </div>
 
       {ctxLoading && (
-        <div style={{ background: palette.warnSoft, color: palette.warn, padding: 10, borderRadius: 8, fontSize: 12, marginBottom: 12, textAlign: 'center' }}>
+        <div style={{ background: palette.warnSoft, color: palette.warn, padding: 10, borderRadius: 8, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
           Carregando vendas do mês...
         </div>
       )}
@@ -1031,7 +1093,7 @@ function HomeFolha({
       {(arquivados > 0 || mostrarArquivados) && (
         <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'flex-end' }}>
           <button onClick={() => setMostrarArquivados(!mostrarArquivados)}
-            style={{ background: 'none', border: 'none', color: palette.accent, fontFamily: FONT, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            style={{ background: 'none', border: 'none', color: palette.accent, fontFamily: FONT, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
             {mostrarArquivados ? '↶ Voltar pros ativos' : `Mostrar arquivados (${arquivados})`}
           </button>
         </div>
@@ -1049,7 +1111,7 @@ function HomeFolha({
           />
         ))}
         {funcionarios.length === 0 && (
-          <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: palette.inkMuted, fontSize: 13 }}>
+          <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: palette.inkMuted, fontSize: 14 }}>
             {mostrarArquivados ? 'Nenhum funcionário arquivado.' : 'Nenhum funcionário cadastrado. Clique em "Novo funcionário".'}
           </div>
         )}
@@ -1058,9 +1120,9 @@ function HomeFolha({
       {/* Botão flutuante */}
       <button onClick={onAbrirCadastro}
         style={{ position: 'fixed', bottom: 24, right: 24, background: palette.ink, color: '#fff', border: 'none', borderRadius: 50, padding: '14px 22px',
-          fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+          fontFamily: FONT, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
           boxShadow: '0 4px 12px rgba(44,62,80,0.2)', zIndex: 50 }}>
-        <Plus size={16} strokeWidth={1.5} />
+        <Plus size={17} strokeWidth={1.5} />
         Novo funcionário
       </button>
     </div>
@@ -1070,8 +1132,8 @@ function HomeFolha({
 function ResumoCell({ label, valor }) {
   return (
     <div>
-      <div style={{ fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase', color: palette.inkMuted, marginBottom: 2 }}>{label}</div>
-      <div style={{ fontFamily: NUM, fontSize: 14, fontWeight: 700, color: palette.ink }}>{valor}</div>
+      <div style={{ fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase', color: palette.inkMuted, marginBottom: 2 }}>{label}</div>
+      <div style={{ fontFamily: NUM, fontSize: 15, fontWeight: 700, color: palette.ink }}>{valor}</div>
     </div>
   );
 }
@@ -1090,22 +1152,22 @@ function CardFunc({ f, total, pago, pagoEm, arquivado, onClick, onReativar }) {
       onMouseLeave={e => { if (!arquivado) { e.currentTarget.style.borderColor = pago ? palette.ok + '40' : palette.beige; e.currentTarget.style.transform = 'translateY(0)'; } }}
     >
       {pago && (
-        <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, padding: '2px 8px', borderRadius: 10, letterSpacing: 0.5,
+        <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 11, padding: '2px 8px', borderRadius: 10, letterSpacing: 0.5,
           background: palette.okSoft, color: palette.ok }}>
           Pago {pagoEm ? new Date(pagoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''}
         </span>
       )}
       {!pago && !arquivado && (
-        <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, padding: '2px 8px', borderRadius: 10, letterSpacing: 0.5,
+        <span style={{ position: 'absolute', top: 10, right: 10, fontSize: 11, padding: '2px 8px', borderRadius: 10, letterSpacing: 0.5,
           background: palette.warnSoft, color: palette.warn }}>
           Pendente
         </span>
       )}
       {arquivado && (
         <button onClick={(e) => { e.stopPropagation(); onReativar(); }}
-          style={{ position: 'absolute', top: 10, right: 10, fontSize: 10, padding: '2px 8px', borderRadius: 10, letterSpacing: 0.5,
+          style={{ position: 'absolute', top: 10, right: 10, fontSize: 11, padding: '2px 8px', borderRadius: 10, letterSpacing: 0.5,
             background: palette.beige, color: palette.archive, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <RotateCcw size={10} strokeWidth={1.5} />
+          <RotateCcw size={11} strokeWidth={1.5} />
           Reativar
         </button>
       )}
@@ -1113,19 +1175,19 @@ function CardFunc({ f, total, pago, pagoEm, arquivado, onClick, onReativar }) {
         <div style={{
           width: 38, height: 38, borderRadius: '50%', background: palette.beigeSoft, color: palette.ink,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 700, fontFamily: NUM, fontSize: 14, flexShrink: 0,
+          fontWeight: 700, fontFamily: NUM, fontSize: 15, flexShrink: 0,
         }}>{iniciais(f.nome_display)}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {f.nome_display}
           </div>
-          <span style={{ display: 'inline-block', fontSize: 10, letterSpacing: 0.5, color: cat.cor, background: cat.bg,
+          <span style={{ display: 'inline-block', fontSize: 11, letterSpacing: 0.5, color: cat.cor, background: cat.bg,
             padding: '2px 8px', borderRadius: 10, marginTop: 3 }}>{cat.label}</span>
         </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 10, borderTop: `1px dashed ${palette.beige}` }}>
-        <span style={{ fontSize: 11, color: palette.inkMuted, letterSpacing: 0.5 }}>Total a pagar</span>
-        <span style={{ fontFamily: NUM, fontSize: 14, fontWeight: 700, color: palette.ink }}>{fmtBRL(total)}</span>
+        <span style={{ fontSize: 12, color: palette.inkMuted, letterSpacing: 0.5 }}>Total a pagar</span>
+        <span style={{ fontFamily: NUM, fontSize: 15, fontWeight: 700, color: palette.ink }}>{fmtBRL(total)}</span>
       </div>
     </div>
   );
@@ -1155,26 +1217,26 @@ function DetalheFolha({
       }}>
         <div style={{
           width: 56, height: 56, borderRadius: '50%', background: palette.beigeSoft, color: palette.ink,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontFamily: NUM, fontSize: 22, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontFamily: NUM, fontSize: 23, flexShrink: 0,
         }}>{iniciais(f.nome_display)}</div>
         <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: palette.ink }}>{f.nome_display}</div>
-          <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ display: 'inline-block', fontSize: 10, color: cat.cor, background: cat.bg, padding: '2px 8px', borderRadius: 10 }}>
+          <div style={{ fontSize: 23, fontWeight: 700, color: palette.ink }}>{f.nome_display}</div>
+          <div style={{ fontSize: 13, color: palette.inkMuted, marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ display: 'inline-block', fontSize: 11, color: cat.cor, background: cat.bg, padding: '2px 8px', borderRadius: 10 }}>
               {cat.label}
             </span>
             <span>Fechamento {nomeMes(competencia)}</span>
             {f.nome_planilha !== f.nome_display && (
-              <span style={{ fontSize: 10, fontStyle: 'italic' }}>· planilha: {f.nome_planilha}</span>
+              <span style={{ fontSize: 11, fontStyle: 'italic' }}>· planilha: {f.nome_planilha}</span>
             )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onEditarFunc} style={btnSecStyle()}>
-            <Edit2 size={14} strokeWidth={1.5} /> Funcionário
+            <Edit2 size={15} strokeWidth={1.5} /> Funcionário
           </button>
           <button onClick={onEditarRegras} style={btnSecStyle()}>
-            <Settings size={14} strokeWidth={1.5} /> Regras
+            <Settings size={15} strokeWidth={1.5} /> Regras
           </button>
         </div>
       </div>
@@ -1185,13 +1247,13 @@ function DetalheFolha({
         borderRadius: '0 0 12px 12px', padding: '20px 24px',
       }}>
         {ctxLoading && (
-          <div style={{ padding: 14, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontStyle: 'italic' }}>
+          <div style={{ padding: 14, textAlign: 'center', color: palette.inkMuted, fontSize: 13, fontStyle: 'italic' }}>
             Calculando comissões...
           </div>
         )}
 
         {linhas.length === 0 && !ctxLoading && (
-          <div style={{ padding: 30, textAlign: 'center', color: palette.inkMuted, fontSize: 13 }}>
+          <div style={{ padding: 30, textAlign: 'center', color: palette.inkMuted, fontSize: 14 }}>
             Nenhuma regra ativa. Clique em <b>Regras</b> pra configurar.
           </div>
         )}
@@ -1208,10 +1270,10 @@ function DetalheFolha({
         {!pago && (
           <div style={{ display: 'flex', gap: 10, margin: '14px 0' }}>
             <button onClick={() => onAddLinha('valor_fixo')} style={btnAddStyle(palette.ok)}>
-              <Plus size={14} strokeWidth={1.5} /> Adicionar valor
+              <Plus size={15} strokeWidth={1.5} /> Adicionar valor
             </button>
             <button onClick={() => onAddLinha('desconto')} style={btnAddStyle(palette.alert)}>
-              <Minus size={14} strokeWidth={1.5} /> Adicionar desconto
+              <Minus size={15} strokeWidth={1.5} /> Adicionar desconto
             </button>
           </div>
         )}
@@ -1222,36 +1284,36 @@ function DetalheFolha({
           padding: '18px 0 10px', borderTop: `2px solid ${palette.ink}`, marginTop: 10,
         }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: palette.ink, letterSpacing: 0.5, textTransform: 'uppercase' }}>Total a pagar</div>
-            <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 2 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: palette.ink, letterSpacing: 0.5, textTransform: 'uppercase' }}>Total a pagar</div>
+            <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2 }}>
               {pago
                 ? `Pago em ${new Date(fechamento.pago_em).toLocaleDateString('pt-BR')}`
                 : `Pagamento previsto em ${dataPagamento.toLocaleDateString('pt-BR')}`}
             </div>
           </div>
-          <div style={{ fontFamily: NUM, fontSize: 18, fontWeight: 700, color: palette.ink }}>{fmtBRL(total)}</div>
+          <div style={{ fontFamily: NUM, fontSize: 19, fontWeight: 700, color: palette.ink }}>{fmtBRL(total)}</div>
         </div>
 
         {/* Ações finais */}
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20, flexWrap: 'wrap' }}>
           <button onClick={onArquivar} style={{ ...btnSecStyle(), color: palette.alert }}>
-            <Archive size={14} strokeWidth={1.5} /> Arquivar funcionário
+            <Archive size={15} strokeWidth={1.5} /> Arquivar funcionário
           </button>
           <div style={{ flex: 1 }} />
           <button onClick={onGerarPdf} style={btnSecStyle()}>
-            <FileText size={14} strokeWidth={1.5} /> Gerar PDF
+            <FileText size={15} strokeWidth={1.5} /> Gerar PDF
           </button>
           {!pago && (
             <button onClick={onMarcarPago} style={{
               background: palette.ok, color: '#fff', border: 'none', borderRadius: 8, padding: '11px 22px',
-              fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontFamily: FONT, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
             }}>
-              <Check size={14} strokeWidth={1.5} /> Marcar pago
+              <Check size={15} strokeWidth={1.5} /> Marcar pago
             </button>
           )}
           {pago && (
-            <span style={{ fontSize: 12, color: palette.ok, padding: '11px 22px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <CheckCircle2 size={14} strokeWidth={1.5} /> Pago
+            <span style={{ fontSize: 13, color: palette.ok, padding: '11px 22px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <CheckCircle2 size={15} strokeWidth={1.5} /> Pago
             </span>
           )}
         </div>
@@ -1277,14 +1339,14 @@ function LinhaCalculada({ l, onEditar, onResetar, onRemover }) {
       padding: '14px 0', borderBottom: `1px solid ${palette.beigeSoft}`,
     }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 14, color: palette.ink, fontWeight: 600 }}>{l.titulo}</div>
+        <div style={{ fontSize: 15, color: palette.ink, fontWeight: 600 }}>{l.titulo}</div>
         {l.descricao_calculo && (
-          <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 2 }}>{l.descricao_calculo}</div>
+          <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 2 }}>{l.descricao_calculo}</div>
         )}
         <div style={{ marginTop: 4, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {l.mes_destino && (
             <span style={{
-              fontSize: 9, textTransform: 'uppercase', letterSpacing: 1,
+              fontSize: 10, textTransform: 'uppercase', letterSpacing: 1,
               color: l.mes_destino === 'seguinte' ? '#b88a3d' : palette.accent,
               background: l.mes_destino === 'seguinte' ? '#f5ecdc' : '#e8f0f7',
               padding: '2px 6px', borderRadius: 4,
@@ -1293,12 +1355,12 @@ function LinhaCalculada({ l, onEditar, onResetar, onRemover }) {
             </span>
           )}
           {l._editado && (
-            <span style={{ fontSize: 9, color: palette.warn, background: palette.warnSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 1, textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 10, color: palette.warn, background: palette.warnSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 1, textTransform: 'uppercase' }}>
               Editado manual
             </span>
           )}
           {l._ajuste && (
-            <span style={{ fontSize: 9, color: palette.ok, background: palette.okSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 1, textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 10, color: palette.ok, background: palette.okSoft, padding: '2px 6px', borderRadius: 4, letterSpacing: 1, textTransform: 'uppercase' }}>
               Manual
             </span>
           )}
@@ -1313,12 +1375,12 @@ function LinhaCalculada({ l, onEditar, onResetar, onRemover }) {
             onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
             style={{
               width: 100, padding: '6px 10px', border: `1px solid ${palette.accent}`, borderRadius: 6,
-              fontFamily: NUM, fontSize: 13, fontWeight: 600, textAlign: 'right', color: palette.ink, outline: 'none', colorScheme: 'light', background: '#fff',
+              fontFamily: NUM, fontSize: 14, fontWeight: 600, textAlign: 'right', color: palette.ink, outline: 'none', colorScheme: 'light', background: '#fff',
             }}
           />
         ) : (
           <span onClick={() => setEditando(true)} style={{
-            fontFamily: NUM, fontSize: 13, fontWeight: 600,
+            fontFamily: NUM, fontSize: 14, fontWeight: 600,
             color: isDesconto ? palette.alert : palette.ink, cursor: 'pointer',
           }}>{fmtBRL(Math.abs(l.valor)) + (isDesconto ? '' : '')}</span>
         )}
@@ -1326,14 +1388,14 @@ function LinhaCalculada({ l, onEditar, onResetar, onRemover }) {
       <div style={{ display: 'flex', gap: 6 }}>
         {l._editado && (
           <button onClick={onResetar} title="Voltar ao valor calculado" style={iconBtnStyle()}>
-            <RotateCcw size={12} strokeWidth={1.5} />
+            <RotateCcw size={13} strokeWidth={1.5} />
           </button>
         )}
         <button onClick={() => setEditando(!editando)} title="Editar valor" style={iconBtnStyle()}>
-          <Edit2 size={12} strokeWidth={1.5} />
+          <Edit2 size={13} strokeWidth={1.5} />
         </button>
         <button onClick={onRemover} title="Remover desse mês" style={iconBtnStyle('danger')}>
-          <Trash2 size={12} strokeWidth={1.5} />
+          <Trash2 size={13} strokeWidth={1.5} />
         </button>
       </div>
     </div>
@@ -1396,8 +1458,8 @@ function ModalCadastro({ editar, onClose, onSalvar }) {
         <Label>Nome na planilha (chave pra match na planilha de Funcionários)</Label>
         <Input value={nomePlanilha} onChange={e => setNomePlanilha(e.target.value)} placeholder="Ex: FRANCISCA" />
         {nomePlanilha.trim() && (matchPlanilha
-          ? <div style={alertStyle('ok')}><CheckCircle2 size={12} strokeWidth={1.5} /> Encontrado na planilha do mês: <b>{matchPlanilha}</b></div>
-          : <div style={alertStyle('warn')}><AlertCircle size={12} strokeWidth={1.5} /> Não encontrado — você vai precisar criar a linha manual</div>
+          ? <div style={alertStyle('ok')}><CheckCircle2 size={13} strokeWidth={1.5} /> Encontrado na planilha do mês: <b>{matchPlanilha}</b></div>
+          : <div style={alertStyle('warn')}><AlertCircle size={13} strokeWidth={1.5} /> Não encontrado — você vai precisar criar a linha manual</div>
         )}
       </div>
 
@@ -1407,7 +1469,7 @@ function ModalCadastro({ editar, onClose, onSalvar }) {
           {Object.entries(CAT_INFO).map(([k, info]) => (
             <label key={k} style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-              border: `1px solid ${categoria === k ? palette.accent : palette.beige}`, borderRadius: 6, cursor: 'pointer', fontSize: 12,
+              border: `1px solid ${categoria === k ? palette.accent : palette.beige}`, borderRadius: 6, cursor: 'pointer', fontSize: 13,
               background: categoria === k ? palette.accentSoft : '#fff',
             }}>
               <input type="radio" checked={categoria === k} onChange={() => setCategoria(k)} />
@@ -1446,7 +1508,7 @@ function ModalRegras({ funcionario: f, regras: regrasIn, onClose, onSalvar }) {
 
   return (
     <ModalBox onClose={onClose} titulo={`Regras base — ${f.nome_display}`} maxWidth={650}>
-      <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 14, fontStyle: 'italic' }}>
+      <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 14, fontStyle: 'italic' }}>
         Mudanças aqui valem pra esse mês e os próximos. Pra mudar só nesse mês, edita direto no card.
       </div>
 
@@ -1458,14 +1520,14 @@ function ModalRegras({ funcionario: f, regras: regrasIn, onClose, onSalvar }) {
       ))}
 
       {regras.length === 0 && (
-        <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontStyle: 'italic' }}>
+        <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted, fontSize: 13, fontStyle: 'italic' }}>
           Nenhuma regra ainda. Adiciona a primeira embaixo.
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'stretch' }}>
         <select value={tipoNovo} onChange={e => setTipoNovo(e.target.value)} style={{
-          flex: 1, padding: '9px 12px', border: `1px solid ${palette.beige}`, borderRadius: 6, fontFamily: FONT, fontSize: 12, background: '#fff', colorScheme: 'light',
+          flex: 1, padding: '9px 12px', border: `1px solid ${palette.beige}`, borderRadius: 6, fontFamily: FONT, fontSize: 13, background: '#fff', colorScheme: 'light',
         }}>
           {Object.entries(TIPO_INFO).filter(([k]) => k !== 'valor_fixo' && k !== 'desconto').map(([k, info]) => (
             <option key={k} value={k}>{info.label}</option>
@@ -1473,14 +1535,14 @@ function ModalRegras({ funcionario: f, regras: regrasIn, onClose, onSalvar }) {
           <option value="desconto">Desconto fixo recorrente</option>
         </select>
         <button onClick={addRegra} style={btnPrimaryStyle()}>
-          <Plus size={14} strokeWidth={1.5} /> Adicionar
+          <Plus size={15} strokeWidth={1.5} /> Adicionar
         </button>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 16, borderTop: `1px solid ${palette.beige}`, marginTop: 16 }}>
         <button onClick={onClose} style={btnSecStyle()}>Cancelar</button>
         <button onClick={() => onSalvar(regras)} style={btnPrimaryStyle()}>
-          <Save size={14} strokeWidth={1.5} /> Salvar regras
+          <Save size={15} strokeWidth={1.5} /> Salvar regras
         </button>
       </div>
     </ModalBox>
@@ -1495,6 +1557,7 @@ function configPadrao(tipo) {
     case 'comissao_loja': return { loja: 'Bom Retiro', percentual: 0.5 };
     case 'bonus_meta_individual': return { base: 'total', faixas: [...FAIXAS_META_PADRAO] };
     case 'comissao_marketplace': return { percentual: 0.1, fonte: 'mktplc_liquido' };
+    case 'acrescimo': return { descricao: 'Alimentação', valor: 0, coluna_planilha: 'alimentacao', mes_destino: 'seguinte' };
     case 'valor_fixo': return { descricao: '', valor: 0 };
     case 'desconto': return { descricao: '', valor: 0 };
     default: return {};
@@ -1509,15 +1572,18 @@ function RegraEditor({ regra, onChange, onRemover }) {
   return (
     <div style={{ background: palette.beigeSoft, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: 14, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: palette.ink, textTransform: 'uppercase', letterSpacing: 0.5 }}>{info.label}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: palette.ink, textTransform: 'uppercase', letterSpacing: 0.5 }}>{info.label}</div>
         <button onClick={onRemover} style={iconBtnStyle('danger')}>
-          <Trash2 size={12} strokeWidth={1.5} />
+          <Trash2 size={13} strokeWidth={1.5} />
         </button>
       </div>
 
       {(regra.tipo === 'salario_fixo' || regra.tipo === 'vale_pago') && (
-        <Field label="Valor (R$)">
-          <Input type="number" step="0.01" value={cfg.valor} onChange={e => onChange({ config: { valor: parseFloat(e.target.value) || 0 } })} num />
+        <Field label={regra.tipo === 'salario_fixo' ? 'Base (salário a pagar + vale)' : 'Valor (R$)'}>
+          <Input type="number" step="0.01"
+            value={cfg.valor === 0 ? '' : cfg.valor}
+            onChange={e => onChange({ config: { valor: e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0) } })}
+            placeholder="0,00" num />
         </Field>
       )}
 
@@ -1577,7 +1643,7 @@ function RegraEditor({ regra, onChange, onRemover }) {
                   <button style={iconBtnStyle('danger')} onClick={() => {
                     onChange({ config: { faixas: cfg.faixas.filter((_, j) => j !== i) } });
                   }}>
-                    <X size={10} strokeWidth={2} />
+                    <X size={11} strokeWidth={2} />
                   </button>
                 </div>
               ))}
@@ -1585,7 +1651,7 @@ function RegraEditor({ regra, onChange, onRemover }) {
                 const novas = [...(cfg.faixas || []), { meta: 0, valor: 0 }];
                 onChange({ config: { faixas: novas } });
               }}>
-                <Plus size={12} strokeWidth={1.5} /> Adicionar faixa
+                <Plus size={13} strokeWidth={1.5} /> Adicionar faixa
               </button>
             </div>
           </div>
@@ -1607,13 +1673,45 @@ function RegraEditor({ regra, onChange, onRemover }) {
         </div>
       )}
 
+      {regra.tipo === 'acrescimo' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+            <Field label="Descrição (aparece no card)">
+              <Input value={cfg.descricao} onChange={e => onChange({ config: { descricao: e.target.value } })} placeholder="Ex: Alimentação" />
+            </Field>
+            <Field label="Valor (R$)">
+              <Input type="number" step="0.01"
+                value={cfg.valor === 0 ? '' : cfg.valor}
+                onChange={e => onChange({ config: { valor: e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0) } })}
+                placeholder="0,00" num />
+            </Field>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+            <Field label="Coluna na planilha">
+              <Select value={cfg.coluna_planilha || 'alimentacao'} onChange={e => onChange({ config: { coluna_planilha: e.target.value } })}>
+                {COLUNAS_PLANILHA_ACRESCIMO.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </Select>
+            </Field>
+            <Field label="Quando paga">
+              <Select value={cfg.mes_destino || 'seguinte'} onChange={e => onChange({ config: { mes_destino: e.target.value } })}>
+                <option value="seguinte">Mês seguinte (junto com salário)</option>
+                <option value="competencia">Mês competência (junto com comissão)</option>
+              </Select>
+            </Field>
+          </div>
+        </>
+      )}
+
       {regra.tipo === 'desconto' && (
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
           <Field label="Descrição">
             <Input value={cfg.descricao} onChange={e => onChange({ config: { descricao: e.target.value } })} placeholder="Ex: Empréstimo" />
           </Field>
           <Field label="Valor (R$)">
-            <Input type="number" step="0.01" value={cfg.valor} onChange={e => onChange({ config: { valor: parseFloat(e.target.value) || 0 } })} num />
+            <Input type="number" step="0.01"
+              value={cfg.valor === 0 ? '' : cfg.valor}
+              onChange={e => onChange({ config: { valor: e.target.value === '' ? 0 : (parseFloat(e.target.value) || 0) } })}
+              placeholder="0,00" num />
           </Field>
         </div>
       )}
@@ -1677,7 +1775,7 @@ function ModalPdf({ funcionario: f, linhas, competencia, fechamento, onClose }) 
       <div style={{ maxWidth: 600, width: '100%', background: 'transparent' }}>
         <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
           <button onClick={onClose} style={{ background: '#fff', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X size={16} strokeWidth={1.5} />
+            <X size={17} strokeWidth={1.5} />
           </button>
         </div>
 
@@ -1685,26 +1783,26 @@ function ModalPdf({ funcionario: f, linhas, competencia, fechamento, onClose }) 
           background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', margin: '0 auto',
           padding: '50px 60px', maxWidth: 480, fontFamily: FONT, color: palette.ink, borderRadius: 4,
         }}>
-          <div style={{ fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: palette.inkMuted, textAlign: 'center', marginBottom: 4 }}>
+          <div style={{ fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: palette.inkMuted, textAlign: 'center', marginBottom: 4 }}>
             Grupo Amícia
           </div>
-          <div style={{ fontSize: 20, fontWeight: 700, textAlign: 'center', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>
+          <div style={{ fontSize: 21, fontWeight: 700, textAlign: 'center', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>
             {f.nome_display}
           </div>
-          <div style={{ textAlign: 'center', fontSize: 12, color: palette.inkSoft, marginBottom: 30, fontStyle: 'italic' }}>
+          <div style={{ textAlign: 'center', fontSize: 13, color: palette.inkSoft, marginBottom: 30, fontStyle: 'italic' }}>
             {nomeMes(competencia)}
           </div>
 
           {linhas.map(l => (
             <div key={l.id} style={{ marginBottom: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: 13, color: palette.ink }}>{l.titulo}</div>
-                <div style={{ fontFamily: NUM, fontSize: 13, fontWeight: 600, color: Number(l.valor) < 0 ? palette.alert : palette.ink }}>
+                <div style={{ fontSize: 14, color: palette.ink }}>{l.titulo}</div>
+                <div style={{ fontFamily: NUM, fontSize: 14, fontWeight: 600, color: Number(l.valor) < 0 ? palette.alert : palette.ink }}>
                   {Number(l.valor) < 0 ? '−' : ''}{fmtBRL(Math.abs(l.valor))}
                 </div>
               </div>
               {l.descricao_calculo && (
-                <div style={{ fontSize: 10, color: palette.inkMuted, fontStyle: 'italic', marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: palette.inkMuted, fontStyle: 'italic', marginTop: 2 }}>
                   {l.descricao_calculo}
                 </div>
               )}
@@ -1714,26 +1812,26 @@ function ModalPdf({ funcionario: f, linhas, competencia, fechamento, onClose }) 
           <div style={{ borderTop: `1px solid ${palette.ink}`, margin: '24px 0 14px' }} />
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Total</div>
-            <div style={{ fontFamily: NUM, fontSize: 16, fontWeight: 700 }}>{fmtBRL(total)}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Total</div>
+            <div style={{ fontFamily: NUM, fontSize: 17, fontWeight: 700 }}>{fmtBRL(total)}</div>
           </div>
 
-          <div style={{ textAlign: 'right', fontSize: 11, color: palette.inkSoft, marginTop: 30 }}>
+          <div style={{ textAlign: 'right', fontSize: 12, color: palette.inkSoft, marginTop: 30 }}>
             Data: {dataPagamento.toLocaleDateString('pt-BR')}
           </div>
 
-          <div style={{ marginTop: 50, borderTop: `1px solid ${palette.beige}`, paddingTop: 12, fontSize: 10, color: palette.inkMuted, textAlign: 'center' }}>
+          <div style={{ marginTop: 50, borderTop: `1px solid ${palette.beige}`, paddingTop: 12, fontSize: 11, color: palette.inkMuted, textAlign: 'center' }}>
             Recebi o valor acima referente ao mês de {nomeMes(competencia)}
           </div>
-          <div style={{ marginTop: 30, display: 'flex', justifyContent: 'space-between', fontSize: 11, color: palette.ink }}>
-            <div>_______________________________<br /><span style={{ fontSize: 10 }}>Assinatura</span></div>
-            <div>_______________<br /><span style={{ fontSize: 10 }}>Data</span></div>
+          <div style={{ marginTop: 30, display: 'flex', justifyContent: 'space-between', fontSize: 12, color: palette.ink }}>
+            <div>_______________________________<br /><span style={{ fontSize: 11 }}>Assinatura</span></div>
+            <div>_______________<br /><span style={{ fontSize: 11 }}>Data</span></div>
           </div>
         </div>
 
         <div className="no-print" style={{ textAlign: 'center', marginTop: 20 }}>
           <button onClick={imprimir} style={btnPrimaryStyle()}>
-            <Printer size={14} strokeWidth={1.5} /> Imprimir
+            <Printer size={15} strokeWidth={1.5} /> Imprimir
           </button>
         </div>
       </div>
@@ -1753,9 +1851,9 @@ function ModalBox({ onClose, titulo, children, maxWidth = 500 }) {
         boxShadow: '0 20px 60px rgba(0,0,0,0.25)', fontFamily: FONT,
       }}>
         <div style={{ padding: '18px 22px', borderBottom: `1px solid ${palette.beige}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: palette.ink }}>{titulo}</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink }}>{titulo}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.inkMuted, padding: 4 }}>
-            <X size={18} strokeWidth={1.5} />
+            <X size={19} strokeWidth={1.5} />
           </button>
         </div>
         <div style={{ padding: '18px 22px' }}>
@@ -1777,7 +1875,7 @@ function Field({ label, children }) {
 
 function Label({ children }) {
   return (
-    <div style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', color: palette.inkMuted, marginBottom: 5 }}>
+    <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: palette.inkMuted, marginBottom: 5 }}>
       {children}
     </div>
   );
@@ -1787,7 +1885,7 @@ function Input({ num, ...props }) {
   return (
     <input {...props} style={{
       width: '100%', border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '9px 11px',
-      fontFamily: num ? NUM : FONT, fontSize: 13, background: '#fff', color: palette.ink,
+      fontFamily: num ? NUM : FONT, fontSize: 14, background: '#fff', color: palette.ink,
       colorScheme: 'light', outline: 'none', boxSizing: 'border-box', fontWeight: num ? 600 : 400,
     }} />
   );
@@ -1797,7 +1895,7 @@ function Select({ children, ...props }) {
   return (
     <select {...props} style={{
       width: '100%', border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '9px 11px',
-      fontFamily: FONT, fontSize: 13, background: '#fff', color: palette.ink, colorScheme: 'light', outline: 'none', cursor: 'pointer',
+      fontFamily: FONT, fontSize: 14, background: '#fff', color: palette.ink, colorScheme: 'light', outline: 'none', cursor: 'pointer',
     }}>{children}</select>
   );
 }
@@ -1812,21 +1910,21 @@ function modalOverlayStyle() {
 function btnPrimaryStyle() {
   return {
     background: palette.ink, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px',
-    fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    fontFamily: FONT, fontSize: 14, fontWeight: 600, cursor: 'pointer',
     display: 'inline-flex', alignItems: 'center', gap: 6,
   };
 }
 function btnSecStyle() {
   return {
     background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '8px 14px',
-    fontFamily: FONT, fontSize: 12, color: palette.inkSoft, cursor: 'pointer',
+    fontFamily: FONT, fontSize: 13, color: palette.inkSoft, cursor: 'pointer',
     display: 'inline-flex', alignItems: 'center', gap: 6,
   };
 }
 function btnAddStyle(cor) {
   return {
     flex: 1, background: 'transparent', border: `1px dashed ${palette.beige}`, borderRadius: 8, padding: 10,
-    color: cor || palette.inkMuted, fontFamily: FONT, fontSize: 12, cursor: 'pointer',
+    color: cor || palette.inkMuted, fontFamily: FONT, fontSize: 13, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
   };
 }
@@ -1842,7 +1940,7 @@ function alertStyle(tipo) {
   const cor = tipo === 'ok' ? palette.ok : palette.warn;
   const bg  = tipo === 'ok' ? palette.okSoft : palette.warnSoft;
   return {
-    padding: '7px 11px', borderRadius: 5, fontSize: 11, marginTop: 6,
+    padding: '7px 11px', borderRadius: 5, fontSize: 12, marginTop: 6,
     display: 'flex', alignItems: 'center', gap: 6, color: cor, background: bg, border: `1px solid ${cor}40`,
   };
 }
