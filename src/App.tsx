@@ -2427,8 +2427,13 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                 {FIXOS_FUNC.map(f=>(<div key={f.label} style={{display:"flex",justifyContent:"space-between",padding:"6px 16px",fontSize:12,color:"#2c3e50"}}><span>{f.label}</span><span>{fmt(f.valor)}</span></div>))}
                 <div style={{display:"flex",justifyContent:"space-between",padding:"12px 16px"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>Total Funcionários</span><span style={{fontSize:14,fontWeight:800,color:"#2c3e50"}}>{fmt(totalFuncGeral)}</span></div>
               </div>
-              <div style={{padding:"12px 16px",background:"#f7f4f0",borderTop:"1px solid #e8e2da"}}>
+              <div style={{padding:"12px 16px",background:"#f7f4f0",borderTop:"1px solid #e8e2da",display:"flex",gap:8,flexWrap:"wrap"}}>
                 <button onClick={()=>addLinhaAux("Funcionários")} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer"}}>+ Adicionar funcionário</button>
+                {setFolhaAberta&&(
+                  <button onClick={()=>setFolhaAberta(true)} style={{background:"#fff",color:"#4a7fa5",border:"1px solid #4a7fa5",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}>
+                    💼 Folha do mês — comissões automáticas
+                  </button>
+                )}
               </div>
             </>
           ):(
