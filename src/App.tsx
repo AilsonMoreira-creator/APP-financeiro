@@ -9,6 +9,7 @@ import HistoricoVendas from './HistoricoVendas';
 import OsAmicia from './os-amicia/OsAmicia';
 import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
 import LojasModule from './Lojas';
+import FolhaPagamento from './FolhaPagamento.jsx';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -1948,7 +1949,7 @@ const GerenciarPrestadores=({cat,prestadores,setPrestadores})=>{
   );
 };
 
-const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinhaAux,prestadores,setPrestadores})=>{
+const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinhaAux,prestadores,setPrestadores,setFolhaAberta})=>{
   const temPrest=CATS_PREST.includes(auxAberta);
   const isTecidos=auxAberta==="Tecidos";
   const isFixa=CATS_FIXAS.includes(auxAberta);
@@ -2011,8 +2012,15 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
         })}
         {(auxData[auxAberta]||[]).length===0&&<div style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum lançamento</div>}
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"#f7f4f0",borderTop:isFixa?"2px solid #4a7fa5":"1px solid #e8e2da"}}>
-        <button onClick={()=>addLinhaAux(auxAberta)} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer"}}>+ Adicionar linha</button>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:"#f7f4f0",borderTop:isFixa?"2px solid #4a7fa5":"1px solid #e8e2da",gap:10,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <button onClick={()=>addLinhaAux(auxAberta)} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer"}}>+ Adicionar linha</button>
+          {auxAberta==="Funcionários"&&setFolhaAberta&&(
+            <button onClick={()=>setFolhaAberta(true)} style={{background:"#fff",color:"#4a7fa5",border:"1px solid #4a7fa5",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}>
+              💼 Folha do mês — comissões automáticas
+            </button>
+          )}
+        </div>
         {isFixa&&<span style={{fontSize:14,fontWeight:900,color:"#2c3e50",fontFamily:"Calibri,Arial"}}>R$ {Number((auxData[auxAberta]||[]).reduce((s,l)=>s+(parseFloat(String(l.valor).replace(",","."))||0),0)).toLocaleString("pt-BR",{minimumFractionDigits:2})}</span>}
       </div>
     </>
@@ -2020,7 +2028,7 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
 };
 
 
-const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc})=>{
+const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta})=>{
   const [recLocal,setRecLocal]=useState(RECEITAS_EXEMPLO);
   const [auxLocal,setAuxLocal]=useState(AUX_INICIAL);
   const [catsLocal,setCatsLocal]=useState([...CATS]);
@@ -2424,7 +2432,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
               </div>
             </>
           ):(
-            <AuxSimplesPanel auxAberta={auxAberta} auxData={auxData} updateLinhaAux={updateLinhaAux} removeLinhaAux={removeLinhaAux} addLinhaAux={addLinhaAux} prestadores={prestadores||PRESTADORES_INICIAL} setPrestadores={setPrestadores||((fn)=>{})}/>
+            <AuxSimplesPanel auxAberta={auxAberta} auxData={auxData} updateLinhaAux={updateLinhaAux} removeLinhaAux={removeLinhaAux} addLinhaAux={addLinhaAux} prestadores={prestadores||PRESTADORES_INICIAL} setPrestadores={setPrestadores||((fn)=>{})} setFolhaAberta={setFolhaAberta}/>
           )}
         </div>
       )}
@@ -2954,7 +2962,7 @@ const AgendaContent=()=>{
   );
 };
 
-const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceitasMes,auxDataPorMes,setAuxDataPorMes,categoriasPorMes,setCategoriasPorMes,dadosMensais,mesAtual,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc})=>{
+const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceitasMes,auxDataPorMes,setAuxDataPorMes,categoriasPorMes,setCategoriasPorMes,dadosMensais,mesAtual,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta})=>{
   const anoAtual=2026;
   const anos=[2026,2025,2024,2023,2022,2021,2020,2019];
   const [anoSel,setAnoSel]=useState(anoAtual);
@@ -2984,6 +2992,7 @@ const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceit
             categorias={categoriasPorMes[mesNum]||[...CATS]} setCategorias={(fn)=>setCategoriasPorMes(prev=>({...prev,[mesNum]:typeof fn==="function"?fn(prev[mesNum]||[...CATS]):fn}))}
             boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores}
             fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc}
+            setFolhaAberta={setFolhaAberta}
           />
         </div>
       );
@@ -7689,6 +7698,7 @@ export default function App(){
   const [sacResetTrigger,setSacResetTrigger]=useState(0);
   const [menuUser,setMenuUser]=useState(false);
   const [iaOpen,setIaOpen]=useState(false); // Sprint 8: modal "Perguntar à IA" (global, qualquer módulo)
+  const [folhaAberta,setFolhaAberta]=useState(false); // Folha de Pagamento — overlay fullscreen acionado em Lançamentos→Despesas→Funcionários
   const [usuarios,setUsuarios]=useState(USUARIOS_INICIAL);
   // Status do último save de usuários (exibido no UsuariosContent pra confirmação visual)
   const [usuariosSaveStatus,setUsuariosSaveStatus]=useState(null); // null | 'saving' | 'saved' | 'error'
@@ -9398,10 +9408,10 @@ export default function App(){
           );
         })()}
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
-        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc}/>}
+        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="agenda"&&<AgendaContent/>}
-        {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc}/>}
+        {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta}/>}
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}
