@@ -86,16 +86,32 @@ export default async function handler(req, res) {
 
     // 4. Bling
     let mktplcBruto = 0, mktplcLiquido = 0, muniam = 0;
+    let sumExitus = 0, sumLumia = 0, sumMuniam = 0, sumTotalBruto = 0;
     const { data: bling } = await supabase
-      .from('bling_resultados').select('exitus, lumia, muniam, valor_liquido')
-      .gte('data', inicio).lte('data', fim);
+      .from('bling_resultados')
+      .select('data, exitus, lumia, muniam, total_bruto, valor_liquido')
+      .gte('data', inicio).lte('data', fim)
+      .order('data', { ascending: true });
     for (const r of (bling || [])) {
       const ex = Number(r.exitus || 0), lu = Number(r.lumia || 0), mu = Number(r.muniam || 0);
       mktplcBruto += ex + lu + mu;
       mktplcLiquido += Number(r.valor_liquido || 0);
       muniam += mu;
+      sumExitus += ex;
+      sumLumia += lu;
+      sumMuniam += mu;
+      sumTotalBruto += Number(r.total_bruto || 0);
     }
     if (mktplcBruto > 0 && mktplcLiquido === 0) mktplcLiquido = mktplcBruto * 0.9;
+    const blingDiagnostico = {
+      total_linhas: bling?.length || 0,
+      data_min: bling?.[0]?.data || null,
+      data_max: bling?.[bling.length - 1]?.data || null,
+      soma_por_marca: { exitus: sumExitus, lumia: sumLumia, muniam: sumMuniam },
+      soma_total_bruto_coluna: sumTotalBruto,
+      sample_primeiras_3: (bling || []).slice(0, 3),
+      sample_ultimas_3: (bling || []).slice(-3),
+    };
 
     // 5. Planilha competência + seguinte
     const { data: fin } = await supabase
@@ -160,6 +176,7 @@ export default async function handler(req, res) {
         mktplc_liquido: mktplcLiquido,
         muniam: muniam,
       },
+      bling_diagnostico: blingDiagnostico,
       total_funcionarios_ativos: funcionarios.length,
       total_vendedoras_ativas: vendedoras?.length || 0,
       detalhe,
