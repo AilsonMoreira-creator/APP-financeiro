@@ -200,6 +200,12 @@ function iniciais(nome) {
   return (nome || '').trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase() || '?';
 }
 
+// Normaliza string pra match: trim + lowercase + remove acentos.
+// "Célia" / "CÉLIA" / "celia" → "celia". Pra match em planilhas e lojas_vendedoras.
+function norm(s) {
+  return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // CÁLCULO DAS REGRAS — Fase 2
 // ═══════════════════════════════════════════════════════════════════════════
@@ -412,9 +418,9 @@ function contextoPorFuncionario(funcionario, ctxGeral, vendedoras) {
   // pelo nome (case-insensitive em nome_planilha vs lojas_vendedoras.nome).
   let vid = funcionario.vendedora_id;
   if (!vid && funcionario.categoria?.startsWith('vendedora') && vendedoras?.length) {
-    const alvo = funcionario.nome_planilha?.trim().toUpperCase();
-    const match = vendedoras.find(v => v.nome?.trim().toUpperCase() === alvo)
-              || vendedoras.find(v => (v.aliases || []).map(a => a.toUpperCase()).includes(alvo));
+    const alvo = norm(funcionario.nome_planilha);
+    const match = vendedoras.find(v => norm(v.nome) === alvo)
+              || vendedoras.find(v => (v.aliases || []).map(norm).includes(alvo));
     if (match) vid = match.id;
   }
   const vendas_propria = (vid && ctxGeral.vendas_por_vendedora.get(vid)) || { atacado: 0, varejo: 0, total: 0 };
@@ -743,8 +749,8 @@ export default function FolhaPagamento({ onVoltar }) {
         if (!payload.auxDataPorMes[mesNum]) payload.auxDataPorMes[mesNum] = {};
         if (!payload.auxDataPorMes[mesNum]['Funcionários']) payload.auxDataPorMes[mesNum]['Funcionários'] = [];
         const arr = payload.auxDataPorMes[mesNum]['Funcionários'];
-        const alvo = (f.nome_planilha || f.nome_display).trim().toLowerCase();
-        const idx = arr.findIndex(r => String(r.nome || '').trim().toLowerCase() === alvo);
+        const alvo = norm(f.nome_planilha || f.nome_display);
+        const idx = arr.findIndex(r => norm(r.nome) === alvo);
         if (idx === -1) {
           return { achou: false, mes: mesNum };
         }
@@ -760,8 +766,8 @@ export default function FolhaPagamento({ onVoltar }) {
       // Vale: só preenche se não estiver lá ainda (cron dia 20 normalmente põe)
       if (valeValor > 0) {
         const arr = payload.auxDataPorMes[mesComp]?.['Funcionários'] || [];
-        const alvo = (f.nome_planilha || f.nome_display).trim().toLowerCase();
-        const linha = arr.find(r => String(r.nome || '').trim().toLowerCase() === alvo);
+        const alvo = norm(f.nome_planilha || f.nome_display);
+        const linha = arr.find(r => norm(r.nome) === alvo);
         if (linha) {
           const valeAtual = parseFloat(linha.vale || 0);
           if (Math.abs(valeAtual - valeValor) > 0.01) {
@@ -1332,8 +1338,8 @@ function ModalCadastro({ editar, onClose, onSalvar }) {
   }, []);
 
   const matchPlanilha = useMemo(() => {
-    const alvo = nomePlanilha.trim().toLowerCase();
-    return linhasPlanilha.find(n => n.toLowerCase() === alvo);
+    const alvo = norm(nomePlanilha);
+    return linhasPlanilha.find(n => norm(n) === alvo);
   }, [nomePlanilha, linhasPlanilha]);
 
   function salvar() {

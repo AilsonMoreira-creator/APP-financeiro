@@ -31,6 +31,11 @@ function competenciaCorrente() {
   return `${brt.getUTCFullYear()}-${String(brt.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+// Normaliza string pra match: trim + lowercase + remove acentos.
+function norm(s) {
+  return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -105,8 +110,8 @@ export default async function handler(req, res) {
       }
 
       // Acha linha case-insensitive
-      const alvo = (f.nome_planilha || f.nome_display).trim().toLowerCase();
-      const linha = linhasPlanilha.find(r => String(r.nome || '').trim().toLowerCase() === alvo);
+      const alvo = norm(f.nome_planilha || f.nome_display);
+      const linha = linhasPlanilha.find(r => norm(r.nome) === alvo);
       if (!linha) {
         stats.nao_encontrados++;
         detalhe.push({ func: f.nome_display, nome_planilha: f.nome_planilha, acao: 'nao_encontrado_planilha' });
