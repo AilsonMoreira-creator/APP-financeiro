@@ -1371,7 +1371,7 @@ function ModalCadastro({ editar, onClose, onSalvar }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 8, borderTop: `1px solid ${palette.beige}`, marginTop: 16, paddingTop: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: `1px solid ${palette.beige}`, marginTop: 16, paddingTop: 16 }}>
         <button onClick={onClose} style={btnSecStyle()}>Cancelar</button>
         <button onClick={salvar} style={btnPrimaryStyle()}>
           {editar ? 'Salvar' : 'Criar e configurar regras'}
