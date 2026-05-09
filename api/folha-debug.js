@@ -64,13 +64,13 @@ export default async function handler(req, res) {
     const { data: vendedoras } = await supabase
       .from('lojas_vendedoras').select('id, nome, loja, aliases').eq('ativa', true);
 
-    // 3. Vendas no período
+    // 3. Vendas no período (separadas por categoria + loja)
     const { data: vendas } = await supabase
       .from('vw_lojas_vendas_completo')
       .select('vendedora_id, categoria, valor_liquido, loja')
       .gte('data_venda', inicio).lte('data_venda', fim);
     const porVend = new Map();
-    let lojaBR = 0, lojaST = 0;
+    let lojaBR_atacado = 0, lojaBR_varejo = 0, lojaST_atacado = 0, lojaST_varejo = 0;
     for (const v of (vendas || [])) {
       const val = Number(v.valor_liquido || 0);
       if (v.vendedora_id) {
@@ -80,9 +80,28 @@ export default async function handler(req, res) {
         else if (v.categoria === 'varejo') acc.varejo += val;
         acc.total += val;
       }
-      if (v.loja === 'Bom Retiro') lojaBR += val;
-      else if (v.loja === 'Silva Teles') lojaST += val;
+      if (v.loja === 'Bom Retiro') {
+        if (v.categoria === 'atacado') lojaBR_atacado += val;
+        else if (v.categoria === 'varejo') lojaBR_varejo += val;
+      } else if (v.loja === 'Silva Teles') {
+        if (v.categoria === 'atacado') lojaST_atacado += val;
+        else if (v.categoria === 'varejo') lojaST_varejo += val;
+      }
     }
+    const lojaBR = lojaBR_atacado + lojaBR_varejo;
+    const lojaST = lojaST_atacado + lojaST_varejo;
+
+    // 3b. Vendas por vendedora ativa (independente de cadastro em folha)
+    const vendedorasDoMes = (vendedoras || []).map(v => {
+      const vendas_dela = porVend.get(v.id) || { atacado: 0, varejo: 0, total: 0 };
+      return {
+        id: v.id,
+        nome: v.nome,
+        loja: v.loja,
+        aliases: v.aliases,
+        vendas: vendas_dela,
+      };
+    }).sort((a, b) => b.vendas.total - a.vendas.total);
 
     // 4. Carrega payload financeiro (usado pra mktplc liquido + planilha)
     const { data: fin } = await supabase
@@ -210,6 +229,12 @@ export default async function handler(req, res) {
         mktplc_liquido: mktplcLiquido,
         muniam: muniam,
       },
+      vendas_por_loja_detalhado: {
+        Silva_Teles: { atacado: lojaST_atacado, varejo: lojaST_varejo, total: lojaST },
+        Bom_Retiro:  { atacado: lojaBR_atacado, varejo: lojaBR_varejo, total: lojaBR },
+        total_lojas: lojaST + lojaBR,
+      },
+      vendedoras_do_mes: vendedorasDoMes,
       bling_diagnostico: blingDiagnostico,
       total_funcionarios_ativos: funcionarios.length,
       total_vendedoras_ativas: vendedoras?.length || 0,
