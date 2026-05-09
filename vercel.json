@@ -126,6 +126,10 @@
     {
       "path": "/api/lojas-receitas-cron-diario",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/folha-aplicar-vales-cron",
+      "schedule": "0 9 20 * *"
     }
   ]
 }
