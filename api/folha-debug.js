@@ -84,11 +84,29 @@ export default async function handler(req, res) {
       else if (v.loja === 'Silva Teles') lojaST += val;
     }
 
-    // 4. Bling — bling_vendas_detalhe é populado automaticamente pelo
-    //    cron bling-cron a cada 10min (45 dias retroativos, situacaoId=9).
-    //    Soma direta dos pedidos do mês.
-    let mktplcBruto = 0, muniam = 0;
-    let totalPedidosNoMes = 0;
+    // 4. Carrega payload financeiro (usado pra mktplc liquido + planilha)
+    const { data: fin } = await supabase
+      .from('amicia_data').select('payload')
+      .eq('user_id', 'amicia-admin').maybeSingle();
+
+    // 5. Bling — abordagem hibrida:
+    //    - mktplc_liquido espelha receitasPorMes (Lancamentos)
+    //    - mktplc_bruto = liquido / 0.9 (regra reversa)
+    //    - muniam isolado vem de bling_vendas_detalhe (unica fonte com isolamento)
+    //    - fallback total pra bling_vendas_detalhe se receitasPorMes vazio
+
+    let mktplcLiquidoLancamentos = 0;
+    const diasReceitas = fin?.payload?.receitasPorMes?.[mes] || {};
+    const diasComMktplc = [];
+    for (const [diaKey, dia] of Object.entries(diasReceitas)) {
+      const v = Number(dia?.marketplaces || 0);
+      if (v > 0) {
+        mktplcLiquidoLancamentos += v;
+        diasComMktplc.push({ dia: Number(diaKey), valor: v });
+      }
+    }
+
+    let blingBruto = 0, muniam = 0, totalPedidosNoMes = 0;
     const porConta = { exitus: { qtd: 0, total: 0 }, lumia: { qtd: 0, total: 0 }, muniam: { qtd: 0, total: 0 }, outros: { qtd: 0, total: 0 } };
     let from = 0; const PAGE = 1000;
     while (true) {
@@ -101,7 +119,7 @@ export default async function handler(req, res) {
       if (!pedidos || pedidos.length === 0) break;
       for (const p of pedidos) {
         const v = Number(p.total_produtos || 0);
-        mktplcBruto += v;
+        blingBruto += v;
         totalPedidosNoMes++;
         const c = p.conta || 'outros';
         if (porConta[c]) { porConta[c].qtd++; porConta[c].total += v; }
@@ -111,18 +129,28 @@ export default async function handler(req, res) {
       if (pedidos.length < PAGE) break;
       from += PAGE;
     }
-    const mktplcLiquido = mktplcBruto * 0.9;
+
+    let mktplcBruto, mktplcLiquido, fonteEscolhida;
+    if (mktplcLiquidoLancamentos > 0) {
+      mktplcLiquido = mktplcLiquidoLancamentos;
+      mktplcBruto = mktplcLiquido / 0.9;
+      fonteEscolhida = 'receitasPorMes (espelho Lancamentos) — bruto via regra reversa /0.9';
+    } else {
+      mktplcBruto = blingBruto;
+      mktplcLiquido = blingBruto * 0.9;
+      fonteEscolhida = 'FALLBACK bling_vendas_detalhe (receitasPorMes vazio — Bling nao sincronizado no mes)';
+    }
     const blingDiagnostico = {
-      fonte: 'bling_vendas_detalhe (cron auto 10min, 45 dias retroativos, situacaoId=9)',
-      total_pedidos_no_mes: totalPedidosNoMes,
-      por_conta: porConta,
-      observacao: 'mktplc_liquido = bruto * 0.9 (-10% devolucoes, regra Ailson)',
+      fonte_usada: fonteEscolhida,
+      receitasPorMes_liquido: mktplcLiquidoLancamentos,
+      receitasPorMes_dias_com_marketplaces: diasComMktplc,
+      bling_vendas_detalhe_bruto: blingBruto,
+      bling_vendas_detalhe_total_pedidos: totalPedidosNoMes,
+      bling_vendas_detalhe_por_conta: porConta,
+      muniam_de: 'bling_vendas_detalhe (sempre — receitasPorMes nao tem isolamento)',
     };
 
-    // 5. Planilha competência + seguinte
-    const { data: fin } = await supabase
-      .from('amicia_data').select('payload')
-      .eq('user_id', 'amicia-admin').maybeSingle();
+    // 6. Planilha competência + seguinte (do fin já carregado)
     const planilhaComp = fin?.payload?.auxDataPorMes?.[mes]?.['Funcionários'] || [];
     const planilhaSeg  = fin?.payload?.auxDataPorMes?.[mesSeg]?.['Funcionários'] || [];
 

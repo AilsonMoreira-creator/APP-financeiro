@@ -374,13 +374,34 @@ async function carregarContexto(competencia, vendedoras) {
     else if (v.loja === 'Silva Teles') lojaST += val;
   }
 
-  // 2. Marketplaces — lê de bling_vendas_detalhe (pedido a pedido).
-  //    Esta tabela é populada automaticamente pelo cron `bling-cron`
-  //    a cada 10min, cobrindo os últimos 45 dias com filtro situacaoId=9
-  //    (Atendido). Logo: pedidos do mes passado que vão sendo atendidos
-  //    em Maio são capturados sem ação manual.
-  //    Colunas: conta (exitus/lumia/muniam), data_pedido, total_produtos.
-  let mktplcBruto = 0;
+  // 2. Marketplaces — abordagem híbrida:
+  //    - mktplc_liquido: espelha o que aparece em Lançamentos (receitasPorMes
+  //      do payload financeiro — populado pelo módulo Bling).
+  //    - mktplc_bruto: líquido / 0.9 (regra reversa, -10% devoluções).
+  //    - muniam: bling_vendas_detalhe filtrado por conta (única fonte com
+  //      isolamento por conta).
+  //    Se receitasPorMes vier zerado (Bling ainda não sincronizado no mês),
+  //    fallback automático pra bling_vendas_detalhe pra tudo.
+
+  // 2a. Tenta espelhar Lançamentos primeiro
+  let mktplcLiquido = 0;
+  try {
+    const { data } = await supabase
+      .from('amicia_data')
+      .select('payload')
+      .eq('user_id', 'amicia-admin')
+      .maybeSingle();
+    const dias = data?.payload?.receitasPorMes?.[mes] || {};
+    for (const dia of Object.values(dias)) {
+      mktplcLiquido += Number(dia?.marketplaces || 0);
+    }
+  } catch (e) {
+    console.warn('[folha] erro receitasPorMes:', e?.message);
+  }
+
+  // 2b. Sempre busca Muniam isolado em bling_vendas_detalhe (paginado)
+  //     E acumula bruto pra fallback caso receitasPorMes esteja vazio
+  let blingBruto = 0;
   let muniam = 0;
   try {
     let from = 0; const PAGE = 1000;
@@ -395,16 +416,24 @@ async function carregarContexto(competencia, vendedoras) {
       if (!pedidos || pedidos.length === 0) break;
       for (const p of pedidos) {
         const v = Number(p.total_produtos || 0);
-        mktplcBruto += v;
+        blingBruto += v;
         if (p.conta === 'muniam') muniam += v;
       }
       if (pedidos.length < PAGE) break;
       from += PAGE;
     }
   } catch (e) {
-    console.warn('[folha] erro ao buscar bling_vendas_detalhe', e?.message);
+    console.warn('[folha] erro bling_vendas_detalhe:', e?.message);
   }
-  const mktplcLiquido = mktplcBruto * 0.9; // -10% devoluções (regra Ailson)
+
+  // 2c. Decide bruto: se Lançamentos tem líquido, regra reversa; senão fallback
+  let mktplcBruto;
+  if (mktplcLiquido > 0) {
+    mktplcBruto = mktplcLiquido / 0.9;
+  } else {
+    mktplcBruto = blingBruto;
+    mktplcLiquido = blingBruto * 0.9;
+  }
 
   return {
     competencia,
