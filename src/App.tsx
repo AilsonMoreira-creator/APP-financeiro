@@ -6388,7 +6388,7 @@ const CALC_PLATS={
   shopee:{nome:"Shopee",cor:"#EE4D2D",ct:"#fff",taxas:[{l:"Afiliados",t:"pct",v:3}],faixas:[{lb:"até R$79,99",ate:79.99,cp:20,cf:4},{lb:"R$80-99,99",ate:99.99,cp:14,cf:16},{lb:"R$100-139",ate:139,cp:14,cf:20}]},
   shein:{nome:"Shein",cor:"#000",ct:"#fff",taxas:[{l:"Comissão",t:"pct",v:20},{l:"Descontos",t:"pct",v:2},{l:"Frete",t:"fix",v:6}]},
   tiktok:{nome:"TikTok Shop",cor:"#010101",ct:"#fff",taxas:[{l:"Comissão",t:"pct",v:14},{l:"Afiliados",t:"pct",v:7},{l:"Frete",t:"fix",v:4}]},
-  meluni:{nome:"Meluni",cor:"#fff",ct:"#000",bd:"#000",taxas:[{l:"Cartão/Antifraude",t:"pct",v:8},{l:"Converter",t:"pct",v:2},{l:"Propaganda",t:"pct",v:10},{l:"Cupons",t:"pct",v:7},{l:"Frete",t:"fix",v:15},{l:"Plataforma",t:"fix",v:5}]},
+  meluni:{nome:"Meluni",cor:"#fff",ct:"#000",bd:"#000",taxas:[{l:"Cartão/Antifraude",t:"pct",v:8},{l:"Converter",t:"pct",v:2},{l:"Cupons",t:"pct",v:7},{l:"Frete",t:"fix",v:15},{l:"Plataforma",t:"fix",v:5}]},
 };
 const CALC_ORDEM=["mercadolivre","shopee","shein","tiktok","meluni"];
 const CALC_CK=[["tecido","Tecido"],["forro","Forro"],["oficina","Oficina Costura"],["passadoria","Passadoria"],["ziper","Zíper"],["botao","Botão/Caseado"],["aviamentos","Aviamentos"],["modelista","Modelista/Piloteiro"],["salaCorte","Sala de Corte"]];
@@ -6420,6 +6420,26 @@ const CalculadoraContent=()=>{
   const[syncStatus,setSyncStatus]=useState(null); // null | 'saving' | 'saved' | 'error'
   const prodsRef=useRef([]);
   const prsRef=useRef({});
+  // === Análise Meluni v2: ROAS global + manuais por produto + estado da tela
+  const [roasMeluniGlobal,setRoasMeluniGlobalState]=useState(10);
+  const [roasMeluniManual,setRoasMeluniManualState]=useState({}); // { ref: roas }
+  const [analiseMeluniState,setAnaliseMeluniStateRaw]=useState({
+    metaVendas:100000,
+    aumentoMargem:0,
+    pecasPorPedido:1.33,
+    cenarios:[
+      {id:'pessimista',nome:'🔴 Pessimista',conv:0.5,cpc:1.80},
+      {id:'conservador',nome:'🟠 Conservador',conv:0.8,cpc:1.50},
+      {id:'realista',nome:'🟡 Realista',conv:1.0,cpc:1.20},
+      {id:'otimista',nome:'🟢 Otimista',conv:1.2,cpc:1.00},
+      {id:'best',nome:'🌟 Best case',conv:1.3,cpc:0.80}
+    ],
+    dadosReais:{cpc:1.20,conv:1.0,periodo:30,ticketReal:null,pecasReal:null},
+    revLucroMin:0
+  });
+  const roasMeluniGlobalRef=useRef(10);
+  const roasMeluniManualRef=useRef({});
+  const analiseMeluniRef=useRef(null);
   // Sprint 7 — detector mobile. Desktop intocado.
   const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
@@ -6440,6 +6460,19 @@ const CalculadoraContent=()=>{
         if(data?.payload){
           if(data.payload.prods){setProds(data.payload.prods);prodsRef.current=data.payload.prods;}
           if(data.payload.prs){setPrs(data.payload.prs);prsRef.current=data.payload.prs;}
+          // Análise Meluni v2: carregar ROAS global, manuais e estado
+          if(typeof data.payload.roasMeluniGlobal==='number'){
+            setRoasMeluniGlobalState(data.payload.roasMeluniGlobal);
+            roasMeluniGlobalRef.current=data.payload.roasMeluniGlobal;
+          }
+          if(data.payload.roasMeluniManual&&typeof data.payload.roasMeluniManual==='object'){
+            setRoasMeluniManualState(data.payload.roasMeluniManual);
+            roasMeluniManualRef.current=data.payload.roasMeluniManual;
+          }
+          if(data.payload.analiseMeluniState&&typeof data.payload.analiseMeluniState==='object'){
+            setAnaliseMeluniStateRaw(prev=>({...prev,...data.payload.analiseMeluniState}));
+            analiseMeluniRef.current={...data.payload.analiseMeluniState};
+          }
           try{localStorage.setItem("amica_calc",JSON.stringify({prods:data.payload.prods||[],prs:data.payload.prs||{}}));}catch(e){console.error(e)}
         }
         setSyncStatus('saved');
@@ -6461,9 +6494,52 @@ const CalculadoraContent=()=>{
       const prodsMerged=[...novosProds,...(remoto.prods||[]).filter(p=>!localRefs.has(p.ref))];
       // Merge prs: local tem prioridade (usuário acabou de alterar), remoto preenche o resto
       const prsMerged={...(remoto.prs||{}),...novosPrs};
-      await supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:{prods:prodsMerged,prs:prsMerged}},{onConflict:'user_id'});
+      // Análise Meluni v2: persistir ROAS global, manuais e estado da análise
+      const novoPayload={
+        prods:prodsMerged,
+        prs:prsMerged,
+        roasMeluniGlobal:roasMeluniGlobalRef.current,
+        roasMeluniManual:roasMeluniManualRef.current,
+        analiseMeluniState:analiseMeluniRef.current||analiseMeluniState
+      };
+      await supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:novoPayload},{onConflict:'user_id'});
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }catch(e){setSyncStatus('error');}
+  };
+
+  // ── Setters dos novos states (com persistência + reset de manuais ao mudar global)
+  const setRoasMeluniGlobal=(novo)=>{
+    const v=parseFloat(novo)||1;
+    roasMeluniGlobalRef.current=v;
+    // RESET dos manuais: ao mudar o global, todos os produtos voltam pro novo global
+    roasMeluniManualRef.current={};
+    setRoasMeluniGlobalState(v);
+    setRoasMeluniManualState({});
+    salvar(prodsRef.current,prsRef.current);
+  };
+  const setRoasMeluniManual=(ref,novo)=>{
+    const v=novo===null||novo===undefined||novo===''?null:(parseFloat(novo)||null);
+    const novoMap={...roasMeluniManualRef.current};
+    if(v===null)delete novoMap[ref]; else novoMap[ref]=v;
+    roasMeluniManualRef.current=novoMap;
+    setRoasMeluniManualState(novoMap);
+    salvar(prodsRef.current,prsRef.current);
+  };
+  const setAnaliseMeluniState=(updater)=>{
+    setAnaliseMeluniStateRaw(prev=>{
+      const novo=typeof updater==='function'?updater(prev):updater;
+      analiseMeluniRef.current=novo;
+      // Salvamento debounced via setTimeout pra evitar spam
+      clearTimeout((window).__meluniSaveT);
+      (window).__meluniSaveT=setTimeout(()=>salvar(prodsRef.current,prsRef.current),500);
+      return novo;
+    });
+  };
+  // ROAS efetivo de um produto: manual sobrescreve global
+  const getRoasEfetivo=(ref)=>{
+    const m=roasMeluniManual[ref];
+    if(typeof m==='number'&&m>0)return m;
+    return roasMeluniGlobal;
   };
 
   const atualizarProds=(fn)=>{
@@ -6485,6 +6561,7 @@ const CalculadoraContent=()=>{
   if(tela==="editar"&&editProd)return<CalcFormProd inicial={editProd} onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>ps.map(p=>p.ref===editProd.ref?np:p));if(prod?.ref===editProd.ref)setProd(np);setTela("home");}} onRegras={()=>setTela("regras")}/>;
   if(tela==="regras")return<CalcRegras onVoltar={()=>setTela("novo")} prs={prs} prods={prods} atualizarPrs={atualizarPrs}/>;
   if(tela==="dash")return<CalcDash prods={prods} prs={prs} onVoltar={()=>setTela("home")}/>;
+  if(tela==="analise")return<CalcAnaliseMeluni prods={prods} prs={prs} roasMeluniGlobal={roasMeluniGlobal} setRoasMeluniGlobal={setRoasMeluniGlobal} state={analiseMeluniState} setState={setAnaliseMeluniState} onVoltar={()=>setTela("home")} mobile={mobile}/>;
   if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
   const c=prod?calcCusto(prod):0;
   return(
@@ -6499,6 +6576,7 @@ const CalculadoraContent=()=>{
             <button onClick={()=>setTela("novo")} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>+ Novo Produto</button>
             <button onClick={()=>setTela("lista")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📋 Lista</button>
             <button onClick={()=>setTela("dash")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📊 Dashboard</button>
+            <button onClick={()=>setTela("analise")} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>🎯 Análise Meluni</button>
           </div>
         </div>
         <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:16}}>
@@ -6540,17 +6618,330 @@ const CalculadoraContent=()=>{
             const ps=prod?prs[`${prod.ref}|${id}`]:null;const ls=ps?calcLucroReal(id,c,ps):null;
             return(<div key={id} onClick={()=>{if(prod){setPlatSel(id);setTela("det");}}} style={{background:r.cor,border:`2px solid ${r.bd||r.cor}`,borderRadius:14,padding:14,cursor:prod?"pointer":"default",transition:"transform 0.15s,box-shadow 0.15s",boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}} onMouseEnter={e=>{if(prod){e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 8px 20px rgba(0,0,0,0.15)";}}} onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)";}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:prod?10:0}}><Logo s={24}/><div style={{fontSize:11,fontWeight:700,color:r.ct}}>{r.nome}</div></div>
-              {prod&&(<>
+              {prod&&(id==='meluni'?(()=>{
+                // === Card Meluni v2 com ROAS dinâmico ===
+                const precoUsado=ps?parseFloat(ps):rb2?.p;
+                const margemMeluni=ps?ls:rb2?.l; // lucro JÁ recalculado sem propaganda
+                const roasEfetivo=getRoasEfetivo(prod.ref);
+                const adsValor=precoUsado&&roasEfetivo>0?precoUsado/roasEfetivo:null;
+                const lucroLiq=margemMeluni!=null&&adsValor!=null?margemMeluni-adsValor:null;
+                const isManual=typeof roasMeluniManual[prod.ref]==='number';
+                return(<>
+                  <div style={{background:"rgba(0,0,0,0.08)",borderRadius:8,padding:"8px 10px",marginBottom:6}}>
+                    <div style={{fontSize:9,color:r.ct,opacity:0.7,marginBottom:1}}>{ps?'💾 PREÇO DEFINIDO':'⭐ PREÇO SUGERIDO'}</div>
+                    <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:r.ct}}>R$ {calcFmt(precoUsado)}</div>
+                  </div>
+                  <div style={{background:"rgba(255,255,255,0.5)",borderRadius:7,padding:"7px 10px",marginBottom:5,border:"1px solid rgba(0,0,0,0.08)"}}>
+                    <div style={{fontSize:9,color:r.ct,opacity:0.7,marginBottom:2}}>MARGEM (antes ads)</div>
+                    <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,fontWeight:700,color:r.ct}}>R$ {calcFmt(margemMeluni)}</div>
+                  </div>
+                  <div style={{background:"rgba(255,255,255,0.5)",borderRadius:7,padding:"7px 10px",marginBottom:5,border:"1px solid rgba(0,0,0,0.08)"}} onClick={e=>e.stopPropagation()}>
+                    <div style={{fontSize:9,color:r.ct,opacity:0.7,marginBottom:2,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span>ROAS {isManual?'🔧 (manual)':'🌐 (global)'}</span>
+                      {isManual&&<span onClick={()=>setRoasMeluniManual(prod.ref,null)} style={{cursor:"pointer",color:"#4a7fa5",fontSize:10,textDecoration:"underline"}}>resetar</span>}
+                    </div>
+                    <input type="number" value={roasEfetivo} step={0.1} min={1} max={20} onChange={e=>setRoasMeluniManual(prod.ref,e.target.value)} onClick={e=>e.stopPropagation()} style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"3px 6px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,fontWeight:700,color:isManual?"#c25a25":"#4a7fa5",textAlign:"right",background:"#fff",outline:"none"}}/>
+                    <div style={{fontSize:9,color:r.ct,opacity:0.6,marginTop:2}}>Ads: -R$ {calcFmt(adsValor)}</div>
+                  </div>
+                  <div style={{background:lucroLiq>=0?"#e8f5ec":"#fae8e8",borderRadius:7,padding:"7px 10px",border:lucroLiq>=0?"1px solid #b8dfc8":"1px solid #f0c8c8"}}>
+                    <div style={{fontSize:9,color:lucroLiq>=0?"#1a7a40":"#9a2828",opacity:0.85,marginBottom:1}}>LUCRO LÍQUIDO</div>
+                    <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:800,color:lucroLiq>=0?"#1a7a40":"#9a2828"}}>{lucroLiq!=null?(lucroLiq>=0?"+":"")+"R$ "+calcFmt(lucroLiq):"—"}</div>
+                  </div>
+                  <div style={{fontSize:9,color:r.ct,opacity:0.45,textAlign:"center",marginTop:6}}>ver detalhes →</div>
+                </>);
+              })():(<>
                 <div style={{background:"rgba(0,0,0,0.25)",borderRadius:8,padding:"8px 10px",marginBottom:8}}>
                   {ps?(<><div style={{fontSize:9,color:r.ct,opacity:0.8,marginBottom:1}}>💾 PREÇO DEFINIDO</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:r.ct}}>R$ {calcFmt(ps)}</div><div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}><div style={{width:8,height:8,borderRadius:2,background:calcTermo(ls)}}/><span style={{fontSize:9,color:r.ct,opacity:0.9}}>lucro: R$ {calcFmt(ls)}</span></div></>):(<><div style={{fontSize:9,color:r.ct,opacity:0.7,marginBottom:1}}>⭐ PREÇO SUGERIDO</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:r.ct}}>R$ {calcFmt(rb2?.p)}</div><div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}><div style={{width:8,height:8,borderRadius:2,background:calcTermo(rb2?.l)}}/><span style={{fontSize:9,color:r.ct,opacity:0.9}}>lucro: R$ {calcFmt(rb2?.l)}</span></div></>)}
                 </div>
                 {[{la:CALC_LMIN,res:rm},{la:CALC_LBOM,res:rb2}].map(({la,res})=>(<div key={la} style={{background:"rgba(255,255,255,0.12)",borderRadius:7,padding:"7px 10px",marginBottom:5}}><div style={{fontSize:9,color:r.ct,opacity:0.65,marginBottom:1}}>LUCRO ≥ R$ {calcFmt(la)}</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,fontWeight:700,color:r.ct}}>R$ {calcFmt(res?.p)}</div><div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><div style={{width:7,height:7,borderRadius:2,background:calcTermo(res?.l)}}/><span style={{fontSize:9,color:r.ct,opacity:0.75}}>R$ {calcFmt(res?.l)}</span></div></div>))}
                 <div style={{fontSize:9,color:r.ct,opacity:0.45,textAlign:"center",marginTop:4}}>ver detalhes →</div>
-              </>)}
+              </>))}
             </div>);
           })}
         </div>
         {!prod&&<div style={{textAlign:"center",padding:"36px 0",color:"#a89f94",fontSize:13}}>Digite a referência ou descrição de um produto para ver os cálculos</div>}
+      </div>
+    </div>
+  );
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ANÁLISE MELUNI v2 — Tela de cenários, ROAS e engenharia reversa
+// ═════════════════════════════════════════════════════════════════════════════
+const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,state,setState,onVoltar,mobile})=>{
+  // Helpers de cálculo
+  const meluniProds=prods.filter(p=>p.marca==='Meluni');
+  const margens=meluniProds.map(p=>{
+    const c=calcCusto(p);
+    const ps=prs[`${p.ref}|meluni`];
+    if(ps){const lr=calcLucroReal('meluni',c,ps);return lr;}
+    const r=calcPreco('meluni',c,CALC_LBOM);return r?.l;
+  }).filter(v=>typeof v==='number'&&!isNaN(v));
+  const precos=meluniProds.map(p=>{
+    const ps=prs[`${p.ref}|meluni`];
+    if(ps)return parseFloat(ps);
+    const r=calcPreco('meluni',calcCusto(p),CALC_LBOM);return r?.p;
+  }).filter(v=>typeof v==='number'&&!isNaN(v));
+  const margemMedia=margens.length?margens.reduce((a,b)=>a+b,0)/margens.length:0;
+  const ticketMedio=precos.length?precos.reduce((a,b)=>a+b,0)/precos.length:0;
+
+  // Inputs efetivos (cadastro com sobrescrita opcional)
+  const ticketProd=state.dadosReais.ticketReal||ticketMedio;
+  const pecasPed=state.dadosReais.pecasReal||state.pecasPorPedido;
+  const ticketPed=ticketProd*pecasPed;
+  const margemUnit=margemMedia+(state.aumentoMargem||0);
+
+  // Cálculos do simulador
+  const meta=parseFloat(state.metaVendas)||0;
+  const pedidos=ticketPed>0?meta/ticketPed:0;
+  const produtos=pedidos*pecasPed;
+  const margemTotal=produtos*margemUnit;
+  const roasBE=margemTotal>0?meta/margemTotal:0;
+
+  // Cálculo do "conversão min p/ ROAS 5"
+  const cpcRef=state.dadosReais.cpc||1.20;
+  const visitasROAS5=(meta/5)/cpcRef;
+  const convMin=visitasROAS5>0?(pedidos/visitasROAS5)*100:0;
+
+  // Engenharia reversa — usa CPC e Conv do bloco Dados Reais
+  const cpcReal=state.dadosReais.cpc||0;
+  const convReal=(state.dadosReais.conv||0)/100;
+  const lucroMin=parseFloat(state.revLucroMin)||0;
+  const visitasRev=convReal>0?pedidos/convReal:0;
+  const adSpendRev=visitasRev*cpcReal;
+  const cacRev=pedidos>0?adSpendRev/pedidos:0;
+  const adSpendMaxAlvo=margemTotal-lucroMin;
+  const roasAlvo=adSpendMaxAlvo>0?meta/adSpendMaxAlvo:0;
+  let revStatus,revStatusColor;
+  if(adSpendMaxAlvo<=0){revStatus='❌ Lucro mín > margem total';revStatusColor='#9a2828';}
+  else if(adSpendRev<adSpendMaxAlvo*0.7){revStatus='✅ Dentro do alvo';revStatusColor='#1a7a40';}
+  else if(adSpendRev<adSpendMaxAlvo){revStatus='⚠️ Atenção (apertado)';revStatusColor='#7a3e15';}
+  else {revStatus='❌ Inviável c/ esses números';revStatusColor='#9a2828';}
+
+  // Helpers de formatação
+  const fmt=v=>'R$ '+(isNaN(v)||v==null?'—':Math.round(v).toLocaleString('pt-BR'));
+  const fmtDec=v=>'R$ '+(isNaN(v)||v==null?'—':v.toFixed(2).replace('.',','));
+  const fmtN=v=>isNaN(v)||v==null?'—':Math.round(v).toLocaleString('pt-BR');
+
+  // Lucro líquido médio dos cards (visualização do impacto do ROAS global)
+  const lucroLiqMedio=margemMedia-(ticketMedio>0&&roasMeluniGlobal>0?ticketMedio/roasMeluniGlobal:0);
+
+  return(
+    <div style={{background:"#f7f4f0",minHeight:"100%",padding:mobile?12:20,fontFamily:"Georgia,serif"}}>
+      <div style={{maxWidth:1100,margin:"0 auto"}}>
+        {/* Header */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18,flexWrap:"wrap",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5",fontFamily:"Georgia,serif"}}>← Voltar</button>
+            <div>
+              <div style={{fontSize:10,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Calculadora · Meluni</div>
+              <div style={{fontSize:mobile?18:22,fontWeight:700,color:"#2c3e50"}}>🎯 Análise de Cenários</div>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:"#8a9aa4",fontStyle:"italic"}}>{meluniProds.length} produto(s) Meluni cadastrado(s)</div>
+        </div>
+
+        {/* Bloco DADOS REAIS DO PERÍODO */}
+        <div style={{background:"#2c3e50",color:"#f7f4f0",padding:"18px 20px",borderRadius:8,marginBottom:20}}>
+          <div style={{fontSize:14,fontWeight:700,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>📥 Dados reais do período (digite manualmente)</div>
+          <div style={{fontSize:11,opacity:0.7,marginBottom:14,fontStyle:"italic"}}>Esses números alimentam a engenharia reversa. Atualize semanalmente.</div>
+          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr 1fr",gap:14}}>
+            <div>
+              <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:0.5,opacity:0.7,marginBottom:4}}>CPC médio (R$)</div>
+              <input type="number" value={state.dadosReais.cpc} step={0.10} min={0.10} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,cpc:parseFloat(e.target.value)||0}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}/>
+              <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>Meta Ads → "CPC (link)"</div>
+            </div>
+            <div>
+              <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:0.5,opacity:0.7,marginBottom:4}}>Conversão site (%)</div>
+              <input type="number" value={state.dadosReais.conv} step={0.1} min={0.1} max={10} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,conv:parseFloat(e.target.value)||0}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}/>
+              <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>GA4 ou: pedidos ÷ visitas × 100</div>
+            </div>
+            <div>
+              <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:0.5,opacity:0.7,marginBottom:4}}>Período analisado</div>
+              <select value={state.dadosReais.periodo} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,periodo:parseInt(e.target.value)||30}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}>
+                <option value={7} style={{color:"#000"}}>Últimos 7 dias</option>
+                <option value={30} style={{color:"#000"}}>Últimos 30 dias</option>
+                <option value={60} style={{color:"#000"}}>Últimos 60 dias</option>
+                <option value={90} style={{color:"#000"}}>Últimos 90 dias</option>
+              </select>
+              <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>Apenas referência</div>
+            </div>
+          </div>
+          <details style={{marginTop:14,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.15)"}}>
+            <summary style={{cursor:"pointer",fontSize:13,opacity:0.85}}>▸ Sobrescrever ticket / peças (opcional)</summary>
+            <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12,marginTop:10}}>
+              <div>
+                <div style={{fontSize:11,opacity:0.7,marginBottom:4}}>Ticket médio real (R$)</div>
+                <input type="number" value={state.dadosReais.ticketReal||''} placeholder={`usa cadastro: ${calcFmt(ticketMedio)}`} min={0} onChange={e=>{const v=parseFloat(e.target.value);setState(p=>({...p,dadosReais:{...p.dadosReais,ticketReal:isNaN(v)||v<=0?null:v}}));}} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}/>
+                <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>Vazio = usa o cadastro</div>
+              </div>
+              <div>
+                <div style={{fontSize:11,opacity:0.7,marginBottom:4}}>Peças por pedido</div>
+                <input type="number" value={state.dadosReais.pecasReal||''} placeholder={`usa: ${state.pecasPorPedido.toFixed(2)}`} min={0} step={0.01} onChange={e=>{const v=parseFloat(e.target.value);setState(p=>({...p,dadosReais:{...p.dadosReais,pecasReal:isNaN(v)||v<=0?null:v}}));}} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}/>
+                <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>Vazio = usa cadastro (1,33)</div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        {/* RESUMO MELUNI — ROAS Global + Margens */}
+        <div style={{background:"#fff",borderRadius:10,padding:16,border:"1px solid #e8e2da",marginBottom:20}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,flexWrap:"wrap",gap:10}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#2c3e50"}}>💰 Resumo Meluni (média dos {meluniProds.length} produtos cadastrados)</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr 1fr":"repeat(4,1fr)",gap:10}}>
+            <div style={{background:"#f7f4f0",padding:12,borderRadius:6,border:"1px solid #e8e2da"}}>
+              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Ticket médio</div>
+              <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:"#2c3e50"}}>{fmt(ticketMedio)}</div>
+            </div>
+            <div style={{background:"#fff8e7",padding:12,borderRadius:6,border:"1px solid #f0d9b5",borderLeft:"3px solid #b87333"}}>
+              <div style={{fontSize:10,color:"#6b3a13",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Margem média (antes ads)</div>
+              <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:"#6b3a13"}}>{fmt(margemMedia)}</div>
+            </div>
+            <div style={{background:"#edf4fb",padding:12,borderRadius:6,border:"1px solid #c8dff0"}}>
+              <div style={{fontSize:10,color:"#4a7fa5",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>🌐 ROAS Global Meluni</div>
+              <input type="number" value={roasMeluniGlobal} step={0.1} min={1} max={20} onChange={e=>setRoasMeluniGlobal(e.target.value)} style={{width:"100%",border:"1px solid #4a7fa5",borderRadius:4,padding:"4px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:"#4a7fa5",textAlign:"center",background:"#fff",outline:"none"}}/>
+              <div style={{fontSize:10,color:"#8a9aa4",marginTop:3,fontStyle:"italic"}}>Reflete em todos cards · reseta manuais</div>
+            </div>
+            <div style={{background:lucroLiqMedio>=0?"#e8f5ec":"#fae8e8",padding:12,borderRadius:6,border:lucroLiqMedio>=0?"1px solid #b8dfc8":"1px solid #f0c8c8"}}>
+              <div style={{fontSize:10,color:lucroLiqMedio>=0?"#1a7a40":"#9a2828",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Lucro líq médio</div>
+              <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:lucroLiqMedio>=0?"#1a7a40":"#9a2828"}}>{(lucroLiqMedio>=0?'+':'')+fmt(lucroLiqMedio).replace('R$ ','R$ ')}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* SIMULADOR DE 5 CENÁRIOS */}
+        <div style={{background:"#fff",borderRadius:10,padding:16,border:"1px solid #e8e2da",marginBottom:20}}>
+          <div style={{fontSize:15,fontWeight:700,color:"#2c3e50",marginBottom:14,paddingBottom:8,borderBottom:"1px solid #e8e2da"}}>📈 Simulador de 5 Cenários</div>
+          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1.5fr 1fr",gap:12,marginBottom:16,padding:12,background:"#f7f4f0",borderRadius:6,border:"1px solid #e8e2da"}}>
+            <div>
+              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>🎯 Meta de vendas (R$)</div>
+              <input type="number" value={state.metaVendas} step={1000} min={1000} onChange={e=>setState(p=>({...p,metaVendas:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none"}}/>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>🧪 Simular aumento de margem (R$/produto)</div>
+              <input type="number" value={state.aumentoMargem} step={1} min={0} onChange={e=>setState(p=>({...p,aumentoMargem:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none"}}/>
+              <div style={{fontSize:11,color:"#4a7fa5",marginTop:3,fontStyle:"italic"}}>"E se eu subir preço, reduzir CMV ou negociar frete?"</div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>📦 Resumo da meta</div>
+              <div style={{fontSize:12,color:"#4a7fa5",fontStyle:"italic",lineHeight:1.5}}>
+                <strong>{fmtN(pedidos)}</strong> pedidos · <strong>{fmtN(produtos)}</strong> produtos<br/>
+                Margem unit: <strong>{fmt(margemUnit)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:mobile?600:"auto"}}>
+              <thead style={{background:"#2c3e50",color:"#fff"}}>
+                <tr>
+                  {['Cenário','Conv.','CPC','Visitas','Ad spend','ROAS','Lucro líq.','Status'].map(h=>(
+                    <th key={h} style={{padding:"10px 8px",textAlign:"left",fontWeight:400,fontSize:11,textTransform:"uppercase",letterSpacing:0.5}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {state.cenarios.map((cen,idx)=>{
+                  const conv=cen.conv/100;
+                  const visitas=conv>0?pedidos/conv:0;
+                  const adSpend=visitas*cen.cpc;
+                  const roasResult=adSpend>0?meta/adSpend:0;
+                  const lucro=margemTotal-adSpend;
+                  let st,stCor,stBg;
+                  if(lucro>margemTotal*0.3){st='Lucro forte';stCor='#1a7a40';stBg='#d4ecd9';}
+                  else if(lucro>0){st='Lucro magro';stCor='#8a6d0e';stBg='#fdf3cf';}
+                  else if(lucro>-margemTotal*0.3){st='Atenção';stCor='#7a3e15';stBg='#fde2cc';}
+                  else {st='Prejuízo';stCor='#9a2828';stBg='#fcd5d5';}
+                  return(
+                    <tr key={cen.id} style={{borderTop:"1px solid #e8e2da"}}>
+                      <td style={{padding:"10px 8px",fontWeight:700,color:"#2c3e50"}}>{cen.nome}</td>
+                      <td style={{padding:"10px 8px"}}>
+                        <input type="number" value={cen.conv} step={0.1} min={0.1} max={10} onChange={e=>{const v=parseFloat(e.target.value)||0;setState(p=>({...p,cenarios:p.cenarios.map((c,i)=>i===idx?{...c,conv:v}:c)}));}} style={{width:60,border:"1px solid #ddd",background:"#fafafa",padding:"3px 5px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:12,textAlign:"right",borderRadius:2,outline:"none"}}/>
+                      </td>
+                      <td style={{padding:"10px 8px"}}>
+                        <input type="number" value={cen.cpc} step={0.1} min={0.1} onChange={e=>{const v=parseFloat(e.target.value)||0;setState(p=>({...p,cenarios:p.cenarios.map((c,i)=>i===idx?{...c,cpc:v}:c)}));}} style={{width:60,border:"1px solid #ddd",background:"#fafafa",padding:"3px 5px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:12,textAlign:"right",borderRadius:2,outline:"none"}}/>
+                      </td>
+                      <td style={{padding:"10px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",textAlign:"right"}}>{fmtN(visitas)}</td>
+                      <td style={{padding:"10px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",textAlign:"right"}}>{fmt(adSpend)}</td>
+                      <td style={{padding:"10px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",textAlign:"right"}}>{roasResult.toFixed(2)}</td>
+                      <td style={{padding:"10px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",textAlign:"right",fontWeight:700,color:lucro>=0?"#1a7a40":"#9a2828"}}>{lucro>=0?'+':''}{fmt(lucro)}</td>
+                      <td style={{padding:"10px 8px"}}>
+                        <span style={{display:"inline-block",padding:"3px 8px",borderRadius:10,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,background:stBg,color:stCor}}>{st}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr 1fr":"repeat(4,1fr)",gap:10,marginTop:14,padding:12,background:"#2c3e50",color:"#f7f4f0",borderRadius:6}}>
+            {[['Margem bruta/produto',fmt(margemUnit)],['Margem total disponível',fmt(margemTotal)],['ROAS break-even',roasBE.toFixed(2)],['Conv min p/ ROAS 5',convMin.toFixed(1)+'%']].map(([l,v])=>(
+              <div key={l} style={{textAlign:"center"}}>
+                <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700}}>{v}</div>
+                <div style={{fontSize:10,opacity:0.8,textTransform:"uppercase",letterSpacing:0.5,marginTop:2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{marginTop:12,padding:12,background:"#fff5e6",border:"1px solid #f0d9b5",borderRadius:4,fontSize:12,color:"#6b3a13"}}>
+            <strong style={{color:"#c25a25"}}>Como ler:</strong> cada linha é uma combinação realista de conversão + CPC. Edite os valores cinza pra ajustar. <strong>Verde</strong> = lucro &gt; 30% margem. <strong>Amarelo</strong> = lucro positivo. <strong>Laranja "Atenção"</strong> = quase break-even. <strong>Vermelho</strong> = prejuízo.
+          </div>
+        </div>
+
+        {/* ENGENHARIA REVERSA */}
+        <div style={{background:"#fff",borderRadius:10,padding:16,border:"1px solid #e8e2da"}}>
+          <div style={{fontSize:15,fontWeight:700,color:"#2c3e50",marginBottom:8,paddingBottom:8,borderBottom:"1px solid #e8e2da"}}>🔄 Engenharia Reversa — ROAS Necessário</div>
+          <div style={{fontSize:12,color:"#8a9aa4",marginBottom:14}}>Usa o <strong>CPC e Conversão</strong> que vc digitou em cima. Você só escolhe o lucro mínimo e a calculadora retorna 2 ROAS: o de break-even (empatar) e o necessário pra atingir o lucro.</div>
+
+          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1.4fr",gap:14}}>
+            <div style={{background:"#f7f4f0",padding:14,borderRadius:6,border:"1px solid #e8e2da"}}>
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>💎 Lucro mínimo desejado (R$)</div>
+                <input type="number" value={state.revLucroMin} step={1000} min={0} onChange={e=>setState(p=>({...p,revLucroMin:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none"}}/>
+                <div style={{fontSize:11,color:"#4a7fa5",marginTop:6,fontStyle:"italic"}}>Quanto vc quer que sobre <strong>depois</strong> de pagar o ad spend.<br/>Coloque <strong>0</strong> pra calcular só o break-even.</div>
+              </div>
+              <div style={{background:"#fff",padding:12,borderRadius:4,borderLeft:"3px solid #4a7fa5",fontSize:12}}>
+                <strong style={{color:"#2c3e50"}}>📥 Dados reais sendo usados:</strong><br/>
+                <span style={{color:"#8a9aa4"}}>CPC:</span> <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{fmtDec(cpcReal)}</span><br/>
+                <span style={{color:"#8a9aa4"}}>Conversão:</span> <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{(state.dadosReais.conv||0).toFixed(1)}%</span><br/>
+                <span style={{fontSize:10,fontStyle:"italic",color:"#8a9aa4"}}>Pra mudar, edite acima no bloco "Dados reais"</span>
+              </div>
+            </div>
+
+            <div style={{background:"#2c3e50",color:"#f7f4f0",padding:14,borderRadius:6}}>
+              <div style={{fontSize:13,marginBottom:10,opacity:0.8}}>Pra meta de R$ {fmtN(meta)}:</div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12}}>
+                <span>Visitas necessárias:</span>
+                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,fontSize:14}}>{fmtN(visitasRev)}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12}}>
+                <span>Ad spend total:</span>
+                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,fontSize:14}}>{fmt(adSpendRev)}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12}}>
+                <span>CAC efetivo:</span>
+                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,fontSize:14}}>{fmtDec(cacRev)}</span>
+              </div>
+              <div style={{background:"rgba(255,255,255,0.1)",marginTop:8,padding:"10px 12px",borderRadius:4}}>
+                <div style={{fontSize:10,opacity:0.8,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>📊 ROAS de break-even (empatar)</div>
+                <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:22,fontWeight:700}}>{roasBE.toFixed(2)}</div>
+                <div style={{fontSize:11,opacity:0.7,marginTop:2,fontStyle:"italic"}}>Ad spend = margem total. Lucro = R$ 0.</div>
+              </div>
+              <div style={{background:"rgba(184,115,51,0.25)",marginTop:8,padding:"10px 12px",borderRadius:4,borderLeft:"3px solid #b87333"}}>
+                <div style={{fontSize:10,opacity:0.8,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>🎯 ROAS pra seu lucro alvo</div>
+                <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:22,fontWeight:700}}>{roasAlvo.toFixed(2)}</div>
+                <div style={{fontSize:11,opacity:0.7,marginTop:2,fontStyle:"italic"}}>{lucroMin===0?'Igual ao break-even (vc não pediu lucro mínimo)':`Pra sobrar ${fmt(lucroMin)} de lucro líquido após ad spend`}</div>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid rgba(255,255,255,0.3)",paddingTop:10,marginTop:10,fontSize:13}}>
+                <span>Status:</span>
+                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,color:revStatusColor==='#1a7a40'?'#9be3a8':revStatusColor==='#7a3e15'?'#fde2cc':'#fcd5d5'}}>{revStatus}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );
