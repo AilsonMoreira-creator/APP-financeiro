@@ -1459,6 +1459,202 @@ async function montarContextoMensagem(sug, contextoExtra) {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CARDÁPIO RICO PRA CONVERSÃO — Ailson 10/05/2026
+  // IA precisa do leque pra escolher o gancho de MAIOR chance de retorno.
+  // Antes, mensagem avulsa recebia só 1 ref pre-escolhida pelo backend ->
+  // qd ela nao casava nada especifico, IA caia em "tem novidade chegando".
+  // Agora ela ve top do cliente + cardapio geral e escolhe o melhor gancho.
+  // ═══════════════════════════════════════════════════════════════════════════
+  let topRefsCliente = [];
+  let novidadesDisponiveis = [];
+  let reposicoesDisponiveis = [];
+  let matchesDaPeca = [];
+  let topRecompra = [];
+  let curadoriaManual = [];
+  let avisoDoDia = null;
+
+  if (cliente && cliente.id) {
+    // Top 3 REFs do cliente — score=pecas×0.7 + recorrencia×3.0 (ja calculado na view)
+    try {
+      const { data: tops } = await supabase
+        .from('vw_lojas_top_refs_por_cliente')
+        .select('ref, posicao, pecas_total, vezes_comprou')
+        .eq('cliente_id', cliente.id)
+        .order('posicao')
+        .limit(3);
+      if (tops?.length) {
+        const refs = tops.map(t => t.ref);
+        const { data: prods } = await supabase
+          .from('lojas_produtos')
+          .select('ref, descricao, categoria, qtd_estoque')
+          .in('ref', refs);
+        const prodMap = new Map((prods || []).map(p => [p.ref, p]));
+        topRefsCliente = tops.map(t => {
+          const p = prodMap.get(t.ref);
+          return {
+            ref: t.ref,
+            posicao: t.posicao,
+            pecas_total: t.pecas_total,
+            vezes_comprou: t.vezes_comprou,
+            descricao: p?.descricao || null,
+            categoria: p?.categoria || null,
+            qtd_estoque: p?.qtd_estoque || 0,
+            em_estoque: (p?.qtd_estoque || 0) >= 50, // pode oferecer reposicao
+          };
+        });
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  // Top 8 novidades com estoque
+  try {
+    const { data: nov } = await supabase
+      .from('vw_lojas_novidades_auto')
+      .select('ref')
+      .limit(30);
+    if (nov?.length) {
+      const refs = nov.map(n => n.ref);
+      const { data: prods } = await supabase
+        .from('lojas_produtos')
+        .select('ref, descricao, categoria, qtd_estoque')
+        .in('ref', refs);
+      novidadesDisponiveis = (prods || [])
+        .filter(p => (p.qtd_estoque || 0) > 5 && p.descricao)
+        .map(p => ({ ref: p.ref, descricao: p.descricao, categoria: p.categoria, qtd_estoque: p.qtd_estoque }))
+        .slice(0, 8);
+    }
+  } catch (e) { /* silent */ }
+
+  // Top 8 reposicoes com estoque (refs ja vendidas + cortes 5-12d)
+  try {
+    const { data: rep } = await supabase
+      .from('vw_lojas_reposicoes_auto')
+      .select('ref')
+      .limit(30);
+    if (rep?.length) {
+      const refs = rep.map(r => r.ref);
+      const { data: prods } = await supabase
+        .from('lojas_produtos')
+        .select('ref, descricao, categoria, qtd_estoque')
+        .in('ref', refs);
+      reposicoesDisponiveis = (prods || [])
+        .filter(p => (p.qtd_estoque || 0) > 5 && p.descricao)
+        .map(p => ({ ref: p.ref, descricao: p.descricao, categoria: p.categoria, qtd_estoque: p.qtd_estoque }))
+        .slice(0, 8);
+    }
+  } catch (e) { /* silent */ }
+
+  // Matches REF×REF da peca referenciada (top 5 — quem compra X tb compra Y)
+  if (sug.produto_ref) {
+    try {
+      const refNorm = refSemZero(sug.produto_ref);
+      const { data: matches } = await supabase
+        .from('mv_lojas_matches_90d')
+        .select('ref_match, pct, coocorrencias')
+        .eq('ref_top', refNorm)
+        .order('pct', { ascending: false })
+        .limit(5);
+      if (matches?.length) {
+        const refsMatch = matches.map(m => m.ref_match);
+        const { data: prodsM } = await supabase
+          .from('lojas_produtos')
+          .select('ref, descricao, categoria, qtd_estoque')
+          .in('ref', refsMatch);
+        const mapM = new Map((prodsM || []).map(p => [p.ref, p]));
+        matchesDaPeca = matches
+          .map(m => {
+            const p = mapM.get(m.ref_match);
+            return {
+              ref_match: m.ref_match,
+              pct: Math.round(m.pct),
+              coocorrencias: m.coocorrencias,
+              descricao: p?.descricao || null,
+              categoria: p?.categoria || null,
+              qtd_estoque: p?.qtd_estoque || 0,
+            };
+          })
+          .filter(m => (m.qtd_estoque || 0) > 5);
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  // Top recompra 90d agregado (top 5 mais pedidas de novo)
+  try {
+    const { data: recRows } = await supabase
+      .from('vw_lojas_recompra_90d')
+      .select('ref, ocorrencias');
+    if (recRows?.length) {
+      const aggMap = new Map();
+      for (const r of recRows) aggMap.set(r.ref, (aggMap.get(r.ref) || 0) + Number(r.ocorrencias || 0));
+      const top5 = [...aggMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+      if (top5.length) {
+        const refs = top5.map(([r]) => r);
+        const { data: prodsR } = await supabase
+          .from('lojas_produtos')
+          .select('ref, descricao, categoria, qtd_estoque')
+          .in('ref', refs);
+        const mapR = new Map((prodsR || []).map(p => [p.ref, p]));
+        topRecompra = top5
+          .map(([ref, ocorr]) => {
+            const p = mapR.get(ref);
+            return {
+              ref,
+              ocorrencias: ocorr,
+              descricao: p?.descricao || null,
+              categoria: p?.categoria || null,
+              qtd_estoque: p?.qtd_estoque || 0,
+            };
+          })
+          .filter(t => (t.qtd_estoque || 0) > 5);
+      }
+    }
+  } catch (e) { /* silent */ }
+
+  // Curadoria manual (best_seller + em_alta marcados pelo admin)
+  try {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const { data: cur } = await supabase
+      .from('lojas_produtos_curadoria')
+      .select('ref, tipo')
+      .eq('ativo', true)
+      .or(`data_fim.is.null,data_fim.gte.${hoje}`)
+      .limit(30);
+    if (cur?.length) {
+      const refs = cur.map(c => c.ref);
+      const tipoMap = new Map(cur.map(c => [c.ref, c.tipo]));
+      const { data: prodsC } = await supabase
+        .from('lojas_produtos')
+        .select('ref, descricao, categoria, qtd_estoque')
+        .in('ref', refs);
+      curadoriaManual = (prodsC || [])
+        .filter(p => (p.qtd_estoque || 0) > 5 && p.descricao)
+        .map(p => ({
+          ref: p.ref,
+          tipo: tipoMap.get(p.ref),
+          descricao: p.descricao,
+          categoria: p.categoria,
+          qtd_estoque: p.qtd_estoque,
+        }))
+        .slice(0, 10);
+    }
+  } catch (e) { /* silent */ }
+
+  // Aviso dedicado pra essa vendedora hoje (se houver)
+  try {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const vendedoraIdAtual = sug.vendedora_id;
+    const { data: avisos } = await supabase
+      .from('lojas_avisos')
+      .select('id, texto, vendedoras_ids')
+      .eq('status', 'pendente')
+      .eq('data_disparo', hoje);
+    const meu = (avisos || []).find(a =>
+      !a.vendedoras_ids || a.vendedoras_ids.length === 0 || a.vendedoras_ids.includes(vendedoraIdAtual)
+    );
+    if (meu) avisoDoDia = { texto: meu.texto };
+  } catch (e) { /* silent */ }
+
   return {
     cliente, grupo, kpi, docsGrupo,
     produto, promocao, coresTop,
@@ -1469,6 +1665,9 @@ async function montarContextoMensagem(sug, contextoExtra) {
     topCategorias, ultimaCompra, perfilCanal, statusEfetivo, pecaInfo,
     // Observações da vendedora — Ailson 07/05/2026 (etapa B)
     observacoesVendedora: cliente?.observacoes_ia || null,
+    // CARDÁPIO RICO — Ailson 10/05/2026 (ganchos de conversão)
+    topRefsCliente, novidadesDisponiveis, reposicoesDisponiveis,
+    matchesDaPeca, topRecompra, curadoriaManual, avisoDoDia,
   };
 }
 
@@ -1950,6 +2149,17 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     // (perguntas guiadas + texto livre). IA usa pra calibrar TOM e CONTEUDO,
     // mas NUNCA menciona o conteudo na mensagem.
     observacoes_vendedora: ctx.observacoesVendedora,
+    // CARDÁPIO RICO — Ailson 10/05/2026 (ganchos de conversão)
+    // IA usa pra ESCOLHER o gancho de maior chance de retorno em vez de
+    // cair em "tem novidade chegando". Hierarquia de prioridade explicada
+    // no SYSTEM_PROMPT (secao ESTRATEGIA DE CONVERSAO).
+    top_refs_cliente: ctx.topRefsCliente?.length > 0 ? ctx.topRefsCliente : null,
+    novidades_disponiveis: ctx.novidadesDisponiveis?.length > 0 ? ctx.novidadesDisponiveis : null,
+    reposicoes_disponiveis: ctx.reposicoesDisponiveis?.length > 0 ? ctx.reposicoesDisponiveis : null,
+    matches_da_peca: ctx.matchesDaPeca?.length > 0 ? ctx.matchesDaPeca : null,
+    top_recompra: ctx.topRecompra?.length > 0 ? ctx.topRecompra : null,
+    curadoria_manual: ctx.curadoriaManual?.length > 0 ? ctx.curadoriaManual : null,
+    aviso_do_dia: ctx.avisoDoDia || null,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };
