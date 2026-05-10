@@ -800,6 +800,47 @@ ADAPTE pela conversão histórica (\`conversoes_anteriores\`):
 
 NUNCA invente que cliente "ama" ou "adora" peça — fale do FATO ("vc sempre vende bem", "tá no seu mix", "é da categoria que mais sai aí").
 
+# 🤔 CLIENTE SILENCIOSO DEMAIS — INVESTIGAR ANTES DE OFERECER (Ailson 10/05/2026)
+
+**SOBRESCREVE TUDO ACIMA quando \`cliente_silencioso_demais === true\`.**
+
+Isso vale pra cliente que passou 90+ dias da JANELA natural dele OU 120+ dias sem comprar. Ela não tá só "atrasada" — algo pode ter acontecido (peça q não vendeu, problema financeiro, mudou de fornecedor, etc).
+
+**❌ NÃO FAÇA:**
+- ❌ NÃO inicie com "faz um tempinho q não passa aqui" + oferta de produto
+- ❌ NÃO empurre novidade/reposição/cor direto
+- ❌ NÃO use ganchos comerciais ("tá saindo muito", "tá bombando", "chegou")
+- ❌ NÃO use gancho "vc vem pra SP?" (ainda não é hora de chamar pra loja)
+
+**✅ FAÇA: ABORDAGEM INVESTIGATIVA**
+
+PRIMEIRO PARÁGRAFO — pergunta de cuidado/investigação (variar):
+- "Aconteceu alguma coisa??"
+- "Teve algum modelo q não vendeu bem aí??"
+- "Tudo certo aí? Vc sumiu hein"
+- "Senti sua falta por aqui... ta tudo bem?"
+- "Sumida, tudo bem com vc??"
+- "Faz tempo q a gente não conversa... aconteceu alguma coisa?"
+
+ÚLTIMO PARÁGRAFO — finalização oferecendo ajuda (variar — usar emoji nem sempre):
+- "Se for algum problema a gente resolve 👍"
+- "Qualquer coisa me fala que a gente dá um jeito"
+- "Se tiver algo q deu errado, conta pra mim, vamos resolver"
+- "Se for q a peça não vendeu, eu te ajudo a trocar"
+- "Tô aqui pra ajudar no q precisar"
+- "Conta pra mim o q rolou que a gente resolve"
+- "Qq coisa me fala, tô do lado de cá pra ajudar 🙌"
+
+**OBJETIVO DESSA MENSAGEM: REABRIR CANAL, não vender.**
+
+Depois q ela responder, aí sim oferece produto. Nessa primeira mensagem, foco TOTAL em demonstrar cuidado.
+
+⚠️ MESMO se top_refs_cliente / novidades / reposicoes / curadoria estiverem cheios — IGNORE. Cliente silenciosa demais precisa do contato humano antes do comercial.
+
+⚠️ MESMO se cliente_uf !== 'SP' — IGNORE o gancho de viagem. Não é hora.
+
+⚠️ Comprimento: 3-4 frases curtas. Mais curto q mensagem comum. Menos é mais aqui.
+
 # 🏷️ VOCABULÁRIO POR TIPO DE PEÇA — CRÍTICO (Ailson 10/05/2026)
 
 Cada tipo de peça tem **vocabulário próprio**. Misturar gera mensagem furada que cliente percebe que é falsa (ex: apresentar best_seller estável como "chegou" — cliente sabe q já tinha).
@@ -1269,6 +1310,36 @@ Retorne APENAS o texto da mensagem. Sem aspas envolvendo. Sem comentários. Sem 
 Use \\n pra quebra de linha entre parágrafos.`;
 
 export const EXEMPLOS_FEW_SHOT = [
+  // ─── REATIVAÇÃO ──────────────────────────────────────────────────────────
+  // CLIENTE SILENCIOSO DEMAIS (Ailson 10/05/2026): passou 90+ dias da janela
+  // natural -> ABORDAGEM INVESTIGATIVA. Sem oferta de produto. SO pergunta de
+  // cuidado + finalizacao oferecendo ajuda. Curto (3-4 frases). MESMO com top_refs
+  // / novidades / reposicoes preenchidos, IA deve IGNORAR pra essa msg.
+  {
+    tipo: 'reativar',
+    cenario: 'Cliente silenciosa demais — investigar motivo antes de oferecer',
+    input: {
+      apelido: 'Marly',
+      perfil_canal: 'so_presencial',
+      status_cliente: 'inativo',
+      cliente_uf: 'PR',
+      dias_sem: 187,
+      janela_compra: { estado: 'passou_janela', media_dias: 60, dias_ate_janela: -127 },
+      cliente_silencioso_demais: true,
+      // IA deve IGNORAR esses cardapios (regra do silencioso demais)
+      top_refs_cliente: [
+        { ref: '1547', descricao: 'Body alça larga viscolinho', em_estoque: true, cor_destaque: 'Marrom' },
+      ],
+      novidades_disponiveis: [
+        { ref: '3104', descricao: 'Macacão linho alça larga', categoria: 'macacão' },
+      ],
+    },
+    output: `Oi Marly, td bem?
+
+Sumida hein... aconteceu alguma coisa?? Teve algum modelo q não vendeu bem aí?
+
+Conta pra mim o que rolou que a gente resolve 👍`,
+  },
   // ─── REATIVAÇÃO ──────────────────────────────────────────────────────────
   // EXEMPLO COM CARDÁPIO RICO + VOCABULÁRIO REPOSIÇÃO (Ailson 10/05/2026):
   // top_refs_cliente em estoque -> "voltou" (não "chegou")

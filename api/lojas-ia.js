@@ -1656,6 +1656,25 @@ async function montarContextoMensagem(sug, contextoExtra) {
   } catch (e) { /* silent */ }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // CLIENTE SILENCIOSO DEMAIS — Ailson 10/05/2026
+  // Quando cliente passou MUITO da janela natural dele (90+ dias da janela)
+  // OU 120+ dias sem comprar -> abordagem INVESTIGATIVA, nao empurrar produto.
+  // IA pergunta motivo primeiro ('aconteceu alguma coisa?', 'teve modelo q
+  // nao vendeu bem?') e finaliza oferecendo ajuda ('se for problema a gente
+  // resolve'). O objetivo eh REABRIR CANAL, nao vender nessa msg.
+  // ═══════════════════════════════════════════════════════════════════════════
+  let clienteSilenciosoDemais = false;
+  // Caso 1: janela confiavel + passou 90+ dias da janela propria
+  if (janelaCompra?.estado === 'passou_janela' && (janelaCompra.dias_ate_janela ?? 0) <= -90) {
+    clienteSilenciosoDemais = true;
+  }
+  // Caso 2: sem janela confiavel mas >= 120 dias sem comprar (entrou em
+  // sem_atividade pelo fallback fixo dos KPIs)
+  else if ((kpi?.dias_sem_comprar || 0) >= 120) {
+    clienteSilenciosoDemais = true;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // LOCALIZAÇÃO + HISTÓRICO "VEM PRA SP?" — Ailson 10/05/2026
   // Cliente fora de SP cujo perfil é presencial -> usar gancho "vc vem pra
   // SP esse mês?". Mas SO repetir esse gancho a cada 90d (sem perguntar 2x
@@ -1786,6 +1805,8 @@ async function montarContextoMensagem(sug, contextoExtra) {
     enderecoUf, enderecoCidade, jaPerguntouVirSP,
     coresDestaqueBling,    // top 3-5 do Bling (pula preto/bege)
     corDestaqueDaPeca,     // cor da peca da sug que ALSO esta em coresDestaqueBling
+    // CLIENTE SILENCIOSO DEMAIS — Ailson 10/05/2026 (terceira passada)
+    clienteSilenciosoDemais,
   };
 }
 
@@ -2291,6 +2312,10 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     cliente_uf: ctx.enderecoUf || null,
     cliente_cidade: ctx.enderecoCidade || null,
     ja_perguntei_vir_sp_90d: ctx.jaPerguntouVirSP || false,
+    // CLIENTE SILENCIOSO DEMAIS — Ailson 10/05/2026 (terceira passada)
+    // Cliente passou 90+ dias da janela natural OU 120+ dias sem comprar
+    // -> NÃO empurrar produto, INVESTIGAR motivo primeiro.
+    cliente_silencioso_demais: ctx.clienteSilenciosoDemais || false,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };
