@@ -6437,7 +6437,7 @@ const CalculadoraContent=()=>{
       {id:'best',nome:'🌟 Best case',conv:1.3,cpc:0.80}
     ],
     dadosReais:{cpc:1.20,conv:1.0,periodo:30,ticketReal:null,pecasReal:null},
-    revLucroMin:0
+    historicoMeluni:[] // [{id, data: 'YYYY-MM-DD', cpc, conv, ticket}]
   });
   const roasMeluniGlobalRef=useRef(10);
   const roasMeluniManualRef=useRef({});
@@ -6691,6 +6691,36 @@ const CalculadoraContent=()=>{
 const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSubsidiado,setFreteSubsidiado,state,setState,onVoltar,mobile})=>{
   // Helper de focus: seleciona tudo ao focar (fix do "zero não sai")
   const onFocusSel=(e)=>e.target.select();
+
+  // === Histórico Meluni: modal de cadastro/edição ===
+  const hojeIso=new Date().toISOString().slice(0,10);
+  const [modalHist,setModalHist]=useState(null); // null=fechado | {id|null, data, cpc, conv, ticket}
+  const abrirModalNovo=()=>setModalHist({id:null,data:hojeIso,cpc:'',conv:'',ticket:''});
+  const abrirModalEditar=(reg)=>setModalHist({id:reg.id,data:reg.data,cpc:String(reg.cpc),conv:String(reg.conv),ticket:String(reg.ticket)});
+  const fecharModal=()=>setModalHist(null);
+  const salvarRegistro=()=>{
+    if(!modalHist)return;
+    const cpc=parseFloat(modalHist.cpc),conv=parseFloat(modalHist.conv),ticket=parseFloat(modalHist.ticket);
+    if(!modalHist.data||isNaN(cpc)||cpc<=0||isNaN(conv)||conv<=0||isNaN(ticket)||ticket<=0){
+      alert('Preencha todos os campos com valores válidos');return;
+    }
+    const novoReg={id:modalHist.id||(Date.now().toString(36)+Math.random().toString(36).slice(2,8)),data:modalHist.data,cpc,conv,ticket};
+    setState(p=>{
+      const lista=p.historicoMeluni||[];
+      const novaLista=modalHist.id?lista.map(r=>r.id===modalHist.id?novoReg:r):[...lista,novoReg];
+      return {...p,historicoMeluni:novaLista};
+    });
+    fecharModal();
+  };
+  const removerRegistro=(id)=>{
+    if(!window.confirm('Excluir esse registro?'))return;
+    setState(p=>({...p,historicoMeluni:(p.historicoMeluni||[]).filter(r=>r.id!==id)}));
+  };
+
+  // Histórico ordenado ASC por data (gráfico mostra evolução temporal)
+  const historicoOrdenado=(state.historicoMeluni||[]).slice().sort((a,b)=>a.data.localeCompare(b.data));
+  // Mais recente primeiro pra tabela
+  const historicoTabela=historicoOrdenado.slice().reverse();
   // Opts pra cálculos respeitando frete subsidiado
   const optsMeluni=freteSubsidiado?{}:{semFrete:true};
   // Helpers de cálculo
@@ -6728,25 +6758,48 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
   const visitasROAS5=(meta/5)/cpcRef;
   const convMin=visitasROAS5>0?(pedidos/visitasROAS5)*100:0;
 
-  // Engenharia reversa — usa CPC e Conv do bloco Dados Reais
-  const cpcReal=state.dadosReais.cpc||0;
-  const convReal=(state.dadosReais.conv||0)/100;
-  const lucroMin=parseFloat(state.revLucroMin)||0;
-  const visitasRev=convReal>0?pedidos/convReal:0;
-  const adSpendRev=visitasRev*cpcReal;
-  const cacRev=pedidos>0?adSpendRev/pedidos:0;
-  const adSpendMaxAlvo=margemTotal-lucroMin;
-  const roasAlvo=adSpendMaxAlvo>0?meta/adSpendMaxAlvo:0;
-  let revStatus,revStatusColor;
-  if(adSpendMaxAlvo<=0){revStatus='❌ Lucro mín > margem total';revStatusColor='#9a2828';}
-  else if(adSpendRev<adSpendMaxAlvo*0.7){revStatus='✅ Dentro do alvo';revStatusColor='#1a7a40';}
-  else if(adSpendRev<adSpendMaxAlvo){revStatus='⚠️ Atenção (apertado)';revStatusColor='#7a3e15';}
-  else {revStatus='❌ Inviável c/ esses números';revStatusColor='#9a2828';}
-
   // Helpers de formatação
   const fmt=v=>'R$ '+(isNaN(v)||v==null?'—':Math.round(v).toLocaleString('pt-BR'));
   const fmtDec=v=>'R$ '+(isNaN(v)||v==null?'—':v.toFixed(2).replace('.',','));
   const fmtN=v=>isNaN(v)||v==null?'—':Math.round(v).toLocaleString('pt-BR');
+
+  // Helpers do histórico
+  const formatarDataBR=(iso)=>{if(!iso||!iso.includes('-'))return iso||'—';const [y,m,d]=iso.split('-');return `${d}/${m}/${y}`;};
+  const getTendencia=(serie,subirEhBom=true)=>{
+    if(serie.length<2)return{dir:'—',cor:'#8a9aa4',pct:0};
+    const u=serie[serie.length-1],pn=serie[serie.length-2];
+    if(pn===0)return{dir:'—',cor:'#8a9aa4',pct:0};
+    const pct=((u-pn)/pn)*100;
+    if(Math.abs(pct)<0.5)return{dir:'→',cor:'#8a9aa4',pct:0};
+    const subiu=pct>0;
+    return{dir:subiu?'↑':'↓',cor:(subiu===subirEhBom)?'#1a7a40':'#9a2828',pct:Math.abs(pct)};
+  };
+  const renderMiniChart=(serie,color)=>{
+    if(serie.length<2)return<div style={{height:60,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#a89f94",fontStyle:"italic"}}>Mín. 2 registros</div>;
+    const W=200,H=60,PAD=6;
+    const min=Math.min(...serie),max=Math.max(...serie);
+    const range=max-min||1;
+    const pts=serie.map((v,i)=>{
+      const x=PAD+(serie.length===1?W/2:(i/(serie.length-1))*(W-PAD*2));
+      const y=H-PAD-((v-min)/range)*(H-PAD*2);
+      return [x,y];
+    });
+    const path=pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+    return(
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:'block'}}>
+        <path d={path} fill="none" stroke={color} strokeWidth="2"/>
+        {pts.map(([x,y],i)=><circle key={i} cx={x} cy={y} r="2.5" fill={color}/>)}
+      </svg>
+    );
+  };
+
+  // Séries para gráficos (ordem cronológica)
+  const serieCpc=historicoOrdenado.map(r=>r.cpc);
+  const serieConv=historicoOrdenado.map(r=>r.conv);
+  const serieTicket=historicoOrdenado.map(r=>r.ticket);
+  const tendCpc=getTendencia(serieCpc,false); // CPC subir = ruim
+  const tendConv=getTendencia(serieConv,true); // Conv subir = bom
+  const tendTicket=getTendencia(serieTicket,true); // Ticket subir = bom
 
   // Lucro líquido médio dos cards (visualização do impacto do ROAS global)
   const lucroLiqMedio=margemMedia-(ticketMedio>0&&roasMeluniGlobal>0?ticketMedio/roasMeluniGlobal:0);
@@ -6919,57 +6972,133 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
           </div>
         </div>
 
-        {/* ENGENHARIA REVERSA */}
+        {/* HISTÓRICO + GRÁFICOS — substituiu Engenharia Reversa */}
         <div style={{background:"#fff",borderRadius:10,padding:16,border:"1px solid #e8e2da"}}>
-          <div style={{fontSize:15,fontWeight:700,color:"#2c3e50",marginBottom:8,paddingBottom:8,borderBottom:"1px solid #e8e2da"}}>🔄 Engenharia Reversa — ROAS Necessário</div>
-          <div style={{fontSize:12,color:"#8a9aa4",marginBottom:14}}>Usa o <strong>CPC e Conversão</strong> que vc digitou em cima. Você só escolhe o lucro mínimo e a calculadora retorna 2 ROAS: o de break-even (empatar) e o necessário pra atingir o lucro.</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,paddingBottom:8,borderBottom:"1px solid #e8e2da",flexWrap:"wrap",gap:10}}>
+            <div style={{fontSize:15,fontWeight:700,color:"#2c3e50"}}>📈 Histórico — CPC · Conversão · Ticket</div>
+            <button onClick={abrirModalNovo} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"8px 14px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>+ Adicionar registro</button>
+          </div>
 
-          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1.4fr",gap:14}}>
-            <div style={{background:"#f7f4f0",padding:14,borderRadius:6,border:"1px solid #e8e2da"}}>
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>💎 Lucro mínimo desejado (R$)</div>
-                <input type="number" value={state.revLucroMin} step={1000} min={0} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,revLucroMin:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none"}}/>
-                <div style={{fontSize:11,color:"#4a7fa5",marginTop:6,fontStyle:"italic"}}>Quanto vc quer que sobre <strong>depois</strong> de pagar o ad spend.<br/>Coloque <strong>0</strong> pra calcular só o break-even.</div>
-              </div>
-              <div style={{background:"#fff",padding:12,borderRadius:4,borderLeft:"3px solid #4a7fa5",fontSize:12}}>
-                <strong style={{color:"#2c3e50"}}>📥 Dados reais sendo usados:</strong><br/>
-                <span style={{color:"#8a9aa4"}}>CPC:</span> <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{fmtDec(cpcReal)}</span><br/>
-                <span style={{color:"#8a9aa4"}}>Conversão:</span> <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{(state.dadosReais.conv||0).toFixed(1)}%</span><br/>
-                <span style={{fontSize:10,fontStyle:"italic",color:"#8a9aa4"}}>Pra mudar, edite acima no bloco "Dados reais"</span>
-              </div>
+          {/* 3 mini-gráficos */}
+          {historicoOrdenado.length>0?(
+            <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"repeat(3,1fr)",gap:12,marginBottom:18}}>
+              {[
+                {label:'CPC médio',color:'#4a7fa5',serie:serieCpc,tend:tendCpc,fmtV:v=>fmtDec(v)},
+                {label:'Conversão',color:'#1a7a40',serie:serieConv,tend:tendConv,fmtV:v=>v.toFixed(1)+'%'},
+                {label:'Ticket médio',color:'#9b59b6',serie:serieTicket,tend:tendTicket,fmtV:v=>fmt(v)}
+              ].map(k=>{
+                const ultimoValor=k.serie.length>0?k.serie[k.serie.length-1]:0;
+                return(
+                  <div key={k.label} style={{background:"#f7f4f0",borderRadius:6,padding:12,border:"1px solid #e8e2da"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+                      <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5}}>{k.label}</div>
+                      <div style={{fontSize:11,color:k.tend.cor,fontWeight:700}}>{k.tend.dir}{k.tend.pct>0?` ${k.tend.pct.toFixed(1)}%`:''}</div>
+                    </div>
+                    <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:22,fontWeight:700,color:k.color,marginBottom:4}}>{k.fmtV(ultimoValor)}</div>
+                    {renderMiniChart(k.serie,k.color)}
+                  </div>
+                );
+              })}
             </div>
+          ):(
+            <div style={{padding:30,textAlign:"center",color:"#a89f94",fontSize:13,fontStyle:"italic",background:"#f7f4f0",borderRadius:6,marginBottom:14}}>
+              Nenhum registro ainda. Clique em "+ Adicionar registro" pra começar.
+            </div>
+          )}
 
-            <div style={{background:"#2c3e50",color:"#f7f4f0",padding:14,borderRadius:6}}>
-              <div style={{fontSize:13,marginBottom:10,opacity:0.8}}>Pra meta de R$ {fmtN(meta)}:</div>
-              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12}}>
-                <span>Visitas necessárias:</span>
-                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,fontSize:14}}>{fmtN(visitasRev)}</span>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12}}>
-                <span>Ad spend total:</span>
-                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,fontSize:14}}>{fmt(adSpendRev)}</span>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12}}>
-                <span>CAC efetivo:</span>
-                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,fontSize:14}}>{fmtDec(cacRev)}</span>
-              </div>
-              <div style={{background:"rgba(255,255,255,0.1)",marginTop:8,padding:"10px 12px",borderRadius:4}}>
-                <div style={{fontSize:10,opacity:0.8,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>📊 ROAS de break-even (empatar)</div>
-                <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:22,fontWeight:700}}>{roasBE.toFixed(2)}</div>
-                <div style={{fontSize:11,opacity:0.7,marginTop:2,fontStyle:"italic"}}>Ad spend = margem total. Lucro = R$ 0.</div>
-              </div>
-              <div style={{background:"rgba(184,115,51,0.25)",marginTop:8,padding:"10px 12px",borderRadius:4,borderLeft:"3px solid #b87333"}}>
-                <div style={{fontSize:10,opacity:0.8,textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}>🎯 ROAS pra seu lucro alvo</div>
-                <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:22,fontWeight:700}}>{roasAlvo.toFixed(2)}</div>
-                <div style={{fontSize:11,opacity:0.7,marginTop:2,fontStyle:"italic"}}>{lucroMin===0?'Igual ao break-even (vc não pediu lucro mínimo)':`Pra sobrar ${fmt(lucroMin)} de lucro líquido após ad spend`}</div>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid rgba(255,255,255,0.3)",paddingTop:10,marginTop:10,fontSize:13}}>
-                <span>Status:</span>
-                <span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,color:revStatusColor==='#1a7a40'?'#9be3a8':revStatusColor==='#7a3e15'?'#fde2cc':'#fcd5d5'}}>{revStatus}</span>
-              </div>
+          {/* Tabela de registros */}
+          {historicoTabela.length>0&&(
+            <div style={{borderTop:"1px solid #e8e2da",paddingTop:14}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:10,textTransform:"uppercase",letterSpacing:0.5}}>📋 Registros ({historicoTabela.length})</div>
+              {mobile?(
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {historicoTabela.map(r=>(
+                    <div key={r.id} style={{background:"#f7f4f0",borderRadius:6,padding:10,border:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:3}}>{formatarDataBR(r.data)}</div>
+                        <div style={{display:"flex",gap:10,fontSize:11,color:"#6b7c8a",flexWrap:"wrap"}}>
+                          <span>CPC: <strong style={{color:'#4a7fa5',fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{fmtDec(r.cpc)}</strong></span>
+                          <span>Conv: <strong style={{color:'#1a7a40',fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{r.conv.toFixed(1)}%</strong></span>
+                          <span>Ticket: <strong style={{color:'#9b59b6',fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{fmt(r.ticket)}</strong></span>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        <button onClick={()=>abrirModalEditar(r)} style={{background:"none",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 8px",cursor:"pointer",color:"#4a7fa5",fontSize:13}}>✏</button>
+                        <button onClick={()=>removerRegistro(r.id)} style={{background:"none",border:"1px solid #f0c8c8",borderRadius:4,padding:"4px 8px",cursor:"pointer",color:"#c0392b",fontSize:15}}>×</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ):(
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <thead style={{background:"#f7f4f0"}}>
+                    <tr>
+                      {['Data','CPC','Conversão','Ticket médio','Ações'].map((h,i)=>(
+                        <th key={h} style={{padding:"8px 12px",textAlign:i===4?'center':'left',fontSize:10,fontWeight:600,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,borderBottom:"1px solid #e8e2da"}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historicoTabela.map(r=>(
+                      <tr key={r.id} style={{borderBottom:"1px solid #f0ebe4"}}>
+                        <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{formatarDataBR(r.data)}</td>
+                        <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#4a7fa5',fontWeight:700}}>{fmtDec(r.cpc)}</td>
+                        <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#1a7a40',fontWeight:700}}>{r.conv.toFixed(1)}%</td>
+                        <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#9b59b6',fontWeight:700}}>{fmt(r.ticket)}</td>
+                        <td style={{padding:"8px 12px",textAlign:"center"}}>
+                          <button onClick={()=>abrirModalEditar(r)} style={{background:"none",border:"none",cursor:"pointer",color:"#4a7fa5",fontSize:15,marginRight:10}}>✏</button>
+                          <button onClick={()=>removerRegistro(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#c0392b",fontSize:17}}>×</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* Placeholder Insights IA */}
+          <div style={{marginTop:18,padding:14,background:"#f0ece6",borderRadius:6,border:"1px dashed #c8c0b4"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#2c3e50",marginBottom:4}}>🤖 Insights inteligentes (em breve)</div>
+            <div style={{fontSize:12,color:"#8a9aa4",fontStyle:"italic",lineHeight:1.5}}>
+              Quando vc tiver pelo menos 4 registros, vou analisar tendências, identificar saturação de audiência, sugerir investimento ideal e comparar com benchmark do setor.
             </div>
           </div>
         </div>
+
+        {/* MODAL de cadastro/edição de registro */}
+        {modalHist&&(
+          <div onClick={fecharModal} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:16}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:10,padding:20,maxWidth:420,width:"100%",boxShadow:"0 10px 40px rgba(0,0,0,0.3)",fontFamily:"Georgia,serif"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,paddingBottom:10,borderBottom:"1px solid #e8e2da"}}>
+                <div style={{fontSize:16,fontWeight:700,color:"#2c3e50"}}>{modalHist.id?'✏ Editar registro':'+ Novo registro'}</div>
+                <button onClick={fecharModal} style={{background:"none",border:"none",cursor:"pointer",fontSize:22,color:"#8a9aa4",lineHeight:1}}>✕</button>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div>
+                  <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>📅 Data</div>
+                  <input type="date" value={modalHist.data} onChange={e=>setModalHist(p=>({...p,data:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:"#2c3e50"}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>CPC médio (R$)</div>
+                  <input type="number" step={0.01} min={0.01} value={modalHist.cpc} placeholder="ex: 1,20" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,cpc:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#4a7fa5'}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Conversão (%)</div>
+                  <input type="number" step={0.1} min={0.1} max={20} value={modalHist.conv} placeholder="ex: 1,0" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,conv:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#1a7a40'}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Ticket médio (R$)</div>
+                  <input type="number" step={1} min={1} value={modalHist.ticket} placeholder="ex: 120" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,ticket:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#9b59b6'}}/>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:18}}>
+                <button onClick={fecharModal} style={{flex:1,background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"10px 14px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,color:"#8a9aa4"}}>Cancelar</button>
+                <button onClick={salvarRegistro} style={{flex:2,background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"10px 14px",cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,fontSize:14}}>💾 Salvar</button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
