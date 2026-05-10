@@ -4103,6 +4103,8 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   const [copiado, setCopiado] = useState(false);
   const [erro, setErro] = useState(null);
   const [marcandoEnviada, setMarcandoEnviada] = useState(false);
+  // Rate limit (429): mostra countdown amigavel + auto-retry
+  const [esperaSeg, setEsperaSeg] = useState(0);
 
   // Edicao da mensagem com lapis (Ailson 04/05): vendedora ajusta pra IA aprender
   const [editandoMsg, setEditandoMsg] = useState(false);
@@ -4147,6 +4149,24 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       setMensagemOriginal(msg);  // guarda pra comparar com a versao editada
       setStep('pronta');
     } catch (e) {
+      // Rate limit (429): UI amigavel com countdown + auto-retry
+      if (e?.code === 'RATE_LIMIT') {
+        const seg = Math.max(1, Math.ceil((e.msEspera || 3000) / 1000));
+        setEsperaSeg(seg);
+        setStep('aguardando');
+        // Countdown decremental + auto-retry no fim
+        const intv = setInterval(() => {
+          setEsperaSeg(prev => {
+            if (prev <= 1) {
+              clearInterval(intv);
+              gerar();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        return;
+      }
       setErro(e.message || 'Erro ao gerar mensagem');
       setStep('erro');
     }
@@ -4377,6 +4397,31 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               A IA tá lendo o histórico da cliente
             </div>
             <style>{`@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.08); opacity: 0.85; } }`}</style>
+          </div>
+        )}
+
+        {/* Step: aguardando (rate limit 429 — UI amigavel com countdown) */}
+        {step === 'aguardando' && (
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            <div style={{
+              width: 60, height: 60, borderRadius: '50%', background: '#fef3c7',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
+              fontSize: sz(28),
+            }}>
+              ⏳
+            </div>
+            <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600, marginBottom: 6 }}>
+              Só um instante
+            </div>
+            <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16, lineHeight: 1.5 }}>
+              Tô gerando outra mensagem ainda.<br/>
+              Tento de novo em <strong style={{ color: palette.accent, fontSize: fz(18) }}>{esperaSeg}s</strong>…
+            </div>
+            <button onClick={onClose} style={{
+              width: '100%', background: palette.surface, color: palette.inkSoft,
+              border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
+              fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
+            }}>Fechar</button>
           </div>
         )}
 

@@ -1138,6 +1138,15 @@ async function gerarMensagemIA(sugestaoId, contextoExtra = {}) {
   });
   if (!res.ok) {
     const txt = await res.text();
+    // Rate limit (429): erro estruturado pra UI mostrar countdown amigavel
+    if (res.status === 429) {
+      let msEspera = 3000;
+      try { const j = JSON.parse(txt); if (j.ms_espera) msEspera = j.ms_espera; } catch { /* default */ }
+      const err = new Error('rate-limit');
+      err.code = 'RATE_LIMIT';
+      err.msEspera = msEspera;
+      throw err;
+    }
     throw new Error(`IA erro ${res.status}: ${txt}`);
   }
   const json = await res.json();
@@ -1163,6 +1172,15 @@ async function gerarMensagemAvulsa(clienteId, contextoExtra = {}) {
   });
   if (!res.ok) {
     const txt = await res.text();
+    // Rate limit (429): erro estruturado pra UI mostrar countdown amigavel
+    if (res.status === 429) {
+      let msEspera = 3000;
+      try { const j = JSON.parse(txt); if (j.ms_espera) msEspera = j.ms_espera; } catch { /* default */ }
+      const err = new Error('rate-limit');
+      err.code = 'RATE_LIMIT';
+      err.msEspera = msEspera;
+      throw err;
+    }
     throw new Error(`IA erro ${res.status}: ${txt}`);
   }
   return await res.json(); // { ok, mensagem, sugestao_id, ... }
