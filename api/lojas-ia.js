@@ -1655,6 +1655,120 @@ async function montarContextoMensagem(sug, contextoExtra) {
     if (meu) avisoDoDia = { texto: meu.texto };
   } catch (e) { /* silent */ }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LOCALIZAÇÃO + HISTÓRICO "VEM PRA SP?" — Ailson 10/05/2026
+  // Cliente fora de SP cujo perfil é presencial -> usar gancho "vc vem pra
+  // SP esse mês?". Mas SO repetir esse gancho a cada 90d (sem perguntar 2x
+  // em sequencia). IA respeita ja_perguntei_vir_sp_90d=true e omite a
+  // pergunta nesse caso.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const enderecoUf = (cliente?.endereco_uf || '').trim().toUpperCase() || null;
+  const enderecoCidade = cliente?.endereco_cidade || null;
+  let jaPerguntouVirSP = false;
+  if (cliente && enderecoUf && enderecoUf !== 'SP') {
+    try {
+      const data90d = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+      const { data: msgsAnt } = await supabase
+        .from('lojas_sugestoes_diarias')
+        .select('mensagem_gerada')
+        .eq('cliente_id', cliente.id)
+        .gte('data_geracao', data90d)
+        .not('mensagem_gerada', 'is', null)
+        .limit(30);
+      const todasMsgs = (msgsAnt || []).map(m => (m.mensagem_gerada || '').toLowerCase()).join(' ');
+      // padroes comuns que indicam que IA ja perguntou sobre vir pra SP
+      const padroes = [
+        'vem pra sp', 'vem pra são paulo', 'vem pra sao paulo',
+        'vir pra sp', 'vir pra são paulo', 'vir pra sao paulo',
+        'vier pra sp', 'vier pra são paulo',
+        'passa em sp', 'vem aqui em sp', 'subir pra sp',
+      ];
+      jaPerguntouVirSP = padroes.some(p => todasMsgs.includes(p));
+    } catch (e) { /* silent */ }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CORES REAIS DAS PEÇAS via MÓDULO OFICINAS — Ailson 10/05/2026
+  // Pra cada ref nas listas (top do cliente, novidades, reposicoes, matches,
+  // top_recompra, curadoria), busca o ULTIMO CORTE ENTREGUE da ref (em
+  // amicia_data user_id='ailson_cortes') e extrai as cores reais.
+  // Depois cruza com cores_top_bling posicoes 3-5 (pulando top 1-2 que sao
+  // sempre preto/bege e nao impressionam). Resulta em `cor_destaque` pra
+  // cada peca — cor que esta TANTO no corte da peca QUANTO bombando no Bling.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const refsRelevantes = new Set();
+  const addRef = (r) => { if (r) refsRelevantes.add(String(r).replace(/^0+/, '') || '0'); };
+  if (produto?.ref) addRef(produto.ref);
+  for (const r of topRefsCliente) addRef(r.ref);
+  for (const p of novidadesDisponiveis) addRef(p.ref);
+  for (const p of reposicoesDisponiveis) addRef(p.ref);
+  for (const m of matchesDaPeca) addRef(m.ref_match);
+  for (const t of topRecompra) addRef(t.ref);
+  for (const c of curadoriaManual) addRef(c.ref);
+
+  const parseDataBR = (s) => {
+    if (!s) return 0;
+    const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return 0;
+    return new Date(`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`).getTime() || 0;
+  };
+
+  const coresPorRef = new Map();
+  if (refsRelevantes.size > 0) {
+    try {
+      const { data: row } = await supabase
+        .from('amicia_data')
+        .select('payload')
+        .eq('user_id', 'ailson_cortes')
+        .maybeSingle();
+      const cortes = row?.payload?.cortes || [];
+      for (const ref of refsRelevantes) {
+        const dosRef = cortes.filter(c => {
+          const cRef = String(c.ref || '').replace(/^0+/, '') || '0';
+          return cRef === ref && c.entregue === true;
+        });
+        if (dosRef.length === 0) continue;
+        // Ordena pela data de entrega DESC, pega o mais recente
+        dosRef.sort((a, b) => parseDataBR(b.dataEntrega) - parseDataBR(a.dataEntrega));
+        const ultimo = dosRef[0];
+        const cores = (ultimo.cores || [])
+          .filter(co => (co.folhas || 0) > 0)
+          .map(co => co.nome)
+          .filter(Boolean);
+        if (cores.length > 0) coresPorRef.set(ref, cores);
+      }
+    } catch (e) {
+      console.warn('[lojas-ia] cortes (oficinas) indisponivel:', e?.message);
+    }
+  }
+
+  // Cores em destaque do Bling = posições 3-5 (pula top 1-2 = preto/bege).
+  // Sao as cores "que estao subindo" agora — fala disso impressiona, fala
+  // de preto/bege não impressiona (qse sempre top).
+  const coresDestaqueBling = coresTop.slice(2, 5);
+
+  // Anotar cor_destaque pra cada item: cor da peça que ALSO está em destaque Bling
+  const anotarCorDestaque = (ref) => {
+    if (!ref) return null;
+    const refN = String(ref).replace(/^0+/, '') || '0';
+    const coresDaPeca = coresPorRef.get(refN) || [];
+    if (coresDaPeca.length === 0) return null;
+    for (const corBling of coresDestaqueBling) {
+      const matchCor = coresDaPeca.find(c => c && c.toLowerCase() === corBling.toLowerCase());
+      if (matchCor) return matchCor; // retorna nome original (case da peça)
+    }
+    return null; // sem interseccao -> IA nao menciona cor
+  };
+
+  // Aplica nas listas (mutaveis ate aqui)
+  topRefsCliente = topRefsCliente.map(r => ({ ...r, cor_destaque: anotarCorDestaque(r.ref) }));
+  novidadesDisponiveis = novidadesDisponiveis.map(p => ({ ...p, cor_destaque: anotarCorDestaque(p.ref) }));
+  reposicoesDisponiveis = reposicoesDisponiveis.map(p => ({ ...p, cor_destaque: anotarCorDestaque(p.ref) }));
+  matchesDaPeca = matchesDaPeca.map(m => ({ ...m, cor_destaque: anotarCorDestaque(m.ref_match) }));
+  topRecompra = topRecompra.map(r => ({ ...r, cor_destaque: anotarCorDestaque(r.ref) }));
+  curadoriaManual = curadoriaManual.map(c => ({ ...c, cor_destaque: anotarCorDestaque(c.ref) }));
+  const corDestaqueDaPeca = produto?.ref ? anotarCorDestaque(produto.ref) : null;
+
   return {
     cliente, grupo, kpi, docsGrupo,
     produto, promocao, coresTop,
@@ -1668,6 +1782,10 @@ async function montarContextoMensagem(sug, contextoExtra) {
     // CARDÁPIO RICO — Ailson 10/05/2026 (ganchos de conversão)
     topRefsCliente, novidadesDisponiveis, reposicoesDisponiveis,
     matchesDaPeca, topRecompra, curadoriaManual, avisoDoDia,
+    // LOCALIZAÇÃO + CORES REAIS — Ailson 10/05/2026 (segunda passada)
+    enderecoUf, enderecoCidade, jaPerguntouVirSP,
+    coresDestaqueBling,    // top 3-5 do Bling (pula preto/bege)
+    corDestaqueDaPeca,     // cor da peca da sug que ALSO esta em coresDestaqueBling
   };
 }
 
@@ -2117,7 +2235,14 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       nome: ctx.produto.descricao,
       categoria: ctx.produto.categoria,
     } : null,
-    cores_top_bling: ctx.coresTop && ctx.coresTop.length > 0 ? ctx.coresTop : null,
+    // Cor destaque da peca da sug (Ailson 10/05/2026)
+    // Cor que esta TANTO no ultimo corte entregue dessa ref QUANTO no top
+    // 3-5 do Bling (cores "do momento"). Se null, IA NAO menciona cor.
+    cor_destaque_da_peca: ctx.corDestaqueDaPeca || null,
+    // Cores 3-5 do Bling — usar SO essas (top 1-2 sao sempre preto/bege).
+    // Substitui o antigo cores_top_bling (top 6 sem filtro).
+    cores_destaque_bling: ctx.coresDestaqueBling && ctx.coresDestaqueBling.length > 0
+      ? ctx.coresDestaqueBling : null,
     promocao: ctx.promocao ? {
       nome: ctx.promocao.nome_curto,
       descricao: ctx.promocao.descricao_completa,
@@ -2160,6 +2285,12 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     top_recompra: ctx.topRecompra?.length > 0 ? ctx.topRecompra : null,
     curadoria_manual: ctx.curadoriaManual?.length > 0 ? ctx.curadoriaManual : null,
     aviso_do_dia: ctx.avisoDoDia || null,
+    // LOCALIZAÇÃO — Ailson 10/05/2026
+    // Cliente fora de SP cujo perfil é presencial -> gancho "vc vem pra SP esse mês?"
+    // MAS so se ja_perguntei_vir_sp_90d=false (anti-repeticao 90d)
+    cliente_uf: ctx.enderecoUf || null,
+    cliente_cidade: ctx.enderecoCidade || null,
+    ja_perguntei_vir_sp_90d: ctx.jaPerguntouVirSP || false,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };
