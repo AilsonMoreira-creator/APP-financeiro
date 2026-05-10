@@ -822,13 +822,20 @@ PRIMEIRO PARÁGRAFO — pergunta de cuidado/investigação (variar):
 - "Sumida, tudo bem com vc??"
 - "Faz tempo q a gente não conversa... aconteceu alguma coisa?"
 
+🎯 PERSONALIZAR com \`ultimos_modelos_levados\` (Ailson 10/05/2026):
+Se vier preenchido (até 2 modelos distintos da cliente, >=01/03/2026), MENCIONE os modelos REAIS por descrição (nunca por REF) pra personalizar a pergunta. Exemplos:
+- "Teve algum modelo q não vendeu bem aí?? Aquela calça pantalona ou aquele body que vc levou?"
+- "Sumida hein... aquela jaqueta de couro e o conjunto WPP q vc tinha levado, deu certo aí?"
+- "Aconteceu alguma coisa?? Tô lembrando da blusa cropped e da saia midi q vc levou — venderam bem?"
+
+Use linguagem natural: "aquele/aquela [descrição]", "lembro que vc levou [descrição] da última vez", etc. Se só tiver 1 modelo no array, mencione 1. Se vazio, segue só com pergunta genérica.
+
 ÚLTIMO PARÁGRAFO — finalização oferecendo ajuda (variar — usar emoji nem sempre):
 - "Se for algum problema a gente resolve 👍"
 - "Qualquer coisa me fala que a gente dá um jeito"
 - "Se tiver algo q deu errado, conta pra mim, vamos resolver"
 - "Se for q a peça não vendeu, eu te ajudo a trocar"
 - "Tô aqui pra ajudar no q precisar"
-- "Conta pra mim o q rolou que a gente resolve"
 - "Qq coisa me fala, tô do lado de cá pra ajudar 🙌"
 
 **OBJETIVO DESSA MENSAGEM: REABRIR CANAL, não vender.**
@@ -1315,9 +1322,11 @@ export const EXEMPLOS_FEW_SHOT = [
   // natural -> ABORDAGEM INVESTIGATIVA. Sem oferta de produto. SO pergunta de
   // cuidado + finalizacao oferecendo ajuda. Curto (3-4 frases). MESMO com top_refs
   // / novidades / reposicoes preenchidos, IA deve IGNORAR pra essa msg.
+  // PERSONALIZA: usa ultimos_modelos_levados pra mencionar pecas REAIS q a
+  // cliente comprou (do periodo >=01/03/2026).
   {
     tipo: 'reativar',
-    cenario: 'Cliente silenciosa demais — investigar motivo antes de oferecer',
+    cenario: 'Cliente silenciosa demais — investigar com modelos REAIS q ela levou',
     input: {
       apelido: 'Marly',
       perfil_canal: 'so_presencial',
@@ -1326,6 +1335,10 @@ export const EXEMPLOS_FEW_SHOT = [
       dias_sem: 187,
       janela_compra: { estado: 'passou_janela', media_dias: 60, dias_ate_janela: -127 },
       cliente_silencioso_demais: true,
+      ultimos_modelos_levados: [
+        { descricao: 'Calça pantalona viscolinho', categoria: 'calça' },
+        { descricao: 'Body alça larga viscolinho', categoria: 'body' },
+      ],
       // IA deve IGNORAR esses cardapios (regra do silencioso demais)
       top_refs_cliente: [
         { ref: '1547', descricao: 'Body alça larga viscolinho', em_estoque: true, cor_destaque: 'Marrom' },
@@ -1336,9 +1349,9 @@ export const EXEMPLOS_FEW_SHOT = [
     },
     output: `Oi Marly, td bem?
 
-Sumida hein... aconteceu alguma coisa?? Teve algum modelo q não vendeu bem aí?
+Sumida hein... aconteceu alguma coisa?? Aquela calça pantalona viscolinho e o body alça larga q vc levou, venderam bem aí?
 
-Conta pra mim o que rolou que a gente resolve 👍`,
+Se for algum problema a gente resolve 👍`,
   },
   // ─── REATIVAÇÃO ──────────────────────────────────────────────────────────
   // EXEMPLO COM CARDÁPIO RICO + VOCABULÁRIO REPOSIÇÃO (Ailson 10/05/2026):

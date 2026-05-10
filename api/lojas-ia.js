@@ -1674,6 +1674,51 @@ async function montarContextoMensagem(sug, contextoExtra) {
     clienteSilenciosoDemais = true;
   }
 
+  // ULTIMOS MODELOS LEVADOS — Ailson 10/05/2026 (etapa silencioso demais)
+  // Quando cliente silenciosa demais, IA personaliza pergunta investigativa
+  // mencionando 2 modelos especificos q ela levou: "teve algum modelo q nao
+  // vendeu bem? aquela calca pantalona ou aquele body que vc levou?"
+  // Filtra >= 01/03/2026 (data confiavel das vendas).
+  let ultimosModelosLevados = [];
+  if (clienteSilenciosoDemais && cliente?.id) {
+    try {
+      const { data: vendasRecentes } = await supabase
+        .from('lojas_vendas')
+        .select('id, data_venda')
+        .eq('cliente_id', cliente.id)
+        .gte('data_venda', '2026-03-01')
+        .order('data_venda', { ascending: false })
+        .limit(10);
+      if (vendasRecentes?.length) {
+        const idsVendas = vendasRecentes.map(v => v.id);
+        const { data: itens } = await supabase
+          .from('lojas_vendas_itens')
+          .select('ref, descricao, categoria, venda_id')
+          .in('venda_id', idsVendas);
+        // Mapa data_venda por venda_id (pra ordenar itens pela data)
+        const dataPorVenda = new Map(vendasRecentes.map(v => [v.id, v.data_venda]));
+        const ordenados = (itens || [])
+          .filter(i => i.descricao)
+          .map(i => ({ ...i, data_venda: dataPorVenda.get(i.venda_id) }))
+          .sort((a, b) => (b.data_venda || '').localeCompare(a.data_venda || ''));
+        // Dedup por descricao normalizada — pega ate 2 modelos distintos
+        const vistos = new Set();
+        for (const it of ordenados) {
+          const key = (it.descricao || '').toLowerCase().trim();
+          if (!key || vistos.has(key)) continue;
+          vistos.add(key);
+          ultimosModelosLevados.push({
+            descricao: it.descricao,
+            categoria: it.categoria || null,
+          });
+          if (ultimosModelosLevados.length >= 2) break;
+        }
+      }
+    } catch (e) {
+      console.warn('[lojas-ia] ultimos modelos levados indisponivel:', e?.message);
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // LOCALIZAÇÃO + HISTÓRICO "VEM PRA SP?" — Ailson 10/05/2026
   // Cliente fora de SP cujo perfil é presencial -> usar gancho "vc vem pra
@@ -1806,7 +1851,7 @@ async function montarContextoMensagem(sug, contextoExtra) {
     coresDestaqueBling,    // top 3-5 do Bling (pula preto/bege)
     corDestaqueDaPeca,     // cor da peca da sug que ALSO esta em coresDestaqueBling
     // CLIENTE SILENCIOSO DEMAIS — Ailson 10/05/2026 (terceira passada)
-    clienteSilenciosoDemais,
+    clienteSilenciosoDemais, ultimosModelosLevados,
   };
 }
 
@@ -2316,6 +2361,12 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     // Cliente passou 90+ dias da janela natural OU 120+ dias sem comprar
     // -> NÃO empurrar produto, INVESTIGAR motivo primeiro.
     cliente_silencioso_demais: ctx.clienteSilenciosoDemais || false,
+    // ultimos_modelos_levados (>=01/03/2026): 2 modelos distintos pra IA
+    // PERSONALIZAR a pergunta investigativa ('aquela calça pantalona ou
+    // aquele body que vc levou, alguma não vendeu bem?'). So tem valor
+    // quando cliente_silencioso_demais=true.
+    ultimos_modelos_levados: ctx.ultimosModelosLevados?.length > 0
+      ? ctx.ultimosModelosLevados : null,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };
