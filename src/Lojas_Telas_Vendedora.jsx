@@ -3922,12 +3922,233 @@ const PERFIL_COMPRA = [
   { v: 'gosta_novidades', label: '✨ Gosta de novidades/lançamentos' },
 ];
 
+// ─── ONDA 3 (Ailson 10/05/2026): Reclamacoes, Elogios, Eventos Timeline ──
+// Tags estruturadas em listas — vendedora marca quando essas coisas
+// acontecem. IA usa como gatilho pra personalizar mensagens (ex:
+// reclamou linho_encolheu + cliente_silencioso_demais -> pergunta direta;
+// elogiou modelagem -> usa modelagem como gancho).
+
+const RECLAMACOES_TIPOS = [
+  { v: 'defeito_costura', label: '🪡 Defeito de costura' },
+  { v: 'linho_encolheu', label: '👕 Linho encolheu na lavagem' },
+  { v: 'tecido_qualidade', label: '🧵 Tecido de baixa qualidade' },
+  { v: 'concorrente_cidade', label: '🏬 Concorrente na cidade c/ mesmo modelo' },
+  { v: 'preco_alto', label: '💰 Achou preço alto' },
+  { v: 'atendimento_ruim', label: '😕 Atendimento deixou a desejar' },
+  { v: 'modelagem_ruim', label: '📏 Modelagem não agradou' },
+  { v: 'outros', label: '📝 Outros' },
+];
+
+const ELOGIOS_TIPOS = [
+  { v: 'atendimento', label: '👏 Atendimento' },
+  { v: 'colecao', label: '✨ Coleção' },
+  { v: 'modelagem', label: '📐 Modelagem' },
+  { v: 'qualidade_tecido', label: '🧶 Qualidade do tecido' },
+  { v: 'precos', label: '💵 Preços' },
+  { v: 'variedade', label: '🌈 Variedade de modelos' },
+  { v: 'outros', label: '📝 Outros' },
+];
+
+const EVENTOS_TIMELINE_TIPOS = [
+  { v: 'gravidez', label: '🤰 Gravidez' },
+  { v: 'mudanca_loja', label: '🏪 Mudança / loja nova' },
+  { v: 'viagem_longa', label: '✈️ Viagem longa' },
+  { v: 'casamento', label: '💍 Casamento próprio/família' },
+  { v: 'reforma_loja', label: '🔨 Reforma da loja' },
+  { v: 'parceria_nova', label: '🤝 Parceria nova com marca/marketplace' },
+  { v: 'outros', label: '📅 Outros' },
+];
+
+// Gerador de ID curto pra itens (tipo_timestamp_random)
+const gerarIdItem = (prefix) =>
+  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+// ─── COMPONENTE HELPER: SecaoListaItens ──────────────────────────────────
+// Renderiza titulo + lista de itens + form inline pra adicionar.
+// Usado pra Reclamacoes, Elogios e EventosTimeline. Diferenca eh so:
+// - reclamacoes tem toggle "resolvido"
+// - cor de destaque por categoria
+const SecaoListaItens = ({
+  titulo, subtitulo, tipos, itens, categoria,
+  onAdd, onRemove, onToggleResolvido,
+  temToggleResolvido = false,
+  corAcento = palette.accent,
+}) => {
+  const [aberto, setAberto] = useState(false);
+  const [tipoSel, setTipoSel] = useState('');
+  const [detalhe, setDetalhe] = useState('');
+
+  const labelTipo = (v) => tipos.find(t => t.v === v)?.label || v;
+
+  const salvarItem = () => {
+    if (!tipoSel) return;
+    onAdd(categoria, tipoSel, detalhe);
+    setTipoSel('');
+    setDetalhe('');
+    setAberto(false);
+  };
+
+  const inputStyleLocal = {
+    width: '100%', padding: '10px 12px',
+    borderRadius: 8, border: `1.5px solid ${palette.beige}`,
+    fontFamily: FONT, fontSize: fz(14), background: palette.surface,
+    color: palette.ink,
+  };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 4 }}>
+        {titulo} {itens.length > 0 && <span style={{ color: corAcento }}>({itens.length})</span>}
+      </div>
+      <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 8 }}>
+        {subtitulo}
+      </div>
+
+      {/* Lista de itens já registrados */}
+      {itens.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          {itens.map(it => (
+            <div key={it.id} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+              padding: '8px 10px',
+              background: it.resolvido ? '#f0f4f0' : palette.surface,
+              border: `1.5px solid ${it.resolvido ? '#c9d8c5' : palette.beige}`,
+              borderRadius: 8,
+              opacity: it.resolvido ? 0.7 : 1,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: fz(13), fontWeight: 600, color: corAcento,
+                  textDecoration: it.resolvido ? 'line-through' : 'none',
+                }}>
+                  {labelTipo(it.tipo)}
+                </div>
+                {it.detalhe && (
+                  <div style={{ fontSize: fz(12), color: palette.inkSoft, marginTop: 2, lineHeight: 1.4 }}>
+                    {it.detalhe}
+                  </div>
+                )}
+                {it.data_registro && (
+                  <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 3 }}>
+                    {new Date(it.data_registro).toLocaleDateString('pt-BR')}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
+                {temToggleResolvido && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleResolvido(it.id)}
+                    title={it.resolvido ? 'Marcar como nao resolvido' : 'Marcar como resolvido'}
+                    style={{
+                      background: it.resolvido ? '#c9d8c5' : palette.surface,
+                      border: `1.5px solid ${it.resolvido ? '#5b9555' : palette.beige}`,
+                      borderRadius: 6, padding: '4px 6px',
+                      fontSize: fz(11), cursor: 'pointer',
+                      color: it.resolvido ? '#3d6e3a' : palette.inkSoft,
+                    }}
+                  >
+                    {it.resolvido ? '✓ ok' : '○'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onRemove(categoria, it.id)}
+                  title="Remover"
+                  style={{
+                    background: 'transparent', border: 'none',
+                    color: palette.inkMuted, fontSize: fz(15), cursor: 'pointer',
+                    padding: '2px 6px',
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Form inline de adicionar */}
+      {!aberto && (
+        <button
+          type="button"
+          onClick={() => setAberto(true)}
+          style={{
+            background: palette.surface,
+            border: `1.5px dashed ${corAcento}`,
+            color: corAcento,
+            borderRadius: 8, padding: '8px 12px',
+            fontSize: fz(13), fontWeight: 600,
+            cursor: 'pointer', fontFamily: FONT,
+            width: '100%',
+          }}
+        >
+          + Adicionar
+        </button>
+      )}
+      {aberto && (
+        <div style={{
+          padding: 10,
+          background: '#fafaf7',
+          border: `1.5px solid ${corAcento}40`,
+          borderRadius: 8,
+        }}>
+          <select value={tipoSel} onChange={e => setTipoSel(e.target.value)} style={{ ...inputStyleLocal, marginBottom: 8 }}>
+            <option value="">— Selecionar tipo —</option>
+            {tipos.map(t => (
+              <option key={t.v} value={t.v}>{t.label}</option>
+            ))}
+          </select>
+          <textarea
+            value={detalhe}
+            onChange={e => setDetalhe(e.target.value.slice(0, 300))}
+            rows={2}
+            placeholder="Detalhes (opcional, max 300 caract)"
+            style={{ ...inputStyleLocal, resize: 'vertical', fontFamily: FONT, marginBottom: 8 }}
+          />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => { setAberto(false); setTipoSel(''); setDetalhe(''); }}
+              style={{
+                flex: 1, background: palette.surface, color: palette.inkSoft,
+                border: `1px solid ${palette.beige}`, borderRadius: 6,
+                padding: '8px', fontSize: fz(13), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={salvarItem}
+              disabled={!tipoSel}
+              style={{
+                flex: 2, background: tipoSel ? corAcento : '#ccc', color: '#fff',
+                border: 'none', borderRadius: 6,
+                padding: '8px', fontSize: fz(13), fontWeight: 600,
+                cursor: tipoSel ? 'pointer' : 'not-allowed', fontFamily: FONT,
+              }}
+            >
+              + Adicionar à lista
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, onSalvar, onClose }) => {
   const [personalidade, setPersonalidade] = useState(observacoesAtuais?.personalidade || '');
   const [eventoRecente, setEventoRecente] = useState(observacoesAtuais?.evento_recente || '');
   const [perfilCompra, setPerfilCompra] = useState(observacoesAtuais?.perfil_compra || []);
   const [preferencias, setPreferencias] = useState(observacoesAtuais?.preferencias || '');
   const [obsLivre, setObsLivre] = useState(observacoesAtuais?.observacao_livre || '');
+  // ─── ONDA 3 (Ailson 10/05/2026): listas estruturadas ───
+  const [reclamacoes, setReclamacoes] = useState(observacoesAtuais?.reclamacoes || []);
+  const [elogios, setElogios] = useState(observacoesAtuais?.elogios || []);
+  const [eventosTimeline, setEventosTimeline] = useState(observacoesAtuais?.eventos_timeline || []);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState(null);
 
@@ -3939,11 +4160,37 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
       setPerfilCompra(observacoesAtuais.perfil_compra || []);
       setPreferencias(observacoesAtuais.preferencias || '');
       setObsLivre(observacoesAtuais.observacao_livre || '');
+      setReclamacoes(observacoesAtuais.reclamacoes || []);
+      setElogios(observacoesAtuais.elogios || []);
+      setEventosTimeline(observacoesAtuais.eventos_timeline || []);
     }
   }, [observacoesAtuais]);
 
   const togglePerfil = (v) => setPerfilCompra(prev =>
     prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]
+  );
+
+  // ─── Handlers Onda 3 ───────────────────────────────────────────────────
+  const adicionarItem = (categoria, tipo, detalhe) => {
+    const novo = {
+      id: gerarIdItem(categoria === 'reclamacoes' ? 'rec' : categoria === 'elogios' ? 'elo' : 'evt'),
+      tipo,
+      detalhe: (detalhe || '').trim(),
+      data_registro: new Date().toISOString(),
+      contexto: {},
+      ...(categoria === 'reclamacoes' ? { resolvido: false } : {}),
+    };
+    if (categoria === 'reclamacoes') setReclamacoes(prev => [...prev, novo]);
+    else if (categoria === 'elogios') setElogios(prev => [...prev, novo]);
+    else if (categoria === 'eventos_timeline') setEventosTimeline(prev => [...prev, novo]);
+  };
+  const removerItem = (categoria, id) => {
+    if (categoria === 'reclamacoes') setReclamacoes(prev => prev.filter(x => x.id !== id));
+    else if (categoria === 'elogios') setElogios(prev => prev.filter(x => x.id !== id));
+    else if (categoria === 'eventos_timeline') setEventosTimeline(prev => prev.filter(x => x.id !== id));
+  };
+  const toggleResolvido = (id) => setReclamacoes(prev =>
+    prev.map(r => r.id === id ? { ...r, resolvido: !r.resolvido } : r)
   );
 
   const nome = (cliente?.apelido || cliente?.comprador_nome || '').split(/\s+/)[0] || 'Cliente';
@@ -3958,6 +4205,10 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
         perfil_compra: perfilCompra,
         preferencias: preferencias.trim(),
         observacao_livre: obsLivre.trim(),
+        // Onda 3 — Ailson 10/05/2026
+        reclamacoes,
+        elogios,
+        eventos_timeline: eventosTimeline,
       };
       const r = await fetch('/api/lojas-cliente-observacoes', {
         method: 'POST',
@@ -4108,6 +4359,43 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
             {obsLivre.length}/1000
           </div>
         </div>
+
+        {/* ─── ONDA 3 (Ailson 10/05/2026): 3 listas estruturadas ─── */}
+        <SecaoListaItens
+          titulo="🛑 Reclamações"
+          subtitulo="Coisas que ela reclamou (defeito, encolheu, preço, etc)"
+          tipos={RECLAMACOES_TIPOS}
+          itens={reclamacoes}
+          categoria="reclamacoes"
+          onAdd={adicionarItem}
+          onRemove={removerItem}
+          onToggleResolvido={toggleResolvido}
+          temToggleResolvido
+          corAcento="#c66160"
+        />
+
+        <SecaoListaItens
+          titulo="🌟 Elogios"
+          subtitulo="Coisas que ela elogiou (atendimento, modelagem, coleção, etc)"
+          tipos={ELOGIOS_TIPOS}
+          itens={elogios}
+          categoria="elogios"
+          onAdd={adicionarItem}
+          onRemove={removerItem}
+          corAcento="#5b9555"
+        />
+
+        <SecaoListaItens
+          titulo="📅 Eventos importantes"
+          subtitulo="Gravidez, mudança de loja, viagem, casamento, etc"
+          tipos={EVENTOS_TIMELINE_TIPOS}
+          itens={eventosTimeline}
+          categoria="eventos_timeline"
+          onAdd={adicionarItem}
+          onRemove={removerItem}
+          corAcento="#6b7c95"
+        />
+        {/* ─── Fim Onda 3 ─── */}
 
         {erro && (
           <div style={{
