@@ -41,7 +41,7 @@ import {
   Users, Star, Sparkles, AlertTriangle, MessageCircle, Package, Tag,
   Pause, Calendar, Archive, Bot, Plus, Store, Gift, FileText,
   ArrowLeftRight, TrendingUp, BarChart3, UserCog, Heart,
-  Save, Trash2, Edit3, Clock, CheckCircle2, AlertCircle, Check, X,
+  Save, Trash2, Edit3, Pencil, Clock, CheckCircle2, AlertCircle, Check, X,
   Upload, Download, FileSpreadsheet, History, UsersRound, Link2, Crown,
   Loader2, Flame, Megaphone, Bell, Palette, EyeOff, RotateCcw, RefreshCw,
 } from 'lucide-react';
@@ -3330,7 +3330,7 @@ export const GruposListScreen = ({ lojas, isAdmin, onBack, onSelectGrupo, onCria
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdicionarCnpj }) => {
-  const { state, clientesEnriquecidos } = lojas;
+  const { state, clientesEnriquecidos, handleSaveGrupo, handleEditarTelefone } = lojas;
 
   // Re-agrega o grupo localmente pra ter dados sempre atualizados
   const grupo = useMemo(() => {
@@ -3340,6 +3340,13 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
   const [mensagens, setMensagens] = useState([]);
   const [carregandoMsg, setCarregandoMsg] = useState(true);
   const [showModalMsg, setShowModalMsg] = useState(false);
+
+  // Editar grupo (Ailson 11/05/2026): modal pra editar nome do grupo
+  // + WhatsApp (que sobrescreve em todos os docs).
+  const [editAberto, setEditAberto] = useState(false);
+  const [editNome, setEditNome] = useState('');
+  const [editWhats, setEditWhats] = useState('');
+  const [salvandoEdit, setSalvandoEdit] = useState(false);
 
   // Carrega mensagens enviadas pra qualquer doc do grupo
   useEffect(() => {
@@ -3409,6 +3416,45 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
     return c ? nomeCliente(c) : '—';
   }, [grupo.documentos]);
 
+  // Salva edicao de nome + whatsapp do grupo (Ailson 11/05/2026)
+  const salvarEditGrupo = async () => {
+    const nomeLimpo = editNome.trim();
+    if (!nomeLimpo) {
+      alert('Nome do grupo nao pode ficar vazio');
+      return;
+    }
+    const whatsLimpo = String(editWhats || '').replace(/\D/g, '');
+    setSalvandoEdit(true);
+    try {
+      // 1) Atualiza nome do grupo se mudou
+      if (nomeLimpo !== grupo.nome_grupo) {
+        await handleSaveGrupo({
+          id: grupo.id,
+          nome_grupo: nomeLimpo,
+          vendedora_id: grupo.vendedora_id,
+        });
+      }
+      // 2) Atualiza WhatsApp em TODOS os docs se preenchido (>=10 digitos)
+      if (whatsLimpo.length >= 10 && handleEditarTelefone) {
+        for (const doc of grupo.documentos) {
+          // Pula docs que ja tem esse mesmo telefone (evita updates desnecessarios)
+          const atual = String(doc.telefone_principal || '').replace(/\D/g, '');
+          if (atual === whatsLimpo) continue;
+          try {
+            await handleEditarTelefone(doc.id, whatsLimpo);
+          } catch (e) {
+            console.warn(`[edit-grupo] erro tel cliente ${doc.id}:`, e?.message);
+          }
+        }
+      }
+      setEditAberto(false);
+    } catch (e) {
+      alert('Erro ao salvar: ' + (e.message || e));
+    } finally {
+      setSalvandoEdit(false);
+    }
+  };
+
   return (
     <div style={{ background: palette.bg, minHeight: '100%', fontFamily: FONT }}>
       <Header
@@ -3438,6 +3484,26 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
                   background: meta.soft, color: meta.cor,
                   letterSpacing: 0.3, textTransform: 'uppercase',
                 }}>{meta.label}</span>
+                {/* Botão editar grupo — Ailson 11/05/2026 */}
+                <button
+                  onClick={() => {
+                    setEditNome(grupo.nome_grupo || '');
+                    // Pre-preenche WhatsApp com o do doc principal ou 1o que tiver
+                    const docPrincipal = grupo.documentos.find(d => d.id === grupo.docPrincipalId);
+                    const docComTel = (docPrincipal?.telefone_principal ? docPrincipal : null)
+                      || grupo.documentos.find(d => d.telefone_principal);
+                    setEditWhats(docComTel?.telefone_principal || '');
+                    setEditAberto(true);
+                  }}
+                  title="Editar nome do grupo e WhatsApp"
+                  style={{
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    padding: 4, marginLeft: 2, display: 'flex', alignItems: 'center',
+                    color: palette.inkMuted, borderRadius: 4,
+                  }}
+                >
+                  <Pencil size={sz(14)} />
+                </button>
               </div>
               <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
                 Vendedora: {vendedora ? `${vendedora.nome} · ${vendedora.loja}` : '—'}
@@ -3676,6 +3742,113 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
           onEnviada={() => setShowModalMsg(false)}
         />
       )}
+
+      {/* Modal Editar grupo (nome + whatsapp) — Ailson 11/05/2026 */}
+      {editAberto && (
+        <div
+          onClick={() => !salvandoEdit && setEditAberto(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16, zIndex: 9999,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: palette.surface, borderRadius: 14,
+              padding: 22, maxWidth: 440, width: '100%',
+              maxHeight: '85vh', overflowY: 'auto',
+              fontFamily: FONT,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <Pencil size={sz(20)} color={palette.accent} />
+              <div style={{ fontSize: fz(18), fontWeight: 700, color: palette.ink }}>
+                Editar grupo
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginBottom: 6 }}>
+                Nome do grupo (comprador)
+              </div>
+              <input
+                type="text"
+                value={editNome}
+                onChange={e => setEditNome(e.target.value)}
+                autoFocus
+                placeholder="Ex: Marisa, Família Souza"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 8,
+                  border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                  fontSize: fz(15), color: palette.ink, background: palette.surface,
+                  boxSizing: 'border-box', fontWeight: 600,
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginBottom: 6 }}>
+                WhatsApp do grupo
+              </div>
+              <input
+                type="text"
+                value={editWhats}
+                onChange={e => setEditWhats(e.target.value)}
+                placeholder="Ex: (11) 99999-9999"
+                inputMode="tel"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 8,
+                  border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                  fontSize: fz(14), color: palette.ink, background: palette.surface,
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {grupo.documentos.length > 1 && editWhats.replace(/\D/g, '').length >= 10 && (
+              <div style={{
+                fontSize: fz(11), color: '#8a6d0e', marginBottom: 12, marginTop: 6, lineHeight: 1.4,
+                background: '#fdf3cf', padding: '6px 9px', borderRadius: 6,
+                border: '1px solid #f0e0a0',
+              }}>
+                ⚠️ Esse WhatsApp vai sobrescrever em todos os {grupo.documentos.length} CNPJs do grupo
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => setEditAberto(false)}
+                disabled={salvandoEdit}
+                style={{
+                  flex: 1, background: palette.surface, color: palette.inkMuted,
+                  border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '12px',
+                  fontSize: fz(14), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={salvarEditGrupo}
+                disabled={salvandoEdit || !editNome.trim()}
+                style={{
+                  flex: 2,
+                  background: editNome.trim() ? palette.accent : palette.beige,
+                  color: editNome.trim() ? 'white' : palette.inkMuted,
+                  border: 'none', borderRadius: 8, padding: '12px',
+                  fontSize: fz(14), fontWeight: 700,
+                  cursor: editNome.trim() && !salvandoEdit ? 'pointer' : 'not-allowed',
+                  fontFamily: FONT,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                {salvandoEdit ? <><Loader2 size={sz(15)} className="spin"/> Salvando...</> : <><Save size={sz(15)}/> Salvar</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -3693,7 +3866,7 @@ export const DetalheGrupoScreen = ({ lojas, grupo: grupoInicial, onBack, onAdici
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriado }) => {
-  const { state, handleSaveGrupo, handleAdicionarAoGrupo } = lojas;
+  const { state, handleSaveGrupo, handleAdicionarAoGrupo, handleEditarTelefone } = lojas;
 
   const [step, setStep] = useState(1);
   const [busca, setBusca] = useState('');
@@ -3701,6 +3874,12 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
     clienteInicial ? [clienteInicial.id] : []
   );
   const [nomeGrupo, setNomeGrupo] = useState(clienteInicial?.apelido || '');
+  // WhatsApp do grupo (Ailson 11/05/2026) — opcional, sobrescreve telefone
+  // de TODOS os CNPJs do grupo. Pre-preenche com o telefone do cliente
+  // inicial (se existir).
+  const [whatsappGrupo, setWhatsappGrupo] = useState(
+    clienteInicial?.telefone_principal || ''
+  );
   const [docPadrao, setDocPadrao] = useState(clienteInicial?.id || null);
   const [salvando, setSalvando] = useState(false);
 
@@ -3754,6 +3933,19 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
 
       for (const clienteId of selecionados) {
         await handleAdicionarAoGrupo(clienteId, grupoSalvo.id);
+      }
+
+      // WhatsApp do grupo — Ailson 11/05/2026: aplica em TODOS os CNPJs
+      // selecionados (sobrescreve se ja tiver). Normaliza pra so digitos.
+      const whatsappLimpo = String(whatsappGrupo || '').replace(/\D/g, '');
+      if (whatsappLimpo.length >= 10 && handleEditarTelefone) {
+        for (const clienteId of selecionados) {
+          try {
+            await handleEditarTelefone(clienteId, whatsappLimpo);
+          } catch (e) {
+            console.warn(`[criar-grupo] erro telefone cliente ${clienteId}:`, e?.message);
+          }
+        }
       }
 
       // TODO: Doc principal não persiste (calculado como maior lifetime)
@@ -3986,9 +4178,31 @@ export const CriarGrupoModal = ({ lojas, clienteInicial = null, onClose, onCriad
                 style={{ ...inputStyle, fontSize: fz(18), padding: '14px 16px', marginBottom: 12 }}
               />
 
+              {/* WhatsApp do grupo (Ailson 11/05/2026) — opcional, sobrescreve todos */}
+              <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                WhatsApp (opcional)
+              </div>
+              <input
+                value={whatsappGrupo}
+                onChange={e => setWhatsappGrupo(e.target.value)}
+                placeholder="Ex: (11) 99999-9999"
+                inputMode="tel"
+                style={{ ...inputStyle, fontSize: fz(15), padding: '11px 14px', marginBottom: 6 }}
+              />
+              {selecionados.length > 1 && whatsappGrupo.replace(/\D/g, '').length >= 10 && (
+                <div style={{
+                  fontSize: fz(11), color: '#8a6d0e', marginBottom: 12, lineHeight: 1.4,
+                  background: '#fdf3cf', padding: '6px 9px', borderRadius: 6,
+                  border: '1px solid #f0e0a0',
+                }}>
+                  ⚠️ Esse WhatsApp vai sobrescrever o atual em todos os {selecionados.length} CNPJs do grupo
+                </div>
+              )}
+
               <div style={{
                 padding: 12, background: palette.beigeSoft, borderRadius: 8,
                 fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5,
+                marginTop: 6,
               }}>
                 💡 <strong>Dica:</strong> use o nome de quem atende, não o nome da loja (a loja varia).
               </div>
