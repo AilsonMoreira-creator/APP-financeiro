@@ -2290,7 +2290,15 @@ export const MinhaCarteiraScreen = ({
   onAbrirCadastrarComprador,
 }) => {
   const { state, carteiraAtual } = lojas;
-  const [filtroStatus, setFiltroStatus] = useState('todos');
+  // Persistir filtroStatus + ordenacao em localStorage — Ailson 11/05/2026.
+  // Sem isso, ao navegar pra detalhe e voltar, componente desmonta e o filtro
+  // volta pro default (todos/lifetime), forcando a vendedora a refiltrar.
+  const [filtroStatus, setFiltroStatus] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('lojas_carteira_filtros') || '{}');
+      return saved.filtroStatus || 'todos';
+    } catch { return 'todos'; }
+  });
 
   // Filtro "na janela de compra" — Ailson 06/05/2026.
   // Lê IDs de clientes dentro da janela via endpoint (calc em tempo real
@@ -2299,7 +2307,16 @@ export const MinhaCarteiraScreen = ({
   const [filtroJanela, setFiltroJanela] = useState(false);
   // Contadores compactos — Ailson 07/05/2026: so Ativos+Atencao+Janela
   // visiveis sempre. Resto via "+" expand.
-  const [contadoresExpandidos, setContadoresExpandidos] = useState(false);
+  // Ailson 11/05/2026: se o filtro persistido eh de linha expandida
+  // (Sacola/S-Ativ/Inativ/Arquivo), inicia ja expandido pra ela ver
+  // o chip ativo destacado.
+  const [contadoresExpandidos, setContadoresExpandidos] = useState(() => {
+    const STATUS_EXPANDIDOS = ['separandoSacola', 'semAtividade', 'inativo', 'arquivo'];
+    try {
+      const saved = JSON.parse(localStorage.getItem('lojas_carteira_filtros') || '{}');
+      return STATUS_EXPANDIDOS.includes(saved.filtroStatus);
+    } catch { return false; }
+  });
   const [showInfoJanela, setShowInfoJanela] = useState(false);
   // Modal observações cliente — Ailson 07/05/2026 (etapa B)
   const [obsModalCliente, setObsModalCliente] = useState(null);
@@ -2340,7 +2357,22 @@ export const MinhaCarteiraScreen = ({
     return () => { cancelado = true; };
   }, [vendedora?.id, state.userId]);
   const [busca, setBusca] = useState('');
-  const [ordenacao, setOrdenacao] = useState('lifetime');
+  const [ordenacao, setOrdenacao] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('lojas_carteira_filtros') || '{}');
+      return saved.ordenacao || 'lifetime';
+    } catch { return 'lifetime'; }
+  });
+
+  // Sincroniza filtroStatus + ordenacao no localStorage sempre que mudam.
+  useEffect(() => {
+    try {
+      localStorage.setItem('lojas_carteira_filtros', JSON.stringify({
+        filtroStatus,
+        ordenacao,
+      }));
+    } catch { /* localStorage indisponivel — ignora silenciosamente */ }
+  }, [filtroStatus, ordenacao]);
   const [mostrarVesti, setMostrarVesti] = useState(false);
   const [mostrarMeta, setMostrarMeta] = useState(false);
 
@@ -2578,6 +2610,24 @@ export const MinhaCarteiraScreen = ({
 
           {/* Linha 2: Contadores principais (Ativos + Atencao) + botao + */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+            {/* Botão "✕ Todos" — Ailson 11/05/2026
+                Aparece SO quando ha filtro de status ativo, pra resetar
+                sem precisar sair da tela. */}
+            {filtroStatus !== 'todos' && (
+              <button onClick={() => setFiltroStatus('todos')} style={{
+                background: palette.accent, color: 'white',
+                border: `1.5px solid ${palette.accent}`,
+                borderRadius: 10, padding: '10px 12px',
+                cursor: 'pointer', fontFamily: FONT,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 5, flexShrink: 0,
+              }}
+                title="Mostrar todos os clientes (limpar filtro)"
+              >
+                <X size={sz(14)} />
+                <span style={{ fontSize: fz(12), fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Todos</span>
+              </button>
+            )}
             <Contador statusKey="ativo" label="Ativos" count={contadores.ativo} />
             <Contador statusKey="atencao" label="Atenção" count={contadores.atencao} />
             <button
