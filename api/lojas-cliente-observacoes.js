@@ -10,13 +10,15 @@
  *                    'discreta' | 'apressada' | 'detalhista' | 'outro' | null,
  *     evento_recente: 'gravidez' | 'viagem' | 'festa' | 'mudanca_loja' |
  *                     'dificuldade_financeira' | 'momento_bom' | 'outro' | null,
+ *     perfil_compra: ['gosta_promocao', 'gosta_novidades'] — array de tags
+ *                    (multi-select, Ailson 10/05/2026)
  *     preferencias: 'string livre, ex: só linho, odeia preto',
  *     observacao_livre: 'string longa adicional'
  *   }
  *
  * Auth: vendedora dona do cliente OU admin.
  *
- * Sessao Ailson 07/05/2026 (etapa B).
+ * Sessao Ailson 07/05/2026 (etapa B), expandido 10/05/2026 (perfil_compra).
  */
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
@@ -27,6 +29,13 @@ const VALORES_PERSONALIDADE = [
 const VALORES_EVENTO = [
   'gravidez', 'viagem', 'festa', 'mudanca_loja',
   'dificuldade_financeira', 'momento_bom', 'outro',
+];
+// Perfil de compra — multi-select (Ailson 10/05/2026)
+// IA usa como GATILHO de prioridade: gosta_promocao -> mensagens com promo
+// quando houver; gosta_novidades -> priorizar novidade_oficina sobre
+// reposicao/best_seller na hierarquia de ganchos.
+const VALORES_PERFIL_COMPRA = [
+  'gosta_promocao', 'gosta_novidades',
 ];
 
 export default async function handler(req, res) {
@@ -85,9 +94,13 @@ async function handlePost(req, res, auth) {
   }
 
   // Sanitiza payload
+  const perfilCompraValido = Array.isArray(payload.perfil_compra)
+    ? payload.perfil_compra.filter(v => VALORES_PERFIL_COMPRA.includes(v))
+    : [];
   const sanitizado = {
     personalidade: VALORES_PERSONALIDADE.includes(payload.personalidade) ? payload.personalidade : null,
     evento_recente: VALORES_EVENTO.includes(payload.evento_recente) ? payload.evento_recente : null,
+    perfil_compra: perfilCompraValido,
     preferencias: typeof payload.preferencias === 'string' ? payload.preferencias.slice(0, 500).trim() : '',
     observacao_livre: typeof payload.observacao_livre === 'string' ? payload.observacao_livre.slice(0, 1000).trim() : '',
     atualizado_em: new Date().toISOString(),
@@ -96,6 +109,7 @@ async function handlePost(req, res, auth) {
 
   // Se TUDO eh vazio, remove a observacao (LIMPAR)
   const ehVazio = !sanitizado.personalidade && !sanitizado.evento_recente
+    && sanitizado.perfil_compra.length === 0
     && !sanitizado.preferencias && !sanitizado.observacao_livre;
 
   const { error: updErr } = await supabase

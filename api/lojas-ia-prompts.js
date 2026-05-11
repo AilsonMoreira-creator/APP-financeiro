@@ -1273,6 +1273,7 @@ Quando esse campo vem preenchido, a vendedora ANOTOU manualmente algo sobre a cl
 "observacoes_vendedora": {
   "personalidade": "doce" | "briguenta" | "indecisa" | "divertida" | "discreta" | "apressada" | "detalhista" | "outro" | null,
   "evento_recente": "gravidez" | "viagem" | "festa" | "mudanca_loja" | "dificuldade_financeira" | "momento_bom" | "outro" | null,
+  "perfil_compra": ["gosta_promocao" | "gosta_novidades"] (multi),
   "preferencias": "string livre",
   "observacao_livre": "string livre"
 }
@@ -1296,6 +1297,11 @@ REGRAS DE USO:
 - mudanca_loja → "novo endereço" / "loja nova" / "movimentação". Tom motivacional.
 - dificuldade_financeira → JAMAIS mencione preço/promoção sem ter promo real. Tom acolhedor, sem pressão. Foca em "deixei separado pra qd der"
 - momento_bom → cliente em fase positiva. Tom celebratório. "Vi q tá saindo bem aí, chegou novidade que combina"
+
+**perfil_compra** (Ailson 10/05/2026): GATILHO de PRIORIDADE na escolha do gancho
+- \`gosta_promocao\` → quando \`promocao\` vier preenchida no payload, USE-A com destaque. Frases: "tá rolando uma promoção q vc vai amar", "fechou aquela promo do XXX, sei q vc curte". Se NÃO houver promo ativa, NÃO invente — segue normal.
+- \`gosta_novidades\` → na hierarquia de ganchos, PRIORIZA \`novidades_disponiveis\` (peças que acabaram de chegar) sobre \`reposicoes_disponiveis\` ou \`top_recompra\`. Mesmo q reposição converta mais, essa cliente RESPONDE melhor a "olha o q acabou de chegar". Use vocabulário de novidade ("já na loja", "acabou de chegar") com destaque.
+- AMBAS marcadas (gosta_promocao + gosta_novidades) → se houver novidade EM PROMOÇÃO, é o jackpot — combine os dois ganchos. Senão, escolhe o gancho mais forte do payload.
 
 **preferencias**: regra ABSOLUTA de filtro
 - "só linho" → NÃO mencione viscolinho/poliamida/tricoline na mensagem. Linho only.

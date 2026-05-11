@@ -2955,6 +2955,36 @@ export const DetalheClienteScreen = ({
   const [telInput, setTelInput] = useState('');
   const [salvandoTel, setSalvandoTel] = useState(false);
 
+  // Observações da cliente — Ailson 10/05/2026
+  // Vendedora abre modal pra anotar personalidade, evento, perfil de
+  // compra, etc. IA usa pra calibrar mensagens. Carrega 1 vez ao montar.
+  const [obsModalAberto, setObsModalAberto] = useState(false);
+  const [obsAtuais, setObsAtuais] = useState(null);
+  const [obsLoading, setObsLoading] = useState(true);
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/lojas-cliente-observacoes?cliente_id=${cliente.id}`, {
+          headers: { 'X-User': state?.userId || '' },
+        });
+        const d = await r.json();
+        if (!cancelado && r.ok) setObsAtuais(d.observacoes || null);
+      } catch (e) {
+        console.warn('Erro carregando observacoes:', e?.message);
+      } finally {
+        if (!cancelado) setObsLoading(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [cliente.id, state?.userId]);
+
+  const temObs = obsAtuais && (
+    obsAtuais.personalidade || obsAtuais.evento_recente ||
+    (obsAtuais.perfil_compra?.length > 0) ||
+    obsAtuais.preferencias || obsAtuais.observacao_livre
+  );
+
   const abrirEditTelefone = () => {
     // Pre-preenche com o telefone atual (so digitos)
     const atual = String(cliente.telefone_principal || '').replace(/\D/g, '');
@@ -3299,7 +3329,21 @@ export const DetalheClienteScreen = ({
         position: 'sticky', bottom: 0, background: palette.surface,
         borderTop: `1px solid ${palette.beige}`, padding: 12,
         boxShadow: '0 -2px 8px rgba(0,0,0,0.04)',
+        display: 'flex', flexDirection: 'column', gap: 8,
       }}>
+        {/* Observações da cliente — Ailson 10/05/2026 */}
+        <button onClick={() => setObsModalAberto(true)} style={{
+          background: temObs ? '#eff5fa' : palette.surface,
+          color: palette.ink,
+          border: `1.5px solid ${temObs ? palette.accent : palette.beige}`,
+          borderRadius: 10,
+          padding: '11px 16px', fontSize: fz(14), fontWeight: 600,
+          cursor: 'pointer', fontFamily: FONT, width: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: fz(17) }}>📝</span>
+          {obsLoading ? 'Observações da cliente' : (temObs ? 'Observações da cliente ✓' : 'Adicionar observações da cliente')}
+        </button>
         <button onClick={() => onPedirMensagem && onPedirMensagem(cliente)} style={{
           background: `linear-gradient(135deg, ${palette.accent} 0%, #3d6b8c 100%)`,
           color: palette.bg, border: 'none', borderRadius: 10,
@@ -3312,6 +3356,20 @@ export const DetalheClienteScreen = ({
           Pedir sugestão de mensagem
         </button>
       </div>
+
+      {/* Modal Observações da cliente — Ailson 10/05/2026 */}
+      {obsModalAberto && (
+        <ModalObservacoesCliente
+          cliente={cliente}
+          userId={state?.userId || ''}
+          observacoesAtuais={obsAtuais}
+          onSalvar={(novaObs) => {
+            setObsAtuais(novaObs);
+            setObsModalAberto(false);
+          }}
+          onClose={() => setObsModalAberto(false)}
+        />
+      )}
 
       {/* Modal editar/cadastrar WhatsApp */}
       {showEditTel && (
@@ -3856,10 +3914,18 @@ const EVENTOS = [
   { v: 'dificuldade_financeira', label: '💸 Dificuldade financeira' },
   { v: 'momento_bom', label: '📈 Em fase positiva' },
 ];
+// Perfil de compra — multi-select (cliente pode marcar varias) — Ailson 10/05/2026
+// IA usa como GATILHO: gosta_promocao -> priorizar mensagens com promo;
+// gosta_novidades -> priorizar novidade_oficina sobre reposicao.
+const PERFIL_COMPRA = [
+  { v: 'gosta_promocao', label: '🏷️ Gosta de promoção' },
+  { v: 'gosta_novidades', label: '✨ Gosta de novidades/lançamentos' },
+];
 
 export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, onSalvar, onClose }) => {
   const [personalidade, setPersonalidade] = useState(observacoesAtuais?.personalidade || '');
   const [eventoRecente, setEventoRecente] = useState(observacoesAtuais?.evento_recente || '');
+  const [perfilCompra, setPerfilCompra] = useState(observacoesAtuais?.perfil_compra || []);
   const [preferencias, setPreferencias] = useState(observacoesAtuais?.preferencias || '');
   const [obsLivre, setObsLivre] = useState(observacoesAtuais?.observacao_livre || '');
   const [salvando, setSalvando] = useState(false);
@@ -3870,10 +3936,15 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
     if (observacoesAtuais) {
       setPersonalidade(observacoesAtuais.personalidade || '');
       setEventoRecente(observacoesAtuais.evento_recente || '');
+      setPerfilCompra(observacoesAtuais.perfil_compra || []);
       setPreferencias(observacoesAtuais.preferencias || '');
       setObsLivre(observacoesAtuais.observacao_livre || '');
     }
   }, [observacoesAtuais]);
+
+  const togglePerfil = (v) => setPerfilCompra(prev =>
+    prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]
+  );
 
   const nome = (cliente?.apelido || cliente?.comprador_nome || '').split(/\s+/)[0] || 'Cliente';
 
@@ -3884,6 +3955,7 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
       const payload = {
         personalidade: personalidade || null,
         evento_recente: eventoRecente || null,
+        perfil_compra: perfilCompra,
         preferencias: preferencias.trim(),
         observacao_livre: obsLivre.trim(),
       };
@@ -3962,6 +4034,46 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
               <option key={p.v} value={p.v}>{p.label}</option>
             ))}
           </select>
+        </div>
+
+        {/* Perfil de compra — multi-select (Ailson 10/05/2026) */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 8 }}>
+            Perfil de compra (marca o q se aplica)
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {PERFIL_COMPRA.map(p => {
+              const ativo = perfilCompra.includes(p.v);
+              return (
+                <button
+                  key={p.v}
+                  type="button"
+                  onClick={() => togglePerfil(p.v)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                    border: `1.5px solid ${ativo ? palette.accent : palette.beige}`,
+                    background: ativo ? '#eff5fa' : palette.surface,
+                    color: palette.ink,
+                    fontFamily: FONT, fontSize: fz(14), fontWeight: ativo ? 600 : 400,
+                    cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <span style={{
+                    width: 18, height: 18, borderRadius: 4,
+                    border: `1.5px solid ${ativo ? palette.accent : palette.inkMuted}`,
+                    background: ativo ? palette.accent : 'transparent',
+                    color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 700, flexShrink: 0,
+                  }}>
+                    {ativo ? '✓' : ''}
+                  </span>
+                  <span>{p.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Preferências */}
