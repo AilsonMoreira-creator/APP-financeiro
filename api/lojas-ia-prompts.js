@@ -1307,7 +1307,7 @@ Quando esse campo vem preenchido, a vendedora ANOTOU manualmente algo sobre a cl
 
 \`\`\`
 "observacoes_vendedora": {
-  "personalidade": "doce" | "briguenta" | "indecisa" | "divertida" | "discreta" | "apressada" | "detalhista" | "outro" | null,
+  "personalidade": "doce" | "direta" | "indecisa" | "divertida" | "discreta" | "apressada" | "detalhista" | "outro" | null,
   "evento_recente": "gravidez" | "viagem" | "festa" | "mudanca_loja" | "dificuldade_financeira" | "momento_bom" | "outro" | null,
   "perfil_compra": ["gosta_promocao" | "gosta_novidades"] (multi),
   "preferencias": "string livre",
@@ -1322,7 +1322,7 @@ REGRAS DE USO:
 
 **personalidade**: calibra TOM da mensagem
 - doce → mensagem afetuosa, emoji acolhedor (💕 🌸), tratamentos carinhosos
-- briguenta → tom NEUTRO e direto, ZERO infantilização, NENHUM "fofa/lindinha"
+- direta → tom NEUTRO e objetivo, ZERO infantilização, NENHUM "fofa/lindinha". Vai direto ao ponto, sem rodeios.
 - indecisa → menos opções, foque em UMA peça/decisão clara, dá pé certinho
 - divertida → tom mais leve, pode ter humor, emoji sorridente (😄 🤭)
 - discreta → mensagem CURTA, sem exclamação dupla, emoji mínimo

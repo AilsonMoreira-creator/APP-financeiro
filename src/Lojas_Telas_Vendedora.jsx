@@ -2982,7 +2982,10 @@ export const DetalheClienteScreen = ({
   const temObs = obsAtuais && (
     obsAtuais.personalidade || obsAtuais.evento_recente ||
     (obsAtuais.perfil_compra?.length > 0) ||
-    obsAtuais.preferencias || obsAtuais.observacao_livre
+    obsAtuais.preferencias ||
+    (obsAtuais.reclamacoes?.length > 0) ||
+    (obsAtuais.elogios?.length > 0)
+    // obsLivre e eventos_timeline removidos da UI — nao contam pra "tem obs"
   );
 
   const abrirEditTelefone = () => {
@@ -3898,7 +3901,7 @@ export const HistoricoCarteiraScreen = ({ lojas, onBack }) => {
 const PERSONALIDADES = [
   { v: '', label: '— não definir —' },
   { v: 'doce', label: '🌸 Doce / acolhedora' },
-  { v: 'briguenta', label: '⚔️ Briguenta / direta' },
+  { v: 'direta', label: '🎯 Direta' },
   { v: 'indecisa', label: '🤔 Indecisa' },
   { v: 'divertida', label: '😄 Divertida' },
   { v: 'discreta', label: '🤫 Discreta / reservada' },
@@ -4547,24 +4550,15 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
           </div>
         </div>
 
-        {/* Observação livre */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: fz(13), fontWeight: 600, color: palette.inkSoft, marginBottom: 6 }}>
-            Outras observações (livre, max 1000 caract)
-          </div>
-          <textarea
-            value={obsLivre}
-            onChange={e => setObsLivre(e.target.value.slice(0, 1000))}
-            rows={3}
-            placeholder='ex: "pediu pra avisar quando chegar verde militar", "compra muito pra revender"'
-            style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT }}
-          />
-          <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 4 }}>
-            {obsLivre.length}/1000
-          </div>
-        </div>
+        {/* Observação livre — REMOVIDA da UI (Ailson 10/05/2026)
+            Dado existente no banco eh preservado via state obsLivre que
+            continua sendo enviado no payload. Mas vendedora nao pode
+            mais editar — campo simplificado pq nao era usado. */}
 
-        {/* ─── ONDA 3 (Ailson 10/05/2026): 3 listas estruturadas ─── */}
+        {/* ─── ONDA 3 (Ailson 10/05/2026): 2 listas estruturadas ─── */}
+        {/* Eventos importantes REMOVIDO da UI: era duplicacao de
+            'Tem algum evento ou momento recente?' (dropdown evento_recente).
+            State eventosTimeline mantido pra preservar dados antigos. */}
         <SecaoListaItens
           titulo="🛑 Reclamações"
           subtitulo="Coisas que ela reclamou (defeito, encolheu, preço, etc)"
@@ -4591,19 +4585,6 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
           onAdd={adicionarItem}
           onRemove={removerItem}
           corAcento="#5b9555"
-        />
-
-        <SecaoListaItens
-          titulo="📅 Eventos importantes"
-          subtitulo="Gravidez, mudança de loja, viagem, casamento, etc"
-          tipos={EVENTOS_TIMELINE_TIPOS}
-          itens={eventosTimeline}
-          categoria="eventos_timeline"
-          cliente={cliente}
-          userId={userId}
-          onAdd={adicionarItem}
-          onRemove={removerItem}
-          corAcento="#6b7c95"
         />
         {/* ─── Fim Onda 3 ─── */}
 

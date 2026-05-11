@@ -23,7 +23,7 @@
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
 const VALORES_PERSONALIDADE = [
-  'doce', 'briguenta', 'indecisa', 'divertida',
+  'doce', 'briguenta', 'direta', 'indecisa', 'divertida',
   'discreta', 'apressada', 'detalhista', 'outro',
 ];
 const VALORES_EVENTO = [
