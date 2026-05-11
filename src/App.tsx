@@ -6877,7 +6877,7 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
           </div>
           <div style={{display:"grid",gridTemplateColumns:mobile?"1fr 1fr":"repeat(4,1fr)",gap:10}}>
             <div style={{background:"#f7f4f0",padding:12,borderRadius:6,border:"1px solid #e8e2da"}}>
-              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Ticket médio</div>
+              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Ticket médio produto</div>
               <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:"#2c3e50"}}>{fmt(ticketMedio)}</div>
             </div>
             <div style={{background:"#fff8e7",padding:12,borderRadius:6,border:"1px solid #f0d9b5",borderLeft:"3px solid #b87333"}}>
@@ -6899,22 +6899,22 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
         {/* SIMULADOR DE 5 CENÁRIOS */}
         <div style={{background:"#fff",borderRadius:10,padding:16,border:"1px solid #e8e2da",marginBottom:20}}>
           <div style={{fontSize:15,fontWeight:700,color:"#2c3e50",marginBottom:14,paddingBottom:8,borderBottom:"1px solid #e8e2da"}}>📈 Simulador de 5 Cenários</div>
-          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1.5fr 1fr",gap:12,marginBottom:16,padding:12,background:"#f7f4f0",borderRadius:6,border:"1px solid #e8e2da"}}>
+          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"180px 220px 1fr",gap:14,marginBottom:16,padding:12,background:"#f7f4f0",borderRadius:6,border:"1px solid #e8e2da",alignItems:"start"}}>
             <div>
               <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>🎯 Meta de vendas (R$)</div>
-              <input type="number" value={state.metaVendas} step={1000} min={1000} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,metaVendas:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none"}}/>
+              <input type="number" value={state.metaVendas} step={1000} min={1000} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,metaVendas:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"7px 9px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
             </div>
             <div>
-              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>🧪 Simular aumento de margem (R$/produto)</div>
-              <input type="number" value={state.aumentoMargem} step={1} min={0} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,aumentoMargem:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none"}}/>
-              <div style={{fontSize:11,color:"#4a7fa5",marginTop:3,fontStyle:"italic"}}>"E se eu subir preço, reduzir CMV ou negociar frete?"</div>
+              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>🧪 Simular aumento margem (R$/produto)</div>
+              <input type="number" value={state.aumentoMargem} step={1} min={0} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,aumentoMargem:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"7px 9px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
+              <div style={{fontSize:10,color:"#4a7fa5",marginTop:3,fontStyle:"italic",lineHeight:1.3}}>"E se eu subir preço, reduzir CMV ou negociar frete?"</div>
             </div>
             <div style={{background:"#fff",padding:12,borderRadius:6,border:"1.5px solid #4a7fa5"}}>
               <div style={{fontSize:10,color:"#4a7fa5",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,fontWeight:700}}>📦 Resumo da meta</div>
               <div style={{fontSize:12,color:"#2c3e50",lineHeight:1.6}}>
                 <div><span style={{color:"#8a9aa4"}}>Pedidos:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmtN(pedidos)}</strong></div>
                 <div><span style={{color:"#8a9aa4"}}>Produtos:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmtN(produtos)}</strong></div>
-                <div><span style={{color:"#8a9aa4"}}>Ticket médio:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmt(ticketMedio)}</strong></div>
+                <div><span style={{color:"#8a9aa4"}}>Ticket médio pedido:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmt(ticketPed)}</strong></div>
                 <div><span style={{color:"#8a9aa4"}}>Margem unit:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmt(margemUnit)}</strong></div>
               </div>
             </div>
