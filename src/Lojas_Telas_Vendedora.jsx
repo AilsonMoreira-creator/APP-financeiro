@@ -3921,8 +3921,8 @@ const EVENTOS = [
 // IA usa como GATILHO: gosta_promocao -> priorizar mensagens com promo;
 // gosta_novidades -> priorizar novidade_oficina sobre reposicao.
 const PERFIL_COMPRA = [
-  { v: 'gosta_promocao', label: '🏷️ Gosta de promoção' },
-  { v: 'gosta_novidades', label: '✨ Gosta de novidades/lançamentos' },
+  { v: 'gosta_promocao', label: '🏷️ Gosta muito de promoção' },
+  { v: 'gosta_novidades', label: '✨ Gosta muito de novidades' },
 ];
 
 // ─── ONDA 3 (Ailson 10/05/2026): Reclamacoes, Elogios, Eventos Timeline ──

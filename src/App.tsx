@@ -6819,47 +6819,51 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
           <div style={{fontSize:11,color:"#8a9aa4",fontStyle:"italic"}}>{meluniProds.length} produto(s) Meluni cadastrado(s)</div>
         </div>
 
-        {/* Bloco DADOS REAIS DO PERÍODO */}
-        <div style={{background:"#2c3e50",color:"#f7f4f0",padding:"18px 20px",borderRadius:8,marginBottom:20}}>
-          <div style={{fontSize:14,fontWeight:700,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>📥 Dados reais do período (digite manualmente)</div>
-          <div style={{fontSize:11,opacity:0.7,marginBottom:14,fontStyle:"italic"}}>Esses números alimentam a engenharia reversa. Atualize semanalmente.</div>
-          <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr 1fr",gap:14}}>
-            <div>
-              <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:0.5,opacity:0.7,marginBottom:4}}>CPC médio (R$)</div>
-              <input type="number" value={state.dadosReais.cpc} step={0.10} min={0.10} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,cpc:parseFloat(e.target.value)||0}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}/>
-              <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>Meta Ads → "CPC (link)"</div>
-            </div>
-            <div>
-              <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:0.5,opacity:0.7,marginBottom:4}}>Conversão site (%)</div>
-              <input type="number" value={state.dadosReais.conv} step={0.1} min={0.1} max={10} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,conv:parseFloat(e.target.value)||0}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}/>
-              <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>GA4 ou: pedidos ÷ visitas × 100</div>
-            </div>
-            <div>
-              <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:0.5,opacity:0.7,marginBottom:4}}>Período analisado</div>
-              <select value={state.dadosReais.periodo} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,periodo:parseInt(e.target.value)||30}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}>
-                <option value={7} style={{color:"#000"}}>Últimos 7 dias</option>
-                <option value={30} style={{color:"#000"}}>Últimos 30 dias</option>
-                <option value={60} style={{color:"#000"}}>Últimos 60 dias</option>
-                <option value={90} style={{color:"#000"}}>Últimos 90 dias</option>
-              </select>
-              <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>Apenas referência</div>
-            </div>
+        {/* Bloco DADOS REAIS DO PERÍODO — Ailson 10/05/2026: só header escuro */}
+        <div style={{background:"#fff",borderRadius:8,marginBottom:20,border:"1px solid #e8e2da",overflow:"hidden"}}>
+          <div style={{background:"#2c3e50",color:"#f7f4f0",padding:"12px 16px"}}>
+            <div style={{fontSize:14,fontWeight:700,display:"flex",alignItems:"center",gap:8}}>📥 Dados reais do período (digite manualmente)</div>
+            <div style={{fontSize:11,opacity:0.75,marginTop:3,fontStyle:"italic"}}>Esses números alimentam a engenharia reversa. Atualize semanalmente.</div>
           </div>
-          <details style={{marginTop:14,paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.15)"}} open>
-            <summary style={{cursor:"pointer",fontSize:13,opacity:0.85}}>▸ Ticket médio por pedido (peças auto-calculadas)</summary>
-            <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12,marginTop:10}}>
+          <div style={{padding:"16px 18px"}}>
+            <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr 1fr",gap:14}}>
               <div>
-                <div style={{fontSize:11,opacity:0.7,marginBottom:4}}>Ticket médio por pedido (R$)</div>
-                <input type="number" value={state.dadosReais.ticketReal||''} placeholder={`usa default: ${fmt(ticketMedio*1.33)}`} min={0} onFocus={onFocusSel} onChange={e=>{const v=parseFloat(e.target.value);setState(p=>({...p,dadosReais:{...p.dadosReais,ticketReal:isNaN(v)||v<=0?null:v}}));}} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,border:"1px solid rgba(255,255,255,0.3)",borderRadius:3,background:"rgba(255,255,255,0.1)",color:"#f7f4f0",fontWeight:700,outline:"none"}}/>
-                <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>Vazio = ticket médio × 1,33 peças (default)</div>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:0.5,color:"#8a9aa4",marginBottom:4,fontWeight:600}}>CPC médio (R$)</div>
+                <input type="number" value={state.dadosReais.cpc} step={0.10} min={0.10} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,cpc:parseFloat(e.target.value)||0}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
+                <div style={{fontSize:10,color:"#8a9aa4",marginTop:3,fontStyle:"italic"}}>Meta Ads → "CPC (link)"</div>
               </div>
               <div>
-                <div style={{fontSize:11,opacity:0.7,marginBottom:4}}>Peças por pedido (auto)</div>
-                <div style={{padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,border:"1px dashed rgba(255,255,255,0.2)",borderRadius:3,background:"rgba(255,255,255,0.05)",color:"#f7f4f0",fontWeight:700}}>{pecasPed.toFixed(2)}</div>
-                <div style={{fontSize:11,opacity:0.6,marginTop:3,fontStyle:"italic"}}>= ticket pedido ÷ ticket médio produto ({fmt(ticketMedio)})</div>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:0.5,color:"#8a9aa4",marginBottom:4,fontWeight:600}}>Conversão site (%)</div>
+                <input type="number" value={state.dadosReais.conv} step={0.1} min={0.1} max={10} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,conv:parseFloat(e.target.value)||0}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
+                <div style={{fontSize:10,color:"#8a9aa4",marginTop:3,fontStyle:"italic"}}>GA4 ou: pedidos ÷ visitas × 100</div>
+              </div>
+              <div>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:0.5,color:"#8a9aa4",marginBottom:4,fontWeight:600}}>Período analisado</div>
+                <select value={state.dadosReais.periodo} onChange={e=>setState(p=>({...p,dadosReais:{...p.dadosReais,periodo:parseInt(e.target.value)||30}}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none",boxSizing:"border-box"}}>
+                  <option value={7}>Últimos 7 dias</option>
+                  <option value={30}>Últimos 30 dias</option>
+                  <option value={60}>Últimos 60 dias</option>
+                  <option value={90}>Últimos 90 dias</option>
+                </select>
+                <div style={{fontSize:10,color:"#8a9aa4",marginTop:3,fontStyle:"italic"}}>Apenas referência</div>
               </div>
             </div>
-          </details>
+            <details style={{marginTop:14,paddingTop:12,borderTop:"1px solid #e8e2da"}} open>
+              <summary style={{cursor:"pointer",fontSize:13,color:"#4a7fa5",fontWeight:600}}>▸ Ticket médio por pedido (peças auto-calculadas)</summary>
+              <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr",gap:12,marginTop:10}}>
+                <div>
+                  <div style={{fontSize:10,color:"#8a9aa4",marginBottom:4,fontWeight:600}}>Ticket médio por pedido (R$)</div>
+                  <input type="number" value={state.dadosReais.ticketReal||''} placeholder={`usa default: ${fmt(ticketMedio*1.33)}`} min={0} onFocus={onFocusSel} onChange={e=>{const v=parseFloat(e.target.value);setState(p=>({...p,dadosReais:{...p.dadosReais,ticketReal:isNaN(v)||v<=0?null:v}}));}} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,border:"1px solid #c8d8e4",borderRadius:4,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>
+                  <div style={{fontSize:10,color:"#8a9aa4",marginTop:3,fontStyle:"italic"}}>Vazio = ticket médio × 1,33 peças (default)</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"#8a9aa4",marginBottom:4,fontWeight:600}}>Peças por pedido (auto)</div>
+                  <div style={{padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:14,border:"1px dashed #c8d8e4",borderRadius:4,background:"#f7f4f0",color:"#2c3e50",fontWeight:700,boxSizing:"border-box"}}>{pecasPed.toFixed(2)}</div>
+                  <div style={{fontSize:10,color:"#8a9aa4",marginTop:3,fontStyle:"italic"}}>= ticket pedido ÷ ticket médio produto ({fmt(ticketMedio)})</div>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
 
         {/* RESUMO MELUNI — ROAS Global + Margens + Frete */}
@@ -6880,10 +6884,10 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
               <div style={{fontSize:10,color:"#6b3a13",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Margem média (top {margensTop.length})</div>
               <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:"#6b3a13"}}>{fmt(margemMedia)}</div>
             </div>
-            <div style={{background:"#edf4fb",padding:12,borderRadius:6,border:"1px solid #c8dff0"}}>
+            <div style={{background:"#edf4fb",padding:12,borderRadius:6,border:"1px solid #c8dff0",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
               <div style={{fontSize:10,color:"#4a7fa5",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>🌐 ROAS Global Meluni</div>
-              <input type="number" value={roasMeluniGlobal} step={0.1} min={1} max={20} onFocus={onFocusSel} onChange={e=>setRoasMeluniGlobal(e.target.value)} style={{width:"100%",border:"1px solid #4a7fa5",borderRadius:4,padding:"4px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:700,color:"#4a7fa5",textAlign:"center",background:"#fff",outline:"none"}}/>
-              <div style={{fontSize:10,color:"#8a9aa4",marginTop:3,fontStyle:"italic"}}>Reflete em todos cards · reseta manuais</div>
+              <input type="number" value={roasMeluniGlobal} step={0.1} min={1} max={20} onFocus={onFocusSel} onChange={e=>setRoasMeluniGlobal(e.target.value)} style={{width:"100%",border:"1px solid #4a7fa5",borderRadius:4,padding:"4px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,fontWeight:700,color:"#4a7fa5",textAlign:"center",background:"#fff",outline:"none",boxSizing:"border-box"}}/>
+              <div style={{fontSize:10,color:"#8a9aa4",marginTop:3,fontStyle:"italic",lineHeight:1.3}}>Reflete em todos cards · reseta manuais</div>
             </div>
             <div style={{background:lucroLiqMedio>=0?"#e8f5ec":"#fae8e8",padding:12,borderRadius:6,border:lucroLiqMedio>=0?"1px solid #b8dfc8":"1px solid #f0c8c8"}}>
               <div style={{fontSize:10,color:lucroLiqMedio>=0?"#1a7a40":"#9a2828",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Lucro líq médio</div>
@@ -6905,11 +6909,13 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
               <input type="number" value={state.aumentoMargem} step={1} min={0} onFocus={onFocusSel} onChange={e=>setState(p=>({...p,aumentoMargem:parseFloat(e.target.value)||0}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:16,border:"1px solid #e8e2da",borderRadius:3,background:"#fff",color:"#2c3e50",fontWeight:700,outline:"none"}}/>
               <div style={{fontSize:11,color:"#4a7fa5",marginTop:3,fontStyle:"italic"}}>"E se eu subir preço, reduzir CMV ou negociar frete?"</div>
             </div>
-            <div>
-              <div style={{fontSize:10,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>📦 Resumo da meta</div>
-              <div style={{fontSize:12,color:"#4a7fa5",fontStyle:"italic",lineHeight:1.5}}>
-                <strong>{fmtN(pedidos)}</strong> pedidos · <strong>{fmtN(produtos)}</strong> produtos<br/>
-                Margem unit: <strong>{fmt(margemUnit)}</strong>
+            <div style={{background:"#fff",padding:12,borderRadius:6,border:"1.5px solid #4a7fa5"}}>
+              <div style={{fontSize:10,color:"#4a7fa5",textTransform:"uppercase",letterSpacing:0.5,marginBottom:6,fontWeight:700}}>📦 Resumo da meta</div>
+              <div style={{fontSize:12,color:"#2c3e50",lineHeight:1.6}}>
+                <div><span style={{color:"#8a9aa4"}}>Pedidos:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmtN(pedidos)}</strong></div>
+                <div><span style={{color:"#8a9aa4"}}>Produtos:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmtN(produtos)}</strong></div>
+                <div><span style={{color:"#8a9aa4"}}>Ticket médio:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmt(ticketMedio)}</strong></div>
+                <div><span style={{color:"#8a9aa4"}}>Margem unit:</span> <strong style={{fontSize:14,color:"#4a7fa5"}}>{fmt(margemUnit)}</strong></div>
               </div>
             </div>
           </div>
@@ -6918,8 +6924,17 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:mobile?600:"auto"}}>
               <thead style={{background:"#2c3e50",color:"#fff"}}>
                 <tr>
-                  {['Cenário','Conv.','CPC','Visitas','Ad spend','ROAS','Lucro líq.','Status'].map(h=>(
-                    <th key={h} style={{padding:"10px 8px",textAlign:"left",fontWeight:400,fontSize:11,textTransform:"uppercase",letterSpacing:0.5}}>{h}</th>
+                  {[
+                    {label:'Cenário',align:'left'},
+                    {label:'Conv.',align:'center'},
+                    {label:'CPC',align:'center'},
+                    {label:'Visitas',align:'right'},
+                    {label:'Gasto Ads',align:'right'},
+                    {label:'ROAS',align:'right'},
+                    {label:'Lucro líq.',align:'right'},
+                    {label:'Status',align:'center'},
+                  ].map(h=>(
+                    <th key={h.label} style={{padding:"10px 8px",textAlign:h.align as any,fontWeight:400,fontSize:11,textTransform:"uppercase",letterSpacing:0.5}}>{h.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -6932,23 +6947,23 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
                   const lucro=margemTotal-adSpend;
                   let st,stCor,stBg;
                   if(lucro>margemTotal*0.3){st='Lucro forte';stCor='#1a7a40';stBg='#d4ecd9';}
-                  else if(lucro>0){st='Lucro magro';stCor='#8a6d0e';stBg='#fdf3cf';}
+                  else if(lucro>0){st='Lucro baixo';stCor='#8a6d0e';stBg='#fdf3cf';}
                   else if(lucro>-margemTotal*0.3){st='Atenção';stCor='#7a3e15';stBg='#fde2cc';}
                   else {st='Prejuízo';stCor='#9a2828';stBg='#fcd5d5';}
                   return(
                     <tr key={cen.id} style={{borderTop:"1px solid #e8e2da"}}>
-                      <td style={{padding:"10px 8px",fontWeight:700,color:"#2c3e50"}}>{cen.nome}</td>
-                      <td style={{padding:"10px 8px"}}>
+                      <td style={{padding:"10px 8px",fontWeight:700,color:"#2c3e50",textAlign:"left"}}>{cen.nome}</td>
+                      <td style={{padding:"10px 8px",textAlign:"center"}}>
                         <input type="number" value={cen.conv} step={0.1} min={0.1} max={10} onFocus={onFocusSel} onChange={e=>{const v=parseFloat(e.target.value)||0;setState(p=>({...p,cenarios:p.cenarios.map((c,i)=>i===idx?{...c,conv:v}:c)}));}} style={{width:60,border:"1px solid #ddd",background:"#fafafa",padding:"3px 5px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:12,textAlign:"right",borderRadius:2,outline:"none"}}/>
                       </td>
-                      <td style={{padding:"10px 8px"}}>
+                      <td style={{padding:"10px 8px",textAlign:"center"}}>
                         <input type="number" value={cen.cpc} step={0.1} min={0.1} onFocus={onFocusSel} onChange={e=>{const v=parseFloat(e.target.value)||0;setState(p=>({...p,cenarios:p.cenarios.map((c,i)=>i===idx?{...c,cpc:v}:c)}));}} style={{width:60,border:"1px solid #ddd",background:"#fafafa",padding:"3px 5px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:12,textAlign:"right",borderRadius:2,outline:"none"}}/>
                       </td>
                       <td style={{padding:"10px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",textAlign:"right"}}>{fmtN(visitas)}</td>
                       <td style={{padding:"10px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",textAlign:"right"}}>{fmt(adSpend)}</td>
                       <td style={{padding:"10px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",textAlign:"right"}}>{roasResult.toFixed(2)}</td>
                       <td style={{padding:"10px 8px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",textAlign:"right",fontWeight:700,color:lucro>=0?"#1a7a40":"#9a2828"}}>{lucro>=0?'+':''}{fmt(lucro)}</td>
-                      <td style={{padding:"10px 8px"}}>
+                      <td style={{padding:"10px 8px",textAlign:"center"}}>
                         <span style={{display:"inline-block",padding:"3px 8px",borderRadius:10,fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,background:stBg,color:stCor}}>{st}</span>
                       </td>
                     </tr>
@@ -7081,15 +7096,15 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
                 </div>
                 <div>
                   <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>CPC médio (R$)</div>
-                  <input type="number" step={0.01} min={0.01} value={modalHist.cpc} placeholder="ex: 1,20" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,cpc:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#4a7fa5'}}/>
+                  <input type="number" step={0.01} min={0.01} value={modalHist.cpc} placeholder="ex: 1,20" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,cpc:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#2c3e50',boxSizing:"border-box"}}/>
                 </div>
                 <div>
                   <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Conversão (%)</div>
-                  <input type="number" step={0.1} min={0.1} max={20} value={modalHist.conv} placeholder="ex: 1,0" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,conv:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#1a7a40'}}/>
+                  <input type="number" step={0.1} min={0.1} max={20} value={modalHist.conv} placeholder="ex: 1,0" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,conv:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#2c3e50',boxSizing:"border-box"}}/>
                 </div>
                 <div>
                   <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Ticket médio (R$)</div>
-                  <input type="number" step={1} min={1} value={modalHist.ticket} placeholder="ex: 120" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,ticket:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#9b59b6'}}/>
+                  <input type="number" step={1} min={1} value={modalHist.ticket} placeholder="ex: 120" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,ticket:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#2c3e50',boxSizing:"border-box"}}/>
                 </div>
               </div>
               <div style={{display:"flex",gap:8,marginTop:18}}>
