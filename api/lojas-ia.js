@@ -42,6 +42,7 @@ import {
 import {
   SYSTEM_PROMPT_SUGESTOES,
   SYSTEM_PROMPT_MENSAGENS,
+  SYSTEM_PROMPT_ENRIQUECER,
   EXEMPLOS_FEW_SHOT,
 } from './lojas-ia-prompts.js';
 
@@ -94,6 +95,13 @@ export default async function handler(req, res) {
     }
     if (action === 'metas_dashboard') {
       return await handleMetasDashboard(req, res, auth);
+    }
+    // Enriquecer observacao via IA — Onda 2 (Ailson 10/05/2026)
+    // Vendedora marca reclamacao/elogio/evento -> IA gera 3 perguntas com
+    // alternativas pra ela responder rapido. Resposta entra em
+    // observacoes_ia.<categoria>[i].contexto.respostas_ia
+    if (action === 'enriquecer_observacao') {
+      return await handleEnriquecerObservacao(req, res, auth);
     }
     return res.status(400).json({ error: `Action desconhecida: ${action}` });
   } catch (e) {
@@ -3252,5 +3260,233 @@ async function handleMetasDashboard(req, res, _auth) {
     vendedoras: respVend,
     loja_BR: lojaBR,
     loja_ST: lojaST,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HANDLER: enriquecer_observacao — Onda 2 (Ailson 10/05/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Quando vendedora marca uma reclamacao/elogio/evento e quer enriquecer com IA,
+// chamamos Claude com:
+//   - contexto resumido da cliente (apelido, status, dias_sem, top categorias, etc)
+//   - categoria + tipo + detalhe do que ela acabou de marcar
+//   - observacoes existentes (pra evitar perguntar o que ja sabe)
+// e Claude retorna 3 perguntas com 3-4 alternativas cada (JSON estrito).
+//
+// Frontend renderiza as perguntas, vendedora responde clicando, e as respostas
+// sao salvas em observacoes_ia.<categoria>[i].contexto.respostas_ia
+//
+// Body: { action: 'enriquecer_observacao', cliente_id, categoria, tipo, detalhe }
+// Retorno: { ok: true, perguntas: [{id, texto, alternativas: [{id, label}]}] }
+//
+async function handleEnriquecerObservacao(req, res, auth) {
+  const { cliente_id, categoria, tipo, detalhe = '' } = req.body || {};
+
+  if (!cliente_id || !categoria || !tipo) {
+    return res.status(400).json({
+      error: 'cliente_id, categoria e tipo sao obrigatorios',
+    });
+  }
+  const CATS_VALIDAS = ['reclamacao', 'elogio', 'evento_timeline'];
+  if (!CATS_VALIDAS.includes(categoria)) {
+    return res.status(400).json({
+      error: `categoria invalida (esperado: ${CATS_VALIDAS.join(', ')})`,
+    });
+  }
+
+  // 1) Carrega cliente + valida auth
+  const { data: cliente, error: errCli } = await supabase
+    .from('lojas_clientes')
+    .select('id, apelido, comprador_nome, vendedora_id, endereco_uf, observacoes_ia')
+    .eq('id', cliente_id)
+    .maybeSingle();
+  if (errCli) return res.status(500).json({ error: errCli.message });
+  if (!cliente) return res.status(404).json({ error: 'Cliente nao encontrado' });
+  if (!auth.isAdmin && cliente.vendedora_id !== auth.vendedoraId) {
+    return res.status(403).json({ error: 'Sem permissao pra esse cliente' });
+  }
+
+  // 2) Carrega KPIs basicos
+  const { data: kpi } = await supabase
+    .from('lojas_clientes_kpis')
+    .select('status_atual, dias_sem_comprar, lifetime_total, qtd_compras, ticket_medio')
+    .eq('cliente_id', cliente_id)
+    .maybeSingle();
+
+  // 3) Top categorias (resumido)
+  let topCategorias = [];
+  try {
+    const { data: itens } = await supabase
+      .from('lojas_vendas_itens')
+      .select('categoria, qtd, lojas_vendas!inner(cliente_id)')
+      .eq('lojas_vendas.cliente_id', cliente_id);
+    if (itens?.length) {
+      const counts = {};
+      itens.forEach(i => {
+        const cat = i.categoria || 'outros';
+        counts[cat] = (counts[cat] || 0) + (i.qtd || 1);
+      });
+      topCategorias = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([cat, qtd]) => ({ categoria: cat, qtd }));
+    }
+  } catch (e) { /* silent */ }
+
+  // 4) Conta ultimas conversoes (resumido — sem detalhe das peças aqui)
+  let ultimaCompraResumo = null;
+  try {
+    const { data: ultV } = await supabase
+      .from('lojas_vendas')
+      .select('id, data_venda, total')
+      .eq('cliente_id', cliente_id)
+      .order('data_venda', { ascending: false })
+      .limit(1);
+    if (ultV?.length) {
+      ultimaCompraResumo = {
+        data_venda: ultV[0].data_venda,
+        total: ultV[0].total,
+      };
+    }
+  } catch (e) { /* silent */ }
+
+  // 5) Observacoes existentes (pra IA nao perguntar o que ja sabe)
+  // Mas remove o item recem-adicionado pra nao confundir
+  const obsExistente = cliente.observacoes_ia || {};
+  const apelido = cliente.apelido || cliente.comprador_nome || '';
+
+  // 6) Configuracao + orcamento
+  const cfg = await getLojasConfig();
+  const orcOk = await temOrcamento({ acao: 'enriquecer_observacao' });
+  if (!orcOk.ok) {
+    return res.status(429).json({
+      error: orcOk.motivo || 'Orcamento mensal esgotado',
+    });
+  }
+
+  // 7) Monta payload pro Claude
+  const userPayload = {
+    cliente: {
+      apelido,
+      status_cliente: kpi?.status_atual || 'desconhecido',
+      dias_sem_comprar: kpi?.dias_sem_comprar || null,
+      qtd_compras: kpi?.qtd_compras || 0,
+      lifetime: kpi?.lifetime_total || 0,
+      ticket_medio: kpi?.ticket_medio || null,
+      cliente_uf: (cliente.endereco_uf || '').trim().toUpperCase() || null,
+    },
+    historico_resumo: {
+      top_categorias: topCategorias.length > 0 ? topCategorias : null,
+      ultima_compra: ultimaCompraResumo,
+    },
+    categoria,
+    tipo,
+    detalhe: detalhe ? String(detalhe).slice(0, 300).trim() : '',
+    observacoes_existentes: {
+      personalidade: obsExistente.personalidade || null,
+      evento_recente: obsExistente.evento_recente || null,
+      perfil_compra: obsExistente.perfil_compra || [],
+      preferencias: obsExistente.preferencias || '',
+      observacao_livre: obsExistente.observacao_livre || '',
+      tem_reclamacoes: (obsExistente.reclamacoes || []).length,
+      tem_elogios: (obsExistente.elogios || []).length,
+      tem_eventos_timeline: (obsExistente.eventos_timeline || []).length,
+    },
+  };
+
+  // 8) Chama Claude
+  const systemBlocks = [
+    {
+      type: 'text',
+      text: SYSTEM_PROMPT_ENRIQUECER,
+      cache_control: { type: 'ephemeral' },
+    },
+  ];
+  const messages = [
+    {
+      role: 'user',
+      content: JSON.stringify(userPayload, null, 2),
+    },
+  ];
+
+  const resp = await chamarClaude({
+    modelo: cfg.modelo_ia || 'claude-sonnet-4-6',
+    systemBlocks,
+    messages,
+    max_tokens: 1500,
+    temperature: 0.5, // mais determinista — perguntas devem ser coerentes
+  });
+
+  if (!resp.ok) {
+    await logarChamadaIA({
+      acao: 'enriquecer_observacao',
+      vendedora_id: auth.vendedoraId,
+      modelo: cfg.modelo_ia || 'claude-sonnet-4-6',
+      ok: false,
+      erro: resp.erro,
+      latencia_ms: resp.latencia_ms,
+    }).catch(() => {});
+    return res.status(502).json({ error: resp.erro });
+  }
+
+  // 9) Parseia JSON tolerante
+  const parsed = parseJsonTolerante(resp.texto);
+  if (!parsed || !Array.isArray(parsed.perguntas) || parsed.perguntas.length !== 3) {
+    await logarChamadaIA({
+      acao: 'enriquecer_observacao',
+      vendedora_id: auth.vendedoraId,
+      modelo: cfg.modelo_ia || 'claude-sonnet-4-6',
+      ok: false,
+      erro: 'JSON invalido ou perguntas != 3',
+      latencia_ms: resp.latencia_ms,
+      input_tokens: resp.usage?.input_tokens || 0,
+      output_tokens: resp.usage?.output_tokens || 0,
+    }).catch(() => {});
+    return res.status(502).json({
+      error: 'IA retornou formato invalido. Tente novamente.',
+      raw: resp.texto.slice(0, 500),
+    });
+  }
+
+  // 10) Sanitiza perguntas (whitelist forma)
+  const perguntasSanitizadas = parsed.perguntas
+    .filter(p => p && typeof p === 'object' && p.texto && Array.isArray(p.alternativas))
+    .slice(0, 3)
+    .map((p, idx) => ({
+      id: typeof p.id === 'string' ? p.id.slice(0, 20) : `p${idx + 1}`,
+      texto: String(p.texto).slice(0, 200),
+      alternativas: (p.alternativas || [])
+        .filter(a => a && typeof a === 'object' && a.label)
+        .slice(0, 4)
+        .map((a, ai) => ({
+          id: typeof a.id === 'string' ? a.id.slice(0, 30) : `a${ai + 1}`,
+          label: String(a.label).slice(0, 100),
+        })),
+    }))
+    .filter(p => p.alternativas.length >= 2);
+
+  if (perguntasSanitizadas.length !== 3) {
+    return res.status(502).json({
+      error: 'IA retornou perguntas em formato invalido. Tente novamente.',
+    });
+  }
+
+  // 11) Log + retorna
+  await logarChamadaIA({
+    acao: 'enriquecer_observacao',
+    vendedora_id: auth.vendedoraId,
+    modelo: cfg.modelo_ia || 'claude-sonnet-4-6',
+    ok: true,
+    latencia_ms: resp.latencia_ms,
+    input_tokens: resp.usage?.input_tokens || 0,
+    output_tokens: resp.usage?.output_tokens || 0,
+    cache_read_tokens: resp.usage?.cache_read_input_tokens || 0,
+  }).catch(() => {});
+
+  return res.json({
+    ok: true,
+    perguntas: perguntasSanitizadas,
+    latencia_ms: resp.latencia_ms,
   });
 }

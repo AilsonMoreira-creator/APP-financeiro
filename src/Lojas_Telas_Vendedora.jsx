@@ -3968,8 +3968,14 @@ const gerarIdItem = (prefix) =>
 // Usado pra Reclamacoes, Elogios e EventosTimeline. Diferenca eh so:
 // - reclamacoes tem toggle "resolvido"
 // - cor de destaque por categoria
+//
+// FLUXO ENRIQUECEDOR IA — Onda 2 (Ailson 10/05/2026):
+// Depois que vendedora escolhe tipo + detalhe, em vez de salvar direto ela
+// pode clicar "🤖 Enriquecer com IA" — chama /api/lojas-ia action
+// enriquecer_observacao que retorna 3 perguntas com alternativas. Vendedora
+// responde clicando, e as respostas vao pro contexto do item.
 const SecaoListaItens = ({
-  titulo, subtitulo, tipos, itens, categoria,
+  titulo, subtitulo, tipos, itens, categoria, cliente, userId,
   onAdd, onRemove, onToggleResolvido,
   temToggleResolvido = false,
   corAcento = palette.accent,
@@ -3977,15 +3983,83 @@ const SecaoListaItens = ({
   const [aberto, setAberto] = useState(false);
   const [tipoSel, setTipoSel] = useState('');
   const [detalhe, setDetalhe] = useState('');
+  // Fluxo enriquecedor IA
+  const [enriquecendo, setEnriquecendo] = useState(false);
+  const [perguntas, setPerguntas] = useState(null); // null | [{id, texto, alternativas}]
+  const [respostas, setRespostas] = useState({}); // { p1: 'a1', p2: 'a3', ... }
+  const [erroEnriquecer, setErroEnriquecer] = useState(null);
 
   const labelTipo = (v) => tipos.find(t => t.v === v)?.label || v;
 
-  const salvarItem = () => {
+  const categoriaApiMap = {
+    reclamacoes: 'reclamacao',
+    elogios: 'elogio',
+    eventos_timeline: 'evento_timeline',
+  };
+
+  const enriquecerComIA = async () => {
     if (!tipoSel) return;
-    onAdd(categoria, tipoSel, detalhe);
+    setEnriquecendo(true);
+    setErroEnriquecer(null);
+    try {
+      const r = await fetch('/api/lojas-ia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+        body: JSON.stringify({
+          action: 'enriquecer_observacao',
+          cliente_id: cliente?.id,
+          categoria: categoriaApiMap[categoria],
+          tipo: tipoSel,
+          detalhe,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setErroEnriquecer(d.error || `HTTP ${r.status}`);
+        return;
+      }
+      setPerguntas(d.perguntas || []);
+      setRespostas({});
+    } catch (e) {
+      setErroEnriquecer(e.message || String(e));
+    } finally {
+      setEnriquecendo(false);
+    }
+  };
+
+  const responder = (pid, aid) => setRespostas(prev => ({ ...prev, [pid]: aid }));
+
+  const salvarItem = (incluirRespostasIA = false) => {
+    if (!tipoSel) return;
+    // Se enriqueceu, monta contexto.respostas_ia: [{pergunta_id, pergunta_texto, resposta_id, resposta_label}]
+    let contexto = {};
+    if (incluirRespostasIA && perguntas?.length) {
+      const respostasArr = perguntas.map(p => {
+        const respId = respostas[p.id];
+        const alt = p.alternativas.find(a => a.id === respId);
+        return {
+          pergunta_id: p.id,
+          pergunta_texto: p.texto,
+          resposta_id: respId || null,
+          resposta_label: alt?.label || null,
+          respondida: !!respId,
+        };
+      });
+      contexto = { respostas_ia: respostasArr, enriquecida_em: new Date().toISOString() };
+    }
+    onAdd(categoria, tipoSel, detalhe, contexto);
+    // Reset
     setTipoSel('');
     setDetalhe('');
+    setPerguntas(null);
+    setRespostas({});
+    setErroEnriquecer(null);
     setAberto(false);
+  };
+
+  const cancelarForm = () => {
+    setAberto(false); setTipoSel(''); setDetalhe('');
+    setPerguntas(null); setRespostas({}); setErroEnriquecer(null);
   };
 
   const inputStyleLocal = {
@@ -3994,6 +4068,9 @@ const SecaoListaItens = ({
     fontFamily: FONT, fontSize: fz(14), background: palette.surface,
     color: palette.ink,
   };
+
+  const todasRespondidas = perguntas?.length > 0
+    && perguntas.every(p => respostas[p.id]);
 
   return (
     <div style={{ marginBottom: 16 }}>
@@ -4022,10 +4099,28 @@ const SecaoListaItens = ({
                   textDecoration: it.resolvido ? 'line-through' : 'none',
                 }}>
                   {labelTipo(it.tipo)}
+                  {it.contexto?.respostas_ia?.length > 0 && (
+                    <span style={{
+                      fontSize: fz(10), color: '#7c4dff', marginLeft: 6,
+                      background: '#f3edff', padding: '1px 6px', borderRadius: 4,
+                      fontWeight: 500,
+                    }}>
+                      🤖 enriquecida
+                    </span>
+                  )}
                 </div>
                 {it.detalhe && (
                   <div style={{ fontSize: fz(12), color: palette.inkSoft, marginTop: 2, lineHeight: 1.4 }}>
                     {it.detalhe}
+                  </div>
+                )}
+                {/* Mostrar respostas IA (resumido) */}
+                {it.contexto?.respostas_ia?.length > 0 && (
+                  <div style={{ marginTop: 4, fontSize: fz(11), color: palette.inkMuted, lineHeight: 1.4 }}>
+                    {it.contexto.respostas_ia
+                      .filter(r => r.respondida)
+                      .map(r => `• ${r.resposta_label}`)
+                      .join(' · ')}
                   </div>
                 )}
                 {it.data_registro && (
@@ -4094,7 +4189,13 @@ const SecaoListaItens = ({
           border: `1.5px solid ${corAcento}40`,
           borderRadius: 8,
         }}>
-          <select value={tipoSel} onChange={e => setTipoSel(e.target.value)} style={{ ...inputStyleLocal, marginBottom: 8 }}>
+          {/* ETAPA 1: tipo + detalhe (sempre visivel) */}
+          <select
+            value={tipoSel}
+            onChange={e => { setTipoSel(e.target.value); setPerguntas(null); setRespostas({}); }}
+            disabled={perguntas !== null}
+            style={{ ...inputStyleLocal, marginBottom: 8 }}
+          >
             <option value="">— Selecionar tipo —</option>
             {tipos.map(t => (
               <option key={t.v} value={t.v}>{t.label}</option>
@@ -4104,34 +4205,136 @@ const SecaoListaItens = ({
             value={detalhe}
             onChange={e => setDetalhe(e.target.value.slice(0, 300))}
             rows={2}
+            disabled={perguntas !== null}
             placeholder="Detalhes (opcional, max 300 caract)"
             style={{ ...inputStyleLocal, resize: 'vertical', fontFamily: FONT, marginBottom: 8 }}
           />
-          <div style={{ display: 'flex', gap: 6 }}>
+
+          {/* ETAPA 2: perguntas IA (so quando enriquecido) */}
+          {perguntas && perguntas.length > 0 && (
+            <div style={{
+              marginBottom: 10, padding: 10,
+              background: '#f3edff',
+              border: '1.5px solid #d4c5f9',
+              borderRadius: 8,
+            }}>
+              <div style={{
+                fontSize: fz(12), fontWeight: 700, color: '#5d3fc7',
+                marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                🤖 Pra eu te ajudar a personalizar as mensagens depois, me responde:
+              </div>
+              {perguntas.map((p, pidx) => (
+                <div key={p.id} style={{ marginBottom: pidx === perguntas.length - 1 ? 0 : 12 }}>
+                  <div style={{ fontSize: fz(12), color: palette.ink, marginBottom: 6, fontWeight: 600 }}>
+                    {pidx + 1}) {p.texto}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {p.alternativas.map(a => {
+                      const ativo = respostas[p.id] === a.id;
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => responder(p.id, a.id)}
+                          style={{
+                            padding: '7px 10px',
+                            borderRadius: 6,
+                            border: `1.5px solid ${ativo ? '#7c4dff' : palette.beige}`,
+                            background: ativo ? '#7c4dff' : palette.surface,
+                            color: ativo ? '#fff' : palette.ink,
+                            fontFamily: FONT, fontSize: fz(12), fontWeight: ativo ? 600 : 400,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {ativo ? '✓ ' : ''}{a.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {erroEnriquecer && (
+            <div style={{
+              padding: 8, background: '#fee', borderRadius: 6, marginBottom: 8,
+              fontSize: fz(12), color: palette.alert,
+            }}>
+              {erroEnriquecer}
+            </div>
+          )}
+
+          {/* Botoes de acao — variam conforme etapa */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button
               type="button"
-              onClick={() => { setAberto(false); setTipoSel(''); setDetalhe(''); }}
+              onClick={cancelarForm}
               style={{
-                flex: 1, background: palette.surface, color: palette.inkSoft,
+                flex: '1 1 80px', background: palette.surface, color: palette.inkSoft,
                 border: `1px solid ${palette.beige}`, borderRadius: 6,
                 padding: '8px', fontSize: fz(13), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
               }}
             >
               Cancelar
             </button>
-            <button
-              type="button"
-              onClick={salvarItem}
-              disabled={!tipoSel}
-              style={{
-                flex: 2, background: tipoSel ? corAcento : '#ccc', color: '#fff',
-                border: 'none', borderRadius: 6,
-                padding: '8px', fontSize: fz(13), fontWeight: 600,
-                cursor: tipoSel ? 'pointer' : 'not-allowed', fontFamily: FONT,
-              }}
-            >
-              + Adicionar à lista
-            </button>
+
+            {/* Sem perguntas ainda: oferece enriquecer ou salvar simples */}
+            {!perguntas && (
+              <>
+                <button
+                  type="button"
+                  onClick={enriquecerComIA}
+                  disabled={!tipoSel || enriquecendo}
+                  style={{
+                    flex: '1 1 130px',
+                    background: !tipoSel || enriquecendo ? '#ccc' : '#f3edff',
+                    color: !tipoSel || enriquecendo ? '#fff' : '#5d3fc7',
+                    border: `1.5px solid ${!tipoSel || enriquecendo ? '#ccc' : '#7c4dff'}`,
+                    borderRadius: 6,
+                    padding: '8px', fontSize: fz(12), fontWeight: 600,
+                    cursor: !tipoSel || enriquecendo ? 'not-allowed' : 'pointer', fontFamily: FONT,
+                  }}
+                >
+                  {enriquecendo ? '🤖 carregando...' : '🤖 Enriquecer c/ IA'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => salvarItem(false)}
+                  disabled={!tipoSel}
+                  style={{
+                    flex: '1 1 90px',
+                    background: tipoSel ? corAcento : '#ccc',
+                    color: '#fff',
+                    border: 'none', borderRadius: 6,
+                    padding: '8px', fontSize: fz(13), fontWeight: 600,
+                    cursor: tipoSel ? 'pointer' : 'not-allowed', fontFamily: FONT,
+                  }}
+                >
+                  Salvar
+                </button>
+              </>
+            )}
+
+            {/* Com perguntas: salvar com respostas */}
+            {perguntas && (
+              <button
+                type="button"
+                onClick={() => salvarItem(true)}
+                style={{
+                  flex: '1 1 160px',
+                  background: corAcento,
+                  color: '#fff',
+                  border: 'none', borderRadius: 6,
+                  padding: '8px', fontSize: fz(13), fontWeight: 600,
+                  cursor: 'pointer', fontFamily: FONT,
+                }}
+              >
+                {todasRespondidas ? '✓ Salvar c/ respostas' : 'Salvar (com o que respondi)'}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -4171,13 +4374,13 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
   );
 
   // ─── Handlers Onda 3 ───────────────────────────────────────────────────
-  const adicionarItem = (categoria, tipo, detalhe) => {
+  const adicionarItem = (categoria, tipo, detalhe, contexto = {}) => {
     const novo = {
       id: gerarIdItem(categoria === 'reclamacoes' ? 'rec' : categoria === 'elogios' ? 'elo' : 'evt'),
       tipo,
       detalhe: (detalhe || '').trim(),
       data_registro: new Date().toISOString(),
-      contexto: {},
+      contexto: contexto && typeof contexto === 'object' ? contexto : {},
       ...(categoria === 'reclamacoes' ? { resolvido: false } : {}),
     };
     if (categoria === 'reclamacoes') setReclamacoes(prev => [...prev, novo]);
@@ -4367,6 +4570,8 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
           tipos={RECLAMACOES_TIPOS}
           itens={reclamacoes}
           categoria="reclamacoes"
+          cliente={cliente}
+          userId={userId}
           onAdd={adicionarItem}
           onRemove={removerItem}
           onToggleResolvido={toggleResolvido}
@@ -4380,6 +4585,8 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
           tipos={ELOGIOS_TIPOS}
           itens={elogios}
           categoria="elogios"
+          cliente={cliente}
+          userId={userId}
           onAdd={adicionarItem}
           onRemove={removerItem}
           corAcento="#5b9555"
@@ -4391,6 +4598,8 @@ export const ModalObservacoesCliente = ({ cliente, userId, observacoesAtuais, on
           tipos={EVENTOS_TIMELINE_TIPOS}
           itens={eventosTimeline}
           categoria="eventos_timeline"
+          cliente={cliente}
+          userId={userId}
           onAdd={adicionarItem}
           onRemove={removerItem}
           corAcento="#6b7c95"
