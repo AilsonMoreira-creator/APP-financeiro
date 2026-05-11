@@ -2289,7 +2289,7 @@ export const MinhaCarteiraScreen = ({
   lojas, vendedora, onBack, onSelectCliente, onAbrirGrupos, onSelectGrupo, onPedirMensagemRapida,
   onAbrirCadastrarComprador,
 }) => {
-  const { state, carteiraAtual } = lojas;
+  const { state, carteiraAtual, handleTransferirCliente } = lojas;
   // Persistir filtroStatus + ordenacao em localStorage — Ailson 11/05/2026.
   // Sem isso, ao navegar pra detalhe e voltar, componente desmonta e o filtro
   // volta pro default (todos/lifetime), forcando a vendedora a refiltrar.
@@ -2299,6 +2299,15 @@ export const MinhaCarteiraScreen = ({
       return saved.filtroStatus || 'todos';
     } catch { return 'todos'; }
   });
+
+  // ─── Transferir cliente (Ailson 11/05/2026) ────────────────────────────────
+  // Atalho pra admin (Ailson + Tamara) transferir cliente direto do card,
+  // sem precisar ir pra tela Admin > Transferir Carteira. Backend ja existe
+  // via handleTransferirCliente do hook.
+  const [clienteTransferir, setClienteTransferir] = useState(null);
+  const [destinoTransferir, setDestinoTransferir] = useState('');
+  const [motivoTransferir, setMotivoTransferir] = useState('');
+  const [salvandoTransferencia, setSalvandoTransferencia] = useState(false);
 
   // Filtro "na janela de compra" — Ailson 06/05/2026.
   // Lê IDs de clientes dentro da janela via endpoint (calc em tempo real
@@ -2470,6 +2479,32 @@ export const MinhaCarteiraScreen = ({
       if (ordenacao === 'antigos') return b.diasUltima - a.diasUltima;
       return a.nome.localeCompare(b.nome);
     });
+
+  // Confirma transferência (chamada pelo modal admin)
+  const confirmarTransferencia = async () => {
+    if (!clienteTransferir) return;
+    if (!destinoTransferir) {
+      alert('Selecione uma vendedora destino');
+      return;
+    }
+    setSalvandoTransferencia(true);
+    try {
+      await handleTransferirCliente(
+        clienteTransferir.id,
+        destinoTransferir,
+        motivoTransferir || 'transferencia_admin_carteira',
+      );
+      const destino = (state.vendedoras || []).find(v => v.id === destinoTransferir);
+      alert(`${nomeCliente(clienteTransferir)} transferido(a) pra ${destino?.nome || 'vendedora destino'}!`);
+      setClienteTransferir(null);
+      setDestinoTransferir('');
+      setMotivoTransferir('');
+    } catch (e) {
+      alert('Erro ao transferir: ' + (e?.message || e));
+    } finally {
+      setSalvandoTransferencia(false);
+    }
+  };
 
   const Contador = ({ statusKey, label, count }) => {
     const meta = statusMap[statusKey];
@@ -2933,6 +2968,30 @@ export const MinhaCarteiraScreen = ({
                       </button>
                     );
                   })()}
+                  {/* Botão Transferir cliente — Ailson 11/05/2026
+                      Atalho admin-only (ele + Tamara). Abre modal sem sair da carteira. */}
+                  {state.isAdmin && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setClienteTransferir(c);
+                        setDestinoTransferir('');
+                        setMotivoTransferir('');
+                      }}
+                      title="Transferir cliente pra outra vendedora (admin)"
+                      style={{
+                        background: `${palette.accent}15`,
+                        color: palette.accent,
+                        border: `1px solid ${palette.accent}40`,
+                        borderRadius: 6, padding: '8px 10px',
+                        fontSize: fz(13), cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                        minWidth: 38,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      <ArrowLeftRight size={sz(15)} />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -2982,6 +3041,129 @@ export const MinhaCarteiraScreen = ({
           }}
           onClose={() => setObsModalCliente(null)}
         />
+      )}
+
+      {/* Modal Transferir cliente (admin) — Ailson 11/05/2026 */}
+      {clienteTransferir && (
+        <div
+          onClick={() => !salvandoTransferencia && setClienteTransferir(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16, zIndex: 9999,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: palette.surface, borderRadius: 14,
+              padding: 22, maxWidth: 440, width: '100%',
+              maxHeight: '85vh', overflowY: 'auto',
+              fontFamily: FONT,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <ArrowLeftRight size={sz(22)} color={palette.accent} />
+              <div style={{ fontSize: fz(18), fontWeight: 700, color: palette.ink }}>
+                Transferir cliente
+              </div>
+            </div>
+            <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 16 }}>
+              Função admin · sai da carteira de {vendedora?.nome || '?'}
+            </div>
+
+            <div style={{
+              background: palette.beigeSoft || '#fafaf7',
+              border: `1px solid ${palette.beige}`,
+              borderRadius: 8, padding: '10px 12px', marginBottom: 16,
+            }}>
+              <div style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginBottom: 4 }}>
+                Cliente
+              </div>
+              <div style={{ fontSize: fz(15), fontWeight: 700, color: palette.ink }}>
+                {nomeCliente(clienteTransferir)}
+              </div>
+              {clienteTransferir.razao_social && clienteTransferir.apelido && (
+                <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
+                  {clienteTransferir.razao_social}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginBottom: 6 }}>
+                Vendedora destino
+              </div>
+              <select
+                value={destinoTransferir}
+                onChange={e => setDestinoTransferir(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 8,
+                  border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                  fontSize: fz(14), color: palette.ink, background: palette.surface,
+                  boxSizing: 'border-box',
+                }}
+              >
+                <option value="">— Escolha uma vendedora —</option>
+                {(state.vendedoras || [])
+                  .filter(v => v.ativa && v.id !== vendedora?.id)
+                  .sort((a, b) => (a.loja || '').localeCompare(b.loja || '') || (a.nome || '').localeCompare(b.nome || ''))
+                  .map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.nome} · {v.loja}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600, marginBottom: 6 }}>
+                Motivo (opcional)
+              </div>
+              <input
+                type="text"
+                value={motivoTransferir}
+                onChange={e => setMotivoTransferir(e.target.value)}
+                placeholder="Ex: cliente foi pra outra loja"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 8,
+                  border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                  fontSize: fz(14), color: palette.ink, background: palette.surface,
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setClienteTransferir(null)}
+                disabled={salvandoTransferencia}
+                style={{
+                  flex: 1, background: palette.surface, color: palette.inkMuted,
+                  border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '12px',
+                  fontSize: fz(14), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarTransferencia}
+                disabled={salvandoTransferencia || !destinoTransferir}
+                style={{
+                  flex: 2,
+                  background: destinoTransferir ? palette.accent : palette.beige,
+                  color: destinoTransferir ? 'white' : palette.inkMuted,
+                  border: 'none', borderRadius: 8, padding: '12px',
+                  fontSize: fz(14), fontWeight: 700, cursor: destinoTransferir && !salvandoTransferencia ? 'pointer' : 'not-allowed',
+                  fontFamily: FONT,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                {salvandoTransferencia ? <><Loader2 size={sz(15)} className="spin"/> Transferindo...</> : <><ArrowLeftRight size={sz(15)}/> Transferir</>}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
