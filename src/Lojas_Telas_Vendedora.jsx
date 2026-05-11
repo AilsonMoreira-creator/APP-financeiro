@@ -30,7 +30,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ArrowLeft, RefreshCw, ChevronRight, Search, Settings,
   Users, Star, Lightbulb, Check, X, Sparkles, Flame, AlertTriangle,
@@ -3925,6 +3925,15 @@ const PERFIL_COMPRA = [
   { v: 'gosta_novidades', label: '✨ Gosta muito de novidades' },
 ];
 
+// ─── EMOJI PICKER (Ailson 11/05/2026) ──────────────────────────────────────
+// Lista padrao curada pra contexto comercial moda atacado: tons calorosos
+// sem exagero, sem emojis "fora do contexto". Conforme a vendedora usa
+// emojis nas edicoes, a lista personaliza (top dela vem primeiro).
+const EMOJIS_PADRAO_VENDEDORA = [
+  '😊', '😍', '🔥', '💕', '✨', '💛',
+  '🌸', '👏', '☕', '🎉', '🌟', '💖',
+];
+
 // ─── ONDA 3 (Ailson 10/05/2026): Reclamacoes, Elogios, Eventos Timeline ──
 // Tags estruturadas em listas — vendedora marca quando essas coisas
 // acontecem. IA usa como gatilho pra personalizar mensagens (ex:
@@ -4701,6 +4710,52 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   const [editandoMsg, setEditandoMsg] = useState(false);
   const [msgRascunho, setMsgRascunho] = useState('');
 
+  // ─── EMOJI PICKER (Ailson 11/05/2026) ──────────────────────────────────────
+  // Vendedoras cujo teclado nao mostra emoji (ex: Celia) usam o picker do
+  // app pra inserir. Lista personaliza pelo uso: top emojis dela vem primeiro
+  // (lojas_estilo_vendedora.emojis), completa com padrao curado.
+  const textareaEditRef = useRef(null);
+  const [emojisVendedora, setEmojisVendedora] = useState({});
+  useEffect(() => {
+    if (!sugestao?.vendedora_id) return;
+    let cancelado = false;
+    fetch(`/api/lojas-estilo-vendedora?vendedora_id=${sugestao.vendedora_id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelado && d) setEmojisVendedora(d.emojis || {}); })
+      .catch(() => { /* fallback usa só padrao, sem alerta */ });
+    return () => { cancelado = true; };
+  }, [sugestao?.vendedora_id]);
+
+  const emojisExibir = useMemo(() => {
+    const counter = Object.entries(emojisVendedora || {});
+    counter.sort((a, b) => b[1] - a[1]); // mais usados primeiro
+    const topVendedora = counter.slice(0, 12).map(([e]) => e);
+    // Completa com padrao SEM repetir
+    const completar = EMOJIS_PADRAO_VENDEDORA.filter(e => !topVendedora.includes(e));
+    return [...topVendedora, ...completar].slice(0, 12);
+  }, [emojisVendedora]);
+
+  const inserirEmoji = (emoji) => {
+    const ta = textareaEditRef.current;
+    if (!ta) {
+      // Fallback: adiciona no fim se ref nao disponivel
+      setMsgRascunho(prev => prev + emoji);
+      return;
+    }
+    const start = ta.selectionStart ?? msgRascunho.length;
+    const end = ta.selectionEnd ?? msgRascunho.length;
+    const novo = msgRascunho.slice(0, start) + emoji + msgRascunho.slice(end);
+    setMsgRascunho(novo);
+    // Reposiciona cursor logo apos o emoji inserido
+    setTimeout(() => {
+      if (textareaEditRef.current) {
+        textareaEditRef.current.focus();
+        const pos = start + emoji.length;
+        textareaEditRef.current.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  };
+
   // Botao WhatsApp (envia COM mensagem) + modal cadastrar tel se vazio
   const [enviandoWhats, setEnviandoWhats] = useState(false);
   const [showCadTel, setShowCadTel] = useState(false);
@@ -5074,6 +5129,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
             {editandoMsg ? (
               <>
                 <textarea
+                  ref={textareaEditRef}
                   value={msgRascunho}
                   onChange={(e) => setMsgRascunho(e.target.value)}
                   autoFocus
@@ -5085,6 +5141,39 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
                     boxSizing: 'border-box', marginBottom: 8,
                   }}
                 />
+                {/* Picker de emojis — Ailson 11/05/2026
+                    Pra celulares cujo teclado nao mostra emoji.
+                    Lista dinamica: top dela primeiro + padrao. */}
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: 6,
+                  padding: '8px 10px', marginBottom: 8,
+                  background: palette.beigeSoft || '#fafaf7',
+                  border: `1px solid ${palette.beige}`,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                }}>
+                  <span style={{
+                    fontSize: fz(10), color: palette.inkMuted,
+                    marginRight: 4,
+                    textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 600,
+                  }}>Emojis</span>
+                  {emojisExibir.map((emoji, idx) => (
+                    <button
+                      key={`${emoji}-${idx}`}
+                      type="button"
+                      onClick={() => inserirEmoji(emoji)}
+                      title={`Inserir ${emoji}`}
+                      style={{
+                        background: 'transparent', border: 'none',
+                        fontSize: fz(22), cursor: 'pointer',
+                        padding: '2px 6px', borderRadius: 6,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
                 <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 10, fontStyle: 'italic' }}>
                   💡 Suas edições ajudam a IA a aprender seu jeito de escrever
                 </div>
