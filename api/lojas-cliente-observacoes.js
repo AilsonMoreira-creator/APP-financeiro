@@ -42,7 +42,7 @@ const VALORES_PERFIL_COMPRA = [
 // Cada item tem { id, tipo, detalhe, data_registro, contexto, resolvido? }.
 // Backend valida tipo (whitelist), trunca detalhe, mantem contexto livre.
 const VALORES_RECLAMACOES = [
-  'defeito_costura', 'linho_encolheu', 'tecido_qualidade',
+  'defeito_costura', 'linho_encolheu', 'viscolinho_encolheu', 'tecido_qualidade',
   'concorrente_cidade', 'preco_alto', 'atendimento_ruim',
   'modelagem_ruim', 'outros',
 ];

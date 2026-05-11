@@ -3931,6 +3931,7 @@ const PERFIL_COMPRA = [
 const RECLAMACOES_TIPOS = [
   { v: 'defeito_costura', label: '🪡 Defeito de costura' },
   { v: 'linho_encolheu', label: '👕 Linho encolheu na lavagem' },
+  { v: 'viscolinho_encolheu', label: '👚 Viscolinho encolheu na lavagem' },
   { v: 'tecido_qualidade', label: '🧵 Tecido de baixa qualidade' },
   { v: 'concorrente_cidade', label: '🏬 Concorrente na cidade c/ mesmo modelo' },
   { v: 'preco_alto', label: '💰 Achou preço alto' },
