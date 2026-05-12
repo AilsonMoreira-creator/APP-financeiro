@@ -56,6 +56,10 @@ import {
 // proprio pra nao impactar arquivos de vendedora. Sprint 05/05/2026.
 import ProdutosTab from './Lojas_Telas_Produtos.jsx';
 
+// Aba 'Carrinho' (admin + vendedoras) — leads do site Convertr.
+// Onda 2 do modulo Leads Carrinho (Ailson 12/05/2026).
+import CarrinhoTab from './Lojas_Carrinho.jsx';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS DE UI ESPECÍFICOS DAS TELAS VENDEDORA
 // ═══════════════════════════════════════════════════════════════════════════
@@ -156,11 +160,15 @@ export const HomeScreen = ({
   const tabs = isAdmin
     ? [
         { id: 'vendedoras', label: 'Vendedoras', icon: Users },
+        { id: 'carrinho', label: 'Carrinho', icon: ShoppingBag },
         { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
         { id: 'produtos', label: 'Produtos', icon: Package },
         { id: 'config', label: 'Config', icon: Settings },
       ]
-    : [{ id: 'vendedoras', label: 'Vendedoras', icon: Users }];
+    : [
+        { id: 'vendedoras', label: 'Vendedoras', icon: Users },
+        { id: 'carrinho', label: 'Carrinho', icon: ShoppingBag },
+      ];
 
   const subtitle = state.ultimaSincronizacao
     ? `Atualizado: ${new Date(state.ultimaSincronizacao).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
@@ -202,6 +210,20 @@ export const HomeScreen = ({
           vendedoraLogadaId={vendedoraLogada?.id}
           userId={state?.userId}
           onSelectVendedora={onSelectVendedora}
+        />
+      )}
+      {activeTab === 'carrinho' && (
+        <CarrinhoTab
+          userId={state?.userId}
+          isAdmin={isAdmin}
+          onAbrirLead={(lead) => {
+            // Onda 3: abrir detalhe do lead (em construção)
+            console.log('[Lojas] abrir lead:', lead.id);
+          }}
+          onAbrirImportar={() => {
+            // Onda 2.3: modal de importar planilhas (em construção)
+            alert('Importar planilhas — em construção (Onda 2.3)');
+          }}
         />
       )}
       {activeTab === 'dashboard' && isAdmin && (
