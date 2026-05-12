@@ -220,10 +220,6 @@ export const HomeScreen = ({
             // Onda 3: abrir detalhe do lead (em construção)
             console.log('[Lojas] abrir lead:', lead.id);
           }}
-          onAbrirImportar={() => {
-            // Onda 2.3: modal de importar planilhas (em construção)
-            alert('Importar planilhas — em construção (Onda 2.3)');
-          }}
         />
       )}
       {activeTab === 'dashboard' && isAdmin && (
