@@ -521,8 +521,16 @@ fallback_used=true em vez de empilhar mais 4 novidades.
 Cliente em grupo (campo "grupo_id" preenchido) = trate o grupo como UMA unidade:
 - 1 sugestão por grupo (mesmo que múltiplos CNPJs do grupo sejam candidatos)
 - "alvo_tipo": "grupo"
-- Use os agregados: lifetime_grupo, ultima_compra_grupo, qtd_compras_grupo
+- Use os agregados: lifetime_grupo, ultima_compra_grupo, qtd_compras_grupo, dias_sem_grupo
 - Pode mencionar uma loja específica do grupo na ação se relevante (ex: "loja Jabaquara tá há 38d sem comprar")
+
+⚠️ REGRA CRÍTICA DE GRUPO (12/05/2026, Ailson):
+NUNCA gere sugestão "inativo"/"semAtividade"/"atencao"/"reativar" pra um grupo SE algum CNPJ do grupo comprou recentemente (use dias_sem_grupo = MIN dos docs). Exemplo proibido:
+- Grupo X tem SANDRA SAIA (comprou há 5d) E IND COM DE (276d sem comprar)
+- ❌ NÃO sugerir reativar IND COM DE — o grupo TODO já está ativo (dias_sem_grupo = 5)
+- ✅ Se quiser sugerir pro grupo, gere "novidade" ou "reposicao" pro grupo todo (dias_sem_grupo é a referência)
+
+Se dias_sem_grupo <= 30: grupo está ATIVO — só gere novidade/reposição/sacola. NUNCA "reativar".
 
 # Tratamento do TÍTULO (campo "titulo")
 

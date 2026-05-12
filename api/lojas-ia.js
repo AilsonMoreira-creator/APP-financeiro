@@ -1960,7 +1960,16 @@ function montarMessagesSugestoes(ctx) {
   // ACRESCIMO 06/05/2026: cooldown geral
   //   - Cliente sugerido nos ultimos N dias (10 padrao, 7 pra carteiras <100):
   //     remove. Excecao: cliente com sacola ativa passa (sacola tem regra propria)
-  const carteiraFiltradaInfo = { sem_kpi: 0, pulando: 0, kpi_parcial: 0, em_cooldown: 0 };
+  //
+  // ACRESCIMO 12/05/2026 (Ailson): cliente em grupo (grupo_id != null) NAO
+  //   entra como candidato individual. O grupo todo eh representado em
+  //   ctx.grupos com agregados (dias_sem_grupo = MIN dos docs, etc).
+  //   Sem isso, IA estava gerando sugestao "inativo" pra UM CNPJ do grupo
+  //   mesmo OUTRO CNPJ do mesmo grupo ter comprado recente
+  //   (ex: Grupo Sandra — SANDRA SAIA comprou ha 5d, mas IA sugeriu
+  //   reativar IND COM DE com 276d). Tambem evita duplicar sugestoes
+  //   (1 pro grupo + 1 pra cada CNPJ).
+  const carteiraFiltradaInfo = { sem_kpi: 0, pulando: 0, kpi_parcial: 0, em_cooldown: 0, em_grupo: 0 };
   const hojeISO = new Date().toISOString().slice(0, 10);
 
   const carteira = ctx.clientes
@@ -1975,6 +1984,13 @@ function montarMessagesSugestoes(ctx) {
       const kpiInutil = (k.dias_sem_comprar == null && !k.ultima_compra);
       if (kpiInutil && !clientesComSacola.has(c.id)) {
         carteiraFiltradaInfo.sem_kpi++;
+        return false;
+      }
+      // Cliente em grupo: descarta individualmente — grupo agregado em ctx.grupos
+      // representa o conjunto. EXCECAO: cliente com sacola ativa passa
+      // (sacola eh atributo individual, nao do grupo).
+      if (c.grupo_id && !clientesComSacola.has(c.id)) {
+        carteiraFiltradaInfo.em_grupo++;
         return false;
       }
       // Cooldown geral — descarta SE não tiver sacola ativa
