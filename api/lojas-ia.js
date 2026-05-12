@@ -1230,6 +1230,25 @@ async function montarContextoMensagem(sug, contextoExtra) {
     getLojasConfig('parametros.fechamento_padrao', null),
   ]);
 
+  // Link Vesti da vendedora (Ailson 12/05/2026) — bug fix:
+  // mensagem pra cliente Vesti deve incluir o link cadastrado pela vendedora.
+  // Antes, montarContextoSugestoes carregava esse campo, mas
+  // montarContextoMensagem nao — entao a IA escrevia "te mando o link"
+  // sem ter como colar URL nenhuma. Agora carrega e expoe via vestiLinkAtivo.
+  let vestiLinkAtivo = null;
+  try {
+    const { data: vend } = await supabase
+      .from('lojas_vendedoras')
+      .select('vesti_link_ativo, vesti_link_1, vesti_link_2, vesti_link_3')
+      .eq('id', sug.vendedora_id)
+      .maybeSingle();
+    if (vend?.vesti_link_ativo) {
+      vestiLinkAtivo = vend[`vesti_link_${vend.vesti_link_ativo}`] || null;
+    }
+  } catch (e) {
+    console.warn('[lojas-ia/mensagem] sem vesti_link:', e?.message);
+  }
+
   // Estilo aprendido da vendedora (Ailson 04/05/2026): IA usa as edicoes
   // anteriores dela como referencia pra gerar mensagem mais parecida com o
   // jeito dela escrever. So entra no prompt se houver pelo menos 1 edicao.
@@ -1860,6 +1879,10 @@ async function montarContextoMensagem(sug, contextoExtra) {
     corDestaqueDaPeca,     // cor da peca da sug que ALSO esta em coresDestaqueBling
     // CLIENTE SILENCIOSO DEMAIS — Ailson 10/05/2026 (terceira passada)
     clienteSilenciosoDemais, ultimosModelosLevados,
+    // LINK VESTI DA VENDEDORA — Ailson 12/05/2026 (bug fix)
+    // Quando cliente eh Vesti (perfilCanal=so_vesti/hibrido_loja_vesti/etc),
+    // a IA DEVE colar essa URL na mensagem. Se null, ela so promete sem URL.
+    vestiLinkAtivo,
   };
 }
 
@@ -2391,6 +2414,12 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     // quando cliente_silencioso_demais=true.
     ultimos_modelos_levados: ctx.ultimosModelosLevados?.length > 0
       ? ctx.ultimosModelosLevados : null,
+    // LINK VESTI DA VENDEDORA — Ailson 12/05/2026 (bug fix critico)
+    // Quando cliente_dominante=vesti_dominante OU canal_cadastro=vesti
+    // a IA DEVE colar essa URL na mensagem. NUNCA escreva "te mando o
+    // link" sem ter o URL aqui. Se null, IA so pode mencionar Vesti
+    // sem URL especifica. NAO altere a URL.
+    vesti_link_vendedora: ctx.vestiLinkAtivo || null,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };

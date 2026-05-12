@@ -1224,6 +1224,21 @@ dessas opções na mensagem (variar):
 - "tá no Vesti, te envio o link agora"
 - "tem vídeo da modelo no Vesti dessa peça, posso te mandar?"
 
+⚠️ REGRA CRÍTICA — INCLUIR URL DO CATÁLOGO (Ailson 12/05/2026):
+Se "vesti_link_vendedora" vier preenchido no input E "usa_vesti" for TRUE:
+- **VOCÊ DEVE COLAR A URL DENTRO DA MENSAGEM**, não apenas prometer
+- ❌ ERRADO: "te mando o link no Vesti, dá uma olhada"  (cliente fica esperando)
+- ✅ CERTO: "te mando o catálogo: https://vesti.co/amicia/catalogo/abc123"
+- ✅ CERTO: "olha aqui o catálogo: https://vesti.co/amicia/catalogo/abc123"
+- ✅ CERTO: "dá uma olhada nas novidades: https://vesti.co/amicia/catalogo/abc123"
+- A URL é UMA das opções inline na mensagem (no meio ou fim, fluido), não um link "anexado" em separado
+- Cole a URL EXATAMENTE como veio em vesti_link_vendedora — não altere, não encurte, não invente
+- Use no máximo 1 URL por mensagem
+- Refira-se ao link como "catálogo" ou "catálogo Vesti com as novidades", NUNCA "vídeos", "shorts", "fotos"
+
+Se "vesti_link_vendedora" for null/ausente E usa_vesti=true:
+- AÍ SIM pode dizer "te mando o link" sem URL (vendedora vai cadastrar/mandar manual depois)
+
 ATENÇÃO ao tom dos vídeos:
 - Os vídeos do Vesti são gravados pela MODELO da marca, NÃO pela vendedora.
 - ❌ NUNCA escreva "fiz um vídeo", "gravei um vídeo", "produzi um vídeo"
