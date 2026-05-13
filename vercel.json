@@ -46,7 +46,8 @@
     "api/lojas-produtos-raiox-refresh.js": { "maxDuration": 60 },
     "api/lojas-receitas-cron-diario.js": { "maxDuration": 60 },
     "api/site-amicia-drive-importar.js": { "maxDuration": 120 },
-    "api/site-amicia-drive-cron.js": { "maxDuration": 60 }
+    "api/site-amicia-drive-cron.js": { "maxDuration": 60 },
+    "api/lojas-leads-mensagem.js": { "maxDuration": 60 }
   },
   "crons": [
     {

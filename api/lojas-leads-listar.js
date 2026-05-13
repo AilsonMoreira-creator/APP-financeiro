@@ -28,7 +28,7 @@
  */
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
-const ESCOPOS_VALIDOS = ['cnpj_publico', 'cpf_aguardando', 'cpf_atribuidos'];
+const ESCOPOS_VALIDOS = ['cnpj_publico', 'cpf_aguardando', 'cpf_atribuidos', 'meus_carrinhos'];
 
 export default async function handler(req, res) {
   setCors(res);
@@ -70,16 +70,23 @@ export default async function handler(req, res) {
       `);
 
     if (escopo === 'cnpj_publico') {
+      // FILA PÚBLICA (regra Ailson 12/05/2026):
+      // - PJ (qualquer valor > 0)
+      // - PF com 12+ peças (atacado mínimo)
+      // - SEM ja_e_cliente_lojas_id (clientes existentes vão pra recompra
+      //   abandonada na carteira da vendedora dona)
       q = q
-        .eq('tipo_pessoa', 'PJ')
         .is('ja_e_cliente_lojas_id', null)
-        .not('status', 'in', '("convertido","perdido_30d","sem_carrinho_valido")')
-        .gt('valor_ultimo_carrinho', 0);
+        .not('status', 'in', '("convertido","perdido_30d","sem_carrinho_valido","aguardando_atribuicao")')
+        .gt('valor_ultimo_carrinho', 0)
+        .or('tipo_pessoa.eq.PJ,and(tipo_pessoa.eq.PF,qtd_pecas_ultimo_carrinho.gte.12)');
     } else if (escopo === 'cpf_aguardando') {
+      // CPFs com VALOR mas MENOS de 12 peças — aguardam admin atribuir caso a caso
       q = q
         .eq('tipo_pessoa', 'PF')
         .eq('status', 'aguardando_atribuicao')
-        .gt('valor_ultimo_carrinho', 0);
+        .gt('valor_ultimo_carrinho', 0)
+        .lt('qtd_pecas_ultimo_carrinho', 12);
     } else if (escopo === 'cpf_atribuidos') {
       q = q
         .eq('tipo_pessoa', 'PF')
@@ -90,8 +97,20 @@ export default async function handler(req, res) {
       if (!auth.isAdmin && auth.vendedoraId) {
         q = q.eq('vendedora_atribuida_id', auth.vendedoraId);
       }
+    } else if (escopo === 'meus_carrinhos') {
+      // Leads que JÁ recebi mensagem da vendedora — vão pra carteira dela
+      // (filtro "🛒 Carrinhos" na MinhaCarteira). Ailson 12/05/2026.
+      // Admin: vê todos com mensagem enviada (visão geral).
+      // Vendedora: vê apenas os que ELA mandou mensagem.
+      q = q
+        .eq('status', 'mensagem_enviada')
+        .not('ultima_msg_vendedora_id', 'is', null);
+      if (!auth.isAdmin && auth.vendedoraId) {
+        q = q.eq('ultima_msg_vendedora_id', auth.vendedoraId);
+      }
     }
 
+    q = q.order('ultima_msg_enviada_em', { ascending: false, nullsFirst: false });
     q = q.order('valor_ultimo_carrinho', { ascending: false, nullsFirst: false });
 
     const { data: leads, error } = await q;
@@ -149,6 +168,20 @@ export default async function handler(req, res) {
       const vName = id => vendedorasMap.get(id)?.nome || null;
       const vLoja = id => vendedorasMap.get(id)?.loja || null;
 
+      // Formatar telefone pra wa.me — só dígitos com 55 (Brasil)
+      // Ex: "(35) 99193-4610" → "5535991934610"
+      const formatarWa = (tel) => {
+        if (!tel) return null;
+        const norm = tel.replace(/\D/g, '');
+        if (norm.length === 12 || norm.length === 13) {
+          if (norm.substring(0, 2) === '55') return norm;
+        }
+        if (norm.length === 10 || norm.length === 11) {
+          return '55' + norm;
+        }
+        return null;
+      };
+
       return {
         ...l,
         // dados do carrinho (último evento com valor)
@@ -158,6 +191,8 @@ export default async function handler(req, res) {
           items_parsed: evt.items_parsed || [],
           created_at: evt.created_at_convertr,
         } : null,
+        // Telefone formatado pra wa.me — pronto pra abrir conversa direto
+        telefone_wa: formatarWa(l.telefone_norm || l.telefone_raw),
         // nomes amigáveis das vendedoras
         vendedora_dona_nome: vName(l.vendedora_dona_id),
         vendedora_dona_loja: vLoja(l.vendedora_dona_id),
@@ -178,6 +213,19 @@ export default async function handler(req, res) {
       .select('*')
       .maybeSingle();
 
+    // ─── Envios hoje da vendedora (limite diário 1 PJ + 2 PF) ──────
+    let enviosHoje = { qtd_pj_hoje: 0, qtd_pf_hoje: 0 };
+    if (auth.vendedoraId) {
+      const { data: env } = await supabase
+        .rpc('envios_hoje_da_vendedora', { p_vendedora_id: auth.vendedoraId })
+        .maybeSingle();
+      if (env) enviosHoje = env;
+    }
+
+    // Limites Ailson 12/05/2026: 1 PJ + 1 PF por dia
+    const LIMITE_PJ_DIA = 1;
+    const LIMITE_PF_DIA = 1;
+
     return res.json({
       ok: true,
       escopo,
@@ -187,6 +235,14 @@ export default async function handler(req, res) {
         qtd_pj_com_carrinho_sem_msg: 0,
         qtd_pj_alto_valor: 0,
         soma_valor_pendente: 0,
+      },
+      // Pra vendedora saber quanto pode mandar ainda hoje
+      envios_hoje: enviosHoje,
+      limites_diarios: {
+        pj: LIMITE_PJ_DIA,
+        pf: LIMITE_PF_DIA,
+        pj_restante: Math.max(0, LIMITE_PJ_DIA - (enviosHoje.qtd_pj_hoje || 0)),
+        pf_restante: Math.max(0, LIMITE_PF_DIA - (enviosHoje.qtd_pf_hoje || 0)),
       },
     });
   } catch (e) {

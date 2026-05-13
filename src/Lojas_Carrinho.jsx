@@ -76,46 +76,173 @@ function nomeLead(lead) {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LeadCard — card individual de lead com carrinho
+// Quando expandido (state interno): mostra IA gera mensagem + edição
+// + botão "Enviar WhatsApp" (auto-marca como enviada) + observações livres.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LeadCard = ({ lead, onClick }) => {
+const LeadCard = ({ lead, userId, isAdmin, vendedoraId, limitesDiarios, onAcaoConcluida, onClickAdmin }) => {
   const items = lead.ultimo_evento?.items_parsed || [];
   const valor = lead.valor_ultimo_carrinho || lead.ultimo_evento?.total || 0;
   const pecas = lead.qtd_pecas_ultimo_carrinho || lead.ultimo_evento?.items_count || 0;
   const isPJ = lead.tipo_pessoa === 'PJ';
 
+  // States internos do card
+  const [expandido, setExpandido] = useState(false);
+  const [mensagemIA, setMensagemIA] = useState('');
+  const [textoEditavel, setTextoEditavel] = useState('');
+  const [gerandoIA, setGerandoIA] = useState(false);
+  const [erroIA, setErroIA] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+  const [obsLivre, setObsLivre] = useState('');
+  const [obsAberta, setObsAberta] = useState(false);
+  const [obsCarregada, setObsCarregada] = useState(false);
+  const [salvandoObs, setSalvandoObs] = useState(false);
+
   // Status visual
   let statusBadge = null;
-  if (lead.status === 'mensagem_enviada') {
-    statusBadge = { label: '✓ Mensagem enviada', cor: palette.ok, soft: palette.okSoft };
-  } else if (lead.lock_ativo) {
+  const jaEnviada = !!lead.ultima_msg_enviada_em;
+  if (lead.status === 'mensagem_enviada' || jaEnviada) {
     statusBadge = {
-      label: lead.lock_e_minha
-        ? '🔒 Você está atendendo'
-        : `🔒 ${lead.vendedora_atendendo_nome || 'Outra vendedora'} atendendo`,
-      cor: palette.warn,
-      soft: palette.warnSoft,
+      label: lead.ultima_msg_vendedora_nome
+        ? `✓ Enviada por ${lead.ultima_msg_vendedora_nome}`
+        : '✓ Mensagem enviada',
+      cor: palette.ok, soft: palette.okSoft,
     };
   }
 
-  // Cliente já existe? Badge especial
   const jaCliente = lead.ja_e_cliente_lojas_id;
 
+  // Limite atingido pra esse tipo?
+  const limiteAtingido = limitesDiarios && (
+    (isPJ && limitesDiarios.pj_restante <= 0) ||
+    (!isPJ && limitesDiarios.pf_restante <= 0)
+  );
+
+  // ─── Handlers ────────────────────────────────────────────────
+  const toggleExpandir = () => {
+    // Se é admin e o lead é CPF aguardando atribuição, callback especial
+    if (onClickAdmin && isAdmin && lead.status === 'aguardando_atribuicao') {
+      onClickAdmin(lead);
+      return;
+    }
+    // Se já foi enviada, expande pra ver histórico mas sem ações
+    setExpandido(e => !e);
+  };
+
+  const gerarMensagem = async () => {
+    setGerandoIA(true);
+    setErroIA(null);
+    try {
+      const r = await fetch('/api/lojas-leads-mensagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId },
+        body: JSON.stringify({ action: 'gerar', lead_id: lead.id }),
+      });
+      const json = await r.json();
+      if (!r.ok || !json.ok) throw new Error(json.error || 'Erro ao gerar');
+      setMensagemIA(json.mensagem);
+      setTextoEditavel(json.mensagem);
+    } catch (e) {
+      setErroIA(e.message);
+    } finally {
+      setGerandoIA(false);
+    }
+  };
+
+  const enviarWhatsApp = async () => {
+    if (!textoEditavel.trim()) {
+      alert('Texto da mensagem está vazio');
+      return;
+    }
+    if (!vendedoraId) {
+      alert('Só vendedoras logadas podem enviar (admin não envia em nome de ninguém)');
+      return;
+    }
+    setEnviando(true);
+    try {
+      const r = await fetch('/api/lojas-leads-mensagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId },
+        body: JSON.stringify({
+          action: 'marcar_enviada',
+          lead_id: lead.id,
+          texto: textoEditavel,
+        }),
+      });
+      const json = await r.json();
+      if (!r.ok || !json.ok) {
+        if (r.status === 429) {
+          alert(json.error);
+          return;
+        }
+        throw new Error(json.error || 'Erro ao enviar');
+      }
+      // Abre WhatsApp em nova aba
+      if (json.wa_me_url) {
+        window.open(json.wa_me_url, '_blank');
+      } else {
+        alert('Mensagem registrada mas telefone inválido pra wa.me');
+      }
+      // Recarrega a lista (lead vai pra status enviada)
+      onAcaoConcluida && onAcaoConcluida();
+    } catch (e) {
+      alert(`Erro: ${e.message}`);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const carregarObs = async () => {
+    if (obsCarregada) return;
+    try {
+      const r = await fetch(`/api/lojas-leads-observacao?lead_id=${lead.id}`, {
+        headers: { 'X-User': userId },
+      });
+      const json = await r.json();
+      if (r.ok && json.ok) setObsLivre(json.texto_livre || '');
+    } catch {}
+    setObsCarregada(true);
+  };
+
+  const toggleObs = () => {
+    if (!obsAberta) carregarObs();
+    setObsAberta(o => !o);
+  };
+
+  const salvarObs = async () => {
+    setSalvandoObs(true);
+    try {
+      const r = await fetch('/api/lojas-leads-observacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId },
+        body: JSON.stringify({ lead_id: lead.id, texto: obsLivre }),
+      });
+      const json = await r.json();
+      if (!r.ok || !json.ok) throw new Error(json.error || 'Erro');
+    } catch (e) {
+      alert(`Erro ao salvar: ${e.message}`);
+    } finally {
+      setSalvandoObs(false);
+    }
+  };
+
+  // ─── Render ──────────────────────────────────────────────────
   return (
-    <button
-      onClick={onClick}
-      style={{
-        width: '100%', textAlign: 'left',
-        background: palette.surface,
-        border: `1px solid ${palette.beige}`,
-        borderRadius: 12, padding: 14,
-        cursor: onClick ? 'pointer' : 'default',
-        fontFamily: FONT, marginBottom: 10,
-        display: 'block',
-      }}
-    >
-      {/* HEADER do card: tipo + nome + valor */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+    <div style={{
+      background: palette.surface,
+      border: `1px solid ${palette.beige}`,
+      borderRadius: 12, padding: 14,
+      fontFamily: FONT, marginBottom: 10,
+    }}>
+      {/* HEADER do card — clicável pra expandir */}
+      <div
+        onClick={toggleExpandir}
+        style={{
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'flex-start',
+          justifyContent: 'space-between', gap: 10, marginBottom: 8,
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 8,
@@ -123,17 +250,10 @@ const LeadCard = ({ lead, onClick }) => {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}>
-            {isPJ ? (
-              <Building2 size={sz(20)} color={palette.accent} />
-            ) : (
-              <User size={sz(20)} color={palette.purple} />
-            )}
+            {isPJ ? <Building2 size={sz(20)} color={palette.accent} /> : <User size={sz(20)} color={palette.purple} />}
           </div>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{
-              fontSize: fz(15), fontWeight: 600, color: palette.ink, lineHeight: 1.2,
-              overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>
+            <div style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {nomeLead(lead)}
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
@@ -143,7 +263,7 @@ const LeadCard = ({ lead, onClick }) => {
                 background: isPJ ? palette.accentSoft : palette.purpleSoft,
                 padding: '2px 6px', borderRadius: 4,
               }}>
-                {isPJ ? 'CNPJ' : 'CPF'}
+                {isPJ ? 'CNPJ' : `CPF · ${pecas}pç`}
               </span>
               {lead.uf_inferida && (
                 <span style={{ fontSize: fz(12), color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -152,8 +272,7 @@ const LeadCard = ({ lead, onClick }) => {
               )}
               {jaCliente && (
                 <span style={{
-                  fontSize: fz(11), fontWeight: 600, letterSpacing: 0.2,
-                  color: palette.ok, background: palette.okSoft,
+                  fontSize: fz(11), fontWeight: 600, color: palette.ok, background: palette.okSoft,
                   padding: '2px 6px', borderRadius: 4,
                 }}>
                   ⭐ Já é cliente
@@ -162,55 +281,40 @@ const LeadCard = ({ lead, onClick }) => {
             </div>
           </div>
         </div>
-        {/* Valor */}
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: fz(18), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
-            {fmtMoeda(valor)}
-          </div>
-          <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2 }}>
-            {pecas} {pecas === 1 ? 'peça' : 'peças'}
-          </div>
+          <div style={{ fontSize: fz(18), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>{fmtMoeda(valor)}</div>
+          <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2 }}>{pecas} {pecas === 1 ? 'peça' : 'peças'}</div>
         </div>
       </div>
 
-      {/* FOTOS das peças do carrinho */}
+      {/* FOTOS das peças */}
       {items.length > 0 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-          {items.slice(0, 4).map((item, i) => (
+          {items.slice(0, expandido ? items.length : 4).map((item, i) => (
             <div key={i} style={{
-              position: 'relative',
-              width: 56, height: 56, borderRadius: 8,
-              background: palette.beigeSoft, overflow: 'hidden',
-              flexShrink: 0,
+              position: 'relative', width: 56, height: 56, borderRadius: 8,
+              background: palette.beigeSoft, overflow: 'hidden', flexShrink: 0,
             }}>
               {item.foto_url && (
-                <img
-                  src={item.foto_url}
-                  alt={item.ref_descricao || item.tipo_inferido || ''}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  loading="lazy"
-                />
+                <img src={item.foto_url} alt={item.ref_descricao || ''}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
               )}
-              {/* Badge REF sobreposto */}
               {item.ref && (
                 <div style={{
                   position: 'absolute', bottom: 0, left: 0, right: 0,
                   background: 'rgba(0,0,0,0.7)', color: '#fff',
-                  fontSize: fz(10), fontWeight: 700, letterSpacing: 0.3,
-                  padding: '1px 3px', textAlign: 'center',
+                  fontSize: fz(10), fontWeight: 700, padding: '1px 3px', textAlign: 'center',
                 }}>
                   {item.ref}
                 </div>
               )}
             </div>
           ))}
-          {items.length > 4 && (
+          {!expandido && items.length > 4 && (
             <div style={{
-              width: 56, height: 56, borderRadius: 8,
-              background: palette.beigeSoft,
+              width: 56, height: 56, borderRadius: 8, background: palette.beigeSoft,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: palette.inkSoft, fontSize: fz(14), fontWeight: 600,
-              flexShrink: 0,
+              color: palette.inkSoft, fontSize: fz(14), fontWeight: 600, flexShrink: 0,
             }}>
               +{items.length - 4}
             </div>
@@ -218,8 +322,11 @@ const LeadCard = ({ lead, onClick }) => {
         </div>
       )}
 
-      {/* INFOS finais: telefone, hora, status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: fz(12), color: palette.inkSoft }}>
+      {/* FOOTER infos */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        fontSize: fz(12), color: palette.inkSoft,
+      }}>
         {lead.telefone_raw && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Phone size={sz(12)} /> {lead.telefone_raw}
@@ -232,14 +339,198 @@ const LeadCard = ({ lead, onClick }) => {
           <span style={{
             fontSize: fz(11), fontWeight: 600,
             color: statusBadge.cor, background: statusBadge.soft,
-            padding: '2px 7px', borderRadius: 4,
-            marginLeft: 'auto',
+            padding: '2px 7px', borderRadius: 4, marginLeft: 'auto',
           }}>
             {statusBadge.label}
           </span>
         )}
       </div>
-    </button>
+
+      {/* CONTEÚDO EXPANDIDO — IA + Envio + Observações */}
+      {expandido && (
+        <div style={{
+          marginTop: 12, paddingTop: 12,
+          borderTop: `1px dashed ${palette.beige}`,
+        }}>
+          {/* Lista de peças com REF (texto) */}
+          {items.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: fz(11), fontWeight: 600, letterSpacing: 1, color: palette.inkMuted, textTransform: 'uppercase', marginBottom: 6 }}>
+                Peças no carrinho
+              </div>
+              <div style={{ fontSize: fz(13), color: palette.ink, lineHeight: 1.5 }}>
+                {items.map((it, i) => (
+                  <div key={i}>
+                    • {it.ref ? <strong>REF {it.ref}</strong> : <em>(sem REF)</em>}
+                    {' — '}
+                    {it.ref_descricao || it.tipo_inferido || 'peça'}
+                    {it.cor_inferida && <span style={{ color: palette.inkSoft }}> · {it.cor_inferida}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* BLOCO IA + ENVIO — sempre disponível (inclui follow-up) */}
+          {vendedoraId && (
+            <div style={{ marginBottom: 12 }}>
+              {/* Se já enviou antes, mostra histórico curto */}
+              {jaEnviada && (
+                <div style={{
+                  marginBottom: 10, padding: 10,
+                  background: palette.okSoft, border: `1px solid ${palette.ok}40`,
+                  borderRadius: 8, fontSize: fz(12), color: palette.ok,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <Check size={sz(14)} />
+                  <div>
+                    Mensagem enviada {fmtHoras(lead.ultima_msg_enviada_em)}
+                    {lead.ultima_msg_vendedora_nome ? ` por ${lead.ultima_msg_vendedora_nome}` : ''}.
+                    {' '}<strong>Pode gerar outra (follow-up).</strong>
+                  </div>
+                </div>
+              )}
+
+              {!mensagemIA && (
+                <button
+                  onClick={gerarMensagem}
+                  disabled={gerandoIA || limiteAtingido}
+                  style={{
+                    width: '100%', padding: 12,
+                    background: limiteAtingido ? palette.beige : palette.accent,
+                    color: limiteAtingido ? palette.inkSoft : palette.bg,
+                    border: 'none', borderRadius: 10, fontFamily: FONT,
+                    fontSize: fz(14), fontWeight: 600,
+                    cursor: gerandoIA || limiteAtingido ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}
+                >
+                  {gerandoIA ? (
+                    <><Loader2 size={sz(16)} style={{ animation: 'spin 0.8s linear infinite' }} /> Gerando…</>
+                  ) : limiteAtingido ? (
+                    <>🚫 Limite diário {isPJ ? 'CNPJ' : 'CPF'} atingido — tenta amanhã</>
+                  ) : (
+                    <><Sparkles size={sz(16)} /> {jaEnviada ? 'Gerar nova mensagem (follow-up)' : 'Gerar mensagem com IA'}</>
+                  )}
+                </button>
+              )}
+
+              {erroIA && (
+                <div style={{
+                  marginTop: 8, padding: 8, background: palette.alertSoft, color: palette.alert,
+                  borderRadius: 8, fontSize: fz(12),
+                }}>
+                  {erroIA}
+                </div>
+              )}
+
+              {mensagemIA && (
+                <>
+                  <div style={{ fontSize: fz(11), fontWeight: 600, letterSpacing: 1, color: palette.inkMuted, textTransform: 'uppercase', marginBottom: 4 }}>
+                    Mensagem (edite se quiser)
+                  </div>
+                  <textarea
+                    value={textoEditavel}
+                    onChange={e => setTextoEditavel(e.target.value)}
+                    rows={5}
+                    style={{
+                      width: '100%', boxSizing: 'border-box',
+                      padding: 10, fontFamily: FONT, fontSize: fz(13),
+                      border: `1px solid ${palette.beige}`, borderRadius: 8,
+                      background: palette.bg, color: palette.ink, resize: 'vertical',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                    <button
+                      onClick={gerarMensagem}
+                      disabled={gerandoIA}
+                      style={{
+                        padding: '10px 12px', fontFamily: FONT, fontSize: fz(13),
+                        background: palette.surface, color: palette.inkSoft,
+                        border: `1px solid ${palette.beige}`, borderRadius: 8,
+                        cursor: gerandoIA ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      🔄 Gerar outra
+                    </button>
+                    <button
+                      onClick={enviarWhatsApp}
+                      disabled={enviando || !textoEditavel.trim() || limiteAtingido}
+                      style={{
+                        flex: 1, padding: '10px 12px', fontFamily: FONT, fontSize: fz(14), fontWeight: 600,
+                        background: enviando || limiteAtingido ? palette.beige : '#25D366',
+                        color: '#fff', border: 'none', borderRadius: 8,
+                        cursor: enviando || !textoEditavel.trim() || limiteAtingido ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      }}
+                    >
+                      {enviando ? (
+                        <><Loader2 size={sz(16)} style={{ animation: 'spin 0.8s linear infinite' }} /> Enviando…</>
+                      ) : (
+                        <><Send size={sz(16)} /> Enviar WhatsApp</>
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Mensagem se admin (não pode enviar) */}
+          {!jaEnviada && !vendedoraId && isAdmin && (
+            <div style={{
+              padding: 10, background: palette.warnSoft, color: palette.warn,
+              borderRadius: 8, fontSize: fz(12), marginBottom: 12,
+            }}>
+              Admin não envia mensagem em nome de vendedora. Use o app como vendedora.
+            </div>
+          )}
+
+          {/* BLOCO OBSERVAÇÕES LIVRES */}
+          <div>
+            <button
+              onClick={toggleObs}
+              style={{
+                padding: '8px 12px', fontFamily: FONT, fontSize: fz(13), fontWeight: 600,
+                background: palette.surface, color: palette.ink,
+                border: `1px solid ${palette.beige}`, borderRadius: 8,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              📝 Outras informações {obsAberta ? '▴' : '▾'}
+            </button>
+            {obsAberta && (
+              <div style={{ marginTop: 8 }}>
+                <textarea
+                  value={obsLivre}
+                  onChange={e => setObsLivre(e.target.value)}
+                  rows={3}
+                  placeholder="Notas livres sobre esse lead (não vai pra IA, só pra equipe)…"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    padding: 10, fontFamily: FONT, fontSize: fz(13),
+                    border: `1px solid ${palette.beige}`, borderRadius: 8,
+                    background: palette.bg, color: palette.ink, resize: 'vertical',
+                  }}
+                />
+                <button
+                  onClick={salvarObs}
+                  disabled={salvandoObs}
+                  style={{
+                    marginTop: 6, padding: '8px 14px', fontFamily: FONT, fontSize: fz(13), fontWeight: 600,
+                    background: palette.ink, color: palette.bg,
+                    border: 'none', borderRadius: 8,
+                    cursor: salvandoObs ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {salvandoObs ? 'Salvando…' : 'Salvar'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -247,11 +538,11 @@ const LeadCard = ({ lead, onClick }) => {
 // LeadsListagem — lista de cards (CNPJ pública / CPF meus)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LeadsListagem = ({ userId, isAdmin, onAbrirLead }) => {
+const LeadsListagem = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
   const [escopo, setEscopo] = useState('cnpj_publico');
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
-  const [data, setData] = useState({ leads: [], badge: {} });
+  const [data, setData] = useState({ leads: [], badge: {}, envios_hoje: {}, limites_diarios: {} });
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -262,10 +553,15 @@ const LeadsListagem = ({ userId, isAdmin, onAbrirLead }) => {
       });
       const json = await r.json();
       if (!r.ok || !json.ok) throw new Error(json.error || 'Erro ao carregar leads');
-      setData({ leads: json.leads || [], badge: json.badge || {} });
+      setData({
+        leads: json.leads || [],
+        badge: json.badge || {},
+        envios_hoje: json.envios_hoje || {},
+        limites_diarios: json.limites_diarios || {},
+      });
     } catch (e) {
       setErro(e.message);
-      setData({ leads: [], badge: {} });
+      setData({ leads: [], badge: {}, envios_hoje: {}, limites_diarios: {} });
     } finally {
       setLoading(false);
     }
@@ -276,9 +572,9 @@ const LeadsListagem = ({ userId, isAdmin, onAbrirLead }) => {
   // ─── Toggle CNPJ / CPF ──────────────────────────────────────────
   const escoposVisiveis = useMemo(() => {
     const base = [
-      { id: 'cnpj_publico', label: '🏢 CNPJs', desc: 'Fila pública pra todas' },
+      { id: 'cnpj_publico', label: '🏢 Fila pública', desc: 'CNPJs + CPFs ≥12pç' },
     ];
-    base.push({ id: 'cpf_atribuidos', label: '👤 CPFs', desc: isAdmin ? 'Atribuídos' : 'Atribuídos pra você' });
+    base.push({ id: 'cpf_atribuidos', label: '👤 CPFs atribuídos', desc: isAdmin ? 'Atribuídos' : 'Atribuídos pra você' });
     if (isAdmin) {
       base.push({ id: 'cpf_aguardando', label: '📋 Aguardando', desc: 'CPFs pra atribuir' });
     }
@@ -351,6 +647,24 @@ const LeadsListagem = ({ userId, isAdmin, onAbrirLead }) => {
         </div>
       )}
 
+      {/* Indicador de envios hoje da vendedora — só se vendedora logada */}
+      {vendedoraId && (data.limites_diarios?.pj != null) && (
+        <div style={{
+          display: 'flex', gap: 8, marginBottom: 14,
+          fontSize: fz(12), color: palette.inkSoft,
+        }}>
+          <span style={{
+            padding: '6px 10px', background: palette.surface,
+            border: `1px solid ${palette.beige}`, borderRadius: 8,
+            fontFamily: FONT,
+          }}>
+            Hoje: <strong>{data.envios_hoje?.qtd_pj_hoje || 0}/{data.limites_diarios?.pj || 1}</strong> CNPJ
+            {' · '}
+            <strong>{data.envios_hoje?.qtd_pf_hoje || 0}/{data.limites_diarios?.pf || 1}</strong> CPF
+          </span>
+        </div>
+      )}
+
       {/* Conteúdo */}
       {loading && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 40 }}>
@@ -373,7 +687,7 @@ const LeadsListagem = ({ userId, isAdmin, onAbrirLead }) => {
         <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>
           <ShoppingBag size={sz(40)} style={{ opacity: 0.3, marginBottom: 10 }} />
           <div style={{ fontSize: fz(14), fontFamily: FONT }}>
-            {escopo === 'cnpj_publico' && 'Nenhum CNPJ aguardando atendimento'}
+            {escopo === 'cnpj_publico' && 'Nenhum lead aguardando atendimento'}
             {escopo === 'cpf_atribuidos' && (isAdmin ? 'Nenhum CPF atribuído' : 'Nenhum CPF atribuído a você')}
             {escopo === 'cpf_aguardando' && 'Nenhum CPF aguardando atribuição'}
           </div>
@@ -383,7 +697,16 @@ const LeadsListagem = ({ userId, isAdmin, onAbrirLead }) => {
       {!loading && !erro && data.leads.length > 0 && (
         <div>
           {data.leads.map(lead => (
-            <LeadCard key={lead.id} lead={lead} onClick={() => onAbrirLead && onAbrirLead(lead)} />
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              userId={userId}
+              isAdmin={isAdmin}
+              vendedoraId={vendedoraId}
+              limitesDiarios={data.limites_diarios}
+              onAcaoConcluida={carregar}
+              onClickAdmin={onAbrirLead}
+            />
           ))}
         </div>
       )}
@@ -858,7 +1181,7 @@ const StatBox = ({ label, valor, cor }) => (
 // CarrinhoTab — componente raiz da tab
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CarrinhoTab = ({ userId, isAdmin, onAbrirLead }) => {
+const CarrinhoTab = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
   const [modalImportar, setModalImportar] = useState(false);
   const [modalAtribuir, setModalAtribuir] = useState(null); // lead a atribuir, null = fechado
   const [reloadKey, setReloadKey] = useState(0);
@@ -911,6 +1234,7 @@ const CarrinhoTab = ({ userId, isAdmin, onAbrirLead }) => {
         key={reloadKey}
         userId={userId}
         isAdmin={isAdmin}
+        vendedoraId={vendedoraId}
         onAbrirLead={handleAbrirLead}
       />
 
@@ -935,3 +1259,4 @@ const CarrinhoTab = ({ userId, isAdmin, onAbrirLead }) => {
 };
 
 export default CarrinhoTab;
+export { LeadCard };

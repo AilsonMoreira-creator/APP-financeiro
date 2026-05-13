@@ -58,7 +58,7 @@ import ProdutosTab from './Lojas_Telas_Produtos.jsx';
 
 // Aba 'Carrinho' (admin + vendedoras) — leads do site Convertr.
 // Onda 2 do modulo Leads Carrinho (Ailson 12/05/2026).
-import CarrinhoTab from './Lojas_Carrinho.jsx';
+import CarrinhoTab, { LeadCard } from './Lojas_Carrinho.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS DE UI ESPECÍFICOS DAS TELAS VENDEDORA
@@ -216,6 +216,7 @@ export const HomeScreen = ({
         <CarrinhoTab
           userId={state?.userId}
           isAdmin={isAdmin}
+          vendedoraId={vendedoraLogada?.id}
           onAbrirLead={(lead) => {
             // Onda 3: abrir detalhe do lead (em construção)
             console.log('[Lojas] abrir lead:', lead.id);
@@ -2338,7 +2339,7 @@ export const MinhaCarteiraScreen = ({
   // (Sacola/S-Ativ/Inativ/Arquivo), inicia ja expandido pra ela ver
   // o chip ativo destacado.
   const [contadoresExpandidos, setContadoresExpandidos] = useState(() => {
-    const STATUS_EXPANDIDOS = ['separandoSacola', 'semAtividade', 'inativo', 'arquivo'];
+    const STATUS_EXPANDIDOS = ['separandoSacola', 'semAtividade', 'inativo', 'arquivo', 'carrinhos'];
     try {
       const saved = JSON.parse(localStorage.getItem('lojas_carteira_filtros') || '{}');
       return STATUS_EXPANDIDOS.includes(saved.filtroStatus);
@@ -2383,6 +2384,29 @@ export const MinhaCarteiraScreen = ({
     })();
     return () => { cancelado = true; };
   }, [vendedora?.id, state.userId]);
+
+  // ─── Carrega leads de carrinho dela (Ailson 12/05/2026) ────────────
+  // Ailson decisão: depois q a vendedora envia mensagem WhatsApp, o lead
+  // some da tab Carrinho geral e aparece AQUI na carteira dela quando o
+  // filtro "🛒 Carrinhos" estiver ativo. Permite continuar fazendo follow-up.
+  const [meusCarrinhos, setMeusCarrinhos] = useState([]);
+  const [reloadCarrinhosKey, setReloadCarrinhosKey] = useState(0);
+  useEffect(() => {
+    if (!state.userId) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/lojas-leads-listar?escopo=meus_carrinhos', {
+          headers: { 'X-User': state.userId },
+        });
+        const d = await r.json();
+        if (!cancelado && r.ok && d.ok) {
+          setMeusCarrinhos(d.leads || []);
+        }
+      } catch {}
+    })();
+    return () => { cancelado = true; };
+  }, [state.userId, reloadCarrinhosKey]);
   const [busca, setBusca] = useState('');
   const [ordenacao, setOrdenacao] = useState(() => {
     try {
@@ -2524,18 +2548,20 @@ export const MinhaCarteiraScreen = ({
     }
   };
 
-  const Contador = ({ statusKey, label, count }) => {
-    const meta = statusMap[statusKey];
+  const Contador = ({ statusKey, label, count, corOverride, corSoftOverride }) => {
+    const meta = statusMap[statusKey] || { cor: corOverride || palette.accent, soft: corSoftOverride || palette.accentSoft };
+    const cor = corOverride || meta.cor;
+    const soft = corSoftOverride || meta.soft;
     const ativo = filtroStatus === statusKey;
     return (
       <button onClick={() => setFiltroStatus(ativo ? 'todos' : statusKey)} style={{
-        background: ativo ? meta.soft : palette.surface,
-        border: `1.5px solid ${ativo ? meta.cor : palette.beige}`,
+        background: ativo ? soft : palette.surface,
+        border: `1.5px solid ${ativo ? cor : palette.beige}`,
         borderRadius: 10, padding: '10px 6px', flex: 1, minWidth: 0, cursor: 'pointer',
         fontFamily: FONT, textAlign: 'center', transition: 'all 0.15s',
       }}>
-        <div style={{ fontSize: fz(21), fontWeight: 700, color: ativo ? meta.cor : palette.ink, lineHeight: 1 }}>{count}</div>
-        <div style={{ fontSize: fz(10), color: ativo ? meta.cor : palette.inkMuted, marginTop: 4, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontSize: fz(21), fontWeight: 700, color: ativo ? cor : palette.ink, lineHeight: 1 }}>{count}</div>
+        <div style={{ fontSize: fz(10), color: ativo ? cor : palette.inkMuted, marginTop: 4, fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>{label}</div>
       </button>
     );
   };
@@ -2704,13 +2730,23 @@ export const MinhaCarteiraScreen = ({
             </button>
           </div>
 
-          {/* Linha 3 (expandida): Sacola, S/Ativ, Inativ, Arquivo */}
+          {/* Linha 3 (expandida): Sacola, S/Ativ, Inativ, Arquivo, 🛒 Carrinhos */}
           {contadoresExpandidos && (
             <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto' }}>
               <Contador statusKey="separandoSacola" label="Sacola" count={contadores.separandoSacola} />
               <Contador statusKey="semAtividade" label="S/Ativ" count={contadores.semAtividade} />
               <Contador statusKey="inativo" label="Inativ" count={contadores.inativo} />
               <Contador statusKey="arquivo" label="Arq" count={contadores.arquivo} />
+              {/* 🛒 Carrinhos — Ailson 12/05/2026 (Onda 3)
+                  Leads que ELA mandou mensagem WhatsApp ficam aqui pra
+                  follow-up: pode pedir nova mensagem, salvar observações. */}
+              <Contador
+                statusKey="carrinhos"
+                label="🛒 Carrinhos"
+                count={meusCarrinhos.length}
+                corOverride={palette.accent}
+                corSoftOverride={palette.accentSoft}
+              />
             </div>
           )}
 
@@ -2819,10 +2855,44 @@ export const MinhaCarteiraScreen = ({
         </div>
 
         <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 8 }}>
-          {itensFiltrados.length} {itensFiltrados.length === 1 ? 'item' : 'itens'}
+          {filtroStatus === 'carrinhos'
+            ? `${meusCarrinhos.length} ${meusCarrinhos.length === 1 ? 'lead' : 'leads'} com mensagem enviada`
+            : `${itensFiltrados.length} ${itensFiltrados.length === 1 ? 'item' : 'itens'}`
+          }
         </div>
 
-        {/* Lista */}
+        {/* ━━━ Lista CARRINHOS — Ailson 12/05/2026 ━━━━━━━━━━━━━━━━━━━━━━ */}
+        {/* Quando filtro Carrinhos ativo, mostra leads que ela mandou
+            mensagem (em vez da lista de clientes normal). Permite follow-up. */}
+        {filtroStatus === 'carrinhos' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {meusCarrinhos.length === 0 && (
+              <div style={{
+                textAlign: 'center', padding: 30, color: palette.inkMuted,
+                background: palette.surface, borderRadius: 12, border: `1px dashed ${palette.beige}`,
+              }}>
+                <div style={{ fontSize: fz(14), marginBottom: 4 }}>Nenhum carrinho aqui ainda</div>
+                <div style={{ fontSize: fz(12), color: palette.inkMuted }}>
+                  Quando vc enviar mensagem pra um lead na tab "🛒 Carrinho", ele vai aparecer aqui
+                </div>
+              </div>
+            )}
+            {meusCarrinhos.map(lead => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                userId={state.userId}
+                isAdmin={state.isAdmin}
+                vendedoraId={vendedora?.id}
+                limitesDiarios={{ pj: 1, pf: 1, pj_restante: 99, pf_restante: 99 }}
+                onAcaoConcluida={() => setReloadCarrinhosKey(k => k + 1)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Lista normal de clientes (oculta quando filtro=carrinhos) */}
+        {filtroStatus !== 'carrinhos' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {itensFiltrados.map(item => {
             const meta = statusMap[item.statusAtual] || statusMap.ativo;
@@ -3015,8 +3085,9 @@ export const MinhaCarteiraScreen = ({
             );
           })}
         </div>
+        )}
 
-        {itensFiltrados.length === 0 && (
+        {itensFiltrados.length === 0 && filtroStatus !== 'carrinhos' && (
           <div style={{
             padding: 32, textAlign: 'center', color: palette.inkMuted, fontSize: fz(15),
             background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12,
