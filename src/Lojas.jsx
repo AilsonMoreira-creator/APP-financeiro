@@ -1916,7 +1916,15 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
   // Estado de navegação
   const [screen, setScreen] = useState('home');
   const [sugestaoAtiva, setSugestaoAtiva] = useState(null);
-  const [clienteAtivo, setClienteAtivo] = useState(null);
+  // Ailson 13/05/2026: bug — ao adicionar WhatsApp via modal, o cliente
+  // mostrado no DetalheClienteScreen não atualizava (era snapshot).
+  // FIX: guarda só o ID e deriva o objeto do state.clientes (que o
+  // reducer atualiza via dispatch UPDATE_CLIENTE).
+  const [clienteAtivoId, setClienteAtivoId] = useState(null);
+  const clienteAtivo = useMemo(
+    () => clienteAtivoId ? state.clientes.find(c => c.id === clienteAtivoId) : null,
+    [clienteAtivoId, state.clientes]
+  );
   const [grupoAtivo, setGrupoAtivo] = useState(null);
   const [grupoOrigem, setGrupoOrigem] = useState('grupos');
   const [showModal, setShowModal] = useState(false);
@@ -1948,7 +1956,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
   };
   
   const handleSelectCliente = (c) => {
-    setClienteAtivo(c);
+    setClienteAtivoId(c.id);
     setScreen('cliente');
   };
   
@@ -1984,6 +1992,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
         <HomeScreen
           lojas={lojas}
           onSelectVendedora={handleSelectVendedora}
+          onSelectCliente={handleSelectCliente}
           onAbrirHistorico={() => setScreen('historico')}
           onNavegarConfig={handleAbrirAdmin}
         />

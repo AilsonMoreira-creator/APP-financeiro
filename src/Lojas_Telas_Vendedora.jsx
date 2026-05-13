@@ -39,7 +39,7 @@ import {
   TrendingUp, TrendingDown, BarChart3, UserCog, Maximize2, Filter,
   Save, Trash2, Edit3, MapPin, Clock, CheckCircle2, AlertCircle,
   Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown, Target,
-  UsersRound, Link2, Unlink2, Crown, ShoppingBag, ShoppingCart, Loader2, Send, User,
+  UsersRound, Link2, Unlink2, Crown, ShoppingBag, ShoppingCart, Loader2, Send, User, Briefcase, UserCheck,
   Bell, Megaphone, BellOff, Trophy, Coins, Eye, EyeOff,
 } from 'lucide-react';
 
@@ -148,6 +148,7 @@ function capitalizeTipo(tipo) {
 export const HomeScreen = ({
   lojas,
   onSelectVendedora,
+  onSelectCliente,
   onTogglePerfil,
   onAbrirHistorico,
   onNavegarConfig,
@@ -163,6 +164,7 @@ export const HomeScreen = ({
         { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
         { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
         { id: 'produtos', label: 'Produtos', icon: Package },
+        { id: 'carteira_geral', label: 'Carteira geral', icon: Briefcase },
         { id: 'config', label: 'Config', icon: Settings },
       ]
     : [
@@ -229,6 +231,9 @@ export const HomeScreen = ({
       )}
       {activeTab === 'produtos' && isAdmin && (
         <ProdutosTab userId={state?.userId} />
+      )}
+      {activeTab === 'carteira_geral' && isAdmin && (
+        <CarteiraGeralTab lojas={lojas} onSelectCliente={onSelectCliente} />
       )}
       {activeTab === 'config' && isAdmin && (
         <ConfigTab lojas={lojas} onNavegar={onNavegarConfig} />
@@ -1422,6 +1427,303 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
     </div>
   );
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CarteiraGeralTab — Ailson 13/05/2026
+// 
+// Tab admin-only que mostra TODOS os clientes de TODAS as vendedoras.
+// Filtros: busca (nome/cnpj/cpf), vendedora, status, ordenação.
+// Click no card → DetalheClienteScreen (mesma da carteira individual).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
+  const { state } = lojas;
+  const { clientes, vendedoras } = state;
+
+  // Filtros — persistem em localStorage como os outros do app
+  const [busca, setBusca] = useState('');
+  const [filtroVendedoraId, setFiltroVendedoraId] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lojas_carteira_geral_filtros') || '{}').vendedoraId || 'todas'; }
+    catch { return 'todas'; }
+  });
+  const [filtroStatus, setFiltroStatus] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lojas_carteira_geral_filtros') || '{}').status || 'todos'; }
+    catch { return 'todos'; }
+  });
+  const [ordenacao, setOrdenacao] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lojas_carteira_geral_filtros') || '{}').ordenacao || 'maior_compra'; }
+    catch { return 'maior_compra'; }
+  });
+
+  // Persiste filtros
+  useEffect(() => {
+    try {
+      localStorage.setItem('lojas_carteira_geral_filtros', JSON.stringify({
+        vendedoraId: filtroVendedoraId, status: filtroStatus, ordenacao,
+      }));
+    } catch {}
+  }, [filtroVendedoraId, filtroStatus, ordenacao]);
+
+  // Mapa vendedora_id -> nome (pra mostrar no card)
+  const vendedoraMap = useMemo(() => {
+    const m = new Map();
+    (vendedoras || []).forEach(v => m.set(v.id, v));
+    return m;
+  }, [vendedoras]);
+
+  // Filtra + ordena
+  const clientesFiltrados = useMemo(() => {
+    const buscaNorm = busca.trim().toLowerCase();
+    let arr = (clientes || []).filter(c => {
+      // Filtro vendedora
+      if (filtroVendedoraId !== 'todas' && c.vendedora_id !== filtroVendedoraId) return false;
+      // Filtro status
+      if (filtroStatus !== 'todos' && c.statusAtual !== filtroStatus) return false;
+      // Busca por nome, apelido, cnpj/cpf
+      if (buscaNorm) {
+        const campos = [
+          c.nome, c.apelido, c.razao_social,
+          (c.documento || '').replace(/\D/g, ''),
+        ].map(s => (s || '').toLowerCase());
+        const buscaSemMascara = buscaNorm.replace(/\D/g, '');
+        const bate = campos.some(s => s.includes(buscaNorm))
+          || (buscaSemMascara && campos.some(s => s.includes(buscaSemMascara)));
+        if (!bate) return false;
+      }
+      return true;
+    });
+
+    // Ordenação
+    if (ordenacao === 'az') {
+      arr.sort((a, b) => (a.nome || a.apelido || '').localeCompare(b.nome || b.apelido || ''));
+    } else if (ordenacao === 'maior_compra') {
+      arr.sort((a, b) => (b.valor_total_compras || 0) - (a.valor_total_compras || 0));
+    } else if (ordenacao === 'mais_recente') {
+      arr.sort((a, b) => {
+        const da = new Date(a.ultima_compra_em || 0).getTime();
+        const db = new Date(b.ultima_compra_em || 0).getTime();
+        return db - da;
+      });
+    }
+
+    return arr;
+  }, [clientes, busca, filtroVendedoraId, filtroStatus, ordenacao]);
+
+  // Contadores por status (sempre com filtros de vendedora + busca aplicados,
+  // mas SEM o filtro de status, pra mostrar quantos tem em cada categoria)
+  const contadores = useMemo(() => {
+    const buscaNorm = busca.trim().toLowerCase();
+    const buscaSemMascara = buscaNorm.replace(/\D/g, '');
+    const aplicavel = (clientes || []).filter(c => {
+      if (filtroVendedoraId !== 'todas' && c.vendedora_id !== filtroVendedoraId) return false;
+      if (buscaNorm) {
+        const campos = [c.nome, c.apelido, c.razao_social, (c.documento || '').replace(/\D/g, '')]
+          .map(s => (s || '').toLowerCase());
+        const bate = campos.some(s => s.includes(buscaNorm))
+          || (buscaSemMascara && campos.some(s => s.includes(buscaSemMascara)));
+        if (!bate) return false;
+      }
+      return true;
+    });
+    return {
+      todos: aplicavel.length,
+      ativo: aplicavel.filter(c => c.statusAtual === 'ativo').length,
+      separandoSacola: aplicavel.filter(c => c.statusAtual === 'separandoSacola').length,
+      atencao: aplicavel.filter(c => c.statusAtual === 'atencao').length,
+      semAtividade: aplicavel.filter(c => c.statusAtual === 'semAtividade').length,
+      inativo: aplicavel.filter(c => c.statusAtual === 'inativo').length,
+      arquivo: aplicavel.filter(c => c.statusAtual === 'arquivo').length,
+    };
+  }, [clientes, busca, filtroVendedoraId]);
+
+  // Vendedoras ativas pra o select
+  const vendedorasOrdenadas = useMemo(() => {
+    return [...(vendedoras || [])].sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+  }, [vendedoras]);
+
+  // ─── Render ──────────────────────────────────────────────────
+  return (
+    <div style={{ background: palette.bg, minHeight: '100vh', padding: 14, fontFamily: FONT }}>
+      {/* Header */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: fz(11), fontWeight: 600, letterSpacing: 1, color: palette.inkMuted, textTransform: 'uppercase' }}>
+          Admin · Visão geral
+        </div>
+        <div style={{ fontSize: fz(20), fontWeight: 600, color: palette.ink, marginTop: 2 }}>
+          Carteira geral
+        </div>
+        <div style={{ fontSize: fz(12), color: palette.inkSoft, marginTop: 2 }}>
+          {clientes?.length || 0} clientes no total · {vendedorasOrdenadas.length} vendedoras
+        </div>
+      </div>
+
+      {/* Busca */}
+      <div style={{ position: 'relative', marginBottom: 10 }}>
+        <Search size={sz(16)} style={{
+          position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+          color: palette.inkMuted, pointerEvents: 'none',
+        }} />
+        <input
+          type="text"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar por nome, apelido, CNPJ ou CPF…"
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '10px 12px 10px 36px', fontFamily: FONT, fontSize: fz(14),
+            border: `1px solid ${palette.beige}`, borderRadius: 10,
+            background: palette.surface, color: palette.ink,
+          }}
+        />
+      </div>
+
+      {/* Filtros: vendedora + ordenação (lado a lado) */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <select
+          value={filtroVendedoraId}
+          onChange={e => setFiltroVendedoraId(e.target.value)}
+          style={{
+            flex: 1, padding: '8px 10px', fontFamily: FONT, fontSize: fz(13),
+            border: `1px solid ${palette.beige}`, borderRadius: 8,
+            background: palette.surface, color: palette.ink,
+          }}
+        >
+          <option value="todas">Todas vendedoras</option>
+          {vendedorasOrdenadas.map(v => (
+            <option key={v.id} value={v.id}>{v.nome}{v.loja ? ` · ${v.loja}` : ''}</option>
+          ))}
+        </select>
+        <select
+          value={ordenacao}
+          onChange={e => setOrdenacao(e.target.value)}
+          style={{
+            flex: 1, padding: '8px 10px', fontFamily: FONT, fontSize: fz(13),
+            border: `1px solid ${palette.beige}`, borderRadius: 8,
+            background: palette.surface, color: palette.ink,
+          }}
+        >
+          <option value="maior_compra">Maiores compras</option>
+          <option value="mais_recente">Mais recentes</option>
+          <option value="az">A → Z</option>
+        </select>
+      </div>
+
+      {/* Chips status — scroll horizontal */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
+        {[
+          { id: 'todos', label: 'Todos', cor: palette.ink },
+          { id: 'ativo', label: 'Ativos', cor: statusMap.ativo.cor },
+          { id: 'separandoSacola', label: 'Sacola', cor: statusMap.separandoSacola.cor },
+          { id: 'atencao', label: 'Atenção', cor: statusMap.atencao.cor },
+          { id: 'semAtividade', label: 'S/Atividade', cor: statusMap.semAtividade.cor },
+          { id: 'inativo', label: 'Inativos', cor: statusMap.inativo.cor },
+          { id: 'arquivo', label: 'Arquivo', cor: statusMap.arquivo.cor },
+        ].map(c => {
+          const ativo = filtroStatus === c.id;
+          const count = contadores[c.id] ?? 0;
+          return (
+            <button
+              key={c.id}
+              onClick={() => setFiltroStatus(c.id)}
+              style={{
+                flexShrink: 0, padding: '6px 12px',
+                background: ativo ? c.cor : palette.surface,
+                color: ativo ? '#fff' : palette.ink,
+                border: `1px solid ${ativo ? c.cor : palette.beige}`,
+                borderRadius: 8, cursor: 'pointer', fontFamily: FONT,
+                fontSize: fz(13), fontWeight: ativo ? 600 : 500,
+                whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              {c.label}
+              <span style={{
+                fontSize: fz(11), fontWeight: 700,
+                background: ativo ? 'rgba(255,255,255,0.2)' : palette.beigeSoft,
+                color: ativo ? '#fff' : palette.inkSoft,
+                padding: '1px 6px', borderRadius: 4,
+              }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Resultado info */}
+      <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 10 }}>
+        {clientesFiltrados.length} {clientesFiltrados.length === 1 ? 'cliente' : 'clientes'}
+        {filtroVendedoraId !== 'todas' && vendedoraMap.has(filtroVendedoraId) && (
+          <span> · {vendedoraMap.get(filtroVendedoraId).nome}</span>
+        )}
+      </div>
+
+      {/* Lista de cards */}
+      {clientesFiltrados.length === 0 && (
+        <div style={{
+          padding: 30, textAlign: 'center', color: palette.inkMuted,
+          background: palette.surface, borderRadius: 12, border: `1px dashed ${palette.beige}`,
+        }}>
+          <div style={{ fontSize: fz(14), marginBottom: 4 }}>Nenhum cliente nesses filtros</div>
+          <div style={{ fontSize: fz(12), color: palette.inkMuted }}>
+            Tenta ajustar busca, vendedora ou status
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 80 }}>
+        {clientesFiltrados.map(c => {
+          const meta = statusMap[c.statusAtual] || statusMap.ativo;
+          const vendedora = vendedoraMap.get(c.vendedora_id);
+          const nome = c.apelido || c.nome || c.razao_social || 'Sem nome';
+          return (
+            <button
+              key={c.id}
+              onClick={() => onSelectCliente && onSelectCliente(c)}
+              style={{
+                background: palette.surface, border: `1px solid ${palette.beige}`,
+                borderRadius: 12, padding: 12, cursor: 'pointer', textAlign: 'left',
+                fontFamily: FONT, display: 'block',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontSize: fz(15), fontWeight: 600, color: palette.ink,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {nome}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{
+                      fontSize: fz(11), fontWeight: 600,
+                      color: meta.cor, background: meta.soft,
+                      padding: '2px 7px', borderRadius: 4,
+                    }}>
+                      {meta.emoji} {meta.label}
+                    </span>
+                    {vendedora && (
+                      <span style={{ fontSize: fz(12), color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <UserCheck size={sz(12)} /> {vendedora.nome}
+                        {vendedora.loja && <span style={{ color: palette.inkMuted }}> · {vendedora.loja}</span>}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: fz(14), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
+                    {c.valor_total_compras ? 'R$ ' + Number(c.valor_total_compras).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—'}
+                  </div>
+                  <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 3 }}>
+                    {c.qtd_compras ? `${c.qtd_compras} ${c.qtd_compras === 1 ? 'compra' : 'compras'}` : 'sem compras'}
+                  </div>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 
 // ─── ConfigTab ─────────────────────────────────────────────────────────────
 
