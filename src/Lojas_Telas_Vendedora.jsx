@@ -1055,8 +1055,8 @@ const CardConversoes = ({ lojas }) => {
           </div>
           <KpiSlice cor={palette.ok}     valor={fmtMoney(valor)}       label="convertido" />
           <KpiSlice cor={palette.warn}   valor={ps.atencao || 0}       label="atenção" />
-          <KpiSlice cor="#e67e22"        valor={ps.semAtividade || 0}  label="90+ dias" />
-          <KpiSlice cor={palette.alert}  valor={ps.inativo || 0}       label="inativo" />
+          <KpiSlice cor="#d4a017"        valor={ps.semAtividade || 0}  label="+3M" />
+          <KpiSlice cor="#e67e22"        valor={ps.inativo || 0}       label="+6M" />
           {/* 🛒 Carrinho — conversões automáticas via cruzamento Miré ↔ leads.
               Mostra qtd + valor + quebra site/manual. Ailson 13/05/2026. */}
           {(po.lead_carrinho?.total || 0) > 0 && (
@@ -1386,7 +1386,7 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
           </div>
           <KpiSlice cor={palette.ok}     valor={stats.ativos}    label="ativos" />
           <KpiSlice cor={palette.warn}   valor={stats.atencao}   label="atenção" />
-          <KpiSlice cor="#e67e22"         valor={stats.semAt}    label="90+ dias" />
+          <KpiSlice cor="#d4a017"        valor={stats.semAt}     label="+3M" />
           <KpiSlice cor={palette.purple} valor={stats.sacola}    label="sacolas" />
           <KpiSlice cor={palette.accent} valor={`${stats.executadas}/${stats.sugestoes}`} label="sugestões hoje" />
         </div>
@@ -1623,8 +1623,8 @@ const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
           { id: 'ativo', label: 'Ativos', cor: statusMap.ativo.cor },
           { id: 'separandoSacola', label: 'Sacola', cor: statusMap.separandoSacola.cor },
           { id: 'atencao', label: 'Atenção', cor: statusMap.atencao.cor },
-          { id: 'semAtividade', label: 'S/Atividade', cor: statusMap.semAtividade.cor },
-          { id: 'inativo', label: 'Inativos', cor: statusMap.inativo.cor },
+          { id: 'semAtividade', label: '+3M', cor: statusMap.semAtividade.cor },
+          { id: 'inativo', label: '+6M', cor: statusMap.inativo.cor },
           { id: 'arquivo', label: 'Arquivo', cor: statusMap.arquivo.cor },
         ].map(c => {
           const ativo = filtroStatus === c.id;
@@ -4350,7 +4350,7 @@ const ConversoesVendedora = ({ conversoes, fz, sz }) => {
           </span>
         </div>
         <div style={{ fontSize: fz(13), color: palette.inkSoft, lineHeight: 1.5 }}>
-          Toda venda de cliente em atenção, sem atividade ou inativo após enviar mensagem
+          Toda venda de cliente em atenção, +3M ou +6M após enviar mensagem
           conta como conversão. Continue mandando! Cada mensagem aumenta sua chance. 💪
         </div>
       </div>
@@ -4400,12 +4400,12 @@ const ConversoesVendedora = ({ conversoes, fz, sz }) => {
               <span style={{ fontSize: fz(11), marginLeft: 4, color: palette.inkMuted }}>em atenção</span></span>
           )}
           {porStatus.semAtividade > 0 && (
-            <span><strong style={{ color: '#e67e22', fontSize: fz(15) }}>{porStatus.semAtividade}</strong>
-              <span style={{ fontSize: fz(11), marginLeft: 4, color: palette.inkMuted }}>sem atividade</span></span>
+            <span><strong style={{ color: '#d4a017', fontSize: fz(15) }}>{porStatus.semAtividade}</strong>
+              <span style={{ fontSize: fz(11), marginLeft: 4, color: palette.inkMuted }}>+3M</span></span>
           )}
           {porStatus.inativo > 0 && (
-            <span><strong style={{ color: palette.alert, fontSize: fz(15) }}>{porStatus.inativo}</strong>
-              <span style={{ fontSize: fz(11), marginLeft: 4, color: palette.inkMuted }}>inativas</span></span>
+            <span><strong style={{ color: '#e67e22', fontSize: fz(15) }}>{porStatus.inativo}</strong>
+              <span style={{ fontSize: fz(11), marginLeft: 4, color: palette.inkMuted }}>+6M</span></span>
           )}
         </div>
       </div>
@@ -4538,8 +4538,8 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
               { status: 'ativo', label: 'Ativos', count: stats.ativos },
               { status: 'separandoSacola', label: 'Sacola em espera', count: stats.sacola },
               { status: 'atencao', label: 'Em atenção', count: stats.atencao },
-              { status: 'semAtividade', label: 'Sem atividade', count: stats.semAt },
-              { status: 'inativo', label: 'Inativos', count: stats.inativo },
+              { status: 'semAtividade', label: '+3M', count: stats.semAt },
+              { status: 'inativo', label: '+6M', count: stats.inativo },
             ];
             // Quando retraido, mostra so a primeira linha (Ativos)
             const visiveis = composicaoExpandida ? linhas : linhas.slice(0, 1);

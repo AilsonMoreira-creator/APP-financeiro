@@ -111,12 +111,18 @@ export const spinKeyframes = { animation: 'spin 1s linear infinite' };
 // MAPAS DE STATUS / SUBTIPOS / FASES (visuais — cor + label + emoji)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Ailson 13/05/2026: renomeacao pra tom menos "perdido" — mantemos
+// os identificadores internos ('semAtividade'/'inativo') pra nao quebrar
+// constraint do banco, filtros e prompts da IA. So mudam labels e cores.
+//   atencao    -> 'Atenção'  amarelo claro
+//   semAtividade -> '+3M'    amarelo mais forte (90-180d)
+//   inativo    -> '+6M'      laranja (180+ d)
 export const statusMap = {
-  ativo: { cor: palette.ok, soft: palette.okSoft, label: 'Ativo', emoji: '🟢' },
-  atencao: { cor: palette.warn, soft: palette.warnSoft, label: 'Atenção', emoji: '🟡' },
-  semAtividade: { cor: '#e67e22', soft: '#fef0e6', label: 'S/Atividade', emoji: '🟠' },
-  inativo: { cor: palette.alert, soft: palette.alertSoft, label: 'Inativo', emoji: '🔴' },
-  arquivo: { cor: palette.archive, soft: palette.archiveSoft, label: 'Arquivo', emoji: '📁' },
+  ativo:           { cor: palette.ok,     soft: palette.okSoft,  label: 'Ativo',    emoji: '🟢' },
+  atencao:         { cor: palette.warn,   soft: palette.warnSoft, label: 'Atenção',  emoji: '🟡' },
+  semAtividade:    { cor: '#d4a017',      soft: '#fef5d4',        label: '+3M',      emoji: '🟡' },
+  inativo:         { cor: '#e67e22',      soft: '#fef0e6',        label: '+6M',      emoji: '🟠' },
+  arquivo:         { cor: palette.archive, soft: palette.archiveSoft, label: 'Arquivo', emoji: '📁' },
   separandoSacola: { cor: palette.purple, soft: palette.purpleSoft, label: 'Sacola', emoji: '🟣' },
 };
 

@@ -917,7 +917,7 @@ export const RegrasScreen = ({ lojas, onBack }) => {
               <span style={{ fontSize: fz(16), color: palette.inkSoft }}>%</span>
             </div>
             <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
-              Cliente 90+ dias
+              Cliente +3M
             </div>
           </div>
           <div>
