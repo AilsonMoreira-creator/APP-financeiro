@@ -97,6 +97,14 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
   const [obsAberta, setObsAberta] = useState(false);
   const [obsCarregada, setObsCarregada] = useState(false);
   const [salvandoObs, setSalvandoObs] = useState(false);
+  // Estado do lock — Ailson 13/05/2026
+  // Quando vendedora abre o card, tenta pegar lock de 30 min. Se outra
+  // vendedora já tá atendendo, bloqueia (toast + não expande).
+  // IMPORTANTE: declarado AQUI (antes do statusBadge) pq outraAtendendo
+  // logo abaixo usa lockInfo — se declarado depois, da TDZ error
+  // "Cannot access 'lockInfo' before initialization" (Ailson 13/05/2026).
+  const [tentandoLock, setTentandoLock] = useState(false);
+  const [lockInfo, setLockInfo] = useState(null); // { vendedora_nome, expira }
 
   // Status visual
   let statusBadge = null;
@@ -134,12 +142,6 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
     (isPJ && limitesDiarios.pj_restante <= 0) ||
     (!isPJ && limitesDiarios.pf_restante <= 0)
   );
-
-  // Estado do lock — Ailson 13/05/2026
-  // Quando vendedora abre o card, tenta pegar lock de 30 min. Se outra
-  // vendedora já tá atendendo, bloqueia (toast + não expande).
-  const [tentandoLock, setTentandoLock] = useState(false);
-  const [lockInfo, setLockInfo] = useState(null); // { vendedora_nome, expira }
 
   // ─── Handlers ────────────────────────────────────────────────
   const toggleExpandir = async () => {
