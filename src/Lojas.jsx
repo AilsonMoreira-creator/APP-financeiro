@@ -1925,6 +1925,12 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
     () => clienteAtivoId ? state.clientes.find(c => c.id === clienteAtivoId) : null,
     [clienteAtivoId, state.clientes]
   );
+  // Tela de onde o detalheCliente foi aberto — pra voltar certo (Ailson 13/05)
+  // 'carteira' = vendedora abriu da MinhaCarteira
+  // 'home'     = admin abriu da Carteira Geral (volta pra home/tab geral)
+  // IMPORTANTE: tem q ficar ANTES do early return de loading (linha ~1942),
+  // senao da React error #310 (Rendered more hooks than during previous render).
+  const [clienteOrigem, setClienteOrigem] = useState('carteira');
   const [grupoAtivo, setGrupoAtivo] = useState(null);
   const [grupoOrigem, setGrupoOrigem] = useState('grupos');
   const [showModal, setShowModal] = useState(false);
@@ -1955,11 +1961,6 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
     setScreen('sugestao');
   };
   
-  // Tela de onde o detalheCliente foi aberto — pra voltar certo (Ailson 13/05)
-  // 'carteira' = vendedora abriu da MinhaCarteira
-  // 'home'     = admin abriu da Carteira Geral (volta pra home/tab geral)
-  const [clienteOrigem, setClienteOrigem] = useState('carteira');
-
   const handleSelectCliente = (c, origem = 'carteira') => {
     setClienteAtivoId(c.id);
     setClienteOrigem(origem);
