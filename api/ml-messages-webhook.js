@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     // Busca/cria conversa
     let { data: conv } = await supabase
       .from('ml_conversations')
-      .select('id')
+      .select('id, status')
       .eq('pack_id', String(packId))
       .eq('brand', brand)
       .maybeSingle();
@@ -140,6 +140,13 @@ export default async function handler(req, res) {
         last_message_at: msg.date_created || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+      // Cliente mandou mensagem nova → reabrir se estava resolvida
+      // (Ailson 13/05/2026 — antes a conv ficava "presa" resolvida e
+      //  vendedora não via a nova mensagem na fila de pendentes)
+      if (fromType === 'buyer' && conv.status === 'resolvido') {
+        update.status = 'aberto';
+        update.tag = null;  // tira a tag 'resolvido' também
+      }
       if (fromType === 'buyer') {
         // Incrementa unread
         await supabase.rpc('increment_unread', { conv_id: conv.id }).catch(() => {

@@ -416,14 +416,14 @@ export default function MLPosVenda({ supabase, currentUser }) {
           {msgs.length === 0 ? (
             <div style={{ ...S, textAlign: 'center', color: PALETTE.textLight, padding: 20, fontSize: 14 }}>Nenhuma mensagem carregada</div>
           ) : (
-            // Garantia de ordem cronológica crescente. Fallback robusto
-            // pra mensagens antigas com date_created NULL: usa created_at
-            // (data de gravação no banco). Ailson 06/05/2026.
+            // Ordem decrescente — mais RECENTES em cima, mais antigas
+            // em baixo (Ailson 13/05/2026). Fallback robusto pra mensagens
+            // antigas com date_created NULL: usa created_at.
             [...msgs]
               .sort((a, b) => {
                 const ta = new Date(a.date_created || a.created_at || 0).getTime();
                 const tb = new Date(b.date_created || b.created_at || 0).getTime();
-                return ta - tb;
+                return tb - ta;
               })
               .map((m, i) => (
             <div key={m.id || i} style={{ marginBottom: 14, display: 'flex', flexDirection: m.from_type === 'seller' ? 'row-reverse' : 'row', gap: 8 }}>
@@ -505,9 +505,27 @@ export default function MLPosVenda({ supabase, currentUser }) {
           </div>
         )}
 
-        {/* Reply */}
-        {conv.status === 'aberto' && (
-          <div style={{ background: PALETTE.white, borderRadius: 10, border: `1px solid ${PALETTE.sand}`, padding: '12px 16px' }}>
+        {/* Reply box — Ailson 13/05/2026:
+            ANTES: aparecia só se status='aberto' (trancava ao resolver)
+            AGORA: sempre habilitado. Pode mandar msg mesmo já resolvida.
+            Botão toggle: Resolver (se aberta) ou Reabrir (se resolvida). */}
+        {(
+          <div style={{
+            background: PALETTE.white, borderRadius: 10,
+            border: `1px solid ${conv.status === 'resolvido' ? PALETTE.green + '40' : PALETTE.sand}`,
+            padding: '12px 16px',
+          }}>
+            {/* Aviso visual quando conversa já está marcada como resolvida */}
+            {conv.status === 'resolvido' && (
+              <div style={{
+                ...S, background: PALETTE.green + '15', color: PALETTE.green,
+                fontSize: 12, padding: '6px 10px', borderRadius: 6,
+                marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <SacIcon name="resolvido" size={14}/>
+                Conversa marcada como resolvida — mas vc pode continuar respondendo se precisar
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
               <button onClick={getAiSuggestion} disabled={aiLoading} style={{ ...S, background: '#f0f6fb', color: PALETTE.blue, border: `1px solid ${PALETTE.blue}40`, borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, opacity: aiLoading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{aiLoading ? '⏳ gerando…' : <><SacIcon name="sugestao_ia" size={14}/>Sugestão IA</>}</button>
               {/* Botao Anexar: input file escondido + label estilizado */}
@@ -526,7 +544,33 @@ export default function MLPosVenda({ supabase, currentUser }) {
                 />
               </label>
               <div style={{ flex: 1 }} />
-              <button onClick={() => updateConv('status', 'resolvido')} style={{ ...S, background: PALETTE.green, color: '#fff', border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}><SacIcon name="resolvido" size={14}/>Resolvido</button>
+              {/* Botão toggle: Resolver (se aberta) | Reabrir (se resolvida) */}
+              {conv.status === 'resolvido' ? (
+                <button
+                  onClick={() => updateConv('status', 'aberto')}
+                  style={{
+                    ...S, background: PALETTE.cream, color: PALETTE.dark,
+                    border: `1px solid ${PALETTE.border}`, borderRadius: 5,
+                    padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}
+                  title="Tira a bolinha verde — volta como pendente"
+                >
+                  ↩️ Reabrir
+                </button>
+              ) : (
+                <button
+                  onClick={() => updateConv('status', 'resolvido')}
+                  style={{
+                    ...S, background: PALETTE.green, color: '#fff',
+                    border: 'none', borderRadius: 5,
+                    padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600,
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}
+                >
+                  <SacIcon name="resolvido" size={14}/>Resolvido
+                </button>
+              )}
             </div>
             {/* Chips de anexos pendentes (acima do textarea) */}
             {pendingAttachments.length > 0 && (
