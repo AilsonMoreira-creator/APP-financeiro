@@ -1955,8 +1955,14 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
     setScreen('sugestao');
   };
   
-  const handleSelectCliente = (c) => {
+  // Tela de onde o detalheCliente foi aberto — pra voltar certo (Ailson 13/05)
+  // 'carteira' = vendedora abriu da MinhaCarteira
+  // 'home'     = admin abriu da Carteira Geral (volta pra home/tab geral)
+  const [clienteOrigem, setClienteOrigem] = useState('carteira');
+
+  const handleSelectCliente = (c, origem = 'carteira') => {
     setClienteAtivoId(c.id);
+    setClienteOrigem(origem);
     setScreen('cliente');
   };
   
@@ -2036,7 +2042,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
         <DetalheClienteScreen
           lojas={lojas}
           cliente={clienteAtivo}
-          onBack={() => setScreen('carteira')}
+          onBack={() => setScreen(clienteOrigem || 'carteira')}
           onAbrirGrupo={handleSelectGrupo}
           onCriarGrupo={(c) => { setClienteParaGrupo(c); setShowCriarGrupo(true); }}
           onPedirMensagem={() => setClienteAvulso(clienteAtivo)}

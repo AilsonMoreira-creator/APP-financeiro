@@ -233,7 +233,10 @@ export const HomeScreen = ({
         <ProdutosTab userId={state?.userId} />
       )}
       {activeTab === 'carteira_geral' && isAdmin && (
-        <CarteiraGeralTab lojas={lojas} onSelectCliente={onSelectCliente} />
+        <CarteiraGeralTab
+          lojas={lojas}
+          onSelectCliente={(c) => onSelectCliente && onSelectCliente(c, 'home')}
+        />
       )}
       {activeTab === 'config' && isAdmin && (
         <ConfigTab lojas={lojas} onNavegar={onNavegarConfig} />
@@ -1437,8 +1440,12 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
-  const { state } = lojas;
-  const { clientes, vendedoras } = state;
+  const { state, clientesEnriquecidos } = lojas;
+  const { vendedoras } = state;
+  // FIX Ailson 13/05/2026: usa clientesEnriquecidos (que tem statusAtual
+  // calculado) em vez de state.clientes (raw, sem statusAtual). Sem isso
+  // os chips de status mostravam 0 em tudo.
+  const clientes = clientesEnriquecidos || [];
 
   // Filtros — persistem em localStorage como os outros do app
   const [busca, setBusca] = useState('');
@@ -1497,12 +1504,13 @@ const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
     if (ordenacao === 'az') {
       arr.sort((a, b) => (a.nome || a.apelido || '').localeCompare(b.nome || b.apelido || ''));
     } else if (ordenacao === 'maior_compra') {
-      arr.sort((a, b) => (b.valor_total_compras || 0) - (a.valor_total_compras || 0));
+      arr.sort((a, b) => (b.kpi?.lifetime_total || 0) - (a.kpi?.lifetime_total || 0));
     } else if (ordenacao === 'mais_recente') {
       arr.sort((a, b) => {
-        const da = new Date(a.ultima_compra_em || 0).getTime();
-        const db = new Date(b.ultima_compra_em || 0).getTime();
-        return db - da;
+        // dias_sem_comprar menor = mais recente
+        const da = a.kpi?.dias_sem_comprar ?? 99999;
+        const db = b.kpi?.dias_sem_comprar ?? 99999;
+        return da - db;
       });
     }
 
@@ -1709,11 +1717,16 @@ const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
                   <div style={{ fontSize: fz(14), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
-                    {c.valor_total_compras ? 'R$ ' + Number(c.valor_total_compras).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—'}
+                    {c.kpi?.lifetime_total ? 'R$ ' + Number(c.kpi.lifetime_total).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) : '—'}
                   </div>
                   <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 3 }}>
-                    {c.qtd_compras ? `${c.qtd_compras} ${c.qtd_compras === 1 ? 'compra' : 'compras'}` : 'sem compras'}
+                    {c.kpi?.qtd_compras ? `${c.kpi.qtd_compras} ${c.kpi.qtd_compras === 1 ? 'compra' : 'compras'}` : 'sem compras'}
                   </div>
+                  {c.kpi?.dias_sem_comprar != null && (
+                    <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2 }}>
+                      {c.kpi.dias_sem_comprar}d sem comprar
+                    </div>
+                  )}
                 </div>
               </div>
             </button>
