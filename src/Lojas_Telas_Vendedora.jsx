@@ -983,6 +983,7 @@ const CardConversoes = ({ lojas }) => {
   const total = data?.total ?? 0;
   const valor = data?.valor_total ?? 0;
   const ps = data?.por_status || { atencao: 0, semAtividade: 0, inativo: 0 };
+  const po = data?.por_origem || { cliente: { total: 0, valor: 0 }, lead_carrinho: { total: 0, valor: 0, site: 0, manual: 0 } };
   const fmtMoney = (v) => 'R$ ' + (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
   return (
@@ -1048,6 +1049,15 @@ const CardConversoes = ({ lojas }) => {
           <KpiSlice cor={palette.warn}   valor={ps.atencao || 0}       label="atenção" />
           <KpiSlice cor="#e67e22"        valor={ps.semAtividade || 0}  label="90+ dias" />
           <KpiSlice cor={palette.alert}  valor={ps.inativo || 0}       label="inativo" />
+          {/* 🛒 Carrinho — conversões automáticas via cruzamento Miré ↔ leads.
+              Mostra qtd + valor + quebra site/manual. Ailson 13/05/2026. */}
+          {(po.lead_carrinho?.total || 0) > 0 && (
+            <KpiSlice
+              cor={palette.accent}
+              valor={`${po.lead_carrinho.total} · ${fmtMoney(po.lead_carrinho.valor)}`}
+              label={`🛒 carrinho (${po.lead_carrinho.site || 0} site · ${po.lead_carrinho.manual || 0} whats)`}
+            />
+          )}
         </div>
       )}
     </div>

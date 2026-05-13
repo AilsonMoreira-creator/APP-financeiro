@@ -3077,7 +3077,7 @@ async function handleConversoesDashboard(req, res, _auth) {
 
   let query = supabase
     .from('lojas_conversoes')
-    .select('vendedora_id, cliente_id, cliente_nome, status_no_envio, dias_ate_compra, valor_venda, data_venda, data_mensagem')
+    .select('vendedora_id, cliente_id, cliente_nome, status_no_envio, dias_ate_compra, valor_venda, data_venda, data_mensagem, origem_tipo, canal_pedido, lead_id, pedido_mire_id')
     .gte('data_venda', inicio)
     .lte('data_venda', fim)
     .order('data_venda', { ascending: false });
@@ -3110,6 +3110,34 @@ async function handleConversoesDashboard(req, res, _auth) {
     }
   }
 
+  // ─── Agregado por origem (cliente vs lead carrinho) — Ailson 13/05/2026 ──
+  // Inclui conversões automaticas detectadas via cruzamento Miré ↔ leads.
+  // Pra admin, mostra a quebra completa no card.
+  const por_origem = {
+    cliente: { total: 0, valor: 0 },
+    lead_carrinho: { total: 0, valor: 0, site: 0, manual: 0, valor_site: 0, valor_manual: 0 },
+  };
+  for (const c of conversoes || []) {
+    const origem = c.origem_tipo === 'lead_carrinho' ? 'lead_carrinho' : 'cliente';
+    const v = Number(c.valor_venda || 0);
+    por_origem[origem].total++;
+    por_origem[origem].valor += v;
+    if (origem === 'lead_carrinho') {
+      if (c.canal_pedido === 'site') {
+        por_origem.lead_carrinho.site++;
+        por_origem.lead_carrinho.valor_site += v;
+      } else {
+        por_origem.lead_carrinho.manual++;
+        por_origem.lead_carrinho.valor_manual += v;
+      }
+    }
+  }
+  // Arredondar valores
+  por_origem.cliente.valor = Math.round(por_origem.cliente.valor * 100) / 100;
+  por_origem.lead_carrinho.valor = Math.round(por_origem.lead_carrinho.valor * 100) / 100;
+  por_origem.lead_carrinho.valor_site = Math.round(por_origem.lead_carrinho.valor_site * 100) / 100;
+  por_origem.lead_carrinho.valor_manual = Math.round(por_origem.lead_carrinho.valor_manual * 100) / 100;
+
   const mapaVendedora = new Map();
   for (const c of conversoes || []) {
     const k = c.vendedora_id;
@@ -3131,6 +3159,7 @@ async function handleConversoesDashboard(req, res, _auth) {
     total,
     valor_total: Math.round(valor_total * 100) / 100,
     por_status,
+    por_origem,
     por_vendedora,
     detalhe: (conversoes || []).slice(0, 50),
   });
