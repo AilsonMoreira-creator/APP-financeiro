@@ -101,7 +101,13 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
   // Status visual
   let statusBadge = null;
   const jaEnviada = !!lead.ultima_msg_enviada_em;
-  if (lead.status === 'mensagem_enviada' || jaEnviada) {
+  const convertido = lead.status === 'convertido';
+  if (convertido) {
+    statusBadge = {
+      label: `✓ Converteu${lead.convertido_valor ? ' ' + fmtMoeda(lead.convertido_valor) : ''}`,
+      cor: palette.ok, soft: palette.okSoft,
+    };
+  } else if (lead.status === 'mensagem_enviada' || jaEnviada) {
     statusBadge = {
       label: lead.ultima_msg_vendedora_nome
         ? `✓ Enviada por ${lead.ultima_msg_vendedora_nome}`
@@ -229,8 +235,8 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
   // ─── Render ──────────────────────────────────────────────────
   return (
     <div style={{
-      background: palette.surface,
-      border: `1px solid ${palette.beige}`,
+      background: convertido ? palette.okSoft : palette.surface,
+      border: `${convertido ? 2 : 1}px solid ${convertido ? palette.ok : palette.beige}`,
       borderRadius: 12, padding: 14,
       fontFamily: FONT, marginBottom: 10,
     }}>
@@ -1221,6 +1227,24 @@ const CarrinhoTab = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLead 
   const [modalAtribuir, setModalAtribuir] = useState(null); // lead a atribuir, null = fechado
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Conversões do mês — vendedora vê só SITE. Admin vê todas (site+manual).
+  // Ailson 13/05/2026 — Opção A do feedback.
+  const [conversoesMes, setConversoesMes] = useState(null);
+  useEffect(() => {
+    if (!userId) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/lojas-leads-conversoes-listar?periodo=mes_atual', {
+          headers: { 'X-User': userId },
+        });
+        const d = await r.json();
+        if (!cancelado && r.ok && d.ok) setConversoesMes(d);
+      } catch {}
+    })();
+    return () => { cancelado = true; };
+  }, [userId, reloadKey]);
+
   // Quando importa ou atribui, força reload da listagem
   const triggerReload = () => setReloadKey(k => k + 1);
 
@@ -1234,6 +1258,11 @@ const CarrinhoTab = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLead 
     // Outros casos: callback do pai (Onda 3 = detalhe completo)
     if (onAbrirLead) onAbrirLead(lead);
   };
+
+  // Renderiza card de conversões só se tem alguma. Vendedora vê só site
+  // (canal_pedido='site'); admin vê todas. Backend já filtra.
+  const totalConv = conversoesMes?.total || 0;
+  const valorConv = conversoesMes?.valor_total || 0;
 
   return (
     <div style={{ background: palette.bg, minHeight: '100vh' }}>
@@ -1264,6 +1293,54 @@ const CarrinhoTab = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLead 
           </button>
         )}
       </div>
+
+      {/* Card 🎉 Conversões do mês — Ailson 13/05/2026 (Opção A)
+          Aparece SE total > 0 no período mes_atual.
+          Vendedora: vê só conversões SITE dela (canal_pedido='site').
+          Admin: vê todas (site + manual). */}
+      {totalConv > 0 && (
+        <div style={{
+          margin: '14px 14px 0 14px',
+          background: palette.okSoft,
+          border: `1px solid ${palette.ok}40`,
+          borderRadius: 12, padding: '12px 14px',
+          fontFamily: FONT,
+          display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: palette.ok, color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: fz(20), flexShrink: 0,
+          }}>
+            🎉
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: fz(11), fontWeight: 700, letterSpacing: 0.5, color: palette.ok, textTransform: 'uppercase' }}>
+              Conversões do mês
+            </div>
+            <div style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink, lineHeight: 1.3, marginTop: 2 }}>
+              {isAdmin ? (
+                <>
+                  <strong style={{ color: palette.ok }}>{totalConv}</strong> pedidos · <strong style={{ color: palette.ok }}>{fmtMoeda(valorConv)}</strong>
+                  {conversoesMes?.por_canal && (
+                    <span style={{ fontSize: fz(12), color: palette.inkSoft, fontWeight: 400 }}>
+                      {' · '}
+                      {conversoesMes.por_canal.site || 0} site · {conversoesMes.por_canal.manual || 0} whats
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  Você converteu <strong style={{ color: palette.ok }}>{totalConv}</strong> {totalConv === 1 ? 'pedido' : 'pedidos'} do site
+                  {' · '}
+                  <strong style={{ color: palette.ok }}>{fmtMoeda(valorConv)}</strong>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <LeadsListagem
         key={reloadKey}

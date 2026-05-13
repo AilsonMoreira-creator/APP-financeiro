@@ -66,6 +66,7 @@ export default async function handler(req, res) {
         qtd_pecas_ultimo_carrinho, valor_ultimo_carrinho, valor_max_carrinho,
         qtd_carrinhos_com_valor,
         observacoes_ia,
+        convertido_em, convertido_valor, convertido_canal, convertido_pedido_mire_id,
         criado_em
       `);
 
@@ -100,10 +101,9 @@ export default async function handler(req, res) {
     } else if (escopo === 'meus_carrinhos') {
       // Leads que JÁ recebi mensagem da vendedora — vão pra carteira dela
       // (filtro "🛒 Carrinhos" na MinhaCarteira). Ailson 12/05/2026.
-      // Admin: vê todos com mensagem enviada (visão geral).
-      // Vendedora: vê apenas os que ELA mandou mensagem.
+      // Inclui também status='convertido' pra ela ver o resultado.
       q = q
-        .eq('status', 'mensagem_enviada')
+        .in('status', ['mensagem_enviada', 'convertido'])
         .not('ultima_msg_vendedora_id', 'is', null);
       if (!auth.isAdmin && auth.vendedoraId) {
         q = q.eq('ultima_msg_vendedora_id', auth.vendedoraId);
