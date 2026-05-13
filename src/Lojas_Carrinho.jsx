@@ -102,6 +102,10 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
   let statusBadge = null;
   const jaEnviada = !!lead.ultima_msg_enviada_em;
   const convertido = lead.status === 'convertido';
+  // Lock atualizado (do backend) OU detectado nesta sessão (lockInfo state)
+  const outraAtendendo = (
+    lead.lock_ativo && !lead.lock_e_minha
+  ) || !!lockInfo;
   if (convertido) {
     statusBadge = {
       label: `✓ Converteu${lead.convertido_valor ? ' ' + fmtMoeda(lead.convertido_valor) : ''}`,
@@ -114,6 +118,13 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
         : '✓ Mensagem enviada',
       cor: palette.ok, soft: palette.okSoft,
     };
+  } else if (outraAtendendo) {
+    // Lock de outra vendedora — mostra no card pra deixar claro
+    const vNome = lockInfo?.vendedora || lead.vendedora_atendendo_nome || 'Outra vendedora';
+    statusBadge = {
+      label: `⏳ ${vNome} atendendo`,
+      cor: palette.warn, soft: palette.warnSoft,
+    };
   }
 
   const jaCliente = lead.ja_e_cliente_lojas_id;
@@ -124,15 +135,60 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
     (!isPJ && limitesDiarios.pf_restante <= 0)
   );
 
+  // Estado do lock — Ailson 13/05/2026
+  // Quando vendedora abre o card, tenta pegar lock de 30 min. Se outra
+  // vendedora já tá atendendo, bloqueia (toast + não expande).
+  const [tentandoLock, setTentandoLock] = useState(false);
+  const [lockInfo, setLockInfo] = useState(null); // { vendedora_nome, expira }
+
   // ─── Handlers ────────────────────────────────────────────────
-  const toggleExpandir = () => {
-    // Se é admin e o lead é CPF aguardando atribuição, callback especial
+  const toggleExpandir = async () => {
+    // Admin CPF aguardando atribuição: callback especial (modal atribuir)
     if (onClickAdmin && isAdmin && lead.status === 'aguardando_atribuicao') {
       onClickAdmin(lead);
       return;
     }
-    // Se já foi enviada, expande pra ver histórico mas sem ações
-    setExpandido(e => !e);
+
+    // Se já tá expandido, só colapsa
+    if (expandido) {
+      setExpandido(false);
+      return;
+    }
+
+    // Lead já com msg enviada / convertido / admin: expande SEM pegar lock
+    // (status pós-atendimento = pode todas verem, sem travar)
+    if (jaEnviada || convertido || !vendedoraId) {
+      setExpandido(true);
+      return;
+    }
+
+    // Tenta pegar o lock — só na fila pública / atribuído pra mim
+    setTentandoLock(true);
+    setLockInfo(null);
+    try {
+      const r = await fetch('/api/lojas-leads-pegar-lock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId },
+        body: JSON.stringify({ lead_id: lead.id }),
+      });
+      const json = await r.json();
+      if (json.ok) {
+        setExpandido(true);
+      } else if (json.motivo === 'lock_de_outra_vendedora') {
+        const expira = json.lock_expira_em ? new Date(json.lock_expira_em) : null;
+        const horaExpira = expira
+          ? expira.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          : 'logo';
+        alert(`${json.vendedora_atendendo_nome || 'Outra vendedora'} já tá atendendo esse lead até ${horaExpira} ⏳`);
+        setLockInfo({ vendedora: json.vendedora_atendendo_nome, expira });
+      } else {
+        alert(json.error || 'Não foi possível abrir o lead agora');
+      }
+    } catch (e) {
+      alert('Erro ao abrir lead: ' + e.message);
+    } finally {
+      setTentandoLock(false);
+    }
   };
 
   const gerarMensagem = async () => {
@@ -240,11 +296,12 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
       borderRadius: 12, padding: 14,
       fontFamily: FONT, marginBottom: 10,
     }}>
-      {/* HEADER do card — clicável pra expandir */}
+      {/* HEADER do card — clicável pra expandir (com lock de 30 min) */}
       <div
-        onClick={toggleExpandir}
+        onClick={tentandoLock ? undefined : toggleExpandir}
         style={{
-          cursor: 'pointer',
+          cursor: tentandoLock ? 'wait' : 'pointer',
+          opacity: tentandoLock ? 0.7 : 1,
           display: 'flex', alignItems: 'flex-start',
           justifyContent: 'space-between', gap: 10, marginBottom: 8,
         }}

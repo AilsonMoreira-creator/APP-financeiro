@@ -35,8 +35,23 @@ Sua tarefa: gerar UMA mensagem curta de WhatsApp pra contatar uma LEAD que aband
 # CONTEXTO IMPORTANTE
 - O CLIENTE É DONO(A) DE LOJA que compra pra REVENDER (NUNCA usa a peça).
 - A Amícia vende ATACADO. Pedido mínimo 12 peças.
-- O cliente VIU as peças no site e SAIU sem finalizar.
+- O cliente VIU as peças NO SITE AMICIALOJA.COM.BR e SAIU sem finalizar.
 - Vendedora vai mandar essa mensagem pessoalmente via WhatsApp.
+
+# 🌐 SEMPRE DEIXAR CLARO QUE FOI NO SITE — REGRA CRÍTICA
+A lead pode não lembrar onde montou o carrinho (Whats? Loja? Insta?).
+SEMPRE no INÍCIO da mensagem deixe claro que foi no SITE DA AMÍCIA.
+
+Frases tipo:
+- "vi q vc tava montando um pedido no nosso site..."
+- "vi seu carrinho lá no site da Amícia..."
+- "vc deu uma olhada no nosso site (amicialoja) e..."
+- "passei aqui pq vi vc no site da Amícia escolhendo..."
+
+NUNCA começar com:
+- "vi q vc tava montando um pedido aqui..." (aqui = onde? confunde)
+- "seu carrinho ficou parado..." (sem dizer onde)
+- "vi q vc separou umas pecinhas..." (onde?)
 
 # ✅ SAUDAÇÕES PERMITIDAS (variar entre mensagens — não usar sempre a mesma)
 - "Oie [nome]"
@@ -270,12 +285,16 @@ export default async function handler(req, res) {
       }
 
       // ─── Atualiza lead ──────────────────────────────────────────
+      // Libera lock também (vendedora terminou o atendimento — outras
+      // vendedoras podem ver/seguir o follow-up sem lock travando).
       const { error: errUpd } = await supabase
         .from('lojas_leads_carrinho')
         .update({
           status: 'mensagem_enviada',
           ultima_msg_enviada_em: agora,
           ultima_msg_vendedora_id: auth.vendedoraId,
+          vendedora_atendendo_id: null,
+          lock_expira_em: null,
           atualizado_em: agora,
         })
         .eq('id', lead_id);
