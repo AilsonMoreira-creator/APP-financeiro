@@ -4437,13 +4437,17 @@ const PERFIL_COMPRA = [
   { v: 'gosta_novidades', label: '✨ Gosta muito de novidades' },
 ];
 
-// ─── EMOJI PICKER (Ailson 11/05/2026) ──────────────────────────────────────
+// ─── EMOJI PICKER (Ailson 11/05/2026, expandido 13/05/2026) ────────────────
 // Lista padrao curada pra contexto comercial moda atacado: tons calorosos
 // sem exagero, sem emojis "fora do contexto". Conforme a vendedora usa
 // emojis nas edicoes, a lista personaliza (top dela vem primeiro).
+//
+// Ailson 13/05/2026: acrescentou 🤎 🍁 🍂 🚀 🙏 da paleta dele.
 const EMOJIS_PADRAO_VENDEDORA = [
-  '😊', '😍', '🔥', '💕', '✨', '💛',
-  '🌸', '👏', '☕', '🎉', '🌟', '💖',
+  '😊', '😍', '🥰', '😘', '🔥', '💕',
+  '🤎', '💛', '💖', '🌸', '🙏', '👏',
+  '✨', '🌟', '🎉', '🚀', '🍁', '🍂',
+  '☕',
 ];
 
 // ─── ONDA 3 (Ailson 10/05/2026): Reclamacoes, Elogios, Eventos Timeline ──
@@ -5241,10 +5245,10 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   const emojisExibir = useMemo(() => {
     const counter = Object.entries(emojisVendedora || {});
     counter.sort((a, b) => b[1] - a[1]); // mais usados primeiro
-    const topVendedora = counter.slice(0, 12).map(([e]) => e);
+    const topVendedora = counter.slice(0, 18).map(([e]) => e);
     // Completa com padrao SEM repetir
     const completar = EMOJIS_PADRAO_VENDEDORA.filter(e => !topVendedora.includes(e));
-    return [...topVendedora, ...completar].slice(0, 12);
+    return [...topVendedora, ...completar].slice(0, 18);
   }, [emojisVendedora]);
 
   const inserirEmoji = (emoji) => {
