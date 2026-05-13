@@ -557,7 +557,7 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
 
 const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLead }) => {
   const [escopo, setEscopo] = useState('cnpj_publico');
-  const [ordenar, setOrdenar] = useState('valor'); // 'valor' | 'recentes'
+  const [ordenar, setOrdenar] = useState('recentes'); // 'valor' | 'recentes' — padrao Ailson 13/05
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
   const [data, setData] = useState({ leads: [], badge: {}, envios_hoje: {}, limites_diarios: {} });
@@ -588,13 +588,14 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
   useEffect(() => { carregar(); }, [carregar]);
 
   // ─── Toggle CNPJ / CPF ──────────────────────────────────────────
+  // Labels Ailson 13/05/2026: 'Lista carrinhos' + 'Carrinho CPF'
   const escoposVisiveis = useMemo(() => {
     const base = [
-      { id: 'cnpj_publico', label: '🏢 Fila pública', desc: 'CNPJs + CPFs ≥12pç' },
+      { id: 'cnpj_publico', label: 'Lista carrinhos', icon: ShoppingCart },
     ];
-    base.push({ id: 'cpf_atribuidos', label: '👤 CPFs atribuídos', desc: isAdmin ? 'Atribuídos' : 'Atribuídos pra você' });
+    base.push({ id: 'cpf_atribuidos', label: 'Carrinho CPF', icon: User });
     if (isAdmin) {
-      base.push({ id: 'cpf_aguardando', label: '📋 Aguardando', desc: 'CPFs pra atribuir' });
+      base.push({ id: 'cpf_aguardando', label: 'Aguardando', icon: AlertCircle });
     }
     return base;
   }, [isAdmin]);
@@ -607,6 +608,7 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
       }}>
         {escoposVisiveis.map(e => {
           const active = escopo === e.id;
+          const Icon = e.icon;
           return (
             <button
               key={e.id}
@@ -620,8 +622,10 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
                 cursor: 'pointer', fontFamily: FONT,
                 fontSize: fz(13), fontWeight: active ? 600 : 500,
                 whiteSpace: 'nowrap', transition: 'all 0.15s',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
               }}
             >
+              {Icon && <Icon size={sz(15)} />}
               {e.label}
             </button>
           );
@@ -663,7 +667,7 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
         </select>
       </div>
 
-      {/* Badge — Resumo CNPJs pendentes (sempre visível, mas mais relevante na fila pública) */}
+      {/* Badge alegre — Ailson 13/05/2026 — tom 'oportunidade' em vez de 'pendente' */}
       {escopo === 'cnpj_publico' && data.badge.qtd_pj_com_carrinho_sem_msg > 0 && (
         <div style={{
           background: palette.accentSoft, border: `1px solid ${palette.accent}30`,
@@ -672,14 +676,16 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
         }}>
           <Sparkles size={sz(20)} color={palette.accent} />
           <div style={{ fontSize: fz(13), color: palette.ink, lineHeight: 1.4 }}>
-            <strong>{data.badge.qtd_pj_com_carrinho_sem_msg}</strong> CNPJ{data.badge.qtd_pj_com_carrinho_sem_msg > 1 ? 's' : ''} esperando atendimento
+            <strong style={{ color: palette.accent }}>Oportunidade!!!</strong>
+            {' '}
+            <strong>{data.badge.qtd_pj_com_carrinho_sem_msg}</strong> {data.badge.qtd_pj_com_carrinho_sem_msg === 1 ? 'carrinho esperando' : 'carrinhos esperando'} mensagem
             {' · '}
-            Soma pendente: <strong>{fmtMoeda(data.badge.soma_valor_pendente)}</strong>
+            💰 <strong>{fmtMoeda(data.badge.soma_valor_pendente)}</strong>
             {data.badge.qtd_pj_alto_valor > 0 && (
               <>
                 {' · '}
                 <span style={{ color: palette.alert, fontWeight: 600 }}>
-                  {data.badge.qtd_pj_alto_valor} alto valor (≥R$500)
+                  🔥 {data.badge.qtd_pj_alto_valor} alto valor
                 </span>
               </>
             )}
