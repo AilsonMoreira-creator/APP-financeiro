@@ -111,7 +111,16 @@ export default async function handler(req, res) {
     }
 
     q = q.order('ultima_msg_enviada_em', { ascending: false, nullsFirst: false });
-    q = q.order('valor_ultimo_carrinho', { ascending: false, nullsFirst: false });
+
+    // Ordenação solicitada — Ailson 13/05/2026
+    // ?ordenar=valor (default) | recentes
+    const ordenar = req.query?.ordenar || 'valor';
+    if (ordenar === 'recentes') {
+      q = q.order('ultimo_carrinho_em', { ascending: false, nullsFirst: false });
+    } else {
+      // 'valor' (default) — maior valor primeiro
+      q = q.order('valor_ultimo_carrinho', { ascending: false, nullsFirst: false });
+    }
 
     const { data: leads, error } = await q;
     if (error) {

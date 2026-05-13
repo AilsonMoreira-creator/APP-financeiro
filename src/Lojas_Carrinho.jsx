@@ -80,7 +80,7 @@ function nomeLead(lead) {
 // + botão "Enviar WhatsApp" (auto-marca como enviada) + observações livres.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LeadCard = ({ lead, userId, isAdmin, vendedoraId, limitesDiarios, onAcaoConcluida, onClickAdmin }) => {
+const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDiarios, onAcaoConcluida, onClickAdmin }) => {
   const items = lead.ultimo_evento?.items_parsed || [];
   const valor = lead.valor_ultimo_carrinho || lead.ultimo_evento?.total || 0;
   const pecas = lead.qtd_pecas_ultimo_carrinho || lead.ultimo_evento?.items_count || 0;
@@ -391,24 +391,35 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, limitesDiarios, onAcaoCo
                 </div>
               )}
 
-              {!mensagemIA && (
+              {/* Mensagem amigável quando limite atingido — Ailson 13/05/2026 */}
+              {limiteAtingido && !mensagemIA && (
+                <div style={{
+                  padding: '14px 16px',
+                  background: palette.warnSoft,
+                  border: `1px solid ${palette.warn}30`,
+                  borderRadius: 10, fontSize: fz(13), color: palette.ink,
+                  lineHeight: 1.5, fontFamily: FONT,
+                }}>
+                  Oiii{vendedoraNome ? ` ${vendedoraNome.split(' ')[0]}` : ''} 😉
+                  {' '}por enquanto o limite é de <strong>1 lead CNPJ</strong> e <strong>1 CPF</strong> diários. Tenta de novo amanhã!
+                </div>
+              )}
+
+              {!limiteAtingido && !mensagemIA && (
                 <button
                   onClick={gerarMensagem}
-                  disabled={gerandoIA || limiteAtingido}
+                  disabled={gerandoIA}
                   style={{
                     width: '100%', padding: 12,
-                    background: limiteAtingido ? palette.beige : palette.accent,
-                    color: limiteAtingido ? palette.inkSoft : palette.bg,
+                    background: palette.accent, color: palette.bg,
                     border: 'none', borderRadius: 10, fontFamily: FONT,
                     fontSize: fz(14), fontWeight: 600,
-                    cursor: gerandoIA || limiteAtingido ? 'not-allowed' : 'pointer',
+                    cursor: gerandoIA ? 'not-allowed' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                   }}
                 >
                   {gerandoIA ? (
                     <><Loader2 size={sz(16)} style={{ animation: 'spin 0.8s linear infinite' }} /> Gerando…</>
-                  ) : limiteAtingido ? (
-                    <>🚫 Limite diário {isPJ ? 'CNPJ' : 'CPF'} atingido — tenta amanhã</>
                   ) : (
                     <><Sparkles size={sz(16)} /> {jaEnviada ? 'Gerar nova mensagem (follow-up)' : 'Gerar mensagem com IA'}</>
                   )}
@@ -538,8 +549,9 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, limitesDiarios, onAcaoCo
 // LeadsListagem — lista de cards (CNPJ pública / CPF meus)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LeadsListagem = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
+const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLead }) => {
   const [escopo, setEscopo] = useState('cnpj_publico');
+  const [ordenar, setOrdenar] = useState('valor'); // 'valor' | 'recentes'
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
   const [data, setData] = useState({ leads: [], badge: {}, envios_hoje: {}, limites_diarios: {} });
@@ -548,7 +560,7 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
     setLoading(true);
     setErro(null);
     try {
-      const r = await fetch(`/api/lojas-leads-listar?escopo=${escopo}`, {
+      const r = await fetch(`/api/lojas-leads-listar?escopo=${escopo}&ordenar=${ordenar}`, {
         headers: { 'X-User': userId },
       });
       const json = await r.json();
@@ -565,7 +577,7 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
     } finally {
       setLoading(false);
     }
-  }, [escopo, userId]);
+  }, [escopo, ordenar, userId]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -621,6 +633,28 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
         >
           <RefreshCw size={sz(15)} style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none' }} />
         </button>
+      </div>
+
+      {/* Ordenação — Ailson 13/05/2026 */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        marginBottom: 14, fontSize: fz(13), color: palette.inkSoft,
+      }}>
+        <Filter size={sz(14)} />
+        <span>Ordenar:</span>
+        <select
+          value={ordenar}
+          onChange={e => setOrdenar(e.target.value)}
+          style={{
+            flex: 1, padding: '6px 8px', borderRadius: 6,
+            border: `1px solid ${palette.beige}`,
+            fontFamily: FONT, fontSize: fz(13),
+            color: palette.ink, background: palette.surface,
+          }}
+        >
+          <option value="valor">Maior valor</option>
+          <option value="recentes">Mais recentes</option>
+        </select>
       </div>
 
       {/* Badge — Resumo CNPJs pendentes (sempre visível, mas mais relevante na fila pública) */}
@@ -703,6 +737,7 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
               userId={userId}
               isAdmin={isAdmin}
               vendedoraId={vendedoraId}
+              vendedoraNome={vendedoraNome}
               limitesDiarios={data.limites_diarios}
               onAcaoConcluida={carregar}
               onClickAdmin={onAbrirLead}
@@ -1181,7 +1216,7 @@ const StatBox = ({ label, valor, cor }) => (
 // CarrinhoTab — componente raiz da tab
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CarrinhoTab = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
+const CarrinhoTab = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLead }) => {
   const [modalImportar, setModalImportar] = useState(false);
   const [modalAtribuir, setModalAtribuir] = useState(null); // lead a atribuir, null = fechado
   const [reloadKey, setReloadKey] = useState(0);
@@ -1235,6 +1270,7 @@ const CarrinhoTab = ({ userId, isAdmin, vendedoraId, onAbrirLead }) => {
         userId={userId}
         isAdmin={isAdmin}
         vendedoraId={vendedoraId}
+        vendedoraNome={vendedoraNome}
         onAbrirLead={handleAbrirLead}
       />
 

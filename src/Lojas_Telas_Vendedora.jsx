@@ -217,6 +217,7 @@ export const HomeScreen = ({
           userId={state?.userId}
           isAdmin={isAdmin}
           vendedoraId={vendedoraLogada?.id}
+          vendedoraNome={vendedoraLogada?.nome}
           onAbrirLead={(lead) => {
             // Onda 3: abrir detalhe do lead (em construção)
             console.log('[Lojas] abrir lead:', lead.id);
@@ -2884,6 +2885,7 @@ export const MinhaCarteiraScreen = ({
                 userId={state.userId}
                 isAdmin={state.isAdmin}
                 vendedoraId={vendedora?.id}
+                vendedoraNome={vendedora?.nome}
                 limitesDiarios={{ pj: 1, pf: 1, pj_restante: 99, pf_restante: 99 }}
                 onAcaoConcluida={() => setReloadCarrinhosKey(k => k + 1)}
               />
