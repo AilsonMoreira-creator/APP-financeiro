@@ -39,7 +39,7 @@ import {
   TrendingUp, TrendingDown, BarChart3, UserCog, Maximize2, Filter,
   Save, Trash2, Edit3, MapPin, Clock, CheckCircle2, AlertCircle,
   Upload, FileSpreadsheet, History, Award, Heart, ChevronUp, ChevronDown, Target,
-  UsersRound, Link2, Unlink2, Crown, ShoppingBag, Loader2, Send, User,
+  UsersRound, Link2, Unlink2, Crown, ShoppingBag, ShoppingCart, Loader2, Send, User,
   Bell, Megaphone, BellOff, Trophy, Coins, Eye, EyeOff,
 } from 'lucide-react';
 
@@ -160,14 +160,14 @@ export const HomeScreen = ({
   const tabs = isAdmin
     ? [
         { id: 'vendedoras', label: 'Vendedoras', icon: Users },
-        { id: 'carrinho', label: 'Carrinho', icon: ShoppingBag },
+        { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
         { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
         { id: 'produtos', label: 'Produtos', icon: Package },
         { id: 'config', label: 'Config', icon: Settings },
       ]
     : [
         { id: 'vendedoras', label: 'Vendedoras', icon: Users },
-        { id: 'carrinho', label: 'Carrinho', icon: ShoppingBag },
+        { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
       ];
 
   const subtitle = state.ultimaSincronizacao
@@ -2743,7 +2743,7 @@ export const MinhaCarteiraScreen = ({
                   follow-up: pode pedir nova mensagem, salvar observações. */}
               <Contador
                 statusKey="carrinhos"
-                label="🛒 Carrinhos"
+                label="Carrinhos"
                 count={meusCarrinhos.length}
                 corOverride={palette.accent}
                 corSoftOverride={palette.accentSoft}

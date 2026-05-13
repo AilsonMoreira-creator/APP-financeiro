@@ -28,7 +28,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  ShoppingBag, Building2, User, MapPin, Phone, AlertCircle,
+  ShoppingCart, Building2, User, MapPin, Phone, AlertCircle,
   RefreshCw, Upload, Loader2, Tag, Sparkles, Clock, ExternalLink,
   Filter, Search, ChevronRight, UserCheck, X, Check, Send,
 } from 'lucide-react';
@@ -719,7 +719,7 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
 
       {!loading && !erro && data.leads.length === 0 && (
         <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>
-          <ShoppingBag size={sz(40)} style={{ opacity: 0.3, marginBottom: 10 }} />
+          <ShoppingCart size={sz(40)} style={{ opacity: 0.3, marginBottom: 10 }} />
           <div style={{ fontSize: fz(14), fontFamily: FONT }}>
             {escopo === 'cnpj_publico' && 'Nenhum lead aguardando atendimento'}
             {escopo === 'cpf_atribuidos' && (isAdmin ? 'Nenhum CPF atribuído' : 'Nenhum CPF atribuído a você')}
