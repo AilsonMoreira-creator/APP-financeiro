@@ -82,6 +82,8 @@ const TIPO_SUGESTAO_VISUAL = {
   fechar_pedido: { icone: Heart, cor: palette.ok, corSoft: palette.okSoft },
   cobranca_incisiva: { icone: Clock, cor: '#e67e22', corSoft: '#fef0e6' },
   desfazer_sacola: { icone: AlertTriangle, cor: palette.alert, corSoft: palette.alertSoft },
+  // Trilha Win-back 3 semanas — Ailson 13/05/2026 (Sprint A)
+  trilha_winback: { icone: RefreshCw, cor: '#9333ea', corSoft: '#f3e8ff' },
 };
 
 function visualSugestao(tipo) {
@@ -137,6 +139,7 @@ function capitalizeTipo(tipo) {
     fechar_pedido: 'Sacola:',
     cobranca_incisiva: 'Sacola — cobrar:',
     desfazer_sacola: '🚨 Sacola antiga:',
+    trilha_winback: '🔄 Trilha retorno:',
   };
   return map[tipo] || 'Sugestão pra';
 }

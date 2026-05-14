@@ -58,6 +58,52 @@ CLIENTE NOVO (1ª compra <= 15d): se houver candidato, OBRIGATORIAMENTE 1 dos 3 
 
 Cliente em SACOLA SEPARANDO (pedido em espera) substitui QUALQUER slot — pode ser inativo/semAtividade/atencao/ativo. Pode ter mais de 1 cliente em sacola — todos viram sugestões prioritárias substituindo na ordem (slot 7 primeiro, depois 6, etc).
 
+
+# 🔄 TRILHAS WIN-BACK ATIVAS (Sprint A — Ailson 13/05/2026)
+
+O campo \`trilhas_winback\` traz clientes em campanha estruturada de retorno (3 semanas). REGRA OBRIGATÓRIA:
+
+**CADA TRILHA SUBSTITUI O SLOT CORRESPONDENTE:**
+- \`status_inicial='semAtividade'\` → SUBSTITUI o slot **+3M** (não procure outro candidato pra esse slot, use ESSA cliente)
+- \`status_inicial='inativo'\` → SUBSTITUI o slot **+6M**
+
+Se houver MAIS DE 1 trilha do mesmo tipo, use a 1ª nesse slot e a 2ª no slot ATIVO (downgrade leve). Pode ter mais de 1 trilha por vendedora.
+
+**TOM PROGRESSIVO POR ETAPA:**
+
+- **Etapa 1 (Semana 1 — Reconexão):**
+  - Tom amigável, leve, sem pressão. "Saudade", lembrança.
+  - NÃO mande oferta nem desconto. SÓ reconexão.
+  - Ex (+3M): "Oie Maria, faz uns 3 meses q vc não passa por aqui ❤️ chegou peças linhas q tem sua cara"
+  - Ex (+6M): "Oie, tô com saudade ❤️ faz um tempo q a gente não conversa, da um oi pra eu ver como anda?"
+
+- **Etapa 2 (Semana 2 — Follow-up):**
+  - O campo \`contexto_resposta\` traz informações da semana 1 (resposta do cliente, se mandou catálogo etc) — Sprint B vai preencher.
+  - SE \`contexto_resposta\` for null: assume "não respondeu". Tom: mais leve ainda, novidade nova ("passei aqui pra vc dar uma olhada nessa peça q ta saindo muito")
+  - SE tem contexto: usa! "vc tinha falado que tava analisando — separei essas X peças q acho q tu vai gostar"
+  - Pode SUGERIR um produto específico aqui (ref do top_refs_cliente se houver).
+
+- **Etapa 3 (Semana 3 — Oferta final):**
+  - ÚLTIMA chance da trilha. **OBRIGATÓRIO incluir BENEFÍCIO CLARO.**
+  - +3M: 5-10% extra ou frete grátis. +6M: 10-15% + brinde.
+  - Tom: clara e afetiva. "Te separei essas peças e tô segurando 10% só essa semana pra vc"
+  - Mencionar produto específico (top_ref do cliente).
+
+**METADADOS OBRIGATÓRIO:**
+Cada sugestão de trilha DEVE ter no \`metadados\`:
+\`\`\`json
+{ "trilha_winback_id": "<UUID da trilha do payload>", "etapa_trilha": 1|2|3 }
+\`\`\`
+Sem isso o backend não consegue avançar a trilha. Importante.
+
+**TIPO da sugestão**: use \`tipo='trilha_winback'\` (não \`inativo\` nem \`semAtividade\`).
+
+**TÍTULO obrigatório**: sempre incluir "(semana N)" no final. Exemplos:
+- "🔄 Reconexão com Maria (semana 1)"
+- "🔄 Follow-up Nina (semana 2)"
+- "🔄 Oferta final Patricia (semana 3)"
+
+
 Tipo REPOSIÇÃO substitui 1 slot de ativo quando:
   a) REF está em refs_reposicao (chegou da oficina) E está no top_refs_cliente da cliente alvo
   b) REF está no top_refs_cliente da cliente alvo COM em_estoque=true (cliente compra bem essa REF e temos estoque agora)

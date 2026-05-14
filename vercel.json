@@ -3,32 +3,50 @@
     {
       "source": "/",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
       ]
     },
     {
       "source": "/index.html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
       ]
     },
     {
       "source": "/sw.js",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
       ]
     },
     {
       "source": "/manifest.json",
       "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
       ]
     }
   ],
   "functions": {
-    "api/ia-cron.js": { "maxDuration": 120 },
-    "api/ia-disparar.js": { "maxDuration": 120 },
-    "api/lojas-ia.js": { "maxDuration": 90 },
+    "api/ia-cron.js": {
+      "maxDuration": 120
+    },
+    "api/ia-disparar.js": {
+      "maxDuration": 120
+    },
+    "api/lojas-ia.js": {
+      "maxDuration": 90
+    },
     "api/lojas-drive-importar.js": {
       "maxDuration": 300,
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/**"
@@ -41,14 +59,33 @@
       "maxDuration": 60,
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/**"
     },
-    "api/lojas-ia-cron-diario.js": { "maxDuration": 600 },
-    "api/lojas-ia-cron-semanal.js": { "maxDuration": 600 },
-    "api/lojas-produtos-raiox-refresh.js": { "maxDuration": 60 },
-    "api/lojas-receitas-cron-diario.js": { "maxDuration": 60 },
-    "api/site-amicia-drive-importar.js": { "maxDuration": 120 },
-    "api/site-amicia-drive-cron.js": { "maxDuration": 60 },
-    "api/lojas-leads-mensagem.js": { "maxDuration": 60 },
-    "api/lojas-leads-conversoes-cron.js": { "maxDuration": 60 }
+    "api/lojas-ia-cron-diario.js": {
+      "maxDuration": 600
+    },
+    "api/lojas-ia-cron-semanal.js": {
+      "maxDuration": 600
+    },
+    "api/lojas-produtos-raiox-refresh.js": {
+      "maxDuration": 60
+    },
+    "api/lojas-receitas-cron-diario.js": {
+      "maxDuration": 60
+    },
+    "api/site-amicia-drive-importar.js": {
+      "maxDuration": 120
+    },
+    "api/site-amicia-drive-cron.js": {
+      "maxDuration": 60
+    },
+    "api/lojas-leads-mensagem.js": {
+      "maxDuration": 60
+    },
+    "api/lojas-leads-conversoes-cron.js": {
+      "maxDuration": 60
+    },
+    "api/lojas-trilha-winback-cron.js": {
+      "maxDuration": 120
+    }
   },
   "crons": [
     {
@@ -142,6 +179,10 @@
     {
       "path": "/api/lojas-leads-conversoes-cron",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/lojas-trilha-winback-cron",
+      "schedule": "0 9 * * 1-5"
     }
   ]
 }

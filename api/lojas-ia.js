@@ -248,6 +248,49 @@ async function handleGerarSugestoes(req, res, auth) {
     return res.status(500).json({ error: 'Erro ao salvar sugestões', detalhe: errIns.message });
   }
 
+  // ─── Avança trilhas Win-back que foram usadas — Ailson 13/05/2026 ────
+  // IA marca cada sugestão de trilha com metadados.trilha_winback_id.
+  // Pra cada uma encontrada, chama lojas_trilha_winback_avancar() que:
+  //   - Etapa 1 → 2: avança + data_proxima_msg = D+7
+  //   - Etapa 2 → 3: idem
+  //   - Etapa 3 → 4: encerra trilha (motivo='concluida_3_semanas')
+  // Re-busca sugestões inseridas pra pegar IDs (insert nao retorna)
+  try {
+    const trilhasUsadas = linhas
+      .filter(l => l.metadados_ia?.trilha_winback_id)
+      .map(l => ({
+        trilha_id: l.metadados_ia.trilha_winback_id,
+        cliente_id: l.cliente_id,
+      }));
+
+    if (trilhasUsadas.length > 0) {
+      // Busca IDs das sugestões recém criadas (data + vendedora + cliente)
+      const hojeISO = new Date().toISOString().slice(0, 10);
+      const { data: sugIds } = await supabase
+        .from('lojas_sugestoes_diarias')
+        .select('id, cliente_id')
+        .eq('vendedora_id', vendedoraId)
+        .eq('data_geracao', hojeISO)
+        .eq('tipo', 'trilha_winback');
+
+      for (const t of trilhasUsadas) {
+        const sug = (sugIds || []).find(s => s.cliente_id === t.cliente_id);
+        try {
+          await supabase.rpc('lojas_trilha_winback_avancar', {
+            p_trilha_id: t.trilha_id,
+            p_sugestao_id: sug?.id || null,
+          });
+        } catch (e) {
+          console.warn('[lojas-ia] avancar trilha falhou:', t.trilha_id, e.message);
+        }
+      }
+      console.log('[lojas-ia]', ctx.vendedoraNome, 'trilhas_avancadas=' + trilhasUsadas.length);
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] erro no avanço de trilhas:', e.message);
+    // Não bloqueia o response — trilhas podem ser avançadas no próximo cron
+  }
+
   // ─── Marca aviso como consumido (se havia um) ─────────────────────────
   // Decisão: só marca consumido APOS o INSERT das sugestoes ter dado certo.
   // Se IA falhou ou banco recusou, aviso fica pendente pra retry.
@@ -448,6 +491,25 @@ async function montarContextoSugestoes(vendedoraId) {
     (jData || []).forEach(j => { janela[j.cliente_id] = j; });
   } catch (e) {
     console.error('[lojas-ia] erro carregar janela:', e.message);
+  }
+
+  // TRILHA WIN-BACK 3 SEMANAS — Ailson 13/05/2026 (Sprint A)
+  // Cliente +3M/+6M fiel (qtd_compras>=4) entra em trilha de 3 mensagens
+  // semanais. Trilha SUBSTITUI slot +6M ou +3M correspondente (sugestao A do
+  // alinhamento). Cron lojas-trilha-winback-cron cria 2 trilhas/vendedora/segunda.
+  //
+  // Aqui carregamos as trilhas ATIVAS com msg_pronta_hoje=true. A IA vai
+  // priorizar essas clientes nos slots correspondentes.
+  const trilhasWinback = [];
+  try {
+    const { data: trilhasData } = await supabase
+      .from('vw_lojas_trilhas_winback_ativas')
+      .select('*')
+      .eq('vendedora_id', vendedoraId)
+      .eq('msg_pronta_hoje', true);
+    if (trilhasData) trilhasWinback.push(...trilhasData);
+  } catch (e) {
+    console.error('[lojas-ia] erro carregar trilhas winback:', e.message);
   }
 
   // CONVERSOES — Ailson 07/05/2026 (auditoria GAP 2)
@@ -1110,6 +1172,7 @@ async function montarContextoSugestoes(vendedoraId) {
     kpis,
     atencaoEspecial,         // { cliente_id: {score, motivos, tem_atraso_ciclo, ...} } — Ailson 06/05/2026
     janela,                  // { cliente_id: {dias_ate_janela_atencao, dentro_janela_compra, media_confiavel} } — Ailson 07/05/2026 (auditoria GAP 1)
+    trilhasWinback,          // [{ trilha_id, cliente_id, cliente_nome, etapa_atual, status_inicial, mensagem_anterior, ... }] — Ailson 13/05/2026 (Sprint A)
     conversoesPorCliente,    // { cliente_id: {total, ultima_data_venda, ultimo_dias_ate_compra, ultimo_valor} } — Ailson 07/05/2026 (auditoria GAP 2)
     conversoesGeral,         // { qtd_60d, valor_60d, qtd_30d } — agregado da vendedora
     historicoSugestoes,      // { cliente_id|grupo_id: [{data, tipo, ref, titulo}, ...max 5] } — Ailson 07/05/2026 GAP 4
@@ -2168,6 +2231,27 @@ function montarMessagesSugestoes(ctx) {
     vendedora: ctx.vendedora,
     carteira,
     grupos: ctx.grupos,
+    // ─── TRILHAS WIN-BACK ATIVAS HOJE ───────────────────────────
+    // Ailson 13/05/2026 (Sprint A). Cliente +3M/+6M fiel (>=4 compras) em
+    // trilha de 3 semanas. CADA TRILHA SUBSTITUI o slot correspondente:
+    //   - status_inicial='semAtividade' → substitui slot +3M
+    //   - status_inicial='inativo'      → substitui slot +6M
+    // IA: pega o trilha_id no metadados da sugestão gerada. Backend depois
+    // chama lojas_trilha_winback_avancar(trilha_id, sugestao_id).
+    trilhas_winback: (ctx.trilhasWinback || []).map(t => ({
+      trilha_id: t.trilha_id,
+      cliente_id: t.cliente_id,
+      cliente_nome: t.cliente_nome,
+      etapa: t.etapa_atual,                  // 1, 2 ou 3
+      etapa_label: t.etapa_label,            // 'Semana 1 — Reconexão' etc
+      status_inicial: t.status_inicial,      // 'semAtividade' ou 'inativo'
+      qtd_compras_inicio: t.qtd_compras_inicio,
+      lifetime_inicio: t.lifetime_inicio,
+      dias_em_trilha: t.dias_em_trilha,
+      mensagem_anterior: t.mensagem_anterior, // texto da msg semana anterior
+      contexto_resposta: t.etapa_atual === 2 ? t.contexto_s2 
+                       : t.etapa_atual === 3 ? t.contexto_s3 : null,
+    })),
     sacolas_ativas: ctx.sacolas.map(s => ({
       cliente_id: s.cliente_id,
       data_cadastro_sacola: s.data_cadastro_sacola,
