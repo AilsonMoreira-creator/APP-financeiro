@@ -60,6 +60,11 @@ import ProdutosTab from './Lojas_Telas_Produtos.jsx';
 // Onda 2 do modulo Leads Carrinho (Ailson 12/05/2026).
 import CarrinhoTab, { LeadCard } from './Lojas_Carrinho.jsx';
 
+// Modal de contexto pre-mensagem (Sprint B Trilha Win-back, 13/05/2026).
+// Aberto quando IA precisa de info da vendedora antes de gerar mensagem
+// (ex: trilha semana 2/3 — vendedora conta o que rolou na semana anterior).
+import ContextoMensagemModal from './Lojas_ContextoMensagemModal.jsx';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS DE UI ESPECÍFICOS DAS TELAS VENDEDORA
 // ═══════════════════════════════════════════════════════════════════════════
@@ -5599,6 +5604,29 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   // Modal de recusa "Nao faz sentido"
   const [showRecusa, setShowRecusa] = useState(false);
 
+  // Modal de Contexto pré-mensagem — Sprint B (Ailson 13/05/2026)
+  // Backend dispara quando precisa de info extra (ex: trilha winback S2/S3).
+  // Front recebe { requires_context, questions, titulo_modal }, abre modal,
+  // coleta respostas, chama de novo com respostas_contexto.
+  const [modalCtx, setModalCtx] = useState(null); // { questions, titulo, ... }
+
+  // Wrapper que faz a chamada efetiva e trata requires_context
+  const chamarGerar = useCallback(async (ctxExtra) => {
+    const sugestaoId = sugestao?.id;
+    if (sugestaoId) {
+      const r = await handleGerarMensagem(sugestaoId, ctxExtra);
+      // Backend pediu contexto? Não é mensagem, é instrução pra abrir modal
+      if (r?.requires_context) {
+        return { _abrirModal: true, ...r };
+      }
+      return r?.mensagem || r; // compatibilidade — antes retornava string
+    } else if (clienteEfetivo && lojas.handleGerarMensagemAvulsa) {
+      const r = await lojas.handleGerarMensagemAvulsa(clienteEfetivo.id, ctxExtra);
+      return r.mensagem;
+    }
+    return '(não foi possível gerar mensagem — cliente não identificado)';
+  }, [sugestao, clienteEfetivo, handleGerarMensagem, lojas]);
+
   const gerar = useCallback(async () => {
     if (!sugestao && !clienteEfetivo) return;
     setErro(null);
@@ -5609,24 +5637,48 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
         try { await handleEditarApelido(clienteEfetivo.id, apelido.trim()); } catch (e) { /* não bloqueia */ }
       }
 
-      // Chama IA
-      const sugestaoId = sugestao?.id;
+      // Chama IA via wrapper que detecta requires_context
       const ctx = { apelido_atual: apelido || null };
-      let msg;
-      if (sugestaoId) {
-        // Modo padrao: tem sugestao das 7 do dia
-        msg = await handleGerarMensagem(sugestaoId, ctx);
-      } else if (clienteEfetivo && lojas.handleGerarMensagemAvulsa) {
-        // Modo avulso (Ailson 08/05/2026): cria sugestao tipo='avulsa'
-        // e gera mensagem. Backend faz tudo.
-        const r = await lojas.handleGerarMensagemAvulsa(clienteEfetivo.id, ctx);
-        msg = r.mensagem;
-      } else {
-        msg = '(não foi possível gerar mensagem — cliente não identificado)';
+      const r = await chamarGerar(ctx);
+
+      // Backend disse "preciso de contexto"? Abre modal
+      if (r?._abrirModal) {
+        setModalCtx({
+          titulo: r.titulo_modal,
+          questions: r.questions,
+          etapa: r.etapa,
+          trilha_id: r.trilha_id,
+          // Quando modal envia, reabre o gerar com respostas
+          onSubmit: async (respostas) => {
+            setModalCtx(null);
+            setStep('gerando');
+            try {
+              const r2 = await chamarGerar({
+                ...ctx,
+                respostas_contexto: respostas,
+              });
+              const msg = typeof r2 === 'string' ? r2 : r2?.mensagem;
+              if (!msg) {
+                setErro('IA retornou vazio. Tenta de novo.');
+                setStep('erro');
+                return;
+              }
+              setMensagem(msg);
+              setMensagemOriginal(msg);
+              setStep('pronta');
+            } catch (e2) {
+              setErro(e2.message || 'Erro ao gerar mensagem');
+              setStep('erro');
+            }
+          },
+        });
+        setStep('apelido'); // volta pro inicial enquanto modal aberto
+        return;
       }
 
+      const msg = typeof r === 'string' ? r : r?.mensagem;
       setMensagem(msg);
-      setMensagemOriginal(msg);  // guarda pra comparar com a versao editada
+      setMensagemOriginal(msg);
       setStep('pronta');
     } catch (e) {
       // Rate limit (429): UI amigavel com countdown + auto-retry
@@ -5650,7 +5702,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       setErro(e.message || 'Erro ao gerar mensagem');
       setStep('erro');
     }
-  }, [sugestao, clienteEfetivo, apelido, apelidoInicial, handleGerarMensagem, handleEditarApelido, lojas]);
+  }, [sugestao, clienteEfetivo, apelido, apelidoInicial, handleGerarMensagem, handleEditarApelido, lojas, chamarGerar]);
 
   // Auto-gera quando entra direto em 'gerando'
   useEffect(() => {
@@ -6179,6 +6231,20 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
           </div>
         )}
       </div>
+
+      {/* Modal de Contexto pré-mensagem (Sprint B — Ailson 13/05/2026) */}
+      {/* Aberto quando backend retorna requires_context (trilha winback S2/S3). */}
+      <ContextoMensagemModal
+        open={!!modalCtx}
+        titulo={modalCtx?.titulo}
+        questions={modalCtx?.questions || []}
+        onClose={() => {
+          setModalCtx(null);
+          // Volta pro step inicial pra vendedora poder tentar de novo se quiser
+          setStep('apelido');
+        }}
+        onSubmit={modalCtx?.onSubmit || (() => {})}
+      />
     </div>
   );
 };

@@ -1150,7 +1150,19 @@ async function gerarMensagemIA(sugestaoId, contextoExtra = {}) {
     throw new Error(`IA erro ${res.status}: ${txt}`);
   }
   const json = await res.json();
-  return json.mensagem;
+  // Ailson 13/05/2026 (Sprint B): backend pode pedir contexto extra antes
+  // de gerar (caso trilha winback S2/S3 sem respostas_contexto). Front
+  // detecta requires_context e abre modal.
+  if (json.requires_context) {
+    return {
+      requires_context: true,
+      etapa: json.etapa,
+      trilha_id: json.trilha_id,
+      titulo_modal: json.titulo_modal,
+      questions: json.questions || [],
+    };
+  }
+  return { mensagem: json.mensagem };
 }
 
 // AVULSA — Ailson 08/05/2026

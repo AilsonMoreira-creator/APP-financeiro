@@ -361,6 +361,84 @@ async function handleGerarMensagem(req, res, auth) {
     });
   }
 
+  // ─── GATE de Contexto — Ailson 13/05/2026 (Sprint B) ────────────────────
+  // Algumas sugestões precisam de info da vendedora antes de gerar mensagem
+  // boa. Caso atual: trilha_winback etapa 2 ou 3 — vendedora precisa contar
+  // o que rolou na semana anterior (cliente respondeu? mandou catálogo?
+  // o que ela disse?). Sem isso a IA gera msg genérica de followup.
+  //
+  // Quando: sug.tipo='trilha_winback' E metadados.etapa_trilha >= 2 E
+  //         contextoExtra NÃO traz respostas_contexto.
+  // Resposta: 200 { requires_context: true, questions: [...] }
+  //          (não é erro — front detecta e abre modal pra vendedora preencher)
+  //
+  // Após vendedora preencher modal, front chama de novo COM respostas_contexto
+  // e este endpoint segue normal (gera mensagem + salva contexto na trilha).
+  const etapaTrilha = sug?.metadados_ia?.etapa_trilha || 0;
+  const trilhaId = sug?.metadados_ia?.trilha_winback_id || null;
+  const precisaContexto = (
+    sug.tipo === 'trilha_winback' &&
+    etapaTrilha >= 2 &&
+    !contextoExtra?.respostas_contexto
+  );
+
+  if (precisaContexto) {
+    return res.json({
+      requires_context: true,
+      etapa: etapaTrilha,
+      trilha_id: trilhaId,
+      titulo_modal: etapaTrilha === 2
+        ? `📞 Como foi com ${sug.alvo_nome_display || 'a cliente'} na semana passada?`
+        : `📞 E aí, ${sug.alvo_nome_display || 'a cliente'} deu retorno?`,
+      questions: [
+        {
+          id: 'respondeu',
+          tipo: 'opcao',
+          pergunta: 'Ela respondeu sua última mensagem?',
+          opcoes: [
+            { valor: 'sim', label: '✅ Sim, respondeu' },
+            { valor: 'visualizou', label: '👀 Visualizou e não respondeu' },
+            { valor: 'nao', label: '❌ Não respondeu nem visualizou' },
+          ],
+          obrigatoria: true,
+        },
+        {
+          id: 'o_que_disse',
+          tipo: 'opcao',
+          pergunta: 'O que ela disse? (se respondeu)',
+          opcoes: [
+            { valor: 'pediu_prazo', label: '⏳ Pediu prazo / vai pensar' },
+            { valor: 'quer_preco', label: '💰 Perguntou preço / desconto' },
+            { valor: 'gostou_mas_nao_fechou', label: '👍 Gostou mas não fechou' },
+            { valor: 'sem_interesse', label: '🚫 Disse que não tem interesse' },
+            { valor: 'outro', label: '✍️ Outro (descreve abaixo)' },
+            { valor: 'nao_respondeu', label: 'Pula — não respondeu' },
+          ],
+          mostrar_se: { respondeu: ['sim', 'visualizou'] },
+        },
+        {
+          id: 'detalhes_extras',
+          tipo: 'texto',
+          pergunta: 'Algo mais que ajuda a IA escrever? (opcional)',
+          placeholder: 'Ex: ela falou da viagem dela, pediu pra esperar o salário, etc',
+          obrigatoria: false,
+        },
+        {
+          id: 'mandou_catalogo',
+          tipo: 'opcao',
+          pergunta: 'Você mandou catálogo ou peça específica?',
+          opcoes: [
+            { valor: 'sim_catalogo', label: '📋 Mandei catálogo geral' },
+            { valor: 'sim_pecas', label: '📸 Mandei peças específicas' },
+            { valor: 'nao', label: '❌ Só a mensagem' },
+          ],
+          obrigatoria: true,
+        },
+      ],
+    });
+  }
+  // ─── Fim do gate ────────────────────────────────────────────────────────
+
   // Carrega cliente OU grupo (depende de alvo_tipo) com KPIs
   const ctx = await montarContextoMensagem(sug, contextoExtra);
   if (ctx.erro) return res.status(400).json({ error: ctx.erro });
@@ -409,6 +487,33 @@ async function handleGerarMensagem(req, res, auth) {
       mensagem_gerada_em: new Date().toISOString(),
     })
     .eq('id', sugestaoId);
+
+  // ─── Sprint B: salva contexto na trilha winback se foi modal ──────────
+  // Quando vendedora preencheu modal (semana 2 ou 3), persiste as respostas
+  // em lojas_trilha_winback.contexto_s2/s3. Útil pra auditar + pra IA usar
+  // referência cruzada se vendedora regerar mensagem.
+  if (
+    sug.tipo === 'trilha_winback' &&
+    contextoExtra?.respostas_contexto &&
+    trilhaId
+  ) {
+    const colunaContexto = etapaTrilha === 2 ? 'contexto_s2' 
+                         : etapaTrilha === 3 ? 'contexto_s3' 
+                         : null;
+    if (colunaContexto) {
+      try {
+        await supabase
+          .from('lojas_trilha_winback')
+          .update({ 
+            [colunaContexto]: contextoExtra.respostas_contexto,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', trilhaId);
+      } catch (e) {
+        console.warn('[lojas-ia] erro salvar contexto trilha:', e.message);
+      }
+    }
+  }
 
   return res.json({
     ok: true,
