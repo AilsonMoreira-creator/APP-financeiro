@@ -650,6 +650,40 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  // ─── Realtime: outras vendedoras pegando lock/mandando msg ──────────
+  // Ailson 14/05/2026: Supabase Realtime no UPDATE de lojas_leads_carrinho.
+  // Quando uma vendedora trava (vendedora_atendendo_id muda) OU manda msg
+  // (ultima_msg_enviada_em muda) OU lead converte, recarrega a fila.
+  //
+  // Debounce 800ms pra agrupar várias mudanças próximas (ex: 5 vendedoras
+  // pegando 5 leads diferentes em sequência rápida não dispara 5 reloads).
+  useEffect(() => {
+    let debounceTimer = null;
+    const dispararReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { carregar(); }, 800);
+    };
+
+    const ch = supabase
+      .channel('lojas-leads-fila-' + escopo)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'lojas_leads_carrinho' },
+        () => dispararReload()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'lojas_leads_carrinho' },
+        () => dispararReload()
+      )
+      .subscribe();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(ch);
+    };
+  }, [carregar, escopo]);
+
   // ─── Toggle CNPJ / CPF ──────────────────────────────────────────
   // Labels Ailson 13/05/2026: 'Lista carrinhos' + 'Carrinho CPF'
   const escoposVisiveis = useMemo(() => {

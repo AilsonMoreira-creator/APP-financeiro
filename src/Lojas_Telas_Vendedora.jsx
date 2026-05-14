@@ -2741,6 +2741,27 @@ export const MinhaCarteiraScreen = ({
     })();
     return () => { cancelado = true; };
   }, [state.userId, reloadCarrinhosKey]);
+
+  // Realtime: a carteira "🛒 Carrinhos" atualiza quando a vendedora
+  // pegar lock OU enviar msg. Ailson 14/05/2026.
+  useEffect(() => {
+    let timer = null;
+    const ch = supabase
+      .channel('minha-carteira-carrinhos')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'lojas_leads_carrinho' },
+        () => {
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => setReloadCarrinhosKey(k => k + 1), 800);
+        }
+      )
+      .subscribe();
+    return () => {
+      if (timer) clearTimeout(timer);
+      supabase.removeChannel(ch);
+    };
+  }, []);
   const [busca, setBusca] = useState('');
   const [ordenacao, setOrdenacao] = useState(() => {
     try {
