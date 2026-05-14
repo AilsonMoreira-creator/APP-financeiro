@@ -65,7 +65,12 @@ export default async function handler(req, res) {
     .maybeSingle();
 
   // 4. Verifica orcamento Anthropic (esse endpoint custa ~R$0.05-0.10)
-  const orcamentoMensal = Number(await getIaConfig('orcamento_mensal_brl', 80));
+  // BUGFIX Ailson 14/05/2026: chave estava INVERTIDA ('orcamento_mensal_brl')
+  // — a chave correta no banco eh 'orcamento_brl_mensal' (igual aos 8 outros
+  // endpoints). Como busca chave inexistente, caia sempre no default 80, e
+  // gasto atual ja R$226 dispara 'orcamento excedido' indevidamente, mesmo
+  // apos admin subir limite pra R$700 via ia_config.
+  const orcamentoMensal = Number(await getIaConfig('orcamento_brl_mensal', 700));
   const gastoAtual = await gastoMesAtualBRL();
   if (gastoAtual >= orcamentoMensal) {
     return res.status(429).json({
