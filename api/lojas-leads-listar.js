@@ -71,16 +71,26 @@ export default async function handler(req, res) {
       `);
 
     if (escopo === 'cnpj_publico') {
-      // FILA PÚBLICA (regra Ailson 12/05/2026):
+      // FILA PÚBLICA (regra Ailson 12/05/2026 + 14/05/2026):
       // - PJ (qualquer valor > 0)
       // - PF com 12+ peças (atacado mínimo)
       // - SEM ja_e_cliente_lojas_id (clientes existentes vão pra recompra
       //   abandonada na carteira da vendedora dona)
+      //
+      // NOVAS REGRAS Ailson 14/05/2026 (pra evitar briga entre vendedoras):
+      // a) Lead com lock ATIVO sai da fila pública e fica visível só pra
+      //    quem travou (na carteira dela).
+      // b) Lead com mensagem JÁ enviada pertence permanentemente à
+      //    vendedora que mandou — não volta pra fila.
+      // c) Lock expira em 30min sem msg: volta automaticamente pra fila.
+      const nowIso = new Date().toISOString();
       q = q
         .is('ja_e_cliente_lojas_id', null)
         .not('status', 'in', '("convertido","perdido_30d","sem_carrinho_valido","aguardando_atribuicao")')
         .gt('valor_ultimo_carrinho', 0)
-        .or('tipo_pessoa.eq.PJ,and(tipo_pessoa.eq.PF,qtd_pecas_ultimo_carrinho.gte.12)');
+        .or('tipo_pessoa.eq.PJ,and(tipo_pessoa.eq.PF,qtd_pecas_ultimo_carrinho.gte.12)')
+        .is('ultima_msg_enviada_em', null) // não tem msg enviada
+        .or(`vendedora_atendendo_id.is.null,lock_expira_em.lt.${nowIso}`); // sem lock ou expirado
     } else if (escopo === 'cpf_aguardando') {
       // CPFs com VALOR mas MENOS de 12 peças — aguardam admin atribuir caso a caso
       q = q
@@ -99,14 +109,30 @@ export default async function handler(req, res) {
         q = q.eq('vendedora_atribuida_id', auth.vendedoraId);
       }
     } else if (escopo === 'meus_carrinhos') {
-      // Leads que JÁ recebi mensagem da vendedora — vão pra carteira dela
-      // (filtro "🛒 Carrinhos" na MinhaCarteira). Ailson 12/05/2026.
-      // Inclui também status='convertido' pra ela ver o resultado.
-      q = q
-        .in('status', ['mensagem_enviada', 'convertido'])
-        .not('ultima_msg_vendedora_id', 'is', null);
+      // Carteira da vendedora — Ailson 12/05/2026 + 14/05/2026:
+      //
+      // Inclui DUAS situações (OR):
+      //   A) Já enviou mensagem (status=mensagem_enviada/convertido E
+      //      ultima_msg_vendedora_id=ela)
+      //   B) NOVO 14/05/2026: lead em lock ATIVO dela (clicou no card,
+      //      ainda não mandou msg). Lock dura 30min — depois sai daqui
+      //      e volta pra fila pública.
+      //
+      // Admin vê tudo (sem filtro vendedoraId).
       if (!auth.isAdmin && auth.vendedoraId) {
-        q = q.eq('ultima_msg_vendedora_id', auth.vendedoraId);
+        const nowIso = new Date().toISOString();
+        const vId = auth.vendedoraId;
+        q = q.or(
+          `and(status.in.(mensagem_enviada,convertido),ultima_msg_vendedora_id.eq.${vId}),` +
+          `and(vendedora_atendendo_id.eq.${vId},lock_expira_em.gt.${nowIso})`
+        );
+      } else {
+        // Admin: tudo que tem msg enviada OU em lock ativo
+        const nowIso = new Date().toISOString();
+        q = q.or(
+          `and(status.in.(mensagem_enviada,convertido),ultima_msg_vendedora_id.not.is.null),` +
+          `and(vendedora_atendendo_id.not.is.null,lock_expira_em.gt.${nowIso})`
+        );
       }
     }
 

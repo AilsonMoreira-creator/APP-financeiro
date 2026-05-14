@@ -176,6 +176,10 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
       const json = await r.json();
       if (json.ok) {
         setExpandido(true);
+        // Ailson 14/05/2026: aqui NÃO disparamos onAcaoConcluida pra não
+        // desmontar o card que a vendedora acabou de abrir. Outras vendedoras
+        // verão o lead sumir da fila no proximo refresh (puxar pra baixo).
+        // Quando a vendedora mandar a msg OU o lock expirar, ai sim recarrega.
       } else if (json.motivo === 'lock_de_outra_vendedora') {
         const expira = json.lock_expira_em ? new Date(json.lock_expira_em) : null;
         const horaExpira = expira
