@@ -569,21 +569,50 @@ Já existe a regra de mix obrigatório (1 reativar + 2 atenção + 3 novidade +
 1 followup). Respeita SEMPRE. Mesmo se faltar candidato pra um tipo, marca
 fallback_used=true em vez de empilhar mais 4 novidades.
 
-# Tratamento de GRUPOS
+# Tratamento de GRUPOS (revisado 15/05/2026)
 
-Cliente em grupo (campo "grupo_id" preenchido) = trate o grupo como UMA unidade:
+Cliente em grupo (campo "grupo_id" preenchido) = trate o grupo como UMA unidade IGUAL a um cliente individual:
 - 1 sugestão por grupo (mesmo que múltiplos CNPJs do grupo sejam candidatos)
 - "alvo_tipo": "grupo"
-- Use os agregados: lifetime_grupo, ultima_compra_grupo, qtd_compras_grupo, dias_sem_grupo
-- Pode mencionar uma loja específica do grupo na ação se relevante (ex: "loja Jabaquara tá há 38d sem comprar")
+- Use SEMPRE os agregados do grupo (lifetime_grupo, dias_sem_grupo, ultima_compra_grupo, ticket_medio_grupo, status_grupo)
+- ⚠️ Os múltiplos CNPJs no array \`docs\` PODEM SER a MESMA LOJA FÍSICA (cliente tem vários CNPJs por questão tributária). NÃO assuma que cada doc é loja diferente. NÃO escreva "loja XYZ do grupo" — fala do grupo como uma unidade só.
 
-⚠️ REGRA CRÍTICA DE GRUPO (12/05/2026, Ailson):
-NUNCA gere sugestão "inativo"/"semAtividade"/"atencao"/"reativar" pra um grupo SE algum CNPJ do grupo comprou recentemente (use dias_sem_grupo = MIN dos docs). Exemplo proibido:
-- Grupo X tem SANDRA SAIA (comprou há 5d) E IND COM DE (276d sem comprar)
-- ❌ NÃO sugerir reativar IND COM DE — o grupo TODO já está ativo (dias_sem_grupo = 5)
-- ✅ Se quiser sugerir pro grupo, gere "novidade" ou "reposicao" pro grupo todo (dias_sem_grupo é a referência)
+⚠️ JANELA DE COMPRA DO GRUPO — REGRA IGUAL CLIENTE INDIVIDUAL (Ailson 15/05/2026):
 
-Se dias_sem_grupo <= 30: grupo está ATIVO — só gere novidade/reposição/sacola. NUNCA "reativar".
+O grupo recebe campo \`janela_grupo\` com a MESMA semântica de \`janela_compra\` individual:
+
+\`\`\`
+"janela_grupo": {
+  "media_dias": 47,
+  "dentro_janela": false,
+  "dias_ate_janela": 36,
+  "estado": "confortavel" | "na_janela" | "passou_janela"
+}
+\`\`\`
+
+REGRAS (idênticas à janela_compra do cliente individual):
+
+1. \`estado="confortavel"\` (acabou de comprar OU ainda dentro do ciclo natural):
+   ❌ NÃO MANDAR sugestão proativa pro grupo. Ele vai voltar sozinho.
+   EXCEÇÕES (única coisa que liga sugestão pra grupo confortável):
+   - Sacola separando ativa pro grupo → manda
+   - status_grupo = atencao/semAtividade/inativo (já passou de qualquer ciclo) → manda
+   - Algum doc do grupo com atencao_especial score>=3 → manda
+
+2. \`estado="na_janela"\` — MOMENTO IDEAL pra contato. Prioriza nos slots ativos. Tom: novidade ou reposição natural.
+
+3. \`estado="passou_janela"\` — grupo está atrasando o ciclo dele. PRIORIDADE MÁXIMA mesmo que status_grupo='ativo'.
+
+4. \`janela_grupo=null\` — grupo sem média confiável (poucos docs com 5+ compras). Use status_grupo como referência única, mesma lógica de cliente individual sem media_confiavel.
+
+⚠️ REGRA DE STATUS (preservada — 12/05/2026):
+Se dias_sem_grupo <= 30 E janela_grupo.estado != "passou_janela":
+- NUNCA gere "inativo"/"semAtividade"/"atencao"/"reativar" pro grupo (algum CNPJ comprou recente, grupo está saudável)
+- Use status_grupo como guia do tipo permitido
+
+EXEMPLO CORRIGIDO (Grupo Sandra, dias_sem_grupo=1, janela_grupo.estado="confortavel"):
+- ❌ NÃO gerar nenhuma sugestão pro grupo — acabou de comprar, vai voltar sozinho
+- ✅ Libera o slot pra outra cliente da carteira (cascata de fallback)
 
 # Tratamento do TÍTULO (campo "titulo")
 

@@ -842,6 +842,37 @@ async function montarContextoSugestoes(vendedoraId) {
       (b.kpi.lifetime_total || 0) - (a.kpi.lifetime_total || 0)
     )[0];
 
+    // JANELA DE COMPRA AGREGADA DO GRUPO — Ailson 15/05/2026
+    // Bug capturado caso Grupo Sandra: comprou ontem (dias_sem_grupo=1) mas IA
+    // gerou sugestao 'novidade' proativa achando que era 'momento quente'.
+    // Mesmo cliente individual confortavel no ciclo nao recebe novidade
+    // proativa — regra DEVE valer pra grupo tambem.
+    //
+    // Calculo: pega o MIN da media_dias_compras entre docs com media_confiavel.
+    // Razao: cliente do grupo com ciclo MAIS CURTO eh o que dita o ritmo
+    // natural — se ele acabou de comprar, o grupo nao precisa de empurrao.
+    let janelaGrupo = null;
+    const docsComJanela = docsKpi
+      .map(d => ({ d, j: janela[d.cliente_id] }))
+      .filter(x => x.j?.media_confiavel);
+    if (docsComJanela.length > 0 && diasSemGrupo != null) {
+      const minMediaGrupo = Math.min(...docsComJanela.map(x => Number(x.j.media_dias_compras)));
+      // Mesmos multiplicadores das faixas custom individuais:
+      // 0.8x = entrada em atencao | 1.2x = entrada em semAtividade
+      const limiarAtencao = minMediaGrupo * 0.8;
+      const limiarSemAtividade = minMediaGrupo * 1.2;
+      let estado;
+      if (diasSemGrupo < limiarAtencao) estado = 'confortavel';
+      else if (diasSemGrupo < limiarSemAtividade) estado = 'na_janela';
+      else estado = 'passou_janela';
+      janelaGrupo = {
+        media_dias: Math.round(minMediaGrupo),
+        dentro_janela: estado === 'na_janela',
+        dias_ate_janela: Math.round(limiarAtencao - diasSemGrupo),
+        estado,
+      };
+    }
+
     return {
       id: g.id,
       nome_grupo: g.nome_grupo,
@@ -855,9 +886,12 @@ async function montarContextoSugestoes(vendedoraId) {
       dias_sem_grupo: diasSemGrupo,
       ultima_compra_grupo: ultimaCompraGrupo,
       status_grupo: statusGrupo,
+      // JANELA DE COMPRA DO GRUPO (Ailson 15/05/2026) — null se sem media confiavel
+      janela_grupo: janelaGrupo,
       doc_principal_id: docPrincipal?.cliente_id,
       doc_principal_apelido: docPrincipal?.apelido,
-      // Lista de docs (pra IA poder mencionar uma loja especifica se quiser)
+      // Lista de docs — IA nao deve assumir que cada doc eh loja diferente
+      // (pode ser mesma loja com varios CNPJs por questao tributaria).
       docs: docsKpi.map(d => ({
         cliente_id: d.cliente_id,
         apelido: d.apelido,
