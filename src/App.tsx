@@ -10,6 +10,7 @@ import OsAmicia from './os-amicia/OsAmicia';
 import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
 import LojasModule from './Lojas';
 import FolhaPagamento from './FolhaPagamento.jsx';
+import ReviewsMeli from './Reviews_meli.jsx';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -4584,6 +4585,17 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
   const mobile=w<640;
+  
+  // Reviews ML — Sprint 3 (Ailson 14/05/2026). Tela isolada que abre
+  // dentro da aba Produtos do Bling. Mostra inteligencia de reviews
+  // por REF (vendas 30d, reviews 30d, nota Exitus, resumos IA, alertas).
+  const [showReviewsML, setShowReviewsML] = useState(false);
+  const sbUrlReviews = (typeof window !== "undefined") 
+    ? (import.meta.env.VITE_SUPABASE_URL || localStorage.getItem("sb_url") || "")
+    : "";
+  const userIdLogado = (typeof window !== "undefined") 
+    ? (localStorage.getItem("usuario_atual") || "admin") 
+    : "admin";
 
   // ── Escaneia blingVendas e salva o top 16 cores no localStorage pra o
   // modal de Detalhamento (em Oficinas) ler o ranking REAL do Bling. ─────
@@ -5309,7 +5321,14 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
         })()}
 
         {/* ════ PRODUTOS ════ */}
-        {tela==="vendas"&&vendasSub==="produtos"&&(()=>{
+        {tela==="vendas"&&vendasSub==="produtos"&&showReviewsML&&(
+          <ReviewsMeli
+            sbUrl={sbUrlReviews}
+            userId={userIdLogado}
+            onClose={() => setShowReviewsML(false)}
+          />
+        )}
+        {tela==="vendas"&&vendasSub==="produtos"&&!showReviewsML&&(()=>{
           const pd=getProdRange();
           // Canais e marcas reais (do dado, não hardcoded)
           const canaisReais=Object.keys(pd.porCanal).sort((a,b)=>(pd.porCanal[b]?.bruto||0)-(pd.porCanal[a]?.bruto||0));
@@ -5357,6 +5376,22 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
                 <button onClick={()=>setVendasSub("overview")} style={{background:"none",border:"1px solid #e8e2da",borderRadius:6,padding:"5px 12px",fontSize:12,cursor:"pointer",color:"#4a7fa5"}}>← Voltar</button>
                 <div style={{fontSize:16,fontWeight:700,color:"#2c3e50"}}>📦 Produtos</div>
+                {/* Reviews ML — Ailson 14/05/2026 (Sprint 3): abre tela isolada */}
+                <button
+                  onClick={() => setShowReviewsML(true)}
+                  style={{
+                    marginLeft: "auto",
+                    background: "#4a7fa5", color: "#fff",
+                    border: "none", borderRadius: 6,
+                    padding: "5px 12px", fontSize: 12,
+                    fontFamily: "Georgia,serif", fontWeight: 600,
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 5,
+                  }}
+                  title="Inteligência de Reviews ML por REF (vendas, notas, alertas)"
+                >
+                  📊 Reviews ML
+                </button>
               </div>
               {/* Filtro data */}
               <div style={{display:"flex",gap:4,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
