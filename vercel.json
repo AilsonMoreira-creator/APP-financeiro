@@ -94,6 +94,9 @@
     },
     "api/ml-reviews-analise-live.js": {
       "maxDuration": 120
+    },
+    "api/ml-reviews-mlb-map-popular.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
