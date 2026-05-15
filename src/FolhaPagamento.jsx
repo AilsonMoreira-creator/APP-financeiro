@@ -769,6 +769,10 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
     // Acréscimos vão pra coluna específica (alimentacao, extra, etc), não somam no salário/comissão
     const acrescimos = []; // { mes_destino, coluna, descricao, valor }
     for (const l of linhas) {
+      // Empréstimos e descontos: NÃO entram em campo nenhum, só visualização
+      // no card. Regra Ailson 15/05/2026 — bug Pedro Abril comissao=-148.54
+      // veio de regra desconto "Emprestimo" R$148,54 caindo no else do loop.
+      if (l.tipo === 'desconto' || l.tipo === 'emprestimo') continue;
       if (l.tipo === 'acrescimo' && l.coluna_planilha) {
         acrescimos.push({
           mes_destino: l.mes_destino,
