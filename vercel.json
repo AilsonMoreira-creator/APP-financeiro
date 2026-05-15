@@ -97,6 +97,9 @@
     },
     "api/ml-reviews-mlb-map-popular.js": {
       "maxDuration": 300
+    },
+    "api/ml-reviews-mlb-debug.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
