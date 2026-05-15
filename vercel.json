@@ -100,6 +100,9 @@
     },
     "api/ml-reviews-mlb-debug.js": {
       "maxDuration": 60
+    },
+    "api/ml-reviews-orfaos-count.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
