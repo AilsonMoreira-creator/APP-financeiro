@@ -91,6 +91,9 @@
     },
     "api/ml-reviews-analise-cron.js": {
       "maxDuration": 600
+    },
+    "api/ml-reviews-analise-live.js": {
+      "maxDuration": 120
     }
   },
   "crons": [
