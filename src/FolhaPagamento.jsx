@@ -496,7 +496,7 @@ function contextoPorFuncionario(funcionario, ctxGeral, vendedoras) {
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function FolhaPagamento({ onVoltar }) {
+export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
   // Persistência em amicia_data 'folha-pagamento' (linha separada)
   const [funcionarios, setFuncionarios] = useState([]);
   const [regras, setRegras] = useState({});
@@ -862,6 +862,20 @@ export default function FolhaPagamento({ onVoltar }) {
           }
         }
       }
+
+      // ─── FIX RACE CONDITION com autosave do App.tsx (Ailson 15/05/2026) ──
+      // Bug capturado: marcarPago salvava direto no Supabase, mas App.tsx tem
+      // state interno de auxDataPorMes e autosave periodico (debounce 1.5s).
+      // Quando autosave disparava DEPOIS do nosso update(), ele relia o remote,
+      // fazia merge 'mantem local' (state stale do App.tsx, sem alteracoes),
+      // sobrescrevendo o trabalho. Resultado: comissao em mes anterior e
+      // salario em mes corrente nao persistiam (bug Folha Abril 2026).
+      //
+      // SOLUCAO: avisa o App.tsx via callback prop ANTES de gravar no banco.
+      // Assim o state interno do pai fica em sync com o que vai pro Supabase,
+      // e qualquer autosave subsequente vai ler 'remote == local' e nao
+      // sobrescrever nada.
+      onAuxDataChange?.(payload.auxDataPorMes);
 
       await supabase
         .from('amicia_data')

@@ -10092,7 +10092,10 @@ export default function App(){
       {/* Folha de Pagamento — overlay fullscreen, acionado em Lançamentos→Despesas→Funcionários */}
       {folhaAberta && (
         <div style={{position:"fixed",inset:0,zIndex:9000,background:"#f7f4f0",overflowY:"auto"}}>
-          <FolhaPagamento onVoltar={()=>setFolhaAberta(false)}/>
+          <FolhaPagamento
+            onVoltar={()=>setFolhaAberta(false)}
+            onAuxDataChange={setAuxDataPorMes}
+          />
         </div>
       )}
     </div>
