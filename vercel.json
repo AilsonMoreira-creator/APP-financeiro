@@ -88,6 +88,9 @@
     },
     "api/ml-reviews-sync-cron.js": {
       "maxDuration": 800
+    },
+    "api/ml-reviews-analise-cron.js": {
+      "maxDuration": 600
     }
   },
   "crons": [
@@ -190,6 +193,10 @@
     {
       "path": "/api/ml-reviews-sync-cron",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/ml-reviews-analise-cron",
+      "schedule": "0 8 1,15 * *"
     }
   ]
 }
