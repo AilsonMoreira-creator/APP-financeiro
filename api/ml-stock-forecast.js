@@ -232,14 +232,24 @@ export default async function handler(req, res) {
     if (diasRestantes <= 0) {
       faixa = 'ATRASADO';
       mensagem = null;
-    } else if (diasRestantes <= 7) {
-      faixa = 'ATE_7_DIAS';
+    } else if (diasRestantes > 20) {
+      // Muito longe — não promete prazo (regra Ailson 15/05/2026)
+      faixa = 'MUITO_LONGE';
+      mensagem = null;
+    } else if (diasRestantes <= 6) {
+      faixa = 'ATE_6_DIAS';
       const corNome = escolhido.cor_match?.nome || cor;
-      mensagem = `Olá! Boa notícia: este modelo na cor ${corNome} está em fase final de produção e a previsão é chegar nos próximos dias (até 7 dias). Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
+      const txtDias = diasRestantes === 1 ? '1 dia' : `${diasRestantes} dias`;
+      mensagem = `Olá! Boa notícia: este modelo na cor ${corNome} está em fase final de produção e a previsão é chegar em ${txtDias}. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
+    } else if (diasRestantes <= 10) {
+      faixa = 'UMA_SEMANA';
+      const corNome = escolhido.cor_match?.nome || cor;
+      mensagem = `Olá! Este modelo na cor ${corNome} está em produção e deve chegar em 1 semana. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
     } else {
-      faixa = 'PROXIMAS_SEMANAS';
+      // 11-20 dias
+      faixa = 'ATE_2_SEMANAS';
       const corNome = escolhido.cor_match?.nome || cor;
-      mensagem = `Olá! Este modelo na cor ${corNome} está em produção e deve chegar nas próximas semanas. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
+      mensagem = `Olá! Este modelo na cor ${corNome} está em produção e deve chegar em até 2 semanas. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`;
     }
 
     out.previsao = {

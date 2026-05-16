@@ -126,6 +126,8 @@ async function tryStockForecast(text, itemId, brand, token, questionId) {
 
     // Se atrasado (passou dos 22 dias): não promete, deixa IA responder
     if (rest <= 0) return null;
+    // Acima de 20 dias: muito longe, não promete prazo (regra Ailson 15/05/2026)
+    if (rest > 20) return null;
 
     // Registra em stock_offers pra rastrear que oferecemos forecast
     await supabase.from('ml_stock_offers').insert({
@@ -135,15 +137,26 @@ async function tryStockForecast(text, itemId, brand, token, questionId) {
       detalhes: { ref, corte_id: escolhido.id, dias_decorridos: dec, dias_restantes: rest },
     });
 
-    if (rest <= 7) {
+    // Faixas granulares (regra Ailson 15/05/2026):
+    //   1-6 dias  → "em N dias" (número exato)
+    //   7-10 dias → "1 semana"
+    //   11-20    → "até 2 semanas"
+    if (rest <= 6) {
+      const txtDias = rest === 1 ? '1 dia' : `${rest} dias`;
       return {
-        text: `${greeting()} Boa notícia: este modelo na cor ${corNome} está em fase final de produção e a previsão é chegar nos próximos dias (até 7 dias). Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`,
-        status: 'auto_stock_forecast_short',
+        text: `${greeting()} Boa notícia: este modelo na cor ${corNome} está em fase final de produção e a previsão é chegar em ${txtDias}. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`,
+        status: 'auto_stock_forecast_dias',
+      };
+    }
+    if (rest <= 10) {
+      return {
+        text: `${greeting()} Este modelo na cor ${corNome} está em produção e deve chegar em 1 semana. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`,
+        status: 'auto_stock_forecast_1sem',
       };
     }
     return {
-      text: `${greeting()} Este modelo na cor ${corNome} está em produção e deve chegar nas próximas semanas. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`,
-      status: 'auto_stock_forecast_long',
+      text: `${greeting()} Este modelo na cor ${corNome} está em produção e deve chegar em até 2 semanas. Fique de olho no anúncio que atualizamos assim que estiver disponível! Agradecemos seu contato!`,
+      status: 'auto_stock_forecast_2sem',
     };
   } catch (e) {
     console.error('[forecast] erro:', e.message);
