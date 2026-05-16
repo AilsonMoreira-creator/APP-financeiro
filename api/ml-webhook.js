@@ -77,16 +77,17 @@ async function tryStockForecast(text, itemId, brand, token, questionId) {
     const corPedida = _extrairCorNaoCadastrada(text, stockNomes);
     if (!corPedida) return null;
 
-    // Pega SCF do item
+    // Pega SCF + variations do item (variations p/ fallback sku_map)
     const itemRes = await fetch(
-      `${ML_API}/items/${itemId}?attributes=seller_custom_field`,
+      `${ML_API}/items/${itemId}?attributes=seller_custom_field,variations`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!itemRes.ok) return null;
     const itemData = await itemRes.json();
     const scfTrim = String(itemData.seller_custom_field || '').trim();
 
-    // Resolve REF: scf_map → regex
+    // Resolve REF: 1) ml_scf_ref_map → 2) regex no SCF → 3) ml_sku_ref_map via
+    // SELLER_SKU das variations (paridade com ml-stock-forecast.js endpoint)
     let ref = null;
     if (scfTrim) {
       const { data: scfRow } = await supabase
@@ -94,6 +95,19 @@ async function tryStockForecast(text, itemId, brand, token, questionId) {
       if (scfRow?.ref) ref = String(scfRow.ref).replace(/^0+/, '').padStart(5, '0');
     }
     if (!ref) ref = _extractRefRegex(scfTrim);
+    if (!ref) {
+      // 3o caminho — sku_map via variations (Ailson 15/05/2026 — tampa orfaos
+      // de Exitus que tem SELLER_SKU mas SCF nao mapeado)
+      const variations = itemData.variations || [];
+      for (const v of variations) {
+        const sku = v.seller_custom_field ||
+          (v.attributes || []).find(a => a.id === 'SELLER_SKU')?.value_name;
+        if (!sku) continue;
+        const { data: refRow } = await supabase
+          .from('ml_sku_ref_map').select('ref').eq('sku', sku).maybeSingle();
+        if (refRow?.ref) { ref = refRow.ref; break; }
+      }
+    }
     if (!ref) return null;
 
     // Busca ailson_cortes
