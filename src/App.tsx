@@ -4251,6 +4251,53 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [syncCatalogoMsg,setSyncCatalogoMsg]=useState(null);
   const [periodo,setPeriodo]=useState("semana"); // "semana" | "mes" | "anual"
   const [calcDesc,setCalcDesc]=useState({}); // ref → descricao da Calculadora
+  // Sprint 8 (Ailson 16/05/2026) — Card de variações enxuto:
+  //   1) Esconde variações com estoque 0 (exceto cores top Bling ou com corte ativo)
+  //   2) Coluna nova "Estoque Projetado" da matriz de cores do módulo Oficina
+  //   3) Aviso de duplicata removido
+  const [matrizProjPorRef,setMatrizProjPorRef]=useState({}); // {refNorm: {"cor|tam": qtd}}
+  const [topCoresBling,setTopCoresBling]=useState(new Set()); // Set<cor.toLowerCase()>
+
+  const carregarMatrizProjetada=async()=>{
+    try{
+      const {data}=await supabase.from('amicia_data')
+        .select('payload').eq('user_id','ailson_cortes').maybeSingle();
+      const cortes=data?.payload?.cortes||[];
+      const result={};
+      for(const c of cortes){
+        if(c?.entregue===true)continue; // só cortes ainda na oficina
+        const refRaw=String(c.ref||'').replace(/\D/g,'').replace(/^0+/,'');
+        if(!refRaw)continue;
+        const cores=c.detalhes?.cores||[];
+        const tamanhos=c.detalhes?.tamanhos||[];
+        if(!cores.length||!tamanhos.length)continue;
+        if(!result[refRaw])result[refRaw]={};
+        for(const co of cores){
+          const folhas=Number(co.folhas)||0;
+          if(folhas<=0)continue;
+          const corNorm=String(co.nome||'').toLowerCase().trim();
+          for(const tm of tamanhos){
+            const grade=Number(tm.grade)||0;
+            if(grade<=0)continue;
+            const tamNorm=String(tm.tam||'').toLowerCase().trim();
+            const key=`${corNorm}|${tamNorm}`;
+            result[refRaw][key]=(result[refRaw][key]||0)+(folhas*grade);
+          }
+        }
+      }
+      setMatrizProjPorRef(result);
+    }catch(e){console.error('matriz proj:',e.message);}
+  };
+
+  const carregarTopCoresBling=()=>{
+    try{
+      const raw=localStorage.getItem("amica_bling_cores_top");
+      if(!raw)return;
+      const parsed=JSON.parse(raw);
+      const set=new Set((parsed?.cores||[]).map(c=>String(c.nome||'').toLowerCase().trim()));
+      setTopCoresBling(set);
+    }catch(e){console.error('top cores:',e.message);}
+  };
 
   const carregarCalc=async()=>{
     try{
@@ -4309,7 +4356,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     finally{setSyncCatalogo(false);}
   };
 
-  useEffect(()=>{carregarCalc();carregar();},[]);
+  useEffect(()=>{carregarCalc();carregar();carregarMatrizProjetada();carregarTopCoresBling();},[]);
 
   const refs=useMemo(()=>{
     const arr=(dados?.refs||[]).filter(r=>!r.sem_dados);
@@ -4525,12 +4572,24 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     {/* Modal de variações */}
     {modalRef&&selectedRef&&(()=>{
       const desc=calcDesc[modalRef]||selectedRef.descricao||'';
-      const vars=(selectedRef.variations||[]).slice().sort((a,b)=>{
+      // Sprint 8 — matriz projetada da REF (módulo Oficina · cortes ativos)
+      const refNorm=String(modalRef).replace(/\D/g,'').replace(/^0+/,'');
+      const matrizRef=matrizProjPorRef[refNorm]||{};
+      const getProj=(cor,tam)=>matrizRef[`${String(cor||'').toLowerCase().trim()}|${String(tam||'').toLowerCase().trim()}`]||0;
+      const varsTodas=(selectedRef.variations||[]).slice().sort((a,b)=>{
         const corA=a.cor||'';const corB=b.cor||'';
         if(corA!==corB)return corA.localeCompare(corB);
         const tamOrder={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
         return (tamOrder[a.tam]||99)-(tamOrder[b.tam]||99);
       });
+      // Filtragem: q>0 OU cor top Bling OU corte ativo (reposição prevista)
+      const vars=varsTodas.filter(v=>{
+        const q=v.qtd||0;
+        if(q>0)return true;
+        if(topCoresBling.has(String(v.cor||'').toLowerCase().trim()))return true;
+        return getProj(v.cor,v.tam)>0;
+      });
+      const ocultas=varsTodas.length-vars.length;
       return <div onClick={()=>setModalRef(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:100,overflowY:"auto",backdropFilter:"blur(3px)"}}>
         <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:680,overflow:"hidden",boxShadow:"0 20px 50px rgba(0,0,0,0.25)"}}>
           <div style={{display:"flex",gap:14,padding:"18px 20px",borderBottom:"1px solid #e8e2da",background:"#faf8f5",alignItems:"flex-start"}}>
@@ -4540,9 +4599,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <div style={{fontSize:17,fontWeight:700,color:"#2c3e50",margin:"2px 0 6px",lineHeight:1.25}}>{desc||"(sem descrição)"}</div>
               <div style={{display:"flex",gap:14,fontSize:11,color:"#8a9aa4",flexWrap:"wrap"}}>
                 <span>Total: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:40}}>{(selectedRef.qtd_total||0).toLocaleString('pt-BR')}</b></span>
-                <span>· Variações: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:13}}>{vars.length}</b></span>
+                <span>· Variações: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:13}}>{vars.length}{ocultas>0&&<span style={{color:"#8a9aa4",fontWeight:400,fontSize:11}}> de {varsTodas.length}</span>}</b></span>
               </div>
-              {selectedRef.alerta_duplicata&&<div style={{background:"#fef7e6",border:"1px solid #f5dba1",color:"#8a6a1f",padding:"8px 12px",borderRadius:6,fontSize:11,marginTop:10}}>⚠️ <b style={{color:"#c19a3e"}}>Duplicata:</b> esta ref está em múltiplos anúncios ativos. Usando o MLB com maior saldo.</div>}
             </div>
             <button onClick={()=>setModalRef(null)} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer",padding:"0 4px",lineHeight:1}}>×</button>
           </div>
@@ -4554,19 +4612,23 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Tamanho</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>SKU</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right"}}>Estoque</th>
+                <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right",opacity:0.85}}>Estoque proj.</th>
               </tr></thead>
               <tbody>
                 {vars.map((v,i)=>{
                   const q=v.qtd||0;const cls=q===0?"#c0392b":q<=3?"#c19a3e":"#2c3e50";
+                  const proj=getProj(v.cor,v.tam);
                   return<tr key={i} style={{background:i%2===0?"#fff":"#faf8f5",borderBottom:"1px solid #e8e2da"}}>
                     <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{v.cor||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{v.tam||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Courier New,monospace",fontSize:10,color:"#8a9aa4"}}>{v.sku&&!String(v.sku).startsWith('_SINT_')?v.sku:'—'}</td>
                     <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:cls}}>{q}</td>
+                    <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:500,fontSize:11,color:proj>0?"#8a9aa4":"#cdd4d9"}}>{proj>0?`+${proj}`:'—'}</td>
                   </tr>;
                 })}
               </tbody>
             </table>
+            {ocultas>0&&<div style={{fontSize:10,color:"#8a9aa4",marginTop:8,fontStyle:"italic"}}>{ocultas} variaç{ocultas===1?'ão oculta':'ões ocultas'} (estoque 0 sem reposição prevista nem cor top).</div>}
           </div>
         </div>
       </div>;
