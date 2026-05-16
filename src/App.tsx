@@ -4576,7 +4576,45 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       const refNorm=String(modalRef).replace(/\D/g,'').replace(/^0+/,'');
       const matrizRef=matrizProjPorRef[refNorm]||{};
       const getProj=(cor,tam)=>matrizRef[`${String(cor||'').toLowerCase().trim()}|${String(tam||'').toLowerCase().trim()}`]||0;
-      const varsTodas=(selectedRef.variations||[]).slice().sort((a,b)=>{
+      // Aliases de cor por REF (Ailson 17/05/2026 — duplicações ML vs fabricação):
+      //   REF 2601: "marrom-escuro" / "marrom escuro" → "Marrom" (SOMA o estoque)
+      //   REF 395 (0395): "branco" → oculta+zera (Offwhite já tem o valor real)
+      // Em qualquer outra REF, mantém idêntico.
+      const aliasCor=(cor)=>{
+        const c=String(cor||'').toLowerCase().trim();
+        if(refNorm==='2601'&&(c==='marrom-escuro'||c==='marrom escuro'))
+          return{destino:'Marrom',ocultar:true,somar:true};
+        if(refNorm==='395'&&c==='branco')
+          return{destino:null,ocultar:true,somar:false};
+        return{destino:null,ocultar:false,somar:false};
+      };
+      // Agrega variações respeitando aliases. "cor|tam" → variação consolidada.
+      const varsRaw=selectedRef.variations||[];
+      const agrupado={};
+      let mergedSomados=0; // pra avisar no rodapé quantos viraram soma
+      for(const v of varsRaw){
+        const a=aliasCor(v.cor);
+        if(a.ocultar&&!a.somar)continue; // 395 Branco → some
+        if(a.somar&&a.destino){
+          // 2601 marrom-escuro → soma na linha Marrom do mesmo tamanho
+          const chave=`${a.destino.toLowerCase()}|${String(v.tam||'').toLowerCase()}`;
+          if(!agrupado[chave]){
+            agrupado[chave]={...v,cor:a.destino,qtd:v.qtd||0,sku:null};
+          }else{
+            agrupado[chave].qtd=(agrupado[chave].qtd||0)+(v.qtd||0);
+          }
+          mergedSomados++;
+          continue;
+        }
+        // Sem alias: deduplica por cor|tam (caso a REF tenha 2 entradas iguais)
+        const chave=`${String(v.cor||'').toLowerCase()}|${String(v.tam||'').toLowerCase()}`;
+        if(!agrupado[chave]){
+          agrupado[chave]={...v};
+        }else{
+          agrupado[chave].qtd=(agrupado[chave].qtd||0)+(v.qtd||0);
+        }
+      }
+      const varsTodas=Object.values(agrupado).sort((a,b)=>{
         const corA=a.cor||'';const corB=b.cor||'';
         if(corA!==corB)return corA.localeCompare(corB);
         const tamOrder={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
@@ -4663,6 +4701,13 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   // modal de Detalhamento (em Oficinas) ler o ranking REAL do Bling. ─────
   useEffect(()=>{
     if(!blingVendas||Object.keys(blingVendas).length===0)return;
+    // Normaliza nome de cor pra agrupar duplicações no ranking (Ailson 17/05/2026):
+    //   "marrom-escuro" / "marrom escuro" → "Marrom" (são a mesma cor de fabricação)
+    const normCorRanking=(nome)=>{
+      const c=String(nome||'').toLowerCase().trim();
+      if(c==='marrom-escuro'||c==='marrom escuro')return 'Marrom';
+      return nome;
+    };
     const corCounts={};
     for(const mk in blingVendas){
       const monthData=blingVendas[mk];if(!monthData||monthData._vazio)continue;
@@ -4672,7 +4717,10 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
           const md=dd[marca];if(!md)continue;
           for(const cn in md){
             for(const prod of(md[cn].produtos||[])){
-              for(const c in(prod.cor||{})){corCounts[c]=(corCounts[c]||0)+(prod.cor[c]||0);}
+              for(const c in(prod.cor||{})){
+                const nomeNorm=normCorRanking(c);
+                corCounts[nomeNorm]=(corCounts[nomeNorm]||0)+(prod.cor[c]||0);
+              }
             }
           }
         }
