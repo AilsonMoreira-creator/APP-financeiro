@@ -23,7 +23,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ArrowLeft, RefreshCw, AlertTriangle, Check, ChevronDown, ChevronUp,
-  Sparkles, TrendingUp, ShoppingBag, Star, Loader2, X,
+  Sparkles, TrendingUp, ShoppingBag, Star, Loader2, X, HelpCircle,
 } from 'lucide-react';
 import { supabase } from './Lojas_Shared.jsx';
 
@@ -566,16 +566,24 @@ export default function ReviewsMeli({ sbUrl, onClose, userId }) {
   const [ordem, setOrdem] = useState('alerta'); // alerta | reviews | vendas | nota
   const [filtro, setFiltro] = useState('todos'); // todos | com_alerta | com_reviews
   const [refAnaliseAtiva, setRefAnaliseAtiva] = useState(null);
+  const [ultimaAnaliseGeral, setUltimaAnaliseGeral] = useState(null);
+  const [ajudaAberta, setAjudaAberta] = useState(false);
   
   const carregar = useCallback(async () => {
     setLoading(true);
     setErro(null);
     try {
-      const { data, error } = await supabase
-        .from('vw_ml_reviews_cards')
-        .select('*');
-      if (error) throw error;
-      setCards(data || []);
+      const [cardsRes, ultRes] = await Promise.all([
+        supabase.from('vw_ml_reviews_cards').select('*'),
+        supabase.from('ml_reviews_analise')
+          .select('criado_em')
+          .order('criado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (cardsRes.error) throw cardsRes.error;
+      setCards(cardsRes.data || []);
+      setUltimaAnaliseGeral(ultRes.data?.criado_em || null);
     } catch (e) {
       setErro(e.message);
     } finally {
@@ -640,7 +648,7 @@ export default function ReviewsMeli({ sbUrl, onClose, userId }) {
       
       {/* HEADER */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+        display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6,
         flexWrap: 'wrap',
       }}>
         <button onClick={onClose} style={{
@@ -651,8 +659,21 @@ export default function ReviewsMeli({ sbUrl, onClose, userId }) {
         }}>
           <ArrowLeft size={14} strokeWidth={2} /> Voltar
         </button>
-        <div style={{ fontSize: 16, fontWeight: 700, color: palette.ink }}>
+        <div style={{
+          fontSize: 16, fontWeight: 700, color: palette.ink,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
           📊 Reviews ML — inteligência por produto
+          <button
+            onClick={() => setAjudaAberta(true)}
+            title="Como funciona"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: 0, color: palette.blue, display: 'flex',
+            }}
+          >
+            <HelpCircle size={16} strokeWidth={2} />
+          </button>
         </div>
         {totalAlertas > 0 && (
           <div style={{
@@ -673,6 +694,16 @@ export default function ReviewsMeli({ sbUrl, onClose, userId }) {
           <RefreshCw size={12} strokeWidth={2} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
           {loading ? 'Carregando...' : 'Atualizar'}
         </button>
+      </div>
+
+      {/* Sub-header: ultima analise geral */}
+      <div style={{
+        fontSize: 11, color: palette.muted, marginBottom: 12,
+        fontStyle: ultimaAnaliseGeral ? 'normal' : 'italic',
+      }}>
+        {ultimaAnaliseGeral
+          ? `Última análise geral: ${new Date(ultimaAnaliseGeral).toLocaleDateString('pt-BR')} às ${new Date(ultimaAnaliseGeral).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · próxima rodada automática a cada 10 dias (dia 1, 11 e 21)`
+          : 'Nenhuma análise geral rodada ainda'}
       </div>
       
       {/* FILTROS + ORDEM */}
@@ -770,6 +801,112 @@ export default function ReviewsMeli({ sbUrl, onClose, userId }) {
           onClose={() => setRefAnaliseAtiva(null)}
         />
       )}
+
+      {/* Modal de ajuda */}
+      {ajudaAberta && <ModalAjuda onClose={() => setAjudaAberta(false)} />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODAL DE AJUDA — explicacao do modulo pra responsavel pela area
+// (Sprint 6 — Ailson 16/05/2026)
+// ═══════════════════════════════════════════════════════════════════════
+function ModalAjuda({ onClose }) {
+  const sec = { fontSize: 13, fontWeight: 700, color: palette.ink, marginTop: 14, marginBottom: 6 };
+  const para = { fontSize: 12, color: palette.ink, lineHeight: 1.5, marginBottom: 6 };
+  const li = { fontSize: 12, color: palette.ink, lineHeight: 1.5, marginLeft: 16, marginBottom: 3 };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16, fontFamily: FONT,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: palette.surface, borderRadius: 12,
+          maxWidth: 620, width: '100%',
+          maxHeight: '85vh', overflowY: 'auto',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          padding: '14px 18px', borderBottom: `1px solid ${palette.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          position: 'sticky', top: 0, background: palette.surface, zIndex: 1,
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: palette.ink }}>
+            Como funciona este módulo
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: palette.muted, padding: 4,
+          }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '14px 18px' }}>
+          <div style={sec}>📊 Análise geral (automática, a cada 10 dias)</div>
+          <div style={para}>
+            Todo dia 1, 11 e 21 do mês às 5h da manhã, a IA roda automaticamente
+            uma análise de todas as REFs com reviews recentes. Ela lê os comentários
+            do Mercado Livre, agrupa por categoria (tamanho, qualidade, cor, tecido,
+            entrega…) e dá uma nota e um resumo dos pontos positivos e negativos.
+          </div>
+          <div style={para}>
+            Quando algum problema aparece de novo ou piora, o card fica com 🟡
+            "alerta" pra você revisar. Clique em "Já vi" no card pra dispensar
+            depois de avaliar.
+          </div>
+
+          <div style={sec}>🔍 Análise individual (botão na cor)</div>
+          <div style={para}>
+            Em cada card de produto tem o botão <strong>"Análise IA agora"</strong>.
+            Ela é mais profunda: usa os últimos 90 dias de reviews + cruza com
+            as vendas dos últimos 30 dias + considera a análise geral vigente
+            como referência, e busca <em>insights novos</em> que a automática
+            ainda não captou. Leva 15-30 segundos. Use quando quiser entender
+            uma REF específica em detalhe ou validar uma decisão de produto.
+          </div>
+
+          <div style={sec}>🚦 O que cada cor de alerta significa</div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            <li style={li}>🟡 <strong>Amarelo</strong>: a IA detectou que alguma reclamação ficou recorrente ou piorou em relação à rodada anterior. Vale revisar.</li>
+            <li style={li}>(sem cor): tudo estável OU sem reviews novos pra avaliar.</li>
+          </ul>
+
+          <div style={sec}>📋 Filtros e ordenação</div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            <li style={li}>• <strong>Todos / Com alerta / Com reviews</strong>: filtra a lista de cards.</li>
+            <li style={li}>• <strong>Alertas primeiro</strong>: prioriza o que precisa de atenção, depois pelas mais vendidas.</li>
+            <li style={li}>• <strong>Mais vendidas</strong>: ordena por faturamento dos últimos 30 dias.</li>
+            <li style={li}>• <strong>+ Reviews</strong>: REFs com mais comentários no topo (mais base estatística).</li>
+            <li style={li}>• <strong>Pior nota</strong>: produtos com avaliação mais baixa primeiro — bom pra plano de ação.</li>
+          </ul>
+
+          <div style={sec}>💡 Dicas de uso</div>
+          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            <li style={li}>• Comece a semana olhando o filtro "Com alerta" e revise cada um.</li>
+            <li style={li}>• Reclamações de tamanho em vários produtos do mesmo tecido = problema sistêmico (modelagem ou encolhimento).</li>
+            <li style={li}>• Antes de subir um anúncio promo de uma REF, dê uma "Análise IA agora" pra checar se não tem reclamação recorrente.</li>
+            <li style={li}>• Reviews muito antigos (acima de 6 meses) têm peso menor — a IA considera mais o que é recente.</li>
+            <li style={li}>• "Nota Exitus" é a nota oficial da página do anúncio. Se a IA acha algo diferente da nota da página, o card mostra os dois.</li>
+          </ul>
+
+          <div style={{ fontSize: 11, color: palette.muted, marginTop: 16, fontStyle: 'italic' }}>
+            Sistema em produção desde 14/05/2026 — qualquer dúvida, fala com o Ailson.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

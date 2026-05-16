@@ -3,7 +3,7 @@
  *
  * Sessao Ailson 14/05/2026 — Sprint 2 do projeto Inteligencia Reviews.
  *
- * Schedule: 0 8 1,15 * * (05h BRT, dia 1 e 15 do mes)
+ * Schedule: 0 8 1,11,21 * * (05h BRT, dia 1, 11 e 21 do mes — 10 em 10 dias)
  *
  * O QUE FAZ:
  *   Pra cada REF com reviews nos ultimos 6 meses:
