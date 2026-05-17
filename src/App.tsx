@@ -7234,21 +7234,20 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
   };
   useEffect(()=>{carregarHistorico();},[]);
 
-  const abrirModalNovo=()=>setModalHist({id:null,data:hojeIso,cpc:'',conv:'',ticket:''});
-  const abrirModalEditar=(reg)=>setModalHist({id:reg.id,data:reg.data,cpc:String(reg.cpc||''),conv:String(reg.conv||''),ticket:String(reg.ticket||'')});
+  const abrirModalNovo=()=>setModalHist({id:null,data:hojeIso,cpc:'',conv:''});
+  const abrirModalEditar=(reg)=>setModalHist({id:reg.id,data:reg.data,cpc:String(reg.cpc||''),conv:String(reg.conv||'')});
   const fecharModal=()=>setModalHist(null);
   const salvarRegistro=async()=>{
     if(!modalHist)return;
     const cpc=parseFloat(modalHist.cpc);
     const conv=modalHist.conv?parseFloat(modalHist.conv):null;
-    const ticket=modalHist.ticket?parseFloat(modalHist.ticket):null;
     if(!modalHist.data||isNaN(cpc)||cpc<=0){
-      alert('Preencha data e CPC (obrigatórios). Conv e ticket são opcionais.');return;
+      alert('Preencha data e CPC (obrigatórios). Conv é opcional.');return;
     }
     const row={
       data:modalHist.data,cpc,
       conv:(conv!==null&&!isNaN(conv)&&conv>0)?conv:null,
-      ticket:(ticket!==null&&!isNaN(ticket)&&ticket>0)?ticket:null,
+      ticket:null, // ticket vem do campo global dadosReais.ticketReal, não por linha
       fonte:'manual',
     };
     try{
@@ -7346,10 +7345,8 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
   // Séries para gráficos (ordem cronológica)
   const serieCpc=historicoOrdenado.map(r=>r.cpc).filter(v=>v!=null);
   const serieConv=historicoOrdenado.map(r=>r.conv).filter(v=>v!=null);
-  const serieTicket=historicoOrdenado.map(r=>r.ticket).filter(v=>v!=null);
   const tendCpc=getTendencia(serieCpc,false); // CPC subir = ruim
   const tendConv=getTendencia(serieConv,true); // Conv subir = bom
-  const tendTicket=getTendencia(serieTicket,true); // Ticket subir = bom
 
   // Lucro líquido médio dos cards (visualização do impacto do ROAS global)
   const lucroLiqMedio=margemMedia-(ticketMedio>0&&roasMeluniGlobal>0?ticketMedio/roasMeluniGlobal:0);
@@ -7546,11 +7543,10 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
 
           {/* 3 mini-gráficos */}
           {historicoOrdenado.length>0?(
-            <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"repeat(3,1fr)",gap:12,marginBottom:18}}>
+            <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"repeat(2,1fr)",gap:12,marginBottom:18}}>
               {[
                 {label:'CPC médio',color:'#4a7fa5',serie:serieCpc,tend:tendCpc,fmtV:v=>fmtDec(v)},
-                {label:'Conversão',color:'#1a7a40',serie:serieConv,tend:tendConv,fmtV:v=>v.toFixed(1)+'%'},
-                {label:'Ticket médio',color:'#9b59b6',serie:serieTicket,tend:tendTicket,fmtV:v=>fmt(v)}
+                {label:'Conversão',color:'#1a7a40',serie:serieConv,tend:tendConv,fmtV:v=>v.toFixed(2)+'%'}
               ].map(k=>{
                 const ultimoValor=k.serie.length>0?k.serie[k.serie.length-1]:0;
                 return(
@@ -7583,8 +7579,7 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
                         <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",marginBottom:3}}>{formatarDataBR(r.data)}</div>
                         <div style={{display:"flex",gap:10,fontSize:11,color:"#6b7c8a",flexWrap:"wrap"}}>
                           <span>CPC: <strong style={{color:'#4a7fa5',fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{fmtDec(r.cpc)}</strong></span>
-                          <span>Conv: <strong style={{color:'#1a7a40',fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{r.conv.toFixed(1)}%</strong></span>
-                          <span>Ticket: <strong style={{color:'#9b59b6',fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{fmt(r.ticket)}</strong></span>
+                          <span>Conv: <strong style={{color:'#1a7a40',fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{r.conv!=null?Number(r.conv).toFixed(2)+'%':'—'}</strong></span>
                         </div>
                       </div>
                       <div style={{display:"flex",gap:6,flexShrink:0}}>
@@ -7598,8 +7593,8 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                   <thead style={{background:"#f7f4f0"}}>
                     <tr>
-                      {['Data','CPC','Conversão','Ticket médio','Ações'].map((h,i)=>(
-                        <th key={h} style={{padding:"8px 12px",textAlign:i===4?'center':'left',fontSize:10,fontWeight:600,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,borderBottom:"1px solid #e8e2da"}}>{h}</th>
+                      {['Data','CPC','Conversão','Ações'].map((h,i)=>(
+                        <th key={h} style={{padding:"8px 12px",textAlign:i===3?'center':'left',fontSize:10,fontWeight:600,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,borderBottom:"1px solid #e8e2da"}}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -7609,7 +7604,6 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
                         <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{formatarDataBR(r.data)}</td>
                         <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#4a7fa5',fontWeight:700}}>{fmtDec(r.cpc)}</td>
                         <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#1a7a40',fontWeight:700}}>{r.conv!=null?Number(r.conv).toFixed(2)+'%':<span style={{color:'#c0b8b0'}}>—</span>}</td>
-                        <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#9b59b6',fontWeight:700}}>{r.ticket!=null?fmt(r.ticket):<span style={{color:'#c0b8b0'}}>—</span>}</td>
                         <td style={{padding:"8px 12px",textAlign:"center"}}>
                           <button onClick={()=>abrirModalEditar(r)} style={{background:"none",border:"none",cursor:"pointer",color:"#4a7fa5",fontSize:15,marginRight:10}}>✏</button>
                           <button onClick={()=>removerRegistro(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#c0392b",fontSize:17}}>×</button>
@@ -7652,10 +7646,9 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
                   <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Conversão (%)</div>
                   <input type="number" step={0.1} min={0.1} max={20} value={modalHist.conv} placeholder="ex: 1,0" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,conv:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#2c3e50',boxSizing:"border-box"}}/>
                 </div>
-                <div>
-                  <div style={{fontSize:11,color:"#8a9aa4",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Ticket médio (R$)</div>
-                  <input type="number" step={1} min={1} value={modalHist.ticket} placeholder="ex: 120" onFocus={onFocusSel} onChange={e=>setModalHist(p=>({...p,ticket:e.target.value}))} style={{width:"100%",padding:"8px 10px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:15,border:"1px solid #c8d8e4",borderRadius:4,outline:"none",fontWeight:700,color:'#2c3e50',boxSizing:"border-box"}}/>
-                </div>
+              </div>
+              <div style={{marginTop:10,padding:"8px 12px",background:"#f7f4f0",borderRadius:4,fontSize:11,color:"#8a9aa4"}}>
+                ℹ️ Ticket médio vem do campo "Dados reais" da análise (atualmente {state.dadosReais.ticketReal?`R$ ${state.dadosReais.ticketReal}`:"sem valor — usa default"}). Não é por dia.
               </div>
               <div style={{display:"flex",gap:8,marginTop:18}}>
                 <button onClick={fecharModal} style={{flex:1,background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"10px 14px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,color:"#8a9aa4"}}>Cancelar</button>
