@@ -3429,6 +3429,7 @@ const calcQtdCalculada=(c)=>{
 //    se ambos → 'ambos'
 // Idempotente: se nada muda, retorna o mesmo objeto (não cria refs novas).
 const aplicarRegrasDivergencia=(c)=>{
+  if(c.arquivado)return c; // 📦 arquivados não tem regras de divergência reavaliadas
   const tem=temDetalhe(c);
   const qm=parseFloat(c.qtd)||0;
   const qc=calcQtdCalculada(c);
@@ -3811,7 +3812,10 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     if(filtroMarca!=="todas"&&c.marca!==filtroMarca)return false;
     if(filtroPago==="pago"&&!c.pago)return false;
     if(filtroPago==="naopago"&&c.pago)return false;
-    if(filtroStatus!=="todos"){const st=getStatusCorte(c);if(filtroStatus!==st)return false;}
+    // 📦 ARQUIVADO: filtroStatus="arquivado" mostra SÓ arquivados; nas outras opções os arquivados não aparecem
+    if(filtroStatus==="arquivado"){if(!c.arquivado)return false;}
+    else{if(c.arquivado)return false;}
+    if(filtroStatus!=="todos"&&filtroStatus!=="arquivado"){const st=getStatusCorte(c);if(filtroStatus!==st)return false;}
     if(filtroRef.trim()&&!c.ref.toLowerCase().includes(filtroRef.toLowerCase().trim()))return false;
     return true;
   });
@@ -3828,7 +3832,18 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   };
   const iniciarEdicao=(c)=>{setEditId(c.id);setForm({nCorte:c.nCorte,ref:c.ref,descricao:c.descricao,marca:c.marca,qtd:String(c.qtd),valorUnit:String(c.valorUnit),oficina:c.oficina,data:c.data});setRefBusca(c.ref);setMostraForm(true);};
   const deletarCorte=(id)=>setConfirm({msg:"Apagar este corte?",onYes:()=>{setCortes(prev=>prev.filter(c=>c.id!==id));setConfirm(null);}});
-  const toggleEntregue=(id)=>{setCortes(prev=>prev.map(c=>{if(c.id!==id)return c;const ne=!c.entregue;if(ne&&pendingSnapshotIds?.current)pendingSnapshotIds.current.add(id);return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
+  // 📦 ARQUIVAR (Ailson 17/05/2026) — substitui exclusão (que não funcionava
+  // via filter por causa do merge multi-user). Arquivar é apenas SET de flag
+  // no item, o merge por _mod respeita normalmente.
+  const arquivarCorte=(id)=>setConfirm({msg:"Arquivar este corte? Ele sai de todas as contagens (Dashboard, Ranking, métricas) mas pode ser desarquivado depois.",onYes:()=>{
+    setCortes(prev=>prev.map(c=>c.id===id?{...c,arquivado:true,_mod:Date.now()}:c));
+    setConfirm(null);setMostraForm(false);setEditId(null);
+  }});
+  const desarquivarCorte=(id)=>setConfirm({msg:"Desarquivar este corte? Volta pra todas as contagens.",onYes:()=>{
+    setCortes(prev=>prev.map(c=>c.id===id?{...c,arquivado:false,_mod:Date.now()}:c));
+    setConfirm(null);setMostraForm(false);setEditId(null);
+  }});
+  const toggleEntregue=(id)=>{setCortes(prev=>prev.map(c=>{if(c.id!==id||c.arquivado)return c;const ne=!c.entregue;if(ne&&pendingSnapshotIds?.current)pendingSnapshotIds.current.add(id);return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
   const togglePago=(id)=>{
     setCortes(prev=>prev.map(c=>{
       if(c.id!==id||!c.entregue)return c;
@@ -3853,8 +3868,9 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const hoje=new Date();
   const anoStr=String(hoje.getFullYear());
   const filtroPeriodo=(c)=>{if(dashPeriodo==="ano")return c.data.startsWith(anoStr);if(dashPeriodo==="custom"&&dashDe&&dashAte)return c.data>=dashDe&&c.data<=dashAte;return true;};
-  const cortesDash=cortes.filter(c=>filtroPeriodo(c)&&(dashMarca==="todas"||c.marca===dashMarca)&&(dashOf==="todas"||c.oficina===dashOf));
-  const oficinasUnicas=[...new Set(cortes.map(c=>c.oficina))].filter(Boolean);
+  // 📦 ARQUIVADO: dashboard e agregações por oficina nunca incluem arquivados
+  const cortesDash=cortes.filter(c=>!c.arquivado&&filtroPeriodo(c)&&(dashMarca==="todas"||c.marca===dashMarca)&&(dashOf==="todas"||c.oficina===dashOf));
+  const oficinasUnicas=[...new Set(cortes.filter(c=>!c.arquivado).map(c=>c.oficina))].filter(Boolean);
   const kpiOficina=(of)=>{
     const cs=cortesDash.filter(c=>c.oficina===of);
     const totalEnviadas=cs.reduce((s,c)=>s+c.qtd,0);
@@ -3867,11 +3883,11 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     const perda=totalEnviadas>0?Math.round((totalEnviadas-totalEntregues)/totalEnviadas*100):0;
     const np=pontualidade!=null?pontualidade/100:0.5;const nm=prazoMedio!=null?Math.max(0,1-prazoMedio/60):0.5;const npe=Math.max(0,1-perda/20);
     const nota=Math.round((np*0.4+nm*0.3+npe*0.3)*5);
-    const emAberto=cortes.filter(c=>c.oficina===of&&!c.entregue&&!c.pago).reduce((s,c)=>s+c.qtd,0);
+    const emAberto=cortes.filter(c=>!c.arquivado&&c.oficina===of&&!c.entregue&&!c.pago).reduce((s,c)=>s+c.qtd,0);
     return{totalEnviadas,totalEntregues,totalValor,prazoMedio,pontualidade,perda,nota,emAberto};
   };
-  const historicoMedioOf=(of)=>{const cs=cortes.filter(c=>c.oficina===of);if(cs.length===0)return 0;const meses=new Set(cs.map(c=>c.data.slice(0,7)));return Math.round(cs.reduce((s,c)=>s+c.qtd,0)/Math.max(meses.size,1));};
-  const emAbertoPorOf=(of)=>cortes.filter(c=>c.oficina===of&&!c.entregue&&!c.pago).reduce((s,c)=>s+c.qtd,0);
+  const historicoMedioOf=(of)=>{const cs=cortes.filter(c=>!c.arquivado&&c.oficina===of);if(cs.length===0)return 0;const meses=new Set(cs.map(c=>c.data.slice(0,7)));return Math.round(cs.reduce((s,c)=>s+c.qtd,0)/Math.max(meses.size,1));};
+  const emAbertoPorOf=(of)=>cortes.filter(c=>!c.arquivado&&c.oficina===of&&!c.entregue&&!c.pago).reduce((s,c)=>s+c.qtd,0);
   const alertas=oficinasUnicas.map(of=>{const med=historicoMedioOf(of),aberto=emAbertoPorOf(of);if(med===0)return null;const pct=Math.round((aberto-med)/med*100);if(pct>=50)return{of,tipo:"sobrecarga",pct};if(pct<=-30)return{of,tipo:"ociosa",pct};return null;}).filter(Boolean);
   const exportarAberto=()=>{
     const linhas=["Nº Corte;Ref;Descrição;Marca;Qtd;Vl.Unit;Total;Oficina;Data;Dias"];
@@ -3893,7 +3909,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
       {corteDetalhe&&<DetalhamentoModal corte={corteDetalhe} onClose={()=>setCorteDetalhe(null)} onSave={salvarDetalhes} onDelete={excluirDetalhes}/>}
       {/* 🔴 MODAL DIVERGÊNCIAS (Ailson 17/05/2026) */}
       {showDivergencias&&(()=>{
-        const todas=cortes.filter(c=>c.divergencia).sort((a,b)=>{
+        const todas=cortes.filter(c=>!c.arquivado&&c.divergencia).sort((a,b)=>{
           // abertas primeiro, depois por data desc
           if(a.divergencia.status!==b.divergencia.status)return a.divergencia.status==="aberto"?-1:1;
           return new Date(b.divergencia.criado_em)-new Date(a.divergencia.criado_em);
@@ -3974,13 +3990,13 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               <option value="todas">Marca</option><option value="Amícia">Amícia</option><option value="Meluni">Meluni</option>
             </select>
             <select value={filtroStatus} onChange={e=>setFiltroStatus(e.target.value)} style={{...iStyle,flex:1}}>
-              <option value="todos">Status</option><option value="amarelo">Na oficina</option><option value="vermelho">Atrasado</option><option value="azul">Entregue</option><option value="verde">Pago</option>
+              <option value="todos">Status</option><option value="amarelo">Na oficina</option><option value="vermelho">Atrasado</option><option value="azul">Entregue</option><option value="verde">Pago</option><option value="arquivado">📦 Arquivados</option>
             </select>
             <select value={filtroPago} onChange={e=>setFiltroPago(e.target.value)} style={{...iStyle,flex:1}}>
               <option value="todos">Pagto</option><option value="pago">✓ Pago</option><option value="naopago">Não pago</option>
             </select>
             <button onClick={exportarAberto} style={{background:"#fff",border:"1px solid #4a7fa5",color:"#4a7fa5",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>↓ CSV</button>
-            {(()=>{const n=cortes.filter(c=>c.divergencia?.status==="aberto").length;return(
+            {(()=>{const n=cortes.filter(c=>!c.arquivado&&c.divergencia?.status==="aberto").length;return(
               <button onClick={()=>setShowDivergencias(true)} style={{background:n>0?"#fdeaea":"#fff",border:`1px solid ${n>0?"#c0392b":"#c8d8e4"}`,color:n>0?"#c0392b":"#6b7c8a",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:n>0?700:400,position:"relative"}}>
                 ⚠ Divergências{n>0&&<span style={{marginLeft:5,background:"#c0392b",color:"#fff",borderRadius:8,padding:"1px 6px",fontSize:10,fontWeight:700}}>{n}</span>}
               </button>
@@ -4000,6 +4016,15 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                 <div><div style={{fontSize:11,color:"#2c3e50",marginBottom:2,fontWeight:700}}>Data envio</div><input type="date" value={form.data} onChange={e=>setForm(p=>({...p,data:e.target.value}))} style={{...iStyle,width:"100%"}}/></div>
                 <div style={{display:"flex",alignItems:"flex-end"}}><button onClick={salvarCorte} style={{background:"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,cursor:"pointer",width:"100%"}}>{editId?"Atualizar":"Salvar"}</button></div>
               </div>
+              {editId&&(()=>{const cEdit=cortes.find(c=>c.id===editId);if(!cEdit)return null;return(
+                <div style={{marginTop:10,paddingTop:10,borderTop:"1px dashed #c8d8e4",display:"flex",justifyContent:"flex-end"}}>
+                  {cEdit.arquivado?(
+                    <button onClick={()=>desarquivarCorte(editId)} style={{background:"#fff",border:"1px solid #27ae60",color:"#27ae60",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📤 Desarquivar este corte</button>
+                  ):(
+                    <button onClick={()=>arquivarCorte(editId)} style={{background:"#fff",border:"1px solid #b7791f",color:"#b7791f",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📦 Arquivar este corte</button>
+                  )}
+                </div>
+              );})()}
               {refBusca&&!buscarProd(refBusca)&&<div style={{marginTop:8,padding:"6px 12px",background:"#fff8e8",border:"1px solid #f0d080",borderRadius:6,fontSize:11,color:"#8a6500"}}>⚠ REF {refBusca} não cadastrada. <button onClick={()=>{setCadAba("produtos");setAba("cadastros");setFormProd(p=>({...p,ref:refBusca}));}} style={{background:"none",border:"none",color:"#4a7fa5",cursor:"pointer",fontSize:11,textDecoration:"underline"}}>Cadastrar agora</button></div>}
             </div>
           )}
@@ -4049,7 +4074,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     <path d="M4 13L7 16" stroke="#3a6f95" strokeWidth="1" strokeLinecap="round"/>
   </svg>
 </span></div>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><span onClick={()=>deletarCorte(c.id)} style={{cursor:"pointer",color:"#d0c8c0",fontSize:16,lineHeight:1}}>×</span></div>
+                      <div/>
                     </div>
                   );
                 })}
@@ -4318,7 +4343,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:"#f7f4f0"}}>{["Código","Descrição","Cortes em aberto",""].map(h=><th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{oficinasCAD.length===0&&<tr><td colSpan={4} style={{padding:24,textAlign:"center",color:"#c0b8b0"}}>Nenhuma oficina cadastrada</td></tr>}{oficinasCAD.map(o=>{const aberto=cortes.filter(c=>c.oficina===o.descricao&&!c.entregue&&!c.pago).length;return(<tr key={o.codigo} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{o.codigo}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{o.descricao}</td><td style={{padding:"8px 12px"}}>{aberto>0?<span style={{background:"#fffbea",color:"#b7791f",borderRadius:4,padding:"2px 8px",fontSize:11}}>{aberto} em aberto</span>:<span style={{color:"#a0a0a0",fontSize:11}}>—</span>}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormOf({codigo:o.codigo,descricao:o.descricao});setEditOfCod(o.codigo);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setOficinasCAD(prev=>prev.filter(x=>x.codigo!==o.codigo))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>);})}</tbody>
+                  <tbody>{oficinasCAD.length===0&&<tr><td colSpan={4} style={{padding:24,textAlign:"center",color:"#c0b8b0"}}>Nenhuma oficina cadastrada</td></tr>}{oficinasCAD.map(o=>{const aberto=cortes.filter(c=>!c.arquivado&&c.oficina===o.descricao&&!c.entregue&&!c.pago).length;return(<tr key={o.codigo} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{o.codigo}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{o.descricao}</td><td style={{padding:"8px 12px"}}>{aberto>0?<span style={{background:"#fffbea",color:"#b7791f",borderRadius:4,padding:"2px 8px",fontSize:11}}>{aberto} em aberto</span>:<span style={{color:"#a0a0a0",fontSize:11}}>—</span>}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{setFormOf({codigo:o.codigo,descricao:o.descricao});setEditOfCod(o.codigo);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span><span onClick={()=>setOficinasCAD(prev=>prev.filter(x=>x.codigo!==o.codigo))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span></td></tr>);})}</tbody>
                 </table>
               </div>
             </div>
@@ -10405,7 +10430,7 @@ export default function App(){
           let blingHoje=0,blingPedidos=0;
           const dHoje=blingVendas[hojeMk]?.[hojeDk];
           if(dHoje){for(const c in dHoje){for(const cn in dHoje[c]){blingHoje+=dHoje[c][cn]?.bruto||0;blingPedidos+=dHoje[c][cn]?.pedidos||0;}}}
-          const cortesAbertos=cortes.filter(c=>!c.entregue&&!c.pago);
+          const cortesAbertos=cortes.filter(c=>!c.arquivado&&!c.entregue&&!c.pago);
           const nCortesAberto=cortesAbertos.length;
           const pecasAbertas=cortesAbertos.reduce((s,c)=>s+(parseInt(c.qtd)||0),0);
           // Boletos: vencendo hoje e no mês

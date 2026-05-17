@@ -126,7 +126,7 @@ async function getStockForecastInfo(text, itemId, brand) {
     const todosCortes = row?.payload?.cortes || [];
     const desdeMs = Date.now() - FORECAST_JANELA_DIAS * 86400000;
     const ativos = todosCortes.filter(c => {
-      if (!c || c.entregue) return false;
+      if (!c || c.entregue || c.arquivado) return false;
       if (!_refMatch(c.ref, ref)) return false;
       const dt = new Date(c.data).getTime();
       return !isNaN(dt) && dt >= desdeMs;

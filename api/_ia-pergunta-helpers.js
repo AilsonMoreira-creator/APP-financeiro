@@ -657,7 +657,7 @@ export async function contextoProducao(ref = null) {
   // + dias_extra (3 sem caseado, 5 com caseado).
   const refsAtivasUnicas = [...new Set(
     todosCortes
-      .filter(c => c.entregue !== true)
+      .filter(c => c.entregue !== true && !c.arquivado)
       .filter(c => !ref || normalizarRef(c.ref) === ref)
       .map(c => normalizarRef(c.ref))
       .filter(Boolean)
@@ -679,9 +679,9 @@ export async function contextoProducao(ref = null) {
     }
   }
 
-  // Cortes em aberto (não entregues, ou entregues parcialmente)
+  // Cortes em aberto (não entregues, ou entregues parcialmente). Arquivados não entram.
   const cortesAtivos = todosCortes
-    .filter(c => c.entregue !== true)
+    .filter(c => c.entregue !== true && !c.arquivado)
     .filter(c => !ref || normalizarRef(c.ref) === ref)
     .map(c => {
       const dataCorte = new Date(c.data);
@@ -709,9 +709,9 @@ export async function contextoProducao(ref = null) {
     });
 
   // Cortes ENTREGUES RECENTES (≤3 dias) - relevante pra equipe saber o que
-  // chegou ha pouco tempo. Mais antigo que isso polui a resposta.
+  // chegou ha pouco tempo. Mais antigo que isso polui a resposta. Arquivados nao entram.
   const cortesEntreguesRecentes = todosCortes
-    .filter(c => c.entregue === true)
+    .filter(c => c.entregue === true && !c.arquivado)
     .filter(c => !ref || normalizarRef(c.ref) === ref)
     .map(c => {
       // Tenta achar a data de entrega real; se nao tiver, usa a ultima atualizacao

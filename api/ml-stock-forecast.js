@@ -176,7 +176,7 @@ export default async function handler(req, res) {
   // ── 4. Filtra cortes ativos da REF ──
   const desdeMs = Date.now() - JANELA_BUSCA_DIAS * 86400000;
   const cortesAtivos = todosCortes.filter(c => {
-    if (!c || c.entregue) return false;
+    if (!c || c.entregue || c.arquivado) return false;
     if (!refMatch(c.ref, ref)) return false;
     const dataCorte = new Date(c.data).getTime();
     if (isNaN(dataCorte) || dataCorte < desdeMs) return false;

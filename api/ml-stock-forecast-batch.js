@@ -82,7 +82,7 @@ async function runForecast(itemId, cor, tamanho, ailsonCortes, scfMap) {
   // Filtra cortes
   const desdeMs = Date.now() - JANELA_BUSCA_DIAS * 86400000;
   const ativos = ailsonCortes.filter(c => {
-    if (!c || c.entregue) return false;
+    if (!c || c.entregue || c.arquivado) return false;
     if (!refMatch(c.ref, ref)) return false;
     const dt = new Date(c.data).getTime();
     if (isNaN(dt) || dt < desdeMs) return false;
