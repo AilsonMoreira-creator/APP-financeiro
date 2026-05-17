@@ -1,7 +1,182 @@
-import { supabase, getValidToken, setCors } from './_ml-helpers.js';
+import { supabase, getValidToken, getStockColors, setCors } from './_ml-helpers.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FORECAST DE COR EM PRODUÇÃO (Ailson 17/05/2026)
+// Copiado/adaptado de ml-webhook.js. Diferença: aqui retorna DADOS BRUTOS
+// pra Claude integrar com as regras dela, em vez de mensagem pronta.
+// Não registra em ml_stock_offers (lá é pra rastrear ofertas de pergunta ML).
+// ═══════════════════════════════════════════════════════════════════════════
+const FORECAST_JANELA_DIAS = 30;
+const FORECAST_CORES_AMPLAS = [
+  'azul bebe','azul bebê','azul claro','azul royal','azul escuro','azul',
+  'verde agua','verde água','verde militar','verde oliva','verde menta','verde',
+  'branco','branca','off white','off-white','natural','creme','nude','cru',
+  'rosa','rose','rosê','pink','salmao','salmão','coral',
+  'amarelo','mostarda','dourado',
+  'vermelho','terracota','tijolo',
+  'cinza','grafite','prata',
+  'caramelo','cappuccino','chocolate','caqui','areia',
+  'lilas','lilás','roxo','lavanda',
+];
+
+function _normCor(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+function _refMatch(a, b) {
+  if (!a || !b) return false;
+  return String(a).replace(/^0+/, '').trim() === String(b).replace(/^0+/, '').trim();
+}
+function _corMatch(corCliente, coresArr) {
+  const norm = _normCor(corCliente);
+  if (!norm) return null;
+  for (const c of (coresArr || [])) {
+    const nO = _normCor(c.nome);
+    if (!nO) continue;
+    if (nO === norm || nO.includes(norm) || norm.includes(nO)) return c;
+  }
+  return null;
+}
+function _extractRefRegex(scf) {
+  if (!scf) return null;
+  const t = String(scf).trim();
+  const m = t.match(/\(\s*(?:ref\s*)?(\d{3,5})\s*\)/i);
+  if (m) return String(parseInt(m[1], 10)).padStart(5, '0');
+  const m2 = t.match(/^\s*0*(\d{3,5})\s*$/);
+  if (m2) return String(parseInt(m2[1], 10)).padStart(5, '0');
+  return null;
+}
+function _extrairCorNaoCadastrada(text, stockColorsNomes) {
+  const lower = _normCor(text);
+  const stockNorm = stockColorsNomes.map(_normCor);
+  const ordered = [...FORECAST_CORES_AMPLAS].sort((a, b) => b.length - a.length);
+  for (const c of ordered) {
+    const cn = _normCor(c);
+    if (!lower.includes(cn)) continue;
+    const isStockColor = stockNorm.some(s => s.includes(cn) || cn.includes(s));
+    if (isStockColor) continue;
+    return c;
+  }
+  return null;
+}
+
+/**
+ * Busca info de cor em produção. Retorna { encontrou, cor, dias_decorridos,
+ * dias_restantes, prazo_total, fonte_oficina, faixa, descricao_amigavel } se
+ * achou corte ativo com a cor que cliente perguntou, senão { encontrou:false }.
+ *
+ * faixa: 'ATRASADO' | 'ATE_6_DIAS' | 'UMA_SEMANA' | 'ATE_2_SEMANAS' | 'MUITO_LONGE'
+ *   - Mesmas faixas do ml-webhook.js (regra Ailson 15/05/2026)
+ *   - MUITO_LONGE (rest>20) → não retorna info (não promete prazo)
+ *   - ATRASADO (rest<=0) → não retorna info (deixa Claude usar regra padrão)
+ */
+async function getStockForecastInfo(text, itemId, brand) {
+  try {
+    const stockColors = await getStockColors();
+    const stockNomes = stockColors.map(c => c.nome);
+    const corPedida = _extrairCorNaoCadastrada(text, stockNomes);
+    if (!corPedida) return { encontrou: false, motivo: 'cor_nao_detectada' };
+
+    const token = await getValidToken(brand);
+    const itemRes = await fetch(
+      `${ML_API}/items/${itemId}?attributes=seller_custom_field,variations`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!itemRes.ok) return { encontrou: false, motivo: 'item_fetch_falhou' };
+    const itemData = await itemRes.json();
+    const scfTrim = String(itemData.seller_custom_field || '').trim();
+
+    // Resolve REF: scf_map → regex → sku_map
+    let ref = null;
+    if (scfTrim) {
+      const { data: scfRow } = await supabase
+        .from('ml_scf_ref_map').select('ref').eq('scf', scfTrim).maybeSingle();
+      if (scfRow?.ref) ref = String(scfRow.ref).replace(/^0+/, '').padStart(5, '0');
+    }
+    if (!ref) ref = _extractRefRegex(scfTrim);
+    if (!ref) {
+      const variations = itemData.variations || [];
+      for (const v of variations) {
+        const sku = v.seller_custom_field ||
+          (v.attributes || []).find(a => a.id === 'SELLER_SKU')?.value_name;
+        if (!sku) continue;
+        const { data: refRow } = await supabase
+          .from('ml_sku_ref_map').select('ref').eq('sku', sku).maybeSingle();
+        if (refRow?.ref) { ref = refRow.ref; break; }
+      }
+    }
+    if (!ref) return { encontrou: false, motivo: 'ref_nao_resolvida' };
+
+    // Prazo total via RPC (Ailson 17/05/2026)
+    let prazoTotalDias = 25;
+    let fonteOficina = 'fallback_js';
+    try {
+      const { data: pData } = await supabase.rpc('fn_oficina_prazo_ref', { p_ref: ref });
+      if (pData && typeof pData === 'object') {
+        prazoTotalDias = pData.prazo_total || prazoTotalDias;
+        fonteOficina = pData.fonte_oficina || fonteOficina;
+      }
+    } catch {}
+
+    // Busca cortes ativos da REF
+    const { data: row } = await supabase.from('amicia_data')
+      .select('payload').eq('user_id', 'ailson_cortes').maybeSingle();
+    const todosCortes = row?.payload?.cortes || [];
+    const desdeMs = Date.now() - FORECAST_JANELA_DIAS * 86400000;
+    const ativos = todosCortes.filter(c => {
+      if (!c || c.entregue) return false;
+      if (!_refMatch(c.ref, ref)) return false;
+      const dt = new Date(c.data).getTime();
+      return !isNaN(dt) && dt >= desdeMs;
+    }).sort((a, b) => new Date(b.data) - new Date(a.data));
+
+    // Procura corte com a cor pedida na matriz
+    let escolhido = null;
+    for (const c of ativos) {
+      const coresM = c.detalhes?.cores;
+      if (!Array.isArray(coresM) || coresM.length === 0) continue;
+      const matched = _corMatch(corPedida, coresM);
+      if (matched) { escolhido = { ...c, _cor: matched }; break; }
+    }
+    if (!escolhido) return { encontrou: false, motivo: 'sem_corte_com_cor', cor_pedida: corPedida };
+
+    const dec = Math.floor((Date.now() - new Date(escolhido.data).getTime()) / 86400000);
+    const rest = prazoTotalDias - dec;
+    const corNome = escolhido._cor?.nome || corPedida;
+
+    // Mesmas faixas do ml-webhook (regra Ailson 15/05/2026)
+    if (rest <= 0) return { encontrou: false, motivo: 'atrasado', cor_pedida: corPedida };
+    if (rest > 20) return { encontrou: false, motivo: 'muito_longe', cor_pedida: corPedida };
+
+    let faixa, descricao_amigavel;
+    if (rest <= 6) {
+      faixa = 'ATE_6_DIAS';
+      descricao_amigavel = rest === 1 ? '1 dia' : `${rest} dias`;
+    } else if (rest <= 10) {
+      faixa = 'UMA_SEMANA';
+      descricao_amigavel = '1 semana';
+    } else {
+      faixa = 'ATE_2_SEMANAS';
+      descricao_amigavel = 'até 2 semanas';
+    }
+
+    return {
+      encontrou: true,
+      cor: corNome,
+      dias_decorridos: dec,
+      dias_restantes: rest,
+      prazo_total: prazoTotalDias,
+      fonte_oficina: fonteOficina,
+      faixa,
+      descricao_amigavel,
+    };
+  } catch (e) {
+    console.warn('[ml-ai getStockForecastInfo]', e?.message);
+    return { encontrou: false, motivo: 'exception' };
+  }
+}
 
 async function getItemContext(itemId, brand) {
   try {
@@ -164,6 +339,15 @@ export default async function handler(req, res) {
       getSimilarQA(question_text, item_id || ''),
     ]);
 
+    // INFO_PRODUCAO (Ailson 17/05/2026): se cliente perguntou sobre cor
+    // esgotada e temos corte ativo com a cor, busca previsão pra Claude
+    // integrar com as regras dela. Senão não injeta nada.
+    let infoProducao = null;
+    if (item_id) {
+      const fc = await getStockForecastInfo(question_text, item_id, brand || 'Exitus');
+      if (fc.encontrou) infoProducao = fc;
+    }
+
     const qaExamples = similarQA.length > 0
       ? similarQA.map((qa, i) => `Ex${i + 1}: P: ${qa.question_text}\nR: ${qa.answer_text}`).join('\n')
       : 'Nenhum exemplo ainda.';
@@ -253,8 +437,8 @@ CONTEXTO DA CONVERSA: Releia as mensagens recentes. Se a cliente está responden
 COR DE PEÇA NO VÍDEO/FOTO: Se cliente pergunta "qual a cor da peça do vídeo?" ou "que cor é essa que aparece na foto?" → BAIXA_CONFIANCA. IA não consegue ver vídeo nem foto, deixa pro humano responder.
 PLUS SIZE: ${plusCrossSell ? `Este modelo TEM versão Plus Size (G1/G2/G3)! Se a cliente precisa de tamanho maior, diga: "Temos esse modelo em Plus Size! Busque por '${plusCrossSell}' nos nossos anúncios!"` : `Medidas > maior tamanho → "Alguns dos nossos modelos possuem versão Plus Size! Vale buscar por 'plus size' nos nossos anúncios." NUNCA afirme que aquele modelo específico tem Plus Size.`}
 PEÇA SEM A CARACTERÍSTICA PEDIDA: Se cliente pergunta variação que NÃO temos (ex: "tem vestido linho com manga?", "tem essa saia em outro tom?"), responda DIRETO que não temos com essa característica MAS indique nossos modelos similares deixando CLARO o que muda. Ex: "Esse vestido de linho é sem manga, não temos com manga. Mas temos outros modelos de linho lindos (todos sem manga) — vale dar uma olhada nos nossos anúncios!". Sempre explicita a diferença pra cliente saber o que vai ver.
-ENTREGA: "Chega amanhã?" → "Se for Flex, próximo dia útil! Prazos no anúncio conforme CEP." Prazo/frete → "Aparece no anúncio conforme CEP!" Rastreamento → "Acompanhe em Minhas Compras." NUNCA prometa prazo.
-ESGOTADO: Tom de venda! "Repomos com frequência e as peças voam rápido! Salva nos favoritos pra não perder!"
+ENTREGA: "Chega amanhã?" → "Se for Flex, próximo dia útil! Prazos no anúncio conforme CEP." Prazo/frete → "Aparece no anúncio conforme CEP!" Rastreamento → "Acompanhe em Minhas Compras." NUNCA prometa prazo de frete.
+ESGOTADO: SEM INFO_PRODUCAO → Tom de venda! "Repomos com frequência e as peças voam rápido! Salva nos favoritos pra não perder!" COM INFO_PRODUCAO (vem no user) → use os dados pra indicar previsão da cor (ex: "Boa notícia! Essa cor já está em produção e a previsão é chegar em [descricao_amigavel]. Salva nos favoritos pra ser avisada!"). Adapte o texto ao tom da loja, não copie literal. NUNCA invente previsão sem ter INFO_PRODUCAO.
 PRODUTO: Comprimento → só se na descrição (midi, longo, curto, mini). NUNCA invente cm — EXCETO saia de linho midi (regra abaixo). Transparência → se não mencionada, cores claras sem forro podem ter leve transparência. Lavagem → Linho: ciclo delicado, não torcer. Suplex: pode lavar máquina. Na dúvida: "siga a etiqueta".
 SAIA LINHO MIDI: título com "saia"+"linho" e cliente pergunta comprimento → "Nossas saias midi de linho têm em média 75cm de comprimento, podendo variar um pouco por modelo e tamanho. A modelo da foto tem 1,68m de altura e a saia fica um pouco abaixo do joelho."
 TROCAS: ML não tem opção de troca. Cliente pede troca → explicar: "O Mercado Livre não tem a opção de troca. O processo é abrir uma devolução pelo Mercado Livre e, em seguida, fazer uma nova compra com a peça desejada. É só ir em 'Minhas Compras' e abrir a devolução por lá!"
@@ -264,7 +448,7 @@ GANCHOS (1, natural): "dos mais vendidos!", "clientes elogiam!", "vai ficar óti
 PROIBIÇÕES: "Amícia", "desvestir", inventar, telefone/WhatsApp, enviar fotos, prometer desconto/cupom, inventar medidas em cm, mencionar refs/numeros internos. Conjunto → NÃO oferte espontaneamente; se cliente perguntar direto: "Temos uma opção de conjunto, vale ver nos anúncios". Blusa de linho → NÃO TEMOS, sugira ${buscasPecaCima}. Se não souber: BAIXA_CONFIANCA.
 BLUSA/BLUSINHA/CROPPED ${isPecaInferior ? `(este anúncio é ${tipoPeca}, peça INFERIOR): cliente quase sempre quer peça do LOOK da foto. Confirme que temos peças de cima: "Esse anúncio é da ${tipoPeca}, mas temos peças de cima que combinam pra montar o look! Busque por ${buscasPecaCima} nos nossos anúncios". NUNCA prometa peça idêntica da foto, NUNCA mencione ref.` : isPecaInteira ? `(este anúncio é ${tipoPeca}, peça INTEIRA): houve confusão. Esclareça: "Esse anúncio é de um ${tipoPeca}, peça inteira. Pra peça de cima separada, busque ${buscasPecaCima} nos anúncios."` : `(este anúncio JÁ É peça superior): responda normal sobre a peça do anúncio.`}
 EXEMPLOS: ${qaExamples}`,
-        messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${ctx.itemContext || 'TÍTULO: ' + ctx.title}\n\n═══ DESCRIÇÃO ═══\n${ctx.desc || 'Sem descrição'}\n\n═══ PERGUNTA ═══\n"${question_text}"\n\nResponda APENAS com o texto final (sem passos nem classificação):` }],
+        messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${ctx.itemContext || 'TÍTULO: ' + ctx.title}\n\n═══ DESCRIÇÃO ═══\n${ctx.desc || 'Sem descrição'}\n${infoProducao ? `\n═══ INFO_PRODUCAO (cor esgotada no anúncio MAS em produção) ═══\nCor: ${infoProducao.cor}\nDias decorridos do corte: ${infoProducao.dias_decorridos}\nDias restantes pra chegar: ${infoProducao.dias_restantes}\nDescrição amigável pra usar na resposta: "${infoProducao.descricao_amigavel}"\nFonte do prazo: ${infoProducao.fonte_oficina}\n` : ''}\n═══ PERGUNTA ═══\n"${question_text}"\n\nResponda APENAS com o texto final (sem passos nem classificação):` }],
       }),
     });
 
@@ -276,7 +460,11 @@ EXEMPLOS: ${qaExamples}`,
     const data = await claudeRes.json();
     return res.json({
       suggestion: data.content?.[0]?.text?.trim() || null,
-      context: { has_description: !!ctx.desc, similar_qa_count: similarQA.length },
+      context: {
+        has_description: !!ctx.desc,
+        similar_qa_count: similarQA.length,
+        info_producao: infoProducao,
+      },
     });
   } catch (err) {
     console.error('[ml-ai]', err.message);
