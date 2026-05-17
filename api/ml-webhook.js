@@ -110,6 +110,17 @@ async function tryStockForecast(text, itemId, brand, token, questionId) {
     }
     if (!ref) return null;
 
+    // PRAZO DINÂMICO (Ailson 17/05/2026): fn_oficina_prazo_ref substitui
+    // FORECAST_PRAZO_MEDIO=22 hardcoded. Mesma lógica do ml-stock-forecast.js.
+    let prazoTotalDias = FORECAST_PRAZO_MEDIO + 3;  // fallback 22+3=25
+    try {
+      const { data: pData, error: pErr } = await supabase.rpc('fn_oficina_prazo_ref', { p_ref: ref });
+      if (pErr) console.warn('[ml-webhook] fn_oficina_prazo_ref erro:', pErr.message);
+      else if (pData && typeof pData === 'object') prazoTotalDias = pData.prazo_total || prazoTotalDias;
+    } catch (e) {
+      console.warn('[ml-webhook] fn_oficina_prazo_ref exception:', e?.message);
+    }
+
     // Busca ailson_cortes
     const { data: row } = await supabase.from('amicia_data')
       .select('payload').eq('user_id', 'ailson_cortes').maybeSingle();
@@ -135,10 +146,10 @@ async function tryStockForecast(text, itemId, brand, token, questionId) {
     if (!escolhido) return null;
 
     const dec = Math.floor((Date.now() - new Date(escolhido.data).getTime()) / 86400000);
-    const rest = FORECAST_PRAZO_MEDIO - dec;
+    const rest = prazoTotalDias - dec;
     const corNome = escolhido._cor?.nome || corPedida;
 
-    // Se atrasado (passou dos 22 dias): não promete, deixa IA responder
+    // Se atrasado (passou do prazo total): não promete, deixa IA responder
     if (rest <= 0) return null;
     // Acima de 20 dias: muito longe, não promete prazo (regra Ailson 15/05/2026)
     if (rest > 20) return null;

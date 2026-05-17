@@ -114,8 +114,20 @@ async function runForecast(itemId, cor, tamanho, ailsonCortes, scfMap) {
   out.oficina = escolhido.oficina;
   if (escolhido._cor_match) out.cor_match = escolhido._cor_match;
 
+  // PRAZO DINÂMICO (Ailson 17/05/2026): fn_oficina_prazo_ref. Substitui
+  // PRAZO_MEDIO_DIAS=22. Mesma regra do ml-stock-forecast / ml-webhook.
+  let prazoTotalDias = PRAZO_MEDIO_DIAS + 3;
+  try {
+    const { data: pData, error: pErr } = await supabase.rpc('fn_oficina_prazo_ref', { p_ref: ref });
+    if (pErr) console.warn('[forecast-batch] prazo ref', ref, 'erro:', pErr.message);
+    else if (pData && typeof pData === 'object') prazoTotalDias = pData.prazo_total || prazoTotalDias;
+  } catch (e) {
+    console.warn('[forecast-batch] prazo ref', ref, 'exception:', e?.message);
+  }
+  out.prazo_total = prazoTotalDias;
+
   const dec = Math.floor((Date.now() - new Date(escolhido.data).getTime()) / 86400000);
-  const rest = PRAZO_MEDIO_DIAS - dec;
+  const rest = prazoTotalDias - dec;
   out.dias_decorridos = dec;
   out.dias_restantes = rest;
 
