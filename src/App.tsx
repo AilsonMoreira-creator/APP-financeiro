@@ -2802,6 +2802,11 @@ const AgendaContent=()=>{
   const anoHoje=new Date().getFullYear();
   const saveTimerRef=useRef(null);
   const lastSyncRef=useRef(0);
+  // 🛡️ AGENDA solução A read-then-write (Ailson 17/05/2026)
+  // Timestamp do remoto que conhecemos por último. Setado via syncFromSupabase,
+  // realtime e save bem-sucedido. Comparado pré-upsert pra detectar conflito.
+  const lastKnownRemoteTs=useRef(0);
+  const [conflitoMsg,setConflitoMsg]=useState(null);
 
   // ── Helpers de persistência ──
   const lerLocal=()=>{try{const s=localStorage.getItem("amica_agenda");return s?JSON.parse(s):null;}catch{return null;}};
@@ -2810,9 +2815,38 @@ const AgendaContent=()=>{
     const now=ts||Date.now();
     lastSyncRef.current=now;
     if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
-    saveTimerRef.current=setTimeout(()=>{
-      supabase.from('amicia_data').upsert({user_id:'agenda',payload:{itens,mes:mesHoje,ano:anoHoje,_updated:now}},{onConflict:'user_id'})
-        .then(({error})=>{if(error)console.error("AGENDA save Supabase:",error.message);else console.log("AGENDA: salvo no Supabase");});
+    saveTimerRef.current=setTimeout(async()=>{
+      // 🛡️ READ-THEN-WRITE (Ailson 17/05/2026): verifica se outro device escreveu
+      // entre nossa última visão e agora. Se sim, ABORTA save e ressincroniza.
+      // Evita o cenário "página antiga sobrescrevendo" (aba em background não
+      // recebe realtime e salva com state velho + timestamp atual = sobrescreve).
+      try{
+        const {data:checkRow}=await supabase.from('amicia_data').select('payload').eq('user_id','agenda').maybeSingle();
+        const remoteTs=checkRow?.payload?._updated||0;
+        if(remoteTs>lastKnownRemoteTs.current&&remoteTs!==now){
+          console.warn("AGENDA: 🛡️ conflito detectado — outro device escreveu, abortando save e resincronizando. remoteTs:",new Date(remoteTs).toLocaleString("pt-BR"),"lastKnown:",new Date(lastKnownRemoteTs.current).toLocaleString("pt-BR"));
+          setConflitoMsg("⚠ Agenda foi atualizada em outro dispositivo. Sincronizando…");
+          setTimeout(()=>setConflitoMsg(null),4000);
+          const remote=checkRow.payload;
+          let remoteItens=remote.itens||[];
+          if(remote.mes!==mesHoje||remote.ano!==anoHoje){
+            remoteItens=remoteItens.map(i=>({...i,feito:false}));
+          }
+          setItens(remoteItens);
+          salvarLocal(remoteItens,remote._updated);
+          lastKnownRemoteTs.current=remote._updated;
+          return; // não salva — usuário precisa editar de novo
+        }
+      }catch(e){
+        console.warn("AGENDA: check pré-save falhou, prosseguindo:",e?.message);
+      }
+      // Save normal
+      const {error}=await supabase.from('amicia_data').upsert({user_id:'agenda',payload:{itens,mes:mesHoje,ano:anoHoje,_updated:now}},{onConflict:'user_id'});
+      if(error)console.error("AGENDA save Supabase:",error.message);
+      else{
+        console.log("AGENDA: salvo no Supabase");
+        lastKnownRemoteTs.current=now; // nosso save virou o "remoto" conhecido
+      }
     },1500);
   };
   const salvarTudo=(novosItens)=>{
@@ -2863,6 +2897,7 @@ const AgendaContent=()=>{
           console.log("AGENDA: localStorage mais recente, enviando pro Supabase");
           salvarSupabase(local.itens,localTs);
         }
+        lastKnownRemoteTs.current=remoteTs; // Read-then-write tracking
       }catch(e){console.error("AGENDA sync:",e)}
     };
     syncFromSupabase();
@@ -2888,6 +2923,7 @@ const AgendaContent=()=>{
         }
         setItens(remoteItens);
         salvarLocal(remoteItens,d._updated);
+        lastKnownRemoteTs.current=d._updated; // Read-then-write tracking
         setTimeout(()=>{realtimeAgendaRef.current=false;},2000);
       }).subscribe();
     return()=>{supabase.removeChannel(ch);};
@@ -2949,6 +2985,11 @@ const AgendaContent=()=>{
   return(
     <div>
       <ConfirmDialog confirm={confirm?confirm.msg:null} onCancel={()=>setConfirm(null)} onConfirm={()=>{confirm.onYes();}}/>
+      {conflitoMsg&&(
+        <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:"#fff8e8",border:"1px solid #f0d080",borderRadius:8,padding:"10px 18px",zIndex:9999,fontSize:13,color:"#8a6500",fontFamily:"Georgia,serif",boxShadow:"0 4px 16px rgba(0,0,0,0.15)",fontWeight:600}}>
+          {conflitoMsg}
+        </div>
+      )}
       {alertas.length>0&&(
         <div style={{background:"#fdeaea",border:"1px solid #f4b8b8",borderRadius:8,padding:"5px 12px",marginBottom:8,display:"flex",gap:8,alignItems:"center"}}>
           <span style={{fontSize:14}}>⚠️</span>
