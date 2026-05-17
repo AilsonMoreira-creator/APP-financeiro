@@ -635,8 +635,10 @@ export async function contextoEstoque(ref = null) {
  *   1. ailson_cortes (REAL — peças já cortadas indo pra oficina)
  *   2. ordens_corte (ESTIMATIVA — programado na sala, pode mudar)
  * Retorna { cortes_reais[], estimativas_sala[] } já enriquecidos com
- * prazo = 22 dias a partir de `data`, e matriz_render pré-montada
- * (células calculadas via folhas × grade).
+ * prazo dinâmico via fn_oficina_prazo_ref (Ailson 17/05/2026):
+ *   prazo_total = dias_oficina (média ref/categoria/fallback 22) +
+ *                 dias_extra (3 sem caseado, 5 com caseado)
+ * e matriz_render pré-montada (células calculadas via folhas × grade).
  */
 export async function contextoProducao(ref = null) {
   // 1. Cortes REAIS das oficinas
@@ -649,6 +651,34 @@ export async function contextoProducao(ref = null) {
   const todosCortes = ac?.payload?.cortes || [];
   const hoje = new Date();
 
+  // PRAZO DINÂMICO (Ailson 17/05/2026): pré-carrega prazo por REF via
+  // fn_oficina_prazo_ref. Substitui o antigo "22 dias" hardcoded.
+  // Retorna prazo_total = dias_oficina (média da ref/categoria/fallback 22)
+  // + dias_extra (3 sem caseado, 5 com caseado).
+  const refsAtivasUnicas = [...new Set(
+    todosCortes
+      .filter(c => c.entregue !== true)
+      .filter(c => !ref || normalizarRef(c.ref) === ref)
+      .map(c => normalizarRef(c.ref))
+      .filter(Boolean)
+  )];
+  const prazoMap = new Map();
+  if (refsAtivasUnicas.length > 0) {
+    try {
+      const results = await Promise.all(
+        refsAtivasUnicas.map(r =>
+          supabase.rpc('fn_oficina_prazo_ref', { p_ref: r }).then(({ data, error }) => ({ ref: r, data, error }))
+        )
+      );
+      for (const r of results) {
+        if (r.error) console.warn('[contextoProducao] prazo ref', r.ref, 'erro:', r.error.message);
+        else if (r.data && typeof r.data === 'object') prazoMap.set(r.ref, r.data);
+      }
+    } catch (e) {
+      console.warn('[contextoProducao] erro carregando prazos:', e?.message);
+    }
+  }
+
   // Cortes em aberto (não entregues, ou entregues parcialmente)
   const cortesAtivos = todosCortes
     .filter(c => c.entregue !== true)
@@ -656,9 +686,12 @@ export async function contextoProducao(ref = null) {
     .map(c => {
       const dataCorte = new Date(c.data);
       const dias_decorridos = Math.floor((hoje - dataCorte) / 86400000);
-      const dias_restantes = 22 - dias_decorridos;
+      const refNorm = normalizarRef(c.ref);
+      const pData = prazoMap.get(refNorm);
+      const prazoTotal = pData?.prazo_total || 25; // fallback 22+3 se RPC falhou
+      const dias_restantes = prazoTotal - dias_decorridos;
       return {
-        ref: normalizarRef(c.ref),
+        ref: refNorm,
         nCorte: c.nCorte,
         descricao: c.descricao,
         oficina: c.oficina,
@@ -667,6 +700,9 @@ export async function contextoProducao(ref = null) {
         qtdEntregue: c.qtdEntregue || 0,
         dias_decorridos,
         dias_restantes,
+        prazo_total: prazoTotal,
+        prazo_fonte: pData?.fonte_oficina || 'fallback_js',
+        prazo_tem_caseado: pData?.tem_caseado || false,
         atrasado: dias_restantes < 0,
         matriz_render: construirMatrizRender(c.detalhes, c.qtd),
       };

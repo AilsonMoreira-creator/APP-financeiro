@@ -192,9 +192,9 @@ const QA_SEED = [
 
   // ─── PRODUÇÃO (7) ──────────────────────────────────────────
   { categoria: 'producao', pergunta: 'Quanto tem em produção total?', resposta_esperada: 'Soma todos cortes ativos (entregue=false). Quebrar por oficina.' },
-  { categoria: 'producao', pergunta: 'Status da REF X em produção?', resposta_esperada: 'Data prevista (corte + 22d) + matriz visual completa. Se múltiplos cortes, listar todos.' },
+  { categoria: 'producao', pergunta: 'Status da REF X em produção?', resposta_esperada: 'Data prevista (data + prazo_total — já calculado por ref) + matriz visual completa. Se múltiplos cortes, listar todos.' },
   { categoria: 'producao', pergunta: 'Qual oficina tá com a REF X?', resposta_esperada: 'Nome da oficina + nCorte + qtd. Se ainda não cortou, dizer "Programado na sala — estimativa".' },
-  { categoria: 'producao', pergunta: 'Prazo da REF X?', resposta_esperada: 'Dias restantes (22 - dias_decorridos). Se atrasado, sinalizar com ⚠.' },
+  { categoria: 'producao', pergunta: 'Prazo da REF X?', resposta_esperada: 'Usar dias_restantes (já calculado, considera oficina + acabamento). Se atrasado, sinalizar com ⚠.' },
   { categoria: 'producao', pergunta: 'Matriz de cores da REF X?', resposta_esperada: 'SEMPRE responder com matriz_render no JSON, não em texto.' },
   { categoria: 'producao', pergunta: 'Variação X (cor + tam) da REF Y em produção?', resposta_esperada: 'Qtd da combinação específica olhando matriz do corte ativo.' },
   { categoria: 'producao', pergunta: 'Cortes atrasados?', resposta_esperada: 'Lista cortes com dias_restantes < 0. Mostrar oficina + REF + dias de atraso.' },

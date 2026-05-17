@@ -140,6 +140,27 @@ export default async function handler(req, res) {
     return res.status(200).json(out);
   }
 
+  // ── 2.5. Prazo dinâmico via fn_oficina_prazo_ref (Ailson 17/05/2026) ──
+  // Substitui o antigo PRAZO_MEDIO_DIAS=22 hardcoded. A RPC retorna:
+  //   - dias_oficina vindo de oficina_metricas_ref (>=3 cortes) OU categoria OU fallback 22
+  //   - dias_extra: +5 se tem caseado na ficha-tecnica/calc-meluni, senão +3
+  //   - prazo_total: soma dos dois (CEIL)
+  // Se a RPC falhar, mantém o fallback 22 + 3 = 25 dias.
+  let prazoTotalDias = PRAZO_MEDIO_DIAS + 3;  // fallback
+  let prazoDetalhe = { fonte_oficina: 'fallback_js', dias_oficina: PRAZO_MEDIO_DIAS, dias_extra: 3 };
+  try {
+    const { data: pData, error: pErr } = await supabase.rpc('fn_oficina_prazo_ref', { p_ref: ref });
+    if (pErr) {
+      console.warn('[ml-stock-forecast] fn_oficina_prazo_ref erro:', pErr.message);
+    } else if (pData && typeof pData === 'object') {
+      prazoTotalDias = pData.prazo_total || prazoTotalDias;
+      prazoDetalhe = pData;
+    }
+  } catch (e) {
+    console.warn('[ml-stock-forecast] fn_oficina_prazo_ref exception:', e?.message);
+  }
+  out.prazo_detalhe = prazoDetalhe;
+
   // ── 3. Busca payload ailson_cortes ──
   const { data: row, error: payErr } = await supabase
     .from('amicia_data').select('payload').eq('user_id', 'ailson_cortes').maybeSingle();
@@ -226,7 +247,7 @@ export default async function handler(req, res) {
 
   if (escolhido) {
     const diasDecorridos = Math.floor((Date.now() - new Date(escolhido.data).getTime()) / 86400000);
-    const diasRestantes = PRAZO_MEDIO_DIAS - diasDecorridos;
+    const diasRestantes = prazoTotalDias - diasDecorridos;
 
     let faixa, mensagem;
     if (diasRestantes <= 0) {
@@ -257,7 +278,7 @@ export default async function handler(req, res) {
       data_corte: escolhido.data,
       dias_decorridos: diasDecorridos,
       dias_restantes_estimados: diasRestantes,
-      prazo_medio_total: PRAZO_MEDIO_DIAS,
+      prazo_medio_total: prazoTotalDias,
       faixa,
       confianca: escolhido.confianca,
       mensagem_sugerida: mensagem,
