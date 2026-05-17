@@ -7222,26 +7222,14 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
   const [modalHist,setModalHist]=useState(null);
   const [historicoDb,setHistoricoDb]=useState([]);
   const [histLoading,setHistLoading]=useState(false);
-  const [histErro,setHistErro]=useState(null); // DEBUG 17/05
 
   const carregarHistorico=async()=>{
     setHistLoading(true);
-    setHistErro(null);
-    console.log('[HIST MELUNI] iniciando fetch...');
     try{
-      const{data,error,status,statusText}=await supabase.from('meluni_meta_ads_historico').select('*').order('data',{ascending:true});
-      console.log('[HIST MELUNI] resposta:',{data,error,status,statusText});
-      if(error){
-        console.warn('historico meluni erro:',error.message);
-        setHistErro(`Erro: ${error.message} (status ${status||'?'})`);
-      } else {
-        setHistoricoDb(data||[]);
-        setHistErro(data&&data.length===0?`Query OK mas retornou 0 linhas (status ${status})`:null);
-      }
-    }catch(e){
-      console.warn('historico meluni exception:',e?.message);
-      setHistErro(`Exception: ${e?.message||String(e)}`);
-    }
+      const{data,error}=await supabase.from('meluni_meta_ads_historico').select('*').order('data',{ascending:true});
+      if(error)console.warn('historico meluni erro:',error.message);
+      else setHistoricoDb(data||[]);
+    }catch(e){console.warn('historico meluni exception:',e?.message);}
     setHistLoading(false);
   };
   useEffect(()=>{carregarHistorico();},[]);
@@ -7551,14 +7539,9 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14,paddingBottom:8,borderBottom:"1px solid #e8e2da",flexWrap:"wrap",gap:10}}>
             <div style={{fontSize:15,fontWeight:700,color:"#2c3e50"}}>📈 Histórico — CPC · Conversão · Ticket</div>
             <div style={{display:"flex",gap:6}}>
-              <button onClick={carregarHistorico} style={{background:"#fff",color:"#4a7fa5",border:"1px solid #4a7fa5",borderRadius:6,padding:"8px 12px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}} title="Recarregar do banco">{histLoading?"⏳":"🔄"} Recarregar</button>
+              <button onClick={carregarHistorico} disabled={histLoading} style={{background:"#fff",color:"#4a7fa5",border:"1px solid #4a7fa5",borderRadius:6,padding:"8px 12px",fontSize:13,cursor:histLoading?"wait":"pointer",fontFamily:"Georgia,serif",opacity:histLoading?0.6:1}} title="Recarregar do banco">{histLoading?"⏳":"🔄"}</button>
               <button onClick={abrirModalNovo} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:6,padding:"8px 14px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>+ Adicionar registro</button>
             </div>
-          </div>
-          {/* 🛠️ DEBUG TEMP 17/05 — remover depois de validar */}
-          <div style={{padding:"8px 12px",borderRadius:6,marginBottom:10,fontSize:11,fontFamily:"Calibri,sans-serif",background:histErro?"#fdeaea":"#eafbf0",border:`1px solid ${histErro?"#f4b8b8":"#b8dfc8"}`,color:histErro?"#c0392b":"#1a7a40"}}>
-            <strong>{histLoading?"⏳ Carregando…":histErro?"❌":"✓"}</strong>{" "}
-            {histLoading?"buscando registros do banco":histErro||`${historicoDb.length} registro(s) carregado(s) do banco`}
           </div>
 
           {/* 3 mini-gráficos */}
