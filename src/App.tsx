@@ -2043,6 +2043,12 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
 
 
 const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta})=>{
+  // 🛡️ AVISO ADMIN-ONLY (Ailson 17/05/2026)
+  // Lê sessão do localStorage pra detectar se é admin. Só admin salva
+  // alterações em Lançamentos hoje (regra em src/App.tsx ~linha 8978).
+  // Sem este aviso, non-admin edita "no vazio" e perde tudo silenciosamente.
+  const sessaoUsuario=(()=>{try{const s=localStorage.getItem("amica_session");return s?JSON.parse(s):null;}catch{return null;}})();
+  const ehAdmin=sessaoUsuario?(sessaoUsuario.id===1||sessaoUsuario.usuario==='admin'||sessaoUsuario.admin===true):true;
   const [recLocal,setRecLocal]=useState(RECEITAS_EXEMPLO);
   const [auxLocal,setAuxLocal]=useState(AUX_INICIAL);
   const [catsLocal,setCatsLocal]=useState([...CATS]);
@@ -2161,6 +2167,14 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const saldoMes=totalGeral-totalDesp;
   return(
     <div>
+      {!ehAdmin&&(
+        <div style={{background:"#fff8e8",border:"1px solid #f0d080",borderRadius:8,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"flex-start",gap:10}}>
+          <span style={{fontSize:18,lineHeight:1,flexShrink:0}}>⚠</span>
+          <div style={{flex:1,fontSize:12,color:"#8a6500",lineHeight:1.5}}>
+            <strong>Você está logado como {sessaoUsuario?.usuario||"não-admin"}.</strong> Apenas o admin pode salvar alterações em Lançamentos — suas edições nesta tela não serão persistidas. Faça login como <strong>admin</strong> pra editar.
+          </div>
+        </div>
+      )}
       {!auxAberta&&(
         <div style={{display:"flex",gap:8,marginBottom:8,flexDirection:mobile?"column":"row"}}>
           <div style={{flex:1,background:"#fff",borderRadius:8,padding:"6px 14px",border:"1px solid #e8e2da",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
