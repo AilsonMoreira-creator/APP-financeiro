@@ -325,6 +325,19 @@ const SvgDashOficinas = ({ size = 32 }) => (
   </svg>
 );
 
+const SvgProdutosOf = ({ size = 32 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 56" fill="none">
+    <rect x="10" y="6" width="44" height="44" rx="3" fill={_B} stroke={_S} strokeWidth="1.8"/>
+    <rect x="22" y="3" width="20" height="6" rx="1.5" fill="#4a6898" stroke={_S} strokeWidth="1.4"/>
+    <line x1="14" y1="18" x2="50" y2="18" stroke="#b8c8d4" strokeWidth="1.4"/>
+    <line x1="14" y1="26" x2="42" y2="26" stroke="#b8c8d4" strokeWidth="1.4"/>
+    <line x1="14" y1="34" x2="46" y2="34" stroke="#b8c8d4" strokeWidth="1.4"/>
+    <circle cx="46" cy="42" r="7" fill="#fff" stroke={_GR} strokeWidth="1.6"/>
+    <line x1="46" y1="42" x2="46" y2="38" stroke={_GR} strokeWidth="1.5" strokeLinecap="round"/>
+    <line x1="46" y1="42" x2="49" y2="44" stroke={_GR} strokeWidth="1.5" strokeLinecap="round"/>
+  </svg>
+);
+
 const SvgCadastros = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 64 56" fill="none">
     <rect x="6" y="40" width="52" height="10" rx="3" fill="#4a6898" stroke={_S} strokeWidth="1.6"/>
@@ -3605,7 +3618,7 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
   );
 };
 
-const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD,isAdmin=true})=>{
+const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD,isAdmin=true,pendingSnapshotIds})=>{
   const [aba,setAba]=useState("cortes");
   const [cadAba,setCadAba]=useState("produtos");
   const [filtroOf,setFiltroOf]=useState("todas");
@@ -3640,6 +3653,34 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [alertaVer,setAlertaVer]=useState(false);
   const [verValores,setVerValores]=useState(false);
   const [confirm,setConfirm]=useState(null);
+  // 🆕 OFICINAS FASE 2: dados das RPCs fn_oficina_dashboard_completo / fn_oficina_produtos_listar
+  const [oficinaDashData,setOficinaDashData]=useState(null);
+  const [oficinaDashLoading,setOficinaDashLoading]=useState(false);
+  const [oficinaProdData,setOficinaProdData]=useState(null);
+  const [oficinaProdLoading,setOficinaProdLoading]=useState(false);
+  const [oficinaProdMarca,setOficinaProdMarca]=useState("Meluni");
+  const [oficinaProdAba,setOficinaProdAba]=useState("ref"); // "ref" | "categoria"
+  const [oficinaProdBusca,setOficinaProdBusca]=useState("");
+  // Fetch dashboard quando entra na aba ou refresh manual (não precisa refetch por dashMarca — RPC traz as 3 marcas juntas)
+  useEffect(()=>{
+    if(aba!=="dashboard"||!supabase)return;
+    setOficinaDashLoading(true);
+    supabase.rpc('fn_oficina_dashboard_completo').then(({data,error})=>{
+      if(error){console.warn("fn_oficina_dashboard_completo erro:",error.message);setOficinaDashData(null);}
+      else setOficinaDashData(data);
+      setOficinaDashLoading(false);
+    });
+  },[aba]);
+  // Fetch produtos quando entra na aba ou troca de marca
+  useEffect(()=>{
+    if(aba!=="produtos"||!supabase)return;
+    setOficinaProdLoading(true);
+    supabase.rpc('fn_oficina_produtos_listar',{p_marca:oficinaProdMarca}).then(({data,error})=>{
+      if(error){console.warn("fn_oficina_produtos_listar erro:",error.message);setOficinaProdData(null);}
+      else setOficinaProdData(data);
+      setOficinaProdLoading(false);
+    });
+  },[aba,oficinaProdMarca]);
   const iStyle={border:"1px solid #c8d8e4",borderRadius:6,padding:"5px 6px",fontSize:12,outline:"none",fontFamily:"Georgia,serif",boxSizing:"border-box"};
   const cortesOrdenados=[...cortes].sort((a,b)=>{const sa=ORDEM_STATUS[getStatusCorte(a)],sb=ORDEM_STATUS[getStatusCorte(b)];if(sa!==sb)return sa-sb;return new Date(b.data)-new Date(a.data);});
   const cortesFiltrados=cortesOrdenados.filter(c=>{
@@ -3664,7 +3705,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   };
   const iniciarEdicao=(c)=>{setEditId(c.id);setForm({nCorte:c.nCorte,ref:c.ref,descricao:c.descricao,marca:c.marca,qtd:String(c.qtd),valorUnit:String(c.valorUnit),oficina:c.oficina,data:c.data});setRefBusca(c.ref);setMostraForm(true);};
   const deletarCorte=(id)=>setConfirm({msg:"Apagar este corte?",onYes:()=>{setCortes(prev=>prev.filter(c=>c.id!==id));setConfirm(null);}});
-  const toggleEntregue=(id)=>{setCortes(prev=>prev.map(c=>{if(c.id!==id)return c;const ne=!c.entregue;return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
+  const toggleEntregue=(id)=>{setCortes(prev=>prev.map(c=>{if(c.id!==id)return c;const ne=!c.entregue;if(ne&&pendingSnapshotIds?.current)pendingSnapshotIds.current.add(id);return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
   const togglePago=(id)=>{
     setCortes(prev=>prev.map(c=>{
       if(c.id!==id||!c.entregue)return c;
@@ -3730,6 +3771,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
       <div style={{display:"flex",borderBottom:"1px solid #e8e2da",marginBottom:16}}>
         <TabBtn id="cortes" label="Cortes" Icon={SvgCortes}/>
         <TabBtn id="dashboard" label="Dashboard" Icon={SvgDashOficinas}/>
+        <TabBtn id="produtos" label="Produtos" Icon={SvgProdutosOf}/>
         <TabBtn id="cadastros" label="Cadastros" Icon={SvgCadastros}/>
       </div>
 
@@ -3857,14 +3899,26 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               <select value={dashMarca} onChange={e=>setDashMarca(e.target.value)} style={{...iStyle}}><option value="todas">Todas as marcas</option><option>Amícia</option><option>Meluni</option></select>
               <select value={dashOf} onChange={e=>setDashOf(e.target.value)} style={{...iStyle}}><option value="todas">Todas as oficinas</option>{oficinasUnicas.map(of=><option key={of}>{of}</option>)}</select>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:16}}>
-              {[{label:"Peças em produção",pcs:totalEmAberto,sub:`${nCortesAberto} corte(s)`,color:"#2c3e50",bg:"#fff",border:"#e8e2da"},{label:"Peças em atraso",pcs:totalAtrasado,sub:`${nCortesAtrasado} corte(s)`,color:"#c0392b",bg:"#fdeaea",border:"#f4b8b8"},{label:"Entregues · últ. 30 dias",pcs:totalEntregue30d,sub:`${nCortes30d} corte(s)`,color:"#27ae60",bg:"#eafbf0",border:"#b8dfc8"}].map((c,i)=>(
-                <div key={i} style={{background:c.bg,borderRadius:12,padding:"16px 18px",border:`1px solid ${c.border}`}}>
-                  <div style={{fontSize:9,color:"#a89f94",letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>{c.label}</div>
-                  <div style={{fontSize:28,fontWeight:700,color:c.color,lineHeight:1}}>{c.pcs}</div>
-                  <div style={{fontSize:10,color:"#8a9aa4",marginTop:6}}>{c.sub}</div>
-                </div>
-              ))}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
+              {(()=>{
+                const k=oficinaDashData?.kpis?.[dashMarca==="todas"?"todas":dashMarca];
+                const kA=oficinaDashData?.kpis?.["Amícia"];
+                const kM=oficinaDashData?.kpis?.Meluni;
+                const cards=[
+                  {label:"Peças em produção",pcs:k?k.pecas_em_producao:totalEmAberto,sub:`${k?k.n_cortes_producao:nCortesAberto} corte(s)`,color:"#2c3e50",bg:"#fff",border:"#e8e2da"},
+                  {label:"Peças em atraso",pcs:k?k.pecas_em_atraso:totalAtrasado,sub:`${k?k.n_cortes_atraso:nCortesAtrasado} corte(s)`,color:"#c0392b",bg:"#fdeaea",border:"#f4b8b8"},
+                  {label:"Entregues · últ. 30d",pcs:k?k.pecas_entregues_30d:totalEntregue30d,sub:`${k?k.n_cortes_30d:nCortes30d} corte(s)`,color:"#27ae60",bg:"#eafbf0",border:"#b8dfc8"},
+                  {label:"⏱ Tempo Amícia",pcs:kA?kA.tempo_medio_dias+"d":"—",sub:`${kA?.n_categorias_com_dados||0} cat. com dados`,color:"#9b59b6",bg:"#f5edfa",border:"#d8b8e8"},
+                  {label:"⏱ Tempo Meluni",pcs:kM?kM.tempo_medio_dias+"d":"—",sub:`${kM?.n_categorias_com_dados||0} cat. com dados`,color:"#4a7fa5",bg:"#eaf3fb",border:"#b8d4ea"},
+                ];
+                return cards.map((c,i)=>(
+                  <div key={i} style={{background:c.bg,borderRadius:12,padding:"14px 14px",border:`1px solid ${c.border}`}}>
+                    <div style={{fontSize:9,color:"#a89f94",letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>{c.label}</div>
+                    <div style={{fontSize:24,fontWeight:700,color:c.color,lineHeight:1}}>{c.pcs}</div>
+                    <div style={{fontSize:10,color:"#8a9aa4",marginTop:6}}>{c.sub}</div>
+                  </div>
+                ));
+              })()}
             </div>
             <div style={{marginBottom:16}}>
               <button onClick={()=>setVerValores(p=>!p)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:6,padding:"5px 14px",fontSize:11,cursor:"pointer",color:"#6b7c8a",fontFamily:"Georgia,serif"}}>{verValores?"▲":"▼"} Valores financeiros</button>
@@ -3890,21 +3944,125 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               </div>
             )}
             <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden",marginBottom:16}}>
-              <div style={{padding:"12px 16px",borderBottom:"1px solid #e8e2da",fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Ranking por Oficina</div>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                <thead><tr style={{background:"#f7f4f0"}}>{["Oficina","Peças fabricadas","Valor pago","Prazo médio","Pontualidade","% Perda","Eficiência"].map(h=>(<th key={h} style={{padding:"8px 12px",textAlign:h==="Oficina"?"left":"center",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>))}</tr></thead>
-                <tbody>
-                  {oficinasUnicas.sort((a,b)=>kpiOficina(b).totalEntregues-kpiOficina(a).totalEntregues).map(of=>{
-                    const k=kpiOficina(of);
-                    return(<tr key={of} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"9px 12px",fontWeight:600,color:"#2c3e50"}}>{of}</td><td style={{padding:"9px 12px",textAlign:"center",color:"#2c3e50"}}>{k.totalEntregues}<span style={{fontSize:10,color:"#a89f94",marginLeft:4}}>pç</span></td><td style={{padding:"9px 12px",textAlign:"center",color:"#27ae60",fontWeight:600}}>{fmt(k.totalValor)}</td><td style={{padding:"9px 12px",textAlign:"center",color:"#2c3e50"}}>{k.prazoMedio!=null?k.prazoMedio+"d":"—"}</td><td style={{padding:"9px 12px",textAlign:"center",color:k.pontualidade>=80?"#27ae60":k.pontualidade>=60?"#f0b429":"#c0392b"}}>{k.pontualidade!=null?k.pontualidade+"%":"—"}</td><td style={{padding:"9px 12px",textAlign:"center",color:k.perda>5?"#c0392b":"#27ae60"}}>{k.perda}%</td><td style={{padding:"9px 12px",textAlign:"center"}}><EstrelaScore n={k.nota}/></td></tr>);
-                  })}
-                  {oficinasUnicas.length===0&&<tr><td colSpan={7} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum dado</td></tr>}
-                </tbody>
-              </table>
+              <div style={{padding:"12px 16px",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontSize:11,color:"#a89f94",letterSpacing:2,textTransform:"uppercase"}}>Ranking por Oficina {oficinaDashData?.config?.cutoff_date&&<span style={{textTransform:"none",letterSpacing:0,marginLeft:8,fontSize:10,color:"#c0b8b0"}}>· desde {new Date(oficinaDashData.config.cutoff_date).toLocaleDateString("pt-BR")}</span>}</div>
+                {oficinaDashLoading&&<span style={{fontSize:10,color:"#a89f94"}}>carregando…</span>}
+              </div>
+              {oficinaDashData?.ranking?.length>0?(
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead><tr style={{background:"#f7f4f0"}}>{["Oficina","Status","Cortes","No prazo","Dias médio","Em aberto","Qtd correta","Última entrega"].map(h=>(<th key={h} style={{padding:"8px 10px",textAlign:h==="Oficina"?"left":"center",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>))}</tr></thead>
+                  <tbody>
+                    {oficinaDashData.ranking.map(r=>(
+                      <tr key={r.oficina} style={{borderBottom:"1px solid #f0ebe4"}}>
+                        <td style={{padding:"9px 10px",fontWeight:600,color:"#2c3e50"}}>{r.oficina}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",fontSize:11}}>{r.status}</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",color:"#2c3e50"}}>{r.cortes}<span style={{fontSize:9,color:"#a89f94",marginLeft:3}}>({r.cortes_em_aberto} ab.)</span></td>
+                        <td style={{padding:"9px 10px",textAlign:"center",color:r.no_prazo_pct>=80?"#27ae60":r.no_prazo_pct>=60?"#f0b429":"#c0392b",fontWeight:600}}>{r.no_prazo_pct}%<span style={{fontSize:9,color:"#a89f94",marginLeft:3,fontWeight:400}}>({r.no_prazo_n}/{r.cortes})</span></td>
+                        <td style={{padding:"9px 10px",textAlign:"center",color:"#2c3e50"}}>{r.dias_medio}d</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",color:r.pecas_em_aberto>0?"#b7791f":"#a0a0a0"}}>{r.pecas_em_aberto}<span style={{fontSize:9,color:"#a89f94",marginLeft:3}}>pç</span></td>
+                        <td style={{padding:"9px 10px",textAlign:"center",color:r.qtd_correta_pct>=95?"#27ae60":"#c0392b"}}>{r.qtd_correta_pct}%</td>
+                        <td style={{padding:"9px 10px",textAlign:"center",color:"#6b7c8a",fontSize:11}}>{r.ultima_entrega?new Date(r.ultima_entrega).toLocaleDateString("pt-BR"):"—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ):(
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead><tr style={{background:"#f7f4f0"}}>{["Oficina","Peças fabricadas","Valor pago","Prazo médio","Pontualidade","% Perda","Eficiência"].map(h=>(<th key={h} style={{padding:"8px 12px",textAlign:h==="Oficina"?"left":"center",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>))}</tr></thead>
+                  <tbody>
+                    {oficinasUnicas.sort((a,b)=>kpiOficina(b).totalEntregues-kpiOficina(a).totalEntregues).map(of=>{
+                      const k=kpiOficina(of);
+                      return(<tr key={of} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"9px 12px",fontWeight:600,color:"#2c3e50"}}>{of}</td><td style={{padding:"9px 12px",textAlign:"center",color:"#2c3e50"}}>{k.totalEntregues}<span style={{fontSize:10,color:"#a89f94",marginLeft:4}}>pç</span></td><td style={{padding:"9px 12px",textAlign:"center",color:"#27ae60",fontWeight:600}}>{fmt(k.totalValor)}</td><td style={{padding:"9px 12px",textAlign:"center",color:"#2c3e50"}}>{k.prazoMedio!=null?k.prazoMedio+"d":"—"}</td><td style={{padding:"9px 12px",textAlign:"center",color:k.pontualidade>=80?"#27ae60":k.pontualidade>=60?"#f0b429":"#c0392b"}}>{k.pontualidade!=null?k.pontualidade+"%":"—"}</td><td style={{padding:"9px 12px",textAlign:"center",color:k.perda>5?"#c0392b":"#27ae60"}}>{k.perda}%</td><td style={{padding:"9px 12px",textAlign:"center"}}><EstrelaScore n={k.nota}/></td></tr>);
+                    })}
+                    {oficinasUnicas.length===0&&<tr><td colSpan={7} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum dado</td></tr>}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         );
       })()}
+
+      {aba==="produtos"&&(
+        <div>
+          {/* Filtros: marca + sub-tab (Por REF / Por Categoria) */}
+          <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+            <div style={{display:"flex",background:"#e8e2da",borderRadius:8,padding:3}}>
+              {["Meluni","Amícia"].map(m=>(
+                <button key={m} onClick={()=>setOficinaProdMarca(m)} style={{padding:"5px 14px",border:"none",borderRadius:6,background:oficinaProdMarca===m?"#2c3e50":"transparent",color:oficinaProdMarca===m?"#fff":"#6b7c8a",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif"}}>{m}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",background:"#e8e2da",borderRadius:8,padding:3}}>
+              {[{id:"ref",label:"Por REF"},{id:"categoria",label:"Por Categoria"}].map(t=>(
+                <button key={t.id} onClick={()=>setOficinaProdAba(t.id)} style={{padding:"5px 14px",border:"none",borderRadius:6,background:oficinaProdAba===t.id?"#4a7fa5":"transparent",color:oficinaProdAba===t.id?"#fff":"#6b7c8a",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif"}}>{t.label}</button>
+              ))}
+            </div>
+            {oficinaProdAba==="ref"&&<input value={oficinaProdBusca} onChange={e=>setOficinaProdBusca(e.target.value)} placeholder="Buscar ref ou descrição..." style={{...iStyle,flex:1,minWidth:180}}/>}
+            {oficinaProdLoading&&<span style={{fontSize:10,color:"#a89f94"}}>carregando…</span>}
+          </div>
+
+          {/* Sub-aba: Por REF */}
+          {oficinaProdAba==="ref"&&(
+            <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:700}}>
+                <thead><tr style={{background:"#f7f4f0"}}>{["Ref","Descrição","Categoria","Nº Cortes","Dias médio","Meta cat.","Fonte","Último corte","Histórico mensal"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:h==="Descrição"?"left":"center",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {(()=>{
+                    const lista=(oficinaProdData||[]).filter(p=>{
+                      if(!oficinaProdBusca.trim())return true;
+                      const q=oficinaProdBusca.toLowerCase().trim();
+                      return String(p.ref).toLowerCase().includes(q)||String(p.descricao||"").toLowerCase().includes(q);
+                    });
+                    if(lista.length===0)return <tr><td colSpan={9} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{oficinaProdLoading?"Carregando…":"Nenhum produto"}</td></tr>;
+                    return lista.map(p=>{
+                      const corMedia=p.dias_medio_efetivo==null?"#a0a0a0":p.meta_categoria==null?"#2c3e50":p.dias_medio_efetivo<=p.meta_categoria*0.85?"#27ae60":p.dias_medio_efetivo<=p.meta_categoria?"#2c3e50":"#c0392b";
+                      const hist=p.historico_mensal||[];
+                      return(
+                        <tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}>
+                          <td style={{padding:"9px 10px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td>
+                          <td style={{padding:"9px 10px",color:"#2c3e50"}}>{p.descricao}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",color:"#6b7c8a",fontSize:11}}>{p.categoria||"—"}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",color:"#2c3e50"}}>{p.n_cortes_ref}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:corMedia}}>{p.dias_medio_efetivo!=null?p.dias_medio_efetivo+"d":"—"}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",color:"#6b7c8a"}}>{p.meta_categoria!=null?p.meta_categoria+"d":"—"}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",fontSize:10,color:p.fonte_media==="propria"?"#27ae60":"#a89f94"}}>{p.fonte_media==="propria"?"própria":"categoria"}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",color:"#6b7c8a",fontSize:11}}>{p.ultimo_corte_data?new Date(p.ultimo_corte_data).toLocaleDateString("pt-BR"):"—"}</td>
+                          <td style={{padding:"9px 10px",fontSize:10,color:"#6b7c8a"}}>{hist.length===0?"—":hist.map(h=>`${h.mes.slice(5)}/${h.mes.slice(2,4)}: ${h.dias}d (${h.cortes})`).join(" · ")}</td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Sub-aba: Por Categoria */}
+          {oficinaProdAba==="categoria"&&(
+            <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:560}}>
+                <thead><tr style={{background:"#f7f4f0"}}>{["Categoria","Nº Cortes","Dias médio","Meta atraso","Fonte","Atualizado"].map(h=><th key={h} style={{padding:"8px 12px",textAlign:h==="Categoria"?"left":"center",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {(()=>{
+                    const cats=oficinaProdMarca==="Meluni"?(oficinaDashData?.categorias_meluni||[]):(oficinaDashData?.categorias_amicia||[]);
+                    if(cats.length===0)return <tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{oficinaDashLoading?"Carregando…":"Acesse o Dashboard primeiro pra carregar os dados de categoria"}</td></tr>;
+                    return cats.map(c=>(
+                      <tr key={c.categoria} style={{borderBottom:"1px solid #f0ebe4"}}>
+                        <td style={{padding:"9px 12px",fontWeight:600,color:"#2c3e50",textTransform:"capitalize"}}>{c.categoria.replace(/_/g," ")}</td>
+                        <td style={{padding:"9px 12px",textAlign:"center",color:"#2c3e50"}}>{c.n_cortes}</td>
+                        <td style={{padding:"9px 12px",textAlign:"center",fontWeight:700,color:"#2c3e50"}}>{c.dias_medio}d</td>
+                        <td style={{padding:"9px 12px",textAlign:"center",color:"#c0392b",fontWeight:600}}>{c.meta_dias}d</td>
+                        <td style={{padding:"9px 12px",textAlign:"center",fontSize:10,color:c.fonte==="real"?"#27ae60":c.fonte==="amostra_pequena"?"#f0b429":"#a89f94"}}>{c.fonte==="real"?"real":c.fonte==="amostra_pequena"?"amostra":"fallback"}</td>
+                        <td style={{padding:"9px 12px",textAlign:"center",color:"#6b7c8a",fontSize:11}}>{c.atualizado_em?new Date(c.atualizado_em).toLocaleDateString("pt-BR"):"—"}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {aba==="cadastros"&&(
         <div>
@@ -8561,6 +8719,11 @@ export default function App(){
   //     (se < lastCorteLoadTs, é trigger de load, não de edit do usuário)
   const lastCorteLoadTs=useRef(0);
   const lastCorteEditTs=useRef(0);
+  // 📸 SNAPSHOT MÉTRICAS (Oficinas Fase 2): IDs de cortes que tiveram entregue
+  // marcado como true e precisam ter `metrica_snapshot` aplicado via RPC
+  // `fn_oficina_aplicar_snapshot_corte`. Processado no save effect APÓS o
+  // upsert (a RPC lê o payload do banco, então precisa rodar depois).
+  const pendingSnapshotIds=useRef(new Set());
   // 🛡️ SNAPSHOT DE INTEGRIDADE: tamanhos conhecidos do último load/save bem sucedido.
   // Usado pra detectar state corrompido (ex: receitasPorMes={} depois de ter 12 meses)
   // e ABORTAR o save antes de sobrescrever dados bons no Supabase.
@@ -9546,6 +9709,21 @@ export default function App(){
           logTroca:usuarioLogado?.admin?logTroca||[]:remoto.logTroca||logTroca||[]};
         lastCorteSaveTs.current=Date.now();
         await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
+        // 📸 OFICINAS FASE 2: aplicar metrica_snapshot nos cortes que foram
+        // marcados como entregue neste ciclo. RPC lê o payload do banco —
+        // por isso rodamos DEPOIS do upsert. Falha silenciosa: se algum corte
+        // não fechar, fn_oficina_recalcular_metricas() faz backfill diário.
+        if(pendingSnapshotIds.current.size>0){
+          const ids=Array.from(pendingSnapshotIds.current);
+          pendingSnapshotIds.current.clear();
+          for(const cid of ids){
+            try{
+              const {data:r,error}=await supabase.rpc('fn_oficina_aplicar_snapshot_corte',{p_id_corte:cid});
+              if(error)console.warn("snapshot oficina id",cid,"erro:",error.message);
+              else if(r?.erro)console.log("snapshot oficina id",cid,"skip:",r.erro);
+            }catch(e){console.warn("snapshot oficina exception id",cid,e?.message);}
+          }
+        }
       }catch(e){console.error("Erro save cortes:",e);}
     },1500);
     return()=>clearTimeout(debounceCortes.current);
@@ -10136,7 +10314,7 @@ export default function App(){
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="osamicia"&&usuarioLogado?.modulos?.includes('osamicia')&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={String(usuarioLogado?.usuario||'').toLowerCase()==='ailson' ? {...usuarioLogado, admin:true} : usuarioLogado}/></ModuleErrorBoundary>}
         {active==="lojas"&&<ModuleErrorBoundary><LojasModule supabase={supabase} userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
-        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true}/>}
+        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
