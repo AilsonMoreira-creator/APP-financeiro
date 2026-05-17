@@ -7213,33 +7213,62 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
   // Helper de focus: seleciona tudo ao focar (fix do "zero não sai")
   const onFocusSel=(e)=>e.target.select();
 
-  // === Histórico Meluni: modal de cadastro/edição ===
+  // === Histórico Meluni Meta Ads (Ailson 17/05/2026) ===
+  // Agora lê/escreve em meluni_meta_ads_historico (tabela dedicada).
+  // O array state.historicoMeluni no JSONB ficou deprecated — não é mais usado.
+  // Motivo: outro chat de análise Meta Ads vai popular direto via SQL upsert,
+  // sem precisar mexer no payload calc-meluni (que é multi-user sensível).
   const hojeIso=new Date().toISOString().slice(0,10);
-  const [modalHist,setModalHist]=useState(null); // null=fechado | {id|null, data, cpc, conv, ticket}
-  const abrirModalNovo=()=>setModalHist({id:null,data:hojeIso,cpc:'',conv:'',ticket:''});
-  const abrirModalEditar=(reg)=>setModalHist({id:reg.id,data:reg.data,cpc:String(reg.cpc),conv:String(reg.conv),ticket:String(reg.ticket)});
-  const fecharModal=()=>setModalHist(null);
-  const salvarRegistro=()=>{
-    if(!modalHist)return;
-    const cpc=parseFloat(modalHist.cpc),conv=parseFloat(modalHist.conv),ticket=parseFloat(modalHist.ticket);
-    if(!modalHist.data||isNaN(cpc)||cpc<=0||isNaN(conv)||conv<=0||isNaN(ticket)||ticket<=0){
-      alert('Preencha todos os campos com valores válidos');return;
-    }
-    const novoReg={id:modalHist.id||(Date.now().toString(36)+Math.random().toString(36).slice(2,8)),data:modalHist.data,cpc,conv,ticket};
-    setState(p=>{
-      const lista=p.historicoMeluni||[];
-      const novaLista=modalHist.id?lista.map(r=>r.id===modalHist.id?novoReg:r):[...lista,novoReg];
-      return {...p,historicoMeluni:novaLista};
-    });
-    fecharModal();
+  const [modalHist,setModalHist]=useState(null);
+  const [historicoDb,setHistoricoDb]=useState([]);
+  const [histLoading,setHistLoading]=useState(false);
+
+  const carregarHistorico=async()=>{
+    setHistLoading(true);
+    try{
+      const{data,error}=await supabase.from('meluni_meta_ads_historico').select('*').order('data',{ascending:true});
+      if(error)console.warn('historico meluni erro:',error.message);
+      else setHistoricoDb(data||[]);
+    }catch(e){console.warn('historico meluni exception:',e?.message);}
+    setHistLoading(false);
   };
-  const removerRegistro=(id)=>{
+  useEffect(()=>{carregarHistorico();},[]);
+
+  const abrirModalNovo=()=>setModalHist({id:null,data:hojeIso,cpc:'',conv:'',ticket:''});
+  const abrirModalEditar=(reg)=>setModalHist({id:reg.id,data:reg.data,cpc:String(reg.cpc||''),conv:String(reg.conv||''),ticket:String(reg.ticket||'')});
+  const fecharModal=()=>setModalHist(null);
+  const salvarRegistro=async()=>{
+    if(!modalHist)return;
+    const cpc=parseFloat(modalHist.cpc);
+    const conv=modalHist.conv?parseFloat(modalHist.conv):null;
+    const ticket=modalHist.ticket?parseFloat(modalHist.ticket):null;
+    if(!modalHist.data||isNaN(cpc)||cpc<=0){
+      alert('Preencha data e CPC (obrigatórios). Conv e ticket são opcionais.');return;
+    }
+    const row={
+      data:modalHist.data,cpc,
+      conv:(conv!==null&&!isNaN(conv)&&conv>0)?conv:null,
+      ticket:(ticket!==null&&!isNaN(ticket)&&ticket>0)?ticket:null,
+      fonte:'manual',
+    };
+    try{
+      const{error}=await supabase.from('meluni_meta_ads_historico').upsert(row,{onConflict:'data'});
+      if(error){alert('Erro ao salvar: '+error.message);return;}
+      await carregarHistorico();
+      fecharModal();
+    }catch(e){alert('Erro: '+(e?.message||''));}
+  };
+  const removerRegistro=async(id)=>{
     if(!window.confirm('Excluir esse registro?'))return;
-    setState(p=>({...p,historicoMeluni:(p.historicoMeluni||[]).filter(r=>r.id!==id)}));
+    try{
+      const{error}=await supabase.from('meluni_meta_ads_historico').delete().eq('id',id);
+      if(error){alert('Erro: '+error.message);return;}
+      await carregarHistorico();
+    }catch(e){alert('Erro: '+(e?.message||''));}
   };
 
   // Histórico ordenado ASC por data (gráfico mostra evolução temporal)
-  const historicoOrdenado=(state.historicoMeluni||[]).slice().sort((a,b)=>a.data.localeCompare(b.data));
+  const historicoOrdenado=historicoDb;
   // Mais recente primeiro pra tabela
   const historicoTabela=historicoOrdenado.slice().reverse();
   // Opts pra cálculos respeitando frete subsidiado
@@ -7315,9 +7344,9 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
   };
 
   // Séries para gráficos (ordem cronológica)
-  const serieCpc=historicoOrdenado.map(r=>r.cpc);
-  const serieConv=historicoOrdenado.map(r=>r.conv);
-  const serieTicket=historicoOrdenado.map(r=>r.ticket);
+  const serieCpc=historicoOrdenado.map(r=>r.cpc).filter(v=>v!=null);
+  const serieConv=historicoOrdenado.map(r=>r.conv).filter(v=>v!=null);
+  const serieTicket=historicoOrdenado.map(r=>r.ticket).filter(v=>v!=null);
   const tendCpc=getTendencia(serieCpc,false); // CPC subir = ruim
   const tendConv=getTendencia(serieConv,true); // Conv subir = bom
   const tendTicket=getTendencia(serieTicket,true); // Ticket subir = bom
@@ -7579,8 +7608,8 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
                       <tr key={r.id} style={{borderBottom:"1px solid #f0ebe4"}}>
                         <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{formatarDataBR(r.data)}</td>
                         <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#4a7fa5',fontWeight:700}}>{fmtDec(r.cpc)}</td>
-                        <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#1a7a40',fontWeight:700}}>{r.conv.toFixed(1)}%</td>
-                        <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#9b59b6',fontWeight:700}}>{fmt(r.ticket)}</td>
+                        <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#1a7a40',fontWeight:700}}>{r.conv!=null?Number(r.conv).toFixed(2)+'%':<span style={{color:'#c0b8b0'}}>—</span>}</td>
+                        <td style={{padding:"8px 12px",fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",color:'#9b59b6',fontWeight:700}}>{r.ticket!=null?fmt(r.ticket):<span style={{color:'#c0b8b0'}}>—</span>}</td>
                         <td style={{padding:"8px 12px",textAlign:"center"}}>
                           <button onClick={()=>abrirModalEditar(r)} style={{background:"none",border:"none",cursor:"pointer",color:"#4a7fa5",fontSize:15,marginRight:10}}>✏</button>
                           <button onClick={()=>removerRegistro(r.id)} style={{background:"none",border:"none",cursor:"pointer",color:"#c0392b",fontSize:17}}>×</button>
