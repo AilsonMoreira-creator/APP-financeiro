@@ -3352,6 +3352,60 @@ const CORES_RANKING_INICIAL=[
 const CORES_OUTRAS_INICIAL=[];
 // Helper: corte tem detalhamento válido (tamanhos + cores preenchidos)
 const temDetalhe=(c)=>!!(c?.detalhes&&Array.isArray(c.detalhes.tamanhos)&&c.detalhes.tamanhos.length>0&&Array.isArray(c.detalhes.cores)&&c.detalhes.cores.length>0);
+
+// Soma das peças via matriz: Σ(grade_tam) × Σ(folhas_cor)
+const calcQtdCalculada=(c)=>{
+  if(!temDetalhe(c))return 0;
+  const somaGrades=(c.detalhes.tamanhos||[]).reduce((s,t)=>s+(parseInt(t.grade)||0),0);
+  const somaFolhas=(c.detalhes.cores||[]).reduce((s,co)=>s+(parseInt(co.folhas)||0),0);
+  return somaGrades*somaFolhas;
+};
+
+// 🔴 DIVERGÊNCIA TRACKING (Ailson 17/05/2026)
+// Retorna o corte com c.divergencia ajustado conforme estado atual.
+// Regras:
+//  - Sem matriz → remove qualquer divergência (volta a "amarela = sem matriz")
+//  - Com matriz + qtds não batem + sem divergência ou status='resolvido'
+//    → CRIA nova divergência (status='aberto', snapshots das qtds atuais)
+//  - Com matriz + qtds não batem + status='aberto' → mantém
+//  - Com matriz + qtds batem + status='aberto' → RESOLVE
+//    Detecta lado: se qtd_manual mudou vs _inicial → 'corte' (1º errou)
+//    se qtd_calculada mudou vs _inicial → 'matriz' (2º errou)
+//    se ambos → 'ambos'
+// Idempotente: se nada muda, retorna o mesmo objeto (não cria refs novas).
+const aplicarRegrasDivergencia=(c)=>{
+  const tem=temDetalhe(c);
+  const qm=parseFloat(c.qtd)||0;
+  const qc=calcQtdCalculada(c);
+  const d=c.divergencia;
+
+  // 1. Sem matriz → apaga divergência (regra B)
+  if(!tem){
+    if(!d)return c;
+    const{divergencia,...resto}=c;
+    return resto;
+  }
+
+  const bate=qm===qc&&qc>0;
+  const aberto=d?.status==="aberto";
+
+  // 2. Bate qtd e tem divergência aberta → RESOLVE
+  if(bate&&aberto){
+    const mudouManual=qm!==d.qtd_manual_inicial;
+    const mudouCalc=qc!==d.qtd_calculada_inicial;
+    const lado=mudouManual&&mudouCalc?"ambos":mudouManual?"corte":mudouCalc?"matriz":"ambos";
+    return{...c,divergencia:{...d,status:"resolvido",resolvido_em:new Date().toISOString(),lado_corrigido:lado}};
+  }
+
+  // 3. Não bate qtd → precisa ter divergência aberta
+  if(!bate&&qc>0){
+    // Sem divergência ainda OU foi resolvida e voltou a divergir → cria nova (regra A: sobrescreve)
+    if(!d||d.status==="resolvido"){
+      return{...c,divergencia:{criado_em:new Date().toISOString(),qtd_manual_inicial:qm,qtd_calculada_inicial:qc,status:"aberto",resolvido_em:null,lado_corrigido:null}};
+    }
+  }
+  return c;  // sem mudanças
+};
 // SVG do ícone matrix (mesmo do preview)
 const SvgMatrixDet=({color="#4a7fa5",size=13})=>(
   <svg width={size} height={size} viewBox="0 0 14 14" fill="none">
@@ -3641,6 +3695,20 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   const [trocaPara,setTrocaPara]=useState("");
   const [trocaMsg,setTrocaMsg]=useState("");
   const [corteDetalhe,setCorteDetalhe]=useState(null); // null = fechado, corte = modal aberto pra esse corte
+  // 🔴 DIVERGÊNCIA (Ailson 17/05/2026)
+  const [showDivergencias,setShowDivergencias]=useState(false);
+  const [filtroDivStatus,setFiltroDivStatus]=useState("aberto"); // "aberto" | "resolvido" | "todos"
+  // Aplica regras de divergência em cada mudança em cortes. Idempotente:
+  // se nada muda, não chama setCortes (evita loop infinito).
+  useEffect(()=>{
+    let mudou=false;
+    const novos=cortes.map(c=>{
+      const r=aplicarRegrasDivergencia(c);
+      if(r!==c){mudou=true;return r;}
+      return c;
+    });
+    if(mudou)setCortes(novos);
+  },[cortes,setCortes]);
 
   // Fotos: mesma lógica FotoProd + zoom DOM
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
@@ -3768,6 +3836,70 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     <div>
       <ConfirmDialog confirm={confirm?confirm.msg:null} onCancel={()=>setConfirm(null)} onConfirm={()=>{confirm.onYes();}}/>
       {corteDetalhe&&<DetalhamentoModal corte={corteDetalhe} onClose={()=>setCorteDetalhe(null)} onSave={salvarDetalhes} onDelete={excluirDetalhes}/>}
+      {/* 🔴 MODAL DIVERGÊNCIAS (Ailson 17/05/2026) */}
+      {showDivergencias&&(()=>{
+        const todas=cortes.filter(c=>c.divergencia).sort((a,b)=>{
+          // abertas primeiro, depois por data desc
+          if(a.divergencia.status!==b.divergencia.status)return a.divergencia.status==="aberto"?-1:1;
+          return new Date(b.divergencia.criado_em)-new Date(a.divergencia.criado_em);
+        });
+        const filtradas=filtroDivStatus==="todos"?todas:todas.filter(c=>c.divergencia.status===filtroDivStatus);
+        const nAbertas=todas.filter(c=>c.divergencia.status==="aberto").length;
+        const nResolvidas=todas.filter(c=>c.divergencia.status==="resolvido").length;
+        return(
+        <div onClick={()=>setShowDivergencias(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9998,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px",overflowY:"auto"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fcfaf7",border:"2px solid #c8d8e4",borderRadius:14,padding:18,maxWidth:920,width:"100%",fontFamily:"Georgia,serif",color:"#2c3e50",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,paddingBottom:10,borderBottom:"1px solid #e8e2da"}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:"#2c3e50"}}>⚠ Divergências de Corte</div>
+                <div style={{fontSize:11,color:"#8a9aa4",marginTop:2}}>{nAbertas} em aberto · {nResolvidas} resolvidas</div>
+              </div>
+              <button onClick={()=>setShowDivergencias(false)} style={{background:"transparent",border:"none",fontSize:24,cursor:"pointer",color:"#8a9aa4",padding:"0 4px"}}>×</button>
+            </div>
+            <div style={{display:"flex",gap:4,marginBottom:12,background:"#e8e2da",borderRadius:8,padding:3,width:"fit-content"}}>
+              {[{id:"aberto",label:`Em aberto (${nAbertas})`,c:"#c0392b"},{id:"resolvido",label:`Resolvidas (${nResolvidas})`,c:"#27ae60"},{id:"todos",label:`Todas (${todas.length})`,c:"#2c3e50"}].map(t=>(
+                <button key={t.id} onClick={()=>setFiltroDivStatus(t.id)} style={{padding:"5px 12px",border:"none",borderRadius:6,background:filtroDivStatus===t.id?t.c:"transparent",color:filtroDivStatus===t.id?"#fff":"#6b7c8a",cursor:"pointer",fontSize:11,fontFamily:"Georgia,serif",fontWeight:filtroDivStatus===t.id?600:400}}>{t.label}</button>
+              ))}
+            </div>
+            {filtradas.length===0?(
+              <div style={{padding:30,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{filtroDivStatus==="aberto"?"🎉 Nenhuma divergência em aberto":filtroDivStatus==="resolvido"?"Nenhuma divergência resolvida ainda":"Nenhuma divergência registrada"}</div>
+            ):(
+              <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:10,overflow:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:800}}>
+                  <thead><tr style={{background:"#f7f4f0"}}>{["Status","Nº Corte","REF","Oficina","Manual","Calculada","Diferença","Criado","Resolvido","Erro foi em"].map(h=>(
+                    <th key={h} style={{padding:"8px 10px",textAlign:["Nº Corte","REF","Oficina"].includes(h)?"left":"center",fontSize:10,color:"#a89f94",fontWeight:600}}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {filtradas.map(c=>{
+                      const d=c.divergencia;
+                      const qmAtual=parseFloat(c.qtd)||0;
+                      const qcAtual=calcQtdCalculada(c);
+                      const diffInicial=d.qtd_manual_inicial-d.qtd_calculada_inicial;
+                      const aberto=d.status==="aberto";
+                      const ladoLabel={corte:"🔢 Corte (1º)",matriz:"📐 Matriz (2º)",ambos:"⚠ Ambos"}[d.lado_corrigido]||"—";
+                      return(
+                        <tr key={c.id} style={{borderBottom:"1px solid #f0ebe4",background:aberto?"#fff8f5":"transparent"}}>
+                          <td style={{padding:"9px 10px",textAlign:"center"}}>{aberto?<span style={{color:"#c0392b",fontWeight:700,fontSize:11}}>🔴 ABERTO</span>:<span style={{color:"#27ae60",fontWeight:600,fontSize:11}}>✅ Resolvido</span>}</td>
+                          <td style={{padding:"9px 10px"}}><button onClick={()=>{setShowDivergencias(false);setCorteDetalhe(c);}} style={{background:"transparent",border:"none",color:"#4a7fa5",fontWeight:700,cursor:"pointer",fontFamily:"Georgia,serif",fontSize:12,padding:0,textDecoration:"underline"}}>{c.nCorte}</button></td>
+                          <td style={{padding:"9px 10px",color:"#2c3e50"}}>{c.ref}</td>
+                          <td style={{padding:"9px 10px",color:"#6b7c8a",fontSize:11}}>{c.oficina}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",fontFamily:"'Courier New',monospace",color:"#2c3e50"}}>{d.qtd_manual_inicial}{!aberto&&qmAtual!==d.qtd_manual_inicial?<><span style={{color:"#a89f94"}}> → </span><strong>{qmAtual}</strong></>:null}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",fontFamily:"'Courier New',monospace",color:"#2c3e50"}}>{d.qtd_calculada_inicial}{!aberto&&qcAtual!==d.qtd_calculada_inicial?<><span style={{color:"#a89f94"}}> → </span><strong>{qcAtual}</strong></>:null}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",fontWeight:700,color:diffInicial>0?"#c0392b":"#b7791f",fontFamily:"'Courier New',monospace"}}>{diffInicial>0?"+":""}{diffInicial}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",color:"#6b7c8a",fontSize:11}}>{new Date(d.criado_em).toLocaleDateString("pt-BR")}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",color:"#6b7c8a",fontSize:11}}>{d.resolvido_em?new Date(d.resolvido_em).toLocaleDateString("pt-BR"):"—"}</td>
+                          <td style={{padding:"9px 10px",textAlign:"center",fontSize:11,fontWeight:600,color:d.lado_corrigido==="corte"?"#b7791f":d.lado_corrigido==="matriz"?"#4a7fa5":d.lado_corrigido==="ambos"?"#8a6500":"#c0b8b0"}}>{ladoLabel}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+        );
+      })()}
       <div style={{display:"flex",borderBottom:"1px solid #e8e2da",marginBottom:16}}>
         <TabBtn id="cortes" label="Cortes" Icon={SvgCortes}/>
         <TabBtn id="dashboard" label="Dashboard" Icon={SvgDashOficinas}/>
@@ -3793,6 +3925,11 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               <option value="todos">Pagto</option><option value="pago">✓ Pago</option><option value="naopago">Não pago</option>
             </select>
             <button onClick={exportarAberto} style={{background:"#fff",border:"1px solid #4a7fa5",color:"#4a7fa5",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer"}}>↓ CSV</button>
+            {(()=>{const n=cortes.filter(c=>c.divergencia?.status==="aberto").length;return(
+              <button onClick={()=>setShowDivergencias(true)} style={{background:n>0?"#fdeaea":"#fff",border:`1px solid ${n>0?"#c0392b":"#c8d8e4"}`,color:n>0?"#c0392b":"#6b7c8a",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:n>0?700:400,position:"relative"}}>
+                ⚠ Divergências{n>0&&<span style={{marginLeft:5,background:"#c0392b",color:"#fff",borderRadius:8,padding:"1px 6px",fontSize:10,fontWeight:700}}>{n}</span>}
+              </button>
+            );})()}
             <button onClick={()=>{setMostraForm(p=>!p);setEditId(null);setForm({nCorte:"",ref:"",descricao:"",marca:"Amícia",qtd:"",valorUnit:"",oficina:"",data:new Date().toISOString().slice(0,10)});setRefBusca("");}} style={{background:mostraForm?"#2c3e50":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>{mostraForm?"✕ Fechar":"+ Novo Corte"}</button>
           </div>
           {mostraForm&&(
@@ -3831,7 +3968,8 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                         <span style={{fontSize:11,fontWeight:600,color:"#4a7fa5"}}>{c.nCorte}</span>
                         <button onClick={()=>setCorteDetalhe(c)} title={temDetalhe(c)?"Ver detalhamento":"Adicionar detalhamento"} style={{position:"relative",width:22,height:22,borderRadius:5,background:"#fff",border:"1px solid #c8d8e4",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <SvgMatrixDet color="#4a7fa5"/>
-                          {!temDetalhe(c)&&<span style={{position:"absolute",top:-3,right:-3,width:9,height:9,borderRadius:"50%",background:"#f0b429",border:"1.5px solid #fff"}}/>}
+                          {!temDetalhe(c)&&<span title="Sem matriz" style={{position:"absolute",top:-3,right:-3,width:9,height:9,borderRadius:"50%",background:"#f0b429",border:"1.5px solid #fff"}}/>}
+                          {temDetalhe(c)&&c.divergencia?.status==="aberto"&&<span title="Divergência em aberto" style={{position:"absolute",top:-3,right:-3,width:9,height:9,borderRadius:"50%",background:"#c0392b",border:"1.5px solid #fff"}}/>}
                         </button>
                       </div>
                       <div style={{padding:"3px 4px",display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
