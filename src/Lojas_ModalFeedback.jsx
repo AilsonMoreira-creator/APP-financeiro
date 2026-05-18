@@ -28,6 +28,27 @@ async function chamarApi(path, opts) {
   return j;
 }
 
+// Ailson 18/05/2026: referencia temporal natural da data da sugestao.
+// "ontem" / "anteontem" / "na sexta" / "no dia 12/05".
+// Usado nas perguntas do modal pra nao ficar hardcoded em "ontem".
+function referenciaTemporal(dataISO) {
+  if (!dataISO) return 'naquela conversa';
+  // Parse ISO sem timezone bug (date-only)
+  const [y, m, d] = dataISO.split('-').map(Number);
+  if (!y || !m || !d) return 'naquela conversa';
+  const data = new Date(y, m - 1, d);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const diffDias = Math.round((hoje - data) / 86400000);
+  if (diffDias === 1) return 'ontem';
+  if (diffDias === 2) return 'anteontem';
+  if (diffDias >= 3 && diffDias <= 7) {
+    const dias = ['no domingo', 'na segunda', 'na terça', 'na quarta', 'na quinta', 'na sexta', 'no sábado'];
+    return dias[data.getDay()];
+  }
+  return `no dia ${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}`;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HOOK: gerencia carregamento + persistência das respostas
 // ═══════════════════════════════════════════════════════════════════════════
@@ -213,12 +234,13 @@ export default function ModalFeedbackDiario({
 
   // Pergunta 1 — ESTADO
   if (pergunta === 1) {
+    const quando = referenciaTemporal(dados.data_sugestao);
     return (
       <ModalSkeleton
         intro={introTexto}
         progresso={`Pergunta 1 de 3`}
         cliente={dados.cliente_nome}
-        contextoPergunta={`Como foi com ${dados.cliente_nome} ontem?`}
+        contextoPergunta={`Como foi com ${dados.cliente_nome} ${quando}?`}
         alternativas={dados.alternativas?.q1 || []}
         onClick={handleResponder}
         onPular={handleAbandonar}
