@@ -65,6 +65,12 @@ import CarrinhoTab, { LeadCard } from './Lojas_Carrinho.jsx';
 // (ex: trilha semana 2/3 — vendedora conta o que rolou na semana anterior).
 import ContextoMensagemModal from './Lojas_ContextoMensagemModal.jsx';
 
+// Modal de feedback diário — Sprint A 18/05/2026 (Ailson).
+// Disparado quando vendedora abre a 7ª sugestão. 3 perguntas progressivas
+// sobre 1 cliente que recebeu msg ontem. Early-exit em 2 negativas.
+// IA usa as respostas pra calibrar futuras sugestões/mensagens desse cliente.
+import ModalFeedbackDiario from './Lojas_ModalFeedback.jsx';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS DE UI ESPECÍFICOS DAS TELAS VENDEDORA
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1817,11 +1823,106 @@ const ConfigTab = ({ lojas, onNavegar }) => {
 // 2. CardDiaScreen — 7 sugestões do dia da vendedora
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ─── Mapa de status do feedback pra badge visual (admin only) ──────────────
+// Sprint A 18/05/2026 (Ailson). Lido da view vw_lojas_feedback_status_sugestao.
+function mapBadgeFeedback(status) {
+  switch (status) {
+    case 'completo':
+      return { emoji: '✅', label: 'Feedback 3/3',     bg: '#d8ecd5', fg: '#2f6b30' };
+    case 'early_exit':
+      return { emoji: '🛑', label: 'Early-exit',        bg: '#e6e8eb', fg: '#5a6470' };
+    case 'parcial_2':
+      return { emoji: '⚡', label: 'Parcial 2/3',       bg: '#fbe8c8', fg: '#8c5a16' };
+    case 'parcial_1':
+      return { emoji: '⚡', label: 'Parcial 1/3',       bg: '#fbe8c8', fg: '#8c5a16' };
+    case 'aguardando':
+      return { emoji: '⏳', label: 'Em andamento',      bg: '#e8e2da', fg: '#5a6470' };
+    default:
+      return null;
+  }
+}
+
+// ─── PIN DE CELEBRAÇÃO: venda site orgânica (Sprint A — Ailson 18/05/2026)
+// Avisos criados pelo cron de conversões quando cliente da vendedora comprou
+// no site SEM mensagem prévia. Renderiza com tom comemorativo no topo das
+// sugestões. Texto vem do cron com prefixo [VENDA_SITE_ORGANICA].
+const PinCelebracaoVendaSite = ({ aviso, onConsumir }) => {
+  // Remove o prefixo de identificação pra exibir
+  const texto = (aviso.texto || '').replace('[VENDA_SITE_ORGANICA]', '').trim();
+  const [consumindo, setConsumindo] = useState(false);
+
+  const handleClick = async () => {
+    if (consumindo) return;
+    setConsumindo(true);
+    try { await onConsumir(); } finally { setConsumindo(false); }
+  };
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #f4e8d8 0%, #ead9c0 100%)',
+      border: `1.5px solid ${palette.warn || '#d4a96a'}`,
+      borderRadius: 14,
+      padding: 14,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      fontFamily: FONT,
+      boxShadow: '0 2px 8px rgba(212,169,106,0.18)',
+    }}>
+      <div style={{
+        width: 44, height: 44, borderRadius: 12,
+        background: 'rgba(255,255,255,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: fz(26), flexShrink: 0,
+      }}>
+        🎉
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink, lineHeight: 1.35, marginBottom: 6 }}>
+          {texto}
+        </div>
+        <button
+          onClick={handleClick}
+          disabled={consumindo}
+          style={{
+            background: palette.ink,
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            padding: '6px 14px',
+            fontSize: fz(13),
+            fontWeight: 600,
+            cursor: consumindo ? 'wait' : 'pointer',
+            fontFamily: FONT,
+          }}
+        >
+          {consumindo ? 'Anotando…' : 'Beleza, anotei! ✅'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const CardDiaScreen = ({
   lojas, vendedora, onBack, onSelectSugestao, onAbrirCarteira, onAbrirDestaques,
 }) => {
   const { state, handleRegerarSugestoes } = lojas;
   const [regenerando, setRegenerando] = useState(false);
+
+  // FEEDBACK DIÁRIO (Sprint A — Ailson 18/05/2026)
+  // Modal abre quando vendedora abre a 7ª (última prioridade) sugestão.
+  // Acionado via wrapper de onSelectSugestao. Backend filtra elegibilidade
+  // (sem candidato = não abre).
+  const [feedbackModalAberto, setFeedbackModalAberto] = useState(false);
+  const [sugestaoPendentePosModal, setSugestaoPendentePosModal] = useState(null);
+  // Anti-disparo duplo: 1 vez por sessão da tela
+  const [feedbackJaTentou, setFeedbackJaTentou] = useState(false);
+
+  // BADGES DE FEEDBACK NO ADMIN (Sprint A — Ailson 18/05/2026)
+  // Admin que abre tela de outra vendedora vê o status do feedback de cada
+  // sugestão (completo/parcial/early_exit/abandonou). Lê a view
+  // vw_lojas_feedback_status_sugestao. Vendedora comum não vê.
+  const [feedbackStatusPorSugestao, setFeedbackStatusPorSugestao] = useState({});
 
   const sugestoes = state.sugestoesHoje;
 
@@ -1836,6 +1937,75 @@ export const CardDiaScreen = ({
 
   const oficiais = sugestoes.filter(s => !ehAvulsa(s));
   const avulsas = sugestoes.filter(ehAvulsa);
+
+  // PINS DE CELEBRAÇÃO (Sprint A — Ailson 18/05/2026)
+  // Avisos com prefixo [VENDA_SITE_ORGANICA] criados pelo cron de conversões
+  // quando cliente da vendedora comprou no site SEM mensagem prévia.
+  // Renderizam acima das sugestões com tom comemorativo.
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const pinsCelebracao = (state.avisos || []).filter(a =>
+    a.status === 'pendente'
+    && (a.texto || '').startsWith('[VENDA_SITE_ORGANICA]')
+    && a.data_disparo <= hojeISO
+    && (
+      !a.vendedoras_ids
+      || a.vendedoras_ids.length === 0
+      || (vendedora?.id && a.vendedoras_ids.includes(vendedora.id))
+    )
+  );
+
+  // Identifica a "última" sugestão (maior prioridade entre oficiais)
+  // pra disparar modal de feedback quando vendedora clicar nela.
+  const prioridadeMaxOficial = oficiais.reduce(
+    (max, s) => (s.prioridade > max ? s.prioridade : max), 0
+  );
+
+  const handleSelectSugestao = useCallback((s) => {
+    // Se for a última sugestão E modal nunca foi tentado nessa sessão E
+    // tem 7 sugestões (carteira completa) → tenta abrir modal antes
+    if (
+      !feedbackJaTentou
+      && oficiais.length >= 5  // tolerante a carteiras < 7 (cascata)
+      && s.prioridade === prioridadeMaxOficial
+      && !ehAvulsa(s)
+    ) {
+      setFeedbackJaTentou(true);
+      setSugestaoPendentePosModal(s);
+      setFeedbackModalAberto(true);
+      return;
+    }
+    onSelectSugestao(s);
+  }, [feedbackJaTentou, oficiais.length, prioridadeMaxOficial, onSelectSugestao]);
+
+  const handleFecharModalFeedback = useCallback(() => {
+    setFeedbackModalAberto(false);
+    if (sugestaoPendentePosModal) {
+      const s = sugestaoPendentePosModal;
+      setSugestaoPendentePosModal(null);
+      onSelectSugestao(s);
+    }
+  }, [sugestaoPendentePosModal, onSelectSugestao]);
+
+  // Carrega status de feedback das 7 sugestões pra admin ver badges
+  useEffect(() => {
+    if (!state.isAdmin || !oficiais.length) {
+      setFeedbackStatusPorSugestao({});
+      return;
+    }
+    const ids = oficiais.map(s => s.id).filter(Boolean);
+    if (ids.length === 0) return;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('vw_lojas_feedback_status_sugestao')
+          .select('sugestao_id, status_badge, resposta_q1, resposta_q2, resposta_q3, prioridade_origem, motivo_encerramento')
+          .in('sugestao_id', ids);
+        const map = {};
+        (data || []).forEach(f => { map[f.sugestao_id] = f; });
+        setFeedbackStatusPorSugestao(map);
+      } catch (e) { /* silent */ }
+    })();
+  }, [state.isAdmin, oficiais.map(s => s.id).join(',')]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const ativas = oficiais.filter(s => s.status === 'pendente' || !s.status);
   const enviadas = oficiais.filter(s => s.status === 'executada');
@@ -1876,8 +2046,12 @@ export const CardDiaScreen = ({
     const cliente = state.clientes.find(c => c.id === s.cliente_id);
     const titulo = s.titulo || (cliente ? `${capitalizeTipo(s.tipo)} ${nomeCliente(cliente)}` : 'Sugestão');
 
+    // Badge de feedback (admin only) — Sprint A 18/05/2026 (Ailson)
+    const fbStatus = state.isAdmin ? feedbackStatusPorSugestao[s.id] : null;
+    const badge = fbStatus ? mapBadgeFeedback(fbStatus.status_badge) : null;
+
     return (
-      <button onClick={() => !riscada && onSelectSugestao(s)} disabled={riscada} style={{
+      <button onClick={() => !riscada && handleSelectSugestao(s)} disabled={riscada} style={{
         background: riscada ? palette.beigeSoft : palette.surface,
         border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 14,
         width: '100%', textAlign: 'left',
@@ -1885,6 +2059,7 @@ export const CardDiaScreen = ({
         opacity: riscada ? 0.55 : 1,
         boxShadow: riscada ? 'none' : '0 1px 3px rgba(44,62,80,0.04)',
         display: 'flex', alignItems: 'flex-start', gap: 12,
+        position: 'relative',
       }}>
         <div style={{
           width: 36, height: 36, borderRadius: 9, background: visual.corSoft,
@@ -1901,6 +2076,19 @@ export const CardDiaScreen = ({
           {riscada && (
             <div style={{ marginTop: 6, fontSize: fz(13), color: palette.ok, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
               <Check size={sz(14)} /> Enviada
+            </div>
+          )}
+          {badge && (
+            <div
+              title={`${badge.label}${fbStatus.resposta_q1 ? ` · Q1=${fbStatus.resposta_q1}` : ''}${fbStatus.resposta_q2 ? ` · Q2=${fbStatus.resposta_q2}` : ''}${fbStatus.resposta_q3 ? ` · Q3=${fbStatus.resposta_q3}` : ''}`}
+              style={{
+                marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: fz(12), fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                background: badge.bg, color: badge.fg, alignSelf: 'flex-start',
+              }}
+            >
+              <span>{badge.emoji}</span>
+              <span>{badge.label}</span>
             </div>
           )}
         </div>
@@ -1989,6 +2177,27 @@ export const CardDiaScreen = ({
           </div>
         </div>
 
+        {pinsCelebracao.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+            {pinsCelebracao.map(p => (
+              <PinCelebracaoVendaSite
+                key={p.id}
+                aviso={p}
+                onConsumir={async () => {
+                  try {
+                    await supabase
+                      .from('lojas_avisos')
+                      .update({ status: 'consumido', consumido_em: new Date().toISOString() })
+                      .eq('id', p.id);
+                    // recarrega via dispatch local — atualiza state.avisos
+                    if (lojas.recarregarAvisos) await lojas.recarregarAvisos();
+                  } catch (e) { console.warn('[pin] erro consumir:', e.message); }
+                }}
+              />
+            ))}
+          </div>
+        )}
+
         {ativas.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
             {ativas.map(s => <SugestaoCard key={s.id} s={s} />)}
@@ -2074,6 +2283,16 @@ export const CardDiaScreen = ({
             Tap 5x ativa hard reload (limpa SW + caches + reload). */}
         <FooterVersao />
       </div>
+
+      {feedbackModalAberto && state.userId && vendedora?.id && (
+        <ModalFeedbackDiario
+          userId={state.userId}
+          vendedoraId={vendedora.id}
+          vendedoraNome={vendedora.nome}
+          onClose={handleFecharModalFeedback}
+        />
+      )}
+
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );

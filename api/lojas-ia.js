@@ -1228,10 +1228,15 @@ async function montarContextoSugestoes(vendedoraId) {
   // Filtra avisos que pertencem a essa vendedora (todas OU explicitamente
   // selecionada). Pode ter mais de 1, mas só consideramos o primeiro como
   // slot dedicado — outros viram "ver também" no contexto.
+  // EXCLUI avisos VENDA_SITE_ORGANICA — esses são pins celebrativos
+  // renderizados pelo frontend, nao viram sugestao da IA. (Ailson 18/05/2026)
   const avisosDestaVendedora = (avisosHoje || []).filter(a =>
-    !a.vendedoras_ids
-    || a.vendedoras_ids.length === 0
-    || a.vendedoras_ids.includes(vendedoraId)
+    !(a.texto || '').startsWith('[VENDA_SITE_ORGANICA]')
+    && (
+      !a.vendedoras_ids
+      || a.vendedoras_ids.length === 0
+      || a.vendedoras_ids.includes(vendedoraId)
+    )
   );
 
   // ─── CORES EM ALTA (Ailson 30/04/2026, semantica opt-in) ──────────────

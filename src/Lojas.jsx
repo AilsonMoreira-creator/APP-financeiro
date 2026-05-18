@@ -1854,6 +1854,16 @@ function useLojasModule() {
     handleLoadConfig,
     handleLoadPromocoesHistorico,
     handleRegistrarImportacaoManual,
+
+    // utilidades — Ailson 18/05/2026 (Sprint A)
+    // Recarrega lista de avisos do banco. Usado pelo PinCelebracaoVendaSite
+    // pra atualizar UI apos vendedora marcar 'Beleza, anotei!'.
+    recarregarAvisos: async () => {
+      try {
+        const avisos = await loadAvisos();
+        dispatch({ type: 'SET_AVISOS', avisos });
+      } catch (e) { console.warn('[lojas] erro recarregar avisos:', e.message); }
+    },
   };
 }
 
