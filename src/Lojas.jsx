@@ -1908,6 +1908,7 @@ import {
 
 // Tela compartilhada (vendedora E admin) pra cadastrar nome do comprador
 import { CadastrarCompradorScreen } from './Lojas_CadastrarComprador.jsx';
+import FeedbackResumoScreen from './Lojas_FeedbackResumo.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL — Router de telas
@@ -2006,6 +2007,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
     else if (id === 'grupos') setScreen('gruposAdmin');
     else if (id === 'importacoes') setScreen('importacoes');
     else if (id === 'cadastrarComprador') setScreen('cadastrarComprador');
+    else if (id === 'feedbackResumo') setScreen('feedbackResumo');
   };
   
   const vendedoraAtiva = state.vendedoraAtiva;
@@ -2183,6 +2185,13 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
         <CadastrarCompradorScreen
           lojas={lojas}
           onBack={() => setScreen(state.isAdmin ? 'home' : 'carteira')}
+        />
+      )}
+
+      {screen === 'feedbackResumo' && (
+        <FeedbackResumoScreen
+          lojas={lojas}
+          onBack={() => setScreen('home')}
         />
       )}
 
