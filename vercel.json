@@ -45,7 +45,7 @@
       "maxDuration": 120
     },
     "api/lojas-ia.js": {
-      "maxDuration": 90
+      "maxDuration": 300
     },
     "api/lojas-drive-importar.js": {
       "maxDuration": 300,

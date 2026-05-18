@@ -160,7 +160,11 @@ async function handleGerarSugestoes(req, res, auth) {
     messages,
     max_tokens: 8000,
     temperature: 0.7,
-    timeoutMs: 75000,
+    // Timeout 240s (era 75s) — Ailson 18/05/2026 hotfix.
+    // Carteiras grandes (Cleide 318, Vanessa 233) estavam estourando 75s
+    // historicamente; Sprint A (feedback no prompt) foi a gota d'agua.
+    // 240s da margem real e fica abaixo do maxDuration 300s do Vercel.
+    timeoutMs: 240000,
   });
 
   // 6. Loga (independente de sucesso)
