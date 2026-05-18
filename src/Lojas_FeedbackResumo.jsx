@@ -16,10 +16,10 @@ import { palette, FONT, fz, sz, supabase } from './Lojas_Shared.jsx';
 import { ChevronLeft, BarChart3, AlertTriangle, AlertCircle, Pencil, Sparkles, Shuffle } from 'lucide-react';
 
 // Labels amigaveis das prioridades_origem
+// Ailson 18/05/2026: removida categoria 'editou_muito' (nao agregava valor).
 const PRIORIDADE_LABEL = {
   atencao_6plus: { label: 'Clientes 6+',     icon: AlertTriangle, cor: palette.warn || '#c97a16', sub: '6+ meses sem comprar ou 6x média de janela' },
   atencao_3plus: { label: 'Clientes 3+',     icon: AlertCircle,   cor: palette.accent || '#5a6470', sub: '3+ meses sem comprar ou 3x média de janela' },
-  editou_muito:  { label: 'Vendedora editou muito', icon: Pencil,  cor: palette.purple || '#7a5fa8', sub: '3+ edições na mensagem original' },
   cliente_novo:  { label: 'Clientes novos',  icon: Sparkles,      cor: palette.ok || '#3a7a3c', sub: '1ª compra recente' },
   aleatorio:     { label: 'Outros',          icon: Shuffle,       cor: palette.inkSoft || '#6a7280', sub: 'Sorteados aleatoriamente' },
 };
@@ -190,7 +190,7 @@ export default function FeedbackResumoScreen({ lojas, onBack }) {
             {/* Por categoria */}
             {Object.entries(agregados.porPrioridade)
               .sort(([a], [b]) => {
-                const ordem = ['atencao_6plus','atencao_3plus','editou_muito','cliente_novo','aleatorio'];
+                const ordem = ['atencao_6plus','atencao_3plus','cliente_novo','aleatorio'];
                 return ordem.indexOf(a) - ordem.indexOf(b);
               })
               .map(([prio, b]) => (

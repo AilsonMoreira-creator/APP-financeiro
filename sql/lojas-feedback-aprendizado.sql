@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS lojas_feedback_diario (
   data_pergunta         date NOT NULL,
   -- Critério usado pra escolher esse cliente (auditoria do algoritmo)
   prioridade_origem     text NOT NULL CHECK (prioridade_origem IN (
-    'atencao_6plus','atencao_3plus','editou_muito','cliente_novo','aleatorio'
+    'atencao_6plus','atencao_3plus','cliente_novo','aleatorio'
   )),
   -- Respostas (Q1 sempre preenchida; Q2 e Q3 podem ser NULL)
   resposta_q1           text CHECK (resposta_q1 IN (
@@ -76,7 +76,7 @@ COMMENT ON TABLE lojas_feedback_diario IS
 
 COMMENT ON COLUMN lojas_feedback_diario.prioridade_origem IS
   'Critério usado pelo algoritmo de seleção. Ordem decrescente: atencao_6plus > '
-  'atencao_3plus > editou_muito > cliente_novo > aleatorio.';
+  'atencao_3plus > cliente_novo > aleatorio.';
 
 COMMENT ON COLUMN lojas_feedback_diario.resposta_q1 IS
   'ESTADO: "Como foi com cliente?" — respondeu/sem_resposta/ignorou/vou_insistir. '
@@ -302,7 +302,7 @@ candidatos_filtrados AS (
       AND v.data_venda <= (c.data_geracao + INTERVAL '1 day')::date
   )
 ),
--- KPIs do cliente pra calcular prioridade (status_atual, qtd_edits)
+-- KPIs do cliente pra calcular prioridade (status_atual, qtd_compras)
 candidatos_com_kpi AS (
   SELECT
     cf.*,
@@ -310,8 +310,6 @@ candidatos_com_kpi AS (
     kpi.status_atual,
     kpi.dias_sem_comprar,
     kpi.media_dias_compras,
-    -- Quantas vezes vendedora editou essa sugestão
-    (SELECT COUNT(*) FROM lojas_edicoes_mensagens e WHERE e.sugestao_id = cf.sugestao_id) AS qtd_edits,
     -- Cliente novo: <= 1 compra histórica
     COALESCE(kpi.qtd_compras, 0) AS qtd_compras
   FROM candidatos_filtrados cf
@@ -331,7 +329,6 @@ SELECT
     WHEN status_atual = 'atencao'
       OR (media_dias_compras IS NOT NULL AND dias_sem_comprar >= media_dias_compras * 3)
                                               THEN 'atencao_3plus'
-    WHEN qtd_edits >= 3                       THEN 'editou_muito'
     WHEN qtd_compras <= 1                     THEN 'cliente_novo'
     ELSE                                           'aleatorio'
   END AS prioridade_origem,
@@ -342,12 +339,11 @@ SELECT
     WHEN status_atual = 'atencao'
       OR (media_dias_compras IS NOT NULL AND dias_sem_comprar >= media_dias_compras * 3)
                                               THEN 2
-    WHEN qtd_edits >= 3                       THEN 3
-    WHEN qtd_compras <= 1                     THEN 4
-    ELSE                                           5
+    WHEN qtd_compras <= 1                     THEN 3
+    ELSE                                           4
   END AS prioridade_rank
 FROM candidatos_com_kpi
-ORDER BY prioridade_rank ASC, qtd_edits DESC, dias_sem_comprar DESC NULLS LAST
+ORDER BY prioridade_rank ASC, dias_sem_comprar DESC NULLS LAST
 LIMIT p_limit;
 $$;
 
