@@ -236,6 +236,42 @@ async function handleGerarSugestoes(req, res, auth) {
       .trim();
   };
 
+  // Sanitiza alvo_nome_display — Ailson 18/05/2026 (Sprint A fix bug Karina)
+  // Quando IA gera placeholder generico tipo "Sacola antiga (cliente)" ou
+  // simplesmente "Cliente" como nome no card, a vendedora manda mensagem
+  // sem saber quem e. Sobrescrevemos com apelido REAL do cliente.
+  //
+  // Carrega apelidos dos clientes-alvo em lote.
+  const clienteIdsParaNomes = [...new Set(
+    sugestoesIA
+      .filter(s => s.alvo_tipo === 'cliente' && s.alvo_id)
+      .map(s => s.alvo_id)
+  )];
+  const apelidoPorCliente = new Map();
+  if (clienteIdsParaNomes.length) {
+    const { data: clientesData } = await supabase
+      .from('lojas_clientes')
+      .select('id, apelido, comprador_nome')
+      .in('id', clienteIdsParaNomes);
+    (clientesData || []).forEach(c => {
+      apelidoPorCliente.set(c.id, c.apelido || c.comprador_nome || null);
+    });
+  }
+  const ehPlaceholderGenerico = (nome) => {
+    if (!nome || typeof nome !== 'string') return true;
+    const t = nome.trim().toLowerCase();
+    // Padroes que IA gera quando "nao sabe" o nome
+    return /\(cliente\)|^cliente$|sacola.*\(.*\)|^a cliente$|^a aluna$/i.test(t);
+  };
+  const resolverNomeDisplay = (s) => {
+    if (s.alvo_tipo !== 'cliente') return s.alvo_nome_display || null;
+    const apelidoReal = apelidoPorCliente.get(s.alvo_id);
+    if (apelidoReal && ehPlaceholderGenerico(s.alvo_nome_display)) {
+      return apelidoReal;
+    }
+    return s.alvo_nome_display || apelidoReal || null;
+  };
+
   // 10. Insere as novas
   const linhas = sugestoesIA.map((s, idx) => ({
     vendedora_id: vendedoraIdAlvo,
@@ -246,7 +282,7 @@ async function handleGerarSugestoes(req, res, auth) {
     alvo_tipo: s.alvo_tipo === 'grupo' ? 'grupo' : 'cliente',
     cliente_id: s.alvo_tipo === 'cliente' ? s.alvo_id : null,
     grupo_id: s.alvo_tipo === 'grupo' ? s.alvo_id : null,
-    alvo_nome_display: s.alvo_nome_display || null,
+    alvo_nome_display: resolverNomeDisplay(s),
     titulo: semTravessao(s.titulo) || 'Sugestão',
     contexto: semTravessao(s.contexto) || null,
     fatos: Array.isArray(s.fatos) ? s.fatos.map(semTravessao) : null,

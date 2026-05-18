@@ -1022,14 +1022,31 @@ async function aplicarUpsert(tipo, registros, importacaoId, extras = {}) {
   if (tipo.startsWith('sacola')) {
     // Resolve cliente_id por documento (busca em lote)
     const documentos = [...new Set(enriquecidos.map(r => r.documento_raw).filter(Boolean))];
+    let docToCliente = new Map();   // documento -> { id, vendedora_id }
     if (documentos.length) {
       const clientes = await selectInBatches('lojas_clientes', 'documento', documentos, {
-        select: 'id, documento',
+        select: 'id, documento, vendedora_id',
       });
-      const docToId = new Map(clientes.map(c => [c.documento, c.id]));
+      docToCliente = new Map(clientes.map(c => [c.documento, c]));
 
       enriquecidos.forEach(r => {
-        r.cliente_id = docToId.get(r.documento_raw) || null;
+        const cli = docToCliente.get(r.documento_raw);
+        r.cliente_id = cli?.id || null;
+
+        // OVERRIDE DE VENDEDORA — Ailson 18/05/2026 (Sprint A fix bug Karina)
+        // Quando PDF do Mire vem SEM vendedor (vendedor_nome_raw vazio),
+        // resolverVendedora() caia em Celia/Cleide (padrao loja). Mas se
+        // a cliente JA tem vendedora dona em lojas_clientes (caso comum:
+        // cliente da Vanessa fez pedido sem o nome dela no balcao), a
+        // sacola DEVE ir pra dona da cliente — nao pra Celia/Cleide.
+        // Ordem de prioridade:
+        //   1. Se vendedor_nome_raw preenchido -> ja foi resolvido (resolverVendedora ok)
+        //   2. Se vazio E cliente tem vendedora_id -> usa dona da cliente
+        //   3. Senao -> mantem padrao da loja (Celia/Cleide)
+        const semVendedorRaw = !r.vendedor_nome_raw || r.vendedor_nome_raw.trim() === '';
+        if (semVendedorRaw && cli?.vendedora_id) {
+          r.vendedora_id = cli.vendedora_id;
+        }
       });
     }
 
