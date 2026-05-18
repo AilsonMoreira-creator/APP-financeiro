@@ -665,8 +665,10 @@ export function parsePedidosEspera(linhasComX, loja, vendedorasCadastradas, hoje
 
   const registros = [];
   let totalLinhasPedido = 0;
+  let vendedoresResgatados = 0;  // metrica de bug Ailson 18/05/2026
 
-  for (const itens of linhasComX) {
+  for (let idxLinha = 0; idxLinha < linhasComX.length; idxLinha++) {
+    const itens = linhasComX[idxLinha];
     // Só linhas que começam com pedido (número 4-7 dígitos numa posição inicial)
     const primeiroItem = itens.slice().sort((a, b) => a.x - b.x)[0];
     if (!primeiroItem || !/^\d{4,7}$/.test(primeiroItem.text.trim())) continue;
@@ -676,6 +678,46 @@ export function parsePedidosEspera(linhasComX, loja, vendedorasCadastradas, hoje
     if (!parsed) {
       detalhes_ignorados.parse_falhou++;
       continue;
+    }
+
+    // RESGATE DE VENDEDOR EM LINHAS ADJACENTES — Ailson 18/05/2026.
+    // PDF do Mire quebra nomes de cliente longos em 2 linhas visuais
+    // dentro da mesma celula. pdfjs separa cada Y como linha distinta.
+    // O 'VANESSA' (que ficaria centralizado verticalmente) cai numa Y
+    // intermediaria e nao acompanha a linha do pedido.
+    // Solucao: se vendedor saiu vazio, olha ate 2 linhas seguintes e
+    // resgata candidato em CAIXA-ALTA (regex igual a do parser principal).
+    // So aceita se a linha NAO comeca com pedido novo.
+    if (!parsed.vendedor_nome_raw) {
+      const regexVendedor = /^[A-ZÁÃÀÉÊÍÓÔÕÚÇÜÂÊÎÔÛ ]{3,}$/;
+      const regexPedidoNovo = /^\d{4,7}$/;
+      for (let off = 1; off <= 2 && idxLinha + off < linhasComX.length; off++) {
+        const linhaAdiante = linhasComX[idxLinha + off];
+        const primeiroAdiante = linhaAdiante.slice().sort((a,b) => a.x - b.x)[0];
+        // Se proxima linha for outro pedido, para — vendedor nao pode vir dai
+        if (primeiroAdiante && regexPedidoNovo.test(primeiroAdiante.text.trim())) break;
+        // Procura candidato a vendedor (ALL CAPS, 3+ chars)
+        // De direita pra esquerda (vendedor fica nas ultimas colunas)
+        const candidatos = linhaAdiante
+          .slice()
+          .sort((a,b) => b.x - a.x)
+          .map(it => it.text.trim())
+          .filter(t => regexVendedor.test(t));
+        if (candidatos.length > 0) {
+          // Filtra "LOJA BOM RETIRO" / "LOJA SILVA TELES" etc (sao vendedoras FAKE,
+          // nao queremos resgatar essas — quando vem LOJA X e parser principal pega,
+          // tudo bem porque vai pro default. Mas aqui no resgate, melhor evitar
+          // pegar string longa que parece nome de loja).
+          const valido = candidatos.find(c =>
+            !/^LOJA\s/.test(c) && !/^CONVERTR$/.test(c) && c.length <= 20
+          );
+          if (valido) {
+            parsed.vendedor_nome_raw = valido;
+            vendedoresResgatados++;
+            break;
+          }
+        }
+      }
     }
 
     // Filtro varejo (CONSUMIDOR, doc=13, etc)
@@ -736,6 +778,7 @@ export function parsePedidosEspera(linhasComX, loja, vendedorasCadastradas, hoje
     total: totalLinhasPedido,
     ignorados: totalLinhasPedido - registros.length,
     detalhes_ignorados,
+    vendedores_resgatados: vendedoresResgatados,   // Ailson 18/05/2026
   };
 }
 
