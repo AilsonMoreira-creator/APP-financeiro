@@ -702,6 +702,37 @@ async function montarContextoSugestoes(vendedoraId) {
     console.error('[lojas-ia] erro carregar historico sugestoes:', e.message);
   }
 
+  // FEEDBACK DIARIO POR CLIENTE — Ailson 18/05/2026 (Sprint A Modal Fechamento)
+  // Pra cada cliente DESSA vendedora, ultimas respostas do modal de
+  // fechamento (90d, max 3 por cliente). 3 sinais: estado/percepcao/plano.
+  // IA usa pra: nao sugerir cliente ja_era+deixar_quieta, modular tom em
+  // clientes quietas, ajustar gancho se vendedora indicou plano.
+  const feedbackPorCliente = {};
+  try {
+    const dataLimiteFb = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+    const { data: fbData } = await supabase
+      .from('lojas_feedback_diario')
+      .select('cliente_id, data_pergunta, data_sugestao, resposta_q1, resposta_q2, resposta_q3, motivo_encerramento')
+      .eq('vendedora_id', vendedoraId)
+      .gte('data_pergunta', dataLimiteFb)
+      .order('data_pergunta', { ascending: false });
+    (fbData || []).forEach(f => {
+      if (!f.resposta_q1) return; // ignora linhas que vendedora nem comecou
+      if (!feedbackPorCliente[f.cliente_id]) feedbackPorCliente[f.cliente_id] = [];
+      if (feedbackPorCliente[f.cliente_id].length >= 3) return; // max 3 por cliente
+      feedbackPorCliente[f.cliente_id].push({
+        data:          f.data_pergunta,
+        data_sugestao: f.data_sugestao,
+        estado:        f.resposta_q1,
+        percepcao:     f.resposta_q2 || null,
+        plano:         f.resposta_q3 || null,
+        encerramento:  f.motivo_encerramento || 'parcial',
+      });
+    });
+  } catch (e) {
+    console.error('[lojas-ia] erro carregar feedback diario:', e.message);
+  }
+
   // Sacolas ativas dessa vendedora
   const { data: sacolasRaw } = await supabase
     .from('lojas_pedidos_sacola')
@@ -1315,6 +1346,7 @@ async function montarContextoSugestoes(vendedoraId) {
     conversoesPorCliente,    // { cliente_id: {total, ultima_data_venda, ultimo_dias_ate_compra, ultimo_valor} } — Ailson 07/05/2026 (auditoria GAP 2)
     conversoesGeral,         // { qtd_60d, valor_60d, qtd_30d } — agregado da vendedora
     historicoSugestoes,      // { cliente_id|grupo_id: [{data, tipo, ref, titulo}, ...max 5] } — Ailson 07/05/2026 GAP 4
+    feedbackPorCliente,      // { cliente_id: [{data, estado, percepcao, plano, encerramento}, ...max 3] } — Ailson 18/05/2026 Sprint A
     sacolas: sacolas || [],
     sacolasDescartadas,
     grupos: grupos || [],
@@ -1520,6 +1552,7 @@ async function montarContextoMensagem(sug, contextoExtra) {
   let janelaCompra = null;
   let conversoesCliente = null;
   let historicoSugestoes = [];
+  let feedbackHistorico = [];   // Ailson 18/05/2026 — feedback diario da vendedora sobre esse cliente
   let topCategorias = [];
   let ultimaCompra = null;
   let perfilCanal = null;
@@ -1582,6 +1615,33 @@ async function montarContextoMensagem(sug, contextoExtra) {
         titulo: h.titulo,
       }));
     } catch (e) { /* silent */ }
+
+    // 3.5 FEEDBACK HISTORICO da vendedora (90d, max 3) — Ailson 18/05/2026
+    // O que a vendedora respondeu sobre interacoes passadas com esse cliente.
+    // 3 sinais por feedback: estado (Q1), percepcao (Q2), plano (Q3).
+    // IA usa pra: nao sugerir clientes ja_era+deixar_quieta, modular tom em
+    // clientes quietas, apoiar follow-up se vendedora indicou plano.
+    try {
+      const dataLimiteFb = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+      const { data: fb } = await supabase
+        .from('lojas_feedback_diario')
+        .select('data_pergunta, data_sugestao, resposta_q1, resposta_q2, resposta_q3, motivo_encerramento')
+        .eq('cliente_id', cliente.id)
+        .gte('data_pergunta', dataLimiteFb)
+        .order('data_pergunta', { ascending: false })
+        .limit(3);
+      feedbackHistorico = (fb || [])
+        .filter(f => f.resposta_q1)  // ignora linhas que vendedora nem comecou
+        .map(f => ({
+          data:         f.data_pergunta,
+          data_sugestao: f.data_sugestao,
+          estado:       f.resposta_q1,
+          percepcao:    f.resposta_q2 || null,
+          plano:        f.resposta_q3 || null,
+          encerramento: f.motivo_encerramento || 'parcial',
+        }));
+    } catch (e) { /* silent */ }
+
 
     // 4. TOP CATEGORIAS — o que cliente mais compra
     try {
@@ -2069,6 +2129,7 @@ async function montarContextoMensagem(sug, contextoExtra) {
     estiloVendedora,
     // Contexto rico — Ailson 07/05/2026
     janelaCompra, conversoesCliente, historicoSugestoes,
+    feedbackHistorico,   // Ailson 18/05/2026 — Sprint A Modal Fechamento
     topCategorias, ultimaCompra, perfilCanal, statusEfetivo, pecaInfo,
     // Observações da vendedora — Ailson 07/05/2026 (etapa B)
     observacoesVendedora: cliente?.observacoes_ia || null,
@@ -2321,6 +2382,12 @@ function montarMessagesSugestoes(ctx) {
         // Vazio = cliente novo no fluxo IA OU nao foi sugerido nos ultimos
         // 28 dias.
         historico_sugestoes: ctx.historicoSugestoes?.[c.id] || [],
+        // FEEDBACK DIARIO da vendedora (90d, max 3) — Ailson 18/05/2026 Sprint A
+        // 3 sinais por feedback: estado (Q1=reacao da cliente), percepcao
+        // (Q2=tua leitura), plano (Q3=o que pretende). NULL = nunca foi
+        // perguntado. Regras de uso explicadas no SYSTEM_PROMPT (secao
+        // FEEDBACK HISTORICO). Vendedora ja_era+deixar_quieta = NAO sugerir.
+        feedback_vendedora: ctx.feedbackPorCliente?.[c.id] || null,
         // Cliente Vesti? Combina vendas físicas (KPIs) + cadastro Vesti
         // (canal_cadastro). True = priorizar sugerir link/video do app.
         usa_vesti: usaVestiCli,
@@ -2604,6 +2671,13 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     ultima_compra: ctx.ultimaCompra,
     conversoes_anteriores: ctx.conversoesCliente,
     historico_sugestoes_28d: ctx.historicoSugestoes,
+    // FEEDBACK DIARIO da vendedora — Ailson 18/05/2026 (Sprint A)
+    // Respostas do modal de fechamento sobre interacoes passadas com este cliente.
+    // 3 sinais por feedback: estado (Q1=reacao da cliente), percepcao (Q2=tua
+    // leitura), plano (Q3=o que pretende). Ate 3 entradas ordenadas por mais
+    // recente. NULL = nunca foi perguntado sobre este cliente.
+    // Regras de uso explicadas no SYSTEM_PROMPT (secao FEEDBACK HISTORICO).
+    feedback_vendedora: ctx.feedbackHistorico?.length > 0 ? ctx.feedbackHistorico : null,
     peca_info: ctx.pecaInfo, // { eh_novidade, eh_reposicao, combina_estilo_cliente }
     // Observacoes da vendedora — Ailson 07/05/2026 (etapa B)
     // Persistidas em lojas_clientes.observacoes_ia. Vendedora preenche modal

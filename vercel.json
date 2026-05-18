@@ -83,6 +83,9 @@
     "api/lojas-leads-conversoes-cron.js": {
       "maxDuration": 60
     },
+    "api/lojas-aprendizado-vendas-cron.js": {
+      "maxDuration": 120
+    },
     "api/lojas-trilha-winback-cron.js": {
       "maxDuration": 120
     },
@@ -197,6 +200,10 @@
     {
       "path": "/api/lojas-leads-conversoes-cron",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/lojas-aprendizado-vendas-cron",
+      "schedule": "30 7 * * *"
     },
     {
       "path": "/api/lojas-trilha-winback-cron",
