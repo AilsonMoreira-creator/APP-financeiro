@@ -220,6 +220,22 @@ async function handleGerarSugestoes(req, res, auth) {
     .eq('data_geracao', hoje)
     .eq('status', 'pendente');
 
+  // Sanitiza travessoes (em-dash —, en-dash –) que IA gera por habito mesmo
+  // contra instrucao do prompt. Defesa em profundidade. Ailson 18/05/2026.
+  // Mantém hifen comum (-) intacto pra palavras compostas (pos-venda etc).
+  const semTravessao = (txt) => {
+    if (!txt || typeof txt !== 'string') return txt;
+    return txt
+      .replace(/\s*—\s*/g, ', ')   // em-dash com espacos -> virgula+espaco
+      .replace(/\s*–\s*/g, ', ')   // en-dash com espacos -> virgula+espaco
+      .replace(/—/g, ', ')          // em-dash colado
+      .replace(/–/g, ', ')          // en-dash colado
+      .replace(/,\s*,/g, ',')       // limpa virgula dupla se sobrou
+      .replace(/\s+/g, ' ')         // colapsa espaços
+      .replace(/\s+([.,!?])/g, '$1') // tira espaço antes de pontuação
+      .trim();
+  };
+
   // 10. Insere as novas
   const linhas = sugestoesIA.map((s, idx) => ({
     vendedora_id: vendedoraIdAlvo,
@@ -231,10 +247,10 @@ async function handleGerarSugestoes(req, res, auth) {
     cliente_id: s.alvo_tipo === 'cliente' ? s.alvo_id : null,
     grupo_id: s.alvo_tipo === 'grupo' ? s.alvo_id : null,
     alvo_nome_display: s.alvo_nome_display || null,
-    titulo: s.titulo || 'Sugestão',
-    contexto: s.contexto || null,
-    fatos: Array.isArray(s.fatos) ? s.fatos : null,
-    acao_sugerida: s.acao_sugerida || null,
+    titulo: semTravessao(s.titulo) || 'Sugestão',
+    contexto: semTravessao(s.contexto) || null,
+    fatos: Array.isArray(s.fatos) ? s.fatos.map(semTravessao) : null,
+    acao_sugerida: semTravessao(s.acao_sugerida) || null,
     produto_ref: s.produto_ref || null,
     produto_nome: s.produto_nome || null,
     promocao_id: s.promocao_id || null,
@@ -480,8 +496,18 @@ async function handleGerarMensagem(req, res, auth) {
     return res.status(502).json({ error: 'Erro ao chamar IA', detalhe: r.erro });
   }
 
-  // Texto puro (sem cercas markdown)
-  const mensagem = r.texto.replace(/^```(?:[a-z]+)?\s*|\s*```$/g, '').trim();
+  // Texto puro (sem cercas markdown) + sanitiza travessões (em-dash —,
+  // en-dash –) que IA gera por habito mesmo proibido no prompt.
+  // Ailson 18/05/2026 — defesa em profundidade.
+  const mensagem = r.texto
+    .replace(/^```(?:[a-z]+)?\s*|\s*```$/g, '')
+    .replace(/\s*—\s*/g, ', ')
+    .replace(/\s*–\s*/g, ', ')
+    .replace(/—/g, ', ')
+    .replace(/–/g, ', ')
+    .replace(/,\s*,/g, ',')
+    .replace(/\s+([.,!?])/g, '$1')
+    .trim();
 
   // Cacheia
   await supabase
