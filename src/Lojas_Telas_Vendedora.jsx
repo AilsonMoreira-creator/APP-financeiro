@@ -2943,6 +2943,28 @@ export const MinhaCarteiraScreen = ({
     return () => { cancelado = true; };
   }, [vendedora?.id, state.userId]);
 
+  // ─── Carrega % de acerto da janela (admin only) — Ailson 18/05/2026 ─────
+  // Estatisticas do sistema de calibracao da janela de compra:
+  // - % de predicoes acertadas (cliente voltou em +/- 15% do prazo)
+  // - Tendencia do modelo (superestima/subestima prazo)
+  // - Breakdown por vendedora
+  const [acertosJanela, setAcertosJanela] = useState(null);
+  useEffect(() => {
+    if (!state.isAdmin || !state.userId) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/lojas-janela-acertos', {
+          headers: { 'X-User': state.userId },
+        });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!cancelado) setAcertosJanela(d);
+      } catch {}
+    })();
+    return () => { cancelado = true; };
+  }, [state.isAdmin, state.userId]);
+
   // ─── Carrega leads de carrinho dela (Ailson 12/05/2026) ────────────
   // Ailson decisão: depois q a vendedora envia mensagem WhatsApp, o lead
   // some da tab Carrinho geral e aparece AQUI na carteira dela quando o
@@ -3263,6 +3285,74 @@ export const MinhaCarteiraScreen = ({
                   </span>
                 </div>
               </button>
+            </div>
+          )}
+
+          {/* Card % de acerto da janela (admin only) — Ailson 18/05/2026.
+              Mostra estatisticas de calibracao do modelo de predicao:
+              quantas predicoes acertaram (cliente voltou em +/- 15% do
+              prazo) e tendencia (modelo superestima ou subestima). */}
+          {state.isAdmin && acertosJanela?.geral?.total_predicoes > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{
+                background: palette.surface,
+                border: `1px solid ${palette.beige}`,
+                borderLeft: `4px solid ${
+                  acertosJanela.geral.pct_acerto >= 50 ? palette.ok :
+                  acertosJanela.geral.pct_acerto >= 25 ? palette.warn :
+                  '#c97a16'
+                }`,
+                borderRadius: 12, padding: '11px 14px',
+                fontFamily: FONT,
+              }}>
+                <div style={{
+                  display: 'flex', alignItems: 'baseline',
+                  justifyContent: 'space-between', gap: 10, marginBottom: 4,
+                }}>
+                  <div style={{
+                    fontSize: fz(11), fontWeight: 700,
+                    color: palette.inkSoft, letterSpacing: 0.4,
+                    textTransform: 'uppercase',
+                  }}>
+                    📊 Acerto da janela (admin)
+                  </div>
+                  <div style={{
+                    fontSize: fz(20), fontWeight: 700,
+                    color: acertosJanela.geral.pct_acerto >= 50 ? palette.ok :
+                           acertosJanela.geral.pct_acerto >= 25 ? palette.warn :
+                           '#c97a16',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {acertosJanela.geral.pct_acerto}%
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: fz(12), color: palette.inkSoft,
+                  lineHeight: 1.4,
+                }}>
+                  <strong>{acertosJanela.geral.acertos}</strong> acertos de{' '}
+                  <strong>{acertosJanela.geral.total_predicoes}</strong> predições
+                  {' · '}
+                  <span style={{ color: '#c97a16' }}>
+                    {acertosJanela.geral.erros_adiantado} vieram antes
+                  </span>
+                  {' · '}
+                  <span style={{ color: palette.warn }}>
+                    {acertosJanela.geral.erros_atrasado} depois
+                  </span>
+                </div>
+                {acertosJanela.insights && (
+                  <div style={{
+                    marginTop: 6, padding: '6px 9px',
+                    background: palette.beigeSoft,
+                    borderRadius: 6,
+                    fontSize: fz(11), color: palette.inkSoft,
+                    lineHeight: 1.4,
+                  }}>
+                    💡 {acertosJanela.insights.mensagem}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
