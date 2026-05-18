@@ -3290,14 +3290,16 @@ export const MinhaCarteiraScreen = ({
 
           {/* Card % de acerto da janela (admin only) — Ailson 18/05/2026.
               Mostra estatisticas de calibracao do modelo de predicao:
-              quantas predicoes acertaram (cliente voltou em +/- 15% do
-              prazo) e tendencia (modelo superestima ou subestima). */}
-          {state.isAdmin && acertosJanela?.geral?.total_predicoes > 0 && (
+              quantas predicoes foram registradas, quantas ja foram resolvidas
+              (cliente voltou), e quantas acertaram (+/- 15% do prazo).
+              Sistema rodou retroativo nos ultimos 30 dias pra ja ter base. */}
+          {state.isAdmin && acertosJanela?.geral?.total_registradas > 0 && (
             <div style={{ marginBottom: 8 }}>
               <div style={{
                 background: palette.surface,
                 border: `1px solid ${palette.beige}`,
                 borderLeft: `4px solid ${
+                  acertosJanela.geral.tendencia === 'dados_insuficientes' ? palette.inkSoft :
                   acertosJanela.geral.pct_acerto >= 50 ? palette.ok :
                   acertosJanela.geral.pct_acerto >= 25 ? palette.warn :
                   '#c97a16'
@@ -3316,32 +3318,66 @@ export const MinhaCarteiraScreen = ({
                   }}>
                     📊 Acerto da janela (admin)
                   </div>
-                  <div style={{
-                    fontSize: fz(20), fontWeight: 700,
-                    color: acertosJanela.geral.pct_acerto >= 50 ? palette.ok :
-                           acertosJanela.geral.pct_acerto >= 25 ? palette.warn :
-                           '#c97a16',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {acertosJanela.geral.pct_acerto}%
-                  </div>
+                  {acertosJanela.geral.total_resolvidas > 0 ? (
+                    <div style={{
+                      fontSize: fz(20), fontWeight: 700,
+                      color: acertosJanela.geral.tendencia === 'dados_insuficientes' ? palette.inkSoft :
+                             acertosJanela.geral.pct_acerto >= 50 ? palette.ok :
+                             acertosJanela.geral.pct_acerto >= 25 ? palette.warn :
+                             '#c97a16',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {acertosJanela.geral.pct_acerto}%
+                    </div>
+                  ) : (
+                    <div style={{
+                      fontSize: fz(13), fontWeight: 600,
+                      color: palette.inkSoft,
+                    }}>
+                      sem resoluções ainda
+                    </div>
+                  )}
                 </div>
                 <div style={{
                   fontSize: fz(12), color: palette.inkSoft,
                   lineHeight: 1.4,
                 }}>
-                  <strong>{acertosJanela.geral.acertos}</strong> acertos de{' '}
-                  <strong>{acertosJanela.geral.total_predicoes}</strong> predições
-                  {' · '}
-                  <span style={{ color: '#c97a16' }}>
-                    {acertosJanela.geral.erros_adiantado} vieram antes
-                  </span>
-                  {' · '}
-                  <span style={{ color: palette.warn }}>
-                    {acertosJanela.geral.erros_atrasado} depois
-                  </span>
+                  <strong>{acertosJanela.geral.total_registradas}</strong> predições registradas
+                  {acertosJanela.geral.total_resolvidas > 0 && (
+                    <>
+                      {' · '}
+                      <strong>{acertosJanela.geral.acertos}</strong> acertos de{' '}
+                      <strong>{acertosJanela.geral.total_resolvidas}</strong> resolvidas
+                    </>
+                  )}
+                  {acertosJanela.geral.aguardando > 0 && (
+                    <>
+                      {' · '}
+                      <span style={{ color: palette.inkMuted }}>
+                        {acertosJanela.geral.aguardando} aguardando cliente voltar
+                      </span>
+                    </>
+                  )}
                 </div>
-                {acertosJanela.insights && (
+                {acertosJanela.geral.total_resolvidas > 0 && (acertosJanela.geral.erros_adiantado > 0 || acertosJanela.geral.erros_atrasado > 0) && (
+                  <div style={{
+                    fontSize: fz(11), color: palette.inkSoft,
+                    marginTop: 3,
+                  }}>
+                    {acertosJanela.geral.erros_adiantado > 0 && (
+                      <span style={{ color: '#c97a16' }}>
+                        {acertosJanela.geral.erros_adiantado} vieram antes
+                      </span>
+                    )}
+                    {acertosJanela.geral.erros_adiantado > 0 && acertosJanela.geral.erros_atrasado > 0 && ' · '}
+                    {acertosJanela.geral.erros_atrasado > 0 && (
+                      <span style={{ color: palette.warn }}>
+                        {acertosJanela.geral.erros_atrasado} depois
+                      </span>
+                    )}
+                  </div>
+                )}
+                {acertosJanela.insights && acertosJanela.geral.tendencia !== 'dados_insuficientes' && (
                   <div style={{
                     marginTop: 6, padding: '6px 9px',
                     background: palette.beigeSoft,
@@ -3350,6 +3386,17 @@ export const MinhaCarteiraScreen = ({
                     lineHeight: 1.4,
                   }}>
                     💡 {acertosJanela.insights.mensagem}
+                  </div>
+                )}
+                {acertosJanela.geral.tendencia === 'dados_insuficientes' && (
+                  <div style={{
+                    marginTop: 6, padding: '6px 9px',
+                    background: palette.beigeSoft,
+                    borderRadius: 6,
+                    fontSize: fz(11), color: palette.inkSoft,
+                    lineHeight: 1.4,
+                  }}>
+                    ℹ️ Dados ainda escassos (precisa de pelo menos 10 resoluções pra tendência confiável). Sistema rodando há poucos dias.
                   </div>
                 )}
               </div>
