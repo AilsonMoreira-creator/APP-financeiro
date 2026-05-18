@@ -27,7 +27,7 @@ const PRIORIDADE_LABEL = {
 // Labels amigaveis das respostas
 const Q1_LABELS = {
   respondeu:     '✅ Respondeu',
-  quietou:       '🤐 Quietou',
+  sem_resposta: '💭 Sem resposta',
   ignorou:       '😶 Ignorou',
   vou_insistir:  '💪 Vou insistir',
 };

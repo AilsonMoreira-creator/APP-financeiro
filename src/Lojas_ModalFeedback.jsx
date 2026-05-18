@@ -3,12 +3,12 @@
  *
  * Disparado quando vendedora abre a 7ª (última) sugestão do dia.
  * Pergunta sobre 1 cliente que recebeu mensagem ONTEM, com 3 sinais:
- *   Q1 (ESTADO):    respondeu | quietou | ignorou | vou_insistir
+ *   Q1 (ESTADO):    respondeu | sem_resposta | ignorou | vou_insistir
  *   Q2 (PERCEPÇÃO): com_certeza | talvez | dificil | ja_era
  *   Q3 (AÇÃO):      mandar_outra | esperar | outro_canal | deixar_quieta
  *
  * Early-exit: se Q1 e Q2 ambas NEGATIVAS, pula Q3 (cliente claramente morto).
- *   Negativas Q1: quietou, ignorou
+ *   Negativas Q1: sem_resposta, ignorou
  *   Negativas Q2: dificil, ja_era
  *
  * Templates de intro/close + alternativas rotacionados pelo backend.
@@ -18,7 +18,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { palette, FONT, fz, sz } from './Lojas_Shared.jsx';
 
-const NEGATIVAS_Q1 = new Set(['quietou', 'ignorou']);
+const NEGATIVAS_Q1 = new Set(['sem_resposta', 'ignorou']);
 const NEGATIVAS_Q2 = new Set(['dificil', 'ja_era']);
 
 async function chamarApi(path, opts) {

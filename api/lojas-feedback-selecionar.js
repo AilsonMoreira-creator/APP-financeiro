@@ -43,7 +43,7 @@ const ALTERNATIVAS_SETS = {
   set_1: {
     q1: [
       { id: 'respondeu',     label: 'Respondeu',     emoji: '✅' },
-      { id: 'quietou',       label: 'Quietou',       emoji: '😶' },
+      { id: 'sem_resposta',       label: 'Sem resposta', emoji: '💭' },
       { id: 'ignorou',       label: 'Ignorou',       emoji: '❌' },
       { id: 'vou_insistir',  label: 'Vou insistir',  emoji: '💪' },
     ],
@@ -63,7 +63,7 @@ const ALTERNATIVAS_SETS = {
   set_2: {
     q1: [
       { id: 'respondeu',     label: 'Topou',        emoji: '🔥' },
-      { id: 'quietou',       label: 'Sumiu',        emoji: '👻' },
+      { id: 'sem_resposta',       label: 'Sumiu',        emoji: '👻' },
       { id: 'ignorou',       label: 'Sem clima',    emoji: '😐' },
       { id: 'vou_insistir',  label: 'Vou retomar',  emoji: '🔄' },
     ],
@@ -83,7 +83,7 @@ const ALTERNATIVAS_SETS = {
   set_3: {
     q1: [
       { id: 'respondeu',     label: 'Engajou',         emoji: '💬' },
-      { id: 'quietou',       label: 'Fria',            emoji: '❄️' },
+      { id: 'sem_resposta',       label: 'Fria',            emoji: '❄️' },
       { id: 'ignorou',       label: 'Bloqueou',        emoji: '🚫' },
       { id: 'vou_insistir',  label: 'Tô insistindo',   emoji: '💪' },
     ],

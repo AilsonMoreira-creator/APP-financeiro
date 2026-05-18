@@ -19,7 +19,7 @@
 -- progressivas. Q3 pode ser NULL se early-exit por 2 negativas ou abandono.
 --
 -- Negativas:
---   Q1: 'quietou', 'ignorou'         (cliente não engajou)
+--   Q1: 'sem_resposta', 'ignorou'         (cliente não engajou)
 --   Q2: 'dificil', 'ja_era'          (vendedora vê como caso difícil/morto)
 -- Se Q1 e Q2 ambas negativas → modal pula Q3 (motivo_encerramento='2_negativas').
 CREATE TABLE IF NOT EXISTS lojas_feedback_diario (
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS lojas_feedback_diario (
   )),
   -- Respostas (Q1 sempre preenchida; Q2 e Q3 podem ser NULL)
   resposta_q1           text CHECK (resposta_q1 IN (
-    'respondeu','quietou','ignorou','vou_insistir'
+    'respondeu','sem_resposta','ignorou','vou_insistir'
   )),
   resposta_q2           text CHECK (resposta_q2 IN (
     'com_certeza','talvez','dificil','ja_era'
@@ -79,8 +79,8 @@ COMMENT ON COLUMN lojas_feedback_diario.prioridade_origem IS
   'atencao_3plus > editou_muito > cliente_novo > aleatorio.';
 
 COMMENT ON COLUMN lojas_feedback_diario.resposta_q1 IS
-  'ESTADO: "Como foi com cliente?" — respondeu/quietou/ignorou/vou_insistir. '
-  'Negativas: quietou, ignorou.';
+  'ESTADO: "Como foi com cliente?" — respondeu/sem_resposta/ignorou/vou_insistir. '
+  'Negativas: sem_resposta, ignorou.';
 
 COMMENT ON COLUMN lojas_feedback_diario.resposta_q2 IS
   'PERCEPÇÃO: "Tu acha que ela ainda compra?" — com_certeza/talvez/dificil/ja_era. '

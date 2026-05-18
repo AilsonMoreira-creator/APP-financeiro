@@ -1779,8 +1779,11 @@ const ConfigTab = ({ lojas, onNavegar }) => {
       sub: state.importacoes[0] ? `Última: ${fmtData(state.importacoes[0].finalizada_em || state.importacoes[0].iniciada_em)}` : 'Nenhuma ainda' },
     { id: 'grupos', icon: UsersRound, cor: palette.purple, corSoft: palette.purpleSoft,
       title: 'Grupos', sub: `${state.grupos.length} ${state.grupos.length === 1 ? 'grupo' : 'grupos'}` },
-    { id: 'feedbackResumo', icon: BarChart3, cor: palette.accent, corSoft: palette.accentSoft,
-      title: 'Feedback clientes 3+ e 6+', sub: 'Respostas do modal de fechamento agregadas por categoria' },
+    // FeedbackResumo: card escondido temporariamente (pedido Ailson 18/05/2026).
+    // Pra reativar: descomenta a entrada abaixo. Arquivo Lojas_FeedbackResumo.jsx
+    // e roteamento em Lojas.jsx continuam vivos.
+    // { id: 'feedbackResumo', icon: BarChart3, cor: palette.accent, corSoft: palette.accentSoft,
+    //   title: 'Feedback clientes 3+ e 6+', sub: 'Respostas do modal de fechamento agregadas por categoria' },
   ];
 
   return (

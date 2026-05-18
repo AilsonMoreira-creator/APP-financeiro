@@ -3,7 +3,7 @@
  *
  * POST body: {
  *   feedback_id: uuid,
- *   q1?: 'respondeu'|'quietou'|'ignorou'|'vou_insistir',
+ *   q1?: 'respondeu'|'sem_resposta'|'ignorou'|'vou_insistir',
  *   q2?: 'com_certeza'|'talvez'|'dificil'|'ja_era',
  *   q3?: 'mandar_outra'|'esperar'|'outro_canal'|'deixar_quieta',
  *   motivo_encerramento?: 'completo'|'2_negativas'|'abandonou'
@@ -20,7 +20,7 @@
  */
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
-const VALORES_Q1 = new Set(['respondeu','quietou','ignorou','vou_insistir']);
+const VALORES_Q1 = new Set(['respondeu','sem_resposta','ignorou','vou_insistir']);
 const VALORES_Q2 = new Set(['com_certeza','talvez','dificil','ja_era']);
 const VALORES_Q3 = new Set(['mandar_outra','esperar','outro_canal','deixar_quieta']);
 const MOTIVOS    = new Set(['completo','2_negativas','abandonou']);
