@@ -83,14 +83,21 @@ export default async function handler(req, res) {
       // b) Lead com mensagem JÁ enviada pertence permanentemente à
       //    vendedora que mandou — não volta pra fila.
       // c) Lock expira em 30min sem msg: volta automaticamente pra fila.
+      //
+      // BUG FIX Ailson 20/05/2026: dois .or() consecutivos no supabase-js
+      // estavam fazendo o segundo sobrescrever o primeiro, retornando 0
+      // leads. Unifiquei num único .or() composto com and() aninhado.
       const nowIso = new Date().toISOString();
+      const lockClause = `or(vendedora_atendendo_id.is.null,lock_expira_em.lt.${nowIso})`;
       q = q
         .is('ja_e_cliente_lojas_id', null)
         .not('status', 'in', '("convertido","perdido_30d","sem_carrinho_valido","aguardando_atribuicao")')
         .gt('valor_ultimo_carrinho', 0)
-        .or('tipo_pessoa.eq.PJ,and(tipo_pessoa.eq.PF,qtd_pecas_ultimo_carrinho.gte.12)')
-        .is('ultima_msg_enviada_em', null) // não tem msg enviada
-        .or(`vendedora_atendendo_id.is.null,lock_expira_em.lt.${nowIso}`); // sem lock ou expirado
+        .is('ultima_msg_enviada_em', null)
+        .or(
+          `and(tipo_pessoa.eq.PJ,${lockClause}),` +
+          `and(tipo_pessoa.eq.PF,qtd_pecas_ultimo_carrinho.gte.12,${lockClause})`
+        );
     } else if (escopo === 'cpf_aguardando') {
       // CPFs com VALOR mas MENOS de 12 peças — aguardam admin atribuir caso a caso
       q = q
