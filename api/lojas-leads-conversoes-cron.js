@@ -43,15 +43,37 @@ export default async function handler(req, res) {
 
   try {
     // ───────────────────────────────────────────────────────────────
-    // 1. Detecta conversões (lógica existente — intocada)
+    // 1A. Detecta conversões de LEAD CARRINHO (lógica existente)
     // ───────────────────────────────────────────────────────────────
     const { data, error } = await supabase
       .rpc('lojas_leads_detectar_conversoes', { p_dias: dias })
       .maybeSingle();
 
     if (error) {
-      console.error('[lojas-leads-conversoes-cron] erro:', error);
+      console.error('[lojas-leads-conversoes-cron] erro lead:', error);
       return res.status(500).json({ error: error.message });
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // 1B. Detecta conversões de SUGESTÃO IA — Ailson 19/05/2026.
+    // Cruza lojas_acoes (mensagem_enviada) ↔ lojas_vendas pra detectar
+    // que cliente comprou após receber mensagem da vendedora. Usa
+    // dedup por (cliente_id, venda_id) - última msg antes da compra.
+    // ───────────────────────────────────────────────────────────────
+    let sugestoesInseridas = 0;
+    let sugestoesMsgsAvaliadas = 0;
+    try {
+      const { data: dataSug, error: errSug } = await supabase
+        .rpc('lojas_detectar_conversoes_sugestoes', { p_dias: dias })
+        .maybeSingle();
+      if (errSug) {
+        console.error('[lojas-leads-conversoes-cron] erro sugestao:', errSug);
+      } else {
+        sugestoesInseridas = dataSug?.inseridas || 0;
+        sugestoesMsgsAvaliadas = dataSug?.msgs_avaliadas || 0;
+      }
+    } catch (e) {
+      console.error('[lojas-leads-conversoes-cron] excecao sugestao:', e.message);
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -152,7 +174,10 @@ export default async function handler(req, res) {
       conv_manual: data?.conv_manual || 0,
       conv_organicas: data?.conv_organicas || 0,
       valor_total: data?.valor_total || 0,
-      avisos_organicas_criados: avisosOrganicasCriados,   // Ailson 18/05/2026
+      avisos_organicas_criados: avisosOrganicasCriados,
+      // Conversoes por sugestao IA — Ailson 19/05/2026
+      sugestoes_conv_inseridas: sugestoesInseridas,
+      sugestoes_msgs_avaliadas: sugestoesMsgsAvaliadas,
     });
   } catch (e) {
     console.error('[lojas-leads-conversoes-cron] exception:', e);
