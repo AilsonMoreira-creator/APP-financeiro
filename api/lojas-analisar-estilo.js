@@ -118,7 +118,7 @@ Responda em JSON com este shape:
   }
 }
 
-Responda APENAS o JSON, sem markdown nem explicacao.`;
+Responda APENAS o JSON. Nada de markdown, nada de cercas como triplo-crase. Nada de texto antes ou depois. Sua mensagem inteira deve comecar com { e terminar com }. Se voce achar que precisa explicar algo, NAO explique - apenas devolva o JSON.`;
 
   const userPrompt = `Analise o estilo de comunicacao da vendedora ${vendedora.nome} (loja ${vendedora.loja}) baseado em ${edicoes.length} edicoes recentes:
 
@@ -145,14 +145,30 @@ Responda APENAS o JSON conforme schema do system prompt.`;
     return res.status(500).json({ error: 'Falha Claude: ' + (e.message || e) });
   }
 
-  // 7. Parse JSON da resposta
+  // 7. Parse JSON da resposta - robusto (Ailson 20/05/2026)
+  // Antes so removia ```json/``` mas a IA as vezes adiciona texto explicativo
+  // antes/depois do JSON. Estrategia agora: tentar direto, depois extrair o
+  // trecho entre o primeiro { e o ultimo } correspondente.
   const textoIA = resposta.content?.[0]?.text || '';
   let analise;
-  try {
-    // Remove possivel cerca markdown
-    const jsonStr = textoIA.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    analise = JSON.parse(jsonStr);
-  } catch (e) {
+  const tentarParse = (str) => {
+    try { return JSON.parse(str); } catch { return null; }
+  };
+  // Limpa cercas markdown variadas
+  const semCerca = textoIA
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```\s*$/, '')
+    .trim();
+  analise = tentarParse(semCerca);
+  // Fallback: pega do primeiro { ao ultimo }
+  if (!analise) {
+    const inicio = semCerca.indexOf('{');
+    const fim = semCerca.lastIndexOf('}');
+    if (inicio !== -1 && fim > inicio) {
+      analise = tentarParse(semCerca.slice(inicio, fim + 1));
+    }
+  }
+  if (!analise) {
     return res.status(500).json({
       error: 'Resposta Claude nao foi JSON valido',
       raw: textoIA.slice(0, 500),

@@ -1009,7 +1009,11 @@ const EstiloIAInline = ({ vendedora, estilo, todasVendedoras, estilosMap, userId
       });
       const d = await r.json();
       if (!r.ok) {
-        setErroAnalise(d.error || `HTTP ${r.status}`);
+        // Se veio raw (parse JSON falhou), mostra preview pra ajudar debug
+        const msg = d.raw
+          ? `${d.error}. IA respondeu: "${String(d.raw).slice(0, 150)}..."`
+          : d.error || `HTTP ${r.status}`;
+        setErroAnalise(msg);
       } else {
         await onAtualizar();
       }
