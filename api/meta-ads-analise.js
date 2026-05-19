@@ -191,6 +191,9 @@ export default async function handler(req, res) {
     url += `&time_increment=${increment}`;
   }
 
+  // Enriquecimento com status atual da campanha (default ligado quando level=campaign)
+  const enrichStatus = req.query.enrich_status !== 'false' && level === 'campaign';
+
   try {
     const tMeta = Date.now();
     const metaResp = await fetch(url);
@@ -205,6 +208,63 @@ export default async function handler(req, res) {
       });
     }
 
+    let dataEnriquecida = metaData.data || [];
+    let duracaoStatus = 0;
+    let avisoStatus = null;
+
+    if (enrichStatus && dataEnriquecida.length > 0) {
+      const campaignIds = dataEnriquecida
+        .map(r => r.campaign_id)
+        .filter(Boolean);
+
+      if (campaignIds.length > 0) {
+        const tStatus = Date.now();
+        // Endpoint /act_X/campaigns aceita ?ids=... pra buscar várias de uma vez
+        // Limita a 50 ids por chamada (limite Meta API)
+        const idsParam = campaignIds.slice(0, 50).join(',');
+        const statusUrl =
+          `https://graph.facebook.com/${META_API_VERSION}/act_${account}/campaigns?` +
+          `fields=id,name,status,effective_status,daily_budget,lifetime_budget,objective,updated_time,created_time,start_time,stop_time` +
+          `&filtering=${encodeURIComponent(JSON.stringify([{field: 'id', operator: 'IN', value: campaignIds.slice(0, 50)}]))}` +
+          `&limit=50` +
+          `&access_token=${META_ADS_TOKEN}`;
+
+        try {
+          const statusResp = await fetch(statusUrl);
+          const statusData = await statusResp.json();
+          duracaoStatus = Date.now() - tStatus;
+
+          if (statusData.error) {
+            avisoStatus = `Falha ao buscar status: ${statusData.error.message}`;
+          } else {
+            // Mapa de id -> status info
+            const statusMap = {};
+            (statusData.data || []).forEach(c => {
+              statusMap[c.id] = {
+                status: c.status,
+                effective_status: c.effective_status,
+                daily_budget: c.daily_budget ? parseFloat(c.daily_budget) / 100 : null, // centavos -> reais
+                lifetime_budget: c.lifetime_budget ? parseFloat(c.lifetime_budget) / 100 : null,
+                objective: c.objective,
+                updated_time: c.updated_time,
+                created_time: c.created_time,
+                start_time: c.start_time,
+                stop_time: c.stop_time,
+              };
+            });
+
+            // Mergeia no resultado
+            dataEnriquecida = dataEnriquecida.map(r => ({
+              ...r,
+              ...(statusMap[r.campaign_id] || { status: 'UNKNOWN' }),
+            }));
+          }
+        } catch (errStatus) {
+          avisoStatus = `Exceção ao buscar status: ${errStatus.message}`;
+        }
+      }
+    }
+
     const result = {
       ok: true,
       account_id: account,
@@ -213,10 +273,13 @@ export default async function handler(req, res) {
       level,
       increment,
       fields_pedidos: fields,
-      total: metaData.data?.length || 0,
-      data: metaData.data || [],
+      enrich_status: enrichStatus,
+      total: dataEnriquecida.length,
+      data: dataEnriquecida,
       paging: metaData.paging || null,
       _duracao_meta_ms: duracaoMeta,
+      _duracao_status_ms: duracaoStatus,
+      _aviso_status: avisoStatus,
       _duracao_total_ms: Date.now() - tInicio,
       _cached: false,
     };
