@@ -39,7 +39,11 @@ export default async function handler(req, res) {
   }
 
   const tInicio = Date.now();
-  const dias = parseInt(req.query?.dias || '14', 10);
+  // Janela ampliada pra 30 dias (era 14) — Ailson 19/05/2026.
+  // Casos como Samanta (carrinho 23/04, compra 27/04) ficavam fora porque
+  // o cron olha pra tras a partir de hoje. Se o cron pula 1-2 dias,
+  // carrinhos antigos saem da janela. 30 dias cobre gaps de execucao.
+  const dias = parseInt(req.query?.dias || '30', 10);
 
   try {
     // ───────────────────────────────────────────────────────────────
