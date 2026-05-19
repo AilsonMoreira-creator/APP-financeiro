@@ -15,14 +15,19 @@ async function syncBrand(brand) {
   try {
     const token = await getValidToken(brand);
 
-    // Busca conversas abertas desta marca
+    // Busca conversas abertas + resolvidas RECENTES (ultimos 15d) desta marca.
+    // Ailson 20/05/2026: antes filtrava so 'aberto', entao se o cliente mandava
+    // msg nova depois de marcado 'resolvido' E o webhook do ML falhava, a msg
+    // nunca era pega pelo sync. Agora pegamos as resolvidas recentes tambem,
+    // e reabrimos automaticamente se detectar msg nova do buyer.
+    const limiteResolvidas = new Date(Date.now() - 15 * 86400e3).toISOString();
     const { data: convs } = await supabase
       .from('ml_conversations')
       .select('*')
       .eq('brand', brand)
-      .eq('status', 'aberto')
+      .or(`status.eq.aberto,and(status.eq.resolvido,last_message_at.gte.${limiteResolvidas})`)
       .order('last_message_at', { ascending: false })
-      .limit(30);
+      .limit(50);
 
     if (!convs || convs.length === 0) return result;
 
@@ -64,13 +69,25 @@ async function syncBrand(brand) {
           const lastFrom = String(last.from?.user_id) === conv.seller_id ? 'seller' : 'buyer';
           const unreadCount = msgs.filter(m => String(m.from?.user_id) !== conv.seller_id && m.date_created > (conv.last_message_at || '2000-01-01')).length;
 
-          await supabase.from('ml_conversations').update({
+          const update = {
             last_message_text: last.text?.plain || last.text || '',
             last_message_from: lastFrom,
             last_message_at: last.date_created,
             ...(unreadCount > 0 ? { unread_count: unreadCount } : {}),
             updated_at: new Date().toISOString(),
-          }).eq('id', conv.id);
+          };
+
+          // Ailson 20/05/2026: se cliente mandou msg NOVA e conv estava
+          // 'resolvido' (sync periodico pegando conversas resolvidas recentes),
+          // reabre automaticamente. Mesma logica do webhook (ml-messages-webhook.js).
+          const lastIsNew = last.date_created > (conv.last_message_at || '2000-01-01');
+          if (lastFrom === 'buyer' && conv.status === 'resolvido' && lastIsNew) {
+            update.status = 'aberto';
+            update.tag = null;
+            result.reabertas = (result.reabertas || 0) + 1;
+          }
+
+          await supabase.from('ml_conversations').update(update).eq('id', conv.id);
         }
 
         // Delay entre packs (respeita rate limit ML)
