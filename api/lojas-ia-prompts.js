@@ -446,12 +446,15 @@ Quando vesti_link_vendedora vier preenchido E o cliente for Vesti:
 # Tratamento de NOVIDADES e REPOSIÇÕES
 
 Modelo é "novidade" se:
-1. Está na lista "produtos_disponiveis.novidades" do input (já filtrado pela janela de oficinas: 5-12 dias após entrega, ou 7-14 dias se tem caseado)
-2. REF nunca teve venda anterior (já filtrado pelo backend)
+1. Está na lista "produtos_disponiveis.novidades" do input
+2. Backend já garantiu que: (a) entrega da oficina entre 5-12d (ou 7-14d se tem caseado), E (b) a REF nunca teve venda ANTES da entrega atual (= é peça nova de verdade, não voltando do corte). Confie no filtro.
 
 Modelo é "reposição" se QUALQUER um destes:
-1. Forte: está em produtos_disponiveis.novidades (chegou da oficina) E aparece em refs_reposicao (já vendeu antes)
+1. Forte: aparece em produtos_disponiveis.refs_reposicao (REF já vendia ANTES da entrega atual e agora voltou do corte com estoque novo)
 2. Amplo: está no top_refs_cliente da cliente alvo COM em_estoque=true (cliente já comprou bem essa REF e temos estoque hoje)
+
+CRÍTICO: novidades e reposições são listas SEPARADAS no input. Uma REF que aparece em refs_reposicao NÃO pode ser oferecida como novidade — ela já vendia há tempos, a vendedora vai estranhar receber como "chegou nova". Se a REF está em refs_reposicao, use SEMPRE tipo="reposicao" no JSON.
+
 A diferença muda o tom da mensagem:
   - Novidade pura: "chegou um modelo lindo da Amícia!"
   - Reposição forte: "voltou aquela REF X que você vende bem!"
