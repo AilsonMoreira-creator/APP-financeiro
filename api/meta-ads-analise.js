@@ -165,8 +165,15 @@ export default async function handler(req, res) {
     ? String(fieldsRaw).split(',').map(f => f.trim()).filter(Boolean)
     : defaultFieldsPorLevel(level);
 
+  // Breakdowns (age, gender, region, device_platform, publisher_platform, etc)
+  const breakdownsRaw = req.query.breakdowns;
+  const BREAKDOWNS_VALIDOS = ['age', 'gender', 'region', 'country', 'dma', 'impression_device', 'device_platform', 'publisher_platform', 'platform_position', 'product_id', 'hourly_stats_aggregated_by_advertiser_time_zone'];
+  const breakdowns = breakdownsRaw
+    ? String(breakdownsRaw).split(',').map(b => b.trim()).filter(b => BREAKDOWNS_VALIDOS.includes(b))
+    : [];
+
   // ── Cache check ─────────────────────────────────────────────────────────
-  const cacheKey = `${account}|${since}|${until}|${level}|${increment}|${limit}|${fields.join(',')}`;
+  const cacheKey = `${account}|${since}|${until}|${level}|${increment}|${limit}|${fields.join(',')}|${breakdowns.join(',')}`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return res.status(200).json({
@@ -189,6 +196,9 @@ export default async function handler(req, res) {
 
   if (increment !== 'all_days') {
     url += `&time_increment=${increment}`;
+  }
+  if (breakdowns.length > 0) {
+    url += `&breakdowns=${breakdowns.join(',')}`;
   }
 
   // Enriquecimento com status atual da campanha (default ligado quando level=campaign)
