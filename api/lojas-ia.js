@@ -2879,7 +2879,7 @@ function classificarProdutos(produtos, curadoria, bestSellersAuto = [], emAltaAu
   return out;
 }
 
-const TIPOS_VALIDOS = ['reativar', 'atencao', 'novidade', 'followup', 'followup_nova', 'sacola', 'reposicao', 'aviso_admin', 'inativo', 'semAtividade'];
+const TIPOS_VALIDOS = ['reativar', 'atencao', 'novidade', 'followup', 'followup_nova', 'sacola', 'reposicao', 'aviso_admin', 'inativo', 'semAtividade', 'trilha_winback', 'previsao_pontual'];
 function validarTipo(t) {
   return TIPOS_VALIDOS.includes(t) ? t : 'followup';
 }

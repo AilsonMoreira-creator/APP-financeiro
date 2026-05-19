@@ -95,6 +95,10 @@ const TIPO_SUGESTAO_VISUAL = {
   desfazer_sacola: { icone: AlertTriangle, cor: palette.alert, corSoft: palette.alertSoft },
   // Trilha Win-back 3 semanas — Ailson 13/05/2026 (Sprint A)
   trilha_winback: { icone: RefreshCw, cor: '#9333ea', corSoft: '#f3e8ff' },
+  // Previsao pontual — Ailson 19/05/2026 (Sprint A+B). Cliente com padrao
+  // historico confiavel + janela proxima de compra. Visual destacado:
+  // verde-agua pra transmitir confianca e proximidade.
+  previsao_pontual: { icone: Clock, cor: '#0e7c8a', corSoft: '#dff7fa' },
 };
 
 function visualSugestao(tipo) {
@@ -151,6 +155,7 @@ function capitalizeTipo(tipo) {
     cobranca_incisiva: 'Sacola — cobrar:',
     desfazer_sacola: '🚨 Sacola antiga:',
     trilha_winback: '🔄 Trilha retorno:',
+    previsao_pontual: '📅 Previsão:',
   };
   return map[tipo] || 'Sugestão pra';
 }

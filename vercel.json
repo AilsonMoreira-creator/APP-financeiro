@@ -206,6 +206,10 @@
       "schedule": "30 7 * * *"
     },
     {
+      "path": "/api/lojas-previsao-pontual-cron",
+      "schedule": "30 9 * * *"
+    },
+    {
       "path": "/api/lojas-janela-avaliar-cron",
       "schedule": "0 6 * * *"
     },
