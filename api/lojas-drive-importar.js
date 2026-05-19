@@ -37,6 +37,7 @@ import {
   setCors,
   validarUsuario,
   ehAdminLojas,
+  getLojasConfig,
 } from './_lojas-helpers.js';
 
 import {
@@ -62,9 +63,44 @@ import {
 // ═══════════════════════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
+//
+// Valores DEFAULT abaixo. Os valores REAIS sao lidos do lojas_config no
+// inicio do handler. Se o config nao existir no banco, cai nos defaults.
+// Ailson 20/05/2026 (item B da auditoria — antes valores eram hardcoded e
+// editar lojas_config nao tinha efeito).
+//
+// Chaves esperadas em lojas_config:
+//   drive_lote_upsert        = 500   (number)
+//   drive_corte_historico    = "2025-01-01" (string ISO date)
+//   drive_estoque_min_oferecer = 100 (number) — usado em pode_oferecer
 
-const TAMANHO_LOTE_UPSERT = 500;
-const HISTORICO_DATA_CORTE = '2025-01-01';  // Não importa vendas anteriores
+const DEFAULT_TAMANHO_LOTE_UPSERT = 500;
+const DEFAULT_HISTORICO_DATA_CORTE = '2025-01-01';
+const DEFAULT_ESTOQUE_MIN_OFERECER = 100;
+
+// Carregados no inicio de cada execucao do handler — preenchidos por
+// carregarConfigsDoBanco(). Globais ao modulo pra evitar passar adiante
+// por todas as funcoes internas.
+let TAMANHO_LOTE_UPSERT = DEFAULT_TAMANHO_LOTE_UPSERT;
+let HISTORICO_DATA_CORTE = DEFAULT_HISTORICO_DATA_CORTE;
+let ESTOQUE_MIN_OFERECER = DEFAULT_ESTOQUE_MIN_OFERECER;
+
+async function carregarConfigsDoBanco() {
+  const [lote, corte, estoque] = await Promise.all([
+    getLojasConfig('drive_lote_upsert', DEFAULT_TAMANHO_LOTE_UPSERT),
+    getLojasConfig('drive_corte_historico', DEFAULT_HISTORICO_DATA_CORTE),
+    getLojasConfig('drive_estoque_min_oferecer', DEFAULT_ESTOQUE_MIN_OFERECER),
+  ]);
+  // Aceita number direto OU string parseavel pra number; default em caso de NaN
+  const loteNum = Number(lote);
+  TAMANHO_LOTE_UPSERT = Number.isFinite(loteNum) && loteNum > 0 ? loteNum : DEFAULT_TAMANHO_LOTE_UPSERT;
+
+  HISTORICO_DATA_CORTE = (typeof corte === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(corte))
+    ? corte : DEFAULT_HISTORICO_DATA_CORTE;
+
+  const estNum = Number(estoque);
+  ESTOQUE_MIN_OFERECER = Number.isFinite(estNum) && estNum >= 0 ? estNum : DEFAULT_ESTOQUE_MIN_OFERECER;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HANDLER PRINCIPAL
@@ -75,6 +111,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
+    // Carrega configs do banco (lote upsert, corte historico, estoque min).
+    // Ailson 20/05/2026 — fallback silencioso pros defaults se nao existirem.
+    await carregarConfigsDoBanco();
+
     // Modo cron (chamado pelo cron-handler) ou manual?
     // - ?modo=cron: chamada interna do lojas-drive-cron
     // - user-agent vercel-cron/1.0: chamada direta do Vercel cron (forma oficial)
@@ -1010,8 +1050,9 @@ async function aplicarUpsert(tipo, registros, importacaoId, extras = {}) {
   if (tipo === 'produtos_semanal') {
     const limpos = enriquecidos.map(r => {
       const { _frase_amigavel, importacao_id, ...resto } = r;
-      // pode_oferecer: estoque > 100 (regra do briefing)
-      resto.pode_oferecer = (resto.qtd_estoque || 0) > 100;
+      // pode_oferecer: estoque > ESTOQUE_MIN_OFERECER (regra do briefing,
+      // valor lido do lojas_config 'drive_estoque_min_oferecer', default 100)
+      resto.pode_oferecer = (resto.qtd_estoque || 0) > ESTOQUE_MIN_OFERECER;
       resto.motivo_pode_oferecer = resto.pode_oferecer ? 'estoque' : null;
       resto.ultima_atualizacao = new Date().toISOString();
       return resto;
