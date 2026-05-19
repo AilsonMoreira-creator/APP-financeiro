@@ -1901,6 +1901,7 @@ import {
   VendedorasAdminScreen, NovaVendedoraScreen,
   TransferirCarteiraScreen,
   CuradoriaScreen,
+  InteligenciaIaScreen,
   AcoesScreen,
   AvisosScreen,
   GruposListScreen, DetalheGrupoScreen,
@@ -2004,6 +2005,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
     else if (id === 'vendedoras') setScreen('vendedorasAdmin');
     else if (id === 'transferir') setScreen('transferir');
     else if (id === 'curadoria') setScreen('curadoria');
+    else if (id === 'inteligenciaIa') setScreen('inteligenciaIa');
     else if (id === 'acoes') setScreen('acoes');
     else if (id === 'avisos') setScreen('avisos');
     else if (id === 'grupos') setScreen('gruposAdmin');
@@ -2150,6 +2152,10 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
 
       {screen === 'curadoria' && (
         <CuradoriaScreen lojas={lojas} onBack={() => setScreen('home')} />
+      )}
+
+      {screen === 'inteligenciaIa' && (
+        <InteligenciaIaScreen lojas={lojas} onBack={() => setScreen('home')} />
       )}
 
       {screen === 'acoes' && (

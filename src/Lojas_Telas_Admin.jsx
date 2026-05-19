@@ -5420,3 +5420,347 @@ const VestiLinksInline = ({ vendedora, onSalvar, onFechar }) => {
     </div>
   );
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// InteligenciaIaScreen — dashboard admin pra Previsão Pontual + Winback
+// Ailson 20/05/2026 (auditoria A + D)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const InteligenciaIaScreen = ({ lojas, onBack }) => {
+  const userId = lojas?.state?.userId;
+  const [aba, setAba] = useState('previsao');
+  const [stats, setStats] = useState(null);
+  const [trilhas, setTrilhas] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    setErro(null);
+    try {
+      const headers = { 'X-User': userId || '' };
+      const [r1, r2] = await Promise.all([
+        fetch('/api/lojas-previsao-pontual-stats', { headers }),
+        fetch('/api/lojas-trilha-winback-listar', { headers }),
+      ]);
+      const d1 = await r1.json();
+      const d2 = await r2.json();
+      if (!r1.ok) throw new Error(d1.error || 'Erro stats previsão');
+      if (!r2.ok) throw new Error(d2.error || 'Erro trilhas');
+      setStats(d1);
+      setTrilhas(d2);
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  return (
+    <div>
+      <Header onBack={onBack} title="Inteligência IA" />
+      <div style={{ padding: 16 }}>
+
+        {/* Abas */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          {[
+            { id: 'previsao', label: '📅 Previsão pontual' },
+            { id: 'winback', label: '🔄 Trilhas winback' },
+          ].map(t => (
+            <button key={t.id} onClick={() => setAba(t.id)} style={{
+              flex: 1, background: aba === t.id ? palette.accent : palette.surface,
+              color: aba === t.id ? 'white' : palette.ink,
+              border: `1px solid ${aba === t.id ? palette.accent : palette.beige}`,
+              borderRadius: 8, padding: '10px 12px', fontFamily: FONT,
+              fontSize: fz(13), fontWeight: 600, cursor: 'pointer',
+            }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {erro && (
+          <div style={{
+            padding: 12, borderRadius: 8, background: palette.alertSoft,
+            color: palette.alert, fontSize: fz(13), marginBottom: 12,
+          }}>{erro}</div>
+        )}
+
+        {loading && (
+          <div style={{ textAlign: 'center', padding: 30, color: palette.inkSoft }}>
+            <Loader2 size={sz(20)} style={spinKeyframes} /> Carregando…
+          </div>
+        )}
+
+        {!loading && aba === 'previsao' && stats && (
+          <SecaoPrevisaoPontual stats={stats} />
+        )}
+
+        {!loading && aba === 'winback' && trilhas && (
+          <SecaoWinback trilhas={trilhas} userId={userId} onMudou={carregar} />
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Sub-secao Previsao Pontual ──────────────────────────────────────────
+const SecaoPrevisaoPontual = ({ stats }) => {
+  const s = stats.stats || {};
+  const cards = [
+    { label: 'Disparadas', valor: s.total_disparadas || 0, cor: palette.accent },
+    { label: 'Acertos', valor: s.acertos || 0, cor: palette.ok },
+    { label: 'Erros', valor: s.erros || 0, cor: palette.alert },
+    { label: 'Em aberto', valor: s.em_aberto || 0, cor: palette.warn },
+  ];
+
+  return (
+    <div>
+      {/* KPI cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 14 }}>
+        {cards.map(c => (
+          <div key={c.label} style={{
+            background: palette.surface, border: `1px solid ${palette.beige}`,
+            borderRadius: 10, padding: 12, textAlign: 'center',
+          }}>
+            <div style={{ fontSize: fz(11), color: palette.inkSoft, marginBottom: 4 }}>{c.label}</div>
+            <div style={{ fontSize: fz(22), fontWeight: 600, color: c.cor }}>{c.valor}</div>
+          </div>
+        ))}
+      </div>
+
+      {s.pct_acerto != null && (
+        <div style={{
+          textAlign: 'center', padding: 10, borderRadius: 8,
+          background: palette.accentSoft, color: palette.accent,
+          fontSize: fz(14), fontWeight: 600, marginBottom: 14,
+        }}>
+          % de acerto: {s.pct_acerto}%
+        </div>
+      )}
+
+      {/* Distribuição de padrões */}
+      {Object.keys(stats.distribuicao_padroes || {}).length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <SectionTitle>Padrões dos clientes</SectionTitle>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {Object.entries(stats.distribuicao_padroes).map(([k, v]) => (
+              <div key={k} style={{
+                background: palette.surface, border: `1px solid ${palette.beige}`,
+                borderRadius: 6, padding: '6px 10px', fontSize: fz(12),
+              }}>
+                <strong>{v}</strong> {k.replace(/_/g, ' ')}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Breakdown por vendedora */}
+      {Object.keys(stats.por_vendedora || {}).length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <SectionTitle>Por vendedora (30d)</SectionTitle>
+          <div style={{
+            background: palette.surface, border: `1px solid ${palette.beige}`,
+            borderRadius: 8, overflow: 'hidden',
+          }}>
+            {Object.entries(stats.por_vendedora)
+              .sort((a, b) => b[1].total - a[1].total)
+              .map(([nome, v], i) => (
+                <div key={nome} style={{
+                  padding: 10, borderTop: i === 0 ? 'none' : `1px solid ${palette.beige}`,
+                  fontSize: fz(13), display: 'flex', justifyContent: 'space-between', gap: 6,
+                }}>
+                  <div style={{ fontWeight: 600 }}>{nome}</div>
+                  <div style={{ color: palette.inkSoft }}>
+                    {v.total} total · <span style={{ color: palette.ok }}>{v.acertos} ✓</span>
+                    {' '} · <span style={{ color: palette.alert }}>{v.erros} ✗</span>
+                    {' '} · <span style={{ color: palette.warn }}>{v.em_aberto} aguardando</span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Elegíveis hoje */}
+      {(stats.elegiveis_hoje || []).length > 0 && (
+        <div>
+          <SectionTitle>Elegíveis hoje (top 20)</SectionTitle>
+          <div style={{
+            background: palette.surface, border: `1px solid ${palette.beige}`,
+            borderRadius: 8, overflow: 'hidden',
+          }}>
+            {stats.elegiveis_hoje.map((e, i) => (
+              <div key={i} style={{
+                padding: 10, borderTop: i === 0 ? 'none' : `1px solid ${palette.beige}`,
+                fontSize: fz(13),
+              }}>
+                <div style={{ fontWeight: 600 }}>
+                  {e.apelido}
+                  <span style={{ color: palette.inkSoft, fontWeight: 400, marginLeft: 6 }}>
+                    · {e.vendedora_nome}
+                  </span>
+                </div>
+                <div style={{ fontSize: fz(11), color: palette.inkSoft, marginTop: 2 }}>
+                  Score {e.score_final} · {e.dias_pra_proxima > 0 ? '+' : ''}{e.dias_pra_proxima}d · {e.canal_dominante}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Sub-secao Trilhas Winback ───────────────────────────────────────────
+const MOTIVOS_ENCERRAR = [
+  { id: 'cliente_bloqueou', label: 'Cliente bloqueou WhatsApp' },
+  { id: 'nao_respondeu', label: 'Não respondeu (3+ tentativas)' },
+  { id: 'comprou_outra_vendedora', label: 'Comprou com outra vendedora' },
+  { id: 'cliente_arquivado', label: 'Cliente foi arquivado' },
+  { id: 'vendedora_desistiu', label: 'Vendedora desistiu' },
+  { id: 'outro', label: 'Outro motivo' },
+];
+
+const SecaoWinback = ({ trilhas, userId, onMudou }) => {
+  const [encerrandoId, setEncerrandoId] = useState(null);
+  const [motivoSel, setMotivoSel] = useState({});
+
+  const encerrar = async (trilhaId) => {
+    const motivo = motivoSel[trilhaId];
+    if (!motivo) return;
+    if (!confirm('Encerrar trilha? Não tem como reabrir.')) return;
+    setEncerrandoId(trilhaId);
+    try {
+      const r = await fetch('/api/lojas-trilha-winback-encerrar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-User': userId || '' },
+        body: JSON.stringify({ trilha_id: trilhaId, motivo }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Erro');
+      await onMudou();
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    } finally {
+      setEncerrandoId(null);
+    }
+  };
+
+  const ativas = trilhas.ativas || [];
+  const encerradas = trilhas.encerradas_30d || [];
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+        <div style={{
+          background: palette.surface, border: `1px solid ${palette.beige}`,
+          borderRadius: 10, padding: 12, textAlign: 'center',
+        }}>
+          <div style={{ fontSize: fz(11), color: palette.inkSoft, marginBottom: 4 }}>Ativas</div>
+          <div style={{ fontSize: fz(22), fontWeight: 600, color: palette.purple }}>{ativas.length}</div>
+        </div>
+        <div style={{
+          background: palette.surface, border: `1px solid ${palette.beige}`,
+          borderRadius: 10, padding: 12, textAlign: 'center',
+        }}>
+          <div style={{ fontSize: fz(11), color: palette.inkSoft, marginBottom: 4 }}>Encerradas 30d</div>
+          <div style={{ fontSize: fz(22), fontWeight: 600, color: palette.inkSoft }}>{encerradas.length}</div>
+        </div>
+      </div>
+
+      {/* Ativas */}
+      <SectionTitle>Trilhas ativas</SectionTitle>
+      {ativas.length === 0 ? (
+        <div style={{ padding: 16, textAlign: 'center', color: palette.inkSoft, fontSize: fz(13) }}>
+          Nenhuma trilha ativa.
+        </div>
+      ) : (
+        ativas.map(t => (
+          <div key={t.id} style={{
+            background: palette.surface, border: `1px solid ${palette.beige}`,
+            borderRadius: 8, padding: 12, marginBottom: 8,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: fz(14) }}>{t.cliente_nome}</div>
+                <div style={{ fontSize: fz(11), color: palette.inkSoft, marginTop: 2 }}>
+                  {t.vendedora_nome} {t.loja ? `· ${t.loja}` : ''}
+                </div>
+              </div>
+              <div style={{
+                background: palette.purpleSoft, color: palette.purple,
+                borderRadius: 6, padding: '2px 8px', fontSize: fz(11), fontWeight: 600,
+              }}>
+                Etapa {t.etapa_atual}/3
+              </div>
+            </div>
+            <div style={{ fontSize: fz(11), color: palette.inkSoft, marginTop: 6 }}>
+              Iniciada há {t.dias_na_trilha}d · Status inicial: {t.status_inicial}
+              {t.lifetime ? ` · Lifetime R$ ${Math.round(t.lifetime).toLocaleString('pt-BR')}` : ''}
+            </div>
+
+            {/* Encerrar */}
+            <div style={{ marginTop: 10, display: 'flex', gap: 6 }}>
+              <select
+                value={motivoSel[t.id] || ''}
+                onChange={(e) => setMotivoSel({ ...motivoSel, [t.id]: e.target.value })}
+                style={{
+                  flex: 1, padding: 6, fontSize: fz(12), fontFamily: FONT,
+                  border: `1px solid ${palette.beige}`, borderRadius: 6, background: 'white',
+                }}
+              >
+                <option value="">— motivo pra encerrar —</option>
+                {MOTIVOS_ENCERRAR.map(m => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => encerrar(t.id)}
+                disabled={!motivoSel[t.id] || encerrandoId === t.id}
+                style={{
+                  background: motivoSel[t.id] ? palette.alert : palette.beige,
+                  color: motivoSel[t.id] ? 'white' : palette.inkSoft,
+                  border: 'none', borderRadius: 6, padding: '6px 12px',
+                  fontFamily: FONT, fontSize: fz(12), fontWeight: 600,
+                  cursor: motivoSel[t.id] ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {encerrandoId === t.id ? '…' : 'Encerrar'}
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Encerradas */}
+      {encerradas.length > 0 && (
+        <>
+          <SectionTitle>Encerradas (últimos 30d)</SectionTitle>
+          <div style={{
+            background: palette.surface, border: `1px solid ${palette.beige}`,
+            borderRadius: 8, overflow: 'hidden',
+          }}>
+            {encerradas.map((e, i) => (
+              <div key={e.id} style={{
+                padding: 10, borderTop: i === 0 ? 'none' : `1px solid ${palette.beige}`,
+                fontSize: fz(12),
+              }}>
+                <div style={{ fontWeight: 600 }}>{e.cliente_nome}</div>
+                <div style={{ color: palette.inkSoft, marginTop: 2 }}>
+                  {e.vendedora_nome} · etapa {e.etapa_final} · {e.motivo} · {fmtData(e.encerrada_em)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+

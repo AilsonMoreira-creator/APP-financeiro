@@ -1773,6 +1773,8 @@ const ConfigTab = ({ lojas, onNavegar }) => {
       title: 'Avisos', sub: `${(state.avisos || []).filter(a => a.status === 'pendente').length} pendentes — vira 1ª sugestão da vendedora` },
     { id: 'curadoria', icon: Star, cor: palette.warn, corSoft: palette.warnSoft,
       title: 'Curadoria de produtos', sub: `Best-sellers · em alta · novidades manuais (${(state.curadoria || []).filter(c => c.ativo).length})` },
+    { id: 'inteligenciaIa', icon: Sparkles, cor: palette.purple, corSoft: palette.purpleSoft,
+      title: 'Inteligência IA', sub: 'Stats previsão pontual + trilhas winback ativas' },
     { id: 'regras', icon: FileText, cor: palette.accent, corSoft: palette.accentSoft,
       title: 'Regras gerais', sub: 'Tom, parâmetros, sempre/nunca' },
     { id: 'vendedoras', icon: UserCog, cor: palette.ok, corSoft: palette.okSoft,
