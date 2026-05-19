@@ -280,11 +280,40 @@ export const SectionTitle = ({ icon: Icon, children }) => (
 // LOADING SCREEN (mostrado durante phases de carregamento ou erro)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Frases motivacionais rotativas durante o "Carregando carteira..." (Ailson 20/05/2026).
+// Tom: "estou preparando algo bom pra vc". Tira a ansiedade do loading.
+const FRASES_LOADING_CARTEIRA = [
+  'Preparando sua carteira pra vc vender muito hoje 💪',
+  'Só um minutinho que tô preparando sua carteira 🌟',
+  'Gerando a carteira pra termos os melhores resultados ⚡',
+  'Organizando as clientes que mais te dão dinheiro 💸',
+  'Buscando as melhores sugestões pra hoje 🎯',
+  'Calculando quem tá pronta pra comprar de novo 🛍️',
+  'Pensando nas suas vendas… quase pronto ✨',
+  'Separando as clientes top da sua carteira 🔥',
+  'Montando o seu dia de venda 📈',
+  'Preparando o caminho da próxima venda 🚀',
+  'Carregando histórico das suas clientes fiéis 💛',
+  'Conectando tudo pra você arrasar 😎',
+];
+
 export function LoadingScreen({ phase, error, online }) {
+  // Rotacao das frases (so na fase LOADING_CARTEIRA) - Ailson 20/05/2026
+  const [fraseIdx, setFraseIdx] = React.useState(() =>
+    Math.floor(Math.random() * FRASES_LOADING_CARTEIRA.length)
+  );
+  React.useEffect(() => {
+    if (phase !== LOAD_PHASES.LOADING_CARTEIRA) return undefined;
+    const t = setInterval(() => {
+      setFraseIdx(i => (i + 1) % FRASES_LOADING_CARTEIRA.length);
+    }, 3200);
+    return () => clearInterval(t);
+  }, [phase]);
+
   const messages = {
     [LOAD_PHASES.LOADING_USER]: 'Verificando autenticação…',
     [LOAD_PHASES.LOADING_VENDEDORAS]: 'Carregando vendedoras…',
-    [LOAD_PHASES.LOADING_CARTEIRA]: 'Carregando carteira…',
+    [LOAD_PHASES.LOADING_CARTEIRA]: FRASES_LOADING_CARTEIRA[fraseIdx],
     [LOAD_PHASES.LOADING_PRODUTOS]: 'Carregando produtos e promoções…',
     [LOAD_PHASES.LOADING_SUGESTOES]: 'Buscando sugestões do dia…',
   };
@@ -328,7 +357,18 @@ export function LoadingScreen({ phase, error, online }) {
       <div style={{ marginBottom: 16, animation: 'spin 1s linear infinite' }}>
         <Loader2 size={sz(46)} color={palette.accent} />
       </div>
-      <div style={{ fontSize: fz(16), color: palette.inkSoft }}>
+      <div
+        key={phase === LOAD_PHASES.LOADING_CARTEIRA ? fraseIdx : phase}
+        style={{
+          fontSize: phase === LOAD_PHASES.LOADING_CARTEIRA ? fz(17) : fz(16),
+          color: phase === LOAD_PHASES.LOADING_CARTEIRA ? palette.ink : palette.inkSoft,
+          lineHeight: 1.45,
+          maxWidth: 320,
+          padding: '0 16px',
+          fontWeight: phase === LOAD_PHASES.LOADING_CARTEIRA ? 500 : 400,
+          animation: 'fadein 0.5s ease',
+        }}
+      >
         {messages[phase] || 'Carregando…'}
       </div>
       {!online && (
@@ -339,7 +379,10 @@ export function LoadingScreen({ phase, error, online }) {
           <WifiOff size={sz(16)} /> Sem conexão
         </div>
       )}
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }

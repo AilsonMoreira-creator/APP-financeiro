@@ -1331,17 +1331,19 @@ function useLojasModule() {
         dispatch({ type: 'SET_PHASE', phase: LOAD_PHASES.LOADING_CARTEIRA });
         const filtroVendedoraCarteira = isAdmin ? null : vendedoraLogada.id;
 
-        // CACHE OPTIMÍSTICO (decisão Ailson 28/04/2026): mostra carteira do
-        // localStorage IMEDIATAMENTE, depois recarrega do Supabase em
-        // background. Vendedora não fica olhando "Carregando..." 3 segundos.
-        // Cache vale 24h (é refrescado sempre no Realtime e nessa carga).
+        // CACHE OPTIMÍSTICO (decisão Ailson 28/04/2026, ampliado 20/05/2026):
+        // mostra carteira do localStorage IMEDIATAMENTE, depois recarrega do
+        // Supabase em background. Vendedora não fica olhando "Carregando..." 3s.
+        // Cache válido por 7 dias (era 24h) — Realtime mantém atualizado de
+        // qualquer forma. Quanto mais largo, menos vendedora pega tela
+        // 'carregando'. Próxima carga em background corrige tudo.
         const cacheKey = `lojas_cache_v1_${filtroVendedoraCarteira || 'admin'}`;
         try {
           const cached = localStorage.getItem(cacheKey);
           if (cached) {
             const { ts, clientes: cClis, grupos: cGrp, sacola: cSac, kpis: cKpis } = JSON.parse(cached);
             const idadeMin = (Date.now() - ts) / 60000;
-            if (idadeMin < 1440 && Array.isArray(cClis)) { // 24h
+            if (idadeMin < 10080 && Array.isArray(cClis)) { // 7 dias
               dispatch({ type: 'SET_CLIENTES', clientes: cClis });
               dispatch({ type: 'SET_GRUPOS', grupos: cGrp || [] });
               dispatch({ type: 'SET_SACOLA', sacola: cSac || [] });
