@@ -19,7 +19,10 @@
 import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-const CLAUDE_MODEL = 'claude-sonnet-4-5-20250929';
+// Modelo unificado com o resto do app. Antes era 'claude-sonnet-4-5-20250929'
+// (nome inválido — não existe na API), o que fazia o endpoint retornar erro
+// e a tela ficar branca ao pedir sugestão. Ailson 20/05/2026.
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
 const LIMITE_PJ_DIA = 1;
 const LIMITE_PF_DIA = 1;

@@ -87,13 +87,19 @@ export default async function handler(req, res) {
       // BUG FIX Ailson 20/05/2026: dois .or() consecutivos no supabase-js
       // estavam fazendo o segundo sobrescrever o primeiro, retornando 0
       // leads. Unifiquei num único .or() composto com and() aninhado.
+      //
+      // FILTRO 5 DIAS Ailson 20/05/2026: Celia reportou que so 2 dos 7 leads
+      // sao novos; outros 5 sao da semana passada. Apos 5 dias, leads
+      // antigos somem da fila publica (sem perder dado - so saem da tela).
       const nowIso = new Date().toISOString();
+      const cincoDiasAtras = new Date(Date.now() - 5 * 86400e3).toISOString().slice(0, 10);
       const lockClause = `or(vendedora_atendendo_id.is.null,lock_expira_em.lt.${nowIso})`;
       q = q
         .is('ja_e_cliente_lojas_id', null)
         .not('status', 'in', '("convertido","perdido_30d","sem_carrinho_valido","aguardando_atribuicao")')
         .gt('valor_ultimo_carrinho', 0)
         .is('ultima_msg_enviada_em', null)
+        .gte('ultimo_carrinho_em', cincoDiasAtras)  // <= 5 dias
         .or(
           `and(tipo_pessoa.eq.PJ,${lockClause}),` +
           `and(tipo_pessoa.eq.PF,qtd_pecas_ultimo_carrinho.gte.12,${lockClause})`
