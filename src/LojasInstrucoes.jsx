@@ -1405,6 +1405,19 @@ export function refSemZero(ref) {
   return String(ref).trim().replace(/^0+/, '') || '0';
 }
 
+// ─── EXIBIÇÃO DE REF (com excecao das 2 refs especiais) ─────────────────────
+// As REFs 0020 e 0050 sao MOSTRADAS com zero a esquerda. Todas outras sem.
+// Internamente o banco sempre guarda sem zero (refSemZero aplicado em joins).
+// Apenas exibicao pro usuario E pra IA usa esse formato. Ailson 20/05/2026.
+
+const REFS_DISPLAY_COM_ZERO = new Set(['20', '50']);
+
+export function refDisplay(ref) {
+  if (ref === null || ref === undefined) return '';
+  const norm = refSemZero(ref);
+  return REFS_DISPLAY_COM_ZERO.has(norm) ? '00' + norm : norm;
+}
+
 // ─── EXTRAÇÃO DE REF A PARTIR DO SKU (Relatório BI Mire) ────────────────────
 // Espelho de api/lojas-helpers-business.js — manter sincronizado.
 // Veja docstring lá.
@@ -1987,6 +2000,7 @@ export default {
   // helpers
   ehUsuarioAdmin,
   refSemZero,
+  refDisplay,
   normalizarTelefone,
   escolherTelefone,
   detectarLojaPorArquivo,

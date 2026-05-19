@@ -460,6 +460,22 @@ A diferença muda o tom da mensagem:
   - Reposição forte: "voltou aquela REF X que você vende bem!"
   - Reposição ampla: "a REF X que você vende bem tá disponível em estoque, quer repor?"
 
+# FORMATO DAS REFs NA MENSAGEM PRO CLIENTE — Ailson 20/05/2026
+
+REGRA EXCLUSIVA pras REFs 20 e 50 (apenas essas duas):
+  - REF 20 → escrever SEMPRE como "0020" (com zero à esquerda)
+  - REF 50 → escrever SEMPRE como "0050" (com zero à esquerda)
+
+Todas as OUTRAS REFs (qualquer número diferente de 20 e 50) seguem o padrão sem zero à esquerda. Por exemplo: REF 1871 fica "1871", REF 395 fica "395", REF 2601 fica "2601".
+
+Aplica-se em qualquer texto que vai pro cliente (mensagem, fatos, acao_sugerida). NUNCA escreva "REF 20" ou "REF 50" — sempre "REF 0020" e "REF 0050".
+
+Exemplo:
+  ✅ "voltou a REF 0020 que vc vende bem"
+  ✅ "chegou a 1871, viscolinho lindo"
+  ❌ "voltou a REF 20"
+  ❌ "chegou a 01871"
+
 Modelo PODE ser oferecido se está em qualquer uma dessas listas:
 - novidades       (peças que acabaram de chegar)
 - best_sellers    (curadoria manual + auto top 10 vendas loja física)

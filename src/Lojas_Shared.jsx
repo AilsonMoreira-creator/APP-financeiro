@@ -28,6 +28,10 @@
 
 import { createClient } from '@supabase/supabase-js';
 import * as React from 'react';
+// Re-exporta helpers de REF pra outros componentes importarem so do Shared.
+import { refSemZero as _refSemZero, refDisplay as _refDisplay } from './LojasInstrucoes.jsx';
+export const refSemZero = _refSemZero;
+export const refDisplay = _refDisplay;
 import {
   ArrowLeft, Loader2, AlertCircle, WifiOff, Phone, Copy, Check,
 } from 'lucide-react';

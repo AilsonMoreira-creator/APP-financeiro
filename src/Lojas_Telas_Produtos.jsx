@@ -18,7 +18,7 @@
 // Filtro de loja afeta paineis 1, 2, 3. Matches sempre agregado.
 // ═══════════════════════════════════════════════════════════════════════════
 import React, { useState, useEffect, useMemo } from 'react';
-import { palette, FONT, FotoProdutoLojas } from './Lojas_Shared.jsx';
+import { palette, FONT, FotoProdutoLojas, refDisplay } from './Lojas_Shared.jsx';
 
 const ProdutosTab = ({ userId }) => {
   const [loja, setLoja] = useState('todas');     // 'todas' | 'BR' | 'ST'
@@ -428,7 +428,7 @@ const CardProduto = ({ item, posicao, metricaLabel, metricaValor }) => (
     <FotoProdutoLojas refProd={item.ref} size={56} />
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: palette.ink }}>
-        REF {item.ref}
+        REF {refDisplay(item.ref)}
       </div>
       {item.descricao && (
         <div style={{
@@ -500,7 +500,7 @@ const PainelMatches = ({ data, refSel, setRefSel }) => {
         }}>
           <span style={{ fontSize: 12, color: palette.inkSoft }}>Ref selecionada:</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: palette.ink }}>
-            REF {refSelInfo.ref}
+            REF {refDisplay(refSelInfo.ref)}
           </span>
           {refSelInfo.descricao && (
             <span style={{ fontSize: 12, color: palette.inkSoft, flex: '1 1 100px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -568,7 +568,7 @@ const PainelMatches = ({ data, refSel, setRefSel }) => {
                   onMouseEnter={e => e.currentTarget.style.background = palette.beigeSoft}
                   onMouseLeave={e => e.currentTarget.style.background = refSel === t.ref ? palette.beigeSoft : 'transparent'}
                 >
-                  <span style={{ fontWeight: 700, minWidth: 70, color: palette.ink }}>REF {t.ref}</span>
+                  <span style={{ fontWeight: 700, minWidth: 70, color: palette.ink }}>REF {refDisplay(t.ref)}</span>
                   {t.descricao && (
                     <span style={{ flex: 1, color: palette.inkSoft, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {t.descricao}
@@ -587,7 +587,7 @@ const PainelMatches = ({ data, refSel, setRefSel }) => {
           background: palette.beigeSoft, borderRadius: 8, padding: 10, marginBottom: 12,
           fontSize: 13, color: palette.inkSoft,
         }}>
-          Clientes que compraram <strong>REF {refSelInfo.ref}</strong> também compraram:
+          Clientes que compraram <strong>REF {refDisplay(refSelInfo.ref)}</strong> também compraram:
           <span style={{ marginLeft: 6, fontSize: 11, color: palette.inkMuted }}>
             (baseado em {matches[0]?.total_compras || 0} compras nos últimos 90 dias)
           </span>
@@ -628,7 +628,7 @@ const CardMatch = ({ match, posicao }) => (
     <FotoProdutoLojas refProd={match.ref_match} size={56} />
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: palette.ink }}>
-        REF {match.ref_match}
+        REF {refDisplay(match.ref_match)}
       </div>
       {match.descricao && (
         <div style={{

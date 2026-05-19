@@ -428,6 +428,17 @@ export function refSemZero(ref) {
   return String(ref).replace(/^0+/, '') || '0';
 }
 
+// Refs especiais que SAO MOSTRADAS pro usuario com zero a esquerda.
+// Banco e queries usam normalizado sem zero. So display. Ailson 20/05/2026.
+const REFS_DISPLAY_COM_ZERO = new Set(['20', '50']);
+
+/** Formata REF pra exibicao: 0020/0050 pras especiais, sem zero pras outras. */
+export function refDisplay(ref) {
+  if (!ref) return '';
+  const norm = refSemZero(ref);
+  return REFS_DISPLAY_COM_ZERO.has(norm) ? '00' + norm : norm;
+}
+
 /** Calcula dias entre uma data ISO e hoje. */
 export function diasDesde(iso) {
   if (!iso) return null;

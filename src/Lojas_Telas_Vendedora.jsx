@@ -49,7 +49,7 @@ import {
   palette, FONT, statusMap, subtipoSacolaMap, faseClienteNovaMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
   fz, sz, TelefoneCopiavel, FotoProdutoLojas, saudacaoHora, emojiHora, fraseDoDia,
-  adminComSaudacao, supabase, spinKeyframes,
+  adminComSaudacao, supabase, spinKeyframes, refDisplay,
 } from './Lojas_Shared.jsx';
 
 // Aba 'Produtos' (admin only) — raio-x de produtos. Isolado em arquivo
@@ -2685,7 +2685,7 @@ export const SugestaoScreen = ({
             }}>
               <FotoProdutoLojas refProd={produto.ref} size={sz(56)} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: fz(13), color: palette.inkMuted, letterSpacing: 0.5 }}>REF {produto.ref}</div>
+                <div style={{ fontSize: fz(13), color: palette.inkMuted, letterSpacing: 0.5 }}>REF {refDisplay(produto.ref)}</div>
                 <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600, marginTop: 2 }}>
                   {produto.descricao || produto.modelo || `Produto ${produto.ref}`}
                 </div>

@@ -51,7 +51,7 @@ import {
 import {
   palette, FONT, statusMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon,
-  supabase, fz, sz, FotoProdutoLojas, spinKeyframes,
+  supabase, fz, sz, FotoProdutoLojas, spinKeyframes, refDisplay,
 } from './Lojas_Shared.jsx';
 
 // Importa ModalMensagem da Parte 2a (usado em DetalheGrupoScreen)
@@ -2254,7 +2254,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
   };
 
   const remover = async (item) => {
-    if (!confirm(`Remover REF ${item.ref} da curadoria?`)) return;
+    if (!confirm(`Remover REF ${refDisplay(item.ref)} da curadoria?`)) return;
     setRemovendoId(item.id_curadoria);
     try {
       await handleRemoverCuradoria(item.id_curadoria);
@@ -2267,7 +2267,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
 
   // Excluir auto (admin "vetou")
   const excluirAuto = async (item) => {
-    if (!confirm(`Excluir REF ${item.ref} desta lista automática?\n\nEla some até você reativar.`)) return;
+    if (!confirm(`Excluir REF ${refDisplay(item.ref)} desta lista automática?\n\nEla some até você reativar.`)) return;
     setExcluindoRef(item.ref);
     try {
       const r = await fetch('/api/lojas-curadoria-excluir', {
@@ -2466,7 +2466,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                       display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
                     }}>
                       <span style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
-                        REF {item.ref}
+                        REF {refDisplay(item.ref)}
                       </span>
                       {/* Badge origem */}
                       <span style={{
@@ -2643,7 +2643,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
-                          REF {p.ref}
+                          REF {refDisplay(p.ref)}
                         </div>
                         <div style={{
                           fontSize: fz(15), fontWeight: 600, color: palette.ink,
@@ -2761,7 +2761,7 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
                       <FotoProdutoLojas refProd={item.ref} size={40} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>
-                          REF {item.ref}
+                          REF {refDisplay(item.ref)}
                         </div>
                         <div style={{
                           fontSize: fz(14), fontWeight: 600, color: palette.ink,
