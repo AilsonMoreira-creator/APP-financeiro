@@ -224,6 +224,10 @@
     {
       "path": "/api/ml-reviews-analise-cron",
       "schedule": "0 8 1,11,21 * *"
+    },
+    {
+      "path": "/api/cron-meluni-meta-ads",
+      "schedule": "0 14 * * *"
     }
   ]
 }
