@@ -91,9 +91,17 @@ export default async function handler(req, res) {
       // FILTRO 5 DIAS Ailson 20/05/2026: Celia reportou que so 2 dos 7 leads
       // sao novos; outros 5 sao da semana passada. Apos 5 dias, leads
       // antigos somem da fila publica (sem perder dado - so saem da tela).
+      //
+      // INCLUSAO DO PROPRIO LOCK Ailson 20/05/2026: Celia clicou no card,
+      // travou, mas o realtime recarregou a lista e o card sumiu (filtro
+      // do lock excluia ate quem travou). Agora a vendedora que travou
+      // continua vendo o card aberto. Outras vendedoras nao veem.
       const nowIso = new Date().toISOString();
       const cincoDiasAtras = new Date(Date.now() - 5 * 86400e3).toISOString().slice(0, 10);
-      const lockClause = `or(vendedora_atendendo_id.is.null,lock_expira_em.lt.${nowIso})`;
+      const vId = auth.vendedoraId;
+      const lockClause = vId
+        ? `or(vendedora_atendendo_id.is.null,lock_expira_em.lt.${nowIso},vendedora_atendendo_id.eq.${vId})`
+        : `or(vendedora_atendendo_id.is.null,lock_expira_em.lt.${nowIso})`;
       q = q
         .is('ja_e_cliente_lojas_id', null)
         .not('status', 'in', '("convertido","perdido_30d","sem_carrinho_valido","aguardando_atribuicao")')
