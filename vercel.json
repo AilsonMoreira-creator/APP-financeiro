@@ -210,6 +210,10 @@
       "schedule": "30 9 * * *"
     },
     {
+      "path": "/api/lojas-aviso-conversoes-semanal-cron",
+      "schedule": "30 11 * * 2"
+    },
+    {
       "path": "/api/lojas-janela-avaliar-cron",
       "schedule": "0 6 * * *"
     },
