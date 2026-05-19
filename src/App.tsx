@@ -7101,6 +7101,7 @@ const CalculadoraContent=()=>{
   if(tela==="regras")return<CalcRegras onVoltar={()=>setTela("novo")} prs={prs} prods={prods} atualizarPrs={atualizarPrs}/>;
   if(tela==="dash")return<CalcDash prods={prods} prs={prs} onVoltar={()=>setTela("home")}/>;
   if(tela==="analise")return<CalcAnaliseMeluni prods={prods} prs={prs} roasMeluniGlobal={roasMeluniGlobal} setRoasMeluniGlobal={setRoasMeluniGlobal} freteSubsidiado={meluniFreteSubsidiado} setFreteSubsidiado={setMeluniFreteSubsidiado} state={analiseMeluniState} setState={setAnaliseMeluniState} onVoltar={()=>setTela("home")} mobile={mobile}/>;
+  if(tela==="meta-ads")return<CalcMetaAdsMeluni onVoltar={()=>setTela("home")} mobile={mobile}/>;
   if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
   const c=prod?calcCusto(prod):0;
   return(
@@ -7116,6 +7117,7 @@ const CalculadoraContent=()=>{
             <button onClick={()=>setTela("lista")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📋 Lista</button>
             <button onClick={()=>setTela("dash")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📊 Dashboard</button>
             <button onClick={()=>setTela("analise")} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>🎯 Análise Meluni</button>
+            <button onClick={()=>setTela("meta-ads")} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📈 Meta Ads Meluni</button>
           </div>
         </div>
         <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:16}}>
@@ -7665,6 +7667,257 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
     </div>
   );
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CalcMetaAdsMeluni — Análise das campanhas Meta Ads da conta Meluni B2C.
+// Sessão Ailson 19/05/2026.
+// Lê dados do endpoint /api/meta-ads-analise (proxy autenticado pra Marketing API).
+// Conta hardcoded por enquanto; futuro: módulo Marketing com seletor de contas.
+// ═══════════════════════════════════════════════════════════════════════════
+const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
+  const META_ACCOUNT='943539471358534'; // Meluni B2C
+  const [periodo,setPeriodo]=useState('7d'); // '7d' | 'mes_atual' | 'mes_passado'
+  const [ocultarPausadas,setOcultarPausadas]=useState(true);
+  const [dados,setDados]=useState(null);
+  const [dadosAnt,setDadosAnt]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [erro,setErro]=useState(null);
+  const [ultimaAtt,setUltimaAtt]=useState(null);
+  const [tickAgora,setTickAgora]=useState(Date.now());
+
+  // "há X min" atualiza sozinho sem novo fetch
+  useEffect(()=>{
+    const t=setInterval(()=>setTickAgora(Date.now()),30000);
+    return()=>clearInterval(t);
+  },[]);
+
+  const fmtIso=(d)=>d.toISOString().slice(0,10);
+  const calcJanela=(p)=>{
+    const hoje=new Date();
+    if(p==='7d'){const s=new Date(hoje);s.setDate(s.getDate()-6);return{since:fmtIso(s),until:fmtIso(hoje)};}
+    if(p==='mes_atual'){const s=new Date(hoje.getFullYear(),hoje.getMonth(),1);return{since:fmtIso(s),until:fmtIso(hoje)};}
+    if(p==='mes_passado'){const s=new Date(hoje.getFullYear(),hoje.getMonth()-1,1);const u=new Date(hoje.getFullYear(),hoje.getMonth(),0);return{since:fmtIso(s),until:fmtIso(u)};}
+    return{since:'',until:''};
+  };
+  const calcJanelaAnt=(p)=>{
+    const{since,until}=calcJanela(p);
+    if(!since)return{since:'',until:''};
+    const s=new Date(since),u=new Date(until);
+    const dias=Math.floor((u-s)/86400000)+1;
+    const uAnt=new Date(s);uAnt.setDate(uAnt.getDate()-1);
+    const sAnt=new Date(uAnt);sAnt.setDate(sAnt.getDate()-(dias-1));
+    return{since:fmtIso(sAnt),until:fmtIso(uAnt)};
+  };
+
+  const carregar=async()=>{
+    setLoading(true);setErro(null);
+    try{
+      const{since,until}=calcJanela(periodo);
+      const{since:sA,until:uA}=calcJanelaAnt(periodo);
+      const base=`/api/meta-ads-analise?account=${META_ACCOUNT}&level=campaign`;
+      const[r1,r2]=await Promise.all([
+        fetch(`${base}&since=${since}&until=${until}`).then(r=>r.json()),
+        fetch(`${base}&since=${sA}&until=${uA}`).then(r=>r.json()),
+      ]);
+      if(!r1.ok){throw new Error(r1.error||r1.meta_error?.message||'Erro Meta API');}
+      setDados(r1);
+      setDadosAnt(r2.ok?r2:null);
+      setUltimaAtt(new Date());
+    }catch(e){
+      setErro(e.message||'Erro ao carregar');
+    }finally{
+      setLoading(false);
+    }
+  };
+
+  useEffect(()=>{carregar();/* eslint-disable-next-line react-hooks/exhaustive-deps */},[periodo]);
+
+  const findAction=(arr,type)=>{
+    if(!arr)return 0;
+    const a=arr.find(x=>x.action_type===type);
+    return a?parseFloat(a.value)||0:0;
+  };
+  const extrair=(c)=>{
+    const lpv=findAction(c.actions,'landing_page_view');
+    const compras=findAction(c.actions,'omni_purchase');
+    const gasto=parseFloat(c.spend)||0;
+    return{
+      id:c.campaign_id,
+      nome:c.campaign_name,
+      status:c.effective_status||c.status,
+      gasto,
+      acessos:lpv,
+      cpc:lpv>0?gasto/lpv:0,
+      compras,
+      conv:lpv>0?(compras/lpv)*100:0,
+      cpa:compras>0?gasto/compras:0,
+    };
+  };
+
+  // delta retorna {valor, cor}. bomSobe=true → verde se sobe (compras/conv); false → verde se cai (gasto/cpc/cpa).
+  const delta=(atual,ant,bomSobe)=>{
+    if(ant==null||ant===0){if(atual===0)return null;return{valor:'novo',cor:'#8a9aa4'};}
+    const pct=((atual-ant)/ant)*100;
+    if(Math.abs(pct)<1)return{valor:'~0%',cor:'#8a9aa4'};
+    const sobe=pct>0;
+    const bom=(sobe===bomSobe);
+    return{valor:`${sobe?'↑':'↓'}${Math.abs(pct).toFixed(0)}%`,cor:bom?'#27ae60':'#c0392b'};
+  };
+
+  const linhas=(dados?.data||[]).map(extrair);
+  const linhasAntMap={};
+  (dadosAnt?.data||[]).forEach(c=>{linhasAntMap[c.campaign_id]=extrair(c);});
+  const linhasFiltradas=linhas.filter(l=>{
+    if(ocultarPausadas&&l.status!=='ACTIVE')return false;
+    return true;
+  }).sort((a,b)=>b.gasto-a.gasto);
+
+  const totals=linhasFiltradas.reduce((acc,l)=>({
+    gasto:acc.gasto+l.gasto,acessos:acc.acessos+l.acessos,compras:acc.compras+l.compras,
+  }),{gasto:0,acessos:0,compras:0});
+  const totalCpc=totals.acessos>0?totals.gasto/totals.acessos:0;
+  const totalConv=totals.acessos>0?(totals.compras/totals.acessos)*100:0;
+  const totalCpa=totals.compras>0?totals.gasto/totals.compras:0;
+
+  // Totais período anterior (mesmas campanhas visíveis) pra Δ% do TOTAL
+  const totalsAnt=Object.values(linhasAntMap)
+    .filter(l=>!ocultarPausadas||l.status==='ACTIVE')
+    .reduce((acc,l)=>({gasto:acc.gasto+l.gasto,acessos:acc.acessos+l.acessos,compras:acc.compras+l.compras}),{gasto:0,acessos:0,compras:0});
+  const totalCpcAnt=totalsAnt.acessos>0?totalsAnt.gasto/totalsAnt.acessos:0;
+  const totalConvAnt=totalsAnt.acessos>0?(totalsAnt.compras/totalsAnt.acessos)*100:0;
+  const totalCpaAnt=totalsAnt.compras>0?totalsAnt.gasto/totalsAnt.compras:0;
+
+  const haMin=ultimaAtt?Math.floor((tickAgora-ultimaAtt.getTime())/60000):0;
+  const haTxt=haMin<1?'agora':haMin===1?'há 1 min':`há ${haMin} min`;
+
+  const fmtR=(v)=>v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtI=(v)=>Math.round(v).toLocaleString('pt-BR');
+
+  const btnPer=(p,label)=>(
+    <button key={p} onClick={()=>setPeriodo(p)} style={{
+      background:periodo===p?'#2c3e50':'#fff',color:periodo===p?'#fff':'#2c3e50',
+      border:'1px solid #e8e2da',borderRadius:6,padding:'6px 12px',
+      fontSize:12,cursor:'pointer',fontFamily:'Georgia,serif',fontWeight:600
+    }}>{label}</button>
+  );
+
+  const statusBadge=(s)=>{
+    if(s==='ACTIVE')return<span title="Ativa" style={{fontSize:14}}>🟢</span>;
+    if(s==='PAUSED'||s==='CAMPAIGN_PAUSED')return<span title="Pausada" style={{fontSize:14}}>⏸️</span>;
+    return<span title={s} style={{fontSize:14}}>⚠️</span>;
+  };
+
+  const tdNum={padding:'8px 10px',textAlign:'right',color:'#2c3e50',fontFamily:'Calibri,\'Segoe UI\',Arial,sans-serif',fontSize:13};
+  const td={padding:'8px 10px',color:'#2c3e50',fontSize:12};
+  const th={padding:'10px 10px',fontWeight:600,fontFamily:'Georgia,serif',fontSize:11,letterSpacing:0.3,textTransform:'uppercase'};
+
+  const cellNum=(num,d)=>(
+    <td style={tdNum}>
+      <div>{num}</div>
+      {d&&<div style={{fontSize:10,color:d.cor,marginTop:2,fontFamily:'Georgia,serif'}}>{d.valor}</div>}
+    </td>
+  );
+
+  return(
+    <div style={{background:'#f7f4f0',minHeight:'100%',padding:mobile?12:20,fontFamily:'Georgia,serif'}}>
+      <div style={{maxWidth:1200,margin:'0 auto'}}>
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <button onClick={onVoltar} style={{background:'#fff',border:'1px solid #e8e2da',borderRadius:8,padding:'7px 14px',cursor:'pointer',fontSize:13,color:'#4a7fa5',fontFamily:'Georgia,serif'}}>← Voltar</button>
+            <div>
+              <div style={{fontSize:10,color:'#a89f94',letterSpacing:2,textTransform:'uppercase'}}>Calculadora · Meta Ads</div>
+              <div style={{fontSize:mobile?18:22,fontWeight:700,color:'#2c3e50'}}>📈 Meta Ads Meluni</div>
+            </div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:11,color:'#8a9aa4',fontStyle:'italic'}}>
+              {loading?'⏳ Atualizando...':ultimaAtt?`🕐 Atualizado ${haTxt}`:''}
+            </span>
+            <button onClick={carregar} disabled={loading} title="Atualizar agora (ignora cache de 5min)" style={{background:'#fff',border:'1px solid #e8e2da',borderRadius:6,padding:'6px 12px',cursor:loading?'not-allowed':'pointer',fontSize:14,color:'#4a7fa5',fontFamily:'Georgia,serif',opacity:loading?0.5:1}}>↻</button>
+          </div>
+        </div>
+
+        {/* Filtros */}
+        <div style={{background:'#fff',border:'1px solid #e8e2da',borderRadius:8,padding:12,marginBottom:14,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{btnPer('7d','7 dias')}{btnPer('mes_atual','Mês atual')}{btnPer('mes_passado','Mês passado')}</div>
+          <div style={{height:24,width:1,background:'#e8e2da'}}/>
+          <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:12,color:'#2c3e50'}}>
+            <input type="checkbox" checked={ocultarPausadas} onChange={e=>setOcultarPausadas(e.target.checked)}/> Ocultar pausadas
+          </label>
+        </div>
+
+        {erro&&(
+          <div style={{background:'#fdf0ed',border:'1px solid #c0392b',color:'#c0392b',padding:12,borderRadius:8,marginBottom:14,fontSize:12}}>
+            ⚠ {erro}
+          </div>
+        )}
+
+        {/* Tabela */}
+        <div style={{background:'#fff',border:'1px solid #e8e2da',borderRadius:8,overflow:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:760}}>
+            <thead>
+              <tr style={{background:'#2c3e50',color:'#f7f4f0'}}>
+                <th style={{...th,textAlign:'center',width:40}}></th>
+                <th style={{...th,textAlign:'left'}}>Campanha</th>
+                <th style={{...th,textAlign:'right'}}>Gasto</th>
+                <th style={{...th,textAlign:'right'}}>Acessos</th>
+                <th style={{...th,textAlign:'right'}}>CPC</th>
+                <th style={{...th,textAlign:'right'}}>Compras</th>
+                <th style={{...th,textAlign:'right'}}>Conv%</th>
+                <th style={{...th,textAlign:'right'}}>CPA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading&&!dados&&(
+                <tr><td colSpan={8} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Carregando dados Meta Ads...</td></tr>
+              )}
+              {!loading&&linhasFiltradas.length===0&&!erro&&(
+                <tr><td colSpan={8} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>
+                  {ocultarPausadas?'Nenhuma campanha ativa no período. Desmarque "Ocultar pausadas" pra ver todas.':'Nenhuma campanha no período.'}
+                </td></tr>
+              )}
+              {linhasFiltradas.map(l=>{
+                const ant=linhasAntMap[l.id];
+                return(
+                  <tr key={l.id} style={{borderBottom:'1px solid #f0ebe4'}}>
+                    <td style={{padding:'8px 4px',textAlign:'center'}}>{statusBadge(l.status)}</td>
+                    <td style={{...td,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={l.nome}>{l.nome}</td>
+                    {cellNum(`R$ ${fmtR(l.gasto)}`,ant?delta(l.gasto,ant.gasto,false):null)}
+                    {cellNum(fmtI(l.acessos),ant?delta(l.acessos,ant.acessos,true):null)}
+                    {cellNum(`R$ ${fmtR(l.cpc)}`,ant?delta(l.cpc,ant.cpc,false):null)}
+                    {cellNum(fmtI(l.compras),ant?delta(l.compras,ant.compras,true):null)}
+                    {cellNum(`${l.conv.toFixed(2)}%`,ant?delta(l.conv,ant.conv,true):null)}
+                    {cellNum(l.cpa>0?`R$ ${fmtR(l.cpa)}`:'—',ant&&l.cpa>0&&ant.cpa>0?delta(l.cpa,ant.cpa,false):null)}
+                  </tr>
+                );
+              })}
+            </tbody>
+            {linhasFiltradas.length>0&&(
+              <tfoot>
+                <tr style={{background:'#f7f4f0',borderTop:'2px solid #2c3e50'}}>
+                  <td style={{padding:'10px 4px'}}></td>
+                  <td style={{...td,fontWeight:700}}>TOTAL ({linhasFiltradas.length})</td>
+                  {cellNum(<b>R$ {fmtR(totals.gasto)}</b>,totalsAnt.gasto>0?delta(totals.gasto,totalsAnt.gasto,false):null)}
+                  {cellNum(<b>{fmtI(totals.acessos)}</b>,totalsAnt.acessos>0?delta(totals.acessos,totalsAnt.acessos,true):null)}
+                  {cellNum(<b>R$ {fmtR(totalCpc)}</b>,totalCpcAnt>0?delta(totalCpc,totalCpcAnt,false):null)}
+                  {cellNum(<b>{fmtI(totals.compras)}</b>,totalsAnt.compras>0?delta(totals.compras,totalsAnt.compras,true):null)}
+                  {cellNum(<b>{totalConv.toFixed(2)}%</b>,totalConvAnt>0?delta(totalConv,totalConvAnt,true):null)}
+                  {cellNum(<b>{totalCpa>0?`R$ ${fmtR(totalCpa)}`:'—'}</b>,totalCpaAnt>0&&totalCpa>0?delta(totalCpa,totalCpaAnt,false):null)}
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+
+        <div style={{marginTop:10,fontSize:10,color:'#a89f94',textAlign:'center',fontStyle:'italic'}}>
+          Conta: Meluni B2C · Cache 5min no servidor · Δ% compara com período anterior de mesma duração
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>{
   const[bRef,setBRef]=useState("");
