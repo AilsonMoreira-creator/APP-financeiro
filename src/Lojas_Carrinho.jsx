@@ -26,7 +26,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ShoppingCart, Building2, User, MapPin, Phone, AlertCircle,
   RefreshCw, Upload, Loader2, Tag, Sparkles, Clock, ExternalLink,
@@ -625,8 +625,24 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
   const [erro, setErro] = useState(null);
   const [data, setData] = useState({ leads: [], badge: {}, envios_hoje: {}, limites_diarios: {} });
 
-  const carregar = useCallback(async () => {
-    setLoading(true);
+  // Ref pra detectar primeira carga (Ailson 20/05/2026 - fix carrinho some)
+  // Nao usar data.leads.length na dependency do useCallback pq causa loop
+  // infinito com o useEffect(carregar) abaixo.
+  const primeiraCargaRef = useRef(true);
+
+  const carregar = useCallback(async (opts = {}) => {
+    // Ailson 20/05/2026 - BUG CARRINHO SOME:
+    // Antes setava setLoading(true) sempre. Isso desmontava TODOS os
+    // LeadCards (porque o JSX condicional eh "!loading && data.leads.length>0").
+    // Quando vendedora clicava no card e o realtime disparava reload, o card
+    // dela DESMONTAVA junto com o state local (expandido, mensagemIA, etc).
+    // Resultado: carrinho sumia visualmente E a operacao de gerar mensagem
+    // era cancelada no meio.
+    // Agora: loading=true so na PRIMEIRA carga (ou troca de escopo) ou se
+    // chamada com {forcado:true}. Reloads via realtime mantem a lista
+    // renderizada e so atualizam os dados.
+    const ehPrimeira = primeiraCargaRef.current;
+    if (ehPrimeira || opts.forcado) setLoading(true);
     setErro(null);
     try {
       const r = await fetch(`/api/lojas-leads-listar?escopo=${escopo}&ordenar=${ordenar}`, {
@@ -640,13 +656,19 @@ const LeadsListagem = ({ userId, isAdmin, vendedoraId, vendedoraNome, onAbrirLea
         envios_hoje: json.envios_hoje || {},
         limites_diarios: json.limites_diarios || {},
       });
+      primeiraCargaRef.current = false;
     } catch (e) {
       setErro(e.message);
-      setData({ leads: [], badge: {}, envios_hoje: {}, limites_diarios: {} });
+      if (ehPrimeira) setData({ leads: [], badge: {}, envios_hoje: {}, limites_diarios: {} });
     } finally {
       setLoading(false);
     }
   }, [escopo, ordenar, userId]);
+
+  // Reseta primeiraCargaRef quando troca de escopo (loading inicial daquele escopo)
+  useEffect(() => {
+    primeiraCargaRef.current = true;
+  }, [escopo]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
