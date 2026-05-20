@@ -5999,6 +5999,12 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   // coleta respostas, chama de novo com respostas_contexto.
   const [modalCtx, setModalCtx] = useState(null); // { questions, titulo, ... }
 
+  // Modal de confirmacao "Cliente recente" — Ailson 20/05/2026
+  // Backend retorna 409 quando vendedora tenta avulsa pra cliente
+  // contactada nos ultimos 7-10d. UI mostra contexto + botao forcar.
+  const [confirmacaoRecente, setConfirmacaoRecente] = useState(null);
+  // { diasAtras, cooldownDias, ultimoContato:{data,tipo,titulo,status,ref}, historicoRecente:[] }
+
   // Wrapper que faz a chamada efetiva e trata requires_context
   const chamarGerar = useCallback(async (ctxExtra) => {
     const sugestaoId = sugestao?.id;
@@ -6086,6 +6092,19 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
             return prev - 1;
           });
         }, 1000);
+        return;
+      }
+      // Cliente contactada recente (409 — Ailson 20/05/2026):
+      // Mostra dialogo amigavel com detalhe do ultimo contato +
+      // botao pra forcar bypass do cooldown.
+      if (e?.code === 'CLIENTE_RECENTE') {
+        setConfirmacaoRecente({
+          diasAtras: e.diasAtras,
+          cooldownDias: e.cooldownDias,
+          ultimoContato: e.ultimoContato,
+          historicoRecente: e.historicoRecente,
+        });
+        setStep('aguardando_confirmacao');
         return;
       }
       setErro(e.message || 'Erro ao gerar mensagem');
@@ -6343,6 +6362,67 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
               fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
             }}>Fechar</button>
+          </div>
+        )}
+
+        {/* Step: aguardando_confirmacao (cliente recente — Ailson 20/05/2026) */}
+        {step === 'aguardando_confirmacao' && confirmacaoRecente && (
+          <div style={{ padding: '20px' }}>
+            <div style={{
+              width: 60, height: 60, borderRadius: '50%', background: palette.alertSoft,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
+            }}>
+              <AlertCircle size={sz(32)} color={palette.alert} />
+            </div>
+            <div style={{ fontSize: fz(16), color: palette.ink, fontWeight: 600, marginBottom: 6, textAlign: 'center' }}>
+              Cliente contactada há pouco
+            </div>
+            <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16, lineHeight: 1.5, textAlign: 'center' }}>
+              Você já mandou mensagem pra essa cliente <b>há {confirmacaoRecente.diasAtras} {confirmacaoRecente.diasAtras === 1 ? 'dia' : 'dias'}</b>.
+              {' '}A regra de não repetir contato é <b>{confirmacaoRecente.cooldownDias} dias</b>.
+            </div>
+
+            {confirmacaoRecente.ultimoContato && (
+              <div style={{
+                background: palette.surface, border: `1px solid ${palette.beige}`,
+                borderRadius: 8, padding: 10, marginBottom: 12, fontSize: fz(13),
+              }}>
+                <div style={{ color: palette.inkSoft, marginBottom: 4 }}>Último contato:</div>
+                <div style={{ color: palette.ink }}>
+                  <b>{confirmacaoRecente.ultimoContato.data}</b>
+                  {' · '}{confirmacaoRecente.ultimoContato.tipo}
+                  {confirmacaoRecente.ultimoContato.ref ? ' · REF ' + confirmacaoRecente.ultimoContato.ref : ''}
+                  {' · '}{confirmacaoRecente.ultimoContato.status}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setConfirmacaoRecente(null); onClose && onClose(); }} style={{
+                flex: 1, background: palette.surface, color: palette.inkSoft,
+                border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '12px',
+                fontSize: fz(15), cursor: 'pointer', fontFamily: FONT,
+              }}>Aguardar</button>
+              <button onClick={async () => {
+                setConfirmacaoRecente(null);
+                setStep('gerando');
+                try {
+                  const r = await lojas.handleGerarMensagemAvulsa(clienteEfetivo.id, { apelido_atual: apelido || null }, true);
+                  const msg = typeof r === 'string' ? r : r?.mensagem;
+                  if (!msg) { setErro('IA não retornou mensagem'); setStep('erro'); return; }
+                  setMensagem(msg);
+                  setMensagemOriginal(msg);
+                  setStep('pronta');
+                } catch (err) {
+                  setErro(err.message || 'Erro ao gerar mensagem');
+                  setStep('erro');
+                }
+              }} style={{
+                flex: 2, background: palette.alert, color: palette.bg, border: 'none',
+                borderRadius: 10, padding: '12px', fontSize: fz(15), fontWeight: 600,
+                cursor: 'pointer', fontFamily: FONT,
+              }}>Mandar mesmo assim</button>
+            </div>
           </div>
         )}
 
