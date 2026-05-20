@@ -136,6 +136,48 @@ export default async function handler(req, res) {
     }
   };
 
+  // RETRY POR VENDEDORA (Ailson 20/05/2026):
+  // Tenta ate 2x se vier erro OU se gerar menos que 7 sugestoes. Espera
+  // 5s entre tentativas. Resolve falha intermitente (bug temporario do
+  // prompt em 20/05 quebrou cron entre 6h e 12h - Joelma ficou com 1,
+  // Cleide com 2, Fran/Tamires com 0 ate o hotfix).
+  const SUGESTOES_MINIMAS_OK = 7;
+  const RETRY_DELAY_MS = 5000;
+  async function gerarComRetry(v) {
+    let ultimo = null;
+    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+      try {
+        const r = await fetch(`${baseUrl}/api/lojas-ia`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User': 'ailson',
+            'X-Internal-Cron': '1',
+          },
+          body: JSON.stringify({ action: 'gerar_sugestoes', vendedora_id: v.id }),
+        });
+        const data = await r.json().catch(() => ({}));
+        const qtdSug = data?.sugestoes?.length || 0;
+        ultimo = {
+          vendedora: v.nome, loja: v.loja,
+          ok: r.ok && qtdSug >= SUGESTOES_MINIMAS_OK,
+          status: r.status,
+          sugestoes: qtdSug,
+          erro: data?.error || (qtdSug < SUGESTOES_MINIMAS_OK ? `apenas ${qtdSug} sugestoes` : null),
+          tentativas: tentativa,
+        };
+        if (ultimo.ok) return ultimo; // sucesso, sai do retry
+      } catch (e) {
+        ultimo = { vendedora: v.nome, loja: v.loja, ok: false, erro: e.message, tentativas: tentativa };
+      }
+      // Espera antes de tentar de novo (se houver proxima tentativa)
+      if (tentativa < 2) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+      }
+    }
+    return ultimo;
+  }
+
   for (let i = 0; i < vendedoras.length; i++) {
     const v = vendedoras[i];
 
@@ -144,33 +186,47 @@ export default async function handler(req, res) {
       await new Promise(resolve => setTimeout(resolve, DELAY_ENTRE_VENDEDORAS_MS));
     }
 
-    try {
-      const r = await fetch(`${baseUrl}/api/lojas-ia`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User': 'ailson',  // admin pra bypassar rate limit individual
-          'X-Internal-Cron': '1',
-        },
-        body: JSON.stringify({
-          action: 'gerar_sugestoes',
-          vendedora_id: v.id,
-        }),
-      });
-      const data = await r.json();
-      resultados.push({
-        vendedora: v.nome, loja: v.loja,
-        ok: r.ok,
-        status: r.status,
-        sugestoes: data?.sugestoes?.length || 0,
-        erro: data?.error || null,
-      });
-    } catch (e) {
-      resultados.push({ vendedora: v.nome, ok: false, erro: e.message });
-    }
+    const resultado = await gerarComRetry(v);
+    resultados.push(resultado);
 
     // Atualiza health depois de cada vendedora — visibilidade incremental
     await atualizarProgresso();
+  }
+
+  // VERIFICACAO POS-LOOP: confere no BANCO quem ficou com <7 sugestoes
+  // e tenta UMA terceira vez (Ailson 20/05/2026 — defesa adicional contra
+  // falhas que o endpoint reportou ok mas o INSERT no banco falhou).
+  try {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const { data: contagemBanco } = await supabase
+      .from('lojas_sugestoes_diarias')
+      .select('vendedora_id')
+      .eq('data_geracao', hoje);
+    const contadorPorVend = {};
+    for (const s of contagemBanco || []) {
+      contadorPorVend[s.vendedora_id] = (contadorPorVend[s.vendedora_id] || 0) + 1;
+    }
+    const incompletas = vendedoras.filter(v =>
+      (contadorPorVend[v.id] || 0) < SUGESTOES_MINIMAS_OK
+    );
+
+    if (incompletas.length > 0) {
+      console.log(`[cron-diario] Verificacao pos-loop: ${incompletas.length} incompletas, tentando 3a vez:`,
+        incompletas.map(v => `${v.nome}=${contadorPorVend[v.id] || 0}`).join(', '));
+
+      for (const v of incompletas) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+        const resultadoTerceira = await gerarComRetry(v);
+        // Atualiza o resultado dela na lista (substituindo)
+        const idx = resultados.findIndex(r => r.vendedora === v.nome);
+        if (idx >= 0) {
+          resultados[idx] = { ...resultadoTerceira, tentativas: (resultadoTerceira.tentativas || 0) + 2, recuperacao_pos_loop: true };
+        }
+        await atualizarProgresso();
+      }
+    }
+  } catch (e) {
+    console.warn('[cron-diario] verificacao pos-loop falhou (nao critico):', e?.message);
   }
 
   const sucessos = resultados.filter(r => r.ok).length;
