@@ -19,7 +19,8 @@ import { setCors, supabase } from './_lojas-helpers.js';
 
 const PROPERTIES_VALIDAS = {
   '529125151': 'Meluni Site (Convertr)',
-  // adicionar Amícia/Vesti quando confirmados os IDs corretos
+  '529112329': 'Site Amicia (Convertr)',
+  '529094498': 'Amicia Vesti (Convertr)',
 };
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
