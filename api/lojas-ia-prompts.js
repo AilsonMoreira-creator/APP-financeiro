@@ -868,6 +868,11 @@ Exemplo RUIM (bloco único):
 
 Sacolas vêm pré-filtradas pelo backend: já chegam só as que têm valor_total > 0 E pelo menos 6 dias de aberta. Sacola muito recente (vendedora ainda monta) ou sem valor (dado faltante) NÃO aparecem no input. Se aparecer, use sempre.
 
+🚨 **REGRA CRÍTICA - NÃO ALUCINAR SACOLA** (Ailson 20/05/2026):
+**SÓ gere sugestão tipo="sacola" pra cliente_id que está EXPLICITAMENTE na lista 'sacolas_ativas' do input.** Cliente que aparece só no 'historicoSugestoes' com tipo='sacola' do passado mas NÃO está em 'sacolas_ativas' hoje = sacola JÁ foi trabalhada/cooldown e NÃO pode virar sugestão de sacola de novo. Pra essa cliente, ofereça outro tipo (novidade, reposicao, atencao) usando o gancho normal — NUNCA reinvente uma sacola que não está no input.
+
+Caso real: Joelma teve 5 sugestões de sacola pra Gildelucia em 8 dias porque IA puxou pelo histórico mesmo após backend remover a sacola por cooldown. Agora backend rejeita silenciosamente sacolas que violam cooldown, mas é melhor IA não tentar — desperdicia slot.
+
 REGRAS POR IDADE DA SACOLA (campo "subtipo_sugerido" do input já vem calculado):
 
 - 6-10d  → tipo "sacola", subtipo "incentivar_acrescentar"

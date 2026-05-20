@@ -343,6 +343,59 @@ async function handleGerarSugestoes(req, res, auth) {
     console.warn('[lojas-ia] fallback trilha_id falhou (nao critico):', e?.message);
   }
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // GUARD SACOLA COOLDOWN NO OUTPUT (Ailson 20/05/2026)
+  // ═════════════════════════════════════════════════════════════════════════
+  // BUG REAL detectado: Joelma teve sugestao de sacola da Gildelucia em 5
+  // dias consecutivos (11, 12, 13, 15, 19/05) - intervalos de 1-2-2-4 dias,
+  // todos abaixo dos 7d definidos. Filter no INPUT da IA (ctx.sacolas) existe
+  // mas IA estava "lembrando" da sacola pelo historicoSugestoes e gerando
+  // sugestao tipo='sacola' mesmo sem ela estar em sacolas_ativas.
+  //
+  // Defesa: pra cada linha que vai ser inserida com tipo='sacola', verifica
+  // se cliente_id ja teve sugestao tipo='sacola' nos ultimos 7 dias. Se sim,
+  // REJEITA a linha (loga aviso). Resto das sugestoes segue normal.
+  // ═════════════════════════════════════════════════════════════════════════
+  try {
+    const linhasSacola = linhas.filter(l => l.tipo === 'sacola' && l.cliente_id);
+    if (linhasSacola.length > 0) {
+      const data7dAtras = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const clienteIdsSacolaNovas = linhasSacola.map(l => l.cliente_id);
+      const { data: sugSacolaRecentes } = await supabase
+        .from('lojas_sugestoes_diarias')
+        .select('cliente_id, data_geracao, status')
+        .eq('vendedora_id', vendedoraId)
+        .eq('tipo', 'sacola')
+        .gte('data_geracao', data7dAtras)
+        .lt('data_geracao', new Date().toISOString().slice(0, 10)) // < hoje
+        .in('cliente_id', clienteIdsSacolaNovas);
+
+      if (sugSacolaRecentes && sugSacolaRecentes.length > 0) {
+        const clientesBloqueados = new Set(sugSacolaRecentes.map(s => s.cliente_id));
+        const linhasFiltradas = linhas.filter(l => {
+          if (l.tipo === 'sacola' && l.cliente_id && clientesBloqueados.has(l.cliente_id)) {
+            const ultimaSug = sugSacolaRecentes.find(s => s.cliente_id === l.cliente_id);
+            console.warn('[lojas-ia] BLOQUEIO sacola cooldown:',
+              ctx.vendedoraNome,
+              'cliente=' + l.cliente_id,
+              'titulo=' + l.titulo,
+              'ultima_em=' + ultimaSug?.data_geracao + '/' + ultimaSug?.status);
+            return false;
+          }
+          return true;
+        });
+        const bloqueadas = linhas.length - linhasFiltradas.length;
+        if (bloqueadas > 0) {
+          console.warn('[lojas-ia] guard cooldown sacola removeu', bloqueadas, 'de', linhas.length, 'sugestoes');
+          linhas.length = 0;
+          linhas.push(...linhasFiltradas);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] guard cooldown sacola falhou (segue normal):', e?.message);
+  }
+
   const { error: errIns } = await supabase
     .from('lojas_sugestoes_diarias')
     .insert(linhas);
