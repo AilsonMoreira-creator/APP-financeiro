@@ -291,9 +291,57 @@ async function handleGerarSugestoes(req, res, auth) {
     produto_nome: s.produto_nome || null,
     promocao_id: s.promocao_id || null,
     fallback_used: !!s.fallback_used,
-    metadados_ia: parsed.parsed?.metadados || null,
+    // BUG FIX Ailson 20/05/2026: era 'parsed.parsed?.metadados' que pegava
+    // metadados GLOBAL e aplicava em TODAS sugestoes. O correto eh pegar
+    // 's.metadados' que eh por sugestao. Sem esse fix, trilha_winback_id
+    // nunca chegava aqui -> trilhas eternizavam na etapa 1 -> mesma
+    // sugestao aparecia dia apos dia (Vanessa reportou repeticoes 20/05).
+    metadados_ia: s.metadados || null,
     status: 'pendente',
   }));
+
+  // FALLBACK AUTOMATICO trilha_winback_id (Ailson 20/05/2026):
+  // Se a IA esqueceu de preencher metadados.trilha_winback_id em uma
+  // sugestao tipo='trilha_winback', backend busca a trilha ativa do
+  // cliente+vendedora e injeta. Defesa contra IA esquecer (jah aconteceu).
+  try {
+    const linhasTrilhaSemId = linhas.filter(l =>
+      l.tipo === 'trilha_winback' &&
+      l.cliente_id &&
+      !l.metadados_ia?.trilha_winback_id
+    );
+    if (linhasTrilhaSemId.length > 0) {
+      const clienteIds = linhasTrilhaSemId.map(l => l.cliente_id);
+      const { data: trilhasAtivas } = await supabase
+        .from('lojas_trilha_winback')
+        .select('id, cliente_id, etapa_atual')
+        .eq('vendedora_id', vendedoraId)
+        .is('encerrada_em', null)
+        .in('cliente_id', clienteIds);
+      const mapaTrilhas = {};
+      for (const t of (trilhasAtivas || [])) {
+        mapaTrilhas[t.cliente_id] = t;
+      }
+      let preenchidos = 0;
+      for (const l of linhasTrilhaSemId) {
+        const t = mapaTrilhas[l.cliente_id];
+        if (t) {
+          l.metadados_ia = {
+            ...(l.metadados_ia || {}),
+            trilha_winback_id: t.id,
+            etapa_trilha: t.etapa_atual,
+            fonte_id: 'fallback_backend_20250520',
+          };
+          preenchidos++;
+        }
+      }
+      if (preenchidos > 0) {
+        console.log('[lojas-ia] fallback trilha_winback_id preencheu', preenchidos, 'de', linhasTrilhaSemId.length);
+      }
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] fallback trilha_id falhou (nao critico):', e?.message);
+  }
 
   const { error: errIns } = await supabase
     .from('lojas_sugestoes_diarias')
