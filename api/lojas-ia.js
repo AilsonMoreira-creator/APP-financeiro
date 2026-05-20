@@ -1305,14 +1305,13 @@ async function montarContextoSugestoes(vendedoraId) {
     )
   );
 
-  // ─── CORES EM ALTA (Ailson 30/04/2026, semantica opt-in) ──────────────
-  // IA usa APENAS cores em lojas_cores_curadoria_manual. Top Bling
-  // (vw_ranking_cores_catalogo) é so visualizacao na admin — admin precisa
-  // clicar pra ativar uma cor (que entra na tabela manual com
-  // motivo='top_bling_selecionada').
-  // Cores adicionadas livremente pela admin (sem motivo especial) tambem
-  // entram. Sem nada selecionado, IA nao menciona cores (so se pedido
-  // explicitamente em ações).
+  // ─── CORES EM ALTA (Ailson 30/04/2026, semantica opt-in + fallback auto 20/05/2026)
+  // 1a opcao: lojas_cores_curadoria_manual (admin opt-in - ativa cores no UI)
+  // 2a opcao (fallback Ailson 20/05/2026): se manual vazia, usa top 6 do Bling
+  // automaticamente. Senao a IA nunca fala de cor (problema relatado: ele criou
+  // a regra mas a curadoria estava vazia, IA nunca usava).
+  // Admin pode SOBRESCREVER o automatico ativando cores manuais (que vem 1o
+  // entao tem prioridade).
   const coresEmAlta = [];
   try {
     const { data: coresManuais } = await supabase
@@ -1327,8 +1326,26 @@ async function montarContextoSugestoes(vendedoraId) {
         motivo: c.motivo,
       });
     }
+
+    // Fallback automatico: se admin nao curou nada, usa as 6 top do Bling.
+    if (coresEmAlta.length === 0) {
+      const { data: coresAutoBling } = await supabase
+        .from('vw_ranking_cores_catalogo')
+        .select('cor, cor_key, vendas_30d')
+        .eq('elegivel_gate1', true)
+        .order('rank_global', { ascending: true })
+        .limit(6);
+      for (const c of coresAutoBling || []) {
+        coresEmAlta.push({
+          cor: c.cor,
+          cor_key: c.cor_key,
+          fonte: 'fallback_bling_30d',
+          motivo: `top_vendas_30d (${c.vendas_30d} peças)`,
+        });
+      }
+    }
   } catch (e) {
-    console.warn('[lojas-ia] lojas_cores_curadoria_manual indisponivel:', e?.message);
+    console.warn('[lojas-ia] cores indisponiveis:', e?.message);
   }
 
   // Regras customizadas (do RegrasScreen)
@@ -1517,8 +1534,8 @@ async function montarContextoMensagem(sug, contextoExtra) {
   try {
     const { data: cores } = await supabase
       .from('vw_ranking_cores_catalogo')
-      .select('cor, vendas_45d')
-      .order('vendas_45d', { ascending: false })
+      .select('cor, vendas_30d')
+      .order('vendas_30d', { ascending: false })
       .limit(6);
     coresTop = (cores || []).map(c => c.cor).filter(Boolean);
   } catch (e) {

@@ -192,7 +192,21 @@ export default async function handler(req, res) {
       });
     }
 
-    const escolhido = candidatos[0];
+    // Protecao extra Ailson 20/05/2026: mesmo com SQL filtrando NULL, garante
+    // aqui que cliente_nome nao seja string vazia/null/undefined antes de
+    // criar a pergunta. Pula candidatos sem nome utilizavel.
+    const candidatoComNome = candidatos.find(c =>
+      c.cliente_nome && String(c.cliente_nome).trim().length > 0 &&
+      String(c.cliente_nome).toLowerCase() !== 'null'
+    );
+    if (!candidatoComNome) {
+      return res.json({
+        ok: true,
+        sem_candidatos: true,
+        motivo: 'Candidatos sem nome utilizavel (apelido, comprador e razao social todos vazios)',
+      });
+    }
+    const escolhido = candidatoComNome;
 
     // ───────────────────────────────────────────────────────────────
     // 3. Sorteia templates (anti-repetição últimos 3 dias)

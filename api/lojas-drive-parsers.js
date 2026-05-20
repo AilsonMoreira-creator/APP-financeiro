@@ -456,7 +456,13 @@ export function parseProdutos(conteudo) {
     const ref = refSemZero(codigoRaw);
     if (!ref) continue;
 
-    const descricao = limparTexto(l['DESCRIÇÃO']);
+    const descricaoRaw = limparTexto(l['DESCRIÇÃO']);
+    // Normaliza abreviacoes que confundem a IA (Ailson 20/05/2026):
+    // - "TRANSP." sozinho era lido como "transparente" pela IA mas significa "transpassado"
+    // Adicione novas regras aqui quando outras abreviacoes derem ambiguidade.
+    const descricao = descricaoRaw
+      ? descricaoRaw.replace(/\bTRANSP\.\B/gi, 'TRANSPASSADO').replace(/\bTRANSP\b(?!\w)/gi, 'TRANSPASSADO')
+      : descricaoRaw;
     const categoria = limparTexto(l['CATEGORIA']);
     const preco_inicial = parseNumeroBR(l['PREÇO|INICIAL']);
     const preco_medio = parseNumeroBR(l['PREÇO|MÉDIO']);
