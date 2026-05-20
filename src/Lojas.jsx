@@ -1168,7 +1168,14 @@ async function gerarMensagemIA(sugestaoId, contextoExtra = {}) {
 // AVULSA — Ailson 08/05/2026
 // Pede mensagem direto pra cliente (sem ter sugestao das 7 do dia)
 // Backend cria sugestao tipo='avulsa' e retorna mensagem + sugestao_id
-async function gerarMensagemAvulsa(clienteId, contextoExtra = {}) {
+//
+// Ailson 20/05/2026 — anti-repeticao:
+//   - 200 com duplicada:true -> backend detectou double-click <60s. Reusa
+//     sugestao existente, retorno transparente pra UI.
+//   - 409 motivo='cliente_contactada_recente' -> cliente teve contato nos
+//     ultimos 7-10d. Joga erro CLIENTE_RECENTE com detalhe pra UI mostrar
+//     dialogo. Vendedora pode retentar com forcarAvulsa=true.
+async function gerarMensagemAvulsa(clienteId, contextoExtra = {}, forcarAvulsa = false) {
   const userId = getUserIdFromStorage();
   const res = await fetch('/api/lojas-ia', {
     method: 'POST',
@@ -1180,6 +1187,7 @@ async function gerarMensagemAvulsa(clienteId, contextoExtra = {}) {
       action: 'gerar_mensagem_avulsa',
       cliente_id: clienteId,
       contexto: contextoExtra,
+      forcar_avulsa: forcarAvulsa,
     }),
   });
   if (!res.ok) {
@@ -1193,9 +1201,27 @@ async function gerarMensagemAvulsa(clienteId, contextoExtra = {}) {
       err.msEspera = msEspera;
       throw err;
     }
+    // Cliente contactada recente (409 — Ailson 20/05/2026)
+    if (res.status === 409) {
+      try {
+        const j = JSON.parse(txt);
+        if (j.motivo === 'cliente_contactada_recente') {
+          const err = new Error('cliente-recente');
+          err.code = 'CLIENTE_RECENTE';
+          err.diasAtras = j.dias_atras;
+          err.cooldownDias = j.cooldown_dias;
+          err.ultimoContato = j.ultimo_contato;
+          err.historicoRecente = j.historico_recente || [];
+          throw err;
+        }
+      } catch (parseErr) {
+        if (parseErr.code === 'CLIENTE_RECENTE') throw parseErr;
+        // se nao parseou, segue pro erro generico
+      }
+    }
     throw new Error(`IA erro ${res.status}: ${txt}`);
   }
-  return await res.json(); // { ok, mensagem, sugestao_id, ... }
+  return await res.json(); // { ok, mensagem, sugestao_id, duplicada?, ... }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1715,8 +1741,9 @@ function useLojasModule() {
 
   // Mensagem avulsa direto da carteira — Ailson 08/05/2026
   // Recebe cliente_id, retorna { mensagem, sugestao_id }
-  const handleGerarMensagemAvulsa = useCallback(async (clienteId, contextoExtra) => {
-    return await gerarMensagemAvulsa(clienteId, contextoExtra);
+  // Ailson 20/05/2026: aceita forcarAvulsa (3o param) pra bypass do cooldown
+  const handleGerarMensagemAvulsa = useCallback(async (clienteId, contextoExtra, forcarAvulsa = false) => {
+    return await gerarMensagemAvulsa(clienteId, contextoExtra, forcarAvulsa);
   }, []);
 
   // Salva edicao de mensagem feita pela vendedora pra IA aprender o estilo

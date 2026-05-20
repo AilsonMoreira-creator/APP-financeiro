@@ -3033,6 +3033,101 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
     return res.status(403).json({ error: 'Sem permissão pra esse cliente' });
   }
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // ANTI-REPETICAO MENSAGEM AVULSA (Ailson 20/05/2026)
+  // Vendedora pode apertar botao 2-3x rapido ou tentar mandar avulsa pra
+  // cliente que jah foi contactada. Antes do INSERT, faz 2 verificacoes:
+  //
+  // GUARD 1 - Double-click (<60s pra mesma cliente):
+  //   Retorna idempotente a sugestao existente (200 com flag). Resolve
+  //   POSTs duplicados do front (network glitch, click multiplo).
+  //   Caso real: Celia/Eliane teve 6 mensagens avulsas em 2 min dia 14/05.
+  //
+  // GUARD 2 - Cliente contactada nos ultimos N dias:
+  //   Carteira <100: 7 dias, >=100: 10 dias (mesma regra do cooldown geral).
+  //   Excecao: cliente com sacola ativa passa direto (igual cooldown geral).
+  //   Retorna 409 com info pra front mostrar dialogo "ja contatou ha X dias".
+  //   Force bypass: req.body.forcar_avulsa=true ignora o cooldown.
+  // ═════════════════════════════════════════════════════════════════════════
+  try {
+    // GUARD 1: double-click — mesmo cliente, ultimos 60s
+    const sessentaSegAtras = new Date(Date.now() - 60000).toISOString();
+    const { data: ultimaAvulsa } = await supabase
+      .from('lojas_sugestoes_diarias')
+      .select('id, titulo, status, produto_ref, created_at')
+      .eq('cliente_id', clienteId)
+      .eq('vendedora_id', cliente.vendedora_id)
+      .gte('created_at', sessentaSegAtras)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (ultimaAvulsa && ultimaAvulsa.length > 0) {
+      const sug = ultimaAvulsa[0];
+      const segundosAtras = Math.round((Date.now() - new Date(sug.created_at).getTime()) / 1000);
+      console.log('[avulsa] double-click bloqueado:', clienteId, segundosAtras + 's');
+      return res.status(200).json({
+        ok: true,
+        sugestao_id: sug.id,
+        titulo: sug.titulo,
+        mensagem: null, // front re-busca via /api/lojas-ia gerar_mensagem normal
+        duplicada: true,
+        motivo: 'double_click',
+        segundos_atras: segundosAtras,
+        nota: 'Mensagem ja foi criada ha ' + segundosAtras + 's. Reusando.',
+      });
+    }
+
+    // GUARD 2: cliente contactada nos ultimos 7-10 dias (bypass se forcar_avulsa)
+    const forcarAvulsa = !!req.body?.forcar_avulsa;
+    if (!forcarAvulsa) {
+      // Conta carteira da vendedora pra decidir cooldown (mesma regra do gerador)
+      const { count: totalCart } = await supabase
+        .from('lojas_clientes')
+        .select('id', { count: 'exact', head: true })
+        .eq('vendedora_id', cliente.vendedora_id)
+        .is('arquivado_em', null);
+      const cooldownDias = (totalCart || 0) < 100 ? 7 : 10;
+      const dataLimite = new Date(Date.now() - cooldownDias * 86400000).toISOString().slice(0, 10);
+
+      // Checa sugestoes recentes (exclui sacola — tem regra propria)
+      const { data: contactosRecentes } = await supabase
+        .from('lojas_sugestoes_diarias')
+        .select('data_geracao, tipo, titulo, status, produto_ref')
+        .eq('cliente_id', clienteId)
+        .eq('vendedora_id', cliente.vendedora_id)
+        .gte('data_geracao', dataLimite)
+        .neq('tipo', 'sacola')
+        .order('data_geracao', { ascending: false })
+        .limit(3);
+
+      if (contactosRecentes && contactosRecentes.length > 0) {
+        const ultimo = contactosRecentes[0];
+        const diasAtras = Math.floor((Date.now() - new Date(ultimo.data_geracao).getTime()) / 86400000);
+        console.log('[avulsa] cooldown bloqueado:', clienteId, diasAtras + 'd', cooldownDias + 'd cooldown');
+        return res.status(409).json({
+          ok: false,
+          motivo: 'cliente_contactada_recente',
+          cooldown_dias: cooldownDias,
+          dias_atras: diasAtras,
+          ultimo_contato: {
+            data: ultimo.data_geracao,
+            tipo: ultimo.tipo,
+            titulo: ultimo.titulo,
+            status: ultimo.status,
+            ref: ultimo.produto_ref,
+          },
+          historico_recente: contactosRecentes.map(c => ({
+            data: c.data_geracao, tipo: c.tipo, ref: c.produto_ref, status: c.status,
+          })),
+          nota: 'Cliente ja foi contactada ha ' + diasAtras + ' dias. Mande forcar_avulsa=true pra ignorar.',
+        });
+      }
+    }
+  } catch (e) {
+    // Se a checagem falhar (timeout etc), nao bloqueia o fluxo principal
+    console.warn('[avulsa] anti-repeticao falhou (segue normal):', e?.message);
+  }
+
   // 2. Cascata pra escolher peça
   // Top categorias da cliente (mesmo calculo do montarContextoMensagem)
   let topCategoria = null;
