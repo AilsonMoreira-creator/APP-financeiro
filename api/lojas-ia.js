@@ -1327,20 +1327,25 @@ async function montarContextoSugestoes(vendedoraId) {
       });
     }
 
-    // Fallback automatico: se admin nao curou nada, usa as 6 top do Bling.
+    // Fallback automatico: se admin nao curou nada, usa as 6 cores das
+    // posicoes 3-8 do Bling (PULA Preto e Bege que sao top 1-2 - Ailson
+    // 20/05/2026: sao obvias, todo mundo ja sabe que vendem, IA fica
+    // repetitiva). Cores 3-8 trazem variedade real (Marrom, Azul Marinho,
+    // Figo, Verde Militar, Caramelo, Nude).
     if (coresEmAlta.length === 0) {
       const { data: coresAutoBling } = await supabase
         .from('vw_ranking_cores_catalogo')
-        .select('cor, cor_key, vendas_30d')
+        .select('cor, cor_key, vendas_30d, rank_global')
         .eq('elegivel_gate1', true)
-        .order('rank_global', { ascending: true })
-        .limit(6);
+        .gte('rank_global', 3) // pula rank 1-2 (Preto + Bege)
+        .lte('rank_global', 8) // pega ate rank 8 (6 cores variadas)
+        .order('rank_global', { ascending: true });
       for (const c of coresAutoBling || []) {
         coresEmAlta.push({
           cor: c.cor,
           cor_key: c.cor_key,
-          fonte: 'fallback_bling_30d',
-          motivo: `top_vendas_30d (${c.vendas_30d} peças)`,
+          fonte: 'fallback_bling_30d_rank3a8',
+          motivo: `top vendas 30d, rank ${c.rank_global} (${c.vendas_30d} peças)`,
         });
       }
     }
@@ -1896,9 +1901,29 @@ async function montarContextoMensagem(sug, contextoExtra) {
         .from('lojas_produtos')
         .select('ref, descricao, categoria, qtd_estoque')
         .in('ref', refs);
+      // Cores top 3 vendidas por REF nos ultimos 30d (Ailson 20/05/2026):
+      // Permite IA falar "voltou body transpassado, o caqui ta lindo" so
+      // se realmente existe esse modelo na cor mencionada.
+      const { data: coresPorRef } = await supabase
+        .from('vw_variacoes_vendidas_30d_ref_cor')
+        .select('ref, cor, vendas_30d_cor_ref')
+        .in('ref', refs)
+        .eq('elegivel_gate2', true)
+        .order('vendas_30d_cor_ref', { ascending: false });
+      const mapaCoresRef = {};
+      for (const c of coresPorRef || []) {
+        if (!mapaCoresRef[c.ref]) mapaCoresRef[c.ref] = [];
+        if (mapaCoresRef[c.ref].length < 3) mapaCoresRef[c.ref].push(c.cor);
+      }
       novidadesDisponiveis = (prods || [])
         .filter(p => (p.qtd_estoque || 0) > 5 && p.descricao)
-        .map(p => ({ ref: p.ref, descricao: p.descricao, categoria: p.categoria, qtd_estoque: p.qtd_estoque }))
+        .map(p => ({
+          ref: p.ref,
+          descricao: p.descricao,
+          categoria: p.categoria,
+          qtd_estoque: p.qtd_estoque,
+          cores_disponiveis: mapaCoresRef[p.ref] || [],
+        }))
         .slice(0, 8);
     }
   } catch (e) { /* silent */ }
@@ -1915,9 +1940,27 @@ async function montarContextoMensagem(sug, contextoExtra) {
         .from('lojas_produtos')
         .select('ref, descricao, categoria, qtd_estoque')
         .in('ref', refs);
+      // Cores top 3 por REF (mesma logica das novidades)
+      const { data: coresPorRef } = await supabase
+        .from('vw_variacoes_vendidas_30d_ref_cor')
+        .select('ref, cor, vendas_30d_cor_ref')
+        .in('ref', refs)
+        .eq('elegivel_gate2', true)
+        .order('vendas_30d_cor_ref', { ascending: false });
+      const mapaCoresRef = {};
+      for (const c of coresPorRef || []) {
+        if (!mapaCoresRef[c.ref]) mapaCoresRef[c.ref] = [];
+        if (mapaCoresRef[c.ref].length < 3) mapaCoresRef[c.ref].push(c.cor);
+      }
       reposicoesDisponiveis = (prods || [])
         .filter(p => (p.qtd_estoque || 0) > 5 && p.descricao)
-        .map(p => ({ ref: p.ref, descricao: p.descricao, categoria: p.categoria, qtd_estoque: p.qtd_estoque }))
+        .map(p => ({
+          ref: p.ref,
+          descricao: p.descricao,
+          categoria: p.categoria,
+          qtd_estoque: p.qtd_estoque,
+          cores_disponiveis: mapaCoresRef[p.ref] || [],
+        }))
         .slice(0, 8);
     }
   } catch (e) { /* silent */ }
