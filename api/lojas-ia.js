@@ -948,6 +948,24 @@ async function montarContextoSugestoes(vendedoraId) {
     (sugestoesRecentes || []).map(s => s.cliente_id)
   );
 
+  // FILTRA TRILHAS WINBACK pelo cooldown geral (Ailson 20/05/2026):
+  // Mesma regra: cliente contactada nos ultimos 7-10d (qualquer tipo, exceto
+  // sacola) nao recebe trilha hoje. data_proxima_msg da trilha NAO eh
+  // alterada — proximo cron volta a tentar quando cooldown vencer.
+  // Caso real evitado: REGILANIA tinha followup dispensado 18/05 +
+  // trilha pendente 20/05 (so 2d entre). Agora trilha so dispara se cliente
+  // estiver com cooldown limpo.
+  if (trilhasWinback.length > 0) {
+    const antes = trilhasWinback.length;
+    const filtradas = trilhasWinback.filter(t => !clientesEmCooldownGeral.has(t.cliente_id));
+    if (filtradas.length < antes) {
+      console.log('[lojas-ia] trilha winback filtrada por cooldown geral:',
+        (antes - filtradas.length), 'de', antes);
+      trilhasWinback.length = 0;
+      trilhasWinback.push(...filtradas);
+    }
+  }
+
   // FIX 07/05/2026: garantir que clientes ja TRABALHADOS hoje
   // (executada ou dispensada) NAO voltem em regerar do mesmo dia.
   // Caso real: vendedora executa 6 sugestoes, clica 'Atualizar' por
@@ -971,7 +989,7 @@ async function montarContextoSugestoes(vendedoraId) {
   // FILTRO SACOLAS (28/04/2026, decisão Ailson):
   //   - valor_total <= 0 → dado faltante do PDF, descarta
   //   - dias < 6 → muito recente, vendedora ainda monta a sacola
-  //   - cliente em cooldown sacola (5 dias) → descarta (decisao 05/05)
+  //   - cliente em cooldown sacola (7 dias) → descarta (decisao 05/05)
   //   - cliente_id IS NULL → descarta (Ailson 20/05/2026): sacola orfa
   //     que nao da pra cadastrar sugestao decente (apareceria como "Sacola
   //     (cliente UUID)" feio). Vendedora regulariza cadastro no Mire
@@ -980,11 +998,17 @@ async function montarContextoSugestoes(vendedoraId) {
   //     representado como agregado em ctx.grupos. Sacola individual de
   //     CNPJ em grupo conflita com sugestao tipo='grupo' (caso real:
   //     Cleide/Heloisa H Porto em grupo).
+  //   - cliente em COOLDOWN GERAL (Ailson 20/05/2026): mesma regra
+  //     7-10d se aplica AGORA a sacola. Antes sacola bypassava (era
+  //     "prioridade absoluta"). Decisao: cliente nenhum recebe contato
+  //     com menos de 7d, mesmo que tenha sacola nova/atualizada. Caso
+  //     real: Fran/ANA LOJA teve novidade 14/05 + sacola amanha 21/05
+  //     (7d exatos = no limite). Agora ANA LOJA fica em cooldown ate 22/05.
   // Telemetria pra debug em metadados_ia
   const clientesEmGrupoSet = new Set(
     (clientes || []).filter(c => c.grupo_id).map(c => c.id)
   );
-  const sacolasDescartadas = { sem_valor: 0, muito_recente: 0, em_cooldown: 0, sem_cliente: 0, cliente_em_grupo: 0 };
+  const sacolasDescartadas = { sem_valor: 0, muito_recente: 0, em_cooldown: 0, sem_cliente: 0, cliente_em_grupo: 0, em_cooldown_geral: 0 };
   const hojeMs = Date.now();
   const sacolas = (sacolasRaw || []).filter(s => {
     const valor = Number(s.valor_total) || 0;
@@ -999,6 +1023,10 @@ async function montarContextoSugestoes(vendedoraId) {
     }
     if (clientesEmGrupoSet.has(s.cliente_id)) {
       sacolasDescartadas.cliente_em_grupo++;
+      return false;
+    }
+    if (clientesEmCooldownGeral.has(s.cliente_id)) {
+      sacolasDescartadas.em_cooldown_geral++;
       return false;
     }
     return true;
@@ -2527,9 +2555,13 @@ function montarMessagesSugestoes(ctx) {
         carteiraFiltradaInfo.em_grupo++;
         return false;
       }
-      // Cooldown geral — descarta SE não tiver sacola ativa
-      // (sacolas têm cooldown próprio mais curto via clientesEmCooldownSacola)
-      if (ctx.clientesEmCooldownGeral?.has(c.id) && !clientesComSacola.has(c.id)) {
+      // Cooldown geral (Ailson 20/05/2026): aplica TAMBEM em clientes com
+      // sacola ativa. Antes havia excecao (sacola bypassava cooldown), mas
+      // decisao: cliente nenhum recebe contato com menos de 7-10d, mesmo
+      // que abriu/atualizou sacola. Cliente espera o ciclo virar.
+      // Sacola dessa cliente nao vai ser sugerida hoje (filter da sacola
+      // tambem aplica clientesEmCooldownGeral em lojas-ia.js linha ~989).
+      if (ctx.clientesEmCooldownGeral?.has(c.id)) {
         carteiraFiltradaInfo.em_cooldown++;
         return false;
       }
@@ -3159,13 +3191,15 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
       const dataLimite = new Date(Date.now() - cooldownDias * 86400000).toISOString().slice(0, 10);
 
       // Checa sugestoes recentes (exclui sacola — tem regra propria)
+      // Cooldown estrito (Ailson 20/05/2026): inclui TAMBEM sacolas.
+      // Antes excluia sacola da contagem (era bypass). Agora cliente que
+      // recebeu QUALQUER sugestao nos ultimos 7-10d nao recebe avulsa.
       const { data: contactosRecentes } = await supabase
         .from('lojas_sugestoes_diarias')
         .select('data_geracao, tipo, titulo, status, produto_ref')
         .eq('cliente_id', clienteId)
         .eq('vendedora_id', cliente.vendedora_id)
         .gte('data_geracao', dataLimite)
-        .neq('tipo', 'sacola')
         .order('data_geracao', { ascending: false })
         .limit(3);
 
