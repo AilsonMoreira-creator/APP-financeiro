@@ -972,17 +972,33 @@ async function montarContextoSugestoes(vendedoraId) {
   //   - valor_total <= 0 → dado faltante do PDF, descarta
   //   - dias < 6 → muito recente, vendedora ainda monta a sacola
   //   - cliente em cooldown sacola (5 dias) → descarta (decisao 05/05)
+  //   - cliente_id IS NULL → descarta (Ailson 20/05/2026): sacola orfa
+  //     que nao da pra cadastrar sugestao decente (apareceria como "Sacola
+  //     (cliente UUID)" feio). Vendedora regulariza cadastro no Mire
+  //     primeiro.
+  //   - cliente em grupo → descarta (Ailson 20/05/2026): grupo eh
+  //     representado como agregado em ctx.grupos. Sacola individual de
+  //     CNPJ em grupo conflita com sugestao tipo='grupo' (caso real:
+  //     Cleide/Heloisa H Porto em grupo).
   // Telemetria pra debug em metadados_ia
-  const sacolasDescartadas = { sem_valor: 0, muito_recente: 0, em_cooldown: 0 };
+  const clientesEmGrupoSet = new Set(
+    (clientes || []).filter(c => c.grupo_id).map(c => c.id)
+  );
+  const sacolasDescartadas = { sem_valor: 0, muito_recente: 0, em_cooldown: 0, sem_cliente: 0, cliente_em_grupo: 0 };
   const hojeMs = Date.now();
   const sacolas = (sacolasRaw || []).filter(s => {
     const valor = Number(s.valor_total) || 0;
     if (valor <= 0) { sacolasDescartadas.sem_valor++; return false; }
     if (!s.data_cadastro_sacola) { sacolasDescartadas.sem_valor++; return false; }
+    if (!s.cliente_id) { sacolasDescartadas.sem_cliente++; return false; }
     const dias = Math.floor((hojeMs - new Date(s.data_cadastro_sacola).getTime()) / 86400000);
     if (dias < 6) { sacolasDescartadas.muito_recente++; return false; }
-    if (s.cliente_id && clientesEmCooldownSacola.has(s.cliente_id)) {
+    if (clientesEmCooldownSacola.has(s.cliente_id)) {
       sacolasDescartadas.em_cooldown++;
+      return false;
+    }
+    if (clientesEmGrupoSet.has(s.cliente_id)) {
+      sacolasDescartadas.cliente_em_grupo++;
       return false;
     }
     return true;
