@@ -93,6 +93,7 @@ export default async function handler(req, res) {
     dimensions = 'date',
     limit: limitRaw = '100',
     order_by,
+    host, // CSV de hostNames pra filtrar (workaround bagunça Convertr)
   } = req.query;
 
   if (!PROPERTIES_VALIDAS[property]) {
@@ -110,7 +111,7 @@ export default async function handler(req, res) {
 
   const limit = Math.min(parseInt(limitRaw, 10) || 100, MAX_LIMIT);
 
-  const cacheKey = `${property}|${start_date}|${end_date}|${metrics}|${dimensions}|${limit}|${order_by || ''}`;
+  const cacheKey = `${property}|${start_date}|${end_date}|${metrics}|${dimensions}|${limit}|${order_by || ''}|${host || ''}`;
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return res.status(200).json({
@@ -133,6 +134,19 @@ export default async function handler(req, res) {
 
     if (order_by) {
       body.orderBys = [{ metric: { metricName: order_by }, desc: true }];
+    }
+
+    // Filtro por hostName (workaround pra bagunça de tagging da Convertr)
+    if (host) {
+      const hosts = host.split(',').map(h => h.trim()).filter(Boolean);
+      if (hosts.length > 0) {
+        body.dimensionFilter = {
+          filter: {
+            fieldName: 'hostName',
+            inListFilter: { values: hosts },
+          },
+        };
+      }
     }
 
     const ga4Resp = await fetch(
@@ -170,6 +184,7 @@ export default async function handler(req, res) {
       property_id: property,
       property_nome: PROPERTIES_VALIDAS[property],
       janela: { start_date, end_date },
+      filtro_host: host || null,
       dimensions: dimNames,
       metrics: metricNames,
       row_count: ga4Data.rowCount || rows.length,
