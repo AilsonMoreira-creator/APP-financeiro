@@ -414,7 +414,11 @@ async function handleGerarSugestoes(req, res, auth) {
       const pct = k.dias_sem_comprar / j.media_dias_compras;
       const semCooldown = !clientesEmCooldownGeral.has(c.id);
       const naoEmGrupo = !c.grupo_id;
-      return pct >= 0.7 && pct <= 1.5 && semCooldown && naoEmGrupo;
+      // OPCAO B (Ailson 21/05/2026): 0.8-1.3 + >=5 visitas
+      // Antes: 0.7-1.5 + >=4. Mais conservador, menos falsos positivos.
+      // Impacto medido em 21/05: reduz obrigatorios totais de 41 -> 20 (-51%).
+      const visitasOk = (j.qtd_datas_unicas || 0) >= 5;
+      return visitasOk && pct >= 0.8 && pct <= 1.3 && semCooldown && naoEmGrupo;
     });
     const clienteIdsSugeridos = new Set(linhas.filter(l => l.cliente_id).map(l => l.cliente_id));
     const obrigEsquecidos = obrigatorios.filter(c => !clienteIdsSugeridos.has(c.id));
@@ -820,7 +824,7 @@ async function montarContextoSugestoes(vendedoraId) {
   try {
     const { data: jData } = await supabase
       .from('vw_lojas_clientes_janela')
-      .select('cliente_id, dias_ate_janela_atencao, dentro_janela_compra, media_confiavel, media_dias_compras')
+      .select('cliente_id, dias_ate_janela_atencao, dentro_janela_compra, media_confiavel, media_dias_compras, qtd_datas_unicas')
       .eq('vendedora_id', vendedoraId);
     (jData || []).forEach(j => { janela[j.cliente_id] = j; });
   } catch (e) {
@@ -2774,7 +2778,9 @@ function montarMessagesSugestoes(ctx) {
             const pct = kpi.dias_sem_comprar / j.media_dias_compras;
             const semCooldown = !ctx.clientesEmCooldownGeral?.has(c.id);
             const naoEmGrupo = !c.grupo_id;
-            return pct >= 0.7 && pct <= 1.5 && semCooldown && naoEmGrupo;
+            // OPCAO B (Ailson 21/05/2026): 0.8-1.3 + >=5 visitas
+            const visitasOk = (j.qtd_datas_unicas || 0) >= 5;
+            return visitasOk && pct >= 0.8 && pct <= 1.3 && semCooldown && naoEmGrupo;
           })(),
         } : null,
         // CONVERSOES — Ailson 07/05/2026 (auditoria GAP 2).
