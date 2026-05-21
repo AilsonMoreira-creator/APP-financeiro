@@ -939,14 +939,21 @@ async function montarContextoSugestoes(vendedoraId) {
 
   const { data: sugestoesRecentes } = await supabase
     .from('lojas_sugestoes_diarias')
-    .select('cliente_id, tipo')
+    .select('cliente_id, grupo_id, tipo')
     .eq('vendedora_id', vendedoraId)
     .neq('tipo', 'sacola')
-    .gte('data_geracao', dataCooldownGeral)
-    .not('cliente_id', 'is', null);
-  const clientesEmCooldownGeral = new Set(
-    (sugestoesRecentes || []).map(s => s.cliente_id)
-  );
+    .gte('data_geracao', dataCooldownGeral);
+  // FIX Ailson 21/05/2026: separar Sets pra cliente_id E grupo_id.
+  // ANTES o filter so tinha cliente_id e excluia .not('cliente_id','is',null)
+  // -> sugestoes de grupo (cliente_id=null, grupo_id=X) passavam INVISIVEIS.
+  // CASO REAL: Vanessa/Mari Diez (grupo) apareceu 7 dias seguidos porque
+  // grupo_id nao era checado em lugar nenhum. Joelma/Ju idem.
+  const clientesEmCooldownGeral = new Set();
+  const gruposEmCooldownGeral = new Set();
+  (sugestoesRecentes || []).forEach(s => {
+    if (s.cliente_id) clientesEmCooldownGeral.add(s.cliente_id);
+    if (s.grupo_id) gruposEmCooldownGeral.add(s.grupo_id);
+  });
 
   // FILTRA TRILHAS WINBACK pelo cooldown geral (Ailson 20/05/2026):
   // Mesma regra: cliente contactada nos ultimos 7-10d (qualquer tipo, exceto
@@ -1143,7 +1150,18 @@ async function montarContextoSugestoes(vendedoraId) {
         qtd_compras: d.kpi.qtd_compras || 0,
       })),
     };
-  }).filter(Boolean);
+  }).filter(Boolean)
+  // FILTRO COOLDOWN GRUPO (Ailson 21/05/2026):
+  // Grupos seguem mesma regra de cliente: nao recebem sugestao se ja foram
+  // contactados nos ultimos 7-10 dias. Caso real: Vanessa/Mari Diez (grupo)
+  // apareceu 7 dias seguidos antes desse fix.
+  .filter(g => {
+    if (gruposEmCooldownGeral.has(g.id)) {
+      console.log('[lojas-ia] grupo filtrado por cooldown:', g.nome_grupo || g.apelido || g.id);
+      return false;
+    }
+    return true;
+  });
 
   // Produtos oferecíveis (view já filtrada)
   const { data: produtos } = await supabase
