@@ -396,6 +396,41 @@ async function handleGerarSugestoes(req, res, auth) {
     console.warn('[lojas-ia] guard cooldown sacola falhou (segue normal):', e?.message);
   }
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // VALIDADOR JANELA PERFEITA (Ailson 21/05/2026)
+  // ═════════════════════════════════════════════════════════════════════════
+  // Identifica clientes obrigatorios (>=70% ciclo, sem cooldown, individual)
+  // e LOGA quais a IA esqueceu. Nao force INSERT manual pq nao tem mensagem
+  // gerada (precisaria chamar IA de novo). Em vez disso, sinaliza pro Ailson
+  // via log + grava em metadados_ia.diagnostico_filtros pra auditoria depois.
+  //
+  // Proxima iteracao: se a IA continuar ignorando, fazer 2a chamada de IA
+  // SOMENTE pros obrigatorios esquecidos e SUBSTITUIR as menos urgentes.
+  try {
+    const obrigatorios = (clientes || []).filter(c => {
+      const k = kpis[c.id] || {};
+      const j = janela[c.id];
+      if (!j?.media_confiavel || !j.media_dias_compras || !k.dias_sem_comprar) return false;
+      const pct = k.dias_sem_comprar / j.media_dias_compras;
+      const semCooldown = !clientesEmCooldownGeral.has(c.id);
+      const naoEmGrupo = !c.grupo_id;
+      return pct >= 0.7 && pct <= 1.5 && semCooldown && naoEmGrupo;
+    });
+    const clienteIdsSugeridos = new Set(linhas.filter(l => l.cliente_id).map(l => l.cliente_id));
+    const obrigEsquecidos = obrigatorios.filter(c => !clienteIdsSugeridos.has(c.id));
+    if (obrigEsquecidos.length > 0) {
+      const nomes = obrigEsquecidos.slice(0, 5).map(c =>
+        (c.apelido || c.razao_social?.split(' ')[0] || c.id.substring(0, 8))
+      ).join(', ');
+      console.warn('[lojas-ia] IA ESQUECEU', obrigEsquecidos.length,
+        'clientes janela perfeita:', nomes, '(de', obrigatorios.length, 'obrigatorios)');
+    } else if (obrigatorios.length > 0) {
+      console.log('[lojas-ia] IA respeitou todos os', obrigatorios.length, 'obrigatorios janela perfeita');
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] validador janela perfeita falhou:', e?.message);
+  }
+
   const { error: errIns } = await supabase
     .from('lojas_sugestoes_diarias')
     .insert(linhas);
@@ -2661,6 +2696,21 @@ function montarMessagesSugestoes(ctx) {
           estado: ctx.janela[c.id].dentro_janela_compra
             ? 'na_janela'
             : (ctx.janela[c.id].dias_ate_janela_atencao > 0 ? 'confortavel' : 'passou_janela'),
+          // OBRIGATORIO_JANELA_PERFEITA (Ailson 21/05/2026):
+          // Cliente com >=70% do ciclo passado E sem cooldown = HARD pick.
+          // IA NAO PODE deixar de fora. Limite 150% pra nao pegar inativo
+          // que provavelmente nao volta. Auditoria 21/05: 41 quentes hoje,
+          // apenas 2 viraram sugestao. IA estava ignorando regra textual.
+          // Agora flag explicita + prompt enforcement.
+          obrigatorio: (() => {
+            const kpi = ctx.kpis?.[c.id] || {};
+            const j = ctx.janela?.[c.id];
+            if (!j?.media_confiavel || !j.media_dias_compras || !kpi.dias_sem_comprar) return false;
+            const pct = kpi.dias_sem_comprar / j.media_dias_compras;
+            const semCooldown = !ctx.clientesEmCooldownGeral?.has(c.id);
+            const naoEmGrupo = !c.grupo_id;
+            return pct >= 0.7 && pct <= 1.5 && semCooldown && naoEmGrupo;
+          })(),
         } : null,
         // CONVERSOES — Ailson 07/05/2026 (auditoria GAP 2).
         // Indica se cliente ja respondeu a mensagem com compra antes (60d).

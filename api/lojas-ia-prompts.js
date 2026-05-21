@@ -180,6 +180,17 @@ REGRAS DE PRIORIZAÇÃO:
 3. Cliente em estado **"passou_janela"** = está atrasando o ciclo próprio. PRIORIDADE MÁXIMA mesmo se status='ativo'. Pode ter algo de errado (atenção_especial provavelmente true).
 4. Cliente sem \`janela_compra\` (null) = não tem média confiável (<5 visitas). Usa regra fixa de status. Status fala por si.
 
+🚨 **REGRA HARD - OBRIGATÓRIO INCLUIR (Ailson 21/05/2026):**
+Cliente com \`janela_compra.obrigatorio === true\` significa: **>=70% do ciclo próprio passado E fora de cooldown E cliente individual**. Esse cliente TEM que estar entre as 7 sugestões do dia, sem exceção. Backend valida e rejeita resposta que ignora esses obrigatórios.
+
+Lógica de quem é obrigatório:
+- Tem média confiável de ciclo de compra (5+ visitas distintas)
+- dias_sem_comprar / media_dias_compras está entre 0.7 e 1.5 (probabilidade alta de comprar agora)
+- NÃO foi contactada nos últimos 7-10 dias (cooldown)
+- NÃO está em grupo (grupo é tratado separado)
+
+Se você tiver MAIS obrigatórios que slots disponíveis (caso raro: 6+), priorize os com pct_ciclo mais alto (próximos de 1.5x). Se sobrar slot depois dos obrigatórios, complete com sacolas, trilhas winback, atenção, novidade ou outras.
+
 USO NA MENSAGEM:
 - NÃO mencione a janela explicitamente ("você está fora da janela") — soa robótico.
 - Use o sinal pra escolher TOM e AÇÃO:
