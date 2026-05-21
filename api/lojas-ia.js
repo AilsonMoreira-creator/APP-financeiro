@@ -431,6 +431,33 @@ async function handleGerarSugestoes(req, res, auth) {
     console.warn('[lojas-ia] validador janela perfeita falhou:', e?.message);
   }
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // VALIDADOR SACOLAS (Ailson 21/05/2026)
+  // ═════════════════════════════════════════════════════════════════════════
+  // Regra (Ailson): ate 2 slots podem ser sacola. Backend ja filtra cooldown
+  // 7d. IA decide quais 2 caso a caso. Logo: se ha >=1 sacola no input mas
+  // IA gerou ZERO -> sinal de problema (caso real Cleide 21/05: 13 sacolas
+  // validas, IA gerou 0). Esse validador so loga ZERO USO quando havia
+  // sacolas no input. Nao força reinjecao.
+  try {
+    const totalSacolasInput = (ctx.sacolas || []).length;
+    const totalSacolasGeradas = linhas.filter(l => l.tipo === 'sacola').length;
+    if (totalSacolasInput >= 1 && totalSacolasGeradas === 0) {
+      const mapCliente = new Map((clientes || []).map(c => [c.id, c]));
+      const nomes = (ctx.sacolas || []).slice(0, 3).map(s => {
+        const c = mapCliente.get(s.cliente_id);
+        return c?.apelido || c?.razao_social?.split(' ')[0] || s.cliente_id?.substring(0, 8);
+      }).join(', ');
+      console.warn('[lojas-ia] IA IGNOROU TODAS as', totalSacolasInput,
+        'sacolas validas:', nomes);
+    } else if (totalSacolasInput > 0) {
+      console.log('[lojas-ia] sacolas: input=' + totalSacolasInput,
+        'sugeridas=' + totalSacolasGeradas, '(max 2)');
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] validador sacolas falhou:', e?.message);
+  }
+
   const { error: errIns } = await supabase
     .from('lojas_sugestoes_diarias')
     .insert(linhas);

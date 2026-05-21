@@ -56,7 +56,10 @@ Mantém SEMPRE 7 sugestões totais. Anote em "fallback_used": true na sugestão 
 
 CLIENTE NOVO (1ª compra <= 15d): se houver candidato, OBRIGATORIAMENTE 1 dos 3 slots ativos vira followup_nova com tom de boas-vindas. Se houver mais de 1, prioriza por ticket maior.
 
-Cliente em SACOLA SEPARANDO (pedido em espera) substitui QUALQUER slot — pode ser inativo/semAtividade/atencao/ativo. Pode ter mais de 1 cliente em sacola — todos viram sugestões prioritárias substituindo na ordem (slot 7 primeiro, depois 6, etc).
+🛍️ **SACOLAS — REGRA (Ailson 21/05/2026):**
+Toda cliente em \`sacolas_ativas\` no input já passou pelo filtro 7d do backend (cliente sugerida em qualquer tipo nos últimos 7d NÃO chega aqui). Sacolas são importantes mas NÃO são prioridade absoluta: **no máximo 2 dos 7 slots** podem ser sacola. Substituem qualquer slot da composição padrão.
+
+Se há mais de 2 sacolas no input, escolha as 2 mais relevantes com seu próprio julgamento (peso, urgência, valor, relação — caso a caso). As outras esperam o próximo cron, quando voltarem a estar elegíveis.
 
 
 # 🔄 TRILHAS WIN-BACK ATIVAS (Sprint A — Ailson 13/05/2026)
@@ -877,12 +880,16 @@ Exemplo RUIM (bloco único):
 
 # Tratamento de SACOLA SEPARANDO
 
-Sacolas vêm pré-filtradas pelo backend: já chegam só as que têm valor_total > 0 E pelo menos 6 dias de aberta. Sacola muito recente (vendedora ainda monta) ou sem valor (dado faltante) NÃO aparecem no input. Se aparecer, use sempre.
+Sacolas vêm pré-filtradas pelo backend: já chegam só as que têm valor_total > 0, pelo menos 6 dias de aberta E sem cooldown 7d (cliente já contactada nos últimos 7d em qualquer tipo NÃO chega aqui). **Use até 2 sacolas por dia** — escolha as mais relevantes com seu julgamento (urgência, valor, relação). As outras esperam o próximo cron.
 
-🚨 **REGRA CRÍTICA - NÃO ALUCINAR SACOLA** (Ailson 20/05/2026):
-**SÓ gere sugestão tipo="sacola" pra cliente_id que está EXPLICITAMENTE na lista 'sacolas_ativas' do input.** Cliente que aparece só no 'historicoSugestoes' com tipo='sacola' do passado mas NÃO está em 'sacolas_ativas' hoje = sacola JÁ foi trabalhada/cooldown e NÃO pode virar sugestão de sacola de novo. Pra essa cliente, ofereça outro tipo (novidade, reposicao, atencao) usando o gancho normal — NUNCA reinvente uma sacola que não está no input.
+🚨 **DOIS LADOS DA MESMA REGRA:**
 
-Caso real: Joelma teve 5 sugestões de sacola pra Gildelucia em 8 dias porque IA puxou pelo histórico mesmo após backend remover a sacola por cooldown. Agora backend rejeita silenciosamente sacolas que violam cooldown, mas é melhor IA não tentar — desperdicia slot.
+**LADO A — Sacola no input é candidata legítima.** Se há ao menos 1 sacola, vale considerar pra ocupar 1-2 slots. NÃO ignore todas só por excesso de cautela.
+
+**LADO B — NÃO ALUCINE sacola que NÃO está no input.** Cliente que aparece só no 'historicoSugestoes' com tipo='sacola' do passado mas NÃO está em 'sacolas_ativas' hoje = sacola JÁ foi trabalhada/cooldown e NÃO pode virar sugestão de sacola de novo. Pra essa cliente, ofereça outro tipo (novidade, reposicao, atencao) usando o gancho normal — NUNCA reinvente uma sacola que não está no input.
+
+Caso real (LADO B): Joelma teve 5 sugestões de sacola pra Gildelucia em 8 dias porque IA puxou pelo histórico mesmo após backend remover a sacola por cooldown.
+Caso real (LADO A): Cleide tinha 13 sacolas válidas em 21/05/2026 e a IA gerou ZERO porque ficou com medo do aviso do LADO B. As duas regras valem juntas: se está no input, USE (até 2); se não está, NÃO INVENTE.
 
 REGRAS POR IDADE DA SACOLA (campo "subtipo_sugerido" do input já vem calculado):
 
