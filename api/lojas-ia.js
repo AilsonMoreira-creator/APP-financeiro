@@ -3370,6 +3370,38 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
     .single();
 
   if (errCriar) {
+    // FIX Ailson 21/05/2026: race condition double-click.
+    // UNIQUE INDEX uniq_avulsa_vendedora_cliente_dia (vendedora_id,
+    // cliente_id, data_geracao) WHERE titulo LIKE 'Mensagem avulsa%'
+    // bloqueia INSERT duplicado no nivel DB. Quando 2 requests chegam
+    // simultaneamente (86-259ms entre clicks), 1 ganha e o outro recebe
+    // 23505. Aqui pegamos esse erro, buscamos a sugestao existente e
+    // retornamos como duplicada — mesmo comportamento do guard 60s mas
+    // que funciona MESMO em race condition.
+    if (errCriar.code === '23505') {
+      const { data: existente } = await supabase
+        .from('lojas_sugestoes_diarias')
+        .select('id, titulo, status')
+        .eq('vendedora_id', cliente.vendedora_id)
+        .eq('cliente_id', clienteId)
+        .eq('data_geracao', hoje)
+        .like('titulo', 'Mensagem avulsa%')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single();
+      console.log('[avulsa] race-condition pego pelo UNIQUE INDEX:', clienteId);
+      if (existente) {
+        return res.status(200).json({
+          ok: true,
+          sugestao_id: existente.id,
+          titulo: existente.titulo,
+          mensagem: null,
+          duplicada: true,
+          motivo: 'double_click_db_race',
+          nota: 'Mensagem ja foi criada (race condition detectada no DB). Reusando.',
+        });
+      }
+    }
     console.error('[avulsa] erro criar sugestao:', errCriar);
     return res.status(500).json({ error: 'Erro ao criar sugestão: ' + errCriar.message });
   }
