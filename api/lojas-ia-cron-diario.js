@@ -157,7 +157,14 @@ export default async function handler(req, res) {
           body: JSON.stringify({ action: 'gerar_sugestoes', vendedora_id: v.id }),
         });
         const data = await r.json().catch(() => ({}));
-        const qtdSug = data?.sugestoes?.length || 0;
+        // FIX Ailson 21/05/2026: o backend retorna 'sugestoes_criadas' (linha
+        // 463 do lojas-ia.js), NAO 'sugestoes'. Antes o cron lia campo
+        // inexistente -> sempre 0 -> sempre achava que falhou -> sempre fazia
+        // retry. Resultado: cada vendedora demorava 2x (chamava IA 2x), cron
+        // timeoutava antes de chegar nas ultimas. CASO REAL hoje 21/05:
+        // Tamires e Joelma ficaram fora porque cron timeoutou na Celia (4a).
+        // Fallback no 'sugestoes' pra compatibilidade caso o backend mude.
+        const qtdSug = data?.sugestoes_criadas ?? data?.sugestoes?.length ?? 0;
         ultimo = {
           vendedora: v.nome, loja: v.loja,
           ok: r.ok && qtdSug >= SUGESTOES_MINIMAS_OK,
