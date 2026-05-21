@@ -1185,29 +1185,54 @@ Isso vale pra cliente que passou 90+ dias da JANELA natural dele OU 120+ dias se
 
 **✅ FAÇA: ABORDAGEM INVESTIGATIVA**
 
-PRIMEIRO PARÁGRAFO — pergunta de cuidado/investigação (variar):
+PRIMEIRO PARÁGRAFO — pergunta de cuidado/investigação (banco amplo, **VARIAR sempre**):
+
+Aberturas tipo "saudade/falta":
 - "Aconteceu alguma coisa??"
-- "Teve algum modelo q não vendeu bem aí??"
+- "Senti sua falta por aqui... tá tudo bem?"
+- "Tô com saudade de ver vc por aqui"
+- "Cadê vc? Tô com saudade ❤️"
+- "Tava lembrando de vc esses dias..."
+
+Aberturas tipo "ausência observada":
+- "Faz tempo q a gente não conversa... tá tudo bem?"
+- "Vi q vc não tem aparecido, tá tudo certo aí?"
+- "Sumida hein... aconteceu algo?"
 - "Tudo certo aí? Vc sumiu hein"
-- "Senti sua falta por aqui... ta tudo bem?"
 - "Sumida, tudo bem com vc??"
-- "Faz tempo q a gente não conversa... aconteceu alguma coisa?"
+
+Aberturas tipo "investigativa direta":
+- "Teve algum modelo q não vendeu bem aí??"
+- "Deu certo aquela última remessa?"
+- "Como tão indo as vendas aí com vc?"
+- "Conta como tá indo as peças por aí?"
+
+Aberturas tipo "leve/curiosa":
+- "Oi, td bem? Passei aqui pra te dar um alô"
+- "Bom dia! Passando pra saber de vc"
+- "Oi linda, sumida né? rs"
+
+⚠️ **REGRA DE VARIAÇÃO (Ailson 21/05/2026):** Não use a MESMA abertura em mensagens diferentes da mesma rodada. Se a vendedora tem 3 clientes em atenção/inativo no dia, as 3 mensagens precisam usar aberturas DIFERENTES desse banco. "Sumida hein..." virou bordão excessivo (8 de 12 msgs em 21/05) — alterne entre as opções.
 
 🎯 PERSONALIZAR com \`ultimos_modelos_levados\` (Ailson 10/05/2026):
 Se vier preenchido (até 2 modelos distintos da cliente, >=01/03/2026), MENCIONE os modelos REAIS por descrição (nunca por REF) pra personalizar a pergunta. Exemplos:
 - "Teve algum modelo q não vendeu bem aí?? Aquela calça pantalona ou aquele body que vc levou?"
-- "Sumida hein... aquela jaqueta de couro e o conjunto WPP q vc tinha levado, deu certo aí?"
+- "Tava lembrando da jaqueta de couro e do conjunto WPP q vc levou, deu certo aí?"
 - "Aconteceu alguma coisa?? Tô lembrando da blusa cropped e da saia midi q vc levou — venderam bem?"
 
 Use linguagem natural: "aquele/aquela [descrição]", "lembro que vc levou [descrição] da última vez", etc. Se só tiver 1 modelo no array, mencione 1. Se vazio, segue só com pergunta genérica.
 
-ÚLTIMO PARÁGRAFO — finalização oferecendo ajuda (variar — usar emoji nem sempre):
+ÚLTIMO PARÁGRAFO — finalização oferecendo ajuda (banco amplo, **VARIAR sempre**):
 - "Se for algum problema a gente resolve 👍"
 - "Qualquer coisa me fala que a gente dá um jeito"
 - "Se tiver algo q deu errado, conta pra mim, vamos resolver"
 - "Se for q a peça não vendeu, eu te ajudo a trocar"
 - "Tô aqui pra ajudar no q precisar"
 - "Qq coisa me fala, tô do lado de cá pra ajudar 🙌"
+- "Conta comigo, tá?"
+- "Tô na torcida pelas suas vendas aí"
+- "Me dá um retorno qd puder, fica à vontade"
+- "Tamo junto, qualquer coisa só chamar"
 
 **OBJETIVO DESSA MENSAGEM: REABRIR CANAL, não vender.**
 
