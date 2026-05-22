@@ -34,7 +34,7 @@ async function carregarRefs() {
   try {
     const { data } = await supabase
       .from('ml_top_refs')
-      .select('ref, tipo, descricao_curta, palavras_chave, is_plus_size, mlb_principal');
+      .select('ref, tipo, descricao_curta, palavras_chave, is_plus_size');
     _cacheRefs = data || [];
     _cacheRefsAt = agora;
   } catch (e) {
@@ -95,14 +95,14 @@ export async function detectarPedidoDeTop(textoCliente) {
 }
 
 /**
- * Dado um MLB, busca as 1-2 opcoes de PARTE DE CIMA do anuncio.
- * Retorna null se o MLB nao esta mapeado (anuncio nao tem combinacao).
+ * Dado um MLB de parte de baixo, busca as 1-2 opcoes de PARTE DE CIMA do
+ * anuncio + os MLBs especificos DA MESMA MARCA. Retorna null se nao mapeado.
  *
  * Retorno: {
  *   ref_baixo,        // ex '2277'
  *   marca,            // 'LUMIA' | 'EXITUS' | 'MUNIAM'
  *   opcoes: [         // 1 ou 2 itens
- *     { ref, tipo, descricao_curta, ordem: 1|2, is_plus_size },
+ *     { ref, tipo, descricao_curta, is_plus_size, mlb (MLB da mesma marca) },
  *     ...
  *   ]
  * }
@@ -113,7 +113,7 @@ export async function buscarTopsDoAnuncio(mlbId) {
   try {
     const { data: row } = await supabase
       .from('ml_top_anuncios_map')
-      .select('ref_baixo, marca, ref_top_1, ref_top_2')
+      .select('ref_baixo, marca, ref_top_1, ref_top_2, mlb_top_1, mlb_top_2')
       .eq('mlb', mlb)
       .maybeSingle();
     if (!row) return null;
@@ -121,10 +121,10 @@ export async function buscarTopsDoAnuncio(mlbId) {
     const refs = await carregarRefs();
     const opcoes = [];
     const t1 = refs.find(r => r.ref === row.ref_top_1);
-    if (t1) opcoes.push({ ...t1, ordem: 1 });
+    if (t1) opcoes.push({ ...t1, mlb: row.mlb_top_1 || null });
     if (row.ref_top_2) {
       const t2 = refs.find(r => r.ref === row.ref_top_2);
-      if (t2) opcoes.push({ ...t2, ordem: 2 });
+      if (t2) opcoes.push({ ...t2, mlb: row.mlb_top_2 || null });
     }
     return { ref_baixo: row.ref_baixo, marca: row.marca, opcoes };
   } catch (e) {
@@ -137,19 +137,21 @@ export async function buscarTopsDoAnuncio(mlbId) {
  * Gera bloco de texto pra injetar no itemContext do anuncio (parte de baixo).
  * Retorna null se o anuncio nao tem mapping.
  *
- * Texto sai assim:
+ * Texto sai com MLB DA MESMA MARCA do anuncio (Lumia/Exitus/Muniam):
  *
  *   PEÇAS DE CIMA QUE COMBINAM (anuncios separados — NAO sao conjunto):
- *     - REF 395 cropped viscolinho — https://produto.mercadolivre.com.br/MLB3708053636
- *     - REF 2361 body decote V    — https://produto.mercadolivre.com.br/MLB3831768685
+ *     - REF 1628 cropped viscolinho — https://produto.mercadolivre.com.br/MLB4093923795
+ *     - REF 395 body transpassado s/manga — https://produto.mercadolivre.com.br/MLB3708101322
+ *
+ * Se cliente esta em anuncio Exitus, link Exitus. Em Lumia, link Lumia. Idem Muniam.
  */
 export async function gerarBlocoTops(mlbId) {
   const info = await buscarTopsDoAnuncio(mlbId);
   if (!info || info.opcoes.length === 0) return null;
 
   const linhas = info.opcoes.map(o => {
-    const link = o.mlb_principal
-      ? ` — https://produto.mercadolivre.com.br/${o.mlb_principal}`
+    const link = o.mlb
+      ? ` — https://produto.mercadolivre.com.br/${o.mlb}`
       : '';
     return `  - REF ${o.ref} ${o.descricao_curta}${link}`;
   }).join('\n');
