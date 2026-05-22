@@ -1,4 +1,5 @@
 import { supabase, getValidToken, isOutsideBusinessHours, getAbsenceMessage, isInAISchedule, getAILowConfidenceMsg, getStockColors, detectColorsInText, isColorRequest, detectSizeInText, detectConfirmation } from './_ml-helpers.js';
+import { gerarBlocoComprimento, REGRAS_COMPRIMENTO_PROMPT } from './_ml-comprimentos.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
@@ -358,6 +359,9 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       // Montar contexto estruturado
       itemContext = `TÍTULO: ${title}`;
       if (sellerField) itemContext += `\nREF DO VENDEDOR: ${sellerField}`;
+      // COMPRIMENTOS — helper compartilhado com ml-ai (Ailson 21/05/2026)
+      const blocoComp = await gerarBlocoComprimento(sellerField);
+      if (blocoComp) itemContext += blocoComp;
       if (item.price) itemContext += `\nPREÇO: R$ ${item.price}`;
       itemContext += `\nESTOQUE TOTAL: ${totalStock}`;
       if (attrs) itemContext += `\n\nATRIBUTOS DO PRODUTO:\n${attrs}`;
@@ -631,10 +635,9 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 - Forro: diga APENAS se tem ou não tem. NUNCA mencione composição.
 - Tecido: use a BASE DE CONHECIMENTO pra identificar o tipo de tecido pelo título/descrição. Só fale composição se perguntarem.
 - Caimento: use o que está na descrição.
-- Comprimento: APENAS se estiver na descrição (midi, longo, curto, mini). NUNCA invente medidas em cm — EXCETO saia de linho midi e calça (regras abaixo).
-- COMPRIMENTO EM CM SEM INFO (qualquer peça que não seja saia de linho ou calça): se a cliente pergunta "quantos cm de comprimento?" e a descrição NÃO informa, NÃO invente medidas E NÃO diga "entre em contato pelo anúncio" (esse canal não existe na pré-venda). Em vez disso, ofereça referência visual: "Infelizmente o comprimento exato em cm não está no anúncio. Como referência, a modelo da foto tem 1,68m de altura — dá pra ter uma boa noção pelas imagens! Qualquer dúvida estou à disposição."
-- SAIA DE LINHO MIDI: se o título contém "saia" e "linho" e a cliente pergunta sobre comprimento/tamanho da saia, pode responder: "Nossas saias midi de linho têm em média 75cm de comprimento, podendo variar um pouco por modelo e tamanho. A modelo da foto tem 1,68m de altura e a saia fica um pouco abaixo do joelho."
-- COMPRIMENTO DE CALÇA: se o título contém "calça" e a cliente pergunta sobre comprimento/altura/cumprimento da calça, use a tabela:
+- Comprimento: ver bloco COMPRIMENTO POR TAMANHO no contexto do anúncio (regra abaixo). NUNCA invente medidas em cm.
+${REGRAS_COMPRIMENTO_PROMPT}
+- COMPRIMENTO DE CALÇA (fallback genérico — só se NÃO veio bloco "COMPRIMENTO POR TAMANHO" no contexto): se o título contém "calça" e a cliente pergunta sobre comprimento/altura/cumprimento da calça, use a tabela:
   • Regular: P 112cm · M 113cm · G 113,5cm · GG 114cm
   • Plus Size: G1 114cm · G2 114,5cm · G3 115cm
   REGRA DE FORMATO:
