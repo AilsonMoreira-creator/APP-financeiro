@@ -5,11 +5,16 @@
 // em anuncios de PARTE DE BAIXO (calca, saia, bermuda). Cada anuncio tem 1
 // ou 2 opcoes de parte de cima dependendo da cor.
 //
-// 4 REFs de top hoje (catalogadas pelo Ailson 22/05/2026):
-//   1628 = CROPPED        (38-41cm)
-//   395  = BODY transp.   (67-70cm)
-//   2361 = BLUSA          (70-74cm, PP/P/M/G/GG)
-//   2820 = CROPPED PLUS   (45-47cm, G1/G2/G3)
+// 5 REFs de top hoje (catalogadas pelo Ailson 22/05/2026):
+//   395  = BODY transpassado s/ manga (67-70cm)
+//   1628 = CROPPED viscolinho         (38-41cm)
+//   2361 = BODY decote V              (70-74cm, PP/P/M/G/GG)
+//   2820 = CROPPED viscolinho PLUS    (45-47cm, G1/G2/G3)
+//   3186 = CAMISA tricoline           (sem MLB mapeado ainda)
+//
+// IMPORTANTE: alguns anuncios tem 2 BODIES diferentes (395 + 2361) ou 2
+// CROPPEDS (normal + plus) como opcoes. Quando cliente pergunta "body",
+// listar os 2 com descricao distinguindo (transpassado vs decote V).
 //
 // Compartilhado entre:
 //   - api/ml-ai.js     (geracao de sugestao on-demand pelo admin)
@@ -70,9 +75,9 @@ export async function detectarPedidoDeTop(textoCliente) {
 
   // Procura match — prioriza tipo mais especifico
   // Se cliente disse "cropped" -> tipo=cropped (mesmo que body tbm tenha "parte de cima" como palavra)
-  // Se disse so "blusa" -> pode ser blusa OU cropped (ambos tem 'blusa' como sinonimo)
-  // Resolucao: tipo mais especifico ganha. body > cropped > blusa > generico.
-  const ordemPrioridade = ['body', 'cropped', 'cropped_plus', 'blusa'];
+  // Se disse so "blusa" -> pode ser cropped OU camisa (ambos tem 'blusa' como sinonimo)
+  // Resolucao: tipo mais especifico ganha. body > cropped > camisa > generico.
+  const ordemPrioridade = ['body', 'cropped', 'camisa'];
 
   for (const tipo of ordemPrioridade) {
     const palavras = porTipo.get(tipo) || new Set();
@@ -157,14 +162,15 @@ export async function gerarBlocoTops(mlbId) {
 /**
  * Regras pra colar no system prompt. Compartilhada por ml-ai e ml-webhook.
  */
-export const REGRAS_TOPS_PROMPT = `PARTE DE CIMA (Ailson 22/05/2026): Se o anuncio tem bloco "PARTES DE CIMA DESTE ANUNCIO" e cliente pergunta sobre top/blusa/cropped/body, USE essa tabela como fonte oficial. Regras:
+export const REGRAS_TOPS_PROMPT = `PARTE DE CIMA (Ailson 22/05/2026): Se o anuncio tem bloco "PARTES DE CIMA DESTE ANUNCIO" e cliente pergunta sobre top/blusa/cropped/body/camisa, USE essa tabela como fonte oficial. Regras:
   1. Cliente pergunta GENERICO ("qual a blusa do conjunto?", "qual a parte de cima?", "tem a peca de cima?"):
-     - Se anuncio tem APENAS 1 opcao -> responde com essa REF + tipo: "A parte de cima desse conjunto e o cropped REF 1628, anuncio separado".
-     - Se anuncio tem 2 opcoes -> liste as duas: "Esse conjunto tem 2 opcoes de cima dependendo da cor: cropped (REF 1628) ou body (REF 395). Qual cor voce esta vendo?"
+     - Se anuncio tem APENAS 1 opcao -> responde com essa REF + descricao: "A parte de cima desse conjunto e o cropped viscolinho (REF 1628), anuncio separado".
+     - Se anuncio tem 2 opcoes -> liste as duas com descricao distinguindo: "Esse conjunto tem 2 opcoes de cima dependendo da cor: body transpassado s/ manga (REF 395) ou body decote V (REF 2361). Qual cor voce esta vendo?"
   2. Cliente especifica tipo:
-     - "cropped"/"croped"/"top" -> responde com a REF que e tipo=cropped (se houver)
-     - "body"/"bodi"/"bori"/"bore" -> responde com a REF que e tipo=body
-     - "blusa"/"blusinha"/"camisa" -> se houver REF tipo=blusa, usa ela; senao usa o que tiver (cropped ou body)
+     - "cropped"/"croped"/"top" -> responde com a REF tipo=cropped. Se houver 2 (normal + plus), liste ambos com descricao.
+     - "body"/"bodi"/"bori"/"bore" -> responde com a REF tipo=body. SE HOUVER 2 BODIES no mesmo anuncio (transpassado + decote V), liste OS DOIS com descricao distinguindo: "Esse conjunto vem com 2 opcoes de body: body transpassado s/manga (REF 395) ou body decote V (REF 2361). Qual cor?"
+     - "camisa"/"tricoline" -> responde com a REF tipo=camisa
+     - "blusa"/"blusinha" -> ambigua. Se anuncio tem cropped -> indica o cropped. Se anuncio tem so camisa -> indica a camisa. Se ambos -> liste os 2.
   3. Se cliente perguntou tipo que NAO ESTA nas opcoes do anuncio:
      - "Esse conjunto nao acompanha [tipo], so [as opcoes que tem]. Posso te mostrar?"
   4. NUNCA invente REF de parte de cima. Se nao veio bloco "PARTES DE CIMA" no contexto, responda: "Deixa eu confirmar com a equipe e te respondo em instantes" e marca pra handoff.`;
