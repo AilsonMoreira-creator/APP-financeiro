@@ -73,6 +73,42 @@ export default async function handler(req, res) {
       await atualizarEstilo(vendedora_id, padroes);
     }
 
+    // ───────────────────────────────────────────────────────────────────────
+    // GATILHO: rodar análise estruturada quando vendedora atinge marcos.
+    // Ailson 21/05/2026 — sem isso o estilo só tem contadores rasos, IA fica
+    // copiando frases. Análise estruturada (lojas-analisar-estilo) extrai
+    // tom + vocabulário + padrões via Claude e salva em lojas_config.
+    // Marcos: 5, 10, 20, 40, 80 edições. Background fire-and-forget.
+    // ───────────────────────────────────────────────────────────────────────
+    try {
+      const alvoAnalise = aprendeCom || vendedora_id; // analisa o que IA realmente usa
+      const { data: estiloRow } = await supabase
+        .from('lojas_estilo_vendedora')
+        .select('qtd_edicoes')
+        .eq('vendedora_id', alvoAnalise)
+        .maybeSingle();
+      const qtd = estiloRow?.qtd_edicoes || 0;
+      const MARCOS = [5, 10, 20, 40, 80, 160];
+      if (MARCOS.includes(qtd)) {
+        // Não bloqueia o return ao vendedor — dispara em background
+        const baseUrl = process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : 'http://localhost:3000';
+        fetch(`${baseUrl}/api/lojas-analisar-estilo`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user': 'ailson', // admin-only endpoint
+            'x-internal-trigger': '1', // marca pra log
+          },
+          body: JSON.stringify({ vendedora_id: alvoAnalise, limite_edicoes: 20 }),
+        }).catch(e => console.warn('[edicao-mensagem] trigger analise falhou:', e?.message));
+        console.log(`[edicao-mensagem] gatilho analise vendedora=${alvoAnalise} marco=${qtd}`);
+      }
+    } catch (e) {
+      console.warn('[edicao-mensagem] gatilho analise erro:', e?.message);
+    }
+
     return res.json({ ok: true, padroes, aprende_com: aprendeCom, contadores_atualizados: !aprendeCom });
   } catch (e) {
     console.error('[edicao-mensagem] erro:', e);

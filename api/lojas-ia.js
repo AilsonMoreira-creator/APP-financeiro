@@ -1826,77 +1826,60 @@ async function montarContextoMensagem(sug, contextoExtra) {
       estiloVendedoraOrigemId = aprendeRow.valor; // redireciona pra referencia
     }
 
+    // ═════════════════════════════════════════════════════════════════════════
+    // PREFERE ANÁLISE ESTRUTURADA (Ailson 21/05/2026)
+    // ═════════════════════════════════════════════════════════════════════════
+    // Filosofia: vendedora ensina TEMPERO, não RECEITA.
+    // - IA tem cardapio AMPLO de aberturas/finalizacoes (17+10 variacoes no prompt).
+    // - Vendedora contribui com vocabulario, emojis, pontuacao, tom — INGREDIENTES.
+    // - IA aplica esses ingredientes SOBRE seu cardapio amplo, nao copia frases.
+    //
+    // Antes pegava 2 edicoes inteiras como few-shot e a IA copiava o esqueleto.
+    // Agora: 1) tenta analise estruturada de lojas_config.analise_estilo.X
+    //       2) se nao tem, fallback pra contadores simples + tag de degradado
+    const { data: analiseRow } = await supabase
+      .from('lojas_config')
+      .select('valor')
+      .eq('chave', `analise_estilo.${estiloVendedoraOrigemId}`)
+      .maybeSingle();
+
+    const analise = analiseRow?.valor;
+
     const { data: estilo } = await supabase
       .from('lojas_estilo_vendedora')
       .select('*')
       .eq('vendedora_id', estiloVendedoraOrigemId)
       .maybeSingle();
 
-    if (estilo && (estilo.qtd_edicoes || 0) > 0) {
-      // Pega top 3 de cada categoria
-      const top3 = (counterObj) => {
-        const entries = Object.entries(counterObj || {});
-        return entries
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 3)
-          .map(([k]) => k);
-      };
-
-      // Ultimas 10 edicoes -> selecionar 2 com ABERTURAS DISTINTAS
-      // (Ailson 21/05/2026): antes pegava as 3 ultimas, mas vendedoras
-      // costumam repetir mesmo padrao em sequencia ("Sumida hein..." 5x
-      // seguidas). Resultado: IA copiava esse padrao em 8/12 mensagens.
-      // Agora: busca 10, agrupa por "primeira frase" e escolhe 2 grupos
-      // diferentes. Garante diversidade de exemplos pra IA aprender.
-      const { data: todasEdicoes } = await supabase
-        .from('lojas_edicoes_mensagens')
-        .select('texto_original, texto_editado')
-        .eq('vendedora_id', estiloVendedoraOrigemId)
-        .order('criado_em', { ascending: false })
-        .limit(10);
-
-      // Agrupa por "abertura" (primeira linha do texto_editado normalizada)
-      const normalizarAbertura = (txt) => {
-        if (!txt) return '';
-        const primeiraLinha = String(txt).split('\n')[0].trim().toLowerCase();
-        // Tira nome proprio (palavras com maiuscula no meio) pra agrupar
-        // "Oi Maria, td bem?" e "Oi Joao, td bem?" como mesma abertura.
-        return primeiraLinha
-          .replace(/\b[a-záéíóúâêîôûãõç]+\b/gi, (w) => {
-            // Mantem palavras comuns ("oi","bom","dia","td","bem","sumida" etc)
-            // Substitui o que parece nome proprio (>=3 chars, uppercased no original)
-            return w;
-          })
-          .replace(/[,!?.]/g, '')
-          .substring(0, 30);
-      };
-      const grupos = new Map();
-      for (const ed of (todasEdicoes || [])) {
-        const chave = normalizarAbertura(ed.texto_editado);
-        if (!grupos.has(chave)) grupos.set(chave, []);
-        grupos.get(chave).push(ed);
-      }
-      // Pega 1 edicao de cada grupo, ate 2 grupos diferentes (priorizando
-      // os mais recentes dentro de cada grupo). Se so houver 1 grupo,
-      // pega 2 do mesmo (fallback compativel).
-      const edicoesDistintas = [];
-      for (const [, lista] of grupos) {
-        edicoesDistintas.push(lista[0]); // mais recente do grupo
-        if (edicoesDistintas.length >= 2) break;
-      }
-      if (edicoesDistintas.length < 2 && (todasEdicoes || []).length >= 2) {
-        edicoesDistintas.push(todasEdicoes[1]); // fallback: segunda mais recente
-      }
-      const edicoes = edicoesDistintas.slice(0, 2);
-
+    if (analise && analise.estruturado) {
+      // CASO IDEAL: analise estruturada via Claude (lojas-analisar-estilo)
+      const e = analise.estruturado;
       estiloVendedora = {
-        qtd_edicoes: estilo.qtd_edicoes,
+        tem_analise: true,
+        qtd_edicoes_analisadas: analise.qtd_edicoes_analisadas,
+        tom_geral: e.tom_geral,                                      // "calorosa direta informal"
+        comprimento_medio: e.comprimento_medio,                       // curta | media | longa
+        vocabulario_caracteristico: e.linguagem || [],                // ["usa 'tô'", "abrevia td/vc", "muitas reticências"]
+        emojis_preferidos: e.emojis_frequentes || [],                 // ["😘","💕","🥰"]
+        tratamentos_preferidos: e.tratamentos || [],                  // ["linda","amor"]
+        padroes_adiciona: e.padroes_de_edicao?.adiciona || [],        // ["emoji no fim","apelido depois do oi"]
+        padroes_remove: e.padroes_de_edicao?.remove || [],            // ["palavras formais","sobrenomes"]
+        eh_de_referencia: estiloVendedoraOrigemId !== sug.vendedora_id,
+      };
+    } else if (estilo && (estilo.qtd_edicoes || 0) > 0) {
+      // FALLBACK: so contadores simples, sem few-shot de frases inteiras
+      const top3 = (counterObj) => Object.entries(counterObj || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([k]) => k);
+      estiloVendedora = {
+        tem_analise: false,
+        qtd_edicoes_aprendidas: estilo.qtd_edicoes,
         saudacao_inicial_top: top3(estilo.saudacao_inicial),
         saudacao_final_top: top3(estilo.saudacao_final),
-        tratamento_top: top3(estilo.tratamento),
-        emojis_top: top3(estilo.emojis),
-        ultimas_edicoes: edicoes || [],
-        eh_de_referencia: estiloVendedoraOrigemId !== sug.vendedora_id, // sinaliza se vem de outra vendedora
+        tratamentos_preferidos: top3(estilo.tratamento),
+        emojis_preferidos: top3(estilo.emojis),
+        eh_de_referencia: estiloVendedoraOrigemId !== sug.vendedora_id,
       };
     }
   } catch (e) {
@@ -3070,18 +3053,35 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       descricao: ctx.promocao.descricao_completa,
       vence_em: ctx.promocao.data_fim,
     } : null,
-    // Estilo aprendido da vendedora (Ailson 04/05/2026): aprende com edicoes
-    // anteriores. Inclui top tratamentos, saudacoes e emojis preferidos.
-    // ATUALIZADO 21/05/2026: instrucao reformulada pra evitar copia literal
-    // de frases. IA vinha copiando "Sumida hein..." em ate 8/12 mensagens.
-    estilo_vendedora: ctx.estiloVendedora ? {
-      qtd_edicoes_aprendidas: ctx.estiloVendedora.qtd_edicoes,
-      saudacao_inicial_preferida: ctx.estiloVendedora.saudacao_inicial_top,
-      saudacao_final_preferida: ctx.estiloVendedora.saudacao_final_top,
-      tratamento_preferido: ctx.estiloVendedora.tratamento_top,
-      emojis_preferidos: ctx.estiloVendedora.emojis_top,
-      instrucao: 'Use isso como REFERÊNCIA DE TOM (emojis, tratamento, formalidade), NÃO copie frases literais. Cada mensagem deve ter abertura PRÓPRIA — varie do banco de aberturas do prompt. Se o estilo dela é "Oi linda, td bem? 😊" e ela usa "🥰" muito, OK adotar saudação curta + emoji. Mas NÃO repetir "Sumida hein..." ou outra frase específica em mensagens consecutivas.',
-    } : null,
+    // Estilo aprendido da vendedora (Ailson 04/05/2026 → refeito 21/05/2026)
+    // FILOSOFIA: vendedora ensina TEMPERO (vocabulário, emojis, pontuação),
+    // não RECEITA (frase pronta). IA tem cardapio amplo de aberturas/finalizacoes
+    // no prompt — vendedora só contribui com ingredientes a aplicar SOBRE o cardapio.
+    estilo_vendedora: ctx.estiloVendedora ? (ctx.estiloVendedora.tem_analise ? {
+      // CASO RICO: analise estruturada disponivel
+      tom_geral: ctx.estiloVendedora.tom_geral,
+      comprimento_medio: ctx.estiloVendedora.comprimento_medio,
+      vocabulario_caracteristico: ctx.estiloVendedora.vocabulario_caracteristico,
+      emojis_preferidos: ctx.estiloVendedora.emojis_preferidos,
+      tratamentos_preferidos: ctx.estiloVendedora.tratamentos_preferidos,
+      o_que_ela_adiciona: ctx.estiloVendedora.padroes_adiciona,
+      o_que_ela_remove: ctx.estiloVendedora.padroes_remove,
+      qtd_edicoes_analisadas: ctx.estiloVendedora.qtd_edicoes_analisadas,
+      eh_de_referencia: ctx.estiloVendedora.eh_de_referencia,
+      instrucao: 'Esses são os INGREDIENTES do estilo dela, não receitas. Use seu CARDÁPIO AMPLO de aberturas/finalizações do prompt e TEMPERE com esses ingredientes: ' +
+        '(1) Aplique emojis preferidos no fim de frases que combinem; ' +
+        '(2) Use o tratamento dela ("linda", "amor", etc) quando fizer sentido; ' +
+        '(3) Aplique o vocabulário/abreviações dela ("vc", "tô", "td", etc); ' +
+        '(4) Respeite o comprimento médio (curta/media/longa); ' +
+        '(5) Adote os padrões que ela ADICIONA. NÃO copie frases literais — varie a abertura sempre.',
+    } : {
+      // FALLBACK: so contadores simples (sem analise rica ainda)
+      qtd_edicoes_aprendidas: ctx.estiloVendedora.qtd_edicoes_aprendidas,
+      tratamentos_preferidos: ctx.estiloVendedora.tratamentos_preferidos,
+      emojis_preferidos: ctx.estiloVendedora.emojis_preferidos,
+      eh_de_referencia: ctx.estiloVendedora.eh_de_referencia,
+      instrucao: 'INGREDIENTES limitados (sem análise rica ainda). Use seu CARDÁPIO AMPLO de aberturas/finalizações e tempere apenas com os emojis e tratamentos preferidos. NÃO copie frases literais.',
+    }) : null,
     // CONTEXTO RICO — Ailson 07/05/2026 (auditoria mensagem individual)
     // Mesmos sinais que a IA das sugestoes diarias usa — agora disponiveis
     // pra geracao de mensagem individual tambem.
