@@ -74,11 +74,12 @@ export default async function handler(req, res) {
     }
 
     // ───────────────────────────────────────────────────────────────────────
-    // GATILHO: rodar análise estruturada quando vendedora atinge marcos.
+    // GATILHO: rodar análise estruturada quando vendedora atinge marcos
+    // OU quando tem >=5 edições mas ainda não tem análise (bootstrap).
     // Ailson 21/05/2026 — sem isso o estilo só tem contadores rasos, IA fica
     // copiando frases. Análise estruturada (lojas-analisar-estilo) extrai
     // tom + vocabulário + padrões via Claude e salva em lojas_config.
-    // Marcos: 5, 10, 20, 40, 80 edições. Background fire-and-forget.
+    // Marcos: 5, 10, 20, 40, 80, 160 edições. Background fire-and-forget.
     // ───────────────────────────────────────────────────────────────────────
     try {
       const alvoAnalise = aprendeCom || vendedora_id; // analisa o que IA realmente usa
@@ -89,7 +90,18 @@ export default async function handler(req, res) {
         .maybeSingle();
       const qtd = estiloRow?.qtd_edicoes || 0;
       const MARCOS = [5, 10, 20, 40, 80, 160];
-      if (MARCOS.includes(qtd)) {
+      const ehMarco = MARCOS.includes(qtd);
+      // Bootstrap: se já passou de 5 edições mas nunca foi analisada, dispara
+      let precisaBootstrap = false;
+      if (!ehMarco && qtd >= 5) {
+        const { data: analiseExistente } = await supabase
+          .from('lojas_config')
+          .select('chave')
+          .eq('chave', `analise_estilo.${alvoAnalise}`)
+          .maybeSingle();
+        precisaBootstrap = !analiseExistente;
+      }
+      if (ehMarco || precisaBootstrap) {
         // Não bloqueia o return ao vendedor — dispara em background
         const baseUrl = process.env.VERCEL_URL
           ? `https://${process.env.VERCEL_URL}`
@@ -103,7 +115,7 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({ vendedora_id: alvoAnalise, limite_edicoes: 20 }),
         }).catch(e => console.warn('[edicao-mensagem] trigger analise falhou:', e?.message));
-        console.log(`[edicao-mensagem] gatilho analise vendedora=${alvoAnalise} marco=${qtd}`);
+        console.log(`[edicao-mensagem] gatilho analise vendedora=${alvoAnalise} qtd=${qtd} motivo=${ehMarco ? 'marco' : 'bootstrap'}`);
       }
     } catch (e) {
       console.warn('[edicao-mensagem] gatilho analise erro:', e?.message);
