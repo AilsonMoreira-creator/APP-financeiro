@@ -34,7 +34,7 @@ async function carregarRefs() {
   try {
     const { data } = await supabase
       .from('ml_top_refs')
-      .select('ref, tipo, descricao_curta, palavras_chave, is_plus_size');
+      .select('ref, tipo, descricao_curta, palavras_chave, is_plus_size, mlb_principal');
     _cacheRefs = data || [];
     _cacheRefsAt = agora;
   } catch (e) {
@@ -139,38 +139,44 @@ export async function buscarTopsDoAnuncio(mlbId) {
  *
  * Texto sai assim:
  *
- *   PARTES DE CIMA DESTE ANUNCIO (tabela oficial):
- *     - REF 1628 (cropped curto) - opcao principal
- *     - REF 395 (body transpassado s/ manga) - 2a opcao
- *   Regras: se cliente perguntar generico "qual a parte de cima/blusa", liste
- *   as 2 opcoes. Se especificar (cropped/body/blusa) responda so o que bate.
+ *   PEÇAS DE CIMA QUE COMBINAM (anuncios separados — NAO sao conjunto):
+ *     - REF 395 cropped viscolinho — https://produto.mercadolivre.com.br/MLB3708053636
+ *     - REF 2361 body decote V    — https://produto.mercadolivre.com.br/MLB3831768685
  */
 export async function gerarBlocoTops(mlbId) {
   const info = await buscarTopsDoAnuncio(mlbId);
   if (!info || info.opcoes.length === 0) return null;
 
   const linhas = info.opcoes.map(o => {
-    const sufixo = info.opcoes.length > 1
-      ? (o.ordem === 1 ? ' (opcao principal)' : ' (2a opcao)')
+    const link = o.mlb_principal
+      ? ` — https://produto.mercadolivre.com.br/${o.mlb_principal}`
       : '';
-    return `  - REF ${o.ref} (${o.descricao_curta})${sufixo}`;
+    return `  - REF ${o.ref} ${o.descricao_curta}${link}`;
   }).join('\n');
 
-  return `\n\nPARTES DE CIMA DESTE ANUNCIO (tabela oficial):\n${linhas}`;
+  return `\n\nPEÇAS DE CIMA QUE COMBINAM (anuncios separados — NAO sao conjunto):\n${linhas}`;
 }
 
 /**
  * Regras pra colar no system prompt. Compartilhada por ml-ai e ml-webhook.
  */
-export const REGRAS_TOPS_PROMPT = `PARTE DE CIMA (Ailson 22/05/2026): Se o anuncio tem bloco "PARTES DE CIMA DESTE ANUNCIO" e cliente pergunta sobre top/blusa/cropped/body/camisa, USE essa tabela como fonte oficial. Regras:
-  1. Cliente pergunta GENERICO ("qual a blusa do conjunto?", "qual a parte de cima?", "tem a peca de cima?"):
-     - Se anuncio tem APENAS 1 opcao -> responde com essa REF + descricao: "A parte de cima desse conjunto e o cropped viscolinho (REF 1628), anuncio separado".
-     - Se anuncio tem 2 opcoes -> liste as duas com descricao distinguindo: "Esse conjunto tem 2 opcoes de cima dependendo da cor: body transpassado s/ manga (REF 395) ou body decote V (REF 2361). Qual cor voce esta vendo?"
+export const REGRAS_TOPS_PROMPT = `PARTE DE CIMA QUE COMBINA (Ailson 22/05/2026): As peças que combinam com a parte de baixo deste anúncio SÃO PEÇAS DIFERENTES, vendidas em ANÚNCIOS SEPARADOS — NUNCA chame de "conjunto", "conjuntinho", "kit", "look completo" nem similar. São peças complementares que ficam bonitas juntas, mas o cliente compra cada uma em um anúncio.
+
+Se o anúncio tem bloco "PEÇAS DE CIMA QUE COMBINAM" e cliente pergunta sobre top/blusa/cropped/body/camisa, USE essa tabela como fonte oficial. Regras:
+
+  1. Cliente pergunta GENÉRICO ("qual a blusa?", "qual a parte de cima?", "tem peça pra cima?"):
+     - Se há APENAS 1 opção -> indique a única com REF + descrição + link: "A peça de cima que combina é o cropped viscolinho (REF 1628), link do anúncio: https://produto.mercadolivre.com.br/MLB...".
+     - Se há 2+ opções -> ofereça AS DUAS com link: "Tem 2 opções que combinam: body transpassado s/manga (https://produto.mercadolivre.com.br/MLB...) e body decote V (https://produto.mercadolivre.com.br/MLB...). Dá uma olhada nos dois e escolhe o que gostar mais!"
+
   2. Cliente especifica tipo:
-     - "cropped"/"croped"/"top" -> responde com a REF tipo=cropped. Se houver 2 (normal + plus), liste ambos com descricao.
-     - "body"/"bodi"/"bori"/"bore" -> responde com a REF tipo=body. SE HOUVER 2 BODIES no mesmo anuncio (transpassado + decote V), liste OS DOIS com descricao distinguindo: "Esse conjunto vem com 2 opcoes de body: body transpassado s/manga (REF 395) ou body decote V (REF 2361). Qual cor?"
-     - "camisa"/"tricoline" -> responde com a REF tipo=camisa
-     - "blusa"/"blusinha" -> ambigua. Se anuncio tem cropped -> indica o cropped. Se anuncio tem so camisa -> indica a camisa. Se ambos -> liste os 2.
-  3. Se cliente perguntou tipo que NAO ESTA nas opcoes do anuncio:
-     - "Esse conjunto nao acompanha [tipo], so [as opcoes que tem]. Posso te mostrar?"
-  4. NUNCA invente REF de parte de cima. Se nao veio bloco "PARTES DE CIMA" no contexto, responda: "Deixa eu confirmar com a equipe e te respondo em instantes" e marca pra handoff.`;
+     - "cropped"/"croped"/"top" -> indique REF(s) tipo=cropped com link. Se houver 2 (normal + plus), liste ambos.
+     - "body"/"bodi"/"bori"/"bore" -> indique REF(s) tipo=body com link. SE HOUVER 2 BODIES disponíveis, OFEREÇA OS DOIS com descrição distinguindo (transpassado vs decote V) + link.
+     - "camisa"/"tricoline" -> indique REF tipo=camisa com link.
+     - "blusa"/"blusinha" -> ambíguo. Ofereça TODAS as opções que combinam (cropped + camisa + body) com links.
+
+  3. REGRA DE OURO: sempre que houver DÚVIDA sobre o que o cliente quer, OFEREÇA AS 2-3 OPÇÕES com seus links. NUNCA pergunte "qual cor você tá vendo?" — o cliente já está vendo o anúncio, não temos como saber a cor pra ele, e perguntar cor não resolve a dúvida da peça. Mande os links e ele escolhe.
+
+  4. Se cliente perguntou tipo que NÃO ESTÁ nas opções disponíveis:
+     - "Esse modelo não tem [tipo] que combina pronto, mas as opções que combinam são [as opções com links]."
+
+  5. SEMPRE inclua o LINK do anúncio (https://produto.mercadolivre.com.br/MLB...) que aparece na tabela. NUNCA invente REF nem link. Se não veio bloco "PEÇAS DE CIMA QUE COMBINAM" no contexto, responda: "Deixa eu confirmar com a equipe e te respondo em instantes" e marca pra handoff.`;

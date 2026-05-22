@@ -641,7 +641,7 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 - Caimento: use o que está na descrição.
 - Comprimento: ver bloco COMPRIMENTO POR TAMANHO no contexto do anúncio (regra abaixo). NUNCA invente medidas em cm.
 ${REGRAS_COMPRIMENTO_PROMPT}
-- Parte de cima do conjunto: ver bloco PARTES DE CIMA DESTE ANUNCIO no contexto (regra abaixo). NUNCA invente REF da peça de cima.
+- Peças de cima que combinam: ver bloco PEÇAS DE CIMA QUE COMBINAM no contexto. SÃO anúncios SEPARADOS, NÃO conjunto. Sempre incluir link e oferecer todas opções quando houver dúvida.
 ${REGRAS_TOPS_PROMPT}
 - COMPRIMENTO DE CALÇA (fallback genérico — só se NÃO veio bloco "COMPRIMENTO POR TAMANHO" no contexto): se o título contém "calça" e a cliente pergunta sobre comprimento/altura/cumprimento da calça, use a tabela:
   • Regular: P 112cm · M 113cm · G 113,5cm · GG 114cm
