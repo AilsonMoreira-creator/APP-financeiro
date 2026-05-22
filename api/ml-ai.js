@@ -22,6 +22,92 @@ const FORECAST_CORES_AMPLAS = [
   'lilas','lilás','roxo','lavanda',
 ];
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TABELA DE COMPRIMENTOS POR REF (Ailson 21/05/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+// Cliente ML pergunta muito comprimento. Antes IA respondia genericamente
+// "modelo tem 1,68m" porque tabela de medidas do anuncio nao tinha.
+// Agora: IA olha o REF do anuncio + consulta esta tabela. Se tem -> da
+// medida especifica. Se cliente nao especificou tamanho -> da o M (default).
+// Se nao tem tabela pra essa REF -> fallback 1,68m (regra antiga).
+// REFs aqui sao normalizadas (zeros a esquerda preservados ou nao).
+const TABELA_COMPRIMENTOS = {
+  '376':  { P: 67, M: 68, G: 69, GG: 70 },
+  '395':  { P: 67, M: 68, G: 69, GG: 70 },
+  '1108': { P: 80, M: 81, G: 82, GG: 83 },
+  '1628': { P: 38, M: 39, G: 40, GG: 41 },
+  '2114': { P: 41, M: 42, G: 43 },
+  '2277': { P: 74, M: 75, G: 76, GG: 77 },
+  '2358': { P: 76, M: 77, G: 78, GG: 79 },
+  '2361': { PP: 70, P: 71, M: 72, G: 73, GG: 74 },
+  '2410': { P: 73, M: 74, G: 75, GG: 76 },
+  '2502': { P: 70, M: 71, G: 72, GG: 73 },
+  '2534': { P: 79, M: 80, G: 81, GG: 82 },
+  '2553': { P: 79, M: 80, G: 81, GG: 82 },
+  '2592': { P: 70, M: 71, G: 72, GG: 73 },
+  '2600': { P: 113, M: 114, G: 115, GG: 116 },
+  '2601': { P: 115, M: 116, G: 117, GG: 118 },
+  '2638': { P: 70, M: 71, G: 72, GG: 73 },
+  '2655': { P: 84, M: 85, G: 86, GG: 87 },
+  '2671': { P: 55, M: 56, G: 57, GG: 58 },
+  '2700': { P: 151, M: 152, G: 153, GG: 154 },
+  '2708': { P: 128, M: 129, G: 130, GG: 131 },
+  '2723': { P: 89, M: 90, G: 91, GG: 92 },
+  '2733': { P: 79, M: 80, G: 81, GG: 82 },
+  '2773': { '106': 123, '110': 124, '114': 125 },
+  '2776': { '46': 79, '48': 80, '50': 81 },
+  '2782': { P: 124, M: 125, G: 126, GG: 127 },
+  '2790': { P: 114, M: 115, G: 116, GG: 117 },
+  '2798': { P: 108, M: 109, G: 110, GG: 111 },
+  '2807': { P: 35, M: 36, G: 37, GG: 38 },
+  '2820': { G1: 45, G2: 46, G3: 47 },
+  '2822': { '92': 117, '96': 118, '100': 119 },
+  '2823': { G1: 156, G2: 157, G3: 158 },
+  '2832': { P: 131, M: 132, G: 133, GG: 134 },
+  '2851': { P: 117, M: 118, G: 119, GG: 120 },
+  '2864': { P: 110, M: 111, G: 112, GG: 113 },
+  '2881': { P: 149, M: 150, G: 151, GG: 152 },
+  '2891': { P: 115, M: 116, G: 117, GG: 118 },
+  '2902': { P: 79, M: 80, G: 81, GG: 82 },
+  '2927': { P: 117, M: 118, G: 119, GG: 120 },
+  '2934': { G1: 112, G2: 113, G3: 114 },
+  '3150': { P: 89, M: 90, G: 91, GG: 92 },
+  '5':    { P: 55, M: 56, G: 57, GG: 58 },  // referencia "005" normalizada
+  '3186': { P: 70, M: 71, G: 72, GG: 73 },
+};
+
+/**
+ * Extrai REF normalizada de uma string de seller_custom_field do ML.
+ * Estratégia em camadas:
+ *   1) Match direto por regex (REF clara no scf: "2708", "z02708", "(2782)/preto")
+ *   2) Lookup em ml_scf_ref_map (formato "z23041476303" não tem REF nos dígitos)
+ * Retorna REF normalizada (sem zeros à esquerda) que bate na TABELA_COMPRIMENTOS.
+ */
+async function _refFromAnuncio(scf) {
+  if (!scf) return null;
+  const s = String(scf).trim();
+  // Camada 1: regex direto
+  const candidatos = (s.match(/\d+/g) || []).map(d => d.replace(/^0+/, '') || '0');
+  for (const c of candidatos) {
+    if (TABELA_COMPRIMENTOS[c]) return c;
+  }
+  // Camada 2: lookup no mapping (scf formato z23041476303 -> ref real)
+  try {
+    const { data: row } = await supabase
+      .from('ml_scf_ref_map')
+      .select('ref')
+      .eq('scf', s)
+      .maybeSingle();
+    if (row?.ref) {
+      const refNorm = String(row.ref).replace(/^0+/, '') || '0';
+      if (TABELA_COMPRIMENTOS[refNorm]) return refNorm;
+    }
+  } catch (e) {
+    console.warn('[ml-ai] lookup scf_ref_map falhou:', e?.message);
+  }
+  return null;
+}
+
 function _normCor(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
@@ -198,6 +284,14 @@ async function getItemContext(itemId, brand) {
       }).join('\n');
       itemContext = `TÍTULO: ${title}`;
       if (item.seller_custom_field) itemContext += `\nREF: ${item.seller_custom_field}`;
+      // COMPRIMENTOS — Ailson 21/05/2026: se anuncio bate REF na tabela,
+      // injeta comprimentos prontos pra IA usar diretamente (sem "modelo 1,68m").
+      const refTab = await _refFromAnuncio(item.seller_custom_field);
+      if (refTab && TABELA_COMPRIMENTOS[refTab]) {
+        const t = TABELA_COMPRIMENTOS[refTab];
+        const linhas = Object.entries(t).map(([tam, cm]) => `  ${tam}: ${cm}cm`).join('\n');
+        itemContext += `\n\nCOMPRIMENTO POR TAMANHO (tabela oficial):\n${linhas}`;
+      }
       if (item.price) itemContext += `\nPREÇO: R$ ${item.price}`;
       itemContext += `\nESTOQUE: ${item.available_quantity || 0}`;
       if (attrs) itemContext += `\n\nATRIBUTOS:\n${attrs}`;
@@ -439,9 +533,13 @@ PLUS SIZE: ${plusCrossSell ? `Este modelo TEM versão Plus Size (G1/G2/G3)! Se a
 PEÇA SEM A CARACTERÍSTICA PEDIDA: Se cliente pergunta variação que NÃO temos (ex: "tem vestido linho com manga?", "tem essa saia em outro tom?"), responda DIRETO que não temos com essa característica MAS indique nossos modelos similares deixando CLARO o que muda. Ex: "Esse vestido de linho é sem manga, não temos com manga. Mas temos outros modelos de linho lindos (todos sem manga) — vale dar uma olhada nos nossos anúncios!". Sempre explicita a diferença pra cliente saber o que vai ver.
 ENTREGA: "Chega amanhã?" → "Se for Flex, próximo dia útil! Prazos no anúncio conforme CEP." Prazo/frete → "Aparece no anúncio conforme CEP!" Rastreamento → "Acompanhe em Minhas Compras." NUNCA prometa prazo de frete.
 ESGOTADO: SEM INFO_PRODUCAO → Tom de venda! "Repomos com frequência e as peças voam rápido! Salva nos favoritos pra não perder!" COM INFO_PRODUCAO (vem no user) → use os dados pra indicar previsão da cor (ex: "Boa notícia! Essa cor já está em produção e a previsão é chegar em [descricao_amigavel]. Salva nos favoritos pra ser avisada!"). Adapte o texto ao tom da loja, não copie literal. NUNCA invente previsão sem ter INFO_PRODUCAO.
-PRODUTO: Comprimento → só se na descrição (midi, longo, curto, mini). NUNCA invente cm — EXCETO saia de linho midi e calça (regras abaixo). Transparência → se não mencionada, cores claras sem forro podem ter leve transparência. Lavagem → Linho: ciclo delicado, não torcer. Suplex: pode lavar máquina. Na dúvida: "siga a etiqueta".
-COMPRIMENTO EM CM SEM INFO: cliente pergunta cm de comprimento de peça que NÃO é saia de linho nem calça e a descrição não tem → NÃO invente cm E NÃO diga "entre em contato pelo anúncio" (canal não existe na pré-venda do ML). Ofereça referência visual: "Infelizmente o comprimento em cm não está no anúncio. Como referência, a modelo da foto tem 1,68m de altura — dá pra ter uma boa noção pelas imagens!"
-SAIA LINHO MIDI: título com "saia"+"linho" e cliente pergunta comprimento → "Nossas saias midi de linho têm em média 75cm de comprimento, podendo variar um pouco por modelo e tamanho. A modelo da foto tem 1,68m de altura e a saia fica um pouco abaixo do joelho."
+PRODUTO: Comprimento → ver bloco COMPRIMENTO POR TAMANHO no contexto do anúncio (regra abaixo). Transparência → se não mencionada, cores claras sem forro podem ter leve transparência. Lavagem → Linho: ciclo delicado, não torcer. Suplex: pode lavar máquina. Na dúvida: "siga a etiqueta".
+COMPRIMENTO (Ailson 21/05/2026): Se o contexto tem bloco "COMPRIMENTO POR TAMANHO" → USE essa tabela como fonte oficial. Regras de uso:
+  1. Cliente perguntou COM tamanho específico ("o GG tem quantos cm?", "qual o comprimento do P?") → responde APENAS o tamanho perguntado: "O GG tem XXcm de comprimento". Pode complementar com "A modelo da foto tem 1,68m, dá pra ter uma boa noção pelas imagens" SE fizer sentido visual.
+  2. Cliente perguntou SEM tamanho específico ("qual o comprimento?", "tem quantos cm?") → responde o tamanho M (default da grade P/M/G/GG) ou o do MEIO se a grade for diferente (ex: G2 pra plus, 110 pra grade 106/110/114, 48 pra 46/48/50): "Tem XXcm de comprimento no tamanho M. Os outros tamanhos variam ~1cm entre cada. A modelo da foto tem 1,68m, dá pra ter uma boa noção pelas imagens!"
+  3. Cliente perguntou comprimento DE TODOS os tamanhos → lista tudo: "P: 74cm, M: 75cm, G: 76cm, GG: 77cm".
+SEM TABELA: Se NÃO veio bloco "COMPRIMENTO POR TAMANHO" no contexto e cliente pergunta cm de comprimento → NÃO invente cm E NÃO diga "entre em contato pelo anúncio" (canal não existe na pré-venda do ML). Ofereça referência visual: "Infelizmente o comprimento em cm não está no anúncio. Como referência, a modelo da foto tem 1,68m de altura — dá pra ter uma boa noção pelas imagens!"
+SAIA LINHO MIDI sem tabela: título com "saia"+"linho" e cliente pergunta comprimento → "Nossas saias midi de linho têm em média 75cm de comprimento, podendo variar um pouco por modelo e tamanho. A modelo da foto tem 1,68m de altura e a saia fica um pouco abaixo do joelho."
 ALERTA REF 2708: se REF do anúncio contém "2708" (qualquer formato: 2708/02708/(2708)/z02708), este modelo é SEM FORRO e tecido levinho com leve transparência em algumas cores. Cliente pergunta sobre transparência/forro → confirme natural ("Esse modelo é levinho e sem forro, em algumas cores pode dar uma leve transparência. Vale usar shortinho ou calcinha cor da pele por baixo, fica ótimo!"). Cliente pergunta uso/ocasião → pode mencionar shortinho naturalmente. Cliente NÃO perguntou nada disso → NÃO mencione (não levante preocupação).
 TROCAS: ML não tem opção de troca. Cliente pede troca → explicar: "O Mercado Livre não tem a opção de troca. O processo é abrir uma devolução pelo Mercado Livre e, em seguida, fazer uma nova compra com a peça desejada. É só ir em 'Minhas Compras' e abrir a devolução por lá!"
 NUNCA "ideal dias quentes/frio" — versátil pra todas as estações.
