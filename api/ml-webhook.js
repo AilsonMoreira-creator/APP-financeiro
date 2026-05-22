@@ -1,5 +1,6 @@
 import { supabase, getValidToken, isOutsideBusinessHours, getAbsenceMessage, isInAISchedule, getAILowConfidenceMsg, getStockColors, detectColorsInText, isColorRequest, detectSizeInText, detectConfirmation } from './_ml-helpers.js';
 import { gerarBlocoComprimento, REGRAS_COMPRIMENTO_PROMPT } from './_ml-comprimentos.js';
+import { gerarBlocoTops, REGRAS_TOPS_PROMPT } from './_ml-tops.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
@@ -362,6 +363,9 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       // COMPRIMENTOS — helper compartilhado com ml-ai (Ailson 21/05/2026)
       const blocoComp = await gerarBlocoComprimento(sellerField);
       if (blocoComp) itemContext += blocoComp;
+      // PARTES DE CIMA — helper compartilhado (Ailson 22/05/2026)
+      const blocoTops = await gerarBlocoTops(item.id);
+      if (blocoTops) itemContext += blocoTops;
       if (item.price) itemContext += `\nPREÇO: R$ ${item.price}`;
       itemContext += `\nESTOQUE TOTAL: ${totalStock}`;
       if (attrs) itemContext += `\n\nATRIBUTOS DO PRODUTO:\n${attrs}`;
@@ -637,6 +641,8 @@ PASSO 3 — APLIQUE AS REGRAS DA CATEGORIA:
 - Caimento: use o que está na descrição.
 - Comprimento: ver bloco COMPRIMENTO POR TAMANHO no contexto do anúncio (regra abaixo). NUNCA invente medidas em cm.
 ${REGRAS_COMPRIMENTO_PROMPT}
+- Parte de cima do conjunto: ver bloco PARTES DE CIMA DESTE ANUNCIO no contexto (regra abaixo). NUNCA invente REF da peça de cima.
+${REGRAS_TOPS_PROMPT}
 - COMPRIMENTO DE CALÇA (fallback genérico — só se NÃO veio bloco "COMPRIMENTO POR TAMANHO" no contexto): se o título contém "calça" e a cliente pergunta sobre comprimento/altura/cumprimento da calça, use a tabela:
   • Regular: P 112cm · M 113cm · G 113,5cm · GG 114cm
   • Plus Size: G1 114cm · G2 114,5cm · G3 115cm

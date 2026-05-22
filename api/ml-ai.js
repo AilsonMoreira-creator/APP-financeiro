@@ -1,5 +1,6 @@
 import { supabase, getValidToken, getStockColors, setCors } from './_ml-helpers.js';
 import { gerarBlocoComprimento, REGRAS_COMPRIMENTO_PROMPT } from './_ml-comprimentos.js';
+import { gerarBlocoTops, REGRAS_TOPS_PROMPT } from './_ml-tops.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
@@ -202,6 +203,11 @@ async function getItemContext(itemId, brand) {
       // COMPRIMENTOS — helper compartilhado com ml-webhook (Ailson 21/05/2026)
       const blocoComp = await gerarBlocoComprimento(item.seller_custom_field);
       if (blocoComp) itemContext += blocoComp;
+      // PARTES DE CIMA — helper compartilhado com ml-webhook (Ailson 22/05/2026)
+      // Anuncios de parte de baixo (calca/saia/bermuda) tem 1-2 opcoes de top
+      // dependendo da cor. IA precisa indicar a REF certa quando cliente pergunta.
+      const blocoTops = await gerarBlocoTops(item.id);
+      if (blocoTops) itemContext += blocoTops;
       if (item.price) itemContext += `\nPREÇO: R$ ${item.price}`;
       itemContext += `\nESTOQUE: ${item.available_quantity || 0}`;
       if (attrs) itemContext += `\n\nATRIBUTOS:\n${attrs}`;
@@ -445,6 +451,7 @@ ENTREGA: "Chega amanhã?" → "Se for Flex, próximo dia útil! Prazos no anúnc
 ESGOTADO: SEM INFO_PRODUCAO → Tom de venda! "Repomos com frequência e as peças voam rápido! Salva nos favoritos pra não perder!" COM INFO_PRODUCAO (vem no user) → use os dados pra indicar previsão da cor (ex: "Boa notícia! Essa cor já está em produção e a previsão é chegar em [descricao_amigavel]. Salva nos favoritos pra ser avisada!"). Adapte o texto ao tom da loja, não copie literal. NUNCA invente previsão sem ter INFO_PRODUCAO.
 PRODUTO: Comprimento → ver bloco COMPRIMENTO POR TAMANHO no contexto do anúncio (regra abaixo). Transparência → se não mencionada, cores claras sem forro podem ter leve transparência. Lavagem → Linho: ciclo delicado, não torcer. Suplex: pode lavar máquina. Na dúvida: "siga a etiqueta".
 ${REGRAS_COMPRIMENTO_PROMPT}
+${REGRAS_TOPS_PROMPT}
 ALERTA REF 2708: se REF do anúncio contém "2708" (qualquer formato: 2708/02708/(2708)/z02708), este modelo é SEM FORRO e tecido levinho com leve transparência em algumas cores. Cliente pergunta sobre transparência/forro → confirme natural ("Esse modelo é levinho e sem forro, em algumas cores pode dar uma leve transparência. Vale usar shortinho ou calcinha cor da pele por baixo, fica ótimo!"). Cliente pergunta uso/ocasião → pode mencionar shortinho naturalmente. Cliente NÃO perguntou nada disso → NÃO mencione (não levante preocupação).
 TROCAS: ML não tem opção de troca. Cliente pede troca → explicar: "O Mercado Livre não tem a opção de troca. O processo é abrir uma devolução pelo Mercado Livre e, em seguida, fazer uma nova compra com a peça desejada. É só ir em 'Minhas Compras' e abrir a devolução por lá!"
 NUNCA "ideal dias quentes/frio" — versátil pra todas as estações.
