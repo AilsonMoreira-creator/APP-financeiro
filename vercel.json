@@ -134,7 +134,7 @@
     },
     {
       "path": "/api/ml-estoque-cron",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 11,13,15,17,19,21,23,1 * * *"
     },
     {
       "path": "/api/bling-produtos-sync",
