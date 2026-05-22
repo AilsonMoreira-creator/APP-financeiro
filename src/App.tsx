@@ -2042,7 +2042,7 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
 };
 
 
-const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta})=>{
+const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta,cortes=[]})=>{
   // 🛡️ AVISO ADMIN-ONLY (Ailson 17/05/2026)
   // Lê sessão do localStorage pra detectar se é admin. Só admin salva
   // alterações em Lançamentos hoje (regra em src/App.tsx ~linha 8978).
@@ -2243,6 +2243,64 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
       )}
       {aba==="despesas"&&!auxAberta&&(
         <div style={{background:"#fff",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",overflow:"hidden"}}>
+          {/* CAMADA 3 (Ailson 21/05/2026): detecta cortes pagos sem lancamento.
+              Alerta admin pra gerar os lancamentos faltantes (resolve erro
+              silencioso de pagamento feito por nao-admin no passado). */}
+          {ehAdmin&&(()=>{
+            const lancsOficinas=auxData["Oficinas Costura"]||[];
+            // 1) Build set de corte_ids ja com lancamento
+            const idsComLanc=new Set(lancsOficinas.filter(l=>l.corte_id).map(l=>l.corte_id));
+            // 2) Fallback legacy: lancamentos sem corte_id correlacionam por REF+valor+prestador
+            const chavesLegacy=new Set(
+              lancsOficinas.filter(l=>!l.corte_id).map(l=>{
+                const refMatch=String(l.descricao||"").match(/REF\s+(\S+)/i);
+                const ref=refMatch?refMatch[1]:"";
+                return `${ref}|${l.valor}|${l.prestador}`;
+              })
+            );
+            // 3) Cortes pagos NESTE mes que nao tem lancamento correspondente
+            const sufixoMes=`/${String(mes).padStart(2,"0")}/`;
+            const faltantes=(cortes||[]).filter(c=>{
+              if(!c.pago||c.arquivado)return false;
+              if(!c.dataPagamento||!c.dataPagamento.includes(sufixoMes))return false;
+              if(idsComLanc.has(c.id))return false;
+              const valor=String(Math.round((c.qtdEntregue||c.qtd)*(c.valorUnit||0)*100)/100);
+              if(chavesLegacy.has(`${c.ref}|${valor}|${c.oficina}`))return false;
+              return true;
+            });
+            if(faltantes.length===0)return null;
+            const totalFaltante=faltantes.reduce((s,c)=>s+(c.qtdEntregue||c.qtd)*(c.valorUnit||0),0);
+            return(
+              <div style={{padding:"10px 14px",background:"#fff5e0",border:"1px solid #e8c280",borderRadius:6,margin:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <div style={{fontSize:12,color:"#8a6500",lineHeight:1.4}}>
+                  <strong>⚠️ {faltantes.length} corte{faltantes.length>1?"s":""} pago{faltantes.length>1?"s":""} sem lançamento</strong>
+                  <span style={{display:"block",color:"#a07810",fontSize:11,marginTop:2}}>
+                    Total faltante: R$ {totalFaltante.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}.
+                    Prestadores: {[...new Set(faltantes.map(c=>c.oficina))].join(", ")}.
+                  </span>
+                </div>
+                <button
+                  onClick={()=>{
+                    if(!setAuxDataPorMes)return;
+                    if(!confirm(`Criar ${faltantes.length} lançamentos faltantes? Total: R$ ${totalFaltante.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}`))return;
+                    setAuxDataPorMes(m=>{
+                      const aux=m[mes]||{};
+                      const ofs=[...(aux["Oficinas Costura"]||[])];
+                      for(const c of faltantes){
+                        const dp=c.dataPagamento||"";
+                        const [d,mm]=dp.split("/");
+                        const dd=(d&&mm)?`${d}/${mm}`:`${String(new Date().getDate()).padStart(2,"0")}/${String(mes).padStart(2,"0")}`;
+                        const vl=String(Math.round((c.qtdEntregue||c.qtd)*(c.valorUnit||0)*100)/100);
+                        ofs.push({corte_id:c.id,data:dd,prestador:c.oficina,valor:vl,descricao:`REF ${c.ref} - ${c.descricao}`});
+                      }
+                      return{...m,[mes]:{...aux,"Oficinas Costura":ofs}};
+                    });
+                  }}
+                  style={{padding:"6px 14px",background:"#b7791f",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}
+                >Gerar lançamentos</button>
+              </div>
+            );
+          })()}
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:"#4a7fa5"}}>
@@ -3844,13 +3902,54 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
     setConfirm(null);setMostraForm(false);setEditId(null);
   }});
   const toggleEntregue=(id)=>{setCortes(prev=>prev.map(c=>{if(c.id!==id||c.arquivado)return c;const ne=!c.entregue;if(ne&&pendingSnapshotIds?.current)pendingSnapshotIds.current.add(id);return{...c,entregue:ne,dataEntrega:ne?new Date().toLocaleDateString("pt-BR"):null,pago:ne?c.pago:false,_mod:Date.now()};}));};
+  // Marcar/Desmarcar corte como pago.
+  // Ailson 21/05/2026 — refatorado pra resolver 2 bugs:
+  // 1) Erro silencioso: nao-admin podia marcar pago mas o lancamento nao era
+  //    salvo no banco (setAuxDataPorMes so persiste com user admin).
+  // 2) Duplicacao: ghost-click iPhone Safari + side effect dentro do updater
+  //    React criava lancamentos duplicados.
+  // Fix: bloqueia se nao for admin + idempotencia por corte_id + side effect
+  // FORA do updater de setCortes (anti-pattern conhecido).
   const togglePago=(id)=>{
+    // CAMADA 1: Apenas admin pode marcar/desmarcar pagamento (evita erro silencioso).
+    if(!isAdmin){
+      alert("⚠️ Apenas admin pode marcar pago. Avisa o Ailson pra marcar.");
+      return;
+    }
+    // Localiza corte antes de qualquer setState pra ler dados puros
+    const corte=cortes.find(c=>c.id===id);
+    if(!corte||!corte.entregue)return;
+    const novoPago=!corte.pago;
+    // CAMADA 2: Calcula dados do lancamento ANTES dos setStates (side effect fora do updater)
+    const hoje=new Date();
+    const mes=hoje.getMonth()+1;
+    const dd=`${String(hoje.getDate()).padStart(2,"0")}/${String(mes).padStart(2,"0")}`;
+    const vl=String(Math.round((corte.qtdEntregue||corte.qtd)*(corte.valorUnit||0)*100)/100);
+    // Atualiza cortes (updater puro - sem side effect dentro)
     setCortes(prev=>prev.map(c=>{
       if(c.id!==id||!c.entregue)return c;
-      const np=!c.pago;
-      if(np&&setAuxDataPorMes){const hoje=new Date(),mes=hoje.getMonth()+1;const dd=`${String(hoje.getDate()).padStart(2,"0")}/${String(mes).padStart(2,"0")}`;const vl=String(Math.round((c.qtdEntregue||c.qtd)*(c.valorUnit||0)*100)/100);setAuxDataPorMes(m=>{const aux=m[mes]||{},ofs=[...(aux["Oficinas Costura"]||[])];ofs.push({data:dd,prestador:c.oficina,valor:vl,descricao:`REF ${c.ref} - ${c.descricao}`});return{...m,[mes]:{...aux,"Oficinas Costura":ofs}};});}
-      return{...c,pago:np,dataPagamento:np?new Date().toLocaleDateString("pt-BR"):null,_mod:Date.now()};
+      return{...c,pago:novoPago,dataPagamento:novoPago?new Date().toLocaleDateString("pt-BR"):null,_mod:Date.now()};
     }));
+    // Atualiza lancamentos (idempotente por corte_id)
+    if(!setAuxDataPorMes)return;
+    setAuxDataPorMes(m=>{
+      const aux=m[mes]||{};
+      const ofs=[...(aux["Oficinas Costura"]||[])];
+      if(novoPago){
+        // MARCAR PAGO: cria lancamento SE ainda nao existe pra esse corte
+        if(ofs.some(o=>o.corte_id===id)){
+          console.log(`[togglePago] lancamento ja existe pro corte ${id}, ignorando (idempotente)`);
+          return m;
+        }
+        ofs.push({corte_id:id,data:dd,prestador:corte.oficina,valor:vl,descricao:`REF ${corte.ref} - ${corte.descricao}`});
+      }else{
+        // DESMARCAR PAGO: remove o lancamento desse corte (resolve duplicacao por re-clique)
+        const idx=ofs.findIndex(o=>o.corte_id===id);
+        if(idx>=0)ofs.splice(idx,1);
+        else console.log(`[togglePago] sem lancamento pra remover do corte ${id}`);
+      }
+      return{...m,[mes]:{...aux,"Oficinas Costura":ofs}};
+    });
   };
   const editarQtdEntregue=(id,v)=>setCortes(prev=>prev.map(c=>c.id===id?{...c,qtdEntregue:parseFloat(v)||0,_mod:Date.now()}:c));
   const salvarDetalhes=(id,detalhes)=>setCortes(prev=>prev.map(c=>c.id===id?{...c,detalhes,_mod:Date.now()}:c));
@@ -10796,7 +10895,7 @@ export default function App(){
           );
         })()}
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
-        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta}/>}
+        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta} cortes={cortes}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="agenda"&&<AgendaContent/>}
         {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta}/>}
