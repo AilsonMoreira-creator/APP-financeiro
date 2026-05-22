@@ -2503,6 +2503,37 @@ async function montarContextoMensagem(sug, contextoExtra) {
   curadoriaManual = curadoriaManual.map(c => ({ ...c, cor_destaque: anotarCorDestaque(c.ref) }));
   const corDestaqueDaPeca = produto?.ref ? anotarCorDestaque(produto.ref) : null;
 
+  // ANTI-CLONE — Ailson 22/05/2026
+  // Busca mensagens ja geradas HOJE pela mesma vendedora pra OUTROS clientes.
+  // Sem isso a IA repetia abertura ("Faz um tempinho q vc nao passa por aqui")
+  // e produto ("conjunto couro cropped saia midi top do mes") em varias msgs
+  // do mesmo dia porque cada chamada era independente, sem memoria do que ela
+  // acabou de escrever 5min antes.
+  // Caso real 22/05: Joelma->Joelma e Joelma->Maria, mesma atencao, msgs quase
+  // identicas geradas com 9min de diferenca.
+  let msgsHojeOutras = [];
+  try {
+    const hojeStr = new Date().toISOString().slice(0, 10);
+    const { data } = await supabase
+      .from('lojas_sugestoes_diarias')
+      .select('alvo_nome_display, tipo, subtipo_sacola, mensagem_gerada, produto_ref')
+      .eq('vendedora_id', sug.vendedora_id)
+      .eq('data_geracao', hojeStr)
+      .not('mensagem_gerada', 'is', null)
+      .neq('id', sug.id)
+      .order('mensagem_gerada_em', { ascending: false })
+      .limit(6);
+    msgsHojeOutras = (data || []).map(m => ({
+      para: m.alvo_nome_display,
+      tipo: m.subtipo_sacola ? `${m.tipo}:${m.subtipo_sacola}` : m.tipo,
+      produto_ref: m.produto_ref || null,
+      abertura: (m.mensagem_gerada || '').split('\n')[0].slice(0, 80),
+      texto_completo: m.mensagem_gerada,
+    }));
+  } catch (e) {
+    console.warn('[lojas-ia/mensagem] anti-clone msgs do dia indisponivel:', e?.message);
+  }
+
   return {
     cliente, grupo, kpi, docsGrupo,
     produto, promocao, coresTop,
@@ -2527,6 +2558,10 @@ async function montarContextoMensagem(sug, contextoExtra) {
     // Quando cliente eh Vesti (perfilCanal=so_vesti/hibrido_loja_vesti/etc),
     // a IA DEVE colar essa URL na mensagem. Se null, ela so promete sem URL.
     vestiLinkAtivo,
+    // ANTI-CLONE — Ailson 22/05/2026
+    // Ate 6 mensagens ja escritas hoje pela mesma vendedora pra outros clientes.
+    // IA usa pra NAO repetir abertura, produto destacado e gancho.
+    msgsHojeOutras,
   };
 }
 
@@ -3138,6 +3173,22 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     // link" sem ter o URL aqui. Se null, IA so pode mencionar Vesti
     // sem URL especifica. NAO altere a URL.
     vesti_link_vendedora: ctx.vestiLinkAtivo || null,
+    // ANTI-CLONE — Ailson 22/05/2026
+    // Mensagens que VOCE MESMA (mesma vendedora) ja escreveu hoje pra outros
+    // clientes. Use pra NAO repetir abertura, produto destacado nem gancho.
+    // Caso real 22/05: Joelma mandou pra Joelma "chegou conjunto couro cropped
+    // saia midi top do mes" e 9min depois mandou texto QUASE IDENTICO pra Maria.
+    // Cada cliente merece mensagem unica.
+    mensagens_que_voce_ja_escreveu_hoje: ctx.msgsHojeOutras?.length > 0 ? {
+      qtd: ctx.msgsHojeOutras.length,
+      mensagens: ctx.msgsHojeOutras,
+      instrucao: 'CRITICO: voce (mesma vendedora) ja mandou essas mensagens hoje pra outras clientes. ' +
+        'NAO REPITA: (a) mesma frase de abertura — varie completamente, ' +
+        '(b) mesmo produto destacado — escolha outro do cardapio se houver opcao, ' +
+        '(c) mesmo gancho ("chegou X", "voltou Y", "no top do mes", "tah sendo sucesso de vendas"). ' +
+        'Cada cliente eh unica. Se voce ESTAVA prestes a usar um gancho repetido, MUDE. ' +
+        'O objetivo eh parecer humana de verdade, nao scripted.',
+    } : null,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
     instrucao: 'Gere a mensagem WhatsApp pronta pra copiar. APENAS o texto, sem aspas ao redor.',
   };
