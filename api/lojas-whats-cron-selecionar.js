@@ -125,22 +125,21 @@ async function executarSelecao(req, res) {
 
     // 3. Busca candidatos com filtros + ordenação (PJ valor desc, depois PF data desc)
     //    Filtro de peças é POR TIPO_PESSOA, então fazemos em JS depois do SELECT.
-    //    NÃO uso .eq().eq()... porque preciso de ordenação composta com tipo_pessoa.
-    //    Pra simplicidade, busco com SELECT e ordeno em JS.
+    //    DATA DE REFERENCIA: COALESCE(ultimo_carrinho_em, last_access, primeira_visita_em)
+    //      → PJ vazio (sem carrinho) usa last_access ou primeira_visita.
+    //    Filtro de janela de dias tambem fica em JS pelo mesmo motivo.
     const { data: leadsRaw, error: errLeads } = await supabase
       .from('lojas_leads_carrinho')
       .select(`
         id, first_name, nome_completo,
         telefone_norm, tipo_pessoa, taxvat_norm,
         qtd_pecas_ultimo_carrinho, valor_ultimo_carrinho,
-        ultimo_carrinho_em,
+        ultimo_carrinho_em, last_access, primeira_visita_em,
         ja_e_cliente_lojas_id, vendedora_atribuida_id, vendedora_dona_id,
         status, convertido_em
       `)
       .eq('status', 'aguardando_atribuicao')
       .is('convertido_em', null)
-      .gte('ultimo_carrinho_em', new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString())
-      .order('ultimo_carrinho_em', { ascending: false })
       .limit(500); // pega um lote grande pra filtrar/ordenar em JS
 
     if (errLeads) throw errLeads;
@@ -148,8 +147,10 @@ async function executarSelecao(req, res) {
 
     // 4. Filtros adicionais em JS:
     //    - Min peças POR TIPO_PESSOA (PJ qualquer / PF >=1, configurável)
+    //    - Janela de dias com data de referência COALESCE
     //    - Telefone válido (regex flexível: aceita com ou sem 55)
     //    - Não duplicar com conversa Sofia ativa
+    const limiteData = Date.now() - dias * 24 * 60 * 60 * 1000;
     const candidatos = [];
     for (const lead of leadsRaw || []) {
       // Filtro min peças por tipo
@@ -157,6 +158,12 @@ async function executarSelecao(req, res) {
       if (lead.tipo_pessoa === 'PJ' && pecas < minPecasPJ) continue;
       if (lead.tipo_pessoa === 'PF' && pecas < minPecasPF) continue;
       if (!['PJ', 'PF'].includes(lead.tipo_pessoa)) continue;
+      // Data de referencia (fallback pra PJ vazio que nao tem ultimo_carrinho_em)
+      const dataRef = lead.ultimo_carrinho_em || lead.last_access || lead.primeira_visita_em;
+      if (!dataRef) continue;
+      const dataMs = new Date(dataRef).getTime();
+      if (isNaN(dataMs) || dataMs < limiteData) continue;
+      lead._dataRef = dataRef;
       // Telefone válido
       const telE164 = normalizarTelefone(lead.telefone_norm);
       if (!telE164 || !telefoneValido(telE164)) continue;
@@ -191,11 +198,13 @@ async function executarSelecao(req, res) {
       const bPJ = b.tipo_pessoa === 'PJ' ? 1 : 0;
       if (aPJ !== bPJ) return bPJ - aPJ; // PJ primeiro
       if (aPJ === 1) {
-        // Ambos PJ → ordena por valor desc
-        return Number(b.valor_ultimo_carrinho || 0) - Number(a.valor_ultimo_carrinho || 0);
+        // Ambos PJ → ordena por valor desc (vazios ficam por último, vão por _dataRef)
+        const valDiff = Number(b.valor_ultimo_carrinho || 0) - Number(a.valor_ultimo_carrinho || 0);
+        if (valDiff !== 0) return valDiff;
+        return new Date(b._dataRef) - new Date(a._dataRef);
       }
-      // Ambos PF → ordena por data desc (já vem da query, mas reforça)
-      return new Date(b.ultimo_carrinho_em) - new Date(a.ultimo_carrinho_em);
+      // Ambos PF → ordena por data ref desc
+      return new Date(b._dataRef) - new Date(a._dataRef);
     });
 
     // 7. Aplica cap
@@ -216,9 +225,10 @@ async function executarSelecao(req, res) {
           nome: s._primeiroNome,
           tel: s._telE164,
           tipo: s.tipo_pessoa,
-          pecas: s.qtd_pecas_ultimo_carrinho,
+          pecas: s.qtd_pecas_ultimo_carrinho || 0,
           valor: Number(s.valor_ultimo_carrinho || 0),
-          ultimo_carrinho: s.ultimo_carrinho_em
+          data_ref: s._dataRef,
+          tem_carrinho: !!s.ultimo_carrinho_em
         }))
       });
     }
