@@ -48,6 +48,10 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   if (req.method === 'GET') {
+    // GET com ?executar=1 ou cron header da Vercel = executa também
+    if (req.query.executar === '1' || req.headers['user-agent']?.includes('vercel-cron')) {
+      return await executarSelecao(req, res);
+    }
     return await resumoFila(req, res);
   }
   if (req.method === 'POST') {

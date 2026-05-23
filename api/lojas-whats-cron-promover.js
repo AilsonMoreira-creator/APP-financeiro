@@ -29,7 +29,19 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  if (req.method === 'GET') return await preview(req, res);
+  if (req.method === 'GET') {
+    // GET com ?executar=1 ou cron header da Vercel = executa
+    if (req.query.executar === '1' || req.headers['user-agent']?.includes('vercel-cron')) {
+      try {
+        const resultado = await executar();
+        return res.status(200).json({ ok: true, ...resultado });
+      } catch (e) {
+        logErro('cron-promover', e);
+        return res.status(500).json({ error: e.message });
+      }
+    }
+    return await preview(req, res);
+  }
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   try {

@@ -258,21 +258,54 @@ function AprovarTab({ userId, refreshTick, onReload }) {
   const [editText, setEditText] = useState('');
   const [acaoEmAndamento, setAcaoEmAndamento] = useState(false);
   const [erroGlobal, setErroGlobal] = useState(null);
+  // Cap diário (configurável aqui mesmo — vale pro próximo cron 8h)
+  const [capDiario, setCapDiario] = useState(null);
+  const [capInput, setCapInput] = useState('');
+  const [salvandoCap, setSalvandoCap] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
     setErroGlobal(null);
     try {
-      const r = await fetch('/api/lojas-whats-aprovar');
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
+      const [rPend, rResumo] = await Promise.all([
+        fetch('/api/lojas-whats-aprovar'),
+        fetch('/api/lojas-whats-cron-selecionar')
+      ]);
+      if (!rPend.ok) throw new Error(`HTTP ${rPend.status}`);
+      const j = await rPend.json();
       setPendentes(j.sugestoes || []);
+      if (rResumo.ok) {
+        const jResumo = await rResumo.json();
+        setCapDiario(jResumo.data?.cap_diario);
+        setCapInput(String(jResumo.data?.cap_diario || ''));
+      }
     } catch (e) {
       setErroGlobal(`Erro: ${e.message}`);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const salvarCap = async () => {
+    const novoCap = parseInt(capInput, 10);
+    if (isNaN(novoCap) || novoCap < 0 || novoCap > 200) {
+      alert('Valor inválido. Digite entre 0 e 200.');
+      return;
+    }
+    setSalvandoCap(true);
+    try {
+      const { error } = await supabase
+        .from('lojas_whats_config')
+        .update({ valor: novoCap, updated_at: new Date().toISOString() })
+        .eq('chave', 'cap_diario');
+      if (error) throw error;
+      setCapDiario(novoCap);
+    } catch (e) {
+      alert(`Erro salvar cap: ${e.message}`);
+    } finally {
+      setSalvandoCap(false);
+    }
+  };
 
   useEffect(() => { carregar(); }, [carregar, refreshTick]);
 
@@ -388,6 +421,40 @@ function AprovarTab({ userId, refreshTick, onReload }) {
 
   return (
     <div style={{ padding: 14, fontFamily: FONT, paddingBottom: 80 }}>
+      {/* Banner do Cap diário */}
+      <div style={{
+        background: palette.accentSoft, padding: 10, borderRadius: 10,
+        marginBottom: 10, display: 'flex', alignItems: 'center',
+        gap: 8, flexWrap: 'wrap',
+      }}>
+        <div style={{ fontSize: fz(13), color: palette.ink }}>
+          <strong>Cap diário:</strong> Sofia gera até{' '}
+          <strong style={{ color: palette.accent }}>{capDiario ?? '?'}</strong> sugestões/dia (cron 8h BRT seg-sex).
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <input
+            type="number" min="0" max="200" value={capInput}
+            onChange={(e) => setCapInput(e.target.value)}
+            style={{
+              width: 60, padding: '4px 6px', borderRadius: 6,
+              border: `1px solid ${palette.beige}`, fontFamily: FONT,
+              fontSize: fz(13), textAlign: 'center',
+            }}
+          />
+          <button
+            onClick={salvarCap}
+            disabled={salvandoCap || parseInt(capInput, 10) === capDiario}
+            style={{
+              ...btnPrimario, padding: '4px 10px', fontSize: fz(12),
+              opacity: (salvandoCap || parseInt(capInput, 10) === capDiario) ? 0.5 : 1
+            }}
+          >
+            {salvandoCap ? '...' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+
       {/* Barra de ação topo */}
       <div style={{
         display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12,

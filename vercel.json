@@ -239,6 +239,14 @@
     {
       "path": "/api/cron-meluni-meta-ads",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/lojas-whats-cron-selecionar",
+      "schedule": "0 11 * * 1-5"
+    },
+    {
+      "path": "/api/lojas-whats-cron-promover",
+      "schedule": "0 */4 * * *"
     }
   ]
 }
