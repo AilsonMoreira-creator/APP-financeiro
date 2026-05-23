@@ -208,14 +208,15 @@ async function getItemContext(itemId, brand) {
       // dependendo da cor. IA precisa indicar a REF certa quando cliente pergunta.
       const blocoTops = await gerarBlocoTops(item.id);
       if (blocoTops) itemContext += blocoTops;
+      var temMapeamentoTops = !!blocoTops;  // ← flag pra usar no prompt
       if (item.price) itemContext += `\nPREÇO: R$ ${item.price}`;
       itemContext += `\nESTOQUE: ${item.available_quantity || 0}`;
       if (attrs) itemContext += `\n\nATRIBUTOS:\n${attrs}`;
       if (variations) itemContext += `\n\nVARIAÇÕES:\n${variations}`;
     }
     const desc = descRes.ok ? ((await descRes.json()).plain_text || '').slice(0, 4000) : '';
-    return { title, desc, itemContext };
-  } catch { return { title: '', desc: '', itemContext: '' }; }
+    return { title, desc, itemContext, temMapeamentoTops: typeof temMapeamentoTops !== 'undefined' ? temMapeamentoTops : false };
+  } catch { return { title: '', desc: '', itemContext: '', temMapeamentoTops: false }; }
 }
 
 async function getSimilarQA(questionText, itemId) {
@@ -464,7 +465,11 @@ NUNCA "ideal dias quentes/frio" — versátil pra todas as estações.
 FORMATO: "Olá! ${saudacao}!" + 100-380 chars + despedida variada. Se múltiplas perguntas, responda TODAS. Emoji max 1. NUNCA **negrito**.
 GANCHOS (1, natural): "dos mais vendidos!", "clientes elogiam!", "vai ficar ótima!". Não em entrega/pós-venda.
 PROIBIÇÕES: "Amícia", "desvestir", inventar, telefone/WhatsApp, enviar fotos, prometer desconto/cupom, inventar medidas em cm, mencionar refs/numeros internos. Conjunto → NÃO oferte espontaneamente; se cliente perguntar direto: "Temos uma opção de conjunto, vale ver nos anúncios". Blusa de linho → NÃO TEMOS, sugira ${buscasPecaCima}. Se não souber: BAIXA_CONFIANCA.
-BLUSA/BLUSINHA/CROPPED ${isPecaInferior ? `(este anúncio é ${tipoPeca}, peça INFERIOR): cliente quase sempre quer peça do LOOK da foto. Confirme que temos peças de cima: "Esse anúncio é da ${tipoPeca}, mas temos peças de cima que combinam pra montar o look! Busque por ${buscasPecaCima} nos nossos anúncios". NUNCA prometa peça idêntica da foto, NUNCA mencione ref.` : isPecaInteira ? `(este anúncio é ${tipoPeca}, peça INTEIRA): houve confusão. Esclareça: "Esse anúncio é de um ${tipoPeca}, peça inteira. Pra peça de cima separada, busque ${buscasPecaCima} nos anúncios."` : `(este anúncio JÁ É peça superior): responda normal sobre a peça do anúncio.`}
+BLUSA/BLUSINHA/CROPPED ${isPecaInferior ? (
+  ctx.temMapeamentoTops
+    ? `(este anúncio é ${tipoPeca}, peça INFERIOR e TEM MAPEAMENTO de peças de cima — ver bloco "PEÇAS DE CIMA QUE COMBINAM" no contexto do anúncio acima): cliente quase sempre quer peça do LOOK da foto. Siga REGRAS_TOPS — use REFs específicas + links do bloco "PEÇAS DE CIMA QUE COMBINAM". NUNCA use sugestão genérica "busque por X". NUNCA prometa peça idêntica da foto.`
+    : `(este anúncio é ${tipoPeca}, peça INFERIOR, SEM mapeamento específico): cliente quase sempre quer peça do LOOK da foto. Diga: "Esse anúncio é da ${tipoPeca}, mas temos peças de cima que combinam pra montar o look! Busque por ${buscasPecaCima} nos nossos anúncios". NUNCA prometa peça idêntica da foto, NUNCA mencione ref.`
+) : isPecaInteira ? `(este anúncio é ${tipoPeca}, peça INTEIRA): houve confusão. Esclareça: "Esse anúncio é de um ${tipoPeca}, peça inteira. Pra peça de cima separada, busque ${buscasPecaCima} nos anúncios."` : `(este anúncio JÁ É peça superior): responda normal sobre a peça do anúncio.`}
 EXEMPLOS: ${qaExamples}`,
         messages: [{ role: 'user', content: `═══ DADOS DO ANÚNCIO ═══\n${ctx.itemContext || 'TÍTULO: ' + ctx.title}\n\n═══ DESCRIÇÃO ═══\n${ctx.desc || 'Sem descrição'}\n${infoProducao ? `\n═══ INFO_PRODUCAO (cor esgotada no anúncio MAS em produção) ═══\nCor: ${infoProducao.cor}\nDias decorridos do corte: ${infoProducao.dias_decorridos}\nDias restantes pra chegar: ${infoProducao.dias_restantes}\nDescrição amigável pra usar na resposta: "${infoProducao.descricao_amigavel}"\nFonte do prazo: ${infoProducao.fonte_oficina}\n` : ''}\n═══ PERGUNTA ═══\n"${question_text}"\n\nResponda APENAS com o texto final (sem passos nem classificação):` }],
       }),

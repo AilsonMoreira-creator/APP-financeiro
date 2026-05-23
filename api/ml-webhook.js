@@ -326,7 +326,7 @@ async function getAIAutoResponse(questionText, itemId, brand) {
   if (!process.env.ANTHROPIC_API_KEY) return null;
   
   // ── Buscar contexto completo do anúncio ──
-  let title = '', desc = '', itemContext = '';
+  let title = '', desc = '', itemContext = '', temMapeamentoTops = false;
   try {
     const token = await getValidToken(brand);
     const [itemRes, descRes] = await Promise.all([
@@ -366,6 +366,7 @@ async function getAIAutoResponse(questionText, itemId, brand) {
       // PARTES DE CIMA — helper compartilhado (Ailson 22/05/2026)
       const blocoTops = await gerarBlocoTops(item.id);
       if (blocoTops) itemContext += blocoTops;
+      temMapeamentoTops = !!blocoTops;
       if (item.price) itemContext += `\nPREÇO: R$ ${item.price}`;
       itemContext += `\nESTOQUE TOTAL: ${totalStock}`;
       if (attrs) itemContext += `\n\nATRIBUTOS DO PRODUTO:\n${attrs}`;
@@ -733,18 +734,32 @@ ${plusCrossSell ? `CROSS-SELL ATIVO: Este modelo TEM versão Plus Size! Termo de
 - PREÇO: confirme o preço que está nos dados do anúncio. Não invente valores.
 
 - BLUSA / BLUSINHA / CROPPED / PEÇA DE CIMA — regra crítica:
-${isPecaInferior ? `  
-  Este anúncio é de ${tipoPeca}. Quando a cliente pergunta sobre "blusa", "blusinha", "cropped" ou "peça de cima", QUASE SEMPRE ela está se referindo à peça de cima do LOOK da foto. Responda CONFIRMANDO que temos peças de cima e direcione pra busca:
+${isPecaInferior ? (temMapeamentoTops ? `
+  Este anúncio é de ${tipoPeca} e TEM MAPEAMENTO ESPECÍFICO de peças de cima (ver bloco "PEÇAS DE CIMA QUE COMBINAM" no contexto do anúncio acima).
+  
+  Quando cliente pergunta sobre "blusa", "blusinha", "cropped", "body" ou "peça de cima":
+  • USE AS REFs ESPECÍFICAS + LINKS do bloco "PEÇAS DE CIMA QUE COMBINAM"
+  • Siga as REGRAS_TOPS (acima) — 1 opção, mande direto; 2+ opções, ofereça as duas
+  • NUNCA use "busque por X" genérico — temos os links exatos
+  
+  EXEMPLO BOM (2 bodies mapeados):
+  Cliente: "Como faço pra comprar essa blusinha?"
+  Resposta: "Olá! Esse anúncio é da nossa ${tipoPeca}, mas temos 2 opções de peça de cima que combinam: body transpassado s/manga (link MLB) e body decote V (link MLB). Dá uma olhada e escolhe a que gostar mais!"
+  
+  REGRAS OBRIGATÓRIAS:
+  • NUNCA mencione números de referência (ref 1628, ref 395) — use só descrição + link
+  • NUNCA prometa peça idêntica da foto
+  • Use o LINK do MLB do bloco — não "busque por X"` : `
+  Este anúncio é de ${tipoPeca}, SEM mapeamento específico de peças de cima. Quando cliente pergunta sobre "blusa", "blusinha", "cropped" ou "peça de cima", direcione pra busca genérica:
   
   EXEMPLO BOM:
   Cliente: "Como faço pra comprar essa blusinha?"
-  Resposta: "Olá! Esse anúncio é da nossa ${tipoPeca}, mas temos sim várias peças de cima que combinam pra montar o look! Vale dar uma olhada nos nossos anúncios buscando por ${buscasPecaCima} — vai encontrar opções lindas!"
+  Resposta: "Olá! Esse anúncio é da nossa ${tipoPeca}, mas temos peças de cima que combinam pra montar o look! Vale dar uma olhada nos nossos anúncios buscando por ${buscasPecaCima} — vai encontrar opções lindas!"
   
   REGRAS OBRIGATÓRIAS:
   • NUNCA mencione números de referência (ref 1628, ref 395, etc) — são internos
-  • NUNCA prometa que TEM a peça idêntica da foto — diga "geralmente é cropped/body" pra cliente buscar e escolher
-  • Sempre indique BUSCA pelos nomes naturais: ${buscasPecaCima}
-  • Se cliente já especificou estilo (ex: "elegante"), pode priorizar a sugestão de "camisa tricoline${sufixoPlusBusca}"` : ''}${isPecaInteira ? `
+  • NUNCA prometa peça idêntica da foto
+  • Sempre indique BUSCA pelos nomes naturais: ${buscasPecaCima}`) : ''}${isPecaInteira ? `
   
   Este anúncio é de ${tipoPeca}, que JÁ É peça inteira (cobre tudo). Se cliente pergunta sobre "blusa" ou "blusinha", houve confusão real — esclareça com naturalidade e ofereça alternativa:
   
