@@ -1,0 +1,232 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// _lojas-whats-meta-client.js — Cliente Meta WhatsApp Business Cloud API
+// ═══════════════════════════════════════════════════════════════════════════
+// Wrapper sobre a Cloud API da Meta:
+//   - Enviar mensagens (texto, template HSM, midia)
+//   - Validar assinatura de webhook (X-Hub-Signature-256)
+//   - Baixar midia recebida
+//   - Sincronizar status de templates
+//
+// Credentials vem de env vars:
+//   META_WA_ACCESS_TOKEN  - token de acesso (24h temp ou System User)
+//   META_WA_PHONE_ID      - phone number id do numero emissor
+//   META_WA_WABA_ID       - WhatsApp Business Account ID
+//   META_WA_APP_SECRET    - app secret pra validar assinatura webhook
+//   META_WA_VERIFY_TOKEN  - verify token pro handshake do webhook
+//
+// Docs: https://developers.facebook.com/docs/whatsapp/cloud-api
+// ═══════════════════════════════════════════════════════════════════════════
+
+import crypto from 'crypto';
+import { log, logErro } from './_lojas-whats-helpers.js';
+
+const META_GRAPH_API = 'https://graph.facebook.com/v21.0';
+
+// ─── HELPER: chamada base na Graph API ────────────────────────────────────
+
+async function metaFetch(path, options = {}) {
+  const url = `${META_GRAPH_API}${path}`;
+  const headers = {
+    'Authorization': `Bearer ${process.env.META_WA_ACCESS_TOKEN}`,
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  };
+  const res = await fetch(url, { ...options, headers });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch (_) { /* nao eh json */ }
+  if (!res.ok) {
+    const err = new Error(`Meta API ${res.status}: ${json?.error?.message || text}`);
+    err.status = res.status;
+    err.metaResponse = json;
+    throw err;
+  }
+  return json;
+}
+
+// ─── VERIFY WEBHOOK (handshake GET na primeira config Meta) ───────────────
+
+/**
+ * Valida o handshake do webhook (GET) que a Meta envia quando registra a URL.
+ * Retorna { ok, challenge } — se ok=true, devolve o challenge (status 200).
+ *
+ * Meta manda query params:
+ *   hub.mode=subscribe
+ *   hub.verify_token=<o que a gente cadastrou>
+ *   hub.challenge=<string aleatoria que a gente devolve>
+ */
+export function verifyWebhookHandshake(query) {
+  const mode = query['hub.mode'];
+  const token = query['hub.verify_token'];
+  const challenge = query['hub.challenge'];
+  const expected = process.env.META_WA_VERIFY_TOKEN;
+  if (mode === 'subscribe' && token && token === expected) {
+    log('webhook', 'handshake OK');
+    return { ok: true, challenge };
+  }
+  logErro('webhook', `handshake FALHOU. mode=${mode} match=${token === expected}`);
+  return { ok: false, challenge: null };
+}
+
+// ─── ASSINATURA DE EVENTOS (POST) ─────────────────────────────────────────
+
+/**
+ * Valida que o POST veio da Meta usando HMAC-SHA256 com APP_SECRET.
+ * Meta manda header X-Hub-Signature-256: sha256=<hash>
+ *
+ * @param {string|Buffer} rawBody - corpo CRU do request (nao JSON parsed)
+ * @param {string} signatureHeader - valor do header X-Hub-Signature-256
+ */
+export function verifyWebhookSignature(rawBody, signatureHeader) {
+  if (!signatureHeader) return false;
+  const secret = process.env.META_WA_APP_SECRET;
+  if (!secret) {
+    logErro('webhook-sign', 'META_WA_APP_SECRET nao configurado');
+    return false;
+  }
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(rawBody)
+    .digest('hex');
+  const provided = signatureHeader.replace(/^sha256=/, '');
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expected, 'hex'),
+      Buffer.from(provided, 'hex')
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+// ─── ENVIO DE MENSAGENS ───────────────────────────────────────────────────
+
+/**
+ * Envia mensagem de TEXTO LIVRE (so funciona dentro da janela 24h apos
+ * cliente ter respondido). Pra primeira mensagem, use enviarTemplate.
+ *
+ * @param {string} telefone - E164 sem '+' (ex: '5511999999999')
+ * @param {string} texto - corpo da mensagem
+ * @param {object} opts - { preview_url: true|false }
+ * @returns {object} { messages: [{ id }] } da Meta
+ */
+export async function enviarTexto(telefone, texto, opts = {}) {
+  const body = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: telefone,
+    type: 'text',
+    text: {
+      preview_url: opts.preview_url !== false, // default true (mostra preview de links)
+      body: texto
+    }
+  };
+  log('enviar-texto', `to=${telefone} len=${texto.length}`);
+  return await metaFetch(`/${process.env.META_WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+/**
+ * Envia mensagem de TEMPLATE HSM (primeira mensagem ou fora da janela 24h).
+ * Template precisa estar APROVADO na Meta antes.
+ *
+ * @param {string} telefone - E164 sem '+'
+ * @param {string} templateName - nome cadastrado na Meta (ex: 'carrinho_abandonado_site_amicia')
+ * @param {Array<string>} variables - valores pras variaveis {{1}}, {{2}}, etc.
+ *                                    Ex: ['Maria', '8']
+ * @param {string} language - default 'pt_BR'
+ */
+export async function enviarTemplate(telefone, templateName, variables = [], language = 'pt_BR') {
+  const components = [];
+  if (variables.length > 0) {
+    components.push({
+      type: 'body',
+      parameters: variables.map(v => ({ type: 'text', text: String(v) }))
+    });
+  }
+  const body = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: telefone,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: language },
+      ...(components.length > 0 ? { components } : {})
+    }
+  };
+  log('enviar-template', `to=${telefone} tpl=${templateName} vars=${variables.length}`);
+  return await metaFetch(`/${process.env.META_WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+// ─── BAIXAR MIDIA RECEBIDA ────────────────────────────────────────────────
+
+/**
+ * Cliente mandou foto/audio/video — Meta envia media_id no webhook.
+ * Pra baixar o conteudo real, precisa 2 chamadas:
+ *   1. GET /<media_id> → retorna { url } temporaria
+ *   2. GET <url> com Bearer token → bytes do arquivo
+ */
+export async function obterUrlMidia(mediaId) {
+  return await metaFetch(`/${mediaId}`);
+}
+
+export async function baixarMidia(mediaUrl) {
+  // mediaUrl ja vem completa do passo 1
+  const res = await fetch(mediaUrl, {
+    headers: { Authorization: `Bearer ${process.env.META_WA_ACCESS_TOKEN}` }
+  });
+  if (!res.ok) throw new Error(`Falha baixar midia ${res.status}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+// ─── TEMPLATES ────────────────────────────────────────────────────────────
+
+/**
+ * Consulta status de um template especifico no Meta.
+ * Util pra sincronizar lojas_whats_templates.status com a Meta.
+ */
+export async function consultarTemplate(name, language = 'pt_BR') {
+  const res = await metaFetch(
+    `/${process.env.META_WA_WABA_ID}/message_templates?name=${encodeURIComponent(name)}`,
+    { method: 'GET' }
+  );
+  const tpl = res?.data?.find(t => t.name === name && t.language === language);
+  return tpl || null;
+}
+
+/**
+ * Lista todos os templates da WABA. Util pra UI mostrar status.
+ */
+export async function listarTemplates() {
+  const res = await metaFetch(
+    `/${process.env.META_WA_WABA_ID}/message_templates?limit=100`,
+    { method: 'GET' }
+  );
+  return res?.data || [];
+}
+
+// ─── MARCAR MENSAGEM COMO LIDA (boa pratica WhatsApp) ─────────────────────
+
+export async function marcarComoLida(messageId) {
+  const body = {
+    messaging_product: 'whatsapp',
+    status: 'read',
+    message_id: messageId
+  };
+  try {
+    return await metaFetch(`/${process.env.META_WA_PHONE_ID}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    // Falha silenciosa — nao bloqueia fluxo se nao conseguir marcar como lida
+    logErro('marcar-lida', e);
+    return null;
+  }
+}
