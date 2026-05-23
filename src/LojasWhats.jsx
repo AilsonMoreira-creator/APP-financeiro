@@ -112,11 +112,24 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
   const [activeTab, setActiveTab] = useState('aprovar');
   const [refreshTick, setRefreshTick] = useState(0);
 
-  if (!isAdmin) {
+  // Permissao Sofia (Ailson 25/05/2026): isAdmin OU usuario tem 'sofia' em modulos[].
+  // Usuario com modulo sofia tem MESMO acesso de admin dentro do modulo:
+  // pode aprovar, editar, dispensar, alterar config, atender clientes.
+  const temAcessoSofia = (() => {
+    if (isAdmin) return true;
+    try {
+      const s = JSON.parse(localStorage.getItem('amica_session') || '{}');
+      return Array.isArray(s?.modulos) && s.modulos.includes('sofia');
+    } catch {
+      return false;
+    }
+  })();
+
+  if (!temAcessoSofia) {
     return (
       <div style={{ padding: 20, fontFamily: FONT, textAlign: 'center' }}>
         <AlertCircle size={48} color={palette.alert} style={{ margin: '20px auto' }} />
-        <p>{ASSISTANT_NAME} é só pra admins.</p>
+        <p>{ASSISTANT_NAME} precisa de permissao especifica. Fala com o admin pra ele liberar.</p>
         <button onClick={onBack} style={btnSecundario}>Voltar</button>
       </div>
     );

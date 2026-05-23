@@ -257,6 +257,18 @@ const SvgLojas = ({ size = 32 }) => {
   );
 };
 
+// Icone Sofia (modulo de permissao Sofia, sub-modulo do Lojas).
+// Reaproveita o whatsapp.png que ja temos em /icons/lojas-whats/.
+const SvgSofia = ({ size = 32 }) => (
+  <img
+    src="/icons/lojas-whats/whatsapp.png"
+    alt="Sofia"
+    width={size}
+    height={size}
+    style={{ objectFit: 'contain', display: 'block' }}
+  />
+);
+
 const SvgConfiguracoes = ({ size = 32 }) => {
   const cx=32,cy=32,R=26,r=20,teeth=8,toothW=0.28;
   const pts=[];
@@ -533,6 +545,11 @@ const modules = [
   // Admin tem acesso. Vendedoras precisam ter "lojas" em modulos[] e estar
   // cadastradas em lojas_vendedoras (tabela do módulo).
   { id:"lojas", Icon:SvgLojas, label:"Lojas" },
+  // Sofia - sub-modulo do Lojas (assistente IA WhatsApp pra carrinhos abandonados).
+  // hideFromMenu: nao aparece como botao no menu principal nem como card na home,
+  // mas aparece como checkbox no editor de usuarios pra dar permissao granular.
+  // Quem tem 'sofia' em modulos[] (ou eh admin) ve a tab Sofia dentro do modulo Lojas.
+  { id:"sofia", Icon:SvgSofia, label:"Sofia", hideFromMenu: true },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -4472,7 +4489,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia","lojas"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia","lojas","sofia"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true,moduloPadrao:"home"},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas","salascorte"],admin:false,moduloPadrao:"oficinas"},
@@ -10720,7 +10737,7 @@ export default function App(){
     return <LoginScreen usuarios={usuarios} onLogin={(u)=>{const ehAdmin=(u.id===1||u.usuario==='admin');const safeUser=ehAdmin?{...u,admin:true,modulos:[...TODOS_MODULOS,"usuarios"]}:u;setUsuarioLogado(safeUser);const defaultMod=safeUser.moduloPadrao||"home";const canAccess=safeUser.admin||defaultMod==="home"||safeUser.modulos.includes(defaultMod);setActive(canAccess?defaultMod:(safeUser.modulos[0]||"home"));try{localStorage.setItem("amica_session",JSON.stringify(safeUser));}catch{}}}/>;
   }
 
-  const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id));
+  const modulosVisiveis=modules.filter(m=>usuarioLogado.modulos.includes(m.id) && !m.hideFromMenu);
 
   return(
     <div style={{height:"100vh",display:"flex",flexDirection:"column",fontFamily:"Georgia,serif",background:"#f7f4f0"}}>

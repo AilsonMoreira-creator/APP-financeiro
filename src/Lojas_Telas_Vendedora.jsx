@@ -80,6 +80,26 @@ import ModalFeedbackDiario from './Lojas_ModalFeedback.jsx';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * Helper de permissao Sofia (Ailson 25/05/2026).
+ *
+ * Sofia eh sub-modulo do Lojas, controlado por permissao granular:
+ *   - isAdmin === true                          -> acesso total
+ *   - usuario.modulos inclui 'sofia'            -> acesso ao modulo
+ *
+ * Le do localStorage amica_session (mesma fonte do isAdmin).
+ * Falha defensiva: retorna false se nao conseguir parsear.
+ */
+function temAcessoSofia(isAdmin) {
+  if (isAdmin) return true;
+  try {
+    const s = JSON.parse(localStorage.getItem('amica_session') || '{}');
+    return Array.isArray(s?.modulos) && s.modulos.includes('sofia');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Mapa de tipo de sugestão pra ícone + cor.
  * No v5 os mocks tinham 'icone: Flame' (componente), mas como agora vem
  * do Supabase como string 'reativar', preciso resolver dinamicamente.
@@ -181,20 +201,25 @@ export const HomeScreen = ({
 
   const [activeTab, setActiveTab] = useState('vendedoras');
 
-  const tabs = isAdmin
+  const acessoSofia = temAcessoSofia(isAdmin);
+
+  // Tabs base: vendedoras + carrinho (sempre visiveis).
+  // Tab Sofia: visivel se isAdmin OU usuario tem modulo 'sofia'.
+  // Demais tabs (dashboard/produtos/carteira/config): apenas isAdmin.
+  const tabsBase = [
+    { id: 'vendedoras', label: 'Vendedoras', icon: Users },
+    { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
+  ];
+  const tabSofia = acessoSofia ? [{ id: 'sofia', label: 'Sofia', icon: Bot }] : [];
+  const tabsAdminExtra = isAdmin
     ? [
-        { id: 'vendedoras', label: 'Vendedoras', icon: Users },
-        { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
-        { id: 'sofia', label: 'Sofia', icon: Bot },
         { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
         { id: 'produtos', label: 'Produtos', icon: Package },
         { id: 'carteira_geral', label: 'Carteira geral', icon: Briefcase },
         { id: 'config', label: 'Config', icon: Settings },
       ]
-    : [
-        { id: 'vendedoras', label: 'Vendedoras', icon: Users },
-        { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
-      ];
+    : [];
+  const tabs = [...tabsBase, ...tabSofia, ...tabsAdminExtra];
 
   const subtitle = state.ultimaSincronizacao
     ? `Atualizado: ${new Date(state.ultimaSincronizacao).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
@@ -250,7 +275,7 @@ export const HomeScreen = ({
           }}
         />
       )}
-      {activeTab === 'sofia' && isAdmin && (
+      {activeTab === 'sofia' && acessoSofia && (
         <LojasWhats
           userId={state?.userId}
           isAdmin={isAdmin}
