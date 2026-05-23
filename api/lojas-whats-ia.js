@@ -20,6 +20,7 @@
 
 import { supabase, setCors, log, logErro, getConfig } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
+import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa } from './_lojas-whats-cardapio.js';
 
 // ─── GATILHOS QUENTE (lista fechada — definida pelo Ailson) ────────────────
 
@@ -118,6 +119,10 @@ PRODUTOS:
 - Pode sugerir peças relacionadas ao que cliente já tem no carrinho
 - Pode mencionar "novidades" e "best sellers" quando fizer sentido
 - NÃO inventar referências/preços/disponibilidade que vc não tem confirmado
+- USA APENAS produtos do CATÁLOGO DISPONÍVEL injetado abaixo
+- Se cliente perguntar sobre algo fora desse catálogo, diga que vai verificar e voltar
+- Linguagem natural ao mencionar produto: "tem uma jaqueta trunia que tá saindo bem"
+  NUNCA fale número de ref (1871, 3190) na conversa — isso é interno
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -214,7 +219,20 @@ async function processarConversa(conversaId) {
     };
   }
 
-  // 5. Gera réplica via Claude
+  // 5. Monta cardápio dinâmico (em_alta + best_sellers + novidades + matches do carrinho)
+  let cardapioStr = '';
+  let refsCarrinho = [];
+  try {
+    refsCarrinho = await getRefsCarrinhoDeConversa(conv.carrinho_id);
+    const cardapio = await montarCardapio({ refsDoCarrinho: refsCarrinho });
+    cardapioStr = formatarCardapioPraIA(cardapio);
+    log('ia', `conversa=${conversaId} cardapio: ${cardapio.em_alta?.length || 0} alta, ${cardapio.best_sellers?.length || 0} bs, ${cardapio.novidades?.length || 0} nov, ${refsCarrinho.length} refs carrinho, ${cardapio.matches?.length || 0} grupos match`);
+  } catch (e) {
+    logErro('ia/cardapio', e);
+    cardapioStr = 'CATALOGO HOJE: indisponivel (use conhecimento geral, sem inventar refs).';
+  }
+
+  // 6. Gera réplica via Claude
   const contextoConv = montarContextoConversa(conv);
   const msgsClaude = montarMensagensClaude(msgs, conv);
 
@@ -222,7 +240,8 @@ async function processarConversa(conversaId) {
     modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
     systemBlocks: [
       { type: 'text', text: SYSTEM_PROMPT },
-      { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` }
+      { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` },
+      { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
     ],
     messages: msgsClaude,
     max_tokens: 400,
@@ -237,7 +256,7 @@ async function processarConversa(conversaId) {
   const textoProposto = (cl.texto || '').trim();
   if (!textoProposto) throw new Error('claude_retornou_vazio');
 
-  // 6. Cria sugestão pendente
+  // 7. Cria sugestão pendente
   const { error: errSug } = await supabase.from('lojas_whats_sugestoes').insert({
     conversa_id: conversaId,
     tipo: 'replica',
@@ -248,13 +267,14 @@ async function processarConversa(conversaId) {
     contexto_ia: {
       ultima_msg_cliente: textoCliente.slice(0, 500),
       gatilhos_detectados: gatilhos,
+      refs_carrinho_resolvidas: refsCarrinho,
       claude_latencia_ms: cl.latencia_ms,
       claude_custo_brl: cl.custo_brl
     }
   });
   if (errSug) throw errSug;
 
-  // 7. Atualiza atividade da conversa
+  // 8. Atualiza atividade da conversa
   await supabase.from('lojas_whats_conversas').update({
     ultima_atividade_em: new Date().toISOString(),
     atualizado_em: new Date().toISOString()
@@ -264,6 +284,7 @@ async function processarConversa(conversaId) {
     motivo: 'replica_proposta',
     gatilhos: [],
     proposta_chars: textoProposto.length,
+    refs_carrinho_resolvidas: refsCarrinho,
     claude_latencia_ms: cl.latencia_ms,
     claude_custo_brl: cl.custo_brl
   };
