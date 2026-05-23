@@ -101,7 +101,8 @@ async function executarSelecao(req, res) {
     // 1. Lê configs
     const cap = await getConfig('cap_diario', 30);
     const dias = await getConfig('filtro_carrinhos_dias', 15);
-    const minPecas = await getConfig('filtro_min_pecas_pf', 6);
+    const minPecasPJ = await getConfig('filtro_min_pecas_pj', 0);
+    const minPecasPF = await getConfig('filtro_min_pecas_pf', 1);
 
     // 2. Conta sugestões já criadas hoje pra respeitar cap
     const hojeStr = new Date().toISOString().slice(0, 10);
@@ -123,8 +124,8 @@ async function executarSelecao(req, res) {
     }
 
     // 3. Busca candidatos com filtros + ordenação (PJ valor desc, depois PF data desc)
+    //    Filtro de peças é POR TIPO_PESSOA, então fazemos em JS depois do SELECT.
     //    NÃO uso .eq().eq()... porque preciso de ordenação composta com tipo_pessoa.
-    //    Faço com RPC ou raw SQL via supabase.
     //    Pra simplicidade, busco com SELECT e ordeno em JS.
     const { data: leadsRaw, error: errLeads } = await supabase
       .from('lojas_leads_carrinho')
@@ -138,7 +139,6 @@ async function executarSelecao(req, res) {
       `)
       .eq('status', 'aguardando_atribuicao')
       .is('convertido_em', null)
-      .gt('qtd_pecas_ultimo_carrinho', minPecas)
       .gte('ultimo_carrinho_em', new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString())
       .order('ultimo_carrinho_em', { ascending: false })
       .limit(500); // pega um lote grande pra filtrar/ordenar em JS
@@ -147,10 +147,17 @@ async function executarSelecao(req, res) {
     log('selecionar', `${leadsRaw?.length || 0} leads brutos do banco`);
 
     // 4. Filtros adicionais em JS:
+    //    - Min peças POR TIPO_PESSOA (PJ qualquer / PF >=1, configurável)
     //    - Telefone válido (regex flexível: aceita com ou sem 55)
     //    - Não duplicar com conversa Sofia ativa
     const candidatos = [];
     for (const lead of leadsRaw || []) {
+      // Filtro min peças por tipo
+      const pecas = Number(lead.qtd_pecas_ultimo_carrinho || 0);
+      if (lead.tipo_pessoa === 'PJ' && pecas < minPecasPJ) continue;
+      if (lead.tipo_pessoa === 'PF' && pecas < minPecasPF) continue;
+      if (!['PJ', 'PF'].includes(lead.tipo_pessoa)) continue;
+      // Telefone válido
       const telE164 = normalizarTelefone(lead.telefone_norm);
       if (!telE164 || !telefoneValido(telE164)) continue;
       lead._telE164 = telE164;
