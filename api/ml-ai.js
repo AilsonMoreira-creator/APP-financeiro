@@ -1,6 +1,6 @@
 import { supabase, getValidToken, getStockColors, setCors } from './_ml-helpers.js';
 import { gerarBlocoComprimento, REGRAS_COMPRIMENTO_PROMPT } from './_ml-comprimentos.js';
-import { gerarBlocoTops, REGRAS_TOPS_PROMPT } from './_ml-tops.js';
+import { gerarBlocoTops, REGRAS_TOPS_PROMPT, formatarBuscasPecaCima } from './_ml-tops.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
@@ -398,13 +398,19 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── PECA DE CIMA / LOOK (Ailson 07/05/2026) ──
-    // Mesma logica do ml-webhook.js: detecta peca inferior vs inteira
-    // pra IA saber o contexto da pergunta sobre "blusa/cropped".
+    // ── PECA DE CIMA / LOOK (Ailson 07/05/2026, refatorado 25/05/2026) ──
+    // Mesma logica do ml-webhook.js: detecta peca inferior vs inteira pra IA
+    // saber o contexto da pergunta sobre "blusa/cropped".
+    //
+    // FALLBACK DINAMICO: quando o anuncio NAO esta mapeado em ml_top_anuncios_map,
+    // usa lista REAL do banco (ml_top_refs) em vez do antigo hardcoded que tinha
+    // "body poliamida" — termo INEXISTENTE no catalogo (cliente buscava e nao
+    // achava nada). Agora usa "body transpassado" / "body decote V" (refs reais).
     const isPecaInferior = ['saia', 'calça', 'bermuda'].includes(tipoPeca);
     const isPecaInteira = ['vestido', 'macacão'].includes(tipoPeca);
     const sufixoPlusBusca = (isPlus || plusCrossSell) ? ' plus size' : '';
-    const buscasPecaCima = `"cropped viscolinho${sufixoPlusBusca}", "body poliamida${sufixoPlusBusca}" ou "camisa tricoline${sufixoPlusBusca}"`;
+    const buscasPecaCima = (await formatarBuscasPecaCima(isPlus || !!plusCrossSell))
+      || `"cropped viscolinho${sufixoPlusBusca}" ou "body transpassado${sufixoPlusBusca}"`;
 
     const claudeRes = await fetch(CLAUDE_API, {
       method: 'POST',

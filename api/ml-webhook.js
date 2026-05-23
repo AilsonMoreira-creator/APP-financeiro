@@ -1,6 +1,6 @@
 import { supabase, getValidToken, isOutsideBusinessHours, getAbsenceMessage, isInAISchedule, getAILowConfidenceMsg, getStockColors, detectColorsInText, isColorRequest, detectSizeInText, detectConfirmation } from './_ml-helpers.js';
 import { gerarBlocoComprimento, REGRAS_COMPRIMENTO_PROMPT } from './_ml-comprimentos.js';
-import { gerarBlocoTops, REGRAS_TOPS_PROMPT } from './_ml-tops.js';
+import { gerarBlocoTops, REGRAS_TOPS_PROMPT, formatarBuscasPecaCima } from './_ml-tops.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages';
@@ -512,7 +512,10 @@ async function getAIAutoResponse(questionText, itemId, brand) {
   const isPecaInteira = ['vestido', 'macacão'].includes(tipoPeca);
   // Sufixo plus size apenas se anuncio eh plus OU tem versao plus disponivel
   const sufixoPlusBusca = (isPlus || plusCrossSell) ? ' plus size' : '';
-  const buscasPecaCima = `"cropped viscolinho${sufixoPlusBusca}", "body poliamida${sufixoPlusBusca}" ou "camisa tricoline${sufixoPlusBusca}"`;
+  // Fallback dinamico do banco (ml_top_refs). Antigo hardcoded tinha "body poliamida"
+  // termo INEXISTENTE nos titulos. Agora usa termos REAIS cadastrados pelo Ailson.
+  const buscasPecaCima = (await formatarBuscasPecaCima(isPlus || !!plusCrossSell))
+    || `"cropped viscolinho${sufixoPlusBusca}" ou "body transpassado${sufixoPlusBusca}"`;
 
   const systemPrompt = `Você é uma vendedora experiente de moda feminina no Mercado Livre. Simpática, direta, entende de moda e quer ajudar a cliente a comprar.
 

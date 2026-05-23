@@ -160,6 +160,65 @@ export async function gerarBlocoTops(mlbId) {
 }
 
 /**
+ * Fallback dinamico pra quando o anuncio NAO esta mapeado em ml_top_anuncios_map.
+ * Retorna lista de descricoes de tops genericos (1 por tipo) baseado em ml_top_refs.
+ *
+ * - isPlus=true:  prefere descricao plus size (ex: ref 2820 "cropped viscolinho plus size")
+ *                 e usa normal pros tipos sem plus
+ * - isPlus=false: so descricoes normais
+ *
+ * Retorna [] se tabela vazia (defensivo).
+ */
+export async function getFallbackTopsGenericos(isPlus = false) {
+  const refs = await carregarRefs();
+  if (!refs || refs.length === 0) return [];
+
+  // Agrupa por tipo
+  const porTipo = {};
+  for (const r of refs) {
+    if (!porTipo[r.tipo]) porTipo[r.tipo] = [];
+    porTipo[r.tipo].push(r);
+  }
+
+  // Pra cada tipo, escolhe a melhor descricao (ordena por ref pra ser deterministico)
+  const escolhidas = {};
+  for (const [tipo, lista] of Object.entries(porTipo)) {
+    const ordenadas = [...lista].sort((a, b) => String(a.ref).localeCompare(String(b.ref)));
+    if (isPlus) {
+      const plus = ordenadas.find(r => r.is_plus_size);
+      const normal = ordenadas.find(r => !r.is_plus_size);
+      escolhidas[tipo] = plus || normal;
+    } else {
+      escolhidas[tipo] = ordenadas.find(r => !r.is_plus_size);
+    }
+  }
+
+  // Ordem: cropped, body, camisa (mesma ordem de prioridade do antigo hardcoded)
+  const ordem = ['cropped', 'body', 'camisa'];
+  return ordem.map(t => escolhidas[t]).filter(Boolean);
+}
+
+/**
+ * Formata a lista de fallback como string pra colar no prompt:
+ *   ["cropped viscolinho", "body transpassado s/ manga", "camisa tricoline"]
+ *   → '"cropped viscolinho", "body transpassado s/ manga" ou "camisa tricoline"'
+ *
+ * Usa termos REAIS do banco (em vez do antigo hardcoded "body poliamida"
+ * que NAO existia em nenhum anuncio — cliente nunca achava nada).
+ *
+ * Retorna null se nenhum top cadastrado (fallback ultra deve ser usado).
+ */
+export async function formatarBuscasPecaCima(isPlus = false) {
+  const lista = await getFallbackTopsGenericos(isPlus);
+  if (lista.length === 0) return null;
+
+  const termos = lista.map(r => `"${r.descricao_curta}"`);
+  if (termos.length === 1) return termos[0];
+  if (termos.length === 2) return `${termos[0]} ou ${termos[1]}`;
+  return `${termos.slice(0, -1).join(', ')} ou ${termos[termos.length - 1]}`;
+}
+
+/**
  * Regras pra colar no system prompt. Compartilhada por ml-ai e ml-webhook.
  */
 export const REGRAS_TOPS_PROMPT = `PARTE DE CIMA QUE COMBINA (Ailson 22/05/2026): As peças que combinam com a parte de baixo deste anúncio SÃO PEÇAS DIFERENTES, vendidas em ANÚNCIOS SEPARADOS — NUNCA chame de "conjunto", "conjuntinho", "kit", "look completo" nem similar. São peças complementares que ficam bonitas juntas, mas o cliente compra cada uma em um anúncio.
