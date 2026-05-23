@@ -60,6 +60,10 @@ import ProdutosTab from './Lojas_Telas_Produtos.jsx';
 // Onda 2 do modulo Leads Carrinho (Ailson 12/05/2026).
 import CarrinhoTab, { LeadCard } from './Lojas_Carrinho.jsx';
 
+// Aba 'Sofia' (admin only) — assistente IA WhatsApp pra carrinhos abandonados.
+// Modulo a parte, mas acessivel via tab dentro de Lojas (Ailson 23/05/2026).
+import LojasWhats from './LojasWhats.jsx';
+
 // Modal de contexto pre-mensagem (Sprint B Trilha Win-back, 13/05/2026).
 // Aberto quando IA precisa de info da vendedora antes de gerar mensagem
 // (ex: trilha semana 2/3 — vendedora conta o que rolou na semana anterior).
@@ -181,6 +185,7 @@ export const HomeScreen = ({
     ? [
         { id: 'vendedoras', label: 'Vendedoras', icon: Users },
         { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
+        { id: 'sofia', label: 'Sofia', icon: Bot },
         { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
         { id: 'produtos', label: 'Produtos', icon: Package },
         { id: 'carteira_geral', label: 'Carteira geral', icon: Briefcase },
@@ -243,6 +248,13 @@ export const HomeScreen = ({
             // Onda 3: abrir detalhe do lead (em construção)
             console.log('[Lojas] abrir lead:', lead.id);
           }}
+        />
+      )}
+      {activeTab === 'sofia' && isAdmin && (
+        <LojasWhats
+          userId={state?.userId}
+          isAdmin={isAdmin}
+          onBack={() => setActiveTab('carrinho')}
         />
       )}
       {activeTab === 'dashboard' && isAdmin && (

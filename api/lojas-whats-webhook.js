@@ -193,10 +193,24 @@ async function processarMensagemRecebida(msg, valueCtx) {
   // 5. Marca como lida no WhatsApp (boa pratica — mostra checkmark azul)
   await marcarComoLida(msg.id);
 
-  // PROXIMO PASSO (nao feito aqui):
-  //   - Chamar IA pra gerar replica
-  //   - Detectar gatilhos Quente
-  //   - Adicionar sugestao na fila Tamara
+  // 6. Dispara IA pra gerar proposta de réplica (fire-and-forget, não bloqueia)
+  //    A IA roda em segundo plano e cria sugestão pendente pra Tamara revisar.
+  //    Se falhar, sem drama — Tamara pode chamar manual depois ou cron pega.
+  disparouIaAsync(conversa.id);
+}
+
+// Fire-and-forget pra /api/lojas-whats-ia (não usa await — não bloqueia webhook)
+function disparouIaAsync(conversaId) {
+  try {
+    const base = process.env.APP_URL || 'https://app-financeiro-brown.vercel.app';
+    fetch(`${base}/api/lojas-whats-ia`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversa_id: conversaId })
+    }).catch(e => logErro('webhook/disparo-ia', e));
+  } catch (e) {
+    logErro('webhook/disparo-ia-sync', e);
+  }
 }
 
 function extrairConteudo(msg) {
