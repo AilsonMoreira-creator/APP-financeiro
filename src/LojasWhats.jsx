@@ -32,7 +32,7 @@ import {
   Bot, RefreshCw, Check, X, Edit3, Send, Filter,
   Users, MessageCircle, Settings, AlertCircle,
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
-  User as UserIcon, Save, Link2, Eye
+  User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar
 } from 'lucide-react';
 import {
   supabase,
@@ -140,6 +140,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'aprovar',     label: 'Aprovar',     icon: () => <EtapaIcon nome="aprovar"     size={16} /> },
     { id: 'conversas',   label: 'Conversas',   icon: () => <EtapaIcon nome="conversando" size={16} /> },
     { id: 'vendedoras',  label: 'Vendedoras',  icon: Users },
+    { id: 'conversao',   label: 'Conversão',   icon: TrendingUp },
     { id: 'config',      label: 'Config',      icon: Settings },
   ];
 
@@ -170,6 +171,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'aprovar' && <AprovarTab userId={userId} refreshTick={refreshTick} onReload={() => setRefreshTick(t => t + 1)} />}
       {activeTab === 'conversas' && <ConversasTab refreshTick={refreshTick} />}
       {activeTab === 'vendedoras' && <VendedorasTab userId={userId} refreshTick={refreshTick} />}
+      {activeTab === 'conversao' && <ConversaoTab refreshTick={refreshTick} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
     </div>
   );
@@ -967,6 +969,311 @@ function ConfigTab({ userId, refreshTick }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 6: CONVERSÃO (Ailson 25/05/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// KPIs de conversao dos leads atendidos por Sofia ou Vendedora, com janela
+// diferenciada por canal: site=5d / loja=15d. Filtra origem_tipo=lead_carrinho
+// (Sofia so atende carrinho abandonado do site Amicia). NAO interfere com
+// CardConversoes do Dashboard Lojas (que tem regra propria de exibir so
+// status atencao/+3M/+6M).
+//
+// Endpoint: /api/lojas-whats-conversoes
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ConversaoTab({ refreshTick }) {
+  // Period: default = últimos 30 dias
+  const hoje = new Date();
+  const hojeStr = hoje.toISOString().slice(0, 10);
+  const default30dAtras = new Date(hoje.getTime() - 30 * 86400000)
+    .toISOString().slice(0, 10);
+
+  const [dataInicio, setDataInicio] = useState(default30dAtras);
+  const [dataFim, setDataFim] = useState(hojeStr);
+  const [dados, setDados] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+
+  // Quick-select periods
+  const setPeriodo = (dias) => {
+    const fim = new Date();
+    const ini = new Date(fim.getTime() - dias * 86400000);
+    setDataInicio(ini.toISOString().slice(0, 10));
+    setDataFim(fim.toISOString().slice(0, 10));
+  };
+
+  useEffect(() => {
+    let cancelado = false;
+    setLoading(true);
+    setErro(null);
+    const params = new URLSearchParams({ data_inicio: dataInicio, data_fim: dataFim });
+    fetch(`/api/lojas-whats-conversoes?${params.toString()}`)
+      .then(r => r.json())
+      .then(d => {
+        if (cancelado) return;
+        if (d.error) setErro(d.error);
+        else setDados(d);
+        setLoading(false);
+      })
+      .catch(e => {
+        if (cancelado) return;
+        setErro(e.message || 'Erro carregando');
+        setLoading(false);
+      });
+    return () => { cancelado = true; };
+  }, [dataInicio, dataFim, refreshTick]);
+
+  const fmtMoney = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+  });
+
+  return (
+    <div style={{ padding: '12px 16px', fontFamily: FONT }}>
+      {/* Filtros de período */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
+        flexWrap: 'wrap', rowGap: 6,
+      }}>
+        <Calendar size={sz(14)} color={palette.inkSoft} />
+        <input
+          type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)}
+          style={{
+            border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '4px 8px',
+            fontSize: fz(12), fontFamily: FONT, color: palette.ink,
+          }}
+        />
+        <span style={{ fontSize: fz(12), color: palette.inkMuted }}>até</span>
+        <input
+          type="date" value={dataFim} onChange={e => setDataFim(e.target.value)}
+          style={{
+            border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '4px 8px',
+            fontSize: fz(12), fontFamily: FONT, color: palette.ink,
+          }}
+        />
+        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+          {[
+            { dias: 7,  label: '7d'  },
+            { dias: 30, label: '30d' },
+            { dias: 90, label: '90d' },
+          ].map(p => (
+            <button
+              key={p.dias}
+              onClick={() => setPeriodo(p.dias)}
+              style={{
+                background: 'transparent', border: `1px solid ${palette.beige}`,
+                borderRadius: 6, padding: '3px 9px',
+                fontSize: fz(11), fontFamily: FONT, fontWeight: 500,
+                cursor: 'pointer', color: palette.inkSoft,
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted }}>
+          <Loader2 size={sz(20)} style={{ animation: 'spin 1s linear infinite' }} />
+          <div style={{ marginTop: 8, fontSize: fz(12) }}>Carregando...</div>
+        </div>
+      ) : erro ? (
+        <div style={{
+          padding: 16, background: palette.alertSoft, color: palette.alert,
+          borderRadius: 8, fontSize: fz(13),
+        }}>
+          {erro}
+        </div>
+      ) : !dados ? null : (
+        <>
+          {/* Header com total */}
+          <div style={{
+            display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 14,
+            flexWrap: 'wrap', rowGap: 6,
+          }}>
+            <div>
+              <div style={{ fontSize: fz(28), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
+                {dados.total}
+              </div>
+              <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                conversões no período ({dados.periodo.dias}d)
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: fz(20), fontWeight: 600, color: palette.ok, lineHeight: 1 }}>
+                {fmtMoney(dados.valor_total)}
+              </div>
+              <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 2 }}>
+                valor total
+              </div>
+            </div>
+          </div>
+
+          {/* 4 KPI cards: Sofia/Vendedora × Site/Loja */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            gap: 10, marginBottom: 18,
+          }}>
+            <KpiConvCard
+              label="🤖 Sofia → Site"
+              sub="≤5 dias após msg"
+              qtd={dados.kpis.sofia_site.qtd}
+              valor={fmtMoney(dados.kpis.sofia_site.valor)}
+              corBarra={palette.accent}
+            />
+            <KpiConvCard
+              label="🤖 Sofia → Loja"
+              sub="≤15 dias após msg"
+              qtd={dados.kpis.sofia_loja.qtd}
+              valor={fmtMoney(dados.kpis.sofia_loja.valor)}
+              corBarra={palette.purple}
+            />
+            <KpiConvCard
+              label="👩‍💼 Vendedora → Site"
+              sub="≤5 dias após msg"
+              qtd={dados.kpis.vendedora_site.qtd}
+              valor={fmtMoney(dados.kpis.vendedora_site.valor)}
+              corBarra={palette.ok}
+            />
+            <KpiConvCard
+              label="👩‍💼 Vendedora → Loja"
+              sub="≤15 dias após msg"
+              qtd={dados.kpis.vendedora_loja.qtd}
+              valor={fmtMoney(dados.kpis.vendedora_loja.valor)}
+              corBarra={palette.warn}
+            />
+          </div>
+
+          {/* Ranking por vendedora */}
+          {dados.por_vendedora.length > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <SectionTitle>Por vendedora</SectionTitle>
+              <div style={{
+                background: palette.surface, border: `1px solid ${palette.beige}`,
+                borderRadius: 8, overflow: 'hidden',
+              }}>
+                {dados.por_vendedora.map((v, i) => (
+                  <div key={v.vendedora_id || i} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 12px',
+                    borderTop: i > 0 ? `1px solid ${palette.beige}` : 'none',
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: fz(13), fontWeight: 600, color: palette.ink }}>
+                        {v.vendedora_nome}
+                      </span>
+                      <span style={{ fontSize: fz(11), color: palette.inkMuted }}>
+                        {v.site} site · {v.loja} loja
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                      <span style={{ fontSize: fz(16), fontWeight: 700, color: palette.ink }}>
+                        {v.qtd}
+                      </span>
+                      <span style={{ fontSize: fz(12), color: palette.ok, fontWeight: 600 }}>
+                        {fmtMoney(v.valor)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Detalhe (top 50) */}
+          {dados.detalhe.length > 0 && (
+            <div>
+              <SectionTitle>Últimas conversões</SectionTitle>
+              <div style={{
+                background: palette.surface, border: `1px solid ${palette.beige}`,
+                borderRadius: 8, overflow: 'hidden',
+              }}>
+                {dados.detalhe.map((d, i) => (
+                  <div key={d.id || i} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 12px', gap: 8,
+                    borderTop: i > 0 ? `1px solid ${palette.beige}` : 'none',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: fz(12), color: palette.ink, fontWeight: 600,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {d.cliente_nome || '—'}
+                      </div>
+                      <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
+                        {d.atendido_por === 'sofia' ? '🤖 Sofia' : `👩‍💼 ${d.vendedora_nome || '?'}`}
+                        {' · '}
+                        {d.canal_pedido === 'site' ? 'site' : 'loja'}
+                        {' · '}
+                        {d.dias_ate_compra}d
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ok }}>
+                        {fmtMoney(d.valor_venda)}
+                      </div>
+                      <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
+                        {d.data_venda}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {dados.total === 0 && (
+            <div style={{
+              padding: 24, textAlign: 'center', color: palette.inkMuted,
+              background: palette.surface, border: `1px dashed ${palette.beige}`,
+              borderRadius: 8,
+            }}>
+              <TrendingUp size={sz(32)} style={{ opacity: 0.3 }} />
+              <div style={{ marginTop: 8, fontSize: fz(13) }}>
+                Sem conversões registradas no período
+              </div>
+              <div style={{ marginTop: 4, fontSize: fz(11) }}>
+                Lead vira conversão quando recebe msg E compra dentro da janela
+                (5d site / 15d loja). Vendas orgânicas não contam.
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Card KPI compacto pra aba Conversao
+function KpiConvCard({ label, sub, qtd, valor, corBarra }) {
+  return (
+    <div style={{
+      background: palette.surface, border: `1px solid ${palette.beige}`,
+      borderRadius: 8, padding: '10px 12px', position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: corBarra,
+      }} />
+      <div style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600, marginBottom: 2 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: fz(10), color: palette.inkMuted, marginBottom: 6 }}>
+        {sub}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontSize: fz(22), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
+          {qtd}
+        </span>
+        <span style={{ fontSize: fz(12), color: palette.ok, fontWeight: 600 }}>
+          {valor}
+        </span>
+      </div>
     </div>
   );
 }
