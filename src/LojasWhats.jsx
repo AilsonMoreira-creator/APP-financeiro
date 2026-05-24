@@ -32,7 +32,8 @@ import {
   Bot, RefreshCw, Check, X, Edit3, Send, Filter,
   Users, MessageCircle, Settings, AlertCircle,
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
-  User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar
+  User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
+  Brain
 } from 'lucide-react';
 import {
   supabase,
@@ -141,6 +142,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'conversas',   label: 'Conversas',   icon: () => <EtapaIcon nome="conversando" size={16} /> },
     { id: 'vendedoras',  label: 'Vendedoras',  icon: Users },
     { id: 'conversao',   label: 'Conversão',   icon: TrendingUp },
+    { id: 'aprendizado', label: 'Aprendizado', icon: Brain },
     { id: 'config',      label: 'Config',      icon: Settings },
   ];
 
@@ -172,6 +174,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'conversas' && <ConversasTab refreshTick={refreshTick} />}
       {activeTab === 'vendedoras' && <VendedorasTab userId={userId} refreshTick={refreshTick} />}
       {activeTab === 'conversao' && <ConversaoTab refreshTick={refreshTick} />}
+      {activeTab === 'aprendizado' && <AprendizadoTab refreshTick={refreshTick} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
     </div>
   );
@@ -1504,6 +1507,270 @@ function KpiConvCard({ label, sub, qtd, valor, corBarra }) {
         <span style={{ fontSize: fz(12), color: palette.ok, fontWeight: 600 }}>
           {valor}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 7: APRENDIZADO IA (Ailson 26/05/2026 — coração da Sofia)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// UI pra Ailson auditar o aprendizado da Sofia. Mostra:
+//   - KPIs: eventos / padroes ativos / usar / evitar / resumos
+//   - Último resumo (texto em prosa gerado pelo Claude)
+//   - Top padrões (palavra/emoji/horario com sucessos × amostras)
+//   - Botão "Gerar resumo agora" (manual trigger cron-resumir)
+//
+// Endpoints:
+//   GET  /api/lojas-whats-aprendizado-listar?action=overview
+//   GET  /api/lojas-whats-aprendizado-listar?action=resumos
+//   POST /api/lojas-whats-aprendizado-listar action=resumir_agora
+// ═══════════════════════════════════════════════════════════════════════════
+
+function AprendizadoTab({ refreshTick }) {
+  const [overview, setOverview] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+  const [gerando, setGerando] = useState(false);
+  const [filtroRecomendacao, setFiltroRecomendacao] = useState('todos');
+
+  const carregar = async () => {
+    setLoading(true);
+    setErro(null);
+    try {
+      const r = await fetch('/api/lojas-whats-aprendizado-listar?action=overview');
+      const d = await r.json();
+      if (d.error) setErro(d.error); else setOverview(d);
+    } catch (e) {
+      setErro(e.message);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { carregar(); }, [refreshTick]);
+
+  const gerarResumoAgora = async () => {
+    setGerando(true);
+    try {
+      const r = await fetch('/api/lojas-whats-aprendizado-listar?action=resumir_agora');
+      const d = await r.json();
+      if (d.error) setErro(d.error);
+      else if (d.skipped) setErro(d.razao || 'Sem dados novos suficientes ainda');
+      else await carregar();
+    } catch (e) { setErro(e.message); }
+    setGerando(false);
+  };
+
+  if (loading) return <div style={{ padding: 20, textAlign: 'center' }}><Loader2 size={sz(24)} className="spin" /></div>;
+  if (erro && !overview) return <div style={{ padding: 16, color: palette.alert }}>{erro}</div>;
+
+  const k = overview?.kpis || {};
+  const padroesFiltrados = (overview?.top_padroes || []).filter(p =>
+    filtroRecomendacao === 'todos' || p.recomendacao === filtroRecomendacao
+  );
+
+  return (
+    <div style={{ padding: '12px 14px', fontFamily: FONT }}>
+      {/* KPIs */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+        gap: 8, marginBottom: 14,
+      }}>
+        <KpiCard label="Eventos" valor={k.eventos_total} cor={palette.accent} />
+        <KpiCard label="Padrões ativos" valor={k.padroes_ativos} cor={palette.ink} />
+        <KpiCard label="✓ Usar" valor={k.padroes_usar} cor={palette.ok} />
+        <KpiCard label="✗ Evitar" valor={k.padroes_evitar} cor={palette.alert} />
+        <KpiCard label="Resumos" valor={k.resumos_total} cor={palette.purple || '#7b6fc6'} />
+      </div>
+
+      {/* Erro flutuante */}
+      {erro && (
+        <div style={{
+          padding: '8px 12px', marginBottom: 12, borderRadius: 6,
+          background: palette.alertSoft, color: palette.alert,
+          fontSize: fz(12),
+        }}>
+          {erro}
+        </div>
+      )}
+
+      {/* Último resumo */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <SectionTitle>📖 Resumo da Sofia</SectionTitle>
+          <button onClick={gerarResumoAgora} disabled={gerando} style={{
+            background: gerando ? palette.beige : palette.ink, color: palette.bg,
+            border: 'none', borderRadius: 6, padding: '5px 11px',
+            fontSize: fz(11), fontFamily: FONT, fontWeight: 600,
+            cursor: gerando ? 'wait' : 'pointer',
+          }}>
+            {gerando ? 'Gerando...' : '🔄 Gerar agora'}
+          </button>
+        </div>
+        {overview?.ultimo_resumo ? (
+          <div style={{
+            background: palette.surface, border: `1px solid ${palette.beige}`,
+            borderRadius: 10, padding: 14,
+          }}>
+            <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 8 }}>
+              Até {overview.ultimo_resumo.ate_data} ·
+              {' '}{overview.ultimo_resumo.atendimentos_analisados} atendimentos ·
+              {' '}{overview.ultimo_resumo.vendas_neste_periodo} vendas ·
+              {' '}{Math.round((overview.ultimo_resumo.taxa_conversao_geral || 0) * 100)}% conversão
+            </div>
+            <div style={{
+              fontSize: fz(13), color: palette.ink, lineHeight: 1.55,
+              whiteSpace: 'pre-wrap', fontFamily: FONT,
+            }}>
+              {overview.ultimo_resumo.resumo_ia || '(vazio)'}
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            padding: 16, textAlign: 'center', color: palette.inkMuted,
+            background: palette.surface, border: `1px dashed ${palette.beige}`,
+            borderRadius: 10, fontSize: fz(12),
+          }}>
+            <Brain size={sz(28)} style={{ opacity: 0.3 }} />
+            <div style={{ marginTop: 8 }}>
+              Nenhum resumo gerado ainda. Sofia precisa de pelo menos 30 atendimentos
+              em estado final pra gerar.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Top padrões */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <SectionTitle>🎯 Padrões aprendidos</SectionTitle>
+          <select
+            value={filtroRecomendacao}
+            onChange={e => setFiltroRecomendacao(e.target.value)}
+            style={{
+              border: `1px solid ${palette.beige}`, borderRadius: 6, padding: '3px 8px',
+              fontSize: fz(11), fontFamily: FONT, color: palette.ink,
+              background: palette.surface,
+            }}
+          >
+            <option value="todos">Todos</option>
+            <option value="usar">✓ Usar</option>
+            <option value="evitar">✗ Evitar</option>
+            <option value="experimentar">⚪ Experimentar</option>
+            <option value="inconclusivo">? Inconclusivo</option>
+          </select>
+        </div>
+
+        {padroesFiltrados.length === 0 ? (
+          <div style={{
+            padding: 16, textAlign: 'center', color: palette.inkMuted,
+            background: palette.surface, border: `1px dashed ${palette.beige}`,
+            borderRadius: 8, fontSize: fz(12),
+          }}>
+            Sem padrões pra mostrar (cron-aprender roda 02h BRT diário).
+          </div>
+        ) : (
+          <div style={{
+            background: palette.surface, border: `1px solid ${palette.beige}`,
+            borderRadius: 8, overflow: 'hidden',
+          }}>
+            {padroesFiltrados.map((p, i) => (
+              <PadraoRow key={i} p={p} primeira={i === 0} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Info do sistema */}
+      <div style={{
+        marginTop: 18, padding: 10, borderRadius: 8,
+        background: '#f0f6fb', border: '1px solid #c8dae8',
+        fontSize: fz(11), color: palette.inkSoft, lineHeight: 1.5,
+      }}>
+        <strong>Como Sofia aprende:</strong> Cron diário (02h BRT) extrai
+        features das mensagens com Claude Haiku, atribui contribuição via decay
+        (última msg pesa mais). Re-agrega padrões. Sofia consulta TOP padrões
+        antes de gerar resposta (70% replica / 30% explora variações).
+        Resumo semanal toda segunda 06h BRT se ≥30 atendimentos novos.
+      </div>
+    </div>
+  );
+}
+
+function KpiCard({ label, valor, cor }) {
+  return (
+    <div style={{
+      background: palette.surface, border: `1px solid ${palette.beige}`,
+      borderRadius: 8, padding: '8px 10px', position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: cor,
+      }} />
+      <div style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600, marginBottom: 2 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: fz(20), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
+        {valor != null ? valor : '—'}
+      </div>
+    </div>
+  );
+}
+
+function PadraoRow({ p, primeira }) {
+  const pct = Math.round((p.taxa_sucesso || 0) * 100);
+  const recCor = {
+    usar:          palette.ok,
+    evitar:        palette.alert,
+    experimentar: '#d4a017',
+    inconclusivo:  palette.inkMuted,
+  }[p.recomendacao] || palette.inkMuted;
+
+  const recIcon = {
+    usar:         '✓',
+    evitar:       '✗',
+    experimentar: '⚪',
+    inconclusivo: '?',
+  }[p.recomendacao] || '·';
+
+  const tipoEmoji = {
+    palavra:    '💬',
+    emoji:      '😀',
+    horario:    '🕒',
+    tipo_msg:   '📋',
+    combinacao: '🔗',
+  }[p.tipo] || '·';
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 12px',
+      borderTop: primeira ? 'none' : `1px solid ${palette.beige}`,
+    }}>
+      <span style={{ fontSize: fz(14), opacity: 0.7 }}>{tipoEmoji}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: fz(13), fontWeight: 600, color: palette.ink,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          "{p.chave}"
+          {p.contexto?.etapa && (
+            <span style={{ fontSize: fz(10), color: palette.inkMuted, marginLeft: 6, fontWeight: 400 }}>
+              em {p.contexto.etapa}
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
+          {p.sucessos}/{p.amostras} amostras
+        </div>
+      </div>
+      <div style={{ textAlign: 'right', minWidth: 60 }}>
+        <div style={{ fontSize: fz(14), fontWeight: 700, color: recCor, lineHeight: 1 }}>
+          {pct}%
+        </div>
+        <div style={{ fontSize: fz(10), color: recCor, fontWeight: 600, marginTop: 2 }}>
+          {recIcon} {p.recomendacao}
+        </div>
       </div>
     </div>
   );
