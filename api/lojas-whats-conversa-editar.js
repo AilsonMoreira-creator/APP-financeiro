@@ -47,11 +47,9 @@ export default async function handler(req, res) {
       if (!CAMPOS_PERMITIDOS.has(k)) continue;
 
       if (k === 'prioridade') {
-        // Normaliza pra int 0/1 (coluna principal eh integer)
-        const valInt = (v === true || v === 1 || v === '1') ? 1 : 0;
-        upd.prioridade = valInt;
-        // Sincroniza com coluna legada lead_prioritario (boolean)
-        upd.lead_prioritario = valInt > 0;
+        // Apos cleanup de 26/05/2026, coluna canonica eh lead_prioritario (bool).
+        // Aceita int (0/1) ou bool por compat com calls antigas.
+        upd.lead_prioritario = (v === true || v === 1 || v === '1');
         continue;
       }
       if (k === 'etapa') {
@@ -83,7 +81,7 @@ export default async function handler(req, res) {
       .from('lojas_whats_conversas')
       .update(upd)
       .eq('id', conversa_id)
-      .select('id, etapa, prioridade, observacao_para_sofia, observacao_assistente, prefere_site, obs_sofia_definida_em')
+      .select('id, etapa, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, obs_sofia_definida_em')
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
