@@ -69,8 +69,9 @@ export default async function handler(req, res) {
         continue;
       }
       if (k === 'prefere_site') {
-        upd.prefere_site = !!v;
-        upd.prefere_site_marcado_em = v ? agora : null;
+        // Coluna canonica eh cliente_indicou_site (criada antes na sessao)
+        upd.cliente_indicou_site = !!v;
+        upd.cliente_indicou_site_em = v ? agora : null;
         continue;
       }
     }

@@ -185,6 +185,64 @@ export async function baixarMidia(mediaUrl) {
   return Buffer.from(await res.arrayBuffer());
 }
 
+// ─── ENVIAR MIDIA ─────────────────────────────────────────────────────────
+
+/**
+ * Faz upload do arquivo binario pro WhatsApp Cloud API.
+ * Retorna media_id valido por 30 dias.
+ *
+ * @param {Buffer} buffer - binary do arquivo
+ * @param {string} mime - 'image/jpeg' | 'video/mp4' | 'application/pdf'
+ * @param {string} filename - nome de referencia (Meta exige)
+ * @returns {string} media_id
+ */
+export async function uploadMidiaParaMeta(buffer, mime, filename = 'media') {
+  const url = `${META_GRAPH_API}/${process.env.META_WA_PHONE_ID}/media`;
+  const FormData = (await import('form-data')).default;
+  const fd = new FormData();
+  fd.append('messaging_product', 'whatsapp');
+  fd.append('type', mime);
+  fd.append('file', buffer, { filename, contentType: mime });
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.META_WA_ACCESS_TOKEN}`,
+      ...fd.getHeaders(),
+    },
+    body: fd,
+  });
+  const j = await res.json();
+  if (!res.ok || !j.id) {
+    throw new Error(`Upload mídia falhou: ${JSON.stringify(j).slice(0, 200)}`);
+  }
+  log('upload-midia', `mime=${mime} size=${buffer.length} media_id=${j.id}`);
+  return j.id;
+}
+
+/**
+ * Envia mensagem de FOTO/VIDEO/DOCUMENTO via WhatsApp.
+ * Usa media_id ja uploaded (de uploadMidiaParaMeta) ou link publico (link param).
+ *
+ * @param {string} telefone - E164 sem '+'
+ * @param {string} tipoWa - 'image' | 'video' | 'document'
+ * @param {object} payload - { id: media_id, caption?: text, filename?: nome (so pra document) }
+ */
+export async function enviarMidia(telefone, tipoWa, payload) {
+  const body = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: telefone,
+    type: tipoWa,
+    [tipoWa]: payload,
+  };
+  log('enviar-midia', `to=${telefone} type=${tipoWa}`);
+  return await metaFetch(`/${process.env.META_WA_PHONE_ID}/messages`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 // ─── TEMPLATES ────────────────────────────────────────────────────────────
 
 /**
