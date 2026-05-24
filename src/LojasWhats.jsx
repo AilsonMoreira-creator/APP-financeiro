@@ -27,7 +27,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Bot, RefreshCw, Check, X, Edit3, Send, Filter,
   Users, MessageCircle, Settings, AlertCircle,
@@ -649,9 +649,10 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   const [filtroEtapa, setFiltroEtapa] = useState(filtroInicial);
   const [modalEnviar, setModalEnviar] = useState(null);
   const [modalEditarLead, setModalEditarLead] = useState(null);
+  const [conversaDetalhe, setConversaDetalhe] = useState(null);  // tela cheia chat
   const [feedback, setFeedback] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
-  const [expandido, setExpandido] = useState(false);  // ver mais que 50
+  const [expandido, setExpandido] = useState(false);
 
   // Sincroniza se filtroInicial mudar (ex: navegacao entre tabs Aprovar/Conversas)
   useEffect(() => { setFiltroEtapa(filtroInicial); }, [filtroInicial]);
@@ -706,6 +707,17 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
     } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
   };
 
+  // Se tem conversa em detalhe, renderiza tela cheia (esconde a lista)
+  if (conversaDetalhe) {
+    return (
+      <ConversaDetail
+        conversaId={conversaDetalhe}
+        onBack={() => { setConversaDetalhe(null); setReloadTick(t => t + 1); }}
+        onEditarLead={(conv) => setModalEditarLead({ conversa: conv })}
+      />
+    );
+  }
+
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
       <div style={{
@@ -743,6 +755,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
                 onEnviarVendedora={() => setModalEnviar({ conversa: c })}
                 onTogglePrioridade={() => onTogglePrioridade(c)}
                 onEditar={() => setModalEditarLead({ conversa: c })}
+                onAbrirChat={() => setConversaDetalhe(c.id)}
               />
             ))}
           </div>
@@ -844,7 +857,7 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip }) => {
   );
 };
 
-const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar }) => {
+const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar, onAbrirChat }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
   const prioritario = !!c.lead_prioritario;
@@ -868,7 +881,8 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
         </button>
 
         <EtapaIcon nome={c.etapa} size={28} />
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Area clicavel: abre chat */}
+        <div onClick={onAbrirChat} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {ehPJ ? <Building2 size={sz(12)} color={palette.warn} /> : <UserIcon size={sz(12)} color={palette.accent} />}
             <span style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -2191,6 +2205,426 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 // Gerenciamento de fotos/videos/catalogos que a Sofia usa nas conversas.
 // Storage: bucket 'sofia-midias' (separado do bucket 'produtos' da Ficha Tecnica).
 // ESCOPO: SOMENTE modulo Sofia/Lojas — NUNCA confundir os 2 buckets.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONVERSA DETAIL — tela cheia tipo WhatsApp (Ailson 26/05/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ConversaDetail({ conversaId, onBack, onEditarLead }) {
+  const [conversa, setConversa] = useState(null);
+  const [mensagens, setMensagens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [novoTexto, setNovoTexto] = useState('');
+  const [midiaAnexada, setMidiaAnexada] = useState(null);  // {id, tipo, nome_arquivo, url_publica}
+  const [seletorMidiaAberto, setSeletorMidiaAberto] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  const [editandoMsgId, setEditandoMsgId] = useState(null);  // edit msg ja enviada (anota erro)
+  const fimChatRef = useRef(null);
+
+  // Carrega conversa + mensagens
+  useEffect(() => {
+    if (!conversaId) return;
+    (async () => {
+      setLoading(true);
+      const [{ data: conv }, { data: msgs }] = await Promise.all([
+        supabase.from('lojas_whats_conversas')
+          .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em')
+          .eq('id', conversaId).maybeSingle(),
+        supabase.from('lojas_whats_mensagens')
+          .select('id, direcao, autor, tipo_midia, texto, meta_message_id, status, enviada_em')
+          .eq('conversa_id', conversaId)
+          .order('enviada_em', { ascending: true })
+          .limit(200),
+      ]);
+      setConversa(conv);
+      setMensagens(msgs || []);
+      setLoading(false);
+    })();
+  }, [conversaId, reloadTick]);
+
+  // Auto-scroll pra ultima msg
+  useEffect(() => {
+    if (fimChatRef.current) {
+      fimChatRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [mensagens]);
+
+  const enviar = async () => {
+    if (!novoTexto.trim() && !midiaAnexada) return;
+    setEnviando(true);
+    setErro(null);
+    try {
+      const r = await fetch('/api/lojas-whats-mensagem-enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: conversaId,
+          texto: novoTexto.trim() || null,
+          midia_id: midiaAnexada?.id || null,
+          autor: 'assistente',
+          usuario: (() => {
+            try { return JSON.parse(localStorage.getItem('amica_session') || '{}')?.usuario || null; }
+            catch { return null; }
+          })(),
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { setErro(j.error || 'Erro ao enviar'); return; }
+      setNovoTexto('');
+      setMidiaAnexada(null);
+      setReloadTick(t => t + 1);
+    } catch (e) { setErro(e.message); }
+    setEnviando(false);
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <Loader2 size={sz(24)} className="spin" />
+      </div>
+    );
+  }
+  if (!conversa) {
+    return <div style={{ padding: 20, color: palette.alert }}>Conversa não encontrada</div>;
+  }
+
+  const etapaInfo = ETAPAS.find(e => e.id === conversa.etapa);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: palette.bg, zIndex: 100,
+      display: 'flex', flexDirection: 'column', fontFamily: FONT,
+    }}>
+      {/* HEADER */}
+      <div style={{
+        background: palette.ink, color: palette.bg, padding: '10px 12px',
+        display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+      }}>
+        <button onClick={onBack} style={{
+          background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+          color: palette.bg, padding: '6px 9px', borderRadius: 6, cursor: 'pointer',
+          display: 'flex', alignItems: 'center',
+        }}>
+          <ChevronRight size={sz(16)} style={{ transform: 'rotate(180deg)' }} />
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: fz(15), fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {conversa.nome_cliente || fmtPhone(conversa.telefone)}
+          </div>
+          <div style={{ fontSize: fz(11), opacity: 0.8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span>{fmtPhone(conversa.telefone)}</span>
+            {conversa.qtd_pecas > 0 && <span>· {conversa.qtd_pecas} pç</span>}
+            {Number(conversa.valor_carrinho) > 0 && <span>· {fmtMoney(conversa.valor_carrinho)}</span>}
+            <span>·</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <EtapaIcon nome={conversa.etapa} size={11} /> {etapaInfo?.label || conversa.etapa}
+            </span>
+          </div>
+        </div>
+        <button onClick={() => onEditarLead && onEditarLead(conversa)} title="Editar lead"
+          style={{
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+            color: palette.bg, padding: '6px 9px', borderRadius: 6, cursor: 'pointer',
+          }}>
+          <Edit3 size={sz(14)} />
+        </button>
+      </div>
+
+      {/* Observação pra Sofia banner */}
+      {conversa.observacao_para_sofia && (
+        <div style={{
+          padding: '8px 12px', background: '#fff8e0', borderBottom: '1px solid #f0d97a',
+          fontSize: fz(11), color: '#5a4500',
+        }}>
+          <strong>📝 Dica pra Sofia:</strong> {conversa.observacao_para_sofia}
+        </div>
+      )}
+      {conversa.observacao_assistente && (
+        <div style={{
+          padding: '8px 12px', background: '#f0f0f0', borderBottom: '1px solid #d0d0d0',
+          fontSize: fz(11), color: '#444',
+        }}>
+          <strong>🔒 privado:</strong> {conversa.observacao_assistente}
+        </div>
+      )}
+
+      {/* CHAT BUBBLES */}
+      <div style={{
+        flex: 1, overflowY: 'auto', padding: 12,
+        background: '#ece5dd',  // WhatsApp-like beige
+        backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.02) 1px, transparent 1px)',
+        backgroundSize: '24px 24px',
+      }}>
+        {mensagens.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted, fontSize: fz(12) }}>
+            Sem mensagens ainda. Envie a primeira abaixo.
+          </div>
+        ) : (
+          mensagens.map(m => <Bubble key={m.id} m={m} />)
+        )}
+        <div ref={fimChatRef} />
+      </div>
+
+      {/* Mídia anexada preview */}
+      {midiaAnexada && (
+        <div style={{
+          padding: '8px 12px', background: '#e8f0ff',
+          borderTop: '1px solid #c8dae8',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <Paperclip size={sz(14)} color={palette.accent} />
+          <span style={{ fontSize: fz(12), color: palette.ink, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {midiaAnexada.tipo}: {midiaAnexada.nome_arquivo}
+          </span>
+          <button onClick={() => setMidiaAnexada(null)} style={{
+            background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+          }}>
+            <X size={sz(14)} color={palette.inkMuted} />
+          </button>
+        </div>
+      )}
+
+      {/* Erro */}
+      {erro && (
+        <div style={{
+          padding: '6px 12px', background: palette.alertSoft,
+          color: palette.alert, fontSize: fz(11),
+          borderTop: `1px solid ${palette.alert}`,
+        }}>
+          {erro}
+        </div>
+      )}
+
+      {/* INPUT BAR */}
+      <div style={{
+        padding: 10, background: palette.surface,
+        borderTop: `1px solid ${palette.beige}`,
+        display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0,
+      }}>
+        <button onClick={() => setSeletorMidiaAberto(true)} title="Anexar mídia"
+          style={{
+            background: palette.bg, border: `1px solid ${palette.beige}`,
+            borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+          <Paperclip size={sz(16)} color={palette.inkMuted} />
+        </button>
+        <textarea
+          value={novoTexto}
+          onChange={e => setNovoTexto(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
+          }}
+          placeholder="Mensagem (Enter envia, Shift+Enter quebra linha)"
+          rows={1}
+          style={{
+            flex: 1, padding: '8px 12px', borderRadius: 18,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT,
+            fontSize: fz(13), color: palette.ink, background: palette.bg,
+            resize: 'none', minHeight: 36, maxHeight: 120, lineHeight: 1.4,
+            boxSizing: 'border-box',
+          }}
+        />
+        <button onClick={enviar} disabled={enviando || (!novoTexto.trim() && !midiaAnexada)}
+          style={{
+            background: '#25d366', color: '#fff',
+            border: 'none', borderRadius: '50%',
+            width: 38, height: 38, cursor: enviando ? 'wait' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, opacity: (!novoTexto.trim() && !midiaAnexada) ? 0.5 : 1,
+          }}>
+          <Send size={sz(16)} />
+        </button>
+      </div>
+
+      {/* Seletor de mídia da biblioteca */}
+      {seletorMidiaAberto && (
+        <SeletorMidiaModal
+          onClose={() => setSeletorMidiaAberto(false)}
+          onSelect={(m) => { setMidiaAnexada(m); setSeletorMidiaAberto(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Bubble individual no chat
+function Bubble({ m }) {
+  const ehSaida = m.direcao === 'saida';
+  const ehAssistente = m.autor === 'assistente';
+  const corBg = ehSaida ? (ehAssistente ? '#d4e3fc' : '#dcf8c6') : '#fff';
+  const align = ehSaida ? 'flex-end' : 'flex-start';
+
+  const horario = m.enviada_em ? new Date(m.enviada_em).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  }) : '';
+
+  // Label do autor
+  const labelAutor = ehSaida
+    ? (ehAssistente ? '👤 assistente' : (m.autor === 'sofia_ia' ? '🤖 Sofia' : 'sistema'))
+    : null;
+
+  return (
+    <div style={{ display: 'flex', justifyContent: align, marginBottom: 8 }}>
+      <div style={{
+        maxWidth: '78%', background: corBg,
+        padding: '7px 10px', borderRadius: 8,
+        boxShadow: '0 1px 1px rgba(0,0,0,0.08)',
+        position: 'relative',
+      }}>
+        {labelAutor && (
+          <div style={{ fontSize: 9, color: '#5a6470', fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            {labelAutor}
+          </div>
+        )}
+        {/* Tipo midia: ícone se for imagem/doc */}
+        {(m.tipo_midia === 'image' || m.tipo_midia === 'video' || m.tipo_midia === 'document') && (
+          <div style={{
+            padding: '6px 8px', background: 'rgba(0,0,0,0.04)',
+            borderRadius: 6, marginBottom: 6, display: 'flex',
+            alignItems: 'center', gap: 6, fontSize: 11, color: '#2c3e50',
+          }}>
+            {m.tipo_midia === 'image' && <Image size={14} />}
+            {m.tipo_midia === 'video' && <Video size={14} />}
+            {m.tipo_midia === 'document' && <FileText size={14} />}
+            <span style={{ fontWeight: 600 }}>
+              {m.tipo_midia === 'image' ? 'Foto enviada' : m.tipo_midia === 'video' ? 'Vídeo' : 'Documento'}
+            </span>
+          </div>
+        )}
+        {m.texto && (
+          <div style={{ fontSize: 13, color: '#1a1a1a', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+            {m.texto}
+          </div>
+        )}
+        <div style={{
+          fontSize: 9, color: '#7c8a99', marginTop: 4,
+          textAlign: 'right',
+        }}>
+          {horario} {ehSaida && m.status === 'entregue' && '✓✓'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal selector de mídia da biblioteca
+function SeletorMidiaModal({ onClose, onSelect }) {
+  const [midias, setMidias] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filtroTipo, setFiltroTipo] = useState('todos');
+  const [busca, setBusca] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const url = filtroTipo !== 'todos'
+        ? `/api/lojas-whats-midia?tipo=${filtroTipo}`
+        : '/api/lojas-whats-midia';
+      const r = await fetch(url);
+      const j = await r.json();
+      setMidias(j.midias || []);
+      setLoading(false);
+    })();
+  }, [filtroTipo]);
+
+  const filtradas = busca
+    ? midias.filter(m =>
+        (m.nome_arquivo || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (m.ref || '').includes(busca))
+    : midias;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1100, padding: 20,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 16,
+        maxWidth: 500, width: '100%', maxHeight: '85vh',
+        display: 'flex', flexDirection: 'column', fontFamily: FONT,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h3 style={{ margin: 0, fontSize: fz(15), fontWeight: 700, color: palette.ink }}>
+            Anexar mídia da biblioteca
+          </h3>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <X size={sz(20)} color={palette.inkMuted} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+          {[
+            { id: 'todos', label: 'Todas' },
+            { id: 'foto', label: '📷 Fotos' },
+            { id: 'video', label: '🎬 Vídeos' },
+            { id: 'catalogo', label: '📄 Catálogos' },
+          ].map(f => (
+            <button key={f.id} onClick={() => setFiltroTipo(f.id)} style={{
+              padding: '4px 9px', borderRadius: 14, cursor: 'pointer',
+              border: `1px solid ${filtroTipo === f.id ? palette.ink : palette.beige}`,
+              background: filtroTipo === f.id ? palette.ink : palette.surface,
+              color: filtroTipo === f.id ? palette.bg : palette.ink,
+              fontSize: fz(11), fontFamily: FONT, fontWeight: 500,
+            }}>{f.label}</button>
+          ))}
+        </div>
+        <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar por nome/REF..."
+          style={{
+            padding: '6px 10px', borderRadius: 6, border: `1px solid ${palette.beige}`,
+            fontFamily: FONT, fontSize: fz(12), marginBottom: 10,
+          }} />
+
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 20 }}><Loader2 size={20} className="spin" /></div>
+          ) : filtradas.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 30, color: palette.inkMuted, fontSize: fz(12) }}>
+              Nenhuma mídia. Vá em "Mídias" pra subir.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
+              {filtradas.map(m => (
+                <button key={m.id} onClick={() => onSelect(m)} style={{
+                  background: palette.surface, border: `1px solid ${palette.beige}`,
+                  borderRadius: 6, padding: 8, cursor: 'pointer', textAlign: 'left',
+                  fontFamily: FONT,
+                }}>
+                  {m.tipo === 'foto' && m.url_publica ? (
+                    <img src={m.url_publica} alt="" style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 4, marginBottom: 4 }} />
+                  ) : (
+                    <div style={{
+                      width: '100%', height: 70, background: palette.beige, borderRadius: 4,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+                      fontSize: 28,
+                    }}>
+                      {m.tipo === 'video' ? '🎬' : '📄'}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {m.ref ? `REF ${m.ref}` : m.nome_arquivo}
+                  </div>
+                  <div style={{ fontSize: 9, color: palette.inkMuted }}>
+                    {m.tipo} · {(m.size_bytes / 1024).toFixed(0)}kb
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 8: MIDIAS SOFIA
 // ═══════════════════════════════════════════════════════════════════════════
 
 function MidiasTab({ refreshTick }) {
