@@ -138,7 +138,6 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
 
   const tabs = [
     { id: 'funil',       label: 'Funil',       icon: () => <EtapaIcon nome="processando" size={16} /> },
-    { id: 'aprovar',     label: 'Aprovar',     icon: () => <EtapaIcon nome="aprovar"     size={16} /> },
     { id: 'conversas',   label: 'Conversas',   icon: () => <EtapaIcon nome="conversando" size={16} /> },
     { id: 'vendedoras',  label: 'Vendedoras',  icon: Users },
     { id: 'conversao',   label: 'Conversão',   icon: TrendingUp },
@@ -171,8 +170,8 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       <TabBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'funil' && <FunilTab refreshTick={refreshTick} />}
-      {activeTab === 'aprovar' && <AprovarTab userId={userId} refreshTick={refreshTick} onReload={() => setRefreshTick(t => t + 1)} />}
-      {activeTab === 'conversas' && <ConversasTab refreshTick={refreshTick} />}
+      {activeTab === 'conversas' && <ConversasTab refreshTick={refreshTick} userId={userId} />}
+      {activeTab === 'aprovar' && <ConversasTab refreshTick={refreshTick} userId={userId} filtroInicial="aprovar" />}
       {activeTab === 'vendedoras' && <VendedorasTab userId={userId} refreshTick={refreshTick} />}
       {activeTab === 'conversao' && <ConversaoTab refreshTick={refreshTick} />}
       {activeTab === 'aprendizado' && <AprendizadoTab refreshTick={refreshTick} />}
@@ -644,31 +643,36 @@ function SugestaoCard({
 // TAB 3: CONVERSAS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ConversasTab({ refreshTick }) {
+function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   const [conversas, setConversas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtroEtapa, setFiltroEtapa] = useState('todas');
+  const [filtroEtapa, setFiltroEtapa] = useState(filtroInicial);
   const [modalEnviar, setModalEnviar] = useState(null);
-  const [modalEditarLead, setModalEditarLead] = useState(null);  // edicao lead inteiro
+  const [modalEditarLead, setModalEditarLead] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
+  const [expandido, setExpandido] = useState(false);  // ver mais que 50
+
+  // Sincroniza se filtroInicial mudar (ex: navegacao entre tabs Aprovar/Conversas)
+  useEffect(() => { setFiltroEtapa(filtroInicial); }, [filtroInicial]);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
+      const limite = expandido ? 500 : 50;
       let q = supabase
         .from('lojas_whats_conversas')
         .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site')
         // Prioritarios primeiro, depois por ultima atividade
         .order('lead_prioritario', { ascending: false })
         .order('ultima_atividade_em', { ascending: false })
-        .limit(100);
+        .limit(limite);
       if (filtroEtapa !== 'todas') q = q.eq('etapa', filtroEtapa);
       const { data } = await q;
       setConversas(data || []);
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick, reloadTick]);
+  }, [filtroEtapa, refreshTick, reloadTick, expandido]);
 
   useEffect(() => {
     if (!feedback) return;
@@ -684,14 +688,22 @@ function ConversasTab({ refreshTick }) {
 
   const onTogglePrioridade = async (c) => {
     const novo = !c.lead_prioritario;
-    const { error } = await supabase.from('lojas_whats_conversas')
-      .update({ lead_prioritario: novo, atualizado_em: new Date().toISOString() })
-      .eq('id', c.id);
-    if (error) setFeedback({ tipo: 'erro', msg: error.message });
-    else {
-      setFeedback({ tipo: 'ok', msg: novo ? '★ Lead marcado como prioridade' : 'Prioridade removida' });
-      setReloadTick(t => t + 1);
-    }
+    try {
+      const r = await fetch('/api/lojas-whats-conversa-editar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: c.id,
+          campos: { prioridade: novo ? 1 : 0 },
+        }),
+      });
+      const j = await r.json();
+      if (j.error) setFeedback({ tipo: 'erro', msg: j.error });
+      else {
+        setFeedback({ tipo: 'ok', msg: novo ? '★ Lead marcado como prioridade' : 'Prioridade removida' });
+        setReloadTick(t => t + 1);
+      }
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
   };
 
   return (
@@ -700,10 +712,12 @@ function ConversasTab({ refreshTick }) {
         display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14,
         overflowX: 'auto', paddingBottom: 4,
       }}>
-        <FiltroChip label="Todas" ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')} />
+        <FiltroChip label="Todas" tooltip={EXPLICACOES_ETAPA.todas}
+          ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')} />
         {ETAPAS.map(et => (
           <FiltroChip key={et.id} label={et.label} ativo={filtroEtapa === et.id}
-            cor={et.cor} onClick={() => setFiltroEtapa(et.id)} iconNome={et.id} />
+            cor={et.cor} onClick={() => setFiltroEtapa(et.id)} iconNome={et.id}
+            tooltip={EXPLICACOES_ETAPA[et.id]} />
         ))}
       </div>
 
@@ -721,16 +735,33 @@ function ConversasTab({ refreshTick }) {
           Nenhuma conversa nessa etapa.
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {conversas.map(c => (
-            <ConversaRow key={c.id} c={c}
-              onContinuarSofia={() => onContinuarSofia(c)}
-              onEnviarVendedora={() => setModalEnviar({ conversa: c })}
-              onTogglePrioridade={() => onTogglePrioridade(c)}
-              onEditar={() => setModalEditarLead({ conversa: c })}
-            />
-          ))}
-        </div>
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {conversas.map(c => (
+              <ConversaRow key={c.id} c={c}
+                onContinuarSofia={() => onContinuarSofia(c)}
+                onEnviarVendedora={() => setModalEnviar({ conversa: c })}
+                onTogglePrioridade={() => onTogglePrioridade(c)}
+                onEditar={() => setModalEditarLead({ conversa: c })}
+              />
+            ))}
+          </div>
+          {!expandido && conversas.length >= 50 && (
+            <button onClick={() => setExpandido(true)} style={{
+              width: '100%', marginTop: 12, padding: '10px',
+              background: palette.surface, border: `1px dashed ${palette.beige}`,
+              borderRadius: 8, cursor: 'pointer', fontFamily: FONT,
+              fontSize: fz(13), fontWeight: 600, color: palette.ink,
+            }}>
+              Ver mais conversas (até 500)
+            </button>
+          )}
+          {expandido && (
+            <div style={{ textAlign: 'center', marginTop: 12, fontSize: fz(11), color: palette.inkMuted }}>
+              {conversas.length} conversas exibidas
+            </div>
+          )}
+        </>
       )}
 
       {modalEnviar && (
@@ -754,19 +785,64 @@ function ConversasTab({ refreshTick }) {
   );
 }
 
-const FiltroChip = ({ label, ativo, cor, onClick, iconNome }) => (
-  <button onClick={onClick} style={{
-    padding: '6px 10px', borderRadius: 16, cursor: 'pointer',
-    border: `1px solid ${ativo ? (cor || palette.ink) : palette.beige}`,
-    background: ativo ? (cor || palette.ink) : palette.surface,
-    color: ativo ? palette.bg : palette.ink,
-    fontSize: fz(12), fontFamily: FONT, fontWeight: 500,
-    whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
-  }}>
-    {iconNome && <EtapaIcon nome={iconNome} size={14} />}
-    {label}
-  </button>
-);
+// Tooltips de cada etapa (Ailson 26/05/2026 — Q sobre regras)
+const EXPLICACOES_ETAPA = {
+  todas:        'Mostra TODAS as conversas (qualquer etapa).',
+  processando:  'Cron criou a sugestão. Sofia está montando o template. Dura segundos.',
+  aprovar:      'Sugestão pronta esperando assistente revisar e enviar (ou dispensar). Se 3 dias sem ação = perdida.',
+  enviada:      'Mensagem HSM enviada. Aguardando cliente responder. 3 dias sem resposta = perdida.',
+  conversando:  'Cliente respondeu! Sofia tem autonomia, conversa fluindo. Sofia aprende padrões aqui.',
+  quente:       'Gatilho detectado (pix, frete, parcela, separar peças). Assistente decide: continuar Sofia OU enviar pra vendedora.',
+  atendida:     'Vendedora aceitou o handoff em até 30min. Atendimento humano. Sofia para nessa conversa.',
+  vendeu:       'Cliente fechou venda. Auto-detectada via cruzamento de pedidos (5d site / 15d loja).',
+  perdida:      'Sem evolução: 3d sem resposta / esfriou 2d após quente / assistente dispensou.',
+};
+
+const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip }) => {
+  const [showTip, setShowTip] = useState(false);
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex' }}>
+      <button onClick={onClick} style={{
+        padding: '6px 10px', borderRadius: 16, cursor: 'pointer',
+        border: `1px solid ${ativo ? (cor || palette.ink) : palette.beige}`,
+        background: ativo ? (cor || palette.ink) : palette.surface,
+        color: ativo ? palette.bg : palette.ink,
+        fontSize: fz(13), fontFamily: FONT, fontWeight: 500,
+        whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
+      }}>
+        {iconNome && <EtapaIcon nome={iconNome} size={14} />}
+        {label}
+      </button>
+      {tooltip && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setShowTip(s => !s); }}
+          onMouseEnter={() => setShowTip(true)}
+          onMouseLeave={() => setShowTip(false)}
+          aria-label="Explicação da etapa"
+          style={{
+            marginLeft: 3, width: 18, height: 18, padding: 0,
+            borderRadius: '50%', border: `1px solid ${palette.beige}`,
+            background: palette.surface, color: palette.inkMuted,
+            cursor: 'pointer', fontSize: 11, fontWeight: 700,
+            fontFamily: FONT, lineHeight: 1, alignSelf: 'center',
+          }}
+        >?</button>
+      )}
+      {showTip && tooltip && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 6,
+          background: palette.ink, color: palette.bg,
+          padding: '8px 11px', borderRadius: 8, fontSize: fz(11),
+          lineHeight: 1.4, maxWidth: 280, minWidth: 220, zIndex: 50,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.18)', fontWeight: 400,
+          fontFamily: FONT,
+        }}>
+          {tooltip}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
@@ -1830,21 +1906,34 @@ function EditarLeadModal({ conversa, onClose, onSucesso, onErro }) {
   const [etapa, setEtapa] = useState(conversa.etapa);
   const [obsSofia, setObsSofia] = useState(conversa.observacao_para_sofia || '');
   const [obsPrivada, setObsPrivada] = useState(conversa.observacao_assistente || '');
-  const [prioritario, setPrioritario] = useState(!!conversa.lead_prioritario);
+  const [prioritario, setPrioritario] = useState(
+    !!conversa.lead_prioritario || (Number(conversa.prioridade) > 0)
+  );
   const [salvando, setSalvando] = useState(false);
   const [anexarAberto, setAnexarAberto] = useState(false);
 
   const salvar = async () => {
     setSalvando(true);
     try {
-      const { error } = await supabase.from('lojas_whats_conversas').update({
-        etapa,
-        observacao_para_sofia: obsSofia.trim() || null,
-        observacao_assistente: obsPrivada.trim() || null,
-        lead_prioritario: prioritario,
-        atualizado_em: new Date().toISOString(),
-      }).eq('id', conversa.id);
-      if (error) { onErro(error.message); return; }
+      const r = await fetch('/api/lojas-whats-conversa-editar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: conversa.id,
+          campos: {
+            etapa,
+            observacao_para_sofia: obsSofia.trim() || null,
+            observacao_assistente: obsPrivada.trim() || null,
+            prioridade: prioritario ? 1 : 0,
+          },
+          usuario: (() => {
+            try { return JSON.parse(localStorage.getItem('amica_session') || '{}')?.usuario || null; }
+            catch { return null; }
+          })(),
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { onErro(j.error || 'Erro ao salvar'); return; }
       onSucesso('Lead atualizado');
     } catch (e) { onErro(e.message); }
     setSalvando(false);

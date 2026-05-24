@@ -47,8 +47,11 @@ export default async function handler(req, res) {
       if (!CAMPOS_PERMITIDOS.has(k)) continue;
 
       if (k === 'prioridade') {
-        // boolean ou int; normaliza pra int 0/1
-        upd.prioridade = (v === true || v === 1 || v === '1') ? 1 : 0;
+        // Normaliza pra int 0/1 (coluna principal eh integer)
+        const valInt = (v === true || v === 1 || v === '1') ? 1 : 0;
+        upd.prioridade = valInt;
+        // Sincroniza com coluna legada lead_prioritario (boolean)
+        upd.lead_prioritario = valInt > 0;
         continue;
       }
       if (k === 'etapa') {

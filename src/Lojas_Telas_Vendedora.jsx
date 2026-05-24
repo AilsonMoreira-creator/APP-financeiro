@@ -225,34 +225,43 @@ export const HomeScreen = ({
     ? `Atualizado: ${new Date(state.ultimaSincronizacao).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`
     : 'Carregando…';
 
+  // Modo tela cheia pra Sofia (Ailson 26/05/2026)
+  // Esconde header "Lojas" + tabs do modulo Lojas pra dar foco total.
+  // Botao "Voltar" do header da Sofia volta pra tab anterior.
+  const sofiaFullscreen = activeTab === 'sofia' && acessoSofia;
+
   return (
     <div style={{ background: palette.bg, minHeight: '100%', fontFamily: FONT }}>
-      <Header
-        title="Lojas"
-        subtitle={subtitle}
-        rightContent={
-          <>
-            {!state.online && (
-              <span style={{
-                fontSize: fz(12), padding: '3px 8px', borderRadius: 6,
-                background: palette.warnSoft, color: palette.warn, fontWeight: 600,
-              }}>
-                Offline
-              </span>
-            )}
-            {onTogglePerfil && (
-              <button onClick={onTogglePerfil} style={{
-                background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
-                color: palette.bg, padding: '6px 10px', borderRadius: 8,
-                cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600, letterSpacing: 0.3,
-              }}>
-                {isAdmin ? '👤 Admin' : '👤 Vendedora'}
-              </button>
-            )}
-          </>
-        }
-      />
-      <TabBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      {!sofiaFullscreen && (
+        <>
+          <Header
+            title="Lojas"
+            subtitle={subtitle}
+            rightContent={
+              <>
+                {!state.online && (
+                  <span style={{
+                    fontSize: fz(12), padding: '3px 8px', borderRadius: 6,
+                    background: palette.warnSoft, color: palette.warn, fontWeight: 600,
+                  }}>
+                    Offline
+                  </span>
+                )}
+                {onTogglePerfil && (
+                  <button onClick={onTogglePerfil} style={{
+                    background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)',
+                    color: palette.bg, padding: '6px 10px', borderRadius: 8,
+                    cursor: 'pointer', fontSize: fz(13), fontFamily: FONT, fontWeight: 600, letterSpacing: 0.3,
+                  }}>
+                    {isAdmin ? '👤 Admin' : '👤 Vendedora'}
+                  </button>
+                )}
+              </>
+            }
+          />
+          <TabBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+        </>
+      )}
       {activeTab === 'vendedoras' && (
         <VendedorasTab
           isAdmin={isAdmin}
