@@ -83,6 +83,9 @@
     "api/lojas-leads-conversoes-cron.js": {
       "maxDuration": 60
     },
+    "api/lojas-whats-cron-aprender.js": {
+      "maxDuration": 300
+    },
     "api/lojas-aviso-falta-whatsapp-cron.js": {
       "maxDuration": 60
     },
@@ -251,6 +254,10 @@
     {
       "path": "/api/lojas-whats-cron-rotacionar",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/lojas-whats-cron-aprender",
+      "schedule": "0 5 * * *"
     }
   ]
 }
