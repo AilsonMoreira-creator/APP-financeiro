@@ -81,6 +81,27 @@ export default async function handler(req, res) {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // 1C. Auto-vendeu Sofia (Ailson 26/05/2026)
+    // Marca conversas Sofia ativas como etapa='vendeu' quando cliente
+    // fechou compra dentro da janela (5d site / 15d loja) apos msg Sofia.
+    // ───────────────────────────────────────────────────────────────
+    let sofiaConvVendeu = 0;
+    let sofiaValorVendeu = 0;
+    try {
+      const { data: dataSofia, error: errSofia } = await supabase
+        .rpc('lojas_whats_auto_vendeu')
+        .maybeSingle();
+      if (errSofia) {
+        console.error('[lojas-leads-conversoes-cron] erro sofia auto-vendeu:', errSofia);
+      } else {
+        sofiaConvVendeu = dataSofia?.conversas_atualizadas || 0;
+        sofiaValorVendeu = dataSofia?.valor_total || 0;
+      }
+    } catch (e) {
+      console.error('[lojas-leads-conversoes-cron] excecao sofia auto-vendeu:', e.message);
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // 2. EXTENSÃO Ailson 18/05/2026 — Aviso venda_site_organica
     // ───────────────────────────────────────────────────────────────
     // Pra vendas no site dos últimos 2 dias que NÃO entraram em
@@ -182,6 +203,9 @@ export default async function handler(req, res) {
       // Conversoes por sugestao IA — Ailson 19/05/2026
       sugestoes_conv_inseridas: sugestoesInseridas,
       sugestoes_msgs_avaliadas: sugestoesMsgsAvaliadas,
+      // Sofia auto-vendeu — Ailson 26/05/2026
+      sofia_conv_vendeu: sofiaConvVendeu,
+      sofia_valor_vendeu: sofiaValorVendeu,
     });
   } catch (e) {
     console.error('[lojas-leads-conversoes-cron] exception:', e);
