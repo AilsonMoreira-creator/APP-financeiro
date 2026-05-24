@@ -21,6 +21,7 @@
 import { supabase, setCors, log, logErro, getConfig } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
 import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa } from './_lojas-whats-cardapio.js';
+import { montarBlocoPadroes, decidirModo } from './_lojas-whats-padroes.js';
 
 // ─── GATILHOS QUENTE (lista fechada — definida pelo Ailson) ────────────────
 
@@ -232,20 +233,37 @@ async function processarConversa(conversaId) {
     cardapioStr = 'CATALOGO HOJE: indisponivel (use conhecimento geral, sem inventar refs).';
   }
 
+  // 5b. APRENDIZADO (Ailson 26/05/2026 — coracao da Sofia)
+  // Decide modo: 30% explorar (gera variacao livre) / 70% replicar (usa padroes).
+  // Injeta bloco de padroes aprendidos no system prompt como DICA (3B suggest).
+  const modoAprendizado = decidirModo();
+  let blocoPadroes = '';
+  try {
+    blocoPadroes = await montarBlocoPadroes(modoAprendizado, { etapa: conv.etapa });
+  } catch (e) {
+    logErro('ia/padroes', e);
+  }
+  log('ia', `conversa=${conversaId} modo=${modoAprendizado} padroes_bloco=${blocoPadroes ? 'SIM' : 'NAO'}`);
+
   // 6. Gera réplica via Claude
   const contextoConv = montarContextoConversa(conv);
   const msgsClaude = montarMensagensClaude(msgs, conv);
 
+  const systemBlocks = [
+    { type: 'text', text: SYSTEM_PROMPT },
+    { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` },
+    { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
+  ];
+  if (blocoPadroes) {
+    systemBlocks.push({ type: 'text', text: blocoPadroes });
+  }
+
   const cl = await chamarClaude({
     modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
-    systemBlocks: [
-      { type: 'text', text: SYSTEM_PROMPT },
-      { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` },
-      { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
-    ],
+    systemBlocks,
     messages: msgsClaude,
     max_tokens: 400,
-    temperature: 0.7
+    temperature: modoAprendizado === 'explorar' ? 0.85 : 0.7  // mais variacao em explorar
   });
 
   if (!cl.ok) {
@@ -269,7 +287,9 @@ async function processarConversa(conversaId) {
       gatilhos_detectados: gatilhos,
       refs_carrinho_resolvidas: refsCarrinho,
       claude_latencia_ms: cl.latencia_ms,
-      claude_custo_brl: cl.custo_brl
+      claude_custo_brl: cl.custo_brl,
+      modo_aprendizado: modoAprendizado,  // 'replicar' | 'explorar' (Ailson 26/05/2026)
+      padroes_no_prompt: !!blocoPadroes
     }
   });
   if (errSug) throw errSug;
