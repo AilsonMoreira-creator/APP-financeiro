@@ -140,6 +140,15 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Storage upload: ' + errUp.message });
     }
 
+    // Infere categoria via funcao SQL (se ref existir)
+    let categoriaInferida = null;
+    if (ref) {
+      try {
+        const { data: catData } = await supabase.rpc('lojas_whats_inferir_categoria', { p_ref: ref });
+        categoriaInferida = catData || null;
+      } catch {}
+    }
+
     // Insere registro
     const { data: row, error: errIns } = await supabase
       .from('lojas_whats_midias')
@@ -151,6 +160,7 @@ export default async function handler(req, res) {
         size_bytes: file.buffer.length,
         mime_type: file.mime,
         descricao: fields.descricao || null,
+        categoria_inferida: categoriaInferida,
         criada_por: fields.criada_por || 'assistente',
         ativa: true,
       })

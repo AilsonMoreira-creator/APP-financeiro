@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
       let qb = supabase
         .from('lojas_whats_midias')
-        .select('id, tipo, ref, nome_arquivo, storage_path, size_bytes, mime_type, descricao, tags, criada_em')
+        .select('id, tipo, ref, nome_arquivo, storage_path, size_bytes, mime_type, descricao, tags, categoria_inferida, enviada_count, ultima_enviada_em, criada_em')
         .eq('ativa', true)
         .order('criada_em', { ascending: false })
         .limit(500);
@@ -65,7 +65,18 @@ export default async function handler(req, res) {
       const { id, ref, descricao, tags } = req.body || {};
       if (!id) return res.status(400).json({ error: 'id obrigatorio' });
       const upd = { atualizada_em: new Date().toISOString() };
-      if (ref !== undefined) upd.ref = ref || null;
+      if (ref !== undefined) {
+        upd.ref = ref || null;
+        // Re-infere categoria se ref mudou
+        if (ref) {
+          try {
+            const { data: catData } = await supabase.rpc('lojas_whats_inferir_categoria', { p_ref: ref });
+            upd.categoria_inferida = catData || null;
+          } catch {}
+        } else {
+          upd.categoria_inferida = null;
+        }
+      }
       if (descricao !== undefined) upd.descricao = descricao || null;
       if (tags !== undefined) upd.tags = Array.isArray(tags) ? tags : [];
       const { data, error } = await supabase
