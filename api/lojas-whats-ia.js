@@ -33,6 +33,16 @@ const GATILHOS_QUENTE = [
   'grade', 'despachar', 'despacha',
 ];
 
+// Frases que indicam que cliente vai voltar pro site amicialoja.com.br
+// (Ailson 26/05/2026 — Sofia se mostra disponivel mas NAO pressiona venda agora)
+const FRASES_SITE = [
+  'vou ver no site', 'prefiro comprar pelo site', 'vou entrar no site',
+  'vou no site', 'vou pelo site', 'comprar pelo site',
+  'meu carrinho no site', 'voltar no site', 'voltar pro site',
+  'vou ver meu carrinho', 'olhar meu carrinho',
+];
+const REGEX_SITE = new RegExp(`(${FRASES_SITE.map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'i');
+
 // Regex compilado uma vez (word boundary pra evitar match parcial)
 const REGEX_QUENTE = new RegExp(
   `\\b(${GATILHOS_QUENTE.map(g => g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
@@ -61,6 +71,12 @@ function detectarGatilhosQuente(texto) {
 // ─── SYSTEM PROMPT da Sofia ────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `Você é Sofia, assistente IA da Amícia, loja de moda feminina em São Paulo (Bom Retiro + Brás + site amicialoja.com.br).
+
+ESCOPO ATUAL (MUITO IMPORTANTE):
+- Atendemos APENAS atacado nesse momento. Atacado pode ser CPF ou CNPJ
+  (sacoleiras, revendedoras, lojistas). NÃO atendemos varejo final ainda.
+- Se cliente parecer querer compra pequena (1-3 peças pra uso próprio),
+  encaminhe sutilmente pro site amicialoja.com.br.
 
 ESTILO DE FALA:
 - Tom de consultora consultiva, vibe vendedoras experientes
@@ -115,15 +131,69 @@ TROCAS:
 - Só por peças da mesma coleção (verão ou inverno)
 - Prazo: 30 dias
 
+CLIENTE QUER VOLTAR PRO SITE:
+Se cliente disser "vou ver no site", "prefiro comprar pelo site", "vou entrar
+no meu carrinho", "vou olhar depois", etc:
+- Mostre-se disponível ("tô aqui se tiver dúvida 😊")
+- Envie o link: amicialoja.com.br
+- NÃO pressione, NÃO empurre venda agora
+- ⚠️ Esse cliente fica em ACOMPANHAMENTO: se 3 dias sem msg, Sofia
+  manda nova mensagem leve. Cliente continua na mesma etapa do funil.
+- Se ele comprar (sai do funil pra "vendeu"), perfeito.
+
+CLIENTE QUE TÁ ESQUECENDO DO CARRINHO:
+Se conversa não engatou e cliente parece ter esquecido, é hora de relembrar
+COM FOTO de um produto que combina com o carrinho dele. Tipo:
+"oi, vc viu que esse body combina super com sua [item do carrinho]?
+certeza que vai vender bem 😉 [ENVIAR_FOTO:REF_DA_FOTO]"
+E termine agradecendo. NÃO insista. Deixa o cliente respirar.
+
+═══════════════════════════════════════════════════════════════════
+MÍDIAS QUE VC PODE ENVIAR (use marcadores no texto):
+═══════════════════════════════════════════════════════════════════
+
+[ENVIAR_FOTO:REF]       - manda foto do produto REF (ex: [ENVIAR_FOTO:2655])
+[ENVIAR_CATALOGO:nome]  - manda catálogo PDF (ex: [ENVIAR_CATALOGO:outono_2026])
+[ENVIAR_VIDEO:REF]      - manda vídeo do produto REF
+[ENVIAR_LINK_SITE]      - envia link amicialoja.com.br
+
+REGRAS DE USO DAS MÍDIAS:
+
+CATÁLOGO PDF:
+- NÃO envie na 1ª nem na 2ª mensagem
+- Só após cliente engajar (a partir da 3ª msg)
+- SEMPRE pergunte ANTES: "posso enviar o catálogo pra vc dar uma olhadinha?"
+  ou "temos o catálogo com todas as fotos, posso te enviar?"
+- Boa hora: quando cliente pediu pra ver muitas fotos OU quer ver "tudo"
+- Catálogo é melhor que mandar 10 fotos separadas
+
+FOTO:
+- Só envie se cliente perguntou sobre produto específico
+- OU se cliente mencionou ref/produto
+- OU se cliente disse categoria ("queria ver calças", "tem macacão?", etc)
+- Para categoria, mande 1-2 fotos das melhores opções (não despeja tudo)
+- 1 mídia por mensagem
+- Sempre acompanhe a foto de texto explicando ("olha que coisa linda esse macacão...")
+
+VÍDEO:
+- Só em fechamento (cliente já mostrou interesse claro, quase decidindo)
+- Pra mostrar caimento/movimento da peça
+
+IMPORTANTE:
+- 1 mídia por mensagem (não combine 2 marcadores na mesma resposta)
+- O marcador será substituído pelo arquivo real ao enviar
+- NUNCA fale número de REF na conversa (mantenha interno)
+- Se não tem foto pra REF, NÃO use marcador (o sistema avisa)
+
+═══════════════════════════════════════════════════════════════════
 PRODUTOS:
-- Catálogo amicialoja.com.br
-- Pode sugerir peças relacionadas ao que cliente já tem no carrinho
-- Pode mencionar "novidades" e "best sellers" quando fizer sentido
-- NÃO inventar referências/preços/disponibilidade que vc não tem confirmado
+═══════════════════════════════════════════════════════════════════
 - USA APENAS produtos do CATÁLOGO DISPONÍVEL injetado abaixo
-- Se cliente perguntar sobre algo fora desse catálogo, diga que vai verificar e voltar
+- Se cliente perguntar sobre algo fora desse catálogo, diga que vai verificar
 - Linguagem natural ao mencionar produto: "tem uma jaqueta trunia que tá saindo bem"
-  NUNCA fale número de ref (1871, 3190) na conversa — isso é interno
+- Pode sugerir peças relacionadas ao carrinho
+- Pode mencionar "novidades" e "best sellers" quando fizer sentido
+- NÃO inventar referências/preços/disponibilidade
 
 ═══════════════════════════════════════════════════════════════════
 
@@ -132,7 +202,7 @@ CONTEXTO ATUAL DA CONVERSA será passado abaixo. Use só dados confirmados.
 OUTPUT FORMAT:
 Responda APENAS o texto da mensagem que será enviada pro cliente.
 SEM aspas, sem prefixo "Resposta:", sem explicação.
-APENAS o texto que vai pro WhatsApp.`;
+APENAS o texto que vai pro WhatsApp (com marcadores [ENVIAR_X] se aplicável).`;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HANDLER
@@ -202,6 +272,17 @@ async function processarConversa(conversaId) {
   const gatilhos = detectarGatilhosQuente(textoCliente);
   log('ia', `conversa=${conversaId} gatilhos=[${gatilhos.join(',')}]`);
 
+  // 3b. Detecta sinal "vou pro site" (Ailson 26/05/2026)
+  // Marca flag pra Sofia acompanhar (3d sem msg = nova mensagem leve)
+  if (REGEX_SITE.test(textoCliente) && !conv.cliente_indicou_site) {
+    await supabase.from('lojas_whats_conversas').update({
+      cliente_indicou_site: true,
+      cliente_indicou_site_em: new Date().toISOString(),
+      atualizado_em: new Date().toISOString(),
+    }).eq('id', conversaId);
+    log('ia', `conversa=${conversaId} marcou cliente_indicou_site`);
+  }
+
   // 4. Se gatilho QUENTE → atualiza conversa pra etapa quente (handoff em outro endpoint)
   if (gatilhos.length > 0) {
     await supabase.from('lojas_whats_conversas').update({
@@ -245,6 +326,63 @@ async function processarConversa(conversaId) {
   }
   log('ia', `conversa=${conversaId} modo=${modoAprendizado} padroes_bloco=${blocoPadroes ? 'SIM' : 'NAO'}`);
 
+  // 5c. MIDIAS DISPONIVEIS (Ailson 26/05/2026)
+  // Lista refs com fotos/videos + catalogos pra Sofia usar via marcadores.
+  let blocoMidias = '';
+  try {
+    const { data: midias } = await supabase
+      .from('lojas_whats_midias')
+      .select('tipo, ref, nome_arquivo, descricao')
+      .eq('ativa', true)
+      .order('criada_em', { ascending: false })
+      .limit(200);
+    if (midias && midias.length > 0) {
+      const fotos = midias.filter(m => m.tipo === 'foto' && m.ref);
+      const videos = midias.filter(m => m.tipo === 'video' && m.ref);
+      const catalogos = midias.filter(m => m.tipo === 'catalogo');
+      const linhas = ['MIDIAS DISPONIVEIS (pode usar via marcadores no texto):'];
+      if (fotos.length > 0) {
+        linhas.push(`  FOTOS por REF: ${fotos.slice(0, 30).map(f => f.ref).join(', ')}`);
+        linhas.push('    → use [ENVIAR_FOTO:REF] quando cliente perguntar/mencionar produto');
+      }
+      if (videos.length > 0) {
+        linhas.push(`  VIDEOS por REF: ${videos.slice(0, 15).map(v => v.ref).join(', ')}`);
+        linhas.push('    → use [ENVIAR_VIDEO:REF] SOMENTE em fechamento');
+      }
+      if (catalogos.length > 0) {
+        linhas.push(`  CATALOGOS: ${catalogos.slice(0, 10).map(c => c.nome_arquivo.replace(/\.[^.]+$/, '')).join(', ')}`);
+        linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] APENAS apos pedir permissao e cliente ja engajou (>=3 msgs)');
+      }
+      blocoMidias = linhas.join('\n');
+    }
+  } catch (e) {
+    logErro('ia/midias', e);
+  }
+
+  // 5d. OBSERVACAO PRA SOFIA (Ailson 26/05/2026 — campo do card lead)
+  // Dica colocada pela assistente humana. Persistente ate ser limpa.
+  // Tambem detecta marcadores [ANEXAR_FOTO:id] que assistente adicionou manualmente.
+  let blocoObs = '';
+  let midiasAnexarManual = [];
+  if (conv.observacao_para_sofia) {
+    const obs = conv.observacao_para_sofia;
+    // Extrai marcadores [ANEXAR_TIPO:id]
+    const matchAnexar = obs.matchAll(/\[ANEXAR_(FOTO|VIDEO|CATALOGO):([a-f0-9-]+)\]/gi);
+    for (const m of matchAnexar) {
+      midiasAnexarManual.push({ tipo: m[1].toLowerCase(), id: m[2] });
+    }
+    const obsLimpa = obs.replace(/\[ANEXAR_[^\]]+\]/g, '').trim();
+    if (obsLimpa) {
+      blocoObs = `OBSERVACAO DA ASSISTENTE HUMANA (dica importante pra sua proxima msg):\n${obsLimpa}`;
+    }
+    if (midiasAnexarManual.length > 0) {
+      const list = midiasAnexarManual.map(m => `${m.tipo}:${m.id}`).join(', ');
+      blocoObs += (blocoObs ? '\n\n' : '') +
+        `MIDIA(S) PRA ENVIAR ANEXADA(S) PELA ASSISTENTE: ${list}\n` +
+        `→ inclua no texto o(s) marcador(es) [ENVIAR_TIPO:identificador]`;
+    }
+  }
+
   // 6. Gera réplica via Claude
   const contextoConv = montarContextoConversa(conv);
   const msgsClaude = montarMensagensClaude(msgs, conv);
@@ -254,16 +392,16 @@ async function processarConversa(conversaId) {
     { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` },
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
-  if (blocoPadroes) {
-    systemBlocks.push({ type: 'text', text: blocoPadroes });
-  }
+  if (blocoMidias) systemBlocks.push({ type: 'text', text: blocoMidias });
+  if (blocoPadroes) systemBlocks.push({ type: 'text', text: blocoPadroes });
+  if (blocoObs) systemBlocks.push({ type: 'text', text: blocoObs });
 
   const cl = await chamarClaude({
     modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
     systemBlocks,
     messages: msgsClaude,
     max_tokens: 400,
-    temperature: modoAprendizado === 'explorar' ? 0.85 : 0.7  // mais variacao em explorar
+    temperature: modoAprendizado === 'explorar' ? 0.85 : 0.7
   });
 
   if (!cl.ok) {

@@ -33,7 +33,7 @@ import {
   Users, MessageCircle, Settings, AlertCircle,
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
   User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
-  Brain
+  Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video
 } from 'lucide-react';
 import {
   supabase,
@@ -143,6 +143,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'vendedoras',  label: 'Vendedoras',  icon: Users },
     { id: 'conversao',   label: 'Conversão',   icon: TrendingUp },
     { id: 'aprendizado', label: 'Aprendizado', icon: Brain },
+    { id: 'midias',      label: 'Mídias',      icon: Paperclip },
     { id: 'config',      label: 'Config',      icon: Settings },
   ];
 
@@ -175,6 +176,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'vendedoras' && <VendedorasTab userId={userId} refreshTick={refreshTick} />}
       {activeTab === 'conversao' && <ConversaoTab refreshTick={refreshTick} />}
       {activeTab === 'aprendizado' && <AprendizadoTab refreshTick={refreshTick} />}
+      {activeTab === 'midias' && <MidiasTab refreshTick={refreshTick} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
     </div>
   );
@@ -646,9 +648,9 @@ function ConversasTab({ refreshTick }) {
   const [conversas, setConversas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEtapa, setFiltroEtapa] = useState('todas');
-  // Modal "Enviar vendedora" (Ailson 26/05/2026 — Etapa 5 quente)
-  const [modalEnviar, setModalEnviar] = useState(null);  // { conversa } | null
-  const [feedback, setFeedback] = useState(null);  // { tipo, msg } | null
+  const [modalEnviar, setModalEnviar] = useState(null);
+  const [modalEditarLead, setModalEditarLead] = useState(null);  // edicao lead inteiro
+  const [feedback, setFeedback] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
@@ -656,7 +658,9 @@ function ConversasTab({ refreshTick }) {
       setLoading(true);
       let q = supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente')
+        .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site')
+        // Prioritarios primeiro, depois por ultima atividade
+        .order('lead_prioritario', { ascending: false })
         .order('ultima_atividade_em', { ascending: false })
         .limit(100);
       if (filtroEtapa !== 'todas') q = q.eq('etapa', filtroEtapa);
@@ -666,7 +670,6 @@ function ConversasTab({ refreshTick }) {
     })();
   }, [filtroEtapa, refreshTick, reloadTick]);
 
-  // Auto-hide feedback apos 4s
   useEffect(() => {
     if (!feedback) return;
     const t = setTimeout(() => setFeedback(null), 4000);
@@ -676,41 +679,41 @@ function ConversasTab({ refreshTick }) {
   if (loading) return <div style={{ padding: 20, textAlign: 'center' }}><Loader2 size={sz(24)} className="spin" /></div>;
 
   const onContinuarSofia = (conversa) => {
-    // Etapa nao muda - Sofia segue. Apenas registra acao pra log/auditoria.
-    // Por enquanto so feedback visual. Toda mensagem ainda precisa OK assistente.
     setFeedback({ tipo: 'ok', msg: `Sofia continua atendimento de ${conversa.nome_cliente || conversa.telefone}` });
+  };
+
+  const onTogglePrioridade = async (c) => {
+    const novo = !c.lead_prioritario;
+    const { error } = await supabase.from('lojas_whats_conversas')
+      .update({ lead_prioritario: novo, atualizado_em: new Date().toISOString() })
+      .eq('id', c.id);
+    if (error) setFeedback({ tipo: 'erro', msg: error.message });
+    else {
+      setFeedback({ tipo: 'ok', msg: novo ? '★ Lead marcado como prioridade' : 'Prioridade removida' });
+      setReloadTick(t => t + 1);
+    }
   };
 
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
-      {/* Filtro por etapa */}
       <div style={{
         display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14,
         overflowX: 'auto', paddingBottom: 4,
       }}>
-        <FiltroChip
-          label="Todas" ativo={filtroEtapa === 'todas'}
-          onClick={() => setFiltroEtapa('todas')}
-        />
+        <FiltroChip label="Todas" ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')} />
         {ETAPAS.map(et => (
-          <FiltroChip
-            key={et.id} label={et.label} ativo={filtroEtapa === et.id}
-            cor={et.cor} onClick={() => setFiltroEtapa(et.id)}
-            iconNome={et.id}
-          />
+          <FiltroChip key={et.id} label={et.label} ativo={filtroEtapa === et.id}
+            cor={et.cor} onClick={() => setFiltroEtapa(et.id)} iconNome={et.id} />
         ))}
       </div>
 
-      {/* Feedback flutuante */}
       {feedback && (
         <div style={{
           padding: '8px 12px', marginBottom: 10, borderRadius: 6,
           background: feedback.tipo === 'erro' ? palette.alertSoft : '#e7f5ec',
           color: feedback.tipo === 'erro' ? palette.alert : '#2e7d32',
           fontSize: fz(13), fontWeight: 500,
-        }}>
-          {feedback.msg}
-        </div>
+        }}>{feedback.msg}</div>
       )}
 
       {conversas.length === 0 ? (
@@ -720,26 +723,30 @@ function ConversasTab({ refreshTick }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {conversas.map(c => (
-            <ConversaRow
-              key={c.id}
-              c={c}
+            <ConversaRow key={c.id} c={c}
               onContinuarSofia={() => onContinuarSofia(c)}
               onEnviarVendedora={() => setModalEnviar({ conversa: c })}
+              onTogglePrioridade={() => onTogglePrioridade(c)}
+              onEditar={() => setModalEditarLead({ conversa: c })}
             />
           ))}
         </div>
       )}
 
-      {/* Modal "Enviar vendedora" */}
       {modalEnviar && (
         <EnviarVendedoraModal
           conversa={modalEnviar.conversa}
           onClose={() => setModalEnviar(null)}
-          onSucesso={(msg) => {
-            setFeedback({ tipo: 'ok', msg });
-            setModalEnviar(null);
-            setReloadTick(t => t + 1);
-          }}
+          onSucesso={(msg) => { setFeedback({ tipo: 'ok', msg }); setModalEnviar(null); setReloadTick(t => t + 1); }}
+          onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
+        />
+      )}
+
+      {modalEditarLead && (
+        <EditarLeadModal
+          conversa={modalEditarLead.conversa}
+          onClose={() => setModalEditarLead(null)}
+          onSucesso={(msg) => { setFeedback({ tipo: 'ok', msg }); setModalEditarLead(null); setReloadTick(t => t + 1); }}
           onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
         />
       )}
@@ -761,18 +768,30 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome }) => (
   </button>
 );
 
-const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora }) => {
+const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
+  const prioritario = !!c.lead_prioritario;
   return (
     <div style={{
-      background: palette.surface, padding: 10, borderRadius: 8,
-      border: `1px solid ${ehQuente ? '#f5a623' : palette.beige}`,
-      borderLeftWidth: ehQuente ? 3 : 1,
-      borderLeftColor: ehQuente ? '#f5a623' : palette.beige,
+      background: prioritario ? '#fffbf0' : palette.surface,
+      padding: 10, borderRadius: 8,
+      border: `1px solid ${prioritario ? '#f5c84e' : (ehQuente ? '#f5a623' : palette.beige)}`,
+      borderLeftWidth: (prioritario || ehQuente) ? 3 : 1,
+      borderLeftColor: prioritario ? '#f5c84e' : (ehQuente ? '#f5a623' : palette.beige),
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <EtapaIcon nome={c.etapa} size={32} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Estrela prioridade */}
+        <button onClick={onTogglePrioridade} title={prioritario ? 'Remover prioridade' : 'Marcar como prioridade'}
+          style={{
+            background: 'transparent', border: 'none', padding: 0,
+            cursor: 'pointer', flexShrink: 0,
+          }}>
+          <Star size={sz(18)} fill={prioritario ? '#f5c84e' : 'none'}
+            color={prioritario ? '#d4a017' : palette.inkMuted} />
+        </button>
+
+        <EtapaIcon nome={c.etapa} size={28} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {ehPJ ? <Building2 size={sz(12)} color={palette.warn} /> : <UserIcon size={sz(12)} color={palette.accent} />}
@@ -783,9 +802,13 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora }) => {
               <span style={{
                 fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
                 background: '#fff4e0', color: '#8a5500', fontWeight: 700,
-              }}>
-                {c.score_quente}
-              </span>
+              }}>{c.score_quente}</span>
+            )}
+            {c.cliente_indicou_site && (
+              <span title="Cliente disse que vai voltar pro site" style={{
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: '#e8f4ff', color: '#2c5d8a', fontWeight: 600,
+              }}>🌐 site</span>
             )}
           </div>
           <div style={{ fontSize: fz(11), color: palette.inkMuted, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -794,12 +817,34 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora }) => {
             {Number(c.valor_carrinho) > 0 && <span>· {fmtMoney(c.valor_carrinho)}</span>}
           </div>
         </div>
-        <div style={{ fontSize: fz(11), color: palette.inkMuted, textAlign: 'right', flexShrink: 0 }}>
+
+        {/* Botao editar (abre modal completo) */}
+        <button onClick={onEditar} title="Editar lead (observações, etapa, anexos)"
+          style={{
+            background: 'transparent', border: `1px solid ${palette.beige}`,
+            borderRadius: 4, padding: 4, cursor: 'pointer', flexShrink: 0,
+          }}>
+          <Edit3 size={sz(12)} color={palette.inkMuted} />
+        </button>
+
+        <div style={{ fontSize: fz(11), color: palette.inkMuted, textAlign: 'right', flexShrink: 0, marginLeft: 4 }}>
           {fmtRelTime(c.ultima_atividade_em)}
         </div>
       </div>
 
-      {/* Botões só pra etapa quente (Ailson 26/05/2026 — Etapa 5) */}
+      {/* Observação pra Sofia (preview se existe) */}
+      {c.observacao_para_sofia && (
+        <div style={{
+          marginTop: 8, padding: '6px 8px', borderRadius: 4,
+          background: '#fff8e0', borderLeft: `2px solid #d4a017`,
+          fontSize: fz(11), color: '#5a4500',
+        }}>
+          <strong>📝 pra Sofia:</strong> {c.observacao_para_sofia.slice(0, 100)}
+          {c.observacao_para_sofia.length > 100 && '...'}
+        </div>
+      )}
+
+      {/* Botões só pra etapa quente */}
       {ehQuente && (
         <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}` }}>
           <button onClick={onContinuarSofia} style={{
@@ -1770,6 +1815,768 @@ function PadraoRow({ p, primeira }) {
         </div>
         <div style={{ fontSize: fz(10), color: recCor, fontWeight: 600, marginTop: 2 }}>
           {recIcon} {p.recomendacao}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL EDITAR LEAD (Ailson 26/05/2026)
+// Mover etapa · Observações (Sofia + privada) · Anexar mídia · Prioridade
+// ═══════════════════════════════════════════════════════════════════════════
+
+function EditarLeadModal({ conversa, onClose, onSucesso, onErro }) {
+  const [etapa, setEtapa] = useState(conversa.etapa);
+  const [obsSofia, setObsSofia] = useState(conversa.observacao_para_sofia || '');
+  const [obsPrivada, setObsPrivada] = useState(conversa.observacao_assistente || '');
+  const [prioritario, setPrioritario] = useState(!!conversa.lead_prioritario);
+  const [salvando, setSalvando] = useState(false);
+  const [anexarAberto, setAnexarAberto] = useState(false);
+
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      const { error } = await supabase.from('lojas_whats_conversas').update({
+        etapa,
+        observacao_para_sofia: obsSofia.trim() || null,
+        observacao_assistente: obsPrivada.trim() || null,
+        lead_prioritario: prioritario,
+        atualizado_em: new Date().toISOString(),
+      }).eq('id', conversa.id);
+      if (error) { onErro(error.message); return; }
+      onSucesso('Lead atualizado');
+    } catch (e) { onErro(e.message); }
+    setSalvando(false);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 20, overflow: 'auto',
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 18,
+        maxWidth: 480, width: '100%', fontFamily: FONT, maxHeight: '90vh', overflow: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: fz(16), color: palette.ink, fontWeight: 700 }}>
+              Editar lead
+            </h3>
+            <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 2 }}>
+              {conversa.nome_cliente || fmtPhone(conversa.telefone)}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+            <X size={sz(22)} color={palette.inkMuted} />
+          </button>
+        </div>
+
+        {/* Prioridade */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '8px 10px', borderRadius: 6, marginBottom: 10,
+          background: prioritario ? '#fffbf0' : palette.surface,
+          border: `1px solid ${prioritario ? '#f5c84e' : palette.beige}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Star size={sz(18)} fill={prioritario ? '#f5c84e' : 'none'}
+              color={prioritario ? '#d4a017' : palette.inkMuted} />
+            <span style={{ fontSize: fz(13), color: palette.ink }}>
+              Lead prioritário (sobe pro topo)
+            </span>
+          </div>
+          <button onClick={() => setPrioritario(p => !p)} style={{
+            background: prioritario ? '#d4a017' : palette.beige,
+            color: prioritario ? '#fff' : palette.ink,
+            border: 'none', borderRadius: 4, padding: '4px 10px',
+            fontSize: fz(11), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+          }}>
+            {prioritario ? 'Remover' : 'Marcar'}
+          </button>
+        </div>
+
+        {/* Mover etapa */}
+        <label style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600 }}>
+          Etapa do funil
+        </label>
+        <select value={etapa} onChange={e => setEtapa(e.target.value)} style={{
+          width: '100%', padding: '7px 10px', borderRadius: 6,
+          border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(13),
+          marginBottom: 12, marginTop: 4, color: palette.ink, background: palette.surface,
+          boxSizing: 'border-box',
+        }}>
+          {ETAPAS.map(et => (
+            <option key={et.id} value={et.id}>{et.label}</option>
+          ))}
+        </select>
+
+        {/* Anexar mídia */}
+        <div style={{
+          marginBottom: 12, padding: 10, background: palette.surface,
+          border: `1px dashed ${palette.beige}`, borderRadius: 6,
+        }}>
+          <button onClick={() => setAnexarAberto(true)} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: palette.accent, fontSize: fz(12), fontWeight: 600, fontFamily: FONT,
+          }}>
+            <Paperclip size={sz(14)} /> Anexar mídia à próxima mensagem
+          </button>
+          <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 4 }}>
+            Escolha foto/vídeo/catálogo que já está em "Mídias Sofia"
+          </div>
+        </div>
+
+        {/* Observação pra Sofia */}
+        <label style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600 }}>
+          📝 Observação pra Sofia <span style={{ fontWeight: 400, color: palette.inkMuted }}>(entra no prompt — persistente até limpar)</span>
+        </label>
+        <textarea value={obsSofia} onChange={e => setObsSofia(e.target.value)}
+          placeholder="Ex: Cliente PJ atacado, prefere PAC, já mencionou que quer macacão floral"
+          style={{
+            width: '100%', padding: '7px 10px', borderRadius: 6,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(12),
+            marginBottom: 12, marginTop: 4, color: palette.ink, background: palette.surface,
+            boxSizing: 'border-box', resize: 'vertical', minHeight: 60,
+          }}
+        />
+
+        {/* Observação privada */}
+        <label style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600 }}>
+          🔒 Anotação privada <span style={{ fontWeight: 400, color: palette.inkMuted }}>(só pra assistente — NÃO entra no prompt)</span>
+        </label>
+        <textarea value={obsPrivada} onChange={e => setObsPrivada(e.target.value)}
+          placeholder="Ex: Cliente da Tamara, não atender entre 12-13h"
+          style={{
+            width: '100%', padding: '7px 10px', borderRadius: 6,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(12),
+            marginBottom: 14, marginTop: 4, color: palette.ink, background: palette.surface,
+            boxSizing: 'border-box', resize: 'vertical', minHeight: 50,
+          }}
+        />
+
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onClose} disabled={salvando} style={{
+            flex: 1, padding: '9px', borderRadius: 6,
+            background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.beige}`, fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+            cursor: salvando ? 'wait' : 'pointer',
+          }}>Cancelar</button>
+          <button onClick={salvar} disabled={salvando} style={{
+            flex: 1, padding: '9px', borderRadius: 6,
+            background: palette.ink, color: palette.bg, border: 'none',
+            fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+            cursor: salvando ? 'wait' : 'pointer',
+          }}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+        </div>
+
+        {/* Modal anexar mídia */}
+        {anexarAberto && (
+          <AnexarMidiaModal
+            conversa={conversa}
+            onClose={() => setAnexarAberto(false)}
+            onSucesso={(msg) => { setAnexarAberto(false); onSucesso(msg); }}
+            onErro={onErro}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
+  const [midias, setMidias] = useState([]);
+  const [filtro, setFiltro] = useState('todos');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const url = filtro !== 'todos' ? `/api/lojas-whats-midia?tipo=${filtro}` : '/api/lojas-whats-midia';
+      try {
+        const r = await fetch(url);
+        const j = await r.json();
+        setMidias(j.midias || []);
+      } catch (e) { onErro(e.message); }
+      setLoading(false);
+    })();
+  }, [filtro]);
+
+  const anexar = async (m) => {
+    // Anota na obs_para_sofia que essa midia deve ir na proxima msg.
+    // Marcador interpretado pelo backend depois.
+    const marcador = `[ANEXAR_${m.tipo.toUpperCase()}:${m.id}]`;
+    const obsAtual = conversa.observacao_para_sofia || '';
+    const novaObs = obsAtual.includes(marcador)
+      ? obsAtual
+      : (obsAtual ? `${obsAtual}\n${marcador}` : marcador);
+    const { error } = await supabase.from('lojas_whats_conversas')
+      .update({ observacao_para_sofia: novaObs, atualizado_em: new Date().toISOString() })
+      .eq('id', conversa.id);
+    if (error) onErro(error.message);
+    else onSucesso(`Mídia anexada: ${m.nome_arquivo}`);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1100, padding: 20,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 16,
+        maxWidth: 500, width: '100%', fontFamily: FONT, maxHeight: '85vh', overflow: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: fz(15), color: palette.ink, fontWeight: 700 }}>
+            Anexar mídia
+          </h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>
+            <X size={sz(20)} color={palette.inkMuted} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10, flexWrap: 'wrap' }}>
+          {['todos', 'foto', 'video', 'catalogo'].map(t => (
+            <button key={t} onClick={() => setFiltro(t)} style={{
+              padding: '4px 8px', borderRadius: 12, cursor: 'pointer',
+              border: `1px solid ${filtro === t ? palette.ink : palette.beige}`,
+              background: filtro === t ? palette.ink : palette.surface,
+              color: filtro === t ? palette.bg : palette.ink,
+              fontSize: fz(11), fontWeight: 500, fontFamily: FONT, textTransform: 'capitalize',
+            }}>{t}</button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 20 }}><Loader2 size={20} className="spin" /></div>
+        ) : midias.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 20, color: palette.inkMuted, fontSize: fz(12) }}>
+            Nenhuma mídia disponível. Suba via aba Mídias Sofia.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fill, minmax(110px,1fr))' }}>
+            {midias.map(m => (
+              <button key={m.id} onClick={() => anexar(m)} style={{
+                background: palette.surface, border: `1px solid ${palette.beige}`,
+                borderRadius: 6, padding: 0, cursor: 'pointer', overflow: 'hidden',
+                display: 'flex', flexDirection: 'column', textAlign: 'left',
+              }}>
+                <div style={{
+                  height: 70, background: '#f0f0f0',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {m.tipo === 'foto' && m.url_publica ? (
+                    <img src={m.url_publica} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ color: palette.inkMuted, textAlign: 'center' }}>
+                      {m.tipo === 'video' && <Video size={24} />}
+                      {m.tipo === 'catalogo' && <FileText size={24} />}
+                      <div style={{ fontSize: 9, textTransform: 'uppercase' }}>{m.tipo}</div>
+                    </div>
+                  )}
+                </div>
+                <div style={{ padding: 4 }}>
+                  <div style={{
+                    fontSize: 10, color: palette.ink, fontWeight: 600,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {m.ref ? `REF ${m.ref}` : m.nome_arquivo.slice(0, 16)}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 8: MÍDIAS SOFIA (Ailson 26/05/2026)
+// ═══════════════════════════════════════════════════════════════════════════
+// Gerenciamento de fotos/videos/catalogos que a Sofia usa nas conversas.
+// Storage: bucket 'sofia-midias' (separado do bucket 'produtos' da Ficha Tecnica).
+// ESCOPO: SOMENTE modulo Sofia/Lojas — NUNCA confundir os 2 buckets.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function MidiasTab({ refreshTick }) {
+  const [midias, setMidias] = useState([]);
+  const [stats, setStats] = useState({ total: 0, total_bytes: 0, por_tipo: {} });
+  const [filtroTipo, setFiltroTipo] = useState('todos');
+  const [busca, setBusca] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [uploadAberto, setUploadAberto] = useState(false);
+  const [editando, setEditando] = useState(null);  // midia em edicao
+
+  const carregar = async () => {
+    setLoading(true);
+    setErro(null);
+    try {
+      const url = filtroTipo !== 'todos'
+        ? `/api/lojas-whats-midia?tipo=${filtroTipo}`
+        : '/api/lojas-whats-midia';
+      const r = await fetch(url);
+      const j = await r.json();
+      if (j.error) setErro(j.error);
+      else {
+        setMidias(j.midias || []);
+        setStats(j.stats || { total: 0, total_bytes: 0, por_tipo: {} });
+      }
+    } catch (e) { setErro(e.message); }
+    setLoading(false);
+  };
+
+  useEffect(() => { carregar(); }, [filtroTipo, refreshTick]);
+
+  useEffect(() => {
+    if (!feedback) return;
+    const t = setTimeout(() => setFeedback(null), 4000);
+    return () => clearTimeout(t);
+  }, [feedback]);
+
+  const onExcluir = async (m) => {
+    if (!confirm(`Excluir ${m.nome_arquivo}? Vai liberar ${(m.size_bytes / 1024 / 1024).toFixed(1)}MB.`)) return;
+    try {
+      const r = await fetch(`/api/lojas-whats-midia?id=${m.id}`, { method: 'DELETE' });
+      const j = await r.json();
+      if (j.error) setErro(j.error);
+      else {
+        setFeedback({ tipo: 'ok', msg: `${m.nome_arquivo} excluida` });
+        await carregar();
+      }
+    } catch (e) { setErro(e.message); }
+  };
+
+  const midiasFiltradas = busca
+    ? midias.filter(m =>
+        (m.nome_arquivo || '').toLowerCase().includes(busca.toLowerCase()) ||
+        (m.ref || '').includes(busca) ||
+        (m.descricao || '').toLowerCase().includes(busca.toLowerCase()))
+    : midias;
+
+  if (loading) return <div style={{ padding: 20, textAlign: 'center' }}><Loader2 size={sz(24)} className="spin" /></div>;
+
+  const fmtMB = (b) => (b / 1024 / 1024).toFixed(1) + 'MB';
+
+  return (
+    <div style={{ padding: '12px 14px', fontFamily: FONT }}>
+      {/* Header stats + botao upload */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 12, gap: 8, flexWrap: 'wrap',
+      }}>
+        <div style={{ fontSize: fz(12), color: palette.inkMuted }}>
+          📦 <strong>{stats.total}</strong> mídias · {fmtMB(stats.total_bytes)} total
+        </div>
+        <button onClick={() => setUploadAberto(true)} style={{
+          background: palette.ink, color: palette.bg,
+          border: 'none', borderRadius: 6, padding: '6px 12px',
+          fontSize: fz(12), fontWeight: 600, cursor: 'pointer',
+          fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          <Upload size={sz(14)} /> Subir mídia
+        </button>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {[
+          { id: 'todos',    label: `Todas (${stats.total})`, icon: null },
+          { id: 'foto',     label: `Fotos (${stats.por_tipo?.foto || 0})`, icon: Image },
+          { id: 'video',    label: `Vídeos (${stats.por_tipo?.video || 0})`, icon: Video },
+          { id: 'catalogo', label: `Catálogos (${stats.por_tipo?.catalogo || 0})`, icon: FileText },
+        ].map(f => (
+          <button key={f.id} onClick={() => setFiltroTipo(f.id)} style={{
+            padding: '5px 10px', borderRadius: 14, cursor: 'pointer',
+            border: `1px solid ${filtroTipo === f.id ? palette.ink : palette.beige}`,
+            background: filtroTipo === f.id ? palette.ink : palette.surface,
+            color: filtroTipo === f.id ? palette.bg : palette.ink,
+            fontSize: fz(11), fontFamily: FONT, fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}>
+            {f.icon && <f.icon size={sz(11)} />} {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Busca */}
+      <input type="text" placeholder="🔍 Buscar por nome, REF ou descrição..." value={busca}
+        onChange={e => setBusca(e.target.value)}
+        style={{
+          width: '100%', padding: '7px 10px', borderRadius: 6,
+          border: `1px solid ${palette.beige}`, fontSize: fz(12), fontFamily: FONT,
+          marginBottom: 10, color: palette.ink, background: palette.surface,
+          boxSizing: 'border-box',
+        }}
+      />
+
+      {/* Feedback */}
+      {(feedback || erro) && (
+        <div style={{
+          padding: '8px 12px', marginBottom: 10, borderRadius: 6,
+          background: erro ? palette.alertSoft : '#e7f5ec',
+          color: erro ? palette.alert : '#2e7d32',
+          fontSize: fz(12),
+        }}>
+          {erro || feedback?.msg}
+        </div>
+      )}
+
+      {/* Grid de midias */}
+      {midiasFiltradas.length === 0 ? (
+        <div style={{
+          padding: 24, textAlign: 'center', color: palette.inkMuted,
+          background: palette.surface, border: `1px dashed ${palette.beige}`,
+          borderRadius: 8, fontSize: fz(12),
+        }}>
+          <Paperclip size={sz(28)} style={{ opacity: 0.3, marginBottom: 6 }} />
+          <div>Nenhuma mídia cadastrada{busca ? ' pra essa busca' : ''}.</div>
+          <div style={{ marginTop: 4, fontSize: fz(11), opacity: 0.7 }}>
+            Clique "Subir mídia" pra adicionar.
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          display: 'grid', gap: 8,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+        }}>
+          {midiasFiltradas.map(m => (
+            <MidiaCard key={m.id} m={m}
+              onEditar={() => setEditando(m)}
+              onExcluir={() => onExcluir(m)} />
+          ))}
+        </div>
+      )}
+
+      {/* Info regras */}
+      <div style={{
+        marginTop: 16, padding: 10, borderRadius: 8,
+        background: '#f0f6fb', border: '1px solid #c8dae8',
+        fontSize: fz(11), color: palette.inkSoft, lineHeight: 1.5,
+      }}>
+        <strong>📌 Como Sofia usa:</strong> auto-detecta REF do nome do arquivo
+        (ex: 2655.jpg → ref 2655). Catálogos PDF são gerais. Sofia decide quando 
+        enviar baseado nas regras + aprendizado (catálogo só após cliente engajar, 
+        foto se cliente mencionou produto/categoria, vídeo só em fechamento).
+        Excluir mídia libera espaço no Storage.
+      </div>
+
+      {/* Modal upload */}
+      {uploadAberto && (
+        <UploadMidiaModal
+          onClose={() => setUploadAberto(false)}
+          onSucesso={() => { setUploadAberto(false); carregar(); setFeedback({ tipo: 'ok', msg: 'Mídia subida com sucesso' }); }}
+          onErro={(msg) => setErro(msg)}
+        />
+      )}
+
+      {/* Modal editar */}
+      {editando && (
+        <EditarMidiaModal
+          midia={editando}
+          onClose={() => setEditando(null)}
+          onSucesso={() => { setEditando(null); carregar(); setFeedback({ tipo: 'ok', msg: 'Mídia atualizada' }); }}
+          onErro={(msg) => setErro(msg)}
+        />
+      )}
+    </div>
+  );
+}
+
+function MidiaCard({ m, onEditar, onExcluir }) {
+  const fmtMB = (b) => (b / 1024 / 1024).toFixed(1) + 'MB';
+  const ehFoto = m.tipo === 'foto';
+  const ehVideo = m.tipo === 'video';
+  const ehCatalogo = m.tipo === 'catalogo';
+  return (
+    <div style={{
+      background: palette.surface, border: `1px solid ${palette.beige}`,
+      borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{
+        height: 100, background: '#f0f0f0', position: 'relative',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {ehFoto && m.url_publica ? (
+          <img src={m.url_publica} alt={m.nome_arquivo} style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+          }} />
+        ) : (
+          <div style={{ textAlign: 'center', color: palette.inkMuted }}>
+            {ehVideo && <Video size={32} />}
+            {ehCatalogo && <FileText size={32} />}
+            {!ehFoto && !ehVideo && !ehCatalogo && <Paperclip size={32} />}
+            <div style={{ fontSize: 10, marginTop: 4, textTransform: 'uppercase', fontWeight: 600 }}>
+              {m.tipo}
+            </div>
+          </div>
+        )}
+        {m.ref && (
+          <div style={{
+            position: 'absolute', top: 4, left: 4,
+            background: palette.ink, color: palette.bg,
+            padding: '1px 6px', borderRadius: 4,
+            fontSize: 10, fontWeight: 700,
+          }}>
+            REF {m.ref}
+          </div>
+        )}
+      </div>
+      <div style={{ padding: 6, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+          fontSize: 11, fontWeight: 600, color: palette.ink, lineHeight: 1.2,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {m.nome_arquivo}
+        </div>
+        <div style={{ fontSize: 10, color: palette.inkMuted, marginTop: 2 }}>
+          {fmtMB(m.size_bytes)}
+        </div>
+        <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+          <button onClick={onEditar} style={{
+            flex: 1, background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.beige}`, borderRadius: 4,
+            padding: '4px 6px', fontSize: 10, cursor: 'pointer', fontFamily: FONT,
+          }}>
+            <Edit3 size={11} />
+          </button>
+          <button onClick={onExcluir} style={{
+            flex: 1, background: palette.alertSoft, color: palette.alert,
+            border: '1px solid ' + palette.alert, borderRadius: 4,
+            padding: '4px 6px', fontSize: 10, cursor: 'pointer', fontFamily: FONT,
+          }}>
+            <Trash2 size={11} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UploadMidiaModal({ onClose, onSucesso, onErro }) {
+  const [tipo, setTipo] = useState('foto');
+  const [arquivo, setArquivo] = useState(null);
+  const [ref, setRef] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const LIMITES_MB = { foto: 2, video: 16, catalogo: 20 };
+  const ACEITOS = {
+    foto: '.jpg,.jpeg,.png,.webp',
+    video: '.mp4,.mov',
+    catalogo: '.pdf',
+  };
+
+  const onFileChange = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const limiteMB = LIMITES_MB[tipo];
+    if (f.size > limiteMB * 1024 * 1024) {
+      onErro(`Arquivo ${(f.size / 1024 / 1024).toFixed(1)}MB excede limite ${tipo} (${limiteMB}MB)`);
+      return;
+    }
+    setArquivo(f);
+    // Auto-detecta REF do nome (3C)
+    const m = f.name.match(/^(\d{3,6})/);
+    if (m && !ref) setRef(m[1]);
+  };
+
+  const enviar = async () => {
+    if (!arquivo) { onErro('Selecione um arquivo'); return; }
+    setEnviando(true);
+    try {
+      const fd = new FormData();
+      fd.append('arquivo', arquivo);
+      fd.append('tipo', tipo);
+      if (ref) fd.append('ref', ref);
+      if (descricao) fd.append('descricao', descricao);
+
+      const r = await fetch('/api/lojas-whats-midia-upload', { method: 'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok || j.error) { onErro(j.error || 'Erro no upload'); return; }
+      onSucesso();
+    } catch (e) { onErro(e.message); }
+    setEnviando(false);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 20,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 20,
+        maxWidth: 460, width: '100%', fontFamily: FONT,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: fz(16), color: palette.ink, fontWeight: 700 }}>
+            Subir mídia
+          </h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>
+            <X size={sz(22)} color={palette.inkMuted} />
+          </button>
+        </div>
+
+        {/* Toggle tipo */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          {['foto', 'video', 'catalogo'].map(t => (
+            <button key={t} onClick={() => { setTipo(t); setArquivo(null); }} style={{
+              flex: 1, padding: '8px 6px', borderRadius: 6, cursor: 'pointer',
+              border: `1px solid ${tipo === t ? palette.accent : palette.beige}`,
+              background: tipo === t ? palette.accent : palette.surface,
+              color: tipo === t ? palette.bg : palette.ink,
+              fontSize: fz(12), fontWeight: 600, fontFamily: FONT, textTransform: 'capitalize',
+            }}>
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 8 }}>
+          Limite: <strong>{LIMITES_MB[tipo]}MB</strong> · Formatos: {ACEITOS[tipo]}
+        </div>
+
+        <input type="file" accept={ACEITOS[tipo]} onChange={onFileChange} style={{
+          width: '100%', padding: 6, marginBottom: 10,
+          fontFamily: FONT, fontSize: fz(12), boxSizing: 'border-box',
+        }} />
+
+        {arquivo && (
+          <div style={{
+            padding: 8, background: palette.surface, borderRadius: 6,
+            border: `1px solid ${palette.beige}`, marginBottom: 10,
+            fontSize: fz(12),
+          }}>
+            <div style={{ fontWeight: 600, color: palette.ink }}>{arquivo.name}</div>
+            <div style={{ color: palette.inkMuted, fontSize: fz(11), marginTop: 2 }}>
+              {(arquivo.size / 1024 / 1024).toFixed(2)}MB
+            </div>
+          </div>
+        )}
+
+        {/* REF (opcional pra catalogo, recomendado pra foto/video) */}
+        <input type="text" placeholder={tipo === 'catalogo' ? 'REF (opcional)' : 'REF do produto (ex: 2655)'}
+          value={ref} onChange={e => setRef(e.target.value)}
+          style={{
+            width: '100%', padding: '7px 10px', borderRadius: 6,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(12),
+            color: palette.ink, background: palette.surface, marginBottom: 8,
+            boxSizing: 'border-box',
+          }}
+        />
+
+        <textarea placeholder="Descrição (opcional) — ex: 'Vestido floral coleção primavera'"
+          value={descricao} onChange={e => setDescricao(e.target.value)}
+          style={{
+            width: '100%', padding: '7px 10px', borderRadius: 6,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(12),
+            color: palette.ink, background: palette.surface, marginBottom: 14,
+            boxSizing: 'border-box', resize: 'vertical', minHeight: 60,
+          }}
+        />
+
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onClose} disabled={enviando} style={{
+            flex: 1, padding: '9px 14px', borderRadius: 6,
+            background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.beige}`, fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+            cursor: enviando ? 'wait' : 'pointer',
+          }}>
+            Cancelar
+          </button>
+          <button onClick={enviar} disabled={enviando || !arquivo} style={{
+            flex: 1, padding: '9px 14px', borderRadius: 6,
+            background: palette.ink, color: palette.bg,
+            border: 'none', fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+            cursor: (enviando || !arquivo) ? 'wait' : 'pointer',
+            opacity: (!arquivo) ? 0.5 : 1,
+          }}>
+            {enviando ? 'Subindo...' : 'Subir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditarMidiaModal({ midia, onClose, onSucesso, onErro }) {
+  const [ref, setRef] = useState(midia.ref || '');
+  const [descricao, setDescricao] = useState(midia.descricao || '');
+  const [salvando, setSalvando] = useState(false);
+
+  const salvar = async () => {
+    setSalvando(true);
+    try {
+      const r = await fetch('/api/lojas-whats-midia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: midia.id, ref, descricao }),
+      });
+      const j = await r.json();
+      if (j.error) onErro(j.error); else onSucesso();
+    } catch (e) { onErro(e.message); }
+    setSalvando(false);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 20,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 20,
+        maxWidth: 420, width: '100%', fontFamily: FONT,
+      }}>
+        <h3 style={{ margin: '0 0 12px', fontSize: fz(16), color: palette.ink, fontWeight: 700 }}>
+          Editar mídia
+        </h3>
+        <div style={{ fontSize: fz(12), color: palette.inkMuted, marginBottom: 10 }}>
+          {midia.nome_arquivo} · {midia.tipo}
+        </div>
+        <label style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600 }}>REF</label>
+        <input type="text" value={ref} onChange={e => setRef(e.target.value)}
+          style={{
+            width: '100%', padding: '7px 10px', borderRadius: 6,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(12),
+            marginBottom: 10, marginTop: 4, color: palette.ink, background: palette.surface,
+            boxSizing: 'border-box',
+          }}
+        />
+        <label style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600 }}>Descrição</label>
+        <textarea value={descricao} onChange={e => setDescricao(e.target.value)}
+          style={{
+            width: '100%', padding: '7px 10px', borderRadius: 6,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(12),
+            marginBottom: 14, marginTop: 4, color: palette.ink, background: palette.surface,
+            boxSizing: 'border-box', resize: 'vertical', minHeight: 70,
+          }}
+        />
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onClose} disabled={salvando} style={{
+            flex: 1, padding: '9px', borderRadius: 6,
+            background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.beige}`, fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+            cursor: salvando ? 'wait' : 'pointer',
+          }}>
+            Cancelar
+          </button>
+          <button onClick={salvar} disabled={salvando} style={{
+            flex: 1, padding: '9px', borderRadius: 6,
+            background: palette.ink, color: palette.bg, border: 'none',
+            fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+            cursor: salvando ? 'wait' : 'pointer',
+          }}>
+            {salvando ? 'Salvando...' : 'Salvar'}
+          </button>
         </div>
       </div>
     </div>
