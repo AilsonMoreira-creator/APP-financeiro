@@ -160,7 +160,9 @@ async function processarMensagemRecebida(msg, valueCtx) {
   const dadosMsg = extrairConteudo(msg);
 
   // 3. Salva em lojas_whats_mensagens
-  const { error: errMsg } = await supabase
+  // Dedup via UNIQUE(meta_message_id): se Meta enviar retry, ignora silencioso.
+  // Ailson 26/05/2026 (auditoria ponto 5).
+  const { data: msgInserida, error: errMsg } = await supabase
     .from('lojas_whats_mensagens')
     .insert({
       conversa_id: conversa.id,
@@ -172,8 +174,17 @@ async function processarMensagemRecebida(msg, valueCtx) {
       meta_message_id: msg.id,
       status: 'entregue',
       enviada_em: new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
-    });
-  if (errMsg) logErro('msg-in-save', errMsg);
+    })
+    .select('id')
+    .maybeSingle();
+  if (errMsg) {
+    // Codigo 23505 = unique_violation. Eh retry da Meta — ignora.
+    if (errMsg.code === '23505') {
+      log('msg-in', `retry meta_message_id=${msg.id} ignorado (dedup)`);
+      return;  // sai do handler, nao processa mais nada deste retry
+    }
+    logErro('msg-in-save', errMsg);
+  }
 
   // 4. Avanca conversa se estava em 'enviada' (cliente respondeu pela 1a vez)
   const updates = {

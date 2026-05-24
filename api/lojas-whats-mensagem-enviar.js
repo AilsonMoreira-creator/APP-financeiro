@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST esperado' });
 
   try {
-    const { conversa_id, texto, midia_id, autor = 'assistente', usuario } = req.body || {};
+    const { conversa_id, texto, midia_id, autor = 'assistente', usuario, vendedora_id } = req.body || {};
     if (!conversa_id) return res.status(400).json({ error: 'conversa_id obrigatorio' });
     if (!texto && !midia_id) return res.status(400).json({ error: 'texto ou midia_id obrigatorio' });
 
@@ -103,6 +103,7 @@ export default async function handler(req, res) {
         tipo_midia: tipoMidiaMsg,
         texto: textoLimpo || null,
         meta_message_id: metaMsgId,
+        enviada_por_vendedora_id: vendedora_id || null,
         status: 'enviando',
         meta_response: metaResp,
         enviada_em: agora,
