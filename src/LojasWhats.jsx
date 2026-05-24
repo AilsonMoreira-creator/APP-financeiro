@@ -643,13 +643,17 @@ function ConversasTab({ refreshTick }) {
   const [conversas, setConversas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEtapa, setFiltroEtapa] = useState('todas');
+  // Modal "Enviar vendedora" (Ailson 26/05/2026 — Etapa 5 quente)
+  const [modalEnviar, setModalEnviar] = useState(null);  // { conversa } | null
+  const [feedback, setFeedback] = useState(null);  // { tipo, msg } | null
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       let q = supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em')
+        .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente')
         .order('ultima_atividade_em', { ascending: false })
         .limit(100);
       if (filtroEtapa !== 'todas') q = q.eq('etapa', filtroEtapa);
@@ -657,9 +661,22 @@ function ConversasTab({ refreshTick }) {
       setConversas(data || []);
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick]);
+  }, [filtroEtapa, refreshTick, reloadTick]);
+
+  // Auto-hide feedback apos 4s
+  useEffect(() => {
+    if (!feedback) return;
+    const t = setTimeout(() => setFeedback(null), 4000);
+    return () => clearTimeout(t);
+  }, [feedback]);
 
   if (loading) return <div style={{ padding: 20, textAlign: 'center' }}><Loader2 size={sz(24)} className="spin" /></div>;
+
+  const onContinuarSofia = (conversa) => {
+    // Etapa nao muda - Sofia segue. Apenas registra acao pra log/auditoria.
+    // Por enquanto so feedback visual. Toda mensagem ainda precisa OK assistente.
+    setFeedback({ tipo: 'ok', msg: `Sofia continua atendimento de ${conversa.nome_cliente || conversa.telefone}` });
+  };
 
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
@@ -681,14 +698,47 @@ function ConversasTab({ refreshTick }) {
         ))}
       </div>
 
+      {/* Feedback flutuante */}
+      {feedback && (
+        <div style={{
+          padding: '8px 12px', marginBottom: 10, borderRadius: 6,
+          background: feedback.tipo === 'erro' ? palette.alertSoft : '#e7f5ec',
+          color: feedback.tipo === 'erro' ? palette.alert : '#2e7d32',
+          fontSize: fz(13), fontWeight: 500,
+        }}>
+          {feedback.msg}
+        </div>
+      )}
+
       {conversas.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>
           Nenhuma conversa nessa etapa.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {conversas.map(c => <ConversaRow key={c.id} c={c} />)}
+          {conversas.map(c => (
+            <ConversaRow
+              key={c.id}
+              c={c}
+              onContinuarSofia={() => onContinuarSofia(c)}
+              onEnviarVendedora={() => setModalEnviar({ conversa: c })}
+            />
+          ))}
         </div>
+      )}
+
+      {/* Modal "Enviar vendedora" */}
+      {modalEnviar && (
+        <EnviarVendedoraModal
+          conversa={modalEnviar.conversa}
+          onClose={() => setModalEnviar(null)}
+          onSucesso={(msg) => {
+            setFeedback({ tipo: 'ok', msg });
+            setModalEnviar(null);
+            setReloadTick(t => t + 1);
+          }}
+          onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
+        />
       )}
     </div>
   );
@@ -708,34 +758,215 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome }) => (
   </button>
 );
 
-const ConversaRow = ({ c }) => {
+const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
+  const ehQuente = c.etapa === 'quente';
   return (
     <div style={{
       background: palette.surface, padding: 10, borderRadius: 8,
-      display: 'flex', alignItems: 'center', gap: 10,
-      border: `1px solid ${palette.beige}`,
+      border: `1px solid ${ehQuente ? '#f5a623' : palette.beige}`,
+      borderLeftWidth: ehQuente ? 3 : 1,
+      borderLeftColor: ehQuente ? '#f5a623' : palette.beige,
     }}>
-      <EtapaIcon nome={c.etapa} size={32} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {ehPJ ? <Building2 size={sz(12)} color={palette.warn} /> : <UserIcon size={sz(12)} color={palette.accent} />}
-          <span style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {c.nome_cliente || '—'}
-          </span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <EtapaIcon nome={c.etapa} size={32} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {ehPJ ? <Building2 size={sz(12)} color={palette.warn} /> : <UserIcon size={sz(12)} color={palette.accent} />}
+            <span style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {c.nome_cliente || '—'}
+            </span>
+            {ehQuente && c.score_quente && (
+              <span style={{
+                fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
+                background: '#fff4e0', color: '#8a5500', fontWeight: 700,
+              }}>
+                {c.score_quente}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: fz(11), color: palette.inkMuted, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span>{fmtPhone(c.telefone)}</span>
+            {c.qtd_pecas > 0 && <span>· {c.qtd_pecas} peças</span>}
+            {Number(c.valor_carrinho) > 0 && <span>· {fmtMoney(c.valor_carrinho)}</span>}
+          </div>
         </div>
-        <div style={{ fontSize: fz(11), color: palette.inkMuted, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <span>{fmtPhone(c.telefone)}</span>
-          {c.qtd_pecas > 0 && <span>· {c.qtd_pecas} peças</span>}
-          {Number(c.valor_carrinho) > 0 && <span>· {fmtMoney(c.valor_carrinho)}</span>}
+        <div style={{ fontSize: fz(11), color: palette.inkMuted, textAlign: 'right', flexShrink: 0 }}>
+          {fmtRelTime(c.ultima_atividade_em)}
         </div>
       </div>
-      <div style={{ fontSize: fz(11), color: palette.inkMuted, textAlign: 'right', flexShrink: 0 }}>
-        {fmtRelTime(c.ultima_atividade_em)}
-      </div>
+
+      {/* Botões só pra etapa quente (Ailson 26/05/2026 — Etapa 5) */}
+      {ehQuente && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}` }}>
+          <button onClick={onContinuarSofia} style={{
+            flex: 1, padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
+            background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.beige}`,
+            fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          }}>
+            <Bot size={sz(14)} /> Continuar Sofia
+          </button>
+          <button onClick={onEnviarVendedora} style={{
+            flex: 1, padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
+            background: '#f5a623', color: '#fff',
+            border: '1px solid #f5a623',
+            fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          }}>
+            <Users size={sz(14)} /> Enviar vendedora
+          </button>
+        </div>
+      )}
     </div>
   );
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL "Enviar vendedora" (Etapa 5 quente → encaminha pra rodízio ou manual)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function EnviarVendedoraModal({ conversa, onClose, onSucesso, onErro }) {
+  const [modo, setModo] = useState('rodizio'); // 'rodizio' | 'manual'
+  const [vendedoraId, setVendedoraId] = useState('');
+  const [vendedoras, setVendedoras] = useState([]);
+  const [enviando, setEnviando] = useState(false);
+
+  // Carrega TODAS vendedoras quando abre o modo manual
+  useEffect(() => {
+    if (modo !== 'manual') return;
+    (async () => {
+      const { data } = await supabase
+        .from('lojas_vendedoras')
+        .select('id, nome, loja, ativa')
+        .order('loja')
+        .order('nome');
+      setVendedoras(data || []);
+    })();
+  }, [modo]);
+
+  const enviar = async () => {
+    if (modo === 'manual' && !vendedoraId) {
+      onErro('Selecione uma vendedora.');
+      return;
+    }
+    setEnviando(true);
+    try {
+      const r = await fetch('/api/lojas-whats-encaminhar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: conversa.id,
+          modo,
+          vendedora_id: modo === 'manual' ? vendedoraId : undefined,
+        }),
+      });
+      const r2 = await r.json();
+      if (!r.ok || r2.error) {
+        onErro(r2.error || 'Erro encaminhando.');
+      } else {
+        const v = vendedoras.find(v => v.id === r2.vendedora_id);
+        const nome = v?.nome || 'vendedora';
+        onSucesso(r2.mensagem || `Lead enviado pra ${nome}.`);
+      }
+    } catch (e) {
+      onErro(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 20,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 20,
+        maxWidth: 420, width: '100%', fontFamily: FONT,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: fz(16), color: palette.ink, fontFamily: FONT, fontWeight: 700 }}>
+            Enviar pra vendedora
+          </h3>
+          <button onClick={onClose} style={{
+            border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
+          }}>
+            <X size={sz(22)} color={palette.inkMuted} />
+          </button>
+        </div>
+        <div style={{ fontSize: fz(13), color: palette.inkSoft, marginBottom: 14 }}>
+          Cliente: <strong>{conversa.nome_cliente || conversa.telefone}</strong>
+        </div>
+
+        {/* Toggle modo */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+          <button onClick={() => setModo('rodizio')} style={{
+            flex: 1, padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
+            border: `1px solid ${modo === 'rodizio' ? palette.accent : palette.beige}`,
+            background: modo === 'rodizio' ? palette.accent : palette.surface,
+            color: modo === 'rodizio' ? palette.bg : palette.ink,
+            fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+          }}>
+            🎲 Rodízio
+          </button>
+          <button onClick={() => setModo('manual')} style={{
+            flex: 1, padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
+            border: `1px solid ${modo === 'manual' ? palette.accent : palette.beige}`,
+            background: modo === 'manual' ? palette.accent : palette.surface,
+            color: modo === 'manual' ? palette.bg : palette.ink,
+            fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+          }}>
+            👤 Definir
+          </button>
+        </div>
+
+        {/* Descrição modo / select */}
+        {modo === 'rodizio' ? (
+          <div style={{
+            padding: 10, borderRadius: 6, background: palette.surface,
+            border: `1px solid ${palette.beige}`, fontSize: fz(12), color: palette.inkSoft,
+            marginBottom: 14,
+          }}>
+            Sistema escolhe a próxima vendedora elegível (rodízio round-robin).
+            Janela 9h-13h BRT. Sábado só Bom Retiro.
+          </div>
+        ) : (
+          <select value={vendedoraId} onChange={e => setVendedoraId(e.target.value)} style={{
+            width: '100%', padding: 8, borderRadius: 6, border: `1px solid ${palette.beige}`,
+            fontFamily: FONT, fontSize: fz(13), color: palette.ink, marginBottom: 14,
+            background: palette.surface,
+          }}>
+            <option value="">Selecione vendedora...</option>
+            {vendedoras.map(v => (
+              <option key={v.id} value={v.id}>{v.nome} ({v.loja})</option>
+            ))}
+          </select>
+        )}
+
+        {/* Botoes */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onClose} disabled={enviando} style={{
+            flex: 1, padding: '9px 14px', borderRadius: 6, cursor: enviando ? 'wait' : 'pointer',
+            background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.beige}`, fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+          }}>
+            Cancelar
+          </button>
+          <button onClick={enviar} disabled={enviando} style={{
+            flex: 1, padding: '9px 14px', borderRadius: 6, cursor: enviando ? 'wait' : 'pointer',
+            background: '#f5a623', color: '#fff',
+            border: '1px solid #f5a623', fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+          }}>
+            {enviando ? 'Enviando...' : 'Enviar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 4: VENDEDORAS — config rodízio + link Vesti
