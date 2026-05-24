@@ -27,7 +27,7 @@ export default async function handler(req, res) {
 
     const { data: handoffs, error } = await supabase
       .from('lojas_whats_handoffs')
-      .select('id, conversa_id, motivo, gatilhos_detectados, resumo_ia, push_enviado_em, expirou_em, criado_em')
+      .select('id, conversa_id, motivo, gatilhos_detectados, resumo_ia, resumo_conversa, pecas_info, modelos_interesse, mensagem_sugerida, push_enviado_em, expirou_em, criado_em')
       .eq('vendedora_id', vendedoraId)
       .eq('status', 'aguardando')
       // Garante precisao dos 30min independente do cron de rotacao (que roda a cada 5min).
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     if (conversaIds.length) {
       const { data: cv } = await supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, etapa, score_quente')
+        .select('id, telefone, nome_cliente, tipo_documento, etapa, score_quente')
         .in('id', conversaIds);
       conversasMap = new Map((cv || []).map(c => [c.id, c]));
     }
@@ -58,11 +58,18 @@ export default async function handler(req, res) {
         handoff_id: h.id,
         conversa_id: h.conversa_id,
         telefone: cv.telefone,
+        nome_cliente: cv.nome_cliente,
+        tipo_documento: cv.tipo_documento,
         etapa: cv.etapa,
         score_quente: cv.score_quente,
         motivo: h.motivo,
         gatilhos: h.gatilhos_detectados,
         resumo_ia: h.resumo_ia,
+        // Novos campos pre-gerados via Claude Haiku (Ailson 26/05/2026)
+        resumo_conversa: h.resumo_conversa,
+        pecas_info: h.pecas_info,
+        modelos_interesse: h.modelos_interesse || [],
+        mensagem_sugerida: h.mensagem_sugerida,
         expira_em: h.expirou_em,
         segundos_restantes: segundosRestantes,
       };

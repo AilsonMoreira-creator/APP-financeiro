@@ -1905,8 +1905,15 @@ function mapBadgeFeedback(status) {
 // status='aguardando' (não passou dos 30min). Se vendedora abrir o app
 // 31min apos notificacao, NAO ve o card — endpoint filtra expirou_em>NOW.
 // Ailson 26/05/2026 (Etapa 7).
+// ─── CARD LEAD SOFIA — handoff pra vendedora (Ailson 26/05/2026 sessao tarde)
+// Card rico com tudo que vendedora precisa pra bater olho e mandar msg:
+//   - Resumo da conversa (Claude Haiku, 2-3 frases)
+//   - Peças escolhidas + valor do carrinho
+//   - Modelos que cliente mostrou interesse
+//   - Botao 'Enviar mensagem' -> abre modal com msg pre-gerada IA + edit + enviar
+// Visual segue padrao SugestaoCard pra nao confundir vendedora.
 const LeadSofiaCard = ({ lead, onAtender }) => {
-  const [atendendo, setAtendendo] = useState(false);
+  const [modalAberto, setModalAberto] = useState(false);
 
   // Timer countdown — atualiza a cada segundo
   const calcRestante = () => {
@@ -1923,112 +1930,250 @@ const LeadSofiaCard = ({ lead, onAtender }) => {
   const min = Math.floor(restante / 60);
   const seg = restante % 60;
   const timerStr = `${min}:${String(seg).padStart(2, '0')}`;
-
-  // Cor do timer fica vermelho quando faltam <5min
   const corTimer = restante < 300 ? '#c0392b' : '#5a6470';
+  const expirou = restante === 0;
 
-  const click = async () => {
-    if (atendendo || restante === 0) return;
-    setAtendendo(true);
-    try { await onAtender(); } finally { setAtendendo(false); }
-  };
+  // Telefone formatado pt-BR
+  const tel = lead.telefone || '';
+  const telFmt = tel.length >= 12
+    ? `(${tel.slice(2, 4)}) ${tel.slice(4, 9)}-${tel.slice(9)}`
+    : tel;
 
-  // Gatilhos = array de strings, formata "pix · parcela · frete"
+  // Resumo: prefere campo novo, fallback no antigo resumo_ia
+  const resumo = lead.resumo_conversa || lead.resumo_ia || null;
+
+  // Gatilhos formatados
   const gatilhosStr = Array.isArray(lead.gatilhos)
     ? lead.gatilhos.slice(0, 4).join(' · ')
     : '';
 
-  // Telefone formatado
-  const tel = lead.telefone || '';
-  const telFmt = tel.length >= 12
-    ? `(${tel.slice(2,4)}) ${tel.slice(4,9)}-${tel.slice(9)}`
-    : tel;
+  // Modelos interesse formatado
+  const modelosStr = Array.isArray(lead.modelos_interesse) && lead.modelos_interesse.length > 0
+    ? lead.modelos_interesse.slice(0, 3).join(' · ')
+    : '';
+
+  return (
+    <>
+      <div style={{
+        background: palette.surface,
+        border: '1.5px solid #4a7fa5',
+        borderRadius: 12,
+        padding: 14,
+        fontFamily: FONT,
+        boxShadow: '0 1px 3px rgba(44,62,80,0.06)',
+      }}>
+        {/* Header: avatar Sofia + nome cliente + timer */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 9, background: '#e8f0ff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <img src="/icons/lojas-whats/whatsapp.png" alt="Sofia"
+              width={22} height={22} style={{ objectFit: 'contain' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: palette.ink, lineHeight: 1.2 }}>
+              {lead.nome_cliente || 'Lead da Sofia'}
+              {lead.tipo_documento === 'CNPJ' && (
+                <span style={{
+                  marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4,
+                  background: '#fff4e0', color: '#8a5500', fontWeight: 700, verticalAlign: 'middle',
+                }}>PJ</span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: palette.inkSoft, marginTop: 2 }}>
+              {telFmt}
+              {lead.pecas_info && <span> · {lead.pecas_info}</span>}
+            </div>
+          </div>
+          {!expirou && (
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: corTimer, lineHeight: 1 }}>
+                {timerStr}
+              </div>
+              <div style={{ fontSize: 9, color: '#7c8a99', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 1 }}>
+                restante
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Resumo da conversa (Claude Haiku) */}
+        {resumo && (
+          <div style={{
+            fontSize: 13, color: palette.ink, lineHeight: 1.45,
+            padding: '8px 10px', borderRadius: 6, marginBottom: 8,
+            background: '#f0f6fb', borderLeft: '3px solid #4a7fa5',
+          }}>
+            {resumo}
+          </div>
+        )}
+
+        {/* Modelos de interesse */}
+        {modelosStr && (
+          <div style={{
+            fontSize: 12, color: '#2c3e50', marginBottom: 6, fontWeight: 500,
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <span style={{ opacity: 0.6 }}>🧷</span>
+            <span>Interesse: {modelosStr}</span>
+          </div>
+        )}
+
+        {/* Gatilhos quentes detectados */}
+        {gatilhosStr && (
+          <div style={{ fontSize: 11, color: '#8a5500', marginBottom: 10, fontWeight: 600 }}>
+            🔥 {gatilhosStr}
+          </div>
+        )}
+
+        {/* Botao principal: Enviar mensagem (novo padrao Ailson) */}
+        <button
+          onClick={() => !expirou && setModalAberto(true)}
+          disabled={expirou}
+          style={{
+            width: '100%',
+            background: expirou ? '#bdc3c7' : '#2c3e50',
+            color: '#fff', border: 'none', borderRadius: 8,
+            padding: '10px 14px',
+            fontSize: 14, fontWeight: 700,
+            cursor: expirou ? 'not-allowed' : 'pointer',
+            fontFamily: FONT,
+          }}
+        >
+          {expirou ? 'Expirou' : '💬 Enviar mensagem'}
+        </button>
+      </div>
+
+      {modalAberto && !expirou && (
+        <EnviarMensagemSofiaModal
+          lead={lead}
+          onClose={() => setModalAberto(false)}
+          onEnviado={async () => {
+            setModalAberto(false);
+            // Aceita o handoff pra mudar conversa pra 'atendida'
+            // (mensagem ja foi enviada, agora so registra que vendedora pegou)
+            if (onAtender) await onAtender();
+          }}
+        />
+      )}
+    </>
+  );
+};
+
+// ─── MODAL ENVIAR MENSAGEM (vendedora envia msg da Sofia direto pelo card)
+// Mostra msg pre-gerada por Claude Haiku no momento que assistente encaminhou.
+// Vendedora pode editar antes de enviar. Botao Enviar dispara POST pra Cloud API.
+const EnviarMensagemSofiaModal = ({ lead, onClose, onEnviado }) => {
+  const [texto, setTexto] = useState(lead.mensagem_sugerida || '');
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  const enviar = async () => {
+    if (!texto.trim()) { setErro('Mensagem vazia.'); return; }
+    setEnviando(true);
+    setErro(null);
+    try {
+      let usuario = null;
+      try { usuario = JSON.parse(localStorage.getItem('amica_session') || '{}')?.usuario || null; }
+      catch {}
+      const r = await fetch('/api/lojas-whats-mensagem-enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: lead.conversa_id,
+          texto: texto.trim(),
+          autor: 'assistente',
+          usuario,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) {
+        setErro(j.error || 'Erro ao enviar.');
+        return;
+      }
+      await onEnviado();
+    } catch (e) {
+      setErro(e.message);
+    }
+    setEnviando(false);
+  };
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, #e8f0ff 0%, #d4e3fc 100%)',
-      border: '1.5px solid #4a7fa5',
-      borderRadius: 14,
-      padding: 14,
-      fontFamily: FONT,
-      boxShadow: '0 2px 8px rgba(74,127,165,0.15)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 16,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 18,
+        maxWidth: 480, width: '100%', fontFamily: FONT,
+        maxHeight: '90vh', overflowY: 'auto',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <h3 style={{ margin: 0, fontSize: 17, color: palette.ink, fontWeight: 700 }}>
+            Enviar mensagem
+          </h3>
+          <button onClick={onClose} aria-label="Fechar" style={{
+            border: 'none', background: 'transparent', cursor: 'pointer',
+            padding: 4, color: palette.inkMuted, fontSize: 22, lineHeight: 1,
+          }}>×</button>
+        </div>
+        <div style={{ fontSize: 13, color: palette.inkSoft, marginBottom: 12 }}>
+          Para: <strong>{lead.nome_cliente || lead.telefone}</strong>
+        </div>
+
         <div style={{
-          width: 44, height: 44, borderRadius: 12,
-          background: '#fff', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          fontSize: 11, color: palette.inkMuted, marginBottom: 4, fontWeight: 600,
+          textTransform: 'uppercase', letterSpacing: 0.5,
         }}>
-          <img
-            src="/icons/lojas-whats/whatsapp.png"
-            alt="Sofia"
-            width={28}
-            height={28}
-            style={{ objectFit: 'contain' }}
-          />
+          Mensagem (gerada pela IA, pode editar)
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#2c3e50', lineHeight: 1.2 }}>
-            Lead da Sofia 🔥
-          </div>
-          <div style={{ fontSize: 12, color: '#5a6470', marginTop: 2 }}>
-            {telFmt}
-          </div>
-        </div>
-        {restante > 0 && (
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: corTimer, lineHeight: 1 }}>
-              {timerStr}
-            </div>
-            <div style={{ fontSize: 9, color: '#7c8a99', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 1 }}>
-              restante
-            </div>
+        <textarea
+          value={texto}
+          onChange={e => setTexto(e.target.value)}
+          rows={6}
+          placeholder="Mensagem pra cliente…"
+          style={{
+            width: '100%', padding: 10, borderRadius: 6,
+            border: `1px solid ${palette.beige}`,
+            fontFamily: FONT, fontSize: 14, color: palette.ink,
+            background: palette.surface, marginBottom: 10,
+            resize: 'vertical', boxSizing: 'border-box',
+          }}
+        />
+
+        {erro && (
+          <div style={{
+            padding: '8px 10px', borderRadius: 6, marginBottom: 10,
+            background: palette.alertSoft, color: palette.alert,
+            fontSize: 12,
+          }}>
+            {erro}
           </div>
         )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} disabled={enviando} style={{
+            flex: 1, padding: '10px 14px', borderRadius: 6,
+            background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.beige}`,
+            fontSize: 14, fontWeight: 600, fontFamily: FONT,
+            cursor: enviando ? 'wait' : 'pointer',
+          }}>
+            Cancelar
+          </button>
+          <button onClick={enviar} disabled={enviando || !texto.trim()} style={{
+            flex: 2, padding: '10px 14px', borderRadius: 6,
+            background: enviando ? '#bdc3c7' : '#2c3e50',
+            color: '#fff', border: 'none',
+            fontSize: 14, fontWeight: 700, fontFamily: FONT,
+            cursor: (enviando || !texto.trim()) ? 'wait' : 'pointer',
+          }}>
+            {enviando ? 'Enviando…' : '💬 Enviar mensagem'}
+          </button>
+        </div>
       </div>
-
-      {/* Resumo IA */}
-      {lead.resumo_ia && (
-        <div style={{
-          fontSize: 12, color: '#2c3e50', lineHeight: 1.4,
-          padding: '8px 10px', borderRadius: 6,
-          background: 'rgba(255,255,255,0.55)', marginBottom: 8,
-        }}>
-          {lead.resumo_ia}
-        </div>
-      )}
-
-      {/* Gatilhos */}
-      {gatilhosStr && (
-        <div style={{
-          fontSize: 11, color: '#8a5500', marginBottom: 10,
-          fontWeight: 600,
-        }}>
-          🔥 {gatilhosStr}
-        </div>
-      )}
-
-      <button
-        onClick={click}
-        disabled={atendendo || restante === 0}
-        style={{
-          width: '100%',
-          background: restante === 0 ? '#bdc3c7' : '#2c3e50',
-          color: '#fff',
-          border: 'none', borderRadius: 8,
-          padding: '10px 14px',
-          fontSize: 14, fontWeight: 700,
-          cursor: (atendendo || restante === 0) ? 'not-allowed' : 'pointer',
-          fontFamily: FONT,
-        }}
-      >
-        {atendendo
-          ? 'Atendendo…'
-          : restante === 0
-            ? 'Expirou'
-            : '👋 Atender agora'}
-      </button>
     </div>
   );
 };

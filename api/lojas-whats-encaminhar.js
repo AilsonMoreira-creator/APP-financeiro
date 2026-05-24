@@ -25,6 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, setCors } from './_lojas-whats-helpers.js';
+import { gerarContextoHandoff } from './_lojas-whats-handoff-ia.js';
 
 const ROTACAO_MIN = 30;  // janela por vendedora
 
@@ -157,6 +158,11 @@ export default async function handler(req, res) {
     const expira = new Date(agora.getTime() + ROTACAO_MIN * 60 * 1000);
     const pushAgora = janela.ativa;  // só dispara push se janela aberta
 
+    // Gera contexto IA (resumo, modelos, msg sugerida) via Claude Haiku ANTES
+    // de inserir. Se falhar, campos ficam null e handoff segue normal.
+    // Ailson 26/05/2026 (sessao tarde) — card vendedora rico.
+    const ctxIa = await gerarContextoHandoff(conversa_id);
+
     const { data: handoff, error: errH } = await supabase
       .from('lojas_whats_handoffs')
       .insert({
@@ -167,6 +173,12 @@ export default async function handler(req, res) {
         resumo_ia: typeof conversa.contexto_ia === 'string'
           ? conversa.contexto_ia.slice(0, 500)
           : null,
+        // Campos novos (Ailson 26/05/2026)
+        resumo_conversa: ctxIa.resumo_conversa,
+        pecas_info: ctxIa.pecas_info,
+        modelos_interesse: ctxIa.modelos_interesse || [],
+        mensagem_sugerida: ctxIa.mensagem_sugerida,
+        mensagem_sugerida_em: ctxIa.mensagem_sugerida ? agora.toISOString() : null,
         push_enviado: pushAgora,
         push_enviado_em: pushAgora ? agora.toISOString() : null,
         expirou_em: pushAgora ? expira.toISOString() : null,
