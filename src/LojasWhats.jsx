@@ -186,84 +186,291 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function FunilTab({ refreshTick }) {
-  const [contagens, setContagens] = useState({});
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [resumo, setResumo] = useState(null);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      // Contagens por etapa
-      const counts = {};
-      for (const etapa of ETAPAS) {
-        const { count } = await supabase
-          .from('lojas_whats_conversas')
-          .select('*', { count: 'exact', head: true })
-          .eq('etapa', etapa.id);
-        counts[etapa.id] = count || 0;
-      }
-      setContagens(counts);
-
-      // Resumo da fila (cap, criadas hoje, etc)
       try {
-        const r = await fetch('/api/lojas-whats-cron-selecionar');
-        if (r.ok) setResumo((await r.json()).data);
-      } catch (_) {}
+        // Calcula datas: hoje, ontem, 7d
+        const hoje = new Date();
+        const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+        const inicioOntem = new Date(inicioHoje); inicioOntem.setDate(inicioOntem.getDate() - 1);
+        const inicioSemana = new Date(inicioHoje); inicioSemana.setDate(inicioSemana.getDate() - 7);
+
+        const fmtUtc = (d) => d.toISOString();
+
+        // KPIs hoje
+        const [
+          carrinhosHoje, carrinhosOntem,
+          enviadasHoje, enviadasOntem,
+          quentesHoje, quentesOntem,
+          vendeuHoje, vendeuOntem,
+          totalRespostas7d, totalEnviadas7d,
+          totalConversas, totalAtivasAgora,
+        ] = await Promise.all([
+          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).gte('iniciada_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).gte('iniciada_em', fmtUtc(inicioOntem)).lt('iniciada_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_mensagens').select('*', { count: 'exact', head: true }).eq('direcao', 'saida').gte('enviada_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_mensagens').select('*', { count: 'exact', head: true }).eq('direcao', 'saida').gte('enviada_em', fmtUtc(inicioOntem)).lt('enviada_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).eq('etapa', 'quente').gte('atualizado_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).eq('etapa', 'quente').gte('atualizado_em', fmtUtc(inicioOntem)).lt('atualizado_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).eq('etapa', 'vendeu').gte('vendeu_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).eq('etapa', 'vendeu').gte('vendeu_em', fmtUtc(inicioOntem)).lt('vendeu_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_mensagens').select('*', { count: 'exact', head: true }).eq('direcao', 'entrada').gte('enviada_em', fmtUtc(inicioSemana)),
+          supabase.from('lojas_whats_mensagens').select('*', { count: 'exact', head: true }).eq('direcao', 'saida').gte('enviada_em', fmtUtc(inicioSemana)),
+          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }),
+          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).not('etapa', 'in', '(perdida,vendeu)'),
+        ]);
+
+        // Contagem por etapa (pra funil visual)
+        const contagensEtapas = {};
+        for (const et of ETAPAS) {
+          const { count } = await supabase
+            .from('lojas_whats_conversas')
+            .select('*', { count: 'exact', head: true })
+            .eq('etapa', et.id);
+          contagensEtapas[et.id] = count || 0;
+        }
+
+        // Resumo cron (cap+pendentes)
+        let resumoCron = null;
+        try {
+          const r = await fetch('/api/lojas-whats-cron-selecionar');
+          if (r.ok) resumoCron = (await r.json()).data;
+        } catch (_) {}
+
+        // Taxa resposta = entradas / saidas nos ultimos 7d
+        const totRespostas = totalRespostas7d.count || 0;
+        const totEnviadas = totalEnviadas7d.count || 0;
+        const taxaResposta = totEnviadas > 0 ? (totRespostas / totEnviadas) : 0;
+
+        setData({
+          hoje: {
+            carrinhos: carrinhosHoje.count || 0,
+            enviadas: enviadasHoje.count || 0,
+            quentes: quentesHoje.count || 0,
+            vendeu: vendeuHoje.count || 0,
+          },
+          ontem: {
+            carrinhos: carrinhosOntem.count || 0,
+            enviadas: enviadasOntem.count || 0,
+            quentes: quentesOntem.count || 0,
+            vendeu: vendeuOntem.count || 0,
+          },
+          taxa_resposta_7d: taxaResposta,
+          total_conversas: totalConversas.count || 0,
+          total_ativas: totalAtivasAgora.count || 0,
+          contagens_etapas: contagensEtapas,
+          resumo_cron: resumoCron,
+        });
+      } catch (e) {
+        console.error('[funil] erro:', e);
+      }
       setLoading(false);
     })();
   }, [refreshTick]);
 
   if (loading) return <div style={{ padding: 20 }}><Loader2 size={sz(24)} className="spin" /></div>;
-
-  const total = Object.values(contagens).reduce((a, b) => a + b, 0);
+  if (!data) return <div style={{ padding: 20, color: palette.alert }}>Erro carregando funil</div>;
 
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
-      <SectionTitle>Hoje</SectionTitle>
-      {resumo && (
-        <div style={{
-          background: palette.surface, borderRadius: 10, padding: 12,
-          marginBottom: 14, display: 'flex', gap: 12, flexWrap: 'wrap',
-          fontSize: fz(13),
-        }}>
-          <StatBox label="Cap diário" valor={resumo.cap_diario} cor={palette.ink} />
-          <StatBox label="Criadas hoje" valor={resumo.criadas_hoje} cor={palette.accent} />
-          <StatBox label="Restante hoje" valor={resumo.restante_hoje} cor={palette.warn} />
-          <StatBox label="Pendentes" valor={resumo.fila_pendentes} cor={palette.warn} />
-          <StatBox label="Enviadas hoje" valor={resumo.enviadas_hoje} cor={palette.ok} />
-        </div>
-      )}
+      {/* TITULO E DATA */}
+      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <SectionTitle>📊 Resumo do dia</SectionTitle>
+        <span style={{ fontSize: fz(11), color: palette.inkMuted }}>
+          {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+        </span>
+      </div>
 
-      <SectionTitle>Funil ({total} conversas total)</SectionTitle>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-        {ETAPAS.map(et => (
-          <div key={et.id} style={{
-            background: palette.surface, borderRadius: 10, padding: 12,
-            display: 'flex', alignItems: 'center', gap: 10,
-            border: `1px solid ${palette.beige}`,
-          }}>
-            <EtapaIcon nome={et.id} size={36} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 2 }}>
-                {et.label}
-              </div>
-              <div style={{ fontSize: fz(22), fontWeight: 700, color: et.cor, lineHeight: 1 }}>
-                {contagens[et.id] || 0}
-              </div>
-            </div>
-          </div>
-        ))}
+      {/* KPIs PRINCIPAIS (4 cards com comparativo dia anterior) */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+        gap: 10, marginBottom: 18,
+      }}>
+        <FunilKpiCard label="Novos carrinhos"
+          hoje={data.hoje.carrinhos} ontem={data.ontem.carrinhos}
+          icon="🛒" cor={palette.accent} />
+        <FunilKpiCard label="Mensagens enviadas"
+          hoje={data.hoje.enviadas} ontem={data.ontem.enviadas}
+          icon="📨" cor={palette.ink} />
+        <FunilKpiCard label="Viraram quente"
+          hoje={data.hoje.quentes} ontem={data.ontem.quentes}
+          icon="🔥" cor="#f5a623" />
+        <FunilKpiCard label="Vendeu"
+          hoje={data.hoje.vendeu} ontem={data.ontem.vendeu}
+          icon="💰" cor={palette.ok} />
+      </div>
+
+      {/* FUNIL VISUAL: barras horizontais decrescentes */}
+      <SectionTitle>🪜 Funil agora</SectionTitle>
+      <FunilVisual contagens={data.contagens_etapas} />
+
+      {/* INDICADORES SECUNDARIOS */}
+      <div style={{
+        marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+        gap: 10,
+      }}>
+        <IndicadorCard
+          titulo="Taxa de resposta cliente"
+          valor={`${Math.round(data.taxa_resposta_7d * 100)}%`}
+          sub="últimos 7 dias"
+          cor={data.taxa_resposta_7d > 0.4 ? palette.ok : data.taxa_resposta_7d > 0.2 ? '#d4a017' : palette.alert}
+        />
+        <IndicadorCard
+          titulo="Conversas ativas"
+          valor={data.total_ativas}
+          sub={`de ${data.total_conversas} total`}
+          cor={palette.accent}
+        />
+        {data.resumo_cron && (
+          <>
+            <IndicadorCard
+              titulo="Cap diário"
+              valor={`${data.resumo_cron.criadas_hoje || 0} / ${data.resumo_cron.cap_diario || 0}`}
+              sub={`${data.resumo_cron.restante_hoje || 0} restante`}
+              cor={palette.ink}
+            />
+            <IndicadorCard
+              titulo="Fila aprovar"
+              valor={data.resumo_cron.fila_pendentes || 0}
+              sub="aguardando assistente"
+              cor={(data.resumo_cron.fila_pendentes || 0) > 0 ? '#d4a017' : palette.inkMuted}
+            />
+          </>
+        )}
+      </div>
+
+      {/* INFO BOX */}
+      <div style={{
+        marginTop: 18, padding: 10, borderRadius: 8,
+        background: '#f0f6fb', border: '1px solid #c8dae8',
+        fontSize: fz(11), color: palette.inkSoft, lineHeight: 1.5,
+      }}>
+        <strong>Como ler:</strong> KPIs comparam hoje com ontem (↑ verde = melhor, ↓ vermelho = pior).
+        Funil mostra distribuição AGORA por etapa (não acumulado).
+        Taxa de resposta = mensagens recebidas / enviadas em 7 dias.
       </div>
     </div>
   );
 }
 
-const StatBox = ({ label, valor, cor }) => (
-  <div style={{ flex: '1 1 90px', textAlign: 'center', padding: '4px 6px' }}>
-    <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 2 }}>{label}</div>
-    <div style={{ fontSize: fz(20), fontWeight: 700, color: cor || palette.ink, lineHeight: 1 }}>{valor}</div>
-  </div>
-);
+// Card KPI com comparativo dia anterior
+function FunilKpiCard({ label, hoje, ontem, icon, cor }) {
+  const diff = hoje - ontem;
+  const pct = ontem > 0 ? Math.round((diff / ontem) * 100) : (hoje > 0 ? 100 : 0);
+  const positivo = diff >= 0;
+  return (
+    <div style={{
+      background: palette.surface, borderRadius: 10,
+      border: `1px solid ${palette.beige}`, padding: '10px 12px',
+      position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: cor,
+      }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <span style={{ fontSize: fz(15) }}>{icon}</span>
+        <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          {label}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontSize: fz(24), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>
+          {hoje}
+        </span>
+        {ontem > 0 && (
+          <span style={{
+            fontSize: fz(11), fontWeight: 600,
+            color: positivo ? palette.ok : palette.alert,
+          }}>
+            {positivo ? '↑' : '↓'} {Math.abs(pct)}%
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
+        ontem: {ontem}
+      </div>
+    </div>
+  );
+}
+
+// Funil visual em barras horizontais (drop-off por etapa)
+function FunilVisual({ contagens }) {
+  // Pega o maior valor pra normalizar barras
+  const max = Math.max(1, ...Object.values(contagens));
+  const totalEntrada = (contagens.processando || 0)
+    + (contagens.aprovar || 0)
+    + (contagens.enviada || 0)
+    + (contagens.conversando || 0)
+    + (contagens.quente || 0)
+    + (contagens.atendida || 0)
+    + (contagens.vendeu || 0)
+    + (contagens.perdida || 0);
+
+  return (
+    <div style={{
+      background: palette.surface, borderRadius: 10,
+      border: `1px solid ${palette.beige}`, padding: '12px',
+      display: 'flex', flexDirection: 'column', gap: 7,
+    }}>
+      {ETAPAS.map(et => {
+        const valor = contagens[et.id] || 0;
+        const pctMax = (valor / max) * 100;
+        const pctTotal = totalEntrada > 0 ? ((valor / totalEntrada) * 100).toFixed(1) : '0.0';
+        return (
+          <div key={et.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 100, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <EtapaIcon nome={et.id} size={18} />
+              <span style={{ fontSize: fz(11), fontWeight: 600, color: palette.ink, whiteSpace: 'nowrap' }}>
+                {et.label}
+              </span>
+            </div>
+            <div style={{
+              flex: 1, height: 22, background: palette.beige,
+              borderRadius: 4, overflow: 'hidden', position: 'relative',
+            }}>
+              <div style={{
+                width: `${pctMax}%`, height: '100%',
+                background: et.cor || palette.ink,
+                transition: 'width 0.4s ease',
+              }} />
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'flex-end',
+                paddingRight: 8,
+                fontSize: fz(11), fontWeight: 700, color: palette.ink,
+              }}>
+                {valor} <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 4 }}>({pctTotal}%)</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function IndicadorCard({ titulo, valor, sub, cor }) {
+  return (
+    <div style={{
+      background: palette.surface, borderRadius: 10,
+      border: `1px solid ${palette.beige}`, padding: '10px 12px',
+    }}>
+      <div style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600, marginBottom: 2 }}>
+        {titulo}
+      </div>
+      <div style={{ fontSize: fz(18), fontWeight: 700, color: cor || palette.ink, lineHeight: 1.1 }}>
+        {valor}
+      </div>
+      <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 2 }}>
+        {sub}
+      </div>
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 2: APROVAR (core MVP) — fila pendentes + ações
