@@ -1112,7 +1112,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
 // Tooltips de cada etapa (Ailson 26/05/2026 — Q sobre regras)
 const EXPLICACOES_ETAPA = {
   todas:        'Mostra TODAS as conversas (qualquer etapa).',
-  processando:  'FILA. Leads elegíveis aguardando Sofia gerar mensagem. Cron-processar (10h BRT) pega cap_diario ou assistente seleciona manual via checkbox.',
+  processando:  'FILA. Leads elegíveis aguardando Sofia gerar mensagem. Cron popula 7h BRT, cron-processar 7h45 pega cap_diario. Assistente pode selecionar manual via checkbox entre 7h45 e início dos envios.',
   aprovar:      'Sugestão pronta esperando assistente revisar e enviar (ou dispensar). Se 3 dias sem ação = perdida.',
   enviada:      'Mensagem HSM enviada. Aguardando cliente responder. 3 dias sem resposta = perdida.',
   conversando:  'Cliente respondeu! Sofia tem autonomia, conversa fluindo. Sofia aprende padrões aqui.',
