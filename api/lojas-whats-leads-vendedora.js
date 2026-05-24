@@ -30,6 +30,10 @@ export default async function handler(req, res) {
       .select('id, conversa_id, motivo, gatilhos_detectados, resumo_ia, push_enviado_em, expirou_em, criado_em')
       .eq('vendedora_id', vendedoraId)
       .eq('status', 'aguardando')
+      // Garante precisao dos 30min independente do cron de rotacao (que roda a cada 5min).
+      // Se vendedora abre o app 31min apos notificacao, NAO ve o card — mesmo
+      // que o cron ainda nao tenha marcado como 'expirado'.
+      .gt('expirou_em', new Date().toISOString())
       .order('criado_em', { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });

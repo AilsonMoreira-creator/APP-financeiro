@@ -1891,6 +1891,139 @@ function mapBadgeFeedback(status) {
   }
 }
 
+// ─── CARD LEAD SOFIA — handoff aguardando atendimento da vendedora ──────
+// Renderiza ACIMA das 7 sugestões do dia quando vendedora tem handoff
+// status='aguardando' (não passou dos 30min). Se vendedora abrir o app
+// 31min apos notificacao, NAO ve o card — endpoint filtra expirou_em>NOW.
+// Ailson 26/05/2026 (Etapa 7).
+const LeadSofiaCard = ({ lead, onAtender }) => {
+  const [atendendo, setAtendendo] = useState(false);
+
+  // Timer countdown — atualiza a cada segundo
+  const calcRestante = () => {
+    if (!lead.expira_em) return 0;
+    return Math.max(0, Math.floor((new Date(lead.expira_em).getTime() - Date.now()) / 1000));
+  };
+  const [restante, setRestante] = useState(calcRestante());
+
+  useEffect(() => {
+    const t = setInterval(() => setRestante(calcRestante()), 1000);
+    return () => clearInterval(t);
+  }, [lead.expira_em]);
+
+  const min = Math.floor(restante / 60);
+  const seg = restante % 60;
+  const timerStr = `${min}:${String(seg).padStart(2, '0')}`;
+
+  // Cor do timer fica vermelho quando faltam <5min
+  const corTimer = restante < 300 ? '#c0392b' : '#5a6470';
+
+  const click = async () => {
+    if (atendendo || restante === 0) return;
+    setAtendendo(true);
+    try { await onAtender(); } finally { setAtendendo(false); }
+  };
+
+  // Gatilhos = array de strings, formata "pix · parcela · frete"
+  const gatilhosStr = Array.isArray(lead.gatilhos)
+    ? lead.gatilhos.slice(0, 4).join(' · ')
+    : '';
+
+  // Telefone formatado
+  const tel = lead.telefone || '';
+  const telFmt = tel.length >= 12
+    ? `(${tel.slice(2,4)}) ${tel.slice(4,9)}-${tel.slice(9)}`
+    : tel;
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #e8f0ff 0%, #d4e3fc 100%)',
+      border: '1.5px solid #4a7fa5',
+      borderRadius: 14,
+      padding: 14,
+      fontFamily: FONT,
+      boxShadow: '0 2px 8px rgba(74,127,165,0.15)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: 12,
+          background: '#fff', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        }}>
+          <img
+            src="/icons/lojas-whats/whatsapp.png"
+            alt="Sofia"
+            width={28}
+            height={28}
+            style={{ objectFit: 'contain' }}
+          />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#2c3e50', lineHeight: 1.2 }}>
+            Lead da Sofia 🔥
+          </div>
+          <div style={{ fontSize: 12, color: '#5a6470', marginTop: 2 }}>
+            {telFmt}
+          </div>
+        </div>
+        {restante > 0 && (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: corTimer, lineHeight: 1 }}>
+              {timerStr}
+            </div>
+            <div style={{ fontSize: 9, color: '#7c8a99', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 1 }}>
+              restante
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Resumo IA */}
+      {lead.resumo_ia && (
+        <div style={{
+          fontSize: 12, color: '#2c3e50', lineHeight: 1.4,
+          padding: '8px 10px', borderRadius: 6,
+          background: 'rgba(255,255,255,0.55)', marginBottom: 8,
+        }}>
+          {lead.resumo_ia}
+        </div>
+      )}
+
+      {/* Gatilhos */}
+      {gatilhosStr && (
+        <div style={{
+          fontSize: 11, color: '#8a5500', marginBottom: 10,
+          fontWeight: 600,
+        }}>
+          🔥 {gatilhosStr}
+        </div>
+      )}
+
+      <button
+        onClick={click}
+        disabled={atendendo || restante === 0}
+        style={{
+          width: '100%',
+          background: restante === 0 ? '#bdc3c7' : '#2c3e50',
+          color: '#fff',
+          border: 'none', borderRadius: 8,
+          padding: '10px 14px',
+          fontSize: 14, fontWeight: 700,
+          cursor: (atendendo || restante === 0) ? 'not-allowed' : 'pointer',
+          fontFamily: FONT,
+        }}
+      >
+        {atendendo
+          ? 'Atendendo…'
+          : restante === 0
+            ? 'Expirou'
+            : '👋 Atender agora'}
+      </button>
+    </div>
+  );
+};
+
 // ─── PIN DE CELEBRAÇÃO: venda site orgânica (Sprint A — Ailson 18/05/2026)
 // Avisos criados pelo cron de conversões quando cliente da vendedora comprou
 // no site SEM mensagem prévia. Renderiza com tom comemorativo no topo das
@@ -2008,6 +2141,50 @@ export const CardDiaScreen = ({
   const prioridadeMaxOficial = oficiais.reduce(
     (max, s) => (s.prioridade > max ? s.prioridade : max), 0
   );
+
+  // LEADS SOFIA (Ailson 26/05/2026 — Etapa 7 atendida)
+  // Carrega handoffs status='aguardando' pra essa vendedora.
+  // Card aparece ACIMA das sugestoes + pins. Timer 30min countdown.
+  // Quando vendedora clica "Atender" -> handoff aceito + conversa.etapa='atendida'.
+  const [leadsSofia, setLeadsSofia] = useState([]);
+  const [leadsSofiaErro, setLeadsSofiaErro] = useState(null);
+
+  useEffect(() => {
+    if (!vendedora?.id) return;
+    let cancelado = false;
+    const carregar = async () => {
+      try {
+        const r = await fetch(`/api/lojas-whats-leads-vendedora?vendedora_id=${vendedora.id}`);
+        const j = await r.json();
+        if (cancelado) return;
+        if (j.error) setLeadsSofiaErro(j.error);
+        else { setLeadsSofia(j.leads || []); setLeadsSofiaErro(null); }
+      } catch (e) {
+        if (!cancelado) setLeadsSofiaErro(e.message);
+      }
+    };
+    carregar();
+    const t = setInterval(carregar, 60000);  // refresh 60s
+    return () => { cancelado = true; clearInterval(t); };
+  }, [vendedora?.id]);
+
+  // Atender lead Sofia -> chama handoff-aceitar
+  const onAtenderLeadSofia = async (handoffId) => {
+    try {
+      const r = await fetch('/api/lojas-whats-handoff-aceitar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendedora_id: vendedora.id, handoff_id: handoffId }),
+      });
+      const j = await r.json();
+      if (j.error) { setLeadsSofiaErro(j.error); return; }
+      // Remove o lead da lista local imediato
+      setLeadsSofia(prev => prev.filter(l => l.handoff_id !== handoffId));
+      // TODO: navegar pra tela de conversa? Por enquanto so atualiza estado.
+    } catch (e) {
+      setLeadsSofiaErro(e.message);
+    }
+  };
 
   const handleSelectSugestao = useCallback((s) => {
     // Se for a última sugestão E modal nunca foi tentado nessa sessão E
@@ -2225,6 +2402,19 @@ export const CardDiaScreen = ({
             )}
           </div>
         </div>
+
+        {/* LEADS SOFIA (Ailson 26/05/2026 — Etapa 7) — acima de tudo */}
+        {leadsSofia.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+            {leadsSofia.map(lead => (
+              <LeadSofiaCard
+                key={lead.handoff_id}
+                lead={lead}
+                onAtender={() => onAtenderLeadSofia(lead.handoff_id)}
+              />
+            ))}
+          </div>
+        )}
 
         {pinsCelebracao.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>

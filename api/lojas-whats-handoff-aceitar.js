@@ -32,6 +32,7 @@ export default async function handler(req, res) {
       .select('id, conversa_id, status, vendedora_id, expirou_em')
       .eq('vendedora_id', vendedora_id)
       .eq('status', 'aguardando')
+      .gt('expirou_em', new Date().toISOString())  // expirou_em precisa estar no FUTURO
       .order('criado_em', { ascending: false })
       .limit(1);
     if (handoff_id) qb = qb.eq('id', handoff_id);
@@ -39,7 +40,9 @@ export default async function handler(req, res) {
     const { data: handoffs, error: errH } = await qb;
     if (errH) return res.status(500).json({ error: errH.message });
     if (!handoffs || handoffs.length === 0) {
-      return res.status(404).json({ error: 'Nenhum handoff aguardando pra essa vendedora' });
+      return res.status(404).json({ 
+        error: 'Lead nao disponivel — janela de 30min ja passou ou outra vendedora ja atendeu.',
+      });
     }
     const handoff = handoffs[0];
 
