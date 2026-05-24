@@ -251,6 +251,10 @@
       "schedule": "0 11 * * 1-5"
     },
     {
+      "path": "/api/lojas-whats-processar",
+      "schedule": "0 13 * * 1-5"
+    },
+    {
       "path": "/api/lojas-whats-cron-promover",
       "schedule": "0 */4 * * *"
     },

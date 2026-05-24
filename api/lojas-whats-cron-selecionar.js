@@ -103,32 +103,17 @@ async function executarSelecao(req, res) {
     const dryRun = body.dry_run === true;
 
     // 1. Lê configs
-    const cap = await getConfig('cap_diario', 30);
+    // REFATOR (Ailson 26/05/2026 sessao tarde): cron-selecionar agora SO POPULA
+    // a fila (etapa 'processando') sem cap diario e sem gerar IA. O processamento
+    // virou responsabilidade do cron-processar (e endpoint manual pra assistente).
     const dias = await getConfig('filtro_carrinhos_dias', 15);
     const minPecasPJ = await getConfig('filtro_min_pecas_pj', 0);
     const minPecasPF = await getConfig('filtro_min_pecas_pf', 1);
+    const maxPecasPJ = await getConfig('filtro_max_pecas_pj', 0);  // PJ qtd=0 (carrinho vazio)
+    const maxPecasPF = await getConfig('filtro_max_pecas_pf', 6);  // PF 1-6 pec
 
-    // 2. Conta sugestões já criadas hoje pra respeitar cap
-    const hojeStr = new Date().toISOString().slice(0, 10);
-    const { count: criadasHoje } = await supabase
-      .from('lojas_whats_sugestoes')
-      .select('*', { count: 'exact', head: true })
-      .gte('criada_em', hojeStr);
-    const restante = Math.max(0, cap - (criadasHoje || 0));
-
-    if (restante === 0) {
-      log('selecionar', `cap diario atingido (${criadasHoje}/${cap}) — pulando`);
-      return res.status(200).json({
-        ok: true,
-        motivo: 'cap_atingido',
-        criadas_hoje: criadasHoje,
-        cap_diario: cap,
-        selecionados: 0
-      });
-    }
-
-    // 3. Busca candidatos com filtros + ordenação (PJ valor desc, depois PF data desc)
-    //    Filtro de peças é POR TIPO_PESSOA, então fazemos em JS depois do SELECT.
+    // 3. Busca candidatos com filtros + ordenação (CNPJ primeiro, depois data desc)
+    //    Filtro de peças é POR TIPO_PESSOA (PJ MIN-MAX / PF MIN-MAX), em JS depois do SELECT.
     //    DATA DE REFERENCIA: COALESCE(ultimo_carrinho_em, last_access, primeira_visita_em)
     //      → PJ vazio (sem carrinho) usa last_access ou primeira_visita.
     //    Filtro de janela de dias tambem fica em JS pelo mesmo motivo.
@@ -144,24 +129,31 @@ async function executarSelecao(req, res) {
       `)
       .eq('status', 'aguardando_atribuicao')
       .is('convertido_em', null)
-      .limit(500); // pega um lote grande pra filtrar/ordenar em JS
+      .limit(1000); // pega um lote grande pra filtrar/ordenar em JS
 
     if (errLeads) throw errLeads;
     log('selecionar', `${leadsRaw?.length || 0} leads brutos do banco`);
 
     // 4. Filtros adicionais em JS:
-    //    - Min peças POR TIPO_PESSOA (PJ qualquer / PF >=1, configurável)
-    //    - Janela de dias com data de referência COALESCE
+    //    - PJ:  qtd_pecas BETWEEN min_pj (0) AND max_pj (0) — so carrinho vazio
+    //    - PF:  qtd_pecas BETWEEN min_pf (1) AND max_pf (6) — 1-6 pec
+    //    - Janela de dias com data de referência COALESCE (max 15d)
     //    - Telefone válido (regex flexível: aceita com ou sem 55)
     //    - Não duplicar com conversa Sofia ativa
+    //
+    //    Fora do filtro = vai pro outro fluxo (aba Carrinhos abandonados do mod Lojas)
     const limiteData = Date.now() - dias * 24 * 60 * 60 * 1000;
     const candidatos = [];
     for (const lead of leadsRaw || []) {
-      // Filtro min peças por tipo
+      // Filtro min/max peças por tipo (Sofia atende PJ=0 e PF 1-6)
       const pecas = Number(lead.qtd_pecas_ultimo_carrinho || 0);
-      if (lead.tipo_pessoa === 'PJ' && pecas < minPecasPJ) continue;
-      if (lead.tipo_pessoa === 'PF' && pecas < minPecasPF) continue;
-      if (!['PJ', 'PF'].includes(lead.tipo_pessoa)) continue;
+      if (lead.tipo_pessoa === 'PJ') {
+        if (pecas < minPecasPJ || pecas > maxPecasPJ) continue;
+      } else if (lead.tipo_pessoa === 'PF') {
+        if (pecas < minPecasPF || pecas > maxPecasPF) continue;
+      } else {
+        continue;
+      }
       // Data de referencia (fallback pra PJ vazio que nao tem ultimo_carrinho_em)
       const dataRef = lead.ultimo_carrinho_em || lead.last_access || lead.primeira_visita_em;
       if (!dataRef) continue;
@@ -196,36 +188,23 @@ async function executarSelecao(req, res) {
     const candidatosUnicos = candidatos.filter(c => !telefonesComConvAtiva.has(c._telE164));
     log('selecionar', `${candidatosUnicos.length} candidatos únicos (${candidatos.length - candidatosUnicos.length} já em fila)`);
 
-    // 6. Ordena: PJ primeiro (por valor desc), depois PF (por data desc)
+    // 6. Ordena: CNPJ primeiro, depois empate por data mais recente
+    //    (Ailson sessao tarde 26/05/2026 — fila visivel pra assistente)
     candidatosUnicos.sort((a, b) => {
       const aPJ = a.tipo_pessoa === 'PJ' ? 1 : 0;
       const bPJ = b.tipo_pessoa === 'PJ' ? 1 : 0;
       if (aPJ !== bPJ) return bPJ - aPJ; // PJ primeiro
-      if (aPJ === 1) {
-        // Ambos PJ → ordena por valor desc (vazios ficam por último, vão por _dataRef)
-        const valDiff = Number(b.valor_ultimo_carrinho || 0) - Number(a.valor_ultimo_carrinho || 0);
-        if (valDiff !== 0) return valDiff;
-        return new Date(b._dataRef) - new Date(a._dataRef);
-      }
-      // Ambos PF → ordena por data ref desc
+      // Empate por tipo: data mais recente primeiro
       return new Date(b._dataRef) - new Date(a._dataRef);
     });
-
-    // 7. Aplica cap
-    const selecionados = candidatosUnicos.slice(0, restante);
-    log('selecionar', `${selecionados.length} selecionados (restante hoje: ${restante})`);
 
     if (dryRun) {
       return res.status(200).json({
         ok: true,
         dry_run: true,
-        cap_diario: cap,
-        criadas_hoje: criadasHoje,
-        restante_hoje: restante,
         leads_brutos: leadsRaw?.length || 0,
         candidatos_validos: candidatosUnicos.length,
-        seriam_selecionados: selecionados.length,
-        preview: selecionados.slice(0, 10).map(s => ({
+        preview: candidatosUnicos.slice(0, 20).map(s => ({
           nome: s._primeiroNome,
           tel: s._telE164,
           tipo: s.tipo_pessoa,
@@ -237,24 +216,14 @@ async function executarSelecao(req, res) {
       });
     }
 
-    // 8. Busca template HSM ativo (carrinho_abandonado_site_amicia)
-    const { data: template } = await supabase
-      .from('lojas_whats_templates')
-      .select('*')
-      .eq('name', 'carrinho_abandonado_site_amicia')
-      .maybeSingle();
-    if (!template) {
-      return res.status(500).json({
-        error: 'template_nao_encontrado',
-        detalhes: 'carrinho_abandonado_site_amicia não está cadastrado em lojas_whats_templates'
-      });
-    }
-
-    // 9. Pra cada selecionado: cria conversa + sugestão
+    // 7. Cria 1 conversa por candidato em etapa 'processando' (sem cap, sem IA).
+    //    A geracao de mensagem (template HSM + sugestao) eh feita depois por:
+    //      - cron-processar (auto: pega cap_diario/dia)
+    //      - endpoint /api/lojas-whats-processar (manual: assistente seleciona)
     const resultados = { criadas: 0, falhas: [] };
-    for (const lead of selecionados) {
+    for (const lead of candidatosUnicos) {
       try {
-        const conversaId = await criarConversaESugestao(lead, template);
+        const conversaId = await criarConversaNaFila(lead);
         if (conversaId) resultados.criadas++;
       } catch (e) {
         logErro('selecionar/criar', e);
@@ -264,13 +233,9 @@ async function executarSelecao(req, res) {
 
     return res.status(200).json({
       ok: true,
-      cap_diario: cap,
-      criadas_hoje_antes: criadasHoje,
-      restante_hoje: restante,
       leads_brutos: leadsRaw?.length || 0,
       candidatos_validos: candidatosUnicos.length,
-      selecionados: selecionados.length,
-      criadas: resultados.criadas,
+      criadas_em_processando: resultados.criadas,
       falhas: resultados.falhas
     });
   } catch (e) {
@@ -279,32 +244,16 @@ async function executarSelecao(req, res) {
   }
 }
 
-// ─── HELPER: cria conversa + sugestão pra 1 lead ──────────────────────────
+// ─── HELPER: cria conversa em 'processando' (fila) — sem IA, sem cap ──────
+// Ailson 26/05/2026 sessao tarde — separou popular da fila de gerar msg.
 
-async function criarConversaESugestao(lead, template) {
-  // Renderiza template (substitui {{1}} e {{2}})
-  const vars = {
-    '1': lead._primeiroNome,
-    '2': String(lead.qtd_pecas_ultimo_carrinho || 0)
-  };
-  let textoProposto = template.body_text;
-  for (const [k, v] of Object.entries(vars)) {
-    textoProposto = textoProposto.replaceAll(`{{${k}}}`, v);
-  }
+async function criarConversaNaFila(lead) {
+  // Marca como prioritario (★) quando PJ com carrinho de alto valor (>R\$5k)
+  // — usa lead_prioritario (bool) apos cleanup auditoria. Vai pro topo do filtro.
+  const valorPJ = Number(lead.valor_ultimo_carrinho || 0);
+  const leadPrioritario = lead.tipo_pessoa === 'PJ' && valorPJ > 5000;
 
-  // Calcula prioridade (PJ valor alto = 90+, PF = 50-89)
-  let prioridade = 50;
-  if (lead.tipo_pessoa === 'PJ') {
-    const valor = Number(lead.valor_ultimo_carrinho || 0);
-    if (valor > 5000) prioridade = 99;
-    else if (valor > 2000) prioridade = 90;
-    else prioridade = 80;
-  } else {
-    const pecas = Number(lead.qtd_pecas_ultimo_carrinho || 0);
-    prioridade = Math.min(89, 50 + Math.floor(pecas / 2));
-  }
-
-  // 1. Cria conversa em 'processando'
+  const agora = new Date().toISOString();
   const { data: conversa, error: errConv } = await supabase
     .from('lojas_whats_conversas')
     .insert({
@@ -316,44 +265,13 @@ async function criarConversaESugestao(lead, template) {
       etapa: 'processando',
       valor_carrinho: lead.valor_ultimo_carrinho,
       qtd_pecas: lead.qtd_pecas_ultimo_carrinho,
-      prioridade,
+      lead_prioritario: leadPrioritario,
       vendedora_atribuida_id: lead.vendedora_atribuida_id || lead.vendedora_dona_id,
-      iniciada_em: new Date().toISOString(),
-      ultima_atividade_em: new Date().toISOString()
+      iniciada_em: agora,
+      ultima_atividade_em: agora
     })
     .select('id')
     .single();
   if (errConv) throw errConv;
-
-  // 2. Cria sugestão pendente
-  const { error: errSug } = await supabase
-    .from('lojas_whats_sugestoes')
-    .insert({
-      conversa_id: conversa.id,
-      tipo: 'primeira_mensagem',
-      template_name: template.name,
-      template_vars: vars,
-      texto_proposto: textoProposto,
-      status: 'pendente',
-      prioridade,
-      motivo_proposta: 'cron_selecao_carrinho_abandonado',
-      contexto_ia: {
-        lead_id: lead.id,
-        ja_e_cliente: !!lead.ja_e_cliente_lojas_id,
-        ultimo_carrinho_em: lead.ultimo_carrinho_em
-      }
-    });
-  if (errSug) {
-    // Rollback: deleta conversa criada
-    await supabase.from('lojas_whats_conversas').delete().eq('id', conversa.id);
-    throw errSug;
-  }
-
-  // 3. Avança conversa pra 'aprovar' (Tamara vê na fila)
-  await supabase
-    .from('lojas_whats_conversas')
-    .update({ etapa: 'aprovar', atualizado_em: new Date().toISOString() })
-    .eq('id', conversa.id);
-
   return conversa.id;
 }

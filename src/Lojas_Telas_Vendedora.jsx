@@ -1912,8 +1912,9 @@ function mapBadgeFeedback(status) {
 //   - Modelos que cliente mostrou interesse
 //   - Botao 'Enviar mensagem' -> abre modal com msg pre-gerada IA + edit + enviar
 // Visual segue padrao SugestaoCard pra nao confundir vendedora.
-const LeadSofiaCard = ({ lead, onAtender }) => {
+const LeadSofiaCard = ({ lead, onAtender, onDispensar }) => {
   const [modalAberto, setModalAberto] = useState(false);
+  const [dispensando, setDispensando] = useState(false);
 
   // Timer countdown — atualiza a cada segundo
   const calcRestante = () => {
@@ -2027,22 +2028,43 @@ const LeadSofiaCard = ({ lead, onAtender }) => {
           </div>
         )}
 
-        {/* Botao principal: Enviar mensagem (novo padrao Ailson) */}
-        <button
-          onClick={() => !expirou && setModalAberto(true)}
-          disabled={expirou}
-          style={{
-            width: '100%',
-            background: expirou ? '#bdc3c7' : '#2c3e50',
-            color: '#fff', border: 'none', borderRadius: 8,
-            padding: '10px 14px',
-            fontSize: 14, fontWeight: 700,
-            cursor: expirou ? 'not-allowed' : 'pointer',
-            fontFamily: FONT,
-          }}
-        >
-          {expirou ? 'Expirou' : '💬 Enviar mensagem'}
-        </button>
+        {/* Botoes: Dispensar + Enviar mensagem (Ailson 26/05/2026 sessao tarde) */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={async () => {
+              if (expirou || dispensando) return;
+              if (!onDispensar) return;
+              setDispensando(true);
+              try { await onDispensar(); } finally { setDispensando(false); }
+            }}
+            disabled={expirou || dispensando || !onDispensar}
+            style={{
+              padding: '10px 14px',
+              background: 'transparent', color: '#5a6470',
+              border: `1px solid ${palette.beige}`, borderRadius: 8,
+              fontSize: 13, fontWeight: 600,
+              cursor: (expirou || dispensando) ? 'not-allowed' : 'pointer',
+              fontFamily: FONT, whiteSpace: 'nowrap',
+            }}
+          >
+            {dispensando ? '…' : 'Não posso'}
+          </button>
+          <button
+            onClick={() => !expirou && setModalAberto(true)}
+            disabled={expirou}
+            style={{
+              flex: 1,
+              background: expirou ? '#bdc3c7' : '#2c3e50',
+              color: '#fff', border: 'none', borderRadius: 8,
+              padding: '10px 14px',
+              fontSize: 14, fontWeight: 700,
+              cursor: expirou ? 'not-allowed' : 'pointer',
+              fontFamily: FONT,
+            }}
+          >
+            {expirou ? 'Expirou' : '💬 Enviar mensagem'}
+          </button>
+        </div>
       </div>
 
       {modalAberto && !expirou && (
@@ -2340,6 +2362,24 @@ export const CardDiaScreen = ({
     }
   };
 
+  // Dispensar lead Sofia -> chama handoff-dispensar (rota imediato pra proxima)
+  // Ailson 26/05/2026 sessao tarde — auditoria ponto 1
+  const onDispensarLeadSofia = async (handoffId) => {
+    if (!confirm('Tem certeza que quer dispensar esse lead? Vai pra próxima vendedora.')) return;
+    try {
+      const r = await fetch('/api/lojas-whats-handoff-dispensar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendedora_id: vendedora.id, handoff_id: handoffId }),
+      });
+      const j = await r.json();
+      if (j.error) { setLeadsSofiaErro(j.error); return; }
+      setLeadsSofia(prev => prev.filter(l => l.handoff_id !== handoffId));
+    } catch (e) {
+      setLeadsSofiaErro(e.message);
+    }
+  };
+
   const handleSelectSugestao = useCallback((s) => {
     // Se for a última sugestão E modal nunca foi tentado nessa sessão E
     // tem 7 sugestões (carteira completa) → tenta abrir modal antes
@@ -2565,6 +2605,7 @@ export const CardDiaScreen = ({
                 key={lead.handoff_id}
                 lead={lead}
                 onAtender={() => onAtenderLeadSofia(lead.handoff_id)}
+                onDispensar={() => onDispensarLeadSofia(lead.handoff_id)}
               />
             ))}
           </div>

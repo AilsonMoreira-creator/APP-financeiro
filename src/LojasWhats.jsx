@@ -860,9 +860,35 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   const [feedback, setFeedback] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [expandido, setExpandido] = useState(false);
+  // Contadores por etapa (badge no chip) + selecao multipla (so na aba processando)
+  // Ailson 26/05/2026 sessao tarde
+  const [contadores, setContadores] = useState({});
+  const [selecionados, setSelecionados] = useState(new Set());
+  const [processandoFila, setProcessandoFila] = useState(false);
 
   // Sincroniza se filtroInicial mudar (ex: navegacao entre tabs Aprovar/Conversas)
   useEffect(() => { setFiltroEtapa(filtroInicial); }, [filtroInicial]);
+  useEffect(() => { setSelecionados(new Set()); }, [filtroEtapa]);
+
+  // Carrega contadores por etapa pros badges nos chips
+  useEffect(() => {
+    (async () => {
+      const etapasIds = ETAPAS.map(e => e.id);
+      const counts = {};
+      const queries = await Promise.all(
+        etapasIds.map(et =>
+          supabase.from('lojas_whats_conversas')
+            .select('*', { count: 'exact', head: true })
+            .eq('etapa', et)
+        )
+      );
+      etapasIds.forEach((id, i) => { counts[id] = queries[i].count || 0; });
+      const { count: total } = await supabase.from('lojas_whats_conversas')
+        .select('*', { count: 'exact', head: true });
+      counts.todas = total || 0;
+      setContadores(counts);
+    })();
+  }, [refreshTick, reloadTick]);
 
   useEffect(() => {
     (async () => {
@@ -871,10 +897,16 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       let q = supabase
         .from('lojas_whats_conversas')
         .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site')
-        // Prioritarios primeiro, depois por ultima atividade
-        .order('lead_prioritario', { ascending: false })
-        .order('ultima_atividade_em', { ascending: false })
-        .limit(limite);
+        // Prioritarios primeiro
+        .order('lead_prioritario', { ascending: false });
+      // Aba 'processando' (fila visivel pra assistente): CNPJ primeiro, data desc
+      if (filtroEtapa === 'processando') {
+        q = q.order('tipo_documento', { ascending: false })  // CNPJ antes de CPF
+              .order('iniciada_em', { ascending: false });
+      } else {
+        q = q.order('ultima_atividade_em', { ascending: false });
+      }
+      q = q.limit(limite);
       if (filtroEtapa !== 'todas') q = q.eq('etapa', filtroEtapa);
       const { data } = await q;
       setConversas(data || []);
@@ -925,6 +957,35 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
     );
   }
 
+  // Handlers selecao multipla (aba processando)
+  const toggleSelecao = (id) => {
+    setSelecionados(prev => {
+      const ns = new Set(prev);
+      if (ns.has(id)) ns.delete(id); else ns.add(id);
+      return ns;
+    });
+  };
+  const processarSelecionados = async () => {
+    if (selecionados.size === 0) return;
+    setProcessandoFila(true);
+    try {
+      const r = await fetch('/api/lojas-whats-processar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_ids: Array.from(selecionados) }),
+      });
+      const j = await r.json();
+      if (j.error) setFeedback({ tipo: 'erro', msg: j.error });
+      else {
+        setFeedback({ tipo: 'ok', msg: `${j.processadas} processadas → Aprovar` });
+        setSelecionados(new Set());
+        setReloadTick(t => t + 1);
+      }
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+    setProcessandoFila(false);
+  };
+
+  const ehAbaProcessando = filtroEtapa === 'processando';
+
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
       <div style={{
@@ -932,13 +993,53 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
         overflowX: 'auto', paddingBottom: 4,
       }}>
         <FiltroChip label="Todas" tooltip={EXPLICACOES_ETAPA.todas}
-          ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')} />
+          ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')}
+          badge={contadores.todas} />
         {ETAPAS.map(et => (
           <FiltroChip key={et.id} label={et.label} ativo={filtroEtapa === et.id}
             cor={et.cor} onClick={() => setFiltroEtapa(et.id)} iconNome={et.id}
-            tooltip={EXPLICACOES_ETAPA[et.id]} />
+            tooltip={EXPLICACOES_ETAPA[et.id]} badge={contadores[et.id]} />
         ))}
       </div>
+
+      {/* Barra de selecao multipla — so na aba processando */}
+      {ehAbaProcessando && conversas.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+          padding: '8px 12px', borderRadius: 8,
+          background: selecionados.size > 0 ? '#fff8e1' : palette.surface,
+          border: `1px solid ${selecionados.size > 0 ? '#ffd54f' : palette.beige}`,
+          flexWrap: 'wrap',
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: fz(12) }}>
+            <input type="checkbox"
+              checked={selecionados.size === conversas.length && conversas.length > 0}
+              onChange={(e) => {
+                setSelecionados(e.target.checked
+                  ? new Set(conversas.map(c => c.id)) : new Set());
+              }}
+              style={{ cursor: 'pointer' }}
+            />
+            <span style={{ color: palette.inkSoft }}>
+              {selecionados.size === 0
+                ? `${conversas.length} na fila`
+                : `${selecionados.size} de ${conversas.length} selecionados`}
+            </span>
+          </label>
+          {selecionados.size > 0 && (
+            <button onClick={processarSelecionados} disabled={processandoFila}
+              style={{
+                marginLeft: 'auto', padding: '6px 14px', borderRadius: 6,
+                background: processandoFila ? '#bdc3c7' : '#2c3e50',
+                color: '#fff', border: 'none', fontFamily: FONT,
+                fontSize: fz(13), fontWeight: 700,
+                cursor: processandoFila ? 'wait' : 'pointer',
+              }}>
+              {processandoFila ? 'Processando…' : `Processar ${selecionados.size}`}
+            </button>
+          )}
+        </div>
+      )}
 
       {feedback && (
         <div style={{
@@ -958,6 +1059,9 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {conversas.map(c => (
               <ConversaRow key={c.id} c={c}
+                selecionavel={ehAbaProcessando}
+                selecionado={selecionados.has(c.id)}
+                onToggleSelecao={() => toggleSelecao(c.id)}
                 onContinuarSofia={() => onContinuarSofia(c)}
                 onEnviarVendedora={() => setModalEnviar({ conversa: c })}
                 onTogglePrioridade={() => onTogglePrioridade(c)}
@@ -1008,7 +1112,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
 // Tooltips de cada etapa (Ailson 26/05/2026 — Q sobre regras)
 const EXPLICACOES_ETAPA = {
   todas:        'Mostra TODAS as conversas (qualquer etapa).',
-  processando:  'Cron criou a sugestão. Sofia está montando o template. Dura segundos.',
+  processando:  'FILA. Leads elegíveis aguardando Sofia gerar mensagem. Cron-processar (10h BRT) pega cap_diario ou assistente seleciona manual via checkbox.',
   aprovar:      'Sugestão pronta esperando assistente revisar e enviar (ou dispensar). Se 3 dias sem ação = perdida.',
   enviada:      'Mensagem HSM enviada. Aguardando cliente responder. 3 dias sem resposta = perdida.',
   conversando:  'Cliente respondeu! Sofia tem autonomia, conversa fluindo. Sofia aprende padrões aqui.',
@@ -1018,7 +1122,7 @@ const EXPLICACOES_ETAPA = {
   perdida:      'Sem evolução: 3d sem resposta / esfriou 2d após quente / assistente dispensou.',
 };
 
-const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip }) => {
+const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip, badge }) => {
   const [showTip, setShowTip] = useState(false);
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }}>
@@ -1028,10 +1132,20 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip }) => {
         background: ativo ? (cor || palette.ink) : palette.surface,
         color: ativo ? palette.bg : palette.ink,
         fontSize: fz(13), fontFamily: FONT, fontWeight: 500,
-        whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
+        whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5,
       }}>
         {iconNome && <EtapaIcon nome={iconNome} size={14} />}
         {label}
+        {typeof badge === 'number' && badge > 0 && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            minWidth: 18, height: 18, padding: '0 5px',
+            borderRadius: 10, fontSize: fz(10), fontWeight: 700,
+            background: ativo ? 'rgba(255,255,255,0.25)' : (cor || palette.ink),
+            color: ativo ? palette.bg : palette.bg,
+            lineHeight: 1,
+          }}>{badge}</span>
+        )}
       </button>
       {tooltip && (
         <button
@@ -1064,19 +1178,24 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip }) => {
   );
 };
 
-const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar, onAbrirChat }) => {
+const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar, onAbrirChat, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
   const prioritario = !!c.lead_prioritario;
   return (
     <div style={{
-      background: prioritario ? '#fffbf0' : palette.surface,
+      background: prioritario ? '#fffbf0' : (selecionado ? '#fff8e1' : palette.surface),
       padding: 10, borderRadius: 8,
-      border: `1px solid ${prioritario ? '#f5c84e' : (ehQuente ? '#f5a623' : palette.beige)}`,
-      borderLeftWidth: (prioritario || ehQuente) ? 3 : 1,
-      borderLeftColor: prioritario ? '#f5c84e' : (ehQuente ? '#f5a623' : palette.beige),
+      border: `1px solid ${selecionado ? '#ffd54f' : (prioritario ? '#f5c84e' : (ehQuente ? '#f5a623' : palette.beige))}`,
+      borderLeftWidth: (prioritario || ehQuente || selecionado) ? 3 : 1,
+      borderLeftColor: selecionado ? '#ffd54f' : (prioritario ? '#f5c84e' : (ehQuente ? '#f5a623' : palette.beige)),
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Checkbox de selecao multipla (so na aba processando) */}
+        {selecionavel && (
+          <input type="checkbox" checked={selecionado} onChange={onToggleSelecao}
+            style={{ cursor: 'pointer', flexShrink: 0 }} />
+        )}
         {/* Estrela prioridade */}
         <button onClick={onTogglePrioridade} title={prioritario ? 'Remover prioridade' : 'Marcar como prioridade'}
           style={{
