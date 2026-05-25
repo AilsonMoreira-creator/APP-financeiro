@@ -1010,6 +1010,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       <>
         <ConversaDetail
           conversaId={conversaDetalhe}
+          userId={userId}
           idsNaAba={(conversas || []).map(c => c.id)}
           onNavegar={(id) => setConversaDetalhe(id)}
           onBack={() => { setConversaDetalhe(null); setReloadTick(t => t + 1); }}
@@ -2890,7 +2891,7 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 // CONVERSA DETAIL — tela cheia tipo WhatsApp (Ailson 26/05/2026)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar }) {
+function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar, userId }) {
   const [conversa, setConversa] = useState(null);
   const [mensagens, setMensagens] = useState([]);
   const [sugestoesPendentes, setSugestoesPendentes] = useState([]);
@@ -3390,10 +3391,15 @@ function Bubble({ m }) {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   }) : '';
 
-  // Label do autor — "Sofia" pra IA e assistente humana (ela representa Sofia
-  // pro cliente). "sistema" so pra logs raros.
+  // Label do autor — usa o icone de pessoa (mesmo dos cards) ao inves do
+  // emoji robo, pra Sofia parecer vendedora ate visualmente. Ailson 25/05/2026
+  const labelSofia = (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      <UserIcon size={9} color={palette.accent} /> Sofia
+    </span>
+  );
   const labelAutor = ehSaida
-    ? (m.autor === 'sistema' ? 'sistema' : '🤖 Sofia')
+    ? (m.autor === 'sistema' ? <span>sistema</span> : labelSofia)
     : null;
 
   // URL da midia: pra image renderiza thumb clicavel; pra document/video
