@@ -3004,9 +3004,11 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
       {/* CHAT BUBBLES */}
       <div style={{
         flex: 1, overflowY: 'auto', padding: 12,
-        background: '#ece5dd',  // WhatsApp-like beige
-        backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.02) 1px, transparent 1px)',
-        backgroundSize: '24px 24px',
+        // Fundo bege com padrao de icones (Ailson 27/05/2026)
+        backgroundColor: '#f3ead5',
+        backgroundImage: `url('${ICONS_BASE}/chat-bg.png')`,
+        backgroundRepeat: 'repeat',
+        backgroundSize: '500px auto',
       }}>
         {mensagens.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted, fontSize: fz(12) }}>
