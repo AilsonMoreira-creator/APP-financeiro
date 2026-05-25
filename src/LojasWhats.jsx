@@ -903,16 +903,25 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   useEffect(() => { setSelecionados(new Set()); }, [filtroEtapa]);
 
   // Carrega contadores por etapa pros badges nos chips
+  // Ailson 25/05/2026: pra etapas 'conversando' e 'quente', badge eh
+  // numero de conversas que PRECISAM DE ACAO — ou seja, cliente foi
+  // o ultimo a enviar mensagem (ultima_msg_direcao='entrada'). Demais
+  // etapas mantem contagem total.
+  const ETAPAS_PRECISA_ACAO = ['conversando', 'quente'];
   useEffect(() => {
     (async () => {
       const etapasIds = ETAPAS.map(e => e.id);
       const counts = {};
       const queries = await Promise.all(
-        etapasIds.map(et =>
-          supabase.from('lojas_whats_conversas')
+        etapasIds.map(et => {
+          let q = supabase.from('lojas_whats_conversas')
             .select('*', { count: 'exact', head: true })
-            .eq('etapa', et)
-        )
+            .eq('etapa', et);
+          if (ETAPAS_PRECISA_ACAO.includes(et)) {
+            q = q.eq('ultima_msg_direcao', 'entrada');
+          }
+          return q;
+        })
       );
       etapasIds.forEach((id, i) => { counts[id] = queries[i].count || 0; });
       const { count: total } = await supabase.from('lojas_whats_conversas')
@@ -921,6 +930,21 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       setContadores(counts);
     })();
   }, [refreshTick, reloadTick]);
+
+  // Realtime: refresh automatico quando entra mensagem nova OU conversa
+  // muda de etapa (Ailson 25/05/2026). Antes os contadores so atualizavam
+  // ao clicar em "atualizar" — entao msg nova nao subia o badge.
+  useEffect(() => {
+    const ch = supabase.channel('sofia-conversas-mensagens')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'lojas_whats_mensagens' },
+        () => setReloadTick(t => t + 1))
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'lojas_whats_conversas' },
+        () => setReloadTick(t => t + 1))
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, []);
 
   useEffect(() => {
     (async () => {
