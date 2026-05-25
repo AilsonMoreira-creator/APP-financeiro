@@ -986,6 +986,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       <>
         <ConversaDetail
           conversaId={conversaDetalhe}
+          idsNaAba={(conversas || []).map(c => c.id)}
+          onNavegar={(id) => setConversaDetalhe(id)}
           onBack={() => { setConversaDetalhe(null); setReloadTick(t => t + 1); }}
           onEditarLead={(conv) => setModalEditarLead({ conversa: conv })}
           onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
@@ -2864,7 +2866,7 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 // CONVERSA DETAIL — tela cheia tipo WhatsApp (Ailson 26/05/2026)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora }) {
+function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar }) {
   const [conversa, setConversa] = useState(null);
   const [mensagens, setMensagens] = useState([]);
   const [sugestoesPendentes, setSugestoesPendentes] = useState([]);
@@ -3159,6 +3161,57 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
           onSelect={(m) => { setMidiaAnexada(m); setSeletorMidiaAberto(false); }}
         />
       )}
+
+      {/* ─── Setas de navegacao entre conversas da MESMA aba (Ailson 25/05/2026) ──
+          Comportamento: percorre a lista de conversas filtradas pelo
+          filtroEtapa atual (passada como idsNaAba pelo pai). Se estiver
+          na aba 'aprovar', anda entre conversas em 'aprovar'. Idem pra
+          outras abas. Setas viram cinza nos limites. */}
+      {idsNaAba && idsNaAba.length > 1 && (() => {
+        const idx = idsNaAba.indexOf(conversaId);
+        const anteriorId = idx > 0 ? idsNaAba[idx - 1] : null;
+        const proximoId  = idx >= 0 && idx < idsNaAba.length - 1 ? idsNaAba[idx + 1] : null;
+        const seta = (lado, id) => (
+          <button
+            onClick={() => id && onNavegar?.(id)}
+            disabled={!id}
+            title={id ? `Ir pra ${lado === 'esq' ? 'anterior' : 'próxima'}` : 'Fim da lista'}
+            style={{
+              position: 'fixed',
+              [lado === 'esq' ? 'left' : 'right']: 8,
+              top: '50%', transform: 'translateY(-50%)',
+              width: 44, height: 44, borderRadius: '50%',
+              background: id ? 'rgba(255,255,255,0.95)' : 'rgba(200,200,200,0.5)',
+              color: id ? palette.ink : '#999',
+              border: '1px solid ' + (id ? '#d0d0d0' : '#e5e5e5'),
+              cursor: id ? 'pointer' : 'not-allowed',
+              fontSize: 22, fontWeight: 700, lineHeight: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+              zIndex: 50,
+              fontFamily: FONT,
+            }}
+          >
+            {lado === 'esq' ? '‹' : '›'}
+          </button>
+        );
+        return (
+          <>
+            {seta('esq', anteriorId)}
+            {seta('dir', proximoId)}
+            <div style={{
+              position: 'fixed', bottom: 80, left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(0,0,0,0.55)', color: '#fff',
+              padding: '3px 10px', borderRadius: 12,
+              fontSize: fz(10), fontFamily: FONT,
+              zIndex: 50, pointerEvents: 'none',
+            }}>
+              {idx + 1} / {idsNaAba.length}
+            </div>
+          </>
+        );
+      })()}
       </div>{/* /wrapper centralizado */}
     </div>
   );
