@@ -7,7 +7,8 @@
 //   - status = 'aguardando_atribuicao'      (Sofia só pega novos, não atropela)
 //   - convertido_em IS NULL                  (ignora quem já comprou)
 //   - ultimo_carrinho_em >= hoje - 15d       (recente)
-//   - qtd_pecas_ultimo_carrinho > 6          (carrinho relevante)
+//   - qtd_pecas_ultimo_carrinho dentro dos filtros PF/PJ
+//     (PF: 1-6 / PJ: 0-0 — config em lojas_whats_config)
 //   - telefone valido (10-11 ou 12-13 digitos BR)
 //   - SEM conversa Sofia ativa pra esse telefone (sem duplicar)
 //

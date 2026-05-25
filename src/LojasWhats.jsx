@@ -865,6 +865,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   const [contadores, setContadores] = useState({});
   const [selecionados, setSelecionados] = useState(new Set());
   const [processandoFila, setProcessandoFila] = useState(false);
+  // Modal de explicacao "?" dos chips de filtro (Ailson 27/05/2026)
+  const [ajudaEtapa, setAjudaEtapa] = useState(null);
 
   // Sincroniza se filtroInicial mudar (ex: navegacao entre tabs Aprovar/Conversas)
   useEffect(() => { setFiltroEtapa(filtroInicial); }, [filtroInicial]);
@@ -992,13 +994,13 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
         display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14,
         overflowX: 'auto', paddingBottom: 4,
       }}>
-        <FiltroChip label="Todas" tooltip={EXPLICACOES_ETAPA.todas}
+        <FiltroChip label="Todas" etapaId="todas" onAjuda={setAjudaEtapa}
           ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')}
           badge={contadores.todas} />
         {ETAPAS.map(et => (
           <FiltroChip key={et.id} label={et.label} ativo={filtroEtapa === et.id}
             cor={et.cor} onClick={() => setFiltroEtapa(et.id)} iconNome={et.id}
-            tooltip={EXPLICACOES_ETAPA[et.id]} badge={contadores[et.id]} />
+            etapaId={et.id} onAjuda={setAjudaEtapa} badge={contadores[et.id]} />
         ))}
       </div>
 
@@ -1105,25 +1107,266 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
           onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
         />
       )}
+
+      {ajudaEtapa && (
+        <ModalEtapa etapaId={ajudaEtapa} onClose={() => setAjudaEtapa(null)} />
+      )}
     </div>
   );
 }
 
 // Tooltips de cada etapa (Ailson 26/05/2026 — Q sobre regras)
-const EXPLICACOES_ETAPA = {
-  todas:        'Mostra TODAS as conversas (qualquer etapa).',
-  processando:  'FILA. Leads elegíveis aguardando Sofia gerar mensagem. Cron popula 7h BRT, cron-processar 7h45 pega cap_diario. Assistente pode selecionar manual via checkbox entre 7h45 e início dos envios.',
-  aprovar:      'Sugestão pronta esperando assistente revisar e enviar (ou dispensar). Se 3 dias sem ação = perdida.',
-  enviada:      'Mensagem HSM enviada. Aguardando cliente responder. 3 dias sem resposta = perdida.',
-  conversando:  'Cliente respondeu! Sofia tem autonomia, conversa fluindo. Sofia aprende padrões aqui.',
-  quente:       'Gatilho detectado (pix, frete, parcela, separar peças). Assistente decide: continuar Sofia OU enviar pra vendedora.',
-  atendida:     'Vendedora aceitou o handoff em até 30min. Atendimento humano. Sofia para nessa conversa.',
-  vendeu:       'Cliente fechou venda. Auto-detectada via cruzamento de pedidos (5d site / 15d loja).',
-  perdida:      'Sem evolução: 3d sem resposta / esfriou 2d após quente / assistente dispensou.',
+// ─── INFO DETALHADA POR ETAPA (modal grande no ?) ─────────────────────────
+// Cada chave eh uma etapa do funil. Renderizada no ModalEtapa.
+// Mantem aspecto educativo — assistente precisa entender pra operar bem.
+
+const INFO_ETAPA = {
+  todas: {
+    titulo: 'Todas as conversas',
+    cor: palette.ink,
+    definicao: 'Filtro neutro. Mostra todas as conversas, em qualquer etapa do funil.',
+    quando_entra: ['Sempre — esse filtro nao remove nada.'],
+    quando_sai: ['Nunca — eh uma visao agregada.'],
+    regras: ['Util pra busca geral ou auditoria.'],
+    acoes: ['Tudo que estiver disponivel na conversa especifica.'],
+  },
+  processando: {
+    titulo: 'Processando (Fila)',
+    cor: '#6b7280',
+    definicao: 'Fila de leads elegiveis aguardando Sofia gerar a primeira mensagem (HSM).',
+    quando_entra: [
+      'Carrinho abandonado no site (lojas_leads_carrinho) entra automaticamente.',
+      'Filtros aplicados: PF 1-6 pecas, PJ 0 pecas (carrinho vazio), maximo 15 dias.',
+      'Cron-selecionar (07h BRT, seg-sex) popula a fila sem cap.',
+    ],
+    quando_sai: [
+      'Cron-processar (07h45 BRT) pega cap_diario, gera HSM via IA, move pra "Aprovar".',
+      'Assistente pode marcar checkbox e processar manualmente leads extras a qualquer momento.',
+    ],
+    regras: [
+      'Sem IA aqui — apenas selecao por regras.',
+      'Cap diario configuravel em lojas_whats_config (cap_diario).',
+      'Ordenacao: PJ por valor desc, PF por data desc.',
+    ],
+    acoes: ['Selecionar via checkbox + botao "Processar selecionados".'],
+  },
+  aprovar: {
+    titulo: 'Aprovar',
+    cor: '#d97706',
+    definicao: 'Sugestao de mensagem (HSM) pronta, esperando a assistente revisar e decidir.',
+    quando_entra: [
+      'Cron-processar gerou a sugestao automaticamente (rotina das 07h45 BRT).',
+      'OU assistente processou manualmente um lead da fila.',
+    ],
+    quando_sai: [
+      'Assistente aprova → mensagem enviada → etapa "Enviada".',
+      'Assistente dispensa → vai pra "Perdida" (motivo: dispensada).',
+      'Sem acao em 3 dias → vira "Perdida" automaticamente.',
+    ],
+    regras: [
+      'Janela de envio: seg-sex 09h-21h (configuravel).',
+      'Texto pode ser editado antes de aprovar.',
+      'Cada envio consome 1 conversa HSM da WABA.',
+    ],
+    acoes: ['Aprovar (envia HSM)', 'Editar texto', 'Dispensar lead', 'Anexar midia'],
+  },
+  enviada: {
+    titulo: 'Enviada',
+    cor: '#3b82f6',
+    definicao: 'HSM enviada via Cloud API. Aguardando o cliente responder pra abrir janela de 24h.',
+    quando_entra: ['Assistente aprovou na etapa anterior.'],
+    quando_sai: [
+      'Cliente responde → etapa "Conversando".',
+      '3 dias sem resposta → etapa "Perdida".',
+    ],
+    regras: [
+      'Status WhatsApp atualizado em tempo real pelo webhook (sent → delivered → read → failed).',
+      'Antes do cliente responder, NAO da pra mandar texto livre — so HSM aprovada.',
+      'Webhook valida HMAC-SHA256 pra garantir que veio da Meta.',
+    ],
+    acoes: ['So aguardar. Visualizar status de entrega.'],
+  },
+  conversando: {
+    titulo: 'Conversando',
+    cor: '#10b981',
+    definicao: 'Cliente respondeu! Janela de 24h aberta. Sofia conduz a conversa de forma autonoma.',
+    quando_entra: ['Primeira mensagem do cliente apos HSM enviada.'],
+    quando_sai: [
+      'IA detecta gatilho de venda → etapa "Quente".',
+      'Cliente fechou venda (cruzamento de pedidos) → "Vendeu".',
+      'Conversa esfria sem evolucao → "Perdida".',
+    ],
+    regras: [
+      'Sofia gera respostas via Claude Sonnet 4.6.',
+      'Aprende padroes da vendedora correspondente (lojas_whats_aprendizado_padroes).',
+      'Tons banidos: incrivel, imperdivel, sensacional, travessao. Sempre "vc".',
+      'Sacola: nao usa R$. Marca "Amicia" nunca no texto da resposta.',
+    ],
+    acoes: ['Acompanhar', 'Intervir manualmente', 'Editar lead', 'Forcar handoff'],
+  },
+  quente: {
+    titulo: 'Quente',
+    cor: '#ef4444',
+    definicao: 'IA detectou que o cliente esta proximo de fechar. Momento de decisao.',
+    quando_entra: [
+      'Mencao a: pix, frete, parcelamento, "separar peca", "vou pagar", "amanha levo".',
+      'Pergunta direta sobre forma de pagamento ou retirada.',
+    ],
+    quando_sai: [
+      'Assistente clica "Continuar Sofia" → volta pra "Conversando".',
+      'Assistente clica "Enviar vendedora" → handoff → "Atendida" quando vendedora aceitar.',
+      '2 dias sem decisao (esfriando) → "Perdida".',
+    ],
+    regras: [
+      'Sofia PAUSA respostas automaticas — espera decisao humana.',
+      'Vendedora rodiziada por loja (Silva Teles ou Bom Retiro) conforme link Vesti.',
+      'Vendedora tem 30 min pra aceitar o handoff.',
+    ],
+    acoes: ['Continuar Sofia', 'Enviar vendedora (handoff)'],
+  },
+  atendida: {
+    titulo: 'Atendida',
+    cor: '#8b5cf6',
+    definicao: 'Vendedora aceitou o handoff e esta conduzindo o atendimento humano.',
+    quando_entra: ['Vendedora aceitou em ate 30min na fila dela.'],
+    quando_sai: [
+      'Cliente fecha venda → "Vendeu".',
+      'Conversa fica parada sem venda → "Perdida".',
+    ],
+    regras: [
+      'Sofia para de gerar mensagens nesta conversa.',
+      'Vendedora continua via WhatsApp pessoal dela.',
+      'App registra que essa vendedora pegou — conta pra conversao depois.',
+    ],
+    acoes: ['Visualizar historico. Aguardar fechamento.'],
+  },
+  vendeu: {
+    titulo: 'Vendeu',
+    cor: '#059669',
+    definicao: 'Conversao confirmada — cliente fechou venda atribuida a essa conversa.',
+    quando_entra: [
+      'Cruzamento automatico de pedidos:',
+      '  • Site: venda em ate 5 dias apos a conversa.',
+      '  • Loja fisica: venda em ate 15 dias apos a conversa.',
+    ],
+    quando_sai: ['Estado terminal — nao sai mais.'],
+    regras: [
+      'Atribuicao usa documento (CPF/CNPJ) + telefone normalizado.',
+      'Vendedora que pegou handoff leva o credito.',
+      'Se Sofia conduziu ate o fim sem handoff: credito vai pra Sofia.',
+    ],
+    acoes: ['Visualizar pedido relacionado. Auditoria.'],
+  },
+  perdida: {
+    titulo: 'Perdida',
+    cor: '#9ca3af',
+    definicao: 'Conversa nao evoluiu. Estado terminal sem conversao.',
+    quando_entra: [
+      'Aprovar: 3 dias sem acao da assistente.',
+      'Enviada: 3 dias sem resposta do cliente.',
+      'Quente: 2 dias sem decisao.',
+      'Manual: assistente dispensou (registra motivo).',
+    ],
+    quando_sai: ['Estado terminal — nao sai mais.'],
+    regras: [
+      'Cron-promover roda a cada 4h reavaliando prazos.',
+      'Nao volta automaticamente — se quiser reativar, e novo lead.',
+    ],
+    acoes: ['So consulta. Util pra entender por que conversoes nao acontecem.'],
+  },
 };
 
-const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip, badge }) => {
-  const [showTip, setShowTip] = useState(false);
+// ─── MODAL DE EXPLICACAO DA ETAPA ─────────────────────────────────────────
+// Aberto ao clicar no ? do FiltroChip. Renderiza INFO_ETAPA[id] formatado.
+
+function ModalEtapa({ etapaId, onClose }) {
+  const info = INFO_ETAPA[etapaId];
+  if (!info) return null;
+
+  // Trava scroll do body enquanto aberto
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = original; };
+  }, []);
+
+  const Section = ({ titulo, items, icon }) => {
+    if (!items || items.length === 0) return null;
+    return (
+      <div style={{ marginTop: 18 }}>
+        <div style={{
+          fontSize: fz(12), fontWeight: 700, color: palette.inkMuted,
+          textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span>{icon}</span> {titulo}
+        </div>
+        <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.55, fontSize: fz(14), color: palette.ink }}>
+          {items.map((it, i) => <li key={i} style={{ marginBottom: 4 }}>{it}</li>)}
+        </ul>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 1000, padding: 16, fontFamily: FONT,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: palette.bg, borderRadius: 14,
+          maxWidth: 600, width: '100%', maxHeight: '88vh', overflowY: 'auto',
+          boxShadow: '0 18px 50px rgba(0,0,0,0.28)',
+        }}
+      >
+        {/* Header colorido com a cor da etapa */}
+        <div style={{
+          background: info.cor, color: '#fff',
+          padding: '18px 22px', borderRadius: '14px 14px 0 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <EtapaIcon nome={etapaId} size={26} />
+            <div style={{ fontSize: fz(20), fontWeight: 700 }}>{info.titulo}</div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Fechar"
+            style={{
+              background: 'rgba(255,255,255,0.2)', border: 'none',
+              color: '#fff', width: 32, height: 32, borderRadius: '50%',
+              fontSize: 18, cursor: 'pointer', fontWeight: 700, lineHeight: 1,
+            }}
+          >×</button>
+        </div>
+
+        {/* Corpo */}
+        <div style={{ padding: '20px 22px 24px' }}>
+          <div style={{
+            fontSize: fz(15), color: palette.ink, lineHeight: 1.55,
+            padding: '12px 14px', background: palette.surface,
+            borderLeft: `3px solid ${info.cor}`, borderRadius: 6,
+          }}>
+            {info.definicao}
+          </div>
+
+          <Section titulo="Quando o lead entra aqui" items={info.quando_entra} icon="→" />
+          <Section titulo="Quando o lead sai daqui" items={info.quando_sai} icon="↳" />
+          <Section titulo="Regras de negocio" items={info.regras} icon="⚙" />
+          <Section titulo="Acoes disponiveis" items={info.acoes} icon="✦" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, onAjuda }) => {
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }}>
       <button onClick={onClick} style={{
@@ -1147,12 +1390,11 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip, badge }) =>
           }}>{badge}</span>
         )}
       </button>
-      {tooltip && (
+      {etapaId && onAjuda && (
         <button
-          onClick={(e) => { e.stopPropagation(); setShowTip(s => !s); }}
-          onMouseEnter={() => setShowTip(true)}
-          onMouseLeave={() => setShowTip(false)}
-          aria-label="Explicação da etapa"
+          onClick={(e) => { e.stopPropagation(); onAjuda(etapaId); }}
+          aria-label={`Como funciona ${label}`}
+          title={`Como funciona ${label}`}
           style={{
             marginLeft: 3, width: 18, height: 18, padding: 0,
             borderRadius: '50%', border: `1px solid ${palette.beige}`,
@@ -1161,18 +1403,6 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, tooltip, badge }) =>
             fontFamily: FONT, lineHeight: 1, alignSelf: 'center',
           }}
         >?</button>
-      )}
-      {showTip && tooltip && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, marginTop: 6,
-          background: palette.ink, color: palette.bg,
-          padding: '8px 11px', borderRadius: 8, fontSize: fz(11),
-          lineHeight: 1.4, maxWidth: 280, minWidth: 220, zIndex: 50,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.18)', fontWeight: 400,
-          fontFamily: FONT,
-        }}>
-          {tooltip}
-        </div>
       )}
     </div>
   );
