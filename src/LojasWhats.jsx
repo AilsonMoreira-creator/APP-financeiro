@@ -2894,9 +2894,18 @@ function ConversaDetail({ conversaId, onBack, onEditarLead }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: palette.bg, zIndex: 100,
+      position: 'fixed', inset: 0, background: palette.beige, zIndex: 100,
       display: 'flex', flexDirection: 'column', fontFamily: FONT,
     }}>
+      {/* Wrapper centralizado: chat com max-width pra nao ficar com balöes
+          nos extremos em telas largas. Fundo bege da tela cheia fica visivel
+          nas laterais. Ailson 27/05/2026 */}
+      <div style={{
+        flex: 1, display: 'flex', flexDirection: 'column',
+        maxWidth: 960, width: '100%', margin: '0 auto',
+        background: palette.bg, minHeight: 0,
+        boxShadow: '0 0 24px rgba(0,0,0,0.06)',
+      }}>
       {/* HEADER */}
       <div style={{
         background: palette.ink, color: palette.bg, padding: '10px 12px',
@@ -3047,6 +3056,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead }) {
           onSelect={(m) => { setMidiaAnexada(m); setSeletorMidiaAberto(false); }}
         />
       )}
+      </div>{/* /wrapper centralizado */}
     </div>
   );
 }
