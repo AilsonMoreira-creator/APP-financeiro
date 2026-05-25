@@ -94,6 +94,13 @@ export default async function handler(req, res) {
 
     // Persiste mensagem
     const agora = new Date().toISOString();
+    // Ailson 25/05/2026: gera URL publica da midia (se tiver) e salva no
+    // campo midia_url da mensagem. Sem isso, frontend nao mostra miniatura.
+    let midiaUrlMsg = null;
+    if (midiaFinal?.storage_path) {
+      const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(midiaFinal.storage_path);
+      midiaUrlMsg = pub?.publicUrl || null;
+    }
     const { data: msgRow, error: errIns } = await supabase
       .from('lojas_whats_mensagens')
       .insert({
@@ -102,6 +109,7 @@ export default async function handler(req, res) {
         autor,
         tipo_midia: tipoMidiaMsg,
         texto: textoLimpo || null,
+        midia_url: midiaUrlMsg,
         meta_message_id: metaMsgId,
         enviada_por_vendedora_id: vendedora_id || null,
         status: 'enviando',

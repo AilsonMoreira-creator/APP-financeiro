@@ -35,7 +35,9 @@ import {
 import {
   verifyWebhookHandshake,
   verifyWebhookSignature,
-  marcarComoLida
+  marcarComoLida,
+  obterUrlMidia,
+  baixarMidia
 } from './_lojas-whats-meta-client.js';
 
 // IMPORTANT: precisamos do body CRU pra validar HMAC.
@@ -159,6 +161,19 @@ async function processarMensagemRecebida(msg, valueCtx) {
   // 2. Extrai texto/midia da mensagem
   const dadosMsg = extrairConteudo(msg);
 
+  // Ailson 25/05/2026: se for midia (image/video/audio/document/sticker)
+  // baixa da Meta e salva no Supabase Storage ANTES do INSERT, pra
+  // midia_url ficar com URL publica permanente (nao o media_id temporario).
+  let midiaUrlFinal = dadosMsg.midia_url;
+  const TIPOS_BAIXAVEIS = ['image', 'video', 'audio', 'document', 'sticker'];
+  if (TIPOS_BAIXAVEIS.includes(dadosMsg.tipo) && dadosMsg.midia_url) {
+    const urlSalva = await baixarESalvarMidiaInbound(
+      dadosMsg.midia_url, dadosMsg.mime, dadosMsg.filename || ''
+    );
+    if (urlSalva) midiaUrlFinal = urlSalva;
+    // Se falhar, mantem o media_id (degrade gracefully, evita perder a msg)
+  }
+
   // 3. Salva em lojas_whats_mensagens
   // Dedup via UNIQUE(meta_message_id): se Meta enviar retry, ignora silencioso.
   // Ailson 26/05/2026 (auditoria ponto 5).
@@ -170,7 +185,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
       autor: 'cliente',
       tipo_midia: dadosMsg.tipo,
       texto: dadosMsg.texto,
-      midia_url: dadosMsg.midia_url,
+      midia_url: midiaUrlFinal,
       meta_message_id: msg.id,
       status: 'entregue',
       enviada_em: new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
@@ -227,21 +242,53 @@ function disparouIaAsync(conversaId) {
 function extrairConteudo(msg) {
   switch (msg.type) {
     case 'text':
-      return { tipo: 'text', texto: msg.text?.body || '', midia_url: null };
+      return { tipo: 'text', texto: msg.text?.body || '', midia_url: null, mime: null };
     case 'image':
-      return { tipo: 'image', texto: msg.image?.caption || null, midia_url: msg.image?.id };
+      return { tipo: 'image', texto: msg.image?.caption || null, midia_url: msg.image?.id, mime: msg.image?.mime_type || 'image/jpeg' };
     case 'audio':
-      return { tipo: 'audio', texto: null, midia_url: msg.audio?.id };
+      return { tipo: 'audio', texto: null, midia_url: msg.audio?.id, mime: msg.audio?.mime_type || 'audio/ogg' };
     case 'video':
-      return { tipo: 'video', texto: msg.video?.caption || null, midia_url: msg.video?.id };
+      return { tipo: 'video', texto: msg.video?.caption || null, midia_url: msg.video?.id, mime: msg.video?.mime_type || 'video/mp4' };
     case 'document':
-      return { tipo: 'document', texto: msg.document?.caption || null, midia_url: msg.document?.id };
+      return { tipo: 'document', texto: msg.document?.caption || null, midia_url: msg.document?.id, mime: msg.document?.mime_type || 'application/pdf', filename: msg.document?.filename };
     case 'sticker':
-      return { tipo: 'sticker', texto: null, midia_url: msg.sticker?.id };
+      return { tipo: 'sticker', texto: null, midia_url: msg.sticker?.id, mime: msg.sticker?.mime_type || 'image/webp' };
     case 'location':
-      return { tipo: 'text', texto: `[localizacao: ${msg.location?.latitude}, ${msg.location?.longitude}]`, midia_url: null };
+      return { tipo: 'text', texto: `[localizacao: ${msg.location?.latitude}, ${msg.location?.longitude}]`, midia_url: null, mime: null };
     default:
-      return { tipo: msg.type, texto: `[tipo nao suportado: ${msg.type}]`, midia_url: null };
+      return { tipo: msg.type, texto: `[tipo nao suportado: ${msg.type}]`, midia_url: null, mime: null };
+  }
+}
+
+// Ailson 25/05/2026: cliente envia foto/video/audio/doc -> Meta nos da
+// um media_id (temporario, validade ~5min). Pra mostrar no app a gente
+// precisa baixar e salvar no nosso Supabase Storage, gerar URL publica
+// permanente. Caso contrario o frontend so tem o ID e nao consegue exibir.
+async function baixarESalvarMidiaInbound(mediaId, mime, sufixoNome = '') {
+  try {
+    const meta = await obterUrlMidia(mediaId);
+    if (!meta?.url) {
+      logErro('webhook/midia-inbound', new Error(`obterUrlMidia retornou sem url: ${JSON.stringify(meta).slice(0,150)}`));
+      return null;
+    }
+    const buf = await baixarMidia(meta.url);
+    const ext = (mime || '').split('/').pop()?.split(';')[0] || 'bin';
+    const safeSufixo = (sufixoNome || '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 40);
+    const fileName = `${Date.now()}_${mediaId}${safeSufixo ? '_' + safeSufixo : ''}.${ext}`;
+    const path = `inbound/${fileName}`;
+    const { error: errUp } = await supabase.storage
+      .from('sofia-midias')
+      .upload(path, buf, { contentType: mime, upsert: false });
+    if (errUp) {
+      logErro('webhook/midia-inbound-upload', errUp);
+      return null;
+    }
+    const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(path);
+    log('midia-inbound', `salva ${mediaId} -> ${path}, ${buf.length} bytes`);
+    return pub?.publicUrl || null;
+  } catch (e) {
+    logErro('webhook/midia-inbound', e);
+    return null;
   }
 }
 

@@ -288,6 +288,13 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
            : midiaParaEnviar.tipo === 'video' ? 'video' : 'document')
         : 'text');
 
+  // Ailson 25/05/2026: salva URL publica da midia pra frontend mostrar miniatura
+  let midiaUrlMsg = null;
+  if (midiaParaEnviar?.storage_path) {
+    const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(midiaParaEnviar.storage_path);
+    midiaUrlMsg = pub?.publicUrl || null;
+  }
+
   const { data: msgRow, error: errMsg } = await supabase
     .from('lojas_whats_mensagens')
     .insert({
@@ -296,6 +303,7 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
       autor: 'sofia_ia',
       tipo_midia: tipoMidiaMsg,
       texto: textoFinal,
+      midia_url: midiaUrlMsg,
       template_name: sug.template_name,
       template_vars: sug.template_vars,
       meta_message_id: metaMsgId,

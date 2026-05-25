@@ -2914,7 +2914,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em')
           .eq('id', conversaId).maybeSingle(),
         supabase.from('lojas_whats_mensagens')
-          .select('id, direcao, autor, tipo_midia, texto, meta_message_id, status, enviada_em')
+          .select('id, direcao, autor, tipo_midia, texto, midia_url, meta_message_id, status, enviada_em')
           .eq('conversa_id', conversaId)
           .order('enviada_em', { ascending: true })
           .limit(200),
@@ -3380,17 +3380,29 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
 function Bubble({ m }) {
   const ehSaida = m.direcao === 'saida';
   const ehAssistente = m.autor === 'assistente';
-  const corBg = ehSaida ? (ehAssistente ? '#d4e3fc' : '#dcf8c6') : '#fff';
+  // Ailson 25/05/2026: padroniza verde WhatsApp pra TODA msg de saida
+  // (Sofia/assistente/vendedora) e branco pra cliente. Antes Sofia ficava
+  // azul, ficava destoante do padrao WhatsApp.
+  const corBg = ehSaida ? '#dcf8c6' : '#fff';
   const align = ehSaida ? 'flex-end' : 'flex-start';
 
   const horario = m.enviada_em ? new Date(m.enviada_em).toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   }) : '';
 
-  // Label do autor
+  // Label do autor — "Sofia" pra IA e assistente humana (ela representa Sofia
+  // pro cliente). "sistema" so pra logs raros.
   const labelAutor = ehSaida
-    ? (ehAssistente ? '👤 assistente' : (m.autor === 'sofia_ia' ? '🤖 Sofia' : 'sistema'))
+    ? (m.autor === 'sistema' ? 'sistema' : '🤖 Sofia')
     : null;
+
+  // URL da midia: pra image renderiza thumb clicavel; pra document/video
+  // mostra ícone+link clicavel. Outbound nosso e inbound do cliente ja vem
+  // com URL publica do Supabase Storage (webhook baixou e salvou).
+  const ehImagem = m.tipo_midia === 'image' && m.midia_url && m.midia_url.startsWith('http');
+  const ehVideo = m.tipo_midia === 'video' && m.midia_url && m.midia_url.startsWith('http');
+  const ehDocumento = m.tipo_midia === 'document' && m.midia_url && m.midia_url.startsWith('http');
+  const ehAudio = m.tipo_midia === 'audio' && m.midia_url && m.midia_url.startsWith('http');
 
   return (
     <div style={{ display: 'flex', justifyContent: align, marginBottom: 8 }}>
@@ -3405,19 +3417,68 @@ function Bubble({ m }) {
             {labelAutor}
           </div>
         )}
-        {/* Tipo midia: ícone se for imagem/doc */}
-        {(m.tipo_midia === 'image' || m.tipo_midia === 'video' || m.tipo_midia === 'document') && (
+        {/* Miniatura de IMAGEM clicavel pra abrir em tamanho real */}
+        {ehImagem && (
+          <a href={m.midia_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+            <img
+              src={m.midia_url}
+              alt="foto"
+              style={{
+                maxWidth: 260, maxHeight: 300,
+                borderRadius: 6, display: 'block',
+                marginBottom: m.texto ? 6 : 0,
+                cursor: 'pointer',
+              }}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
+          </a>
+        )}
+        {/* VIDEO com controle nativo */}
+        {ehVideo && (
+          <video
+            src={m.midia_url}
+            controls
+            style={{
+              maxWidth: 260, maxHeight: 300,
+              borderRadius: 6, display: 'block',
+              marginBottom: m.texto ? 6 : 0,
+              background: '#000',
+            }}
+          />
+        )}
+        {/* AUDIO */}
+        {ehAudio && (
+          <audio src={m.midia_url} controls style={{ display: 'block', marginBottom: m.texto ? 6 : 0, maxWidth: 260 }} />
+        )}
+        {/* DOCUMENTO: link clicavel */}
+        {ehDocumento && (
+          <a
+            href={m.midia_url} target="_blank" rel="noopener noreferrer"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 10px', background: 'rgba(0,0,0,0.05)',
+              borderRadius: 6, marginBottom: m.texto ? 6 : 0,
+              textDecoration: 'none', color: '#1a4a8a',
+              fontSize: 12, fontWeight: 600,
+            }}
+          >
+            <FileText size={16} />
+            <span>📎 Abrir documento</span>
+          </a>
+        )}
+        {/* Fallback: tem tipo de midia mas URL nao chegou (ainda baixando ou erro) */}
+        {!ehImagem && !ehVideo && !ehAudio && !ehDocumento &&
+         (m.tipo_midia === 'image' || m.tipo_midia === 'video' || m.tipo_midia === 'document' || m.tipo_midia === 'audio') && (
           <div style={{
             padding: '6px 8px', background: 'rgba(0,0,0,0.04)',
             borderRadius: 6, marginBottom: 6, display: 'flex',
-            alignItems: 'center', gap: 6, fontSize: 11, color: '#2c3e50',
+            alignItems: 'center', gap: 6, fontSize: 11, color: '#888',
+            fontStyle: 'italic',
           }}>
             {m.tipo_midia === 'image' && <Image size={14} />}
             {m.tipo_midia === 'video' && <Video size={14} />}
             {m.tipo_midia === 'document' && <FileText size={14} />}
-            <span style={{ fontWeight: 600 }}>
-              {m.tipo_midia === 'image' ? 'Foto enviada' : m.tipo_midia === 'video' ? 'Vídeo' : 'Documento'}
-            </span>
+            <span>Mídia (carregando...)</span>
           </div>
         )}
         {m.texto && (
