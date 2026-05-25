@@ -242,7 +242,7 @@ export const StatusDot = ({ status }) => {
 export const TabBar = ({ tabs, activeTab, onChange }) => (
   <div style={{
     background: palette.surface, borderBottom: `1px solid ${palette.beige}`,
-    padding: '0 4px', position: 'sticky', top: 60, zIndex: 9,
+    padding: '0 16px 0 4px', position: 'sticky', top: 60, zIndex: 9,
     fontFamily: FONT, display: 'flex', overflowX: 'auto', WebkitOverflowScrolling: 'touch',
   }}>
     {tabs.map(tab => {
@@ -256,6 +256,7 @@ export const TabBar = ({ tabs, activeTab, onChange }) => (
           fontWeight: active ? 600 : 400,
           borderBottom: active ? `2.5px solid ${palette.accent}` : '2.5px solid transparent',
           display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'all 0.15s',
+          flexShrink: 0,
         }}>
           <Icon size={sz(18)} />
           {tab.label}

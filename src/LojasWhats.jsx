@@ -50,15 +50,27 @@ const ASSISTANT_NAME = 'Sofia'; // mude aqui pra trocar nome em toda UI
 const ICONS_BASE = '/icons/lojas-whats';
 
 // Ícone de etapa: usa PNG colorido pra cards visuais (funil/cards)
-const EtapaIcon = ({ nome, size = 28, style = {} }) => (
-  <img
-    src={`${ICONS_BASE}/${nome}.png`}
-    alt={nome}
-    width={size}
-    height={size}
-    style={{ display: 'block', objectFit: 'contain', flexShrink: 0, ...style }}
-  />
-);
+const EtapaIcon = ({ nome, size = 28, style = {} }) => {
+  // Fallback: se PNG da etapa nao existir (ex: follow_up.png nao subido ainda),
+  // troca pelo de conversando.png como placeholder visual.
+  // Ailson 27/05/2026
+  const handleError = (e) => {
+    if (!e.currentTarget.dataset.fallback) {
+      e.currentTarget.dataset.fallback = '1';
+      e.currentTarget.src = `${ICONS_BASE}/conversando.png`;
+    }
+  };
+  return (
+    <img
+      src={`${ICONS_BASE}/${nome}.png`}
+      alt={nome}
+      width={size}
+      height={size}
+      onError={handleError}
+      style={{ display: 'block', objectFit: 'contain', flexShrink: 0, ...style }}
+    />
+  );
+};
 
 // ETAPAS do funil (ordem visual + label + cor)
 const ETAPAS = [
@@ -69,6 +81,7 @@ const ETAPAS = [
   { id: 'quente',       label: 'Quente',       cor: palette.alert },
   { id: 'atendida',     label: 'Atendida',     cor: palette.purple },
   { id: 'vendeu',       label: 'Vendeu',       cor: palette.ok },
+  { id: 'follow_up',    label: 'Follow up',    cor: '#f59e0b' },
   { id: 'perdida',      label: 'Perdida',      cor: palette.inkMuted },
 ];
 
@@ -1257,6 +1270,35 @@ const INFO_ETAPA = {
     ],
     acoes: ['Visualizar pedido relacionado. Auditoria.'],
   },
+  follow_up: {
+    titulo: 'Follow up',
+    cor: '#f59e0b',
+    definicao: 'Lead com potencial mas que nao virou venda no primeiro contato. Sofia tenta de novo depois de um tempo com outro angulo.',
+    quando_entra: [
+      'Cliente estava em "Conversando" mas IA NAO conseguiu levar pra "Quente".',
+      'Sinais detectados pela IA:',
+      '  • "vou pensar", "depois decido", "indeciso"',
+      '  • "vou voltar no site pra comprar" mas passaram 3 dias sem venda no sistema',
+      '  • Pediu catalogo e nao respondeu mais',
+      '  • Conversa esfriou mas demonstrou interesse real',
+    ],
+    quando_sai: [
+      'Cliente responde o follow-up → volta pra "Conversando".',
+      'Detecta gatilho quente no follow-up → "Quente".',
+      'Sem resposta apos 2 tentativas de follow-up → "Perdida".',
+      'Cruzamento de venda detecta compra → "Vendeu".',
+    ],
+    regras: [
+      'Sofia escolhe template baseado no contexto da conversa anterior:',
+      '  • Mencionou site → "Conseguiu fazer o pedido no site?"',
+      '  • Pediu catalogo → "Conseguiu analisar o catalogo? Ficou alguma duvida?"',
+      '  • Generico → "Ainda quer fechar? Posso ajudar?"',
+      'Envio: texto livre se janela 24h aberta, HSM se fora.',
+      'Intervalo: 3-5 dias apos ultima interacao (configuravel).',
+      'Limite: 2 follow-ups por conversa, depois vira Perdida.',
+    ],
+    acoes: ['Enviar follow-up agora', 'Editar mensagem antes de enviar', 'Pular follow-up', 'Enviar vendedora'],
+  },
   perdida: {
     titulo: 'Perdida',
     cor: '#9ca3af',
@@ -1265,6 +1307,7 @@ const INFO_ETAPA = {
       'Aprovar: 3 dias sem acao da assistente.',
       'Enviada: 3 dias sem resposta do cliente.',
       'Quente: 2 dias sem decisao.',
+      'Follow up: 2 tentativas sem resposta.',
       'Manual: assistente dispensou (registra motivo).',
     ],
     quando_sai: ['Estado terminal — nao sai mais.'],

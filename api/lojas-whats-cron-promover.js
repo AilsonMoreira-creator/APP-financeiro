@@ -11,6 +11,18 @@
 //
 //   3. Conversas em 'esfriando' há >2d → 'perdida' (motivo='esfriou_total')
 //
+// TODO (Ailson 27/05/2026 — aguardando 3 templates):
+//   4. Conversas em 'conversando' SEM virar quente apos N dias E com sinais
+//      de potencial residual → 'follow_up'.
+//      Sinais a detectar via Claude (ja temos a conversa em lojas_whats_mensagens):
+//        - "vou pensar" / "depois decido" / "indeciso"
+//        - "vou voltar no site pra comprar" (e sem venda em 3d)
+//        - Pediu catalogo e nao respondeu
+//      Move pra 'follow_up' e agenda proximo envio (3-5d).
+//   5. Conversas em 'follow_up' com 2 tentativas sem resposta → 'perdida'.
+//   6. Cron novo (ou estende cron-processar) pra disparar HSM de follow-up
+//      respeitando janela 24h vs HSM templates.
+//
 // Configurável em lojas_whats_config:
 //   - regua_dias_perdida (default 3)
 //   - regua_quente_esfriando_dias (default 1)
