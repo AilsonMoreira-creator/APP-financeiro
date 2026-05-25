@@ -139,7 +139,57 @@ async function processarEvento(payload) {
           await processarStatusMensagem(st);
         }
       }
+
+      // Status de aprovacao de templates pela Meta (APPROVED/REJECTED/...)
+      // Ailson 25/05/2026: antes nao tinha handler — banco ficava parado
+      // em 'pendente_aprovacao' mesmo apos Meta aprovar. Tinha que UPDATE
+      // manual. Agora sincroniza automatico via webhook.
+      if (change.field === 'message_template_status_update' && value.event) {
+        await processarStatusTemplate(value);
+      }
     }
+  }
+}
+
+// ─── STATUS DE TEMPLATE (aprovacao/rejeicao Meta) ─────────────────────────
+async function processarStatusTemplate(value) {
+  // Payload Meta:
+  // {
+  //   event: 'APPROVED' | 'REJECTED' | 'PENDING_DELETION' | 'FLAGGED' | 'PAUSED' | 'PENDING',
+  //   message_template_id: 962474963078755,
+  //   message_template_name: 'carrinho_abandonado_site_amicia',
+  //   message_template_language: 'pt_BR',
+  //   reason: 'NONE' | motivo de rejeicao
+  // }
+  const event = value.event;
+  const name = value.message_template_name;
+  const lang = value.message_template_language;
+
+  log('template-status', `${name} (${lang}): ${event}${value.reason && value.reason !== 'NONE' ? ' — ' + value.reason : ''}`);
+
+  // Mapeia event Meta -> status interno
+  const statusMap = {
+    APPROVED: 'aprovado',
+    REJECTED: 'rejeitado',
+    PENDING: 'pendente_aprovacao',
+    PAUSED: 'pausado',
+    PENDING_DELETION: 'aprovado',  // mantem aprovado, so marca delete
+    FLAGGED: 'aprovado',           // mantem aprovado, mas flag pra revisar
+    DISABLED: 'rejeitado',
+  };
+  const statusInterno = statusMap[event] || 'pendente_aprovacao';
+
+  const { error } = await supabase
+    .from('lojas_whats_templates')
+    .update({
+      status: statusInterno,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq('name', name)
+    .eq('language', lang);
+
+  if (error) {
+    logErro('template-status/update', error);
   }
 }
 
