@@ -962,13 +962,41 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   };
 
   // Se tem conversa em detalhe, renderiza tela cheia (esconde a lista)
+  // Mas ainda renderiza os modais — senao eles ficam fora do DOM e so
+  // aparecem depois de fechar o detalhe. Ailson 27/05/2026
   if (conversaDetalhe) {
     return (
-      <ConversaDetail
-        conversaId={conversaDetalhe}
-        onBack={() => { setConversaDetalhe(null); setReloadTick(t => t + 1); }}
-        onEditarLead={(conv) => setModalEditarLead({ conversa: conv })}
-      />
+      <>
+        <ConversaDetail
+          conversaId={conversaDetalhe}
+          onBack={() => { setConversaDetalhe(null); setReloadTick(t => t + 1); }}
+          onEditarLead={(conv) => setModalEditarLead({ conversa: conv })}
+          onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
+        />
+        {modalEditarLead && (
+          <EditarLeadModal
+            conversa={modalEditarLead.conversa}
+            onClose={() => setModalEditarLead(null)}
+            onSucesso={(msg) => { setFeedback({ tipo: 'ok', msg }); setModalEditarLead(null); setReloadTick(t => t + 1); }}
+            onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
+          />
+        )}
+        {modalEnviar && (
+          <EnviarVendedoraModal
+            conversa={modalEnviar.conversa}
+            onClose={() => setModalEnviar(null)}
+            onSucesso={(msg) => {
+              setFeedback({ tipo: 'ok', msg });
+              setModalEnviar(null);
+              // Apos enviar pra vendedora, volta pra lista (lead saiu do
+              // contexto Sofia) e recarrega
+              setConversaDetalhe(null);
+              setReloadTick(t => t + 1);
+            }}
+            onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
+          />
+        )}
+      </>
     );
   }
 
@@ -2810,7 +2838,7 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 // CONVERSA DETAIL — tela cheia tipo WhatsApp (Ailson 26/05/2026)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ConversaDetail({ conversaId, onBack, onEditarLead }) {
+function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora }) {
   const [conversa, setConversa] = useState(null);
   const [mensagens, setMensagens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2939,6 +2967,20 @@ function ConversaDetail({ conversaId, onBack, onEditarLead }) {
           }}>
           <Edit3 size={sz(14)} />
         </button>
+        {/* Enviar pra vendedora direto do chat — assistente nao precisa
+            voltar pra lista. Ailson 27/05/2026 */}
+        {onEnviarVendedora && (
+          <button onClick={() => onEnviarVendedora(conversa)} title="Enviar pra vendedora"
+            style={{
+              background: '#f59e0b', border: '1px solid #d97706',
+              color: '#fff', padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontFamily: FONT, fontSize: fz(12), fontWeight: 600, whiteSpace: 'nowrap',
+            }}>
+            <Users size={sz(14)} />
+            Vendedora
+          </button>
+        )}
       </div>
 
       {/* Observação pra Sofia banner */}
