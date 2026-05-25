@@ -198,17 +198,22 @@ export async function baixarMidia(mediaUrl) {
  */
 export async function uploadMidiaParaMeta(buffer, mime, filename = 'media') {
   const url = `${META_GRAPH_API}/${process.env.META_WA_PHONE_ID}/media`;
-  const FormData = (await import('form-data')).default;
+
+  // Ailson 25/05/2026: usar FormData NATIVO (global no Node 18+) + Blob.
+  // ANTES: lib 'form-data' (npm) + fetch nativo -> Meta retornava
+  // "(#100) The parameter file is required" porque fetch nao preservava
+  // o Content-Type com boundary corretamente. Bug conhecido na combinacao.
+  // AGORA: FormData global + Blob -> fetch monta multipart certinho.
   const fd = new FormData();
   fd.append('messaging_product', 'whatsapp');
   fd.append('type', mime);
-  fd.append('file', buffer, { filename, contentType: mime });
+  fd.append('file', new Blob([buffer], { type: mime }), filename);
 
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.META_WA_ACCESS_TOKEN}`,
-      ...fd.getHeaders(),
+      // NAO setar Content-Type — fetch seta sozinho com boundary correto
     },
     body: fd,
   });
