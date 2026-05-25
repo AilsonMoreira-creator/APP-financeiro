@@ -462,6 +462,65 @@ async function handleGerarSugestoes(req, res, auth) {
     console.warn('[lojas-ia] validador sacolas falhou:', e?.message);
   }
 
+  // ═════════════════════════════════════════════════════════════════════════
+  // VALIDADOR FK PRE-INSERT (Ailson 25/05/2026)
+  // ═════════════════════════════════════════════════════════════════════════
+  // A IA as vezes alucina UUIDs de clientes/grupos que nao existem no banco
+  // (caso real Vanessa 25/05: gerou d2f5eabe-... pra "MARIA GORETTI DA"
+  //  quando o id real era bab6e623-...). O INSERT em batch viola FK e
+  // PERDE AS 7 SUGESTOES inteiras pq eh transacao.
+  // Fix: valida cada cliente_id/grupo_id contra o banco. Descarta linhas
+  // com FK invalida, ajusta prioridade, segue com as validas. Ailson
+  // prefere ter 5/7 sugestoes a perder todas as 7.
+  try {
+    const clienteIds = [...new Set(linhas.filter(l => l.cliente_id).map(l => l.cliente_id))];
+    const grupoIds   = [...new Set(linhas.filter(l => l.grupo_id).map(l => l.grupo_id))];
+
+    const [{ data: clientesOk }, { data: gruposOk }] = await Promise.all([
+      clienteIds.length
+        ? supabase.from('lojas_clientes').select('id').in('id', clienteIds)
+        : Promise.resolve({ data: [] }),
+      grupoIds.length
+        ? supabase.from('lojas_grupos').select('id').in('id', grupoIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const setClientesOk = new Set((clientesOk || []).map(c => c.id));
+    const setGruposOk   = new Set((gruposOk   || []).map(g => g.id));
+
+    const total = linhas.length;
+    const linhasValidas = linhas.filter(l => {
+      if (l.cliente_id && !setClientesOk.has(l.cliente_id)) {
+        console.warn(`[lojas-ia] FK invalida — cliente_id ${l.cliente_id} (${l.alvo_nome_display}) nao existe. Descartando sugestao "${l.titulo}".`);
+        return false;
+      }
+      if (l.grupo_id && !setGruposOk.has(l.grupo_id)) {
+        console.warn(`[lojas-ia] FK invalida — grupo_id ${l.grupo_id} (${l.alvo_nome_display}) nao existe. Descartando sugestao "${l.titulo}".`);
+        return false;
+      }
+      return true;
+    });
+
+    if (linhasValidas.length < total) {
+      // Re-numera prioridade pra ficar 1..N continuo
+      linhasValidas.forEach((l, i) => { l.prioridade = i + 1; });
+      const descartadas = total - linhasValidas.length;
+      console.warn(`[lojas-ia] ${descartadas}/${total} sugestoes descartadas por FK invalida. Salvando ${linhasValidas.length}.`);
+      linhas.length = 0;
+      linhas.push(...linhasValidas);
+    }
+  } catch (e) {
+    // Validacao falhou — segue tentando INSERT, melhor que abortar
+    console.warn('[lojas-ia] validador FK falhou:', e?.message);
+  }
+
+  if (linhas.length === 0) {
+    return res.status(500).json({
+      error: 'Erro ao salvar sugestões',
+      detalhe: 'Todas as sugestoes da IA tinham cliente_id/grupo_id invalido (alucinacao). Tente novamente.',
+    });
+  }
+
   const { error: errIns } = await supabase
     .from('lojas_sugestoes_diarias')
     .insert(linhas);
