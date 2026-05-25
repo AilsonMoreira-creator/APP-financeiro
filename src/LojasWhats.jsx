@@ -3600,16 +3600,73 @@ function UploadMidiaModal({ onClose, onSucesso, onErro }) {
     if (!arquivo) { onErro('Selecione um arquivo'); return; }
     setEnviando(true);
     try {
-      const fd = new FormData();
-      fd.append('arquivo', arquivo);
-      fd.append('tipo', tipo);
-      if (ref) fd.append('ref', ref);
-      if (descricao) fd.append('descricao', descricao);
+      // Ailson 25/05/2026: catalogos PDF estouram limite 4.5MB do Vercel.
+      // Pra arquivos > 4MB: fluxo 2-passos (presign + PUT direto Supabase + register).
+      // Pra arquivos pequenos: fluxo classico (multipart via Vercel) — mais simples.
+      const USAR_FLUXO_DIRETO = arquivo.size > 4 * 1024 * 1024;
 
-      const r = await fetch('/api/lojas-whats-midia-upload', { method: 'POST', body: fd });
-      const j = await r.json();
-      if (!r.ok || j.error) { onErro(j.error || 'Erro no upload'); return; }
-      onSucesso();
+      if (USAR_FLUXO_DIRETO) {
+        // ── PASSO 1: pedir signed upload URL ──────────────────────────────
+        const presignRes = await fetch('/api/lojas-whats-midia-presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tipo,
+            nome_arquivo: arquivo.name,
+            size_bytes: arquivo.size,
+            mime_type: arquivo.type,
+          }),
+        });
+        const presign = await presignRes.json();
+        if (!presignRes.ok || presign.error) {
+          onErro(presign.error || 'Falha na presign'); setEnviando(false); return;
+        }
+
+        // ── PASSO 2: PUT direto no Supabase Storage (sem passar pelo Vercel) ──
+        const putRes = await fetch(presign.uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': arquivo.type,
+            'Authorization': `Bearer ${presign.token}`,
+            'x-upsert': 'false',
+          },
+          body: arquivo,
+        });
+        if (!putRes.ok) {
+          const txt = await putRes.text();
+          onErro('Upload direto falhou: ' + (txt || putRes.status)); setEnviando(false); return;
+        }
+
+        // ── PASSO 3: registrar metadados no banco ─────────────────────────
+        const regRes = await fetch('/api/lojas-whats-midia-upload?modo=register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storage_path: presign.storage_path,
+            tipo,
+            ref: ref || null,
+            descricao: descricao || null,
+            nome_arquivo: arquivo.name,
+            size_bytes: arquivo.size,
+            mime_type: arquivo.type,
+          }),
+        });
+        const reg = await regRes.json();
+        if (!regRes.ok || reg.error) { onErro(reg.error || 'Erro ao registrar'); setEnviando(false); return; }
+        onSucesso();
+      } else {
+        // ── FLUXO CLASSICO (arquivos pequenos) ─────────────────────────────
+        const fd = new FormData();
+        fd.append('arquivo', arquivo);
+        fd.append('tipo', tipo);
+        if (ref) fd.append('ref', ref);
+        if (descricao) fd.append('descricao', descricao);
+
+        const r = await fetch('/api/lojas-whats-midia-upload', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (!r.ok || j.error) { onErro(j.error || 'Erro no upload'); return; }
+        onSucesso();
+      }
     } catch (e) { onErro(e.message); }
     setEnviando(false);
   };

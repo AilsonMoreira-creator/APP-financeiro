@@ -98,6 +98,16 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST esperado' });
 
+  // ─── MODO "REGISTER" (Ailson 25/05/2026) ────────────────────────────────
+  // Pra arquivos grandes (>4MB), browser sobe DIRETO pro Supabase Storage
+  // via signed URL (endpoint /api/lojas-whats-midia-presign), bypass do
+  // Vercel body limit de 4.5MB. Depois chama AQUI com modo=register e
+  // o storage_path do arquivo ja subido pra registrar metadados.
+  // Fluxo full: presign -> PUT direto Supabase -> register (esse modo).
+  if (req.query?.modo === 'register' || req.headers['content-type']?.includes('application/json')) {
+    return handleRegister(req, res);
+  }
+
   try {
     const { fields, file } = await readMultipart(req);
     if (!file) return res.status(400).json({ error: 'Arquivo nao enviado (campo "arquivo")' });
@@ -182,6 +192,93 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     console.error('[midia-upload] exception:', e);
+    return res.status(500).json({ error: e.message });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODO REGISTER — chamado APOS upload direto pra Supabase via signed URL
+// ═══════════════════════════════════════════════════════════════════════════
+async function handleRegister(req, res) {
+  try {
+    // Le body JSON
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const raw = Buffer.concat(chunks).toString('utf8');
+    let body;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return res.status(400).json({ error: 'Body deve ser JSON valido' });
+    }
+
+    const { storage_path, tipo, ref: refRaw, descricao, nome_arquivo, size_bytes, mime_type, criada_por } = body;
+
+    if (!storage_path) return res.status(400).json({ error: 'storage_path obrigatorio' });
+    if (!tipo || !LIMITES[tipo]) return res.status(400).json({ error: `tipo invalido: ${tipo}` });
+    if (!nome_arquivo) return res.status(400).json({ error: 'nome_arquivo obrigatorio' });
+
+    // Valida que o arquivo realmente existe no storage (anti-fabricacao)
+    // Lista o path e ve se aparece
+    const pasta = storage_path.split('/')[0];
+    const fileName = storage_path.split('/').slice(1).join('/');
+    const { data: lista, error: errList } = await supabase.storage
+      .from('sofia-midias')
+      .list(pasta, { search: fileName, limit: 1 });
+
+    if (errList) {
+      return res.status(500).json({ error: 'Falha ao verificar storage: ' + errList.message });
+    }
+    if (!lista || lista.length === 0) {
+      return res.status(404).json({ error: 'Arquivo nao encontrado em storage. Faca o upload primeiro.' });
+    }
+
+    // REF: igual ao fluxo normal
+    const refManual = (refRaw || '').trim();
+    const refDetectada = detectarRefDoNome(nome_arquivo);
+    const refFinal = refManual || refDetectada || null;
+    const ref = tipo === 'catalogo' ? (refManual || null) : refFinal;
+
+    // Infere categoria
+    let categoriaInferida = null;
+    if (ref) {
+      try {
+        const { data: catData } = await supabase.rpc('lojas_whats_inferir_categoria', { p_ref: ref });
+        categoriaInferida = catData || null;
+      } catch {}
+    }
+
+    const { data: row, error: errIns } = await supabase
+      .from('lojas_whats_midias')
+      .insert({
+        tipo,
+        ref,
+        nome_arquivo,
+        storage_path,
+        size_bytes: size_bytes || lista[0]?.metadata?.size || null,
+        mime_type: mime_type || lista[0]?.metadata?.mimetype || null,
+        descricao: descricao || null,
+        categoria_inferida: categoriaInferida,
+        criada_por: criada_por || 'assistente',
+        ativa: true,
+      })
+      .select().single();
+
+    if (errIns) {
+      // Rollback storage
+      await supabase.storage.from('sofia-midias').remove([storage_path]);
+      return res.status(500).json({ error: 'DB insert: ' + errIns.message });
+    }
+
+    const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(storage_path);
+
+    return res.json({
+      ok: true,
+      midia: row,
+      url_publica: pub?.publicUrl,
+    });
+  } catch (e) {
+    console.error('[midia-upload/register] exception:', e);
     return res.status(500).json({ error: e.message });
   }
 }
