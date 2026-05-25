@@ -2867,6 +2867,7 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora }) {
   const [conversa, setConversa] = useState(null);
   const [mensagens, setMensagens] = useState([]);
+  const [sugestoesPendentes, setSugestoesPendentes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [novoTexto, setNovoTexto] = useState('');
   const [midiaAnexada, setMidiaAnexada] = useState(null);  // {id, tipo, nome_arquivo, url_publica}
@@ -2882,7 +2883,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
     if (!conversaId) return;
     (async () => {
       setLoading(true);
-      const [{ data: conv }, { data: msgs }] = await Promise.all([
+      const [{ data: conv }, { data: msgs }, { data: sugs }] = await Promise.all([
         supabase.from('lojas_whats_conversas')
           .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em')
           .eq('id', conversaId).maybeSingle(),
@@ -2891,9 +2892,20 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
           .eq('conversa_id', conversaId)
           .order('enviada_em', { ascending: true })
           .limit(200),
+        // Sugestoes pendentes da Sofia (Ailson 25/05/2026 fix bug)
+        // Antes: tela de conversa so mostrava mensagens. Sugestoes pendentes
+        // ficavam invisiveis aqui (so apareciam na aba Aprovar do funil).
+        // Caso real: Amanda Goncalves + Gleide Maria em etapa='aprovar' com
+        // sugestao pendente -> tela mostrava "Sem mensagens ainda".
+        supabase.from('lojas_whats_sugestoes')
+          .select('id, tipo, texto_proposto, motivo_proposta, criada_em, status')
+          .eq('conversa_id', conversaId)
+          .eq('status', 'pendente')
+          .order('criada_em', { ascending: true }),
       ]);
       setConversa(conv);
       setMensagens(msgs || []);
+      setSugestoesPendentes(sugs || []);
       setLoading(false);
     })();
   }, [conversaId, reloadTick]);
@@ -3045,12 +3057,27 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
         backgroundRepeat: 'repeat',
         backgroundSize: '500px auto',
       }}>
-        {mensagens.length === 0 ? (
+        {mensagens.length === 0 && sugestoesPendentes.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted, fontSize: fz(12) }}>
             Sem mensagens ainda. Envie a primeira abaixo.
           </div>
         ) : (
-          mensagens.map(m => <Bubble key={m.id} m={m} />)
+          <>
+            {mensagens.map(m => <Bubble key={m.id} m={m} />)}
+            {/* Sugestoes pendentes da Sofia (Ailson 25/05/2026 fix) */}
+            {sugestoesPendentes.map(sug => (
+              <SugestaoPendenteBubble
+                key={sug.id}
+                sug={sug}
+                onAprovou={() => setReloadTick(t => t + 1)}
+                userId={userId}
+                palette={palette}
+                fz={fz}
+                sz={sz}
+                FONT={FONT}
+              />
+            ))}
+          </>
         )}
         <div ref={fimChatRef} />
       </div>
@@ -3138,6 +3165,141 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
 }
 
 // Bubble individual no chat
+// ─── Bubble pra sugestao da Sofia pendente de aprovacao (Ailson 25/05/2026) ──
+// Antes esse bubble nao existia: a tela de conversa so renderizava mensagens
+// ja enviadas (lojas_whats_mensagens). Sugestoes pendentes (lojas_whats_sugestoes
+// status='pendente') ficavam invisiveis aqui — so na aba Aprovar do funil.
+// Resultado: leads recem-processados pela Sofia (Amanda, Gleide 25/05) apareciam
+// como "Sem mensagens ainda" mesmo com sugestao pronta no banco.
+//
+// Agora: cada sugestao pendente vira um bubble especial (fundo diferente,
+// borda amarela) com 3 botoes: Aprovar / Editar / Dispensar. Usa o mesmo
+// endpoint /api/lojas-whats-aprovar usado na aba Aprovar.
+function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT }) {
+  const [editando, setEditando] = useState(false);
+  const [editText, setEditText] = useState(sug.texto_proposto || '');
+  const [acaoEm, setAcaoEm] = useState(false);
+
+  const horario = sug.criada_em ? new Date(sug.criada_em).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  }) : '';
+
+  const acionar = async (acao, texto = null) => {
+    setAcaoEm(true);
+    try {
+      const r = await fetch('/api/lojas-whats-aprovar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sugestao_ids: [sug.id], acao,
+          texto_editado: texto,
+          aprovada_por: userId || 'tamara',
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.falhas > 0) {
+        alert(j.error || 'Erro ao processar');
+      } else {
+        onAprovou?.();
+      }
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    } finally {
+      setAcaoEm(false);
+      setEditando(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, fontFamily: FONT }}>
+      <div style={{
+        maxWidth: '85%', background: '#fff8e0',
+        border: '2px solid #f0c050', borderRadius: 10, padding: 10,
+      }}>
+        <div style={{ fontSize: fz(10), color: '#7a5a00', marginBottom: 6, fontWeight: 600 }}>
+          🤖 Sofia sugeriu — aguardando sua aprovação
+        </div>
+
+        {editando ? (
+          <>
+            <textarea
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              style={{
+                width: '100%', minHeight: 90, padding: 8, borderRadius: 6,
+                border: '1px solid #d0c080', fontSize: fz(13), fontFamily: FONT,
+                resize: 'vertical', whiteSpace: 'pre-wrap',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button
+                onClick={() => acionar('aprovar', editText)}
+                disabled={acaoEm}
+                style={{
+                  padding: '6px 12px', background: '#2c7a4f', color: '#fff',
+                  border: 'none', borderRadius: 6, fontSize: fz(12), cursor: 'pointer',
+                }}
+              >Salvar e enviar</button>
+              <button
+                onClick={() => { setEditando(false); setEditText(sug.texto_proposto); }}
+                disabled={acaoEm}
+                style={{
+                  padding: '6px 12px', background: '#ccc', color: '#333',
+                  border: 'none', borderRadius: 6, fontSize: fz(12), cursor: 'pointer',
+                }}
+              >Cancelar</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{
+              fontSize: fz(13), lineHeight: 1.5, whiteSpace: 'pre-wrap',
+              color: palette.ink, marginBottom: 8,
+            }}>
+              {sug.texto_proposto}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button
+                onClick={() => acionar('aprovar')}
+                disabled={acaoEm}
+                style={{
+                  padding: '6px 10px', background: '#2c7a4f', color: '#fff',
+                  border: 'none', borderRadius: 6, fontSize: fz(12), cursor: 'pointer',
+                }}
+              >✓ Aprovar e enviar</button>
+              <button
+                onClick={() => setEditando(true)}
+                disabled={acaoEm}
+                style={{
+                  padding: '6px 10px', background: '#f0f0f0', color: '#333',
+                  border: 'none', borderRadius: 6, fontSize: fz(12), cursor: 'pointer',
+                }}
+              >✏️ Editar</button>
+              <button
+                onClick={() => {
+                  if (confirm('Dispensar essa sugestão? A conversa vai pra Perdida.')) {
+                    acionar('dispensar');
+                  }
+                }}
+                disabled={acaoEm}
+                style={{
+                  padding: '6px 10px', background: '#fff', color: '#a23',
+                  border: '1px solid #d99', borderRadius: 6, fontSize: fz(12), cursor: 'pointer',
+                }}
+              >✕ Dispensar</button>
+            </div>
+          </>
+        )}
+        {horario && (
+          <div style={{ fontSize: fz(9), color: '#888', marginTop: 6, textAlign: 'right' }}>
+            {horario}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Bubble({ m }) {
   const ehSaida = m.direcao === 'saida';
   const ehAssistente = m.autor === 'assistente';
