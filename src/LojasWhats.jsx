@@ -3068,10 +3068,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
         <textarea
           value={novoTexto}
           onChange={e => setNovoTexto(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
-          }}
-          placeholder="Mensagem (Enter envia, Shift+Enter quebra linha)"
+          placeholder="Mensagem (Enter quebra linha · clica no botao verde pra enviar)"
           rows={1}
           style={{
             flex: 1, padding: '8px 12px', borderRadius: 18,
