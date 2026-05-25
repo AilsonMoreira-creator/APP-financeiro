@@ -337,13 +337,26 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
     atualizada_em: agora
   }).eq('id', sugestaoId);
 
-  // Avança conversa pra etapa='enviada'
-  await supabase.from('lojas_whats_conversas').update({
-    etapa: 'enviada',
-    primeira_msg_enviada_em: agora,
+  // Avança conversa pra etapa apropriada baseado no tipo de sugestao.
+  // Ailson 25/05/2026: bug — antes forcava 'enviada' SEMPRE, mesmo quando
+  // a sugestao era replica em uma conversa ja 'conversando'. Agora:
+  //   - primeira_mensagem (HSM): aprovar -> ENVIADA (espera cliente responder)
+  //   - replica (cliente ja respondeu antes): mantem etapa atual (Conversando,
+  //     follow_up, ou outra) — so atualiza timestamps.
+  // Caso esfecial: se conversa estava em 'follow_up' e replica foi aprovada,
+  // tambem mantem follow_up (Sofia esta no flow de retomada).
+  const updatesConv = {
     ultima_atividade_em: agora,
-    atualizado_em: agora
-  }).eq('id', sug.conversa.id);
+    atualizado_em: agora,
+  };
+  if (sug.tipo === 'primeira_mensagem') {
+    updatesConv.etapa = 'enviada';
+    updatesConv.primeira_msg_enviada_em = agora;
+  }
+  // Pra replica em outras etapas: NAO toca em etapa
+  await supabase.from('lojas_whats_conversas')
+    .update(updatesConv)
+    .eq('id', sug.conversa.id);
 
   return {
     acao,
