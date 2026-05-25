@@ -251,7 +251,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
     logErro('msg-in-save', errMsg);
   }
 
-  // 4. Avanca conversa se estava em 'enviada' (cliente respondeu pela 1a vez)
+  // 4. Avanca etapa quando cliente responde
   const updates = {
     ultima_atividade_em: new Date().toISOString(),
     atualizado_em: new Date().toISOString()
@@ -260,6 +260,20 @@ async function processarMensagemRecebida(msg, valueCtx) {
     updates.etapa = 'conversando';
     updates.cliente_respondeu_em = new Date().toISOString();
     log('msg-in', `conversa ${conversa.id} avancou: enviada -> conversando`);
+  } else if (conversa.etapa === 'follow_up') {
+    // Sprint B Sofia Follow-up (Ailson 25/05/2026): cliente respondeu em FUp
+    // -> volta pra conversando + limpa tag/contadores. Sofia pode marcar
+    // de novo depois se cliente esfriar de novo.
+    updates.etapa = 'conversando';
+    updates.cliente_respondeu_em = new Date().toISOString();
+    updates.follow_up_tag = null;
+    updates.follow_up_vence_em = null;
+    updates.follow_up_entrou_em = null;
+    updates.follow_up_origem = null;
+    updates.follow_up_motivo = null;
+    // follow_up_tentativas NAO reseta — historico fica preservado pra cron
+    // decidir quando 'desistir' (>= 2 tentativas sem retorno -> perdida).
+    log('msg-in', `conversa ${conversa.id} retornou: follow_up -> conversando`);
   }
   await supabase
     .from('lojas_whats_conversas')

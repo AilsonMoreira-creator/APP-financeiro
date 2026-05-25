@@ -905,12 +905,15 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   // Carrega contadores por etapa pros badges nos chips
   // Ailson 25/05/2026: pra etapas 'conversando' e 'quente', badge eh
   // numero de conversas que PRECISAM DE ACAO — ou seja, cliente foi
-  // o ultimo a enviar mensagem (ultima_msg_direcao='entrada'). Demais
-  // etapas mantem contagem total.
+  // o ultimo a enviar mensagem (ultima_msg_direcao='entrada').
+  // Pra 'follow_up' (Sprint B): badge conta conversas com tag VENCIDA
+  // (follow_up_vence_em <= NOW) — Sofia ja gerou sugestao pra revisar
+  // (ou ja deveria). Demais etapas mantem contagem total.
   const ETAPAS_PRECISA_ACAO = ['conversando', 'quente'];
   useEffect(() => {
     (async () => {
       const etapasIds = ETAPAS.map(e => e.id);
+      const agora = new Date().toISOString();
       const counts = {};
       const queries = await Promise.all(
         etapasIds.map(et => {
@@ -919,6 +922,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
             .eq('etapa', et);
           if (ETAPAS_PRECISA_ACAO.includes(et)) {
             q = q.eq('ultima_msg_direcao', 'entrada');
+          } else if (et === 'follow_up') {
+            q = q.lte('follow_up_vence_em', agora);
           }
           return q;
         })

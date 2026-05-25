@@ -68,7 +68,67 @@ function detectarGatilhosQuente(texto) {
   return [...encontrados];
 }
 
-// ─── SYSTEM PROMPT da Sofia ────────────────────────────────────────────────
+// ─── DETECTOR FOLLOW-UP (Sprint B Sofia, Ailson 25/05/2026) ────────────────
+// Quando cliente sinaliza esfriamento ("vou pensar", "vou voltar no site",
+// "amanha te falo"), Sofia marca pra retomar depois. Tag define timing:
+//   1d = cliente prometeu retorno proximo (compromisso curto)
+//   3d = cliente vai pensar (sinal medio)
+//   7d = cliente vai resolver por outro canal (mais frio)
+//
+// Retorna { tag, motivo } ou null se nao detectou sinal.
+// O CONTEUDO da msg de retomada NAO depende da tag — Sofia gera baseado
+// em contexto da conversa (decisao Ailson 25/05/2026).
+
+const PADROES_FUP_1D = [
+  /\b(amanha|amanhã)\s+(eu\s+)?(te\s+)?(falo|respondo|aviso|retorno|volto|confirmo|fecho)\b/i,
+  /\bte\s+(falo|respondo|aviso|retorno)\s+amanha\b/i,
+  /\b(at[ée]\s+)?(amanha|amanhã)\b.*\b(te\s+)?(falo|aviso|respondo)\b/i,
+  /\b(depois\s+do\s+almoço|hoje\s+a\s+noite|hoje\s+a\s+tarde)\b.*\b(te\s+)?(falo|aviso|confirmo)\b/i,
+];
+
+const PADROES_FUP_3D = [
+  /\bvou\s+pensar\b/i,
+  /\bpreciso\s+pensar\b/i,
+  /\bdeixa\s+eu\s+pensar\b/i,
+  /\bdepois\s+(eu\s+)?decido\b/i,
+  /\bvou\s+ver\s+(direitinho|melhor|com\s+calma)\b/i,
+  /\b(t[ôo]|estou)\s+(em\s+)?d[uú]vida\b/i,
+  /\bindeciso\b/i,
+  /\bn[ãa]o\s+sei\s+(se|ainda)\b/i,
+  /\bvou\s+conversar\s+(com|em\s+casa)\b/i,
+];
+
+const PADROES_FUP_7D = [
+  /\bvou\s+(voltar|ver|comprar)\s+(pelo|no)\s*site\b/i,
+  /\b(prefiro|melhor)\s+(comprar|pegar)\s+(pelo|no)\s*site\b/i,
+  /\b(meu\s+)?carrinho\s+no\s+site\b/i,
+  /\bvou\s+olhar\s+(no|pelo)\s*site\b/i,
+  /\bvou\s+terminar\s+(la|lá|por\s*la)\b/i,
+];
+
+function detectarFollowUp(texto) {
+  if (!texto || texto.length < 4) return null;
+  const t = texto.toLowerCase();
+  // Ordem: 1d (mais especifico) > 3d > 7d
+  for (const re of PADROES_FUP_1D) {
+    if (re.test(t)) return { tag: '1d', motivo: 'cliente prometeu retorno em 1d' };
+  }
+  for (const re of PADROES_FUP_3D) {
+    if (re.test(t)) return { tag: '3d', motivo: 'cliente disse que vai pensar' };
+  }
+  for (const re of PADROES_FUP_7D) {
+    if (re.test(t)) return { tag: '7d', motivo: 'cliente vai resolver pelo proprio site' };
+  }
+  return null;
+}
+
+function calcularVencimentoFUp(tag) {
+  const dias = { '1d': 1, '3d': 3, '7d': 7 }[tag];
+  if (!dias) return null;
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return d.toISOString();
+}
 
 const SYSTEM_PROMPT = `Você é Sofia, assistente IA da Amícia, loja de moda feminina em São Paulo (Bom Retiro + Brás + site amicialoja.com.br).
 
@@ -299,6 +359,31 @@ async function processarConversa(conversaId) {
       gatilhos,
       proxima_acao: 'handoff_vendedora'
     };
+  }
+
+  // 4b. Detector FOLLOW-UP (Sprint B Sofia, Ailson 25/05/2026)
+  // Se cliente sinaliza esfriamento ("vou pensar", "amanha te falo", "vou
+  // voltar no site"), marca conversa pra retomada futura ANTES de gerar
+  // replica. A replica em si continua sendo gerada normalmente — Sofia
+  // responde educadamente e depois a conversa entra em 'follow_up'.
+  // Limite de 2 tentativas (depois -> perdida). Se ja tem tentativa em
+  // andamento, nao remarca.
+  const detFup = detectarFollowUp(textoCliente);
+  if (detFup && conv.etapa !== 'follow_up' && (conv.follow_up_tentativas || 0) < 2) {
+    const venceEm = calcularVencimentoFUp(detFup.tag);
+    await supabase.from('lojas_whats_conversas').update({
+      etapa: 'follow_up',
+      follow_up_tag: detFup.tag,
+      follow_up_vence_em: venceEm,
+      follow_up_entrou_em: new Date().toISOString(),
+      follow_up_origem: 'sofia_detectou',
+      follow_up_motivo: detFup.motivo,
+      ultima_atividade_em: new Date().toISOString(),
+      atualizado_em: new Date().toISOString(),
+    }).eq('id', conversaId);
+    log('ia', `conversa=${conversaId} marcou follow_up tag=${detFup.tag} motivo="${detFup.motivo}"`);
+    // Continua o flow normal: ainda vai gerar replica educada agora.
+    // Quando vencer, cron-followup vai gerar nova msg de retomada.
   }
 
   // 5. Monta cardápio dinâmico (em_alta + best_sellers + novidades + matches do carrinho)

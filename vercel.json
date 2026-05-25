@@ -89,6 +89,9 @@
     "api/lojas-whats-cron-resumir.js": {
       "maxDuration": 60
     },
+    "api/lojas-whats-cron-followup.js": {
+      "maxDuration": 300
+    },
     "api/lojas-aviso-falta-whatsapp-cron.js": {
       "maxDuration": 60
     },
@@ -269,6 +272,10 @@
     {
       "path": "/api/lojas-whats-cron-resumir",
       "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/lojas-whats-cron-followup",
+      "schedule": "0 12,15,18,21 * * *"
     }
   ]
 }
