@@ -27,7 +27,16 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  if (req.method === 'GET') return listarRascunhos(req, res);
+  if (req.method === 'GET') {
+    // Suporte mobile: GET ?submeter=1&name=... executa submit
+    // (gambiarra pra Ailson testar pelo Safari sem terminal)
+    if (req.query.submeter === '1' && req.query.name) {
+      // Injeta name no body pra reaproveitar submeter()
+      req.body = { name: req.query.name };
+      return submeter(req, res);
+    }
+    return listarRascunhos(req, res);
+  }
   if (req.method === 'POST') return submeter(req, res);
 
   return res.status(405).json({ error: 'method_not_allowed' });
