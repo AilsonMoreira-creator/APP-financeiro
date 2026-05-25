@@ -3203,7 +3203,12 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
             title={id ? `Ir pra ${lado === 'esq' ? 'anterior' : 'próxima'}` : 'Fim da lista'}
             style={{
               position: 'fixed',
-              [lado === 'esq' ? 'left' : 'right']: 8,
+              // Aproxima do card do chat (wrapper 960px centralizado).
+              // Em tela larga: seta encosta na margem do wrapper + 12px de gap.
+              // Em tela estreita: fallback 8px da borda (max evita seta sair da tela).
+              // Conta: metade wrapper (480) + gap (12) + largura seta (44) = 536.
+              // Ailson 25/05/2026
+              [lado === 'esq' ? 'left' : 'right']: 'max(8px, calc(50% - 536px))',
               top: '50%', transform: 'translateY(-50%)',
               width: 44, height: 44, borderRadius: '50%',
               background: id ? 'rgba(255,255,255,0.95)' : 'rgba(200,200,200,0.5)',
@@ -3294,8 +3299,8 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
         maxWidth: '85%', background: '#fff8e0',
         border: '2px solid #f0c050', borderRadius: 10, padding: 10,
       }}>
-        <div style={{ fontSize: fz(10), color: '#7a5a00', marginBottom: 6, fontWeight: 600 }}>
-          🤖 Sofia sugeriu — aguardando sua aprovação
+        <div style={{ fontSize: fz(10), color: '#7a5a00', marginBottom: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Bot size={12} strokeWidth={2} /> Sofia sugeriu — aguardando sua aprovação
         </div>
 
         {editando ? (
