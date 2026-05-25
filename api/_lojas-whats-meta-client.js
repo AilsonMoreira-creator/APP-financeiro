@@ -269,6 +269,67 @@ export async function listarTemplates() {
   return res?.data || [];
 }
 
+// ─── SUBMETER TEMPLATE PRA APROVACAO META ─────────────────────────────────
+
+/**
+ * Submete um template pra aprovacao Meta na WABA configurada (META_WA_WABA_ID).
+ *
+ * O template DEVE existir no banco (lojas_whats_templates) com:
+ *   - name, category, language, body_text, variables (jsonb), botoes (jsonb opcional)
+ *
+ * Retorna a resposta crua da Meta. Caller deve persistir meta_template_id
+ * + status novo em lojas_whats_templates.
+ *
+ * Docs: https://developers.facebook.com/docs/whatsapp/business-management-api/message-templates
+ *
+ * IMPORTANTE: Template pertence ao WABA, nao ao Phone Number.
+ * Nao precisa de numero ativo na WABA pra submeter.
+ */
+export async function submeterTemplate(tplRow) {
+  // 1. Monta componente BODY com exemplos das variaveis
+  const components = [];
+
+  // BODY (sempre presente)
+  const bodyComp = { type: 'BODY', text: tplRow.body_text };
+  if (Array.isArray(tplRow.variables) && tplRow.variables.length > 0) {
+    // Meta exige exemplos em formato [[ex1, ex2, ...]]
+    const exemplos = tplRow.variables
+      .sort((a, b) => Number(a.nome) - Number(b.nome))
+      .map(v => v.exemplo || 'exemplo');
+    bodyComp.example = { body_text: [exemplos] };
+  }
+  components.push(bodyComp);
+
+  // BUTTONS (opcional)
+  if (Array.isArray(tplRow.botoes) && tplRow.botoes.length > 0) {
+    components.push({
+      type: 'BUTTONS',
+      buttons: tplRow.botoes.map(b => {
+        if (b.type === 'URL') {
+          return { type: 'URL', text: b.text, url: b.url };
+        }
+        if (b.type === 'PHONE_NUMBER') {
+          return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone_number };
+        }
+        // QUICK_REPLY
+        return { type: 'QUICK_REPLY', text: b.text };
+      })
+    });
+  }
+
+  const body = {
+    name: tplRow.name,
+    language: tplRow.language || 'pt_BR',
+    category: tplRow.category || 'MARKETING',
+    components
+  };
+
+  return await metaFetch(
+    `/${process.env.META_WA_WABA_ID}/message_templates`,
+    { method: 'POST', body: JSON.stringify(body) }
+  );
+}
+
 // ─── MARCAR MENSAGEM COMO LIDA (boa pratica WhatsApp) ─────────────────────
 
 export async function marcarComoLida(messageId) {
