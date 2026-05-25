@@ -13,7 +13,7 @@
 
 import { supabase, setCors } from './_lojas-helpers.js';
 
-export const config = { maxDuration: 600 };
+export const config = { maxDuration: 800 };
 
 export default async function handler(req, res) {
   setCors(res);
@@ -98,7 +98,13 @@ export default async function handler(req, res) {
   // do contador por minuto.
   const baseUrl = `https://${req.headers.host}`;
   const resultados = [];
-  const DELAY_ENTRE_VENDEDORAS_MS = 30000; // 30s
+  const DELAY_ENTRE_VENDEDORAS_MS = 20000; // 20s
+  // Ailson 25/05/2026: reduzido 30s -> 20s. Em 24/05 Vanessa (6a vendedora)
+  // nao foi processada — cron timeoutou aos 10min. Conta: 5x70s IA + 5x30s
+  // delay = 510s, sobrou 90s pro retry da Vanessa. Mas retry 1 = 63s +
+  // delay 5s + retry 2 = mais 63s = 131s. Estourou.
+  // Agora: 5x70s + 5x20s = 460s + Vanessa 70s + retry max 70s = ~600s.
+  // Combinado com maxDuration aumentado pra 800s, sobra 200s de folga.
   // Ailson 07/05/2026: reduzido de 75s pra 30s. Margem de 600s do Vercel
   // estava apertada (~8min com prompt maior dos GAPs 1-4 da auditoria).
   // Anthropic Sonnet 4.6 permite ~50 chamadas/min — 30s entre 5 vendedoras
