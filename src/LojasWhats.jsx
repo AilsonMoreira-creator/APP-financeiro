@@ -105,6 +105,23 @@ const fmtPhone = (tel) => {
   return tel;
 };
 
+// Formata CPF (11) ou CNPJ (14). Se ja tiver formato, devolve como esta.
+const fmtDocumento = (doc) => {
+  if (!doc) return '';
+  const s = String(doc).replace(/\D/g, '');
+  if (s.length === 11) {
+    return `${s.slice(0,3)}.${s.slice(3,6)}.${s.slice(6,9)}-${s.slice(9)}`;
+  }
+  if (s.length === 14) {
+    return `${s.slice(0,2)}.${s.slice(2,5)}.${s.slice(5,8)}/${s.slice(8,12)}-${s.slice(12)}`;
+  }
+  return doc;
+};
+
+// Fonte do chat — Helvetica pra ficar mais proximo do WhatsApp.
+// Outras telas do Sofia continuam com FONT (Georgia do app financeiro).
+const FONT_CHAT = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif';
+
 const fmtRelTime = (iso) => {
   if (!iso) return '';
   const dt = new Date(iso);
@@ -911,7 +928,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       const limite = expandido ? 500 : 50;
       let q = supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site')
+        .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site')
         // Prioritarios primeiro
         .order('lead_prioritario', { ascending: false });
       // Aba 'processando' (fila visivel pra assistente): CNPJ primeiro, data desc
@@ -1511,6 +1528,12 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
         {/* Area clicavel: abre chat */}
         <div onClick={onAbrirChat} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Icone origem: carrinho abandonado (Ailson 27/05/2026).
+                Hoje todos leads vem dai. No futuro: outras origens viram outros icones. */}
+            {c.carrinho_id && (
+              <ShoppingCart size={sz(12)} color={palette.inkMuted}
+                style={{ flexShrink: 0 }} />
+            )}
             {ehPJ ? <Building2 size={sz(12)} color={palette.warn} /> : <UserIcon size={sz(12)} color={palette.accent} />}
             <span style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {c.nome_cliente || '—'}
@@ -1530,6 +1553,9 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
           </div>
           <div style={{ fontSize: fz(11), color: palette.inkMuted, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <span>{fmtPhone(c.telefone)}</span>
+            {c.documento && (
+              <span>· {c.tipo_documento}: {fmtDocumento(c.documento)}</span>
+            )}
             {c.qtd_pecas > 0 && <span>· {c.qtd_pecas} peças</span>}
             {Number(c.valor_carrinho) > 0 && <span>· {fmtMoney(c.valor_carrinho)}</span>}
           </div>
@@ -2858,7 +2884,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
       setLoading(true);
       const [{ data: conv }, { data: msgs }] = await Promise.all([
         supabase.from('lojas_whats_conversas')
-          .select('id, telefone, nome_cliente, tipo_documento, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em')
+          .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em')
           .eq('id', conversaId).maybeSingle(),
         supabase.from('lojas_whats_mensagens')
           .select('id, direcao, autor, tipo_midia, texto, meta_message_id, status, enviada_em')
@@ -2923,7 +2949,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
   return (
     <div style={{
       position: 'fixed', inset: 0, background: palette.beige, zIndex: 100,
-      display: 'flex', flexDirection: 'column', fontFamily: FONT,
+      display: 'flex', flexDirection: 'column', fontFamily: FONT_CHAT,
     }}>
       {/* Wrapper centralizado: chat com max-width pra nao ficar com balöes
           nos extremos em telas largas. Fundo bege da tela cheia fica visivel
@@ -2947,11 +2973,20 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
           <ChevronRight size={sz(16)} style={{ transform: 'rotate(180deg)' }} />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: fz(15), fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {conversa.nome_cliente || fmtPhone(conversa.telefone)}
+          <div style={{ fontSize: fz(15), fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {conversa.carrinho_id && (
+              <ShoppingCart size={sz(14)} style={{ opacity: 0.8, flexShrink: 0 }}
+                titleAccess="Origem: carrinho abandonado" />
+            )}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {conversa.nome_cliente || fmtPhone(conversa.telefone)}
+            </span>
           </div>
           <div style={{ fontSize: fz(11), opacity: 0.8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <span>{fmtPhone(conversa.telefone)}</span>
+            {conversa.documento && (
+              <span>· {conversa.tipo_documento}: {fmtDocumento(conversa.documento)}</span>
+            )}
             {conversa.qtd_pecas > 0 && <span>· {conversa.qtd_pecas} pç</span>}
             {Number(conversa.valor_carrinho) > 0 && <span>· {fmtMoney(conversa.valor_carrinho)}</span>}
             <span>·</span>
@@ -2975,7 +3010,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
               background: '#f59e0b', border: '1px solid #d97706',
               color: '#fff', padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 6,
-              fontFamily: FONT, fontSize: fz(12), fontWeight: 600, whiteSpace: 'nowrap',
+              fontFamily: FONT_CHAT, fontSize: fz(12), fontWeight: 600, whiteSpace: 'nowrap',
             }}>
             <Users size={sz(14)} />
             Vendedora
@@ -3072,7 +3107,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora })
           rows={1}
           style={{
             flex: 1, padding: '8px 12px', borderRadius: 18,
-            border: `1px solid ${palette.beige}`, fontFamily: FONT,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT_CHAT,
             fontSize: fz(13), color: palette.ink, background: palette.bg,
             resize: 'none', minHeight: 36, maxHeight: 120, lineHeight: 1.4,
             boxSizing: 'border-box',

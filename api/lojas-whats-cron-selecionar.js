@@ -122,7 +122,7 @@ async function executarSelecao(req, res) {
       .from('lojas_leads_carrinho')
       .select(`
         id, first_name, nome_completo,
-        telefone_norm, tipo_pessoa, taxvat_norm,
+        telefone_norm, tipo_pessoa, taxvat_norm, taxvat_raw,
         qtd_pecas_ultimo_carrinho, valor_ultimo_carrinho,
         ultimo_carrinho_em, last_access, primeira_visita_em,
         ja_e_cliente_lojas_id, vendedora_atribuida_id, vendedora_dona_id,
@@ -263,6 +263,7 @@ async function criarConversaNaFila(lead) {
       telefone: lead._telE164,
       nome_cliente: lead.nome_completo || lead.first_name,
       tipo_documento: lead.tipo_pessoa === 'PJ' ? 'CNPJ' : 'CPF',
+      documento: lead.taxvat_raw || null,  // Ailson 27/05/2026
       etapa: 'processando',
       valor_carrinho: lead.valor_ultimo_carrinho,
       qtd_pecas: lead.qtd_pecas_ultimo_carrinho,
