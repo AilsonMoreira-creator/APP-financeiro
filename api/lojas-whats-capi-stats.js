@@ -47,11 +47,11 @@ export default async function handler(req, res) {
     const varejo = enviados.filter(e => e.venda_categoria === 'varejo');
 
     // Origem: auto vs manual
-    const auto_match = enviados.filter(e => (e.origem_capi || 'auto_match') === 'auto_match');
-    const manual_vendedora = enviados.filter(e => e.origem_capi === 'manual_vendedora');
+    const auto_cron = enviados.filter(e => (e.origem_capi || 'auto_cron') === 'auto_cron');
+    const manual_vendedora_externa = enviados.filter(e => e.origem_capi === 'manual_vendedora_externa');
     // Breakdown por vendedora (so manual)
     const porVendedora = {};
-    for (const e of manual_vendedora) {
+    for (const e of manual_vendedora_externa) {
       const v = e.vendedora_nome || '?';
       if (!porVendedora[v]) porVendedora[v] = { qtd: 0, valor: 0 };
       porVendedora[v].qtd++;
@@ -95,7 +95,7 @@ export default async function handler(req, res) {
         tipo_match: e.tipo_match,
         ctwa_clid: e.ctwa_clid ? `${e.ctwa_clid.slice(0, 8)}...` : null,
         venda_categoria: e.venda_categoria,
-        origem_capi: e.origem_capi || 'auto_match',
+        origem_capi: e.origem_capi || 'auto_cron',
         vendedora_nome: e.vendedora_nome || null,
         // Auto: nome vem da conversa. Manual: nome vem do dados_manual
         cliente_nome: conv?.nome_cliente || dm.nome_cliente || null,
@@ -115,8 +115,8 @@ export default async function handler(req, res) {
         sem_ctwa_clid,
         atacado: { qtd: atacado.length, valor: atacado.reduce((s, e) => s + Number(e.valor || 0), 0) },
         varejo: { qtd: varejo.length, valor: varejo.reduce((s, e) => s + Number(e.valor || 0), 0) },
-        auto_match: { qtd: auto_match.length, valor: auto_match.reduce((s, e) => s + Number(e.valor || 0), 0) },
-        manual_vendedora: { qtd: manual_vendedora.length, valor: manual_vendedora.reduce((s, e) => s + Number(e.valor || 0), 0) },
+        auto_cron: { qtd: auto_cron.length, valor: auto_cron.reduce((s, e) => s + Number(e.valor || 0), 0) },
+        manual_vendedora_externa: { qtd: manual_vendedora_externa.length, valor: manual_vendedora_externa.reduce((s, e) => s + Number(e.valor || 0), 0) },
       },
       manual_por_vendedora,
       serie_diaria,

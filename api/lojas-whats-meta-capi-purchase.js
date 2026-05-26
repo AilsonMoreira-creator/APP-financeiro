@@ -170,7 +170,7 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
       conversa_id, venda_info, tipo_match, pixelId, eventId,
       payload, response: { erro: e.message }, status: 'falhou', erro: e.message,
       ctwaClid: conv.ctwa_clid,
-      origemCapi: 'auto_match',
+      origemCapi: 'auto_cron',
     });
     return { status: 'falhou', erro: e.message };
   }
@@ -181,7 +181,7 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
     payload, response: respJson, status: ok ? 'enviado' : 'falhou',
     erro: ok ? null : JSON.stringify(respJson).slice(0, 500),
     ctwaClid: conv.ctwa_clid,
-    origemCapi: 'auto_match',
+    origemCapi: 'auto_cron',
   });
 
   if (!ok) {
@@ -302,7 +302,7 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
       tipo_match: 'manual', pixelId, eventId,
       payload, response: { erro: e.message }, status: 'falhou', erro: e.message,
       ctwaClid: null,
-      origemCapi: 'manual_vendedora',
+      origemCapi: 'manual_vendedora_externa',
       vendedoraNome: vendedora_nome,
       dadosManual: dados_manual,
     });
@@ -317,7 +317,7 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
     payload, response: respJson, status: ok ? 'enviado' : 'falhou',
     erro: ok ? null : JSON.stringify(respJson).slice(0, 500),
     ctwaClid: null,
-    origemCapi: 'manual_vendedora',
+    origemCapi: 'manual_vendedora_externa',
     vendedoraNome: vendedora_nome,
     dadosManual: dados_manual,
   });
@@ -357,7 +357,7 @@ async function salvarAudit({ conversa_id, venda_info, tipo_match, pixelId, event
       meta_response: response,
       status,
       erro,
-      origem_capi: origemCapi || 'auto_match',
+      origem_capi: origemCapi || 'auto_cron',
       vendedora_nome: vendedoraNome || null,
       dados_manual: dadosManual || null,
     });

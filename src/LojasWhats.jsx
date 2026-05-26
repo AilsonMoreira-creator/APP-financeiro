@@ -2342,7 +2342,7 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
   if (loading || !dados || dados.error) return null;
   const k = dados.kpis || {};
   const semConversoes = (k.total_eventos || 0) === 0;
-  const qtdManual = k.manual_vendedora?.qtd || 0;
+  const qtdManual = k.manual_vendedora_externa?.qtd || 0;
 
   return (
     <div style={{ marginTop: 22, paddingTop: 16, borderTop: `2px solid ${palette.beige}` }}>
@@ -2392,7 +2392,7 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
             <KpiCapi label="Match telefone" valor={k.match_telefone} cor={palette.inkSoft} />
             <KpiCapi label="Match CPF/CNPJ" valor={k.match_documento} cor={palette.inkSoft} />
             {qtdManual > 0 && (
-              <KpiCapi label="Manual vendedora" valor={`${qtdManual} · R$ ${Number(k.manual_vendedora?.valor||0).toLocaleString('pt-BR', {maximumFractionDigits:0})}`}
+              <KpiCapi label="Manual vendedora" valor={`${qtdManual} · R$ ${Number(k.manual_vendedora_externa?.valor||0).toLocaleString('pt-BR', {maximumFractionDigits:0})}`}
                 cor="#8b5cf6"
                 hint="Vendas informadas manualmente pelas vendedoras (sem conversa Sofia)" />
             )}
@@ -2421,7 +2421,7 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
                 Últimas conversões reportadas
               </div>
               {dados.ultimos.map((e, i) => {
-                const isManual = e.origem_capi === 'manual_vendedora';
+                const isManual = e.origem_capi === 'manual_vendedora_externa';
                 return (
                   <div key={i} style={{
                     padding: '6px 10px', display: 'flex', gap: 8, alignItems: 'center',
@@ -2429,19 +2429,16 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
                     fontSize: fz(11),
                     background: isManual ? '#faf5ff' : 'transparent',
                   }}>
-                    {isManual && (
-                      <span style={{
-                        background: '#8b5cf6', color: '#fff', padding: '1px 5px',
-                        borderRadius: 4, fontSize: fz(9), fontWeight: 700,
-                        flexShrink: 0,
-                      }}>✋ MANUAL</span>
-                    )}
                     <div style={{ flex: '1 1 0', minWidth: 0 }}>
                       <div style={{ fontWeight: 600, color: palette.ink }}>
                         {e.cliente_nome || 'Sem nome'}{' '}
                         <span style={{ fontWeight: 400, color: palette.inkMuted, fontSize: fz(10) }}>
                           · #{e.numero_pedido || '?'} · {e.venda_categoria}
-                          {isManual && e.vendedora_nome && ` · ${e.vendedora_nome}`}
+                          {isManual && e.vendedora_nome && (
+                            <span style={{ color: '#8b5cf6', fontWeight: 600 }}>
+                              {' '}· [manual · {e.vendedora_nome}]
+                            </span>
+                          )}
                         </span>
                       </div>
                       <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
@@ -2714,7 +2711,7 @@ function ModalVendaManualMeta({ onClose, onSucesso }) {
             fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
             opacity: (!valido || enviando) ? 0.6 : 1,
           }}>
-            {enviando ? 'Enviando...' : 'Disparar Purchase Meta'}
+            {enviando ? 'Enviando...' : 'Enviar pra Meta'}
           </button>
         </div>
       </div>
