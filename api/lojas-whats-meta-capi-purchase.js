@@ -38,7 +38,28 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   try {
-    const { conversa_id, venda_info, tipo_match } = req.body || {};
+    const body = req.body || {};
+
+    // ─── Fluxo MANUAL (vendedora informa venda via formulario) ───────────────
+    // POST { manual:true, dados_manual:{telefone, valor, numero_pedido, ...}, vendedora_nome }
+    if (body.manual === true) {
+      const { dados_manual, vendedora_nome } = body;
+      if (!vendedora_nome) return res.status(400).json({ error: 'vendedora_nome_obrigatorio' });
+      if (!dados_manual?.telefone) return res.status(400).json({ error: 'dados_manual.telefone_obrigatorio' });
+      if (!dados_manual?.valor || dados_manual.valor <= 0) {
+        return res.status(400).json({ error: 'dados_manual.valor obrigatorio (>0)' });
+      }
+      if (!dados_manual?.numero_pedido) {
+        return res.status(400).json({ error: 'dados_manual.numero_pedido_obrigatorio (necessario pra idempotencia)' });
+      }
+      const resultado = await dispararPurchaseManual({ dados_manual, vendedora_nome });
+      const httpStatus = resultado.status === 'enviado' ? 200
+                       : resultado.status === 'duplicado' ? 200 : 500;
+      return res.status(httpStatus).json(resultado);
+    }
+
+    // ─── Fluxo AUTO (cron de match Sofia x Mire) ─────────────────────────────
+    const { conversa_id, venda_info, tipo_match } = body;
     if (!conversa_id) return res.status(400).json({ error: 'conversa_id_obrigatorio' });
     if (!venda_info?.valor || venda_info.valor <= 0) {
       return res.status(400).json({ error: 'venda_info.valor obrigatorio (>0)' });
@@ -149,6 +170,7 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
       conversa_id, venda_info, tipo_match, pixelId, eventId,
       payload, response: { erro: e.message }, status: 'falhou', erro: e.message,
       ctwaClid: conv.ctwa_clid,
+      origemCapi: 'auto_match',
     });
     return { status: 'falhou', erro: e.message };
   }
@@ -159,6 +181,7 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
     payload, response: respJson, status: ok ? 'enviado' : 'falhou',
     erro: ok ? null : JSON.stringify(respJson).slice(0, 500),
     ctwaClid: conv.ctwa_clid,
+    origemCapi: 'auto_match',
   });
 
   if (!ok) {
@@ -184,26 +207,159 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
   };
 }
 
-async function salvarAudit({ conversa_id, venda_info, tipo_match, pixelId, eventId, payload, response, status, erro, ctwaClid }) {
+// ─── Fluxo MANUAL: vendedora informa venda via formulario (sem conversa Sofia) ─
+// Usado quando cliente comprou via anuncio Meta mas nao passou por Sofia OU
+// passou e o cron de match nao pegou. Vendedora preenche dados do cliente
+// (telefone, nome opcional, CPF opcional, valor, numero pedido) e o evento
+// Purchase vai pro Meta com user_data hashed pra advanced matching.
+//
+// Sem ctwa_clid (Vanessa nunca tera). Sem ligacao com conversa Sofia.
+// Idempotencia: event_id = sha256('manual|telefone|numero_pedido|valor)
+export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
+  const {
+    telefone, nome_cliente, documento,
+    valor, numero_pedido, categoria,
+  } = dados_manual;
+
+  // 1. Variaveis Meta
+  const pixelId = process.env.META_CAPI_PIXEL_B2B_ID;
+  const token = process.env.META_ADS_TOKEN || process.env.META_WA_ACCESS_TOKEN;
+  if (!pixelId) return { status: 'falhou', erro: 'META_CAPI_PIXEL_B2B_ID nao configurado em env' };
+  if (!token) return { status: 'falhou', erro: 'token Meta nao configurado em env (META_ADS_TOKEN ou META_WA_ACCESS_TOKEN)' };
+
+  // 2. event_id deterministico (idempotencia Meta-side + nossa)
+  const eventId = crypto.createHash('sha256')
+    .update(`manual|${telefone}|${numero_pedido}|${valor}`)
+    .digest('hex')
+    .slice(0, 32);
+
+  // 3. Idempotencia nossa: ja tem evento manual com esse event_id?
+  const { data: jaExiste } = await supabase
+    .from('lojas_whats_capi_eventos')
+    .select('id, status, enviado_em')
+    .eq('meta_event_id', eventId)
+    .maybeSingle();
+  if (jaExiste && jaExiste.status === 'enviado') {
+    log('capi-purchase-manual', `event_id ja enviado (${eventId.slice(0,8)}) — skip`);
+    return { status: 'duplicado', event_id: eventId, enviado_em_anterior: jaExiste.enviado_em };
+  }
+
+  // 4. Hashing pra Meta
+  const sha = (v) => v ? crypto.createHash('sha256')
+    .update(String(v).toLowerCase().trim()).digest('hex') : null;
+
+  // Telefone E.164 sem '+'
+  const telDigits = String(telefone || '').replace(/\D/g, '');
+  const telE164 = telDigits.startsWith('55') ? telDigits : `55${telDigits.slice(-11)}`;
+
+  // Nome separa primeiro / ultimo (opcional)
+  const nomePartes = (nome_cliente || '').trim().split(/\s+/).filter(Boolean);
+  const firstName = nomePartes[0] || null;
+  const lastName = nomePartes.length > 1 ? nomePartes.slice(-1)[0] : null;
+
+  const user_data = {
+    ph: sha(telE164),
+    external_id: sha(documento),
+    fn: sha(firstName),
+    ln: sha(lastName),
+  };
+  for (const k of Object.keys(user_data)) {
+    if (user_data[k] === null || user_data[k] === undefined) delete user_data[k];
+  }
+
+  // 5. Payload
+  const eventData = {
+    event_name: 'Purchase',
+    event_time: Math.floor(Date.now() / 1000),
+    event_id: eventId,
+    action_source: 'business_messaging',
+    user_data,
+    custom_data: {
+      currency: 'BRL',
+      value: Number(valor),
+      order_id: numero_pedido,
+      content_category: categoria || 'varejo',
+    },
+  };
+  const payload = { data: [eventData] };
+
+  // 6. POST pra Meta
+  const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${pixelId}/events?access_token=${encodeURIComponent(token)}`;
+  let respJson, ok;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    respJson = await r.json();
+    ok = r.ok;
+  } catch (e) {
+    logErro('capi-purchase-manual/fetch', e);
+    await salvarAudit({
+      conversa_id: null,
+      venda_info: { valor, numero_pedido, categoria },
+      tipo_match: 'manual', pixelId, eventId,
+      payload, response: { erro: e.message }, status: 'falhou', erro: e.message,
+      ctwaClid: null,
+      origemCapi: 'manual_vendedora',
+      vendedoraNome: vendedora_nome,
+      dadosManual: dados_manual,
+    });
+    return { status: 'falhou', erro: e.message };
+  }
+
+  // 7. Audit
+  await salvarAudit({
+    conversa_id: null,
+    venda_info: { valor, numero_pedido, categoria },
+    tipo_match: 'manual', pixelId, eventId,
+    payload, response: respJson, status: ok ? 'enviado' : 'falhou',
+    erro: ok ? null : JSON.stringify(respJson).slice(0, 500),
+    ctwaClid: null,
+    origemCapi: 'manual_vendedora',
+    vendedoraNome: vendedora_nome,
+    dadosManual: dados_manual,
+  });
+
+  if (!ok) {
+    logErro('capi-purchase-manual/meta', new Error(JSON.stringify(respJson)));
+    return { status: 'falhou', erro: respJson?.error?.message || 'meta_retornou_erro', response: respJson };
+  }
+
+  log('capi-purchase-manual', `vend=${vendedora_nome} tel=${telDigits.slice(-4)} valor=R$${valor} pedido=${numero_pedido} event_id=${eventId.slice(0,8)} ok`);
+  return {
+    status: 'enviado',
+    event_id: eventId,
+    valor: Number(valor),
+    vendedora_nome,
+    response: respJson,
+  };
+}
+
+async function salvarAudit({ conversa_id, venda_info, tipo_match, pixelId, eventId, payload, response, status, erro, ctwaClid, origemCapi, vendedoraNome, dadosManual }) {
   // user_data hashed jamais salvar plain — payload ja vem com hashes,
   // mas removo pra evitar contaminacao no audit log
   const payloadSafe = JSON.parse(JSON.stringify(payload));
   
   try {
     await supabase.from('lojas_whats_capi_eventos').insert({
-      conversa_id,
+      conversa_id: conversa_id || null,
       venda_id: venda_info.venda_id || null,
       venda_categoria: venda_info.categoria || null,
       numero_pedido: venda_info.numero_pedido || null,
       meta_pixel_id: pixelId,
       meta_event_id: eventId,
       tipo_match,
-      ctwa_clid: ctwaClid,
+      ctwa_clid: ctwaClid || null,
       valor: venda_info.valor,
       request_payload: payloadSafe,
       meta_response: response,
       status,
       erro,
+      origem_capi: origemCapi || 'auto_match',
+      vendedora_nome: vendedoraNome || null,
+      dados_manual: dadosManual || null,
     });
   } catch (e) {
     // Se for unique violation no event_id, ja foi enviado antes — ok

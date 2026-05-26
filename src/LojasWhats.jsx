@@ -2325,6 +2325,8 @@ function ConversaoTab({ refreshTick }) {
 function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
   const [dados, setDados] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [modalManualAberto, setModalManualAberto] = useState(false);
+  const [tickLocal, setTickLocal] = useState(0);
 
   useEffect(() => {
     let cancelado = false;
@@ -2335,11 +2337,12 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
       .then(d => { if (!cancelado) { setDados(d); setLoading(false); } })
       .catch(() => { if (!cancelado) setLoading(false); });
     return () => { cancelado = true; };
-  }, [dataInicio, dataFim, refreshTick]);
+  }, [dataInicio, dataFim, refreshTick, tickLocal]);
 
   if (loading || !dados || dados.error) return null;
   const k = dados.kpis || {};
   const semConversoes = (k.total_eventos || 0) === 0;
+  const qtdManual = k.manual_vendedora?.qtd || 0;
 
   return (
     <div style={{ marginTop: 22, paddingTop: 16, borderTop: `2px solid ${palette.beige}` }}>
@@ -2349,7 +2352,7 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
           background: '#1877f2', color: '#fff',
           padding: '3px 8px', borderRadius: 6, fontSize: fz(11),
         }}>f Ads</span>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: fz(14), fontWeight: 700, color: palette.ink }}>
             Conversões enviadas pra Meta (CAPI)
           </div>
@@ -2357,6 +2360,14 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
             Cada evento Purchase reportado fecha o loop de attribution Click-to-WhatsApp
           </div>
         </div>
+        <button onClick={() => setModalManualAberto(true)} style={{
+          padding: '6px 10px', borderRadius: 6, cursor: 'pointer',
+          background: '#1877f2', color: '#fff', border: '1px solid #1877f2',
+          fontSize: fz(12), fontWeight: 600, fontFamily: FONT,
+          whiteSpace: 'nowrap',
+        }}>
+          + Informar venda manual
+        </button>
       </div>
 
       {semConversoes ? (
@@ -2366,7 +2377,8 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
           borderRadius: 8, fontSize: fz(12),
         }}>
           Nenhuma conversão CAPI enviada no período.<br/>
-          Eventos disparam quando venda Miré cruza com conversa Sofia origem Anúncio/Carrinho.
+          Eventos disparam quando venda Miré cruza com conversa Sofia origem Anúncio/Carrinho<br/>
+          <span style={{ fontSize: fz(11) }}>ou quando vendedora informa venda manualmente acima.</span>
         </div>
       ) : (
         <>
@@ -2374,11 +2386,16 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
             <KpiCapi label="Eventos enviados" valor={k.total_eventos} cor="#1877f2" />
             <KpiCapi label="Valor total" valor={`R$ ${Number(k.valor_total||0).toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} cor={palette.ok} />
-            <KpiCapi label="Com CTWA ID" valor={`${k.com_ctwa_clid}/${k.total_eventos}`} 
+            <KpiCapi label="Com CTWA ID" valor={`${k.com_ctwa_clid}/${k.total_eventos}`}
               cor={k.com_ctwa_clid === k.total_eventos ? palette.ok : palette.warn}
               hint="ctwa_clid garante attribution exata na Meta" />
             <KpiCapi label="Match telefone" valor={k.match_telefone} cor={palette.inkSoft} />
             <KpiCapi label="Match CPF/CNPJ" valor={k.match_documento} cor={palette.inkSoft} />
+            {qtdManual > 0 && (
+              <KpiCapi label="Manual vendedora" valor={`${qtdManual} · R$ ${Number(k.manual_vendedora?.valor||0).toLocaleString('pt-BR', {maximumFractionDigits:0})}`}
+                cor="#8b5cf6"
+                hint="Vendas informadas manualmente pelas vendedoras (sem conversa Sofia)" />
+            )}
             {k.falhados > 0 && <KpiCapi label="Falhados" valor={k.falhados} cor={palette.alert} />}
           </div>
 
@@ -2390,6 +2407,11 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
             <div style={{ padding: '6px 12px', background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 6 }}>
               <strong>Varejo:</strong> {k.varejo?.qtd || 0} · R$ {Number(k.varejo?.valor||0).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0})}
             </div>
+            {dados.manual_por_vendedora?.length > 0 && dados.manual_por_vendedora.map(mv => (
+              <div key={mv.vendedora_nome} style={{ padding: '6px 12px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 6 }}>
+                <strong>✋ {mv.vendedora_nome}:</strong> {mv.qtd} · R$ {Number(mv.valor||0).toLocaleString('pt-BR', {maximumFractionDigits:0})}
+              </div>
+            ))}
           </div>
 
           {/* Lista últimas conversões */}
@@ -2398,36 +2420,304 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
               <div style={{ padding: '6px 10px', borderBottom: `1px solid ${palette.beige}`, fontSize: fz(11), fontWeight: 700, color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 Últimas conversões reportadas
               </div>
-              {dados.ultimos.map((e, i) => (
-                <div key={i} style={{
-                  padding: '6px 10px', display: 'flex', gap: 8, alignItems: 'center',
-                  borderBottom: i < dados.ultimos.length - 1 ? `1px solid ${palette.beige}` : 'none',
-                  fontSize: fz(11),
-                }}>
-                  <div style={{ flex: '1 1 0', minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, color: palette.ink }}>
-                      {e.cliente_nome || 'Sem nome'}{' '}
-                      <span style={{ fontWeight: 400, color: palette.inkMuted, fontSize: fz(10) }}>
-                        · #{e.numero_pedido || '?'} · {e.venda_categoria}
-                      </span>
+              {dados.ultimos.map((e, i) => {
+                const isManual = e.origem_capi === 'manual_vendedora';
+                return (
+                  <div key={i} style={{
+                    padding: '6px 10px', display: 'flex', gap: 8, alignItems: 'center',
+                    borderBottom: i < dados.ultimos.length - 1 ? `1px solid ${palette.beige}` : 'none',
+                    fontSize: fz(11),
+                    background: isManual ? '#faf5ff' : 'transparent',
+                  }}>
+                    {isManual && (
+                      <span style={{
+                        background: '#8b5cf6', color: '#fff', padding: '1px 5px',
+                        borderRadius: 4, fontSize: fz(9), fontWeight: 700,
+                        flexShrink: 0,
+                      }}>✋ MANUAL</span>
+                    )}
+                    <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: palette.ink }}>
+                        {e.cliente_nome || 'Sem nome'}{' '}
+                        <span style={{ fontWeight: 400, color: palette.inkMuted, fontSize: fz(10) }}>
+                          · #{e.numero_pedido || '?'} · {e.venda_categoria}
+                          {isManual && e.vendedora_nome && ` · ${e.vendedora_nome}`}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
+                        {new Date(e.enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        {!isManual && ` · match: ${e.tipo_match}`}
+                        {e.ctwa_clid && ' · ctwa ✓'}
+                        {e.origem_lead === 'anuncio_instagram' && ' · 📱 anúncio'}
+                        {e.origem_lead === 'carrinho_site_amicialoja' && ' · 🛒 carrinho'}
+                      </div>
                     </div>
-                    <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
-                      {new Date(e.enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      {' · '}match: {e.tipo_match}
-                      {e.ctwa_clid && ' · ctwa ✓'}
-                      {e.origem_lead === 'anuncio_instagram' && ' · 📱 anúncio'}
-                      {e.origem_lead === 'carrinho_site_amicialoja' && ' · 🛒 carrinho'}
+                    <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ok, flexShrink: 0 }}>
+                      R$ {Number(e.valor).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0})}
                     </div>
                   </div>
-                  <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ok, flexShrink: 0 }}>
-                    R$ {Number(e.valor).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0})}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
       )}
+
+      {modalManualAberto && (
+        <ModalVendaManualMeta
+          onClose={() => setModalManualAberto(false)}
+          onSucesso={() => {
+            setModalManualAberto(false);
+            setTickLocal(t => t + 1);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Modal: vendedora informa venda manualmente pra disparar Purchase Meta ──
+// Caso de uso: cliente comprou na loja vindo de anuncio Meta mas (a) nao passou
+// por Sofia OU (b) o cron de match Mire x Sofia nao pegou. Vendedora preenche
+// telefone + nome (opt) + CPF (opt) + valor + Nº pedido + categoria.
+// Sem ctwa_clid (vendedora nao tem) — attribution depende do advanced matching
+// (telefone hash) da Meta. Default vendedora_nome=Vanessa.
+function ModalVendaManualMeta({ onClose, onSucesso }) {
+  const [vendedoras, setVendedoras] = useState([]);
+  const [vendedoraNome, setVendedoraNome] = useState('Vanessa');
+  const [telefone, setTelefone] = useState('');
+  const [nomeCliente, setNomeCliente] = useState('');
+  const [documento, setDocumento] = useState('');
+  const [valor, setValor] = useState('');
+  const [numeroPedido, setNumeroPedido] = useState('');
+  const [categoria, setCategoria] = useState('varejo');
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState(null);
+  const [okMsg, setOkMsg] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('lojas_vendedoras')
+        .select('nome, loja, ativa')
+        .eq('ativa', true)
+        .order('loja')
+        .order('nome');
+      setVendedoras(data || []);
+    })();
+  }, []);
+
+  const valorNum = parseFloat(String(valor).replace(',', '.')) || 0;
+  const telDigits = telefone.replace(/\D/g, '');
+  const valido = vendedoraNome
+    && telDigits.length >= 10
+    && valorNum > 0
+    && numeroPedido.trim().length > 0;
+
+  const enviar = async () => {
+    if (!valido) return;
+    setEnviando(true);
+    setErro(null);
+    setOkMsg(null);
+    try {
+      const r = await fetch('/api/lojas-whats-meta-capi-purchase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manual: true,
+          vendedora_nome: vendedoraNome,
+          dados_manual: {
+            telefone: telDigits,
+            nome_cliente: nomeCliente.trim() || null,
+            documento: documento.replace(/\D/g, '') || null,
+            valor: valorNum,
+            numero_pedido: numeroPedido.trim(),
+            categoria,
+          },
+        }),
+      });
+      const r2 = await r.json();
+      if (!r.ok || r2.error) {
+        setErro(r2.error || 'Erro ao enviar.');
+      } else if (r2.status === 'duplicado') {
+        setOkMsg(`Já enviado anteriormente (event_id ${r2.event_id?.slice(0,8)}...).`);
+        setTimeout(onSucesso, 1500);
+      } else {
+        setOkMsg(`✓ Purchase enviado pra Meta (R$ ${valorNum.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2})}).`);
+        setTimeout(onSucesso, 1500);
+      }
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%', padding: 8, borderRadius: 6, border: `1px solid ${palette.beige}`,
+    fontFamily: FONT, fontSize: fz(13), color: palette.ink,
+    background: palette.surface, boxSizing: 'border-box',
+  };
+  const labelStyle = { fontSize: fz(11), color: palette.inkSoft, fontWeight: 600, marginBottom: 3, display: 'block' };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 16,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 16,
+        maxWidth: 460, width: '100%', fontFamily: FONT,
+        maxHeight: '92vh', overflowY: 'auto',
+      }}>
+        {/* Header compacto */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: fz(15), color: palette.ink, fontFamily: FONT, fontWeight: 700 }}>
+            <span style={{
+              fontFamily: 'Arial Black, sans-serif', fontWeight: 900,
+              background: '#1877f2', color: '#fff',
+              padding: '2px 6px', borderRadius: 4, fontSize: fz(10), marginRight: 6,
+            }}>f Ads</span>
+            Informar venda manual
+          </h3>
+          <button onClick={onClose} style={{
+            border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
+          }}>
+            <X size={sz(20)} color={palette.inkMuted} />
+          </button>
+        </div>
+        <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 12 }}>
+          Reporta venda pro Meta CAPI quando cliente veio de anúncio mas o match automático não pegou.
+        </div>
+
+        {/* Vendedora (full width) */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Vendedora *</label>
+          <select value={vendedoraNome} onChange={e => setVendedoraNome(e.target.value)} style={inputStyle}>
+            {vendedoras.length === 0 && <option value="Vanessa">Vanessa</option>}
+            {vendedoras.map(v => (
+              <option key={`${v.loja}-${v.nome}`} value={v.nome}>{v.nome} ({v.loja})</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Telefone + Valor side-by-side */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <div style={{ flex: 1.4 }}>
+            <label style={labelStyle}>Telefone cliente *</label>
+            <input
+              value={telefone}
+              onChange={e => setTelefone(e.target.value)}
+              placeholder="11 99999-9999"
+              inputMode="tel"
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Valor R$ *</label>
+            <input
+              value={valor}
+              onChange={e => setValor(e.target.value)}
+              placeholder="0,00"
+              inputMode="decimal"
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        {/* Nome + CPF side-by-side */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <div style={{ flex: 1.4 }}>
+            <label style={labelStyle}>Nome cliente</label>
+            <input
+              value={nomeCliente}
+              onChange={e => setNomeCliente(e.target.value)}
+              placeholder="opcional"
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>CPF/CNPJ</label>
+            <input
+              value={documento}
+              onChange={e => setDocumento(e.target.value)}
+              placeholder="opcional"
+              inputMode="numeric"
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        {/* Pedido + Categoria side-by-side */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <div style={{ flex: 1.4 }}>
+            <label style={labelStyle}>Nº pedido Miré *</label>
+            <input
+              value={numeroPedido}
+              onChange={e => setNumeroPedido(e.target.value)}
+              placeholder="ex: 12345"
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Categoria *</label>
+            <select value={categoria} onChange={e => setCategoria(e.target.value)} style={inputStyle}>
+              <option value="varejo">Varejo</option>
+              <option value="atacado">Atacado</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Aviso obrigatorios */}
+        <div style={{
+          fontSize: fz(10), color: palette.inkMuted, marginBottom: 10,
+          padding: '6px 8px', background: palette.surface, borderRadius: 4,
+          border: `1px dashed ${palette.beige}`,
+        }}>
+          Telefone + Nº pedido + Valor são obrigatórios. Nome e CPF ajudam o
+          advanced matching da Meta — preencha se tiver.
+        </div>
+
+        {/* Mensagens */}
+        {erro && (
+          <div style={{
+            fontSize: fz(12), color: '#fff', background: palette.alert,
+            padding: '6px 10px', borderRadius: 6, marginBottom: 10,
+          }}>
+            {erro}
+          </div>
+        )}
+        {okMsg && (
+          <div style={{
+            fontSize: fz(12), color: '#fff', background: palette.ok,
+            padding: '6px 10px', borderRadius: 6, marginBottom: 10,
+          }}>
+            {okMsg}
+          </div>
+        )}
+
+        {/* Botoes */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onClose} disabled={enviando} style={{
+            flex: 1, padding: '9px 14px', borderRadius: 6, cursor: enviando ? 'wait' : 'pointer',
+            background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.beige}`, fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+          }}>
+            Cancelar
+          </button>
+          <button onClick={enviar} disabled={!valido || enviando} style={{
+            flex: 1.5, padding: '9px 14px', borderRadius: 6,
+            cursor: (!valido || enviando) ? 'not-allowed' : 'pointer',
+            background: (!valido || enviando) ? palette.inkMuted : '#1877f2',
+            color: '#fff', border: 'none',
+            fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+            opacity: (!valido || enviando) ? 0.6 : 1,
+          }}>
+            {enviando ? 'Enviando...' : 'Disparar Purchase Meta'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
