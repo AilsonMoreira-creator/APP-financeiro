@@ -130,6 +130,67 @@ function calcularVencimentoFUp(tag) {
   return d.toISOString();
 }
 
+// ─── DETECTOR CPF/CNPJ (Ailson 25/05/2026) ─────────────────────────────────
+// Sofia/cliente sinaliza fechamento -> Sofia pede CPF/CNPJ.
+// Quando cliente responde, esta funcao detecta passivamente no texto
+// e persiste em lojas_whats_conversas.documento + tipo_documento.
+//
+// Match com Mire: lojas_vendas.documento_cliente_raw / lojas_vendas_varejo.documento_raw
+// (formato bruto, so digitos no Mire — vamos normalizar antes de salvar)
+//
+// Retorna { documento: '11144477735', tipo: 'cpf' } ou null.
+
+function detectarDocumento(texto) {
+  if (!texto || texto.length < 11) return null;
+  // CPF/CNPJ podem vir formatados (XXX.XXX.XXX-XX) ou nao (11 ou 14 digitos)
+  // Pega TODAS as sequencias de digitos com pontuacao possivel
+  const matches = texto.match(/\b\d{2,3}[\s.-]?\d{3}[\s.-]?\d{3}([\s.-]?\d{4})?[\s\/.-]?\d{2}\b/g) || [];
+  for (const m of matches) {
+    const soDigitos = m.replace(/\D/g, '');
+    if (soDigitos.length === 11 && validarCPF(soDigitos)) {
+      return { documento: soDigitos, tipo: 'cpf' };
+    }
+    if (soDigitos.length === 14 && validarCNPJ(soDigitos)) {
+      return { documento: soDigitos, tipo: 'cnpj' };
+    }
+  }
+  return null;
+}
+
+// Validacao CPF (algoritmo oficial — evita falso positivo de qualquer
+// sequencia de 11 digitos que apareça por acaso)
+function validarCPF(cpf) {
+  if (cpf.length !== 11) return false;
+  if (/^(\d)\1+$/.test(cpf)) return false;  // 00000000000, 11111111111 etc.
+  let soma = 0;
+  for (let i = 0; i < 9; i++) soma += parseInt(cpf[i]) * (10 - i);
+  let resto = (soma * 10) % 11;
+  if (resto === 10) resto = 0;
+  if (resto !== parseInt(cpf[9])) return false;
+  soma = 0;
+  for (let i = 0; i < 10; i++) soma += parseInt(cpf[i]) * (11 - i);
+  resto = (soma * 10) % 11;
+  if (resto === 10) resto = 0;
+  return resto === parseInt(cpf[10]);
+}
+
+function validarCNPJ(cnpj) {
+  if (cnpj.length !== 14) return false;
+  if (/^(\d)\1+$/.test(cnpj)) return false;
+  const pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const pesos2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  let soma = 0;
+  for (let i = 0; i < 12; i++) soma += parseInt(cnpj[i]) * pesos1[i];
+  let resto = soma % 11;
+  const d1 = resto < 2 ? 0 : 11 - resto;
+  if (d1 !== parseInt(cnpj[12])) return false;
+  soma = 0;
+  for (let i = 0; i < 13; i++) soma += parseInt(cnpj[i]) * pesos2[i];
+  resto = soma % 11;
+  const d2 = resto < 2 ? 0 : 11 - resto;
+  return d2 === parseInt(cnpj[13]);
+}
+
 const SYSTEM_PROMPT = `Você é Sofia, assistente IA da Amícia, loja de moda feminina em São Paulo (Bom Retiro + Brás + site amicialoja.com.br).
 
 ESCOPO ATUAL (MUITO IMPORTANTE):
@@ -341,6 +402,22 @@ async function processarConversa(conversaId) {
       atualizado_em: new Date().toISOString(),
     }).eq('id', conversaId);
     log('ia', `conversa=${conversaId} marcou cliente_indicou_site`);
+  }
+
+  // 3c. Detecta CPF/CNPJ no texto (Ailson 25/05/2026 — match Sofia x Mire)
+  // Se cliente forneceu documento valido e conversa ainda nao tem,
+  // persiste em documento+tipo_documento. Match com Mire fica perfeito
+  // (lojas_vendas.documento_cliente_raw / lojas_vendas_varejo.documento_raw).
+  if (!conv.documento) {
+    const docDetectado = detectarDocumento(textoCliente);
+    if (docDetectado) {
+      await supabase.from('lojas_whats_conversas').update({
+        documento: docDetectado.documento,
+        tipo_documento: docDetectado.tipo,
+        atualizado_em: new Date().toISOString(),
+      }).eq('id', conversaId);
+      log('ia', `conversa=${conversaId} capturou ${docDetectado.tipo}=${docDetectado.documento.slice(0,3)}***`);
+    }
   }
 
   // 4. Se gatilho QUENTE → atualiza conversa pra etapa quente (handoff em outro endpoint)
