@@ -9,6 +9,7 @@ import HistoricoVendas from './HistoricoVendas';
 import OsAmicia from './os-amicia/OsAmicia';
 import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
 import LojasModule from './Lojas';
+import LojasWhats from './LojasWhats.jsx';
 import FolhaPagamento from './FolhaPagamento.jsx';
 import ReviewsMeli from './Reviews_meli.jsx';
 
@@ -9312,6 +9313,7 @@ export default function App(){
   const [homeSCPending,setHomeSCPending]=useState(0);
   const [homeAgendaHoje,setHomeAgendaHoje]=useState(0);
   const [homeLojasPending,setHomeLojasPending]=useState(0);
+  const [homeSofiaPending,setHomeSofiaPending]=useState(0);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
   const ultimaAtividadeRef=useRef(Date.now()); // timestamp da última atividade do usuário (toque/click/scroll/keydown). Reseta o timeout de inatividade.
   const ultimaSyncAtividadeRef=useRef(0); // throttle de localStorage
@@ -9913,6 +9915,15 @@ export default function App(){
         supabase.from('lojas_sugestoes_diarias').select('id',{count:'exact',head:true}).eq('vendedora_id',vd.id).eq('data_geracao',hojeStr).eq('status','pendente').then(({count})=>{
           if(typeof count==='number')setHomeLojasPending(count);
         }).catch(()=>{});
+      }).catch(()=>{});
+    }
+    // Sofia: count conversas com mensagem nova nao respondida nas ultimas 24h.
+    // So busca se usuario tem 'sofia' em modulos (ou eh admin).
+    const modulosUser=Array.isArray(usuarioLogado?.modulos)?usuarioLogado.modulos:[];
+    const temSofia=usuarioLogado?.admin===true || modulosUser.includes('sofia');
+    if(temSofia){
+      fetch('/api/lojas-whats-home-kpi').then(r=>r.json()).then(d=>{
+        if(typeof d?.naoRespondidas==='number')setHomeSofiaPending(d.naoRespondidas);
       }).catch(()=>{});
     }
   },[dbCarregado]);
@@ -10871,6 +10882,10 @@ export default function App(){
               kpiValue:homeLojasPending>0?`${homeLojasPending}`:"✓",
               kpiLabel:homeLojasPending>0?"sugestões hoje":"sem sugestões hoje",
               detail:homeLojasPending>0?"Co-piloto IA pras lojas":"Bom Retiro · Silva Teles"},
+            {id:"sofia",label:"Sofia",Icon:SvgSofia,color:"#8b6b50",bg:"#faf6f0",border:"#e8dcc8",
+              kpiValue:homeSofiaPending>0?`${homeSofiaPending}`:"✓",
+              kpiLabel:homeSofiaPending>0?"esperando resposta":"sem pendências",
+              detail:homeSofiaPending>0?"Mensagens nas últimas 24h":"WhatsApp B2B · IA atendente"},
           ].filter(m=>usuarioLogado.modulos.includes(m.id));
 
           return(
@@ -10926,6 +10941,7 @@ export default function App(){
         {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
         {active==="osamicia"&&usuarioLogado?.modulos?.includes('osamicia')&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={String(usuarioLogado?.usuario||'').toLowerCase()==='ailson' ? {...usuarioLogado, admin:true} : usuarioLogado}/></ModuleErrorBoundary>}
         {active==="lojas"&&<ModuleErrorBoundary><LojasModule supabase={supabase} userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
+        {active==="sofia"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('sofia'))&&<ModuleErrorBoundary><LojasWhats userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
