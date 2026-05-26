@@ -202,7 +202,12 @@ async function processarMensagemRecebida(msg, valueCtx) {
   log('msg-in', `from=${telefone} type=${msg.type} id=${msg.id}`);
 
   // 1. Acha (ou cria) conversa pra esse telefone
-  const conversa = await acharOuCriarConversa(telefone, nomeCliente);
+  // Ailson 25/05/2026: passa referral + texto pra detectar origem (CTWA)
+  const primeiraTextoMaybe = msg.type === 'text' ? msg.text?.body : null;
+  const conversa = await acharOuCriarConversa(telefone, nomeCliente, {
+    referral: msg.referral || null,
+    primeiraTexto: primeiraTextoMaybe,
+  });
   if (!conversa) {
     logErro('msg-in', `nao consegui criar conversa pra ${telefone}`);
     return;
@@ -384,8 +389,50 @@ async function processarStatusMensagem(status) {
  * "Ativa" = qualquer etapa que nao seja 'perdida' ou 'vendeu' antiga.
  * MVP: pega a mais recente nao perdida. Se nao tem, cria nova em 'conversando'
  * (mensagem do cliente chegando sem conversa pre-existente = inbound espontaneo).
+ *
+ * Ailson 25/05/2026 - Sprint Attribution: agora recebe refInfo opcional
+ * com { referral, primeiraTexto } pra detectar origem do lead.
+ * Referral vem do payload Meta quando lead clica em CTA de anuncio (CTWA).
+ * Texto da 1a msg eh fallback (frase CTA padrao "Gostaria de informacoes
+ * pra comprar no Atacado").
  */
-async function acharOuCriarConversa(telefone, nomeCliente) {
+
+// Frases CTA do anuncio Instagram (Ailson definiu: "Gostaria de
+// informacoes pra comprar no Atacado"). Regex flexivel pra suportar
+// variacoes que cliente possa digitar/editar.
+const REGEX_CTA_INSTAGRAM = /\b(gostaria|quero|tenho\s+interesse|preciso)[\s\S]{0,60}\b(informa\w*|comprar|saber|valor|preco)[\s\S]{0,40}\batacado\b/i;
+const REGEX_ATACADO_PURO = /\b(comprar|comprar\s+no|info\w*\s+(do|sobre)|valores?\s+(do|de))\s+atacado\b/i;
+
+function detectarOrigemLead(refInfo) {
+  if (!refInfo) return { origem: 'desconhecida', confianca: 0, meta: {} };
+
+  // 1. PRIMARY — referral.source_type='ad' do payload Meta (CTWA)
+  //    Vem direto da Meta, robusto contra cliente editar mensagem.
+  if (refInfo.referral?.source_type === 'ad') {
+    return {
+      origem: 'anuncio_instagram',
+      confianca: 1.0,
+      meta: {
+        ctwa_clid: refInfo.referral.ctwa_clid || null,
+        ad_source_id: refInfo.referral.source_id || null,
+        ad_headline: refInfo.referral.headline || null,
+        ref_data: refInfo.referral,
+      }
+    };
+  }
+
+  // 2. SECONDARY — texto bate com frase CTA (caso referral nao tenha vindo)
+  if (refInfo.primeiraTexto) {
+    if (REGEX_CTA_INSTAGRAM.test(refInfo.primeiraTexto) || REGEX_ATACADO_PURO.test(refInfo.primeiraTexto)) {
+      return { origem: 'anuncio_instagram', confianca: 0.7, meta: {} };
+    }
+  }
+
+  // 3. FALLBACK — origem desconhecida (admin pode reclassificar via UI)
+  return { origem: 'desconhecida', confianca: 0, meta: {} };
+}
+
+async function acharOuCriarConversa(telefone, nomeCliente, refInfo) {
   if (!telefone) return null;
   // Busca ativa
   const { data: existente } = await supabase
@@ -396,19 +443,42 @@ async function acharOuCriarConversa(telefone, nomeCliente) {
     .order('iniciada_em', { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (existente) return existente;
+  if (existente) {
+    // Se existente nao tinha ctwa_clid e agora veio um, atualiza
+    // (cliente pode ter voltado pelo anuncio depois de uma conversa antiga)
+    if (refInfo?.referral?.source_type === 'ad' && !existente.ctwa_clid) {
+      const det = detectarOrigemLead(refInfo);
+      await supabase.from('lojas_whats_conversas').update({
+        ctwa_clid: det.meta.ctwa_clid,
+        meta_ad_source_id: det.meta.ad_source_id,
+        meta_ad_headline: det.meta.ad_headline,
+        meta_referral_data: det.meta.ref_data,
+        // Nao sobrescreve origem se ja tinha — historico preservado
+      }).eq('id', existente.id);
+      log('conversa', `existente=${existente.id} ganhou ctwa_clid de nova click`);
+    }
+    return existente;
+  }
 
-  // Cria nova como inbound espontaneo (cliente puxou conversa)
-  log('conversa', `nova conversa inbound espontaneo pra ${telefone}`);
+  // Detecta origem do lead novo
+  const origem = detectarOrigemLead(refInfo);
+  log('conversa', `nova conversa inbound: tel=${telefone} origem=${origem.origem} conf=${origem.confianca}`);
+
   const { data: nova, error } = await supabase
     .from('lojas_whats_conversas')
     .insert({
       telefone,
       nome_cliente: nomeCliente,
-      etapa: 'conversando', // ja entra conversando pq cliente que falou primeiro
+      etapa: 'conversando',
       iniciada_em: new Date().toISOString(),
       cliente_respondeu_em: new Date().toISOString(),
-      ultima_atividade_em: new Date().toISOString()
+      ultima_atividade_em: new Date().toISOString(),
+      origem_lead: origem.origem,
+      origem_lead_confianca: origem.confianca,
+      ctwa_clid: origem.meta.ctwa_clid || null,
+      meta_ad_source_id: origem.meta.ad_source_id || null,
+      meta_ad_headline: origem.meta.ad_headline || null,
+      meta_referral_data: origem.meta.ref_data || null,
     })
     .select('*')
     .single();

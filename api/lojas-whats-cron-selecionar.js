@@ -270,7 +270,9 @@ async function criarConversaNaFila(lead) {
       lead_prioritario: leadPrioritario,
       vendedora_atribuida_id: lead.vendedora_atribuida_id || lead.vendedora_dona_id,
       iniciada_em: agora,
-      ultima_atividade_em: agora
+      ultima_atividade_em: agora,
+      origem_lead: 'carrinho_site_amicialoja',  // Sprint Attribution Ailson 25/05/2026
+      origem_lead_confianca: 1.0,
     })
     .select('id')
     .single();

@@ -92,6 +92,12 @@
     "api/lojas-whats-cron-followup.js": {
       "maxDuration": 300
     },
+    "api/lojas-whats-cron-capi-match.js": {
+      "maxDuration": 300
+    },
+    "api/lojas-whats-meta-capi-purchase.js": {
+      "maxDuration": 30
+    },
     "api/lojas-aviso-falta-whatsapp-cron.js": {
       "maxDuration": 60
     },
@@ -276,6 +282,10 @@
     {
       "path": "/api/lojas-whats-cron-followup",
       "schedule": "0 12,15,18,21 * * *"
+    },
+    {
+      "path": "/api/lojas-whats-cron-capi-match",
+      "schedule": "0 6 * * *"
     }
   ]
 }

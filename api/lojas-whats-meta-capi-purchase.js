@@ -1,0 +1,214 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// lojas-whats-meta-capi-purchase.js — Dispara Purchase event pra Meta CAPI
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Sprint Attribution Sofia (Ailson 25/05/2026).
+// Chamado quando uma venda no Mire dá match com uma conversa Sofia que
+// veio de anuncio Instagram (Click-to-WhatsApp).
+//
+// Meta Conversions API server-side event "Purchase" inclui:
+//   - user_data hashed (SHA256): phone, email, name, external_id
+//   - ctwa_clid (Click-to-WhatsApp Click ID) — chave de attribution CTWA
+//   - custom_data: value, currency, order_id
+//   - action_source: "business_messaging"
+//
+// POST body: {
+//   conversa_id: uuid (obrigatorio),
+//   venda_info: {
+//     valor: 1234.56,
+//     numero_pedido: '123',
+//     venda_id: uuid (opcional),
+//     categoria: 'atacado' | 'varejo'
+//   },
+//   tipo_match: 'telefone' | 'documento' | 'manual'
+// }
+//
+// Idempotencia: usa event_id = hash do (conversa_id + numero_pedido).
+// Se ja foi enviado (capi_purchase_enviado=true) NAO reenvia.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import crypto from 'crypto';
+import { supabase, setCors, log, logErro } from './_lojas-whats-helpers.js';
+
+const META_GRAPH_VERSION = 'v21.0';
+
+export default async function handler(req, res) {
+  setCors(res);
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+
+  try {
+    const { conversa_id, venda_info, tipo_match } = req.body || {};
+    if (!conversa_id) return res.status(400).json({ error: 'conversa_id_obrigatorio' });
+    if (!venda_info?.valor || venda_info.valor <= 0) {
+      return res.status(400).json({ error: 'venda_info.valor obrigatorio (>0)' });
+    }
+    if (!['telefone', 'documento', 'manual'].includes(tipo_match)) {
+      return res.status(400).json({ error: 'tipo_match invalido', validos: ['telefone','documento','manual'] });
+    }
+
+    const resultado = await dispararPurchase({ conversa_id, venda_info, tipo_match });
+    return res.status(resultado.status === 'enviado' ? 200 : 500).json(resultado);
+  } catch (e) {
+    logErro('capi-purchase', e);
+    return res.status(500).json({ error: e.message });
+  }
+}
+
+export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) {
+  // 1. Carrega conversa
+  const { data: conv } = await supabase
+    .from('lojas_whats_conversas')
+    .select('id, telefone, nome_cliente, documento, tipo_documento, ctwa_clid, origem_lead, capi_purchase_enviado, capi_purchase_event_id')
+    .eq('id', conversa_id)
+    .maybeSingle();
+  if (!conv) {
+    return { status: 'falhou', erro: 'conversa_nao_encontrada' };
+  }
+
+  // 2. Idempotencia
+  if (conv.capi_purchase_enviado) {
+    log('capi', `conv=${conversa_id} ja enviado capi (${conv.capi_purchase_event_id}) — skip`);
+    return { status: 'duplicado', conversa_id, event_id_anterior: conv.capi_purchase_event_id };
+  }
+
+  // 3. Variaveis Meta
+  const pixelId = process.env.META_CAPI_PIXEL_B2B_ID;
+  const token = process.env.META_ADS_TOKEN || process.env.META_WA_ACCESS_TOKEN;
+  if (!pixelId) {
+    return { status: 'falhou', erro: 'META_CAPI_PIXEL_B2B_ID nao configurado em env' };
+  }
+  if (!token) {
+    return { status: 'falhou', erro: 'token Meta nao configurado em env (META_ADS_TOKEN ou META_WA_ACCESS_TOKEN)' };
+  }
+
+  // 4. Monta event_id deterministico (idempotencia no lado Meta tambem)
+  const eventId = crypto.createHash('sha256')
+    .update(`${conversa_id}|${venda_info.numero_pedido || ''}|${venda_info.valor}`)
+    .digest('hex')
+    .slice(0, 32);
+
+  // 5. Hashing pra Meta (SHA256 lowercase trim)
+  const sha = (v) => v ? crypto.createHash('sha256')
+    .update(String(v).toLowerCase().trim()).digest('hex') : null;
+
+  // Telefone normalizado pra E.164 sem '+' (Meta espera digits only, com codigo pais)
+  const telDigits = (conv.telefone || '').replace(/\D/g, '');
+  const telE164 = telDigits.startsWith('55') ? telDigits : `55${telDigits.slice(-11)}`;
+
+  // Nome separa primeiro / ultimo
+  const nomePartes = (conv.nome_cliente || '').trim().split(/\s+/);
+  const firstName = nomePartes[0] || null;
+  const lastName = nomePartes.length > 1 ? nomePartes.slice(-1)[0] : null;
+
+  const user_data = {
+    ph: sha(telE164),                                  // phone hash
+    external_id: sha(conv.documento),                  // CPF/CNPJ hash (se tiver)
+    fn: sha(firstName),                                 // first name hash
+    ln: sha(lastName),                                  // last name hash
+  };
+  if (conv.ctwa_clid) {
+    user_data.ctwa_clid = conv.ctwa_clid;              // NAO hashed (Meta exige plain)
+  }
+  // Remove campos null
+  for (const k of Object.keys(user_data)) {
+    if (user_data[k] === null || user_data[k] === undefined) delete user_data[k];
+  }
+
+  // 6. Payload final
+  const eventData = {
+    event_name: 'Purchase',
+    event_time: Math.floor(Date.now() / 1000),
+    event_id: eventId,
+    action_source: 'business_messaging',  // CTWA flow
+    user_data,
+    custom_data: {
+      currency: 'BRL',
+      value: Number(venda_info.valor),
+      order_id: venda_info.numero_pedido || null,
+      content_category: venda_info.categoria || 'atacado',
+    },
+  };
+
+  const payload = { data: [eventData] };
+
+  // 7. POST pra Meta
+  const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${pixelId}/events?access_token=${encodeURIComponent(token)}`;
+  let respJson, ok;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    respJson = await r.json();
+    ok = r.ok;
+  } catch (e) {
+    logErro('capi-purchase/fetch', e);
+    await salvarAudit({
+      conversa_id, venda_info, tipo_match, pixelId, eventId,
+      payload, response: { erro: e.message }, status: 'falhou', erro: e.message,
+      ctwaClid: conv.ctwa_clid,
+    });
+    return { status: 'falhou', erro: e.message };
+  }
+
+  // 8. Audit
+  await salvarAudit({
+    conversa_id, venda_info, tipo_match, pixelId, eventId,
+    payload, response: respJson, status: ok ? 'enviado' : 'falhou',
+    erro: ok ? null : JSON.stringify(respJson).slice(0, 500),
+    ctwaClid: conv.ctwa_clid,
+  });
+
+  if (!ok) {
+    logErro('capi-purchase/meta', new Error(JSON.stringify(respJson)));
+    return { status: 'falhou', erro: respJson?.error?.message || 'meta_retornou_erro', response: respJson };
+  }
+
+  // 9. Marca conversa como enviado
+  await supabase.from('lojas_whats_conversas').update({
+    capi_purchase_enviado: true,
+    capi_purchase_enviado_em: new Date().toISOString(),
+    capi_purchase_event_id: eventId,
+    atualizado_em: new Date().toISOString(),
+  }).eq('id', conversa_id);
+
+  log('capi-purchase', `conv=${conversa_id} valor=R$${venda_info.valor} match=${tipo_match} ctwa=${conv.ctwa_clid ? 'sim' : 'nao'} event_id=${eventId.slice(0,8)} ok`);
+  return {
+    status: 'enviado',
+    conversa_id,
+    event_id: eventId,
+    valor: venda_info.valor,
+    response: respJson,
+  };
+}
+
+async function salvarAudit({ conversa_id, venda_info, tipo_match, pixelId, eventId, payload, response, status, erro, ctwaClid }) {
+  // user_data hashed jamais salvar plain — payload ja vem com hashes,
+  // mas removo pra evitar contaminacao no audit log
+  const payloadSafe = JSON.parse(JSON.stringify(payload));
+  
+  try {
+    await supabase.from('lojas_whats_capi_eventos').insert({
+      conversa_id,
+      venda_id: venda_info.venda_id || null,
+      venda_categoria: venda_info.categoria || null,
+      numero_pedido: venda_info.numero_pedido || null,
+      meta_pixel_id: pixelId,
+      meta_event_id: eventId,
+      tipo_match,
+      ctwa_clid: ctwaClid,
+      valor: venda_info.valor,
+      request_payload: payloadSafe,
+      meta_response: response,
+      status,
+      erro,
+    });
+  } catch (e) {
+    // Se for unique violation no event_id, ja foi enviado antes — ok
+    if (e.code !== '23505') {
+      logErro('capi-purchase/audit', e);
+    }
+  }
+}

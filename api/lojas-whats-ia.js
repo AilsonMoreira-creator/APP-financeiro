@@ -545,7 +545,34 @@ async function processarConversa(conversaId) {
     }
   }
 
-  // 6. Gera réplica via Claude
+  // 5d. ROTEIRO ESTRATEGICO por origem_lead (Sprint Attribution Ailson 25/05/2026)
+  // Lead de carrinho site_amicia (Roteiro A) ja sabe preco/politicas.
+  // Lead de anuncio Instagram (Roteiro B) chegou do zero, trabalho total.
+  // Sofia consulta as politicas + roteiro + tecidos do banco e injeta como bloco.
+  let blocoRoteiro = '';
+  let blocoPoliticas = '';
+  let blocoTecidos = '';
+  try {
+    const roteiros = await getConfig('roteiros_estrategicos', {});
+    const chave = conv.origem_lead === 'carrinho_site_amicialoja' ? 'A_carrinho_site_amicialoja'
+                : conv.origem_lead === 'anuncio_instagram'        ? 'B_anuncio_instagram'
+                : null;
+    if (chave && roteiros[chave] && typeof roteiros[chave] === 'object') {
+      blocoRoteiro = `ROTEIRO ESTRATEGICO PRA ESTA CONVERSA (origem=${conv.origem_lead}):\n${JSON.stringify(roteiros[chave], null, 2)}\n\nIMPORTANTE: NUNCA pergunte diretamente o perfil do lead. Mapeia pelos sinais nas mensagens. Adapte tom e ganchos baseado em quem voce detectar.`;
+    }
+    const politicas = await getConfig('politicas_comerciais', null);
+    if (politicas) {
+      blocoPoliticas = `POLITICAS COMERCIAIS AMICIA (sigam SEMPRE — pgto/atacado/varejo/frete/troca):\n${JSON.stringify(politicas, null, 2)}\n\nLEMBRETE: PIX padrao 5% sempre, 10%/15% so na negociacao. Atacado 12 pecas (pode misturar). 3-7 pecas eh tabela varejo (+R$30/peca). Bojo: NENHUM modelo tem.`;
+    }
+    const tecidos = await getConfig('tecidos', null);
+    if (tecidos) {
+      blocoTecidos = `TECIDOS AMICIA (info detalhada quando cliente perguntar):\n${JSON.stringify(tecidos, null, 2)}\n\nREGRAS DE OURO TECIDOS:\n- Viscolinho NAO tem linho (eh viscose + elastano com trama slub)\n- Suplex eh POLIAMIDA, nao poliester (diferencial)\n- Viscose estampada: estampa digital EXCLUSIVA Amicia`;
+    }
+  } catch (e) {
+    logErro('ia/roteiro-config', e);
+  }
+
+
   const contextoConv = montarContextoConversa(conv);
   const msgsClaude = montarMensagensClaude(msgs, conv);
 
@@ -555,6 +582,9 @@ async function processarConversa(conversaId) {
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
   if (blocoMidias) systemBlocks.push({ type: 'text', text: blocoMidias });
+  if (blocoRoteiro) systemBlocks.push({ type: 'text', text: blocoRoteiro });
+  if (blocoPoliticas) systemBlocks.push({ type: 'text', text: blocoPoliticas });
+  if (blocoTecidos) systemBlocks.push({ type: 'text', text: blocoTecidos });
   if (blocoPadroes) systemBlocks.push({ type: 'text', text: blocoPadroes });
   if (blocoObs) systemBlocks.push({ type: 'text', text: blocoObs });
 

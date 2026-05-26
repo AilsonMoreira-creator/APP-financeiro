@@ -957,7 +957,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       const limite = expandido ? 500 : 50;
       let q = supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site')
+        .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead')
         // Prioritarios primeiro
         .order('lead_prioritario', { ascending: false });
       // Aba 'processando' (fila visivel pra assistente): CNPJ primeiro, data desc
@@ -1581,6 +1581,20 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
                 fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
                 background: '#e8f4ff', color: '#2c5d8a', fontWeight: 600,
               }}>🌐 site</span>
+            )}
+            {/* Origem do lead — flag visual (Ailson 25/05/2026) */}
+            {c.origem_lead === 'anuncio_instagram' && (
+              <span title="Lead veio de anúncio Meta Ads (Instagram/Facebook)" style={{
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: '#e7f1fc', color: '#1877f2', fontWeight: 700,
+                fontFamily: 'Arial Black, sans-serif',
+              }}>f Ads</span>
+            )}
+            {c.origem_lead === 'carrinho_site_amicialoja' && (
+              <span title="Lead de carrinho abandonado no site amicialoja.com.br" style={{
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: '#fff0e0', color: '#a55a00', fontWeight: 600,
+              }}>🛒 carrinho</span>
             )}
           </div>
           <div style={{ fontSize: fz(11), color: palette.inkMuted, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -2298,8 +2312,135 @@ function ConversaoTab({ refreshTick }) {
               </div>
             </div>
           )}
+
+          {/* Bloco CAPI Meta Ads (Ailson 25/05/2026 - Sprint Attribution) */}
+          <CapiMetaAdsBloco dataInicio={dataInicio} dataFim={dataFim} refreshTick={refreshTick} />
         </>
       )}
+    </div>
+  );
+}
+
+// ─── Bloco CAPI Meta Ads (Conversoes enviadas pra Meta) ────────────────────
+function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
+  const [dados, setDados] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelado = false;
+    setLoading(true);
+    const params = new URLSearchParams({ data_inicio: dataInicio, data_fim: dataFim });
+    fetch(`/api/lojas-whats-capi-stats?${params.toString()}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelado) { setDados(d); setLoading(false); } })
+      .catch(() => { if (!cancelado) setLoading(false); });
+    return () => { cancelado = true; };
+  }, [dataInicio, dataFim, refreshTick]);
+
+  if (loading || !dados || dados.error) return null;
+  const k = dados.kpis || {};
+  const semConversoes = (k.total_eventos || 0) === 0;
+
+  return (
+    <div style={{ marginTop: 22, paddingTop: 16, borderTop: `2px solid ${palette.beige}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{
+          fontFamily: 'Arial Black, sans-serif', fontWeight: 900,
+          background: '#1877f2', color: '#fff',
+          padding: '3px 8px', borderRadius: 6, fontSize: fz(11),
+        }}>f Ads</span>
+        <div>
+          <div style={{ fontSize: fz(14), fontWeight: 700, color: palette.ink }}>
+            Conversões enviadas pra Meta (CAPI)
+          </div>
+          <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
+            Cada evento Purchase reportado fecha o loop de attribution Click-to-WhatsApp
+          </div>
+        </div>
+      </div>
+
+      {semConversoes ? (
+        <div style={{
+          padding: 16, textAlign: 'center', color: palette.inkMuted,
+          background: palette.surface, border: `1px dashed ${palette.beige}`,
+          borderRadius: 8, fontSize: fz(12),
+        }}>
+          Nenhuma conversão CAPI enviada no período.<br/>
+          Eventos disparam quando venda Miré cruza com conversa Sofia origem Anúncio/Carrinho.
+        </div>
+      ) : (
+        <>
+          {/* Linha de KPIs */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <KpiCapi label="Eventos enviados" valor={k.total_eventos} cor="#1877f2" />
+            <KpiCapi label="Valor total" valor={`R$ ${Number(k.valor_total||0).toLocaleString('pt-BR', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`} cor={palette.ok} />
+            <KpiCapi label="Com CTWA ID" valor={`${k.com_ctwa_clid}/${k.total_eventos}`} 
+              cor={k.com_ctwa_clid === k.total_eventos ? palette.ok : palette.warn}
+              hint="ctwa_clid garante attribution exata na Meta" />
+            <KpiCapi label="Match telefone" valor={k.match_telefone} cor={palette.inkSoft} />
+            <KpiCapi label="Match CPF/CNPJ" valor={k.match_documento} cor={palette.inkSoft} />
+            {k.falhados > 0 && <KpiCapi label="Falhados" valor={k.falhados} cor={palette.alert} />}
+          </div>
+
+          {/* Atacado vs Varejo */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, fontSize: fz(12) }}>
+            <div style={{ padding: '6px 12px', background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 6 }}>
+              <strong>Atacado:</strong> {k.atacado?.qtd || 0} · R$ {Number(k.atacado?.valor||0).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0})}
+            </div>
+            <div style={{ padding: '6px 12px', background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 6 }}>
+              <strong>Varejo:</strong> {k.varejo?.qtd || 0} · R$ {Number(k.varejo?.valor||0).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0})}
+            </div>
+          </div>
+
+          {/* Lista últimas conversões */}
+          {dados.ultimos?.length > 0 && (
+            <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ padding: '6px 10px', borderBottom: `1px solid ${palette.beige}`, fontSize: fz(11), fontWeight: 700, color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                Últimas conversões reportadas
+              </div>
+              {dados.ultimos.map((e, i) => (
+                <div key={i} style={{
+                  padding: '6px 10px', display: 'flex', gap: 8, alignItems: 'center',
+                  borderBottom: i < dados.ultimos.length - 1 ? `1px solid ${palette.beige}` : 'none',
+                  fontSize: fz(11),
+                }}>
+                  <div style={{ flex: '1 1 0', minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: palette.ink }}>
+                      {e.cliente_nome || 'Sem nome'}{' '}
+                      <span style={{ fontWeight: 400, color: palette.inkMuted, fontSize: fz(10) }}>
+                        · #{e.numero_pedido || '?'} · {e.venda_categoria}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 1 }}>
+                      {new Date(e.enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      {' · '}match: {e.tipo_match}
+                      {e.ctwa_clid && ' · ctwa ✓'}
+                      {e.origem_lead === 'anuncio_instagram' && ' · 📱 anúncio'}
+                      {e.origem_lead === 'carrinho_site_amicialoja' && ' · 🛒 carrinho'}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ok, flexShrink: 0 }}>
+                    R$ {Number(e.valor).toLocaleString('pt-BR', {minimumFractionDigits:0, maximumFractionDigits:0})}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function KpiCapi({ label, valor, cor, hint }) {
+  return (
+    <div title={hint} style={{
+      background: palette.surface, border: `1px solid ${palette.beige}`,
+      borderLeft: `3px solid ${cor}`, borderRadius: 6, padding: '6px 10px',
+      minWidth: 90,
+    }}>
+      <div style={{ fontSize: fz(15), fontWeight: 700, color: palette.ink, lineHeight: 1 }}>{valor}</div>
+      <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 2 }}>{label}</div>
     </div>
   );
 }
