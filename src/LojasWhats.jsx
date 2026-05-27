@@ -1913,7 +1913,8 @@ function EnviarVendedoraModal({ conversa, onClose, onSucesso, onErro }) {
             fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}>
-            <Users size={sz(14)} /> Definir
+            <img src="/sac-icons/usuario_falando.png" alt="Definir" style={{ width: 18, height: 18 }} />
+            Definir
           </button>
         </div>
 
