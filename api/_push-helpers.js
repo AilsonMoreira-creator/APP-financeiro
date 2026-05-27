@@ -189,3 +189,59 @@ export async function enviarPushSAC({ titulo, mensagem, url = '/', tag = 'sac-ms
   }
   return { enviadas, falhadas, removidas };
 }
+
+/**
+ * Envia push pra TODOS os usuarios inscritos no Sofia (WhatsApp B2B).
+ * Chamado pelo webhook lojas-whats quando cliente manda mensagem.
+ * Inclui flag silentIfOpen:true no payload → SW silencia se app tiver aba aberta.
+ * Auto-limpa subscriptions invalidas (410/404).
+ *
+ * @param {object} opts
+ * @param {string} opts.titulo
+ * @param {string} opts.mensagem
+ * @param {string} opts.url - url pra abrir ao clicar (default '/?modulo=sofia')
+ * @param {string} opts.tag - tag pra dedup
+ * @returns { enviadas, falhadas, removidas }
+ */
+export async function enviarPushSofia({ titulo, mensagem, url = '/?modulo=sofia', tag = 'sofia-msg' }) {
+  if (!VAPID_PRIVATE_KEY) {
+    return { enviadas: 0, falhadas: 0, removidas: 0, motivo: 'VAPID nao configurado' };
+  }
+
+  const { data: subs, error } = await supabase
+    .from('sofia_push_subscriptions')
+    .select('id, endpoint, subscription, user_id');
+  if (error || !subs?.length) {
+    return { enviadas: 0, falhadas: 0, removidas: 0 };
+  }
+
+  const payload = JSON.stringify({
+    title: titulo || 'Sofia',
+    body: mensagem,
+    url,
+    tag,
+    silentIfOpen: true,  // SW respeita: se tem aba aberta, nao mostra notif
+  });
+
+  let enviadas = 0, falhadas = 0, removidas = 0;
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification(s.subscription, payload);
+      enviadas++;
+      await supabase
+        .from('sofia_push_subscriptions')
+        .update({ ultimo_uso_em: new Date().toISOString() })
+        .eq('id', s.id);
+    } catch (err) {
+      const status = err?.statusCode || 0;
+      if (status === 410 || status === 404) {
+        await supabase.from('sofia_push_subscriptions').delete().eq('id', s.id);
+        removidas++;
+      } else {
+        falhadas++;
+        console.warn('[push-sofia] falha sub', s.id, err?.message);
+      }
+    }
+  }
+  return { enviadas, falhadas, removidas };
+}

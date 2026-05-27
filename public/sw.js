@@ -12,7 +12,7 @@
 // Pra Lojas (uso 100% online), eh aceitavel.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SW_VERSION = '2026-05-27-v3';
+const SW_VERSION = '2026-05-27-v4';
 
 self.addEventListener('install', (event) => {
   console.log('[SW] install', SW_VERSION);
@@ -53,18 +53,32 @@ self.addEventListener('push', (event) => {
     payload = { title: 'Amícia', body: event.data.text() };
   }
 
-  const title = payload.title || 'Amícia';
-  const options = {
-    body: payload.body || '',
-    icon: '/pwa192.png',
-    badge: '/pwa192.png',
-    tag: payload.tag || 'amicia-default',
-    requireInteraction: false,
-    data: { url: payload.url || '/' },
-    vibrate: [100, 50, 100],
+  const handle = async () => {
+    // Se quem mandou pediu silentIfOpen, checa se tem alguma aba do app
+    // aberta (qualquer estado: focada, background, minimizada).
+    // App "fechado" = clients.matchAll retorna array vazio → notifica normal.
+    if (payload.silentIfOpen) {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      if (clients.length > 0) {
+        // App aberto em algum lugar → silencia (usuario vai ver na propria UI)
+        return;
+      }
+    }
+
+    const title = payload.title || 'Amícia';
+    const options = {
+      body: payload.body || '',
+      icon: '/pwa192.png',
+      badge: '/pwa192.png',
+      tag: payload.tag || 'amicia-default',
+      requireInteraction: false,
+      data: { url: payload.url || '/' },
+      vibrate: [100, 50, 100],
+    };
+    await self.registration.showNotification(title, options);
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(handle());
 });
 
 self.addEventListener('notificationclick', (event) => {

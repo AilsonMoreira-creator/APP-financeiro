@@ -28,6 +28,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { ativarPushSofia, desativarPushSofia, statusSubscriptionSofia } from './sofia-push-client.js';
 import {
   Bot, RefreshCw, Check, X, Edit3, Send, Filter,
   Users, MessageCircle, Settings, AlertCircle,
@@ -142,6 +143,24 @@ const fmtRelTime = (iso) => {
 export default function LojasWhats({ userId, isAdmin, onBack }) {
   const [activeTab, setActiveTab] = useState('aprovar');
   const [refreshTick, setRefreshTick] = useState(0);
+  // Push notif desktop: 'desabilitado' (no SW/permission), 'inscrito', 'naoinscrito', null=loading
+  const [pushStatus, setPushStatus] = useState(null);
+
+  useEffect(() => {
+    statusSubscriptionSofia().then(setPushStatus).catch(() => setPushStatus('desabilitado'));
+  }, []);
+
+  const togglePush = async () => {
+    if (pushStatus === 'inscrito') {
+      const r = await desativarPushSofia();
+      if (r.ok) setPushStatus('naoinscrito');
+      else alert('Erro: ' + r.motivo);
+    } else if (pushStatus === 'naoinscrito') {
+      const r = await ativarPushSofia(userId);
+      if (r.ok) { setPushStatus('inscrito'); alert('✓ Notificações Sofia ativadas. Só toca quando o app estiver totalmente fechado.'); }
+      else alert('Erro: ' + r.motivo);
+    }
+  };
 
   // Permissao Sofia (Ailson 25/05/2026): isAdmin OU usuario tem 'sofia' em modulos[].
   // Usuario com modulo sofia tem MESMO acesso de admin dentro do modulo:
@@ -183,18 +202,36 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
         subtitle={`Assistente IA WhatsApp · ${new Date().toLocaleDateString('pt-BR')}`}
         onBack={onBack}
         rightContent={
-          <button
-            onClick={() => setRefreshTick(t => t + 1)}
-            style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              color: palette.bg, padding: '6px 10px', borderRadius: 8,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: fz(13), fontFamily: FONT,
-            }}
-          >
-            <RefreshCw size={sz(14)} />
-          </button>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {pushStatus && pushStatus !== 'desabilitado' && (
+              <button
+                onClick={togglePush}
+                title={pushStatus === 'inscrito'
+                  ? 'Notificações ativas (toca só quando app totalmente fechado) — clique pra desativar'
+                  : 'Ativar notificações desktop pra novas msgs Sofia'}
+                style={{
+                  background: pushStatus === 'inscrito' ? 'rgba(39,174,96,0.85)' : 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  color: '#fff', padding: '6px 10px', borderRadius: 8,
+                  cursor: 'pointer', fontSize: fz(14), fontFamily: FONT,
+                }}
+              >
+                {pushStatus === 'inscrito' ? '🔔' : '🔕'}
+              </button>
+            )}
+            <button
+              onClick={() => setRefreshTick(t => t + 1)}
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: palette.bg, padding: '6px 10px', borderRadius: 8,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: fz(13), fontFamily: FONT,
+              }}
+            >
+              <RefreshCw size={sz(14)} />
+            </button>
+          </div>
         }
       />
       <TabBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />

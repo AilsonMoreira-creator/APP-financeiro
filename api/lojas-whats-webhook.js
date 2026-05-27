@@ -39,6 +39,7 @@ import {
   obterUrlMidia,
   baixarMidia
 } from './_lojas-whats-meta-client.js';
+import { enviarPushSofia } from './_push-helpers.js';
 
 // IMPORTANT: precisamos do body CRU pra validar HMAC.
 // Vercel/Next API por padrao parseia body. Desligamos isso aqui:
@@ -254,6 +255,28 @@ async function processarMensagemRecebida(msg, valueCtx) {
       return;  // sai do handler, nao processa mais nada deste retry
     }
     logErro('msg-in-save', errMsg);
+  }
+
+  // Push pra usuarios inscritos na Sofia. Tag por conversa_id deduplica
+  // notifs do mesmo cliente. silentIfOpen no payload → SW silencia se
+  // app esta aberto (Ailson 27/05/2026: so toca se app fechado).
+  // So dispara se msg eh recente (5 min) — protege contra retry/historico.
+  const msgRecente = (Date.now() - parseInt(msg.timestamp, 10) * 1000) < 5 * 60 * 1000;
+  if (msgInserida && msgRecente) {
+    const nomeBonito = primeiroNome(conversa.nome_cliente) || 'Cliente';
+    const previewTxt = dadosMsg.texto
+      ? dadosMsg.texto.slice(0, 80)
+      : (dadosMsg.tipo === 'image' ? '📷 imagem'
+        : dadosMsg.tipo === 'audio' ? '🎤 audio'
+        : dadosMsg.tipo === 'video' ? '🎥 video'
+        : dadosMsg.tipo === 'document' ? '📎 documento'
+        : '(anexo)');
+    enviarPushSofia({
+      titulo: `💬 Sofia · ${nomeBonito}`,
+      mensagem: previewTxt,
+      url: '/?modulo=sofia',
+      tag: `sofia-conv-${conversa.id}`,
+    }).catch(e => console.warn('[lojas-whats-webhook] push falhou:', e.message));
   }
 
   // 4. Avanca etapa quando cliente responde
