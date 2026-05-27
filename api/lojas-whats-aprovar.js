@@ -275,9 +275,14 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
 
   // Se Meta falhou: marca sugestão como falhou (NÃO marca como enviada)
   if (erroEnvio) {
+    // DEBUG TEMPORARIO: salva o metaResponse no texto_editado pra inspecao
+    // via SQL (logs Vercel truncados). Remover apos diagnostico.
+    const debugBlob = erroMetaResponse
+      ? '[DEBUG_META_FAIL] ' + JSON.stringify(erroMetaResponse).slice(0, 2000)
+      : '[DEBUG_META_FAIL_NO_RESP] ' + (erroEnvio || '').slice(0, 500);
     await supabase.from('lojas_whats_sugestoes').update({
       status: 'falhou',
-      texto_editado: acao === 'editar_aprovar' ? textoEditado : null,
+      texto_editado: debugBlob,
       aprovada_por: aprovadaPor,
       aprovada_em: agora,
       atualizada_em: agora
