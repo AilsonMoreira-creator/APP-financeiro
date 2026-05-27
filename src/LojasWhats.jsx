@@ -948,6 +948,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   // (follow_up_vence_em <= NOW) — Sofia ja gerou sugestao pra revisar
   // (ou ja deveria). Demais etapas mantem contagem total.
   const ETAPAS_PRECISA_ACAO = ['conversando', 'quente'];
+  const [unreadPorEtapa, setUnreadPorEtapa] = useState({});
   useEffect(() => {
     (async () => {
       const etapasIds = ETAPAS.map(e => e.id);
@@ -971,6 +972,23 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
         .select('*', { count: 'exact', head: true });
       counts.todas = total || 0;
       setContadores(counts);
+
+      // Conversas com mensagens nao vistas por etapa (badge vermelho)
+      // Ailson 27/05/2026: badge VERMELHO em cima/lado do chip qdo houver
+      // qualquer msg nova nao vista do cliente em qq aba.
+      const unreadQueries = await Promise.all(
+        etapasIds.map(et =>
+          supabase.from('lojas_whats_conversas')
+            .select('*', { count: 'exact', head: true })
+            .eq('etapa', et).gt('unread_count', 0)
+        )
+      );
+      const unread = {};
+      etapasIds.forEach((id, i) => { unread[id] = unreadQueries[i].count || 0; });
+      const { count: totalUnread } = await supabase.from('lojas_whats_conversas')
+        .select('*', { count: 'exact', head: true }).gt('unread_count', 0);
+      unread.todas = totalUnread || 0;
+      setUnreadPorEtapa(unread);
     })();
   }, [refreshTick, reloadTick]);
 
@@ -995,7 +1013,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       const limite = expandido ? 500 : 50;
       let q = supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead')
+        .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count')
         // Prioritarios primeiro
         .order('lead_prioritario', { ascending: false });
       // Aba 'processando' (fila visivel pra assistente): CNPJ primeiro, data desc
@@ -1124,11 +1142,12 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       }}>
         <FiltroChip label="Todas" etapaId="todas" onAjuda={setAjudaEtapa}
           ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')}
-          badge={contadores.todas} />
+          badge={contadores.todas} unread={unreadPorEtapa.todas} />
         {ETAPAS.map(et => (
           <FiltroChip key={et.id} label={et.label} ativo={filtroEtapa === et.id}
             cor={et.cor} onClick={() => setFiltroEtapa(et.id)} iconNome={et.id}
-            etapaId={et.id} onAjuda={setAjudaEtapa} badge={contadores[et.id]} />
+            etapaId={et.id} onAjuda={setAjudaEtapa}
+            badge={contadores[et.id]} unread={unreadPorEtapa[et.id]} />
         ))}
       </div>
 
@@ -1196,7 +1215,18 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
                 onEnviarVendedora={() => setModalEnviar({ conversa: c })}
                 onTogglePrioridade={() => onTogglePrioridade(c)}
                 onEditar={() => setModalEditarLead({ conversa: c })}
-                onAbrirChat={() => setConversaDetalhe(c.id)}
+                onAbrirChat={() => {
+                  setConversaDetalhe(c.id);
+                  // Zera unread localmente (UI instantanea) + no banco (fire-and-forget)
+                  if (c.unread_count > 0) {
+                    setConversas(prev => prev.map(x => x.id === c.id ? { ...x, unread_count: 0 } : x));
+                    fetch('/api/lojas-whats-conversa-vista', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ conversa_id: c.id }),
+                    }).catch(() => {});
+                  }
+                }}
               />
             ))}
           </div>
@@ -1524,7 +1554,7 @@ function ModalEtapa({ etapaId, onClose }) {
   );
 }
 
-const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, onAjuda }) => {
+const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unread, onAjuda }) => {
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }}>
       <button onClick={onClick} style={{
@@ -1548,6 +1578,17 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, onAj
           }}>{badge}</span>
         )}
       </button>
+      {/* Badge VERMELHO de mensagens nao vistas — flutua no canto superior direito */}
+      {typeof unread === 'number' && unread > 0 && (
+        <span style={{
+          position: 'absolute', top: -4, right: 14, zIndex: 1,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          minWidth: 16, height: 16, padding: '0 4px',
+          borderRadius: 8, fontSize: fz(9), fontWeight: 700,
+          background: '#dc2626', color: '#fff', lineHeight: 1,
+          border: '2px solid #fff', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+        }}>{unread}</span>
+      )}
       {etapaId && onAjuda && (
         <button
           onClick={(e) => { e.stopPropagation(); onAjuda(etapaId); }}
@@ -1608,6 +1649,16 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
             <span style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {c.nome_cliente || '—'}
             </span>
+            {/* Badge VERMELHO: mensagens novas nao vistas (Ailson 27/05/2026) */}
+            {c.unread_count > 0 && (
+              <span title={`${c.unread_count} mensagem(ns) nova(s) do cliente`} style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                minWidth: 18, height: 18, padding: '0 5px',
+                borderRadius: 9, fontSize: fz(10), fontWeight: 700,
+                background: '#dc2626', color: '#fff', lineHeight: 1,
+                flexShrink: 0,
+              }}>{c.unread_count}</span>
+            )}
             {ehQuente && c.score_quente && (
               <span style={{
                 fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
