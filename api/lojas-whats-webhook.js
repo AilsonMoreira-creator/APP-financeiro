@@ -305,6 +305,10 @@ async function processarMensagemRecebida(msg, valueCtx) {
     unread_count: (conversa.unread_count || 0) + 1,
     // Cliente respondeu → reseta timer de oferta varejo (cron nao move)
     oferta_varejo_em: null,
+    // Cliente respondeu → reseta timers de catalogo (cron-catalogo nao
+    // dispara msg de 6h nem move pra follow_up de 1d)
+    catalogo_enviado_em: null,
+    catalogo_followup_6h_em: null,
   };
   // Etapas terminais/intermediarias voltam pra 'conversando' quando cliente
   // manda msg nova (Ailson 27/05/2026 — cliente em qualquer aba pode voltar

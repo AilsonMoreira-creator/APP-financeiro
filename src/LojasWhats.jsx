@@ -2343,14 +2343,14 @@ function ConversaoTab({ refreshTick }) {
             gap: 10, marginBottom: 18,
           }}>
             <KpiConvCard
-              label="🤖 Sofia → Site"
+              label="✨ Sofia → Site"
               sub="≤5 dias após msg"
               qtd={dados.kpis.sofia_site.qtd}
               valor={fmtMoney(dados.kpis.sofia_site.valor)}
               corBarra={palette.accent}
             />
             <KpiConvCard
-              label="🤖 Sofia → Loja"
+              label="✨ Sofia → Loja"
               sub="≤15 dias após msg"
               qtd={dados.kpis.sofia_loja.qtd}
               valor={fmtMoney(dados.kpis.sofia_loja.valor)}
@@ -3491,6 +3491,9 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
   const [erro, setErro] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [editandoMsgId, setEditandoMsgId] = useState(null);  // edit msg ja enviada (anota erro)
+  // Botao "robô vazado": dispara IA na hora (Ailson 27/05/2026)
+  const [iaDisparando, setIaDisparando] = useState(false);
+  const [templatesParaEscolher, setTemplatesParaEscolher] = useState(null);  // {templates: []}
   const fimChatRef = useRef(null);
 
   // Carrega conversa + mensagens
@@ -3742,6 +3745,47 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           }}>
           <Paperclip size={sz(16)} color={palette.inkMuted} />
         </button>
+        {/* Robô vazado: pede pra Sofia gerar sugestao AGORA sem esperar
+            o ritmo automatico (Ailson 27/05/2026). Dentro janela 24h →
+            msg livre. Fora → seletor de templates aprovados. */}
+        <button
+          onClick={async () => {
+            if (iaDisparando) return;
+            setIaDisparando(true);
+            try {
+              const r = await fetch('/api/lojas-whats-ia-disparar-manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversa_id: conversaId }),
+              });
+              const d = await r.json();
+              if (!r.ok) { alert('Erro: ' + (d.error || r.status)); return; }
+              if (d.modo === 'livre') {
+                setReloadTick(t => t + 1);  // recarrega sugestoes pendentes
+              } else if (d.modo === 'template') {
+                if (!d.templates?.length) {
+                  alert('Janela 24h expirada e nao ha templates aprovados. Submeta um template antes.');
+                  return;
+                }
+                setTemplatesParaEscolher({ templates: d.templates });
+              }
+            } catch (e) {
+              alert('Erro: ' + e.message);
+            } finally {
+              setIaDisparando(false);
+            }
+          }}
+          disabled={iaDisparando}
+          title="Pedir pra Sofia gerar mensagem agora"
+          style={{
+            background: palette.bg, border: `1px solid ${palette.beige}`,
+            borderRadius: '50%', width: 36, height: 36,
+            cursor: iaDisparando ? 'wait' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, opacity: iaDisparando ? 0.5 : 1,
+          }}>
+          <Bot size={sz(16)} strokeWidth={1.4} color={palette.accent} />
+        </button>
         <textarea
           value={novoTexto}
           onChange={e => setNovoTexto(e.target.value)}
@@ -3773,6 +3817,74 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           onClose={() => setSeletorMidiaAberto(false)}
           onSelect={(m) => { setMidiaAnexada(m); setSeletorMidiaAberto(false); }}
         />
+      )}
+
+      {/* Seletor de TEMPLATE (quando fora da janela 24h WhatsApp) */}
+      {templatesParaEscolher && (
+        <div onClick={() => setTemplatesParaEscolher(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 100, padding: 20,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: palette.bg, borderRadius: 10, padding: 16,
+            maxWidth: 480, width: '100%', maxHeight: '80vh', overflowY: 'auto',
+          }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: fz(15), color: palette.ink }}>
+              Janela 24h expirada — escolha um template
+            </h3>
+            <p style={{ margin: '0 0 12px', fontSize: fz(11), color: palette.inkSoft }}>
+              Cliente nao mandou msg ha mais de 24h. Meta exige template HSM pra reabrir.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {templatesParaEscolher.templates.map(t => (
+                <button key={t.id}
+                  onClick={async () => {
+                    if (!confirm(`Enviar template "${t.name}" pra ${conversa?.nome_cliente || 'cliente'}?`)) return;
+                    try {
+                      const r = await fetch('/api/lojas-whats-mensagem-enviar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          conversa_id: conversaId,
+                          template_name: t.name,
+                          template_language: t.language,
+                          autor: 'assistente',
+                          usuario: userId,
+                        }),
+                      });
+                      const d = await r.json();
+                      if (!r.ok) { alert('Erro: ' + (d.error || r.status)); return; }
+                      setTemplatesParaEscolher(null);
+                      setReloadTick(x => x + 1);
+                    } catch (e) {
+                      alert('Erro: ' + e.message);
+                    }
+                  }}
+                  style={{
+                    textAlign: 'left', padding: 10, borderRadius: 6,
+                    background: palette.surface, border: `1px solid ${palette.beige}`,
+                    cursor: 'pointer', fontFamily: FONT, color: palette.ink,
+                  }}>
+                  <div style={{ fontSize: fz(13), fontWeight: 700, marginBottom: 4 }}>
+                    {t.name} <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 400 }}>· {t.language}</span>
+                  </div>
+                  {t.body && (
+                    <div style={{ fontSize: fz(11), color: palette.inkSoft, whiteSpace: 'pre-wrap' }}>
+                      {t.body.slice(0, 180)}{t.body.length > 180 ? '…' : ''}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setTemplatesParaEscolher(null)} style={{
+              marginTop: 12, width: '100%', padding: '8px',
+              background: 'none', border: `1px solid ${palette.beige}`,
+              borderRadius: 6, cursor: 'pointer', fontFamily: FONT,
+              fontSize: fz(12), color: palette.inkSoft,
+            }}>Cancelar</button>
+          </div>
+        </div>
       )}
 
       {/* ─── Setas de navegacao entre conversas da MESMA aba (Ailson 25/05/2026) ──

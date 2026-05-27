@@ -140,6 +140,13 @@ export default async function handler(req, res) {
       updConv.oferta_varejo_em = agora;
       log('msg-enviar', `conversa=${conversa_id} OFERTA detectada → oferta_varejo_em=${agora}`);
     }
+    // Catalogo enviado → marca pra cron-catalogo monitorar follow-up 6h.
+    // Webhook reseta esse campo qdo cliente responder qualquer coisa.
+    if (midiaFinal?.tipo === 'catalogo') {
+      updConv.catalogo_enviado_em = agora;
+      updConv.catalogo_followup_6h_em = null; // reseta caso ja tinha um anterior
+      log('msg-enviar', `conversa=${conversa_id} CATALOGO enviado → timer 6h ativo`);
+    }
     await supabase.from('lojas_whats_conversas').update(updConv).eq('id', conversa_id);
 
     log('msg-enviar', `conversa=${conversa_id} autor=${autor} midia=${midiaFinal?.id || 'no'}`);
