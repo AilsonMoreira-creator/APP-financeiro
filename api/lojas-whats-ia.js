@@ -562,7 +562,7 @@ async function processarConversa(conversaId) {
     }
     const politicas = await getConfig('politicas_comerciais', null);
     if (politicas) {
-      blocoPoliticas = `POLITICAS COMERCIAIS AMICIA (sigam SEMPRE — pgto/atacado/varejo/frete/troca):\n${JSON.stringify(politicas, null, 2)}\n\nLEMBRETE: PIX padrao 5% sempre, 10%/15% so na negociacao. Atacado 12 pecas (pode misturar). 3-7 pecas eh tabela varejo (+R$30/peca). Bojo: NENHUM modelo tem.`;
+      blocoPoliticas = `POLITICAS COMERCIAIS AMICIA (sigam SEMPRE — pgto/atacado/varejo/frete/troca):\n${JSON.stringify(politicas, null, 2)}\n\nLEMBRETE: PIX padrao 5% sempre, 10%/15% so na negociacao. Atacado 12 pecas (pode misturar). 3-7 pecas eh tabela varejo (+R$30/peca). Bojo: NENHUM modelo tem.\n\nMARCADORES OBRIGATORIOS (backend remove antes de enviar pro cliente, cliente NUNCA ve esses colchetes):\n- Cliente sinaliza 1-2 pecas e voce vai oferecer upgrade pra 3+: COMECE a resposta com [OFERTA_UPGRADE]\n- Cliente sinaliza 3-7 pecas e voce vai oferecer +R$30/peca (tabela varejo): COMECE a resposta com [OFERTA_VAREJO]\nExemplo: "[OFERTA_VAREJO] Olha, conversei com a gerente e ela liberou! Consigo fazer pra vc, mas aumentando R$30 por peca (entra na tabela varejo). Ainda vale muito a pena, viu?"\nIMPORTANTE: nao coloque o marcador se nao for esses casos especificos. Marcador serve pro backend monitorar 24h sem resposta -> move pra aba Varejo automaticamente.`;
     }
     const tecidos = await getConfig('tecidos', null);
     if (tecidos) {

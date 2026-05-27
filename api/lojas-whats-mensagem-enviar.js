@@ -41,6 +41,17 @@ export default async function handler(req, res) {
     let textoLimpo = texto || '';
     let midiaFinal = null;
 
+    // PARSER MARCADORES VAREJO: Sofia usa [OFERTA_VAREJO] ou [OFERTA_UPGRADE]
+    // no inicio quando oferece +R$30 (3-7 pecas) ou upgrade 1-2 -> 3 pecas.
+    // Backend remove o marcador antes de enviar pro cliente e seta o timer
+    // oferta_varejo_em. Cron monitora: 24h sem resposta -> etapa='varejo'.
+    let setOfertaVarejo = false;
+    const matchOferta = textoLimpo.match(/^\s*\[(OFERTA_VAREJO|OFERTA_UPGRADE)\]\s*/i);
+    if (matchOferta) {
+      setOfertaVarejo = true;
+      textoLimpo = textoLimpo.replace(matchOferta[0], '').trim();
+    }
+
     if (midia_id) {
       // midia escolhida explicitamente
       const { data: m } = await supabase.from('lojas_whats_midias')
@@ -120,9 +131,16 @@ export default async function handler(req, res) {
     if (errIns) logErro('msg-enviar/db', errIns);
 
     // Atualiza atividade conversa
-    await supabase.from('lojas_whats_conversas').update({
-      ultima_atividade_em: agora, atualizado_em: agora,
-    }).eq('id', conversa_id);
+    const updConv = { ultima_atividade_em: agora, atualizado_em: agora };
+    if (setOfertaVarejo) {
+      // Marcador [OFERTA_VAREJO] ou [OFERTA_UPGRADE] detectado e removido:
+      // dispara timer de 24h. Cron monitora — se cliente nao responder em
+      // 24h, move conversa pra etapa='varejo'. Webhook (msg-buyer) reseta
+      // esse campo qdo cliente responder qualquer coisa.
+      updConv.oferta_varejo_em = agora;
+      log('msg-enviar', `conversa=${conversa_id} OFERTA detectada → oferta_varejo_em=${agora}`);
+    }
+    await supabase.from('lojas_whats_conversas').update(updConv).eq('id', conversa_id);
 
     log('msg-enviar', `conversa=${conversa_id} autor=${autor} midia=${midiaFinal?.id || 'no'}`);
     return res.json({ ok: true, message_id: metaMsgId, mensagem_id: msgRow?.id });

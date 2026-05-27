@@ -299,26 +299,31 @@ async function processarMensagemRecebida(msg, valueCtx) {
   // 4. Avanca etapa quando cliente responde
   const updates = {
     ultima_atividade_em: new Date().toISOString(),
-    atualizado_em: new Date().toISOString()
+    atualizado_em: new Date().toISOString(),
+    // Incrementa contador de msgs nao vistas (badge vermelho na UI).
+    // Vendedora zera ao abrir conversa via /api/lojas-whats-conversa-vista.
+    unread_count: (conversa.unread_count || 0) + 1,
+    // Cliente respondeu → reseta timer de oferta varejo (cron nao move)
+    oferta_varejo_em: null,
   };
-  if (conversa.etapa === 'enviada') {
+  // Etapas terminais/intermediarias voltam pra 'conversando' quando cliente
+  // manda msg nova (Ailson 27/05/2026 — cliente em qualquer aba pode voltar
+  // a interagir). Excecoes: 'conversando', 'quente', 'processando', 'aprovar'
+  // permanecem (ja sao estados ativos/em transito).
+  const ETAPAS_QUE_VOLTAM = ['enviada', 'follow_up', 'atendida', 'perdida', 'varejo', 'vendeu'];
+  if (ETAPAS_QUE_VOLTAM.includes(conversa.etapa)) {
     updates.etapa = 'conversando';
     updates.cliente_respondeu_em = new Date().toISOString();
-    log('msg-in', `conversa ${conversa.id} avancou: enviada -> conversando`);
-  } else if (conversa.etapa === 'follow_up') {
-    // Sprint B Sofia Follow-up (Ailson 25/05/2026): cliente respondeu em FUp
-    // -> volta pra conversando + limpa tag/contadores. Sofia pode marcar
-    // de novo depois se cliente esfriar de novo.
-    updates.etapa = 'conversando';
-    updates.cliente_respondeu_em = new Date().toISOString();
-    updates.follow_up_tag = null;
-    updates.follow_up_vence_em = null;
-    updates.follow_up_entrou_em = null;
-    updates.follow_up_origem = null;
-    updates.follow_up_motivo = null;
-    // follow_up_tentativas NAO reseta — historico fica preservado pra cron
-    // decidir quando 'desistir' (>= 2 tentativas sem retorno -> perdida).
-    log('msg-in', `conversa ${conversa.id} retornou: follow_up -> conversando`);
+    // Se estava em follow_up, limpa contexto do follow_up tambem
+    if (conversa.etapa === 'follow_up') {
+      updates.follow_up_tag = null;
+      updates.follow_up_vence_em = null;
+      updates.follow_up_entrou_em = null;
+      updates.follow_up_origem = null;
+      updates.follow_up_motivo = null;
+      // follow_up_tentativas NAO reseta — historico preservado
+    }
+    log('msg-in', `conversa ${conversa.id} retornou: ${conversa.etapa} -> conversando`);
   }
   await supabase
     .from('lojas_whats_conversas')

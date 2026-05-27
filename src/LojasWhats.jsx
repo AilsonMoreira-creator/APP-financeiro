@@ -84,6 +84,7 @@ const ETAPAS = [
   { id: 'vendeu',       label: 'Vendeu',       cor: palette.ok },
   { id: 'follow_up',    label: 'Follow up',    cor: '#f59e0b' },
   { id: 'perdida',      label: 'Perdida',      cor: palette.inkMuted },
+  { id: 'varejo',       label: 'Varejo',       cor: '#8b5cf6' },
 ];
 
 const fz = (n) => `${n}px`;
