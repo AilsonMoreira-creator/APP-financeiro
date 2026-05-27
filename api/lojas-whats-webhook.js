@@ -390,19 +390,23 @@ async function baixarESalvarMidiaInbound(mediaId, mime, sufixoNome = '') {
       return null;
     }
     const buf = await baixarMidia(meta.url);
-    const ext = (mime || '').split('/').pop()?.split(';')[0] || 'bin';
+    // Mime do WhatsApp pode vir com parametros (ex: 'audio/ogg; codecs=opus').
+    // Supabase Storage so aceita mime "puro" (sem ;codecs=...) na lista de
+    // allowed_mime_types — strip qq coisa apos ;.
+    const mimePuro = (mime || '').split(';')[0].trim();
+    const ext = mimePuro.split('/').pop() || 'bin';
     const safeSufixo = (sufixoNome || '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 40);
     const fileName = `${Date.now()}_${mediaId}${safeSufixo ? '_' + safeSufixo : ''}.${ext}`;
     const path = `inbound/${fileName}`;
     const { error: errUp } = await supabase.storage
       .from('sofia-midias')
-      .upload(path, buf, { contentType: mime, upsert: false });
+      .upload(path, buf, { contentType: mimePuro, upsert: false });
     if (errUp) {
       logErro('webhook/midia-inbound-upload', errUp);
       return null;
     }
     const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(path);
-    log('midia-inbound', `salva ${mediaId} -> ${path}, ${buf.length} bytes`);
+    log('midia-inbound', `salva ${mediaId} -> ${path}, ${buf.length} bytes (mime=${mimePuro})`);
     return pub?.publicUrl || null;
   } catch (e) {
     logErro('webhook/midia-inbound', e);
