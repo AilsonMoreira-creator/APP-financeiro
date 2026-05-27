@@ -3385,7 +3385,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em')
           .eq('id', conversaId).maybeSingle(),
         supabase.from('lojas_whats_mensagens')
-          .select('id, direcao, autor, tipo_midia, texto, midia_url, meta_message_id, status, enviada_em')
+          .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, midia_url, meta_message_id, status, enviada_em')
           .eq('conversa_id', conversaId)
           .order('enviada_em', { ascending: true })
           .limit(200),
@@ -3929,7 +3929,21 @@ function Bubble({ m }) {
         )}
         {/* AUDIO */}
         {ehAudio && (
-          <audio src={m.midia_url} controls style={{ display: 'block', marginBottom: m.texto ? 6 : 0, maxWidth: 260 }} />
+          <>
+            <audio src={m.midia_url} controls style={{ display: 'block', marginBottom: m.audio_transcricao ? 4 : (m.texto ? 6 : 0), maxWidth: 260 }} />
+            {/* Transcricao Whisper (auto): pra Tamara ler sem precisar dar play */}
+            {m.audio_transcricao && (
+              <div style={{
+                fontSize: fz(11), fontStyle: 'italic', color: palette.inkSoft,
+                padding: '4px 8px', background: 'rgba(0,0,0,0.04)',
+                borderLeft: `2px solid ${palette.inkMuted}`, borderRadius: 4,
+                marginBottom: m.texto ? 6 : 0, maxWidth: 260,
+              }}>
+                <span style={{ fontSize: fz(9), color: palette.inkMuted, fontWeight: 600, marginRight: 4 }}>📝 transcrição:</span>
+                {m.audio_transcricao}
+              </div>
+            )}
+          </>
         )}
         {/* DOCUMENTO: link clicavel */}
         {ehDocumento && (

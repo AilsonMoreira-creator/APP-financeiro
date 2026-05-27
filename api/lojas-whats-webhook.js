@@ -279,6 +279,23 @@ async function processarMensagemRecebida(msg, valueCtx) {
     }).catch(e => console.warn('[lojas-whats-webhook] push falhou:', e.message));
   }
 
+  // STT automatico: se for audio, dispara transcricao via Whisper em
+  // background (fire-and-forget). Endpoint /api/lojas-whats-transcrever
+  // baixa audio do Storage, manda pra OpenAI Whisper, salva resultado
+  // em lojas_whats_mensagens.audio_transcricao. Sofia IA ja consome essa
+  // coluna automaticamente quando vai gerar proxima sugestao.
+  // Nao await — Meta espera resposta rapida do webhook.
+  if (msgInserida && dadosMsg.tipo === 'audio' && midiaUrlFinal?.startsWith('http')) {
+    const host = req.headers?.host || process.env.VERCEL_URL;
+    const proto = host?.includes('localhost') ? 'http' : 'https';
+    const url = `${proto}://${host}/api/lojas-whats-transcrever`;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mensagem_id: msgInserida.id }),
+    }).catch(e => console.warn('[lojas-whats-webhook] disparo transcrever falhou:', e.message));
+  }
+
   // 4. Avanca etapa quando cliente responde
   const updates = {
     ultima_atividade_em: new Date().toISOString(),
