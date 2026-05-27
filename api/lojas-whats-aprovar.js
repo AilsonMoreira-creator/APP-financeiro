@@ -353,6 +353,14 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
     updatesConv.etapa = 'enviada';
     updatesConv.primeira_msg_enviada_em = agora;
   }
+  // Ailson 27/05/2026: fix Neuma — catalogo enviado via aprovar tambem
+  // precisa marcar catalogo_enviado_em pra cron-catalogo FASE 1 (6h) e
+  // FASE 2 (24h) dispararem. Antes so o mensagem-enviar.js marcava;
+  // aprovar.js (que e o fluxo das sugestoes Sofia aprovadas) nao.
+  if (midiaParaEnviar && midiaParaEnviar.tipo === 'catalogo') {
+    updatesConv.catalogo_enviado_em = agora;
+    updatesConv.catalogo_followup_6h_em = null;
+  }
   // Pra replica em outras etapas: NAO toca em etapa
   await supabase.from('lojas_whats_conversas')
     .update(updatesConv)
