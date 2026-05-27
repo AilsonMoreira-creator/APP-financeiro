@@ -222,6 +222,7 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
   let metaResp = null;
   let metaMsgId = null;
   let erroEnvio = null;
+  let erroMetaResponse = null;
 
   try {
     if (sug.tipo === 'primeira_mensagem' && sug.template_name) {
@@ -265,7 +266,11 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
     metaMsgId = metaResp?.messages?.[0]?.id || null;
   } catch (e) {
     erroEnvio = e.message;
+    erroMetaResponse = e.metaResponse || null;
     logErro('aprovar/envio-meta', e);
+    if (erroMetaResponse) {
+      console.error('[lojas-whats/aprovar/envio-meta] metaResponse:', JSON.stringify(erroMetaResponse));
+    }
   }
 
   // Se Meta falhou: marca sugestão como falhou (NÃO marca como enviada)
@@ -277,7 +282,8 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
       aprovada_em: agora,
       atualizada_em: agora
     }).eq('id', sugestaoId);
-    throw new Error(`meta_falhou: ${erroEnvio}`);
+    const detalhe = erroMetaResponse ? ` :: ${JSON.stringify(erroMetaResponse)}` : '';
+    throw new Error(`meta_falhou: ${erroEnvio}${detalhe}`);
   }
 
   // Persiste mensagem enviada
