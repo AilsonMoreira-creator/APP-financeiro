@@ -265,11 +265,11 @@
     },
     {
       "path": "/api/lojas-whats-cron-selecionar",
-      "schedule": "0 10 * * 1-5"
+      "schedule": "0 12 * * 1-5"
     },
     {
       "path": "/api/lojas-whats-processar",
-      "schedule": "45 10 * * 1-5"
+      "schedule": "30 12 * * 1-5"
     },
     {
       "path": "/api/lojas-whats-cron-promover",
