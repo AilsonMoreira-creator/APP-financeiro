@@ -1911,8 +1911,9 @@ function EnviarVendedoraModal({ conversa, onClose, onSucesso, onErro }) {
             background: modo === 'manual' ? palette.accent : palette.surface,
             color: modo === 'manual' ? palette.bg : palette.ink,
             fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}>
-            👤 Definir
+            <Users size={sz(14)} /> Definir
           </button>
         </div>
 
