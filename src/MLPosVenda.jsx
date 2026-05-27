@@ -439,15 +439,11 @@ export default function MLPosVenda({ supabase, currentUser }) {
             // Ordem decrescente — mais RECENTES em cima, mais antigas
             // em baixo (Ailson 13/05/2026). Fallback robusto pra mensagens
             // antigas com date_created NULL: usa created_at.
-            // Tie-breaker por id (autoincrement) garante ordem estavel quando
-            // duas msgs tem o mesmo timestamp (precisao em segundos do ML).
             [...msgs]
               .sort((a, b) => {
                 const ta = new Date(a.date_created || a.created_at || 0).getTime();
                 const tb = new Date(b.date_created || b.created_at || 0).getTime();
-                if (tb !== ta) return tb - ta;
-                // Mesmo timestamp → desempate por id (insert order)
-                return (b.id || 0) - (a.id || 0);
+                return tb - ta;
               })
               .map((m, i) => (
             <div key={m.id || i} style={{ marginBottom: 14, display: 'flex', flexDirection: m.from_type === 'seller' ? 'row-reverse' : 'row', gap: 8 }}>

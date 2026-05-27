@@ -58,10 +58,6 @@ async function syncBrand(brand) {
             from_id: String(m.from?.user_id || ''),
             text: m.text?.plain || m.text || '',
             attachments,
-            // Ailson 26/05/2026: garantir que date_created NUNCA seja NULL
-            // (ordem de msgs no chat depende disso — NULLs caiam no fallback
-            // created_at e mensagens antigas importadas hoje apareciam como
-            // "mais recentes" que mensagens reais de ontem).
             date_created: m.date_created || new Date().toISOString(),
           }, { onConflict: 'message_id,brand' });
 
