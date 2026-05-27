@@ -129,3 +129,63 @@ export function checarAuthCron(req) {
   const user = String(req.query?.user || '');
   return ['ailson', 'amicia-admin'].includes(user);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SAC PUSH (Mercado Livre pos-venda)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Envia push notification pra TODOS os usuarios inscritos no SAC.
+ * Chamado pelo webhook + sync quando uma mensagem nova de buyer entra.
+ * Auto-limpa subscriptions invalidas (410/404).
+ *
+ * @param {object} opts
+ * @param {string} opts.titulo - titulo da notificacao
+ * @param {string} opts.mensagem - corpo
+ * @param {string} opts.url - url pra abrir ao clicar (default '/' que cai na home)
+ * @param {string} opts.tag - tag pra dedup (default 'sac-msg')
+ * @returns { enviadas, falhadas, removidas }
+ */
+export async function enviarPushSAC({ titulo, mensagem, url = '/', tag = 'sac-msg' }) {
+  if (!VAPID_PRIVATE_KEY) {
+    return { enviadas: 0, falhadas: 0, removidas: 0, motivo: 'VAPID nao configurado' };
+  }
+
+  const { data: subs, error } = await supabase
+    .from('sac_push_subscriptions')
+    .select('id, endpoint, subscription, user_id');
+  if (error || !subs?.length) {
+    return { enviadas: 0, falhadas: 0, removidas: 0 };
+  }
+
+  const payload = JSON.stringify({
+    title: titulo || 'Amícia SAC',
+    body: mensagem,
+    url,
+    tag,
+  });
+
+  let enviadas = 0, falhadas = 0, removidas = 0;
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification(s.subscription, payload);
+      enviadas++;
+      // touch — atualiza ultimo_uso pra rastrear quem ainda recebe
+      await supabase
+        .from('sac_push_subscriptions')
+        .update({ ultimo_uso_em: new Date().toISOString() })
+        .eq('id', s.id);
+    } catch (err) {
+      const status = err?.statusCode || 0;
+      if (status === 410 || status === 404) {
+        // Subscription expirou/foi removida no browser — limpa
+        await supabase.from('sac_push_subscriptions').delete().eq('id', s.id);
+        removidas++;
+      } else {
+        falhadas++;
+        console.warn('[push-sac] falha sub', s.id, err?.message);
+      }
+    }
+  }
+  return { enviadas, falhadas, removidas };
+}

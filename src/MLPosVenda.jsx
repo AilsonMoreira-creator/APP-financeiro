@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SacIcon } from './SacIcons';
+import { ativarPushSAC, desativarPushSAC, statusSubscriptionSAC } from './sac-push-client.js';
 
 const PALETTE = {
   dark: '#2c3e50', blue: '#4a7fa5', cream: '#f7f4f0', sand: '#e8e2da', white: '#fff',
@@ -54,7 +55,26 @@ export default function MLPosVenda({ supabase, currentUser }) {
   // Sprint anexos 04/05/2026: lista de anexos pendentes pra enviar junto da mensagem
   const [pendingAttachments, setPendingAttachments] = useState([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  // Notif desktop: 'desabilitado' (no SW), 'inscrito', 'naoinscrito', null=loading
+  const [pushStatus, setPushStatus] = useState(null);
   const chatEndRef = useRef(null);
+
+  // Carrega status notif desktop ao montar
+  useEffect(() => {
+    statusSubscriptionSAC().then(setPushStatus).catch(() => setPushStatus('desabilitado'));
+  }, []);
+
+  const togglePush = async () => {
+    if (pushStatus === 'inscrito') {
+      const r = await desativarPushSAC();
+      if (r.ok) setPushStatus('naoinscrito');
+      else alert('Erro: ' + r.motivo);
+    } else if (pushStatus === 'naoinscrito') {
+      const r = await ativarPushSAC(currentUser);
+      if (r.ok) { setPushStatus('inscrito'); alert('✓ Notificações ativadas. Vc vai ser alertado quando chegar msg pós-venda.'); }
+      else alert('Erro: ' + r.motivo);
+    }
+  };
 
   // ── Fetch conversas ──
   const fetchConvs = useCallback(async () => {
@@ -419,11 +439,15 @@ export default function MLPosVenda({ supabase, currentUser }) {
             // Ordem decrescente — mais RECENTES em cima, mais antigas
             // em baixo (Ailson 13/05/2026). Fallback robusto pra mensagens
             // antigas com date_created NULL: usa created_at.
+            // Tie-breaker por id (autoincrement) garante ordem estavel quando
+            // duas msgs tem o mesmo timestamp (precisao em segundos do ML).
             [...msgs]
               .sort((a, b) => {
                 const ta = new Date(a.date_created || a.created_at || 0).getTime();
                 const tb = new Date(b.date_created || b.created_at || 0).getTime();
-                return tb - ta;
+                if (tb !== ta) return tb - ta;
+                // Mesmo timestamp → desempate por id (insert order)
+                return (b.id || 0) - (a.id || 0);
               })
               .map((m, i) => (
             <div key={m.id || i} style={{ marginBottom: 14, display: 'flex', flexDirection: m.from_type === 'seller' ? 'row-reverse' : 'row', gap: 8 }}>
@@ -639,6 +663,19 @@ export default function MLPosVenda({ supabase, currentUser }) {
           }}>{b}</button>
         ))}
         <button onClick={fetchConvs} style={{ ...S, background: PALETTE.dark, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600, marginLeft: 'auto', display: 'inline-flex', alignItems: 'center' }}><SacIcon name="sync" size={14} style={{filter:'brightness(0) invert(1)'}}/></button>
+        {/* Botao notif desktop: 🔔 inscrito · 🔕 nao inscrito · oculto se browser nao suporta */}
+        {pushStatus && pushStatus !== 'desabilitado' && (
+          <button onClick={togglePush}
+            title={pushStatus === 'inscrito' ? 'Notificações ativas — clique pra desativar' : 'Ativar notificações desktop pra novas mensagens'}
+            style={{
+              ...S, background: pushStatus === 'inscrito' ? '#27ae60' : PALETTE.sand,
+              color: pushStatus === 'inscrito' ? '#fff' : PALETTE.text,
+              border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 14,
+              cursor: 'pointer', fontWeight: 600,
+            }}>
+            {pushStatus === 'inscrito' ? '🔔' : '🔕'}
+          </button>
+        )}
         {(() => {
           const faltando = convs.filter(c => !c.item_title || !c.item_thumbnail).length;
           if (faltando === 0 && !enrichLoading) return null;

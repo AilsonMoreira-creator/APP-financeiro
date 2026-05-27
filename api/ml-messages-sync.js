@@ -4,6 +4,7 @@
  * Busca mensagens não lidas das 3 contas e atualiza Supabase
  */
 import { supabase, getValidToken, BRANDS } from './_ml-helpers.js';
+import { enviarPushSAC } from './_push-helpers.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 
@@ -57,6 +58,10 @@ async function syncBrand(brand) {
             from_id: String(m.from?.user_id || ''),
             text: m.text?.plain || m.text || '',
             attachments,
+            // Ailson 26/05/2026: garantir que date_created NUNCA seja NULL
+            // (ordem de msgs no chat depende disso — NULLs caiam no fallback
+            // created_at e mensagens antigas importadas hoje apareciam como
+            // "mais recentes" que mensagens reais de ontem).
             date_created: m.date_created || new Date().toISOString(),
           }, { onConflict: 'message_id,brand' });
 
@@ -88,6 +93,18 @@ async function syncBrand(brand) {
           }
 
           await supabase.from('ml_conversations').update(update).eq('id', conv.id);
+
+          // Push pra usuarios SAC inscritos (so se ultima msg eh nova e do buyer).
+          // Webhook tambem dispara — tag por conv_id deduplica notif repetida.
+          if (lastFrom === 'buyer' && lastIsNew) {
+            const previewTxt = (last.text?.plain || last.text || '').slice(0, 80) || '(anexo)';
+            enviarPushSAC({
+              titulo: `🛒 ${brand} · nova mensagem`,
+              mensagem: previewTxt,
+              url: '/?sac=1',
+              tag: `sac-conv-${conv.id}`,
+            }).catch(e => console.warn('[ml-msg-sync] push falhou:', e.message));
+          }
         }
 
         // Delay entre packs (respeita rate limit ML)

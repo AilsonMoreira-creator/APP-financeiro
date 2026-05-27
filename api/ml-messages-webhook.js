@@ -4,6 +4,7 @@
  * Salva conversa + mensagem no Supabase
  */
 import { supabase, getValidToken } from './_ml-helpers.js';
+import { enviarPushSAC } from './_push-helpers.js';
 
 const ML_API = 'https://api.mercadolibre.com';
 
@@ -177,6 +178,17 @@ export default async function handler(req, res) {
       attachments,
       date_created: msg.date_created || new Date().toISOString(),
     }, { onConflict: 'message_id,brand' });
+
+    // Push pra usuarios SAC inscritos (so se msg eh do buyer)
+    if (fromType === 'buyer') {
+      const previewTxt = (msg.text?.plain || msg.text || '').slice(0, 80) || '(anexo)';
+      enviarPushSAC({
+        titulo: `🛒 ${brand} · nova mensagem`,
+        mensagem: previewTxt,
+        url: '/?sac=1',
+        tag: `sac-conv-${conv.id}`,  // mesma tag substitui notif anterior da mesma conv
+      }).catch(e => console.warn('[ml-msg-webhook] push falhou:', e.message));
+    }
 
     return res.status(200).json({ processed: true, pack_id: packId, message_id: msgId });
   } catch (err) {
