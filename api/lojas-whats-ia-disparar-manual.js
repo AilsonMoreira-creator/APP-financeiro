@@ -8,15 +8,17 @@
 // - Verifica ultima msg do cliente:
 //   - <24h (dentro da janela WhatsApp): chama IA normal → gera msg livre
 //     como sugestao pendente (Tamara aprova como sempre)
-//   - >=24h (fora da janela): retorna lista de templates aprovados pra
-//     Tamara escolher manualmente (Meta exige template fora da janela)
+//   - >=24h (fora da janela): Sofia escolhe template automaticamente
+//     (followup_catalogo_24h_v1 | carrinho_abandonado_site_amicia_v2 |
+//     visita_site_amicia_v1) e cria sugestao pendente. Tamara aprova
+//     no fluxo normal — sem modal de templates tecnicos.
 //
 // POST { conversa_id }
 // Resposta:
-//   { ok, modo: 'livre' }  ← sugestao criada, ja aparece na fila
-//   { ok, modo: 'template', templates: [...] }  ← frontend mostra seletor
+//   { ok, modo: 'livre' }            ← IA gerou msg livre
+//   { ok, modo: 'sugestao_criada' }  ← Sofia escolheu template + criou sugestao
 //
-// Ailson 27/05/2026
+// Ailson 27/05/2026 (refator: trocou modo:'template' por sugestao_criada)
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, setCors, logErro } from './_lojas-whats-helpers.js';
@@ -67,21 +69,73 @@ export default async function handler(req, res) {
       });
     }
 
-    // FORA da janela: lista templates aprovados pra Tamara escolher
-    const { data: templates, error: errTpl } = await supabase
+    // FORA da janela: Sofia escolhe template automaticamente baseado em contexto
+    // e cria uma sugestao pendente — Tamara aprova na aba "Aprovar" como sempre.
+    // (Ailson 27/05/2026 — substituiu o modal de templates tecnicos)
+    const { data: conv } = await supabase
+      .from('lojas_whats_conversas')
+      .select('id, telefone, nome_cliente, qtd_pecas, catalogo_enviado_em')
+      .eq('id', conversa_id)
+      .maybeSingle();
+    if (!conv) return res.status(404).json({ error: 'conversa_nao_encontrada' });
+
+    // Regra de escolha:
+    //  catalogo enviado <48h → followup_catalogo_24h_v1
+    //  qtd_pecas >= 1       → carrinho_abandonado_site_amicia_v2
+    //  else (so visitou)    → visita_site_amicia_v1
+    const agora48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    let templateName;
+    if (conv.catalogo_enviado_em && new Date(conv.catalogo_enviado_em) > agora48h) {
+      templateName = 'followup_catalogo_24h_v1';
+    } else if (Number(conv.qtd_pecas || 0) >= 1) {
+      templateName = 'carrinho_abandonado_site_amicia_v2';
+    } else {
+      templateName = 'visita_site_amicia_v1';
+    }
+
+    const { data: tpl } = await supabase
       .from('lojas_whats_templates')
-      .select('name, language, category, body_text, variables, botoes, meta_template_id')
-      .eq('status', 'aprovado')
+      .select('name, body_text, language')
+      .eq('name', templateName)
       .eq('ativo', true)
-      .order('name', { ascending: true });
-    if (errTpl) throw errTpl;
+      .maybeSingle();
+    if (!tpl) return res.status(500).json({ error: `template ${templateName} nao encontrado` });
+
+    // Renderiza vars no corpo do template
+    const primeiroNome = (conv.nome_cliente || 'cliente').split(' ')[0];
+    const vars = { '1': primeiroNome, '2': String(conv.qtd_pecas || 0) };
+    let textoProposto = tpl.body_text;
+    for (const [k, v] of Object.entries(vars)) {
+      textoProposto = textoProposto.replaceAll(`{{${k}}}`, v);
+    }
+
+    // Cria sugestao pendente
+    const { data: sug, error: errSug } = await supabase
+      .from('lojas_whats_sugestoes')
+      .insert({
+        conversa_id,
+        tipo: 'primeira_mensagem',
+        template_name: tpl.name,
+        template_vars: vars,
+        texto_proposto: textoProposto,
+        status: 'pendente',
+        motivo_proposta: 'tamara_pediu_sofia_gerar',
+      })
+      .select()
+      .single();
+    if (errSug) throw errSug;
+
+    // Move conversa pra etapa 'aprovar' (se nao estiver)
+    await supabase
+      .from('lojas_whats_conversas')
+      .update({ etapa: 'aprovar', atualizado_em: new Date().toISOString() })
+      .eq('id', conversa_id);
 
     return res.status(200).json({
       ok: true,
-      modo: 'template',
-      motivo: 'janela 24h expirada — Meta exige template HSM',
-      ultima_msg_cliente_em: ultimaBuyer?.enviada_em || null,
-      templates: templates || [],
+      modo: 'sugestao_criada',
+      template: tpl.name,
+      sugestao_id: sug.id,
     });
   } catch (e) {
     logErro('ia-disparar-manual', e);
