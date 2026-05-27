@@ -22,19 +22,24 @@ import { supabase, log, logErro } from './_lojas-whats-helpers.js';
 import { enviarTexto, enviarTemplate } from './_lojas-whats-meta-client.js';
 
 const VARIACOES_MSG_6H = [
-  'Oi! Conseguiu dar uma olhadinha no catálogo? Ficou alguma dúvida em algum modelo? 🤗',
-  'Oi, tudo bem? Deu pra ver o catálogo? Posso te ajudar com alguma peça em específico?',
-  'Oi! Passando aqui pra saber se vc viu o catálogo… alguma dúvida? Posso te mandar mais info de algum modelo?',
-  'Olá! Conseguiu olhar o catálogo? Se ficou na dúvida em algo, me chama que te ajudo 🙌',
+  'Oi {nome}! Conseguiu dar uma olhadinha no catálogo? Ficou alguma dúvida em algum modelo? 🤗',
+  'Oi {nome}, tudo bem? Deu pra ver o catálogo? Posso te ajudar com alguma peça em específico?',
+  'Oi {nome}! Passando aqui pra saber se vc viu o catálogo… alguma dúvida? Posso te mandar mais info de algum modelo?',
+  'Olá {nome}! Conseguiu olhar o catálogo? Se ficou na dúvida em algo, me chama que te ajudo 🙌',
 ];
 
-function escolherMsg6h(conversaId) {
+function escolherMsg6h(conversaId, nomeCliente) {
   // Pseudo-aleatorio determinista baseado no id da conversa pra ela receber
   // sempre a mesma variacao (idempotencia se cron rodar 2x)
   const idStr = String(conversaId);
   let h = 0;
   for (let i = 0; i < idStr.length; i++) h = (h * 31 + idStr.charCodeAt(i)) | 0;
-  return VARIACOES_MSG_6H[Math.abs(h) % VARIACOES_MSG_6H.length];
+  const template = VARIACOES_MSG_6H[Math.abs(h) % VARIACOES_MSG_6H.length];
+  // Pega primeiro nome — mais natural. Se vazio, fallback educado.
+  const primeiroNome = (nomeCliente || '').split(' ')[0].trim();
+  return primeiroNome
+    ? template.replace('{nome}', primeiroNome)
+    : template.replace('Oi {nome}!', 'Oi!').replace('Oi {nome},', 'Oi, tudo bem?').replace('Olá {nome}!', 'Olá!');
 }
 
 export default async function handler(req, res) {
@@ -78,7 +83,7 @@ export default async function handler(req, res) {
 
       for (const conv of f1) {
         try {
-          const texto = escolherMsg6h(conv.id);
+          const texto = escolherMsg6h(conv.id, conv.nome_cliente);
           const r = await enviarTexto(conv.telefone, texto);
           const metaMsgId = r?.messages?.[0]?.id || null;
           if (!metaMsgId) throw new Error('meta_sem_message_id');

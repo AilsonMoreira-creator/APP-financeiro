@@ -70,8 +70,9 @@ export default async function handler(req, res) {
     // FORA da janela: lista templates aprovados pra Tamara escolher
     const { data: templates, error: errTpl } = await supabase
       .from('lojas_whats_templates')
-      .select('id, name, language, body, header_type, header_text, footer, components')
+      .select('name, language, category, body_text, variables, botoes, meta_template_id')
       .eq('status', 'aprovado')
+      .eq('ativo', true)
       .order('name', { ascending: true });
     if (errTpl) throw errTpl;
 

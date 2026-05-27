@@ -1022,7 +1022,10 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       const limite = expandido ? 500 : 50;
       let q = supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos')
+        .select(`
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos,
+          handoffs:lojas_whats_handoffs(status)
+        `)
         // Prioritarios primeiro
         .order('lead_prioritario', { ascending: false });
       // Aba 'processando' (fila visivel pra assistente): CNPJ primeiro, data desc
@@ -1798,29 +1801,46 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
         </div>
       )}
 
-      {/* Botões só pra etapa quente */}
-      {ehQuente && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}` }}>
-          <button onClick={onContinuarSofia} style={{
-            flex: 1, padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
-            background: palette.surface, color: palette.ink,
-            border: `1px solid ${palette.beige}`,
-            fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-          }}>
-            <Bot size={sz(14)} /> Continuar Sofia
-          </button>
-          <button onClick={onEnviarVendedora} style={{
-            flex: 1, padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
-            background: '#f5a623', color: '#fff',
-            border: '1px solid #f5a623',
-            fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-          }}>
-            <Users size={sz(14)} /> Enviar vendedora
-          </button>
-        </div>
-      )}
+      {/* Botões só pra etapa quente — esconde se ja tem handoff pendente */}
+      {ehQuente && (() => {
+        const handoffPend = (c.handoffs || []).some(h => ['aguardando','fila_fora_janela'].includes(h.status));
+        if (handoffPend) {
+          // Ja foi enviada pra vendedora — mostra status passivo
+          return (
+            <div style={{
+              marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}`,
+              padding: '8px 10px', background: '#ecfdf5', border: '1px solid #86efac',
+              borderRadius: 6, color: '#166534',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+            }}>
+              <Users size={sz(14)} /> Enviado pra vendedora — aguardando aceitar
+            </div>
+          );
+        }
+        return (
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}` }}>
+            <button onClick={onContinuarSofia} style={{
+              flex: 1, padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
+              background: palette.surface, color: palette.ink,
+              border: `1px solid ${palette.beige}`,
+              fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            }}>
+              <Bot size={sz(14)} /> Continuar Sofia
+            </button>
+            <button onClick={onEnviarVendedora} style={{
+              flex: 1, padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
+              background: '#f5a623', color: '#fff',
+              border: '1px solid #f5a623',
+              fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            }}>
+              <Users size={sz(14)} /> Enviar vendedora
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -3911,7 +3931,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {templatesParaEscolher.templates.map(t => (
-                <button key={t.id}
+                <button key={t.name}
                   onClick={async () => {
                     if (!confirm(`Enviar template "${t.name}" pra ${conversa?.nome_cliente || 'cliente'}?`)) return;
                     try {
@@ -3942,9 +3962,9 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
                   <div style={{ fontSize: fz(13), fontWeight: 700, marginBottom: 4 }}>
                     {t.name} <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 400 }}>· {t.language}</span>
                   </div>
-                  {t.body && (
+                  {t.body_text && (
                     <div style={{ fontSize: fz(11), color: palette.inkSoft, whiteSpace: 'pre-wrap' }}>
-                      {t.body.slice(0, 180)}{t.body.length > 180 ? '…' : ''}
+                      {t.body_text.slice(0, 180)}{t.body_text.length > 180 ? '…' : ''}
                     </div>
                   )}
                 </button>
