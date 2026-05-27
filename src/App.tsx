@@ -9178,8 +9178,31 @@ const FichaTecnicaContent=()=>{
 export default function App(){
   const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);const ehAdmin=(u.id===1||u.usuario==='admin');if(ehAdmin){u.admin=true;/* Admin sempre recebe TODOS os modulos atualizados (inclui modulos novos como osamicia) */u.modulos=[...TODOS_MODULOS,"usuarios"];try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}return u;}catch{return null;}});
   const [active,setActive]=useState(()=>{
+    // Deep-linking: ?sac=1 ou ?modulo=X (vem do click em push notification)
+    try{
+      const params=new URLSearchParams(window.location.search);
+      if(params.get('sac')==='1')return'sac';
+      const mod=params.get('modulo');
+      if(mod)return mod;
+    }catch{}
     try{const s=localStorage.getItem("amica_session");if(s){const u=JSON.parse(s);const mod=u.moduloPadrao||"home";if(u.admin||mod==="home"||u.modulos?.includes(mod))return mod;return u.modulos?.[0]||"home";}}catch{}return"lancamentos";
   });
+
+  // Listener: SW dispara 'amicia-navegar' quando user clica em push notification
+  // (aba ja estava aberta). main.tsx propaga o postMessage do SW como custom event.
+  useEffect(()=>{
+    const handler=(e)=>{
+      try{
+        const u=new URL(e.detail.url, window.location.origin);
+        const params=u.searchParams;
+        if(params.get('sac')==='1'){setActive('sac');return;}
+        const mod=params.get('modulo');
+        if(mod)setActive(mod);
+      }catch{}
+    };
+    window.addEventListener('amicia-navegar',handler);
+    return()=>window.removeEventListener('amicia-navegar',handler);
+  },[]);
   const [sacResetTrigger,setSacResetTrigger]=useState(0);
   const [menuUser,setMenuUser]=useState(false);
   const [iaOpen,setIaOpen]=useState(false); // Sprint 8: modal "Perguntar à IA" (global, qualquer módulo)

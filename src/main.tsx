@@ -32,6 +32,10 @@ if ('serviceWorker' in navigator) {
       console.log('[App] SW atualizado, recarregando…', event.data.version);
       window.location.reload();
     }
+    // Push notification clicada: SW envia a URL pra App.tsx navegar internamente
+    if (event.data?.type === 'NAVEGAR_PARA' && event.data?.url) {
+      window.dispatchEvent(new CustomEvent('amicia-navegar', { detail: { url: event.data.url } }));
+    }
   });
 
   // Tambem recarrega quando o controller muda (SW novo ativa)

@@ -12,7 +12,7 @@
 // Pra Lojas (uso 100% online), eh aceitavel.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SW_VERSION = '2026-05-08-v2';
+const SW_VERSION = '2026-05-27-v3';
 
 self.addEventListener('install', (event) => {
   console.log('[SW] install', SW_VERSION);
@@ -76,11 +76,14 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         const url = new URL(client.url);
         if (url.origin === self.location.origin && 'focus' in client) {
-          client.navigate(targetUrl);
+          // Aba ja aberta: posta mensagem pra atualizar estado React
+          // (client.navigate so muda URL, nao re-roda useState init no React)
+          client.postMessage({ type: 'NAVEGAR_PARA', url: targetUrl });
           return client.focus();
         }
       }
       if (self.clients.openWindow) {
+        // Aba fechada: abre nova com query param que useState init le
         return self.clients.openWindow(targetUrl);
       }
     })
