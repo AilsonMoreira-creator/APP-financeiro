@@ -4016,7 +4016,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
             />
             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
               <button
-                onClick={() => acionar('aprovar', editText)}
+                onClick={() => acionar('editar_aprovar', editText)}
                 disabled={acaoEm}
                 style={{
                   padding: '6px 12px', background: '#2c7a4f', color: '#fff',
@@ -4221,6 +4221,19 @@ function Bubble({ m }) {
             <span>📎 Abrir documento</span>
           </a>
         )}
+        {/* Tipo 'unsupported' = WhatsApp Business API nao consegue processar
+            esse formato (ex: vCard, certos stickers animados, formatos exoticos).
+            Limitacao da Meta — nao tem como recuperar o arquivo via API. */}
+        {m.tipo_midia === 'unsupported' && (
+          <div style={{
+            padding: '8px 10px', background: '#fef3c7',
+            border: '1px solid #fcd34d', borderRadius: 6, marginBottom: 6,
+            display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#92400e',
+          }}>
+            <span>⚠️</span>
+            <span>Cliente enviou um arquivo em formato que o WhatsApp Business API não consegue baixar (vCard, sticker animado, etc). Peça pra reenviar como foto, vídeo ou PDF.</span>
+          </div>
+        )}
         {/* Fallback: tem tipo de midia mas URL nao chegou (ainda baixando ou erro) */}
         {!ehImagem && !ehVideo && !ehAudio && !ehDocumento &&
          (m.tipo_midia === 'image' || m.tipo_midia === 'video' || m.tipo_midia === 'document' || m.tipo_midia === 'audio') && (
@@ -4233,7 +4246,11 @@ function Bubble({ m }) {
             {m.tipo_midia === 'image' && <Image size={14} />}
             {m.tipo_midia === 'video' && <Video size={14} />}
             {m.tipo_midia === 'document' && <FileText size={14} />}
-            <span>Mídia (carregando...)</span>
+            <span>
+              {m.midia_url
+                ? `❌ Mídia indisponível (falha no download — link Meta expira em ~5min, peça pra reenviar)`
+                : 'Mídia (carregando...)'}
+            </span>
           </div>
         )}
         {m.texto && (

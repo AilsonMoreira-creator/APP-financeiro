@@ -279,21 +279,35 @@ async function processarMensagemRecebida(msg, valueCtx) {
     }).catch(e => console.warn('[lojas-whats-webhook] push falhou:', e.message));
   }
 
-  // STT automatico: se for audio, dispara transcricao via Whisper em
-  // background (fire-and-forget). Endpoint /api/lojas-whats-transcrever
-  // baixa audio do Storage, manda pra OpenAI Whisper, salva resultado
-  // em lojas_whats_mensagens.audio_transcricao. Sofia IA ja consome essa
-  // coluna automaticamente quando vai gerar proxima sugestao.
-  // Nao await — Meta espera resposta rapida do webhook.
+  // STT automatico: se for audio, dispara transcricao via Whisper.
+  // Endpoint /api/lojas-whats-transcrever baixa audio do Storage, manda
+  // pra OpenAI Whisper, salva resultado em audio_transcricao.
+  // Sofia IA ja consome esse campo automaticamente.
+  //
+  // IMPORTANTE (Ailson 27/05/2026): NAO usar fire-and-forget aqui.
+  // Vercel serverless mata Promise orfa quando o webhook termina o response,
+  // entao a chamada nunca chegava no endpoint. Usar await com timeout
+  // garante execucao. Whisper tipico 2-5s, timeout 12s pra margem.
   if (msgInserida && dadosMsg.tipo === 'audio' && midiaUrlFinal?.startsWith('http')) {
     const host = req.headers?.host || process.env.VERCEL_URL;
     const proto = host?.includes('localhost') ? 'http' : 'https';
     const url = `${proto}://${host}/api/lojas-whats-transcrever`;
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mensagem_id: msgInserida.id }),
-    }).catch(e => console.warn('[lojas-whats-webhook] disparo transcrever falhou:', e.message));
+    try {
+      const ctrl = AbortSignal.timeout(12000);
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagem_id: msgInserida.id }),
+        signal: ctrl,
+      });
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '');
+        log('webhook/transcrever', `falha http ${r.status}: ${txt.slice(0, 120)}`);
+      }
+    } catch (e) {
+      // Timeout ou erro de rede — nao bloqueia webhook (msg ja foi salva)
+      log('webhook/transcrever', `erro: ${e.message}`);
+    }
   }
 
   // 4. Avanca etapa quando cliente responde
