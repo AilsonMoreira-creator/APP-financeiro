@@ -4117,6 +4117,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
 }
 
 function Bubble({ m }) {
+  const [capaErr, setCapaErr] = useState(false);
   const ehSaida = m.direcao === 'saida';
   const ehAssistente = m.autor === 'assistente';
   // Ailson 25/05/2026: padroniza verde WhatsApp pra TODA msg de saida
@@ -4147,6 +4148,15 @@ function Bubble({ m }) {
   const ehVideo = m.tipo_midia === 'video' && m.midia_url && m.midia_url.startsWith('http');
   const ehDocumento = m.tipo_midia === 'document' && m.midia_url && m.midia_url.startsWith('http');
   const ehAudio = m.tipo_midia === 'audio' && m.midia_url && m.midia_url.startsWith('http');
+
+  // Ailson 27/05/2026: pra catalogos (path inclui /catalogos/), tentar
+  // mostrar capa.jpg do mesmo folder como miniatura clicavel em vez de
+  // ícone genérico de documento. Se a capa nao existir (404), useState
+  // capaErr ativa e volta pro layout antigo de "Abrir documento".
+  const ehCatalogo = ehDocumento && m.midia_url.includes('/catalogos/');
+  const capaUrl = ehCatalogo
+    ? m.midia_url.replace(/\/catalogos\/[^/]+$/, '/catalogos/capa.jpg')
+    : null;
 
   return (
     <div style={{ display: 'flex', justifyContent: align, marginBottom: 8 }}>
@@ -4209,7 +4219,33 @@ function Bubble({ m }) {
           </>
         )}
         {/* DOCUMENTO: link clicavel */}
-        {ehDocumento && (
+        {ehDocumento && ehCatalogo && !capaErr && (
+          <a
+            href={m.midia_url} target="_blank" rel="noopener noreferrer"
+            style={{
+              display: 'block', textDecoration: 'none', cursor: 'pointer',
+              marginBottom: m.texto ? 6 : 0,
+            }}
+            title="Abrir catálogo (PDF)"
+          >
+            <img
+              src={capaUrl}
+              alt="Catálogo Amícia"
+              onError={() => setCapaErr(true)}
+              style={{
+                maxWidth: 220, width: '100%', borderRadius: 8,
+                display: 'block', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              }}
+            />
+            <div style={{
+              fontSize: 10, color: palette.inkMuted, marginTop: 3,
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <FileText size={11} /> Catálogo · clique pra abrir
+            </div>
+          </a>
+        )}
+        {ehDocumento && (!ehCatalogo || capaErr) && (
           <a
             href={m.midia_url} target="_blank" rel="noopener noreferrer"
             style={{
@@ -4221,7 +4257,7 @@ function Bubble({ m }) {
             }}
           >
             <FileText size={16} />
-            <span>📎 Abrir documento</span>
+            <span>📎 Abrir {ehCatalogo ? 'catálogo' : 'documento'}</span>
           </a>
         )}
         {/* Tipo 'unsupported' = WhatsApp Business API nao consegue processar
