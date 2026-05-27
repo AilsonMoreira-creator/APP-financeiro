@@ -124,6 +124,7 @@ async function executarSelecao(req, res) {
         id, first_name, nome_completo,
         telefone_norm, tipo_pessoa, taxvat_norm, taxvat_raw,
         qtd_pecas_ultimo_carrinho, valor_ultimo_carrinho,
+        qtd_carrinhos_total,
         ultimo_carrinho_em, last_access, primeira_visita_em,
         ja_e_cliente_lojas_id, vendedora_atribuida_id, vendedora_dona_id,
         status, convertido_em
@@ -146,6 +147,13 @@ async function executarSelecao(req, res) {
     const limiteData = Date.now() - dias * 24 * 60 * 60 * 1000;
     const candidatos = [];
     for (const lead of leadsRaw || []) {
+      // Ailson 27/05/2026: SO pega cliente q TEVE carrinho REAL alguma vez.
+      // Caso Gisele Neves (PJ, qtd_carrinhos_total=0, access_count=1) recebeu
+      // msg de "carrinho abandonado com 0 peças" mesmo sendo só uma visitante
+      // do site. PJ visitante sem carrinho criado nunca → fora do funil Sofia.
+      // Vendedoras pegam manualmente via aba Leads Carrinho se quiserem.
+      if (!lead.qtd_carrinhos_total || lead.qtd_carrinhos_total < 1) continue;
+
       // Filtro min/max peças por tipo (Sofia atende PJ=0 e PF 1-6)
       const pecas = Number(lead.qtd_pecas_ultimo_carrinho || 0);
       if (lead.tipo_pessoa === 'PJ') {
