@@ -4039,8 +4039,38 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
               fontSize: fz(13), lineHeight: 1.5, whiteSpace: 'pre-wrap',
               color: palette.ink, marginBottom: 8,
             }}>
-              {sug.texto_proposto}
+              {(() => {
+                // Destaca marcador [ASSISTENTE_ANEXAR:descricao] em vermelho —
+                // Sofia pediu pra Tamara anexar midia manualmente.
+                // Tamara deve apagar o marcador + anexar a midia real antes de enviar.
+                const txt = sug.texto_proposto || '';
+                const re = /\[ASSISTENTE_ANEXAR:([^\]]+)\]/gi;
+                const parts = [];
+                let last = 0; let m; let i = 0;
+                while ((m = re.exec(txt)) !== null) {
+                  if (m.index > last) parts.push(<span key={`t${i++}`}>{txt.slice(last, m.index)}</span>);
+                  parts.push(
+                    <span key={`m${i++}`} title="Apague esse marcador e anexe a mídia manualmente antes de enviar" style={{
+                      display: 'inline-block', padding: '2px 6px', borderRadius: 4,
+                      background: '#fee2e2', color: '#b91c1c', fontWeight: 700,
+                      fontSize: fz(11), border: '1px dashed #b91c1c', margin: '0 2px',
+                    }}>📎 ANEXAR: {m[1].trim()}</span>
+                  );
+                  last = re.lastIndex;
+                }
+                if (last < txt.length) parts.push(<span key={`t${i++}`}>{txt.slice(last)}</span>);
+                return parts.length ? parts : txt;
+              })()}
             </div>
+            {/\[ASSISTENTE_ANEXAR/i.test(sug.texto_proposto || '') && (
+              <div style={{
+                fontSize: fz(10), color: '#b91c1c', background: '#fef2f2',
+                border: '1px solid #fecaca', borderRadius: 4, padding: '4px 6px',
+                marginBottom: 8,
+              }}>
+                ⚠️ Sofia pediu pra vc anexar mídia manualmente. Edite a msg pra apagar o marcador, anexe a foto/vídeo, depois envie.
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               <button
                 onClick={() => acionar('aprovar')}

@@ -67,6 +67,16 @@ export default async function handler(req, res) {
       }
     }
 
+    // Protecao: nao deixa enviar pro cliente se ainda tem marker
+    // [ASSISTENTE_ANEXAR:...] no texto (Tamara esqueceu de editar).
+    // Sofia usa esse marker pra avisar que precisa anexar midia manual.
+    if (textoLimpo && /\[ASSISTENTE_ANEXAR:[^\]]+\]/i.test(textoLimpo)) {
+      return res.status(400).json({
+        error: 'marker_assistente_anexar_pendente',
+        detalhe: 'Sofia pediu pra anexar midia manualmente. Edite a msg pra remover o marker [ASSISTENTE_ANEXAR:...] e anexe a foto/video antes de enviar.',
+      });
+    }
+
     // Envia via Meta
     let metaResp = null;
     let metaMsgId = null;
