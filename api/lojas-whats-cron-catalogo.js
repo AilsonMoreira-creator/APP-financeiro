@@ -19,7 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, log, logErro } from './_lojas-whats-helpers.js';
-import { enviarTexto } from './_lojas-whats-meta-client.js';
+import { enviarTexto, enviarTemplate } from './_lojas-whats-meta-client.js';
 
 const VARIACOES_MSG_6H = [
   'Oi! Conseguiu dar uma olhadinha no catálogo? Ficou alguma dúvida em algum modelo? 🤗',
@@ -109,10 +109,13 @@ export default async function handler(req, res) {
       }
     }
 
-    // ─── FASE 2 — 24h apos msg de 6h, vira follow_up tag '1d' ─────────────
+    // ─── FASE 2 — 24h apos msg de 6h ─────────────────────────────────────
+    // Ailson 27/05/2026: agora ENVIA AUTOMATICAMENTE o template HSM
+    // followup_catalogo_24h_v1 (fora da janela 24h Meta → precisa HSM)
+    // e depois move pra follow_up. Respeita janela 9-20h BRT igual FASE 1.
     const { data: f2, error: errF2 } = await supabase
       .from('lojas_whats_conversas')
-      .select('id, telefone, etapa')
+      .select('id, telefone, nome_cliente, etapa')
       .not('catalogo_followup_6h_em', 'is', null)
       .lt('catalogo_followup_6h_em', cutoff24h)
       .in('etapa', ['conversando', 'quente']);
@@ -120,26 +123,54 @@ export default async function handler(req, res) {
 
     const venceEm1d = new Date(Date.now() + 86400000).toISOString();
     const f2Resultados = [];
-    for (const conv of f2 || []) {
-      try {
-        await supabase.from('lojas_whats_conversas').update({
-          etapa: 'follow_up',
-          follow_up_tag: '1d',
-          follow_up_vence_em: venceEm1d,
-          follow_up_entrou_em: agora.toISOString(),
-          follow_up_origem: 'cron_catalogo_24h',
-          follow_up_motivo: 'cliente nao respondeu apos catalogo + msg 6h',
-          // Limpa os timers de catalogo (ja cumpriu papel)
-          catalogo_enviado_em: null,
-          catalogo_followup_6h_em: null,
-          ultima_atividade_em: agora.toISOString(),
-          atualizado_em: agora.toISOString(),
-        }).eq('id', conv.id);
-        f2Resultados.push({ id: conv.id, ok: true });
-        log('cron-catalogo/24h', `conv=${conv.id} → follow_up tag=1d`);
-      } catch (e) {
-        f2Resultados.push({ id: conv.id, erro: e.message });
-        logErro('cron-catalogo/24h', e);
+
+    if (!dentroJanela9_20 && (f2 || []).length > 0) {
+      log('cron-catalogo', `FASE 2 pulada — hora BRT ${horaBRT}h fora da janela 9-20h (${f2.length} pendentes)`);
+    } else {
+      for (const conv of f2 || []) {
+        try {
+          const primeiroNome = (conv.nome_cliente || 'cliente').split(' ')[0];
+          // Envia template HSM
+          const r = await enviarTemplate(conv.telefone, 'followup_catalogo_24h_v1', [primeiroNome]);
+          const metaMsgId = r?.messages?.[0]?.id || null;
+          if (!metaMsgId) throw new Error('meta_sem_message_id');
+
+          // Renderiza texto pra salvar a msg
+          const textoMsg = `Oii ${primeiroNome}! 😊\n\nVc conseguiu dar uma olhadinha no catálogo? Ficou alguma dúvida sobre algum modelo, tamanho ou entrega?`;
+
+          await supabase.from('lojas_whats_mensagens').insert({
+            conversa_id: conv.id,
+            direcao: 'saida',
+            autor: 'assistente',
+            tipo_midia: 'text',
+            texto: textoMsg,
+            template_name: 'followup_catalogo_24h_v1',
+            template_vars: { '1': primeiroNome },
+            meta_message_id: metaMsgId,
+            status: 'enviando',
+            enviada_em: agora.toISOString(),
+          });
+
+          // Move pra follow_up tag 1d
+          await supabase.from('lojas_whats_conversas').update({
+            etapa: 'follow_up',
+            follow_up_tag: '1d',
+            follow_up_vence_em: venceEm1d,
+            follow_up_entrou_em: agora.toISOString(),
+            follow_up_origem: 'cron_catalogo_24h',
+            follow_up_motivo: 'cliente nao respondeu apos catalogo + msg 6h (template auto enviado)',
+            catalogo_enviado_em: null,
+            catalogo_followup_6h_em: null,
+            ultima_atividade_em: agora.toISOString(),
+            atualizado_em: agora.toISOString(),
+          }).eq('id', conv.id);
+
+          f2Resultados.push({ id: conv.id, ok: true });
+          log('cron-catalogo/24h', `conv=${conv.id} template enviado + follow_up tag=1d`);
+        } catch (e) {
+          f2Resultados.push({ id: conv.id, erro: e.message });
+          logErro('cron-catalogo/24h', e);
+        }
       }
     }
 

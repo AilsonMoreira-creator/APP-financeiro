@@ -83,16 +83,21 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Busca template
-    const { data: template } = await supabase
+    // Busca os 2 templates ativos: v2 (carrinho com pecas) + visita_site (zerado)
+    // Ailson 27/05/2026: escolhe baseado em qtd_pecas da conversa.
+    const { data: templates } = await supabase
       .from('lojas_whats_templates')
       .select('*')
-      .eq('name', 'carrinho_abandonado_site_amicia')
-      .maybeSingle();
-    if (!template) {
+      .in('name', ['carrinho_abandonado_site_amicia_v2', 'visita_site_amicia_v1'])
+      .eq('ativo', true);
+
+    const tplCarrinho = templates?.find(t => t.name === 'carrinho_abandonado_site_amicia_v2');
+    const tplVisita   = templates?.find(t => t.name === 'visita_site_amicia_v1');
+
+    if (!tplCarrinho || !tplVisita) {
       return res.status(500).json({
         error: 'template_nao_encontrado',
-        detalhes: 'carrinho_abandonado_site_amicia não cadastrado',
+        detalhes: `templates ativos faltando: carrinho=${!!tplCarrinho}, visita=${!!tplVisita}`,
       });
     }
 
@@ -130,11 +135,17 @@ export default async function handler(req, res) {
       });
     }
 
-    const resultados = { processadas: 0, falhas: [] };
+    const resultados = { processadas: 0, falhas: [], por_template: {} };
     for (const conv of conversas) {
       try {
+        // Regra Ailson 27/05/2026:
+        //   qtd_pecas >= 1 → template_v2 (carrinho com pecas)
+        //   qtd_pecas <= 0 / null → visita_site (apenas {{1}})
+        const pecas = Number(conv.qtd_pecas || 0);
+        const template = pecas >= 1 ? tplCarrinho : tplVisita;
         await processarConversaUnica(conv, template);
         resultados.processadas++;
+        resultados.por_template[template.name] = (resultados.por_template[template.name] || 0) + 1;
       } catch (e) {
         logErro('processar/unica', e);
         resultados.falhas.push({ conversa_id: conv.id, erro: e.message });
@@ -146,6 +157,7 @@ export default async function handler(req, res) {
       ok: true,
       modo: ehCronAuto ? 'cron_auto' : 'manual',
       processadas: resultados.processadas,
+      por_template: resultados.por_template,
       falhas: resultados.falhas,
     });
   } catch (e) {
