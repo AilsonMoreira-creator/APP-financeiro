@@ -90,6 +90,15 @@ const ETAPAS = [
 const fz = (n) => `${n}px`;
 const sz = (n) => n;
 
+// Emojis curados pro picker da assistente (Ailson 27/05/2026) — mesmo
+// conjunto usado no modulo Lojas pelas vendedoras.
+const EMOJIS_PICKER = [
+  '😊', '😍', '🥰', '😘', '🔥', '💕',
+  '🤎', '💛', '💖', '🌸', '🙏', '👏',
+  '✨', '🌟', '🎉', '🚀', '🍁', '🍂',
+  '☕', '😉', '😂', '❤️', '👍', '🙌',
+];
+
 const fmtMoney = (v) => Number(v || 0).toLocaleString('pt-BR', {
   style: 'currency', currency: 'BRL', minimumFractionDigits: 2
 });
@@ -3497,6 +3506,8 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
   // Botao "robô vazado": dispara IA na hora (Ailson 27/05/2026)
   const [iaDisparando, setIaDisparando] = useState(false);
   const [templatesParaEscolher, setTemplatesParaEscolher] = useState(null);  // {templates: []}
+  const [emojiPickerAberto, setEmojiPickerAberto] = useState(false);
+  const textareaRef = useRef(null);
   const fimChatRef = useRef(null);
 
   // Carrega conversa + mensagens
@@ -3636,8 +3647,9 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           <Edit3 size={sz(14)} />
         </button>
         {/* Enviar pra vendedora direto do chat — assistente nao precisa
-            voltar pra lista. Ailson 27/05/2026 */}
-        {onEnviarVendedora && (
+            voltar pra lista. Ailson 27/05/2026.
+            Esconde se ja foi enviada (quente/atendida) — evita reenvio. */}
+        {onEnviarVendedora && !['quente', 'atendida', 'vendeu', 'perdida'].includes(conversa.etapa) && (
           <button onClick={() => onEnviarVendedora(conversa)} title="Enviar pra vendedora"
             style={{
               background: '#f59e0b', border: '1px solid #d97706',
@@ -3648,6 +3660,18 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
             <Users size={sz(14)} />
             Vendedora
           </button>
+        )}
+        {/* Quando ja foi enviada, mostra status passivo (sem clique) */}
+        {['quente', 'atendida'].includes(conversa.etapa) && (
+          <div style={{
+            background: '#ecfdf5', border: '1px solid #86efac',
+            color: '#166534', padding: '6px 12px', borderRadius: 6,
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontFamily: FONT_CHAT, fontSize: fz(11), fontWeight: 600, whiteSpace: 'nowrap',
+          }}>
+            <Users size={sz(13)} />
+            {conversa.etapa === 'atendida' ? 'Vendedora atendendo' : 'Enviado pra vendedora'}
+          </div>
         )}
       </div>
 
@@ -3790,6 +3814,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           <Bot size={sz(16)} strokeWidth={1.4} color={palette.accent} />
         </button>
         <textarea
+          ref={textareaRef}
           value={novoTexto}
           onChange={e => setNovoTexto(e.target.value)}
           placeholder="Mensagem (Enter quebra linha · clica no botao verde pra enviar)"
@@ -3802,6 +3827,51 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
             boxSizing: 'border-box',
           }}
         />
+        {/* Botao emoji picker (Ailson 27/05/2026) */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setEmojiPickerAberto(v => !v)}
+            title="Inserir emoji"
+            style={{
+              background: palette.bg, border: `1px solid ${palette.beige}`,
+              borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18,
+            }}>😊</button>
+          {emojiPickerAberto && (
+            <div style={{
+              position: 'absolute', bottom: 44, right: 0, zIndex: 50,
+              background: '#fff', border: `1px solid ${palette.beige}`,
+              borderRadius: 8, padding: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+              display: 'grid', gridTemplateColumns: 'repeat(6, 32px)', gap: 4,
+              width: 220,
+            }}>
+              {EMOJIS_PICKER.map(e => (
+                <button key={e} onClick={() => {
+                  const ta = textareaRef.current;
+                  if (!ta) { setNovoTexto(p => p + e); return; }
+                  const s = ta.selectionStart ?? novoTexto.length;
+                  const en = ta.selectionEnd ?? novoTexto.length;
+                  const novo = novoTexto.slice(0, s) + e + novoTexto.slice(en);
+                  setNovoTexto(novo);
+                  setTimeout(() => {
+                    if (textareaRef.current) {
+                      textareaRef.current.focus();
+                      const pos = s + e.length;
+                      textareaRef.current.setSelectionRange(pos, pos);
+                    }
+                  }, 0);
+                }}
+                  style={{
+                    width: 32, height: 32, border: 'none', background: 'transparent',
+                    cursor: 'pointer', fontSize: 18, borderRadius: 4,
+                  }}
+                  onMouseEnter={(ev) => ev.target.style.background = palette.beige}
+                  onMouseLeave={(ev) => ev.target.style.background = 'transparent'}
+                >{e}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <button onClick={enviar} disabled={enviando || (!novoTexto.trim() && !midiaAnexada)}
           style={{
             background: '#25d366', color: '#fff',

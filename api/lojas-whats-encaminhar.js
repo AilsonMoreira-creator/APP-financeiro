@@ -130,6 +130,23 @@ export default async function handler(req, res) {
       return res.status(409).json({ error: `conversa ja em etapa ${conversa.etapa}` });
     }
 
+    // Ailson 27/05/2026: bloqueia duplicacao — se ja existe handoff
+    // pendente (status 'aguardando' ou 'fila_fora_janela') pra essa
+    // conversa, retorna 409 em vez de criar segundo.
+    const { data: handoffPendente } = await supabase
+      .from('lojas_whats_handoffs')
+      .select('id, vendedora_id, status, criado_em')
+      .eq('conversa_id', conversa_id)
+      .in('status', ['aguardando', 'fila_fora_janela'])
+      .maybeSingle();
+    if (handoffPendente) {
+      return res.status(409).json({
+        error: 'handoff_ja_pendente',
+        detalhe: `Já existe handoff pendente pra essa conversa (status=${handoffPendente.status}). Espera a vendedora aceitar/recusar antes de reenviar.`,
+        handoff_id: handoffPendente.id,
+      });
+    }
+
     // Determina vendedora alvo
     const janela = getJanelaAtualBRT();
     let vendedoraIdAlvo = null;
@@ -200,6 +217,20 @@ export default async function handler(req, res) {
       // Incrementa contador
       await supabase.rpc('increment', { table_name: 'lojas_whats_vendedoras', row_id: vendedoraIdAlvo, col: 'total_leads_recebidos' })
         .then(() => null, () => null);  // ignora se RPC nao existir
+    }
+
+    // Ailson 27/05/2026: atualiza etapa da conversa pra 'quente' e limpa
+    // sugestao_quente_pendente_em (foi promovido, nao precisa mais sugestao).
+    // Aguarda a vendedora aceitar (vira 'atendida') ou expirar (fila).
+    // So muda se a conversa ainda estava em pre-quente.
+    if (!['quente', 'atendida'].includes(conversa.etapa)) {
+      await supabase.from('lojas_whats_conversas').update({
+        etapa: 'quente',
+        sugestao_quente_pendente_em: null,
+        sugestao_quente_motivo: null,
+        sugestao_quente_gatilhos: null,
+        atualizado_em: agora.toISOString(),
+      }).eq('id', conversa_id);
     }
 
     return res.json({
