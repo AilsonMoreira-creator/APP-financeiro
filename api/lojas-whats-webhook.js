@@ -388,7 +388,18 @@ function extrairConteudo(msg) {
     case 'location':
       return { tipo: 'text', texto: `[localizacao: ${msg.location?.latitude}, ${msg.location?.longitude}]`, midia_url: null, mime: null };
     default:
-      return { tipo: msg.type, texto: `[tipo nao suportado: ${msg.type}]`, midia_url: null, mime: null };
+      // Meta classifica como 'unsupported' arquivos que a Cloud API não consegue
+      // processar (vCards, stickers animados de origem desconhecida, etc).
+      // O motivo costuma vir em msg.errors[]. Capturamos pra Tamara entender.
+      const errMeta = Array.isArray(msg.errors) && msg.errors[0]
+        ? `${msg.errors[0].title || msg.errors[0].message || ''} (code ${msg.errors[0].code || '?'})`
+        : 'sem detalhes';
+      return {
+        tipo: msg.type,
+        texto: `[tipo nao suportado: ${msg.type}] ${errMeta}`,
+        midia_url: null,
+        mime: null,
+      };
   }
 }
 

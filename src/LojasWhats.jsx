@@ -1731,10 +1731,11 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
           background: '#fff8e7', border: '1px solid #f5c84e',
           display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: fz(11), color: '#8a5500', flex: 1, minWidth: 0 }}>
-            <strong>🤖 Sofia sugere promover pra quente</strong>
+          <span style={{ fontSize: fz(11), color: '#8a5500', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <img src="/robo-ia.png" alt="Sofia" style={{ width: 18, height: 18, flexShrink: 0, verticalAlign: 'middle' }} />
+            <strong>Sofia sugere promover pra quente</strong>
             {c.sugestao_quente_motivo && (
-              <span style={{ display: 'block', color: '#6a4500', marginTop: 2 }}>
+              <span style={{ display: 'block', color: '#6a4500', marginTop: 2, width: '100%' }}>
                 {c.sugestao_quente_motivo}
               </span>
             )}
