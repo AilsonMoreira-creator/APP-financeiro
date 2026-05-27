@@ -45,52 +45,67 @@ export default async function handler(req, res) {
   }
 
   try {
+    // ─── Janela 9h-20h BRT (Ailson 27/05/2026) ────────────────────────────
+    // Cliente nao recebe msg auto antes das 9h nem depois das 20h.
+    // FASE 1 (envio direto pro cliente) respeita estritamente.
+    // FASE 2 (mudanca de etapa, sem envio) roda sempre — quem envia depois
+    // eh cron-followup gerando SUGESTAO pendente (Tamara aprova manual).
+    const horaBRT = parseInt(
+      new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false })
+    , 10);
+    const dentroJanela9_20 = horaBRT >= 9 && horaBRT < 20;
+
     const agora = new Date();
     const cutoff6h  = new Date(Date.now() - 6  * 60 * 60 * 1000).toISOString();
     const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     // ─── FASE 1 — 6h, dispara msg automatica ──────────────────────────────
-    const { data: f1, error: errF1 } = await supabase
-      .from('lojas_whats_conversas')
-      .select('id, telefone, nome_cliente, etapa')
-      .not('catalogo_enviado_em', 'is', null)
-      .lt('catalogo_enviado_em', cutoff6h)
-      .is('catalogo_followup_6h_em', null)
-      .in('etapa', ['conversando', 'quente']);
-    if (errF1) throw errF1;
+    let f1 = [];
+    let f1Resultados = [];
+    if (!dentroJanela9_20) {
+      // Posterga FASE 1 pra proxima rodada dentro do horario comercial
+      log('cron-catalogo', `FASE 1 pulada — hora BRT ${horaBRT}h fora da janela 9-20h`);
+    } else {
+      const { data: f1Data, error: errF1 } = await supabase
+        .from('lojas_whats_conversas')
+        .select('id, telefone, nome_cliente, etapa')
+        .not('catalogo_enviado_em', 'is', null)
+        .lt('catalogo_enviado_em', cutoff6h)
+        .is('catalogo_followup_6h_em', null)
+        .in('etapa', ['conversando', 'quente']);
+      if (errF1) throw errF1;
+      f1 = f1Data || [];
 
-    const f1Resultados = [];
-    for (const conv of f1 || []) {
-      try {
-        const texto = escolherMsg6h(conv.id);
-        const r = await enviarTexto(conv.telefone, texto);
-        const metaMsgId = r?.messages?.[0]?.id || null;
-        if (!metaMsgId) throw new Error('meta_sem_message_id');
+      for (const conv of f1) {
+        try {
+          const texto = escolherMsg6h(conv.id);
+          const r = await enviarTexto(conv.telefone, texto);
+          const metaMsgId = r?.messages?.[0]?.id || null;
+          if (!metaMsgId) throw new Error('meta_sem_message_id');
 
-        // Persiste msg enviada
-        await supabase.from('lojas_whats_mensagens').insert({
-          conversa_id: conv.id,
-          direcao: 'saida',
-          autor: 'assistente',
-          tipo_midia: 'text',
-          texto,
-          meta_message_id: metaMsgId,
-          status: 'enviando',
-          enviada_em: agora.toISOString(),
-        });
+          await supabase.from('lojas_whats_mensagens').insert({
+            conversa_id: conv.id,
+            direcao: 'saida',
+            autor: 'assistente',
+            tipo_midia: 'text',
+            texto,
+            meta_message_id: metaMsgId,
+            status: 'enviando',
+            enviada_em: agora.toISOString(),
+          });
 
-        // Marca o follow-up 6h ja disparado + ja considera 24h pendente
-        await supabase.from('lojas_whats_conversas').update({
-          catalogo_followup_6h_em: agora.toISOString(),
-          ultima_atividade_em: agora.toISOString(),
-          atualizado_em: agora.toISOString(),
-        }).eq('id', conv.id);
+          await supabase.from('lojas_whats_conversas').update({
+            catalogo_followup_6h_em: agora.toISOString(),
+            ultima_atividade_em: agora.toISOString(),
+            atualizado_em: agora.toISOString(),
+          }).eq('id', conv.id);
 
-        f1Resultados.push({ id: conv.id, tel: conv.telefone, ok: true });
-        log('cron-catalogo/6h', `conv=${conv.id} msg auto enviada`);
-      } catch (e) {
-        f1Resultados.push({ id: conv.id, tel: conv.telefone, erro: e.message });
-        logErro('cron-catalogo/6h', e);
+          f1Resultados.push({ id: conv.id, tel: conv.telefone, ok: true });
+          log('cron-catalogo/6h', `conv=${conv.id} msg auto enviada`);
+        } catch (e) {
+          f1Resultados.push({ id: conv.id, tel: conv.telefone, erro: e.message });
+          logErro('cron-catalogo/6h', e);
+        }
       }
     }
 
@@ -130,7 +145,9 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      fase_1_6h: { processadas: (f1 || []).length, resultados: f1Resultados },
+      hora_brt: horaBRT,
+      dentro_janela_9_20: dentroJanela9_20,
+      fase_1_6h: { processadas: f1.length, resultados: f1Resultados },
       fase_2_24h: { processadas: (f2 || []).length, resultados: f2Resultados },
     });
   } catch (e) {
