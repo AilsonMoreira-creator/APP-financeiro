@@ -26,6 +26,7 @@ export default async function handler(req, res) {
   const baseUrl = `https://${req.headers.host}`;
 
   try {
+    // 1) Import dos CSVs do Drive → popula lojas_leads_carrinho
     const r = await fetch(`${baseUrl}/api/site-amicia-drive-importar`, {
       method: 'POST',
       headers: {
@@ -37,11 +38,32 @@ export default async function handler(req, res) {
 
     const data = await r.json().catch(() => ({}));
 
+    // 2) ENCADEAMENTO (Ailson 27/05/2026): dispara cron-selecionar Sofia
+    //    LOGO APÓS o import terminar, garantindo que leads novos sejam
+    //    pegos no mesmo ciclo, independente de schedule. Robustez extra
+    //    além do cron agendado às 09h BRT.
+    //    Idempotente: cron-selecionar filtra duplicatas (não cria conversa
+    //    pra telefone que já tem conversa ativa).
+    let selecionarOk = false;
+    let selecionarResultado = null;
+    try {
+      const rSel = await fetch(`${baseUrl}/api/lojas-whats-cron-selecionar?executar=1`, {
+        method: 'GET',
+        headers: { 'x-vercel-cron': '1' },
+      });
+      selecionarResultado = await rSel.json().catch(() => ({}));
+      selecionarOk = rSel.ok;
+    } catch (eSel) {
+      console.error('[site-amicia-drive-cron] erro chain selecionar:', eSel);
+      selecionarResultado = { erro: eSel.message };
+    }
+
     return res.status(200).json({
       ok: r.ok,
       status: r.status,
       duracao_ms: Date.now() - tInicio,
       resultado: data,
+      chain_selecionar: { ok: selecionarOk, resultado: selecionarResultado },
     });
   } catch (err) {
     console.error('[site-amicia-drive-cron] erro:', err);
