@@ -1013,7 +1013,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       const limite = expandido ? 500 : 50;
       let q = supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count')
+        .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos')
         // Prioritarios primeiro
         .order('lead_prioritario', { ascending: false });
       // Aba 'processando' (fila visivel pra assistente): CNPJ primeiro, data desc
@@ -1719,6 +1719,72 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
         }}>
           <strong>📝 pra Sofia:</strong> {c.observacao_para_sofia.slice(0, 100)}
           {c.observacao_para_sofia.length > 100 && '...'}
+        </div>
+      )}
+
+      {/* Sugestao Sofia pendente: Tamara decide promover pra quente ou nao
+          (Ailson 27/05/2026). Aparece antes do bloco quente porque essa
+          decisao precede a transicao pra quente. */}
+      {c.sugestao_quente_pendente_em && (
+        <div style={{
+          marginTop: 8, padding: 8, borderRadius: 6,
+          background: '#fff8e7', border: '1px solid #f5c84e',
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: fz(11), color: '#8a5500', flex: 1, minWidth: 0 }}>
+            <strong>🤖 Sofia sugere promover pra quente</strong>
+            {c.sugestao_quente_motivo && (
+              <span style={{ display: 'block', color: '#6a4500', marginTop: 2 }}>
+                {c.sugestao_quente_motivo}
+              </span>
+            )}
+          </span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!confirm('Promover esta conversa pra quente e disparar handoff pra vendedora?')) return;
+                const r = await fetch('/api/lojas-whats-sugestao-quente-decidir', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    conversa_id: c.id, decisao: 'aceitar',
+                    decidida_por: 'tamara',
+                  }),
+                });
+                const d = await r.json();
+                if (!r.ok) alert('Erro: ' + (d.error || r.status));
+              }}
+              style={{
+                padding: '5px 10px', borderRadius: 5, cursor: 'pointer',
+                background: '#d97706', color: '#fff', border: 'none',
+                fontSize: fz(11), fontFamily: FONT, fontWeight: 700,
+              }}>
+              🔥 Promover
+            </button>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                const r = await fetch('/api/lojas-whats-sugestao-quente-decidir', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    conversa_id: c.id, decisao: 'recusar',
+                    decidida_por: 'tamara',
+                  }),
+                });
+                const d = await r.json();
+                if (!r.ok) alert('Erro: ' + (d.error || r.status));
+              }}
+              style={{
+                padding: '5px 10px', borderRadius: 5, cursor: 'pointer',
+                background: palette.surface, color: palette.inkSoft,
+                border: `1px solid ${palette.beige}`,
+                fontSize: fz(11), fontFamily: FONT, fontWeight: 600,
+              }}>
+              ❌ Manter
+            </button>
+          </div>
         </div>
       )}
 

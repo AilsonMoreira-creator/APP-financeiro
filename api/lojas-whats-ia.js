@@ -420,22 +420,33 @@ async function processarConversa(conversaId) {
     }
   }
 
-  // 4. Se gatilho QUENTE → atualiza conversa pra etapa quente (handoff em outro endpoint)
+  // 4. Se gatilho QUENTE → SUGERE promocao pra Tamara aprovar (Ailson 27/05/2026)
+  //    Antes: movia conversa direto pra etapa='quente' e disparava handoff vendedora.
+  //    Agora: seta sugestao_quente_pendente_em + motivo + gatilhos. Tamara ve
+  //    botao inline na conversa e aceita/recusa. Aceitar = executa o fluxo
+  //    antigo (etapa='quente' + handoff). Recusar = volta a flag pra null,
+  //    conversa continua em 'conversando' e Sofia segue engajando.
+  //    Endpoint: /api/lojas-whats-sugestao-quente-decidir
+  //    Historico: tabela lojas_whats_sugestoes_decisoes (treina detector).
   if (gatilhos.length > 0) {
-    await supabase.from('lojas_whats_conversas').update({
-      etapa: 'quente',
-      score_quente: 80 + Math.min(20, gatilhos.length * 5),
-      gatilhos_detectados: gatilhos,
-      quente_desde: new Date().toISOString(),
-      ultima_atividade_em: new Date().toISOString(),
-      atualizado_em: new Date().toISOString()
-    }).eq('id', conversaId);
-    // NÃO gera sugestão — handoff vai assumir
-    return {
-      motivo: 'promovido_quente',
-      gatilhos,
-      proxima_acao: 'handoff_vendedora'
-    };
+    // Se ja tem sugestao pendente, nao re-criar (deixa Tamara decidir a atual)
+    if (!conv.sugestao_quente_pendente_em) {
+      const motivoSugestao = gatilhos.slice(0, 3).map(g => g.tipo || g).join(' + ');
+      await supabase.from('lojas_whats_conversas').update({
+        sugestao_quente_pendente_em: new Date().toISOString(),
+        sugestao_quente_motivo: motivoSugestao,
+        sugestao_quente_gatilhos: gatilhos,
+        score_quente: 80 + Math.min(20, gatilhos.length * 5),
+        gatilhos_detectados: gatilhos,
+        ultima_atividade_em: new Date().toISOString(),
+        atualizado_em: new Date().toISOString()
+      }).eq('id', conversaId);
+      log('ia', `conversa=${conversaId} SUGERIU promocao quente (${gatilhos.length} gatilhos) → aguardando Tamara`);
+    }
+    // Continua flow normal — IA AINDA gera sugestao de msg, mas Tamara pode
+    // tanto aprovar o texto quanto promover pra quente independentemente.
+    // (Se Tamara aceitar promocao, conversa vira atendida e msgs param de
+    // ser geradas automaticamente.)
   }
 
   // 4b. Detector FOLLOW-UP (Sprint B Sofia, Ailson 25/05/2026)
