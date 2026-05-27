@@ -95,15 +95,29 @@ export default async function handler(req, res) {
 
     const { data: tpl } = await supabase
       .from('lojas_whats_templates')
-      .select('name, body_text, language')
+      .select('name, body_text, language, variables')
       .eq('name', templateName)
       .eq('ativo', true)
       .maybeSingle();
     if (!tpl) return res.status(500).json({ error: `template ${templateName} nao encontrado` });
 
-    // Renderiza vars no corpo do template
+    // Monta vars APENAS com as chaves que o template declara em tpl.variables.
+    // Importante: enviar parameter a mais pra Meta = template rejeitado.
+    // Ex: visita_site_amicia_v1 tem so [{nome:'1'}] → vars = {'1': nome}
+    //     carrinho_abandonado_site_amicia_v2 tem [{nome:'1'},{nome:'2'}] → +qtd
     const primeiroNome = (conv.nome_cliente || 'cliente').split(' ')[0];
-    const vars = { '1': primeiroNome, '2': String(conv.qtd_pecas || 0) };
+    const valorPorChave = {
+      '1': primeiroNome,
+      '2': String(conv.qtd_pecas || 0),
+    };
+    const declaradas = Array.isArray(tpl.variables) ? tpl.variables : [];
+    const vars = {};
+    for (const v of declaradas) {
+      const k = String(v?.nome ?? '');
+      if (k && valorPorChave[k] !== undefined) vars[k] = valorPorChave[k];
+    }
+
+    // Renderiza texto_proposto pra UI
     let textoProposto = tpl.body_text;
     for (const [k, v] of Object.entries(vars)) {
       textoProposto = textoProposto.replaceAll(`{{${k}}}`, v);
