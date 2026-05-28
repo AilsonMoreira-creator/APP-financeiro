@@ -634,6 +634,7 @@ async function processarConversa(conversaId) {
     const roteiros = await getConfig('roteiros_estrategicos', {});
     const chave = conv.origem_lead === 'carrinho_site_amicialoja' ? 'A_carrinho_site_amicialoja'
                 : conv.origem_lead === 'anuncio_instagram'        ? 'B_anuncio_instagram'
+                : (conv.origem_lead === 'instagram_stories' || conv.origem_lead === 'instagram_linktree') ? 'C_instagram_organico'
                 : null;
     if (chave && roteiros[chave] && typeof roteiros[chave] === 'object') {
       blocoRoteiro = `ROTEIRO ESTRATEGICO PRA ESTA CONVERSA (origem=${conv.origem_lead}):\n${JSON.stringify(roteiros[chave], null, 2)}\n\nIMPORTANTE: NUNCA pergunte diretamente o perfil do lead. Mapeia pelos sinais nas mensagens. Adapte tom e ganchos baseado em quem voce detectar.`;

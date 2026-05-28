@@ -34,7 +34,8 @@ import {
   Users, MessageCircle, Settings, AlertCircle,
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
   User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
-  Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video
+  Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video,
+  Instagram, Copy, Circle
 } from 'lucide-react';
 import {
   supabase,
@@ -1926,6 +1927,18 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
                 background: '#fff0e0', color: '#a55a00', fontWeight: 600,
               }}>🛒 carrinho</span>
             )}
+            {c.origem_lead === 'instagram_stories' && (
+              <span title="Lead via link no Stories do Instagram (Amicia)" style={{
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: 'linear-gradient(45deg, #fbe5d2, #f4d6e5)', color: '#a8388d', fontWeight: 700,
+              }}>📸 stories</span>
+            )}
+            {c.origem_lead === 'instagram_linktree' && (
+              <span title="Lead via Linktree do Instagram (Amicia)" style={{
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: '#e6f7ee', color: '#1f7a48', fontWeight: 700,
+              }}>🔗 linktree</span>
+            )}
           </div>
           <div style={{ fontSize: fz(11), color: palette.inkMuted, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <span>{fmtPhone(c.telefone)}</span>
@@ -2472,6 +2485,87 @@ function ConfigTab({ userId, refreshTick }) {
 // Endpoint: /api/lojas-whats-conversoes
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ─── Origens Instagram (Ailson 28/05/2026)
+// Cards com os 2 links wa.me prontos pra colar no Instagram (Stories + Linktree).
+// Mensagens pre-preenchidas batem com a deteccao em api/lojas-whats-webhook.js
+// (REGEX_INSTA_STORIES / REGEX_INSTA_LINKTREE) → marcam origem_lead +
+// disparam rotina C da Sofia.
+const WA_NUMERO_CENTRAL = '5511945017349';  // (11) 94501-7349 — Sofia Amicia
+const TEXTO_INSTA_STORIES  = 'Olá!! Vi vcs no insta e preciso de informação para comprar no atacado!!';
+const TEXTO_INSTA_LINKTREE = 'Olá!! Gostaria de informações pra comprar no atacado!!';
+const URL_INSTA_STORIES  = `https://wa.me/${WA_NUMERO_CENTRAL}?text=${encodeURIComponent(TEXTO_INSTA_STORIES)}`;
+const URL_INSTA_LINKTREE = `https://wa.me/${WA_NUMERO_CENTRAL}?text=${encodeURIComponent(TEXTO_INSTA_LINKTREE)}`;
+
+function OrigensInstagramCards() {
+  const [copiado, setCopiado] = useState(null);
+  const copiar = (url, qual) => {
+    try {
+      navigator.clipboard.writeText(url);
+      setCopiado(qual);
+      setTimeout(() => setCopiado(c => c === qual ? null : c), 1800);
+    } catch {}
+  };
+  const cardBase = {
+    flex: '1 1 280px', minWidth: 0, padding: 12, borderRadius: 10,
+    border: `1.5px solid ${palette.beige}`, background: palette.surface,
+    display: 'flex', flexDirection: 'column', gap: 8,
+  };
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+      {/* STORIES */}
+      <div style={{ ...cardBase, borderColor: '#f4d6e5' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
+            <Instagram size={sz(22)} color="#a8388d" strokeWidth={1.6} style={{ position: 'absolute', top: 3, left: 3 }} />
+            <Circle size={sz(10)} color="#a8388d" fill="#a8388d" style={{ position: 'absolute', top: 0, right: 0 }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>📸 Stories</div>
+            <div style={{ fontSize: fz(10), color: palette.inkMuted }}>Link pro Stories do Instagram</div>
+          </div>
+        </div>
+        <div style={{
+          fontSize: fz(10), color: palette.inkSoft, padding: 6, borderRadius: 4,
+          background: palette.bg, fontFamily: 'monospace', wordBreak: 'break-all',
+        }}>{URL_INSTA_STORIES}</div>
+        <button onClick={() => copiar(URL_INSTA_STORIES, 'stories')} style={{
+          padding: '6px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+          background: copiado === 'stories' ? palette.ok : '#a8388d', color: '#fff',
+          fontSize: fz(11), fontWeight: 700, fontFamily: FONT,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+        }}>
+          {copiado === 'stories' ? <><Check size={sz(12)} /> Copiado!</> : <><Copy size={sz(12)} /> Copiar link</>}
+        </button>
+      </div>
+      {/* LINKTREE */}
+      <div style={{ ...cardBase, borderColor: '#cde9d8' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
+            <Instagram size={sz(22)} color="#1f7a48" strokeWidth={1.6} style={{ position: 'absolute', top: 3, left: 3 }} />
+            <Link2 size={sz(11)} color="#1f7a48" style={{ position: 'absolute', top: 0, right: 0, background: palette.surface, borderRadius: 2 }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>🔗 Linktree</div>
+            <div style={{ fontSize: fz(10), color: palette.inkMuted }}>Link pro Linktree da bio</div>
+          </div>
+        </div>
+        <div style={{
+          fontSize: fz(10), color: palette.inkSoft, padding: 6, borderRadius: 4,
+          background: palette.bg, fontFamily: 'monospace', wordBreak: 'break-all',
+        }}>{URL_INSTA_LINKTREE}</div>
+        <button onClick={() => copiar(URL_INSTA_LINKTREE, 'linktree')} style={{
+          padding: '6px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+          background: copiado === 'linktree' ? palette.ok : '#1f7a48', color: '#fff',
+          fontSize: fz(11), fontWeight: 700, fontFamily: FONT,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+        }}>
+          {copiado === 'linktree' ? <><Check size={sz(12)} /> Copiado!</> : <><Copy size={sz(12)} /> Copiar link</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ConversaoTab({ refreshTick }) {
   // Period: default = últimos 30 dias
   const hoje = new Date();
@@ -2562,6 +2656,10 @@ function ConversaoTab({ refreshTick }) {
           ))}
         </div>
       </div>
+
+      {/* Origens Instagram — 2 cards com os links wa.me prontos pra colar.
+          Ailson 28/05/2026: stories + linktree, rotina C da Sofia. */}
+      <OrigensInstagramCards />
 
       {loading ? (
         <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted }}>
@@ -2865,6 +2963,8 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
                         {e.ctwa_clid && ' · ctwa ✓'}
                         {e.origem_lead === 'anuncio_instagram' && ' · 📱 anúncio'}
                         {e.origem_lead === 'carrinho_site_amicialoja' && ' · 🛒 carrinho'}
+                        {e.origem_lead === 'instagram_stories' && ' · 📸 stories'}
+                        {e.origem_lead === 'instagram_linktree' && ' · 🔗 linktree'}
                       </div>
                     </div>
                     <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ok, flexShrink: 0 }}>

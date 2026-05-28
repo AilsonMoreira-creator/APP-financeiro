@@ -467,6 +467,16 @@ async function processarStatusMensagem(status) {
 const REGEX_CTA_INSTAGRAM = /\b(gostaria|quero|tenho\s+interesse|preciso)[\s\S]{0,60}\b(informa\w*|comprar|saber|valor|preco)[\s\S]{0,40}\batacado\b/i;
 const REGEX_ATACADO_PURO = /\b(comprar|comprar\s+no|info\w*\s+(do|sobre)|valores?\s+(do|de))\s+atacado\b/i;
 
+// Frases dos links manuais que Ailson cola no Instagram (Stories + Linktree).
+// Ailson 28/05/2026 — Sprint Instagram Organico (Rotina C).
+// Stories: "Olá!! Vi vcs no insta e preciso de informação para comprar no atacado!!"
+// Linktree: "Olá!! Gostaria de informações pra comprar no atacado!!"
+const REGEX_INSTA_STORIES = /\bvi\s+v(?:cs|oc[êe]s?)\s+no\s+insta\b/i;
+// Linktree usa frase quase identica ao CTA do anuncio; so consegue distinguir
+// pela AUSENCIA de referral (=ad). Por isso o check vem antes do REGEX_CTA_INSTAGRAM
+// e so rola se nao tinha referral=ad.
+const REGEX_INSTA_LINKTREE = /\bgostaria\s+de\s+informa\w*\s+pr[ao]\s+comprar\s+no\s+atacado\b/i;
+
 function detectarOrigemLead(refInfo) {
   if (!refInfo) return { origem: 'desconhecida', confianca: 0, meta: {} };
 
@@ -485,14 +495,24 @@ function detectarOrigemLead(refInfo) {
     };
   }
 
-  // 2. SECONDARY — texto bate com frase CTA (caso referral nao tenha vindo)
+  // 2. INSTAGRAM ORGANICO — links manuais (stories/linktree). Checa ANTES do
+  //    CTA generico pq a frase do linktree e identica ao CTA do anuncio
+  //    (so distingue por nao ter referral=ad — ja descartado no passo 1).
   if (refInfo.primeiraTexto) {
+    if (REGEX_INSTA_STORIES.test(refInfo.primeiraTexto)) {
+      return { origem: 'instagram_stories', confianca: 0.95, meta: {} };
+    }
+    if (REGEX_INSTA_LINKTREE.test(refInfo.primeiraTexto)) {
+      return { origem: 'instagram_linktree', confianca: 0.9, meta: {} };
+    }
+
+    // 3. SECONDARY — texto bate com frase CTA generica (caso referral nao tenha vindo)
     if (REGEX_CTA_INSTAGRAM.test(refInfo.primeiraTexto) || REGEX_ATACADO_PURO.test(refInfo.primeiraTexto)) {
       return { origem: 'anuncio_instagram', confianca: 0.7, meta: {} };
     }
   }
 
-  // 3. FALLBACK — origem desconhecida (admin pode reclassificar via UI)
+  // 4. FALLBACK — origem desconhecida (admin pode reclassificar via UI)
   return { origem: 'desconhecida', confianca: 0, meta: {} };
 }
 
