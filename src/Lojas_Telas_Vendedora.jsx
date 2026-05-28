@@ -2084,9 +2084,10 @@ const LeadSofiaCard = ({ lead, vendedoraNome, onAtender, onDispensar }) => {
   );
 };
 
-// ─── MODAL ENVIAR MENSAGEM (vendedora envia msg da Sofia direto pelo card)
-// Mostra msg pre-gerada por Claude Haiku no momento que assistente encaminhou.
-// Vendedora pode editar antes de enviar. Botao Enviar dispara POST pra Cloud API.
+// ─── MODAL ENVIAR MENSAGEM (vendedora assume o lead da Sofia pelo card)
+// Mostra a msg de continuidade pre-gerada (nome da vendedora + contexto real).
+// Vendedora edita se quiser e o botao ABRE O WHATSAPP DELA (wa.me) com o texto
+// pronto pra cliente — a msg sai do numero da vendedora, conversa nova. Ailson 28/05/2026.
 const EnviarMensagemSofiaModal = ({ lead, vendedoraNome, onClose, onEnviado }) => {
   // Substitui o placeholder [VENDEDORA] pelo nome real de quem esta abrindo o
   // card (robusto contra rotacao de handoff: se rotacionou Vanessa->Fran, o nome
@@ -2099,27 +2100,19 @@ const EnviarMensagemSofiaModal = ({ lead, vendedoraNome, onClose, onEnviado }) =
 
   const enviar = async () => {
     if (!texto.trim()) { setErro('Mensagem vazia.'); return; }
+    // A vendedora envia do PROPRIO WhatsApp dela (NAO pelo numero central da
+    // Sofia). Abre o WhatsApp da vendedora ja com a conversa pra cliente e a
+    // mensagem pre-preenchida — ela confere e toca enviar no proprio celular.
+    // A cliente recebe do numero da vendedora = conversa nova/separada.
+    // Ailson 28/05/2026 (antes saia pela API central e parecia "da Sofia").
+    const fone = String(lead.telefone || '').replace(/\D/g, '');
+    if (!fone) { setErro('Telefone da cliente inválido.'); return; }
     setEnviando(true);
     setErro(null);
     try {
-      let usuario = null;
-      try { usuario = JSON.parse(localStorage.getItem('amica_session') || '{}')?.usuario || null; }
-      catch {}
-      const r = await fetch('/api/lojas-whats-mensagem-enviar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversa_id: lead.conversa_id,
-          texto: texto.trim(),
-          autor: 'assistente',
-          usuario,
-        }),
-      });
-      const j = await r.json();
-      if (!r.ok || j.error) {
-        setErro(j.error || 'Erro ao enviar.');
-        return;
-      }
+      const url = `https://wa.me/${fone}?text=${encodeURIComponent(texto.trim())}`;
+      window.open(url, '_blank');
+      // Marca o handoff como atendido (vendedora assumiu) e fecha o card.
       await onEnviado();
     } catch (e) {
       setErro(e.message);
@@ -2147,8 +2140,11 @@ const EnviarMensagemSofiaModal = ({ lead, vendedoraNome, onClose, onEnviado }) =
             padding: 4, color: palette.inkMuted, fontSize: 22, lineHeight: 1,
           }}>×</button>
         </div>
-        <div style={{ fontSize: 13, color: palette.inkSoft, marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: palette.inkSoft, marginBottom: 4 }}>
           Para: <strong>{lead.nome_cliente || lead.telefone}</strong>
+        </div>
+        <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 12, fontStyle: 'italic' }}>
+          Vai abrir o SEU WhatsApp com a mensagem pronta — é só conferir e enviar pra cliente.
         </div>
 
         <div style={{
@@ -2198,7 +2194,7 @@ const EnviarMensagemSofiaModal = ({ lead, vendedoraNome, onClose, onEnviado }) =
             fontSize: 14, fontWeight: 700, fontFamily: FONT,
             cursor: (enviando || !texto.trim()) ? 'wait' : 'pointer',
           }}>
-            {enviando ? 'Enviando…' : '💬 Enviar mensagem'}
+            {enviando ? 'Abrindo…' : '📱 Abrir meu WhatsApp'}
           </button>
         </div>
       </div>
