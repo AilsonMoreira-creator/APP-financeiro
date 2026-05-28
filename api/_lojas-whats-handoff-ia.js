@@ -54,7 +54,7 @@ export async function gerarContextoHandoff(conversaId) {
     // 1. Pega conversa + ultimas msgs
     const { data: conv } = await supabase
       .from('lojas_whats_conversas')
-      .select('id, nome_cliente, telefone, tipo_documento, etapa, qtd_pecas, valor_carrinho, gatilhos_detectados, items_html_raw, carrinho_id')
+      .select('id, nome_cliente, telefone, tipo_documento, etapa, qtd_pecas, valor_carrinho, gatilhos_detectados, carrinho_id')
       .eq('id', conversaId)
       .maybeSingle();
     if (!conv) return fallback;
