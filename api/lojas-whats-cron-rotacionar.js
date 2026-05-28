@@ -29,9 +29,13 @@ function getJanelaAtualBRT() {
   const dia = brt.getUTCDay();
   const hora = brt.getUTCHours();
   if (dia === 0) return { ativa: false, motivo: 'domingo' };
-  if (hora < 9 || hora >= 13) return { ativa: false, motivo: `${hora}h fora janela` };
-  if (dia === 6) return { ativa: true, motivo: 'sab — so BR', restringeLoja: 'Bom Retiro' };
-  return { ativa: true, motivo: 'seg-sex — todas', restringeLoja: null };
+  const sab = dia === 6;
+  const horaFim = sab ? 13 : 18;
+  if (hora < 9 || hora >= horaFim) {
+    return { ativa: false, motivo: `${hora}h fora janela ${sab ? 'sab 9-13h' : 'seg-sex 9-18h'}` };
+  }
+  if (sab) return { ativa: true, motivo: 'sab 9-13h — so BR', restringeLoja: 'Bom Retiro' };
+  return { ativa: true, motivo: 'seg-sex 9-18h — todas', restringeLoja: null };
 }
 
 async function escolherProximaVendedora(conversaId, restringeLoja) {

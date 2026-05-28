@@ -41,9 +41,13 @@ function getJanelaAtualBRT() {
   const hora = brt.getUTCHours();
 
   if (diaSemana === 0) return { ativa: false, motivo: 'domingo (loja fechada)' };
-  if (hora < 9 || hora >= 13) return { ativa: false, motivo: `${hora}h BRT — fora janela 9-13h` };
-  if (diaSemana === 6) return { ativa: true, motivo: 'sab 9-13h — só BR', restringeLoja: 'Bom Retiro' };
-  return { ativa: true, motivo: 'seg-sex 9-13h — todas', restringeLoja: null };
+  const sab = diaSemana === 6;
+  const horaFim = sab ? 13 : 18;
+  if (hora < 9 || hora >= horaFim) {
+    return { ativa: false, motivo: `${hora}h BRT — fora janela ${sab ? 'sab 9-13h' : 'seg-sex 9-18h'}` };
+  }
+  if (sab) return { ativa: true, motivo: 'sab 9-13h — só BR', restringeLoja: 'Bom Retiro' };
+  return { ativa: true, motivo: 'seg-sex 9-18h — todas', restringeLoja: null };
 }
 
 /**
@@ -183,7 +187,10 @@ export default async function handler(req, res) {
     // Cria handoff
     const agora = new Date();
     const expira = new Date(agora.getTime() + ROTACAO_MIN * 60 * 1000);
-    const pushAgora = janela.ativa;  // só dispara push se janela aberta
+    // Manual = vendedora foi escolhida deliberadamente pelo operador, vai
+    // direto pra ela (ativa na hora). Rodizio automatico respeita a janela
+    // (nao acorda vendedora fora de horario). Ailson 28/05/2026.
+    const pushAgora = (modo === 'manual') ? true : janela.ativa;
 
     // Gera contexto IA (resumo, modelos, msg sugerida) via Claude Haiku ANTES
     // de inserir. Se falhar, campos ficam null e handoff segue normal.
