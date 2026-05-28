@@ -2071,6 +2071,26 @@ const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, on
         </div>
       )}
 
+      {/* Conversando sem sugestao quente pendente e sem handoff em andamento:
+          botao manual 'Enviar pra vendedora' fica visivel (Tamara pode
+          escalar a qualquer momento, especialmente apos clicar 'Manter' na
+          sugestao quente — antes o botao so aparecia em etapa=quente,
+          deixando a Tamara sem acao apos manter). Ailson 28/05/2026. */}
+      {c.etapa === 'conversando' && !c.sugestao_quente_pendente_em &&
+        !(c.handoffs || []).some(h => ['aguardando','fila_fora_janela'].includes(h.status)) && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}` }}>
+          <button onClick={onEnviarVendedora} style={{
+            flex: 1, padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
+            background: '#f5a623', color: '#fff',
+            border: '1px solid #f5a623',
+            fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          }}>
+            <Users size={sz(14)} /> Enviar pra vendedora
+          </button>
+        </div>
+      )}
+
       {/* Botões só pra etapa quente — esconde se ja tem handoff pendente */}
       {ehQuente && (() => {
         const handoffPend = (c.handoffs || []).some(h => ['aguardando','fila_fora_janela'].includes(h.status));
@@ -3893,7 +3913,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
       setLoading(true);
       const [{ data: conv }, { data: msgs }, { data: sugs }] = await Promise.all([
         supabase.from('lojas_whats_conversas')
-          .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em')
+          .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos')
           .eq('id', conversaId).maybeSingle(),
         supabase.from('lojas_whats_mensagens')
           .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, midia_url, meta_message_id, status, enviada_em')
@@ -4067,6 +4087,70 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           fontSize: fz(11), color: '#444',
         }}>
           <strong>🔒 privado:</strong> {conversa.observacao_assistente}
+        </div>
+      )}
+
+      {/* Sugestao Sofia pendente — banner com Promover/Manter NO CHAT (Ailson
+          28/05/2026). Antes esses botoes so existiam no ConversaRow (lista
+          mobile). No split view desktop a sugestao era invisivel aqui: nao
+          tinha como decidir sem voltar pra lista. */}
+      {conversa.sugestao_quente_pendente_em && (
+        <div style={{
+          padding: 10, borderBottom: `1px solid #f5c84e`,
+          background: '#fff8e7',
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: fz(12), color: '#8a5500', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <img src="/robo-ia.png" alt="Sofia" style={{ width: 20, height: 20, flexShrink: 0 }} />
+            <span><strong>Sofia sugere promover pra quente.</strong>{conversa.sugestao_quente_motivo && <span style={{ color: '#6a4500' }}> {conversa.sugestao_quente_motivo}</span>}</span>
+          </span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={async () => {
+                if (!confirm('Promover esta conversa pra quente e disparar handoff pra vendedora?')) return;
+                const r = await fetch('/api/lojas-whats-sugestao-quente-decidir', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ conversa_id: conversa.id, decisao: 'aceitar', decidida_por: 'tamara' }),
+                });
+                const d = await r.json();
+                if (!r.ok) { alert('Erro: ' + (d.error || r.status)); return; }
+                setConversa(prev => prev ? {
+                  ...prev,
+                  sugestao_quente_pendente_em: null,
+                  sugestao_quente_motivo: null,
+                  sugestao_quente_gatilhos: null,
+                  etapa: 'quente',
+                } : prev);
+              }}
+              style={{
+                padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+                background: '#d97706', color: '#fff', border: 'none',
+                fontSize: fz(12), fontFamily: FONT, fontWeight: 700,
+              }}>🔥 Promover</button>
+            <button
+              onClick={async () => {
+                const r = await fetch('/api/lojas-whats-sugestao-quente-decidir', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ conversa_id: conversa.id, decisao: 'recusar', decidida_por: 'tamara' }),
+                });
+                const d = await r.json();
+                if (!r.ok) { alert('Erro: ' + (d.error || r.status)); return; }
+                setConversa(prev => prev ? {
+                  ...prev,
+                  sugestao_quente_pendente_em: null,
+                  sugestao_quente_motivo: null,
+                  sugestao_quente_gatilhos: null,
+                } : prev);
+              }}
+              style={{
+                padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+                background: palette.surface, color: palette.inkSoft,
+                border: `1px solid ${palette.beige}`,
+                fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+              }}>❌ Manter</button>
+          </div>
         </div>
       )}
 
