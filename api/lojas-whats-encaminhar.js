@@ -131,8 +131,11 @@ export default async function handler(req, res) {
     }
 
     // Ailson 27/05/2026: bloqueia duplicacao — se ja existe handoff
-    // pendente (status 'aguardando' ou 'fila_fora_janela') pra essa
-    // conversa, retorna 409 em vez de criar segundo.
+    // pendente (status 'aguardando' ou 'fila_fora_janela') pra essa conversa.
+    // Ailson 28/05/2026: no modo MANUAL (re-atribuicao deliberada a uma
+    // vendedora escolhida), CANCELA o pendente e segue — assim da pra
+    // reenviar/trocar de vendedora sem ficar travado. No rodizio automatico
+    // mantem o 409 pra evitar dupes acidentais.
     const { data: handoffPendente } = await supabase
       .from('lojas_whats_handoffs')
       .select('id, vendedora_id, status, criado_em')
@@ -140,11 +143,18 @@ export default async function handler(req, res) {
       .in('status', ['aguardando', 'fila_fora_janela'])
       .maybeSingle();
     if (handoffPendente) {
-      return res.status(409).json({
-        error: 'handoff_ja_pendente',
-        detalhe: `Já existe handoff pendente pra essa conversa (status=${handoffPendente.status}). Espera a vendedora aceitar/recusar antes de reenviar.`,
-        handoff_id: handoffPendente.id,
-      });
+      if (modo === 'manual') {
+        await supabase
+          .from('lojas_whats_handoffs')
+          .update({ status: 'cancelado', atualizado_em: new Date().toISOString() })
+          .eq('id', handoffPendente.id);
+      } else {
+        return res.status(409).json({
+          error: 'handoff_ja_pendente',
+          detalhe: `Já existe handoff pendente pra essa conversa (status=${handoffPendente.status}). Espera a vendedora aceitar/recusar, ou reenvie no modo manual escolhendo a vendedora.`,
+          handoff_id: handoffPendente.id,
+        });
+      }
     }
 
     // Determina vendedora alvo
