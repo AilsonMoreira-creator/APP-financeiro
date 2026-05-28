@@ -34,6 +34,16 @@ export default async function handler(req, res) {
     const { conversa_id } = req.body || {};
     if (!conversa_id) return res.status(400).json({ error: 'conversa_id_obrigatorio' });
 
+    // Tamara pediu sugestão manual: descarta sugestão pendente atual (ex: emoji
+    // solto, ou proposta antiga) pra FORÇAR geração nova. Sem isso, lojas-whats-ia
+    // retorna 'ja_tem_sugestao_pendente' e nada acontece (tela só pisca).
+    // Ailson 28/05/2026.
+    await supabase
+      .from('lojas_whats_sugestoes')
+      .update({ status: 'dispensada' })
+      .eq('conversa_id', conversa_id)
+      .eq('status', 'pendente');
+
     // 1. Pega ultima msg do cliente pra detectar janela 24h
     const { data: ultimaBuyer } = await supabase
       .from('lojas_whats_mensagens')
@@ -65,7 +75,10 @@ export default async function handler(req, res) {
         });
       }
       return res.status(200).json({
-        ok: true, modo: 'livre', detalhe: data,
+        ok: true, modo: 'livre',
+        gerou: data?.motivo === 'replica_proposta',
+        motivo: data?.motivo || null,
+        detalhe: data,
       });
     }
 

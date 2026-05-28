@@ -4021,6 +4021,10 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
               fontSize: 18,
             }}>😊</button>
           {emojiPickerAberto && (
+            <div onClick={() => setEmojiPickerAberto(false)}
+              style={{ position: 'fixed', inset: 0, zIndex: 49 }} />
+          )}
+          {emojiPickerAberto && (
             <div style={{
               position: 'absolute', bottom: 44, left: 0, zIndex: 50,
               background: '#fff', border: `1px solid ${palette.beige}`,
@@ -4081,6 +4085,13 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
               const d = await r.json();
               if (!r.ok) { alert('Erro: ' + (d.error || r.status)); return; }
               if (d.modo === 'livre') {
+                if (d.gerou === false) {
+                  const motivos = {
+                    sem_mensagem_cliente_pra_responder: 'a última mensagem não é do cliente — não há o que responder ainda.',
+                    conversa_ja_fechada: 'essa conversa já está fechada.',
+                  };
+                  alert('Sofia não gerou: ' + (motivos[d.motivo] || d.motivo || 'motivo desconhecido'));
+                }
                 setReloadTick(t => t + 1);  // recarrega sugestoes pendentes
               } else if (d.modo === 'sugestao_criada') {
                 alert(`Sofia gerou sugestão (${d.template}) — abra a aba Aprovar`);
