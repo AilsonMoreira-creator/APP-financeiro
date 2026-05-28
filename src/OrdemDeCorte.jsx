@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import OrdemMatrixModal from './OrdemMatrixModal';
+import { ModalDefinirSala, SALAS_PADRAO } from './FilaDeCorte';
 
 const FN = "Calibri,'Segoe UI',Arial,sans-serif";
 const SERIF = "Georgia,'Times New Roman',serif";
@@ -166,8 +167,40 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
   const [showNova, setShowNova] = useState(false);
   const [editandoId, setEditandoId] = useState(null);
   const [excluindoId, setExcluindoId] = useState(null);
+  // Ailson 28/05/2026: admin agora pode definir sala diretamente do card
+  // (separado), sem precisar abrir a FilaDeCorte mobile. Antes o admin
+  // criava ordem, separava na Fila e o card de 'separado' ficava sem acao
+  // visivel — parecia que tinha sumido.
+  const [definindoSala, setDefinindoSala] = useState(null);
+  const [salasDisponiveis, setSalasDisponiveis] = useState(SALAS_PADRAO);
 
   const usuario = usuarioLogado?.usuario || '';
+
+  // Carrega salas do payload 'salas-corte' (mesmo padrao da FilaDeCorte)
+  useEffect(() => {
+    if (!supabase) return;
+    const carregarSalas = async () => {
+      try {
+        const { data } = await supabase
+          .from('amicia_data')
+          .select('payload')
+          .eq('user_id', 'salas-corte')
+          .single();
+        const salas = data?.payload?.salas;
+        if (Array.isArray(salas) && salas.length > 0) setSalasDisponiveis(salas);
+      } catch { /* mantem fallback */ }
+    };
+    carregarSalas();
+    const ch = supabase.channel('sync-salas-ordem')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'amicia_data', filter: 'user_id=eq.salas-corte' },
+        (payload) => {
+          const salas = payload?.new?.payload?.salas;
+          if (Array.isArray(salas) && salas.length > 0) setSalasDisponiveis(salas);
+        })
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, [supabase]);
 
   const carregar = useCallback(async () => {
     try {
@@ -283,9 +316,20 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
             onEditar={() => setEditandoId(o.id)}
             onExcluir={() => setExcluindoId(o.id)}
             onAbrirMatrix={() => setMatrixOrdem(o)}
+            onDefinirSala={() => setDefinindoSala(o)}
           />
         ))}
       </div>
+
+      {definindoSala && (
+        <ModalDefinirSala
+          ordem={definindoSala}
+          usuario={usuario}
+          salas={salasDisponiveis}
+          onClose={() => setDefinindoSala(null)}
+          onSalvo={() => { setDefinindoSala(null); carregar(); }}
+        />
+      )}
 
       {matrixOrdem && (
         <OrdemMatrixModal ordem={matrixOrdem} onClose={() => setMatrixOrdem(null)} />
@@ -317,7 +361,7 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
 // CARD DE ORDEM (intocado)
 // ════════════════════════════════════════════════════════════════════════════
 
-function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix }) {
+function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix, onDefinirSala }) {
   const status = STATUS_PILL[ordem.status] || STATUS_PILL.aguardando;
   const cores = ordem.cores || [];
   const isFinalizada = ordem.status === 'na_sala' || ordem.status === 'concluido' || ordem.status === 'cancelado';
@@ -387,6 +431,19 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
         )}
 
         <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+          {/* Ailson 28/05/2026: admin pode definir a sala direto do card
+              quando tecido ja foi separado — antes so era possivel via
+              FilaDeCorte mobile. */}
+          {ordem.status === 'separado' && (
+            <button onClick={onDefinirSala} title="Escolher sala de corte" style={{
+              padding: '6px 12px', background: '#2c3e50', color: '#fff',
+              border: 'none', borderRadius: 4, cursor: 'pointer',
+              fontSize: 12, fontWeight: 600, fontFamily: SERIF,
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              ✂️ Definir sala
+            </button>
+          )}
           <button onClick={onAbrirMatrix} title="Ver matriz" style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           </button>

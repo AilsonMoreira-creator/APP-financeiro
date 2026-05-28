@@ -30,6 +30,7 @@ function loadCoresRanking() {
 }
 
 const SALAS_PADRAO = ['Antonio', 'Adalecio', 'Chico'];
+export { SALAS_PADRAO };
 
 export default function FilaDeCorte({ supabase, usuarioLogado }) {
   const [ordens, setOrdens] = useState([]);
@@ -374,7 +375,7 @@ function ModalEditarTecido({ ordem, usuario, onClose, onSalvo }) {
 // MODAL DEFINIR SALA
 // ════════════════════════════════════════════════════════════════════════════
 
-function ModalDefinirSala({ ordem, usuario, salas, onClose, onSalvo }) {
+export function ModalDefinirSala({ ordem, usuario, salas, onClose, onSalvo }) {
   const [salaSel, setSalaSel] = useState(null);
   const [erro, setErro] = useState(null);
   const [saving, setSaving] = useState(false);
