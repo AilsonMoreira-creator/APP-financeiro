@@ -24,12 +24,20 @@
 import { supabase, setCors, log, logErro, getConfig, primeiroNome } from './_lojas-whats-helpers.js';
 
 async function processarConversaUnica(conv, template) {
-  // Renderiza template (substitui {{1}} e {{2}})
+  // Monta vars SOMENTE com as chaves que o template DECLARA (evita enviar
+  // parâmetro a mais → Meta rejeita). visita_site declara {{1}}; carrinho_v2
+  // declara {{1}}+{{2}}. Ailson 28/05/2026 (mesma causa do caso Poliana).
   const nome = primeiroNome(conv.nome_cliente);
-  const vars = {
+  const valorPorChave = {
     '1': nome || 'cliente',
-    '2': String(conv.qtd_pecas || 0)
+    '2': String(conv.qtd_pecas || 0),
   };
+  const declaradas = Array.isArray(template.variables) ? template.variables : [];
+  const vars = {};
+  for (const d of declaradas) {
+    const k = String(d?.nome ?? '');
+    if (k && valorPorChave[k] !== undefined) vars[k] = valorPorChave[k];
+  }
   let textoProposto = template.body_text;
   for (const [k, v] of Object.entries(vars)) {
     textoProposto = textoProposto.replaceAll(`{{${k}}}`, v);

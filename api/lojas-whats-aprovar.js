@@ -227,8 +227,16 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
   try {
     if (sug.tipo === 'primeira_mensagem' && sug.template_name) {
       // Envia HSM (template aprovado pela Meta).
-      // template_vars vem como { "1": "Maria", "2": "8" } — converte pra array ordenado
-      const vars = ordenarVarsTemplate(sug.template_vars);
+      // Filtra template_vars pelas variáveis DECLARADAS pelo template — mandar
+      // parâmetro a mais faz a Meta rejeitar (#132000). Ex: visita_site_amicia_v1
+      // declara só {{1}}, mas a sugestão pode ter vindo com {1,2} do cron.
+      // Ailson 28/05/2026 (mesma causa-raiz do caso Poliana).
+      const { data: tplDecl } = await supabase
+        .from('lojas_whats_templates')
+        .select('variables')
+        .eq('name', sug.template_name)
+        .maybeSingle();
+      const vars = ordenarVarsTemplate(sug.template_vars, tplDecl?.variables);
       metaResp = await enviarTemplate(sug.conversa.telefone, sug.template_name, vars);
     } else {
       // Réplica: texto livre (só funciona dentro da janela 24h)
@@ -384,11 +392,20 @@ async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
   };
 }
 
-// ─── HELPER: converte template_vars { "1":"Maria","2":"8" } → ["Maria","8"] ─
+// ─── HELPER: template_vars { "1":"Maria","2":"8" } → ["Maria","8"] ──────────
+// Se `declaradas` (template.variables) vier, usa SOMENTE as chaves declaradas,
+// na ordem declarada — evita enviar parâmetro a mais pra Meta. Sem `declaradas`,
+// cai no comportamento antigo (todas as chaves, ordenadas).
 
-function ordenarVarsTemplate(varsObj) {
+function ordenarVarsTemplate(varsObj, declaradas) {
   if (!varsObj || typeof varsObj !== 'object') return [];
-  // Ordena por chave numérica
+  if (Array.isArray(declaradas) && declaradas.length > 0) {
+    return declaradas
+      .map(d => String(d?.nome ?? ''))
+      .filter(k => k)
+      .map(k => String(varsObj[k] ?? ''));
+  }
+  // Fallback: ordena por chave numérica
   const keys = Object.keys(varsObj).sort((a, b) => Number(a) - Number(b));
   return keys.map(k => String(varsObj[k] ?? ''));
 }
