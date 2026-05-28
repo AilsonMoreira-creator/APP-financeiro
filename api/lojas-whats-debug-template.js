@@ -42,6 +42,27 @@ export default async function handler(req, res) {
     });
   }
 
+  // action=waba_detalhe → busca nome+business da WABA configurada,
+  // e lista as outras WABAs visiveis pelo token (pra identificar
+  // se templates foram submetidos em outra conta)
+  if (req.query?.action === 'waba_detalhe') {
+    const out = {};
+    // 1. Detalhe da WABA configurada
+    const r1 = await metaFetchRaw(
+      `/${process.env.META_WA_WABA_ID}?fields=id,name,owner_business_info,business_verification_status,country,timezone_id`
+    );
+    out.waba_configurada = r1.json || r1.raw;
+    // 2. Lista todos os businesses do user/system-user
+    const r2 = await metaFetchRaw(`/me?fields=id,name`);
+    out.token_owner = r2.json || r2.raw;
+    // 3. WABAs owned por businesses
+    const r3 = await metaFetchRaw(
+      `/me/businesses?fields=id,name,owned_whatsapp_business_accounts{id,name}&limit=20`
+    );
+    out.businesses_e_wabas = r3.json || r3.raw;
+    return res.status(200).json(out);
+  }
+
   // action=consultar_nome&name=X → busca por nome ESPECIFICO (qualquer status/language)
   if (req.query?.action === 'consultar_nome') {
     const name = req.query?.name;
