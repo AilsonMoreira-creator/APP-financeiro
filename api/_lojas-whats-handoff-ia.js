@@ -85,17 +85,19 @@ export async function gerarContextoHandoff(conversaId) {
     }
 
     // 4. Prompt unico — pede 3 coisas em JSON pra economizar tokens
-    const prompt = `Analise essa conversa de WhatsApp entre uma assistente IA (Sofia, loja Amicia moda feminina atacado) e uma cliente. Extraia 3 informacoes em JSON valido (sem markdown):
+    const temPecas = Number(conv.qtd_pecas || 0) > 0;
+    const prompt = `Analise essa conversa de WhatsApp entre uma assistente IA (Sofia, loja Amicia moda feminina atacado) e uma cliente. A conversa esta sendo PASSADA pra uma vendedora humana assumir. Extraia 3 informacoes em JSON valido (sem markdown):
 
 {
   "resumo_conversa": "2-3 frases pra vendedora bater olho. Inclui o que cliente quer, objecoes, e estado emocional. Direto, sem floreios. Max 200 chars.",
   "modelos_interesse": ["Lista de produtos/categorias que cliente demonstrou interesse durante a conversa. Inclui REFs numericas se mencionadas e categorias (VESTIDO, MACACAO, BLUSA, etc). Max 5 itens. Vazio [] se nao identificou."],
-  "mensagem_sugerida": "Mensagem pronta pra vendedora enviar pelo WhatsApp continuando o atendimento. Tom: 'tu', humano, profissional mas casual. SEM mencionar 'sou nova vendedora' ou similar — cliente nao precisa saber que mudou de pessoa. Continua de onde a Sofia parou. Max 250 chars. NAO usa emojis. NAO usa 'imperdível/incrível/sensacional/travessao'. SEM R$ em sacolas."
+  "mensagem_sugerida": "Mensagem pronta pra a VENDEDORA enviar pelo WhatsApp ASSUMINDO o atendimento que a Sofia comecou. A cliente VAI perceber que mudou de atendente — e tudo bem. O ESSENCIAL e a cliente sentir que a vendedora JA SABE exatamente o que foi conversado e JA ESTA AGINDO (pra nao dar tempo de desistir). ESTRUTURA OBRIGATORIA (siga a ordem):\\n1. Saudacao com primeiro nome da cliente (ex: 'Oii Heloise!')\\n2. Apresentacao: 'Aqui e a [VENDEDORA], da Amicia' (use LITERALMENTE o texto [VENDEDORA] como placeholder — nao invente nome)\\n3. PONTE DE CONTEXTO (a parte mais importante): cite NOMINALMENTE as pecas/modelos especificos que a cliente falou no historico — ex: 'a Sofia me passou que voce curtiu a calca de couro e a jaqueta de couro' ou 'vi aqui que voce ta de olho no 2655 e no vestido viscose'. NUNCA escreva generico tipo 'os modelos que voce viu', 'o que voces conversaram', 'as pecas de interesse'. SEMPRE nomeie o produto real (tipo da peca, cor, material ou REF) extraido do historico. Se a cliente so falou de uma categoria, nomeie a categoria especifica (ex: 'as blusas de renda').\\n4. Acao concreta com URGENCIA: 'ja estou separando aqui pra voce' (presente continuo, passa que a vendedora ja esta em movimento). Use isso SEMPRE que houver qualquer peca/tipo identificado. So evite se literalmente nao houver NADA citavel.\\n5. Gancho leve pra cliente responder (ex: 'quer que eu ja confirme o pedido?' ou 'tem mais alguma peca que voce quer junto?')\\nTom: 'tu', humano, caloroso, profissional. A cliente DEVE sentir continuidade total. REGRA DURA: a mensagem precisa conter pelo menos UM nome concreto de peca/modelo/material/REF do historico — se vier generica, esta ERRADA. Max 400 chars. No maximo 1 emoji. SEM 'imperdivel/incrivel/sensacional', SEM travessao, SEM R$ em sacolas."
 }
 
 CONTEXTO:
 - Cliente: ${conv.nome_cliente || 'sem nome'} (${conv.tipo_documento || 'PF'})
 - Carrinho: ${pecasInfo || 'sem info'}
+- Tem pecas definidas: ${temPecas ? 'SIM' : 'NAO'}
 - Etapa: ${conv.etapa}
 - Gatilhos: ${JSON.stringify(conv.gatilhos_detectados || [])}
 

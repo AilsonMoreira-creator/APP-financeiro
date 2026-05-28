@@ -1912,7 +1912,7 @@ function mapBadgeFeedback(status) {
 //   - Modelos que cliente mostrou interesse
 //   - Botao 'Enviar mensagem' -> abre modal com msg pre-gerada IA + edit + enviar
 // Visual segue padrao SugestaoCard pra nao confundir vendedora.
-const LeadSofiaCard = ({ lead, onAtender, onDispensar }) => {
+const LeadSofiaCard = ({ lead, vendedoraNome, onAtender, onDispensar }) => {
   const [modalAberto, setModalAberto] = useState(false);
   const [dispensando, setDispensando] = useState(false);
 
@@ -2070,6 +2070,7 @@ const LeadSofiaCard = ({ lead, onAtender, onDispensar }) => {
       {modalAberto && !expirou && (
         <EnviarMensagemSofiaModal
           lead={lead}
+          vendedoraNome={vendedoraNome}
           onClose={() => setModalAberto(false)}
           onEnviado={async () => {
             setModalAberto(false);
@@ -2086,8 +2087,13 @@ const LeadSofiaCard = ({ lead, onAtender, onDispensar }) => {
 // ─── MODAL ENVIAR MENSAGEM (vendedora envia msg da Sofia direto pelo card)
 // Mostra msg pre-gerada por Claude Haiku no momento que assistente encaminhou.
 // Vendedora pode editar antes de enviar. Botao Enviar dispara POST pra Cloud API.
-const EnviarMensagemSofiaModal = ({ lead, onClose, onEnviado }) => {
-  const [texto, setTexto] = useState(lead.mensagem_sugerida || '');
+const EnviarMensagemSofiaModal = ({ lead, vendedoraNome, onClose, onEnviado }) => {
+  // Substitui o placeholder [VENDEDORA] pelo nome real de quem esta abrindo o
+  // card (robusto contra rotacao de handoff: se rotacionou Vanessa->Fran, o nome
+  // sai correto pq usa quem realmente atende). Ailson 28/05/2026.
+  const textoInicial = (lead.mensagem_sugerida || '')
+    .replace(/\[VENDEDORA\]/g, vendedoraNome || 'a vendedora');
+  const [texto, setTexto] = useState(textoInicial);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
 
@@ -2604,6 +2610,7 @@ export const CardDiaScreen = ({
               <LeadSofiaCard
                 key={lead.handoff_id}
                 lead={lead}
+                vendedoraNome={vendedora?.nome}
                 onAtender={() => onAtenderLeadSofia(lead.handoff_id)}
                 onDispensar={() => onDispensarLeadSofia(lead.handoff_id)}
               />

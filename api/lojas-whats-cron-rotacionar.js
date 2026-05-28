@@ -129,7 +129,7 @@ export default async function handler(req, res) {
     if (janela.ativa) {
       const { data: expirados } = await supabase
         .from('lojas_whats_handoffs')
-        .select('id, conversa_id, vendedora_id')
+        .select('id, conversa_id, vendedora_id, resumo_conversa, pecas_info, modelos_interesse, mensagem_sugerida, mensagem_sugerida_em, gatilhos_detectados, resumo_ia')
         .eq('status', 'aguardando')
         .lte('expirou_em', agora.toISOString())
         .limit(50);
@@ -166,12 +166,22 @@ export default async function handler(req, res) {
           continue;
         }
 
-        // Cria novo handoff
+        // Cria novo handoff — herda contexto IA do anterior. Como a mensagem
+        // usa placeholder [VENDEDORA], o frontend troca pelo nome de quem
+        // realmente atende, entao a msg sugerida serve pra nova vendedora tb.
+        // Ailson 28/05/2026.
         const novaExpira = new Date(agora.getTime() + ROTACAO_MIN * 60 * 1000);
         const { data: novoH } = await supabase.from('lojas_whats_handoffs').insert({
           conversa_id: h.conversa_id,
           vendedora_id: proxima.vendedora_id,
           motivo: 'rodizio_rotacao_30min',
+          resumo_conversa: h.resumo_conversa || null,
+          pecas_info: h.pecas_info || null,
+          modelos_interesse: h.modelos_interesse || [],
+          mensagem_sugerida: h.mensagem_sugerida || null,
+          mensagem_sugerida_em: h.mensagem_sugerida_em || null,
+          gatilhos_detectados: h.gatilhos_detectados || null,
+          resumo_ia: h.resumo_ia || null,
           push_enviado: true,
           push_enviado_em: agora.toISOString(),
           expirou_em: novaExpira.toISOString(),
