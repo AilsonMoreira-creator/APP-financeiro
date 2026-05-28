@@ -13,7 +13,9 @@
 
 import { supabase, setCors } from './_ordens-corte-helpers.js';
 
-const POR_PAGINA = 50;
+const POR_PAGINA = 500;  // Ailson 28/05: era 50, mas ja temos 55+ ordens
+                         // (cancelado+concluido inflam) e o admin nao tem UI
+                         // de paginacao — info ficava cortada silenciosamente.
 
 export default async function handler(req, res) {
   setCors(res);

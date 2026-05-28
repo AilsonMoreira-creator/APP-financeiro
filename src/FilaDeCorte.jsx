@@ -78,13 +78,20 @@ export default function FilaDeCorte({ supabase, usuarioLogado }) {
   const carregar = useCallback(async () => {
     try {
       setLoading(true); setErro(null);
-      const r = await fetch(`/api/ordens-corte-listar?perfil=${isAdmin ? 'admin' : 'funcionario'}`);
+      // Ailson 28/05/2026: SEMPRE usa perfil=funcionario na Fila pra forcar
+      // o filtro server-side de status (in aguardando, separado). Antes admin
+      // chamava perfil=admin que retornava TODAS as 55+ ordens paginadas a 50
+      // por pagina, ordenadas alfabeticamente por status — separados ('s')
+      // ficavam fora da pagina 1 porque cancelado+concluido ja ocupavam 48.
+      // Como a Fila so renderiza aguardando+separado, usar perfil=funcionario
+      // independente do role do user resolve permanentemente.
+      const r = await fetch('/api/ordens-corte-listar?perfil=funcionario');
       const d = await r.json();
       if (d.error) { setErro(d.error); return; }
       setOrdens((d.ordens || []).filter(o => o.status === 'aguardando' || o.status === 'separado'));
     } catch (e) { setErro(e?.message); }
     finally { setLoading(false); }
-  }, [isAdmin]);
+  }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
 
