@@ -11,7 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, setCors } from './_lojas-whats-helpers.js';
-import { enviarTemplate, listarTemplates } from './_lojas-whats-meta-client.js';
+import { enviarTemplate, listarTemplates, submeterTemplate } from './_lojas-whats-meta-client.js';
 
 const META_GRAPH_API = 'https://graph.facebook.com/v21.0';
 
@@ -29,7 +29,64 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  // action=waba_info → mostra config
+  // action=submit_3 → submete os 3 templates faltantes na WABA configurada
+  // Le do banco lojas_whats_templates, manda pra Meta via submeterTemplate,
+  // persiste meta_template_id + status retornado. Idempotente: se template
+  // ja tem meta_template_id, pula.
+  if (req.query?.action === 'submit_3') {
+    const NOMES = [
+      'visita_site_amicia_v1',
+      'carrinho_abandonado_site_amicia_v2',
+      'followup_catalogo_24h_v1',
+    ];
+    const resultados = [];
+    for (const nome of NOMES) {
+      const { data: tpl, error: errSel } = await supabase
+        .from('lojas_whats_templates')
+        .select('*')
+        .eq('name', nome)
+        .maybeSingle();
+      if (errSel || !tpl) {
+        resultados.push({ nome, ok: false, erro: 'nao_encontrado_no_banco' });
+        continue;
+      }
+      if (tpl.meta_template_id) {
+        resultados.push({
+          nome, ok: false, pulou: true,
+          motivo: 'ja_tem_meta_template_id',
+          meta_template_id: tpl.meta_template_id,
+        });
+        continue;
+      }
+      try {
+        const resp = await submeterTemplate(tpl);
+        // Persiste id + status retornado pela Meta
+        const novoStatus = (resp.status || 'PENDING').toLowerCase() === 'approved'
+          ? 'aprovado'
+          : (resp.status || 'PENDING').toLowerCase();
+        await supabase
+          .from('lojas_whats_templates')
+          .update({
+            meta_template_id: resp.id || null,
+            status: novoStatus,
+            atualizado_em: new Date().toISOString(),
+          })
+          .eq('name', nome);
+        resultados.push({
+          nome, ok: true,
+          meta_template_id: resp.id,
+          status_meta: resp.status,
+        });
+      } catch (e) {
+        resultados.push({
+          nome, ok: false,
+          erro: e.message,
+          metaResponse: e.metaResponse || null,
+        });
+      }
+    }
+    return res.status(200).json({ ok: true, resultados });
+  }
   if (req.query?.action === 'waba_info') {
     return res.status(200).json({
       meta_waba_id: process.env.META_WA_WABA_ID
