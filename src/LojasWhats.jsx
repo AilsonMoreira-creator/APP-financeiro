@@ -4628,11 +4628,15 @@ function Bubble({ m }) {
   // Ailson 27/05/2026: pra catalogos (path inclui /catalogos/), tentar
   // mostrar capa.{ext} do mesmo folder como miniatura clicavel em vez de
   // ícone genérico de documento. Cascata: jpg → png → webp → fallback.
+  // Ailson 28/05/2026: cache-busting com versao manual. Browsers podem
+  // cachear 404 da capa de antes dela ter sido uploadada — bumpar a
+  // versao forca refresh em todos os clientes.
   const ehCatalogo = ehDocumento && m.midia_url.includes('/catalogos/');
   const CAPA_EXTS = ['jpg', 'png', 'webp'];
+  const CAPA_VERSION = '20260528a';  // bumpar quando capa for trocada
   const capaErr = capaIdx >= CAPA_EXTS.length;
   const capaUrl = ehCatalogo && !capaErr
-    ? m.midia_url.replace(/\/catalogos\/[^/]+$/, `/catalogos/capa.${CAPA_EXTS[capaIdx]}`)
+    ? `${m.midia_url.replace(/\/catalogos\/[^/]+$/, `/catalogos/capa.${CAPA_EXTS[capaIdx]}`)}?v=${CAPA_VERSION}`
     : null;
 
   return (
@@ -4708,7 +4712,10 @@ function Bubble({ m }) {
             <img
               src={capaUrl}
               alt="Catálogo Amícia"
-              onError={() => setCapaIdx(i => i + 1)}
+              onError={() => {
+                console.warn('[capa] falhou:', capaUrl, '→ proxima extensao');
+                setCapaIdx(i => i + 1);
+              }}
               style={{
                 maxWidth: 220, width: '100%', borderRadius: 8,
                 display: 'block', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
