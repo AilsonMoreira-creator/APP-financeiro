@@ -36,6 +36,20 @@ export default async function handler(req, res) {
   if (req.query?.action === 'regen_handoff') {
     const conversaId = req.query?.conversa_id;
     if (!conversaId) return res.status(400).json({ error: 'conversa_id_obrigatorio' });
+    // Smoke test direto do chamarClaude pra isolar se a API responde
+    let smoke = null;
+    try {
+      const { chamarClaude } = await import('./_lojas-helpers.js');
+      const cl = await chamarClaude({
+        modelo: 'claude-sonnet-4-6',
+        messages: [{ role: 'user', content: 'Responda apenas: OK' }],
+        max_tokens: 20,
+        temperature: 0,
+      });
+      smoke = { ok: cl.ok, erro: cl.erro || null, texto: (cl.texto || '').slice(0, 40), modelo_key_present: !!process.env.ANTHROPIC_API_KEY };
+    } catch (e) {
+      smoke = { ok: false, erro: 'throw: ' + (e.message || String(e)), modelo_key_present: !!process.env.ANTHROPIC_API_KEY };
+    }
     const ctx = await gerarContextoHandoff(conversaId);
     const gerou = !!(ctx?.resumo_conversa || ctx?.mensagem_sugerida);
     let atualizou = false;
@@ -53,7 +67,7 @@ export default async function handler(req, res) {
         .eq('status', 'aguardando');
       atualizou = !error;
     }
-    return res.status(200).json({ ok: true, gerou, atualizou, contexto: ctx });
+    return res.status(200).json({ ok: true, smoke, gerou, atualizou, contexto: ctx });
   }
 
   // action=submit_3 → submete os 3 templates faltantes na WABA configurada
