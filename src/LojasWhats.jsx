@@ -111,7 +111,7 @@ function useIsDesktop(breakpoint = SPLIT_BREAKPOINT) {
 // NÃO altera ConversaRow (card expandido) — é um componente paralelo.
 // Ailson 28/05/2026.
 const LARGURA_LISTA_SPLIT = 320;
-const CardCompacto = ({ c, ativo, onClick }) => {
+const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const temSugestaoSofia = !!c.sugestao_quente_pendente_em;
   // Carrinho: detecta por carrinho_id (presente em TODOS leads carrinho, mesmo
@@ -184,6 +184,13 @@ const CardCompacto = ({ c, ativo, onClick }) => {
               background: '#fff4e0', color: '#8a5500',
               fontSize: fz(9), fontWeight: 700, padding: '2px 6px', borderRadius: 6,
             }}>PJ</span>
+          )}
+          {c.etapa === 'atendida' && vendedoraNome && (
+            <span title={`Atendida por ${vendedoraNome}`} style={{
+              background: '#f3eafc', color: '#6b3aa0',
+              fontSize: fz(9.5), fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+            }}>👤 {vendedoraNome}</span>
           )}
           {origem === 'carrinho' ? (
             <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas || 0} pç</span>
@@ -1070,6 +1077,17 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   const [modalEnviar, setModalEnviar] = useState(null);
   const [modalEditarLead, setModalEditarLead] = useState(null);
   const [conversaDetalhe, setConversaDetalhe] = useState(null);  // tela cheia chat
+  // Mapa id->nome de vendedoras pra mostrar quem atendeu (aba Atendida e demais).
+  // Ailson 28/05/2026.
+  const [vendedorasMap, setVendedorasMap] = useState(new Map());
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('lojas_vendedoras')
+        .select('id, nome');
+      if (data) setVendedorasMap(new Map(data.map(v => [v.id, v.nome])));
+    })();
+  }, []);
   const isDesktop = useIsDesktop();  // split view só em desktop; mobile = fullscreen
   const [feedback, setFeedback] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -1160,7 +1178,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id,
           handoffs:lojas_whats_handoffs(status)
         `)
         // Prioritarios primeiro
@@ -1324,6 +1342,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
               <CardCompacto key={c.id} c={c}
                 ativo={c.id === conversaDetalhe}
                 onClick={() => abrirConversa(c.id, c.unread_count)}
+                vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : null}
               />
             ))}
           </div>
@@ -1437,6 +1456,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {conversas.map(c => (
               <ConversaRow key={c.id} c={c}
+                vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : null}
                 selecionavel={ehAbaProcessando}
                 selecionado={selecionados.has(c.id)}
                 onToggleSelecao={() => toggleSelecao(c.id)}
@@ -1849,7 +1869,7 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unre
   );
 };
 
-const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
+const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
   const prioritario = !!c.lead_prioritario;
@@ -1938,6 +1958,12 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
                 fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
                 background: '#e6f7ee', color: '#1f7a48', fontWeight: 700,
               }}>🔗 linktree</span>
+            )}
+            {c.etapa === 'atendida' && vendedoraNome && (
+              <span title={`Atendida por ${vendedoraNome}`} style={{
+                fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
+                background: '#f3eafc', color: '#6b3aa0', fontWeight: 700,
+              }}>👤 {vendedoraNome}</span>
             )}
           </div>
           <div style={{ fontSize: fz(11), color: palette.inkMuted, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
