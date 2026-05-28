@@ -87,33 +87,40 @@ export async function gerarContextoHandoff(conversaId) {
       return { ...fallback, pecas_info: pecasInfo };
     }
 
-    // 4. Prompt unico — pede 3 coisas em JSON pra economizar tokens
+    // 4. Prompt — esqueleto JSON LIMPO + regras separadas (prompt antigo
+    // embutia instrucoes gigantes dentro do JSON exemplo, o que fazia o modelo
+    // devolver JSON invalido/truncado → fallback. Ailson 28/05/2026.
     const temPecas = Number(conv.qtd_pecas || 0) > 0;
-    const prompt = `Analise essa conversa de WhatsApp entre uma assistente IA (Sofia, loja Amicia moda feminina atacado) e uma cliente. A conversa esta sendo PASSADA pra uma vendedora humana assumir. Extraia 3 informacoes em JSON valido (sem markdown):
+    const prompt = `Voce prepara o repasse de uma conversa de WhatsApp (loja Amicia, moda feminina atacado) da assistente IA Sofia pra uma vendedora humana assumir.
 
-{
-  "resumo_conversa": "2-3 frases pra vendedora bater olho. Inclui o que cliente quer, objecoes, e estado emocional. Direto, sem floreios. Max 200 chars.",
-  "modelos_interesse": ["Lista de produtos/categorias que cliente demonstrou interesse durante a conversa. Inclui REFs numericas se mencionadas e categorias (VESTIDO, MACACAO, BLUSA, etc). Max 5 itens. Vazio [] se nao identificou."],
-  "mensagem_sugerida": "Mensagem pronta pra a VENDEDORA enviar pelo WhatsApp ASSUMINDO o atendimento que a Sofia comecou. A cliente VAI perceber que mudou de atendente — e tudo bem. O ESSENCIAL e a cliente sentir que a vendedora JA SABE exatamente o que foi conversado e JA ESTA AGINDO (pra nao dar tempo de desistir). ESTRUTURA OBRIGATORIA (siga a ordem):\\n1. Saudacao com primeiro nome da cliente (ex: 'Oii Heloise!')\\n2. Apresentacao: 'Aqui e a [VENDEDORA], da Amicia' (use LITERALMENTE o texto [VENDEDORA] como placeholder — nao invente nome)\\n3. PONTE DE CONTEXTO (a parte mais importante): cite NOMINALMENTE as pecas/modelos especificos que a cliente falou no historico — ex: 'a Sofia me passou que voce curtiu a calca de couro e a jaqueta de couro' ou 'vi aqui que voce ta de olho no 2655 e no vestido viscose'. NUNCA escreva generico tipo 'os modelos que voce viu', 'o que voces conversaram', 'as pecas de interesse'. SEMPRE nomeie o produto real (tipo da peca, cor, material ou REF) extraido do historico. Se a cliente so falou de uma categoria, nomeie a categoria especifica (ex: 'as blusas de renda').\\n4. Acao concreta com URGENCIA: 'ja estou separando aqui pra voce' (presente continuo, passa que a vendedora ja esta em movimento). Use isso SEMPRE que houver qualquer peca/tipo identificado. So evite se literalmente nao houver NADA citavel.\\n5. Gancho leve pra cliente responder (ex: 'quer que eu ja confirme o pedido?' ou 'tem mais alguma peca que voce quer junto?')\\nTom: 'tu', humano, caloroso, profissional. A cliente DEVE sentir continuidade total. REGRA DURA: a mensagem precisa conter pelo menos UM nome concreto de peca/modelo/material/REF do historico — se vier generica, esta ERRADA. Max 400 chars. No maximo 1 emoji. SEM 'imperdivel/incrivel/sensacional', SEM travessao, SEM R$ em sacolas."
-}
+DADOS: Cliente ${conv.nome_cliente || 'sem nome'} (${conv.tipo_documento || 'PF'}). Carrinho: ${pecasInfo || 'sem info'}. Pecas definidas: ${temPecas ? 'SIM' : 'NAO'}. Gatilhos: ${JSON.stringify(conv.gatilhos_detectados || [])}.
 
-CONTEXTO:
-- Cliente: ${conv.nome_cliente || 'sem nome'} (${conv.tipo_documento || 'PF'})
-- Carrinho: ${pecasInfo || 'sem info'}
-- Tem pecas definidas: ${temPecas ? 'SIM' : 'NAO'}
-- Etapa: ${conv.etapa}
-- Gatilhos: ${JSON.stringify(conv.gatilhos_detectados || [])}
-
-HISTORICO DA CONVERSA (ordem cronologica):
+HISTORICO (ordem cronologica):
 """
 ${historico}
-"""`;
+"""
+
+Devolva SOMENTE um JSON valido (sem markdown, sem nenhum texto fora do JSON), exatamente com estas 3 chaves:
+{"resumo_conversa":"...","modelos_interesse":["..."],"mensagem_sugerida":"..."}
+
+Conteudo de cada chave:
+- resumo_conversa: 2-3 frases pra vendedora bater o olho (o que a cliente quer, objecoes, estado). Max 200 chars.
+- modelos_interesse: array com ate 5 produtos/categorias que a cliente demonstrou interesse (REFs numericas e categorias tipo VESTIDO, MACACAO, BLUSA). [] se nao houver.
+- mensagem_sugerida: mensagem pronta pra vendedora enviar assumindo o atendimento. Max 400 chars. Siga TODAS as regras abaixo.
+
+REGRAS da mensagem_sugerida:
+1. Saudacao + primeiro nome da cliente (ex: "Oii Heloise!").
+2. Apresente-se: "Aqui e a [VENDEDORA], da Amicia" — use LITERALMENTE o texto [VENDEDORA], nao invente nome.
+3. Cite NOMINALMENTE pecas/modelos reais do historico (ex: "a calca de couro e a jaqueta de couro", "o 2655"). NUNCA generico tipo "os modelos que voce viu". Se so houver categoria, nomeie a categoria (ex: "as blusas de renda").
+4. Acao com urgencia: "ja estou separando aqui pra voce" sempre que houver peca/tipo citavel.
+5. Termine com um gancho leve (ex: "quer que eu ja confirme o pedido?").
+Tom "tu", humano, caloroso. Max 1 emoji. SEM travessao, SEM "imperdivel/incrivel/sensacional", SEM R$ em sacolas.`;
 
     // 5. Chama Claude (Sonnet via helper comprovado)
     const cl = await chamarClaude({
       modelo: MODELO_HANDOFF,
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 600,
+      max_tokens: 1000,
       temperature: 0.3,
     });
     if (!cl.ok) {

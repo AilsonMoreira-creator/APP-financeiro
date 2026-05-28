@@ -36,34 +36,24 @@ export default async function handler(req, res) {
   if (req.query?.action === 'regen_handoff') {
     const conversaId = req.query?.conversa_id;
     if (!conversaId) return res.status(400).json({ error: 'conversa_id_obrigatorio' });
-    // Replica o nucleo do gerarContextoHandoff e retorna o texto CRU do Claude
-    // + se o JSON.parse funciona — pra achar onde quebra. TEMP.
-    let diag = {};
-    try {
-      const { chamarClaude } = await import('./_lojas-helpers.js');
-      const { data: conv } = await supabase
-        .from('lojas_whats_conversas')
-        .select('id, nome_cliente, telefone, tipo_documento, etapa, qtd_pecas, valor_carrinho, gatilhos_detectados, carrinho_id')
-        .eq('id', conversaId).maybeSingle();
-      const { data: msgs } = await supabase
-        .from('lojas_whats_mensagens')
-        .select('direcao, autor, texto, enviada_em')
-        .eq('conversa_id', conversaId).not('texto', 'is', null)
-        .order('enviada_em', { ascending: false }).limit(10);
-      const hist = (msgs || []).reverse().map(m => {
-        const quem = m.direcao === 'entrada' ? 'CLIENTE' : (m.autor === 'sofia_ia' ? 'SOFIA' : 'ASSISTENTE');
-        return `${quem}: ${(m.texto || '').slice(0, 300)}`;
-      }).join('\n');
-      const prompt = `Analise essa conversa e devolva SO um JSON valido (sem markdown, sem texto fora do JSON):\n{"resumo_conversa":"2-3 frases","modelos_interesse":["item"],"mensagem_sugerida":"mensagem pra vendedora assumir, cite [VENDEDORA] e pecas reais"}\n\nCLIENTE: ${conv?.nome_cliente}\nHISTORICO:\n"""\n${hist}\n"""`;
-      const cl = await chamarClaude({ modelo: 'claude-sonnet-4-6', messages: [{ role: 'user', content: prompt }], max_tokens: 600, temperature: 0.3 });
-      let parseOk = false, parseErro = null;
-      const txt = (cl.texto || '').replace(/```json|```/g, '').trim();
-      try { JSON.parse(txt); parseOk = true; } catch (e) { parseErro = e.message; }
-      diag = { conv_achou: !!conv, n_msgs: (msgs || []).length, hist_len: hist.length, cl_ok: cl.ok, cl_erro: cl.erro || null, parseOk, parseErro, texto_cru: (cl.texto || '').slice(0, 500) };
-    } catch (e) {
-      diag = { throw: e.message || String(e) };
+    const ctx = await gerarContextoHandoff(conversaId);
+    const gerou = !!(ctx?.resumo_conversa || ctx?.mensagem_sugerida);
+    let atualizou = false;
+    if (gerou) {
+      const { error } = await supabase
+        .from('lojas_whats_handoffs')
+        .update({
+          resumo_conversa: ctx.resumo_conversa,
+          pecas_info: ctx.pecas_info,
+          modelos_interesse: ctx.modelos_interesse,
+          mensagem_sugerida: ctx.mensagem_sugerida,
+          mensagem_sugerida_em: new Date().toISOString(),
+        })
+        .eq('conversa_id', conversaId)
+        .eq('status', 'aguardando');
+      atualizou = !error;
     }
-    return res.status(200).json({ ok: true, diag });
+    return res.status(200).json({ ok: true, gerou, atualizou, contexto: ctx });
   }
 
   // action=submit_3 → submete os 3 templates faltantes na WABA configurada
