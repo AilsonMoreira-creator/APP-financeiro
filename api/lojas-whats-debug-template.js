@@ -12,7 +12,6 @@
 
 import { supabase, setCors } from './_lojas-whats-helpers.js';
 import { enviarTemplate, listarTemplates, submeterTemplate } from './_lojas-whats-meta-client.js';
-import { gerarContextoHandoff } from './_lojas-whats-handoff-ia.js';
 
 const META_GRAPH_API = 'https://graph.facebook.com/v21.0';
 
@@ -29,32 +28,6 @@ async function metaFetchRaw(path) {
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
-
-  // action=regen_handoff&conversa_id=X → testa o caminho Sonnet de geracao de
-  // contexto de handoff e atualiza o handoff 'aguardando' dessa conversa.
-  // Verificacao do fix 72cf30d (Haiku->Sonnet). REMOVER apos confirmar.
-  if (req.query?.action === 'regen_handoff') {
-    const conversaId = req.query?.conversa_id;
-    if (!conversaId) return res.status(400).json({ error: 'conversa_id_obrigatorio' });
-    const ctx = await gerarContextoHandoff(conversaId);
-    const gerou = !!(ctx?.resumo_conversa || ctx?.mensagem_sugerida);
-    let atualizou = false;
-    if (gerou) {
-      const { error } = await supabase
-        .from('lojas_whats_handoffs')
-        .update({
-          resumo_conversa: ctx.resumo_conversa,
-          pecas_info: ctx.pecas_info,
-          modelos_interesse: ctx.modelos_interesse,
-          mensagem_sugerida: ctx.mensagem_sugerida,
-          mensagem_sugerida_em: new Date().toISOString(),
-        })
-        .eq('conversa_id', conversaId)
-        .eq('status', 'aguardando');
-      atualizou = !error;
-    }
-    return res.status(200).json({ ok: true, gerou, atualizou, contexto: ctx });
-  }
 
   // action=submit_3 → submete os 3 templates faltantes na WABA configurada
   // Le do banco lojas_whats_templates, manda pra Meta via submeterTemplate,
