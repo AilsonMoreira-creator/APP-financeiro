@@ -29,58 +29,6 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  // action=transcr_run&mensagem_id=X → roda transcreverAudio (salva no banco). TEMP.
-  if (req.query?.action === 'transcr_run') {
-    const { transcreverAudio } = await import('./lojas-whats-transcrever.js');
-    const r = await transcreverAudio(req.query?.mensagem_id);
-    return res.status(200).json(r);
-  }
-
-  // action=transcr_diag&mensagem_id=X → roda a transcricao passo a passo e
-  // diz onde quebra (key/download/whisper). TEMP. REMOVER apos diagnostico.
-  if (req.query?.action === 'transcr_diag') {
-    const mensagem_id = req.query?.mensagem_id;
-    const diag = { tem_openai_key: !!process.env.OPENAI_API_KEY };
-    try {
-      const { data: msg } = await supabase
-        .from('lojas_whats_mensagens')
-        .select('id, tipo_midia, midia_url, audio_transcricao')
-        .eq('id', mensagem_id).maybeSingle();
-      diag.msg_achou = !!msg;
-      diag.tipo_midia = msg?.tipo_midia;
-      diag.tem_url = msg?.midia_url?.startsWith('http') || false;
-      if (msg?.midia_url?.startsWith('http')) {
-        const t0 = Date.now();
-        const aRes = await fetch(msg.midia_url, { signal: AbortSignal.timeout(20000) });
-        diag.download_status = aRes.status;
-        const blob = await aRes.blob();
-        diag.audio_size = blob.size;
-        diag.download_ms = Date.now() - t0;
-        if (aRes.ok && blob.size > 0 && diag.tem_openai_key) {
-          const form = new FormData();
-          form.append('file', blob, 'audio.ogg');
-          form.append('model', 'whisper-1');
-          form.append('language', 'pt');
-          form.append('response_format', 'json');
-          const t1 = Date.now();
-          const wRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-            body: form,
-            signal: AbortSignal.timeout(25000),
-          });
-          diag.whisper_status = wRes.status;
-          diag.whisper_ms = Date.now() - t1;
-          const wTxt = await wRes.text();
-          diag.whisper_body = wTxt.slice(0, 300);
-        }
-      }
-    } catch (e) {
-      diag.erro = e.name + ': ' + (e.message || String(e));
-    }
-    return res.status(200).json({ ok: true, diag });
-  }
-
   // action=submit_3 → submete os 3 templates faltantes na WABA configurada
   // Le do banco lojas_whats_templates, manda pra Meta via submeterTemplate,
   // persiste meta_template_id + status retornado. Idempotente: se template
