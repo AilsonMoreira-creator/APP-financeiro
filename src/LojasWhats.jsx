@@ -90,6 +90,113 @@ const ETAPAS = [
 const fz = (n) => `${n}px`;
 const sz = (n) => n;
 
+// Hook: detecta se viewport é "desktop" (split view). Mobile mantém fullscreen.
+// Ailson 28/05/2026 — split view do chat.
+const SPLIT_BREAKPOINT = 768;
+function useIsDesktop(breakpoint = SPLIT_BREAKPOINT) {
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= breakpoint : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= breakpoint);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [breakpoint]);
+  return isDesktop;
+}
+
+// Card compacto da coluna esquerda no split view. Mostra só o essencial:
+// ícone de etapa + nome + unread + origem + badge "Sofia" (sugestão pendente).
+// NÃO altera ConversaRow (card expandido) — é um componente paralelo.
+// Ailson 28/05/2026.
+const LARGURA_LISTA_SPLIT = 320;
+const CardCompacto = ({ c, ativo, onClick }) => {
+  const ehPJ = c.tipo_documento === 'CNPJ';
+  const temSugestaoSofia = !!c.sugestao_quente_pendente_em;
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        padding: '9px 11px',
+        borderBottom: `1px solid ${palette.beige}`,
+        cursor: 'pointer',
+        background: ativo ? '#e8e2da' : 'transparent',
+        borderLeft: ativo ? `3px solid ${palette.accent}` : '3px solid transparent',
+        display: 'flex', alignItems: 'center', gap: 8,
+        fontFamily: FONT,
+      }}
+    >
+      <EtapaIcon nome={c.etapa} size={24} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {ehPJ
+            ? <Building2 size={sz(11)} color={palette.warn} style={{ flexShrink: 0 }} />
+            : <UserIcon size={sz(11)} color={palette.accent} style={{ flexShrink: 0 }} />}
+          <span style={{
+            fontSize: fz(13), fontWeight: 600, color: palette.ink,
+            flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{c.nome_cliente || fmtPhone(c.telefone) || '—'}</span>
+          {temSugestaoSofia && (
+            <span title="Sugestão Sofia pendente" style={{
+              background: '#fff8e7', color: '#8a5500', border: '1px solid #f5c84e',
+              fontSize: fz(9), fontWeight: 700, padding: '0px 4px', borderRadius: 3, flexShrink: 0,
+            }}>Sofia</span>
+          )}
+          {c.unread_count > 0 && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              minWidth: 17, height: 17, padding: '0 4px', borderRadius: 9,
+              fontSize: fz(10), fontWeight: 700, background: '#dc2626', color: '#fff',
+              lineHeight: 1, flexShrink: 0,
+            }}>{c.unread_count}</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          {c.origem_lead === 'anuncio_instagram' && (
+            <span style={{ fontSize: fz(9), color: '#1877f2', fontWeight: 700 }}>f Ads</span>
+          )}
+          {c.origem_lead === 'carrinho_site_amicialoja' && (
+            <span style={{ fontSize: fz(9), color: '#a55a00', fontWeight: 600 }}>🛒 carrinho</span>
+          )}
+          {c.qtd_pecas > 0 && (
+            <span style={{ fontSize: fz(9), color: palette.inkMuted }}>{c.qtd_pecas} pç</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Chip compacto pra barra de filtros da coluna esquerda (split view).
+// Troca o filtroEtapa sem fechar o chat aberto. Ailson 28/05/2026.
+const ChipMini = ({ label, ativo, onClick, badge, unread, cor }) => (
+  <button onClick={onClick} style={{
+    padding: '3px 8px', borderRadius: 12,
+    border: ativo ? `1px solid ${palette.accent}` : `1px solid ${palette.beige}`,
+    background: ativo ? palette.accent : palette.surface,
+    color: ativo ? '#fff' : palette.inkSoft,
+    fontFamily: FONT, fontSize: fz(10), fontWeight: 700,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4,
+    whiteSpace: 'nowrap',
+  }}>
+    <span style={{ width: 6, height: 6, borderRadius: '50%', background: ativo ? '#fff' : (cor || palette.inkMuted), flexShrink: 0 }} />
+    {label}
+    {badge > 0 && (
+      <span style={{
+        background: ativo ? 'rgba(255,255,255,0.25)' : palette.bg,
+        padding: '0 4px', borderRadius: 8, fontSize: fz(9), fontWeight: 700,
+      }}>{badge}</span>
+    )}
+    {unread > 0 && (
+      <span style={{
+        background: '#dc2626', color: '#fff', minWidth: 14, height: 14,
+        padding: '0 3px', borderRadius: 7, fontSize: fz(9), fontWeight: 700,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      }}>{unread}</span>
+    )}
+  </button>
+);
+
 // Emojis curados pro picker da assistente (Ailson 27/05/2026) — mesmo
 // conjunto usado no modulo Lojas pelas vendedoras.
 const EMOJIS_PICKER = [
@@ -934,6 +1041,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   const [modalEnviar, setModalEnviar] = useState(null);
   const [modalEditarLead, setModalEditarLead] = useState(null);
   const [conversaDetalhe, setConversaDetalhe] = useState(null);  // tela cheia chat
+  const isDesktop = useIsDesktop();  // split view só em desktop; mobile = fullscreen
   const [feedback, setFeedback] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [expandido, setExpandido] = useState(false);
@@ -1075,21 +1183,24 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
     } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
   };
 
-  // Se tem conversa em detalhe, renderiza tela cheia (esconde a lista)
-  // Mas ainda renderiza os modais — senao eles ficam fora do DOM e so
-  // aparecem depois de fechar o detalhe. Ailson 27/05/2026
+  // Se tem conversa em detalhe:
+  //  - MOBILE (<768px): tela cheia (esconde a lista) — comportamento original
+  //  - DESKTOP (>=768px): split view — lista compacta à esquerda + chat à direita
+  // Modais renderizados em ambos (senão ficam fora do DOM). Ailson 28/05/2026
   if (conversaDetalhe) {
-    return (
+    const abrirConversa = (id, unread) => {
+      setConversaDetalhe(id);
+      if (unread > 0) {
+        setConversas(prev => prev.map(x => x.id === id ? { ...x, unread_count: 0 } : x));
+        fetch('/api/lojas-whats-conversa-vista', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversa_id: id }),
+        }).catch(() => {});
+      }
+    };
+
+    const modais = (
       <>
-        <ConversaDetail
-          conversaId={conversaDetalhe}
-          userId={userId}
-          idsNaAba={(conversas || []).map(c => c.id)}
-          onNavegar={(id) => setConversaDetalhe(id)}
-          onBack={() => { setConversaDetalhe(null); setReloadTick(t => t + 1); }}
-          onEditarLead={(conv) => setModalEditarLead({ conversa: conv })}
-          onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
-        />
         {modalEditarLead && (
           <EditarLeadModal
             conversa={modalEditarLead.conversa}
@@ -1105,14 +1216,91 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
             onSucesso={(msg) => {
               setFeedback({ tipo: 'ok', msg });
               setModalEnviar(null);
-              // Apos enviar pra vendedora, volta pra lista (lead saiu do
-              // contexto Sofia) e recarrega
               setConversaDetalhe(null);
               setReloadTick(t => t + 1);
             }}
             onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
           />
         )}
+      </>
+    );
+
+    const chatDetalhe = (
+      <ConversaDetail
+        conversaId={conversaDetalhe}
+        userId={userId}
+        idsNaAba={(conversas || []).map(c => c.id)}
+        onNavegar={(id) => setConversaDetalhe(id)}
+        onBack={() => { setConversaDetalhe(null); setReloadTick(t => t + 1); }}
+        onEditarLead={(conv) => setModalEditarLead({ conversa: conv })}
+        onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
+        splitLeft={isDesktop ? LARGURA_LISTA_SPLIT : 0}
+      />
+    );
+
+    // MOBILE — fullscreen (comportamento original intacto)
+    if (!isDesktop) {
+      return <>{chatDetalhe}{modais}</>;
+    }
+
+    // DESKTOP — split view
+    const etapaLabelAtual = filtroEtapa === 'todas'
+      ? 'no total'
+      : `em ${(ETAPAS.find(e => e.id === filtroEtapa)?.label) || filtroEtapa}`;
+    const etapasNaBarra = ETAPAS.filter(et =>
+      ['aprovar', 'quente', 'conversando', 'follow_up', 'processando'].includes(et.id)
+      || et.id === filtroEtapa
+    );
+    return (
+      <>
+        {/* COLUNA ESQUERDA — lista compacta + filtros cross-tab */}
+        <div style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0,
+          width: LARGURA_LISTA_SPLIT, zIndex: 101,
+          background: palette.surface, borderRight: `1px solid ${palette.beige}`,
+          display: 'flex', flexDirection: 'column', fontFamily: FONT,
+        }}>
+          {/* Barra de filtros (troca a aba SEM fechar o chat aberto) */}
+          <div style={{
+            display: 'flex', gap: 4, flexWrap: 'wrap', padding: 8,
+            borderBottom: `1px solid ${palette.beige}`, background: palette.bg,
+          }}>
+            <ChipMini label="Todas" cor={palette.inkMuted}
+              ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')}
+              badge={contadores.todas} unread={unreadPorEtapa.todas} />
+            {etapasNaBarra.map(et => (
+              <ChipMini key={et.id} label={et.label} cor={et.cor}
+                ativo={filtroEtapa === et.id} onClick={() => setFiltroEtapa(et.id)}
+                badge={contadores[et.id]} unread={unreadPorEtapa[et.id]} />
+            ))}
+          </div>
+          {/* Contagem da aba atual */}
+          <div style={{
+            padding: '6px 11px', fontSize: fz(10), fontWeight: 700,
+            color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.5,
+            borderBottom: `1px solid ${palette.beige}`, background: palette.surface,
+          }}>
+            {conversas.length} {etapaLabelAtual}
+          </div>
+          {/* Lista scrollable */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {conversas.length === 0 ? (
+              <div style={{
+                padding: 20, fontSize: fz(12), color: palette.inkMuted,
+                textAlign: 'center', fontStyle: 'italic',
+              }}>
+                Nenhuma conversa nessa etapa
+              </div>
+            ) : conversas.map(c => (
+              <CardCompacto key={c.id} c={c}
+                ativo={c.id === conversaDetalhe}
+                onClick={() => abrirConversa(c.id, c.unread_count)}
+              />
+            ))}
+          </div>
+        </div>
+        {chatDetalhe}
+        {modais}
       </>
     );
   }
@@ -3526,7 +3714,7 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 // CONVERSA DETAIL — tela cheia tipo WhatsApp (Ailson 26/05/2026)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar, userId }) {
+function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar, userId, splitLeft = 0 }) {
   const [conversa, setConversa] = useState(null);
   const [mensagens, setMensagens] = useState([]);
   const [sugestoesPendentes, setSugestoesPendentes] = useState([]);
@@ -3626,7 +3814,8 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: palette.beige, zIndex: 100,
+      position: 'fixed', top: 0, right: 0, bottom: 0, left: splitLeft,
+      background: palette.beige, zIndex: 100,
       display: 'flex', flexDirection: 'column', fontFamily: FONT_CHAT,
     }}>
       {/* Wrapper centralizado: chat com max-width pra nao ficar com balöes
@@ -3933,6 +4122,10 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
         const idx = idsNaAba.indexOf(conversaId);
         const anteriorId = idx > 0 ? idsNaAba[idx - 1] : null;
         const proximoId  = idx >= 0 && idx < idsNaAba.length - 1 ? idsNaAba[idx + 1] : null;
+        // No split view o chat começa em splitLeft, então o centro útil
+        // desloca splitLeft/2. Em fullscreen (splitLeft=0) cai no cálculo
+        // original. Ailson 28/05/2026.
+        const meioOff = splitLeft / 2;
         const seta = (lado, id) => (
           <button
             onClick={() => id && onNavegar?.(id)}
@@ -3940,12 +4133,12 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
             title={id ? `Ir pra ${lado === 'esq' ? 'anterior' : 'próxima'}` : 'Fim da lista'}
             style={{
               position: 'fixed',
-              // Aproxima do card do chat (wrapper 960px centralizado).
-              // Em tela larga: seta encosta na margem do wrapper + 12px de gap.
-              // Em tela estreita: fallback 8px da borda (max evita seta sair da tela).
+              // Aproxima do card do chat (wrapper 960px centralizado na área útil).
+              // esq: piso = borda da lista (splitLeft) + 8px pra não invadi-la.
               // Conta: metade wrapper (480) + gap (12) + largura seta (44) = 536.
-              // Ailson 25/05/2026
-              [lado === 'esq' ? 'left' : 'right']: 'max(8px, calc(50% - 536px))',
+              [lado === 'esq' ? 'left' : 'right']: lado === 'esq'
+                ? `max(${splitLeft + 8}px, calc(50% + ${meioOff}px - 536px))`
+                : `max(8px, calc(50% - ${meioOff}px - 536px))`,
               top: '50%', transform: 'translateY(-50%)',
               width: 44, height: 44, borderRadius: '50%',
               background: id ? 'rgba(255,255,255,0.95)' : 'rgba(200,200,200,0.5)',
@@ -3967,7 +4160,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
             {seta('esq', anteriorId)}
             {seta('dir', proximoId)}
             <div style={{
-              position: 'fixed', bottom: 80, left: '50%',
+              position: 'fixed', bottom: 80, left: `calc(50% + ${meioOff}px)`,
               transform: 'translateX(-50%)',
               background: 'rgba(0,0,0,0.55)', color: '#fff',
               padding: '3px 10px', borderRadius: 12,
