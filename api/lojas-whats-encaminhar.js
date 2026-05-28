@@ -240,12 +240,27 @@ export default async function handler(req, res) {
     // sugestao_quente_pendente_em (foi promovido, nao precisa mais sugestao).
     // Aguarda a vendedora aceitar (vira 'atendida') ou expirar (fila).
     // So muda se a conversa ainda estava em pre-quente.
+    //
+    // Ailson 28/05/2026: em MODO MANUAL, ja seta vendedora_atribuida_id
+    // imediatamente (o admin escolheu deliberadamente — registra a intencao
+    // sem esperar a vendedora aceitar). No rodizio espera o aceite, senao
+    // ficaria fantasma se o rodizio rotacionasse. Bug fix Marcia Dias:
+    // ficou marcada com Celia (1o aceite antigo) porque o handoff manual
+    // pra Tamires nao atualizava o campo, so o aceite faz.
     if (!['quente', 'atendida'].includes(conversa.etapa)) {
-      await supabase.from('lojas_whats_conversas').update({
+      const updateConv = {
         etapa: 'quente',
         sugestao_quente_pendente_em: null,
         sugestao_quente_motivo: null,
         sugestao_quente_gatilhos: null,
+        atualizado_em: agora.toISOString(),
+      };
+      if (modo === 'manual') updateConv.vendedora_atribuida_id = vendedoraIdAlvo;
+      await supabase.from('lojas_whats_conversas').update(updateConv).eq('id', conversa_id);
+    } else if (modo === 'manual') {
+      // Mesmo se ja estava em quente/atendida, manual sobrescreve a vendedora.
+      await supabase.from('lojas_whats_conversas').update({
+        vendedora_atribuida_id: vendedoraIdAlvo,
         atualizado_em: agora.toISOString(),
       }).eq('id', conversa_id);
     }

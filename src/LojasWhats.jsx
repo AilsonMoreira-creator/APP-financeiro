@@ -1254,6 +1254,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
             onClose={() => setModalEditarLead(null)}
             onSucesso={(msg) => { setFeedback({ tipo: 'ok', msg }); setModalEditarLead(null); setReloadTick(t => t + 1); }}
             onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
+            onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
           />
         )}
         {modalEnviar && (
@@ -1525,6 +1526,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
           onClose={() => setModalEditarLead(null)}
           onSucesso={(msg) => { setFeedback({ tipo: 'ok', msg }); setModalEditarLead(null); setReloadTick(t => t + 1); }}
           onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
+          onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
         />
       )}
 
@@ -2068,26 +2070,6 @@ const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, on
               ❌ Manter
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Conversando sem sugestao quente pendente e sem handoff em andamento:
-          botao manual 'Enviar pra vendedora' fica visivel (Tamara pode
-          escalar a qualquer momento, especialmente apos clicar 'Manter' na
-          sugestao quente — antes o botao so aparecia em etapa=quente,
-          deixando a Tamara sem acao apos manter). Ailson 28/05/2026. */}
-      {c.etapa === 'conversando' && !c.sugestao_quente_pendente_em &&
-        !(c.handoffs || []).some(h => ['aguardando','fila_fora_janela'].includes(h.status)) && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}` }}>
-          <button onClick={onEnviarVendedora} style={{
-            flex: 1, padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
-            background: '#f5a623', color: '#fff',
-            border: '1px solid #f5a623',
-            fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-          }}>
-            <Users size={sz(14)} /> Enviar pra vendedora
-          </button>
         </div>
       )}
 
@@ -3593,7 +3575,7 @@ function PadraoRow({ p, primeira }) {
 // Mover etapa · Observações (Sofia + privada) · Anexar mídia · Prioridade
 // ═══════════════════════════════════════════════════════════════════════════
 
-function EditarLeadModal({ conversa, onClose, onSucesso, onErro }) {
+function EditarLeadModal({ conversa, onClose, onSucesso, onErro, onEnviarVendedora }) {
   const [etapa, setEtapa] = useState(conversa.etapa);
   const [obsSofia, setObsSofia] = useState(conversa.observacao_para_sofia || '');
   const [obsPrivada, setObsPrivada] = useState(conversa.observacao_assistente || '');
@@ -3692,6 +3674,21 @@ function EditarLeadModal({ conversa, onClose, onSucesso, onErro }) {
             <option key={et.id} value={et.id}>{et.label}</option>
           ))}
         </select>
+
+        {/* Enviar pra vendedora — atalho aqui pra etapas em aberto (Ailson 28/05/2026).
+            Fecha o modal de editar e abre o de escolher vendedora. Some quando
+            a conversa ja terminou (atendida/vendeu/perdida) ou ja foi quente
+            (banner do quente cobre esse caso na lista). */}
+        {onEnviarVendedora && !['quente', 'atendida', 'vendeu', 'perdida'].includes(conversa.etapa) && (
+          <button onClick={() => { onClose(); onEnviarVendedora(conversa); }} style={{
+            width: '100%', padding: '9px 12px', borderRadius: 6,
+            background: '#f5a623', color: '#fff', border: 'none',
+            fontSize: fz(13), fontFamily: FONT, fontWeight: 700, cursor: 'pointer',
+            marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}>
+            <Users size={sz(15)} /> Enviar pra vendedora
+          </button>
+        )}
 
         {/* Anexar mídia */}
         <div style={{
