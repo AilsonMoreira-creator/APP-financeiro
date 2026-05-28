@@ -113,8 +113,10 @@ const LARGURA_LISTA_SPLIT = 320;
 const CardCompacto = ({ c, ativo, onClick }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const temSugestaoSofia = !!c.sugestao_quente_pendente_em;
-  const origem = c.origem_lead === 'anuncio_instagram' ? 'ads'
-    : c.origem_lead === 'carrinho_site_amicialoja' ? 'carrinho'
+  // Carrinho: detecta por carrinho_id (presente em TODOS leads carrinho, mesmo
+  // os legados sem origem_lead corretamente setada). Ailson 28/05/2026.
+  const origem = c.carrinho_id ? 'carrinho'
+    : c.origem_lead === 'anuncio_instagram' ? 'ads'
     : null;
   return (
     <div
@@ -182,7 +184,9 @@ const CardCompacto = ({ c, ativo, onClick }) => {
               fontSize: fz(9), fontWeight: 700, padding: '2px 6px', borderRadius: 6,
             }}>PJ</span>
           )}
-          {c.qtd_pecas > 0 && (
+          {origem === 'carrinho' ? (
+            <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas || 0} pç</span>
+          ) : c.qtd_pecas > 0 && (
             <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas} pç</span>
           )}
         </div>
