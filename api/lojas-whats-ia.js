@@ -417,9 +417,17 @@ async function processarConversa(conversaId) {
   // 2. Texto da última msg do cliente (texto direto OU transcrição de áudio)
   const textoCliente = ultima.audio_transcricao || ultima.texto || '';
 
+  // Detecta se esta eh a PRIMEIRA msg do cliente nessa conversa.
+  // Caso seja: alguns clientes tem auto-reply WhatsApp Business com info
+  // comercial (PIX, parcelamento, sedex) que dispara falsos positivos no
+  // detector de gatilhos quente. Regra Ailson 27/05/2026: na 1a msg do
+  // cliente, ignorar gatilhos quente.
+  const msgsClienteAteAgora = (msgs || []).filter(m => m.direcao === 'entrada');
+  const ehPrimeiraMsgCliente = msgsClienteAteAgora.length <= 1;
+
   // 3. Detecta gatilhos quente
   const gatilhos = detectarGatilhosQuente(textoCliente);
-  log('ia', `conversa=${conversaId} gatilhos=[${gatilhos.join(',')}]`);
+  log('ia', `conversa=${conversaId} gatilhos=[${gatilhos.join(',')}] primeira_msg=${ehPrimeiraMsgCliente}`);
 
   // 3b. Detecta sinal "vou pro site" (Ailson 26/05/2026)
   // Marca flag pra Sofia acompanhar (3d sem msg = nova mensagem leve)
@@ -457,8 +465,12 @@ async function processarConversa(conversaId) {
   //    Endpoint: /api/lojas-whats-sugestao-quente-decidir
   //    Historico: tabela lojas_whats_sugestoes_decisoes (treina detector).
   if (gatilhos.length > 0) {
-    // Se ja tem sugestao pendente, nao re-criar (deixa Tamara decidir a atual)
-    if (!conv.sugestao_quente_pendente_em) {
+    if (ehPrimeiraMsgCliente) {
+      // 1a msg do cliente — provavel auto-reply do WhatsApp Business com
+      // info comercial boilerplate (PIX, parcelamento, sedex). Ignora.
+      log('ia', `conversa=${conversaId} IGNOROU ${gatilhos.length} gatilhos quente (1a msg cliente — provavel auto-reply)`);
+    } else if (!conv.sugestao_quente_pendente_em) {
+      // Se ja tem sugestao pendente, nao re-criar (deixa Tamara decidir a atual)
       const motivoSugestao = gatilhos.slice(0, 3).map(g => g.tipo || g).join(' + ');
       await supabase.from('lojas_whats_conversas').update({
         sugestao_quente_pendente_em: new Date().toISOString(),

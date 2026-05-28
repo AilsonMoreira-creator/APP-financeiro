@@ -13,20 +13,79 @@
 import { supabase, setCors } from './_lojas-whats-helpers.js';
 import { enviarTemplate, listarTemplates } from './_lojas-whats-meta-client.js';
 
+const META_GRAPH_API = 'https://graph.facebook.com/v21.0';
+
+async function metaFetchRaw(path) {
+  const res = await fetch(`${META_GRAPH_API}${path}`, {
+    headers: { Authorization: `Bearer ${process.env.META_WA_ACCESS_TOKEN}` },
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch (_) {}
+  return { status: res.status, json, raw: text };
+}
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
-  // action=list_meta → lista templates direto da Meta (fonte da verdade)
+  // action=waba_info → mostra config
+  if (req.query?.action === 'waba_info') {
+    return res.status(200).json({
+      meta_waba_id: process.env.META_WA_WABA_ID
+        ? `...${String(process.env.META_WA_WABA_ID).slice(-6)}`
+        : null,
+      meta_phone_id: process.env.META_WA_PHONE_ID
+        ? `...${String(process.env.META_WA_PHONE_ID).slice(-6)}`
+        : null,
+      meta_token_present: !!process.env.META_WA_ACCESS_TOKEN,
+    });
+  }
+
+  // action=consultar_nome&name=X → busca por nome ESPECIFICO (qualquer status/language)
+  if (req.query?.action === 'consultar_nome') {
+    const name = req.query?.name;
+    if (!name) return res.status(400).json({ error: 'name_obrigatorio' });
+    const r = await metaFetchRaw(
+      `/${process.env.META_WA_WABA_ID}/message_templates?name=${encodeURIComponent(name)}&fields=name,language,status,category,id,quality_score,rejected_reason,components`
+    );
+    return res.status(200).json({ status_http: r.status, body: r.json || r.raw });
+  }
+
+  // action=list_meta_full → lista todos templates (paginado, qualquer status)
+  if (req.query?.action === 'list_meta_full') {
+    const tudo = [];
+    let url = `/${process.env.META_WA_WABA_ID}/message_templates?limit=100&fields=name,language,status,category,id`;
+    for (let i = 0; i < 10; i++) {
+      const r = await metaFetchRaw(url);
+      if (!r.json?.data) break;
+      tudo.push(...r.json.data);
+      const next = r.json?.paging?.next;
+      if (!next) break;
+      // extrai path da url completa (graph.facebook.com/v21.0/...)
+      const m = next.match(/graph\.facebook\.com\/v\d+\.\d+(\/.*)/);
+      if (!m) break;
+      url = m[1];
+    }
+    const porStatus = {};
+    for (const t of tudo) {
+      porStatus[t.status] = (porStatus[t.status] || 0) + 1;
+    }
+    return res.status(200).json({
+      total: tudo.length,
+      por_status: porStatus,
+      templates: tudo.map(t => ({
+        name: t.name, language: t.language, status: t.status, category: t.category, id: t.id,
+      })),
+    });
+  }
+
+  // action=list_meta → lista APPROVED only (rapido)
   if (req.query?.action === 'list_meta') {
     try {
       const tpls = await listarTemplates();
       const resumo = tpls.map(t => ({
-        name: t.name,
-        language: t.language,
-        status: t.status,
-        category: t.category,
-        id: t.id,
+        name: t.name, language: t.language, status: t.status, category: t.category, id: t.id,
       }));
       return res.status(200).json({ ok: true, total: tpls.length, templates: resumo });
     } catch (e) {

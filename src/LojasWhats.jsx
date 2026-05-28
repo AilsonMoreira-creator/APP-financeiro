@@ -1227,6 +1227,19 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
                 onEnviarVendedora={() => setModalEnviar({ conversa: c })}
                 onTogglePrioridade={() => onTogglePrioridade(c)}
                 onEditar={() => setModalEditarLead({ conversa: c })}
+                onDecidiuQuente={(id, decisao) => {
+                  // Update otimista: zera sugestao quente do card (some na hora)
+                  // e se aceitou tambem ja marca etapa='quente' localmente.
+                  // Reload tick depois pega handoffs novos e estado real.
+                  setConversas(prev => prev.map(x => x.id === id ? {
+                    ...x,
+                    sugestao_quente_pendente_em: null,
+                    sugestao_quente_motivo: null,
+                    sugestao_quente_gatilhos: null,
+                    ...(decisao === 'aceitar' ? { etapa: 'quente' } : {}),
+                  } : x));
+                  setReloadTick(t => t + 1);
+                }}
                 onAbrirChat={() => {
                   setConversaDetalhe(c.id);
                   // Zera unread localmente (UI instantanea) + no banco (fire-and-forget)
@@ -1619,7 +1632,7 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unre
   );
 };
 
-const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar, onAbrirChat, selecionavel, selecionado, onToggleSelecao }) => {
+const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
   const prioritario = !!c.lead_prioritario;
@@ -1766,7 +1779,8 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
                   }),
                 });
                 const d = await r.json();
-                if (!r.ok) alert('Erro: ' + (d.error || r.status));
+                if (!r.ok) { alert('Erro: ' + (d.error || r.status)); return; }
+                onDecidiuQuente?.(c.id, 'aceitar');
               }}
               style={{
                 padding: '5px 10px', borderRadius: 5, cursor: 'pointer',
@@ -1787,7 +1801,8 @@ const ConversaRow = ({ c, onContinuarSofia, onEnviarVendedora, onTogglePrioridad
                   }),
                 });
                 const d = await r.json();
-                if (!r.ok) alert('Erro: ' + (d.error || r.status));
+                if (!r.ok) { alert('Erro: ' + (d.error || r.status)); return; }
+                onDecidiuQuente?.(c.id, 'recusar');
               }}
               style={{
                 padding: '5px 10px', borderRadius: 5, cursor: 'pointer',
