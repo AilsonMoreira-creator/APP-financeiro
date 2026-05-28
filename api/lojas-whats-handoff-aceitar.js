@@ -26,25 +26,45 @@ export default async function handler(req, res) {
     const { vendedora_id, handoff_id } = req.body || {};
     if (!vendedora_id) return res.status(400).json({ error: 'vendedora_id obrigatorio' });
 
-    // Acha o handoff
-    let qb = supabase
-      .from('lojas_whats_handoffs')
-      .select('id, conversa_id, status, vendedora_id, expirou_em')
-      .eq('vendedora_id', vendedora_id)
-      .eq('status', 'aguardando')
-      .gt('expirou_em', new Date().toISOString())  // expirou_em precisa estar no FUTURO
-      .order('criado_em', { ascending: false })
-      .limit(1);
-    if (handoff_id) qb = qb.eq('id', handoff_id);
-
-    const { data: handoffs, error: errH } = await qb;
-    if (errH) return res.status(500).json({ error: errH.message });
-    if (!handoffs || handoffs.length === 0) {
-      return res.status(404).json({ 
-        error: 'Lead nao disponivel — janela de 30min ja passou ou outra vendedora ja atendeu.',
-      });
+    // Acha o handoff.
+    // Ailson 28/05/2026: quando a vendedora age no PROPRIO card (manda
+    // handoff_id), aceitamos mesmo que a janela de 30min tenha acabado ou
+    // o status nao seja exatamente 'aguardando' — o que importa e que ela
+    // assumiu e a conversa tem que ir pra 'atendida'. So bloqueamos estados
+    // terminais (cancelado). Sem handoff_id, mantem o comportamento antigo
+    // (handoff aguardando + dentro da janela).
+    let handoff = null;
+    if (handoff_id) {
+      const { data, error: errH } = await supabase
+        .from('lojas_whats_handoffs')
+        .select('id, conversa_id, status, vendedora_id, expirou_em')
+        .eq('id', handoff_id)
+        .maybeSingle();
+      if (errH) return res.status(500).json({ error: errH.message });
+      if (!data) {
+        return res.status(404).json({ error: 'Handoff nao encontrado.' });
+      }
+      if (data.status === 'cancelado') {
+        return res.status(409).json({ error: 'Esse lead foi cancelado.' });
+      }
+      handoff = data;
+    } else {
+      const { data: handoffs, error: errH } = await supabase
+        .from('lojas_whats_handoffs')
+        .select('id, conversa_id, status, vendedora_id, expirou_em')
+        .eq('vendedora_id', vendedora_id)
+        .in('status', ['aguardando', 'fila_fora_janela'])
+        .gt('expirou_em', new Date().toISOString())
+        .order('criado_em', { ascending: false })
+        .limit(1);
+      if (errH) return res.status(500).json({ error: errH.message });
+      if (!handoffs || handoffs.length === 0) {
+        return res.status(404).json({
+          error: 'Lead nao disponivel — janela de 30min ja passou ou outra vendedora ja atendeu.',
+        });
+      }
+      handoff = handoffs[0];
     }
-    const handoff = handoffs[0];
 
     // Marca handoff aceito
     const agora = new Date();
