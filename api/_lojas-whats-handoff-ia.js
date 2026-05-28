@@ -19,10 +19,13 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, log, logErro } from './_lojas-whats-helpers.js';
+import { chamarClaude } from './_lojas-helpers.js';
 
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const MODELO_HAIKU = 'claude-haiku-4-5-20251001';
+// Usa Sonnet via chamarClaude (caminho COMPROVADO da Sofia). O Haiku
+// (claude-haiku-4-5-20251001) estava sendo REJEITADO pela API → handoff
+// sempre voltava sem contexto (resumo/mensagem null). Sonnet aqui custa
+// centavos (poucos handoffs/dia) e garante a geração. Ailson 28/05/2026.
+const MODELO_HANDOFF = 'claude-sonnet-4-6';
 
 function fmtMoneyBR(n) {
   if (!Number(n)) return null;
@@ -45,7 +48,7 @@ export async function gerarContextoHandoff(conversaId) {
     mensagem_sugerida: null,
   };
 
-  if (!ANTHROPIC_KEY) return fallback;
+  if (!conversaId) return fallback;
 
   try {
     // 1. Pega conversa + ultimas msgs
@@ -106,24 +109,18 @@ HISTORICO DA CONVERSA (ordem cronologica):
 ${historico}
 """`;
 
-    // 5. Chama Haiku
-    const r = await fetch(ANTHROPIC_API, {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: MODELO_HAIKU,
-        max_tokens: 600,
-        temperature: 0.3,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+    // 5. Chama Claude (Sonnet via helper comprovado)
+    const cl = await chamarClaude({
+      modelo: MODELO_HANDOFF,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 600,
+      temperature: 0.3,
     });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error?.message || 'Claude erro');
-    const txt = (j.content?.[0]?.text || '').replace(/```json|```/g, '').trim();
+    if (!cl.ok) {
+      logErro('handoff-ia/claude', new Error(cl.erro || 'chamarClaude falhou'));
+      return { ...fallback, pecas_info: pecasInfo };
+    }
+    const txt = (cl.texto || '').replace(/```json|```/g, '').trim();
 
     let parsed = {};
     try { parsed = JSON.parse(txt); } catch (e) {
