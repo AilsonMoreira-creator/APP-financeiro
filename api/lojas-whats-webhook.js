@@ -40,6 +40,7 @@ import {
   baixarMidia
 } from './_lojas-whats-meta-client.js';
 import { enviarPushSofia } from './_push-helpers.js';
+import { transcreverAudio } from './lojas-whats-transcrever.js';
 
 // IMPORTANT: precisamos do body CRU pra validar HMAC.
 // Vercel/Next API por padrao parseia body. Desligamos isso aqui:
@@ -279,33 +280,18 @@ async function processarMensagemRecebida(msg, valueCtx) {
     }).catch(e => console.warn('[lojas-whats-webhook] push falhou:', e.message));
   }
 
-  // STT automatico: se for audio, dispara transcricao via Whisper.
-  // Endpoint /api/lojas-whats-transcrever baixa audio do Storage, manda
-  // pra OpenAI Whisper, salva resultado em audio_transcricao.
-  // Sofia IA ja consome esse campo automaticamente.
-  //
-  // IMPORTANTE (Ailson 27/05/2026): NAO usar fire-and-forget aqui.
-  // Vercel serverless mata Promise orfa quando o webhook termina o response,
-  // entao a chamada nunca chegava no endpoint. Usar await com timeout
-  // garante execucao. Whisper tipico 2-5s, timeout 12s pra margem.
+  // STT automatico: se for audio, transcreve via Whisper IN-PROCESS.
+  // Ailson 28/05/2026: antes chamava /api/lojas-whats-transcrever via fetch
+  // HTTP (funcao Vercel -> funcao Vercel), que falhava silenciosamente (audio
+  // baixava mas audio_transcricao ficava null) — Sofia recebia "[audio sem
+  // transcricao]" e respondia off-topic. Agora chama a funcao direto, sem o
+  // hop HTTP fragil. Awaited ANTES do disparo da IA (linha abaixo), entao a
+  // transcricao ja esta salva quando a Sofia le o historico.
   if (msgInserida && dadosMsg.tipo === 'audio' && midiaUrlFinal?.startsWith('http')) {
-    const host = req.headers?.host || process.env.VERCEL_URL;
-    const proto = host?.includes('localhost') ? 'http' : 'https';
-    const url = `${proto}://${host}/api/lojas-whats-transcrever`;
     try {
-      const ctrl = AbortSignal.timeout(12000);
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensagem_id: msgInserida.id }),
-        signal: ctrl,
-      });
-      if (!r.ok) {
-        const txt = await r.text().catch(() => '');
-        log('webhook/transcrever', `falha http ${r.status}: ${txt.slice(0, 120)}`);
-      }
+      const tr = await transcreverAudio(msgInserida.id);
+      if (!tr.ok) log('webhook/transcrever', `falha: ${tr.erro}`);
     } catch (e) {
-      // Timeout ou erro de rede — nao bloqueia webhook (msg ja foi salva)
       log('webhook/transcrever', `erro: ${e.message}`);
     }
   }

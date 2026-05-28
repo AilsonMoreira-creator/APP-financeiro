@@ -29,6 +29,13 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
+  // action=transcr_run&mensagem_id=X → roda transcreverAudio (salva no banco). TEMP.
+  if (req.query?.action === 'transcr_run') {
+    const { transcreverAudio } = await import('./lojas-whats-transcrever.js');
+    const r = await transcreverAudio(req.query?.mensagem_id);
+    return res.status(200).json(r);
+  }
+
   // action=transcr_diag&mensagem_id=X → roda a transcricao passo a passo e
   // diz onde quebra (key/download/whisper). TEMP. REMOVER apos diagnostico.
   if (req.query?.action === 'transcr_diag') {
