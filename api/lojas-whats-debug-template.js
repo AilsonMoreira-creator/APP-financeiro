@@ -11,14 +11,31 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, setCors } from './_lojas-whats-helpers.js';
-import { enviarTemplate } from './_lojas-whats-meta-client.js';
+import { enviarTemplate, listarTemplates } from './_lojas-whats-meta-client.js';
 
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
+  // action=list_meta → lista templates direto da Meta (fonte da verdade)
+  if (req.query?.action === 'list_meta') {
+    try {
+      const tpls = await listarTemplates();
+      const resumo = tpls.map(t => ({
+        name: t.name,
+        language: t.language,
+        status: t.status,
+        category: t.category,
+        id: t.id,
+      }));
+      return res.status(200).json({ ok: true, total: tpls.length, templates: resumo });
+    } catch (e) {
+      return res.status(200).json({ ok: false, erro: e.message, metaResponse: e.metaResponse || null });
+    }
+  }
+
   const conversa_id = req.query?.conversa_id;
-  if (!conversa_id) return res.status(400).json({ error: 'conversa_id_obrigatorio' });
+  if (!conversa_id) return res.status(400).json({ error: 'conversa_id_ou_action_obrigatorio' });
 
   try {
     const { data: conv } = await supabase
