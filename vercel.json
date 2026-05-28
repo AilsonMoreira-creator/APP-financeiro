@@ -298,6 +298,10 @@
     {
       "path": "/api/lojas-whats-cron-capi-match",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/oficina-recalcular-cron",
+      "schedule": "0 9 * * *"
     }
   ]
 }
