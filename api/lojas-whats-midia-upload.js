@@ -32,7 +32,10 @@ export const config = {
 const LIMITES = {
   foto:      { bytes: 2  * 1024 * 1024, mimes: ['image/jpeg','image/jpg','image/png','image/webp'], pasta: 'fotos' },
   video:     { bytes: 16 * 1024 * 1024, mimes: ['video/mp4','video/quicktime'],                     pasta: 'videos' },
-  catalogo:  { bytes: 20 * 1024 * 1024, mimes: ['application/pdf'],                                  pasta: 'catalogos' },
+  // tipo='catalogo' aceita PDF (catalogo em si) OU imagem (capa do catalogo).
+  // Imagens caem no fluxo de capa: salvas como catalogos/capa.{ext}, upsert,
+  // sem registrar em lojas_whats_midias. Ailson 27/05/2026.
+  catalogo:  { bytes: 20 * 1024 * 1024, mimes: ['application/pdf','image/jpeg','image/jpg','image/png','image/webp'], pasta: 'catalogos' },
 };
 
 // Le multipart manualmente (sem dependencia)
@@ -125,6 +128,36 @@ export default async function handler(req, res) {
     }
     if (!limite.mimes.includes(file.mime)) {
       return res.status(415).json({ error: `Mime invalido pra ${tipo}: ${file.mime}. Aceitos: ${limite.mimes.join(', ')}` });
+    }
+
+    // ─── CAPA DO CATALOGO (Ailson 27/05/2026) ────────────────────────────
+    // Quando tipo=catalogo + mime=image/*, eh upload da capa (miniatura
+    // mostrada na UI do chat no lugar do icone generico de documento).
+    // Salva como catalogos/capa.{ext} com upsert e deleta as outras 2
+    // extensoes pra garantir sempre 1 capa ativa. NAO registra em
+    // lojas_whats_midias (capa nao deve aparecer no seletor de mídias).
+    if (tipo === 'catalogo' && file.mime.startsWith('image/')) {
+      const ext = (file.mime === 'image/png') ? 'png'
+                : (file.mime === 'image/webp') ? 'webp'
+                : 'jpg';
+      const capaPath = `catalogos/capa.${ext}`;
+      // Deleta as 3 versoes possiveis pra evitar 2 capas ativas
+      await supabase.storage.from('sofia-midias').remove([
+        'catalogos/capa.jpg', 'catalogos/capa.png', 'catalogos/capa.webp',
+      ]);
+      const { error: errUp } = await supabase.storage
+        .from('sofia-midias')
+        .upload(capaPath, file.buffer, { contentType: file.mime, upsert: true });
+      if (errUp) {
+        return res.status(500).json({ error: 'Storage upload capa: ' + errUp.message });
+      }
+      const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(capaPath);
+      return res.json({
+        ok: true,
+        eh_capa_catalogo: true,
+        storage_path: capaPath,
+        url_publica: pub?.publicUrl,
+      });
     }
 
     // REF: prioridade campo manual > auto-detect (3C escolha Ailson)

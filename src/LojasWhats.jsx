@@ -4151,7 +4151,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
 }
 
 function Bubble({ m }) {
-  const [capaErr, setCapaErr] = useState(false);
+  const [capaIdx, setCapaIdx] = useState(0);  // 0=jpg, 1=png, 2=webp, 3=fallback
   const ehSaida = m.direcao === 'saida';
   const ehAssistente = m.autor === 'assistente';
   // Ailson 25/05/2026: padroniza verde WhatsApp pra TODA msg de saida
@@ -4184,12 +4184,13 @@ function Bubble({ m }) {
   const ehAudio = m.tipo_midia === 'audio' && m.midia_url && m.midia_url.startsWith('http');
 
   // Ailson 27/05/2026: pra catalogos (path inclui /catalogos/), tentar
-  // mostrar capa.jpg do mesmo folder como miniatura clicavel em vez de
-  // ícone genérico de documento. Se a capa nao existir (404), useState
-  // capaErr ativa e volta pro layout antigo de "Abrir documento".
+  // mostrar capa.{ext} do mesmo folder como miniatura clicavel em vez de
+  // ícone genérico de documento. Cascata: jpg → png → webp → fallback.
   const ehCatalogo = ehDocumento && m.midia_url.includes('/catalogos/');
-  const capaUrl = ehCatalogo
-    ? m.midia_url.replace(/\/catalogos\/[^/]+$/, '/catalogos/capa.jpg')
+  const CAPA_EXTS = ['jpg', 'png', 'webp'];
+  const capaErr = capaIdx >= CAPA_EXTS.length;
+  const capaUrl = ehCatalogo && !capaErr
+    ? m.midia_url.replace(/\/catalogos\/[^/]+$/, `/catalogos/capa.${CAPA_EXTS[capaIdx]}`)
     : null;
 
   return (
@@ -4265,7 +4266,7 @@ function Bubble({ m }) {
             <img
               src={capaUrl}
               alt="Catálogo Amícia"
-              onError={() => setCapaErr(true)}
+              onError={() => setCapaIdx(i => i + 1)}
               style={{
                 maxWidth: 220, width: '100%', borderRadius: 8,
                 display: 'block', boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
@@ -4724,7 +4725,10 @@ function UploadMidiaModal({ onClose, onSucesso, onErro }) {
   const ACEITOS = {
     foto: '.jpg,.jpeg,.png,.webp',
     video: '.mp4,.mov',
-    catalogo: '.pdf',
+    // Catalogo aceita PDF (catalogo em si) OU imagem (capa do catalogo).
+    // Imagem cai em fluxo separado no backend: salva como catalogos/capa.{ext}
+    // e sobrescreve a anterior. Ailson 27/05/2026.
+    catalogo: '.pdf,.jpg,.jpeg,.png,.webp',
   };
 
   const onFileChange = (e) => {
