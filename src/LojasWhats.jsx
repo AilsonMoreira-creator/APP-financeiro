@@ -113,53 +113,77 @@ const LARGURA_LISTA_SPLIT = 320;
 const CardCompacto = ({ c, ativo, onClick }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const temSugestaoSofia = !!c.sugestao_quente_pendente_em;
+  const origem = c.origem_lead === 'anuncio_instagram' ? 'ads'
+    : c.origem_lead === 'carrinho_site_amicialoja' ? 'carrinho'
+    : null;
   return (
     <div
       onClick={onClick}
       style={{
-        padding: '9px 11px',
-        borderBottom: `1px solid ${palette.beige}`,
+        margin: '6px 8px', padding: '10px 11px', borderRadius: 10,
         cursor: 'pointer',
-        background: ativo ? '#e8e2da' : 'transparent',
-        borderLeft: ativo ? `3px solid ${palette.accent}` : '3px solid transparent',
-        display: 'flex', alignItems: 'center', gap: 8,
+        background: ativo ? '#eef4f9' : palette.surface,
+        border: `1px solid ${ativo ? palette.accent : palette.beige}`,
+        boxShadow: ativo ? '0 1px 5px rgba(74,127,165,0.20)' : '0 1px 2px rgba(0,0,0,0.04)',
+        display: 'flex', alignItems: 'center', gap: 10,
         fontFamily: FONT,
+        transition: 'background 0.12s, border-color 0.12s, box-shadow 0.12s',
       }}
     >
-      <EtapaIcon nome={c.etapa} size={24} />
+      {/* Avatar fixo — garante que o nome sempre começa na mesma posição (uniforme) */}
+      <div style={{
+        width: 38, height: 38, borderRadius: 9, flexShrink: 0,
+        background: ativo ? '#dceaf5' : palette.bg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <EtapaIcon nome={c.etapa} size={26} />
+      </div>
+      {/* Bloco de texto */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          {ehPJ
-            ? <Building2 size={sz(11)} color={palette.warn} style={{ flexShrink: 0 }} />
-            : <UserIcon size={sz(11)} color={palette.accent} style={{ flexShrink: 0 }} />}
+        {/* Linha 1: nome + badges à direita */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{
-            fontSize: fz(13), fontWeight: 600, color: palette.ink,
+            fontSize: fz(13.5), fontWeight: 700, color: palette.ink,
             flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{c.nome_cliente || fmtPhone(c.telefone) || '—'}</span>
           {temSugestaoSofia && (
             <span title="Sugestão Sofia pendente" style={{
               background: '#fff8e7', color: '#8a5500', border: '1px solid #f5c84e',
-              fontSize: fz(9), fontWeight: 700, padding: '0px 4px', borderRadius: 3, flexShrink: 0,
+              fontSize: fz(9), fontWeight: 700, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
             }}>Sofia</span>
           )}
           {c.unread_count > 0 && (
             <span style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              minWidth: 17, height: 17, padding: '0 4px', borderRadius: 9,
+              minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
               fontSize: fz(10), fontWeight: 700, background: '#dc2626', color: '#fff',
               lineHeight: 1, flexShrink: 0,
             }}>{c.unread_count}</span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-          {c.origem_lead === 'anuncio_instagram' && (
-            <span style={{ fontSize: fz(9), color: '#1877f2', fontWeight: 700 }}>f Ads</span>
+        {/* Linha 2: origem destacada + PJ + peças */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+          {origem === 'ads' && (
+            <span style={{
+              background: '#e7f1fc', color: '#1877f2',
+              fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
+              fontFamily: 'Arial, sans-serif',
+            }}>f Ads</span>
           )}
-          {c.origem_lead === 'carrinho_site_amicialoja' && (
-            <span style={{ fontSize: fz(9), color: '#a55a00', fontWeight: 600 }}>🛒 carrinho</span>
+          {origem === 'carrinho' && (
+            <span style={{
+              background: '#fff0e0', color: '#a55a00',
+              fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
+            }}>🛒 carrinho</span>
+          )}
+          {ehPJ && (
+            <span style={{
+              background: '#fff4e0', color: '#8a5500',
+              fontSize: fz(9), fontWeight: 700, padding: '2px 6px', borderRadius: 6,
+            }}>PJ</span>
           )}
           {c.qtd_pecas > 0 && (
-            <span style={{ fontSize: fz(9), color: palette.inkMuted }}>{c.qtd_pecas} pç</span>
+            <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas} pç</span>
           )}
         </div>
       </div>
@@ -1257,13 +1281,13 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
         <div style={{
           position: 'fixed', top: 0, left: 0, bottom: 0,
           width: LARGURA_LISTA_SPLIT, zIndex: 101,
-          background: palette.surface, borderRight: `1px solid ${palette.beige}`,
+          background: palette.bg, borderRight: `1px solid ${palette.beige}`,
           display: 'flex', flexDirection: 'column', fontFamily: FONT,
         }}>
           {/* Barra de filtros (troca a aba SEM fechar o chat aberto) */}
           <div style={{
             display: 'flex', gap: 4, flexWrap: 'wrap', padding: 8,
-            borderBottom: `1px solid ${palette.beige}`, background: palette.bg,
+            borderBottom: `1px solid ${palette.beige}`, background: palette.surface,
           }}>
             <ChipMini label="Todas" cor={palette.inkMuted}
               ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')}
@@ -1276,9 +1300,9 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
           </div>
           {/* Contagem da aba atual */}
           <div style={{
-            padding: '6px 11px', fontSize: fz(10), fontWeight: 700,
+            padding: '7px 12px', fontSize: fz(10), fontWeight: 700,
             color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.5,
-            borderBottom: `1px solid ${palette.beige}`, background: palette.surface,
+            borderBottom: `1px solid ${palette.beige}`, background: 'transparent',
           }}>
             {conversas.length} {etapaLabelAtual}
           </div>
@@ -3986,6 +4010,51 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
         borderTop: `1px solid ${palette.beige}`,
         display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0,
       }}>
+        {/* Botao emoji picker — à esquerda junto dos demais (Ailson 28/05/2026) */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setEmojiPickerAberto(v => !v)}
+            title="Inserir emoji"
+            style={{
+              background: palette.bg, border: `1px solid ${palette.beige}`,
+              borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 18,
+            }}>😊</button>
+          {emojiPickerAberto && (
+            <div style={{
+              position: 'absolute', bottom: 44, left: 0, zIndex: 50,
+              background: '#fff', border: `1px solid ${palette.beige}`,
+              borderRadius: 8, padding: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
+              display: 'grid', gridTemplateColumns: 'repeat(6, 32px)', gap: 4,
+              width: 220,
+            }}>
+              {EMOJIS_PICKER.map(e => (
+                <button key={e} onClick={() => {
+                  const ta = textareaRef.current;
+                  if (!ta) { setNovoTexto(p => p + e); return; }
+                  const s = ta.selectionStart ?? novoTexto.length;
+                  const en = ta.selectionEnd ?? novoTexto.length;
+                  const novo = novoTexto.slice(0, s) + e + novoTexto.slice(en);
+                  setNovoTexto(novo);
+                  setTimeout(() => {
+                    if (textareaRef.current) {
+                      textareaRef.current.focus();
+                      const pos = s + e.length;
+                      textareaRef.current.setSelectionRange(pos, pos);
+                    }
+                  }, 0);
+                }}
+                  style={{
+                    width: 32, height: 32, border: 'none', background: 'transparent',
+                    cursor: 'pointer', fontSize: 18, borderRadius: 4,
+                  }}
+                  onMouseEnter={(ev) => ev.target.style.background = palette.beige}
+                  onMouseLeave={(ev) => ev.target.style.background = 'transparent'}
+                >{e}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <button onClick={() => setSeletorMidiaAberto(true)} title="Anexar mídia"
           style={{
             background: palette.bg, border: `1px solid ${palette.beige}`,
@@ -4048,51 +4117,6 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
             boxSizing: 'border-box',
           }}
         />
-        {/* Botao emoji picker (Ailson 27/05/2026) */}
-        <div style={{ position: 'relative', flexShrink: 0 }}>
-          <button onClick={() => setEmojiPickerAberto(v => !v)}
-            title="Inserir emoji"
-            style={{
-              background: palette.bg, border: `1px solid ${palette.beige}`,
-              borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18,
-            }}>😊</button>
-          {emojiPickerAberto && (
-            <div style={{
-              position: 'absolute', bottom: 44, right: 0, zIndex: 50,
-              background: '#fff', border: `1px solid ${palette.beige}`,
-              borderRadius: 8, padding: 8, boxShadow: '0 4px 14px rgba(0,0,0,0.15)',
-              display: 'grid', gridTemplateColumns: 'repeat(6, 32px)', gap: 4,
-              width: 220,
-            }}>
-              {EMOJIS_PICKER.map(e => (
-                <button key={e} onClick={() => {
-                  const ta = textareaRef.current;
-                  if (!ta) { setNovoTexto(p => p + e); return; }
-                  const s = ta.selectionStart ?? novoTexto.length;
-                  const en = ta.selectionEnd ?? novoTexto.length;
-                  const novo = novoTexto.slice(0, s) + e + novoTexto.slice(en);
-                  setNovoTexto(novo);
-                  setTimeout(() => {
-                    if (textareaRef.current) {
-                      textareaRef.current.focus();
-                      const pos = s + e.length;
-                      textareaRef.current.setSelectionRange(pos, pos);
-                    }
-                  }, 0);
-                }}
-                  style={{
-                    width: 32, height: 32, border: 'none', background: 'transparent',
-                    cursor: 'pointer', fontSize: 18, borderRadius: 4,
-                  }}
-                  onMouseEnter={(ev) => ev.target.style.background = palette.beige}
-                  onMouseLeave={(ev) => ev.target.style.background = 'transparent'}
-                >{e}</button>
-              ))}
-            </div>
-          )}
-        </div>
         <button onClick={enviar} disabled={enviando || (!novoTexto.trim() && !midiaAnexada)}
           style={{
             background: '#25d366', color: '#fff',
