@@ -175,8 +175,36 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: error.message });
     }
 
+    // Ailson 28/05/2026: quando o desvio pra Sofia esta ativo, esconde leads
+    // que ja viraram conversa Sofia (eles "somem" do modulo Lojas, indo SO
+    // pra Sofia). Reversivel desligando a config. Importacao tardia pra
+    // evitar dep circular.
+    let leadsFinal = leads || [];
+    try {
+      const { data: cfg } = await supabase
+        .from('lojas_whats_config')
+        .select('valor')
+        .eq('chave', 'desvio_carrinhos_para_sofia')
+        .maybeSingle();
+      const desvioAtivo = cfg?.valor === true;
+      if (desvioAtivo && leadsFinal.length > 0) {
+        const telefones = leadsFinal.map(l => l.telefone_norm).filter(Boolean);
+        if (telefones.length > 0) {
+          const { data: convs } = await supabase
+            .from('lojas_whats_conversas')
+            .select('telefone')
+            .in('telefone', telefones)
+            .not('etapa', 'in', '(perdida,vendeu)');
+          const telComConv = new Set((convs || []).map(c => c.telefone));
+          leadsFinal = leadsFinal.filter(l => !telComConv.has(l.telefone_norm));
+        }
+      }
+    } catch (e) {
+      console.warn('[lojas-leads-listar] check desvio falhou (ignorando):', e?.message);
+    }
+
     // ─── Buscar último evento (items_parsed) de cada lead ──────────
-    const leadIds = (leads || []).map(l => l.id);
+    const leadIds = leadsFinal.map(l => l.id);
     let eventosByLead = new Map();
 
     if (leadIds.length > 0) {
@@ -199,7 +227,7 @@ export default async function handler(req, res) {
 
     // ─── Buscar nomes de vendedoras referenciadas ──────────────────
     const vendedoraIds = new Set();
-    for (const l of leads || []) {
+    for (const l of leadsFinal) {
       if (l.vendedora_dona_id) vendedoraIds.add(l.vendedora_dona_id);
       if (l.vendedora_atribuida_id) vendedoraIds.add(l.vendedora_atribuida_id);
       if (l.vendedora_atendendo_id) vendedoraIds.add(l.vendedora_atendendo_id);
@@ -217,7 +245,7 @@ export default async function handler(req, res) {
 
     // ─── Enriquecer cada lead ──────────────────────────────────────
     const agora = Date.now();
-    const leadsEnriquecidos = (leads || []).map(l => {
+    const leadsEnriquecidos = leadsFinal.map(l => {
       const evt = eventosByLead.get(l.id);
       const lockAtivo = l.lock_expira_em && new Date(l.lock_expira_em).getTime() > agora;
 
