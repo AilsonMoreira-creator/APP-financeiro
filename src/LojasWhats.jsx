@@ -1194,7 +1194,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado,
           handoffs:lojas_whats_handoffs(status)
         `)
         // Prioritarios primeiro
@@ -4001,6 +4001,21 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
     setEnviando(false);
   };
 
+  // Desmarcar/reativar o relogio de follow-up do catalogo (6h/24h). Ailson 29/05/2026.
+  const toggleCatalogoFollowup = async () => {
+    if (!conversa) return;
+    try {
+      await fetch('/api/lojas-whats-conversa-editar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: conversaId,
+          campos: { catalogo_followup_pausado: !conversa.catalogo_followup_pausado },
+        }),
+      });
+      setReloadTick(t => t + 1);
+    } catch (e) { /* silencioso — proxima carga reflete */ }
+  };
+
   if (loading) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
@@ -4099,6 +4114,55 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           </div>
         )}
       </div>
+
+      {/* Relógio de follow-up do catálogo (6h/24h). Aparece quando o catálogo
+          foi enviado e o cliente não respondeu. Vendedora pode desmarcar
+          (não envia auto) ou manter. Espelha a janela 9-20h → senão 9h do dia
+          seguinte. Ailson 29/05/2026. */}
+      {conversa.catalogo_enviado_em && !['vendeu', 'perdida'].includes(conversa.etapa) && (() => {
+        const fase24 = !!conversa.catalogo_followup_6h_em;
+        const baseMs = fase24
+          ? new Date(conversa.catalogo_followup_6h_em).getTime() + 24 * 3600 * 1000
+          : new Date(conversa.catalogo_enviado_em).getTime() + 6 * 3600 * 1000;
+        const base = new Date(baseMs);
+        const horaBRT = parseInt(base.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }), 10);
+        let alvo = base; let adiado = false;
+        if (horaBRT < 9 || horaBRT >= 20) {
+          adiado = true;
+          const d = new Date(base);
+          if (horaBRT >= 20) d.setUTCDate(d.getUTCDate() + 1);
+          const dataBRT = d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+          alvo = new Date(`${dataBRT}T09:00:00-03:00`);
+        }
+        const quando = alvo.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const pausado = conversa.catalogo_followup_pausado;
+        return (
+          <div style={{
+            padding: '7px 12px',
+            background: pausado ? '#f3f4f6' : '#eef6ff',
+            borderBottom: `1px solid ${pausado ? '#d1d5db' : '#bfdbfe'}`,
+            fontSize: fz(11), color: pausado ? '#6b7280' : '#1e40af',
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+          }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: fz(13) }}>{pausado ? '🔕' : '⏰'}</span>
+              {pausado
+                ? <span>Follow-up do catálogo <b>desmarcado</b> — não vai sair automático</span>
+                : <span>Follow-up <b>{fase24 ? '24h' : '6h'}</b> automático {adiado ? 'previsto' : '~'} <b>{quando}</b>{adiado ? ' (fora do horário → foi pra 9h)' : ''}</span>}
+            </span>
+            <button onClick={toggleCatalogoFollowup} style={{
+              marginLeft: 'auto',
+              background: pausado ? '#2c7a4f' : 'transparent',
+              color: pausado ? '#fff' : '#1e40af',
+              border: `1px solid ${pausado ? '#2c7a4f' : '#bfdbfe'}`,
+              padding: '3px 10px', borderRadius: 6, cursor: 'pointer',
+              fontSize: fz(11), fontWeight: 600, whiteSpace: 'nowrap',
+            }}>
+              {pausado ? '🔔 Reativar' : '🔕 Desmarcar'}
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Observação pra Sofia banner */}
       {conversa.observacao_para_sofia && (

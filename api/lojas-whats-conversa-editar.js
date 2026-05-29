@@ -22,6 +22,7 @@ const CAMPOS_PERMITIDOS = new Set([
   'observacao_para_sofia',
   'observacao_assistente',
   'prefere_site',
+  'catalogo_followup_pausado',
 ]);
 
 const ETAPAS_VALIDAS = new Set([
@@ -73,6 +74,11 @@ export default async function handler(req, res) {
         // Coluna canonica eh cliente_indicou_site (criada antes na sessao)
         upd.cliente_indicou_site = !!v;
         upd.cliente_indicou_site_em = v ? agora : null;
+        continue;
+      }
+      if (k === 'catalogo_followup_pausado') {
+        // Desmarcar/reativar o relogio de follow-up do catalogo (6h/24h). Ailson 29/05/2026.
+        upd.catalogo_followup_pausado = !!v;
         continue;
       }
     }

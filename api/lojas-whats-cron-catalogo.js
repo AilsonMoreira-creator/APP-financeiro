@@ -77,6 +77,7 @@ export default async function handler(req, res) {
         .not('catalogo_enviado_em', 'is', null)
         .lt('catalogo_enviado_em', cutoff6h)
         .is('catalogo_followup_6h_em', null)
+        .eq('catalogo_followup_pausado', false)
         .in('etapa', ['conversando', 'quente']);
       if (errF1) throw errF1;
       f1 = f1Data || [];
@@ -123,6 +124,7 @@ export default async function handler(req, res) {
       .select('id, telefone, nome_cliente, etapa')
       .not('catalogo_followup_6h_em', 'is', null)
       .lt('catalogo_followup_6h_em', cutoff24h)
+      .eq('catalogo_followup_pausado', false)
       .in('etapa', ['conversando', 'quente']);
     if (errF2) throw errF2;
 
