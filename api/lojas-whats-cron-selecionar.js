@@ -104,15 +104,14 @@ async function executarSelecao(req, res) {
     const dryRun = body.dry_run === true;
 
     // 1. Lê configs
+    // REFATOR (Ailson 26/05/2026 sessao tarde): cron-selecionar agora SO POPULA
+    // a fila (etapa 'processando') sem cap diario e sem gerar IA. O processamento
+    // virou responsabilidade do cron-processar (e endpoint manual pra assistente).
     const dias = await getConfig('filtro_carrinhos_dias', 15);
     const minPecasPJ = await getConfig('filtro_min_pecas_pj', 0);
     const minPecasPF = await getConfig('filtro_min_pecas_pf', 1);
     const maxPecasPJ = await getConfig('filtro_max_pecas_pj', 0);  // PJ qtd=0 (carrinho vazio)
     const maxPecasPF = await getConfig('filtro_max_pecas_pf', 6);  // PF 1-6 pec
-    // Ailson 28/05/2026: toggle "desvio carrinhos pra Sofia". Quando true:
-    // ignora filtros qtd_pecas (pega TUDO de aguardando_atribuicao), marca
-    // lead_prioritario=true. Reversivel — desligar volta pro fluxo normal.
-    const desvioAtivo = await getConfig('desvio_carrinhos_para_sofia', false) === true;
 
     // 3. Busca candidatos com filtros + ordenação (CNPJ primeiro, depois data desc)
     //    Filtro de peças é POR TIPO_PESSOA (PJ MIN-MAX / PF MIN-MAX), em JS depois do SELECT.
@@ -147,19 +146,14 @@ async function executarSelecao(req, res) {
     const limiteData = Date.now() - dias * 24 * 60 * 60 * 1000;
     const candidatos = [];
     for (const lead of leadsRaw || []) {
-      // Filtro min/max peças por tipo. Pulado quando desvio ativo (pega TUDO).
-      if (!desvioAtivo) {
-        const pecas = Number(lead.qtd_pecas_ultimo_carrinho || 0);
-        if (lead.tipo_pessoa === 'PJ') {
-          if (pecas < minPecasPJ || pecas > maxPecasPJ) continue;
-        } else if (lead.tipo_pessoa === 'PF') {
-          if (pecas < minPecasPF || pecas > maxPecasPF) continue;
-        } else {
-          continue;
-        }
+      // Filtro min/max peças por tipo (Sofia atende PJ=0 e PF 1-6)
+      const pecas = Number(lead.qtd_pecas_ultimo_carrinho || 0);
+      if (lead.tipo_pessoa === 'PJ') {
+        if (pecas < minPecasPJ || pecas > maxPecasPJ) continue;
+      } else if (lead.tipo_pessoa === 'PF') {
+        if (pecas < minPecasPF || pecas > maxPecasPF) continue;
       } else {
-        // Desvio ativo: precisa ter tipo_pessoa valido (PF ou PJ), mas qualquer qtd
-        if (lead.tipo_pessoa !== 'PJ' && lead.tipo_pessoa !== 'PF') continue;
+        continue;
       }
       // Data de referencia (fallback pra PJ vazio que nao tem ultimo_carrinho_em)
       const dataRef = lead.ultimo_carrinho_em || lead.last_access || lead.primeira_visita_em;
@@ -230,7 +224,7 @@ async function executarSelecao(req, res) {
     const resultados = { criadas: 0, falhas: [] };
     for (const lead of candidatosUnicos) {
       try {
-        const conversaId = await criarConversaNaFila(lead, desvioAtivo);
+        const conversaId = await criarConversaNaFila(lead);
         if (conversaId) resultados.criadas++;
       } catch (e) {
         logErro('selecionar/criar', e);
@@ -254,12 +248,11 @@ async function executarSelecao(req, res) {
 // ─── HELPER: cria conversa em 'processando' (fila) — sem IA, sem cap ──────
 // Ailson 26/05/2026 sessao tarde — separou popular da fila de gerar msg.
 
-async function criarConversaNaFila(lead, desvioAtivo = false) {
-  // Prioridade (★):
-  //   - Modo normal: PJ com carrinho > R$5k
-  //   - Modo desvio ativo: TODOS sao prioritarios (Ailson 28/05/2026)
+async function criarConversaNaFila(lead) {
+  // Marca como prioritario (★) quando PJ com carrinho de alto valor (>R\$5k)
+  // — usa lead_prioritario (bool) apos cleanup auditoria. Vai pro topo do filtro.
   const valorPJ = Number(lead.valor_ultimo_carrinho || 0);
-  const leadPrioritario = desvioAtivo || (lead.tipo_pessoa === 'PJ' && valorPJ > 5000);
+  const leadPrioritario = lead.tipo_pessoa === 'PJ' && valorPJ > 5000;
 
   const agora = new Date().toISOString();
   const { data: conversa, error: errConv } = await supabase

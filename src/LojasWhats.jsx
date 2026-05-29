@@ -2500,12 +2500,13 @@ function ConfigTab({ userId, refreshTick }) {
           <div style={{ fontSize: fz(22), flexShrink: 0 }}>🚀</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: fz(13), fontWeight: 700, color: palette.ink, marginBottom: 2 }}>
-              Desviar carrinhos pra Sofia
+              Atribuição manual vira prioridade da Sofia
             </div>
             <div style={{ fontSize: fz(11), color: palette.inkMuted, lineHeight: 1.4 }}>
-              Quando ligado, TODOS os carrinhos aguardando atribuição (PF e PJ, qualquer qtd) vêm pra Sofia
-              marcados como prioritários ⭐ e somem do módulo Lojas/Carrinhos. Não mexe em leads já atribuídos
-              a vendedoras. Reversível: desligar volta pro fluxo normal.
+              Quando ligado: ao atribuir um CPF a uma vendedora no módulo Lojas/Carrinhos,
+              o lead vira conversa Sofia com estrela ⭐ (vendedora escolhida fica como dona).
+              Reversível: desligar = atribuição volta a ir direto pra vendedora. Fluxo automático
+              dos carrinhos pelo cron continua igual.
             </div>
           </div>
           <button

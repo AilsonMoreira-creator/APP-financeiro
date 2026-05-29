@@ -175,19 +175,12 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: error.message });
     }
 
-    // Ailson 28/05/2026: quando o desvio pra Sofia esta ativo, esconde leads
-    // que ja viraram conversa Sofia (eles "somem" do modulo Lojas, indo SO
-    // pra Sofia). Reversivel desligando a config. Importacao tardia pra
-    // evitar dep circular.
+    // Ailson 28/05/2026: leads com conversa Sofia ativa SOMEM da listagem
+    // do mod Lojas (independente de flag). Faz sentido sempre: se Sofia
+    // ja esta atendendo, nao faz sentido aparecer em paralelo aqui.
     let leadsFinal = leads || [];
     try {
-      const { data: cfg } = await supabase
-        .from('lojas_whats_config')
-        .select('valor')
-        .eq('chave', 'desvio_carrinhos_para_sofia')
-        .maybeSingle();
-      const desvioAtivo = cfg?.valor === true;
-      if (desvioAtivo && leadsFinal.length > 0) {
+      if (leadsFinal.length > 0) {
         const telefones = leadsFinal.map(l => l.telefone_norm).filter(Boolean);
         if (telefones.length > 0) {
           const { data: convs } = await supabase
@@ -200,7 +193,7 @@ export default async function handler(req, res) {
         }
       }
     } catch (e) {
-      console.warn('[lojas-leads-listar] check desvio falhou (ignorando):', e?.message);
+      console.warn('[lojas-leads-listar] check conversa Sofia falhou (ignorando):', e?.message);
     }
 
     // ─── Buscar último evento (items_parsed) de cada lead ──────────
