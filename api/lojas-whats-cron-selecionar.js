@@ -114,10 +114,15 @@ async function executarSelecao(req, res) {
     const maxPecasPF = await getConfig('filtro_max_pecas_pf', 6);  // PF 1-6 pec
 
     // 3. Busca candidatos com filtros + ordenação (CNPJ primeiro, depois data desc)
-    //    Filtro de peças é POR TIPO_PESSOA (PJ MIN-MAX / PF MIN-MAX), em JS depois do SELECT.
-    //    DATA DE REFERENCIA: COALESCE(ultimo_carrinho_em, last_access, primeira_visita_em)
-    //      → PJ vazio (sem carrinho) usa last_access ou primeira_visita.
-    //    Filtro de janela de dias tambem fica em JS pelo mesmo motivo.
+    //    Ailson 28/05/2026: Sofia passa a atender TODOS os carrinhos que iriam
+    //    pro mod Lojas/Carrinhos (CNPJ Publico + CPF Aguardando), marcados como
+    //    PRIORITARIOS ⭐. Os que ja iam pra Sofia (PJ vazio + PF zerado/1-6)
+    //    continuam normais (sem estrela). Os de prioridade SUMEM do mod Lojas
+    //    via filtro do listar.
+    //
+    //    Exclui leads que ja estao sendo trabalhados por vendedora:
+    //    msg enviada, lock ativo, ou ja com dona.
+    const nowIso = new Date().toISOString();
     const { data: leadsRaw, error: errLeads } = await supabase
       .from('lojas_leads_carrinho')
       .select(`
@@ -126,46 +131,74 @@ async function executarSelecao(req, res) {
         qtd_pecas_ultimo_carrinho, valor_ultimo_carrinho,
         ultimo_carrinho_em, last_access, primeira_visita_em,
         ja_e_cliente_lojas_id, vendedora_atribuida_id, vendedora_dona_id,
+        vendedora_atendendo_id, lock_expira_em, ultima_msg_enviada_em,
         status, convertido_em
       `)
-      .eq('status', 'aguardando_atribuicao')
+      .not('status', 'in', '("convertido","perdido_30d","sem_carrinho_valido")')
       .is('convertido_em', null)
-      .limit(1000); // pega um lote grande pra filtrar/ordenar em JS
+      .is('ultima_msg_enviada_em', null)        // vendedora ainda nao mandou msg
+      .is('vendedora_atribuida_id', null)        // sem dona atribuida
+      .or(`vendedora_atendendo_id.is.null,lock_expira_em.lt.${nowIso}`)  // sem lock ativo
+      .limit(2000);
 
     if (errLeads) throw errLeads;
     log('selecionar', `${leadsRaw?.length || 0} leads brutos do banco`);
 
-    // 4. Filtros adicionais em JS:
-    //    - PJ:  qtd_pecas BETWEEN min_pj (0) AND max_pj (0) — so carrinho vazio
-    //    - PF:  qtd_pecas BETWEEN min_pf (1) AND max_pf (6) — 1-6 pec
-    //    - Janela de dias com data de referência COALESCE (max 15d)
-    //    - Telefone válido (regex flexível: aceita com ou sem 55)
-    //    - Não duplicar com conversa Sofia ativa
+    // 4. Filtros adicionais em JS — 2 caminhos:
+    //    CAMINHO A (normal, sem estrela): leads que ja iam pra Sofia hoje
+    //      - PJ qtd in [minPJ..maxPJ] (default: vazio/zerado)
+    //      - PF qtd in [minPF..maxPF] (default: 0-6, incluindo zerado/NULL)
     //
-    //    Fora do filtro = vai pro outro fluxo (aba Carrinhos abandonados do mod Lojas)
+    //    CAMINHO B (PRIORITARIO ⭐): leads que iriam pro mod Lojas/Carrinhos
+    //      - CNPJ Publico: ja_e_cliente_lojas_id null + status != aguardando_atribuicao
+    //                      + valor > 0 + (PJ qualquer OU PF 12+)
+    //      - CPF Aguardando: tipo='PF' + status=aguardando_atribuicao + valor>0 + qtd<12
+    //
+    //    Lead vai pra Sofia se passa em A OR B. Se passa em B (independente de A), e prioritario.
+    //    Janela de dias aplicada igual pra ambos. Telefone valido obrigatorio.
     const limiteData = Date.now() - dias * 24 * 60 * 60 * 1000;
     const candidatos = [];
     for (const lead of leadsRaw || []) {
-      // Filtro min/max peças por tipo (Sofia atende PJ=0 e PF 1-6)
       const pecas = Number(lead.qtd_pecas_ultimo_carrinho || 0);
-      if (lead.tipo_pessoa === 'PJ') {
-        if (pecas < minPecasPJ || pecas > maxPecasPJ) continue;
-      } else if (lead.tipo_pessoa === 'PF') {
-        if (pecas < minPecasPF || pecas > maxPecasPF) continue;
-      } else {
-        continue;
+      const valor = Number(lead.valor_ultimo_carrinho || 0);
+      const statusOk = lead.status !== 'aguardando_atribuicao'; // (cnpj publico exige)
+
+      // ── CAMINHO B (prioritario): leads que iriam pro mod Lojas ──
+      let passaB = false;
+      if (valor > 0) {
+        // CNPJ Publico: cliente novo, status promovido, PJ ou PF 12+
+        if (!lead.ja_e_cliente_lojas_id && statusOk &&
+            (lead.tipo_pessoa === 'PJ' || (lead.tipo_pessoa === 'PF' && pecas >= 12))) {
+          passaB = true;
+        }
+        // CPF Aguardando: PF status aguardando_atribuicao com <12 pec
+        if (lead.tipo_pessoa === 'PF' && lead.status === 'aguardando_atribuicao' && pecas < 12) {
+          passaB = true;
+        }
       }
-      // Data de referencia (fallback pra PJ vazio que nao tem ultimo_carrinho_em)
+
+      // ── CAMINHO A (normal): filtros qtd_pecas atuais ──
+      let passaA = false;
+      if (lead.status === 'aguardando_atribuicao') {
+        if (lead.tipo_pessoa === 'PJ' && pecas >= minPecasPJ && pecas <= maxPecasPJ) passaA = true;
+        else if (lead.tipo_pessoa === 'PF' && pecas >= minPecasPF && pecas <= maxPecasPF) passaA = true;
+      }
+
+      if (!passaA && !passaB) continue;
+      if (lead.tipo_pessoa !== 'PJ' && lead.tipo_pessoa !== 'PF') continue;
+
+      // Data de referencia + janela
       const dataRef = lead.ultimo_carrinho_em || lead.last_access || lead.primeira_visita_em;
       if (!dataRef) continue;
       const dataMs = new Date(dataRef).getTime();
       if (isNaN(dataMs) || dataMs < limiteData) continue;
       lead._dataRef = dataRef;
-      // Telefone válido
+      // Telefone valido
       const telE164 = normalizarTelefone(lead.telefone_norm);
       if (!telE164 || !telefoneValido(telE164)) continue;
       lead._telE164 = telE164;
       lead._primeiroNome = primeiroNome(lead.first_name || lead.nome_completo);
+      lead._prioritario = passaB;   // ⭐ se passa no caminho B (mod Lojas)
       candidatos.push(lead);
     }
 
@@ -249,10 +282,9 @@ async function executarSelecao(req, res) {
 // Ailson 26/05/2026 sessao tarde — separou popular da fila de gerar msg.
 
 async function criarConversaNaFila(lead) {
-  // Marca como prioritario (★) quando PJ com carrinho de alto valor (>R\$5k)
-  // — usa lead_prioritario (bool) apos cleanup auditoria. Vai pro topo do filtro.
-  const valorPJ = Number(lead.valor_ultimo_carrinho || 0);
-  const leadPrioritario = lead.tipo_pessoa === 'PJ' && valorPJ > 5000;
+  // Prioritario (★) quando passa pelo CAMINHO B do filtro (mod Lojas).
+  // Ailson 28/05/2026: substitui regra antiga (PJ > R$5k).
+  const leadPrioritario = lead._prioritario === true;
 
   const agora = new Date().toISOString();
   const { data: conversa, error: errConv } = await supabase
