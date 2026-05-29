@@ -2467,63 +2467,8 @@ function ConfigTab({ userId, refreshTick }) {
 
   if (loading) return <div style={{ padding: 20, textAlign: 'center' }}><Loader2 size={sz(24)} className="spin" /></div>;
 
-  // Ailson 28/05/2026: toggle de destaque pro desvio de carrinhos pra Sofia.
-  // O config tambem aparece na lista geral abaixo (editavel como JSON), mas
-  // o toggle aqui em cima e mais claro/visual.
-  const desvioCfg = configs.find(c => c.chave === 'desvio_carrinhos_para_sofia');
-  const desvioAtivo = desvioCfg?.valor === true;
-  const toggleDesvio = async () => {
-    const novo = !desvioAtivo;
-    setSalvando('desvio_carrinhos_para_sofia');
-    try {
-      const { error } = await supabase
-        .from('lojas_whats_config')
-        .update({ valor: novo, updated_at: new Date().toISOString() })
-        .eq('chave', 'desvio_carrinhos_para_sofia');
-      if (error) throw error;
-      setConfigs(prev => prev.map(c => c.chave === 'desvio_carrinhos_para_sofia' ? { ...c, valor: novo } : c));
-    } catch (e) {
-      alert(`Erro: ${e.message}`);
-    } finally { setSalvando(null); }
-  };
-
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
-      {/* Toggle Desvio de Carrinhos */}
-      {desvioCfg && (
-        <div style={{
-          padding: 14, borderRadius: 10, marginBottom: 16,
-          background: desvioAtivo ? '#fff4e0' : palette.surface,
-          border: `1.5px solid ${desvioAtivo ? '#f5a623' : palette.beige}`,
-          display: 'flex', gap: 12, alignItems: 'center',
-        }}>
-          <div style={{ fontSize: fz(22), flexShrink: 0 }}>🚀</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: fz(13), fontWeight: 700, color: palette.ink, marginBottom: 2 }}>
-              Atribuição manual vira prioridade da Sofia
-            </div>
-            <div style={{ fontSize: fz(11), color: palette.inkMuted, lineHeight: 1.4 }}>
-              Quando ligado: ao atribuir um CPF a uma vendedora no módulo Lojas/Carrinhos,
-              o lead vira conversa Sofia com estrela ⭐ (vendedora escolhida fica como dona).
-              Reversível: desligar = atribuição volta a ir direto pra vendedora. Fluxo automático
-              dos carrinhos pelo cron continua igual.
-            </div>
-          </div>
-          <button
-            onClick={toggleDesvio}
-            disabled={salvando === 'desvio_carrinhos_para_sofia'}
-            style={{
-              padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer',
-              background: desvioAtivo ? '#27ae60' : '#999',
-              color: '#fff', fontSize: fz(13), fontWeight: 800, fontFamily: FONT,
-              minWidth: 80, flexShrink: 0,
-              opacity: salvando === 'desvio_carrinhos_para_sofia' ? 0.6 : 1,
-            }}>
-            {salvando === 'desvio_carrinhos_para_sofia' ? '...' : (desvioAtivo ? 'ON' : 'OFF')}
-          </button>
-        </div>
-      )}
-
       <div style={{ fontSize: fz(13), color: palette.inkMuted, marginBottom: 12 }}>
         Edite com cuidado. Cache é invalidado em ~1min.
       </div>
