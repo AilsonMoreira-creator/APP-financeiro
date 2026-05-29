@@ -4659,12 +4659,18 @@ function Bubble({ m, botao }) {
   // Ailson 28/05/2026: cache-busting com versao manual. Browsers podem
   // cachear 404 da capa de antes dela ter sido uploadada — bumpar a
   // versao forca refresh em todos os clientes.
+  // Ailson 29/05/2026: a capa nao aparecia mesmo com o arquivo existindo e o
+  // bucket publico. Causa: 404 cacheado no caminho /object/public/ — e o
+  // Supabase IGNORA query string (?v=) pra cache de objeto, entao bumpar versao
+  // nao furava. Solucao: usar o endpoint /render/image/ (caminho de URL
+  // diferente => chave de cache nova, sem herdar o 404). Bonus: redimensiona.
   const ehCatalogo = ehDocumento && m.midia_url.includes('/catalogos/');
   const CAPA_EXTS = ['jpg', 'png', 'webp'];
-  const CAPA_VERSION = '20260529a';  // bumpar quando capa for trocada
   const capaErr = capaIdx >= CAPA_EXTS.length;
   const capaUrl = ehCatalogo && !capaErr
-    ? `${m.midia_url.replace(/\/catalogos\/[^/]+$/, `/catalogos/capa.${CAPA_EXTS[capaIdx]}`)}?v=${CAPA_VERSION}`
+    ? `${m.midia_url
+        .replace('/object/public/', '/render/image/public/')
+        .replace(/\/catalogos\/[^/]+$/, `/catalogos/capa.${CAPA_EXTS[capaIdx]}`)}?width=240&quality=85`
     : null;
 
   return (
