@@ -483,6 +483,12 @@ const REGEX_INSTA_STORIES = /\bvi\s+v(?:cs|oc[êe]s?)\s+no\s+insta\b/i;
 // e so rola se nao tinha referral=ad.
 const REGEX_INSTA_LINKTREE = /\bgostaria\s+de\s+informa\S*\s+pr[ao]\s+comprar\s+no\s+atacado\b/i;
 
+// Mensagem pronta do anuncio CTWA (Campanha 03): "Quero comprar no ATACADO
+// (nao apague esta mensagem)". O trecho "nao apague esta mensagem" so existe
+// nessa msg pronta — fingerprint perfeito do anuncio. Backup de atribuicao
+// pros casos raros em que o referral=ad nao vem no payload. Ailson 29/05/2026.
+const REGEX_AD_PRONTA = /n[ãa]o\s+apague\s+esta\s+mensagem/i;
+
 function detectarOrigemLead(refInfo) {
   if (!refInfo) return { origem: 'desconhecida', confianca: 0, meta: {} };
 
@@ -499,6 +505,13 @@ function detectarOrigemLead(refInfo) {
         ref_data: refInfo.referral,
       }
     };
+  }
+
+  // 1B. BACKUP DE ATRIBUICAO — fingerprint da msg pronta do anuncio.
+  //     Cobre o caso raro de referral=ad nao chegar no payload mas o cliente
+  //     ter mantido a msg pronta ("nao apague esta mensagem"). Ailson 29/05/2026.
+  if (refInfo.primeiraTexto && REGEX_AD_PRONTA.test(refInfo.primeiraTexto)) {
+    return { origem: 'anuncio_instagram', confianca: 0.85, meta: { via: 'msg_pronta_texto' } };
   }
 
   // 2. INSTAGRAM ORGANICO — links manuais (stories/linktree). Checa ANTES do
