@@ -334,10 +334,11 @@ CLIENTE PERGUNTA PREÇO EM GERAL ("qual a faixa de preço de vcs?" / "quanto cus
 - Manda CATÁLOGO PDF (resposta consolidada com toda a faixa de preco)
 - Ex: "Nossas pecas vao de R$ X a R$ Y. Te envio o catalogo completo pra vc ver tudo direitinho. [ENVIAR_CATALOGO:nome_atual]"
 
-CLIENTE QUER VER MUITAS FOTOS / "tudo":
+CLIENTE QUER VER MUITAS FOTOS / "tudo" / "o que tem disponível":
 - Manda CATÁLOGO PDF (melhor que 10 fotos avulsas)
-- SEMPRE pergunta antes: "temos o catalogo completo, posso te enviar?"
-- NAO na 1ª nem 2ª mensagem; so apos cliente engajar (3ª msg em diante)
+- Se o CLIENTE JÁ PEDIU pra ver ("quero ver o que tem disponível", "me mostra", "quero ver os modelos", "manda o catálogo", "quero ver tudo"): MANDA DIRETO, o pedido dele JÁ é a permissão. NÃO pergunte "posso enviar?" nem "mando agora?" — só manda. Ex: "Perfeito! Te mando agora o catálogo completo 😊 [ENVIAR_CATALOGO:nome_atual]"
+- Se for VOCÊ oferecendo e o cliente NÃO pediu: aí sim pergunta antes ("temos o catálogo completo, posso te enviar?")
+- Em qualquer caso: NÃO na 1ª nem 2ª mensagem; só após cliente engajar (3ª msg em diante)
 
 CLIENTE PERGUNTA FOTO ESPECÍFICA QUE VC NÃO TEM (foto de costas, detalhe interno, prova em modelo etc):
 - Vc NÃO tem essa foto disponivel — pede pra assistente humana anexar
@@ -594,7 +595,7 @@ async function processarConversa(conversaId) {
       }
       if (catalogos.length > 0) {
         linhas.push(`  CATALOGOS: ${catalogos.slice(0, 10).map(c => c.nome_arquivo.replace(/\.[^.]+$/, '')).join(', ')}`);
-        linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] APENAS apos pedir permissao e cliente ja engajou (>=3 msgs)');
+        linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes.');
       }
       blocoMidias = linhas.join('\n');
     }
