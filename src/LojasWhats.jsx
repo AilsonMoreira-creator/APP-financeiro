@@ -4547,22 +4547,38 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
               color: palette.ink, marginBottom: 8,
             }}>
               {(() => {
-                // Destaca marcador [ASSISTENTE_ANEXAR:descricao] em vermelho —
-                // Sofia pediu pra Tamara anexar midia manualmente.
-                // Tamara deve apagar o marcador + anexar a midia real antes de enviar.
+                // Marcadores no texto da sugestao:
+                //  - [ASSISTENTE_ANEXAR:x] = VERMELHO, Tamara precisa anexar manual.
+                //  - [ENVIAR_CATALOGO/FOTO/VIDEO:x] = VERDE, vai junto AUTOMATICO
+                //    quando aprovar (backend anexa). Tamara nao faz nada. Ailson 29/05/2026.
                 const txt = sug.texto_proposto || '';
-                const re = /\[ASSISTENTE_ANEXAR:([^\]]+)\]/gi;
+                const re = /\[(ASSISTENTE_ANEXAR|ENVIAR_CATALOGO|ENVIAR_FOTO|ENVIAR_VIDEO):([^\]]+)\]/gi;
                 const parts = [];
                 let last = 0; let m; let i = 0;
                 while ((m = re.exec(txt)) !== null) {
                   if (m.index > last) parts.push(<span key={`t${i++}`}>{txt.slice(last, m.index)}</span>);
-                  parts.push(
-                    <span key={`m${i++}`} title="Apague esse marcador e anexe a mídia manualmente antes de enviar" style={{
-                      display: 'inline-block', padding: '2px 6px', borderRadius: 4,
-                      background: '#fee2e2', color: '#b91c1c', fontWeight: 700,
-                      fontSize: fz(11), border: '1px dashed #b91c1c', margin: '0 2px',
-                    }}>📎 ANEXAR: {m[1].trim()}</span>
-                  );
+                  const tipo = m[1].toUpperCase();
+                  const val = m[2].trim();
+                  if (tipo === 'ASSISTENTE_ANEXAR') {
+                    parts.push(
+                      <span key={`m${i++}`} title="Apague esse marcador e anexe a mídia manualmente antes de enviar" style={{
+                        display: 'inline-block', padding: '2px 6px', borderRadius: 4,
+                        background: '#fee2e2', color: '#b91c1c', fontWeight: 700,
+                        fontSize: fz(11), border: '1px dashed #b91c1c', margin: '0 2px',
+                      }}>📎 ANEXAR: {val}</span>
+                    );
+                  } else {
+                    const rotulo = tipo === 'ENVIAR_CATALOGO' ? '📎 Catálogo'
+                      : tipo === 'ENVIAR_FOTO' ? `🖼️ Foto REF ${val}`
+                      : `🎬 Vídeo REF ${val}`;
+                    parts.push(
+                      <span key={`m${i++}`} title="Vai junto automaticamente quando você aprovar — não precisa anexar nada" style={{
+                        display: 'inline-block', padding: '2px 6px', borderRadius: 4,
+                        background: '#dcfce7', color: '#15803d', fontWeight: 700,
+                        fontSize: fz(11), border: '1px solid #86efac', margin: '0 2px',
+                      }}>{rotulo} · anexado automático</span>
+                    );
+                  }
                   last = re.lastIndex;
                 }
                 if (last < txt.length) parts.push(<span key={`t${i++}`}>{txt.slice(last)}</span>);
