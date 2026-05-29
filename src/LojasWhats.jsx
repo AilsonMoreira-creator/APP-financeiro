@@ -116,8 +116,12 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
   const temSugestaoSofia = !!c.sugestao_quente_pendente_em;
   // Carrinho: detecta por carrinho_id (presente em TODOS leads carrinho, mesmo
   // os legados sem origem_lead corretamente setada). Ailson 28/05/2026.
+  // Stories/Linktree adicionados no mesmo dia — vinham faltando aqui (no
+  // CardCompacto da split view), apesar de estarem corretos no ConversaRow.
   const origem = c.carrinho_id ? 'carrinho'
     : c.origem_lead === 'anuncio_instagram' ? 'ads'
+    : c.origem_lead === 'instagram_stories' ? 'stories'
+    : c.origem_lead === 'instagram_linktree' ? 'linktree'
     : null;
   return (
     <div
@@ -178,6 +182,18 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               background: '#fff0e0', color: '#a55a00',
               fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
             }}>🛒 carrinho</span>
+          )}
+          {origem === 'stories' && (
+            <span title="Lead via link no Stories do Instagram (Amicia)" style={{
+              background: 'linear-gradient(45deg, #fbe5d2, #f4d6e5)', color: '#a8388d',
+              fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
+            }}>📸 stories</span>
+          )}
+          {origem === 'linktree' && (
+            <span title="Lead via Linktree do Instagram (Amicia)" style={{
+              background: '#e6f7ee', color: '#1f7a48',
+              fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
+            }}>🔗 linktree</span>
           )}
           {ehPJ && (
             <span style={{
