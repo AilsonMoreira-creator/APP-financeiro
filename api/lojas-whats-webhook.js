@@ -309,6 +309,12 @@ async function processarMensagemRecebida(msg, valueCtx) {
     // dispara msg de 6h nem move pra follow_up de 1d)
     catalogo_enviado_em: null,
     catalogo_followup_6h_em: null,
+    // Debounce de resposta da Sofia: empurra responder_em pra now()+60s a CADA
+    // inbound. Se o cliente manda em rajada, cada msg adia +60s e o cron agrupa
+    // (responde 1x depois que ele para de digitar). Quem gera eh o cron
+    // lojas-whats-cron-responder (1/min), NAO inline — serverless mata o
+    // fire-and-forget e responder inline ignoraria o debounce. Ailson 29/05/2026.
+    responder_em: new Date(Date.now() + 60 * 1000).toISOString(),
   };
   // Etapas terminais/intermediarias voltam pra 'conversando' quando cliente
   // manda msg nova (Ailson 27/05/2026 — cliente em qualquer aba pode voltar
@@ -337,24 +343,12 @@ async function processarMensagemRecebida(msg, valueCtx) {
   // 5. Marca como lida no WhatsApp (boa pratica — mostra checkmark azul)
   await marcarComoLida(msg.id);
 
-  // 6. Dispara IA pra gerar proposta de réplica (fire-and-forget, não bloqueia)
-  //    A IA roda em segundo plano e cria sugestão pendente pra Tamara revisar.
-  //    Se falhar, sem drama — Tamara pode chamar manual depois ou cron pega.
-  disparouIaAsync(conversa.id);
-}
-
-// Fire-and-forget pra /api/lojas-whats-ia (não usa await — não bloqueia webhook)
-function disparouIaAsync(conversaId) {
-  try {
-    const base = process.env.APP_URL || 'https://app-financeiro-brown.vercel.app';
-    fetch(`${base}/api/lojas-whats-ia`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conversa_id: conversaId })
-    }).catch(e => logErro('webhook/disparo-ia', e));
-  } catch (e) {
-    logErro('webhook/disparo-ia-sync', e);
-  }
+  // 6. Resposta da Sofia: NAO gera inline. O bloco de updates acima ja setou
+  //    responder_em = now()+60s. O cron lojas-whats-cron-responder (1/min) pega
+  //    e gera a sugestao via processarConversa. Antes era fire-and-forget pra
+  //    /api/lojas-whats-ia, mas o serverless encerra a function depois do 200
+  //    pro WhatsApp e matava o fetch em voo (resposta saia atrasada ou nunca).
+  //    Ailson 29/05/2026.
 }
 
 function extrairConteudo(msg) {

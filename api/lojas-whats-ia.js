@@ -406,8 +406,8 @@ export default async function handler(req, res) {
 }
 
 // ─── PROCESSAR 1 CONVERSA ─────────────────────────────────────────────────
-
-async function processarConversa(conversaId) {
+// Exportada: o cron lojas-whats-cron-responder chama in-process (sem hop HTTP).
+export async function processarConversa(conversaId) {
   // 1. Busca conversa + últimas mensagens
   const { data: conv, error: errConv } = await supabase
     .from('lojas_whats_conversas')
