@@ -898,7 +898,14 @@ const ModalAtribuirCPF = ({ lead, userId, onClose, onSucesso }) => {
         .select('id, nome, loja')
         .eq('ativa', true)
         .order('nome');
-      if (alive && !error) setVendedoras(data || []);
+      if (alive && !error) {
+        setVendedoras(data || []);
+        // Ailson 29/05/2026: se a cliente ja tem vendedora dona (e ela esta ativa),
+        // ja deixa selecionada — admin pode trocar, mas o ideal e manter.
+        if (lead.vendedora_dona_id && (data || []).some(v => v.id === lead.vendedora_dona_id)) {
+          setSelecionada(lead.vendedora_dona_id);
+        }
+      }
     })();
     return () => { alive = false; };
   }, []);
@@ -963,6 +970,16 @@ const ModalAtribuirCPF = ({ lead, userId, onClose, onSucesso }) => {
 
         {/* Lista de vendedoras */}
         <div style={{ padding: 14 }}>
+          {lead.vendedora_dona_id && (
+            <div style={{
+              background: palette.accentSoft, border: `1px solid ${palette.accent}`,
+              borderRadius: 8, padding: '8px 10px', marginBottom: 10,
+              fontSize: fz(12), color: palette.ink, lineHeight: 1.45,
+            }}>
+              ⚠️ Essa cliente já é atendida por <b>{lead.vendedora_dona_nome || 'uma vendedora'}</b>
+              {lead.vendedora_dona_loja ? ` (${lead.vendedora_dona_loja})` : ''}. Já deixei ela selecionada — o ideal é manter, mas você pode escolher outra se precisar.
+            </div>
+          )}
           <div style={{ fontSize: fz(13), color: palette.inkSoft, marginBottom: 10 }}>
             Selecione a vendedora que vai atender esse CPF:
           </div>
@@ -992,8 +1009,15 @@ const ModalAtribuirCPF = ({ lead, userId, onClose, onSucesso }) => {
                     {v.nome.charAt(0).toUpperCase()}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink }}>
+                    <div style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
                       {v.nome}
+                      {v.id === lead.vendedora_dona_id && (
+                        <span style={{
+                          fontSize: fz(10), fontWeight: 700, color: palette.accent,
+                          background: palette.accentSoft, borderRadius: 6, padding: '1px 6px',
+                          letterSpacing: 0.3,
+                        }}>já atende</span>
+                      )}
                     </div>
                     {v.loja && (
                       <div style={{ fontSize: fz(11), color: palette.inkMuted }}>
