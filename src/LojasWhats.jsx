@@ -1246,7 +1246,26 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
     } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
   };
 
-  // Se tem conversa em detalhe:
+  // Desmarcar/reativar o relogio de follow-up do catalogo direto no card. Ailson 29/05/2026.
+  const onToggleCatalogoFollowup = async (c) => {
+    const novo = !c.catalogo_followup_pausado;  // novo=true => pausado
+    try {
+      const r = await fetch('/api/lojas-whats-conversa-editar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: c.id,
+          campos: { catalogo_followup_pausado: novo },
+        }),
+      });
+      const j = await r.json();
+      if (j.error) setFeedback({ tipo: 'erro', msg: j.error });
+      else {
+        setFeedback({ tipo: 'ok', msg: novo ? '🔕 Follow-up do catálogo desmarcado' : '🔔 Follow-up do catálogo reativado' });
+        setReloadTick(t => t + 1);
+      }
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+  };
   //  - MOBILE (<768px): tela cheia (esconde a lista) — comportamento original
   //  - DESKTOP (>=768px): split view — lista compacta à esquerda + chat à direita
   // Modais renderizados em ambos (senão ficam fora do DOM). Ailson 28/05/2026
@@ -1480,6 +1499,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
                 onContinuarSofia={() => onContinuarSofia(c)}
                 onEnviarVendedora={() => setModalEnviar({ conversa: c })}
                 onTogglePrioridade={() => onTogglePrioridade(c)}
+                onToggleCatalogoFollowup={() => onToggleCatalogoFollowup(c)}
                 onEditar={() => setModalEditarLead({ conversa: c })}
                 onDecidiuQuente={(id, decisao) => {
                   // Update otimista: zera sugestao quente do card (some na hora)
@@ -1887,7 +1907,7 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unre
   );
 };
 
-const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
+const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
   const prioritario = !!c.lead_prioritario;
@@ -1977,6 +1997,39 @@ const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, on
                 background: '#e6f7ee', color: '#1f7a48', fontWeight: 700,
               }}>🔗 linktree</span>
             )}
+            {/* Relógio de follow-up do catálogo — clicável: desmarca/reativa o
+                envio automático 6h/24h sem abrir o chat. Ailson 29/05/2026. */}
+            {c.catalogo_enviado_em && !['vendeu', 'perdida'].includes(c.etapa) && (() => {
+              const fase24 = !!c.catalogo_followup_6h_em;
+              const baseMs = fase24
+                ? new Date(c.catalogo_followup_6h_em).getTime() + 24 * 3600 * 1000
+                : new Date(c.catalogo_enviado_em).getTime() + 6 * 3600 * 1000;
+              const base = new Date(baseMs);
+              const hBRT = parseInt(base.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }), 10);
+              let alvo = base;
+              if (hBRT < 9 || hBRT >= 20) {
+                const d = new Date(base);
+                if (hBRT >= 20) d.setUTCDate(d.getUTCDate() + 1);
+                const dataBRT = d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+                alvo = new Date(`${dataBRT}T09:00:00-03:00`);
+              }
+              const quando = alvo.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', hour: '2-digit', minute: '2-digit' });
+              const pausado = c.catalogo_followup_pausado;
+              return (
+                <span
+                  onClick={(e) => { e.stopPropagation(); onToggleCatalogoFollowup && onToggleCatalogoFollowup(); }}
+                  title={pausado
+                    ? 'Follow-up do catálogo DESMARCADO — não sai automático. Clique pra reativar.'
+                    : `Follow-up ${fase24 ? '24h' : '6h'} automático ~ ${quando}. Clique pra desmarcar.`}
+                  style={{
+                    fontSize: fz(10), padding: '1px 5px', borderRadius: 8, cursor: 'pointer',
+                    background: pausado ? '#f3f4f6' : '#eef6ff',
+                    color: pausado ? '#9ca3af' : '#1e40af', fontWeight: 700, flexShrink: 0,
+                    textDecoration: pausado ? 'line-through' : 'none',
+                  }}
+                >{pausado ? '🔕' : '⏰'}</span>
+              );
+            })()}
             {c.etapa === 'atendida' && vendedoraNome && (
               <span title={`Atendida por ${vendedoraNome}`} style={{
                 fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
