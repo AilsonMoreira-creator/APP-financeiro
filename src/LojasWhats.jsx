@@ -3904,6 +3904,9 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar, userId, splitLeft = 0 }) {
   const [conversa, setConversa] = useState(null);
   const [mensagens, setMensagens] = useState([]);
+  // Ailson 29/05/2026: mapa nome_template -> botao URL, pra renderizar no app
+  // o mesmo botao que o WhatsApp mostra pra cliente (so visual, nao afeta envio).
+  const [tplBotoes, setTplBotoes] = useState({});
   const [sugestoesPendentes, setSugestoesPendentes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [novoTexto, setNovoTexto] = useState('');
@@ -3929,7 +3932,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos')
           .eq('id', conversaId).maybeSingle(),
         supabase.from('lojas_whats_mensagens')
-          .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, midia_url, meta_message_id, status, enviada_em')
+          .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, midia_url, meta_message_id, status, enviada_em, template_name')
           .eq('conversa_id', conversaId)
           .order('enviada_em', { ascending: true })
           .limit(200),
@@ -3947,6 +3950,18 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
       setConversa(conv);
       setMensagens(msgs || []);
       setSugestoesPendentes(sugs || []);
+      // Mapa de botoes dos templates (so visual). Pega o 1o botao URL de cada.
+      if (Object.keys(tplBotoes).length === 0) {
+        const { data: tpls } = await supabase.from('lojas_whats_templates').select('name, botoes');
+        if (tpls) {
+          const mapa = {};
+          for (const t of tpls) {
+            const btn = Array.isArray(t.botoes) ? t.botoes.find(b => b?.type === 'URL' && b?.url) : null;
+            if (btn) mapa[t.name] = { text: btn.text || 'VER NO SITE', url: btn.url };
+          }
+          setTplBotoes(mapa);
+        }
+      }
       setLoading(false);
     })();
   }, [conversaId, reloadTick]);
@@ -4182,7 +4197,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
           </div>
         ) : (
           <>
-            {mensagens.map(m => <Bubble key={m.id} m={m} />)}
+            {mensagens.map(m => <Bubble key={m.id} m={m} botao={m.tipo_midia === 'template' ? tplBotoes[m.template_name] : null} />)}
             {/* Sugestoes pendentes da Sofia (Ailson 25/05/2026 fix) */}
             {sugestoesPendentes.map(sug => (
               <SugestaoPendenteBubble
@@ -4605,7 +4620,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
   );
 }
 
-function Bubble({ m }) {
+function Bubble({ m, botao }) {
   const [capaIdx, setCapaIdx] = useState(0);  // 0=jpg, 1=png, 2=webp, 3=fallback
   const ehSaida = m.direcao === 'saida';
   const ehAssistente = m.autor === 'assistente';
@@ -4793,6 +4808,16 @@ function Bubble({ m }) {
           <div style={{ fontSize: 13, color: '#1a1a1a', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
             {m.texto}
           </div>
+        )}
+        {botao && (
+          <a href={botao.url} target="_blank" rel="noopener noreferrer" style={{
+            display: 'block', marginTop: 8, paddingTop: 8,
+            borderTop: '1px solid rgba(0,0,0,0.1)',
+            textAlign: 'center', fontSize: 13, fontWeight: 600,
+            color: '#1c7ed6', textDecoration: 'none',
+          }}>
+            🔗 {botao.text}
+          </a>
         )}
         <div style={{
           fontSize: 9, color: '#7c8a99', marginTop: 4,
