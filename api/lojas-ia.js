@@ -758,10 +758,17 @@ async function handleGerarMensagem(req, res, auth) {
     return res.status(502).json({ error: 'Erro ao chamar IA', detalhe: r.erro });
   }
 
+  // Ailson 29/05/2026 — rede de segurança: a IA as vezes "pensa em voz alta"
+  // (rascunho com markdown/flags) e separa do texto real com '---', mesmo
+  // proibido no prompt. Fica so com o que vem DEPOIS do ultimo '---'.
+  const textoBruto = r.texto.includes('---')
+    ? r.texto.slice(r.texto.lastIndexOf('---') + 3)
+    : r.texto;
+
   // Texto puro (sem cercas markdown) + sanitiza travessões (em-dash —,
   // en-dash –) que IA gera por habito mesmo proibido no prompt.
   // Ailson 18/05/2026 — defesa em profundidade.
-  const mensagem = r.texto
+  const mensagem = textoBruto
     .replace(/^```(?:[a-z]+)?\s*|\s*```$/g, '')
     .replace(/\s*—\s*/g, ', ')
     .replace(/\s*–\s*/g, ', ')
