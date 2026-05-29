@@ -120,16 +120,25 @@ export default async function handler(req, res) {
         .not('cliente_id', 'is', null);
 
       if (vendasSite?.length > 0) {
-        // IDs das vendas que JÁ entraram em lojas_conversoes (não-orgânicas)
+        // IDs das vendas que JÁ entraram em lojas_conversoes
         const vendaIds = vendasSite.map(v => v.id);
         const { data: convExistentes } = await supabase
           .from('lojas_conversoes')
-          .select('venda_id')
+          .select('venda_id, atendido_por')
           .in('venda_id', vendaIds);
-        const convertidasSet = new Set((convExistentes || []).map(c => c.venda_id));
+        // Vendas tratadas por outro caminho (vendedora chamou / sofia / venda na loja)
+        // NAO precisam do aviso "comprou no site". Mas as 'dona_carteira' (cliente
+        // da vendedora comprou no site direto, sem ela ver) PRECISAM do aviso +
+        // ja contam comissao pra ela — entao NAO entram no set de exclusao.
+        // Ailson 29/05/2026 (Regra A).
+        const tratadasSet = new Set(
+          (convExistentes || [])
+            .filter(c => c.atendido_por !== 'dona_carteira')
+            .map(c => c.venda_id)
+        );
 
-        // Só processa as ORGÂNICAS
-        const organicas = vendasSite.filter(v => !convertidasSet.has(v.id));
+        // Processa orgânicas + dona_carteira (ambas = cliente comprou no site sem a vendedora)
+        const organicas = vendasSite.filter(v => !tratadasSet.has(v.id));
 
         if (organicas.length > 0) {
           // Busca vendedora responsavel de cada cliente
