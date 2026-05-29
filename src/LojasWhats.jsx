@@ -4661,7 +4661,7 @@ function Bubble({ m, botao }) {
   // versao forca refresh em todos os clientes.
   const ehCatalogo = ehDocumento && m.midia_url.includes('/catalogos/');
   const CAPA_EXTS = ['jpg', 'png', 'webp'];
-  const CAPA_VERSION = '20260528a';  // bumpar quando capa for trocada
+  const CAPA_VERSION = '20260529a';  // bumpar quando capa for trocada
   const capaErr = capaIdx >= CAPA_EXTS.length;
   const capaUrl = ehCatalogo && !capaErr
     ? `${m.midia_url.replace(/\/catalogos\/[^/]+$/, `/catalogos/capa.${CAPA_EXTS[capaIdx]}`)}?v=${CAPA_VERSION}`

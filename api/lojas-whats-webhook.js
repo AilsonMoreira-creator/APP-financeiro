@@ -373,6 +373,12 @@ function extrairConteudo(msg) {
       return { tipo: 'sticker', texto: null, midia_url: msg.sticker?.id, mime: msg.sticker?.mime_type || 'image/webp' };
     case 'location':
       return { tipo: 'text', texto: `[localizacao: ${msg.location?.latitude}, ${msg.location?.longitude}]`, midia_url: null, mime: null };
+    case 'reaction': {
+      // Cliente reagiu a uma msg com emoji (ou removeu). Antes caia no default
+      // e virava "[tipo nao suportado: reaction]". Ailson 29/05/2026.
+      const emo = msg.reaction?.emoji;
+      return { tipo: 'text', texto: emo ? `[reagiu com ${emo}]` : '[removeu a reação]', midia_url: null, mime: null };
+    }
     default:
       // Meta classifica como 'unsupported' arquivos que a Cloud API não consegue
       // processar (vCards, stickers animados de origem desconhecida, etc).
@@ -475,7 +481,7 @@ const REGEX_INSTA_STORIES = /\bvi\s+v(?:cs|oc[êe]s?)\s+no\s+insta\b/i;
 // Linktree usa frase quase identica ao CTA do anuncio; so consegue distinguir
 // pela AUSENCIA de referral (=ad). Por isso o check vem antes do REGEX_CTA_INSTAGRAM
 // e so rola se nao tinha referral=ad.
-const REGEX_INSTA_LINKTREE = /\bgostaria\s+de\s+informa\w*\s+pr[ao]\s+comprar\s+no\s+atacado\b/i;
+const REGEX_INSTA_LINKTREE = /\bgostaria\s+de\s+informa\S*\s+pr[ao]\s+comprar\s+no\s+atacado\b/i;
 
 function detectarOrigemLead(refInfo) {
   if (!refInfo) return { origem: 'desconhecida', confianca: 0, meta: {} };
@@ -506,9 +512,12 @@ function detectarOrigemLead(refInfo) {
       return { origem: 'instagram_linktree', confianca: 0.9, meta: {} };
     }
 
-    // 3. SECONDARY — texto bate com frase CTA generica (caso referral nao tenha vindo)
+    // 3. SECONDARY — texto bate com frase CTA generica de atacado, mas SEM referral=ad.
+    //    Anuncio real SEMPRE traz referral (passo 1); sem ele, NAO e anuncio.
+    //    A frase generica e a mesma do link organico (linktree/insta), entao
+    //    trata como instagram_linktree — nunca anuncio. Ailson 29/05/2026.
     if (REGEX_CTA_INSTAGRAM.test(refInfo.primeiraTexto) || REGEX_ATACADO_PURO.test(refInfo.primeiraTexto)) {
-      return { origem: 'anuncio_instagram', confianca: 0.7, meta: {} };
+      return { origem: 'instagram_linktree', confianca: 0.6, meta: {} };
     }
   }
 
