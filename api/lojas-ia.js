@@ -3251,8 +3251,11 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
       instrucao: 'CRITICO: voce (mesma vendedora) ja mandou essas mensagens hoje pra outras clientes. ' +
         'NAO REPITA: (a) mesma frase de abertura — varie completamente, ' +
         '(b) mesmo produto destacado — escolha outro do cardapio se houver opcao, ' +
-        '(c) mesmo gancho ("chegou X", "voltou Y", "no top do mes", "tah sendo sucesso de vendas"). ' +
-        'Cada cliente eh unica. Se voce ESTAVA prestes a usar um gancho repetido, MUDE. ' +
+        '(c) mesmo gancho ("chegou X", "voltou Y", "no top do mes", "tah sendo sucesso de vendas"), ' +
+        '(d) mesma frase de FECHAMENTO/CTA ("vou enviar o catalogo", "me conta que a gente resolve", ' +
+        '"qualquer coisa to a disposicao", "passa aqui essa semana") — varie tambem o final. ' +
+        'Varie a mensagem INTEIRA: abertura, corpo E fechamento, nao so a abertura. ' +
+        'Cada cliente eh unica. Se voce ESTAVA prestes a usar uma frase repetida, MUDE. ' +
         'O objetivo eh parecer humana de verdade, nao scripted.',
     } : null,
     contexto_extra: contextoExtra && Object.keys(contextoExtra).length > 0 ? contextoExtra : null,
