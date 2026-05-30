@@ -483,14 +483,23 @@ const REGEX_INSTA_LINKTREE = /\bgostaria\s+de\s+informa\S*\s+pr[ao]\s+comprar\s+
 // pros casos raros em que o referral=ad nao vem no payload. Ailson 29/05/2026.
 const REGEX_AD_PRONTA = /n[ãa]o\s+apague\s+esta\s+mensagem/i;
 
+// Frase prefill da campanha do FACEBOOK (Ailson 30/05/2026):
+// "Olá! Tenho interesse e queria mais informações pra comprar Atacado".
+// Distingue anuncio do FACEBOOK do anuncio do INSTAGRAM entre os leads CTWA
+// (so aplica quando ja tem referral=ad — sem referral nao e anuncio).
+const REGEX_AD_FACEBOOK = /tenho\s+interesse\s+e\s+queria\s+mais\s+informa\w*[\s\S]{0,20}atacado/i;
+
 function detectarOrigemLead(refInfo) {
   if (!refInfo) return { origem: 'desconhecida', confianca: 0, meta: {} };
 
   // 1. PRIMARY — referral.source_type='ad' do payload Meta (CTWA)
   //    Vem direto da Meta, robusto contra cliente editar mensagem.
+  //    Distingue FACEBOOK x INSTAGRAM pela frase prefill da campanha:
+  //    a do Facebook usa "tenho interesse e queria mais informações...".
   if (refInfo.referral?.source_type === 'ad') {
+    const ehFacebook = refInfo.primeiraTexto && REGEX_AD_FACEBOOK.test(refInfo.primeiraTexto);
     return {
-      origem: 'anuncio_instagram',
+      origem: ehFacebook ? 'anuncio_facebook' : 'anuncio_instagram',
       confianca: 1.0,
       meta: {
         ctwa_clid: refInfo.referral.ctwa_clid || null,

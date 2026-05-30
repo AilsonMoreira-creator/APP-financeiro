@@ -35,7 +35,7 @@ import {
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
   User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
   Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video,
-  Instagram, Copy, Circle
+  Instagram, Facebook, Copy, Circle
 } from 'lucide-react';
 import {
   supabase,
@@ -119,6 +119,7 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
   // Stories/Linktree adicionados no mesmo dia — vinham faltando aqui (no
   // CardCompacto da split view), apesar de estarem corretos no ConversaRow.
   const origem = c.carrinho_id ? 'carrinho'
+    : c.origem_lead === 'anuncio_facebook' ? 'fb'
     : c.origem_lead === 'anuncio_instagram' ? 'ads'
     : c.origem_lead === 'instagram_stories' ? 'stories'
     : c.origem_lead === 'instagram_linktree' ? 'linktree'
@@ -170,6 +171,13 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
         </div>
         {/* Linha 2: origem destacada + PJ + peças */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+          {origem === 'fb' && (
+            <span title="Lead veio de anúncio do Facebook (campanha atacado)" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              background: '#e7f1fc', color: '#1877f2',
+              fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
+            }}><Facebook size={fz(11)} fill="#1877f2" color="#1877f2" strokeWidth={0} /> Facebook</span>
+          )}
           {origem === 'ads' && (
             <span style={{
               background: '#e7f1fc', color: '#1877f2',
@@ -1972,6 +1980,13 @@ const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, on
               }}>🌐 site</span>
             )}
             {/* Origem do lead — flag visual (Ailson 25/05/2026) */}
+            {c.origem_lead === 'anuncio_facebook' && (
+              <span title="Lead veio de anúncio do Facebook (campanha atacado)" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: '#e7f1fc', color: '#1877f2', fontWeight: 700,
+              }}><Facebook size={fz(11)} fill="#1877f2" color="#1877f2" strokeWidth={0} /> Facebook</span>
+            )}
             {c.origem_lead === 'anuncio_instagram' && (
               <span title="Lead veio de anúncio Meta Ads (Instagram/Facebook)" style={{
                 fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
@@ -3058,6 +3073,7 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
                         {new Date(e.enviado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                         {!isManual && ` · match: ${e.tipo_match}`}
                         {e.ctwa_clid && ' · ctwa ✓'}
+                        {e.origem_lead === 'anuncio_facebook' && ' · 📘 facebook ads'}
                         {e.origem_lead === 'anuncio_instagram' && ' · 📱 anúncio'}
                         {e.origem_lead === 'carrinho_site_amicialoja' && ' · 🛒 carrinho'}
                         {e.origem_lead === 'instagram_stories' && ' · 📸 stories'}
