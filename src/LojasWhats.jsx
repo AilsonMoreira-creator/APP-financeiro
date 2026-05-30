@@ -1116,6 +1116,9 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   const [feedback, setFeedback] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [expandido, setExpandido] = useState(false);
+  // Realtime atualiza a lista em background — spinner so na 1a carga (nao
+  // pisca a tela a cada msg nova). Ailson 30/05/2026.
+  const jaCarregouListaRef = useRef(false);
   // Contadores por etapa (badge no chip) + selecao multipla (so na aba processando)
   // Ailson 26/05/2026 sessao tarde
   const [contadores, setContadores] = useState({});
@@ -1189,7 +1192,13 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
         { event: 'INSERT', schema: 'public', table: 'lojas_whats_mensagens' },
         () => setReloadTick(t => t + 1))
       .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'lojas_whats_conversas' },
+        () => setReloadTick(t => t + 1))
+      .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'lojas_whats_conversas' },
+        () => setReloadTick(t => t + 1))
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'lojas_whats_sugestoes' },
         () => setReloadTick(t => t + 1))
       .subscribe();
     return () => { try { supabase.removeChannel(ch); } catch {} };
@@ -1197,7 +1206,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
+      if (!jaCarregouListaRef.current) setLoading(true);  // spinner so na 1a carga
       const limite = expandido ? 500 : 50;
       let q = supabase
         .from('lojas_whats_conversas')
@@ -1218,6 +1227,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       if (filtroEtapa !== 'todas') q = q.eq('etapa', filtroEtapa);
       const { data } = await q;
       setConversas(data || []);
+      jaCarregouListaRef.current = true;
       setLoading(false);
     })();
   }, [filtroEtapa, refreshTick, reloadTick, expandido]);
@@ -3984,6 +3994,9 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
+  // Realtime atualiza a thread em background — spinner so quando troca de
+  // conversa, nao a cada msg/sugestao nova. Ailson 30/05/2026.
+  const convCarregadaRef = useRef(null);
   const [editandoMsgId, setEditandoMsgId] = useState(null);  // edit msg ja enviada (anota erro)
   // Botao "robô vazado": dispara IA na hora (Ailson 27/05/2026)
   const [iaDisparando, setIaDisparando] = useState(false);
@@ -3995,7 +4008,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
   useEffect(() => {
     if (!conversaId) return;
     (async () => {
-      setLoading(true);
+      if (convCarregadaRef.current !== conversaId) setLoading(true);  // spinner so ao trocar de conversa
       const [{ data: conv }, { data: msgs }, { data: sugs }] = await Promise.all([
         supabase.from('lojas_whats_conversas')
           .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos')
@@ -4032,8 +4045,24 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
         }
       }
       setLoading(false);
+      convCarregadaRef.current = conversaId;
     })();
   }, [conversaId, reloadTick]);
+
+  // Realtime da conversa aberta: msg nova ou sugestao nova/alterada aparece na
+  // hora, sem reload de pagina (scopeado nesse conversaId). Ailson 30/05/2026.
+  useEffect(() => {
+    if (!conversaId) return;
+    const ch = supabase.channel(`sofia-conversa-${conversaId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'lojas_whats_mensagens', filter: `conversa_id=eq.${conversaId}` },
+        () => setReloadTick(t => t + 1))
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'lojas_whats_sugestoes', filter: `conversa_id=eq.${conversaId}` },
+        () => setReloadTick(t => t + 1))
+      .subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, [conversaId]);
 
   // Auto-scroll pra ultima msg
   useEffect(() => {
