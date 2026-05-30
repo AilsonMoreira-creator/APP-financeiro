@@ -84,6 +84,25 @@ export default async function handler(req, res) {
 
       for (const conv of f1) {
         try {
+          // CLAIM antes de enviar: marca catalogo_followup_6h_em ANTES, so se
+          // ainda estiver null. Se o envio/insert falhar depois, NAO reenvia na
+          // hora seguinte (antes marcava so apos enviar -> spam hora a hora).
+          // Ailson 30/05/2026.
+          const { data: claimed } = await supabase
+            .from('lojas_whats_conversas')
+            .update({
+              catalogo_followup_6h_em: agora.toISOString(),
+              ultima_atividade_em: agora.toISOString(),
+              atualizado_em: agora.toISOString(),
+            })
+            .eq('id', conv.id)
+            .is('catalogo_followup_6h_em', null)
+            .select('id');
+          if (!claimed?.length) {
+            f1Resultados.push({ id: conv.id, motivo: 'ja_claimed' });
+            continue;
+          }
+
           const texto = escolherMsg6h(conv.id, conv.nome_cliente);
           const r = await enviarTexto(conv.telefone, texto);
           const metaMsgId = r?.messages?.[0]?.id || null;
@@ -99,12 +118,6 @@ export default async function handler(req, res) {
             status: 'enviando',
             enviada_em: agora.toISOString(),
           });
-
-          await supabase.from('lojas_whats_conversas').update({
-            catalogo_followup_6h_em: agora.toISOString(),
-            ultima_atividade_em: agora.toISOString(),
-            atualizado_em: agora.toISOString(),
-          }).eq('id', conv.id);
 
           f1Resultados.push({ id: conv.id, tel: conv.telefone, ok: true });
           log('cron-catalogo/6h', `conv=${conv.id} msg auto enviada`);
@@ -136,13 +149,39 @@ export default async function handler(req, res) {
     } else {
       for (const conv of f2 || []) {
         try {
+          // CLAIM antes de enviar o template: move pra follow_up ANTES, so se
+          // ainda estiver elegivel (etapa conversando/quente + marcador 6h).
+          // Atomico: dois runs nao claimam o mesmo. Se o envio falhar depois, a
+          // conversa ja esta em follow_up (cron-followup cuida) — nunca reenvia
+          // o template hora a hora. Ailson 30/05/2026.
+          const { data: claimed } = await supabase
+            .from('lojas_whats_conversas')
+            .update({
+              etapa: 'follow_up',
+              follow_up_tag: '1d',
+              follow_up_vence_em: venceEm1d,
+              follow_up_entrou_em: agora.toISOString(),
+              follow_up_origem: 'cron_catalogo_24h',
+              follow_up_motivo: 'cliente nao respondeu apos catalogo + msg 6h (template auto enviado)',
+              catalogo_enviado_em: null,
+              catalogo_followup_6h_em: null,
+              ultima_atividade_em: agora.toISOString(),
+              atualizado_em: agora.toISOString(),
+            })
+            .eq('id', conv.id)
+            .in('etapa', ['conversando', 'quente'])
+            .not('catalogo_followup_6h_em', 'is', null)
+            .select('id');
+          if (!claimed?.length) {
+            f2Resultados.push({ id: conv.id, motivo: 'ja_claimed' });
+            continue;
+          }
+
           const primeiroNome = (conv.nome_cliente || 'cliente').split(' ')[0];
-          // Envia template HSM
           const r = await enviarTemplate(conv.telefone, 'followup_catalogo_24h_v1', [primeiroNome]);
           const metaMsgId = r?.messages?.[0]?.id || null;
           if (!metaMsgId) throw new Error('meta_sem_message_id');
 
-          // Renderiza texto pra salvar a msg
           const textoMsg = `Oii ${primeiroNome}! 😊\n\nVc conseguiu dar uma olhadinha no catálogo? Ficou alguma dúvida sobre algum modelo, tamanho ou entrega?`;
 
           await supabase.from('lojas_whats_mensagens').insert({
@@ -157,20 +196,6 @@ export default async function handler(req, res) {
             status: 'enviando',
             enviada_em: agora.toISOString(),
           });
-
-          // Move pra follow_up tag 1d
-          await supabase.from('lojas_whats_conversas').update({
-            etapa: 'follow_up',
-            follow_up_tag: '1d',
-            follow_up_vence_em: venceEm1d,
-            follow_up_entrou_em: agora.toISOString(),
-            follow_up_origem: 'cron_catalogo_24h',
-            follow_up_motivo: 'cliente nao respondeu apos catalogo + msg 6h (template auto enviado)',
-            catalogo_enviado_em: null,
-            catalogo_followup_6h_em: null,
-            ultima_atividade_em: agora.toISOString(),
-            atualizado_em: agora.toISOString(),
-          }).eq('id', conv.id);
 
           f2Resultados.push({ id: conv.id, ok: true });
           log('cron-catalogo/24h', `conv=${conv.id} template enviado + follow_up tag=1d`);
