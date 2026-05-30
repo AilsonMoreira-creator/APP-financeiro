@@ -123,10 +123,11 @@ async function executar() {
         continue;
       }
 
-      // Regra Ailson 30/05/2026: jamais a 3a mensagem sem resposta. Se ja tem
-      // 2 saidas da Sofia sem o cliente responder, nao gera mais retomada.
-      if (await contarSofiaSemResposta(conv.id) >= 2) {
-        resultados.skips.push({ id: conv.id, motivo: '2_sem_resposta' });
+      // Regra Ailson 30/05/2026: catálogo + 6h + 24h = 3 toques legítimos.
+      // Jamais a 4a sem resposta: se ja tem 3 saidas sem o cliente responder,
+      // nao gera mais retomada.
+      if (await contarSofiaSemResposta(conv.id) >= 3) {
+        resultados.skips.push({ id: conv.id, motivo: '3_sem_resposta' });
         continue;
       }
 

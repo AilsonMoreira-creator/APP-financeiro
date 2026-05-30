@@ -84,9 +84,10 @@ export default async function handler(req, res) {
 
       for (const conv of f1) {
         try {
-          // Regra Ailson 30/05/2026: nunca a 3a mensagem sem resposta.
-          if (await contarSofiaSemResposta(conv.id) >= 2) {
-            f1Resultados.push({ id: conv.id, motivo: '2_sem_resposta' });
+          // Regra Ailson 30/05/2026: catálogo + 6h + 24h = 3 toques legítimos.
+          // Jamais a 4a sem resposta (>= 3 sem resposta -> nao envia mais).
+          if (await contarSofiaSemResposta(conv.id) >= 3) {
+            f1Resultados.push({ id: conv.id, motivo: '3_sem_resposta' });
             continue;
           }
           // CLAIM antes de enviar: marca catalogo_followup_6h_em ANTES, so se
@@ -154,9 +155,10 @@ export default async function handler(req, res) {
     } else {
       for (const conv of f2 || []) {
         try {
-          // Regra Ailson 30/05/2026: nunca a 3a mensagem sem resposta.
-          if (await contarSofiaSemResposta(conv.id) >= 2) {
-            f2Resultados.push({ id: conv.id, motivo: '2_sem_resposta' });
+          // Regra Ailson 30/05/2026: catálogo + 6h + 24h = 3 toques legítimos.
+          // Jamais a 4a sem resposta (>= 3 sem resposta -> nao envia mais).
+          if (await contarSofiaSemResposta(conv.id) >= 3) {
+            f2Resultados.push({ id: conv.id, motivo: '3_sem_resposta' });
             continue;
           }
           // CLAIM antes de enviar o template: move pra follow_up ANTES, so se

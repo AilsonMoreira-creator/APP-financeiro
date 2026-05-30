@@ -73,8 +73,8 @@ export async function saveConfig(chave, valor, descricao = null) {
  *   "21999999999"      -> "5521999999999"
  */
 // Conta mensagens da Sofia enviadas SEM resposta do cliente desde a ultima
-// entrada. Regra Ailson 30/05/2026: jamais enviar a 3a sem resposta — os
-// caminhos proativos checam isto ANTES de enviar e param em >= 2.
+// entrada. Regra Ailson 30/05/2026: catálogo + 6h + 24h = 3 toques legítimos;
+// os caminhos proativos checam isto ANTES de enviar e param em >= 3 (nunca a 4a).
 export async function contarSofiaSemResposta(conversaId) {
   const { data: ult } = await supabase
     .from('lojas_whats_mensagens')
