@@ -517,6 +517,13 @@ function detectarOrigemLead(refInfo) {
     return { origem: 'anuncio_instagram', confianca: 0.85, meta: { via: 'msg_pronta_texto' } };
   }
 
+  // 1C. BACKUP FACEBOOK — frase prefill da campanha do Facebook sem referral
+  //     no payload. Checa ANTES do bloco linktree (a frase tambem casa o CTA
+  //     generico, que mandaria pra linktree). Ailson 30/05/2026.
+  if (refInfo.primeiraTexto && REGEX_AD_FACEBOOK.test(refInfo.primeiraTexto)) {
+    return { origem: 'anuncio_facebook', confianca: 0.85, meta: { via: 'frase_fb_fallback' } };
+  }
+
   // 2. INSTAGRAM ORGANICO — links manuais (stories/linktree). Checa ANTES do
   //    CTA generico pq a frase do linktree e identica ao CTA do anuncio
   //    (so distingue por nao ter referral=ad — ja descartado no passo 1).

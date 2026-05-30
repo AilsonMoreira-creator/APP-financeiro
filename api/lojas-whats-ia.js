@@ -341,6 +341,7 @@ CLIENTE QUER VER MUITAS FOTOS / "tudo" / "o que tem disponível":
 - Se o CLIENTE JÁ PEDIU pra ver ("quero ver o que tem disponível", "me mostra", "quero ver os modelos", "manda o catálogo", "quero ver tudo"): MANDA DIRETO, o pedido dele JÁ é a permissão. NÃO pergunte "posso enviar?" nem "mando agora?" — só manda. Ex: "Perfeito! Te mando agora o catálogo completo 😊 [ENVIAR_CATALOGO:nome_atual]"
 - Se for VOCÊ oferecendo e o cliente NÃO pediu: aí sim pergunta antes ("temos o catálogo completo, posso te enviar?")
 - Em qualquer caso: NÃO na 1ª nem 2ª mensagem; só após cliente engajar (3ª msg em diante)
+- NUNCA reenvie o catálogo se ele JÁ foi enviado nesta conversa. Se o contexto avisar que o catálogo já foi enviado, NÃO use [ENVIAR_CATALOGO:...] de novo e NÃO diga "te mando o catálogo" — manda foto da peça específica ([ENVIAR_FOTO:REF]) ou responde direto.
 
 CLIENTE PERGUNTA FOTO ESPECÍFICA QUE VC NÃO TEM (foto de costas, detalhe interno, prova em modelo etc):
 - Vc NÃO tem essa foto disponivel — pede pra assistente humana anexar
@@ -658,6 +659,24 @@ export async function processarConversa(conversaId) {
   }
 
 
+  // "Catalogo ja enviado alguma vez" — sinal CONFIAVEL pelo historico de
+  // mensagens. NAO usa conv.catalogo_enviado_em porque o webhook zera esse
+  // campo a cada inbound do cliente (servia so pro relogio de follow-up).
+  // Catalogo enviado = documento PDF em /catalogos/. Ailson 30/05/2026.
+  let catalogoJaEnviado = false;
+  try {
+    const { count: nCat } = await supabase
+      .from('lojas_whats_mensagens')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversa_id', conversaId)
+      .eq('direcao', 'saida')
+      .eq('tipo_midia', 'document')
+      .ilike('midia_url', '%catalogos/%');
+    catalogoJaEnviado = (nCat || 0) > 0;
+  } catch (e) {
+    logErro('ia/check-catalogo-enviado', e);
+  }
+
   const contextoConv = montarContextoConversa(conv);
   const msgsClaude = montarMensagensClaude(msgs, conv);
 
@@ -667,6 +686,11 @@ export async function processarConversa(conversaId) {
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
   if (blocoMidias) systemBlocks.push({ type: 'text', text: blocoMidias });
+  // Avisa a IA quando o catalogo JA foi enviado — pra ela nao reanexar e nao
+  // dizer "te mando o catalogo" de novo. Ailson 30/05/2026.
+  if (catalogoJaEnviado) {
+    systemBlocks.push({ type: 'text', text: `ATENCAO: o catalogo JA FOI ENVIADO pra esse cliente nesta conversa. NAO reenvie. NUNCA use [ENVIAR_CATALOGO:...] de novo aqui, e NAO diga "te mando o catalogo". Se ele tiver duvida sobre uma peca, manda a FOTO dela ([ENVIAR_FOTO:REF]) ou responde direto.` });
+  }
   if (blocoRoteiro) systemBlocks.push({ type: 'text', text: blocoRoteiro });
   if (blocoPoliticas) systemBlocks.push({ type: 'text', text: blocoPoliticas });
   if (blocoTecidos) systemBlocks.push({ type: 'text', text: blocoTecidos });
@@ -686,8 +710,22 @@ export async function processarConversa(conversaId) {
     throw new Error(`claude_falhou: ${cl.erro}`);
   }
 
-  const textoProposto = (cl.texto || '').trim();
+  let textoProposto = (cl.texto || '').trim();
   if (!textoProposto) throw new Error('claude_retornou_vazio');
+
+  // GUARD ANTI-REENVIO DO CATALOGO (Ailson 30/05/2026):
+  // Se o catalogo JA foi enviado nesta conversa e a IA reanexou o marcador,
+  // remove o marcador (mantem o texto). Garante "nunca 2x" mesmo se a IA
+  // ignorar a regra do prompt. O contexto tambem avisa ela (systemBlocks).
+  if (catalogoJaEnviado && /\[ENVIAR_CATALOGO:[^\]]+\]/i.test(textoProposto)) {
+    textoProposto = textoProposto
+      .replace(/\[ENVIAR_CATALOGO:[^\]]+\]/gi, '')
+      .replace(/[ \t]*\n{3,}[ \t]*/g, '\n\n')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim();
+    log('ia', `conversa=${conversaId} catalogo ja enviado antes — marcador removido (anti-reenvio)`);
+  }
+  if (!textoProposto) throw new Error('claude_retornou_vazio_pos_guard');
 
   // 7. Cria sugestão pendente
   const { error: errSug } = await supabase.from('lojas_whats_sugestoes').insert({
