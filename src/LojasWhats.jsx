@@ -4754,7 +4754,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
 }
 
 function Bubble({ m, botao }) {
-  const [capaIdx, setCapaIdx] = useState(0);  // 0=jpg, 1=png, 2=webp, 3=fallback
+  const [capaIdx, setCapaIdx] = useState(0);  // 0=objeto direto, 1=render/image, 2=fallback
   const ehSaida = m.direcao === 'saida';
   const ehAssistente = m.autor === 'assistente';
   // Ailson 25/05/2026: padroniza verde WhatsApp pra TODA msg de saida
@@ -4798,13 +4798,22 @@ function Bubble({ m, botao }) {
   // nao furava. Solucao: usar o endpoint /render/image/ (caminho de URL
   // diferente => chave de cache nova, sem herdar o 404). Bonus: redimensiona.
   const ehCatalogo = ehDocumento && m.midia_url.includes('/catalogos/');
-  const CAPA_EXTS = ['jpg', 'png', 'webp'];
-  const capaErr = capaIdx >= CAPA_EXTS.length;
-  const capaUrl = ehCatalogo && !capaErr
-    ? `${m.midia_url
-        .replace('/object/public/', '/render/image/public/')
-        .replace(/\/catalogos\/[^/]+$/, `/catalogos/capa.${CAPA_EXTS[capaIdx]}`)}?width=240&quality=85`
+  // Ailson 29/05/2026: no bucket so existe capa.jpg (sem png/webp). Cascata de
+  // ESTRATEGIAS de URL (nao mais de extensao):
+  //   0) objeto publico direto — NAO depende de Image Transformations (que pode
+  //      estar off no projeto). ?v bump = chave de cache nova (fura 404 antigo).
+  //   1) /render/image/ — fallback: caminho diferente => outra chave de cache,
+  //      e redimensiona. So serve se o transform estiver habilitado.
+  // Se as duas falharem, capaErr => cai no icone generico de documento.
+  const capaBase = ehCatalogo
+    ? m.midia_url.replace(/\/catalogos\/[^/]+$/, '/catalogos/capa.jpg')
     : null;
+  const CAPA_CANDIDATOS = capaBase ? [
+    `${capaBase}?v=3`,
+    `${capaBase.replace('/object/public/', '/render/image/public/')}?width=240&quality=85`,
+  ] : [];
+  const capaErr = capaIdx >= CAPA_CANDIDATOS.length;
+  const capaUrl = !capaErr ? CAPA_CANDIDATOS[capaIdx] : null;
 
   return (
     <div style={{ display: 'flex', justifyContent: align, marginBottom: 8 }}>
