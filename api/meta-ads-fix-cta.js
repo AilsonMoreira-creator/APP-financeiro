@@ -152,7 +152,8 @@ export default async function handler(req, res) {
   if (Array.isArray(p.ad_ids) && p.ad_ids.length) adIds = p.ad_ids.map(String);
   else if (typeof p.ad_ids === 'string' && p.ad_ids.trim()) adIds = p.ad_ids.split(',').map((s) => s.trim());
 
-  const apply = req.method === 'POST';
+  // aplica via POST OU via GET com &aplicar=sim (pra rodar do Safari no iPhone)
+  const apply = req.method === 'POST' || String(p.aplicar || '').toLowerCase() === 'sim';
   const results = [];
   for (const adId of adIds) {
     try {
