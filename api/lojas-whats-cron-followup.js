@@ -26,7 +26,7 @@
 // GET ?executar=1 = executa | GET sem param = preview
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, getConfig } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, getConfig, contarSofiaSemResposta } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
 
 const MODELO_DEFAULT = 'claude-sonnet-4-6';
@@ -120,6 +120,13 @@ async function executar() {
         .eq('status', 'pendente');
       if (pendCount > 0) {
         resultados.skips.push({ id: conv.id, motivo: 'ja_tem_pendente' });
+        continue;
+      }
+
+      // Regra Ailson 30/05/2026: jamais a 3a mensagem sem resposta. Se ja tem
+      // 2 saidas da Sofia sem o cliente responder, nao gera mais retomada.
+      if (await contarSofiaSemResposta(conv.id) >= 2) {
+        resultados.skips.push({ id: conv.id, motivo: '2_sem_resposta' });
         continue;
       }
 

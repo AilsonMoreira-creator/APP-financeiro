@@ -18,7 +18,7 @@
 // Ailson 27/05/2026
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, log, logErro } from './_lojas-whats-helpers.js';
+import { supabase, log, logErro, contarSofiaSemResposta } from './_lojas-whats-helpers.js';
 import { enviarTexto, enviarTemplate } from './_lojas-whats-meta-client.js';
 
 const VARIACOES_MSG_6H = [
@@ -84,6 +84,11 @@ export default async function handler(req, res) {
 
       for (const conv of f1) {
         try {
+          // Regra Ailson 30/05/2026: nunca a 3a mensagem sem resposta.
+          if (await contarSofiaSemResposta(conv.id) >= 2) {
+            f1Resultados.push({ id: conv.id, motivo: '2_sem_resposta' });
+            continue;
+          }
           // CLAIM antes de enviar: marca catalogo_followup_6h_em ANTES, so se
           // ainda estiver null. Se o envio/insert falhar depois, NAO reenvia na
           // hora seguinte (antes marcava so apos enviar -> spam hora a hora).
@@ -149,6 +154,11 @@ export default async function handler(req, res) {
     } else {
       for (const conv of f2 || []) {
         try {
+          // Regra Ailson 30/05/2026: nunca a 3a mensagem sem resposta.
+          if (await contarSofiaSemResposta(conv.id) >= 2) {
+            f2Resultados.push({ id: conv.id, motivo: '2_sem_resposta' });
+            continue;
+          }
           // CLAIM antes de enviar o template: move pra follow_up ANTES, so se
           // ainda estiver elegivel (etapa conversando/quente + marcador 6h).
           // Atomico: dois runs nao claimam o mesmo. Se o envio falhar depois, a

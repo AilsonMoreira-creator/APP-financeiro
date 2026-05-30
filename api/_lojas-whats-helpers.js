@@ -72,6 +72,30 @@ export async function saveConfig(chave, valor, descricao = null) {
  *   "+5511999999999"   -> "5511999999999"
  *   "21999999999"      -> "5521999999999"
  */
+// Conta mensagens da Sofia enviadas SEM resposta do cliente desde a ultima
+// entrada. Regra Ailson 30/05/2026: jamais enviar a 3a sem resposta — os
+// caminhos proativos checam isto ANTES de enviar e param em >= 2.
+export async function contarSofiaSemResposta(conversaId) {
+  const { data: ult } = await supabase
+    .from('lojas_whats_mensagens')
+    .select('enviada_em')
+    .eq('conversa_id', conversaId)
+    .eq('direcao', 'entrada')
+    .order('enviada_em', { ascending: false })
+    .limit(1);
+  const ultimaEntrada = ult?.[0]?.enviada_em || null;
+
+  let q = supabase
+    .from('lojas_whats_mensagens')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversa_id', conversaId)
+    .eq('direcao', 'saida')
+    .in('autor', ['sofia_ia', 'assistente']);
+  if (ultimaEntrada) q = q.gt('enviada_em', ultimaEntrada);
+  const { count } = await q;
+  return count || 0;
+}
+
 export function normalizarTelefone(raw) {
   if (!raw) return null;
   let s = String(raw).replace(/\D/g, ''); // so digitos
