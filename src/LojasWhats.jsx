@@ -4843,19 +4843,19 @@ function Bubble({ m, botao }) {
   // nao furava. Solucao: usar o endpoint /render/image/ (caminho de URL
   // diferente => chave de cache nova, sem herdar o 404). Bonus: redimensiona.
   const ehCatalogo = ehDocumento && m.midia_url.includes('/catalogos/');
-  // Ailson 29/05/2026: no bucket so existe capa.jpg (sem png/webp). Cascata de
-  // ESTRATEGIAS de URL (nao mais de extensao):
-  //   0) objeto publico direto — NAO depende de Image Transformations (que pode
-  //      estar off no projeto). ?v bump = chave de cache nova (fura 404 antigo).
-  //   1) /render/image/ — fallback: caminho diferente => outra chave de cache,
-  //      e redimensiona. So serve se o transform estiver habilitado.
-  // Se as duas falharem, capaErr => cai no icone generico de documento.
-  const capaBase = ehCatalogo
-    ? m.midia_url.replace(/\/catalogos\/[^/]+$/, '/catalogos/capa.jpg')
+  // Ailson 30/05/2026: a capa.jpg antiga ficou com 404 preso no cache do
+  // /object/ e o /render/image/ depende de Image Transformations (off). Solucao
+  // definitiva: NOME NOVO (capa2.*) servido pelo /object/ direto — caminho/nome
+  // inedito = sem 404 cacheado, e sem depender de transform. Cascata so de
+  // objeto direto (png primeiro, que e o formato da arte enviada). Sobe a capa
+  // como sofia-midias/catalogos/capa2.png (ou .jpg) que ja aparece.
+  const dirCatalogos = ehCatalogo
+    ? m.midia_url.replace(/\/catalogos\/[^/]+$/, '/catalogos/')
     : null;
-  const CAPA_CANDIDATOS = capaBase ? [
-    `${capaBase}?v=3`,
-    `${capaBase.replace('/object/public/', '/render/image/public/')}?width=240&quality=85`,
+  const CAPA_CANDIDATOS = dirCatalogos ? [
+    `${dirCatalogos}capa2.png?v=1`,
+    `${dirCatalogos}capa2.jpg?v=1`,
+    `${dirCatalogos}capa.jpg?v=4`,
   ] : [];
   const capaErr = capaIdx >= CAPA_CANDIDATOS.length;
   const capaUrl = !capaErr ? CAPA_CANDIDATOS[capaIdx] : null;
