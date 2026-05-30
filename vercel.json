@@ -98,6 +98,9 @@
     "api/lojas-whats-cron-responder.js": {
       "maxDuration": 120
     },
+    "api/lojas-whats-cron-aprendizado.js": {
+      "maxDuration": 60
+    },
     "api/lojas-whats-meta-capi-purchase.js": {
       "maxDuration": 30
     },
@@ -305,6 +308,10 @@
     {
       "path": "/api/lojas-whats-cron-responder",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/lojas-whats-cron-aprendizado",
+      "schedule": "0 11 * * 1"
     },
     {
       "path": "/api/oficina-recalcular-cron",

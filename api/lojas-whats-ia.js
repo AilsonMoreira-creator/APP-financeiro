@@ -691,6 +691,14 @@ export async function processarConversa(conversaId) {
   if (catalogoJaEnviado) {
     systemBlocks.push({ type: 'text', text: `ATENCAO: o catalogo JA FOI ENVIADO pra esse cliente nesta conversa. NAO reenvie. NUNCA use [ENVIAR_CATALOGO:...] de novo aqui, e NAO diga "te mando o catalogo". Se ele tiver duvida sobre uma peca, manda a FOTO dela ([ENVIAR_FOTO:REF]) ou responde direto.` });
   }
+
+  // Orientacao aprendida (cron-aprendizado semanal) — guidance SUAVE, baseada
+  // no que de fato faz o cliente responder/se interessar. Ailson 30/05/2026.
+  try {
+    const { data: apr } = await supabase
+      .from('lojas_whats_aprendizado').select('guidance').eq('id', 1).maybeSingle();
+    if (apr?.guidance) systemBlocks.push({ type: 'text', text: apr.guidance });
+  } catch (e) { logErro('ia/guidance-aprendizado', e); }
   if (blocoRoteiro) systemBlocks.push({ type: 'text', text: blocoRoteiro });
   if (blocoPoliticas) systemBlocks.push({ type: 'text', text: blocoPoliticas });
   if (blocoTecidos) systemBlocks.push({ type: 'text', text: blocoTecidos });
