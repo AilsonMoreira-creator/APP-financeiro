@@ -47,8 +47,17 @@ export function parseMarcadoresMidia(texto) {
     });
   }
 
-  // Remove TODOS marcadores do texto (mesmo se descartar alem do primeiro)
-  textoLimpo = texto.replace(REGEX_MARCADOR, '').replace(/\s+/g, ' ').trim();
+  // Remove TODOS marcadores do texto (mesmo se descartar alem do primeiro).
+  // IMPORTANTE: preservar quebras de linha (paragrafos). O /\s+/g antigo
+  // colapsava \n\n em 1 espaco -> a Sofia mandava tudo num bloco so, mesmo
+  // sem marcador. Agora colapsa so espacos/tabs e limita a 1 linha em branco
+  // entre paragrafos. Ailson 30/05/2026.
+  textoLimpo = texto
+    .replace(REGEX_MARCADOR, '')
+    .replace(/[ \t]+/g, ' ')           // espacos/tabs repetidos -> 1 espaco (nao mexe em \n)
+    .replace(/[ \t]*\n[ \t]*/g, '\n')  // tira espaco em volta das quebras
+    .replace(/\n{3,}/g, '\n\n')        // no maximo 1 linha em branco entre paragrafos
+    .trim();
 
   // Limita a 1 midia (Ailson)
   return { textoLimpo, marcadores: marcadores.slice(0, 1) };
