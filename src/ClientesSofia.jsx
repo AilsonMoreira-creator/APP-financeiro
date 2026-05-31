@@ -27,6 +27,11 @@ import {
   Send, X, RefreshCw,
 } from 'lucide-react';
 import { supabase, palette, FONT, SectionTitle } from './Lojas_Shared.jsx';
+// Reuso do chat e do split do Sofia (import circular seguro: uso so em render).
+import {
+  ConversaDetail, EditarLeadModal, EnviarVendedoraModal,
+  useIsDesktop, LARGURA_LISTA_SPLIT,
+} from './LojasWhats.jsx';
 
 // ─── helpers locais (mesmos do Sofia) ───
 const fz = (n) => `${n}px`;
@@ -117,7 +122,11 @@ const STATUS_FB = {
 // COMPONENTE DE ABA (renderizado dentro do Sofia)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
+export default function ClientesTab({ userId, refreshTick }) {
+  const isDesktop = useIsDesktop();           // split: desktop = 2 paineis; mobile = tela cheia
+  const [chatId, setChatId] = useState(null); // conversa aberta no split (antes era overlay no parent)
+  const [modalEditar, setModalEditar] = useState(null);
+  const [modalEnviar, setModalEnviar] = useState(null);
   const [subTab, setSubTab] = useState('feedback'); // 'feedback' | 'inativos'
   const [ordenar, setOrdenar] = useState('lifetime'); // 'lifetime' | 'az'
   const [envio, setEnvio] = useState('todos'); // 'todos' | 'enviadas' | 'nao_enviadas'
@@ -198,15 +207,15 @@ export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
       });
       const d = await r.json();
       if (!r.ok || !d.conversa_id) { alert('Erro ao abrir conversa: ' + (d.error || r.status)); return; }
-      if (onAbrirConversa) onAbrirConversa(d.conversa_id);
+      setChatId(d.conversa_id);
     } catch (e) {
       alert('Erro ao abrir conversa: ' + e.message);
     } finally {
       setAbrindoId(null);
     }
-  }, [abrindoId, onAbrirConversa, subTab]);
+  }, [abrindoId, subTab]);
 
-  return (
+  const conteudoLista = (
     <div style={{ background: palette.bg, minHeight: 'calc(100vh - 110px)', fontFamily: FONT }}>
       {/* sub-abas Feedback | Inativos */}
       <div style={{
@@ -270,6 +279,68 @@ export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
       )}
     </div>
   );
+
+  // Chat aberto a partir de um card: split IGUAL ao Sofia (Conversas).
+  // Desktop = lista a esquerda (LARGURA_LISTA_SPLIT) + ConversaDetail a direita.
+  // Mobile = chat em tela cheia. Aposenta o overlay chatOverlayId do parent.
+  // Ailson 31/05/2026.
+  const modaisChat = (
+    <>
+      {modalEditar && (
+        <EditarLeadModal
+          conversa={modalEditar.conversa}
+          onClose={() => setModalEditar(null)}
+          onSucesso={() => setModalEditar(null)}
+          onErro={(msg) => alert(msg)}
+          onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
+        />
+      )}
+      {modalEnviar && (
+        <EnviarVendedoraModal
+          conversa={modalEnviar.conversa}
+          onClose={() => setModalEnviar(null)}
+          onSucesso={(msg) => { setModalEnviar(null); setChatId(null); setTickLocal(t => t + 1); alert(msg); }}
+          onErro={(msg) => alert(msg)}
+        />
+      )}
+    </>
+  );
+
+  if (chatId) {
+    const chat = (
+      <ConversaDetail
+        conversaId={chatId}
+        userId={userId}
+        idsNaAba={[]}
+        onNavegar={(id) => setChatId(id)}
+        onBack={() => { setChatId(null); setTickLocal(t => t + 1); }}
+        onEditarLead={(conv) => setModalEditar({ conversa: conv })}
+        onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
+        splitLeft={isDesktop ? LARGURA_LISTA_SPLIT : 0}
+      />
+    );
+
+    // MOBILE — chat em tela cheia (esconde a lista)
+    if (!isDesktop) return <>{chat}{modaisChat}</>;
+
+    // DESKTOP — split: lista a esquerda + chat a direita
+    return (
+      <>
+        <div style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0,
+          width: LARGURA_LISTA_SPLIT, zIndex: 101,
+          background: palette.bg, borderRight: `1px solid ${palette.beige}`,
+          overflowY: 'auto', fontFamily: FONT,
+        }}>
+          {conteudoLista}
+        </div>
+        {chat}
+        {modaisChat}
+      </>
+    );
+  }
+
+  return conteudoLista;
 }
 
 function SubTab({ id, label, Icon, ativo, onClick }) {

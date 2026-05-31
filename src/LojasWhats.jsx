@@ -95,7 +95,7 @@ const sz = (n) => n;
 // Hook: detecta se viewport é "desktop" (split view). Mobile mantém fullscreen.
 // Ailson 28/05/2026 — split view do chat.
 const SPLIT_BREAKPOINT = 768;
-function useIsDesktop(breakpoint = SPLIT_BREAKPOINT) {
+export function useIsDesktop(breakpoint = SPLIT_BREAKPOINT) {
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= breakpoint : false
   );
@@ -111,7 +111,7 @@ function useIsDesktop(breakpoint = SPLIT_BREAKPOINT) {
 // ícone de etapa + nome + unread + origem + badge "Sofia" (sugestão pendente).
 // NÃO altera ConversaRow (card expandido) — é um componente paralelo.
 // Ailson 28/05/2026.
-const LARGURA_LISTA_SPLIT = 320;
+export const LARGURA_LISTA_SPLIT = 320;
 const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const temSugestaoSofia = !!c.sugestao_quente_pendente_em;
@@ -323,10 +323,6 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
   const [tabAnterior, setTabAnterior] = useState('aprovar');
   const handleTabChange = (t) => { if (t === 'clientes') setTabAnterior(activeTab); setActiveTab(t); };
   const [refreshTick, setRefreshTick] = useState(0);
-  // Chat aberto por cima (aba Clientes clica num card) — não troca de aba.
-  const [chatOverlayId, setChatOverlayId] = useState(null);
-  const [ovModalEnviar, setOvModalEnviar] = useState(null);
-  const [ovModalEditar, setOvModalEditar] = useState(null);
   // Push notif desktop: 'desabilitado' (no SW/permission), 'inscrito', 'naoinscrito', null=loading
   const [pushStatus, setPushStatus] = useState(null);
 
@@ -429,40 +425,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'aprendizado' && <AprendizadoTab refreshTick={refreshTick} />}
       {activeTab === 'midias' && <MidiasTab refreshTick={refreshTick} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
-      {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} onAbrirConversa={(id) => setChatOverlayId(id)} />}
-
-      {/* Chat aberto por cima (vindo de um card da aba Clientes). onBack volta pra aba Clientes. */}
-      {chatOverlayId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: palette.bg }}>
-          <ConversaDetail
-            conversaId={chatOverlayId}
-            userId={userId}
-            idsNaAba={[]}
-            onNavegar={(id) => setChatOverlayId(id)}
-            onBack={() => setChatOverlayId(null)}
-            onEditarLead={(conv) => setOvModalEditar({ conversa: conv })}
-            onEnviarVendedora={(conv) => setOvModalEnviar({ conversa: conv })}
-            splitLeft={0}
-          />
-          {ovModalEditar && (
-            <EditarLeadModal
-              conversa={ovModalEditar.conversa}
-              onClose={() => setOvModalEditar(null)}
-              onSucesso={() => setOvModalEditar(null)}
-              onErro={(msg) => alert(msg)}
-              onEnviarVendedora={(conv) => setOvModalEnviar({ conversa: conv })}
-            />
-          )}
-          {ovModalEnviar && (
-            <EnviarVendedoraModal
-              conversa={ovModalEnviar.conversa}
-              onClose={() => setOvModalEnviar(null)}
-              onSucesso={(msg) => { setOvModalEnviar(null); setChatOverlayId(null); alert(msg); }}
-              onErro={(msg) => alert(msg)}
-            />
-          )}
-        </div>
-      )}
+      {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} />}
     </div>
   );
 }
@@ -2406,7 +2369,7 @@ const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, on
 // MODAL "Enviar vendedora" (Etapa 5 quente → encaminha pra rodízio ou manual)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function EnviarVendedoraModal({ conversa, onClose, onSucesso, onErro }) {
+export function EnviarVendedoraModal({ conversa, onClose, onSucesso, onErro }) {
   const [modo, setModo] = useState('rodizio'); // 'rodizio' | 'manual'
   const [vendedoraId, setVendedoraId] = useState('');
   const [vendedoras, setVendedoras] = useState([]);
@@ -3933,7 +3896,7 @@ function PadraoRow({ p, primeira }) {
 // Mover etapa · Observações (Sofia + privada) · Anexar mídia · Prioridade
 // ═══════════════════════════════════════════════════════════════════════════
 
-function EditarLeadModal({ conversa, onClose, onSucesso, onErro, onEnviarVendedora }) {
+export function EditarLeadModal({ conversa, onClose, onSucesso, onErro, onEnviarVendedora }) {
   const [etapa, setEtapa] = useState(conversa.etapa);
   const [obsSofia, setObsSofia] = useState(conversa.observacao_para_sofia || '');
   const [obsPrivada, setObsPrivada] = useState(conversa.observacao_assistente || '');
@@ -4243,7 +4206,7 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 // CONVERSA DETAIL — tela cheia tipo WhatsApp (Ailson 26/05/2026)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar, userId, splitLeft = 0 }) {
+export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar, userId, splitLeft = 0 }) {
   const [conversa, setConversa] = useState(null);
   const [mensagens, setMensagens] = useState([]);
   // Ailson 29/05/2026: mapa nome_template -> botao URL, pra renderizar no app
