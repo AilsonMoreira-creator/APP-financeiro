@@ -321,6 +321,10 @@ const fmtRelTime = (iso) => {
 export default function LojasWhats({ userId, isAdmin, onBack }) {
   const [activeTab, setActiveTab] = useState('aprovar');
   const [refreshTick, setRefreshTick] = useState(0);
+  // Chat aberto por cima (aba Clientes clica num card) — não troca de aba.
+  const [chatOverlayId, setChatOverlayId] = useState(null);
+  const [ovModalEnviar, setOvModalEnviar] = useState(null);
+  const [ovModalEditar, setOvModalEditar] = useState(null);
   // Push notif desktop: 'desabilitado' (no SW/permission), 'inscrito', 'naoinscrito', null=loading
   const [pushStatus, setPushStatus] = useState(null);
 
@@ -423,7 +427,40 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'aprendizado' && <AprendizadoTab refreshTick={refreshTick} />}
       {activeTab === 'midias' && <MidiasTab refreshTick={refreshTick} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
-      {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} />}
+      {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} onAbrirConversa={(id) => setChatOverlayId(id)} />}
+
+      {/* Chat aberto por cima (vindo de um card da aba Clientes). onBack volta pra aba Clientes. */}
+      {chatOverlayId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: palette.bg }}>
+          <ConversaDetail
+            conversaId={chatOverlayId}
+            userId={userId}
+            idsNaAba={[]}
+            onNavegar={(id) => setChatOverlayId(id)}
+            onBack={() => setChatOverlayId(null)}
+            onEditarLead={(conv) => setOvModalEditar({ conversa: conv })}
+            onEnviarVendedora={(conv) => setOvModalEnviar({ conversa: conv })}
+            splitLeft={0}
+          />
+          {ovModalEditar && (
+            <EditarLeadModal
+              conversa={ovModalEditar.conversa}
+              onClose={() => setOvModalEditar(null)}
+              onSucesso={() => setOvModalEditar(null)}
+              onErro={(msg) => alert(msg)}
+              onEnviarVendedora={(conv) => setOvModalEnviar({ conversa: conv })}
+            />
+          )}
+          {ovModalEnviar && (
+            <EnviarVendedoraModal
+              conversa={ovModalEnviar.conversa}
+              onClose={() => setOvModalEnviar(null)}
+              onSucesso={(msg) => { setOvModalEnviar(null); setChatOverlayId(null); alert(msg); }}
+              onErro={(msg) => alert(msg)}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

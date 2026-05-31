@@ -74,9 +74,10 @@ const STATUS_FB = {
 // COMPONENTE DE ABA (renderizado dentro do Sofia)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function ClientesTab({ userId, refreshTick }) {
+export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
   const [subTab, setSubTab] = useState('feedback'); // 'feedback' | 'inativos'
   const [ordenar, setOrdenar] = useState('lifetime'); // 'lifetime' | 'az'
+  const [abrindoId, setAbrindoId] = useState(null);   // cliente_id sendo aberto no chat
 
   // Set GLOBAL de bloqueados (toggle) + realtime
   const [bloqueados, setBloqueados] = useState(() => new Set());
@@ -132,6 +133,26 @@ export default function ClientesTab({ userId, refreshTick }) {
     }
   }, [userId]);
 
+  // Clique no card → acha/cria conversa zerada e abre o MESMO chat do Sofia.
+  const abrirChat = useCallback(async (clienteId) => {
+    if (abrindoId) return;
+    setAbrindoId(clienteId);
+    try {
+      const etapa = subTab === 'inativos' ? 'inativo' : 'feedback';
+      const r = await fetch('/api/lojas-whats-conversa-abrir-cliente', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_id: clienteId, etapa }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.conversa_id) { alert('Erro ao abrir conversa: ' + (d.error || r.status)); return; }
+      if (onAbrirConversa) onAbrirConversa(d.conversa_id);
+    } catch (e) {
+      alert('Erro ao abrir conversa: ' + e.message);
+    } finally {
+      setAbrindoId(null);
+    }
+  }, [abrindoId, onAbrirConversa, subTab]);
+
   return (
     <div style={{ background: palette.bg, minHeight: 'calc(100vh - 110px)', fontFamily: FONT }}>
       {/* sub-abas Feedback | Inativos */}
@@ -148,11 +169,13 @@ export default function ClientesTab({ userId, refreshTick }) {
 
       {subTab === 'feedback' && (
         <FeedbackTab refreshTick={refreshTick} ordenar={ordenar}
-          bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap} />
+          bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
+          onAbrir={abrirChat} abrindoId={abrindoId} />
       )}
       {subTab === 'inativos' && (
         <InativosTab refreshTick={refreshTick} ordenar={ordenar}
-          bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap} />
+          bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
+          onAbrir={abrirChat} abrindoId={abrindoId} />
       )}
     </div>
   );
@@ -205,7 +228,7 @@ function ordenarLista(lista, modo) {
 // SUB-ABA FEEDBACK
 // ═══════════════════════════════════════════════════════════════════════════
 
-function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap }) {
+function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId }) {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -278,7 +301,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
       <SectionTitle icon={MessageSquare}>{visiveis.length} cliente(s)</SectionTitle>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {visiveis.map(l => (
-          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle}>
+          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id}>
             <Campo Icon={ShoppingCart} label="1ª compra" valor={l.valor_primeira != null ? fmtMoney(l.valor_primeira) : '—'} destaque />
             <Campo label="em" valor={fmtDataBR(l.primeira_compra)} />
             <StatusBadge status={l.status} />
@@ -293,7 +316,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
 // SUB-ABA INATIVOS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap }) {
+function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId }) {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -348,7 +371,7 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
       <SectionTitle icon={Clock}>{visiveis.length} cliente(s) inativo(s)</SectionTitle>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {visiveis.map(l => (
-          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle}>
+          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id}>
             <Campo Icon={ShoppingCart} label="lifetime" valor={fmtMoney(l.lifetime_total)} destaque />
             <Campo label="compras" valor={String(l.qtd_compras ?? 0)} />
             <Campo label="sem comprar" valor={`${l.dias_sem_comprar ?? '—'}d`} alerta />
@@ -363,13 +386,18 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
 // CARD (nome + vendedora que atende + contato + campos + toggle bloqueio)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ClienteCard({ l, bloqueado, onToggle, children }) {
+function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, children }) {
   return (
-    <div style={{
-      background: palette.surface, borderRadius: 12, padding: 12,
-      border: `1px solid ${bloqueado ? palette.alert : palette.beige}`,
-      opacity: bloqueado ? 0.6 : 1, transition: 'opacity 0.15s, border-color 0.15s',
-    }}>
+    <div
+      onClick={() => { if (!abrindo && onAbrir) onAbrir(l.cliente_id); }}
+      title="Abrir conversa (chat Sofia)"
+      style={{
+        background: palette.surface, borderRadius: 12, padding: 12,
+        border: `1px solid ${bloqueado ? palette.alert : palette.beige}`,
+        opacity: bloqueado ? 0.6 : (abrindo ? 0.7 : 1),
+        cursor: abrindo ? 'wait' : 'pointer',
+        transition: 'opacity 0.15s, border-color 0.15s',
+      }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <UserIcon size={sz(15)} color={palette.accent} style={{ marginTop: 3, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -389,7 +417,7 @@ function ClienteCard({ l, bloqueado, onToggle, children }) {
         </div>
         {/* toggle liga/desliga bloqueio */}
         <button
-          onClick={() => onToggle(l.cliente_id)}
+          onClick={(e) => { e.stopPropagation(); onToggle(l.cliente_id); }}
           title={bloqueado ? 'Desbloquear cliente' : 'Bloquear (sai de todas as abas; nenhuma ação é disparada)'}
           style={{
             ...btnBase, padding: '5px 9px', fontSize: fz(11), gap: 4, flexShrink: 0,
