@@ -474,9 +474,11 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
 function FunilTab({ refreshTick }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [importando, setImportando] = useState(false);
+  const [toast, setToast] = useState(null); // { tipo: 'ok'|'erro'|'info', texto }
 
-  useEffect(() => {
-    (async () => {
+  const carregar = useCallback(async () => {
       setLoading(true);
       try {
         // Calcula datas: hoje, ontem, 7d
@@ -491,15 +493,21 @@ function FunilTab({ refreshTick }) {
         const [
           carrinhosHoje, carrinhosOntem,
           enviadasHoje, enviadasOntem,
+          recebidasHoje, recebidasOntem,
           quentesHoje, quentesOntem,
           vendeuHoje, vendeuOntem,
           totalRespostas7d, totalEnviadas7d,
           totalConversas, totalAtivasAgora,
         ] = await Promise.all([
-          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).gte('iniciada_em', fmtUtc(inicioHoje)),
-          supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).gte('iniciada_em', fmtUtc(inicioOntem)).lt('iniciada_em', fmtUtc(inicioHoje)),
+          // Novos carrinhos = leads de carrinho CRIADOS no dia (lojas_leads_carrinho).
+          // Antes contava conversas iniciadas (errado) — Ailson 31/05/2026.
+          supabase.from('lojas_leads_carrinho').select('*', { count: 'exact', head: true }).gte('criado_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_leads_carrinho').select('*', { count: 'exact', head: true }).gte('criado_em', fmtUtc(inicioOntem)).lt('criado_em', fmtUtc(inicioHoje)),
           supabase.from('lojas_whats_mensagens').select('*', { count: 'exact', head: true }).eq('direcao', 'saida').gte('enviada_em', fmtUtc(inicioHoje)),
           supabase.from('lojas_whats_mensagens').select('*', { count: 'exact', head: true }).eq('direcao', 'saida').gte('enviada_em', fmtUtc(inicioOntem)).lt('enviada_em', fmtUtc(inicioHoje)),
+          // Mensagens recebidas no dia (direcao=entrada) — Ailson 31/05/2026.
+          supabase.from('lojas_whats_mensagens').select('*', { count: 'exact', head: true }).eq('direcao', 'entrada').gte('enviada_em', fmtUtc(inicioHoje)),
+          supabase.from('lojas_whats_mensagens').select('*', { count: 'exact', head: true }).eq('direcao', 'entrada').gte('enviada_em', fmtUtc(inicioOntem)).lt('enviada_em', fmtUtc(inicioHoje)),
           supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).eq('etapa', 'quente').gte('atualizado_em', fmtUtc(inicioHoje)),
           supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).eq('etapa', 'quente').gte('atualizado_em', fmtUtc(inicioOntem)).lt('atualizado_em', fmtUtc(inicioHoje)),
           supabase.from('lojas_whats_conversas').select('*', { count: 'exact', head: true }).eq('etapa', 'vendeu').gte('vendeu_em', fmtUtc(inicioHoje)),
@@ -536,12 +544,14 @@ function FunilTab({ refreshTick }) {
           hoje: {
             carrinhos: carrinhosHoje.count || 0,
             enviadas: enviadasHoje.count || 0,
+            recebidas: recebidasHoje.count || 0,
             quentes: quentesHoje.count || 0,
             vendeu: vendeuHoje.count || 0,
           },
           ontem: {
             carrinhos: carrinhosOntem.count || 0,
             enviadas: enviadasOntem.count || 0,
+            recebidas: recebidasOntem.count || 0,
             quentes: quentesOntem.count || 0,
             vendeu: vendeuOntem.count || 0,
           },
@@ -555,21 +565,91 @@ function FunilTab({ refreshTick }) {
         console.error('[funil] erro:', e);
       }
       setLoading(false);
-    })();
-  }, [refreshTick]);
+  }, []);
+
+  useEffect(() => { carregar(); }, [refreshTick, reloadKey, carregar]);
+
+  // Auto-dismiss do toast apos alguns segundos
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Importacao manual dos carrinhos do Drive (sem esperar cron das 08:00 BRT).
+  // Chama o mesmo cron (site-amicia-drive-cron) com ?force=1: importa os CSVs
+  // pra lojas_leads_carrinho E encadeia o selecionar da Sofia, igual ao diario.
+  const importarCarrinhos = useCallback(async () => {
+    setImportando(true);
+    setToast(null);
+    try {
+      const r = await fetch('/api/site-amicia-drive-cron?force=1');
+      const j = await r.json().catch(() => ({}));
+      const res = j?.resultado || {};
+      const detalhes = Array.isArray(res.detalhes) ? res.detalhes : [];
+      const totalCarrinhos = detalhes
+        .filter(d => d && d.ok)
+        .reduce((s, d) => s + (d.carrinhos_inseridos || 0), 0);
+      const processados = res.pares_processados || 0;
+
+      if (!r.ok || j?.ok === false || res.ok === false) {
+        setToast({ tipo: 'erro', texto: 'Falha na importação. Tenta de novo em instantes.' });
+      } else if (processados > 0) {
+        const arq = processados === 1 ? '1 arquivo' : `${processados} arquivos`;
+        setToast({ tipo: 'ok', texto: `${totalCarrinhos} carrinhos importados (${arq})` });
+        setReloadKey(k => k + 1); // refresh do painel
+      } else {
+        setToast({ tipo: 'info', texto: 'Nenhum arquivo novo no Drive' });
+      }
+    } catch (e) {
+      setToast({ tipo: 'erro', texto: 'Erro de rede ao importar. Tenta de novo.' });
+    }
+    setImportando(false);
+  }, []);
 
   if (loading) return <div style={{ padding: 20 }}><Loader2 size={sz(24)} className="spin" /></div>;
   if (!data) return <div style={{ padding: 20, color: palette.alert }}>Erro carregando funil</div>;
 
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
-      {/* TITULO E DATA */}
-      <div style={{ marginBottom: 14, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+      {/* TITULO E DATA + BOTAO IMPORTAR CARRINHOS (Ailson 31/05/2026) */}
+      <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <SectionTitle>📊 Resumo do dia</SectionTitle>
         <span style={{ fontSize: fz(11), color: palette.inkMuted }}>
           {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
         </span>
+        <button
+          onClick={importarCarrinhos}
+          disabled={importando}
+          title="Importa os CSVs de carrinho do Drive na hora (sem esperar o cron das 08:00)"
+          style={{
+            marginLeft: 'auto',
+            background: importando ? palette.beige : palette.accent,
+            color: importando ? palette.inkMuted : '#fff',
+            border: 'none', borderRadius: 8, padding: '7px 12px',
+            cursor: importando ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontSize: fz(12), fontWeight: 600, fontFamily: FONT,
+          }}
+        >
+          {importando
+            ? <><Loader2 size={sz(14)} className="spin" /> Importando…</>
+            : <><ShoppingCart size={sz(14)} /> Importar carrinhos agora</>}
+        </button>
       </div>
+
+      {/* TOAST do resultado da importacao */}
+      {toast && (
+        <div style={{
+          marginBottom: 12, padding: '8px 12px', borderRadius: 8,
+          fontSize: fz(12), fontWeight: 500, fontFamily: FONT,
+          background: toast.tipo === 'ok' ? palette.okSoft : toast.tipo === 'erro' ? palette.alertSoft : palette.accentSoft,
+          color: toast.tipo === 'ok' ? palette.ok : toast.tipo === 'erro' ? palette.alert : palette.accent,
+          border: `1px solid ${toast.tipo === 'ok' ? palette.ok : toast.tipo === 'erro' ? palette.alert : palette.accent}`,
+        }}>
+          {toast.tipo === 'ok' ? '✅ ' : toast.tipo === 'erro' ? '⚠️ ' : 'ℹ️ '}{toast.texto}
+        </div>
+      )}
 
       {/* KPIs PRINCIPAIS (4 cards com comparativo dia anterior) */}
       <div style={{
@@ -582,6 +662,9 @@ function FunilTab({ refreshTick }) {
         <FunilKpiCard label="Mensagens enviadas"
           hoje={data.hoje.enviadas} ontem={data.ontem.enviadas}
           icon="📨" cor={palette.ink} />
+        <FunilKpiCard label="Mensagens recebidas"
+          hoje={data.hoje.recebidas} ontem={data.ontem.recebidas}
+          icon="📥" cor={palette.inkSoft} />
         <FunilKpiCard label="Viraram quente"
           hoje={data.hoje.quentes} ontem={data.ontem.quentes}
           icon="🔥" cor="#f5a623" />
