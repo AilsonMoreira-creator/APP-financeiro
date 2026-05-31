@@ -1211,7 +1211,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, editando_por, editando_em,
           handoffs:lojas_whats_handoffs(status)
         `)
         // Prioritarios primeiro
@@ -1967,6 +1967,14 @@ const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, on
             <span style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {c.nome_cliente || '—'}
             </span>
+            {/* Trava de presença: alguém com o chat aberto (Ailson 30/05/2026) */}
+            {c.editando_por && c.editando_em && (Date.now() - new Date(c.editando_em).getTime() < 45000) && (
+              <span title={`Sendo respondido por ${c.editando_por}`} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
+                fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
+                background: '#fff4e5', color: '#9c5b00', fontWeight: 700,
+              }}>✏️ {c.editando_por}</span>
+            )}
             {/* Badge VERMELHO: mensagens novas nao vistas (Ailson 27/05/2026) */}
             {c.unread_count > 0 && (
               <span title={`${c.unread_count} mensagem(ns) nova(s) do cliente`} style={{
@@ -4076,6 +4084,14 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
   const textareaRef = useRef(null);
   const fimChatRef = useRef(null);
 
+  // ─── Trava de presença (Ailson 30/05/2026) ──────────────────────────────
+  // So 1 pessoa edita/responde a mesma conversa por vez. Quem abre "segura"
+  // (editando_por + heartbeat editando_em). Os demais veem "sendo respondido
+  // por X" e ficam so-leitura. Lock obsoleto (>45s sem heartbeat) eh tomado.
+  const [lockPor, setLockPor] = useState(null);  // userId de quem segura, ou null
+  const [souDono, setSouDono] = useState(false);
+  const bloqueado = !!lockPor && lockPor !== userId;
+
   // Carrega conversa + mensagens
   useEffect(() => {
     if (!conversaId) return;
@@ -4136,6 +4152,53 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
     return () => { try { supabase.removeChannel(ch); } catch {} };
   }, [conversaId]);
 
+  // ─── Lock: claim atomico + heartbeat + release ──────────────────────────
+  const tentarLock = useCallback(async () => {
+    if (!conversaId || !userId) return;
+    const agoraIso = new Date().toISOString();
+    const staleIso = new Date(Date.now() - 45000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    try {
+      // Claim: pega o lock se estiver livre, ja for meu, ou estiver obsoleto.
+      const { data: claimed } = await supabase
+        .from('lojas_whats_conversas')
+        .update({ editando_por: userId, editando_em: agoraIso })
+        .eq('id', conversaId)
+        .or(`editando_por.is.null,editando_por.eq."${userId}",editando_em.lt.${staleIso}`)
+        .select('editando_por');
+      if (claimed && claimed.length) {
+        setLockPor(userId); setSouDono(true);
+      } else {
+        const { data: atual } = await supabase
+          .from('lojas_whats_conversas')
+          .select('editando_por').eq('id', conversaId).maybeSingle();
+        setLockPor(atual?.editando_por || null); setSouDono(false);
+      }
+    } catch {}
+  }, [conversaId, userId]);
+
+  const liberarLock = useCallback(() => {
+    if (!conversaId || !userId) return;
+    try {
+      supabase.from('lojas_whats_conversas')
+        .update({ editando_por: null, editando_em: null })
+        .eq('id', conversaId).eq('editando_por', userId)
+        .then(() => {}, () => {});
+    } catch {}
+  }, [conversaId, userId]);
+
+  useEffect(() => {
+    if (!conversaId) return;
+    tentarLock();
+    const hb = setInterval(tentarLock, 20000);
+    const onHide = () => liberarLock();
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      clearInterval(hb);
+      window.removeEventListener('pagehide', onHide);
+      liberarLock();
+    };
+  }, [conversaId, userId, tentarLock, liberarLock]);
+
   // Auto-scroll pra ultima msg
   useEffect(() => {
     if (fimChatRef.current) {
@@ -4144,6 +4207,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
   }, [mensagens]);
 
   const enviar = async () => {
+    if (bloqueado) return;
     if (!novoTexto.trim() && !midiaAnexada) return;
     setEnviando(true);
     setErro(null);
@@ -4439,6 +4503,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
                 sug={sug}
                 onAprovou={() => setReloadTick(t => t + 1)}
                 userId={userId}
+                bloqueado={bloqueado}
                 palette={palette}
                 fz={fz}
                 sz={sz}
@@ -4480,11 +4545,23 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
         </div>
       )}
 
+      {/* Trava de presença — outro usuário está respondendo (Ailson 30/05/2026) */}
+      {bloqueado && (
+        <div style={{
+          padding: '8px 12px', background: '#fff4e5', color: '#9c5b00',
+          fontSize: fz(11.5), fontWeight: 600, borderTop: '1px solid #f0c98a',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          🔒 Sendo respondido por <b>{lockPor}</b> — somente leitura até essa pessoa sair do chat
+        </div>
+      )}
+
       {/* INPUT BAR */}
       <div style={{
         padding: 10, background: palette.surface,
         borderTop: `1px solid ${palette.beige}`,
         display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0,
+        opacity: bloqueado ? 0.55 : 1, pointerEvents: bloqueado ? 'none' : 'auto',
       }}>
         {/* Botao emoji picker — à esquerda junto dos demais (Ailson 28/05/2026) */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -4699,7 +4776,7 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
 // Agora: cada sugestao pendente vira um bubble especial (fundo diferente,
 // borda amarela) com 3 botoes: Aprovar / Editar / Dispensar. Usa o mesmo
 // endpoint /api/lojas-whats-aprovar usado na aba Aprovar.
-function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT }) {
+function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz, sz, FONT }) {
   const [editando, setEditando] = useState(false);
   const [editText, setEditText] = useState(sug.texto_proposto || '');
   const [acaoEm, setAcaoEm] = useState(false);
@@ -4709,6 +4786,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
   }) : '';
 
   const acionar = async (acao, texto = null) => {
+    if (bloqueado) return;
     setAcaoEm(true);
     try {
       const r = await fetch('/api/lojas-whats-aprovar', {
@@ -4828,10 +4906,10 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, palette, fz, sz, FONT 
                 ⚠️ Sofia pediu pra vc anexar mídia manualmente. Edite a msg pra apagar o marcador, anexe a foto/vídeo, depois envie.
               </div>
             )}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', opacity: bloqueado ? 0.5 : 1, pointerEvents: bloqueado ? 'none' : 'auto' }}>
               <button
                 onClick={() => acionar('aprovar')}
-                disabled={acaoEm}
+                disabled={acaoEm || bloqueado}
                 style={{
                   padding: '6px 10px', background: '#2c7a4f', color: '#fff',
                   border: 'none', borderRadius: 6, fontSize: fz(12), cursor: 'pointer',
