@@ -643,7 +643,7 @@ export async function processarConversa(conversaId) {
   try {
     const roteiros = await getConfig('roteiros_estrategicos', {});
     const chave = conv.origem_lead === 'carrinho_site_amicialoja' ? 'A_carrinho_site_amicialoja'
-                : conv.origem_lead === 'anuncio_instagram'        ? 'B_anuncio_instagram'
+                : (conv.origem_lead === 'anuncio_instagram' || conv.origem_lead === 'anuncio_facebook') ? 'B_anuncio_instagram'
                 : (conv.origem_lead === 'instagram_stories' || conv.origem_lead === 'instagram_linktree') ? 'C_instagram_organico'
                 : null;
     if (chave && roteiros[chave] && typeof roteiros[chave] === 'object') {
