@@ -156,7 +156,8 @@ export default async function handler(req, res) {
     await supabase
       .from('lojas_whats_conversas')
       .update({ etapa: 'aprovar', atualizado_em: new Date().toISOString() })
-      .eq('id', conversa_id);
+      .eq('id', conversa_id)
+      .not('etapa', 'in', '(feedback,inativo)'); // módulo Clientes fica na própria etapa
 
     return res.status(200).json({
       ok: true,

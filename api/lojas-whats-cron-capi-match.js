@@ -120,7 +120,7 @@ async function executar() {
       if (resultado.status === 'enviado') {
         stats.capi_enviado_ok++;
         // Marca conversa como 'vendeu' se ainda nao tava
-        if (conv.etapa !== 'vendeu') {
+        if (conv.etapa !== 'vendeu' && conv.etapa !== 'feedback' && conv.etapa !== 'inativo') {
           await supabase.from('lojas_whats_conversas').update({
             etapa: 'vendeu',
             vendeu_em: new Date().toISOString(),

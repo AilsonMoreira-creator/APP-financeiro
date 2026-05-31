@@ -86,7 +86,7 @@ async function preview(req, res) {
       // Qualquer etapa ativa sem atividade há > diasPerdida
       supabase.from('lojas_whats_conversas')
         .select('*', { count: 'exact', head: true })
-        .not('etapa', 'in', '(perdida,vendeu)')
+        .not('etapa', 'in', '(perdida,vendeu,feedback,inativo)')
         .lt('ultima_atividade_em', cutoffPerdida),
       // Esfriando há > 2d → vai pra perdida
       supabase.from('lojas_whats_conversas')
@@ -149,7 +149,7 @@ async function executar() {
       perdida_em: agora,
       atualizado_em: agora
     })
-    .not('etapa', 'in', '(perdida,vendeu)')
+    .not('etapa', 'in', '(perdida,vendeu,feedback,inativo)')
     .lt('ultima_atividade_em', cutoffPerdida)
     .select('id');
   if (err2) logErro('cron-promover/perdida-sem-resposta', err2);

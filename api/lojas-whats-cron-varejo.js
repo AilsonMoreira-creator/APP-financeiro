@@ -24,7 +24,7 @@ export default async function handler(req, res) {
       .lt('oferta_varejo_em', limite)
       // Nao mexe em conversas que ja sairam pro caminho da vendedora,
       // ja venderam ou ja foram pra perdida/varejo manualmente.
-      .not('etapa', 'in', '(atendida,vendeu,perdida,varejo)');
+      .not('etapa', 'in', '(atendida,vendeu,perdida,varejo,feedback,inativo)');
 
     if (errSel) throw errSel;
     if (!candidatas || candidatas.length === 0) {

@@ -534,7 +534,7 @@ export async function processarConversa(conversaId) {
   // Limite de 2 tentativas (depois -> perdida). Se ja tem tentativa em
   // andamento, nao remarca.
   const detFup = detectarFollowUp(textoCliente);
-  if (detFup && conv.etapa !== 'follow_up' && (conv.follow_up_tentativas || 0) < 2) {
+  if (detFup && conv.etapa !== 'follow_up' && conv.etapa !== 'feedback' && conv.etapa !== 'inativo' && (conv.follow_up_tentativas || 0) < 2) {
     const venceEm = calcularVencimentoFUp(detFup.tag);
     await supabase.from('lojas_whats_conversas').update({
       etapa: 'follow_up',
