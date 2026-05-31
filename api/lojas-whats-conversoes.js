@@ -166,37 +166,34 @@ export default async function handler(req, res) {
     }));
 
     // ── Origens de lead (Instagram/Ads) — funil do periodo ──────────────
-    // Ailson 30/05/2026: cada card de origem (Stories / Linktree / Meta Ads)
-    // mostra recebidas (conversas iniciadas no periodo por essa origem),
-    // convertidos (etapa='vendeu' — unico sinal de venda por conversa; a
-    // tabela lojas_conversoes nao liga em origem_lead) e % conversao.
-    const fimMais1 = new Date(new Date(dataFim).getTime() + 86400000)
-      .toISOString().slice(0, 10);
-    const { data: convOrigens } = await supabase
-      .from('lojas_whats_conversas')
-      .select('origem_lead, etapa')
-      .in('origem_lead', ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram'])
-      .gte('iniciada_em', dataInicio)
-      .lt('iniciada_em', fimMais1);
-
+    // Ailson 30/05/2026: cada card (Stories / Linktree / Meta Ads) mostra
+    // recebidas (conversas iniciadas no periodo) e convertidos = venda REAL
+    // casada por TELEFONE (ultimos 8 digitos) ou DOCUMENTO em ate 15 dias
+    // (fn_lojas_whats_origens_conversao). Stories/Linktree casam por telefone;
+    // Meta Ads idem (ctwa_clid identifica a origem; a venda casa por fone/doc).
     const origens = {
       stories:  { recebidas: 0, convertidos: 0, pct: 0 },
       linktree: { recebidas: 0, convertidos: 0, pct: 0 },
       meta_ads: { recebidas: 0, convertidos: 0, pct: 0 },
     };
-    const grupoOrigem = (o) =>
-      o === 'instagram_stories'  ? 'stories'  :
-      o === 'instagram_linktree' ? 'linktree' :
-      (o === 'anuncio_facebook' || o === 'anuncio_instagram') ? 'meta_ads' : null;
-    for (const c of convOrigens || []) {
-      const g = grupoOrigem(c.origem_lead);
-      if (!g) continue;
-      origens[g].recebidas++;
-      if (c.etapa === 'vendeu') origens[g].convertidos++;
-    }
-    for (const k of Object.keys(origens)) {
-      const o = origens[k];
-      o.pct = o.recebidas > 0 ? Math.round((o.convertidos / o.recebidas) * 1000) / 10 : 0;
+    try {
+      const { data: origRows, error: errOrig } = await supabase.rpc(
+        'fn_lojas_whats_origens_conversao',
+        { p_inicio: dataInicio, p_fim: dataFim, p_janela_dias: 15 }
+      );
+      if (errOrig) console.error('[lojas-whats-conversoes] origens rpc:', errOrig.message);
+      for (const r of origRows || []) {
+        if (origens[r.grupo]) {
+          origens[r.grupo].recebidas = Number(r.recebidas || 0);
+          origens[r.grupo].convertidos = Number(r.convertidos || 0);
+        }
+      }
+      for (const k of Object.keys(origens)) {
+        const o = origens[k];
+        o.pct = o.recebidas > 0 ? Math.round((o.convertidos / o.recebidas) * 1000) / 10 : 0;
+      }
+    } catch (e) {
+      console.error('[lojas-whats-conversoes] origens excecao:', e?.message);
     }
 
     return res.json({
