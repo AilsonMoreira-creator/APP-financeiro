@@ -24,6 +24,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2, AlertCircle, Phone, ShoppingCart, User as UserIcon,
   Ban, ArrowDownAZ, ArrowDown01, Clock, MessageSquare, CheckCircle2,
+  Send, X,
 } from 'lucide-react';
 import { supabase, palette, FONT, SectionTitle } from './Lojas_Shared.jsx';
 
@@ -78,6 +79,12 @@ export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
   const [subTab, setSubTab] = useState('feedback'); // 'feedback' | 'inativos'
   const [ordenar, setOrdenar] = useState('lifetime'); // 'lifetime' | 'az'
   const [abrindoId, setAbrindoId] = useState(null);   // cliente_id sendo aberto no chat
+  const [selecionados, setSelecionados] = useState(() => new Set()); // seleção p/ massa
+  const [modalMassa, setModalMassa] = useState(false);
+
+  const toggleSel = useCallback((id) => {
+    setSelecionados(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }, []);
 
   // Set GLOBAL de bloqueados (toggle) + realtime
   const [bloqueados, setBloqueados] = useState(() => new Set());
@@ -170,12 +177,48 @@ export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
       {subTab === 'feedback' && (
         <FeedbackTab refreshTick={refreshTick} ordenar={ordenar}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
-          onAbrir={abrirChat} abrindoId={abrindoId} />
+          onAbrir={abrirChat} abrindoId={abrindoId}
+          selecionados={selecionados} onToggleSel={toggleSel} />
       )}
       {subTab === 'inativos' && (
         <InativosTab refreshTick={refreshTick} ordenar={ordenar}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
-          onAbrir={abrirChat} abrindoId={abrindoId} />
+          onAbrir={abrirChat} abrindoId={abrindoId}
+          selecionados={selecionados} onToggleSel={toggleSel} />
+      )}
+
+      {/* Barra de ação em massa (aparece quando há seleção) */}
+      {selecionados.size > 0 && (
+        <div style={{
+          position: 'sticky', bottom: 0, zIndex: 20,
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 16px', background: palette.ink,
+          borderTop: `1px solid ${palette.beige}`,
+        }}>
+          <span style={{ color: palette.bg, fontSize: fz(13), fontWeight: 600 }}>
+            {selecionados.size} selecionado(s)
+          </span>
+          <button onClick={() => setModalMassa(true)} style={{
+            ...btnBase, marginLeft: 'auto', background: palette.accent, color: palette.bg, gap: 5,
+          }}>
+            <Send size={sz(14)} /> Enviar em massa
+          </button>
+          <button onClick={() => setSelecionados(new Set())} style={{
+            ...btnBase, background: 'transparent', color: palette.bg,
+            border: `1px solid rgba(255,255,255,0.3)`,
+          }}>
+            Limpar
+          </button>
+        </div>
+      )}
+
+      {modalMassa && (
+        <ModalMassa
+          clienteIds={[...selecionados]}
+          etapa={subTab === 'inativos' ? 'inativo' : 'feedback'}
+          onClose={() => setModalMassa(false)}
+          onEnviado={() => { setModalMassa(false); setSelecionados(new Set()); }}
+        />
       )}
     </div>
   );
@@ -228,7 +271,7 @@ function ordenarLista(lista, modo) {
 // SUB-ABA FEEDBACK
 // ═══════════════════════════════════════════════════════════════════════════
 
-function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId }) {
+function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel }) {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -301,7 +344,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
       <SectionTitle icon={MessageSquare}>{visiveis.length} cliente(s)</SectionTitle>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {visiveis.map(l => (
-          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id}>
+          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id} selecionado={selecionados.has(l.cliente_id)} onToggleSel={onToggleSel}>
             <Campo Icon={ShoppingCart} label="1ª compra" valor={l.valor_primeira != null ? fmtMoney(l.valor_primeira) : '—'} destaque />
             <Campo label="em" valor={fmtDataBR(l.primeira_compra)} />
             <StatusBadge status={l.status} />
@@ -316,7 +359,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
 // SUB-ABA INATIVOS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId }) {
+function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel }) {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -371,7 +414,7 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
       <SectionTitle icon={Clock}>{visiveis.length} cliente(s) inativo(s)</SectionTitle>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {visiveis.map(l => (
-          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id}>
+          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id} selecionado={selecionados.has(l.cliente_id)} onToggleSel={onToggleSel}>
             <Campo Icon={ShoppingCart} label="lifetime" valor={fmtMoney(l.lifetime_total)} destaque />
             <Campo label="compras" valor={String(l.qtd_compras ?? 0)} />
             <Campo label="sem comprar" valor={`${l.dias_sem_comprar ?? '—'}d`} alerta />
@@ -386,7 +429,7 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
 // CARD (nome + vendedora que atende + contato + campos + toggle bloqueio)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, children }) {
+function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, selecionado, onToggleSel, children }) {
   return (
     <div
       onClick={() => { if (!abrindo && onAbrir) onAbrir(l.cliente_id); }}
@@ -399,6 +442,13 @@ function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, children }) {
         transition: 'opacity 0.15s, border-color 0.15s',
       }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <input
+          type="checkbox"
+          checked={!!selecionado}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => { e.stopPropagation(); onToggleSel && onToggleSel(l.cliente_id); }}
+          style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2, flexShrink: 0 }}
+        />
         <UserIcon size={sz(15)} color={palette.accent} style={{ marginTop: 3, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
@@ -449,6 +499,129 @@ function StatusBadge({ status }) {
     <span style={{ fontSize: fz(10), padding: '1px 7px', borderRadius: 4, background: s.soft, color: s.cor, fontWeight: 600 }}>
       {s.label}
     </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL ENVIO EM MASSA — mostra a mensagem (template) que vai pra todos selecionados
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
+  const [templates, setTemplates] = useState([]);
+  const [templateName, setTemplateName] = useState('');
+  const [carregandoTpls, setCarregandoTpls] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('lojas_whats_templates')
+        .select('name, body_text, variables')
+        .eq('ativo', true)
+        .order('name');
+      setTemplates(data || []);
+      if (data && data.length > 0) setTemplateName(data[0].name);
+      setCarregandoTpls(false);
+    })();
+  }, []);
+
+  const tpl = templates.find(t => t.name === templateName);
+  const preview = tpl ? tpl.body_text.replaceAll('{{1}}', 'Maria').replaceAll('{{2}}', 'X') : '';
+
+  const enviar = async () => {
+    if (!templateName) { alert('Escolha um template.'); return; }
+    setEnviando(true);
+    try {
+      const r = await fetch('/api/lojas-whats-clientes-massa', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_ids: clienteIds, etapa, template_name: templateName }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) { alert('Erro: ' + (d.error || r.status)); return; }
+      setResultado(d);
+    } catch (e) {
+      alert('Erro: ' + e.message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 20, maxWidth: 480, width: '100%', fontFamily: FONT,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: fz(16), color: palette.ink, fontWeight: 700 }}>
+            Enviar em massa — {clienteIds.length} cliente(s)
+          </h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+            <X size={sz(22)} color={palette.inkMuted} />
+          </button>
+        </div>
+
+        {resultado ? (
+          <div>
+            <div style={{ fontSize: fz(14), color: palette.ink, marginBottom: 12, lineHeight: 1.6 }}>
+              ✅ Preparados: <strong>{resultado.preparados}</strong><br />
+              ⏭️ Pulados (já tinham pendente): <strong>{resultado.pulados}</strong><br />
+              {resultado.erros?.length > 0 && <>⚠️ Erros: <strong>{resultado.erros.length}</strong><br /></>}
+            </div>
+            <div style={{ fontSize: fz(12), color: palette.inkSoft, marginBottom: 14 }}>
+              As mensagens caíram na fila <strong>Aprovar</strong>. Lá você revisa e dispara (envio HSM).
+            </div>
+            <button onClick={onEnviado} style={{ ...btnBase, width: '100%', background: palette.accent, color: palette.bg }}>
+              Fechar
+            </button>
+          </div>
+        ) : carregandoTpls ? (
+          <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted }}>
+            <Loader2 size={26} color={palette.accent} style={{ animation: 'spin 1s linear infinite' }} />
+          </div>
+        ) : (
+          <div>
+            <label style={{ fontSize: fz(12), color: palette.inkSoft, display: 'block', marginBottom: 4 }}>
+              Template (mensagem que vai ser disparada)
+            </label>
+            <select value={templateName} onChange={e => setTemplateName(e.target.value)} style={{
+              width: '100%', padding: 8, borderRadius: 6, border: `1px solid ${palette.beige}`,
+              fontFamily: FONT, fontSize: fz(13), color: palette.ink, marginBottom: 12, background: palette.surface,
+            }}>
+              {templates.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+            </select>
+
+            <div style={{
+              background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8,
+              padding: 12, fontSize: fz(13), color: palette.ink, whiteSpace: 'pre-wrap', lineHeight: 1.5,
+              maxHeight: 200, overflowY: 'auto', marginBottom: 12,
+            }}>
+              {preview || '—'}
+            </div>
+
+            <div style={{
+              fontSize: fz(11), color: palette.warn, background: palette.warnSoft,
+              padding: 8, borderRadius: 6, marginBottom: 14,
+            }}>
+              Vai preparar a mensagem pra <strong>{clienteIds.length}</strong> cliente(s) na fila <strong>Aprovar</strong> (etapa {etapa}). O disparo HSM sai de lá.
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={onClose} disabled={enviando} style={{ ...btnBase, flex: 1, background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>
+                Cancelar
+              </button>
+              <button onClick={enviar} disabled={enviando || !templateName} style={{ ...btnBase, flex: 1, background: palette.accent, color: palette.bg, gap: 5 }}>
+                {enviando ? <Loader2 size={sz(14)} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={sz(14)} />}
+                {enviando ? 'Preparando…' : 'Aceitar'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
