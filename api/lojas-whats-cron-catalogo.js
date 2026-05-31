@@ -50,15 +50,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    // ─── Janela 9h-20h BRT (Ailson 27/05/2026) ────────────────────────────
-    // Cliente nao recebe msg auto antes das 9h nem depois das 20h.
-    // FASE 1 (envio direto pro cliente) respeita estritamente.
-    // FASE 2 (mudanca de etapa, sem envio) roda sempre — quem envia depois
-    // eh cron-followup gerando SUGESTAO pendente (Tamara aprova manual).
+    // ─── Janela 9h-20h BRT, seg-sáb (Ailson 27/05 + 30/05/2026) ───────────
+    // Cliente nao recebe msg auto antes das 9h, depois das 20h, nem no DOMINGO.
+    // FASE 1 (envio direto) e FASE 2 (template auto) respeitam estritamente.
     const horaBRT = parseInt(
       new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false })
     , 10);
-    const dentroJanela9_20 = horaBRT >= 9 && horaBRT < 20;
+    const diaSemanaBRT = new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', weekday: 'short' });
+    const ehDomingo = diaSemanaBRT === 'Sun';
+    const dentroJanela9_20 = horaBRT >= 9 && horaBRT < 20 && !ehDomingo;
 
     const agora = new Date();
     const cutoff6h  = new Date(Date.now() - 6  * 60 * 60 * 1000).toISOString();
@@ -69,7 +69,7 @@ export default async function handler(req, res) {
     let f1Resultados = [];
     if (!dentroJanela9_20) {
       // Posterga FASE 1 pra proxima rodada dentro do horario comercial
-      log('cron-catalogo', `FASE 1 pulada — hora BRT ${horaBRT}h fora da janela 9-20h`);
+      log('cron-catalogo', `FASE 1 pulada — ${ehDomingo ? "domingo" : "hora BRT "+horaBRT+"h"} fora da janela`);
     } else {
       const { data: f1Data, error: errF1 } = await supabase
         .from('lojas_whats_conversas')
@@ -151,7 +151,7 @@ export default async function handler(req, res) {
     const f2Resultados = [];
 
     if (!dentroJanela9_20 && (f2 || []).length > 0) {
-      log('cron-catalogo', `FASE 2 pulada — hora BRT ${horaBRT}h fora da janela 9-20h (${f2.length} pendentes)`);
+      log('cron-catalogo', `FASE 2 pulada — ${ehDomingo ? "domingo" : "hora BRT "+horaBRT+"h"} fora da janela (${f2.length} pendentes)`);
     } else {
       for (const conv of f2 || []) {
         try {

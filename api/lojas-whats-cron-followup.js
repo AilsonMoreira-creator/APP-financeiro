@@ -26,7 +26,7 @@
 // GET ?executar=1 = executa | GET sem param = preview
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, getConfig, contarSofiaSemResposta } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, getConfig, contarSofiaSemResposta, limparEstiloSofia } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
 
 const MODELO_DEFAULT = 'claude-sonnet-4-6';
@@ -265,5 +265,5 @@ Responda APENAS com o texto da mensagem de retomada. Nada antes, nada depois.`;
     logErro('cron-followup/claude', cl.erro);
     return null;
   }
-  return (cl.texto || '').trim();
+  return limparEstiloSofia((cl.texto || '').trim());
 }

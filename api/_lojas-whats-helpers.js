@@ -96,6 +96,23 @@ export async function contarSofiaSemResposta(conversaId) {
   return count || 0;
 }
 
+// Limpa o texto da Sofia pro tom de WhatsApp humano (Ailson 30/05/2026):
+//  - troca travessão (— –) por vírgula (marca registrada de IA)
+//  - tira ponto final no fim de cada linha (fica formal/robótico demais),
+//    preservando "...", "…", "!" e "?"
+// NÃO força reticências (isso fica a cargo do prompt, ~20% das vezes).
+export function limparEstiloSofia(texto) {
+  if (!texto) return texto;
+  let t = String(texto);
+  // travessão -> vírgula
+  t = t.replace(/\s*[—–]\s*/g, ', ');
+  // limpa pontuação duplicada e vírgula órfã no começo de linha
+  t = t.replace(/,\s*([,.!?;:])/g, '$1').replace(/\s+,/g, ',').replace(/(^|\n)\s*,\s*/g, '$1');
+  // tira ponto final isolado no fim de cada linha (preserva ... … ! ?)
+  t = t.split('\n').map(l => l.replace(/([^.\s])\.\s*$/, '$1')).join('\n');
+  return t;
+}
+
 export function normalizarTelefone(raw) {
   if (!raw) return null;
   let s = String(raw).replace(/\D/g, ''); // so digitos

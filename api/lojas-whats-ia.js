@@ -18,7 +18,7 @@
 //   POST /api/lojas-whats-ia { conversa_id: "xxx" }
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, getConfig } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, getConfig, limparEstiloSofia } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
 import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa } from './_lojas-whats-cardapio.js';
 import { montarBlocoPadroes, decidirModo } from './_lojas-whats-padroes.js';
@@ -251,13 +251,16 @@ ESTILO DE FALA:
 - NÃO transparecer que só quer vender
 - Frase curta, direta, fluida — máximo 3-4 linhas curtas
 - Formatação WhatsApp: negrito é UM asterisco só (*assim*), itálico é _assim_. Use com parcimônia. NUNCA use ** (markdown) — no WhatsApp vira asterisco literal.
+- Pontuação CASUAL de WhatsApp: NÃO termine as frases/linhas com ponto final (fica formal/robótico demais). Deixe sem ponto, ou use ! ou ? quando fizer sentido.
+- Em mais ou menos 1 de cada 5 mensagens (NÃO sempre), termine a frase com reticências "…" pra dar um tom mais leve e humano. Não force.
+- NUNCA use travessão (— ou –) — é a marca registrada de texto de IA e o cliente percebe. Pra separar ideias, use vírgula ou comece outra frase.
 
 JAMAIS:
 - "Sou eu, sua assistente virtual..."
 - "Como posso ajudar você hoje?" / "Posso te ajudar com alguma coisa?" / "Em que posso ajudar?" — variações disso QUANDO cliente já comunicou objetivo
 - "Aproveite nossa oferta especial..."
 - "Última chance!", "Compre agora!"
-- Travessões longos (—)
+- Travessões (— ou –) — NUNCA, em hipótese alguma. Vírgula no lugar.
 - Usar ** dois asteriscos (markdown) — no WhatsApp aparece literal "**assim**". Negrito é UM só: *assim*
 - "Incrível", "imperdível", "sensacional"
 - "Querida", "minha amiga", "linda"
@@ -734,6 +737,9 @@ export async function processarConversa(conversaId) {
     log('ia', `conversa=${conversaId} catalogo ja enviado antes — marcador removido (anti-reenvio)`);
   }
   if (!textoProposto) throw new Error('claude_retornou_vazio_pos_guard');
+
+  // Estilo WhatsApp humano: sem travessão, sem ponto final (Ailson 30/05/2026)
+  textoProposto = limparEstiloSofia(textoProposto);
 
   // 7. Cria sugestão pendente
   const { error: errSug } = await supabase.from('lojas_whats_sugestoes').insert({
