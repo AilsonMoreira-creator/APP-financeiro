@@ -316,6 +316,10 @@
     {
       "path": "/api/oficina-recalcular-cron",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/lojas-whats-clientes-fila-cron",
+      "schedule": "* * * * *"
     }
   ]
 }

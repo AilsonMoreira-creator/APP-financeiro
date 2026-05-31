@@ -553,9 +553,10 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
   const templateName = etapa === 'inativo' ? 'Inativos_v1' : 'Feedback_v1';
   const [body, setBody] = useState(null);
   const [carregando, setCarregando] = useState(true);
-  const [passo, setPasso] = useState('aprovar'); // 'aprovar' | 'confirmar' | 'resultado'
+  const [passo, setPasso] = useState('aprovar'); // aprovar | confirmar | progresso
   const [enviando, setEnviando] = useState(false);
-  const [resultado, setResultado] = useState(null);
+  const [lote, setLote] = useState(null);
+  const [prog, setProg] = useState(null); // { enviado, erro, pend, total }
 
   useEffect(() => {
     (async () => {
@@ -569,6 +570,26 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
     })();
   }, [templateName]);
 
+  // polling do progresso da fila do lote
+  useEffect(() => {
+    if (passo !== 'progresso' || !lote) return;
+    let vivo = true;
+    const tick = async () => {
+      const { data } = await supabase.from('clientes_sofia_fila').select('status').eq('lote_id', lote);
+      if (!vivo || !data) return;
+      const c = { enviado: 0, erro: 0, pend: 0, total: data.length };
+      data.forEach(r => {
+        if (r.status === 'enviado') c.enviado++;
+        else if (r.status === 'erro') c.erro++;
+        else c.pend++;
+      });
+      setProg(c);
+    };
+    tick();
+    const iv = setInterval(tick, 2500);
+    return () => { vivo = false; clearInterval(iv); };
+  }, [passo, lote]);
+
   const preview = body ? body.replaceAll('{{1}}', 'Maria').replaceAll('{{2}}', 'X') : null;
 
   const disparar = async () => {
@@ -580,7 +601,7 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
       });
       const d = await r.json();
       if (!r.ok || d.error) { alert('Erro: ' + (d.error || r.status)); return; }
-      setResultado(d); setPasso('resultado');
+      setLote(d.lote_id); setPasso('progresso');
     } catch (e) {
       alert('Erro: ' + e.message);
     } finally {
@@ -609,7 +630,6 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
     </div>
   );
 
-  // template ainda não existe
   if (passo === 'aprovar' && !body) return wrap(
     <div>
       <div style={{ fontSize: fz(13), color: palette.alert, background: palette.alertSoft, padding: 12, borderRadius: 8, marginBottom: 14 }}>
@@ -645,20 +665,34 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
         <button onClick={() => setPasso('aprovar')} disabled={enviando} style={{ ...btnBase, flex: 1, background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>Voltar</button>
         <button onClick={disparar} disabled={enviando} style={{ ...btnBase, flex: 1, background: palette.ok, color: palette.bg, gap: 5 }}>
           {enviando ? <Loader2 size={sz(14)} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={sz(14)} />}
-          {enviando ? 'Disparando…' : 'Confirmar e disparar'}
+          {enviando ? 'Enfileirando…' : 'Confirmar e disparar'}
         </button>
       </div>
     </div>
   );
 
-  // resultado
+  // progresso
+  const enviado = prog?.enviado ?? 0;
+  const erro = prog?.erro ?? 0;
+  const total = prog?.total ?? clienteIds.length;
+  const done = prog && prog.pend === 0;
   return wrap(
-    <div>
-      <div style={{ fontSize: fz(14), color: palette.ink, marginBottom: 12, lineHeight: 1.6 }}>
-        ✅ Enviadas: <strong>{resultado?.enviados ?? 0}</strong><br />
-        {resultado?.erros?.length > 0 && <>⚠️ Erros: <strong>{resultado.erros.length}</strong> (de {resultado.total})<br /></>}
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ margin: '6px 0 12px' }}>
+        {done
+          ? <CheckCircle2 size={40} color={palette.ok} style={{ margin: '0 auto' }} />
+          : <Loader2 size={36} color={palette.accent} style={{ margin: '0 auto', animation: 'spin 1s linear infinite' }} />}
       </div>
-      <button onClick={onEnviado} style={{ ...btnBase, width: '100%', background: palette.accent, color: palette.bg }}>Fechar</button>
+      <div style={{ fontSize: fz(18), fontWeight: 700, color: palette.ok }}>
+        {enviado} enviada(s) com sucesso
+      </div>
+      <div style={{ fontSize: fz(13), color: palette.inkSoft, margin: '4px 0 14px' }}>
+        {done ? `de ${total} · concluído` : `enviando… ${enviado + erro}/${total}`}
+        {erro > 0 && <span style={{ color: palette.alert }}> · {erro} erro(s)</span>}
+      </div>
+      <button onClick={onEnviado} style={{ ...btnBase, width: '100%', background: palette.accent, color: palette.bg }}>
+        {done ? 'Fechar' : 'Fechar (continua em segundo plano)'}
+      </button>
     </div>
   );
 }
