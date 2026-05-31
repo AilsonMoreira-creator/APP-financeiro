@@ -42,6 +42,7 @@ import {
   palette, FONT,
   Header, TabBar, SectionTitle, LoadingScreen,
 } from './Lojas_Shared.jsx';
+import ClientesTab from './ClientesSofia.jsx';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTES & HELPERS
@@ -370,6 +371,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'aprendizado', label: 'Aprendizado', icon: Brain },
     { id: 'midias',      label: 'Mídias',      icon: Paperclip },
     { id: 'config',      label: 'Config',      icon: Settings },
+    { id: 'clientes',    label: 'Clientes',    icon: Users },
   ];
 
   return (
@@ -421,6 +423,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'aprendizado' && <AprendizadoTab refreshTick={refreshTick} />}
       {activeTab === 'midias' && <MidiasTab refreshTick={refreshTick} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
+      {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} />}
     </div>
   );
 }
