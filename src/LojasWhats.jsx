@@ -320,6 +320,8 @@ const fmtRelTime = (iso) => {
 
 export default function LojasWhats({ userId, isAdmin, onBack }) {
   const [activeTab, setActiveTab] = useState('aprovar');
+  const [tabAnterior, setTabAnterior] = useState('aprovar');
+  const handleTabChange = (t) => { if (t === 'clientes') setTabAnterior(activeTab); setActiveTab(t); };
   const [refreshTick, setRefreshTick] = useState(0);
   // Chat aberto por cima (aba Clientes clica num card) — não troca de aba.
   const [chatOverlayId, setChatOverlayId] = useState(null);
@@ -380,11 +382,10 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
 
   return (
     <div style={{ background: palette.bg, minHeight: '100vh', fontFamily: FONT }}>
-      {activeTab !== 'clientes' && (
       <Header
         title={ASSISTANT_NAME}
         subtitle={`Assistente IA WhatsApp · ${new Date().toLocaleDateString('pt-BR')}`}
-        onBack={onBack}
+        onBack={activeTab === 'clientes' ? () => setActiveTab(tabAnterior || 'aprovar') : onBack}
         rightContent={
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             {pushStatus && pushStatus !== 'desabilitado' && (
@@ -418,8 +419,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
           </div>
         }
       />
-      )}
-      <TabBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      {activeTab !== 'clientes' && <TabBar tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />}
 
       {activeTab === 'funil' && <FunilTab refreshTick={refreshTick} />}
       {activeTab === 'conversas' && <ConversasTab refreshTick={refreshTick} userId={userId} />}
