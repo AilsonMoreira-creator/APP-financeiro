@@ -2618,7 +2618,7 @@ const TEXTO_INSTA_LINKTREE = 'Olá!! Gostaria de informações pra comprar no at
 const URL_INSTA_STORIES  = `https://wa.me/${WA_NUMERO_CENTRAL}?text=${encodeURIComponent(TEXTO_INSTA_STORIES)}`;
 const URL_INSTA_LINKTREE = `https://wa.me/${WA_NUMERO_CENTRAL}?text=${encodeURIComponent(TEXTO_INSTA_LINKTREE)}`;
 
-function OrigensInstagramCards() {
+function OrigensInstagramCards({ origens, loading }) {
   const [copiado, setCopiado] = useState(null);
   const copiar = (url, qual) => {
     try {
@@ -2628,10 +2628,32 @@ function OrigensInstagramCards() {
     } catch {}
   };
   const cardBase = {
-    flex: '1 1 280px', minWidth: 0, padding: 12, borderRadius: 10,
+    flex: '1 1 240px', minWidth: 0, padding: 12, borderRadius: 10,
     border: `1.5px solid ${palette.beige}`, background: palette.surface,
     display: 'flex', flexDirection: 'column', gap: 8,
   };
+  // Funil da origem no periodo do filtro: recebidas · vendas · % (Ailson 30/05/2026)
+  const Metricas = ({ o, cor }) => (
+    <div style={{
+      display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap',
+      padding: '6px 8px', borderRadius: 6, background: palette.bg,
+    }}>
+      <span style={{ fontSize: fz(15), fontWeight: 700, color: palette.ink }}>
+        {loading && !o ? '…' : (o?.recebidas ?? 0)}
+      </span>
+      <span style={{ fontSize: fz(9.5), color: palette.inkMuted }}>recebidas</span>
+      <span style={{ color: palette.beige, fontSize: fz(11) }}>·</span>
+      <span style={{ fontSize: fz(15), fontWeight: 700, color: cor }}>
+        {loading && !o ? '…' : (o?.convertidos ?? 0)}
+      </span>
+      <span style={{ fontSize: fz(9.5), color: palette.inkMuted }}>vendas</span>
+      <span style={{ color: palette.beige, fontSize: fz(11) }}>·</span>
+      <span style={{ fontSize: fz(13), fontWeight: 700, color: cor }}>
+        {o && o.recebidas > 0 ? `${o.pct}%` : '—'}
+      </span>
+      <span style={{ fontSize: fz(9.5), color: palette.inkMuted }}>conv.</span>
+    </div>
+  );
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
       {/* STORIES */}
@@ -2646,6 +2668,7 @@ function OrigensInstagramCards() {
             <div style={{ fontSize: fz(10), color: palette.inkMuted }}>Link pro Stories do Instagram</div>
           </div>
         </div>
+        <Metricas o={origens?.stories} cor="#a8388d" />
         <div style={{
           fontSize: fz(10), color: palette.inkSoft, padding: 6, borderRadius: 4,
           background: palette.bg, fontFamily: 'monospace', wordBreak: 'break-all',
@@ -2671,6 +2694,7 @@ function OrigensInstagramCards() {
             <div style={{ fontSize: fz(10), color: palette.inkMuted }}>Link pro Linktree da bio</div>
           </div>
         </div>
+        <Metricas o={origens?.linktree} cor="#1f7a48" />
         <div style={{
           fontSize: fz(10), color: palette.inkSoft, padding: 6, borderRadius: 4,
           background: palette.bg, fontFamily: 'monospace', wordBreak: 'break-all',
@@ -2683,6 +2707,23 @@ function OrigensInstagramCards() {
         }}>
           {copiado === 'linktree' ? <><Check size={sz(12)} /> Copiado!</> : <><Copy size={sz(12)} /> Copiar link</>}
         </button>
+      </div>
+      {/* META ADS (Ailson 30/05/2026) — origem via anuncio (clique-pra-WhatsApp),
+          sem link wa.me pra copiar. So o funil recebidas/vendas/%. */}
+      <div style={{ ...cardBase, borderColor: '#cfe0ee' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Facebook size={sz(22)} color="#2c5fa8" strokeWidth={1.6} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>📣 Meta Ads</div>
+            <div style={{ fontSize: fz(10), color: palette.inkMuted }}>Leads de anúncios Facebook/Instagram</div>
+          </div>
+        </div>
+        <Metricas o={origens?.meta_ads} cor="#2c5fa8" />
+        <div style={{ fontSize: fz(9.5), color: palette.inkSoft, lineHeight: 1.35 }}>
+          Conta os leads que chegam pelos anúncios (clique-pra-WhatsApp). A origem vem do próprio anúncio — não tem link pra copiar aqui.
+        </div>
       </div>
     </div>
   );
@@ -2781,7 +2822,7 @@ function ConversaoTab({ refreshTick }) {
 
       {/* Origens Instagram — 2 cards com os links wa.me prontos pra colar.
           Ailson 28/05/2026: stories + linktree, rotina C da Sofia. */}
-      <OrigensInstagramCards />
+      <OrigensInstagramCards origens={dados?.origens} loading={loading} />
 
       {loading ? (
         <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted }}>

@@ -165,6 +165,40 @@ export default async function handler(req, res) {
       lead_id: r.lead_id,
     }));
 
+    // ── Origens de lead (Instagram/Ads) — funil do periodo ──────────────
+    // Ailson 30/05/2026: cada card de origem (Stories / Linktree / Meta Ads)
+    // mostra recebidas (conversas iniciadas no periodo por essa origem),
+    // convertidos (etapa='vendeu' — unico sinal de venda por conversa; a
+    // tabela lojas_conversoes nao liga em origem_lead) e % conversao.
+    const fimMais1 = new Date(new Date(dataFim).getTime() + 86400000)
+      .toISOString().slice(0, 10);
+    const { data: convOrigens } = await supabase
+      .from('lojas_whats_conversas')
+      .select('origem_lead, etapa')
+      .in('origem_lead', ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram'])
+      .gte('iniciada_em', dataInicio)
+      .lt('iniciada_em', fimMais1);
+
+    const origens = {
+      stories:  { recebidas: 0, convertidos: 0, pct: 0 },
+      linktree: { recebidas: 0, convertidos: 0, pct: 0 },
+      meta_ads: { recebidas: 0, convertidos: 0, pct: 0 },
+    };
+    const grupoOrigem = (o) =>
+      o === 'instagram_stories'  ? 'stories'  :
+      o === 'instagram_linktree' ? 'linktree' :
+      (o === 'anuncio_facebook' || o === 'anuncio_instagram') ? 'meta_ads' : null;
+    for (const c of convOrigens || []) {
+      const g = grupoOrigem(c.origem_lead);
+      if (!g) continue;
+      origens[g].recebidas++;
+      if (c.etapa === 'vendeu') origens[g].convertidos++;
+    }
+    for (const k of Object.keys(origens)) {
+      const o = origens[k];
+      o.pct = o.recebidas > 0 ? Math.round((o.convertidos / o.recebidas) * 1000) / 10 : 0;
+    }
+
     return res.json({
       periodo: {
         inicio: dataInicio,
@@ -175,6 +209,7 @@ export default async function handler(req, res) {
       total,
       valor_total: valorTotal,
       kpis,
+      origens,
       por_vendedora: porVendedora,
       detalhe,
     });
