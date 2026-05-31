@@ -471,6 +471,72 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
 // TAB 1: FUNIL
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ─── Realtime resiliente (Ailson 31/05/2026) ──────────────────────────────
+// No celular o WebSocket do Supabase cai quando o app vai pra segundo plano e
+// nao reconecta sozinho ao voltar — a tela so atualizava em acao manual.
+// Este hook:
+//   (a) reassina o canal no visibilitychange/focus (removeChannel + subscribe + refetch)
+//   (b) trata status do .subscribe (reassina em CHANNEL_ERROR/TIMED_OUT/CLOSED)
+//   (c) fallback de polling (~18s) SO com a aba visivel
+// montarListeners(c, aoMudar) recebe o canal e o callback, encadeia os .on() e
+// devolve o canal. aoMudar normalmente faz setReloadTick(t => t + 1).
+function useRealtimeSofia(channelName, montarListeners, aoMudar, { ativo = true, pollMs = 18000 } = {}) {
+  const aoMudarRef = useRef(aoMudar);
+  aoMudarRef.current = aoMudar;
+  const montarRef = useRef(montarListeners);
+  montarRef.current = montarListeners;
+
+  useEffect(() => {
+    if (!ativo || !channelName) return;
+    let canal = null;
+    let cancelado = false;
+    let epoca = 0; // ignora callbacks de canais antigos (evita loop de re-subscribe)
+
+    const assinar = () => {
+      if (cancelado) return;
+      const minhaEpoca = ++epoca;
+      if (canal) { try { supabase.removeChannel(canal); } catch {} canal = null; }
+      let c = supabase.channel(channelName);
+      c = montarRef.current(c, () => { aoMudarRef.current && aoMudarRef.current(); });
+      c.subscribe((status) => {
+        if (cancelado || minhaEpoca !== epoca) return; // canal obsoleto
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          if (document.visibilityState === 'visible') {
+            setTimeout(() => {
+              if (!cancelado && minhaEpoca === epoca && document.visibilityState === 'visible') assinar();
+            }, 3000);
+          }
+        }
+      });
+      canal = c;
+    };
+
+    assinar();
+
+    // Voltou pro foco/visibilidade: reassina o canal e refetch imediato.
+    const aoVoltar = () => {
+      if (document.visibilityState !== 'visible') return;
+      assinar();
+      aoMudarRef.current && aoMudarRef.current();
+    };
+    document.addEventListener('visibilitychange', aoVoltar);
+    window.addEventListener('focus', aoVoltar);
+
+    // Fallback: polling leve so com aba visivel (rede de seguranca).
+    const iv = setInterval(() => {
+      if (document.visibilityState === 'visible') aoMudarRef.current && aoMudarRef.current();
+    }, pollMs);
+
+    return () => {
+      cancelado = true;
+      clearInterval(iv);
+      document.removeEventListener('visibilitychange', aoVoltar);
+      window.removeEventListener('focus', aoVoltar);
+      if (canal) { try { supabase.removeChannel(canal); } catch {} }
+    };
+  }, [channelName, ativo, pollMs]);
+}
+
 function FunilTab({ refreshTick }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1309,25 +1375,17 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   }, [refreshTick, reloadTick]);
 
   // Realtime: refresh automatico quando entra mensagem nova OU conversa
-  // muda de etapa (Ailson 25/05/2026). Antes os contadores so atualizavam
-  // ao clicar em "atualizar" — entao msg nova nao subia o badge.
-  useEffect(() => {
-    const ch = supabase.channel('sofia-conversas-mensagens')
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'lojas_whats_mensagens' },
-        () => setReloadTick(t => t + 1))
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'lojas_whats_conversas' },
-        () => setReloadTick(t => t + 1))
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'lojas_whats_conversas' },
-        () => setReloadTick(t => t + 1))
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'lojas_whats_sugestoes' },
-        () => setReloadTick(t => t + 1))
-      .subscribe();
-    return () => { try { supabase.removeChannel(ch); } catch {} };
-  }, []);
+  // muda de etapa. Reconecta no foco/visibilidade + fallback polling (Ailson
+  // 31/05/2026) — no celular o socket caia em background e nao voltava sozinho.
+  useRealtimeSofia(
+    'sofia-conversas-mensagens',
+    (c, aoMudar) => c
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lojas_whats_mensagens' }, aoMudar)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lojas_whats_conversas' }, aoMudar)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lojas_whats_conversas' }, aoMudar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lojas_whats_sugestoes' }, aoMudar),
+    () => setReloadTick(t => t + 1),
+  );
 
   useEffect(() => {
     (async () => {
@@ -4263,19 +4321,15 @@ function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, i
   }, [conversaId, reloadTick]);
 
   // Realtime da conversa aberta: msg nova ou sugestao nova/alterada aparece na
-  // hora, sem reload de pagina (scopeado nesse conversaId). Ailson 30/05/2026.
-  useEffect(() => {
-    if (!conversaId) return;
-    const ch = supabase.channel(`sofia-conversa-${conversaId}`)
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'lojas_whats_mensagens', filter: `conversa_id=eq.${conversaId}` },
-        () => setReloadTick(t => t + 1))
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'lojas_whats_sugestoes', filter: `conversa_id=eq.${conversaId}` },
-        () => setReloadTick(t => t + 1))
-      .subscribe();
-    return () => { try { supabase.removeChannel(ch); } catch {} };
-  }, [conversaId]);
+  // hora. Reconecta no foco/visibilidade + fallback polling (Ailson 31/05/2026).
+  useRealtimeSofia(
+    `sofia-conversa-${conversaId}`,
+    (c, aoMudar) => c
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lojas_whats_mensagens', filter: `conversa_id=eq.${conversaId}` }, aoMudar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lojas_whats_sugestoes', filter: `conversa_id=eq.${conversaId}` }, aoMudar),
+    () => setReloadTick(t => t + 1),
+    { ativo: !!conversaId },
+  );
 
   // ─── Lock: claim atomico + heartbeat + release ──────────────────────────
   const tentarLock = useCallback(async () => {
