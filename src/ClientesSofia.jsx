@@ -24,7 +24,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2, AlertCircle, Phone, ShoppingCart, User as UserIcon,
   Ban, ArrowDownAZ, ArrowDown01, Clock, MessageSquare, CheckCircle2,
-  Send, X,
+  Send, X, RefreshCw,
 } from 'lucide-react';
 import { supabase, palette, FONT, SectionTitle } from './Lojas_Shared.jsx';
 
@@ -77,6 +77,28 @@ async function fetchEnviadoSet(ids, size = 200) {
   return set;
 }
 
+// Map cliente_id → vendedora_id da ÚLTIMA venda (quem atende; cadastro vem 81% nulo)
+async function fetchVendedoraSet(ids, size = 200) {
+  const map = new Map();
+  for (let i = 0; i < ids.length; i += size) {
+    const { data } = await supabase
+      .from('lojas_vendas')
+      .select('cliente_id, vendedora_id, data_venda, created_at')
+      .in('cliente_id', ids.slice(i, i + size))
+      .not('vendedora_id', 'is', null)
+      .order('data_venda', { ascending: false })
+      .order('created_at', { ascending: false });
+    (data || []).forEach(r => { if (!map.has(r.cliente_id)) map.set(r.cliente_id, r.vendedora_id); });
+  }
+  return map;
+}
+
+function filtrarVend(linhas, vendFiltro) {
+  if (!vendFiltro || vendFiltro === 'todas') return linhas;
+  if (vendFiltro === '__sem__') return linhas.filter(l => !l.vendedora_id);
+  return linhas.filter(l => l.vendedora_id === vendFiltro);
+}
+
 function filtrarEnvio(linhas, envio) {
   if (envio === 'enviadas') return linhas.filter(l => l.enviado);
   if (envio === 'nao_enviadas') return linhas.filter(l => !l.enviado);
@@ -102,6 +124,9 @@ export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
   const [abrindoId, setAbrindoId] = useState(null);   // cliente_id sendo aberto no chat
   const [selecionados, setSelecionados] = useState(() => new Set()); // seleção p/ massa
   const [modalMassa, setModalMassa] = useState(false);
+  const [vendFiltro, setVendFiltro] = useState('todas');
+  const [tickLocal, setTickLocal] = useState(0);
+  const tick = refreshTick + tickLocal;
 
   const toggleSel = useCallback((id) => {
     setSelecionados(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -193,16 +218,18 @@ export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
       </div>
 
       {/* filtro único (vale pra sub-aba ativa) */}
-      <FiltroBar ordenar={ordenar} setOrdenar={setOrdenar} envio={envio} setEnvio={setEnvio} />
+      <FiltroBar ordenar={ordenar} setOrdenar={setOrdenar} envio={envio} setEnvio={setEnvio}
+        vendFiltro={vendFiltro} setVendFiltro={setVendFiltro} vendMap={vendMap}
+        onRefresh={() => setTickLocal(t => t + 1)} />
 
       {subTab === 'feedback' && (
-        <FeedbackTab refreshTick={refreshTick} ordenar={ordenar}
+        <FeedbackTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
           onAbrir={abrirChat} abrindoId={abrindoId}
           selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
       )}
       {subTab === 'inativos' && (
-        <InativosTab refreshTick={refreshTick} ordenar={ordenar}
+        <InativosTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
           onAbrir={abrirChat} abrindoId={abrindoId}
           selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
@@ -258,7 +285,10 @@ function SubTab({ id, label, Icon, ativo, onClick }) {
   );
 }
 
-function FiltroBar({ ordenar, setOrdenar, envio, setEnvio }) {
+function FiltroBar({ ordenar, setOrdenar, envio, setEnvio, vendFiltro, setVendFiltro, vendMap, onRefresh }) {
+  const vendOpts = Array.from((vendMap || new Map()).entries())
+    .map(([id, nome]) => ({ id, nome }))
+    .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
   const OptOrd = ({ id, label, Icon }) => {
     const a = ordenar === id;
     return (
@@ -293,6 +323,21 @@ function FiltroBar({ ordenar, setOrdenar, envio, setEnvio }) {
       <OptEnv id="todos" label="Todos" />
       <OptEnv id="enviadas" label="Com msg enviada" />
       <OptEnv id="nao_enviadas" label="Sem msg enviada" />
+      <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 6 }}>Vendedora</span>
+      <select value={vendFiltro} onChange={e => setVendFiltro(e.target.value)} style={{
+        padding: '5px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`,
+        background: palette.surface, color: palette.inkSoft, fontFamily: FONT, fontSize: fz(12), cursor: 'pointer',
+      }}>
+        <option value="todas">Todas</option>
+        {vendOpts.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+        <option value="__sem__">Sem vendedora</option>
+      </select>
+      <button onClick={onRefresh} title="Atualizar" style={{
+        ...btnBase, marginLeft: 'auto', padding: '5px 9px', background: palette.surface,
+        color: palette.inkSoft, border: `1px solid ${palette.beige}`,
+      }}>
+        <RefreshCw size={sz(14)} />
+      </button>
     </div>
   );
 }
@@ -308,7 +353,7 @@ function ordenarLista(lista, modo) {
 // SUB-ABA FEEDBACK
 // ═══════════════════════════════════════════════════════════════════════════
 
-function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, envio }) {
+function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, envio, vendFiltro }) {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -332,7 +377,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = elegiveis.map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, fbs, vendas, enviadoSet] = await Promise.all([
+        const [cads, fbs, vendas, enviadoSet, vendaVendMap] = await Promise.all([
           selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
           selectInBatches('clientes_sofia_feedback', 'cliente_id, status', 'cliente_id', ids),
           supabase.from('lojas_vendas')
@@ -341,6 +386,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             .order('data_venda', { ascending: true }).order('created_at', { ascending: true })
             .then(r => { if (r.error) throw r.error; return r.data || []; }),
           fetchEnviadoSet(ids),
+          fetchVendedoraSet(ids),
         ]);
 
         const cadMap = new Map(cads.map(c => [c.id, c]));
@@ -358,7 +404,8 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             cliente_id: k.cliente_id,
             nome: c.razao_social || c.comprador_nome || '—',
             telefone: c.telefone_principal,
-            vendedora_nome: vendMap.get(c.vendedora_id) || '—',
+            vendedora_id: vendaVendMap.get(k.cliente_id) || null,
+            vendedora_nome: vendMap.get(vendaVendMap.get(k.cliente_id)) || '—',
             primeira_compra: k.primeira_compra,
             valor_primeira: primeiraVenda.get(k.cliente_id) ?? null,
             lifetime_total: k.lifetime_total,
@@ -373,7 +420,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
     return () => { vivo = false; };
   }, [refreshTick, vendMap]);
 
-  const visiveis = ordenarLista(filtrarEnvio(linhas, envio), ordenar);
+  const visiveis = ordenarLista(filtrarVend(filtrarEnvio(linhas, envio), vendFiltro), ordenar);
   if (loading) return <Carregando />;
   if (erro) return <ErroBox msg={erro} />;
   if (visiveis.length === 0) return <Vazio msg="Nenhum cliente nesse filtro." />;
@@ -398,7 +445,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
 // SUB-ABA INATIVOS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, envio }) {
+function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, envio, vendFiltro }) {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -418,9 +465,10 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = (kpis || []).map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, enviadoSet] = await Promise.all([
+        const [cads, enviadoSet, vendaVendMap] = await Promise.all([
           selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
           fetchEnviadoSet(ids),
+          fetchVendedoraSet(ids),
         ]);
         const cadMap = new Map(cads.map(c => [c.id, c]));
 
@@ -432,7 +480,8 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             cliente_id: k.cliente_id,
             nome: c.razao_social || c.comprador_nome || '—',
             telefone: c.telefone_principal,
-            vendedora_nome: vendMap.get(c.vendedora_id) || '—',
+            vendedora_id: vendaVendMap.get(k.cliente_id) || null,
+            vendedora_nome: vendMap.get(vendaVendMap.get(k.cliente_id)) || '—',
             lifetime_total: k.lifetime_total,
             qtd_compras: k.qtd_compras,
             dias_sem_comprar: k.dias_sem_comprar,
@@ -447,7 +496,7 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
     return () => { vivo = false; };
   }, [refreshTick, vendMap]);
 
-  const visiveis = ordenarLista(filtrarEnvio(linhas, envio), ordenar);
+  const visiveis = ordenarLista(filtrarVend(filtrarEnvio(linhas, envio), vendFiltro), ordenar);
   if (loading) return <Carregando />;
   if (erro) return <ErroBox msg={erro} />;
   if (visiveis.length === 0) return <Vazio msg="Nenhum cliente inativo nesse filtro." />;

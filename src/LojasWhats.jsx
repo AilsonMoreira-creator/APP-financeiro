@@ -380,6 +380,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
 
   return (
     <div style={{ background: palette.bg, minHeight: '100vh', fontFamily: FONT }}>
+      {activeTab !== 'clientes' && (
       <Header
         title={ASSISTANT_NAME}
         subtitle={`Assistente IA WhatsApp · ${new Date().toLocaleDateString('pt-BR')}`}
@@ -417,6 +418,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
           </div>
         }
       />
+      )}
       <TabBar tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'funil' && <FunilTab refreshTick={refreshTick} />}
