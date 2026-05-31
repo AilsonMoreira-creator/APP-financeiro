@@ -2618,8 +2618,11 @@ const TEXTO_INSTA_LINKTREE = 'Olá!! Gostaria de informações pra comprar no at
 const URL_INSTA_STORIES  = `https://wa.me/${WA_NUMERO_CENTRAL}?text=${encodeURIComponent(TEXTO_INSTA_STORIES)}`;
 const URL_INSTA_LINKTREE = `https://wa.me/${WA_NUMERO_CENTRAL}?text=${encodeURIComponent(TEXTO_INSTA_LINKTREE)}`;
 
-function OrigensInstagramCards({ origens, loading }) {
+function OrigensInstagramCards({ origens, loading, kpis, fmtMoney }) {
   const [copiado, setCopiado] = useState(null);
+  const [ajuda, setAjuda] = useState(null);        // qual card tem o "?" aberto
+  const [expandido, setExpandido] = useState(false); // detalhe do card Carrinho
+  const fMoney = fmtMoney || ((v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 }));
   const copiar = (url, qual) => {
     try {
       navigator.clipboard.writeText(url);
@@ -2654,20 +2657,47 @@ function OrigensInstagramCards({ origens, loading }) {
       <span style={{ fontSize: fz(9.5), color: palette.inkMuted }}>conv.</span>
     </div>
   );
+  // Cabecalho com botao "?" (Ailson 30/05/2026)
+  const Header = ({ icone, titulo, sub, id }) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+      {icone}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>{titulo}</div>
+        <div style={{ fontSize: fz(10), color: palette.inkMuted }}>{sub}</div>
+      </div>
+      <button
+        onClick={() => setAjuda(a => a === id ? null : id)}
+        title="O que é este card?"
+        style={{
+          width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+          border: `1px solid ${palette.beige}`, cursor: 'pointer', lineHeight: 1,
+          background: ajuda === id ? palette.ink : 'transparent',
+          color: ajuda === id ? '#fff' : palette.inkMuted,
+          fontSize: fz(10), fontWeight: 700, fontFamily: FONT,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >?</button>
+    </div>
+  );
+  const Ajuda = ({ id, children }) => ajuda === id ? (
+    <div style={{
+      fontSize: fz(9.5), color: palette.inkSoft, lineHeight: 1.4,
+      padding: '6px 8px', borderRadius: 6, background: palette.bg,
+      border: `1px dashed ${palette.beige}`,
+    }}>{children}</div>
+  ) : null;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
       {/* STORIES */}
       <div style={{ ...cardBase, borderColor: '#f4d6e5' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
-            <Instagram size={sz(22)} color="#a8388d" strokeWidth={1.6} style={{ position: 'absolute', top: 3, left: 3 }} />
-            <Circle size={sz(10)} color="#a8388d" fill="#a8388d" style={{ position: 'absolute', top: 0, right: 0 }} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>📸 Stories</div>
-            <div style={{ fontSize: fz(10), color: palette.inkMuted }}>Link pro Stories do Instagram</div>
-          </div>
-        </div>
+        <Header id="stories" titulo="📸 Stories" sub="Link pro Stories do Instagram"
+          icone={
+            <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
+              <Instagram size={sz(22)} color="#a8388d" strokeWidth={1.6} style={{ position: 'absolute', top: 3, left: 3 }} />
+              <Circle size={sz(10)} color="#a8388d" fill="#a8388d" style={{ position: 'absolute', top: 0, right: 0 }} />
+            </div>
+          } />
+        <Ajuda id="stories">Leads que chegam pelo link no Stories do Instagram. <b>Recebidas</b> = conversas iniciadas no período. <b>Vendas</b> = lead que comprou (casado por telefone) em até 15 dias. <b>conv.</b> = vendas ÷ recebidas.</Ajuda>
         <Metricas o={origens?.stories} cor="#a8388d" />
         <div style={{
           fontSize: fz(10), color: palette.inkSoft, padding: 6, borderRadius: 4,
@@ -2684,16 +2714,14 @@ function OrigensInstagramCards({ origens, loading }) {
       </div>
       {/* LINKTREE */}
       <div style={{ ...cardBase, borderColor: '#cde9d8' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
-            <Instagram size={sz(22)} color="#1f7a48" strokeWidth={1.6} style={{ position: 'absolute', top: 3, left: 3 }} />
-            <Link2 size={sz(11)} color="#1f7a48" style={{ position: 'absolute', top: 0, right: 0, background: palette.surface, borderRadius: 2 }} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>🔗 Linktree</div>
-            <div style={{ fontSize: fz(10), color: palette.inkMuted }}>Link pro Linktree da bio</div>
-          </div>
-        </div>
+        <Header id="linktree" titulo="🔗 Linktree" sub="Link pro Linktree da bio"
+          icone={
+            <div style={{ position: 'relative', width: 28, height: 28, flexShrink: 0 }}>
+              <Instagram size={sz(22)} color="#1f7a48" strokeWidth={1.6} style={{ position: 'absolute', top: 3, left: 3 }} />
+              <Link2 size={sz(11)} color="#1f7a48" style={{ position: 'absolute', top: 0, right: 0, background: palette.surface, borderRadius: 2 }} />
+            </div>
+          } />
+        <Ajuda id="linktree">Leads que chegam pelo link do Linktree na bio do Instagram. <b>Recebidas</b> = conversas iniciadas no período. <b>Vendas</b> = lead que comprou (casado por telefone) em até 15 dias. <b>conv.</b> = vendas ÷ recebidas.</Ajuda>
         <Metricas o={origens?.linktree} cor="#1f7a48" />
         <div style={{
           fontSize: fz(10), color: palette.inkSoft, padding: 6, borderRadius: 4,
@@ -2708,22 +2736,57 @@ function OrigensInstagramCards({ origens, loading }) {
           {copiado === 'linktree' ? <><Check size={sz(12)} /> Copiado!</> : <><Copy size={sz(12)} /> Copiar link</>}
         </button>
       </div>
-      {/* META ADS (Ailson 30/05/2026) — origem via anuncio (clique-pra-WhatsApp),
-          sem link wa.me pra copiar. So o funil recebidas/vendas/%. */}
+      {/* META ADS */}
       <div style={{ ...cardBase, borderColor: '#cfe0ee' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Facebook size={sz(22)} color="#2c5fa8" strokeWidth={1.6} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>📣 Meta Ads</div>
-            <div style={{ fontSize: fz(10), color: palette.inkMuted }}>Leads de anúncios Facebook/Instagram</div>
-          </div>
-        </div>
+        <Header id="meta_ads" titulo="📣 Meta Ads" sub="Anúncios Facebook/Instagram"
+          icone={
+            <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Facebook size={sz(22)} color="#2c5fa8" strokeWidth={1.6} />
+            </div>
+          } />
+        <Ajuda id="meta_ads">Leads que chegam pelos anúncios (clique-pra-WhatsApp). A origem vem do próprio anúncio — não tem link pra copiar. <b>Vendas</b> = lead que comprou (casado por telefone/documento) em até 15 dias.</Ajuda>
         <Metricas o={origens?.meta_ads} cor="#2c5fa8" />
-        <div style={{ fontSize: fz(9.5), color: palette.inkSoft, lineHeight: 1.35 }}>
-          Conta os leads que chegam pelos anúncios (clique-pra-WhatsApp). A origem vem do próprio anúncio — não tem link pra copiar aqui.
-        </div>
+      </div>
+      {/* CARRINHO DO SITE — consolida os 4 modos (Sofia/Vendedora × Site/Loja).
+          Ailson 30/05/2026: virou card igual os outros, com detalhe expansível. */}
+      <div style={{ ...cardBase, borderColor: '#e3d9c8' }}>
+        <Header id="carrinho" titulo="Carrinho do Site" sub="Carrinho abandonado no site"
+          icone={
+            <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fz(18) }}>🛒</div>
+          } />
+        <Ajuda id="carrinho">Leads de carrinho abandonado no site Amícia. <b>Conversão</b> = venda atribuída ao lead: <b>site</b> em ≤5 dias, <b>loja</b> em ≤15 dias após a mensagem (Sofia ou vendedora). Abra "ver detalhe" pra separar por quem atendeu × canal.</Ajuda>
+        <Metricas o={origens?.carrinho} cor="#9c7b3f" />
+        <button onClick={() => setExpandido(e => !e)} style={{
+          padding: '4px 6px', borderRadius: 6, border: `1px solid ${palette.beige}`,
+          background: 'transparent', cursor: 'pointer', color: palette.inkSoft,
+          fontSize: fz(10), fontWeight: 600, fontFamily: FONT,
+        }}>
+          {expandido ? '▴ ocultar detalhe' : '▾ ver detalhe (Sofia/Vendedora × Site/Loja)'}
+        </button>
+        {expandido && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {[
+              { l: '✨ Sofia → Site',      s: '≤5d',  k: kpis?.sofia_site,     c: palette.accent },
+              { l: '✨ Sofia → Loja',      s: '≤15d', k: kpis?.sofia_loja,     c: palette.purple },
+              { l: '👩‍💼 Vendedora → Site', s: '≤5d',  k: kpis?.vendedora_site, c: palette.ok },
+              { l: '👩‍💼 Vendedora → Loja', s: '≤15d', k: kpis?.vendedora_loja, c: palette.warn },
+            ].map((m, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+                padding: '4px 6px', borderRadius: 4, background: palette.bg,
+                borderLeft: `3px solid ${m.c}`,
+              }}>
+                <span style={{ fontSize: fz(10), color: palette.ink }}>
+                  {m.l} <span style={{ color: palette.inkMuted }}>{m.s}</span>
+                </span>
+                <span style={{ fontSize: fz(10), whiteSpace: 'nowrap' }}>
+                  <b style={{ color: palette.ink }}>{m.k?.qtd ?? 0}</b>
+                  <span style={{ color: palette.ok, marginLeft: 6 }}>{fMoney(m.k?.valor)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2822,7 +2885,7 @@ function ConversaoTab({ refreshTick }) {
 
       {/* Origens Instagram — 2 cards com os links wa.me prontos pra colar.
           Ailson 28/05/2026: stories + linktree, rotina C da Sofia. */}
-      <OrigensInstagramCards origens={dados?.origens} loading={loading} />
+      <OrigensInstagramCards origens={dados?.origens} loading={loading} kpis={dados?.kpis} fmtMoney={fmtMoney} />
 
       {loading ? (
         <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted }}>
@@ -2861,40 +2924,8 @@ function ConversaoTab({ refreshTick }) {
             </div>
           </div>
 
-          {/* 4 KPI cards: Sofia/Vendedora × Site/Loja */}
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: 10, marginBottom: 18,
-          }}>
-            <KpiConvCard
-              label="✨ Sofia → Site"
-              sub="≤5 dias após msg"
-              qtd={dados.kpis.sofia_site.qtd}
-              valor={fmtMoney(dados.kpis.sofia_site.valor)}
-              corBarra={palette.accent}
-            />
-            <KpiConvCard
-              label="✨ Sofia → Loja"
-              sub="≤15 dias após msg"
-              qtd={dados.kpis.sofia_loja.qtd}
-              valor={fmtMoney(dados.kpis.sofia_loja.valor)}
-              corBarra={palette.purple}
-            />
-            <KpiConvCard
-              label="👩‍💼 Vendedora → Site"
-              sub="≤5 dias após msg"
-              qtd={dados.kpis.vendedora_site.qtd}
-              valor={fmtMoney(dados.kpis.vendedora_site.valor)}
-              corBarra={palette.ok}
-            />
-            <KpiConvCard
-              label="👩‍💼 Vendedora → Loja"
-              sub="≤15 dias após msg"
-              qtd={dados.kpis.vendedora_loja.qtd}
-              valor={fmtMoney(dados.kpis.vendedora_loja.valor)}
-              corBarra={palette.warn}
-            />
-          </div>
+          {/* Os 4 modos (Sofia/Vendedora × Site/Loja) agora vivem dentro do
+              card "Carrinho do Site" (expansível). Ailson 30/05/2026. */}
 
           {/* Ranking por vendedora */}
           {dados.por_vendedora.length > 0 && (

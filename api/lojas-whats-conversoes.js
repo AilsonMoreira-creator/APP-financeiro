@@ -175,6 +175,7 @@ export default async function handler(req, res) {
       stories:  { recebidas: 0, convertidos: 0, pct: 0 },
       linktree: { recebidas: 0, convertidos: 0, pct: 0 },
       meta_ads: { recebidas: 0, convertidos: 0, pct: 0 },
+      carrinho: { recebidas: 0, convertidos: 0, pct: 0 },
     };
     try {
       const { data: origRows, error: errOrig } = await supabase.rpc(
@@ -188,6 +189,19 @@ export default async function handler(req, res) {
           origens[r.grupo].convertidos = Number(r.convertidos || 0);
         }
       }
+      // Carrinho do site: recebidas = leads de carrinho no periodo; convertidos =
+      // total de conversoes ja apurado (lojas_conversoes, origem_tipo=lead_carrinho).
+      const fimMais1 = new Date(new Date(dataFim).getTime() + 86400000)
+        .toISOString().slice(0, 10);
+      const { count: carrinhoRec } = await supabase
+        .from('lojas_whats_conversas')
+        .select('id', { count: 'exact', head: true })
+        .eq('origem_lead', 'carrinho_site_amicialoja')
+        .gte('iniciada_em', dataInicio)
+        .lt('iniciada_em', fimMais1);
+      origens.carrinho.recebidas = carrinhoRec || 0;
+      origens.carrinho.convertidos = total;
+
       for (const k of Object.keys(origens)) {
         const o = origens[k];
         o.pct = o.recebidas > 0 ? Math.round((o.convertidos / o.recebidas) * 1000) / 10 : 0;
