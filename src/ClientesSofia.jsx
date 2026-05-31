@@ -63,6 +63,26 @@ async function selectInBatches(tabela, colunas, coluna, ids, size = 200) {
   return out;
 }
 
+// Set de cliente_ids que já têm conversa com mensagem enviada (primeira_msg_enviada_em)
+async function fetchEnviadoSet(ids, size = 200) {
+  const set = new Set();
+  for (let i = 0; i < ids.length; i += size) {
+    const { data } = await supabase
+      .from('lojas_whats_conversas')
+      .select('cliente_id')
+      .not('primeira_msg_enviada_em', 'is', null)
+      .in('cliente_id', ids.slice(i, i + size));
+    (data || []).forEach(r => { if (r.cliente_id) set.add(r.cliente_id); });
+  }
+  return set;
+}
+
+function filtrarEnvio(linhas, envio) {
+  if (envio === 'enviadas') return linhas.filter(l => l.enviado);
+  if (envio === 'nao_enviadas') return linhas.filter(l => !l.enviado);
+  return linhas;
+}
+
 const STATUS_FB = {
   pendente:        { label: 'Pendente',         cor: palette.inkMuted, soft: palette.beigeSoft },
   card_enviado:    { label: 'Card enviado',     cor: palette.accent,   soft: palette.accentSoft },
@@ -78,6 +98,7 @@ const STATUS_FB = {
 export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
   const [subTab, setSubTab] = useState('feedback'); // 'feedback' | 'inativos'
   const [ordenar, setOrdenar] = useState('lifetime'); // 'lifetime' | 'az'
+  const [envio, setEnvio] = useState('todos'); // 'todos' | 'enviadas' | 'nao_enviadas'
   const [abrindoId, setAbrindoId] = useState(null);   // cliente_id sendo aberto no chat
   const [selecionados, setSelecionados] = useState(() => new Set()); // seleção p/ massa
   const [modalMassa, setModalMassa] = useState(false);
@@ -172,19 +193,19 @@ export default function ClientesTab({ userId, refreshTick, onAbrirConversa }) {
       </div>
 
       {/* filtro único (vale pra sub-aba ativa) */}
-      <FiltroBar ordenar={ordenar} setOrdenar={setOrdenar} />
+      <FiltroBar ordenar={ordenar} setOrdenar={setOrdenar} envio={envio} setEnvio={setEnvio} />
 
       {subTab === 'feedback' && (
         <FeedbackTab refreshTick={refreshTick} ordenar={ordenar}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
           onAbrir={abrirChat} abrindoId={abrindoId}
-          selecionados={selecionados} onToggleSel={toggleSel} />
+          selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
       )}
       {subTab === 'inativos' && (
         <InativosTab refreshTick={refreshTick} ordenar={ordenar}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
           onAbrir={abrirChat} abrindoId={abrindoId}
-          selecionados={selecionados} onToggleSel={toggleSel} />
+          selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
       )}
 
       {/* Barra de ação em massa (aparece quando há seleção) */}
@@ -237,8 +258,8 @@ function SubTab({ id, label, Icon, ativo, onClick }) {
   );
 }
 
-function FiltroBar({ ordenar, setOrdenar }) {
-  const Opt = ({ id, label, Icon }) => {
+function FiltroBar({ ordenar, setOrdenar, envio, setEnvio }) {
+  const OptOrd = ({ id, label, Icon }) => {
     const a = ordenar === id;
     return (
       <button onClick={() => setOrdenar(id)} style={{
@@ -250,12 +271,28 @@ function FiltroBar({ ordenar, setOrdenar }) {
       </button>
     );
   };
+  const OptEnv = ({ id, label }) => {
+    const a = envio === id;
+    return (
+      <button onClick={() => setEnvio(id)} style={{
+        ...btnBase, padding: '5px 10px', fontSize: fz(12),
+        background: a ? palette.ink : palette.surface, color: a ? palette.bg : palette.inkSoft,
+        border: `1px solid ${a ? palette.ink : palette.beige}`,
+      }}>
+        {label}
+      </button>
+    );
+  };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', flexWrap: 'wrap',
       background: palette.surface, borderBottom: `1px solid ${palette.beige}` }}>
-      <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 2 }}>Ordenar</span>
-      <Opt id="lifetime" label="Maior valor" Icon={ArrowDown01} />
-      <Opt id="az" label="A–Z" Icon={ArrowDownAZ} />
+      <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Ordenar</span>
+      <OptOrd id="lifetime" label="Maior valor" Icon={ArrowDown01} />
+      <OptOrd id="az" label="A–Z" Icon={ArrowDownAZ} />
+      <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 6 }}>Envio</span>
+      <OptEnv id="todos" label="Todos" />
+      <OptEnv id="enviadas" label="Com msg enviada" />
+      <OptEnv id="nao_enviadas" label="Sem msg enviada" />
     </div>
   );
 }
@@ -271,7 +308,7 @@ function ordenarLista(lista, modo) {
 // SUB-ABA FEEDBACK
 // ═══════════════════════════════════════════════════════════════════════════
 
-function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel }) {
+function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, envio }) {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -295,7 +332,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = elegiveis.map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, fbs, vendas] = await Promise.all([
+        const [cads, fbs, vendas, enviadoSet] = await Promise.all([
           selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
           selectInBatches('clientes_sofia_feedback', 'cliente_id, status', 'cliente_id', ids),
           supabase.from('lojas_vendas')
@@ -303,6 +340,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             .in('cliente_id', ids)
             .order('data_venda', { ascending: true }).order('created_at', { ascending: true })
             .then(r => { if (r.error) throw r.error; return r.data || []; }),
+          fetchEnviadoSet(ids),
         ]);
 
         const cadMap = new Map(cads.map(c => [c.id, c]));
@@ -325,6 +363,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             valor_primeira: primeiraVenda.get(k.cliente_id) ?? null,
             lifetime_total: k.lifetime_total,
             status,
+            enviado: enviadoSet.has(k.cliente_id),
           });
         }
         if (vivo) setLinhas(out);
@@ -334,10 +373,10 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
     return () => { vivo = false; };
   }, [refreshTick, vendMap]);
 
-  const visiveis = ordenarLista(linhas, ordenar);
+  const visiveis = ordenarLista(filtrarEnvio(linhas, envio), ordenar);
   if (loading) return <Carregando />;
   if (erro) return <ErroBox msg={erro} />;
-  if (visiveis.length === 0) return <Vazio msg="Nenhum cliente na janela de feedback (1ª compra nos últimos 15 dias)." />;
+  if (visiveis.length === 0) return <Vazio msg="Nenhum cliente nesse filtro." />;
 
   return (
     <div style={{ padding: '12px 16px' }}>
@@ -359,7 +398,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
 // SUB-ABA INATIVOS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel }) {
+function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, envio }) {
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -379,7 +418,10 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = (kpis || []).map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const cads = await selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids);
+        const [cads, enviadoSet] = await Promise.all([
+          selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
+          fetchEnviadoSet(ids),
+        ]);
         const cadMap = new Map(cads.map(c => [c.id, c]));
 
         const out = [];
@@ -395,6 +437,7 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             qtd_compras: k.qtd_compras,
             dias_sem_comprar: k.dias_sem_comprar,
             ultima_compra: k.ultima_compra,
+            enviado: enviadoSet.has(k.cliente_id),
           });
         }
         if (vivo) setLinhas(out);
@@ -404,10 +447,10 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
     return () => { vivo = false; };
   }, [refreshTick, vendMap]);
 
-  const visiveis = ordenarLista(linhas, ordenar);
+  const visiveis = ordenarLista(filtrarEnvio(linhas, envio), ordenar);
   if (loading) return <Carregando />;
   if (erro) return <ErroBox msg={erro} />;
-  if (visiveis.length === 0) return <Vazio msg="Nenhum cliente inativo (6+ meses sem comprar)." />;
+  if (visiveis.length === 0) return <Vazio msg="Nenhum cliente inativo nesse filtro." />;
 
   return (
     <div style={{ padding: '12px 16px' }}>
@@ -507,9 +550,10 @@ function StatusBadge({ status }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
-  const [templates, setTemplates] = useState([]);
-  const [templateName, setTemplateName] = useState('');
-  const [carregandoTpls, setCarregandoTpls] = useState(true);
+  const templateName = etapa === 'inativo' ? 'Inativos_v1' : 'Feedback_v1';
+  const [body, setBody] = useState(null);
+  const [carregando, setCarregando] = useState(true);
+  const [passo, setPasso] = useState('aprovar'); // 'aprovar' | 'confirmar' | 'resultado'
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState(null);
 
@@ -517,29 +561,26 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
     (async () => {
       const { data } = await supabase
         .from('lojas_whats_templates')
-        .select('name, body_text, variables')
-        .eq('ativo', true)
-        .order('name');
-      setTemplates(data || []);
-      if (data && data.length > 0) setTemplateName(data[0].name);
-      setCarregandoTpls(false);
+        .select('body_text, ativo')
+        .eq('name', templateName)
+        .maybeSingle();
+      setBody(data && data.ativo ? data.body_text : null);
+      setCarregando(false);
     })();
-  }, []);
+  }, [templateName]);
 
-  const tpl = templates.find(t => t.name === templateName);
-  const preview = tpl ? tpl.body_text.replaceAll('{{1}}', 'Maria').replaceAll('{{2}}', 'X') : '';
+  const preview = body ? body.replaceAll('{{1}}', 'Maria').replaceAll('{{2}}', 'X') : null;
 
-  const enviar = async () => {
-    if (!templateName) { alert('Escolha um template.'); return; }
+  const disparar = async () => {
     setEnviando(true);
     try {
       const r = await fetch('/api/lojas-whats-clientes-massa', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cliente_ids: clienteIds, etapa, template_name: templateName }),
+        body: JSON.stringify({ cliente_ids: clienteIds, etapa }),
       });
       const d = await r.json();
       if (!r.ok || d.error) { alert('Erro: ' + (d.error || r.status)); return; }
-      setResultado(d);
+      setResultado(d); setPasso('resultado');
     } catch (e) {
       alert('Erro: ' + e.message);
     } finally {
@@ -547,80 +588,77 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
     }
   };
 
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-    }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: palette.bg, borderRadius: 12, padding: 20, maxWidth: 480, width: '100%', fontFamily: FONT,
-      }}>
+  const wrap = (children) => (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: palette.bg, borderRadius: 12, padding: 20, maxWidth: 480, width: '100%', fontFamily: FONT }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: fz(16), color: palette.ink, fontWeight: 700 }}>
-            Enviar em massa — {clienteIds.length} cliente(s)
-          </h3>
+          <h3 style={{ margin: 0, fontSize: fz(16), color: palette.ink, fontWeight: 700 }}>Enviar em massa</h3>
           <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
             <X size={sz(22)} color={palette.inkMuted} />
           </button>
         </div>
-
-        {resultado ? (
-          <div>
-            <div style={{ fontSize: fz(14), color: palette.ink, marginBottom: 12, lineHeight: 1.6 }}>
-              ✅ Preparados: <strong>{resultado.preparados}</strong><br />
-              ⏭️ Pulados (já tinham pendente): <strong>{resultado.pulados}</strong><br />
-              {resultado.erros?.length > 0 && <>⚠️ Erros: <strong>{resultado.erros.length}</strong><br /></>}
-            </div>
-            <div style={{ fontSize: fz(12), color: palette.inkSoft, marginBottom: 14 }}>
-              As mensagens caíram na fila <strong>Aprovar</strong>. Lá você revisa e dispara (envio HSM).
-            </div>
-            <button onClick={onEnviado} style={{ ...btnBase, width: '100%', background: palette.accent, color: palette.bg }}>
-              Fechar
-            </button>
-          </div>
-        ) : carregandoTpls ? (
-          <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted }}>
-            <Loader2 size={26} color={palette.accent} style={{ animation: 'spin 1s linear infinite' }} />
-          </div>
-        ) : (
-          <div>
-            <label style={{ fontSize: fz(12), color: palette.inkSoft, display: 'block', marginBottom: 4 }}>
-              Template (mensagem que vai ser disparada)
-            </label>
-            <select value={templateName} onChange={e => setTemplateName(e.target.value)} style={{
-              width: '100%', padding: 8, borderRadius: 6, border: `1px solid ${palette.beige}`,
-              fontFamily: FONT, fontSize: fz(13), color: palette.ink, marginBottom: 12, background: palette.surface,
-            }}>
-              {templates.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-            </select>
-
-            <div style={{
-              background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8,
-              padding: 12, fontSize: fz(13), color: palette.ink, whiteSpace: 'pre-wrap', lineHeight: 1.5,
-              maxHeight: 200, overflowY: 'auto', marginBottom: 12,
-            }}>
-              {preview || '—'}
-            </div>
-
-            <div style={{
-              fontSize: fz(11), color: palette.warn, background: palette.warnSoft,
-              padding: 8, borderRadius: 6, marginBottom: 14,
-            }}>
-              Vai preparar a mensagem pra <strong>{clienteIds.length}</strong> cliente(s) na fila <strong>Aprovar</strong> (etapa {etapa}). O disparo HSM sai de lá.
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={onClose} disabled={enviando} style={{ ...btnBase, flex: 1, background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>
-                Cancelar
-              </button>
-              <button onClick={enviar} disabled={enviando || !templateName} style={{ ...btnBase, flex: 1, background: palette.accent, color: palette.bg, gap: 5 }}>
-                {enviando ? <Loader2 size={sz(14)} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={sz(14)} />}
-                {enviando ? 'Preparando…' : 'Aceitar'}
-              </button>
-            </div>
-          </div>
-        )}
+        {children}
       </div>
+    </div>
+  );
+
+  if (carregando) return wrap(
+    <div style={{ padding: 20, textAlign: 'center' }}>
+      <Loader2 size={26} color={palette.accent} style={{ animation: 'spin 1s linear infinite' }} />
+    </div>
+  );
+
+  // template ainda não existe
+  if (passo === 'aprovar' && !body) return wrap(
+    <div>
+      <div style={{ fontSize: fz(13), color: palette.alert, background: palette.alertSoft, padding: 12, borderRadius: 8, marginBottom: 14 }}>
+        O template <strong>{templateName}</strong> ainda não existe (ou está inativo). Crie e aprove ele na Meta primeiro.
+      </div>
+      <button onClick={onClose} style={{ ...btnBase, width: '100%', background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>Fechar</button>
+    </div>
+  );
+
+  if (passo === 'aprovar') return wrap(
+    <div>
+      <div style={{ fontSize: fz(12), color: palette.inkSoft, marginBottom: 6 }}>
+        Mensagem escolhida pela Sofia (<strong>{templateName}</strong>):
+      </div>
+      <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: 12,
+        fontSize: fz(13), color: palette.ink, whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: 240, overflowY: 'auto', marginBottom: 14 }}>
+        {preview}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={onClose} style={{ ...btnBase, flex: 1, background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>Cancelar</button>
+        <button onClick={() => setPasso('confirmar')} style={{ ...btnBase, flex: 1, background: palette.accent, color: palette.bg }}>Aprovar mensagem</button>
+      </div>
+    </div>
+  );
+
+  if (passo === 'confirmar') return wrap(
+    <div>
+      <div style={{ fontSize: fz(15), color: palette.ink, textAlign: 'center', margin: '8px 0 16px', lineHeight: 1.5 }}>
+        <strong>{clienteIds.length}</strong> mensagem(ns) serão enviadas
+        <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>etapa {etapa} · template {templateName} · envio irreversível</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => setPasso('aprovar')} disabled={enviando} style={{ ...btnBase, flex: 1, background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>Voltar</button>
+        <button onClick={disparar} disabled={enviando} style={{ ...btnBase, flex: 1, background: palette.ok, color: palette.bg, gap: 5 }}>
+          {enviando ? <Loader2 size={sz(14)} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={sz(14)} />}
+          {enviando ? 'Disparando…' : 'Confirmar e disparar'}
+        </button>
+      </div>
+    </div>
+  );
+
+  // resultado
+  return wrap(
+    <div>
+      <div style={{ fontSize: fz(14), color: palette.ink, marginBottom: 12, lineHeight: 1.6 }}>
+        ✅ Enviadas: <strong>{resultado?.enviados ?? 0}</strong><br />
+        {resultado?.erros?.length > 0 && <>⚠️ Erros: <strong>{resultado.erros.length}</strong> (de {resultado.total})<br /></>}
+      </div>
+      <button onClick={onEnviado} style={{ ...btnBase, width: '100%', background: palette.accent, color: palette.bg }}>Fechar</button>
     </div>
   );
 }

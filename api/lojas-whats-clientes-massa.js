@@ -1,21 +1,23 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// /api/lojas-whats-clientes-massa — preparar mensagem em massa (módulo Clientes)
+// /api/lojas-whats-clientes-massa — DISPARO em massa (módulo Clientes)
 // ═══════════════════════════════════════════════════════════════════════════
-// POST { cliente_ids: [...], etapa: 'feedback'|'inativo', template_name }
+// POST { cliente_ids: [...], etapa: 'feedback'|'inativo' }
+//
+// Template é escolhido pela etapa (Sofia escolhe):
+//   feedback → Feedback_v1   |   inativo → Inativos_v1
 //
 // Pra cada cliente selecionado:
-//   1. acha/cria conversa zerada (etapa própria do módulo)
-//   2. cria uma sugestão 'primeira_mensagem' PENDENTE com o template escolhido
-//      (renderizada com o 1º nome / qtd, conforme as vars que o template declara)
+//   1. acha/cria conversa zerada na etapa do módulo (mantém a etapa — não vai pro funil)
+//   2. envia o template HSM via Meta (enviarTemplate) — mesmo caminho da Aprovar
+//   3. grava a mensagem (saída) e marca primeira_msg_enviada_em (sem mudar a etapa)
 //
-// As mensagens caem na fila APROVAR — daí o envio HSM sai pelo caminho já testado
-// (lojas-whats-aprovar → Meta). NÃO dispara WhatsApp direto aqui (segurança:
-// até 491 clientes; e não há template de feedback/inativo aprovado ainda).
-//
-// Retorna { preparados, pulados, erros, total }.
+// Retorna { enviados, erros, total }.
+// OBS: loop sequencial; lotes muito grandes podem estourar o tempo da função —
+// disparar em blocos menores se necessário.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, normalizarTelefone } from './_lojas-whats-helpers.js';
+import { enviarTemplate } from './_lojas-whats-meta-client.js';
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,8 +25,18 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-const ETAPAS_OK = ['feedback', 'inativo'];
-const LIMITE = 500; // trava de segurança
+const TEMPLATE_POR_ETAPA = { feedback: 'Feedback_v1', inativo: 'Inativos_v1' };
+const LIMITE = 500;
+
+// monta array posicional de variáveis na ordem que o template declara
+function montarVars(declaradas, valorPorChave) {
+  const arr = [];
+  for (const v of (Array.isArray(declaradas) ? declaradas : [])) {
+    const k = String(v?.nome ?? '');
+    arr.push(valorPorChave[k] !== undefined ? valorPorChave[k] : '');
+  }
+  return arr;
+}
 
 export default async function handler(req, res) {
   setCors(res);
@@ -32,32 +44,33 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
 
   try {
-    const { cliente_ids, etapa, template_name } = req.body || {};
+    const { cliente_ids, etapa } = req.body || {};
     if (!Array.isArray(cliente_ids) || cliente_ids.length === 0) {
       return res.status(400).json({ error: 'cliente_ids_obrigatorio' });
     }
     if (cliente_ids.length > LIMITE) {
       return res.status(400).json({ error: `limite_${LIMITE}_excedido` });
     }
-    const etapaFinal = ETAPAS_OK.includes(etapa) ? etapa : 'feedback';
-    if (!template_name) return res.status(400).json({ error: 'template_name_obrigatorio' });
+    const etapaFinal = (etapa === 'inativo') ? 'inativo' : 'feedback';
+    const templateName = TEMPLATE_POR_ETAPA[etapaFinal];
 
-    // Carrega template (precisa estar ativo)
+    // template precisa existir e estar ativo (Ailson cria Feedback_v1 / Inativos_v1)
     const { data: tpl } = await supabase
       .from('lojas_whats_templates')
-      .select('name, body_text, language, variables')
-      .eq('name', template_name)
+      .select('name, language, variables')
+      .eq('name', templateName)
       .eq('ativo', true)
       .maybeSingle();
-    if (!tpl) return res.status(400).json({ error: 'template_invalido_ou_inativo' });
-    const declaradas = Array.isArray(tpl.variables) ? tpl.variables : [];
+    if (!tpl) return res.status(400).json({ error: `template_${templateName}_inexistente_ou_inativo` });
+    const language = tpl.language || 'pt_BR';
+    const declaradas = tpl.variables;
 
-    let preparados = 0, pulados = 0;
+    const agora = new Date().toISOString();
+    let enviados = 0;
     const erros = [];
 
     for (const clienteId of cliente_ids) {
       try {
-        // 1) cadastro do cliente
         const { data: cli } = await supabase
           .from('lojas_clientes')
           .select('telefone_principal, razao_social, comprador_nome')
@@ -68,7 +81,7 @@ export default async function handler(req, res) {
         if (!tel) { erros.push({ clienteId, erro: 'telefone_invalido' }); continue; }
         const nome = cli.razao_social || cli.comprador_nome || null;
 
-        // 2) acha/cria conversa não-terminal
+        // acha/cria conversa não-terminal
         let conversaId;
         const { data: existentes } = await supabase
           .from('lojas_whats_conversas')
@@ -88,49 +101,50 @@ export default async function handler(req, res) {
           conversaId = nova.id;
         }
 
-        // já tem sugestão pendente? pula (evita duplicar)
-        const { data: pend } = await supabase
-          .from('lojas_whats_sugestoes')
-          .select('id')
-          .eq('conversa_id', conversaId)
-          .eq('status', 'pendente')
-          .limit(1);
-        if (pend && pend.length > 0) { pulados++; continue; }
-
-        // 3) monta vars só com as chaves declaradas + renderiza texto
+        // vars (posicional) — {{1}} = 1º nome
         const primeiroNome = (nome || 'cliente').split(' ')[0];
-        const valorPorChave = { '1': primeiroNome };
-        const vars = {};
-        for (const v of declaradas) {
-          const k = String(v?.nome ?? '');
-          if (k && valorPorChave[k] !== undefined) vars[k] = valorPorChave[k];
-        }
-        let textoProposto = tpl.body_text;
-        for (const [k, val] of Object.entries(vars)) {
-          textoProposto = textoProposto.replaceAll(`{{${k}}}`, val);
+        const vars = montarVars(declaradas, { '1': primeiroNome });
+
+        // envia HSM
+        let metaResp, metaMsgId;
+        try {
+          metaResp = await enviarTemplate(tel, templateName, vars, language);
+          metaMsgId = metaResp?.messages?.[0]?.id || null;
+        } catch (e) {
+          erros.push({ clienteId, erro: 'meta_falhou: ' + e.message });
+          continue;
         }
 
-        const { error: eS } = await supabase
-          .from('lojas_whats_sugestoes')
-          .insert({
-            conversa_id: conversaId,
-            tipo: 'primeira_mensagem',
-            template_name: tpl.name,
-            template_vars: vars,
-            texto_proposto: textoProposto,
-            status: 'pendente',
-            motivo_proposta: `clientes_massa_${etapaFinal}`,
-          });
-        if (eS) { erros.push({ clienteId, erro: eS.message }); continue; }
-        preparados++;
+        // grava mensagem de saída
+        await supabase.from('lojas_whats_mensagens').insert({
+          conversa_id: conversaId,
+          direcao: 'saida',
+          autor: 'sofia_ia',
+          tipo_midia: 'template',
+          texto: null,
+          template_name: templateName,
+          template_vars: { '1': primeiroNome },
+          meta_message_id: metaMsgId,
+          status: 'enviando',
+          meta_response: metaResp,
+          enviada_em: agora,
+        });
+
+        // marca enviada — SEM mudar a etapa (fica em feedback/inativo)
+        await supabase.from('lojas_whats_conversas').update({
+          primeira_msg_enviada_em: agora,
+          ultima_atividade_em: agora,
+          ultima_msg_direcao: 'saida',
+          atualizado_em: agora,
+        }).eq('id', conversaId);
+
+        enviados++;
       } catch (e) {
         erros.push({ clienteId, erro: e.message });
       }
     }
 
-    return res.status(200).json({
-      ok: true, preparados, pulados, erros, total: cliente_ids.length,
-    });
+    return res.status(200).json({ ok: true, enviados, erros, total: cliente_ids.length });
   } catch (e) {
     console.error('[lojas-whats-clientes-massa]', e.message);
     return res.status(500).json({ error: e.message });
