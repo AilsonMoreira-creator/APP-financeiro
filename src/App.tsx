@@ -1987,10 +1987,10 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
   const isFixa=CATS_FIXAS.includes(auxAberta);
   const listaPrest=prestadores[auxAberta]||[];
   const inputStyle={width:"100%",border:"1px solid #c8d8e4",borderRadius:4,padding:"4px 6px",fontSize:12,outline:"none",background:"#fff"};
-  const gridCols=isFixa?"50px 1fr 120px 36px"
-    :isTecidos?"80px 1fr 90px 110px 36px"
-    :temPrest?"90px 1fr 120px 36px"
-    :"90px 1fr 120px 36px";
+  const gridCols=isFixa?"80px 300px 130px 40px"
+    :isTecidos?"90px 220px 130px 130px 40px"
+    :temPrest?"90px 260px 130px 40px"
+    :"90px 300px 130px 40px";
   const headers=isFixa?["Data","Descrição","Valor",""]
     :isTecidos?["Data","Empresa","Nº Nota","Valor",""]
     :temPrest?["Data","Prestador","Valor",""]
@@ -2015,7 +2015,7 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
                 <div style={{padding:"6px 8px"}}><input value={row.data||""} onChange={e=>updateLinhaAux(auxAberta,idx,"data",e.target.value)} style={dis} disabled={fromBoleto}/></div>
               )}
               {isFixa?(
-                row.descricao?
+                (row.descricao&&!row._novo)?
                   <div style={{padding:"6px 12px",fontWeight:700,color:"#2c3e50",fontSize:12}}>{row.descricao}</div>
                   :<div style={{padding:"6px 8px"}}><input value={row.descricao||""} onChange={e=>updateLinhaAux(auxAberta,idx,"descricao",e.target.value)} placeholder="Descrição..." style={{...inputStyle,fontWeight:700}}/></div>
               ):isTecidos?(
@@ -2162,9 +2162,17 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
       }
       if(!val||v===0||isNaN(v))l[idx].data="";
     }
-    // Sync new descriptions to fixosConfig template
-    if(field==="descricao"&&CATS_FIXAS.includes(cat)&&val&&!oldVal&&setFixosConfig){
-      setFixosConfig(pc=>{const cfg={...pc};if(!(cfg[cat]||[]).includes(val))cfg[cat]=[...(cfg[cat]||[]),val];return cfg;});
+    // Sync descricao -> fixosConfig (template do mes seguinte). Substitui o
+    // valor antigo pelo atual a cada tecla, pra nunca deixar a letra parcial
+    // ("P") presa no template. Ailson 01/06/2026.
+    if(field==="descricao"&&CATS_FIXAS.includes(cat)&&setFixosConfig){
+      setFixosConfig(pc=>{
+        const cfg={...pc};
+        let arr=(cfg[cat]||[]).filter(d=>d&&d!==oldVal);
+        if(val&&!arr.includes(val))arr=[...arr,val];
+        cfg[cat]=arr;
+        return cfg;
+      });
     }
     return{...prev,[cat]:l};
   });
@@ -2186,7 +2194,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
     if(cat==="Funcionários") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),{nome:"",salario:"",comissao:"",extra:"",alimentacao:"",vale:"",ferias:"",rescisao:""}]}));
     else if(cat==="Tecidos") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:"",empresa:"",nroNota:"",valor:"",descricao:""}]}));
     else if(CATS_PREST.includes(cat)) setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:dataAuto,prestador:"",valor:"",descricao:""}]}));
-    else setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:dataAuto,valor:"",descricao:""}]}));
+    else setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:dataAuto,valor:"",descricao:"",_novo:true}]}));
   };
   const adicionarCategoria=()=>{if(!novaCategoria.trim()||categorias.includes(novaCategoria.trim()))return;setCategorias(prev=>[...prev,novaCategoria.trim()]);setAuxData(prev=>({...prev,[novaCategoria.trim()]:[]}));setNovaCategoria("");};
   const removerCategoria=(cat)=>{setCategorias(prev=>prev.filter(c=>c!==cat));setAuxData(prev=>{const n={...prev};delete n[cat];return n;});};
