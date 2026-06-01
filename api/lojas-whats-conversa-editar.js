@@ -19,6 +19,7 @@ import { supabase, setCors } from './_lojas-whats-helpers.js';
 const CAMPOS_PERMITIDOS = new Set([
   'prioridade',
   'etapa',
+  'follow_up_dias',
   'observacao_para_sofia',
   'observacao_assistente',
   'prefere_site',
@@ -58,10 +59,25 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: `etapa invalida: ${v}` });
         }
         upd.etapa = v;
-        // Move manual pra follow_up: marca como vencido AGORA pra o card aparecer
-        // na aba (lista + badge filtram follow_up_vence_em <= now) e entrar no
-        // fluxo de follow-up. Ailson 01/06/2026.
-        if (v === 'follow_up') upd.follow_up_vence_em = agora;
+        // NAO seta follow_up_vence_em aqui. Padrao ao mover pra follow_up =
+        // NULL (nao envia nada, fica parado aguardando decisao manual). O
+        // agendamento e feito pelo card via follow_up_dias (1d/3d/Nd) ou fica
+        // NULL ("nao enviar por enquanto"). Ailson 01/06/2026.
+        continue;
+      }
+      if (k === 'follow_up_dias') {
+        // Agenda (ou nao) a retomada do follow-up.
+        //   numero > 0  -> follow_up_vence_em = now + N dias (cron-followup
+        //                  gera retomada quando vencer)
+        //   null/0/etc  -> follow_up_vence_em = null (nao dispara nada)
+        // Cap de sanidade em 365 dias. Ailson 01/06/2026.
+        const n = Number(v);
+        if (Number.isFinite(n) && n > 0) {
+          const dias = Math.min(Math.floor(n), 365);
+          upd.follow_up_vence_em = new Date(Date.now() + dias * 86400000).toISOString();
+        } else {
+          upd.follow_up_vence_em = null;
+        }
         continue;
       }
       if (k === 'observacao_para_sofia') {
@@ -87,11 +103,18 @@ export default async function handler(req, res) {
       }
     }
 
+    // Default do modal Editar lead: mover pra follow_up SEM informar dias =
+    // "nao enviar por enquanto" (vence_em = null). O ajuste fino de 1d/3d/Nd
+    // e feito depois pelo card. Ailson 01/06/2026.
+    if (upd.etapa === 'follow_up' && !('follow_up_dias' in campos)) {
+      upd.follow_up_vence_em = null;
+    }
+
     const { data, error } = await supabase
       .from('lojas_whats_conversas')
       .update(upd)
       .eq('id', conversa_id)
-      .select('id, etapa, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, obs_sofia_definida_em')
+      .select('id, etapa, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, obs_sofia_definida_em, follow_up_vence_em')
       .single();
     if (error) return res.status(500).json({ error: error.message });
 

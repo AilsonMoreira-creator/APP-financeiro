@@ -1358,7 +1358,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, editando_por, editando_em,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1432,7 +1432,29 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       }
     } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
   };
-  //  - MOBILE (<768px): tela cheia (esconde a lista) — comportamento original
+
+  // Define (ou nao) o agendamento de follow-up direto no card. Ailson 01/06/2026.
+  //   dias > 0 -> retomada agendada pra now+dias | null -> nao envia (fica parado)
+  const onDefinirFollowUp = async (c, dias) => {
+    try {
+      const r = await fetch('/api/lojas-whats-conversa-editar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: c.id,
+          campos: { etapa: 'follow_up', follow_up_dias: dias },
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { setFeedback({ tipo: 'erro', msg: j.error || 'Erro ao agendar follow-up' }); return; }
+      setFeedback({
+        tipo: 'ok',
+        msg: dias ? `Follow-up agendado pra ${dias} dia${dias > 1 ? 's' : ''}` : 'Follow-up parado (não envia por enquanto)',
+      });
+      setReloadTick(t => t + 1);
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+  };
+
   //  - DESKTOP (>=768px): split view — lista compacta à esquerda + chat à direita
   // Modais renderizados em ambos (senão ficam fora do DOM). Ailson 28/05/2026
   if (conversaDetalhe) {
@@ -1712,6 +1734,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
                 onEnviarVendedora={() => setModalEnviar({ conversa: c })}
                 onTogglePrioridade={() => onTogglePrioridade(c)}
                 onToggleCatalogoFollowup={() => onToggleCatalogoFollowup(c)}
+                onDefinirFollowUp={(dias) => onDefinirFollowUp(c, dias)}
                 onEditar={() => setModalEditarLead({ conversa: c })}
                 onDecidiuQuente={(id, decisao) => {
                   // Update otimista: zera sugestao quente do card (some na hora)
@@ -2119,10 +2142,13 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unre
   );
 };
 
-const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
+const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onDefinirFollowUp, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
   const prioritario = !!c.lead_prioritario;
+  const [definirAberto, setDefinirAberto] = useState(false);
+  const [definirN, setDefinirN] = useState('');
+  const [fupBusy, setFupBusy] = useState(false);
   return (
     <div style={{
       background: prioritario ? '#fffbf0' : (selecionado ? '#fff8e1' : palette.surface),
@@ -2419,6 +2445,62 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
             }}>
               <Users size={sz(14)} /> Enviar vendedora
             </button>
+          </div>
+        );
+      })()}
+
+      {/* Mini-controle de follow-up: agenda (1d/3d/Nd) ou deixa parado
+          ("nao enviar"). NULL = nada dispara sozinho. Ailson 01/06/2026. */}
+      {c.etapa === 'follow_up' && onDefinirFollowUp && (() => {
+        const venceEm = c.follow_up_vence_em ? new Date(c.follow_up_vence_em) : null;
+        const venceLabel = venceEm
+          ? venceEm.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          : null;
+        const aplicar = async (dias) => {
+          if (fupBusy) return;
+          setFupBusy(true);
+          try { await onDefinirFollowUp(dias); }
+          finally { setFupBusy(false); setDefinirAberto(false); setDefinirN(''); }
+        };
+        const btnBase = {
+          padding: '5px 9px', borderRadius: 5, cursor: fupBusy ? 'default' : 'pointer',
+          border: `1px solid ${palette.beige}`, background: palette.surface,
+          color: palette.ink, fontSize: fz(11), fontFamily: FONT, fontWeight: 600,
+          opacity: fupBusy ? 0.6 : 1,
+        };
+        return (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}` }}>
+            <div style={{ fontSize: fz(11), color: venceLabel ? '#92580a' : palette.inkMuted, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+              {venceLabel ? `⏰ retomada agendada ~ ${venceLabel}` : '⏸️ parado — não envia por enquanto'}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button disabled={fupBusy} onClick={(e) => { e.stopPropagation(); aplicar(1); }} style={btnBase}>1 dia</button>
+              <button disabled={fupBusy} onClick={(e) => { e.stopPropagation(); aplicar(3); }} style={btnBase}>3 dias</button>
+              {!definirAberto ? (
+                <button disabled={fupBusy} onClick={(e) => { e.stopPropagation(); setDefinirAberto(true); }} style={btnBase}>Definir dias</button>
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                  <input type="number" min="1" max="365" value={definirN}
+                    autoFocus
+                    onChange={(e) => setDefinirN(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { const n = parseInt(definirN, 10); if (n > 0) aplicar(n); } }}
+                    placeholder="N"
+                    style={{
+                      width: 52, padding: '4px 6px', borderRadius: 5,
+                      border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(11),
+                      color: palette.ink, background: palette.surface, boxSizing: 'border-box',
+                    }} />
+                  <button disabled={fupBusy} onClick={() => { const n = parseInt(definirN, 10); if (n > 0) aplicar(n); }}
+                    style={{ ...btnBase, background: '#f5a623', color: '#fff', border: '1px solid #f5a623' }}>OK</button>
+                  <button disabled={fupBusy} onClick={() => { setDefinirAberto(false); setDefinirN(''); }}
+                    style={{ ...btnBase, padding: '5px 7px' }}>×</button>
+                </span>
+              )}
+              <button disabled={fupBusy} onClick={(e) => { e.stopPropagation(); aplicar(null); }}
+                style={{ ...btnBase, color: venceLabel ? palette.inkSoft : '#1f7a48', borderColor: venceLabel ? palette.beige : '#9bd3b0', background: venceLabel ? palette.surface : '#eefaf2' }}>
+                Não enviar
+              </button>
+            </div>
           </div>
         );
       })()}
@@ -3973,17 +4055,23 @@ export function EditarLeadModal({ conversa, onClose, onSucesso, onErro, onEnviar
   const salvar = async () => {
     setSalvando(true);
     try {
+      // So envia 'etapa' se ela REALMENTE mudou. Importante pra follow_up:
+      // se a conversa ja esta em follow_up (com agendamento), reenviar
+      // etapa='follow_up' sem follow_up_dias faria o backend zerar o
+      // follow_up_vence_em. Mandar etapa so na transicao evita isso. O
+      // ajuste de dias do follow-up e feito no card. Ailson 01/06/2026.
+      const campos = {
+        observacao_para_sofia: obsSofia.trim() || null,
+        observacao_assistente: obsPrivada.trim() || null,
+        prioridade: prioritario ? 1 : 0,
+      };
+      if (etapa !== conversa.etapa) campos.etapa = etapa;
       const r = await fetch('/api/lojas-whats-conversa-editar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversa_id: conversa.id,
-          campos: {
-            etapa,
-            observacao_para_sofia: obsSofia.trim() || null,
-            observacao_assistente: obsPrivada.trim() || null,
-            prioridade: prioritario ? 1 : 0,
-          },
+          campos,
           usuario: (() => {
             try { return JSON.parse(localStorage.getItem('amica_session') || '{}')?.usuario || null; }
             catch { return null; }
