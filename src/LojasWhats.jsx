@@ -1348,6 +1348,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lojas_whats_conversas' }, aoMudar)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lojas_whats_sugestoes' }, aoMudar),
     () => setReloadTick(t => t + 1),
+    { pollMs: 12000 },
   );
 
   useEffect(() => {
@@ -4264,8 +4265,27 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           .order('criada_em', { ascending: true }),
       ]);
       setConversa(conv);
-      setMensagens(msgs || []);
-      setSugestoesPendentes(sugs || []);
+      // Atualiza SO quando a thread realmente mudou — assim o polling rapido
+      // (3s, chat ao vivo) nao re-renderiza nem joga o scroll pro fim a cada
+      // ciclo. Retornar prev (mesma referencia) faz o React nao re-renderizar.
+      // Ailson 31/05/2026.
+      const novasMsgs = msgs || [];
+      setMensagens(prev => {
+        const ult = prev[prev.length - 1], novoUlt = novasMsgs[novasMsgs.length - 1];
+        if (prev.length === novasMsgs.length && ult?.id === novoUlt?.id && ult?.status === novoUlt?.status) {
+          return prev;
+        }
+        return novasMsgs;
+      });
+      const novasSugs = sugs || [];
+      setSugestoesPendentes(prev => {
+        if (prev.length === novasSugs.length
+            && prev[0]?.id === novasSugs[0]?.id
+            && prev[prev.length - 1]?.id === novasSugs[novasSugs.length - 1]?.id) {
+          return prev;
+        }
+        return novasSugs;
+      });
       // Mapa de botoes dos templates (so visual). Pega o 1o botao URL de cada.
       if (Object.keys(tplBotoes).length === 0) {
         const { data: tpls } = await supabase.from('lojas_whats_templates').select('name, botoes');
@@ -4291,7 +4311,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lojas_whats_mensagens', filter: `conversa_id=eq.${conversaId}` }, aoMudar)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lojas_whats_sugestoes', filter: `conversa_id=eq.${conversaId}` }, aoMudar),
     () => setReloadTick(t => t + 1),
-    { ativo: !!conversaId },
+    { ativo: !!conversaId, pollMs: 3000 },
   );
 
   // ─── Lock: claim atomico + heartbeat + release ──────────────────────────
