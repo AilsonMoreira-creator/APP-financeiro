@@ -1359,7 +1359,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
         .from('lojas_whats_conversas')
         .select(`
           id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, editando_por, editando_em,
-          handoffs:lojas_whats_handoffs(status)
+          handoffs:lojas_whats_handoffs(status, vendedora_id)
         `)
         // Prioritarios primeiro
         .order('lead_prioritario', { ascending: false });
@@ -1658,6 +1658,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
             {conversas.map(c => (
               <ConversaRow key={c.id} c={c}
                 vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : null}
+                vendedorasMap={vendedorasMap}
                 selecionavel={ehAbaProcessando}
                 selecionado={selecionados.has(c.id)}
                 onToggleSelecao={() => toggleSelecao(c.id)}
@@ -2072,7 +2073,7 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unre
   );
 };
 
-const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
+const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
   const prioritario = !!c.lead_prioritario;
@@ -2326,16 +2327,29 @@ const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, on
       {ehQuente && (() => {
         const handoffPend = (c.handoffs || []).some(h => ['aguardando','fila_fora_janela'].includes(h.status));
         if (handoffPend) {
-          // Ja foi enviada pra vendedora — mostra status passivo
+          // Ja foi enviada pra vendedora — mostra QUEM estamos esperando + permite
+          // cancelar e reenviar manual (escolher outra vendedora). Ailson 01/06/2026.
+          const hPend = (c.handoffs || []).find(h => ['aguardando', 'fila_fora_janela'].includes(h.status));
+          const vNome = hPend && vendedorasMap ? vendedorasMap.get(hPend.vendedora_id) : null;
           return (
-            <div style={{
-              marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}`,
-              padding: '8px 10px', background: '#ecfdf5', border: '1px solid #86efac',
-              borderRadius: 6, color: '#166534',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
-            }}>
-              <Users size={sz(14)} /> Enviado pra vendedora — aguardando aceitar
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${palette.beige}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{
+                padding: '8px 10px', background: '#ecfdf5', border: '1px solid #86efac',
+                borderRadius: 6, color: '#166534',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+              }}>
+                <Users size={sz(14)} /> Aguardando {vNome || 'vendedora'} aceitar
+              </div>
+              <button onClick={onEnviarVendedora} style={{
+                padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
+                background: palette.surface, color: palette.alert,
+                border: `1px solid ${palette.beige}`,
+                fontSize: fz(12), fontFamily: FONT, fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              }}>
+                <Users size={sz(14)} /> Cancelar e enviar manual
+              </button>
             </div>
           );
         }
@@ -2371,7 +2385,10 @@ const ConversaRow = ({ c, vendedoraNome, onContinuarSofia, onEnviarVendedora, on
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function EnviarVendedoraModal({ conversa, onClose, onSucesso, onErro }) {
-  const [modo, setModo] = useState('rodizio'); // 'rodizio' | 'manual'
+  // Se a conversa ja tem handoff pendente, abrimos direto no modo "Definir"
+  // (manual) — o backend cancela o pendente e reenvia pra escolhida. Ailson 01/06.
+  const temHandoffPendente = (conversa.handoffs || []).some(h => ['aguardando', 'fila_fora_janela'].includes(h.status));
+  const [modo, setModo] = useState(temHandoffPendente ? 'manual' : 'rodizio'); // 'rodizio' | 'manual'
   const [vendedoraId, setVendedoraId] = useState('');
   const [vendedoras, setVendedoras] = useState([]);
   const [enviando, setEnviando] = useState(false);
