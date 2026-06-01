@@ -1359,7 +1359,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
         .from('lojas_whats_conversas')
         .select(`
           id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, editando_por, editando_em,
-          handoffs:lojas_whats_handoffs(status, vendedora_id)
+          handoffs:lojas_whats_handoffs(status, vendedora_id),
+          sugestoes:lojas_whats_sugestoes(id, status)
         `)
         // Prioritarios primeiro
         .order('lead_prioritario', { ascending: false });
@@ -1582,6 +1583,38 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   };
 
   const ehAbaProcessando = filtroEtapa === 'processando';
+  const ehAbaAprovar = filtroEtapa === 'aprovar';
+
+  // Aprovar em lote (aba Aprovar): mapeia as conversas selecionadas pras suas
+  // sugestoes pendentes e aprova/envia todas de uma vez. Ailson 01/06/2026.
+  const aprovarSelecionados = async () => {
+    const sugIds = [];
+    for (const c of conversas) {
+      if (!selecionados.has(c.id)) continue;
+      const sug = (c.sugestoes || []).find(s => s.status === 'pendente');
+      if (sug) sugIds.push(sug.id);
+    }
+    if (sugIds.length === 0) return;
+    if (!confirm(`Aprovar e enviar ${sugIds.length} mensagens de uma vez?`)) return;
+    setProcessandoFila(true);
+    try {
+      const r = await fetch('/api/lojas-whats-aprovar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sugestao_ids: sugIds, acao: 'aprovar', aprovada_por: userId || 'tamara' }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) setFeedback({ tipo: 'erro', msg: j.error || 'Erro ao aprovar.' });
+      else {
+        const msg = j.falhas > 0
+          ? `${j.processadas} aprovadas, ${j.falhas} falharam`
+          : `${j.processadas} aprovadas e enviadas`;
+        setFeedback({ tipo: j.falhas > 0 ? 'erro' : 'ok', msg });
+        setSelecionados(new Set());
+        setReloadTick(t => t + 1);
+      }
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+    setProcessandoFila(false);
+  };
 
   return (
     <div style={{ padding: 14, fontFamily: FONT }}>
@@ -1600,8 +1633,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
         ))}
       </div>
 
-      {/* Barra de selecao multipla — so na aba processando */}
-      {ehAbaProcessando && conversas.length > 0 && (
+      {/* Barra de selecao multipla — abas processando e aprovar */}
+      {(ehAbaProcessando || ehAbaAprovar) && conversas.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
           padding: '8px 12px', borderRadius: 8,
@@ -1620,21 +1653,34 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
             />
             <span style={{ color: palette.inkSoft }}>
               {selecionados.size === 0
-                ? `${conversas.length} na fila`
+                ? (ehAbaAprovar ? 'Selecionar todos' : `${conversas.length} na fila`)
                 : `${selecionados.size} de ${conversas.length} selecionados`}
             </span>
           </label>
           {selecionados.size > 0 && (
-            <button onClick={processarSelecionados} disabled={processandoFila}
-              style={{
-                marginLeft: 'auto', padding: '6px 14px', borderRadius: 6,
-                background: processandoFila ? '#bdc3c7' : '#2c3e50',
-                color: '#fff', border: 'none', fontFamily: FONT,
-                fontSize: fz(13), fontWeight: 700,
-                cursor: processandoFila ? 'wait' : 'pointer',
-              }}>
-              {processandoFila ? 'Processando…' : `Processar ${selecionados.size}`}
-            </button>
+            ehAbaAprovar ? (
+              <button onClick={aprovarSelecionados} disabled={processandoFila}
+                style={{
+                  marginLeft: 'auto', padding: '6px 14px', borderRadius: 6,
+                  background: processandoFila ? '#bdc3c7' : palette.ok,
+                  color: '#fff', border: 'none', fontFamily: FONT,
+                  fontSize: fz(13), fontWeight: 700,
+                  cursor: processandoFila ? 'wait' : 'pointer',
+                }}>
+                {processandoFila ? 'Aprovando…' : `✓ Aprovar ${selecionados.size}`}
+              </button>
+            ) : (
+              <button onClick={processarSelecionados} disabled={processandoFila}
+                style={{
+                  marginLeft: 'auto', padding: '6px 14px', borderRadius: 6,
+                  background: processandoFila ? '#bdc3c7' : '#2c3e50',
+                  color: '#fff', border: 'none', fontFamily: FONT,
+                  fontSize: fz(13), fontWeight: 700,
+                  cursor: processandoFila ? 'wait' : 'pointer',
+                }}>
+                {processandoFila ? 'Processando…' : `Processar ${selecionados.size}`}
+              </button>
+            )
           )}
         </div>
       )}
@@ -1659,7 +1705,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
               <ConversaRow key={c.id} c={c}
                 vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : null}
                 vendedorasMap={vendedorasMap}
-                selecionavel={ehAbaProcessando}
+                selecionavel={ehAbaProcessando || ehAbaAprovar}
                 selecionado={selecionados.has(c.id)}
                 onToggleSelecao={() => toggleSelecao(c.id)}
                 onContinuarSofia={() => onContinuarSofia(c)}
