@@ -5470,7 +5470,10 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
         const [y,m]=anoMes.split("-").map(Number);
         const ultimoDia=new Date(y,m,0).getDate();
         dataFinal=anoMes+"-"+String(ultimoDia).padStart(2,"0");
-        mesAlvo=mesOverride;
+        // receitasPorMes e indexado pelo NUMERO do mes (1-12), nao por "YYYY-MM".
+        // Antes mesAlvo=mesOverride (string) gravava num balde fantasma e o
+        // botao "fechar mes" nao alterava a celula visivel. Ailson 01/06/2026.
+        mesAlvo=m;
       }else{
         anoMes=now.toISOString().slice(0,7);
         dataInicial=anoMes+"-01";
