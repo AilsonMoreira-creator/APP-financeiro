@@ -5156,7 +5156,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           </div>
           <div style={{padding:"16px 20px"}}>
             <div style={{fontSize:10,color:"#8a9aa4",fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Variações · Estoque atual</div>
-            <table style={{width:"auto",borderCollapse:"separate",borderSpacing:0,fontSize:12}}>
+            <table style={{width:"auto",margin:"0 auto",borderCollapse:"separate",borderSpacing:0,fontSize:12}}>
               <thead><tr>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Cor</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Tamanho</th>
