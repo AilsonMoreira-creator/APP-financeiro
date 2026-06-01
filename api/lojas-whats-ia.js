@@ -442,13 +442,29 @@ export async function processarConversa(conversaId) {
   }
 
   // Já tem sugestão pendente pra essa conversa?
-  const { count: pendCount } = await supabase
+  // Se a pendente for MAIS ANTIGA que a última msg do cliente, ela está "velha"
+  // (o cliente falou mais coisa depois) — descarta e regera, pra a Sofia SEMPRE
+  // ler a última pergunta. Ailson 01/06/2026.
+  const { data: pendentes } = await supabase
     .from('lojas_whats_sugestoes')
-    .select('*', { count: 'exact', head: true })
+    .select('id, criada_em')
     .eq('conversa_id', conversaId)
-    .eq('status', 'pendente');
-  if (pendCount > 0) {
-    return { motivo: 'ja_tem_sugestao_pendente' };
+    .eq('status', 'pendente')
+    .order('criada_em', { ascending: false });
+  if (pendentes && pendentes.length > 0) {
+    const sugMaisRecente = new Date(pendentes[0].criada_em).getTime();
+    const ultimaMsgEm = new Date(ultima.enviada_em).getTime();
+    if (sugMaisRecente >= ultimaMsgEm) {
+      // A sugestão já cobre a última mensagem do cliente — mantém.
+      return { motivo: 'ja_tem_sugestao_pendente' };
+    }
+    // Cliente respondeu DEPOIS da sugestão: descarta a(s) pendente(s) e regera
+    // lendo as mensagens novas (assim a Sofia não ignora a pergunta dele).
+    await supabase.from('lojas_whats_sugestoes')
+      .update({ status: 'substituida' })
+      .eq('conversa_id', conversaId)
+      .eq('status', 'pendente');
+    log('ia', `conversa=${conversaId} ${pendentes.length} sugestao(oes) pendente(s) velha(s) -> substituida (cliente respondeu depois), regerando`);
   }
 
   // 2. Texto da última msg do cliente (texto direto OU transcrição de áudio)
