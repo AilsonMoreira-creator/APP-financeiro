@@ -2060,7 +2060,7 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
 };
 
 
-const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta,cortes=[]})=>{
+const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta,cortes=[],onMesAnterior,onMesProximo,onMesAtual})=>{
   // 🛡️ AVISO ADMIN-ONLY (Ailson 17/05/2026)
   // Lê sessão do localStorage pra detectar se é admin. Só admin salva
   // alterações em Lançamentos hoje (regra em src/App.tsx ~linha 8978).
@@ -2228,6 +2228,25 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
           </div>
         </div>
       )}
+      {/* Navegacao de mes (so na aba Lancamentos — Historico tem seu proprio
+          voltar). Abaixo do card SALDO. Ailson 01/06/2026. */}
+      {!auxAberta&&onMesAnterior&&(()=>{
+        const ano=new Date().getFullYear();
+        const navBtn={padding:"5px 12px",borderRadius:6,border:"1px solid #c8d8e4",background:"#fff",color:"#2c3e50",fontSize:12,fontFamily:"Georgia,serif",cursor:"pointer",fontWeight:600};
+        const navBtnOff={...navBtn,opacity:0.4,cursor:"default"};
+        return(
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+            <button onClick={mes>1?onMesAnterior:undefined} disabled={mes<=1} style={mes>1?navBtn:navBtnOff}>← {MESES[Math.max(0,mes-2)]}</button>
+            <span style={{fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif",minWidth:96,textAlign:"center"}}>{MESES[mes-1]} {ano}</span>
+            {mes!==mesHojeAtual&&(
+              <>
+                <button onClick={mes<12?onMesProximo:undefined} disabled={mes>=12} style={mes<12?navBtn:navBtnOff}>{MESES[Math.min(11,mes)]} →</button>
+                <button onClick={onMesAtual} style={{...navBtn,background:"#2c3e50",color:"#fff",border:"1px solid #2c3e50"}}>Mês atual ({MESES[mesHojeAtual-1]})</button>
+              </>
+            )}
+          </div>
+        );
+      })()}
       {!auxAberta&&(
         <div style={{display:"flex",gap:0,borderBottom:"1px solid #e8e2da",marginBottom:0}}>
           <button onClick={()=>setAba("geral")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="geral"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="geral"?"#2c3e50":"#8a9aa4"}}>Geral</button>
@@ -9344,6 +9363,9 @@ export default function App(){
     const v=blingMktMensal?.[k];
     return(v!=null&&v!=='')?Number(v):null;
   };
+  // Mes exibido na aba Lancamentos (navegavel: anterior/proximo/atual). Comeca
+  // no mes corrente. Ailson 01/06/2026.
+  const [mesLanc,setMesLanc]=useState(MES_ATUAL);
   const [tecidosCAD,setTecidosCAD]=useState([
     {id:1,descricao:"Linho s/ elastano",metragemRolo:50,valorMetro:10},
     {id:2,descricao:"Linho c/ elastano",metragemRolo:50,valorMetro:18},
@@ -10993,7 +11015,7 @@ export default function App(){
           );
         })()}
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
-        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} mktMensal={getMktMensal(MES_ATUAL)} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta} cortes={cortes}/>}
+        {active==="lancamentos"&&<LancamentosContent mes={mesLanc} mktMensal={getMktMensal(mesLanc)} receitas={getReceitasMes(mesLanc)} setReceitas={(fn)=>setReceitasMes(mesLanc,fn)} auxData={auxDataPorMes[mesLanc]||{}} setAuxData={(fn)=>setAuxMes(mesLanc,fn)} categorias={categoriasPorMes[mesLanc]||[...CATS]} setCategorias={(fn)=>setCatsMes(mesLanc,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta} cortes={cortes} onMesAnterior={()=>setMesLanc(m=>Math.max(1,m-1))} onMesProximo={()=>setMesLanc(m=>Math.min(12,m+1))} onMesAtual={()=>setMesLanc(MES_ATUAL)}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="agenda"&&<AgendaContent/>}
         {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} getMktMensal={getMktMensal} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta}/>}
