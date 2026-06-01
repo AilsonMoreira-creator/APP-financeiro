@@ -240,14 +240,31 @@ export default async function handler(req, res) {
     // Ailson 01/06/2026.
     try {
       const DEV_PCT = 10;
+      // So mantem mes ATUAL + ANTERIOR (os que o cron cobre 100% no
+      // bling_vendas_detalhe). Meses anteriores ficam preservados (merge) —
+      // assim um mes ja finalizado nao reverte e meses parciais/antigos (ex:
+      // antes de Mar/2026, quando o detalhe ainda nao existia) nunca entram
+      // com valor errado. Janela em horario de Brasilia (UTC-3).
+      const brt = new Date(Date.now() - 3 * 3600 * 1000);
+      const y = brt.getUTCFullYear(), mo = brt.getUTCMonth(); // 0-11
+      const kAtual = `${y}-${String(mo + 1).padStart(2, '0')}`;
+      const prev = new Date(Date.UTC(y, mo - 1, 1));
+      const kPrev = `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}`;
+      const alvos = new Set([kAtual, kPrev]);
+
       const { data: mkt, error: mktErr } = await supabase
         .from('vw_bling_marketplaces_mensal')
         .select('ano_mes, bruto');
       if (mktErr) {
         console.error('[bling-cron] marketplaces mensal erro:', mktErr.message);
       } else {
-        const porMes = {};
+        // Preserva os meses ja gravados; atualiza so atual+anterior
+        const { data: existente } = await supabase
+          .from('amicia_data').select('payload')
+          .eq('user_id', 'bling-marketplaces-mensal').maybeSingle();
+        const porMes = { ...(existente?.payload?.por_mes || {}) };
         for (const r of (mkt || [])) {
+          if (!alvos.has(r.ano_mes)) continue;
           const bruto = parseFloat(r.bruto) || 0;
           porMes[r.ano_mes] = Math.round(bruto * (1 - DEV_PCT / 100) * 100) / 100;
         }
@@ -256,7 +273,7 @@ export default async function handler(req, res) {
           payload: { por_mes: porMes, dev_pct: DEV_PCT, atualizado_em: new Date().toISOString() },
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
-        console.log('[bling-cron] marketplaces mensal atualizado:', Object.keys(porMes).length, 'meses');
+        console.log('[bling-cron] marketplaces mensal atualizado:', kAtual, kPrev);
       }
     } catch (e) { console.error('[bling-cron] marketplaces mensal exception:', e.message); }
 
