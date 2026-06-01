@@ -21,8 +21,9 @@
 // Ailson 29/05/2026.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, log, logErro } from './_lojas-whats-helpers.js';
+import { supabase, log, logErro, getConfig } from './_lojas-whats-helpers.js';
 import { processarConversa } from './lojas-whats-ia.js';
+import { processarUma } from './lojas-whats-aprovar.js';
 
 // Quanto pegamos por run. Mantido modesto: cada processarConversa faz 1 chamada
 // ao Claude (alguns segundos). 12 * ~5s = ~60s, folgado dentro do maxDuration.
@@ -41,7 +42,12 @@ export default async function handler(req, res) {
 
   const agoraIso = new Date().toISOString();
   let gerados = 0, pulados = 0, erros = 0;
+  let autoEnviadas = 0, autoFalhas = 0;
   const detalhe = [];
+
+  // Chave liga/desliga do auto-envio da Sofia (default DESLIGADO).
+  // Ailson 31/05/2026 — Sofia responde sozinha so quando isto estiver true.
+  const autoAtivo = await getConfig('sofia_auto_resposta_ativa', false) === true;
 
   try {
     // 1. Conversas com debounce vencido e ultima msg do cliente.
@@ -84,7 +90,23 @@ export default async function handler(req, res) {
         // conversa_ja_fechada).
         if (r?.motivo === 'replica_proposta') {
           gerados++;
-          detalhe.push({ id: c.id, motivo: r.motivo });
+          let autoInfo = null;
+          // Auto-envio: so se a chave estiver ligada E o gate classificou como AUTO.
+          // Reusa o MESMO pipeline da aprovacao (processarUma), so que disparado
+          // pelo sistema (aprovada_por='sofia_auto'). Falha aqui nao derruba o run:
+          // a sugestao fica 'falhou' e a Tamara ve. Na duvida, fica pendente.
+          if (autoAtivo && r.autoEnviar && r.sugestaoId) {
+            try {
+              await processarUma(r.sugestaoId, 'aprovar', null, 'sofia_auto');
+              autoEnviadas++;
+              autoInfo = { auto_enviada: true, fase: r.faseAuto, motivo_auto: r.motivoAuto };
+            } catch (eAuto) {
+              autoFalhas++;
+              logErro('cron-responder/auto-envio', eAuto);
+              autoInfo = { auto_enviada: false, erro: eAuto.message };
+            }
+          }
+          detalhe.push({ id: c.id, motivo: r.motivo, auto: autoInfo });
         } else {
           pulados++;
           detalhe.push({ id: c.id, motivo: r?.motivo || 'sem_acao' });
@@ -108,6 +130,9 @@ export default async function handler(req, res) {
       gerados,
       pulados,
       erros,
+      auto_ativo: autoAtivo,
+      auto_enviadas: autoEnviadas,
+      auto_falhas: autoFalhas,
       detalhe,
     });
   } catch (e) {

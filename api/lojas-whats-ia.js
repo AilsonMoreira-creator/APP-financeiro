@@ -741,8 +741,17 @@ export async function processarConversa(conversaId) {
   // Estilo WhatsApp humano: sem travessão, sem ponto final (Ailson 30/05/2026)
   textoProposto = limparEstiloSofia(textoProposto);
 
-  // 7. Cria sugestão pendente
-  const { error: errSug } = await supabase.from('lojas_whats_sugestoes').insert({
+  // 6b. Classificacao auto-envio (Ailson 31/05/2026): decide se a Sofia pode
+  // responder SOZINHA (gate deterministico = 100% de certeza) ou se fica
+  // pendente pra Tamara. Quem dispara o envio e o cron-responder, e SO quando a
+  // chave sofia_auto_resposta_ativa estiver ligada (default desligada).
+  const ultimaSaida = (msgs || []).find(m => m.direcao === 'saida');
+  const sofiaOfereceuCatalogo = !!(ultimaSaida && /catal[oa]g/i.test(ultimaSaida.texto || '')
+    && /(quer|posso|te mando|te envio|\bmando\b|gostaria de ver|quer que eu)/i.test(ultimaSaida.texto || ''));
+  const cls = classificarAutoEnvio({ textoCliente, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo });
+
+  // 7. Cria sugestão pendente (captura o id pro auto-envio)
+  const { data: sugRow, error: errSug } = await supabase.from('lojas_whats_sugestoes').insert({
     conversa_id: conversaId,
     tipo: 'replica',
     texto_proposto: textoProposto,
@@ -756,9 +765,14 @@ export async function processarConversa(conversaId) {
       claude_latencia_ms: cl.latencia_ms,
       claude_custo_brl: cl.custo_brl,
       modo_aprendizado: modoAprendizado,  // 'replicar' | 'explorar' (Ailson 26/05/2026)
-      padroes_no_prompt: !!blocoPadroes
+      padroes_no_prompt: !!blocoPadroes,
+      // Auto-envio + aprendizado por origem (Ailson 31/05/2026)
+      origem_lead: conv.origem_lead || null,
+      auto_envio: cls.auto,
+      fase_auto: cls.fase || null,
+      motivo_auto: cls.motivo || null
     }
-  });
+  }).select('id').single();
   if (errSug) throw errSug;
 
   // 8. Atualiza atividade da conversa
@@ -769,12 +783,66 @@ export async function processarConversa(conversaId) {
 
   return {
     motivo: 'replica_proposta',
+    sugestaoId: sugRow?.id || null,
+    autoEnviar: cls.auto,
+    faseAuto: cls.fase || null,
+    motivoAuto: cls.motivo || null,
     gatilhos: [],
     proposta_chars: textoProposto.length,
     refs_carrinho_resolvidas: refsCarrinho,
     claude_latencia_ms: cl.latencia_ms,
     claude_custo_brl: cl.custo_brl
   };
+}
+
+// ─── GATE AUTO-ENVIO (Ailson 31/05/2026) ──────────────────────────────────
+// Decide se a Sofia responde SOZINHA (100% de certeza, por regra deterministica)
+// ou se a sugestao fica pendente pra Tamara. Default conservador: na duvida,
+// pendente. Quem executa o envio e o cron-responder, so com a chave ligada.
+//   - Abertura nas origens padrao (stories/linktree/anuncio) -> auto
+//   - Pedido direto de ver/catalogo -> auto
+//   - "atacado" sozinho -> auto
+//   - Confirmacao curta ("sim/pode/claro") SO se a Sofia acabou de oferecer catalogo -> auto
+//   - Qualquer outra coisa -> pendente (aprovacao)
+function classificarAutoEnvio({ textoCliente, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo }) {
+  const t = String(textoCliente || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim();
+  if (!t) return { auto: false, motivo: 'sem_texto' };
+
+  // 1. Abertura: 1a msg do cliente numa origem padrao
+  const origensPadrao = ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram'];
+  if (ehPrimeiraMsgCliente && origensPadrao.includes(conv.origem_lead)) {
+    return { auto: true, fase: 'abertura', motivo: 'abertura_origem_padrao' };
+  }
+
+  // 2. Pedido direto de ver / catalogo
+  const pedeCatalogo =
+    /\bcatal[oa]g/.test(t) ||                        // catalogo, catalago, catalog
+    /\bquero (ver|receber)\b/.test(t) ||
+    /\bgostaria de ver\b/.test(t) ||
+    /\bver (os|o que|o q|modelos|disponiv)/.test(t) ||
+    /\bdisponiv/.test(t) ||
+    /\bme mostra\b/.test(t) ||
+    /\bvou olhar os modelos\b/.test(t);
+  if (pedeCatalogo) return { auto: true, fase: 'catalogo', motivo: 'pedido_direto_catalogo' };
+
+  // 3. "atacado" sozinho (mensagem curta basicamente so "atacado")
+  const palavras = t.replace(/[^a-z ]/g, '').trim().split(/\s+/).filter(Boolean);
+  if (/\batacado\b/.test(t) && palavras.length <= 3) {
+    return { auto: true, fase: 'catalogo', motivo: 'atacado_sozinho' };
+  }
+
+  // 4. Confirmacao curta a uma oferta de catalogo da Sofia
+  const confirmaCurta = t.length <= 25
+    && /^(sim|claro|pode( sim)?|por favor|pode mandar|manda|aguardando|ok|isso|quero)\b/.test(t);
+  if (confirmaCurta && sofiaOfereceuCatalogo) {
+    return { auto: true, fase: 'catalogo', motivo: 'confirmacao_pos_oferta' };
+  }
+
+  // 5. Resto: aprovacao
+  return { auto: false, motivo: 'requer_aprovacao' };
 }
 
 // ─── HELPERS DE CONTEXTO PRA CLAUDE ───────────────────────────────────────

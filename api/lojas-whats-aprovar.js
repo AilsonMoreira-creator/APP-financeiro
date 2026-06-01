@@ -152,7 +152,7 @@ async function executarAcao(req, res) {
 
 // ─── Processa 1 sugestão ───────────────────────────────────────────────────
 
-async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
+export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
   // 1. Busca sugestão + conversa
   const { data: sug, error: errSug } = await supabase
     .from('lojas_whats_sugestoes')
