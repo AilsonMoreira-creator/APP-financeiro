@@ -2060,7 +2060,7 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
 };
 
 
-const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta,cortes=[]})=>{
+const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta,cortes=[]})=>{
   // 🛡️ AVISO ADMIN-ONLY (Ailson 17/05/2026)
   // Lê sessão do localStorage pra detectar se é admin. Só admin salva
   // alterações em Lançamentos hoje (regra em src/App.tsx ~linha 8978).
@@ -2070,8 +2070,19 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const [recLocal,setRecLocal]=useState(RECEITAS_EXEMPLO);
   const [auxLocal,setAuxLocal]=useState(AUX_INICIAL);
   const [catsLocal,setCatsLocal]=useState([...CATS]);
-  const receitas=recProp!==undefined?recProp:recLocal;
+  const receitasBase=recProp!==undefined?recProp:recLocal;
   const setReceitas=recProp!==undefined?setRecProp:setRecLocal;
+  // Marketplaces e AUTOMATICO: vem do Bling (chave bling-marketplaces-mensal,
+  // ja liquido -10%). Sobrepoe no dia 1 e zera os outros dias pra nao duplicar
+  // no total. Os lancamentos manuais (Silva Teles/Bom Retiro) ficam intactos —
+  // nunca gravamos marketplaces no payload por aqui. Ailson 01/06/2026.
+  const receitas=(()=>{
+    if(mktMensal==null)return receitasBase;
+    const out={};
+    for(const k of Object.keys(receitasBase))out[k]={...receitasBase[k],marketplaces:""};
+    out[1]={...(receitasBase[1]||{}),marketplaces:String(mktMensal)};
+    return out;
+  })();
   const auxData=auxProp!==undefined?auxProp:auxLocal;
   const setAuxData=auxProp!==undefined?setAuxProp:setAuxLocal;
   const categorias=catsProp!==undefined?catsProp:catsLocal;
@@ -2140,7 +2151,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
   const totalGeral=totRec.st+totRec.br+totRec.mkt;
   const recTotais={geral:totalGeral,mkt:totRec.mkt};
   const totalDesp=categorias.reduce((s,c)=>s+calcTotalAux(c,auxData,recTotais),0);
-  const salvarCelula=(dia,canal,val)=>setReceitas(prev=>({...prev,[dia]:{...(prev[dia]||{}),[canal]:val}}));
+  const salvarCelula=(dia,canal,val)=>{if(canal==="marketplaces")return;setReceitas(prev=>({...prev,[dia]:{...(prev[dia]||{}),[canal]:val}}));};
   const updateLinhaAux=(cat,idx,field,val)=>setAuxData(prev=>{
     const l=[...(prev[cat]||[])];const oldVal=l[idx]?.[field];l[idx]={...l[idx],[field]:val};
     // Auto-date for fixed categories when valor is entered
@@ -2242,7 +2253,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                         {editando===key?(
                           <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:cellPad,fontSize:cellFs,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal)}/>
                         ):(
-                          <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
+                          <div onClick={()=>!futuro&&canal!=="marketplaces"&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
                             {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                           </div>
                         )}
@@ -2413,7 +2424,7 @@ const LancamentosContent=({mes=3,receitas:recProp,setReceitas:setRecProp,auxData
                           {editando===key?(
                             <input ref={el=>el&&el.focus({preventScroll:true})} value={d[canal]||""} onChange={e=>salvarCelula(dia,canal,e.target.value)} style={{width:"100%",border:"2px solid #4a7fa5",borderRadius:4,padding:cellPad,fontSize:cellFs,fontWeight:700,fontFamily:_FN,textAlign:"right",outline:"none",background:"#f0f6fb",color:"#2c3e50",boxSizing:"border-box",margin:"0 4px"}} onBlur={()=>setEditando(null)} onKeyDown={e=>navCelula(e,dia,canal,"g")}/>
                           ):(
-                            <div onClick={()=>!futuro&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
+                            <div onClick={()=>!futuro&&canal!=="marketplaces"&&setEditando(key)} onMouseEnter={e=>{if(!futuro)e.currentTarget.style.background=isDom?"#d0c8be":"#edf4fa";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}} style={{fontFamily:_FN,fontSize:cellFs,fontWeight:700,color:d[canal]?valCol:emptyCol,cursor:futuro?"default":"pointer",width:"100%",textAlign:"right",padding:cellPad,borderRadius:3,transition:"background 0.12s"}}>
                               {d[canal]?parseFloat(d[canal]).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}
                             </div>
                           )}
@@ -3112,7 +3123,7 @@ const AgendaContent=()=>{
   );
 };
 
-const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceitasMes,auxDataPorMes,setAuxDataPorMes,categoriasPorMes,setCategoriasPorMes,dadosMensais,mesAtual,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta})=>{
+const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceitasMes,getMktMensal,auxDataPorMes,setAuxDataPorMes,categoriasPorMes,setCategoriasPorMes,dadosMensais,mesAtual,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta})=>{
   const anoAtual=2026;
   const anos=[2026,2025,2024,2023,2022,2021,2020,2019];
   const [anoSel,setAnoSel]=useState(anoAtual);
@@ -3136,7 +3147,7 @@ const HistoricoContent=({boletosShared,setBoletosShared,getReceitasMes,setReceit
             <div style={{fontSize:22,fontWeight:600,color:"#2c3e50"}}>{MESES[mesSel]} {anoSel}</div>
             {!temDados&&<div style={{fontSize:12,color:"#a89f94",background:"#f7f4f0",padding:"4px 10px",borderRadius:6}}>Sem dados</div>}
           </div>
-          <LancamentosContent mes={mesNum}
+          <LancamentosContent mes={mesNum} mktMensal={getMktMensal?getMktMensal(mesNum):null}
             receitas={getReceitasMes(mesNum)} setReceitas={(fn)=>setReceitasMes(mesNum,fn)}
             auxData={auxDataPorMes[mesNum]||{}} setAuxData={(fn)=>setAuxDataPorMes(prev=>({...prev,[mesNum]:typeof fn==="function"?fn(prev[mesNum]||{}):fn}))}
             categorias={categoriasPorMes[mesNum]||[...CATS]} setCategorias={(fn)=>setCategoriasPorMes(prev=>({...prev,[mesNum]:typeof fn==="function"?fn(prev[mesNum]||[...CATS]):fn}))}
@@ -9304,6 +9315,27 @@ export default function App(){
   ]);
   const [oficinasCAD,setOficinasCAD]=useState(OFICINAS_CAD_INICIAL);
   const [logTroca,setLogTroca]=useState([]);
+  // Marketplaces mensal (automatico, vem do Bling via cron -> chave dedicada
+  // 'bling-marketplaces-mensal'). { "2026-05": 873388.77, ... } ja liquido.
+  // O frontend so LE; nunca grava no payload financeiro. Ailson 01/06/2026.
+  const [blingMktMensal,setBlingMktMensal]=useState({});
+  useEffect(()=>{
+    let vivo=true;
+    const carregar=async()=>{
+      try{
+        const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-marketplaces-mensal').maybeSingle();
+        if(vivo&&data?.payload?.por_mes)setBlingMktMensal(data.payload.por_mes);
+      }catch(e){console.error('mkt mensal load:',e);}
+    };
+    carregar();
+    const t=setInterval(carregar,5*60*1000); // refresca a cada 5 min (cron roda a cada 10)
+    return()=>{vivo=false;clearInterval(t);};
+  },[]);
+  const getMktMensal=(m)=>{
+    const k=`${new Date().getFullYear()}-${String(m).padStart(2,'0')}`;
+    const v=blingMktMensal?.[k];
+    return(v!=null&&v!=='')?Number(v):null;
+  };
   const [tecidosCAD,setTecidosCAD]=useState([
     {id:1,descricao:"Linho s/ elastano",metragemRolo:50,valorMetro:10},
     {id:2,descricao:"Linho c/ elastano",metragemRolo:50,valorMetro:18},
@@ -10953,10 +10985,10 @@ export default function App(){
           );
         })()}
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
-        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta} cortes={cortes}/>}
+        {active==="lancamentos"&&<LancamentosContent mes={MES_ATUAL} mktMensal={getMktMensal(MES_ATUAL)} receitas={getReceitasMes(MES_ATUAL)} setReceitas={(fn)=>setReceitasMes(MES_ATUAL,fn)} auxData={auxDataPorMes[MES_ATUAL]||{}} setAuxData={(fn)=>setAuxMes(MES_ATUAL,fn)} categorias={categoriasPorMes[MES_ATUAL]||[...CATS]} setCategorias={(fn)=>setCatsMes(MES_ATUAL,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta} cortes={cortes}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="agenda"&&<AgendaContent/>}
-        {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta}/>}
+        {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} getMktMensal={getMktMensal} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta}/>}
         {active==="relatorio"&&<RelatorioContent auxDataPorMes={auxDataPorMes} receitasPorMes={receitasPorMes} prestadores={prestadores} boletosShared={boletosShared} cortes={cortes} mesAtual={MES_ATUAL}/>}
         {active==="calculadora"&&<CalculadoraContent/>}
         {active==="fichatecnica"&&<FichaTecnicaContent/>}

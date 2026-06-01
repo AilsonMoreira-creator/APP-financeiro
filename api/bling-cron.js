@@ -231,6 +231,35 @@ export default async function handler(req, res) {
     const duracao = ((Date.now() - inicio) / 1000).toFixed(1);
     console.log(`[bling-cron] ✓ concluído em ${duracao}s — ${resumo.novos} novos, ${resumo.erros} erros`);
 
+    // ── Marketplaces mensal → "pista própria" pra célula de Lançamentos ──────
+    // Soma total_produtos por mês (view vw_bling_marketplaces_mensal) e aplica
+    // -10% de devolução. O frontend LÊ dessa chave dedicada; o cron NUNCA grava
+    // no payload financeiro (amicia-admin) — assim nao sobrescreve os
+    // lancamentos manuais de Silva Teles/Bom Retiro (merge do sync e por mes
+    // inteiro). Resolve o "Marketplaces travado/baixo no fim do mes" sem clique.
+    // Ailson 01/06/2026.
+    try {
+      const DEV_PCT = 10;
+      const { data: mkt, error: mktErr } = await supabase
+        .from('vw_bling_marketplaces_mensal')
+        .select('ano_mes, bruto');
+      if (mktErr) {
+        console.error('[bling-cron] marketplaces mensal erro:', mktErr.message);
+      } else {
+        const porMes = {};
+        for (const r of (mkt || [])) {
+          const bruto = parseFloat(r.bruto) || 0;
+          porMes[r.ano_mes] = Math.round(bruto * (1 - DEV_PCT / 100) * 100) / 100;
+        }
+        await supabase.from('amicia_data').upsert({
+          user_id: 'bling-marketplaces-mensal',
+          payload: { por_mes: porMes, dev_pct: DEV_PCT, atualizado_em: new Date().toISOString() },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' });
+        console.log('[bling-cron] marketplaces mensal atualizado:', Object.keys(porMes).length, 'meses');
+      }
+    } catch (e) { console.error('[bling-cron] marketplaces mensal exception:', e.message); }
+
     // Salva status da execução no Supabase pra painel de saúde
     try {
       await supabase.from('amicia_data').upsert({
