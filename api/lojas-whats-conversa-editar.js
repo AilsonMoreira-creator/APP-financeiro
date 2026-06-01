@@ -26,7 +26,7 @@ const CAMPOS_PERMITIDOS = new Set([
 ]);
 
 const ETAPAS_VALIDAS = new Set([
-  'processando','aprovar','enviada','conversando','quente','atendida','vendeu','perdida',
+  'processando','aprovar','enviada','conversando','quente','atendida','vendeu','perdida','follow_up','varejo',
 ]);
 
 export default async function handler(req, res) {
@@ -58,6 +58,10 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: `etapa invalida: ${v}` });
         }
         upd.etapa = v;
+        // Move manual pra follow_up: marca como vencido AGORA pra o card aparecer
+        // na aba (lista + badge filtram follow_up_vence_em <= now) e entrar no
+        // fluxo de follow-up. Ailson 01/06/2026.
+        if (v === 'follow_up') upd.follow_up_vence_em = agora;
         continue;
       }
       if (k === 'observacao_para_sofia') {
