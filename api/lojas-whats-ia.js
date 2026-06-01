@@ -579,6 +579,7 @@ export async function processarConversa(conversaId) {
   // 5c. MIDIAS DISPONIVEIS (Ailson 26/05/2026)
   // Lista refs com fotos/videos + catalogos pra Sofia usar via marcadores.
   let blocoMidias = '';
+  let nomeCatalogoAtual = null;  // catalogo mais recente — pro force-inject (Ailson 31/05/2026)
   try {
     const { data: midias } = await supabase
       .from('lojas_whats_midias')
@@ -600,8 +601,9 @@ export async function processarConversa(conversaId) {
         linhas.push('    → use [ENVIAR_VIDEO:REF] SOMENTE em fechamento');
       }
       if (catalogos.length > 0) {
+        nomeCatalogoAtual = catalogos[0].nome_arquivo.replace(/\.[^.]+$/, '');
         linhas.push(`  CATALOGOS: ${catalogos.slice(0, 10).map(c => c.nome_arquivo.replace(/\.[^.]+$/, '')).join(', ')}`);
-        linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes.');
+        linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes. Quando o cliente responder que JA revende / tem loja / e sacoleira / esta comecando, acolhe rapido e JA manda o catalogo (sem ficar perguntando mais).');
       }
       blocoMidias = linhas.join('\n');
     }
@@ -750,6 +752,17 @@ export async function processarConversa(conversaId) {
     && /(quer|posso|te mando|te envio|\bmando\b|gostaria de ver|quer que eu)/i.test(ultimaSaida.texto || ''));
   const cls = classificarAutoEnvio({ textoCliente, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo });
 
+  // Garante o catalogo nos gatilhos de catalogo (Ailson 31/05/2026): se o gate
+  // classificou fase=catalogo (pedido direto, atacado, qualificacao, confirmacao),
+  // o catalogo ainda NAO foi enviado e a IA nao colocou o marcador, injeta o
+  // catalogo atual. Assim "ja vendo / revenda / tenho loja" sempre puxa o catalogo.
+  // O guard anti-reenvio acima ja protege contra mandar 2x.
+  if (cls.fase === 'catalogo' && !catalogoJaEnviado && nomeCatalogoAtual
+      && !/\[ENVIAR_CATALOGO:[^\]]+\]/i.test(textoProposto)) {
+    textoProposto = `${textoProposto}\n\n[ENVIAR_CATALOGO:${nomeCatalogoAtual}]`;
+    log('ia', `conversa=${conversaId} catalogo force-inject (motivo=${cls.motivo})`);
+  }
+
   // 7. Cria sugestão pendente (captura o id pro auto-envio)
   const { data: sugRow, error: errSug } = await supabase.from('lojas_whats_sugestoes').insert({
     conversa_id: conversaId,
@@ -834,14 +847,30 @@ function classificarAutoEnvio({ textoCliente, conv, ehPrimeiraMsgCliente, sofiaO
     return { auto: true, fase: 'catalogo', motivo: 'atacado_sozinho' };
   }
 
-  // 4. Confirmacao curta a uma oferta de catalogo da Sofia
+  // 4. Resposta de qualificacao (ja revende / tem loja / sacoleira / comecando)
+  //    -> manda o catalogo tambem (Ailson 31/05/2026). O catalogo e garantido
+  //    pelo force-inject la no processarConversa, mesmo se a IA nao colocar marcador.
+  const ehQualificacao =
+    /\b(ja )?vend[oe]\b/.test(t) ||
+    /\breven[dt]/.test(t) ||                 // revendo, revenda, revendedora
+    /\btenho (uma )?loja\b/.test(t) ||
+    /\bminha loja\b/.test(t) ||
+    /\bloja (fisica|propria)\b/.test(t) ||
+    /\bsacoleira\b/.test(t) ||
+    /\bprimeira (vez|compra)\b/.test(t) ||
+    /\b(to|estou|vou|quero|pensando em)\s*comec/.test(t) ||
+    /\bcomecand/.test(t) ||
+    /\biniciando\b/.test(t);
+  if (ehQualificacao) return { auto: true, fase: 'catalogo', motivo: 'qualificacao_resposta' };
+
+  // 5. Confirmacao curta a uma oferta de catalogo da Sofia
   const confirmaCurta = t.length <= 25
     && /^(sim|claro|pode( sim)?|por favor|pode mandar|manda|aguardando|ok|isso|quero)\b/.test(t);
   if (confirmaCurta && sofiaOfereceuCatalogo) {
     return { auto: true, fase: 'catalogo', motivo: 'confirmacao_pos_oferta' };
   }
 
-  // 5. Resto: aprovacao
+  // 6. Resto: aprovacao
   return { auto: false, motivo: 'requer_aprovacao' };
 }
 
