@@ -477,6 +477,14 @@ const REGEX_INSTA_STORIES = /\bvi\s+v(?:cs|oc[êe]s?)\s+no\s+insta\b/i;
 // e so rola se nao tinha referral=ad.
 const REGEX_INSTA_LINKTREE = /\bgostaria\s+de\s+informa\S*\s+pr[ao]\s+comprar\s+no\s+atacado\b/i;
 
+// LINKTREE V2 (Ailson 01/06/2026) — frase nova, ASSINATURA UNICA e inequivoca:
+// "Olá! Vim pelo link e quero conhecer o atacado da Amícia". So quem clica no
+// botao do Linktree manda exatamente isso (prefill do wa.me). Casa "vim pelo
+// link ... atacado". Substitui a frase generica antiga (REGEX_INSTA_LINKTREE),
+// que era ambigua. A antiga FICA durante a transicao (leads que ja mandaram a
+// frase velha) e sai depois de uns dias.
+const REGEX_INSTA_LINKTREE_V2 = /vim\s+pelo\s+link[\s\S]{0,40}atacado/i;
+
 // Mensagem pronta do anuncio CTWA (Campanha 03): "Quero comprar no ATACADO
 // (nao apague esta mensagem)". O trecho "nao apague esta mensagem" so existe
 // nessa msg pronta — fingerprint perfeito do anuncio. Backup de atribuicao
@@ -530,6 +538,10 @@ function detectarOrigemLead(refInfo) {
   if (refInfo.primeiraTexto) {
     if (REGEX_INSTA_STORIES.test(refInfo.primeiraTexto)) {
       return { origem: 'instagram_stories', confianca: 0.95, meta: {} };
+    }
+    // V2 — assinatura unica nova do Linktree (alta confianca). Ailson 01/06/2026.
+    if (REGEX_INSTA_LINKTREE_V2.test(refInfo.primeiraTexto)) {
+      return { origem: 'instagram_linktree', confianca: 0.95, meta: { via: 'linktree_v2' } };
     }
     if (REGEX_INSTA_LINKTREE.test(refInfo.primeiraTexto)) {
       return { origem: 'instagram_linktree', confianca: 0.9, meta: {} };
