@@ -4,6 +4,7 @@ import { supabase, USER_ID } from "./supabase.js";
 import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
+import { useCaseado, CaseadoBtnIcone } from './caseado.jsx';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
 import OsAmicia from './os-amicia/OsAmicia';
@@ -3882,6 +3883,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
 
   // Fotos: mesma lógica FotoProd + zoom DOM
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
+  const caseadoApi=useCaseado();
   const handleZoom=(src)=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer';const img=document.createElement('img');img.src=src;img.style.cssText='width:265px;height:378px;object-fit:cover;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.3);border:3px solid #fff';ov.appendChild(img);ov.onclick=()=>document.body.removeChild(ov);document.body.appendChild(ov);};
   const [dashPeriodo,setDashPeriodo]=useState("ano");
   const [dashDe,setDashDe]=useState("");
@@ -4211,7 +4213,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
                         <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                         <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif"}}>{c.ref}</div>
                       </div>
-                      <div style={{padding:"5px 8px"}}><div style={{fontSize:12,color:"#2c3e50"}}>{c.descricao}</div><span style={{fontSize:9,color:"#fff",background:c.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 5px"}}>{c.marca}</span></div>
+                      <div style={{padding:"5px 8px"}}><div style={{fontSize:12,color:"#2c3e50"}}>{c.descricao}</div><span style={{display:"inline-flex",alignItems:"center",gap:4}}><span style={{fontSize:9,color:"#fff",background:c.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 5px"}}>{c.marca}</span><CaseadoBtnIcone corte={c} api={caseadoApi}/></span></div>
                       <div style={{padding:"5px 8px",fontSize:11,color:"#2c3e50"}}>{c.oficina}</div>
                       <div style={{padding:"5px 8px",fontSize:15,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.qtd}</div>
                       <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.valorUnit!=null?"R$ "+Number(c.valorUnit).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>
