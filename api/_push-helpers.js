@@ -146,14 +146,19 @@ export function checarAuthCron(req) {
  * @param {string} opts.tag - tag pra dedup (default 'sac-msg')
  * @returns { enviadas, falhadas, removidas }
  */
-export async function enviarPushSAC({ titulo, mensagem, url = '/', tag = 'sac-msg' }) {
+export async function enviarPushSAC({ titulo, mensagem, url = '/', tag = 'sac-msg', userId = null }) {
   if (!VAPID_PRIVATE_KEY) {
     return { enviadas: 0, falhadas: 0, removidas: 0, motivo: 'VAPID nao configurado' };
   }
 
-  const { data: subs, error } = await supabase
+  // userId opcional: filtra só as inscrições daquele usuário (usado pelo push
+  // de teste). Sem userId, envia pra todos os inscritos (comportamento padrão
+  // do webhook/cron). Ailson 02/06/2026.
+  let query = supabase
     .from('sac_push_subscriptions')
     .select('id, endpoint, subscription, user_id');
+  if (userId) query = query.eq('user_id', String(userId));
+  const { data: subs, error } = await query;
   if (error || !subs?.length) {
     return { enviadas: 0, falhadas: 0, removidas: 0 };
   }

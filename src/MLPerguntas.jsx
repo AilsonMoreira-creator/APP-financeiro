@@ -17,6 +17,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import MLPosVenda from './MLPosVenda';
 import { SacIcon } from './SacIcons';
+import { ativarPushSAC } from './sac-push-client.js';
 
 // ══════════════════════════════════════════════════════════
 // CONSTANTS
@@ -212,6 +213,9 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
   const [showTemplates, setShowTemplates] = useState(false);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [configSection, setConfigSection] = useState('saude');
+  // Push de teste do SAC (Config → Notificações). Ailson 02/06/2026.
+  const [pushMsg, setPushMsg] = useState('');
+  const [pushBusy, setPushBusy] = useState(false);
   const [tokenStatus, setTokenStatus] = useState([]);
   const [answeredToday, setAnsweredToday] = useState([]);
   const [qaHistory, setQaHistory] = useState([]);
@@ -1335,6 +1339,36 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
   // ══════════════════════════════════════════════════════════
   // PAGE: CONFIGURAÇÕES
   // ══════════════════════════════════════════════════════════
+  async function ativarNesteAparelho() {
+    setPushBusy(true); setPushMsg('');
+    try {
+      const r = await ativarPushSAC(currentUser);
+      setPushMsg(r.ok ? '✓ Notificações ativadas neste aparelho.' : 'Erro: ' + (r.motivo || 'falha'));
+    } catch (e) {
+      setPushMsg('Erro: ' + e.message);
+    } finally { setPushBusy(false); }
+  }
+
+  async function enviarPushTeste() {
+    setPushBusy(true); setPushMsg('');
+    try {
+      const r = await fetch('/api/sac-push-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUser }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setPushMsg('Erro: ' + (d.error || `HTTP ${r.status}`)); return; }
+      if ((d.enviadas || 0) === 0) {
+        setPushMsg('Nenhum aparelho inscrito pra "' + currentUser + '". Ative neste aparelho primeiro (botão ao lado).');
+      } else {
+        setPushMsg(`✓ Enviado pra ${d.enviadas} aparelho(s). Deve aparecer em segundos.`);
+      }
+    } catch (e) {
+      setPushMsg('Erro: ' + e.message);
+    } finally { setPushBusy(false); }
+  }
+
   function renderConfig() {
     const sections = [
       { id: 'saude', icon: 'saude', label: 'Saúde' },
@@ -1344,6 +1378,7 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
       { id: 'ausencia', icon: 'lua', label: 'Ausência' },
       { id: 'ia', icon: 'sugestao_ia', label: 'IA' },
       { id: 'alertas', icon: 'sino', label: 'Alertas' },
+      { id: 'notificacoes', icon: 'sino', label: 'Notificações' },
       { id: 'treinamento', icon: 'livros', label: 'Treinar IA' },
       { id: 'treinamento_pv', icon: 'livros', label: 'Pós-Venda' },
     ];
@@ -1666,6 +1701,29 @@ export default function MLPerguntas({ supabase, currentUser = 'Admin', resetTrig
                 <span style={{ ...S, fontSize: 15, color: PALETTE.textLight }}>min</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* NOTIFICAÇÕES PUSH (Ailson 02/06/2026) */}
+        {configSection === 'notificacoes' && (
+          <div style={{ background: PALETTE.white, border: `1px solid ${PALETTE.border}`, borderRadius: 8, padding: 12 }}>
+            <div style={{ ...S, fontSize: 15, fontWeight: 700, color: PALETTE.dark, display: 'inline-flex', alignItems: 'center', gap: 5, marginBottom: 8 }}><SacIcon name="sino" size={18}/>Notificações push (Pós-Venda)</div>
+            <div style={{ ...S, fontSize: 14, color: PALETTE.textLight, marginBottom: 10, lineHeight: 1.45 }}>
+              O alerta chega quando entra mensagem nova de comprador no pós-venda (não re-notifica os antigos). Ative em cada aparelho que vc quer receber. Pra receber no celular, ative pelo próprio celular (no iPhone, adicione o app à tela inicial antes). O navegador precisa estar aberto pra notificação aparecer.
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={ativarNesteAparelho} disabled={pushBusy} style={{ ...S, background: PALETTE.sand, color: PALETTE.text, border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 14, cursor: 'pointer', fontWeight: 600, opacity: pushBusy ? 0.6 : 1 }}>
+                🔔 Ativar neste aparelho
+              </button>
+              <button onClick={enviarPushTeste} disabled={pushBusy} style={{ ...S, background: PALETTE.blue, color: '#fff', border: 'none', borderRadius: 5, padding: '6px 12px', fontSize: 14, cursor: 'pointer', fontWeight: 600, opacity: pushBusy ? 0.6 : 1 }}>
+                {pushBusy ? 'Enviando...' : '📨 Enviar push de teste'}
+              </button>
+            </div>
+            {pushMsg && (
+              <div style={{ ...S, fontSize: 14, marginTop: 10, fontWeight: 600, color: pushMsg.startsWith('✓') ? '#27ae60' : pushMsg.startsWith('Erro') ? '#c0392b' : PALETTE.text }}>
+                {pushMsg}
+              </div>
+            )}
           </div>
         )}
 
