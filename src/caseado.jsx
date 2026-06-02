@@ -20,6 +20,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from './supabase.js';
 
+const FN = "Calibri,'Segoe UI',Arial,sans-serif";
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 // Normaliza ref tirando zeros à esquerda (0020 ≡ 20). Mesmo padrão do app.
 export function normRef(ref) {
@@ -299,6 +301,166 @@ export function ModalDefinirCaseado({ corte, api, registroAtual, onClose }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Foto do produto (bucket `produtos`) — mesmo método do FotoOrdem ──────────
+export function FotoCaseado({ refProd, w = 52, h = 66 }) {
+  const sbUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL)
+    || (typeof localStorage !== 'undefined' && localStorage.getItem('sb_url')) || '';
+  const base = sbUrl ? `${sbUrl}/storage/v1/object/public/produtos/` : '';
+  const ph = (
+    <div style={{ width: w, height: h, borderRadius: 6, background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e8e2da', flexShrink: 0, color: '#c0b8b0', fontSize: 16 }}>📷</div>
+  );
+  if (!base || !refProd) return ph;
+  const orig = String(refProd).toUpperCase();
+  const norm = orig.replace(/^0+/, '') || '0';
+  const urls = [norm + '.jpg', norm + '.png', norm + '.webp'];
+  if (orig !== norm) urls.push(orig + '.jpg', orig + '.png', orig + '.webp');
+  const pad4 = norm.padStart(4, '0'), pad5 = norm.padStart(5, '0');
+  if (pad4 !== norm && pad4 !== orig) urls.push(pad4 + '.jpg', pad4 + '.png', pad4 + '.webp');
+  if (pad5 !== norm && pad5 !== orig && pad5 !== pad4) urls.push(pad5 + '.jpg', pad5 + '.png', pad5 + '.webp');
+  const cb = '?v=' + new Date().toISOString().slice(0, 10);
+  return (
+    <div style={{ position: 'relative', width: w, height: h, flexShrink: 0 }}>
+      <img src={base + urls[0] + cb} alt={`REF ${refProd}`}
+        onError={(e) => {
+          const cur = e.target.src;
+          const idx = urls.findIndex(u => cur.includes(u));
+          if (idx >= 0 && idx < urls.length - 1) e.target.src = base + urls[idx + 1] + cb;
+          else { e.target.style.display = 'none'; const n = e.target.nextSibling; if (n) n.style.display = 'flex'; }
+        }}
+        style={{ width: w, height: h, objectFit: 'cover', borderRadius: 6, border: '1px solid #e8e2da' }} />
+      <div style={{ width: w, height: h, borderRadius: 6, background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)', display: 'none', alignItems: 'center', justifyContent: 'center', border: '1px solid #e8e2da', position: 'absolute', top: 0, left: 0, color: '#c0b8b0', fontSize: 16 }}>📷</div>
+    </div>
+  );
+}
+
+// Ícone da aba Caseado (botão de camisa) — usa currentColor pra acompanhar a aba
+export function CaseadoTabIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" fill="none" />
+      <circle cx="9.5" cy="9.5" r="1.3" fill="currentColor" />
+      <circle cx="14.5" cy="9.5" r="1.3" fill="currentColor" />
+      <circle cx="9.5" cy="14.5" r="1.3" fill="currentColor" />
+      <circle cx="14.5" cy="14.5" r="1.3" fill="currentColor" />
+    </svg>
+  );
+}
+
+function diasParado(reg) {
+  if (!reg?.definido_em) return 0;
+  const ini = new Date(reg.definido_em).getTime();
+  const fim = reg.entregue && reg.entregue_em ? new Date(reg.entregue_em).getTime() : Date.now();
+  return Math.max(0, Math.floor((fim - ini) / 86400000));
+}
+function fmtData(x) { try { return new Date(x).toLocaleDateString('pt-BR'); } catch { return '—'; } }
+
+// ── Tela Caseado (aba ao lado de Cadastros no módulo Oficinas) ───────────────
+export function TelaCaseado({ api }) {
+  const [busca, setBusca] = useState('');
+  const [nomeFiltro, setNomeFiltro] = useState('todos');
+  const [statusFiltro, setStatusFiltro] = useState('todos'); // todos | aberto | entregue
+  const [novoNome, setNovoNome] = useState('');
+  const registros = api?.registros || [];
+
+  const termo = busca.trim().toLowerCase();
+  let lista = registros.filter(r => {
+    if (statusFiltro === 'aberto' && r.entregue) return false;
+    if (statusFiltro === 'entregue' && !r.entregue) return false;
+    if (nomeFiltro !== 'todos' && r.nome !== nomeFiltro) return false;
+    if (termo) { const hay = (String(r.ref || '') + ' ' + String(r.descricao || '')).toLowerCase(); if (!hay.includes(termo)) return false; }
+    return true;
+  });
+  // abertos em cima, cada grupo do mais recém-definido pro mais antigo
+  lista = [...lista].sort((a, b) => {
+    if (!!a.entregue !== !!b.entregue) return a.entregue ? 1 : -1;
+    const ta = new Date(a.entregue && a.entregue_em ? a.entregue_em : a.definido_em).getTime();
+    const tb = new Date(b.entregue && b.entregue_em ? b.entregue_em : b.definido_em).getTime();
+    return tb - ta;
+  });
+  const nAbertos = registros.filter(r => !r.entregue).length;
+  const nEntregues = registros.filter(r => r.entregue).length;
+
+  const removerNome = (n) => { if (window.confirm(`Remover o caseado "${n}" da lista? (não apaga os cortes já definidos com esse nome)`)) api.removeNome(n); };
+  const addNome = () => { const t = novoNome.trim(); if (!t) return; api.addNome(t); setNovoNome(''); };
+
+  const iStyle = { padding: '6px 10px', fontSize: 13, border: '1px solid #d8e2ea', borderRadius: 6, fontFamily: 'Georgia,serif', color: '#2c3e50', outline: 'none' };
+
+  return (
+    <div>
+      {/* Cadastro de caseados */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10, padding: '8px 10px', background: '#f7f4f0', borderRadius: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#5a6470' }}>Caseados:</span>
+        {(api?.nomes || []).map(n => (
+          <span key={n} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#2c3e50', background: '#fff', border: '1px solid #d8e2ea', borderRadius: 14, padding: '3px 6px 3px 12px' }}>
+            {n}
+            <button onClick={() => removerNome(n)} title="Remover" style={{ width: 18, height: 18, borderRadius: '50%', border: 'none', background: '#f0e4e4', color: '#c0392b', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0 }}>×</button>
+          </span>
+        ))}
+        <input value={novoNome} onChange={e => setNovoNome(e.target.value)} onKeyDown={e => e.key === 'Enter' && addNome()} placeholder="novo caseado" style={{ ...iStyle, width: 130, padding: '4px 8px' }} />
+        <button onClick={addNome} style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, color: '#fff', background: '#4a7fa5', border: 'none', borderRadius: 6, cursor: 'pointer' }}>+ Adicionar</button>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar ref ou descrição..." style={{ ...iStyle, flex: '1 1 200px', minWidth: 160 }} />
+        <select value={nomeFiltro} onChange={e => setNomeFiltro(e.target.value)} style={iStyle}>
+          <option value="todos">Todos os caseados</option>
+          {(api?.nomes || []).map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        <select value={statusFiltro} onChange={e => setStatusFiltro(e.target.value)} style={iStyle}>
+          <option value="todos">Todos os status</option>
+          <option value="aberto">Em aberto</option>
+          <option value="entregue">Entregues</option>
+        </select>
+        <span style={{ fontSize: 12, color: '#8a9aa4', marginLeft: 'auto' }}>{nAbertos} aberto(s) · {nEntregues} entregue(s)</span>
+      </div>
+
+      {/* Lista de cards */}
+      {lista.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 30, color: '#a89f94', fontSize: 14 }}>
+          {registros.length === 0 ? 'Nenhum caseado definido ainda. Defina pelo ícone de botão na lista de Cortes.' : 'Nenhum resultado pros filtros.'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {lista.map(reg => {
+            const dias = diasParado(reg);
+            const ent = !!reg.entregue;
+            return (
+              <div key={reg.id} style={{ background: '#fff', border: `1px solid ${ent ? '#d4edc4' : '#e8e2da'}`, borderRadius: 10, padding: 12, opacity: ent ? 0.92 : 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <FotoCaseado refProd={reg.ref} />
+                  <span style={{ background: ent ? '#eafbf0' : '#fff8ea', color: ent ? '#27ae60' : '#b7791f', border: `1px solid ${ent ? '#c6e9cf' : '#f0dca8'}`, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {ent ? '✓ Entregue' : 'No caseado'}
+                  </span>
+                  <div style={{ flex: '1 1 240px', minWidth: 180 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>REF {reg.ref}{reg.descricao ? ` · ${reg.descricao}` : ''}</div>
+                    <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 2 }}>
+                      🧵 {reg.oficina || '—'} · {reg.qtd != null ? `${reg.qtd} pç` : '—'} · definido {fmtData(reg.definido_em)}
+                    </div>
+                  </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#5a3a8c', background: '#f0eafa', border: '1px solid #d8c8ec', borderRadius: 10, padding: '4px 10px' }}>
+                    ✂️ {reg.nome}
+                  </span>
+                  <div style={{ textAlign: 'center', minWidth: 48 }}>
+                    <div style={{ fontSize: 20, fontWeight: 700, fontFamily: FN, color: (dias >= 7 && !ent) ? '#c0392b' : '#2c3e50' }}>{dias}</div>
+                    <div style={{ fontSize: 9, color: '#8a9aa4', textTransform: 'uppercase' }}>{ent ? 'dias' : 'dias parado'}</div>
+                  </div>
+                  <div onClick={() => api.toggleEntregue(reg)} title={ent ? 'Marcar como não entregue' : 'Marcar caseado como entregue'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', minWidth: 54 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 6, background: ent ? '#27ae60' : '#fff', border: ent ? 'none' : '2px solid #c0d0dc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {ent && <span style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: 9, color: '#8a9aa4', textTransform: 'uppercase' }}>Entrega</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

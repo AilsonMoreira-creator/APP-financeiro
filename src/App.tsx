@@ -4,7 +4,7 @@ import { supabase, USER_ID } from "./supabase.js";
 import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
-import { useCaseado, CaseadoBtnIcone } from './caseado.jsx';
+import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
 import OsAmicia from './os-amicia/OsAmicia';
@@ -4133,7 +4133,10 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
         <TabBtn id="dashboard" label="Dashboard" Icon={SvgDashOficinas}/>
         <TabBtn id="produtos" label="Produtos" Icon={SvgProdutosOf}/>
         <TabBtn id="cadastros" label="Cadastros" Icon={SvgCadastros}/>
+        <TabBtn id="caseado" label="Caseado" Icon={CaseadoTabIcon}/>
       </div>
+
+      {aba==="caseado"&&<TelaCaseado api={caseadoApi}/>}
 
       {aba==="cortes"&&(
         <div>
