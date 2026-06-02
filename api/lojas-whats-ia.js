@@ -693,16 +693,28 @@ export async function processarConversa(conversaId) {
   // mensagens. NAO usa conv.catalogo_enviado_em porque o webhook zera esse
   // campo a cada inbound do cliente (servia so pro relogio de follow-up).
   // Catalogo enviado = documento PDF em /catalogos/. Ailson 30/05/2026.
+  // Vesti (teste A/B): o "catalogo" e um LINK de texto (sem documento), entao
+  // detecta pelo dominio v.vesti.mobi nas msgs de saida. Ailson 01/06/2026.
   let catalogoJaEnviado = false;
   try {
-    const { count: nCat } = await supabase
-      .from('lojas_whats_mensagens')
-      .select('id', { count: 'exact', head: true })
-      .eq('conversa_id', conversaId)
-      .eq('direcao', 'saida')
-      .eq('tipo_midia', 'document')
-      .ilike('midia_url', '%catalogos/%');
-    catalogoJaEnviado = (nCat || 0) > 0;
+    if (conv.catalogo_formato === 'vesti') {
+      const { count: nVesti } = await supabase
+        .from('lojas_whats_mensagens')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversa_id', conversaId)
+        .eq('direcao', 'saida')
+        .ilike('texto', '%vesti.mobi%');
+      catalogoJaEnviado = (nVesti || 0) > 0;
+    } else {
+      const { count: nCat } = await supabase
+        .from('lojas_whats_mensagens')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversa_id', conversaId)
+        .eq('direcao', 'saida')
+        .eq('tipo_midia', 'document')
+        .ilike('midia_url', '%catalogos/%');
+      catalogoJaEnviado = (nCat || 0) > 0;
+    }
   } catch (e) {
     logErro('ia/check-catalogo-enviado', e);
   }

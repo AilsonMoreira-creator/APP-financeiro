@@ -27,7 +27,8 @@ import {
   setCors,
   log,
   logErro,
-  primeiroNome
+  primeiroNome,
+  getConfig
 } from './_lojas-whats-helpers.js';
 import { enviarTemplate, enviarTexto } from './_lojas-whats-meta-client.js';
 import { parseMarcadoresMidia, resolverMidia, enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
@@ -158,7 +159,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
     .from('lojas_whats_sugestoes')
     .select(`
       *,
-      conversa:lojas_whats_conversas (id, telefone, etapa, nome_cliente)
+      conversa:lojas_whats_conversas (id, telefone, etapa, nome_cliente, catalogo_formato)
     `)
     .eq('id', sugestaoId)
     .maybeSingle();
@@ -258,16 +259,44 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
         // Sem midia OU catalogo (PDF nao tem caption): envia texto
         metaResp = await enviarTexto(sug.conversa.telefone, textoFinal);
 
-        // Catalogo: envia documento PDF depois do texto (separado)
+        // Catalogo: PDF (padrao) OU link virtual Vesti (teste A/B).
         if (midiaParaEnviar && midiaParaEnviar.tipo === 'catalogo') {
-          const r = await enviarMidiaSofia({
-            telefone: sug.conversa.telefone,
-            midia: midiaParaEnviar,
-            conversaId: sug.conversa.id,
-            mensagemId: null,
-            decididaPor: 'ia_automatica',
-          });
-          if (!r.ok) log('aprovar', `catalogo enviado com erro: ${r.erro}`);
+          if (sug.conversa.catalogo_formato === 'vesti') {
+            // Teste A/B (Ailson 01/06/2026): em vez do PDF, manda o catalogo
+            // VIRTUAL Vesti numa 2a mensagem (link + explicacao, pra nao ficar
+            // longo). Regras comerciais iguais. catalogo_enviado_em seta igual
+            // (abaixo), entao o follow-up de 6h/24h segue normal.
+            try {
+              const msgVesti = await getConfig('vesti_mensagem',
+                'Esse é o nosso catálogo virtual 😊 lá vc consegue ver os valores, o estoque e finalizar a compra por lá\n\nQualquer dúvida me chama aqui que te ajudo\n\nhttps://v.vesti.mobi/amicia');
+              const respVesti = await enviarTexto(sug.conversa.telefone, msgVesti);
+              // Registra a 2a mensagem (link Vesti) no historico — pro chat
+              // mostrar e pro anti-reenvio detectar (busca 'vesti.mobi').
+              await supabase.from('lojas_whats_mensagens').insert({
+                conversa_id: sug.conversa.id,
+                direcao: 'saida',
+                autor: 'sofia_ia',
+                tipo_midia: 'text',
+                texto: msgVesti,
+                meta_message_id: respVesti?.messages?.[0]?.id || null,
+                status: 'enviando',
+                enviada_em: agora,
+              });
+              log('aprovar', `conversa=${sug.conversa.id} catalogo VESTI (link virtual) enviado`);
+            } catch (e) {
+              logErro('aprovar/vesti-link', e);
+            }
+          } else {
+            // Padrao: envia documento PDF depois do texto (separado)
+            const r = await enviarMidiaSofia({
+              telefone: sug.conversa.telefone,
+              midia: midiaParaEnviar,
+              conversaId: sug.conversa.id,
+              mensagemId: null,
+              decididaPor: 'ia_automatica',
+            });
+            if (!r.ok) log('aprovar', `catalogo enviado com erro: ${r.erro}`);
+          }
         }
       }
     }
