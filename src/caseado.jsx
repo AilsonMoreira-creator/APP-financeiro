@@ -145,6 +145,15 @@ export function useCaseado() {
     return { ok: true };
   }, [carregarRegistros]);
 
+  // Remove o caseado de um corte (volta ao estado original, sem caseado).
+  // Reflete na tela Caseado (some o card) via realtime.
+  const remover = useCallback(async (corteId) => {
+    const { error } = await supabase.from('oficinas_caseado').delete().eq('corte_id', corteId);
+    if (error) { console.error('[caseado] remover:', error.message); return { ok: false, erro: error.message }; }
+    await carregarRegistros();
+    return { ok: true };
+  }, [carregarRegistros]);
+
   const salvarNomes = useCallback(async (novos) => {
     setNomes(novos);
     try {
@@ -162,7 +171,7 @@ export function useCaseado() {
     setNomes(prev => { const novos = prev.filter(x => x !== n); salvarNomes(novos); return novos; });
   }, [salvarNomes]);
 
-  return { registros, nomes, loading, precisaCaseado, registroPorCorte, definir, toggleEntregue, addNome, removeNome };
+  return { registros, nomes, loading, precisaCaseado, registroPorCorte, definir, toggleEntregue, remover, addNome, removeNome };
 }
 
 // ── Ícone de botão (camisa) na linha do corte ────────────────────────────────
@@ -198,7 +207,7 @@ export function CaseadoBtnIcone({ corte, api }) {
         title={titulo}
         onClick={(e) => { e.stopPropagation(); setModal(true); }}
         style={{
-          position: 'relative', width: 16, height: 16, borderRadius: 4, verticalAlign: 'middle', marginLeft: 5,
+          position: 'relative', width: 16, height: 16, borderRadius: 4,
           background: definido ? '#eafaf0' : '#fff', border: `1px solid ${definido ? '#bfe6cd' : '#c8d8e4'}`,
           cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}
@@ -218,12 +227,13 @@ export function CaseadoBtnIcone({ corte, api }) {
 // ── Modal "Definir Caseado" ──────────────────────────────────────────────────
 export function ModalDefinirCaseado({ corte, api, registroAtual, onClose }) {
   const [escolhido, setEscolhido] = useState(null);
-  const [status, setStatus] = useState('idle'); // idle | salvando | ok | erro
+  const [status, setStatus] = useState('idle'); // idle | salvando | ok | removendo | removido | erro
   const timerRef = useRef(null);
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  const ocupado = status === 'salvando' || status === 'ok' || status === 'removendo' || status === 'removido';
 
   const escolher = async (nome) => {
-    if (status === 'salvando' || status === 'ok') return;
+    if (ocupado) return;
     setEscolhido(nome);
     setStatus('salvando');
     const r = await api.definir(corte, nome);
@@ -231,9 +241,18 @@ export function ModalDefinirCaseado({ corte, api, registroAtual, onClose }) {
     else { setStatus('erro'); }
   };
 
+  const apagar = async () => {
+    if (ocupado) return;
+    setStatus('removendo');
+    const r = await api.remover(corte.id);
+    if (r?.ok) { setStatus('removido'); timerRef.current = setTimeout(onClose, 900); }
+    else { setStatus('erro'); }
+  };
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 360, maxWidth: '92vw', boxShadow: '0 12px 44px rgba(0,0,0,0.28)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: 20, width: 360, maxWidth: '92vw', boxShadow: '0 12px 44px rgba(0,0,0,0.28)' }}>
+        <button type="button" onClick={onClose} aria-label="Fechar" style={{ position: 'absolute', top: 8, right: 10, width: 30, height: 30, border: 'none', background: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: '#b0b8c0' }}>×</button>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#2c3e50', fontFamily: 'Georgia,serif', textAlign: 'center', marginBottom: 4 }}>Definir Caseado</div>
         <div style={{ fontSize: 12, color: '#6b7c8a', textAlign: 'center', marginBottom: 16 }}>
           Ref {corte?.ref} · {corte?.descricao || ''}{corte?.oficina ? ` · ${corte.oficina}` : ''}
@@ -242,12 +261,12 @@ export function ModalDefinirCaseado({ corte, api, registroAtual, onClose }) {
           {(api?.nomes || []).map(nome => {
             const ehAtual = registroAtual?.nome === nome;
             const sel = escolhido === nome;
-            const destaque = sel || (ehAtual && !escolhido);
+            const destaque = sel || (ehAtual && !escolhido && status !== 'removido');
             return (
-              <button key={nome} type="button" disabled={status === 'salvando' || status === 'ok'} onClick={() => escolher(nome)}
+              <button key={nome} type="button" disabled={ocupado} onClick={() => escolher(nome)}
                 style={{
                   position: 'relative', padding: '15px 14px', borderRadius: 10,
-                  cursor: (status === 'salvando' || status === 'ok') ? 'default' : 'pointer',
+                  cursor: ocupado ? 'default' : 'pointer',
                   border: `2px solid ${destaque ? '#27ae60' : '#e2e8ee'}`,
                   background: destaque ? '#eafaf0' : '#f6f9fc',
                   textAlign: 'center', opacity: (escolhido && !sel) ? 0.45 : 1,
@@ -268,11 +287,16 @@ export function ModalDefinirCaseado({ corte, api, registroAtual, onClose }) {
         {status === 'ok' && (
           <div style={{ fontSize: 13, color: '#27ae60', fontWeight: 700, textAlign: 'center', marginTop: 14 }}>✓ Caseado definido: {escolhido}</div>
         )}
-        {status === 'erro' && (
-          <div style={{ fontSize: 13, color: '#c0392b', fontWeight: 600, textAlign: 'center', marginTop: 14 }}>Erro ao salvar. Tenta de novo.</div>
+        {status === 'removido' && (
+          <div style={{ fontSize: 13, color: '#6b7c8a', fontWeight: 700, textAlign: 'center', marginTop: 14 }}>Caseado removido</div>
         )}
-        {status !== 'ok' && (
-          <button type="button" onClick={onClose} style={{ marginTop: 16, width: '100%', padding: '8px', fontSize: 13, color: '#6b7c8a', background: 'none', border: 'none', cursor: 'pointer' }}>Cancelar</button>
+        {status === 'erro' && (
+          <div style={{ fontSize: 13, color: '#c0392b', fontWeight: 600, textAlign: 'center', marginTop: 14 }}>Erro. Tenta de novo.</div>
+        )}
+        {registroAtual && status !== 'ok' && status !== 'removido' && (
+          <button type="button" onClick={apagar} disabled={ocupado} style={{ marginTop: 16, width: '100%', padding: '9px', fontSize: 13, fontWeight: 600, color: '#c0392b', background: 'none', border: 'none', cursor: ocupado ? 'default' : 'pointer', opacity: ocupado ? 0.6 : 1 }}>
+            {status === 'removendo' ? 'Apagando...' : 'Apagar seleção'}
+          </button>
         )}
       </div>
     </div>
