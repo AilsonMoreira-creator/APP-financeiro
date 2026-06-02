@@ -171,7 +171,7 @@ function SvgBotaoCamisa({ definido }) {
   const stroke = definido ? '#1e8449' : '#4a7fa5';
   const furo = definido ? '#fff' : '#4a7fa5';
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" style={{ display: 'block' }}>
+    <svg width="13" height="13" viewBox="0 0 24 24" style={{ display: 'block' }}>
       <circle cx="12" cy="12" r="9" fill={fill} stroke={stroke} strokeWidth="1.6" />
       <circle cx="9.4" cy="9.4" r="1.4" fill={furo} />
       <circle cx="14.6" cy="9.4" r="1.4" fill={furo} />
@@ -198,7 +198,7 @@ export function CaseadoBtnIcone({ corte, api }) {
         title={titulo}
         onClick={(e) => { e.stopPropagation(); setModal(true); }}
         style={{
-          position: 'relative', width: 22, height: 22, borderRadius: 5,
+          position: 'relative', width: 16, height: 16, borderRadius: 4, verticalAlign: 'middle', marginLeft: 5,
           background: definido ? '#eafaf0' : '#fff', border: `1px solid ${definido ? '#bfe6cd' : '#c8d8e4'}`,
           cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}
@@ -217,40 +217,63 @@ export function CaseadoBtnIcone({ corte, api }) {
 
 // ── Modal "Definir Caseado" ──────────────────────────────────────────────────
 export function ModalDefinirCaseado({ corte, api, registroAtual, onClose }) {
-  const [salvando, setSalvando] = useState(false);
+  const [escolhido, setEscolhido] = useState(null);
+  const [status, setStatus] = useState('idle'); // idle | salvando | ok | erro
+  const timerRef = useRef(null);
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
   const escolher = async (nome) => {
-    setSalvando(true);
+    if (status === 'salvando' || status === 'ok') return;
+    setEscolhido(nome);
+    setStatus('salvando');
     const r = await api.definir(corte, nome);
-    setSalvando(false);
-    if (r?.ok) onClose();
-    else alert('Erro ao salvar: ' + (r?.erro || 'tente de novo'));
+    if (r?.ok) { setStatus('ok'); timerRef.current = setTimeout(onClose, 1000); }
+    else { setStatus('erro'); }
   };
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: 18, width: 340, maxWidth: '92vw', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#2c3e50', fontFamily: 'Georgia,serif', marginBottom: 2 }}>Definir Caseado</div>
-        <div style={{ fontSize: 12, color: '#6b7c8a', marginBottom: 14 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 360, maxWidth: '92vw', boxShadow: '0 12px 44px rgba(0,0,0,0.28)' }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#2c3e50', fontFamily: 'Georgia,serif', textAlign: 'center', marginBottom: 4 }}>Definir Caseado</div>
+        <div style={{ fontSize: 12, color: '#6b7c8a', textAlign: 'center', marginBottom: 16 }}>
           Ref {corte?.ref} · {corte?.descricao || ''}{corte?.oficina ? ` · ${corte.oficina}` : ''}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {(api?.nomes || []).map(nome => {
-            const atual = registroAtual?.nome === nome;
+            const ehAtual = registroAtual?.nome === nome;
+            const sel = escolhido === nome;
+            const destaque = sel || (ehAtual && !escolhido);
             return (
-              <button key={nome} type="button" disabled={salvando} onClick={() => escolher(nome)} style={{
-                padding: '11px 14px', fontSize: 15, fontWeight: 600, textAlign: 'left',
-                border: `1px solid ${atual ? '#4a7fa5' : '#d8e2ea'}`, borderRadius: 8,
-                background: atual ? '#eaf3fb' : '#fff', color: '#2c3e50', cursor: salvando ? 'default' : 'pointer',
-                opacity: salvando ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              }}>
-                {nome}{atual && <span style={{ fontSize: 11, color: '#4a7fa5', fontWeight: 700 }}>atual ✓</span>}
+              <button key={nome} type="button" disabled={status === 'salvando' || status === 'ok'} onClick={() => escolher(nome)}
+                style={{
+                  position: 'relative', padding: '15px 14px', borderRadius: 10,
+                  cursor: (status === 'salvando' || status === 'ok') ? 'default' : 'pointer',
+                  border: `2px solid ${destaque ? '#27ae60' : '#e2e8ee'}`,
+                  background: destaque ? '#eafaf0' : '#f6f9fc',
+                  textAlign: 'center', opacity: (escolhido && !sel) ? 0.45 : 1,
+                }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: '#2c3e50' }}>{nome}</span>
+                {destaque && (
+                  <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#27ae60', fontWeight: 700, fontSize: 13 }}>
+                    {sel && status === 'salvando' ? 'salvando...' : sel && status === 'ok' ? '✓ definido' : '✓'}
+                  </span>
+                )}
               </button>
             );
           })}
           {(!api?.nomes || api.nomes.length === 0) && (
-            <div style={{ fontSize: 13, color: '#a89f94', padding: '8px 0' }}>Nenhum caseado cadastrado. Cadastre na tela Caseado.</div>
+            <div style={{ fontSize: 13, color: '#a89f94', textAlign: 'center', padding: '8px 0' }}>Nenhum caseado cadastrado. Cadastre na tela Caseado.</div>
           )}
         </div>
-        <button type="button" onClick={onClose} style={{ marginTop: 14, width: '100%', padding: '8px', fontSize: 13, color: '#6b7c8a', background: 'none', border: 'none', cursor: 'pointer' }}>Cancelar</button>
+        {status === 'ok' && (
+          <div style={{ fontSize: 13, color: '#27ae60', fontWeight: 700, textAlign: 'center', marginTop: 14 }}>✓ Caseado definido: {escolhido}</div>
+        )}
+        {status === 'erro' && (
+          <div style={{ fontSize: 13, color: '#c0392b', fontWeight: 600, textAlign: 'center', marginTop: 14 }}>Erro ao salvar. Tenta de novo.</div>
+        )}
+        {status !== 'ok' && (
+          <button type="button" onClick={onClose} style={{ marginTop: 16, width: '100%', padding: '8px', fontSize: 13, color: '#6b7c8a', background: 'none', border: 'none', cursor: 'pointer' }}>Cancelar</button>
+        )}
       </div>
     </div>
   );
