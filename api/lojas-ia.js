@@ -4117,6 +4117,36 @@ async function handleConversoesDashboard(req, res, _auth) {
   }
   const por_vendedora = Array.from(mapaVendedora.values()).sort((a, b) => b.total - a.total);
 
+  // ─── Conversões Vesti (teste A/B Fase 2) — Ailson 02/06/2026 ────────────
+  // O sinal vesti mora em lojas_whats_conversas.vendeu_canal (marcado pela
+  // função lojas_whats_vesti_auto_vendeu), NÃO em lojas_conversoes. Por isso
+  // contamos direto da fonte aqui, filtrando vendedora + período por vendeu_em.
+  let vesti = { qtd: 0, valor: 0 };
+  try {
+    // fim é date 'YYYY-MM-DD'; vendeu_em é timestamptz → usa próximo dia exclusivo
+    const _fim1 = new Date(fim + 'T00:00:00Z');
+    _fim1.setUTCDate(_fim1.getUTCDate() + 1);
+    const fimExclusivo = _fim1.toISOString().slice(0, 10);
+
+    let vestiQ = supabase
+      .from('lojas_whats_conversas')
+      .select('vendeu_valor')
+      .eq('vendeu_canal', 'vesti')
+      .gte('vendeu_em', inicio)
+      .lt('vendeu_em', fimExclusivo);
+    if (vendedora_id) vestiQ = vestiQ.eq('vendedora_atribuida_id', vendedora_id);
+
+    const { data: vestiRows, error: vestiErr } = await vestiQ;
+    if (vestiErr) {
+      console.error('[conversoes_dashboard] erro query vesti:', vestiErr.message);
+    } else {
+      vesti.qtd = (vestiRows || []).length;
+      vesti.valor = Math.round((vestiRows || []).reduce((s, r) => s + Number(r.vendeu_valor || 0), 0) * 100) / 100;
+    }
+  } catch (e) {
+    console.error('[conversoes_dashboard] exceção query vesti:', e.message);
+  }
+
   return res.json({
     periodo,
     periodo_label: label,
@@ -4128,6 +4158,7 @@ async function handleConversoesDashboard(req, res, _auth) {
     por_status,
     por_origem,
     por_vendedora,
+    vesti,
     detalhe: (conversoes || []).slice(0, 50),
   });
 }

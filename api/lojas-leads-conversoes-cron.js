@@ -102,6 +102,28 @@ export default async function handler(req, res) {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // 1D. Auto-vendeu Vesti (Ailson 02/06/2026 — teste A/B Fase 2)
+    // Marca conversas do teste Vesti como etapa='vendeu', vendeu_canal='vesti'
+    // quando (1) o link Vesti foi enviado na conversa E (2) rolou venda Vesti
+    // depois, casada por telefone. Idempotente, additiva — roda junto sem risco.
+    // ───────────────────────────────────────────────────────────────
+    let vestiConvVendeu = 0;
+    let vestiValorVendeu = 0;
+    try {
+      const { data: dataVesti, error: errVesti } = await supabase
+        .rpc('lojas_whats_vesti_auto_vendeu')
+        .maybeSingle();
+      if (errVesti) {
+        console.error('[lojas-leads-conversoes-cron] erro vesti auto-vendeu:', errVesti);
+      } else {
+        vestiConvVendeu = dataVesti?.conversas_marcadas || 0;
+        vestiValorVendeu = dataVesti?.valor_total || 0;
+      }
+    } catch (e) {
+      console.error('[lojas-leads-conversoes-cron] excecao vesti auto-vendeu:', e.message);
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // 2. EXTENSÃO Ailson 18/05/2026 — Aviso venda_site_organica
     // ───────────────────────────────────────────────────────────────
     // Pra vendas no site dos últimos 2 dias que NÃO entraram em
@@ -215,6 +237,9 @@ export default async function handler(req, res) {
       // Sofia auto-vendeu — Ailson 26/05/2026
       sofia_conv_vendeu: sofiaConvVendeu,
       sofia_valor_vendeu: sofiaValorVendeu,
+      // Vesti auto-vendeu (teste A/B Fase 2) — Ailson 02/06/2026
+      vesti_conv_vendeu: vestiConvVendeu,
+      vesti_valor_vendeu: vestiValorVendeu,
     });
   } catch (e) {
     console.error('[lojas-leads-conversoes-cron] exception:', e);

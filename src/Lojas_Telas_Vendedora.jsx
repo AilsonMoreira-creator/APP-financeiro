@@ -5157,9 +5157,27 @@ const ConversoesVendedora = ({ conversoes, fz, sz }) => {
   const total = conversoes?.total || 0;
   const valor = conversoes?.valor_total || 0;
   const porStatus = conversoes?.por_status || { atencao: 0, semAtividade: 0, inativo: 0 };
+  const vesti = conversoes?.vesti || { qtd: 0, valor: 0 };
 
-  // Sem conversões ainda — encorajamento
-  if (total === 0) {
+  const fmtR = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  // Linha discreta de conversões pelo catálogo Vesti (teste A/B) — só quando há.
+  const blocoVesti = vesti.qtd > 0 ? (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      background: palette.surface, border: `1px solid ${palette.purple}40`,
+      borderRadius: 8, padding: '8px 10px', marginTop: 10,
+      fontSize: fz(13), color: palette.inkSoft,
+    }}>
+      <Link2 size={sz(15)} color={palette.purple} />
+      <span>
+        <strong style={{ color: palette.purple }}>{vesti.qtd}</strong> via Vesti · {fmtR(vesti.valor)}
+      </span>
+    </div>
+  ) : null;
+
+  // Sem conversões nem vesti — encorajamento
+  if (total === 0 && vesti.qtd === 0) {
     return (
       <div style={{
         background: palette.beigeSoft, border: `1px solid ${palette.beige}`,
@@ -5179,7 +5197,27 @@ const ConversoesVendedora = ({ conversoes, fz, sz }) => {
     );
   }
 
-  const fmtR = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  // Só conversões pelo catálogo Vesti (sem linha em lojas_conversoes, mas
+  // houve venda Vesti casada pela função do teste A/B).
+  if (total === 0) {
+    return (
+      <div style={{
+        background: `linear-gradient(135deg, ${palette.purpleSoft} 0%, ${palette.bg} 100%)`,
+        border: `1px solid ${palette.purple}40`,
+        borderRadius: 14, padding: 16, marginBottom: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Award size={sz(20)} color={palette.purple} />
+          <span style={{ fontSize: fz(15), fontWeight: 600, color: palette.ink }}>
+            {vesti.qtd} {vesti.qtd === 1 ? 'cliente comprou' : 'clientes compraram'} pelo catálogo Vesti
+          </span>
+        </div>
+        <div style={{ fontSize: fz(12), color: palette.inkMuted, marginLeft: 28 }}>
+          {fmtR(vesti.valor)} em vendas · teste A/B
+        </div>
+      </div>
+    );
+  }
 
   // Frase motivacional baseada no volume
   let parabens = '👏 Mandou bem!';
@@ -5231,6 +5269,8 @@ const ConversoesVendedora = ({ conversoes, fz, sz }) => {
           )}
         </div>
       </div>
+
+      {blocoVesti}
     </div>
   );
 };
