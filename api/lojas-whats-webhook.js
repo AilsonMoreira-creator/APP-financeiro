@@ -562,12 +562,16 @@ function detectarOrigemLead(refInfo) {
 
 async function acharOuCriarConversa(telefone, nomeCliente, refInfo) {
   if (!telefone) return null;
-  // Busca ativa
+  // Busca a conversa mais recente do telefone — INCLUSIVE perdida. Antes
+  // excluia perdida (.not etapa in perdida), entao um cliente perdido que
+  // mandava msg gerava uma CONVERSA NOVA e o historico ficava partido em dois
+  // cards (parecia "mensagem sumindo"). Agora reativa o MESMO card: a msg cai
+  // na thread existente e o handler principal move perdida->conversando.
+  // Mensagens nunca sao apagadas; a thread fica continua. Ailson 01/06/2026.
   const { data: existente } = await supabase
     .from('lojas_whats_conversas')
     .select('*')
     .eq('telefone', telefone)
-    .not('etapa', 'in', '(perdida)')
     .order('iniciada_em', { ascending: false })
     .limit(1)
     .maybeSingle();

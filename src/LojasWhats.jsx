@@ -1306,9 +1306,9 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
             .eq('etapa', et);
           if (ETAPAS_PRECISA_ACAO.includes(et)) {
             q = q.eq('ultima_msg_direcao', 'entrada');
-          } else if (et === 'follow_up') {
-            q = q.lte('follow_up_vence_em', agora);
           }
+          // follow_up: badge = TOTAL de cards na aba (Ailson 01/06/2026 —
+          // antes contava so os vencidos, confundia). Cor discreta no chip.
           return q;
         })
       );
@@ -1651,6 +1651,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
           <FiltroChip key={et.id} label={et.label} ativo={filtroEtapa === et.id}
             cor={et.cor} onClick={() => setFiltroEtapa(et.id)} iconNome={et.id}
             etapaId={et.id} onAjuda={setAjudaEtapa}
+            badgeCor={et.id === 'follow_up' ? palette.inkMuted : undefined}
             badge={contadores[et.id]} unread={unreadPorEtapa[et.id]} />
         ))}
       </div>
@@ -2089,7 +2090,7 @@ function ModalEtapa({ etapaId, onClose }) {
   );
 }
 
-const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unread, onAjuda }) => {
+const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unread, onAjuda, badgeCor }) => {
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }}>
       <button onClick={onClick} style={{
@@ -2107,7 +2108,7 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unre
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             minWidth: 18, height: 18, padding: '0 5px',
             borderRadius: 10, fontSize: fz(10), fontWeight: 700,
-            background: ativo ? 'rgba(255,255,255,0.25)' : (cor || palette.ink),
+            background: ativo ? 'rgba(255,255,255,0.25)' : (badgeCor || cor || palette.ink),
             color: ativo ? palette.bg : palette.bg,
             lineHeight: 1,
           }}>{badge}</span>
