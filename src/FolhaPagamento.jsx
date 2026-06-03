@@ -194,6 +194,14 @@ function competenciaSeguinte(comp) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// Mês anterior ao corrente — é o que normalmente se fecha (Ailson 03/06/2026).
+function competenciaAnterior() {
+  const d = new Date();
+  const ano = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear();
+  const mes = d.getMonth() === 0 ? 12 : d.getMonth();
+  return `${ano}-${String(mes).padStart(2, '0')}`;
+}
+
 function nomeMes(comp) {
   const [a, m] = comp.split('-').map(Number);
   const d = new Date(a, m - 1, 1);
@@ -508,7 +516,7 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
   // Estado de tela
   const [tela, setTela] = useState('home');                        // 'home' | 'detalhe'
   const [funcSelId, setFuncSelId] = useState(null);
-  const [competencia, setCompetencia] = useState(competenciaAtual());
+  const [competencia, setCompetencia] = useState(competenciaAnterior());
   const [mostrarArquivados, setMostrarArquivados] = useState(false);
 
   // Modais
@@ -770,11 +778,15 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
     // Acréscimos vão pra coluna específica (alimentacao, extra, ferias, 13º, etc), não somam no salário/comissão
     const acrescimos = []; // { mes_destino, coluna, descricao, valor }
 
-    // Roteamento de "extras" por palavra-chave na descrição (Ailson 03/06/2026):
-    //   férias / 1/3 férias / terço      -> coluna 'ferias'          | mês atual
-    //   13º / 13 salário / parcela 13     -> coluna 'decimo_terceiro' | mês atual
-    //   acréscimo com coluna real definida -> essa coluna             | conforme mes_destino
-    //   qualquer outro extra que não casar -> coluna 'extra'          | mês atual
+    // Roteamento de meses (Ailson 03/06/2026 - fecha a folha do mês anterior):
+    //   COMISSÃO -> mês de competência (a folha que está fechando, ex: maio)
+    //   TODO O RESTO (salário, extra, férias, 13º, alimentação, rescisão, vale)
+    //     -> mês corrente / seguinte (ex: junho). É o "mês atual" do dono.
+    // Coluna do "extra" definida por palavra-chave na descrição:
+    //   férias / 1/3 / terço          -> coluna 'ferias'
+    //   13º / 13 salário / parcela 13  -> coluna 'decimo_terceiro'
+    //   coluna real já definida na regra -> essa coluna
+    //   qualquer outro                 -> coluna 'extra'
     // Regra do dono: nenhum valor positivo pode ficar sem coluna.
     const COLS_REAIS = ['alimentacao', 'extra', 'ferias', 'decimo_terceiro', 'rescisao'];
     const deburr = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -782,11 +794,10 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
     const eh13 = (t) => /decimo terceiro/.test(t) || /(^|\D)13(\D|$)/.test(t);
     const colunaDoExtra = (l) => {
       const t = deburr(l.titulo);
-      if (ehFerias(t) || l.coluna_planilha === 'ferias')      return { coluna: 'ferias',          mes_destino: 'competencia' };
-      if (eh13(t) || l.coluna_planilha === 'decimo_terceiro') return { coluna: 'decimo_terceiro', mes_destino: 'competencia' };
-      if (l.coluna_planilha && COLS_REAIS.includes(l.coluna_planilha))
-        return { coluna: l.coluna_planilha, mes_destino: l.mes_destino === 'seguinte' ? 'seguinte' : 'competencia' };
-      return { coluna: 'extra', mes_destino: 'competencia' };
+      if (ehFerias(t) || l.coluna_planilha === 'ferias')      return 'ferias';
+      if (eh13(t) || l.coluna_planilha === 'decimo_terceiro') return 'decimo_terceiro';
+      if (l.coluna_planilha && COLS_REAIS.includes(l.coluna_planilha)) return l.coluna_planilha;
+      return 'extra';
     };
 
     for (const l of linhas) {
@@ -794,14 +805,13 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
       // no card. Regra Ailson 15/05/2026 (bug Pedro Abril comissao=-148.54).
       if (l.tipo === 'desconto' || l.tipo === 'emprestimo') continue;
       const v = Number(l.valor || 0);
-      if (l.tipo === 'salario_fixo') {
-        salarioTotal += v;
-      } else if (['comissao_propria', 'comissao_loja', 'comissao_marketplace', 'bonus_meta_individual'].includes(l.tipo)) {
-        comissaoTotal += v;
+      if (['comissao_propria', 'comissao_loja', 'comissao_marketplace', 'bonus_meta_individual'].includes(l.tipo)) {
+        comissaoTotal += v;          // -> competência (mês que fecha)
+      } else if (l.tipo === 'salario_fixo') {
+        salarioTotal += v;           // -> mês seguinte (corrente)
       } else {
-        // acrescimo, valor_fixo e qualquer outro positivo -> coluna por palavra-chave
-        const { coluna, mes_destino } = colunaDoExtra(l);
-        acrescimos.push({ mes_destino, coluna, descricao: l.titulo, valor: v });
+        // acrescimo, valor_fixo e qualquer outro positivo -> coluna por keyword, mês corrente
+        acrescimos.push({ mes_destino: 'seguinte', coluna: colunaDoExtra(l), descricao: l.titulo, valor: v });
       }
     }
     // Agrupa acréscimos da mesma coluna+mes (ex: 2 acréscimos em "alimentacao" mês seguinte)
@@ -829,7 +839,7 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
       `Vai escrever na planilha:\n` +
       `• Salário R$ ${salarioTotal.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} (mês de pagamento)\n` +
       `• Comissão R$ ${comissaoTotal.toFixed(2).replace('.',',')} → ${nomeMes(competencia)} (competência)\n` +
-      (valeValor > 0 ? `• Vale R$ ${valeValor.toFixed(2).replace('.',',')} → ${nomeMes(competencia)} (se ainda não estiver lá)\n` : '') +
+      (valeValor > 0 ? `• Vale R$ ${valeValor.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} (se ainda não estiver lá)\n` : '') +
       (acrescimosResumo ? acrescimosResumo + '\n' : '') +
       `\nContinuar?`
     )) return;
@@ -882,9 +892,11 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
         escrever(mesNum, { [coluna]: valor.toFixed(2) });
       }
 
-      // Vale: só preenche se não estiver lá ainda (cron dia 20 normalmente põe)
+      // Vale: vai pro mês corrente (mesSeg), igual ao cron dia 20. Só preenche
+      // se ainda não estiver lá (o cron normalmente já põe). A linha de mesSeg
+      // já foi criada acima pelo escrever() do salário.
       if (valeValor > 0) {
-        const arr = payload.auxDataPorMes[mesComp]?.['Funcionários'] || [];
+        const arr = payload.auxDataPorMes[mesSeg]?.['Funcionários'] || [];
         const alvo = norm(f.nome_planilha || f.nome_display);
         const linha = arr.find(r => norm(r.nome) === alvo);
         if (linha) {
