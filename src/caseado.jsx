@@ -359,12 +359,18 @@ function diasParado(reg) {
 function fmtData(x) { try { return new Date(x).toLocaleDateString('pt-BR'); } catch { return '—'; } }
 
 // ── Tela Caseado (aba ao lado de Cadastros no módulo Oficinas) ───────────────
+const inputCaseado = { padding: '11px 12px', fontSize: 15, border: '1px solid #d8e2ea', borderRadius: 8, fontFamily: 'Georgia,serif', color: '#2c3e50', outline: 'none', background: '#fff', colorScheme: 'light', WebkitAppearance: 'none', appearance: 'none' };
+function chipStyle(active) {
+  return { padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 20, cursor: 'pointer', border: `1px solid ${active ? '#4a7fa5' : '#d8e2ea'}`, background: active ? '#4a7fa5' : '#fff', color: active ? '#fff' : '#5a6470', whiteSpace: 'nowrap', lineHeight: 1.2 };
+}
+
 export function TelaCaseado({ api }) {
   const [busca, setBusca] = useState('');
   const [nomeFiltro, setNomeFiltro] = useState('todos');
   const [statusFiltro, setStatusFiltro] = useState('todos'); // todos | aberto | entregue
-  const [novoNome, setNovoNome] = useState('');
+  const [gerenciar, setGerenciar] = useState(false);
   const registros = api?.registros || [];
+  const nomes = api?.nomes || [];
 
   const termo = busca.trim().toLowerCase();
   let lista = registros.filter(r => {
@@ -383,39 +389,27 @@ export function TelaCaseado({ api }) {
   });
   const nAbertos = registros.filter(r => !r.entregue).length;
   const nEntregues = registros.filter(r => r.entregue).length;
-
-  const removerNome = (n) => { if (window.confirm(`Remover o caseado "${n}" da lista? (não apaga os cortes já definidos com esse nome)`)) api.removeNome(n); };
-  const addNome = () => { const t = novoNome.trim(); if (!t) return; api.addNome(t); setNovoNome(''); };
-
-  const iStyle = { padding: '6px 10px', fontSize: 13, border: '1px solid #d8e2ea', borderRadius: 6, fontFamily: 'Georgia,serif', color: '#2c3e50', outline: 'none' };
+  const contaPorNome = (n) => registros.filter(r => r.nome === n).length;
 
   return (
     <div>
-      {/* Cadastro de caseados */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10, padding: '8px 10px', background: '#f7f4f0', borderRadius: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#5a6470' }}>Caseados:</span>
-        {(api?.nomes || []).map(n => (
-          <span key={n} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#2c3e50', background: '#fff', border: '1px solid #d8e2ea', borderRadius: 14, padding: '3px 6px 3px 12px' }}>
-            {n}
-            <button onClick={() => removerNome(n)} title="Remover" style={{ width: 18, height: 18, borderRadius: '50%', border: 'none', background: '#f0e4e4', color: '#c0392b', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0 }}>×</button>
-          </span>
+      {/* Filtro por caseado (chips clicáveis) + gerenciar */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+        <button onClick={() => setNomeFiltro('todos')} style={chipStyle(nomeFiltro === 'todos')}>Todos ({registros.length})</button>
+        {nomes.map(n => (
+          <button key={n} onClick={() => setNomeFiltro(n)} style={chipStyle(nomeFiltro === n)}>✂️ {n} ({contaPorNome(n)})</button>
         ))}
-        <input value={novoNome} onChange={e => setNovoNome(e.target.value)} onKeyDown={e => e.key === 'Enter' && addNome()} placeholder="novo caseado" style={{ ...iStyle, width: 130, padding: '4px 8px' }} />
-        <button onClick={addNome} style={{ padding: '5px 12px', fontSize: 12, fontWeight: 600, color: '#fff', background: '#4a7fa5', border: 'none', borderRadius: 6, cursor: 'pointer' }}>+ Adicionar</button>
+        <button onClick={() => setGerenciar(true)} title="Cadastrar / remover caseados" style={{ marginLeft: 'auto', padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d8e2ea', background: '#fff', color: '#5a6470', cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ Gerenciar</button>
       </div>
 
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar ref ou descrição..." style={{ ...iStyle, flex: '1 1 200px', minWidth: 160 }} />
-        <select value={nomeFiltro} onChange={e => setNomeFiltro(e.target.value)} style={iStyle}>
-          <option value="todos">Todos os caseados</option>
-          {(api?.nomes || []).map(n => <option key={n} value={n}>{n}</option>)}
-        </select>
-        <select value={statusFiltro} onChange={e => setStatusFiltro(e.target.value)} style={iStyle}>
-          <option value="todos">Todos os status</option>
-          <option value="aberto">Em aberto</option>
-          <option value="entregue">Entregues</option>
-        </select>
+      {/* Busca (linha própria, full width no celular) */}
+      <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar ref ou descrição..." style={{ ...inputCaseado, width: '100%', boxSizing: 'border-box', marginBottom: 8 }} />
+
+      {/* Status (chips) + contagem */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+        <button onClick={() => setStatusFiltro('todos')} style={chipStyle(statusFiltro === 'todos')}>Todos</button>
+        <button onClick={() => setStatusFiltro('aberto')} style={chipStyle(statusFiltro === 'aberto')}>Em aberto</button>
+        <button onClick={() => setStatusFiltro('entregue')} style={chipStyle(statusFiltro === 'entregue')}>Entregues</button>
         <span style={{ fontSize: 12, color: '#8a9aa4', marginLeft: 'auto' }}>{nAbertos} aberto(s) · {nEntregues} entregue(s)</span>
       </div>
 
@@ -431,27 +425,27 @@ export function TelaCaseado({ api }) {
             const ent = !!reg.entregue;
             return (
               <div key={reg.id} style={{ background: '#fff', border: `1px solid ${ent ? '#d4edc4' : '#e8e2da'}`, borderRadius: 10, padding: 12, opacity: ent ? 0.92 : 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <FotoCaseado refProd={reg.ref} />
-                  <span style={{ background: ent ? '#eafbf0' : '#fff8ea', color: ent ? '#27ae60' : '#b7791f', border: `1px solid ${ent ? '#c6e9cf' : '#f0dca8'}`, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {ent ? '✓ Entregue' : 'No caseado'}
-                  </span>
-                  <div style={{ flex: '1 1 240px', minWidth: 180 }}>
+                  <div style={{ flex: '1 1 200px', minWidth: 150 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                      <span style={{ background: ent ? '#eafbf0' : '#fff8ea', color: ent ? '#27ae60' : '#b7791f', border: `1px solid ${ent ? '#c6e9cf' : '#f0dca8'}`, padding: '3px 9px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {ent ? '✓ Entregue' : 'No caseado'}
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: '#5a3a8c', background: '#f0eafa', border: '1px solid #d8c8ec', borderRadius: 10, padding: '3px 9px' }}>✂️ {reg.nome}</span>
+                    </div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>REF {reg.ref}{reg.descricao ? ` · ${reg.descricao}` : ''}</div>
                     <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 2 }}>
                       🧵 {reg.oficina || '—'} · {reg.qtd != null ? `${reg.qtd} pç` : '—'} · definido {fmtData(reg.definido_em)}
                     </div>
                   </div>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#5a3a8c', background: '#f0eafa', border: '1px solid #d8c8ec', borderRadius: 10, padding: '4px 10px' }}>
-                    ✂️ {reg.nome}
-                  </span>
-                  <div style={{ textAlign: 'center', minWidth: 48 }}>
-                    <div style={{ fontSize: 20, fontWeight: 700, fontFamily: FN, color: (dias >= 7 && !ent) ? '#c0392b' : '#2c3e50' }}>{dias}</div>
+                  <div style={{ textAlign: 'center', minWidth: 46 }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, fontFamily: FN, color: (dias >= 7 && !ent) ? '#c0392b' : '#2c3e50' }}>{dias}</div>
                     <div style={{ fontSize: 9, color: '#8a9aa4', textTransform: 'uppercase' }}>{ent ? 'dias' : 'dias parado'}</div>
                   </div>
-                  <div onClick={() => api.toggleEntregue(reg)} title={ent ? 'Marcar como não entregue' : 'Marcar caseado como entregue'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', minWidth: 54 }}>
-                    <div style={{ width: 26, height: 26, borderRadius: 6, background: ent ? '#27ae60' : '#fff', border: ent ? 'none' : '2px solid #c0d0dc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {ent && <span style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>✓</span>}
+                  <div onClick={() => api.toggleEntregue(reg)} title={ent ? 'Marcar como não entregue' : 'Marcar caseado como entregue'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', minWidth: 56 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: 7, background: ent ? '#27ae60' : '#fff', border: ent ? 'none' : '2px solid #c0d0dc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {ent && <span style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>✓</span>}
                     </div>
                     <span style={{ fontSize: 9, color: '#8a9aa4', textTransform: 'uppercase' }}>Entrega</span>
                   </div>
@@ -461,6 +455,38 @@ export function TelaCaseado({ api }) {
           })}
         </div>
       )}
+
+      {gerenciar && <ModalGerenciarCaseados api={api} onClose={() => setGerenciar(false)} />}
+    </div>
+  );
+}
+
+// Modal protegido pra cadastrar/remover caseados (não fica solto na tela)
+function ModalGerenciarCaseados({ api, onClose }) {
+  const [novo, setNovo] = useState('');
+  const nomes = api?.nomes || [];
+  const add = () => { const t = novo.trim(); if (!t) return; api.addNome(t); setNovo(''); };
+  const rem = (n) => { if (window.confirm(`Remover o caseado "${n}"? Não apaga os cortes já definidos com esse nome.`)) api.removeNome(n); };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: 20, width: 400, maxWidth: '94vw', boxShadow: '0 12px 44px rgba(0,0,0,0.28)' }}>
+        <button type="button" onClick={onClose} aria-label="Fechar" style={{ position: 'absolute', top: 8, right: 10, width: 30, height: 30, border: 'none', background: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: '#b0b8c0' }}>×</button>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#2c3e50', fontFamily: 'Georgia,serif', textAlign: 'center', marginBottom: 3 }}>Gerenciar caseados</div>
+        <div style={{ fontSize: 12, color: '#6b7c8a', textAlign: 'center', marginBottom: 16 }}>Cadastre ou remova quem faz o caseado.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+          {nomes.map(n => (
+            <div key={n} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #e2e8ee', borderRadius: 8, background: '#f6f9fc' }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#2c3e50' }}>✂️ {n}</span>
+              <button type="button" onClick={() => rem(n)} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#c0392b', background: '#fbeaea', border: '1px solid #f0d0d0', borderRadius: 6, cursor: 'pointer' }}>Remover</button>
+            </div>
+          ))}
+          {nomes.length === 0 && <div style={{ fontSize: 13, color: '#a89f94', textAlign: 'center', padding: '8px 0' }}>Nenhum caseado cadastrado ainda.</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={novo} onChange={e => setNovo(e.target.value)} onKeyDown={e => e.key === 'Enter' && add()} placeholder="Nome do caseado" style={{ ...inputCaseado, flex: 1, minWidth: 0, boxSizing: 'border-box' }} />
+          <button type="button" onClick={add} style={{ padding: '10px 16px', fontSize: 14, fontWeight: 600, color: '#fff', background: '#4a7fa5', border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Adicionar</button>
+        </div>
+      </div>
     </div>
   );
 }
