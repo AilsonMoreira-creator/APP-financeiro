@@ -1929,10 +1929,10 @@ const calcTotalAux=(cat,auxData,recTotais,correcao={ativo:true,valor:10000})=>{
   if(cat==="Taxas Cartão")return Math.round(recTotais.geral*0.01);
   if(cat==="Taxas Marketplaces")return Math.round(recTotais.mkt*0.29);
   if(cat==="Valor de Correção")return 10000;
-  if(cat==="Funcionários"){const func=(auxData["Funcionários"]||[]).reduce((s,r)=>s+["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].reduce((a,f)=>a+parseFloat(r[f]||0),0),0);return func+FIXOS_FUNC.reduce((s,f)=>s+f.valor,0);}
+  if(cat==="Funcionários"){const func=(auxData["Funcionários"]||[]).reduce((s,r)=>s+["salario","comissao","extra","alimentacao","vale","ferias","decimo_terceiro","rescisao"].reduce((a,f)=>a+parseFloat(r[f]||0),0),0);return func+FIXOS_FUNC.reduce((s,f)=>s+f.valor,0);}
   return(auxData[cat]||[]).reduce((s,r)=>s+parseFloat(r.valor||0),0);
 };
-const calcRowTotal=(row)=>["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].reduce((s,f)=>s+parseFloat(row[f]||0),0);
+const calcRowTotal=(row)=>["salario","comissao","extra","alimentacao","vale","ferias","decimo_terceiro","rescisao"].reduce((s,f)=>s+parseFloat(row[f]||0),0);
 
 const PrestadorInput=({row,listaPrest,onUpdate,inputStyle})=>{
   const [busca,setBusca]=useState(row.prestador||"");
@@ -2125,7 +2125,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
       const atual=auxData["Funcionários"]||[];
       if(atual.length===0){
         const nomes=fixosNomesFunc||FIXOS_NOMES_FUNC;
-        const linhas=nomes.map(nome=>({nome,salario:"",comissao:"",extra:"",alimentacao:"",vale:"",ferias:"",rescisao:""}));
+        const linhas=nomes.map(nome=>({nome,salario:"",comissao:"",extra:"",alimentacao:"",vale:"",ferias:"",decimo_terceiro:"",rescisao:""}));
         setAuxData(prev=>({...prev,["Funcionários"]:linhas}));
       }
     }
@@ -2192,7 +2192,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
   const addLinhaAux=(cat,dadosIniciais)=>{
     const hoje=new Date();const dd=`${String(hoje.getDate()).padStart(2,"0")}/${String(hoje.getMonth()+1).padStart(2,"0")}`;
     const dataAuto=CATS_DATA_AUTO.includes(cat)?dd:"";
-    if(cat==="Funcionários") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),{nome:"",salario:"",comissao:"",extra:"",alimentacao:"",vale:"",ferias:"",rescisao:""}]}));
+    if(cat==="Funcionários") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),{nome:"",salario:"",comissao:"",extra:"",alimentacao:"",vale:"",ferias:"",decimo_terceiro:"",rescisao:""}]}));
     else if(cat==="Tecidos") setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:"",empresa:"",nroNota:"",valor:"",descricao:""}]}));
     else if(CATS_PREST.includes(cat)) setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:dataAuto,prestador:"",valor:"",descricao:""}]}));
     else setAuxData(prev=>({...prev,[cat]:[...(prev[cat]||[]),dadosIniciais||{data:dataAuto,valor:"",descricao:"",_novo:true}]}));
@@ -2532,7 +2532,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
             <>
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                  <thead><tr style={{background:"#f7f4f0"}}>{["Nome","Salário","Comissão","Extra","Alimentação","Vale","Férias","Rescisão","Total",""].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontSize:10,color:h==="Nome"?_B:"#a89f94",fontWeight:h==="Nome"?700:600,letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
+                  <thead><tr style={{background:"#f7f4f0"}}>{["Nome","Salário","Comissão","Extra","Alimentação","Vale","Férias","13º Salário","Rescisão","Total",""].map(h=><th key={h} style={{padding:"7px 8px",textAlign:"left",fontSize:10,color:h==="Nome"?_B:"#a89f94",fontWeight:h==="Nome"?700:600,letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>)}</tr></thead>
                   <tbody>
                     {(auxData["Funcionários"]||[]).map((row,idx)=>{
                       const rowTotal=calcRowTotal(row);
@@ -2547,7 +2547,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                                 style={{border:"none",borderRadius:4,padding:"5px 6px",fontSize:13,outline:"none",fontFamily:"Georgia,serif",fontWeight:700,background:"transparent",color:"#2c3e50",width:110}}/>
                             )}
                           </td>
-                          {["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].map(f=>(
+                          {["salario","comissao","extra","alimentacao","vale","ferias","decimo_terceiro","rescisao"].map(f=>(
                             <td key={f} style={{padding:"6px 4px"}}>
                               <input value={row[f]||""} onChange={e=>updateLinhaAux("Funcionários",idx,f,e.target.value)}
                                 style={{...inputStyle,width:76,textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:700}}
@@ -3299,7 +3299,7 @@ const RelatorioContent=(props)=>{
       const desp=CATS.reduce((s,c)=>{
         if(c==="Taxas Cartão")return s+Math.round(r*0.01);
         if(c==="Taxas Marketplaces")return s+Math.round(mkt*0.29);
-        if(c==="Funcionários")return s+(aux["Funcionários"]||[]).reduce((a,x)=>a+["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].reduce((b,f)=>b+parseFloat(x[f]||0),0),0);
+        if(c==="Funcionários")return s+(aux["Funcionários"]||[]).reduce((a,x)=>a+["salario","comissao","extra","alimentacao","vale","ferias","decimo_terceiro","rescisao"].reduce((b,f)=>b+parseFloat(x[f]||0),0),0);
         return s+(aux[c]||[]).reduce((a,x)=>a+parseFloat(x.valor||0),0);
       },0);
       return{st,br,mkt,r,desp,saldo:r-desp,margem:r>0?(((r-desp)/r)*100).toFixed(1):0};
@@ -3331,7 +3331,7 @@ const RelatorioContent=(props)=>{
   const calcDesp=(cat)=>{
     if(cat==="Taxas Cartão")return Math.round(totalVendas*0.01);
     if(cat==="Taxas Marketplaces")return Math.round(totalMKT*0.29);
-    if(cat==="Funcionários")return(auxMes["Funcionários"]||[]).reduce((s,r)=>s+["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].reduce((b,f)=>b+parseFloat(r[f]||0),0),0);
+    if(cat==="Funcionários")return(auxMes["Funcionários"]||[]).reduce((s,r)=>s+["salario","comissao","extra","alimentacao","vale","ferias","decimo_terceiro","rescisao"].reduce((b,f)=>b+parseFloat(r[f]||0),0),0);
     return(auxMes[cat]||[]).reduce((s,r)=>s+parseFloat(r.valor||0),0);
   };
   const totalDesp=CATS.reduce((s,c)=>s+calcDesp(c),0);
@@ -3431,7 +3431,7 @@ const RelatorioContent=(props)=>{
       if(cat==="Taxas Cartão")return Math.round(totalVendasMes*0.01);
       if(cat==="Taxas Marketplaces")return Math.round(totalMktMes*0.29);
       if(cat==="Valor de Correção")return 10000;
-      if(cat==="Funcionários")return(aux["Funcionários"]||[]).reduce((s,r)=>s+["salario","comissao","extra","alimentacao","vale","ferias","rescisao"].reduce((b,f)=>b+parseFloat(r[f]||0),0),0);
+      if(cat==="Funcionários")return(aux["Funcionários"]||[]).reduce((s,r)=>s+["salario","comissao","extra","alimentacao","vale","ferias","decimo_terceiro","rescisao"].reduce((b,f)=>b+parseFloat(r[f]||0),0),0);
       return(aux[cat]||[]).reduce((s,r)=>s+parseFloat(r.valor||0),0);
     };
     const mediaCat=(cat)=>{const vals=mesesBase.map(m=>calcDespMes(cat,m)).filter(v=>v>0);return vals.length>0?Math.round(vals.reduce((s,v)=>s+v,0)/vals.length):0;};

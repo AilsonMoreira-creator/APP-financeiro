@@ -61,10 +61,11 @@ const TIPO_INFO = {
 
 // Colunas disponíveis em auxDataPorMes[mes]['Funcionários'][linha] pra Acréscimo
 const COLUNAS_PLANILHA_ACRESCIMO = [
-  { key: 'alimentacao', label: 'Alimentação' },
-  { key: 'extra',       label: 'Extra' },
-  { key: 'ferias',      label: 'Férias' },
-  { key: 'rescisao',    label: 'Rescisão' },
+  { key: 'alimentacao',     label: 'Alimentação' },
+  { key: 'extra',           label: 'Extra' },
+  { key: 'ferias',          label: 'Férias' },
+  { key: 'decimo_terceiro', label: '13º Salário' },
+  { key: 'rescisao',        label: 'Rescisão' },
 ];
 
 // Funcionários iniciais — pré-cadastrados na primeira carga
@@ -766,24 +767,41 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
     // Soma por mes_destino
     let salarioTotal = 0;
     let comissaoTotal = 0;
-    // Acréscimos vão pra coluna específica (alimentacao, extra, etc), não somam no salário/comissão
+    // Acréscimos vão pra coluna específica (alimentacao, extra, ferias, 13º, etc), não somam no salário/comissão
     const acrescimos = []; // { mes_destino, coluna, descricao, valor }
+
+    // Roteamento de "extras" por palavra-chave na descrição (Ailson 03/06/2026):
+    //   férias / 1/3 férias / terço      -> coluna 'ferias'          | mês atual
+    //   13º / 13 salário / parcela 13     -> coluna 'decimo_terceiro' | mês atual
+    //   acréscimo com coluna real definida -> essa coluna             | conforme mes_destino
+    //   qualquer outro extra que não casar -> coluna 'extra'          | mês atual
+    // Regra do dono: nenhum valor positivo pode ficar sem coluna.
+    const COLS_REAIS = ['alimentacao', 'extra', 'ferias', 'decimo_terceiro', 'rescisao'];
+    const deburr = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const ehFerias = (t) => /feria|terco/.test(t);
+    const eh13 = (t) => /decimo terceiro/.test(t) || /(^|\D)13(\D|$)/.test(t);
+    const colunaDoExtra = (l) => {
+      const t = deburr(l.titulo);
+      if (ehFerias(t) || l.coluna_planilha === 'ferias')      return { coluna: 'ferias',          mes_destino: 'competencia' };
+      if (eh13(t) || l.coluna_planilha === 'decimo_terceiro') return { coluna: 'decimo_terceiro', mes_destino: 'competencia' };
+      if (l.coluna_planilha && COLS_REAIS.includes(l.coluna_planilha))
+        return { coluna: l.coluna_planilha, mes_destino: l.mes_destino === 'seguinte' ? 'seguinte' : 'competencia' };
+      return { coluna: 'extra', mes_destino: 'competencia' };
+    };
+
     for (const l of linhas) {
-      // Empréstimos e descontos: NÃO entram em campo nenhum, só visualização
-      // no card. Regra Ailson 15/05/2026 — bug Pedro Abril comissao=-148.54
-      // veio de regra desconto "Emprestimo" R$148,54 caindo no else do loop.
+      // Empréstimos e descontos: NÃO entram em coluna nenhuma, só visualização
+      // no card. Regra Ailson 15/05/2026 (bug Pedro Abril comissao=-148.54).
       if (l.tipo === 'desconto' || l.tipo === 'emprestimo') continue;
-      if (l.tipo === 'acrescimo' && l.coluna_planilha) {
-        acrescimos.push({
-          mes_destino: l.mes_destino,
-          coluna: l.coluna_planilha,
-          descricao: l.titulo,
-          valor: Number(l.valor),
-        });
-      } else if (l.mes_destino === 'seguinte') {
-        salarioTotal += Number(l.valor);
+      const v = Number(l.valor || 0);
+      if (l.tipo === 'salario_fixo') {
+        salarioTotal += v;
+      } else if (['comissao_propria', 'comissao_loja', 'comissao_marketplace', 'bonus_meta_individual'].includes(l.tipo)) {
+        comissaoTotal += v;
       } else {
-        comissaoTotal += Number(l.valor);
+        // acrescimo, valor_fixo e qualquer outro positivo -> coluna por palavra-chave
+        const { coluna, mes_destino } = colunaDoExtra(l);
+        acrescimos.push({ mes_destino, coluna, descricao: l.titulo, valor: v });
       }
     }
     // Agrupa acréscimos da mesma coluna+mes (ex: 2 acréscimos em "alimentacao" mês seguinte)
@@ -801,8 +819,9 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
     const [, mesComp] = competencia.split('-').map(Number);
     const [, mesSeg] = compSeguinte.split('-').map(Number);
 
+    const labelColuna = (key) => (COLUNAS_PLANILHA_ACRESCIMO.find(c => c.key === key)?.label) || key;
     const acrescimosResumo = acrescimos
-      .map(a => `• ${a.descricao} R$ ${a.valor.toFixed(2).replace('.',',')} → ${a.mes_destino === 'seguinte' ? nomeMes(compSeguinte) : nomeMes(competencia)} (coluna ${a.coluna})`)
+      .map(a => `• ${a.descricao} R$ ${a.valor.toFixed(2).replace('.',',')} → ${a.mes_destino === 'seguinte' ? nomeMes(compSeguinte) : nomeMes(competencia)} (coluna ${labelColuna(a.coluna)})`)
       .join('\n');
 
     if (!confirm(
@@ -829,19 +848,28 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
       const payload = dado.payload;
       payload.auxDataPorMes = payload.auxDataPorMes || {};
 
+      const novaLinhaFunc = (nome) => ({
+        nome, salario: '', comissao: '', extra: '', alimentacao: '',
+        vale: '', ferias: '', decimo_terceiro: '', rescisao: '',
+      });
       const escrever = (mesNum, campos) => {
         if (!payload.auxDataPorMes[mesNum]) payload.auxDataPorMes[mesNum] = {};
         if (!payload.auxDataPorMes[mesNum]['Funcionários']) payload.auxDataPorMes[mesNum]['Funcionários'] = [];
         const arr = payload.auxDataPorMes[mesNum]['Funcionários'];
         const alvo = norm(f.nome_planilha || f.nome_display);
-        const idx = arr.findIndex(r => norm(r.nome) === alvo);
+        let idx = arr.findIndex(r => norm(r.nome) === alvo);
+        let criou = false;
         if (idx === -1) {
-          return { achou: false, mes: mesNum };
+          // Sem linha do funcionário nesse mês: cria automaticamente
+          // (Ailson 03/06/2026) pra nenhum valor se perder.
+          arr.push(novaLinhaFunc(f.nome_planilha || f.nome_display));
+          idx = arr.length - 1;
+          criou = true;
         }
         for (const [k, v] of Object.entries(campos)) {
           arr[idx][k] = String(v);
         }
-        return { achou: true, mes: mesNum };
+        return { achou: true, criou, mes: mesNum };
       };
 
       const r1 = escrever(mesSeg, { salario: salarioTotal.toFixed(2) });
@@ -902,11 +930,11 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
       marcarDirty();
 
       const avisos = [];
-      if (!r1.achou) avisos.push(`⚠ Linha "${f.nome_planilha}" não existe na planilha de ${nomeMes(compSeguinte)} (salário). Crie manual.`);
-      if (!r2.achou) avisos.push(`⚠ Linha "${f.nome_planilha}" não existe na planilha de ${nomeMes(competencia)} (comissão). Crie manual.`);
+      if (r1.criou) avisos.push(`+ Linha de ${f.nome_planilha} criada em ${nomeMes(compSeguinte)}.`);
+      if (r2.criou) avisos.push(`+ Linha de ${f.nome_planilha} criada em ${nomeMes(competencia)}.`);
       alert(`✓ ${f.nome_display} marcada como pago.\n\n` +
-        (r1.achou ? `Salário R$ ${salarioTotal.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} ✓\n` : '') +
-        (r2.achou ? `Comissão R$ ${comissaoTotal.toFixed(2).replace('.',',')} → ${nomeMes(competencia)} ✓\n` : '') +
+        `Salário R$ ${salarioTotal.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} ✓\n` +
+        `Comissão R$ ${comissaoTotal.toFixed(2).replace('.',',')} → ${nomeMes(competencia)} ✓\n` +
         (avisos.length ? '\n' + avisos.join('\n') : ''));
     } catch (e) {
       console.error('[folha] marcar pago:', e?.message);
