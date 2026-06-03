@@ -361,7 +361,7 @@ function fmtData(x) { try { return new Date(x).toLocaleDateString('pt-BR'); } ca
 // ── Tela Caseado (aba ao lado de Cadastros no módulo Oficinas) ───────────────
 const inputCaseado = { padding: '11px 12px', fontSize: 15, border: '1px solid #d8e2ea', borderRadius: 8, fontFamily: 'Georgia,serif', color: '#2c3e50', outline: 'none', background: '#fff', colorScheme: 'light', WebkitAppearance: 'none', appearance: 'none' };
 function chipStyle(active) {
-  return { padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 20, cursor: 'pointer', border: `1px solid ${active ? '#4a7fa5' : '#d8e2ea'}`, background: active ? '#4a7fa5' : '#fff', color: active ? '#fff' : '#5a6470', whiteSpace: 'nowrap', lineHeight: 1.2 };
+  return { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 20, cursor: 'pointer', border: `1px solid ${active ? '#4a7fa5' : '#d8e2ea'}`, background: active ? '#4a7fa5' : '#fff', color: active ? '#fff' : '#5a6470', whiteSpace: 'nowrap', lineHeight: 1.2 };
 }
 
 export function TelaCaseado({ api }) {
@@ -397,7 +397,7 @@ export function TelaCaseado({ api }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
         <button onClick={() => setNomeFiltro('todos')} style={chipStyle(nomeFiltro === 'todos')}>Todos ({registros.length})</button>
         {nomes.map(n => (
-          <button key={n} onClick={() => setNomeFiltro(n)} style={chipStyle(nomeFiltro === n)}>✂️ {n} ({contaPorNome(n)})</button>
+          <button key={n} onClick={() => setNomeFiltro(n)} style={chipStyle(nomeFiltro === n)}><CaseadoTabIcon size={13} />{n} ({contaPorNome(n)})</button>
         ))}
         <button onClick={() => setGerenciar(true)} title="Cadastrar / remover caseados" style={{ marginLeft: 'auto', padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d8e2ea', background: '#fff', color: '#5a6470', cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ Gerenciar</button>
       </div>
@@ -432,7 +432,7 @@ export function TelaCaseado({ api }) {
                       <span style={{ background: ent ? '#eafbf0' : '#fff8ea', color: ent ? '#27ae60' : '#b7791f', border: `1px solid ${ent ? '#c6e9cf' : '#f0dca8'}`, padding: '3px 9px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
                         {ent ? '✓ Entregue' : 'No caseado'}
                       </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: '#5a3a8c', background: '#f0eafa', border: '1px solid #d8c8ec', borderRadius: 10, padding: '3px 9px' }}>✂️ {reg.nome}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: '#5a3a8c', background: '#f0eafa', border: '1px solid #d8c8ec', borderRadius: 10, padding: '3px 9px' }}><CaseadoTabIcon size={13} />{reg.nome}</span>
                     </div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>REF {reg.ref}{reg.descricao ? ` · ${reg.descricao}` : ''}</div>
                     <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 2 }}>
@@ -476,7 +476,7 @@ function ModalGerenciarCaseados({ api, onClose }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
           {nomes.map(n => (
             <div key={n} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #e2e8ee', borderRadius: 8, background: '#f6f9fc' }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: '#2c3e50' }}>✂️ {n}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 600, color: '#2c3e50' }}><CaseadoTabIcon size={15} />{n}</span>
               <button type="button" onClick={() => rem(n)} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, color: '#c0392b', background: '#fbeaea', border: '1px solid #f0d0d0', borderRadius: 6, cursor: 'pointer' }}>Remover</button>
             </div>
           ))}
