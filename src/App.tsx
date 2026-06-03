@@ -3843,8 +3843,10 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
   );
 };
 
-const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD,isAdmin=true,pendingSnapshotIds})=>{
+const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD,isAdmin=true,pendingSnapshotIds,abaPedida,onAbaConsumida})=>{
   const [aba,setAba]=useState("cortes");
+  // Abre numa sub-aba específica quando vem da home (ex.: card Caseado → aba caseado)
+  useEffect(()=>{if(abaPedida){setAba(abaPedida);onAbaConsumida&&onAbaConsumida();}},[abaPedida]);
   const [cadAba,setCadAba]=useState("produtos");
   const [filtroOf,setFiltroOf]=useState("todas");
   const [filtroMarca,setFiltroMarca]=useState("todas");
@@ -9408,6 +9410,7 @@ export default function App(){
   const [homeLojasPending,setHomeLojasPending]=useState(0);
   const [homeSofiaPending,setHomeSofiaPending]=useState(0);
   const [homeCaseadoAbertos,setHomeCaseadoAbertos]=useState(0);
+  const [oficinasAbaPedida,setOficinasAbaPedida]=useState(null);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
   const ultimaAtividadeRef=useRef(Date.now()); // timestamp da última atividade do usuário (toque/click/scroll/keydown). Reseta o timeout de inatividade.
   const ultimaSyncAtividadeRef=useRef(0); // throttle de localStorage
@@ -10961,7 +10964,7 @@ export default function App(){
             {id:"oficinas",label:"Oficinas",Icon:SvgOficinas,color:"#8e6b3a",bg:"#faf6f0",border:"#e8dcc8",
               kpiValue:nCortesAberto>0?`${nCortesAberto} cortes`:"—",kpiLabel:"em produção",
               detail:nCortesAberto>0?`${pecasAbertas.toLocaleString("pt-BR")} peças`:"sem cortes abertos"},
-            {id:"caseado",gate:"oficinas",navTo:"oficinas",label:"Caseado",Icon:CaseadoTabIcon,color:"#5a3a8c",bg:"#f4eefb",border:"#ddd0ee",
+            {id:"caseado",gate:"oficinas",navTo:"oficinas",subAba:"caseado",label:"Caseado",Icon:CaseadoTabIcon,color:"#5a3a8c",bg:"#f4eefb",border:"#ddd0ee",
               kpiValue:homeCaseadoAbertos>0?`${homeCaseadoAbertos}`:"✓",kpiLabel:homeCaseadoAbertos>0?"no caseado":"nada no caseado",
               detail:homeCaseadoAbertos>0?"Cortes aguardando botão":"Tudo entregue"},
             {id:"salascorte",label:"Salas de Corte",Icon:SvgSalasCorte,color:"#6b4c3b",bg:"#f8f3ee",border:"#e0d4c8",
@@ -10997,7 +11000,7 @@ export default function App(){
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(230px, 1fr))",gap:12}}>
                 {homeModules.map(m=>(
-                  <div key={m.id} onClick={()=>setActive(m.navTo||m.id)}
+                  <div key={m.id} onClick={()=>{if(m.subAba)setOficinasAbaPedida(m.subAba);setActive(m.navTo||m.id);}}
                     onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.borderColor=m.color;e.currentTarget.style.boxShadow=`0 8px 24px ${m.color}18, 0 2px 6px rgba(0,0,0,0.06)`;e.currentTarget.querySelector(".home-bar").style.background=m.color;e.currentTarget.querySelector(".home-arrow").style.opacity="1";e.currentTarget.querySelector(".home-arrow").style.transform="translateX(3px)";e.currentTarget.querySelector(".home-kpi").style.background=m.bg;}}
                     onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.borderColor=m.border;e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.03)";e.currentTarget.querySelector(".home-bar").style.background="transparent";e.currentTarget.querySelector(".home-arrow").style.opacity="0.25";e.currentTarget.querySelector(".home-arrow").style.transform="none";e.currentTarget.querySelector(".home-kpi").style.background="transparent";}}
                     style={{background:"#fff",border:`1.5px solid ${m.border}`,borderRadius:14,padding:"18px 16px 14px",cursor:"pointer",transition:"all 0.25s ease",position:"relative",overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.03)"}}>
@@ -11043,7 +11046,7 @@ export default function App(){
         {active==="osamicia"&&usuarioLogado?.modulos?.includes('osamicia')&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={String(usuarioLogado?.usuario||'').toLowerCase()==='ailson' ? {...usuarioLogado, admin:true} : usuarioLogado}/></ModuleErrorBoundary>}
         {active==="lojas"&&<ModuleErrorBoundary><LojasModule supabase={supabase} userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sofia"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('sofia'))&&<ModuleErrorBoundary><LojasWhats userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
-        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds}/>}
+        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
