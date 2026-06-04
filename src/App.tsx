@@ -5292,8 +5292,12 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
           const md=dd[marca];if(!md)continue;
           const mn=marca.charAt(0).toUpperCase()+marca.slice(1);
           if(!r.porMarca[mn])r.porMarca[mn]={pedidos:0,bruto:0,itens:0};
-          for(const cn in md){
-            const cd=md[cn];
+          for(const cnRaw in md){
+            // Site Meluni vem do Bling sem nome de canal -> canal_geral 'Outros'.
+            // Como não dá pra corrigir no Bling, renomeia "Outros" -> "Meluni" aqui
+            // (só exibição; histórico no banco continua 'Outros'). Ailson 04/06/2026.
+            const cn=cnRaw==="Outros"?"Meluni":cnRaw;
+            const cd=md[cnRaw];
             if(!r.porCanal[cn])r.porCanal[cn]={pedidos:0,bruto:0,frete:0,itens:0,subcanais:{},produtos:{}};
             const cc=r.porCanal[cn];
             cc.pedidos+=cd.pedidos||0;cc.bruto+=cd.bruto||0;cc.frete+=cd.frete||0;cc.itens+=cd.itens||0;
