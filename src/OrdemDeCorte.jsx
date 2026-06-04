@@ -401,8 +401,18 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
   return (
     <div ref={cardRef} style={{
       background: '#fff', border: '1px solid #e8e2da', borderRadius: 10, padding: 14,
-      opacity: isFinalizada ? 0.85 : 1,
+      opacity: isFinalizada ? 0.85 : 1, position: 'relative',
     }}>
+      <button onClick={handleCompartilhar} disabled={gerandoImg} data-noshot="1" title="Compartilhar como imagem (WhatsApp)" style={{
+        position: 'absolute', top: 10, right: 10, zIndex: 3,
+        padding: 6, background: '#fff', border: '1px solid #d6cfc6', borderRadius: 8,
+        cursor: gerandoImg ? 'default' : 'pointer', color: '#27ae60', lineHeight: 0,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)', opacity: gerandoImg ? 0.5 : 1,
+      }}>
+        {gerandoImg ? <span style={{ fontSize: 13, lineHeight: 1 }}>…</span> : (
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        )}
+      </button>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
         {/* Thumbnail do produto (Supabase Storage bucket `produtos`) */}
         <FotoOrdem refProd={ordem.ref} />
@@ -453,7 +463,7 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
           </div>
         )}
 
-        <div data-noshot="1" style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
+        <div data-noshot="1" style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexShrink: 0, marginRight: 36 }}>
           {/* Ailson 28/05/2026: admin pode definir a sala direto do card
               quando tecido ja foi separado — antes so era possivel via
               FilaDeCorte mobile. */}
@@ -467,11 +477,6 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
               ✂️ Definir sala
             </button>
           )}
-          <button onClick={handleCompartilhar} disabled={gerandoImg} title="Compartilhar como imagem (WhatsApp)" style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: gerandoImg ? 'default' : 'pointer', fontSize: 14, color: '#27ae60', opacity: gerandoImg ? 0.5 : 1 }}>
-            {gerandoImg ? '…' : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-            )}
-          </button>
           <button onClick={onAbrirMatrix} title="Ver matriz" style={{ padding: 6, background: '#fff', border: '1px solid #e8e2da', borderRadius: 4, cursor: 'pointer', fontSize: 14 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           </button>
