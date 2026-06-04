@@ -522,8 +522,11 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
   // Modais
   const [modalCadastro, setModalCadastro] = useState(null);        // null | { isEdit, funcId? }
   const [modalRegras, setModalRegras] = useState(null);            // null | funcId
-  const [modalPdf, setModalPdf] = useState(null);                  // null | funcId
+  const [modalPdf, setModalPdf] = useState(null);                  // null | array de funcId
   const [modalAddLinha, setModalAddLinha] = useState(null);        // null | { tipo: 'valor_fixo'|'desconto' }
+
+  // Seleção em massa (checkbox por card)
+  const [selecionados, setSelecionados] = useState({});            // { [funcId]: true }
 
   // Vendedoras (pra resolver vendedora_id por nome)
   const [vendedoras, setVendedoras] = useState([]);
@@ -766,27 +769,16 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
     marcarDirty();
   }
 
-  // ───────── Marcar pago — escreve na planilha auxDataPorMes
-  async function marcarPago(funcId) {
+  // ───────── Computa a folha de UM funcionário (puro, sem IO)
+  function montarFolha(funcId) {
     const f = funcionarios.find(x => x.id === funcId);
-    if (!f) return;
+    if (!f) return null;
     const linhas = linhasCalculadas(funcId);
 
-    // Soma por mes_destino
-    let salarioTotal = 0;
-    let comissaoTotal = 0;
-    // Acréscimos vão pra coluna específica (alimentacao, extra, ferias, 13º, etc), não somam no salário/comissão
-    const acrescimos = []; // { mes_destino, coluna, descricao, valor }
-
     // Roteamento de meses (Ailson 03/06/2026 - fecha a folha do mês anterior):
-    //   COMISSÃO -> mês de competência (a folha que está fechando, ex: maio)
-    //   TODO O RESTO (salário, extra, férias, 13º, alimentação, rescisão, vale)
-    //     -> mês corrente / seguinte (ex: junho). É o "mês atual" do dono.
-    // Coluna do "extra" definida por palavra-chave na descrição:
-    //   férias / 1/3 / terço          -> coluna 'ferias'
-    //   13º / 13 salário / parcela 13  -> coluna 'decimo_terceiro'
-    //   coluna real já definida na regra -> essa coluna
-    //   qualquer outro                 -> coluna 'extra'
+    //   COMISSÃO -> competência (a folha que está fechando). Resto -> mês corrente/seguinte.
+    // Coluna do "extra" por palavra-chave: férias/terço -> ferias; 13º/parcela 13 ->
+    //   decimo_terceiro; coluna real já definida -> ela; qualquer outro -> extra.
     // Regra do dono: nenhum valor positivo pode ficar sem coluna.
     const COLS_REAIS = ['alimentacao', 'extra', 'ferias', 'decimo_terceiro', 'rescisao'];
     const deburr = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -800,28 +792,26 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
       return 'extra';
     };
 
+    let salarioTotal = 0, comissaoTotal = 0;
+    const acrescimos = [];
     for (const l of linhas) {
-      // Empréstimos e descontos: NÃO entram em coluna nenhuma, só visualização
-      // no card. Regra Ailson 15/05/2026 (bug Pedro Abril comissao=-148.54).
+      // Empréstimos e descontos: NÃO entram em coluna nenhuma (regra Ailson 15/05/2026).
       if (l.tipo === 'desconto' || l.tipo === 'emprestimo') continue;
       const v = Number(l.valor || 0);
       if (['comissao_propria', 'comissao_loja', 'comissao_marketplace', 'bonus_meta_individual'].includes(l.tipo)) {
-        comissaoTotal += v;          // -> competência (mês que fecha)
+        comissaoTotal += v;
       } else if (l.tipo === 'salario_fixo') {
-        salarioTotal += v;           // -> mês seguinte (corrente)
+        salarioTotal += v;
       } else {
-        // acrescimo, valor_fixo e qualquer outro positivo -> coluna por keyword, mês corrente
         acrescimos.push({ mes_destino: 'seguinte', coluna: colunaDoExtra(l), descricao: l.titulo, valor: v });
       }
     }
-    // Agrupa acréscimos da mesma coluna+mes (ex: 2 acréscimos em "alimentacao" mês seguinte)
     const acrescimosAgrupados = {};
     for (const a of acrescimos) {
       const k = `${a.mes_destino}|${a.coluna}`;
       acrescimosAgrupados[k] = (acrescimosAgrupados[k] || 0) + a.valor;
     }
 
-    // Vale (do regras base)
     const valeRegra = (regrasDoFunc(funcId) || []).find(r => r.tipo === 'vale_pago' && r.ativo);
     const valeValor = Number(valeRegra?.config?.valor || 0);
 
@@ -829,13 +819,67 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
     const [, mesComp] = competencia.split('-').map(Number);
     const [, mesSeg] = compSeguinte.split('-').map(Number);
 
+    return { f, funcId, linhas, salarioTotal, comissaoTotal, acrescimos, acrescimosAgrupados, valeValor, compSeguinte, mesComp, mesSeg };
+  }
+
+  // ───────── Escreve a folha de UM funcionário no payload (cria linha se faltar)
+  function aplicarFolhaNoPayload(payload, m) {
+    payload.auxDataPorMes = payload.auxDataPorMes || {};
+    const { f, salarioTotal, comissaoTotal, acrescimosAgrupados, valeValor, mesComp, mesSeg } = m;
+
+    const novaLinhaFunc = (nome) => ({
+      nome, salario: '', comissao: '', extra: '', alimentacao: '',
+      vale: '', ferias: '', decimo_terceiro: '', rescisao: '',
+    });
+    const escrever = (mesNum, campos) => {
+      if (!payload.auxDataPorMes[mesNum]) payload.auxDataPorMes[mesNum] = {};
+      if (!payload.auxDataPorMes[mesNum]['Funcionários']) payload.auxDataPorMes[mesNum]['Funcionários'] = [];
+      const arr = payload.auxDataPorMes[mesNum]['Funcionários'];
+      const alvo = norm(f.nome_planilha || f.nome_display);
+      let idx = arr.findIndex(r => norm(r.nome) === alvo);
+      let criou = false;
+      if (idx === -1) {
+        arr.push(novaLinhaFunc(f.nome_planilha || f.nome_display));
+        idx = arr.length - 1;
+        criou = true;
+      }
+      for (const [k, v] of Object.entries(campos)) arr[idx][k] = String(v);
+      return { criou };
+    };
+
+    const r1 = escrever(mesSeg, { salario: salarioTotal.toFixed(2) });
+    const r2 = escrever(mesComp, { comissao: comissaoTotal.toFixed(2) });
+    for (const [k, valor] of Object.entries(acrescimosAgrupados)) {
+      const [mesDestino, coluna] = k.split('|');
+      const mesNum = mesDestino === 'seguinte' ? mesSeg : mesComp;
+      escrever(mesNum, { [coluna]: valor.toFixed(2) });
+    }
+    // Vale -> mês corrente (mesSeg), igual ao cron dia 20. Só se ainda não estiver lá.
+    if (valeValor > 0) {
+      const arr = payload.auxDataPorMes[mesSeg]?.['Funcionários'] || [];
+      const alvo = norm(f.nome_planilha || f.nome_display);
+      const linha = arr.find(r => norm(r.nome) === alvo);
+      if (linha) {
+        const valeAtual = parseFloat(linha.vale || 0);
+        if (Math.abs(valeAtual - valeValor) > 0.01) linha.vale = valeValor.toFixed(2);
+      }
+    }
+    return { r1, r2 };
+  }
+
+  // ───────── Marcar UM como pago
+  async function marcarPago(funcId) {
+    const m = montarFolha(funcId);
+    if (!m) return;
+    const { f, salarioTotal, comissaoTotal, valeValor, acrescimos, compSeguinte } = m;
+
     const labelColuna = (key) => (COLUNAS_PLANILHA_ACRESCIMO.find(c => c.key === key)?.label) || key;
     const acrescimosResumo = acrescimos
-      .map(a => `• ${a.descricao} R$ ${a.valor.toFixed(2).replace('.',',')} → ${a.mes_destino === 'seguinte' ? nomeMes(compSeguinte) : nomeMes(competencia)} (coluna ${labelColuna(a.coluna)})`)
+      .map(a => `• ${a.descricao} R$ ${a.valor.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} (coluna ${labelColuna(a.coluna)})`)
       .join('\n');
 
     if (!confirm(
-      `Marcar ${f.nome_display} como pago — ${nomeMes(competencia)}?\n\n` +
+      `Marcar ${f.nome_display} como pago - ${nomeMes(competencia)}?\n\n` +
       `Vai escrever na planilha:\n` +
       `• Salário R$ ${salarioTotal.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} (mês de pagamento)\n` +
       `• Comissão R$ ${comissaoTotal.toFixed(2).replace('.',',')} → ${nomeMes(competencia)} (competência)\n` +
@@ -845,95 +889,26 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
     )) return;
 
     try {
-      // Lê payload financeiro atual
       const { data: dado } = await supabase
-        .from('amicia_data')
-        .select('payload')
-        .eq('user_id', 'amicia-admin')
-        .maybeSingle();
-      if (!dado?.payload) {
-        alert('Payload financeiro não encontrado.');
-        return;
-      }
+        .from('amicia_data').select('payload').eq('user_id', 'amicia-admin').maybeSingle();
+      if (!dado?.payload) { alert('Payload financeiro não encontrado.'); return; }
       const payload = dado.payload;
-      payload.auxDataPorMes = payload.auxDataPorMes || {};
 
-      const novaLinhaFunc = (nome) => ({
-        nome, salario: '', comissao: '', extra: '', alimentacao: '',
-        vale: '', ferias: '', decimo_terceiro: '', rescisao: '',
-      });
-      const escrever = (mesNum, campos) => {
-        if (!payload.auxDataPorMes[mesNum]) payload.auxDataPorMes[mesNum] = {};
-        if (!payload.auxDataPorMes[mesNum]['Funcionários']) payload.auxDataPorMes[mesNum]['Funcionários'] = [];
-        const arr = payload.auxDataPorMes[mesNum]['Funcionários'];
-        const alvo = norm(f.nome_planilha || f.nome_display);
-        let idx = arr.findIndex(r => norm(r.nome) === alvo);
-        let criou = false;
-        if (idx === -1) {
-          // Sem linha do funcionário nesse mês: cria automaticamente
-          // (Ailson 03/06/2026) pra nenhum valor se perder.
-          arr.push(novaLinhaFunc(f.nome_planilha || f.nome_display));
-          idx = arr.length - 1;
-          criou = true;
-        }
-        for (const [k, v] of Object.entries(campos)) {
-          arr[idx][k] = String(v);
-        }
-        return { achou: true, criou, mes: mesNum };
-      };
+      const { r1, r2 } = aplicarFolhaNoPayload(payload, m);
 
-      const r1 = escrever(mesSeg, { salario: salarioTotal.toFixed(2) });
-      const r2 = escrever(mesComp, { comissao: comissaoTotal.toFixed(2) });
-
-      // Acréscimos: cada um vai pra coluna específica do mês escolhido
-      for (const [k, valor] of Object.entries(acrescimosAgrupados)) {
-        const [mesDestino, coluna] = k.split('|');
-        const mesNum = mesDestino === 'seguinte' ? mesSeg : mesComp;
-        escrever(mesNum, { [coluna]: valor.toFixed(2) });
-      }
-
-      // Vale: vai pro mês corrente (mesSeg), igual ao cron dia 20. Só preenche
-      // se ainda não estiver lá (o cron normalmente já põe). A linha de mesSeg
-      // já foi criada acima pelo escrever() do salário.
-      if (valeValor > 0) {
-        const arr = payload.auxDataPorMes[mesSeg]?.['Funcionários'] || [];
-        const alvo = norm(f.nome_planilha || f.nome_display);
-        const linha = arr.find(r => norm(r.nome) === alvo);
-        if (linha) {
-          const valeAtual = parseFloat(linha.vale || 0);
-          if (Math.abs(valeAtual - valeValor) > 0.01) {
-            linha.vale = valeValor.toFixed(2);
-          }
-        }
-      }
-
-      // ─── FIX RACE CONDITION com autosave do App.tsx (Ailson 15/05/2026) ──
-      // Bug capturado: marcarPago salvava direto no Supabase, mas App.tsx tem
-      // state interno de auxDataPorMes e autosave periodico (debounce 1.5s).
-      // Quando autosave disparava DEPOIS do nosso update(), ele relia o remote,
-      // fazia merge 'mantem local' (state stale do App.tsx, sem alteracoes),
-      // sobrescrevendo o trabalho. Resultado: comissao em mes anterior e
-      // salario em mes corrente nao persistiam (bug Folha Abril 2026).
-      //
-      // SOLUCAO: avisa o App.tsx via callback prop ANTES de gravar no banco.
-      // Assim o state interno do pai fica em sync com o que vai pro Supabase,
-      // e qualquer autosave subsequente vai ler 'remote == local' e nao
-      // sobrescrever nada.
+      // FIX RACE CONDITION (Ailson 15/05/2026): avisa o App.tsx ANTES de gravar,
+      // pra o autosave do pai não sobrescrever com state stale.
       onAuxDataChange?.(payload.auxDataPorMes);
-
       await supabase
-        .from('amicia_data')
-        .update({ payload, updated_at: new Date().toISOString() })
-        .eq('user_id', 'amicia-admin');
+        .from('amicia_data').update({ payload, updated_at: new Date().toISOString() }).eq('user_id', 'amicia-admin');
 
-      // Snapshot do fechamento
       const k = fechamentoKey(funcId, competencia);
       setFechamentos(prev => ({
         ...prev,
         [k]: {
           ...(prev[k] || {}),
           snapshot: {
-            linhas, totalSalario: salarioTotal, totalComissao: comissaoTotal,
+            linhas: m.linhas, totalSalario: salarioTotal, totalComissao: comissaoTotal,
             totalGeral: salarioTotal + comissaoTotal, vale: valeValor,
           },
           pago_em: new Date().toISOString(),
@@ -950,6 +925,57 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
         (avisos.length ? '\n' + avisos.join('\n') : ''));
     } catch (e) {
       console.error('[folha] marcar pago:', e?.message);
+      alert('Erro ao marcar pago: ' + e?.message);
+    }
+  }
+
+  // ───────── Marcar VÁRIOS como pago (um confirm, uma gravação, um resumo)
+  async function marcarVariosPago(ids) {
+    const montagens = ids.map(montarFolha).filter(Boolean);
+    if (!montagens.length) return;
+    const compSeguinte = competenciaSeguinte(competencia);
+    const totalGeral = montagens.reduce((s, m) => s + m.salarioTotal + m.comissaoTotal, 0);
+
+    if (!confirm(
+      `Marcar ${montagens.length} funcionário(s) como pago - ${nomeMes(competencia)}?\n\n` +
+      `• Comissão → ${nomeMes(competencia)} (competência)\n` +
+      `• Salário e demais → ${nomeMes(compSeguinte)} (mês de pagamento)\n\n` +
+      `Total geral: R$ ${totalGeral.toFixed(2).replace('.',',')}\n\nContinuar?`
+    )) return;
+
+    try {
+      const { data: dado } = await supabase
+        .from('amicia_data').select('payload').eq('user_id', 'amicia-admin').maybeSingle();
+      if (!dado?.payload) { alert('Payload financeiro não encontrado.'); return; }
+      const payload = dado.payload;
+
+      for (const m of montagens) aplicarFolhaNoPayload(payload, m);
+
+      onAuxDataChange?.(payload.auxDataPorMes);
+      await supabase
+        .from('amicia_data').update({ payload, updated_at: new Date().toISOString() }).eq('user_id', 'amicia-admin');
+
+      const agora = new Date().toISOString();
+      setFechamentos(prev => {
+        const next = { ...prev };
+        for (const m of montagens) {
+          const k = fechamentoKey(m.funcId, competencia);
+          next[k] = {
+            ...(next[k] || {}),
+            snapshot: {
+              linhas: m.linhas, totalSalario: m.salarioTotal, totalComissao: m.comissaoTotal,
+              totalGeral: m.salarioTotal + m.comissaoTotal, vale: m.valeValor,
+            },
+            pago_em: agora,
+          };
+        }
+        return next;
+      });
+      marcarDirty();
+      setSelecionados({});
+      alert(`✓ ${montagens.length} funcionário(s) marcado(s) como pago - ${nomeMes(competencia)}.`);
+    } catch (e) {
+      console.error('[folha] marcar varios pago:', e?.message);
       alert('Erro ao marcar pago: ' + e?.message);
     }
   }
@@ -1013,6 +1039,15 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
           mostrarArquivados={mostrarArquivados}
           setMostrarArquivados={setMostrarArquivados}
           onReativar={reativarFuncionario}
+          selecionados={selecionados}
+          onToggleSel={(id) => setSelecionados(prev => { const n = { ...prev }; if (n[id]) delete n[id]; else n[id] = true; return n; })}
+          onToggleTodos={(ids) => setSelecionados(prev => {
+            const todos = ids.length > 0 && ids.every(id => prev[id]);
+            if (todos) return {};
+            const n = {}; ids.forEach(id => { n[id] = true; }); return n;
+          })}
+          onMarcarVarios={(ids) => marcarVariosPago(ids)}
+          onGerarPdfVarios={(ids) => setModalPdf(ids)}
         />
       )}
 
@@ -1031,7 +1066,7 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
           onAddLinha={(tipo) => setModalAddLinha({ tipo })}
           onRemoverAjuste={(ajusteId) => removerAjuste(funcSelId, ajusteId)}
           onMarcarPago={() => marcarPago(funcSelId)}
-          onGerarPdf={() => setModalPdf(funcSelId)}
+          onGerarPdf={() => setModalPdf([funcSelId])}
           onArquivar={() => {
             if (confirm(`Arquivar ${funcSel.nome_display}?\nFunciona como soft-delete: o histórico de fechamentos passados continua, e você pode reativar quando quiser.`)) {
               arquivarFuncionario(funcSelId);
@@ -1079,10 +1114,14 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
 
       {modalPdf && (
         <ModalPdf
-          funcionario={funcionarios.find(f => f.id === modalPdf)}
-          linhas={linhasCalculadas(modalPdf)}
+          itens={(Array.isArray(modalPdf) ? modalPdf : [modalPdf])
+            .map(id => ({
+              funcionario: funcionarios.find(f => f.id === id),
+              linhas: linhasCalculadas(id),
+              fechamento: fechamentoDoFunc(id, competencia),
+            }))
+            .filter(it => it.funcionario)}
           competencia={competencia}
-          fechamento={fechamentoDoFunc(modalPdf, competencia)}
           onClose={() => setModalPdf(null)}
         />
       )}
@@ -1097,6 +1136,7 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
 function HomeFolha({
   funcionarios, allFuncs, regras, competencia, setCompetencia, fechamentos, ctxGeral, ctxLoading,
   totalFunc, onAbrirDetalhe, onAbrirCadastro, mostrarArquivados, setMostrarArquivados, onReativar,
+  selecionados, onToggleSel, onToggleTodos, onMarcarVarios, onGerarPdfVarios,
 }) {
   const totalPrevisto = funcionarios.reduce((s, f) => s + totalFunc(f.id), 0);
   const pagos = funcionarios.filter(f => fechamentos[`${f.id}|${competencia}`]?.pago_em).length;
@@ -1157,6 +1197,43 @@ function HomeFolha({
         </div>
       )}
 
+      {/* Barra de seleção em massa */}
+      {!mostrarArquivados && funcionarios.length > 0 && (() => {
+        const idsVisiveis = funcionarios.map(f => f.id);
+        const idsSel = idsVisiveis.filter(id => selecionados?.[id]);
+        const todosMarcados = idsSel.length === idsVisiveis.length;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14,
+            background: idsSel.length ? palette.accentSoft : '#fff',
+            border: `1px solid ${idsSel.length ? palette.accent + '55' : palette.beige}`,
+            borderRadius: 10, padding: '10px 14px', transition: 'all 0.15s' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: palette.ink, fontWeight: 600 }}>
+              <input type="checkbox" checked={todosMarcados}
+                onChange={() => onToggleTodos(idsVisiveis)}
+                style={{ width: 17, height: 17, accentColor: palette.accent, cursor: 'pointer' }} />
+              Selecionar todos
+            </label>
+            <span style={{ fontSize: 13, color: palette.inkMuted }}>
+              {idsSel.length > 0 ? `${idsSel.length} selecionado(s)` : 'Nenhum selecionado'}
+            </span>
+            {idsSel.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+                <button onClick={() => onMarcarVarios(idsSel)}
+                  style={{ background: palette.ink, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px',
+                    fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Check size={15} strokeWidth={1.5} /> Marcar {idsSel.length} como pago
+                </button>
+                <button onClick={() => onGerarPdfVarios(idsSel)}
+                  style={{ background: '#fff', color: palette.ink, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '8px 14px',
+                    fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Printer size={15} strokeWidth={1.5} /> Gerar PDF ({idsSel.length})
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Grid de cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
         {funcionarios.map(f => (
@@ -1164,6 +1241,9 @@ function HomeFolha({
             pago={!!fechamentos[`${f.id}|${competencia}`]?.pago_em}
             pagoEm={fechamentos[`${f.id}|${competencia}`]?.pago_em}
             arquivado={!f.ativo}
+            selecionavel={!mostrarArquivados}
+            selecionado={!!selecionados?.[f.id]}
+            onToggleSel={() => onToggleSel(f.id)}
             onClick={() => mostrarArquivados ? null : onAbrirDetalhe(f.id)}
             onReativar={() => onReativar(f.id)}
           />
@@ -1196,7 +1276,7 @@ function ResumoCell({ label, valor }) {
   );
 }
 
-function CardFunc({ f, total, pago, pagoEm, arquivado, onClick, onReativar }) {
+function CardFunc({ f, total, pago, pagoEm, arquivado, onClick, onReativar, selecionavel, selecionado, onToggleSel }) {
   const cat = CAT_INFO[f.categoria] || CAT_INFO.outro;
   return (
     <div onClick={onClick}
@@ -1205,6 +1285,7 @@ function CardFunc({ f, total, pago, pagoEm, arquivado, onClick, onReativar }) {
         border: `1px solid ${pago ? palette.ok + '40' : palette.beige}`,
         borderRadius: 12, padding: 16, cursor: arquivado ? 'default' : 'pointer',
         transition: 'all 0.15s', position: 'relative', opacity: arquivado ? 0.7 : 1,
+        outline: selecionado ? `2px solid ${palette.accent}` : 'none', outlineOffset: -2,
       }}
       onMouseEnter={e => { if (!arquivado) { e.currentTarget.style.borderColor = palette.accent; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
       onMouseLeave={e => { if (!arquivado) { e.currentTarget.style.borderColor = pago ? palette.ok + '40' : palette.beige; e.currentTarget.style.transform = 'translateY(0)'; } }}
@@ -1230,6 +1311,12 @@ function CardFunc({ f, total, pago, pagoEm, arquivado, onClick, onReativar }) {
         </button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        {selecionavel && (
+          <input type="checkbox" checked={!!selecionado}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => { e.stopPropagation(); onToggleSel?.(); }}
+            style={{ width: 18, height: 18, accentColor: palette.accent, cursor: 'pointer', flexShrink: 0 }} />
+        )}
         <div style={{
           width: 38, height: 38, borderRadius: '50%', background: palette.beigeSoft, color: palette.ink,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1812,84 +1899,97 @@ function ModalAddLinha({ tipo, onClose, onSalvar }) {
 // MODAL: PDF (preview imprimível)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ModalPdf({ funcionario: f, linhas, competencia, fechamento, onClose }) {
+function Recibo({ funcionario: f, linhas, competencia, fechamento }) {
   const total = linhas.reduce((s, l) => s + Number(l.valor || 0), 0);
   const dataPagamento = fechamento?.pago_em ? new Date(fechamento.pago_em) : new Date();
+  return (
+    <div className="recibo" style={{
+      background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', margin: '0 auto 24px',
+      padding: '50px 60px', maxWidth: 480, color: palette.ink, borderRadius: 4,
+    }}>
+      <div style={{ fontSize: 12, letterSpacing: 3, textTransform: 'uppercase', color: palette.inkMuted, textAlign: 'center', marginBottom: 4 }}>
+        Grupo Amícia
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 700, textAlign: 'center', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>
+        {f.nome_display}
+      </div>
+      <div style={{ textAlign: 'center', fontSize: 14, color: palette.inkSoft, marginBottom: 30, fontStyle: 'italic' }}>
+        {nomeMes(competencia)}
+      </div>
 
-  function imprimir() {
-    window.print();
-  }
+      {linhas.map(l => (
+        <div key={l.id} style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ fontSize: 15, color: palette.ink }}>{l.titulo}</div>
+            <div style={{ fontFamily: NUM, fontSize: 15, fontWeight: 600, color: Number(l.valor) < 0 ? palette.alert : palette.ink }}>
+              {Number(l.valor) < 0 ? '−' : ''}{fmtBRL(Math.abs(l.valor))}
+            </div>
+          </div>
+          {l.descricao_calculo && (
+            <div style={{ fontSize: 12, color: palette.inkMuted, fontStyle: 'italic', marginTop: 2 }}>
+              {l.descricao_calculo}
+            </div>
+          )}
+        </div>
+      ))}
 
+      <div style={{ borderTop: `1px solid ${palette.ink}`, margin: '24px 0 14px' }} />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Total</div>
+        <div style={{ fontFamily: NUM, fontSize: 18, fontWeight: 700 }}>{fmtBRL(total)}</div>
+      </div>
+
+      <div style={{ textAlign: 'right', fontSize: 13, color: palette.inkSoft, marginTop: 30 }}>
+        Data: {dataPagamento.toLocaleDateString('pt-BR')}
+      </div>
+
+      <div style={{ marginTop: 50, borderTop: `1px solid ${palette.beige}`, paddingTop: 12, fontSize: 12, color: palette.inkMuted, textAlign: 'center' }}>
+        Recebi o valor acima referente ao mês de {nomeMes(competencia)}
+      </div>
+      <div style={{ marginTop: 30, display: 'flex', justifyContent: 'space-between', fontSize: 13, color: palette.ink }}>
+        <div>_______________________________<br /><span style={{ fontSize: 12 }}>Assinatura</span></div>
+        <div>_______________<br /><span style={{ fontSize: 12 }}>Data</span></div>
+      </div>
+    </div>
+  );
+}
+
+function ModalPdf({ itens, competencia, onClose }) {
+  function imprimir() { window.print(); }
+  const lista = itens || [];
   return (
     <div style={modalOverlayStyle()} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <style>{`
         @media print {
           body * { visibility: hidden; }
           #pdf-print, #pdf-print * { visibility: visible; }
-          #pdf-print { position: absolute; left: 0; top: 0; width: 100%; padding: 30px 50px; }
+          #pdf-print { position: absolute; left: 0; top: 0; width: 100%; }
+          #pdf-print .recibo { box-shadow: none !important; margin: 0 !important; max-width: 100% !important; border-radius: 0 !important; padding: 30px 50px !important; }
+          #pdf-print .recibo:not(:last-child) { break-after: page; page-break-after: always; }
           .no-print { display: none !important; }
         }
       `}</style>
-      <div style={{ maxWidth: 600, width: '100%', background: 'transparent' }}>
-        <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+      <div style={{ maxWidth: 600, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: 'transparent' }}>
+        <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
+            {lista.length > 1 ? `${lista.length} recibos` : ''}
+          </span>
           <button onClick={onClose} style={{ background: '#fff', border: 'none', borderRadius: '50%', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <X size={17} strokeWidth={1.5} />
           </button>
         </div>
 
-        <div id="pdf-print" style={{
-          background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', margin: '0 auto',
-          padding: '50px 60px', maxWidth: 480, fontFamily: FONT, color: palette.ink, borderRadius: 4,
-        }}>
-          <div style={{ fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: palette.inkMuted, textAlign: 'center', marginBottom: 4 }}>
-            Grupo Amícia
-          </div>
-          <div style={{ fontSize: 21, fontWeight: 700, textAlign: 'center', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>
-            {f.nome_display}
-          </div>
-          <div style={{ textAlign: 'center', fontSize: 13, color: palette.inkSoft, marginBottom: 30, fontStyle: 'italic' }}>
-            {nomeMes(competencia)}
-          </div>
-
-          {linhas.map(l => (
-            <div key={l.id} style={{ marginBottom: 18 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: 14, color: palette.ink }}>{l.titulo}</div>
-                <div style={{ fontFamily: NUM, fontSize: 14, fontWeight: 600, color: Number(l.valor) < 0 ? palette.alert : palette.ink }}>
-                  {Number(l.valor) < 0 ? '−' : ''}{fmtBRL(Math.abs(l.valor))}
-                </div>
-              </div>
-              {l.descricao_calculo && (
-                <div style={{ fontSize: 11, color: palette.inkMuted, fontStyle: 'italic', marginTop: 2 }}>
-                  {l.descricao_calculo}
-                </div>
-              )}
-            </div>
+        <div id="pdf-print" style={{ fontFamily: FONT }}>
+          {lista.map(it => (
+            <Recibo key={it.funcionario.id} funcionario={it.funcionario} linhas={it.linhas}
+              competencia={competencia} fechamento={it.fechamento} />
           ))}
-
-          <div style={{ borderTop: `1px solid ${palette.ink}`, margin: '24px 0 14px' }} />
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>Total</div>
-            <div style={{ fontFamily: NUM, fontSize: 17, fontWeight: 700 }}>{fmtBRL(total)}</div>
-          </div>
-
-          <div style={{ textAlign: 'right', fontSize: 12, color: palette.inkSoft, marginTop: 30 }}>
-            Data: {dataPagamento.toLocaleDateString('pt-BR')}
-          </div>
-
-          <div style={{ marginTop: 50, borderTop: `1px solid ${palette.beige}`, paddingTop: 12, fontSize: 11, color: palette.inkMuted, textAlign: 'center' }}>
-            Recebi o valor acima referente ao mês de {nomeMes(competencia)}
-          </div>
-          <div style={{ marginTop: 30, display: 'flex', justifyContent: 'space-between', fontSize: 12, color: palette.ink }}>
-            <div>_______________________________<br /><span style={{ fontSize: 11 }}>Assinatura</span></div>
-            <div>_______________<br /><span style={{ fontSize: 11 }}>Data</span></div>
-          </div>
         </div>
 
         <div className="no-print" style={{ textAlign: 'center', marginTop: 20 }}>
           <button onClick={imprimir} style={btnPrimaryStyle()}>
-            <Printer size={15} strokeWidth={1.5} /> Imprimir
+            <Printer size={15} strokeWidth={1.5} /> Imprimir {lista.length > 1 ? `(${lista.length})` : ''}
           </button>
         </div>
       </div>
