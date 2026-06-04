@@ -4368,7 +4368,8 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   const [sugestoesPendentes, setSugestoesPendentes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [novoTexto, setNovoTexto] = useState('');
-  const [midiaAnexada, setMidiaAnexada] = useState(null);  // {id, tipo, nome_arquivo, url_publica}
+  const [midiasAnexadas, setMidiasAnexadas] = useState([]);  // [{id,tipo,nome_arquivo,url_publica} (biblioteca) | {_local:true,file,previewUrl,nome_arquivo} (dispositivo)]
+  const fileLocalRef = useRef(null);
   const [seletorMidiaAberto, setSeletorMidiaAberto] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
@@ -4522,31 +4523,81 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
 
   const enviar = async () => {
     if (bloqueado) return;
-    if (!novoTexto.trim() && !midiaAnexada) return;
+    const textoMsg = novoTexto.trim();
+    const itens = midiasAnexadas;
+    if (!textoMsg && itens.length === 0) return;
     setEnviando(true);
     setErro(null);
+    const usuario = (() => {
+      try { return JSON.parse(localStorage.getItem('amica_session') || '{}')?.usuario || null; }
+      catch { return null; }
+    })();
     try {
-      const r = await fetch('/api/lojas-whats-mensagem-enviar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversa_id: conversaId,
-          texto: novoTexto.trim() || null,
-          midia_id: midiaAnexada?.id || null,
-          autor: 'assistente',
-          usuario: (() => {
-            try { return JSON.parse(localStorage.getItem('amica_session') || '{}')?.usuario || null; }
-            catch { return null; }
-          })(),
-        }),
-      });
-      const j = await r.json();
-      if (!r.ok || j.error) { setErro(j.error || 'Erro ao enviar'); return; }
+      if (itens.length === 0) {
+        const r = await fetch('/api/lojas-whats-mensagem-enviar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversa_id: conversaId, texto: textoMsg || null, midia_id: null, autor: 'assistente', usuario }),
+        });
+        const j = await r.json();
+        if (!r.ok || j.error) { setErro(j.error || 'Erro ao enviar'); setEnviando(false); return; }
+      } else {
+        // 1+ midias: a 1a leva o texto digitado, as demais so a midia (1 por msg)
+        for (let i = 0; i < itens.length; i++) {
+          const it = itens[i];
+          const txt = i === 0 ? (textoMsg || null) : null;
+          if (it._local) {
+            const ok = await enviarFotoLocal(it.file, txt, usuario);
+            if (!ok) { setEnviando(false); return; }
+          } else {
+            const r = await fetch('/api/lojas-whats-mensagem-enviar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ conversa_id: conversaId, texto: txt, midia_id: it.id, autor: 'assistente', usuario }),
+            });
+            const j = await r.json();
+            if (!r.ok || j.error) { setErro(j.error || 'Erro ao enviar mídia'); setEnviando(false); return; }
+          }
+        }
+      }
       setNovoTexto('');
-      setMidiaAnexada(null);
+      setMidiasAnexadas([]);
       setReloadTick(t => t + 1);
     } catch (e) { setErro(e.message); }
     setEnviando(false);
+  };
+
+  // Upload local "so enviar" (NAO guarda na biblioteca). Ailson 04/06/2026:
+  // presign -> PUT direto no storage -> endpoint sobe pra Meta e registra a msg,
+  // sem criar item reutilizavel em lojas_whats_midias.
+  const enviarFotoLocal = async (file, texto, usuario) => {
+    try {
+      const presignRes = await fetch('/api/lojas-whats-midia-presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'foto', nome_arquivo: file.name, size_bytes: file.size, mime_type: file.type }),
+      });
+      const presign = await presignRes.json();
+      if (!presignRes.ok || presign.error) { setErro(presign.error || 'Falha no upload'); return false; }
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type, 'Authorization': `Bearer ${presign.token}`, 'x-upsert': 'false' },
+        body: file,
+      });
+      if (!putRes.ok) { setErro('Upload falhou: ' + putRes.status); return false; }
+      const r = await fetch('/api/lojas-whats-midia-enviar-local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversa_id: conversaId, storage_path: presign.storage_path,
+          mime_type: file.type, nome_arquivo: file.name, texto: texto || null,
+          autor: 'assistente', usuario,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { setErro(j.error || 'Erro ao enviar foto'); return false; }
+      return true;
+    } catch (e) { setErro(e.message); return false; }
   };
 
   // Desmarcar/reativar o relogio de follow-up do catalogo (6h/24h). Ailson 29/05/2026.
@@ -4829,22 +4880,32 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
         <div ref={fimChatRef} />
       </div>
 
-      {/* Mídia anexada preview */}
-      {midiaAnexada && (
+      {/* Mídias anexadas preview (1 ou várias) */}
+      {midiasAnexadas.length > 0 && (
         <div style={{
           padding: '8px 12px', background: '#e8f0ff',
           borderTop: '1px solid #c8dae8',
-          display: 'flex', alignItems: 'center', gap: 8,
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
         }}>
-          <Paperclip size={sz(14)} color={palette.accent} />
-          <span style={{ fontSize: fz(12), color: palette.ink, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {midiaAnexada.tipo}: {midiaAnexada.nome_arquivo}
-          </span>
-          <button onClick={() => setMidiaAnexada(null)} style={{
-            background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
-          }}>
-            <X size={sz(14)} color={palette.inkMuted} />
-          </button>
+          {midiasAnexadas.map((m, i) => (
+            <div key={m._local ? `loc${i}` : m.id} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: palette.bg, border: '1px solid #c8dae8',
+              borderRadius: 14, padding: '3px 8px', maxWidth: 200,
+            }}>
+              {m._local
+                ? <Image size={sz(13)} color={palette.accent} />
+                : <Paperclip size={sz(13)} color={palette.accent} />}
+              <span style={{ fontSize: fz(11), color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {m._local ? `foto: ${m.nome_arquivo}` : `${m.tipo}: ${m.nome_arquivo}`}
+              </span>
+              <button onClick={() => setMidiasAnexadas(prev => prev.filter((_, j) => j !== i))} style={{
+                background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex',
+              }}>
+                <X size={sz(13)} color={palette.inkMuted} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -4926,7 +4987,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             </div>
           )}
         </div>
-        <button onClick={() => setSeletorMidiaAberto(true)} title="Anexar mídia"
+        <button onClick={() => setSeletorMidiaAberto(true)} title="Anexar da biblioteca"
           style={{
             background: palette.bg, border: `1px solid ${palette.beige}`,
             borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
@@ -4934,6 +4995,60 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             flexShrink: 0,
           }}>
           <Paperclip size={sz(16)} color={palette.inkMuted} />
+        </button>
+        {/* Foto do dispositivo (celular/desktop) — Ailson 04/06/2026.
+            So envia, nao guarda na biblioteca. Aceita varias de uma vez. */}
+        <input
+          ref={fileLocalRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length === 0) return;
+            setMidiasAnexadas(prev => {
+              const espaco = Math.max(0, 10 - prev.length);
+              const novos = files.slice(0, espaco).map(f => ({ _local: true, file: f, nome_arquivo: f.name }));
+              return [...prev, ...novos];
+            });
+            e.target.value = '';
+          }}
+        />
+        <button onClick={() => fileLocalRef.current?.click()} title="Enviar foto do dispositivo"
+          style={{
+            background: palette.bg, border: `1px solid ${palette.beige}`,
+            borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+          <Image size={sz(16)} color={palette.inkMuted} />
+        </button>
+        {/* Vesti: insere o link do catalogo virtual no campo (vc revisa e envia).
+            Ailson 04/06/2026. */}
+        <button onClick={() => {
+          const link = 'https://v.vesti.mobi/amicia';
+          const ta = textareaRef.current;
+          if (!ta) { setNovoTexto(p => (p ? p + ' ' : '') + link); return; }
+          const s = ta.selectionStart ?? novoTexto.length;
+          const en = ta.selectionEnd ?? novoTexto.length;
+          const novo = novoTexto.slice(0, s) + link + novoTexto.slice(en);
+          setNovoTexto(novo);
+          setTimeout(() => {
+            if (textareaRef.current) {
+              textareaRef.current.focus();
+              const pos = s + link.length;
+              textareaRef.current.setSelectionRange(pos, pos);
+            }
+          }, 0);
+        }} title="Inserir link do catálogo Vesti"
+          style={{
+            background: palette.bg, border: `1px solid ${palette.beige}`,
+            borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+          <Link2 size={sz(16)} color={palette.accent} />
         </button>
         {/* Robô vazado: pede pra Sofia gerar sugestao AGORA sem esperar
             o ritmo automatico. Dentro janela 24h → msg livre. Fora →
@@ -4995,23 +5110,30 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             boxSizing: 'border-box',
           }}
         />
-        <button onClick={enviar} disabled={enviando || (!novoTexto.trim() && !midiaAnexada)}
+        <button onClick={enviar} disabled={enviando || (!novoTexto.trim() && midiasAnexadas.length === 0)}
           style={{
             background: '#25d366', color: '#fff',
             border: 'none', borderRadius: '50%',
             width: 38, height: 38, cursor: enviando ? 'wait' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexShrink: 0, opacity: (!novoTexto.trim() && !midiaAnexada) ? 0.5 : 1,
+            flexShrink: 0, opacity: (!novoTexto.trim() && midiasAnexadas.length === 0) ? 0.5 : 1,
           }}>
           <Send size={sz(16)} />
         </button>
       </div>
 
-      {/* Seletor de mídia da biblioteca */}
+      {/* Seletor de mídia da biblioteca (seleção múltipla) */}
       {seletorMidiaAberto && (
         <SeletorMidiaModal
           onClose={() => setSeletorMidiaAberto(false)}
-          onSelect={(m) => { setMidiaAnexada(m); setSeletorMidiaAberto(false); }}
+          onSelect={(arr) => {
+            setMidiasAnexadas(prev => {
+              const idsExistentes = new Set(prev.filter(m => !m._local).map(m => m.id));
+              const novos = (arr || []).filter(m => !idsExistentes.has(m.id));
+              return [...prev, ...novos].slice(0, 10);
+            });
+            setSeletorMidiaAberto(false);
+          }}
         />
       )}
 
@@ -5493,6 +5615,13 @@ function SeletorMidiaModal({ onClose, onSelect }) {
   const [loading, setLoading] = useState(true);
   const [filtroTipo, setFiltroTipo] = useState('todos');
   const [busca, setBusca] = useState('');
+  const [sel, setSel] = useState({});  // id -> midia (selecao multipla)
+  const toggleSel = (m) => setSel(prev => {
+    const novo = { ...prev };
+    if (novo[m.id]) delete novo[m.id]; else novo[m.id] = m;
+    return novo;
+  });
+  const qtdSel = Object.keys(sel).length;
 
   useEffect(() => {
     (async () => {
@@ -5566,11 +5695,19 @@ function SeletorMidiaModal({ onClose, onSelect }) {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
               {filtradas.map(m => (
-                <button key={m.id} onClick={() => onSelect(m)} style={{
-                  background: palette.surface, border: `1px solid ${palette.beige}`,
+                <button key={m.id} onClick={() => toggleSel(m)} style={{
+                  background: sel[m.id] ? '#e8f0ff' : palette.surface,
+                  border: `2px solid ${sel[m.id] ? palette.accent : palette.beige}`,
                   borderRadius: 6, padding: 8, cursor: 'pointer', textAlign: 'left',
-                  fontFamily: FONT,
+                  fontFamily: FONT, position: 'relative',
                 }}>
+                  {sel[m.id] && (
+                    <span style={{
+                      position: 'absolute', top: 4, right: 4, zIndex: 1,
+                      background: palette.accent, color: '#fff', borderRadius: '50%',
+                      width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}><Check size={12} /></span>
+                  )}
                   {m.tipo === 'foto' && m.url_publica ? (
                     <img src={m.url_publica} alt="" style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 4, marginBottom: 4 }} />
                   ) : (
@@ -5592,6 +5729,26 @@ function SeletorMidiaModal({ onClose, onSelect }) {
               ))}
             </div>
           )}
+        </div>
+        {/* Rodapé: anexar as selecionadas de uma vez */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+          <button onClick={onClose} style={{
+            padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
+            border: `1px solid ${palette.beige}`, background: palette.surface,
+            color: palette.ink, fontSize: fz(12), fontFamily: FONT, fontWeight: 500,
+          }}>Cancelar</button>
+          <button
+            disabled={qtdSel === 0}
+            onClick={() => onSelect(Object.values(sel))}
+            style={{
+              padding: '8px 16px', borderRadius: 8, border: 'none',
+              cursor: qtdSel === 0 ? 'not-allowed' : 'pointer',
+              background: qtdSel === 0 ? palette.beige : palette.accent,
+              color: qtdSel === 0 ? palette.inkMuted : '#fff',
+              fontSize: fz(12), fontFamily: FONT, fontWeight: 700,
+            }}>
+            Anexar{qtdSel > 0 ? ` (${qtdSel})` : ''}
+          </button>
         </div>
       </div>
     </div>
