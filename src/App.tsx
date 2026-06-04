@@ -13,6 +13,7 @@ import LojasModule from './Lojas';
 import LojasWhats from './LojasWhats.jsx';
 import FolhaPagamento from './FolhaPagamento.jsx';
 import ReviewsMeli from './Reviews_meli.jsx';
+import { listarCoresManuais, adicionarCorManual, removerCorManual, resolverHexCor } from './cores-manuais.js';
 
 // ── Error Boundary (mostra erro em vez de tela branca) ──
 class ModuleErrorBoundary extends Component{
@@ -3596,6 +3597,9 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
   const [novaCorNome,setNovaCorNome]=useState("");
   const [novaCorHex,setNovaCorHex]=useState("#888888");
   const [confirmDel,setConfirmDel]=useState(false);
+  const [coresManuais,setCoresManuais]=useState([]);
+  useEffect(()=>{listarCoresManuais().then(setCoresManuais);},[]);
+  const removerManualPersistida=(nome)=>{removerCorManual(nome).then(setCoresManuais).catch(()=>{});};
   const ehLeitura=estado==="salvo";
 
   // Lê o ranking REAL do Bling salvo pelo BlingContent (top 16 cores por venda).
@@ -3633,7 +3637,7 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
   };
   const setFolhasCor=(nome,v)=>{if(ehLeitura)return;setCoresSel(prev=>prev.map(c=>c.nome===nome?{...c,folhas:parseInt(v)||0}:c));};
   const removerCor=(nome)=>{if(ehLeitura)return;setCoresSel(prev=>prev.filter(c=>c.nome!==nome));};
-  const adicionarNovaCor=()=>{if(ehLeitura||!novaCorNome.trim())return;if(coresSel.some(c=>c.nome.toLowerCase()===novaCorNome.trim().toLowerCase()))return;setCoresSel(prev=>[...prev,{nome:novaCorNome.trim(),hex:novaCorHex,folhas:0}]);setNovaCorNome("");};
+  const adicionarNovaCor=async()=>{if(ehLeitura||!novaCorNome.trim())return;const nome=novaCorNome.trim();if(coresSel.some(c=>c.nome.toLowerCase()===nome.toLowerCase()))return;let hex=novaCorHex;if(hex==="#888888"||hex==="#888"){const r=await resolverHexCor(nome);if(r)hex=r;}setCoresSel(prev=>[...prev,{nome,hex,folhas:0}]);const ehRanking=coresRanking.some(c=>(c.nome||"").toLowerCase()===nome.toLowerCase());const jaManual=coresManuais.some(m=>(m.nome||"").toLowerCase()===nome.toLowerCase());if(!ehRanking&&!jaManual){adicionarCorManual(nome,hex).then(setCoresManuais).catch(()=>{});}setNovaCorNome("");setNovaCorHex("#888888");};
 
   const somaGrades=tamSel.reduce((s,t)=>s+(parseInt(grades[t])||0),0);
   const somaFolhas=coresSel.reduce((s,c)=>s+(c.folhas||0),0);
@@ -3731,10 +3735,22 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
               );})}
             </div>
           )}
+          {coresManuais.length>0&&(
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+              <div style={{width:"100%",fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",fontWeight:600,marginBottom:2}}>Cores manuais · clique p/ usar · × remove</div>
+              {coresManuais.map(m=>{const ativo=coresSel.some(s=>s.nome.toLowerCase()===(m.nome||"").toLowerCase());return(
+                <span key={m.nome} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 6px",border:`1.5px solid ${ativo?C.blue:C.sand}`,background:ativo?C.softBlue:"#fff",borderRadius:20,fontSize:11,fontFamily:FONT,color:C.navy,fontWeight:ativo?600:400}}>
+                  <span style={{width:14,height:14,borderRadius:"50%",background:m.hex||"#888888",border:`1px solid ${C.sand}`}}/>
+                  <button onClick={()=>!ehLeitura&&toggleCor({nome:m.nome,hex:m.hex})} disabled={ehLeitura} style={{background:"none",border:"none",padding:0,cursor:ehLeitura?"default":"pointer",fontSize:11,fontFamily:FONT,color:C.navy}}>{m.nome}</button>
+                  <button onClick={()=>removerManualPersistida(m.nome)} title={`Excluir ${m.nome}`} style={{background:"none",border:"none",cursor:"pointer",color:"#c0392b",fontSize:13,lineHeight:1,padding:"0 2px"}}>×</button>
+                </span>
+              );})}
+            </div>
+          )}
           {!ehLeitura&&(
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:14}}>
               <input type="color" value={novaCorHex} onChange={e=>setNovaCorHex(e.target.value)} style={{width:36,height:30,border:`1px solid ${C.sand}`,borderRadius:6,cursor:"pointer",padding:2}}/>
-              <input placeholder="Nome da nova cor…" value={novaCorNome} onChange={e=>setNovaCorNome(e.target.value)} style={{...iStyle,flex:1,maxWidth:220}}/>
+              <input placeholder="Nome da nova cor…" value={novaCorNome} onChange={e=>setNovaCorNome(e.target.value)} onBlur={async()=>{const n=novaCorNome.trim();if(!n)return;const h=await resolverHexCor(n);if(h)setNovaCorHex(prev=>(prev==="#888888"||prev==="#888")?h:prev);}} style={{...iStyle,flex:1,maxWidth:220}}/>
               <button onClick={adicionarNovaCor} style={{background:C.blue,color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:11,fontFamily:FONT,cursor:"pointer"}}>+ Incluir cor</button>
             </div>
           )}

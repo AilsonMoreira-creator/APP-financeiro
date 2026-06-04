@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { listarCoresManuais, adicionarCorManual, removerCorManual } from './cores-manuais.js';
+import { listarCoresManuais, adicionarCorManual, removerCorManual, resolverHexCor } from './cores-manuais.js';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import { ModalDefinirSala, SALAS_PADRAO } from './FilaDeCorte';
 
@@ -521,7 +521,7 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
     onChange(cores.map((c, idx) => idx === i ? { ...c, rolos: n } : c));
   };
   const remover = (i) => onChange(cores.filter((_, idx) => idx !== i));
-  const addManual = () => {
+  const addManual = async () => {
     const nome = corManual.nome.trim();
     if (!nome) {
       onErro && onErro('Digite o nome da cor antes de incluir');
@@ -531,12 +531,18 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
       onErro && onErro(`Cor "${nome}" já adicionada`);
       return;
     }
-    onChange([...cores, { nome, hex: corManual.hex || '#888', rolos: parseInt(corManual.rolos) || 1 }]);
+    // Se o tom ainda é o default (vc não mexeu no seletor), busca a cor pelo nome.
+    let hex = corManual.hex || '#888';
+    if (hex === '#888' || hex === '#888888') {
+      const resolvido = await resolverHexCor(nome);
+      if (resolvido) hex = resolvido;
+    }
+    onChange([...cores, { nome, hex, rolos: parseInt(corManual.rolos) || 1 }]);
     // Persiste como cor manual reutilizavel (compartilhada com Oficina). Ailson 04/06/2026.
     const ehRanking = coresRanking.some(r => (r.nome || '').toLowerCase() === nome.toLowerCase());
     const jaManual = coresManuais.some(m => (m.nome || '').toLowerCase() === nome.toLowerCase());
     if (!ehRanking && !jaManual) {
-      adicionarCorManual(nome, corManual.hex || '#888').then(setCoresManuais).catch(() => {});
+      adicionarCorManual(nome, hex).then(setCoresManuais).catch(() => {});
     }
     setCorManual({ nome: '', rolos: 1, hex: '#888' });
     onErro && onErro(null);
@@ -623,6 +629,12 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
         <input type="text" value={corManual.nome}
           onChange={e => setCorManual(p => ({ ...p, nome: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && addManual()}
+          onBlur={async () => {
+            const nome = corManual.nome.trim();
+            if (!nome) return;
+            const hex = await resolverHexCor(nome);
+            if (hex) setCorManual(p => ((p.hex === '#888' || p.hex === '#888888') ? { ...p, hex } : p));
+          }}
           placeholder="digite o nome da cor"
           style={{ flex: 1, padding: '7px 10px', border: '1px dashed #8a9aa4', borderRadius: 6, fontFamily: SERIF, fontSize: 13 }} />
         <input type="number" min={1} value={corManual.rolos}

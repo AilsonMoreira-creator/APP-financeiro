@@ -3,6 +3,19 @@
 
 const URL = '/api/cortes-cores-manuais';
 
+// Infere o hex de uma cor pelo nome (dicionario de moda + IA). Retorna null se nao achar.
+export async function resolverHexCor(nome) {
+  const n = (nome || '').trim();
+  if (!n) return null;
+  try {
+    const r = await fetch('/api/cor-hex?nome=' + encodeURIComponent(n));
+    const j = await r.json();
+    return j && j.hex ? j.hex : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listarCoresManuais() {
   try {
     const r = await fetch(URL);
