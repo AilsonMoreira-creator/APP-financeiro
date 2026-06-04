@@ -255,48 +255,48 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
         });
         if (!r.ok) throw new Error(r.erro || 'envio_midia_falhou');
         metaResp = { messages: [{ id: r.message_id }], _midia: true };
+      } else if (midiaParaEnviar && midiaParaEnviar.tipo === 'catalogo' && sug.conversa.catalogo_formato === 'vesti') {
+        // VESTI (teste A/B) — Ailson 04/06/2026: catalogo VIRTUAL em 2 mensagens,
+        // SEM PDF e SEM a fala generica do catalogo (que era pensada pro PDF).
+        //   Msg 1 = explica como funciona | Msg 2 = link.
+        // A fala da Sofia (textoFinal, ex: "Manda ver...") e DESCARTADA aqui.
+        // O registro principal (abaixo) vira a Msg 1 como texto puro (sem doc),
+        // entao nao aparece mais o card de PDF fantasma no chat.
+        const vmsg1 = await getConfig('vesti_msg1',
+          'Esse é o nosso catálogo virtual 😊 lá vc vê todos os modelos com foto, o valor de cada peça e o que tá em estoque na hora. Dá pra montar o pedido e finalizar a compra por lá mesmo');
+        const vmsg2 = await getConfig('vesti_msg2',
+          'É só abrir aqui ó: https://v.vesti.mobi/amicia\n\nQualquer dúvida sobre preço ou modelo me chama que eu te ajudo');
+        textoFinal = vmsg1;
+        metaResp = await enviarTexto(sug.conversa.telefone, vmsg1);
+        try {
+          const respVesti = await enviarTexto(sug.conversa.telefone, vmsg2);
+          await supabase.from('lojas_whats_mensagens').insert({
+            conversa_id: sug.conversa.id,
+            direcao: 'saida',
+            autor: 'sofia_ia',
+            tipo_midia: 'text',
+            texto: vmsg2,
+            meta_message_id: respVesti?.messages?.[0]?.id || null,
+            status: 'enviando',
+            enviada_em: agora,
+          });
+          log('aprovar', `conversa=${sug.conversa.id} catalogo VESTI (2 msgs, sem PDF) enviado`);
+        } catch (e) {
+          logErro('aprovar/vesti-link', e);
+        }
       } else {
-        // Sem midia OU catalogo (PDF nao tem caption): envia texto
+        // Sem midia OU catalogo PDF padrao (PDF nao tem caption): envia texto.
         metaResp = await enviarTexto(sug.conversa.telefone, textoFinal);
-
-        // Catalogo: PDF (padrao) OU link virtual Vesti (teste A/B).
         if (midiaParaEnviar && midiaParaEnviar.tipo === 'catalogo') {
-          if (sug.conversa.catalogo_formato === 'vesti') {
-            // Teste A/B (Ailson 01/06/2026): em vez do PDF, manda o catalogo
-            // VIRTUAL Vesti numa 2a mensagem (link + explicacao, pra nao ficar
-            // longo). Regras comerciais iguais. catalogo_enviado_em seta igual
-            // (abaixo), entao o follow-up de 6h/24h segue normal.
-            try {
-              const msgVesti = await getConfig('vesti_mensagem',
-                'Esse é o nosso catálogo virtual 😊 lá vc consegue ver os valores, o estoque e finalizar a compra por lá\n\nQualquer dúvida me chama aqui que te ajudo\n\nhttps://v.vesti.mobi/amicia');
-              const respVesti = await enviarTexto(sug.conversa.telefone, msgVesti);
-              // Registra a 2a mensagem (link Vesti) no historico — pro chat
-              // mostrar e pro anti-reenvio detectar (busca 'vesti.mobi').
-              await supabase.from('lojas_whats_mensagens').insert({
-                conversa_id: sug.conversa.id,
-                direcao: 'saida',
-                autor: 'sofia_ia',
-                tipo_midia: 'text',
-                texto: msgVesti,
-                meta_message_id: respVesti?.messages?.[0]?.id || null,
-                status: 'enviando',
-                enviada_em: agora,
-              });
-              log('aprovar', `conversa=${sug.conversa.id} catalogo VESTI (link virtual) enviado`);
-            } catch (e) {
-              logErro('aprovar/vesti-link', e);
-            }
-          } else {
-            // Padrao: envia documento PDF depois do texto (separado)
-            const r = await enviarMidiaSofia({
-              telefone: sug.conversa.telefone,
-              midia: midiaParaEnviar,
-              conversaId: sug.conversa.id,
-              mensagemId: null,
-              decididaPor: 'ia_automatica',
-            });
-            if (!r.ok) log('aprovar', `catalogo enviado com erro: ${r.erro}`);
-          }
+          // Padrao: envia documento PDF depois do texto (separado)
+          const r = await enviarMidiaSofia({
+            telefone: sug.conversa.telefone,
+            midia: midiaParaEnviar,
+            conversaId: sug.conversa.id,
+            mensagemId: null,
+            decididaPor: 'ia_automatica',
+          });
+          if (!r.ok) log('aprovar', `catalogo enviado com erro: ${r.erro}`);
         }
       }
     }
@@ -329,16 +329,19 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   }
 
   // Persiste mensagem enviada
+  // VESTI: catalogo virtual nao envia documento PDF, entao o registro principal
+  // NAO pode virar 'document' (gerava card de PDF fantasma no chat). Ailson 04/06/2026.
+  const ehVestiCatalogo = midiaParaEnviar?.tipo === 'catalogo' && sug.conversa.catalogo_formato === 'vesti';
   const tipoMidiaMsg = sug.tipo === 'primeira_mensagem'
     ? 'template'
-    : (midiaParaEnviar
+    : (midiaParaEnviar && !ehVestiCatalogo
         ? (midiaParaEnviar.tipo === 'foto' ? 'image'
            : midiaParaEnviar.tipo === 'video' ? 'video' : 'document')
         : 'text');
 
   // Ailson 25/05/2026: salva URL publica da midia pra frontend mostrar miniatura
   let midiaUrlMsg = null;
-  if (midiaParaEnviar?.storage_path) {
+  if (midiaParaEnviar?.storage_path && !ehVestiCatalogo) {
     const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(midiaParaEnviar.storage_path);
     midiaUrlMsg = pub?.publicUrl || null;
   }
@@ -364,7 +367,8 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   if (errMsg) logErro('aprovar/insert-msg', errMsg);
 
   // Backfill: atualiza lojas_whats_midias_usos com mensagem_id real
-  if (midiaParaEnviar && msgRow?.id) {
+  // (vesti nao envia midia, entao nao ha uso pra casar)
+  if (midiaParaEnviar && !ehVestiCatalogo && msgRow?.id) {
     await supabase
       .from('lojas_whats_midias_usos')
       .update({ mensagem_id: msgRow.id })

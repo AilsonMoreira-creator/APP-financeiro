@@ -18,8 +18,9 @@
 // Ailson 27/05/2026
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, log, logErro, contarSofiaSemResposta } from './_lojas-whats-helpers.js';
+import { supabase, log, logErro, contarSofiaSemResposta, getConfig } from './_lojas-whats-helpers.js';
 import { enviarTexto, enviarTemplate } from './_lojas-whats-meta-client.js';
+import { enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
 
 const VARIACOES_MSG_6H = [
   'Oi {nome}! Conseguiu dar uma olhadinha no catálogo? Ficou alguma dúvida em algum modelo? 🤗',
@@ -73,7 +74,7 @@ export default async function handler(req, res) {
     } else {
       const { data: f1Data, error: errF1 } = await supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, etapa')
+        .select('id, telefone, nome_cliente, etapa, catalogo_formato')
         .not('catalogo_enviado_em', 'is', null)
         .lt('catalogo_enviado_em', cutoff6h)
         .is('catalogo_followup_6h_em', null)
@@ -81,6 +82,20 @@ export default async function handler(req, res) {
         .in('etapa', ['conversando', 'quente']);
       if (errF1) throw errF1;
       f1 = f1Data || [];
+
+      // Catalogo PDF ativo (fallback do follow-up vesti). Ailson 04/06/2026.
+      let catAtivo = null;
+      try {
+        const { data: c } = await supabase
+          .from('lojas_whats_midias')
+          .select('id, tipo, nome_arquivo, storage_path, mime_type')
+          .eq('tipo', 'catalogo')
+          .eq('ativa', true)
+          .order('criada_em', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        catAtivo = c || null;
+      } catch (e) { logErro('cron-catalogo/cat-ativo', e); }
 
       for (const conv of f1) {
         try {
@@ -109,24 +124,77 @@ export default async function handler(req, res) {
             continue;
           }
 
-          const texto = escolherMsg6h(conv.id, conv.nome_cliente);
-          const r = await enviarTexto(conv.telefone, texto);
-          const metaMsgId = r?.messages?.[0]?.id || null;
-          if (!metaMsgId) throw new Error('meta_sem_message_id');
+          if (conv.catalogo_formato === 'vesti') {
+            // VESTI 6h (Ailson 04/06/2026): a cliente recebeu o LINK. No follow-up
+            // de 6h a Sofia pergunta se ela conseguiu abrir e manda o PDF tambem,
+            // caso prefira ver por aqui. 1 toque = 2 mensagens (texto + PDF).
+            const primeiroNome = (conv.nome_cliente || '').split(' ')[0].trim();
+            const tplVesti = await getConfig('vesti_followup_6h',
+              'Oii {nome} 😊 vc conseguiu abrir o link do catálogo?? Tô te encaminhando o catálogo em PDF também, caso vc prefira ver por aqui');
+            const texto = primeiroNome
+              ? tplVesti.replace('{nome}', primeiroNome)
+              : tplVesti.replace('Oii {nome} 😊', 'Oii 😊').replace('{nome}', '');
+            const r = await enviarTexto(conv.telefone, texto);
+            const metaMsgId = r?.messages?.[0]?.id || null;
+            if (!metaMsgId) throw new Error('meta_sem_message_id');
+            await supabase.from('lojas_whats_mensagens').insert({
+              conversa_id: conv.id,
+              direcao: 'saida',
+              autor: 'assistente',
+              tipo_midia: 'text',
+              texto,
+              meta_message_id: metaMsgId,
+              status: 'enviando',
+              enviada_em: agora.toISOString(),
+            });
+            // Manda o PDF como alternativa (se houver catalogo ativo)
+            if (catAtivo) {
+              const rm = await enviarMidiaSofia({
+                telefone: conv.telefone,
+                midia: catAtivo,
+                conversaId: conv.id,
+                mensagemId: null,
+                decididaPor: 'ia_automatica',
+              });
+              if (rm.ok) {
+                const pub = supabase.storage.from('sofia-midias').getPublicUrl(catAtivo.storage_path);
+                await supabase.from('lojas_whats_mensagens').insert({
+                  conversa_id: conv.id,
+                  direcao: 'saida',
+                  autor: 'assistente',
+                  tipo_midia: 'document',
+                  texto: null,
+                  midia_url: pub?.data?.publicUrl || null,
+                  meta_message_id: rm.message_id || null,
+                  status: 'enviando',
+                  enviada_em: agora.toISOString(),
+                });
+              } else {
+                log('cron-catalogo/6h', `conv=${conv.id} PDF vesti falhou: ${rm.erro}`);
+              }
+            }
+            f1Resultados.push({ id: conv.id, tel: conv.telefone, ok: true, vesti: true });
+            log('cron-catalogo/6h', `conv=${conv.id} VESTI 6h (pergunta + PDF) enviado`);
+          } else {
+            const texto = escolherMsg6h(conv.id, conv.nome_cliente);
+            const r = await enviarTexto(conv.telefone, texto);
+            const metaMsgId = r?.messages?.[0]?.id || null;
+            if (!metaMsgId) throw new Error('meta_sem_message_id');
 
-          await supabase.from('lojas_whats_mensagens').insert({
-            conversa_id: conv.id,
-            direcao: 'saida',
-            autor: 'assistente',
-            tipo_midia: 'text',
-            texto,
-            meta_message_id: metaMsgId,
-            status: 'enviando',
-            enviada_em: agora.toISOString(),
-          });
+            await supabase.from('lojas_whats_mensagens').insert({
+              conversa_id: conv.id,
+              direcao: 'saida',
+              autor: 'assistente',
+              tipo_midia: 'text',
+              texto,
+              meta_message_id: metaMsgId,
+              status: 'enviando',
+              enviada_em: agora.toISOString(),
+            });
 
-          f1Resultados.push({ id: conv.id, tel: conv.telefone, ok: true });
-          log('cron-catalogo/6h', `conv=${conv.id} msg auto enviada`);
+            f1Resultados.push({ id: conv.id, tel: conv.telefone, ok: true });
+            log('cron-catalogo/6h', `conv=${conv.id} msg auto enviada`);
+          }
         } catch (e) {
           f1Resultados.push({ id: conv.id, tel: conv.telefone, erro: e.message });
           logErro('cron-catalogo/6h', e);

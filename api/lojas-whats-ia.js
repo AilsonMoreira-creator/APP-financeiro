@@ -443,7 +443,7 @@ export async function processarConversa(conversaId) {
     .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, enviada_em')
     .eq('conversa_id', conversaId)
     .order('enviada_em', { ascending: false })
-    .limit(20);
+    .limit(40);
 
   const ultima = msgs?.[0];
   if (!ultima || ultima.direcao !== 'entrada') {
@@ -725,6 +725,7 @@ export async function processarConversa(conversaId) {
   const systemBlocks = [
     { type: 'text', text: SYSTEM_PROMPT },
     { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` },
+    { type: 'text', text: 'REGRA ANTI-REPETICAO (IMPORTANTE): antes de perguntar qualquer coisa pra cliente (se ela ja revende, ha quanto tempo, que tipo de cliente/loja ela e, cidade, nome), releia TODO o historico da conversa acima. Se ela JA respondeu isso em qualquer momento, NUNCA pergunte de novo, use o que ela ja disse. Repetir pergunta que ela ja respondeu passa a impressao de que vc nao prestou atencao e irrita a cliente.' },
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
   if (blocoMidias) systemBlocks.push({ type: 'text', text: blocoMidias });
