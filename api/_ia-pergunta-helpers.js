@@ -228,6 +228,7 @@ export function classificarIntencao(pergunta) {
       'cortando', 'cortado', 'matriz', 'folhas',
       'corte ', 'cortes ', 'cortar', // pega "tem corte", "quantos cortes", "vai cortar"
       'entrega', 'prazo', 'chega', 'devolv', 'pronta', 'atrasad', 'lote',
+      'reposi', 'caseado', 'botão', 'botao', 'passadoria', // caseado/reposição (Ailson 04/06)
     ],
     estoque: [
       'estoque', 'ruptura', 'zerad', 'acabando', 'acabou', 'vai acabar',
@@ -758,10 +759,48 @@ export async function contextoProducao(ref = null) {
     refCadastrada = await buscarRefNoCadastro(ref);
   }
 
+  // 4. CASEADO (Ailson 04/06/2026): se a ref NÃO tem corte ativo na oficina,
+  //    mas prega botão (custo botao>0 na Calc/Ficha — mesmo caminho do módulo
+  //    Caseado) e tem registro em oficinas_caseado ainda não entregue, a peça
+  //    está no caseado pregando botão (etapa antes da passadoria).
+  let caseadoEmAndamento = [];
+  if (ref && cortesAtivos.length === 0) {
+    try {
+      const [rCalc, rFicha] = await Promise.all([
+        supabase.from('amicia_data').select('payload').eq('user_id', 'calc-meluni').maybeSingle(),
+        supabase.from('amicia_data').select('payload').eq('user_id', 'ficha-tecnica').maybeSingle(),
+      ]);
+      const botaoPositivo = (v) => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) && n > 0; };
+      const refsBotao = new Set();
+      (rCalc.data?.payload?.prods || []).forEach(p => { if (botaoPositivo(p?.botao)) refsBotao.add(normalizarRef(p?.ref)); });
+      (rFicha.data?.payload?.produtos || []).forEach(p => { if (botaoPositivo(p?.botao)) refsBotao.add(normalizarRef(p?.ref)); });
+
+      if (refsBotao.has(ref)) {
+        const { data: regs } = await supabase.from('oficinas_caseado').select('*');
+        const ativos = (regs || []).filter(r => normalizarRef(r.ref) === ref && r.entregue !== true);
+        caseadoEmAndamento = ativos.map(r => {
+          const corteOrig = todosCortes.find(c => String(c.id) === String(r.corte_id));
+          return {
+            nome_caseado: r.nome || null,
+            ref,
+            descricao: r.descricao || corteOrig?.descricao || null,
+            oficina: r.oficina || corteOrig?.oficina || null,
+            qtd: r.qtd ?? corteOrig?.qtd ?? null,
+            definido_em: r.definido_em || null,
+            matriz_render: corteOrig ? construirMatrizRender(corteOrig.detalhes, corteOrig.qtd) : null,
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('[contextoProducao] caseado:', e?.message);
+    }
+  }
+
   return {
     cortes_reais: cortesAtivos.slice(0, 20),
     cortes_entregues_recentes: cortesEntreguesRecentes.slice(0, 5), // ≤3 dias, max 5
     estimativas_sala: estimativasSala,
+    caseado_em_andamento: caseadoEmAndamento, // peças pregando botão no caseado (Ailson 04/06/2026)
     total_reais: cortesAtivos.length,
     ref_cadastrada: refCadastrada, // null se não foi checado, { encontrada: bool, descricao, ... } se foi
   };
@@ -1088,13 +1127,27 @@ REGRAS:
   que não tem nenhum recente o suficiente pra valer mencionar.
 - Cortes entregues NÃO entram no "total entrando" - só conta cortes_reais (ativos).
 
+CASEADO — PEÇA PREGANDO BOTÃO (contexto.producao.caseado_em_andamento):
+Quando NÃO tem cortes_reais (nada ativo na oficina) mas vem caseado_em_andamento, a
+peça já saiu da oficina e está no caseado pregando botão (etapa antes da passadoria).
+Responda no tom do dia a dia, citando o nome do caseado. Exemplo:
+"Oii ${nomeUser || 'fulana'}! Tem um corte da REF pregando botão no caseado <nome_caseado>,
+já tá finalizando e vai pra passadoria."
+- Use o campo nome_caseado. Se vier null, diga só "no caseado" (sem inventar nome).
+- A matriz de cores do corte e a foto aparecem embaixo automaticamente — não escreva
+  cor/tamanho nem URL no texto.
+- NÃO invente prazo em dias pro caseado (não tem prazo calculado). Fale da etapa, não de data.
+- Só use caseado_em_andamento se cortes_reais estiver vazio (peça já passou da oficina).
+
 FILTRO MONETÁRIO:
 ${filtroMonetarioMsg}
 
-PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04):
+PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04, caseado 04/06):
 1. "cortes_reais" (de ailson_cortes) = REAL, tem data e prazo concreto
-2. "estimativas_sala" (de ordens_corte) = ESTIMATIVA, ainda não virou corte
-Se achar REAL, responda com data + fatos. Se só achar ESTIMATIVA, diga:
+2. "caseado_em_andamento" = peça já saiu da oficina e está no caseado pregando botão
+3. "estimativas_sala" (de ordens_corte) = ESTIMATIVA, ainda não virou corte
+Se achar REAL, responda com data + fatos. Se não tem REAL mas tem caseado, responda que
+está no caseado (vai pra passadoria). Se só achar ESTIMATIVA, diga:
 "Tá programado na sala, estimativa de X peças — ainda pode mudar. Pergunta em 2 dias."
 
 ESTOQUE — RESUMO GERAL (sem REF específica na pergunta):

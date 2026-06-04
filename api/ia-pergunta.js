@@ -271,8 +271,20 @@ Estrutura obrigatória (só um campo):
         matriz: c.matriz_render,
       }));
 
-    matrizesRender = matrizesAtivas.length > 0 ? matrizesAtivas : null;
-    matrizRender = matrizesAtivas[0]?.matriz || null;
+    // Caseado em andamento (peça pregando botão) — matriz do corte original.
+    const matrizesCaseado = (contexto.producao.caseado_em_andamento || [])
+      .filter(c => c.matriz_render)
+      .map(c => ({
+        titulo: `Caseado${c.nome_caseado ? ' ' + c.nome_caseado : ''} (pregando botão)`,
+        oficina: c.oficina || '',
+        data: '',
+        qtd: c.qtd,
+        matriz: c.matriz_render,
+      }));
+
+    const todasMatrizes = [...matrizesAtivas, ...matrizesCaseado];
+    matrizesRender = todasMatrizes.length > 0 ? todasMatrizes : null;
+    matrizRender = todasMatrizes[0]?.matriz || null;
   }
 
   // foto_url do produto. Estrategia em 3 niveis:
