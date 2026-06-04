@@ -387,51 +387,57 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
       background: '#fff', border: '1px solid #e8e2da', borderRadius: 10, padding: 14,
       opacity: isFinalizada ? 0.85 : 1,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
         {/* Thumbnail do produto (Supabase Storage bucket `produtos`) */}
         <FotoOrdem refProd={ordem.ref} />
 
-        <span style={{ background: status.bg, color: status.color, border: `1px solid ${status.border}`, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-          {status.txt}
-        </span>
-
-        <div style={{ flex: '1 1 250px', minWidth: 200 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>
-            REF {ordem.ref}{ordem.descricao ? ` · ${ordem.descricao}` : ''}
-          </div>
-          <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 2 }}>
-            🧵 {ordem.tecido} · <span style={{ color: '#5a6470', fontWeight: 600 }}>Grade {ordenarTamanhos(Object.entries(ordem.grade || {})).map(([t, v]) => `${v}${t}`).join(' · ')}</span>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: '0 1 auto' }}>
-          {cores.slice(0, 4).map((c, i) => (
-            <span key={i} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: '#f7f4f0', borderRadius: 10 }}>
-              <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: c.hex || hexCor(c.nome) }} />
-              {c.nome} {c.rolos}
+        {/* MIOLO: status + ref/desc + tecido/grade + CORES (as cores ficam aqui
+            dentro e quebram pra baixo — assim não empurram rolos/grupo/sala). */}
+        <div style={{ flex: '1 1 260px', minWidth: 200 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+            <span style={{ background: status.bg, color: status.color, border: `1px solid ${status.border}`, padding: '3px 9px', borderRadius: 12, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {status.txt}
             </span>
-          ))}
-          {cores.length > 4 && <span style={{ fontSize: 10, color: '#8a9aa4' }}>+{cores.length - 4}</span>}
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>
+              REF {ordem.ref}{ordem.descricao ? ` · ${ordem.descricao}` : ''}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: '#8a9aa4', marginBottom: cores.length > 0 ? 8 : 0 }}>
+            🧵 {ordem.tecido} · <span style={{ color: '#5a6470', fontWeight: 600, fontSize: 12 }}>Grade {ordenarTamanhos(Object.entries(ordem.grade || {})).map(([t, v]) => `${v}${t}`).join(' · ')}</span>
+          </div>
+          {cores.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {cores.slice(0, 6).map((c, i) => (
+                <span key={i} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', background: '#f7f4f0', borderRadius: 10, whiteSpace: 'nowrap' }}>
+                  <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: c.hex || hexCor(c.nome), flexShrink: 0 }} />
+                  {c.nome} <strong style={{ color: '#5a6470' }}>{c.rolos}</strong>
+                </span>
+              ))}
+              {cores.length > 6 && <span style={{ fontSize: 10, color: '#8a9aa4', alignSelf: 'center' }}>+{cores.length - 6}</span>}
+            </div>
+          )}
         </div>
 
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        {/* DIREITA: rolos + grupo — posição estável, não depende das cores.
+            Grupo com quadradinho de fundo pra não confundir com rolos. */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexShrink: 0 }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 20, fontWeight: 700, fontFamily: FN, color: '#2c3e50' }}>{ordem.total_rolos}</div>
             <div style={{ fontSize: 9, color: '#8a9aa4', textTransform: 'uppercase' }}>rolos</div>
           </div>
-          <div style={{ textAlign: 'center', minWidth: 30 }}>
-            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: FN, color: ordem.grupo != null ? '#2c3e50' : '#c0b8b0' }}>{ordem.grupo != null ? ordem.grupo : '—'}</div>
-            <div style={{ fontSize: 9, color: '#8a9aa4', textTransform: 'uppercase' }}>grupo</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 20, fontWeight: 700, fontFamily: FN, color: ordem.grupo != null ? '#2c3e50' : '#c0b8b0', background: '#f0ecf7', border: '1px solid #e2dcef', borderRadius: 6, padding: '1px 10px', minWidth: 34 }}>{ordem.grupo != null ? ordem.grupo : '—'}</div>
+            <div style={{ fontSize: 9, color: '#8a9aa4', textTransform: 'uppercase', marginTop: 2 }}>grupo</div>
           </div>
         </div>
 
         {ordem.sala && (
-          <div style={{ textAlign: 'center', padding: '4px 10px', background: '#eafbf0', borderRadius: 6, color: '#27ae60', fontSize: 11, fontWeight: 600 }}>
+          <div style={{ textAlign: 'center', padding: '4px 10px', background: '#eafbf0', borderRadius: 6, color: '#27ae60', fontSize: 11, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>
             ✂️ {ordem.sala}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
           {/* Ailson 28/05/2026: admin pode definir a sala direto do card
               quando tecido ja foi separado — antes so era possivel via
               FilaDeCorte mobile. */}
