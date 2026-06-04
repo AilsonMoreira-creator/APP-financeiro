@@ -764,36 +764,52 @@ export async function contextoProducao(ref = null) {
   //    Caseado) e tem registro em oficinas_caseado ainda não entregue, a peça
   //    está no caseado pregando botão (etapa antes da passadoria).
   let caseadoEmAndamento = [];
-  if (ref && cortesAtivos.length === 0) {
-    try {
-      const [rCalc, rFicha] = await Promise.all([
-        supabase.from('amicia_data').select('payload').eq('user_id', 'calc-meluni').maybeSingle(),
-        supabase.from('amicia_data').select('payload').eq('user_id', 'ficha-tecnica').maybeSingle(),
-      ]);
-      const botaoPositivo = (v) => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) && n > 0; };
-      const refsBotao = new Set();
-      (rCalc.data?.payload?.prods || []).forEach(p => { if (botaoPositivo(p?.botao)) refsBotao.add(normalizarRef(p?.ref)); });
-      (rFicha.data?.payload?.produtos || []).forEach(p => { if (botaoPositivo(p?.botao)) refsBotao.add(normalizarRef(p?.ref)); });
+  try {
+    const mapCaseado = (r) => {
+      const corteOrig = todosCortes.find(c => String(c.id) === String(r.corte_id));
+      return {
+        nome_caseado: r.nome || null,
+        ref: normalizarRef(r.ref),
+        descricao: r.descricao || corteOrig?.descricao || null,
+        oficina: r.oficina || corteOrig?.oficina || null,
+        qtd: r.qtd ?? corteOrig?.qtd ?? null,
+        definido_em: r.definido_em || null,
+        matriz_render: corteOrig ? construirMatrizRender(corteOrig.detalhes, corteOrig.qtd) : null,
+      };
+    };
 
-      if (refsBotao.has(ref)) {
-        const { data: regs } = await supabase.from('oficinas_caseado').select('*');
-        const ativos = (regs || []).filter(r => normalizarRef(r.ref) === ref && r.entregue !== true);
-        caseadoEmAndamento = ativos.map(r => {
-          const corteOrig = todosCortes.find(c => String(c.id) === String(r.corte_id));
-          return {
-            nome_caseado: r.nome || null,
-            ref,
-            descricao: r.descricao || corteOrig?.descricao || null,
-            oficina: r.oficina || corteOrig?.oficina || null,
-            qtd: r.qtd ?? corteOrig?.qtd ?? null,
-            definido_em: r.definido_em || null,
-            matriz_render: corteOrig ? construirMatrizRender(corteOrig.detalhes, corteOrig.qtd) : null,
-          };
-        });
+    if (ref) {
+      // REF específica: só considera caseado se a peça prega botão (custo botao>0
+      // na Calc/Ficha) e não tem corte ativo — evita falso positivo.
+      if (cortesAtivos.length === 0) {
+        const [rCalc, rFicha] = await Promise.all([
+          supabase.from('amicia_data').select('payload').eq('user_id', 'calc-meluni').maybeSingle(),
+          supabase.from('amicia_data').select('payload').eq('user_id', 'ficha-tecnica').maybeSingle(),
+        ]);
+        const botaoPositivo = (v) => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) && n > 0; };
+        const refsBotao = new Set();
+        (rCalc.data?.payload?.prods || []).forEach(p => { if (botaoPositivo(p?.botao)) refsBotao.add(normalizarRef(p?.ref)); });
+        (rFicha.data?.payload?.produtos || []).forEach(p => { if (botaoPositivo(p?.botao)) refsBotao.add(normalizarRef(p?.ref)); });
+        if (refsBotao.has(ref)) {
+          const { data: regs } = await supabase.from('oficinas_caseado').select('*');
+          caseadoEmAndamento = (regs || [])
+            .filter(r => normalizarRef(r.ref) === ref && r.entregue !== true)
+            .map(mapCaseado);
+        }
       }
-    } catch (e) {
-      console.warn('[contextoProducao] caseado:', e?.message);
+    } else {
+      // SEM ref (busca por material/categoria, ex: "jaqueta de couro"): traz TODAS
+      // as peças ativas do caseado — senão a IA responde "não tem nada no caseado"
+      // mesmo tendo. A IA filtra por material/descrição no próprio texto.
+      // Bug corrigido por Ailson 04/06/2026.
+      const { data: regs } = await supabase.from('oficinas_caseado').select('*');
+      caseadoEmAndamento = (regs || [])
+        .filter(r => r.entregue !== true)
+        .map(mapCaseado)
+        .slice(0, 20);
     }
+  } catch (e) {
+    console.warn('[contextoProducao] caseado:', e?.message);
   }
 
   return {
