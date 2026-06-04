@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { listarCoresManuais, adicionarCorManual, removerCorManual } from './cores-manuais.js';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import { ModalDefinirSala, SALAS_PADRAO } from './FilaDeCorte';
 
@@ -502,6 +503,11 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
 
 // Sub: editor de cores (lista + chips ranking + manual)
 function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, onErro }) {
+  const [coresManuais, setCoresManuais] = useState([]);
+  useEffect(() => { listarCoresManuais().then(setCoresManuais); }, []);
+  const removerManualPersistida = (nome) => {
+    removerCorManual(nome).then(setCoresManuais).catch(() => {});
+  };
   const addCor = (c) => {
     if (cores.some(x => x.nome.toLowerCase() === c.nome.toLowerCase())) {
       onErro && onErro(`Cor "${c.nome}" já adicionada`);
@@ -526,6 +532,12 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
       return;
     }
     onChange([...cores, { nome, hex: corManual.hex || '#888', rolos: parseInt(corManual.rolos) || 1 }]);
+    // Persiste como cor manual reutilizavel (compartilhada com Oficina). Ailson 04/06/2026.
+    const ehRanking = coresRanking.some(r => (r.nome || '').toLowerCase() === nome.toLowerCase());
+    const jaManual = coresManuais.some(m => (m.nome || '').toLowerCase() === nome.toLowerCase());
+    if (!ehRanking && !jaManual) {
+      adicionarCorManual(nome, corManual.hex || '#888').then(setCoresManuais).catch(() => {});
+    }
     setCorManual({ nome: '', rolos: 1, hex: '#888' });
     onErro && onErro(null);
   };
@@ -570,6 +582,36 @@ function CoresEditor({ cores, onChange, coresRanking, corManual, setCorManual, o
                   <span style={{ width: 10, height: 10, borderRadius: '50%', background: r.hex || hexCor(r.nome) }} />
                   {r.nome} <span style={{ fontFamily: FN, fontSize: 11, color: '#8a9aa4' }}>#{idx + 1}</span>
                 </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {coresManuais.length > 0 && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e8e2da' }}>
+          <div style={{ fontFamily: FN, fontSize: 13, color: '#8a9aa4', marginBottom: 6 }}>🎨 Cores manuais · clique pra adicionar · ✕ remove</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {coresManuais.map((m) => {
+              const ja = cores.some(c => c.nome.toLowerCase() === (m.nome || '').toLowerCase());
+              return (
+                <span key={m.nome} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '5px 6px 5px 10px', background: '#fff',
+                  border: '1px solid #e8e2da', borderRadius: 14,
+                  fontSize: 13, fontFamily: SERIF, color: '#1C2533', opacity: ja ? 0.4 : 1,
+                }}>
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.hex || hexCor(m.nome) }} />
+                  <button type="button" onClick={() => !ja && addCor({ nome: m.nome, hex: m.hex })} disabled={ja}
+                    title={ja ? 'já adicionada' : `Adicionar ${m.nome}`}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: ja ? 'default' : 'pointer', fontFamily: SERIF, fontSize: 13, color: '#1C2533' }}>
+                    {m.nome}
+                  </button>
+                  <button type="button" onClick={() => removerManualPersistida(m.nome)} title={`Excluir ${m.nome}`}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>
+                    ✕
+                  </button>
+                </span>
               );
             })}
           </div>

@@ -31,6 +31,7 @@
  *   - Helpers fmtInt, fmtPct
  */
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { listarCoresManuais, adicionarCorManual, removerCorManual } from '../cores-manuais.js';
 
 // ─── Helpers de formato ───────────────────────────────────────────────
 
@@ -1065,6 +1066,8 @@ function BlocoGrade({ gradeModulos, setGradeModulos, editando, maxModulos, categ
 function BlocoCores({ cores, setCores, editando, C, CALIBRI }) {
   const [novaCorNome, setNovaCorNome] = useState('');
   const [novaCorRolos, setNovaCorRolos] = useState(1);
+  const [coresManuais, setCoresManuais] = useState([]);
+  useEffect(() => { listarCoresManuais().then(setCoresManuais); }, []);
 
   // Le o ranking REAL do Bling salvo pelo BlingContent (top 16 cores por venda).
   // Mesma logica do DetalhamentoModal em src/App.tsx ~3300.
@@ -1162,8 +1165,19 @@ function BlocoCores({ cores, setCores, editando, C, CALIBRI }) {
       return;
     }
     setCores([...cores, { cor: nome, rolos, tendencia_label: 'nova', tendencia_pct: null }]);
+    // Persiste como cor manual reutilizavel (compartilhada com Sala de Cortes),
+    // se nao for cor do ranking Bling nem ja salva. Ailson 04/06/2026.
+    const ehRanking = rankingBling.some(r => (r.nome || '').toLowerCase() === nome.toLowerCase());
+    const jaManual = coresManuais.some(m => (m.nome || '').toLowerCase() === nome.toLowerCase());
+    if (!ehRanking && !jaManual) {
+      adicionarCorManual(nome, corHex(nome)).then(setCoresManuais).catch(() => {});
+    }
     setNovaCorNome('');
     setNovaCorRolos(1);
+  };
+
+  const removerManualPersistida = (nome) => {
+    removerCorManual(nome).then(setCoresManuais).catch(() => {});
   };
 
   // Quick-add de cor do ranking Bling: click adiciona com 1 rolo default.
@@ -1256,6 +1270,60 @@ function BlocoCores({ cores, setCores, editando, C, CALIBRI }) {
                 <span style={{ color: C.muted, fontSize: 14, lineHeight: 1 }}>+</span>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cores manuais salvas (compartilhadas com Sala de Cortes). Ailson 04/06/2026. */}
+      {coresManuais.length > 0 && (
+        <div style={{
+          marginBottom: 10, padding: 8, background: '#f5f3fa',
+          borderRadius: 6, border: `1px solid ${C.cream}`,
+        }}>
+          <div style={{
+            fontSize: 9, color: C.muted, fontFamily: CALIBRI,
+            textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6,
+            fontWeight: 700,
+          }}>
+            cores manuais (click pra adicionar · × remove)
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {coresManuais.map((m, i) => {
+              const jaNaLista = coresJaNaLista.has((m.nome || '').toLowerCase());
+              return (
+                <span key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  background: '#fff', border: `1px solid ${C.cream}`,
+                  borderRadius: 14, padding: '3px 4px 3px 6px',
+                  fontFamily: CALIBRI, fontSize: 11, color: C.iaDarker,
+                  opacity: jaNaLista ? 0.45 : 1,
+                }}>
+                  <span style={{
+                    width: 12, height: 12, borderRadius: 2,
+                    background: m.hex || corHex(m.nome),
+                    border: '1px solid rgba(0,0,0,0.1)', display: 'inline-block', flexShrink: 0,
+                  }} />
+                  <button
+                    onClick={() => adicionarCorDoRanking(m.nome)}
+                    disabled={jaNaLista}
+                    title={jaNaLista ? 'já está na lista' : `Adicionar ${m.nome}`}
+                    style={{
+                      background: 'transparent', border: 'none', padding: 0,
+                      cursor: jaNaLista ? 'default' : 'pointer',
+                      fontFamily: CALIBRI, fontSize: 11, color: C.iaDarker,
+                    }}
+                  >{m.nome}</button>
+                  <button
+                    onClick={() => removerManualPersistida(m.nome)}
+                    title={`Excluir ${m.nome} das cores manuais`}
+                    style={{
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: C.critical, fontSize: 14, lineHeight: 1, padding: '0 2px',
+                    }}
+                  >×</button>
+                </span>
+              );
+            })}
           </div>
         </div>
       )}
