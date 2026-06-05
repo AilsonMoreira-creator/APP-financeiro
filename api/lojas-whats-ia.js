@@ -275,6 +275,17 @@ SEMPRE:
 - Se cliente perguntar preço/produto que vc não tem certeza → pedir um momento e dizer que vai confirmar
 
 ═══════════════════════════════════════════════════════════════════
+CLIENTE MANDOU UM PRINT OU FOTO DE UMA PEÇA (muito comum)
+═══════════════════════════════════════════════════════════════════
+Quando o cliente manda uma imagem (print do catálogo, foto de uma peça, screenshot), vc CONSEGUE VER a imagem de verdade. JAMAIS peça pra ele "explicar", "descrever" ou "dizer qual modelo" — isso entrega na hora que é robô e irrita. Aja como uma vendedora que recebeu a foto:
+- Olhe a imagem e leia a peça: tipo (vestido, macacão, conjunto, saia...), tecido aparente, cor, detalhes (manga, comprimento, decote, fenda).
+- Cruze com o CATALOGO/produtos que vc conhece pra achar o modelo e a REF. Se bater, fala dele com naturalidade ("esse é o nosso macacão de linho").
+- Se ficar entre 2 modelos bem parecidos, faz UMA pergunta curta de desempate (a cor, um detalhe), nunca um questionário.
+- Se de fato não houver nada parecido no que vc tem, aí sim diz que vai confirmar com a equipe se essa peça específica tá disponível, sem mandar ele explicar.
+- Já avança: comenta a peça, e conduz pro próximo passo (cor que ela quer, quantidade, fechar).
+NUNCA diga "não consigo ver imagens", "me descreve a peça" ou "qual o nome do modelo?".
+
+═══════════════════════════════════════════════════════════════════
 CLIENTE MANDOU AS PEÇAS QUE ESCOLHEU (refs, modelos, "quero essas", carrinho)
 ═══════════════════════════════════════════════════════════════════
 - Seja COMEDIDA. NADA de "Ótimas escolhas! Esses modelos são lindos!! 😍" com exclamação dupla, emoji empilhado ou enchendo de elogio.
@@ -441,7 +452,7 @@ export async function processarConversa(conversaId) {
   // Última mensagem (in/out) — se ultima foi 'saida' (Sofia/Tamara), não tem o que responder ainda
   const { data: msgs } = await supabase
     .from('lojas_whats_mensagens')
-    .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, enviada_em')
+    .select('id, direcao, autor, tipo_midia, texto, midia_url, audio_transcricao, enviada_em')
     .eq('conversa_id', conversaId)
     .order('enviada_em', { ascending: false })
     .limit(40);
@@ -951,25 +962,55 @@ function montarContextoConversa(conv) {
 function montarMensagensClaude(msgs, conv) {
   // Inverte (mais antigas primeiro) e mapeia pra formato Claude (user/assistant)
   const ordenadas = [...(msgs || [])].reverse();
+
+  // VISAO (Ailson 05/06/2026): cliente manda print do catalogo / foto de peca o
+  // tempo todo. Passamos a imagem DE VERDADE pro modelo (multimodal). Pra segurar
+  // custo, so as 3 imagens mais recentes do cliente (com URL publica) entram como
+  // imagem real; imagens antigas viram placeholder de texto.
+  const idsImagemReal = new Set(
+    ordenadas
+      .filter(m => m.tipo_midia === 'image' && typeof m.midia_url === 'string' && m.midia_url.startsWith('http'))
+      .slice(-3)
+      .map(m => m.id)
+  );
+
   const result = [];
   for (const m of ordenadas) {
     const isCliente = m.direcao === 'entrada';
     const role = isCliente ? 'user' : 'assistant';
-    let conteudo = m.audio_transcricao || m.texto || '';
-    if (!conteudo && m.tipo_midia === 'image') conteudo = '[cliente enviou imagem]';
-    if (!conteudo && m.tipo_midia === 'audio') conteudo = '[cliente enviou áudio sem transcrição]';
-    if (!conteudo) continue;
 
-    // Claude exige user/assistant alternados — mescla mensagens consecutivas
-    if (result.length > 0 && result[result.length - 1].role === role) {
-      result[result.length - 1].content += '\n' + conteudo;
+    const blocks = [];
+    if (m.tipo_midia === 'image' && idsImagemReal.has(m.id)) {
+      blocks.push({ type: 'image', source: { type: 'url', url: m.midia_url } });
+      const legenda = (m.texto || '').trim()
+        || (isCliente ? 'Cliente enviou esta imagem (print do catálogo ou foto de uma peça).' : '');
+      if (legenda) blocks.push({ type: 'text', text: legenda });
     } else {
-      result.push({ role, content: conteudo });
+      let txt = m.audio_transcricao || m.texto || '';
+      if (!txt && m.tipo_midia === 'image') txt = '[cliente enviou uma imagem]';
+      if (!txt && m.tipo_midia === 'audio') txt = '[cliente enviou áudio sem transcrição]';
+      if (!txt) continue;
+      blocks.push({ type: 'text', text: txt });
+    }
+
+    // Claude exige user/assistant alternados — mescla mensagens consecutivas do
+    // mesmo papel concatenando os blocks (texto e/ou imagem).
+    if (result.length > 0 && result[result.length - 1].role === role) {
+      result[result.length - 1].blocks.push(...blocks);
+    } else {
+      result.push({ role, blocks });
     }
   }
+
   // Claude exige que comece com user
   if (result.length === 0 || result[0].role !== 'user') {
-    result.unshift({ role: 'user', content: '(início da conversa)' });
+    result.unshift({ role: 'user', blocks: [{ type: 'text', text: '(início da conversa)' }] });
   }
-  return result;
+
+  // Normaliza: se a mensagem é só 1 bloco de texto, manda como string (econômico
+  // e compatível); se tem imagem ou múltiplos blocks, manda como array multimodal.
+  return result.map(r => {
+    const soTexto = r.blocks.length === 1 && r.blocks[0].type === 'text';
+    return { role: r.role, content: soTexto ? r.blocks[0].text : r.blocks };
+  });
 }
