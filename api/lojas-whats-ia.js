@@ -367,6 +367,11 @@ CLIENTE QUER VER MUITAS FOTOS / "tudo" / "o que tem disponível":
 - Em qualquer caso: NÃO na 1ª nem 2ª mensagem; só após cliente engajar (3ª msg em diante)
 - NUNCA reenvie o catálogo se ele JÁ foi enviado nesta conversa. Se o contexto avisar que o catálogo já foi enviado, NÃO use [ENVIAR_CATALOGO:...] de novo e NÃO diga "te mando o catálogo" — manda foto da peça específica ([ENVIAR_FOTO:REF]) ou responde direto.
 
+CLIENTE TRAVOU NO LINK (VESTI) OU PEDIU O CATÁLOGO:
+- A gente manda primeiro o LINK do catálogo (Vesti). Se a cliente disser que NÃO conseguiu acessar, deu erro, não abriu, não carregou, tá com problema no link, OU se ela PEDIR o catálogo: manda o catálogo PDF na hora, com [ENVIAR_CATALOGO:nome_atual].
+- Acolhe rápido e resolve, tom de "tô aqui contigo". Ex: "Oii <nome>, a gente continua por aqui! Vou te enviar o catálogo 😊 [ENVIAR_CATALOGO:nome_atual]"
+- Isso vale MESMO que vc já tenha mandado o LINK antes — o PDF é a alternativa pra quem travou no link. (A única coisa que vc não repete é o PDF, se o PDF mesmo já tiver ido.)
+
 CLIENTE PERGUNTA FOTO ESPECÍFICA QUE VC NÃO TEM (foto de costas, detalhe interno, prova em modelo etc):
 - Vc NÃO tem essa foto disponivel — pede pra assistente humana anexar
 - Use o marcador [ASSISTENTE_ANEXAR:descricao_do_que_pedir]
@@ -715,9 +720,21 @@ export async function processarConversa(conversaId) {
   // Catalogo enviado = documento PDF em /catalogos/. Ailson 30/05/2026.
   // Vesti (teste A/B): o "catalogo" e um LINK de texto (sem documento), entao
   // detecta pelo dominio v.vesti.mobi nas msgs de saida. Ailson 01/06/2026.
-  let catalogoJaEnviado = false;
+  let catalogoJaEnviado = false;     // "catalogo" no formato da conversa (vesti = link; senao = PDF)
+  let pdfCatalogoJaEnviado = false;  // o DOCUMENTO PDF foi enviado? (e o que o marcador [ENVIAR_CATALOGO] manda)
   try {
+    // PDF documento em /catalogos/ — sempre checa, e o que o marcador realmente envia.
+    const { count: nCat } = await supabase
+      .from('lojas_whats_mensagens')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversa_id', conversaId)
+      .eq('direcao', 'saida')
+      .eq('tipo_midia', 'document')
+      .ilike('midia_url', '%catalogos/%');
+    pdfCatalogoJaEnviado = (nCat || 0) > 0;
+
     if (conv.catalogo_formato === 'vesti') {
+      // No teste Vesti o "catalogo" e um LINK de texto (v.vesti.mobi).
       const { count: nVesti } = await supabase
         .from('lojas_whats_mensagens')
         .select('id', { count: 'exact', head: true })
@@ -726,14 +743,7 @@ export async function processarConversa(conversaId) {
         .ilike('texto', '%vesti.mobi%');
       catalogoJaEnviado = (nVesti || 0) > 0;
     } else {
-      const { count: nCat } = await supabase
-        .from('lojas_whats_mensagens')
-        .select('id', { count: 'exact', head: true })
-        .eq('conversa_id', conversaId)
-        .eq('direcao', 'saida')
-        .eq('tipo_midia', 'document')
-        .ilike('midia_url', '%catalogos/%');
-      catalogoJaEnviado = (nCat || 0) > 0;
+      catalogoJaEnviado = pdfCatalogoJaEnviado;
     }
   } catch (e) {
     logErro('ia/check-catalogo-enviado', e);
@@ -773,10 +783,13 @@ export async function processarConversa(conversaId) {
       systemBlocks.push({ type: 'text', text: 'ENTREGA LOCAL: o DDD do cliente é 11 (São Paulo capital ou região metropolitana). Vc PODE oferecer entrega via motoboy (rápida); se perguntarem o custo, por volta de R$ 20. Use quando fizer sentido (cliente falar de frete/entrega ou no fechamento).' });
     }
   }
-  // Avisa a IA quando o catalogo JA foi enviado — pra ela nao reanexar e nao
-  // dizer "te mando o catalogo" de novo. Ailson 30/05/2026.
-  if (catalogoJaEnviado) {
-    systemBlocks.push({ type: 'text', text: `ATENCAO: o catalogo JA FOI ENVIADO pra esse cliente nesta conversa. NAO reenvie. NUNCA use [ENVIAR_CATALOGO:...] de novo aqui, e NAO diga "te mando o catalogo". Se ele tiver duvida sobre uma peca, manda a FOTO dela ([ENVIAR_FOTO:REF]) ou responde direto.` });
+  // Avisa a IA sobre o que ja foi enviado. Distingue PDF (documento) de link Vesti.
+  // Ailson 30/05 (PDF) + 06/06 (fallback Vesti->PDF).
+  if (pdfCatalogoJaEnviado) {
+    systemBlocks.push({ type: 'text', text: `ATENCAO: o catalogo PDF JA FOI ENVIADO pra esse cliente nesta conversa. NAO reenvie. NUNCA use [ENVIAR_CATALOGO:...] de novo aqui, e NAO diga "te mando o catalogo". Se ele tiver duvida sobre uma peca, manda a FOTO dela ([ENVIAR_FOTO:REF]) ou responde direto.` });
+  } else if (catalogoJaEnviado) {
+    // Modo Vesti: o LINK ja foi mandado, mas o PDF ainda nao.
+    systemBlocks.push({ type: 'text', text: `ATENCAO: vc JA mandou o LINK do catalogo (Vesti) pra esse cliente. NAO fique remandando o link nem dizendo "te mando o catalogo" do nada. POREM: se o cliente disser que NAO conseguiu acessar / deu erro / nao abriu / nao carregou, OU se ele PEDIR o catalogo, ai vc PODE e DEVE mandar o catalogo PDF como alternativa, com [ENVIAR_CATALOGO:nome]. Nesse caso responda acolhendo, tipo "a gente continua por aqui, vou te enviar o catalogo".` });
   }
 
   // Orientacao aprendida (cron-aprendizado semanal) — guidance SUAVE, baseada
@@ -808,17 +821,16 @@ export async function processarConversa(conversaId) {
   let textoProposto = (cl.texto || '').trim();
   if (!textoProposto) throw new Error('claude_retornou_vazio');
 
-  // GUARD ANTI-REENVIO DO CATALOGO (Ailson 30/05/2026):
-  // Se o catalogo JA foi enviado nesta conversa e a IA reanexou o marcador,
-  // remove o marcador (mantem o texto). Garante "nunca 2x" mesmo se a IA
-  // ignorar a regra do prompt. O contexto tambem avisa ela (systemBlocks).
-  if (catalogoJaEnviado && /\[ENVIAR_CATALOGO:[^\]]+\]/i.test(textoProposto)) {
+  // GUARD ANTI-REENVIO DO CATALOGO PDF (Ailson 30/05, ajustado 06/06):
+  // Bloqueia o marcador SO se o PDF ja foi enviado de fato. No modo Vesti, ter
+  // mandado o LINK nao bloqueia o PDF (ele e o fallback quando o cliente trava).
+  if (pdfCatalogoJaEnviado && /\[ENVIAR_CATALOGO:[^\]]+\]/i.test(textoProposto)) {
     textoProposto = textoProposto
       .replace(/\[ENVIAR_CATALOGO:[^\]]+\]/gi, '')
       .replace(/[ \t]*\n{3,}[ \t]*/g, '\n\n')
       .replace(/[ \t]{2,}/g, ' ')
       .trim();
-    log('ia', `conversa=${conversaId} catalogo ja enviado antes — marcador removido (anti-reenvio)`);
+    log('ia', `conversa=${conversaId} PDF do catalogo ja enviado antes — marcador removido (anti-reenvio)`);
   }
   if (!textoProposto) throw new Error('claude_retornou_vazio_pos_guard');
 
