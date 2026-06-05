@@ -258,9 +258,28 @@ Estrutura obrigatória (só um campo):
     || /\b(pra vir|pra chegar|vai chegar|esta vindo|está vindo|ta vindo|tá vindo|vindo)\b/i.test(perguntaLower)
     || /\b(na oficina|nas oficinas|na costura|na produção|na producao|com a costureira|com o costureiro)\b/i.test(perguntaLower);
 
-  if (refFoco && contexto.producao && (intent.categoria === 'producao' || perguntaSobreCorte)) {
+  // Refs que a IA citou na resposta (cruzando com o contexto de produção).
+  // Permite anexar matriz/foto quando a pergunta foi por material/categoria
+  // (sem REF na pergunta), mas a resposta falou de peça(s) específica(s).
+  // Ailson 05/06/2026.
+  const refsProdContexto = [
+    ...(contexto.producao?.cortes_reais || []),
+    ...(contexto.producao?.caseado_em_andamento || []),
+  ].map(c => c.ref).filter(Boolean);
+  const respTextoLower = String(respostaIA.resposta_texto || '').toLowerCase();
+  const refsMencionadas = new Set(
+    refsProdContexto.filter(r => {
+      const semZero = String(r).replace(/^0+/, '');
+      return semZero && new RegExp(`\\b0*${semZero}\\b`).test(respTextoLower);
+    })
+  );
+  // Com refFoco, usa o contexto como está (já filtrado pela ref). Sem refFoco,
+  // só as matrizes das refs que a resposta citou (evita despejar 20 matrizes).
+  const matrizFiltro = (c) => refFoco ? true : refsMencionadas.has(c.ref);
+
+  if ((refFoco || refsMencionadas.size > 0) && contexto.producao && (intent.categoria === 'producao' || perguntaSobreCorte)) {
     const matrizesAtivas = (contexto.producao.cortes_reais || [])
-      .filter(c => c.matriz_render)
+      .filter(c => c.matriz_render && matrizFiltro(c))
       .map(c => ({
         titulo: `Corte nº ${c.nCorte || '?'}${c.atrasado ? ' ⚠ atrasado' : ''}`,
         oficina: c.oficina || '',
@@ -273,7 +292,7 @@ Estrutura obrigatória (só um campo):
 
     // Caseado em andamento (peça pregando botão) — matriz do corte original.
     const matrizesCaseado = (contexto.producao.caseado_em_andamento || [])
-      .filter(c => c.matriz_render)
+      .filter(c => c.matriz_render && matrizFiltro(c))
       .map(c => ({
         titulo: `Caseado${c.nome_caseado ? ' ' + c.nome_caseado : ''} (pregando botão)`,
         oficina: c.oficina || '',
@@ -301,8 +320,10 @@ Estrutura obrigatória (só um campo):
     contexto.ficha_tecnica?.foto_url ||
     '';
 
-  if (!fotoUrl && refFoco) {
-    fotoUrl = await resolverFotoUrl(refFoco);
+  // refParaFoto: a da pergunta, ou (se a resposta citou exatamente 1) essa ref.
+  const refParaFoto = refFoco || (refsMencionadas.size === 1 ? [...refsMencionadas][0] : null);
+  if (!fotoUrl && refParaFoto) {
+    fotoUrl = await resolverFotoUrl(refParaFoto);
   }
 
   // SANITIZACAO: remove URLs do storage Supabase do texto. A IA recebe
@@ -339,7 +360,7 @@ Estrutura obrigatória (só um campo):
     resposta_texto: respostaLimpa,
     matriz_render: matrizRender,        // legado
     matrizes_render: matrizesRender,    // novo - array completo de cortes ativos
-    foto_url: refFoco ? fotoUrl : '',
+    foto_url: refParaFoto ? fotoUrl : '',
     categoria: intent.categoria,
     ref_detectada: refFoco,
     r_bloqueado: rBloqueado,
