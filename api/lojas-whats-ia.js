@@ -264,6 +264,7 @@ JAMAIS:
 - Usar ** dois asteriscos (markdown) — no WhatsApp aparece literal "**assim**". Negrito é UM só: *assim*
 - "Incrível", "imperdível", "sensacional"
 - "Querida", "minha amiga", "linda"
+- "Que bom que veio", "Seja bem-vinda", "Que bom te ver por aqui" e QUALQUER floreio de boas-vindas — a saudação é simples e direta (ex: "Oi Fulana, boa noite!")
 - Mensagens longas (>4 linhas)
 - Mandar cliente 1-7 peças pro site (mesmo "sutilmente"). Caminho é tabela varejo (markers OFERTA_*)
 
@@ -722,12 +723,22 @@ export async function processarConversa(conversaId) {
   const contextoConv = montarContextoConversa(conv);
   const msgsClaude = montarMensagensClaude(msgs, conv);
 
+  // Período do dia em BRT (UTC-3) pra Sofia saudar com o cumprimento certo.
+  // Ailson 05/06/2026.
+  const horaBRT = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getHours();
+  const saudacaoPeriodo = horaBRT >= 5 && horaBRT < 12 ? 'bom dia'
+    : horaBRT >= 12 && horaBRT < 18 ? 'boa tarde'
+    : 'boa noite';
+  const saudacaoCap = saudacaoPeriodo.charAt(0).toUpperCase() + saudacaoPeriodo.slice(1);
+
   const systemBlocks = [
     { type: 'text', text: SYSTEM_PROMPT },
     { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` },
     { type: 'text', text: 'REGRA ANTI-REPETICAO (IMPORTANTE): antes de perguntar qualquer coisa pra cliente (se ela ja revende, ha quanto tempo, que tipo de cliente/loja ela e, cidade, nome), releia TODO o historico da conversa acima. Se ela JA respondeu isso em qualquer momento, NUNCA pergunte de novo, use o que ela ja disse. Repetir pergunta que ela ja respondeu passa a impressao de que vc nao prestou atencao e irrita a cliente.' },
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
+  // Saudação simples e humana, com o período certo do dia. Ailson 05/06/2026.
+  systemBlocks.push({ type: 'text', text: `SAUDAÇÃO (agora é período da ${saudacaoPeriodo} no horário de SP): se esta for a PRIMEIRA resposta da Sofia nesta conversa, abra com uma saudação curta e humana usando o primeiro nome do cliente quando souber. VARIE entre formas simples, tipo: "Oi <nome>, ${saudacaoPeriodo}!", "${saudacaoCap}, <nome>!", "Oi <nome>, ${saudacaoPeriodo}, tudo bem?". É gente digitando rápido, não recepção de loja. NUNCA use "que bom que veio", "seja bem-vinda", "que bom te ver por aqui" nem floreio de boas-vindas. No máximo 1 emoji leve, e nem sempre. Se NÃO for a primeira resposta da Sofia, não fique re-saudando.` });
   if (blocoMidias) systemBlocks.push({ type: 'text', text: blocoMidias });
   // DDD 11 = São Paulo capital/região metropolitana → libera oferta de motoboy.
   // Sofia so oferece motoboy quando este aviso aparece. Ailson 01/06/2026.
