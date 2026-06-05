@@ -248,3 +248,70 @@ export function formatarCardapioPraIA(cardapio) {
   }
   return linhas.join('\n').trim();
 }
+
+// ─── LISTA DE REFERENCIAS ATIVAS (reconhecer print / pergunta por modelo) ─────
+// Diferente do cardapio (destaques pra OFERECER), esta e a base AMPLA do que tem
+// estoque agora, pra Sofia RECONHECER qualquer peca que a cliente mandar (print,
+// foto, nome). Traz estoque-semaforo (qtd_estoque do Mire, por REF) + as cores do
+// corte mais recente conhecido daquela ref. Ailson 05/06/2026.
+const cacheRefsAtivas = { data: null, expiresAt: 0 };
+
+function semaforoEstoque(q) {
+  const n = Number(q) || 0;
+  if (n >= 40) return 'bastante';
+  if (n >= 12) return 'tem disponivel';
+  if (n >= 1) return 'pouco (ta saindo)';
+  return 'sem estoque';
+}
+
+export async function montarListaReferenciasAtivas() {
+  if (cacheRefsAtivas.data && cacheRefsAtivas.expiresAt > Date.now()) {
+    return cacheRefsAtivas.data;
+  }
+  try {
+    // 1. Produtos com estoque (base ampla do que da pra reconhecer/vender)
+    const { data: prods } = await supabase
+      .from('lojas_produtos')
+      .select('ref, descricao, categoria, qtd_estoque')
+      .gt('qtd_estoque', 0)
+      .order('qtd_estoque', { ascending: false })
+      .range(0, 199);
+
+    // 2. Cores por ref: do corte mais recente (por data) que tenha cores.
+    //    Cor e caracteristica do modelo, entao o corte recente reflete as atuais.
+    const mapaCores = {};
+    try {
+      const { data: ac } = await supabase
+        .from('amicia_data').select('payload').eq('user_id', 'ailson_cortes').maybeSingle();
+      const cortes = ac?.payload?.cortes || [];
+      const ordenados = [...cortes].sort((a, b) => String(a?.data || '').localeCompare(String(b?.data || '')));
+      for (const c of ordenados) {
+        const cores = (c?.detalhes?.cores || []).map(x => x?.nome).filter(Boolean);
+        if (!c?.ref || cores.length === 0) continue;
+        const refN = String(c.ref).replace(/^0+/, '') || '0';
+        mapaCores[refN] = [...new Set(cores)]; // mais recente sobrescreve
+      }
+    } catch (e) { logErro('cardapio/cores-corte', e); }
+
+    // 3. Formata uma linha por ref
+    const linhas = (prods || []).map(p => {
+      const refN = String(p.ref).replace(/^0+/, '') || '0';
+      const cores = mapaCores[refN];
+      const partes = [
+        `REF ${p.ref}`,
+        `${p.descricao || 's/ descricao'}${p.categoria ? ` (${String(p.categoria).toLowerCase()})` : ''}`,
+        `estoque: ${semaforoEstoque(p.qtd_estoque)}`,
+      ];
+      if (cores && cores.length) partes.push(`cores do ultimo corte: ${cores.join(', ')}`);
+      return '- ' + partes.join(' | ');
+    });
+
+    const str = linhas.length ? linhas.join('\n') : '(sem referencias com estoque no momento)';
+    cacheRefsAtivas.data = str;
+    cacheRefsAtivas.expiresAt = Date.now() + CACHE_TTL_MS;
+    return str;
+  } catch (e) {
+    logErro('cardapio/refs-ativas', e);
+    return '';
+  }
+}
