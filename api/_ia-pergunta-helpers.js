@@ -812,11 +812,45 @@ export async function contextoProducao(ref = null) {
     console.warn('[contextoProducao] caseado:', e?.message);
   }
 
+  // 3ª FONTE / fallback (Ailson 05/06/2026): SALA DE CORTE — peças que ainda
+  // estão sendo cortadas (enfesto + corte com risco da grade). Só interessa
+  // quando NÃO há nada na oficina nem no caseado pra aquela ref. A prioridade
+  // (oficina > caseado > sala) é decidida pela IA no prompt; aqui só carregamos.
+  // Por enquanto SEM cores/qtds: status 'pendente' = sendo cortado na sala;
+  // 'concluido' = já saiu da sala (foi pra oficina).
+  let salaCorteEmAndamento = [];
+  try {
+    const { data: sc } = await supabase
+      .from('amicia_data')
+      .select('payload')
+      .eq('user_id', 'salas-corte')
+      .maybeSingle();
+    const cortesSala = (sc?.payload?.cortes || [])
+      .filter(c => c.status === 'pendente' && c.sala) // sendo cortado + sala definida
+      .filter(c => !ref || normalizarRef(c.ref) === ref)
+      .map(c => ({
+        ref: normalizarRef(c.ref),
+        descricao: c.descricao || '',
+        sala: c.sala,
+      }));
+    // dedup por ref+sala (a mesma peça pode ter rolos divididos em + de uma ordem)
+    const vistos = new Set();
+    salaCorteEmAndamento = cortesSala.filter(c => {
+      const k = `${c.ref}|${c.sala}`;
+      if (vistos.has(k)) return false;
+      vistos.add(k);
+      return true;
+    }).slice(0, 20);
+  } catch (e) {
+    console.warn('[contextoProducao] sala de corte:', e?.message);
+  }
+
   return {
     cortes_reais: cortesAtivos.slice(0, 20),
     cortes_entregues_recentes: cortesEntreguesRecentes.slice(0, 5), // ≤3 dias, max 5
     estimativas_sala: estimativasSala,
     caseado_em_andamento: caseadoEmAndamento, // peças pregando botão no caseado (Ailson 04/06/2026)
+    sala_corte_em_andamento: salaCorteEmAndamento, // peças ainda na sala de corte — 3ª fonte (Ailson 05/06/2026)
     total_reais: cortesAtivos.length,
     ref_cadastrada: refCadastrada, // null se não foi checado, { encontrada: bool, descricao, ... } se foi
   };
@@ -1155,16 +1189,26 @@ já tá finalizando e vai pra passadoria."
 - NÃO invente prazo em dias pro caseado (não tem prazo calculado). Fale da etapa, não de data.
 - Só use caseado_em_andamento se cortes_reais estiver vazio (peça já passou da oficina).
 
+SALA DE CORTE — PEÇA AINDA SENDO CORTADA (contexto.producao.sala_corte_em_andamento):
+Use SÓ quando NÃO tem cortes_reais NEM caseado_em_andamento pra aquela peça, mas ela aparece
+em sala_corte_em_andamento. Significa que ainda está na sala de corte (cortando o tecido) e NÃO
+chegou na oficina. Responda no tom do dia a dia citando o nome da sala (campo "sala"). Exemplo:
+"Oii ${nomeUser || 'fulana'}! Não tem nenhum corte dessa na oficina ainda, mas já tá sendo
+cortado na sala <sala>. Daqui uns 2 dias consigo te passar as cores e as quantidades."
+- NÃO informe cores nem quantidades dessa peça — ainda não temos, está só na sala.
+- Cite a sala exatamente como vem no campo "sala" (ex: Antonio, Chico, Adalecio, Fabrica).
+- Não vem foto nem matriz pra peça que está só na sala — não escreva cor/tamanho.
+
 FILTRO MONETÁRIO:
 ${filtroMonetarioMsg}
 
-PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04, caseado 04/06):
-1. "cortes_reais" (de ailson_cortes) = REAL, tem data e prazo concreto
-2. "caseado_em_andamento" = peça já saiu da oficina e está no caseado pregando botão
-3. "estimativas_sala" (de ordens_corte) = ESTIMATIVA, ainda não virou corte
-Se achar REAL, responda com data + fatos. Se não tem REAL mas tem caseado, responda que
-está no caseado (vai pra passadoria). Se só achar ESTIMATIVA, diga:
-"Tá programado na sala, estimativa de X peças — ainda pode mudar. Pergunta em 2 dias."
+PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04, caseado 04/06, sala de corte 05/06):
+Pra "tem a REF X pra chegar?" / "tá vindo a peça Y?", procure NESTA ORDEM e pare na 1ª que achar:
+1. "cortes_reais" (ailson_cortes) = REAL, já está na oficina costurando. Tem data/prazo. Responda com data + fatos.
+2. "caseado_em_andamento" = já saiu da oficina, pregando botão no caseado (vai pra passadoria).
+3. "sala_corte_em_andamento" = ainda NÃO foi pra oficina; está sendo cortada na sala de corte. Diga que tá sendo cortado na sala tal e que em uns 2 dias terá as cores/qtds (sem dar cores agora).
+Se a peça aparece em mais de uma fonte, vale a de cima (mais avançada na produção).
+"estimativas_sala" é fonte antiga e normalmente vem vazia — ignore se não trouxer nada.
 
 ESTOQUE — RESUMO GERAL (sem REF específica na pergunta):
 Quando o contexto.estoque inclui "risco_zerar_curva_a", "risco_zerar_geral_urgente"
