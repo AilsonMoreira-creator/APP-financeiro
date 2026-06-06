@@ -71,22 +71,31 @@ async function preview(req, res) {
   try {
     const diasPerdida = await getConfig('regua_dias_perdida', 3);
     const diasEsfriando = await getConfig('regua_quente_esfriando_dias', 1);
+    const diasAtendidaFup = await getConfig('regua_dias_atendida_followup', 3);
+    const diasFollowupMax = await getConfig('regua_dias_followup_max', 15); // so informativo no preview (acao pendente)
 
     const cutoffPerdida = new Date(Date.now() - diasPerdida * 86400000).toISOString();
     const cutoffEsfriando = new Date(Date.now() - diasEsfriando * 86400000).toISOString();
     const cutoffEsfriouTotal = new Date(Date.now() - (diasEsfriando + 2) * 86400000).toISOString();
+    const cutoffAtendida = new Date(Date.now() - diasAtendidaFup * 86400000).toISOString();
+    const cutoffFollowup15 = new Date(Date.now() - diasFollowupMax * 86400000).toISOString();
 
-    const [{ count: paraEsfriando }, { count: paraPerdida }, { count: paraEsfriouTotal }] = await Promise.all([
+    const [{ count: paraEsfriando }, { count: paraFollowup }, { count: paraPerdida }, { count: paraEsfriouTotal }, { count: followupVencidos }] = await Promise.all([
       // Quente sem evoluir há > diasEsfriando E ainda não esfriando
       supabase.from('lojas_whats_conversas')
         .select('*', { count: 'exact', head: true })
         .eq('etapa', 'quente')
         .is('esfriando_desde', null)
         .lt('ultima_atividade_em', cutoffEsfriando),
-      // Qualquer etapa ativa sem atividade há > diasPerdida
+      // Atendida sem venda há > diasAtendidaFup → follow_up
       supabase.from('lojas_whats_conversas')
         .select('*', { count: 'exact', head: true })
-        .not('etapa', 'in', '(perdida,vendeu,feedback,inativo)')
+        .eq('etapa', 'atendida')
+        .lt('ultima_atividade_em', cutoffAtendida),
+      // Etapa ativa (exceto atendida/follow_up/vendeu/etc) sem atividade > diasPerdida
+      supabase.from('lojas_whats_conversas')
+        .select('*', { count: 'exact', head: true })
+        .not('etapa', 'in', '(perdida,vendeu,feedback,inativo,atendida,follow_up)')
         .lt('ultima_atividade_em', cutoffPerdida),
       // Esfriando há > 2d → vai pra perdida
       supabase.from('lojas_whats_conversas')
@@ -94,6 +103,11 @@ async function preview(req, res) {
         .eq('etapa', 'quente')
         .not('esfriando_desde', 'is', null)
         .lt('esfriando_desde', cutoffEsfriouTotal),
+      // INFORMATIVO: follow_up parado ha > 15d (acao pendente — Ailson decide)
+      supabase.from('lojas_whats_conversas')
+        .select('*', { count: 'exact', head: true })
+        .eq('etapa', 'follow_up')
+        .lt('follow_up_entrou_em', cutoffFollowup15),
     ]);
 
     return res.status(200).json({
@@ -102,12 +116,18 @@ async function preview(req, res) {
       regras: {
         dias_perdida: diasPerdida,
         dias_esfriando: diasEsfriando,
-        cutoffs: { perdida: cutoffPerdida, esfriando: cutoffEsfriando, esfriou_total: cutoffEsfriouTotal }
+        dias_atendida_followup: diasAtendidaFup,
+        dias_followup_max: diasFollowupMax,
+        cutoffs: { perdida: cutoffPerdida, esfriando: cutoffEsfriando, esfriou_total: cutoffEsfriouTotal, atendida: cutoffAtendida }
       },
       seriam_processadas: {
         marcar_esfriando: paraEsfriando || 0,
+        atendida_para_followup: paraFollowup || 0,
         marcar_perdida_sem_resposta: paraPerdida || 0,
         marcar_perdida_esfriou_total: paraEsfriouTotal || 0
+      },
+      informativo: {
+        followup_parados_mais_de_15d: followupVencidos || 0 // sem acao por enquanto
       }
     });
   } catch (e) {
@@ -121,11 +141,13 @@ async function preview(req, res) {
 async function executar() {
   const diasPerdida = await getConfig('regua_dias_perdida', 3);
   const diasEsfriando = await getConfig('regua_quente_esfriando_dias', 1);
+  const diasAtendidaFup = await getConfig('regua_dias_atendida_followup', 3); // atendida sem venda Xd -> follow_up (Ailson 06/06)
   const agora = new Date().toISOString();
 
   const cutoffPerdida = new Date(Date.now() - diasPerdida * 86400000).toISOString();
   const cutoffEsfriando = new Date(Date.now() - diasEsfriando * 86400000).toISOString();
   const cutoffEsfriouTotal = new Date(Date.now() - (diasEsfriando + 2) * 86400000).toISOString();
+  const cutoffAtendida = new Date(Date.now() - diasAtendidaFup * 86400000).toISOString();
 
   // ─── 1. Marca Quente parado como esfriando ────────────────────────────
   const { data: paraEsfriando, error: err1 } = await supabase
@@ -140,7 +162,30 @@ async function executar() {
     .select('id');
   if (err1) logErro('cron-promover/esfriando', err1);
 
-  // ─── 2. Marca como perdida sem resposta ───────────────────────────────
+  // ─── 2. Atendida sem venda há > diasAtendidaFup → follow_up ────────────
+  // Regra Ailson 06/06: o card fica na aba Atendida ate ~3 dias. Quem vendeu
+  // ja saiu pra 'vendeu' (capi-match / leads-conversoes-cron), entao quem
+  // CONTINUA em 'atendida' apos 3d e justamente quem NAO vendeu → follow_up.
+  // NAO seta follow_up_vence_em de proposito: o card so estaciona na aba, SEM
+  // disparar HSM (o cron-followup so atua em quem tem follow_up_vence_em).
+  const { data: paraFollowup, error: errFup } = await supabase
+    .from('lojas_whats_conversas')
+    .update({
+      etapa: 'follow_up',
+      follow_up_entrou_em: agora,
+      follow_up_origem: 'cron_atendida_sem_venda',
+      follow_up_motivo: 'sem_venda_apos_atendida',
+      atualizado_em: agora
+    })
+    .eq('etapa', 'atendida')
+    .lt('ultima_atividade_em', cutoffAtendida)
+    .select('id');
+  if (errFup) logErro('cron-promover/atendida-followup', errFup);
+
+  // ─── 3. Marca como perdida sem resposta ───────────────────────────────
+  // 'vendeu' nunca sai (fica pra sempre, ate pra remarketing). 'atendida' agora
+  // vai pra follow_up (regra 2 acima). 'follow_up' estaciona (decisao dos 15d
+  // pendente — Ailson decide depois). Por isso os 3 ficam de fora daqui.
   const { data: paraPerdida, error: err2 } = await supabase
     .from('lojas_whats_conversas')
     .update({
@@ -149,7 +194,7 @@ async function executar() {
       perdida_em: agora,
       atualizado_em: agora
     })
-    .not('etapa', 'in', '(perdida,vendeu,feedback,inativo)')
+    .not('etapa', 'in', '(perdida,vendeu,feedback,inativo,atendida,follow_up)')
     .lt('ultima_atividade_em', cutoffPerdida)
     .select('id');
   if (err2) logErro('cron-promover/perdida-sem-resposta', err2);
@@ -187,9 +232,10 @@ async function executar() {
 
   const resultado = {
     executado_em: agora,
-    regras: { dias_perdida: diasPerdida, dias_esfriando: diasEsfriando },
+    regras: { dias_perdida: diasPerdida, dias_esfriando: diasEsfriando, dias_atendida_followup: diasAtendidaFup },
     processadas: {
       marcadas_esfriando: paraEsfriando?.length || 0,
+      atendida_movidas_followup: paraFollowup?.length || 0,
       marcadas_perdida_sem_resposta: paraPerdida?.length || 0,
       marcadas_perdida_esfriou_total: paraEsfriouTotal?.length || 0,
       sugestoes_dispensadas: sugDispensadas
