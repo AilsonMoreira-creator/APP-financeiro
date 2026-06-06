@@ -319,9 +319,13 @@ async function processarMensagemRecebida(msg, valueCtx) {
   };
   // Etapas terminais/intermediarias voltam pra 'conversando' quando cliente
   // manda msg nova (Ailson 27/05/2026 — cliente em qualquer aba pode voltar
-  // a interagir). Excecoes: 'conversando', 'quente', 'processando', 'aprovar'
-  // permanecem (ja sao estados ativos/em transito).
-  const ETAPAS_QUE_VOLTAM = ['enviada', 'follow_up', 'atendida', 'perdida', 'varejo', 'vendeu'];
+  // a interagir). Excecoes que PERMANECEM: 'conversando', 'quente',
+  // 'processando', 'aprovar' (ja sao ativos/em transito) e 'vendeu' (Ailson
+  // 06/06: venda fica fixa na aba pro remarketing; a msg nova so faz o card
+  // subir na lista + badge unread, e a assistente move manual pra conversando
+  // se quiser. O cron-responder ja nao responde 'vendeu', entao a Sofia nao
+  // fala sozinha aqui).
+  const ETAPAS_QUE_VOLTAM = ['enviada', 'follow_up', 'atendida', 'perdida', 'varejo'];
   if (ETAPAS_QUE_VOLTAM.includes(conversa.etapa)) {
     updates.etapa = 'conversando';
     updates.cliente_respondeu_em = new Date().toISOString();

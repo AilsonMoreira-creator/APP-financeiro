@@ -217,6 +217,13 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               display: 'inline-flex', alignItems: 'center', gap: 3,
             }}>👤 {vendedoraNome}</span>
           )}
+          {c.etapa === 'follow_up' && vendedoraNome && (
+            <span title={`Estava em atendimento com ${vendedoraNome}`} style={{
+              background: '#f3eafc', color: '#6b3aa0',
+              fontSize: fz(9.5), fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+            }}>👤 estava com {vendedoraNome}</span>
+          )}
           {origem === 'carrinho' ? (
             <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas || 0} pç</span>
           ) : c.qtd_pecas > 0 && (
@@ -2289,6 +2296,12 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
                 fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
                 background: '#f3eafc', color: '#6b3aa0', fontWeight: 700,
               }}>👤 {vendedoraNome}</span>
+            )}
+            {c.etapa === 'follow_up' && vendedoraNome && (
+              <span title={`Estava em atendimento com ${vendedoraNome}`} style={{
+                fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
+                background: '#f3eafc', color: '#6b3aa0', fontWeight: 700,
+              }}>👤 estava com {vendedoraNome}</span>
             )}
           </div>
           <div style={{ fontSize: fz(11), color: palette.inkMuted, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
