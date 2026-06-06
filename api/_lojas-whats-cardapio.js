@@ -19,8 +19,46 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, log, logErro } from './_lojas-whats-helpers.js';
+import { MODELOS_POR_REF } from './_lojas-modelos-data.js';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+
+// ─── BASE DE CONHECIMENTO DE PRODUTOS (ficha tecnica por REF) ──────────────
+// Vem do manual versionado (_lojas-modelos-data.js). A Sofia consulta pra SE
+// BASEAR; usa so o relevante e NAO cola literal. Ailson 06/06/2026.
+
+// Ficha resumida (fatos curtos) — enriquece a lista de refs ativas (barato).
+function fichaCurtaModelo(refNorm) {
+  const m = MODELOS_POR_REF[refNorm];
+  if (!m) return null;
+  const partes = [];
+  if (m.tecido) partes.push(m.tecido);
+  if (m.composicao) partes.push(m.composicao);
+  if (m.forro) partes.push(`forro: ${m.forro}`);
+  if (Array.isArray(m.detalhes) && m.detalhes.length) partes.push(m.detalhes.join(', '));
+  if (Array.isArray(m.combina_com) && m.combina_com.length) partes.push(`combina com ${m.combina_com.join(', ')}`);
+  if (m.tamanho_modelo) partes.push(`modelo veste ${m.tamanho_modelo}`);
+  if (m.preco_atacado) partes.push(`atacado R$${Number(m.preco_atacado).toFixed(0)}`);
+  return partes.join(' · ');
+}
+
+// Ficha DETALHADA (inclui descricao_completa) — so pras refs em foco (ex:
+// carrinho), pra Sofia falar da peca que a cliente esta vendo com profundidade.
+export function montarFichasDetalhadas(refs) {
+  if (!refs || !refs.length) return '';
+  const blocos = [];
+  for (const r of refs) {
+    const refNorm = String(r).replace(/^0+/, '') || '0';
+    const m = MODELOS_POR_REF[refNorm];
+    if (!m) continue;
+    const linhas = [`REF ${m.ref} — ${m.nome}`];
+    const ficha = fichaCurtaModelo(refNorm);
+    if (ficha) linhas.push(ficha);
+    if (m.descricao_completa) linhas.push(m.descricao_completa);
+    blocos.push(linhas.join('\n'));
+  }
+  return blocos.join('\n\n');
+}
 const cacheCardapioGeral = { data: null, expiresAt: 0 };
 const cacheMatches = new Map(); // key: refs joined → { data, expiresAt }
 
@@ -303,6 +341,8 @@ export async function montarListaReferenciasAtivas() {
         `estoque: ${semaforoEstoque(p.qtd_estoque)}`,
       ];
       if (cores && cores.length) partes.push(`cores do ultimo corte: ${cores.join(', ')}`);
+      const ficha = fichaCurtaModelo(refN);
+      if (ficha) partes.push(`ficha: ${ficha}`);
       return '- ' + partes.join(' | ');
     });
 

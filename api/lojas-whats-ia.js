@@ -20,7 +20,7 @@
 
 import { supabase, setCors, log, logErro, getConfig, limparEstiloSofia } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
-import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa, montarListaReferenciasAtivas } from './_lojas-whats-cardapio.js';
+import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa, montarListaReferenciasAtivas, montarFichasDetalhadas } from './_lojas-whats-cardapio.js';
 import { montarBlocoPadroes, decidirModo } from './_lojas-whats-padroes.js';
 
 // ─── GATILHOS QUENTE (lista fechada — definida pelo Ailson) ────────────────
@@ -614,6 +614,14 @@ export async function processarConversa(conversaId) {
     listaRefsAtivas = await montarListaReferenciasAtivas();
   } catch (e) { logErro('ia/refs-ativas', e); }
 
+  // 5a-bis. Base de conhecimento DETALHADA das pecas EM FOCO (refs do carrinho):
+  // ficha tecnica + descricao_completa, pra Sofia falar com profundidade da peca
+  // que a cliente esta de fato vendo. So as refs do carrinho, pra nao inflar.
+  let fichasFoco = '';
+  try {
+    if (refsCarrinho && refsCarrinho.length) fichasFoco = montarFichasDetalhadas(refsCarrinho);
+  } catch (e) { logErro('ia/fichas-foco', e); }
+
   // 5b. APRENDIZADO (Ailson 26/05/2026 — coracao da Sofia)
   // Decide modo: 30% explorar (gera variacao livre) / 70% replicar (usa padroes).
   // Injeta bloco de padroes aprendidos no system prompt como DICA (3B suggest).
@@ -770,7 +778,10 @@ export async function processarConversa(conversaId) {
   systemBlocks.push({ type: 'text', text: `SAUDAÇÃO (agora é período da ${saudacaoPeriodo} no horário de SP): se esta for a PRIMEIRA resposta da Sofia nesta conversa, abra com uma saudação curta e humana usando o primeiro nome do cliente quando souber. VARIE entre formas simples, tipo: "Oi <nome>, ${saudacaoPeriodo}!", "${saudacaoCap}, <nome>!", "Oi <nome>, ${saudacaoPeriodo}, tudo bem?". É gente digitando rápido, não recepção de loja. NUNCA use "que bom que veio", "seja bem-vinda", "que bom te ver por aqui" nem floreio de boas-vindas. No máximo 1 emoji leve, e nem sempre. Se NÃO for a primeira resposta da Sofia, não fique re-saudando.` });
   // Lista ampla pra RECONHECER a peca que a cliente mandar (print/foto/modelo).
   if (listaRefsAtivas) {
-    systemBlocks.push({ type: 'text', text: `REFERENCIAS ATIVAS DA AMICIA (o que temos COM ESTOQUE agora — use pra RECONHECER a peca que a cliente mandar por print, foto ou nome. NAO e a lista do que oferecer sozinha; pra oferecer proativamente use o cardapio acima):\n${listaRefsAtivas}\n\nCOMO USAR ESTA LISTA:\n- Cliente mandou print/foto ou citou um modelo: cruze com esta lista pra achar a REF e a descricao certa, e fale da peca com naturalidade.\n- "estoque" e um SEMAFORO por referencia (soma de todas as cores/tamanhos): "bastante" = vende tranquila; "tem disponivel" = tem, mas confirme se for pedido grande; "pouco (ta saindo)" = avisa que ta saindo e conduz pra fechar logo. NUNCA fale o numero exato de pecas, nem prometa cor/tamanho especifico — a disponibilidade fina por cor e tamanho a separacao confirma na hora de fechar.\n- "cores do ultimo corte" sao as cores que sairam na producao mais recente da peca: pode dizer as cores, mas pra cor+tamanho exatos confirma na separacao.\n- Se a peca que a cliente mandou NAO aparece aqui (sem estoque), pode estar em reposicao: se vier info de producao no contexto usa, senao diz que vai confirmar com a equipe. Nunca diga que a peca "nao existe" so porque nao esta nesta lista.` });
+    systemBlocks.push({ type: 'text', text: `REFERENCIAS ATIVAS DA AMICIA (o que temos COM ESTOQUE agora — use pra RECONHECER a peca que a cliente mandar por print, foto ou nome. NAO e a lista do que oferecer sozinha; pra oferecer proativamente use o cardapio acima):\n${listaRefsAtivas}\n\nCOMO USAR ESTA LISTA:\n- Cliente mandou print/foto ou citou um modelo: cruze com esta lista pra achar a REF e a descricao certa, e fale da peca com naturalidade.\n- "estoque" e um SEMAFORO por referencia (soma de todas as cores/tamanhos): "bastante" = vende tranquila; "tem disponivel" = tem, mas confirme se for pedido grande; "pouco (ta saindo)" = avisa que ta saindo e conduz pra fechar logo. NUNCA fale o numero exato de pecas, nem prometa cor/tamanho especifico — a disponibilidade fina por cor e tamanho a separacao confirma na hora de fechar.\n- "cores do ultimo corte" sao as cores que sairam na producao mais recente da peca: pode dizer as cores, mas pra cor+tamanho exatos confirma na separacao.\n- quando a linha trouxer "ficha:" sao dados tecnicos da peca (tecido, composicao, forro, caimento, com o que combina, tamanho que a modelo veste, preco atacado) — use pra tirar duvida com naturalidade, sem despejar tudo de uma vez.\n- Se a peca que a cliente mandou NAO aparece aqui (sem estoque), pode estar em reposicao: se vier info de producao no contexto usa, senao diz que vai confirmar com a equipe. Nunca diga que a peca "nao existe" so porque nao esta nesta lista.` });
+  }
+  if (fichasFoco) {
+    systemBlocks.push({ type: 'text', text: `BASE DE CONHECIMENTO — FICHA DETALHADA DA(S) PECA(S) QUE A CLIENTE ESTA VENDO / NO CARRINHO:\n${fichasFoco}\n\nISTO E PRA VC SE BASEAR, NAO PRA COLAR. Use so o trecho relevante pra pergunta da cliente (tecido, caimento, forro, com o que combina, etc.), sempre com as SUAS palavras e no momento certo. NUNCA mande a descricao inteira nem um textao tecnico do nada.` });
   }
   if (blocoMidias) systemBlocks.push({ type: 'text', text: blocoMidias });
   // DDD 11 = São Paulo capital/região metropolitana → libera oferta de motoboy.
