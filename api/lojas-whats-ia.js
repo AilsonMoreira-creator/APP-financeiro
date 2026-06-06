@@ -504,6 +504,21 @@ export async function processarConversa(conversaId) {
   const msgsClienteAteAgora = (msgs || []).filter(m => m.direcao === 'entrada');
   const ehPrimeiraMsgCliente = msgsClienteAteAgora.length <= 1;
 
+  // 2c. ESTRATEGIA A/B DE ABERTURA (Ailson 06/06/2026): 20% dos leads NAO-carrinho
+  // entram no grupo 'catalogo_direto' (abertura manda o catalogo logo, sem citar
+  // minimo, deixa a cliente perguntar pra gerar interacao). 80% ficam 'padrao'.
+  // Sorteia UMA vez (na 1a msg) e grava — fica estavel e da pra comparar depois.
+  const ehCarrinho = conv.origem_lead === 'carrinho_site_amicialoja';
+  if (!conv.experimento_abertura && ehPrimeiraMsgCliente && !ehCarrinho) {
+    const grupo = Math.random() < 0.20 ? 'catalogo_direto' : 'padrao';
+    try {
+      await supabase.from('lojas_whats_conversas')
+        .update({ experimento_abertura: grupo }).eq('id', conversaId);
+    } catch (e) { logErro('ia/experimento-abertura', e); }
+    conv.experimento_abertura = grupo;  // reflete em memoria pro prompt e classificador
+    log('ia', `conversa=${conversaId} experimento_abertura sorteado=${grupo}`);
+  }
+
   // 3. Detecta gatilhos quente
   const gatilhos = detectarGatilhosQuente(textoCliente);
   log('ia', `conversa=${conversaId} gatilhos=[${gatilhos.join(',')}] primeira_msg=${ehPrimeiraMsgCliente}`);
@@ -776,6 +791,11 @@ export async function processarConversa(conversaId) {
   ];
   // Saudação simples e humana, com o período certo do dia. Ailson 05/06/2026.
   systemBlocks.push({ type: 'text', text: `SAUDAÇÃO (agora é período da ${saudacaoPeriodo} no horário de SP): se esta for a PRIMEIRA resposta da Sofia nesta conversa, abra com uma saudação curta e humana usando o primeiro nome do cliente quando souber. VARIE entre formas simples, tipo: "Oi <nome>, ${saudacaoPeriodo}!", "${saudacaoCap}, <nome>!", "Oi <nome>, ${saudacaoPeriodo}, tudo bem?". É gente digitando rápido, não recepção de loja. NUNCA use "que bom que veio", "seja bem-vinda", "que bom te ver por aqui" nem floreio de boas-vindas. No máximo 1 emoji leve, e nem sempre. Se NÃO for a primeira resposta da Sofia, não fique re-saudando.` });
+  // ESTRATEGIA A/B (Ailson 06/06/2026): grupo 'catalogo_direto' = manda catalogo
+  // na abertura, sem qualificar e sem citar minimo, deixando a cliente perguntar.
+  if (conv.experimento_abertura === 'catalogo_direto') {
+    systemBlocks.push({ type: 'text', text: `ESTRATEGIA DESTA CONVERSA (importante): ${ehPrimeiraMsgCliente ? 'esta e a abertura. ' : ''}seja simpatica e direta — manda uma saudação curta com o nome da cliente e ja oferece o catalogo de forma leve. VARIE o texto naturalmente (NAO use sempre a mesma frase), no espirito de "Oi <nome>, ${saudacaoPeriodo}! Segue o nosso catalogo, qualquer duvida to a disposição". REGRAS DESTA CONVERSA: (1) NAO qualifique a cliente — nao pergunte se ela ja revende, se tem loja, se ta comecando etc. (2) NAO cite a quantidade minima de pecas, nem preco de atacado vs varejo, de cara. So fale do minimo SE a propria cliente perguntar. A intencao e deixar ela puxar a conversa e perguntar. ${ehPrimeiraMsgCliente ? 'Inclua [ENVIAR_CATALOGO] no fim que o catalogo vai anexado automaticamente.' : ''}` });
+  }
   // Lista ampla pra RECONHECER a peca que a cliente mandar (print/foto/modelo).
   if (listaRefsAtivas) {
     systemBlocks.push({ type: 'text', text: `REFERENCIAS ATIVAS DA AMICIA (o que temos COM ESTOQUE agora — use pra RECONHECER a peca que a cliente mandar por print, foto ou nome. NAO e a lista do que oferecer sozinha; pra oferecer proativamente use o cardapio acima):\n${listaRefsAtivas}\n\nCOMO USAR ESTA LISTA:\n- Cliente mandou print/foto ou citou um modelo: cruze com esta lista pra achar a REF e a descricao certa, e fale da peca com naturalidade.\n- "estoque" e um SEMAFORO por referencia (soma de todas as cores/tamanhos): "bastante" = vende tranquila; "tem disponivel" = tem, mas confirme se for pedido grande; "pouco (ta saindo)" = avisa que ta saindo e conduz pra fechar logo. NUNCA fale o numero exato de pecas, nem prometa cor/tamanho especifico — a disponibilidade fina por cor e tamanho a separacao confirma na hora de fechar.\n- "cores do ultimo corte" sao as cores que sairam na producao mais recente da peca: pode dizer as cores, mas pra cor+tamanho exatos confirma na separacao.\n- quando a linha trouxer "ficha:" sao dados tecnicos da peca (tecido, composicao, forro, caimento, com o que combina, tamanho que a modelo veste, preco atacado) — use pra tirar duvida com naturalidade, sem despejar tudo de uma vez.\n- Se a peca que a cliente mandou NAO aparece aqui (sem estoque), pode estar em reposicao: se vier info de producao no contexto usa, senao diz que vai confirmar com a equipe. Nunca diga que a peca "nao existe" so porque nao esta nesta lista.` });
@@ -932,6 +952,13 @@ export async function processarConversa(conversaId) {
 //   - Confirmacao curta ("sim/pode/claro") SO se a Sofia acabou de oferecer catalogo -> auto
 //   - Qualquer outra coisa -> pendente (aprovacao)
 function classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo }) {
+  // Grupo do teste A/B (Ailson 06/06/2026): na abertura manda o catalogo direto e
+  // ja auto-envia, independente da origem/texto da 1a msg. fase=catalogo garante
+  // que o force-inject anexe o catalogo.
+  if (ehPrimeiraMsgCliente && conv && conv.experimento_abertura === 'catalogo_direto') {
+    return { auto: true, fase: 'catalogo', motivo: 'abertura_teste_catalogo_direto' };
+  }
+
   const norm = s => String(s || '')
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
