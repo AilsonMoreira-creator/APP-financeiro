@@ -853,9 +853,18 @@ export async function processarConversa(conversaId) {
   // pendente pra Tamara. Quem dispara o envio e o cron-responder, e SO quando a
   // chave sofia_auto_resposta_ativa estiver ligada (default desligada).
   const ultimaSaida = (msgs || []).find(m => m.direcao === 'saida');
+  // Mensagens NOVAS do cliente desde a ultima resposta da Sofia/Tamara. A cliente
+  // costuma mandar varias picadas (ex: "bom dia" + "quero o catalogo" + "voces
+  // fazem pacote?"); o gate de auto-envio agora olha TODAS, nao so a ultima, pra
+  // nao perder um pedido de catalogo que veio antes de uma pergunta. Ailson 06/06.
+  const textosNovos = [];
+  for (const m of (msgs || [])) {          // msgs vem DESC (mais recente primeiro)
+    if (m.direcao === 'saida') break;       // para na ultima saida (resposta) anterior
+    if (m.direcao === 'entrada') textosNovos.push(m.audio_transcricao || m.texto || '');
+  }
   const sofiaOfereceuCatalogo = !!(ultimaSaida && /catal[oa]g/i.test(ultimaSaida.texto || '')
     && /(quer|posso|te mando|te envio|\bmando\b|gostaria de ver|quer que eu)/i.test(ultimaSaida.texto || ''));
-  const cls = classificarAutoEnvio({ textoCliente, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo });
+  const cls = classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo });
 
   // Garante o catalogo nos gatilhos de catalogo (Ailson 31/05/2026): se o gate
   // classificou fase=catalogo (pedido direto, atacado, qualificacao, confirmacao),
@@ -922,53 +931,63 @@ export async function processarConversa(conversaId) {
 //   - "atacado" sozinho -> auto
 //   - Confirmacao curta ("sim/pode/claro") SO se a Sofia acabou de oferecer catalogo -> auto
 //   - Qualquer outra coisa -> pendente (aprovacao)
-function classificarAutoEnvio({ textoCliente, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo }) {
-  const t = String(textoCliente || '')
+function classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo }) {
+  const norm = s => String(s || '')
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .trim();
+  const t = norm(textoCliente);
   if (!t) return { auto: false, motivo: 'sem_texto' };
 
-  // 1. Abertura: 1a msg do cliente numa origem padrao
+  // 1. Abertura: 1a msg do cliente numa origem padrao (avalia a ULTIMA msg)
   const origensPadrao = ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram'];
   if (ehPrimeiraMsgCliente && origensPadrao.includes(conv.origem_lead)) {
     return { auto: true, fase: 'abertura', motivo: 'abertura_origem_padrao' };
   }
 
-  // 2. Pedido direto de ver / catalogo
-  const pedeCatalogo =
-    /\bcatal[oa]g/.test(t) ||                        // catalogo, catalago, catalog
-    /\bquero (ver|receber)\b/.test(t) ||
-    /\bgostaria de ver\b/.test(t) ||
-    /\bver (os|o que|o q|modelos|disponiv)/.test(t) ||
-    /\bdisponiv/.test(t) ||
-    /\bme mostra\b/.test(t) ||
-    /\bvou olhar os modelos\b/.test(t);
-  if (pedeCatalogo) return { auto: true, fase: 'catalogo', motivo: 'pedido_direto_catalogo' };
+  // Candidatos = TODAS as mensagens novas nao respondidas (nao so a ultima).
+  // Assim "quero o catalogo" + "voces fazem pacote?" dispara mesmo que a ultima
+  // seja a pergunta. Ailson 06/06/2026.
+  const candidatos = (Array.isArray(textosNovos) && textosNovos.length ? textosNovos : [textoCliente])
+    .map(norm).filter(Boolean);
 
-  // 3. "atacado" sozinho (mensagem curta basicamente so "atacado")
-  const palavras = t.replace(/[^a-z ]/g, '').trim().split(/\s+/).filter(Boolean);
-  if (/\batacado\b/.test(t) && palavras.length <= 3) {
-    return { auto: true, fase: 'catalogo', motivo: 'atacado_sozinho' };
-  }
+  // 2. Pedido direto de ver / catalogo / pacote / como funciona (em qualquer msg nova)
+  const pedeCatalogo = txt =>
+    /\bcatal[oa]g/.test(txt) ||                        // catalogo, catalago, catalog
+    /\bquero (ver|receber)\b/.test(txt) ||
+    /\bgostaria de (ver|receber)\b/.test(txt) ||
+    /\bver (os|o que|o q|modelos|disponiv)/.test(txt) ||
+    /\bdisponiv/.test(txt) ||
+    /\bme mostra\b/.test(txt) ||
+    /\bvou olhar os modelos\b/.test(txt) ||
+    /\bpacote/.test(txt) ||                            // pacote(s) — Ailson 06/06
+    /\bcomo funciona/.test(txt);                       // "como funciona" o atacado — Ailson 06/06
+  if (candidatos.some(pedeCatalogo)) return { auto: true, fase: 'catalogo', motivo: 'pedido_direto_catalogo' };
 
-  // 4. Resposta de qualificacao (ja revende / tem loja / sacoleira / comecando)
-  //    -> manda o catalogo tambem (Ailson 31/05/2026). O catalogo e garantido
-  //    pelo force-inject la no processarConversa, mesmo se a IA nao colocar marcador.
-  const ehQualificacao =
-    /\b(ja )?vend[oe]\b/.test(t) ||
-    /\breven[dt]/.test(t) ||                 // revendo, revenda, revendedora
-    /\btenho (uma )?loja\b/.test(t) ||
-    /\bminha loja\b/.test(t) ||
-    /\bloja (fisica|propria)\b/.test(t) ||
-    /\bsacoleira\b/.test(t) ||
-    /\bprimeira (vez|compra)\b/.test(t) ||
-    /\b(to|estou|vou|quero|pensando em)\s*comec/.test(t) ||
-    /\bcomecand/.test(t) ||
-    /\biniciando\b/.test(t);
-  if (ehQualificacao) return { auto: true, fase: 'catalogo', motivo: 'qualificacao_resposta' };
+  // 3. "atacado" sozinho (mensagem curta basicamente so "atacado"), em qualquer msg nova
+  const atacadoCurto = txt => {
+    const palavras = txt.replace(/[^a-z ]/g, '').trim().split(/\s+/).filter(Boolean);
+    return /\batacado\b/.test(txt) && palavras.length <= 3;
+  };
+  if (candidatos.some(atacadoCurto)) return { auto: true, fase: 'catalogo', motivo: 'atacado_sozinho' };
 
-  // 5. Confirmacao curta a uma oferta de catalogo da Sofia
+  // 4. Resposta de qualificacao (ja revende / tem loja / trabalha com roupas / comecando)
+  const ehQualificacao = txt =>
+    /\b(ja )?vend[oe]\b/.test(txt) ||
+    /\breven[dt]/.test(txt) ||                          // revendo, revenda, revendedora
+    /\btenho (uma )?loja\b/.test(txt) ||
+    /\bminha loja\b/.test(txt) ||
+    /\bloja (fisica|propria)\b/.test(txt) ||
+    /\bsacoleira\b/.test(txt) ||
+    /\btrabalho com roupas?\b/.test(txt) ||             // "ja trabalho com roupas femininas" — Ailson 06/06
+    /\btrabalho com moda\b/.test(txt) ||
+    /\bprimeira (vez|compra)\b/.test(txt) ||
+    /\b(to|estou|vou|quero|pensando em)\s*comec/.test(txt) ||
+    /\bcomecand/.test(txt) ||
+    /\biniciando\b/.test(txt);
+  if (candidatos.some(ehQualificacao)) return { auto: true, fase: 'catalogo', motivo: 'qualificacao_resposta' };
+
+  // 5. Confirmacao curta a uma oferta de catalogo da Sofia (avalia a ULTIMA msg)
   const confirmaCurta = t.length <= 25
     && /^(sim|claro|pode( sim)?|por favor|pode mandar|manda|aguardando|ok|isso|quero)\b/.test(t);
   if (confirmaCurta && sofiaOfereceuCatalogo) {
