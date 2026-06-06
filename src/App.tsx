@@ -7453,6 +7453,57 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
     }catch(e){alert('Erro: '+(e?.message||''));}
   };
 
+  // === Puxar dados reais automaticos — 30 dias (Ailson 06/06/2026) ===
+  // Ticket medio POR PEDIDO = vendas Meluni (canal "Outros" no Bling, somando as 3
+  // contas) dos ultimos 30 dias: bruto / pedidos. CPC e conversao = tabela
+  // meluni_meta_ads_historico dos ultimos 30 dias, PONDERADO (soma gasto / soma
+  // cliques; soma compras / soma cliques * 100). Os 3 campos continuam editaveis.
+  // NAO mexe na "media de valor por peca" (ticketMedio) — e outro conceito.
+  const [puxandoReais,setPuxandoReais]=useState(false);
+  const [reaisMsg,setReaisMsg]=useState(null);
+  const puxarDadosReais=async()=>{
+    setPuxandoReais(true);setReaisMsg(null);
+    const limite=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+    let cpcCalc=null,convCalc=null,ticketCalc=null;const avisos=[];
+    // 1) CPC + conversao da Meta (meluni_meta_ads_historico, ultimos 30d)
+    try{
+      const recs=(historicoDb||[]).filter(r=>r.data&&r.data>=limite);
+      let g=0,cl=0,cp=0;const cpcs=[],convs=[];
+      for(const r of recs){
+        if(r.cliques>0){g+=Number(r.gasto)||0;cl+=r.cliques;cp+=Number(r.compras)||0;}
+        if(r.cpc>0)cpcs.push(Number(r.cpc));
+        if(r.conv!=null&&Number(r.conv)>0)convs.push(Number(r.conv));
+      }
+      if(cl>0){cpcCalc=g/cl;if(cp>0)convCalc=(cp/cl)*100;}
+      if(cpcCalc==null&&cpcs.length)cpcCalc=cpcs.reduce((a,b)=>a+b,0)/cpcs.length; // fallback media simples
+      if(convCalc==null&&convs.length)convCalc=convs.reduce((a,b)=>a+b,0)/convs.length;
+      if(cpcCalc==null&&convCalc==null)avisos.push('sem dados Meta no período');
+    }catch(e){avisos.push('erro Meta');}
+    // 2) Ticket medio por pedido (vendas Bling canal Outros = Meluni, ultimos 30d)
+    try{
+      const resp=await fetch('/api/bling-vendas-cache',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data_inicio:limite,data_fim:hojeIso})});
+      const result=await resp.json();
+      if(result&&result.ok&&result.vendas){
+        const CONTAS=['exitus','lumia','muniam'];let bruto=0,pedidos=0;
+        for(const mk in result.vendas){const mes=result.vendas[mk];if(!mes||mes._vazio)continue;
+          for(const dk in mes){const dia=mes[dk];if(!dia||dia._vazio)continue;
+            for(const conta of CONTAS){const canais=dia[conta];if(!canais)continue;
+              const cd=canais['Outros'];if(cd){bruto+=Number(cd.bruto)||0;pedidos+=Number(cd.pedidos)||0;}}}}
+        if(pedidos>0)ticketCalc=bruto/pedidos; else avisos.push('sem pedidos Meluni no período');
+      }else avisos.push('Bling indisponível');
+    }catch(e){avisos.push('erro Bling');}
+    // 3) Aplica nos campos (continuam editaveis)
+    const r2=v=>Math.round(v*100)/100;
+    setState(p=>({...p,dadosReais:{...p.dadosReais,
+      ...(cpcCalc!=null?{cpc:r2(cpcCalc)}:{}),
+      ...(convCalc!=null?{conv:r2(convCalc)}:{}),
+      ...(ticketCalc!=null?{ticketReal:r2(ticketCalc)}:{}),
+    }}));
+    const fmtR=v=>v==null?'—':'R$ '+v.toFixed(2).replace('.',',');
+    setReaisMsg(`Atualizado (30 dias): CPC ${fmtR(cpcCalc)} · conv ${convCalc!=null?convCalc.toFixed(2)+'%':'—'} · ticket ${fmtR(ticketCalc)}${avisos.length?' — '+avisos.join('; '):''}`);
+    setPuxandoReais(false);
+  };
+
   // Histórico ordenado ASC por data (gráfico mostra evolução temporal)
   const historicoOrdenado=historicoDb;
   // Mais recente primeiro pra tabela
@@ -7556,8 +7607,12 @@ const CalcAnaliseMeluni=({prods,prs,roasMeluniGlobal,setRoasMeluniGlobal,freteSu
         {/* Bloco DADOS REAIS DO PERÍODO — Ailson 10/05/2026: só header escuro */}
         <div style={{background:"#fff",borderRadius:8,marginBottom:20,border:"1px solid #e8e2da",overflow:"hidden"}}>
           <div style={{background:"#2c3e50",color:"#f7f4f0",padding:"12px 16px"}}>
-            <div style={{fontSize:14,fontWeight:700,display:"flex",alignItems:"center",gap:8}}>📥 Dados reais do período (digite manualmente)</div>
-            <div style={{fontSize:11,opacity:0.75,marginTop:3,fontStyle:"italic"}}>Esses números alimentam a engenharia reversa. Atualize semanalmente.</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+              <div style={{fontSize:14,fontWeight:700,display:"flex",alignItems:"center",gap:8}}>📥 Dados reais do período (últimos 30 dias)</div>
+              <button onClick={puxarDadosReais} disabled={puxandoReais} style={{background:puxandoReais?"#5a6b7a":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"7px 14px",fontSize:13,fontWeight:700,cursor:puxandoReais?"wait":"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>{puxandoReais?"Puxando…":"↻ Puxar dados reais (30 dias)"}</button>
+            </div>
+            <div style={{fontSize:11,opacity:0.75,marginTop:3,fontStyle:"italic"}}>Ticket do Bling (canal Meluni) · CPC e conversão do Meta Ads. Pode editar depois.</div>
+            {reaisMsg&&<div style={{fontSize:11,marginTop:6,background:"rgba(255,255,255,0.12)",borderRadius:4,padding:"5px 8px"}}>{reaisMsg}</div>}
           </div>
           <div style={{padding:"16px 18px"}}>
             <div style={{display:"grid",gridTemplateColumns:mobile?"1fr":"1fr 1fr 1fr",gap:14}}>
