@@ -6,7 +6,7 @@
 // FEEDBACK: template escolhido POR CLIENTE pela view vw_lojas_clientes_feedback:
 //   - perfil 'distancia' (canal Vesti OU pagamento a distância) → feedback_v1 (cita entrega)
 //   - resto (presencial/desconhecido/multiplo)                  → feedback_loja_v1 (neutro)
-//   - falso_novo (mesmo telefone já existe em cadastro com 1ª compra anterior) → PULADO
+//   - falso_novo (mesmo telefone OU grupo já existe em cadastro com 1ª compra anterior) → PULADO
 // INATIVO: template único (inativos_v1).
 //
 // Insere os clientes na fila (clientes_sofia_fila) com o template_name já resolvido
