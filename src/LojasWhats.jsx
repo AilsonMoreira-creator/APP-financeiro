@@ -4397,8 +4397,16 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   // Mobile (Ailson 06/06): ao focar, o textarea expande e os icones de suporte
   // descem pra linha de baixo; ao enviar/desfocar volta ao normal. Desktop intacto.
   const isDesktop = useIsDesktop();
-  const [msgFocado, setMsgFocado] = useState(false);
   const textareaRef = useRef(null);
+  // Mobile: campo de mensagem cresce conforme o texto e volta sozinho ao limpar,
+  // SEM depender de foco/blur (no iOS o blur nao dispara ao tocar numa area vazia,
+  // por isso o campo ficava grande e nao recolhia). Ailson 07/06/2026.
+  const ajustarAlturaMsg = () => {
+    const el = textareaRef.current;
+    if (!el || isDesktop) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+  };
   const fimChatRef = useRef(null);
 
   // ─── Trava de presença (Ailson 30/05/2026) ──────────────────────────────
@@ -4582,7 +4590,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
       setReloadTick(t => t + 1);
       // Mobile: ao enviar, recolhe o campo e fecha o teclado pra voltar ao normal
       // (Ailson 06/06 — evita a tela ficar "expandida" depois do envio).
-      if (!isDesktop) { setMsgFocado(false); textareaRef.current?.blur(); }
+      if (!isDesktop && textareaRef.current) { textareaRef.current.style.height = ''; }
     } catch (e) { setErro(e.message); }
     setEnviando(false);
   };
@@ -4955,7 +4963,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
       <div style={{
         padding: 10, background: palette.surface,
         borderTop: `1px solid ${palette.beige}`,
-        display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0, flexWrap: 'wrap',
+        display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0,
         opacity: bloqueado ? 0.55 : 1, pointerEvents: bloqueado ? 'none' : 'auto',
       }}>
         {/* Botao emoji picker — à esquerda junto dos demais (Ailson 28/05/2026) */}
@@ -5119,20 +5127,15 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
         <textarea
           ref={textareaRef}
           value={novoTexto}
-          onChange={e => setNovoTexto(e.target.value)}
-          onFocus={() => setMsgFocado(true)}
-          onBlur={() => setMsgFocado(false)}
+          onChange={e => { setNovoTexto(e.target.value); ajustarAlturaMsg(); }}
           placeholder="Mensagem (Enter quebra linha · clica no botao verde pra enviar)"
           rows={1}
           style={{
             flex: 1, padding: '8px 12px', borderRadius: 18,
             border: `1px solid ${palette.beige}`, fontFamily: FONT_CHAT,
             fontSize: fz(13), color: palette.ink, background: palette.bg,
-            resize: 'none', minHeight: 36, maxHeight: 120, lineHeight: 1.4,
-            boxSizing: 'border-box',
-            // Mobile + focado: campo pula pra 1a linha, ocupa tudo e fica maior;
-            // os icones de suporte descem pra linha de baixo (flexWrap no container).
-            ...(!isDesktop && msgFocado ? { order: -1, flexBasis: '100%', minHeight: 96, maxHeight: 160 } : {}),
+            resize: 'none', minHeight: 36, maxHeight: isDesktop ? 120 : 140, lineHeight: 1.4,
+            boxSizing: 'border-box', overflowY: 'auto',
           }}
         />
         <button onClick={enviar} disabled={enviando || (!novoTexto.trim() && midiasAnexadas.length === 0)}
