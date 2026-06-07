@@ -428,6 +428,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
   const [linhas, setLinhas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
+  const [ocultados, setOcultados] = useState(0);
 
   useEffect(() => {
     let vivo = true;
@@ -448,7 +449,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = elegiveis.map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, fbs, vendas, enviadoSet, vendaVendMap] = await Promise.all([
+        const [cads, fbs, vendas, enviadoSet, vendaVendMap, dedup] = await Promise.all([
           selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
           selectInBatches('clientes_sofia_feedback', 'cliente_id, status', 'cliente_id', ids),
           supabase.from('lojas_vendas')
@@ -458,18 +459,23 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             .then(r => { if (r.error) throw r.error; return r.data || []; }),
           fetchEnviadoSet(ids),
           fetchVendedoraSet(ids),
+          selectInBatches('vw_lojas_clientes_feedback', 'cliente_id, perfil_entrega, falso_novo', 'cliente_id', ids),
         ]);
 
         const cadMap = new Map(cads.map(c => [c.id, c]));
         const fbMap = new Map(fbs.map(f => [f.cliente_id, f]));
+        const dedupMap = new Map((dedup || []).map(d => [d.cliente_id, d]));
         const primeiraVenda = new Map();
         for (const v of vendas) if (!primeiraVenda.has(v.cliente_id)) primeiraVenda.set(v.cliente_id, v.valor_liquido);
 
         const out = [];
+        let ocult = 0;
         for (const k of elegiveis) {
           const status = fbMap.get(k.cliente_id)?.status || 'pendente';
           if (status === 'respondeu' || status === 'dispensado') continue;
           if (bloqueadosRef.current.has(k.cliente_id)) continue; // exclui bloqueado no carregamento
+          const dd = dedupMap.get(k.cliente_id);
+          if (dd && dd.falso_novo) { ocult++; continue; } // já era cliente (mesmo telefone em cadastro anterior)
           const c = cadMap.get(k.cliente_id) || {};
           out.push({
             cliente_id: k.cliente_id,
@@ -480,11 +486,12 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             primeira_compra: k.primeira_compra,
             valor_primeira: primeiraVenda.get(k.cliente_id) ?? null,
             lifetime_total: k.lifetime_total,
+            perfil: dd?.perfil_entrega || 'presencial',
             status,
             enviado: enviadoSet.has(k.cliente_id),
           });
         }
-        if (vivo) setLinhas(out);
+        if (vivo) { setLinhas(out); setOcultados(ocult); }
       } catch (err) { if (vivo) setErro(err.message || String(err)); }
       finally { if (vivo) setLoading(false); }
     })();
@@ -499,11 +506,19 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
   return (
     <div style={{ padding: '12px 16px' }}>
       <SectionTitle icon={MessageSquare}>{visiveis.length} cliente(s)</SectionTitle>
+      {ocultados > 0 && (
+        <div style={{ fontSize: fz(11), color: palette.inkMuted, margin: '-4px 0 8px' }}>
+          {ocultados} oculto(s): já eram clientes (mesmo telefone em cadastro anterior)
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {visiveis.map(l => (
           <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id} selecionado={selecionados.has(l.cliente_id)} onToggleSel={onToggleSel}>
             <Campo Icon={ShoppingCart} label="1ª compra" valor={l.valor_primeira != null ? fmtMoney(l.valor_primeira) : '—'} destaque />
             <Campo label="em" valor={fmtDataBR(l.primeira_compra)} />
+            <span style={{ fontSize: fz(10), padding: '1px 7px', borderRadius: 4, background: palette.beige, color: palette.inkSoft, fontWeight: 600 }}>
+              {l.perfil === 'distancia' ? 'a distância' : 'na loja'}
+            </span>
             <StatusBadge status={l.status} />
           </ClienteCard>
         ))}
@@ -670,25 +685,40 @@ function StatusBadge({ status }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
-  const templateName = etapa === 'inativo' ? 'Inativos_v1' : 'Feedback_v1';
-  const [body, setBody] = useState(null);
+  // feedback usa 2 templates (a distância × presencial); a Sofia escolhe por cliente.
+  // inativo usa 1 só. Nomes batem com os cadastrados na Meta (tudo minúsculo).
+  const tplDefs = etapa === 'inativo'
+    ? [{ name: 'inativos_v1', label: null }]
+    : [
+        { name: 'feedback_v1', label: 'A distância (fala de entrega)' },
+        { name: 'feedback_loja_v1', label: 'Presencial / na loja' },
+      ];
+
+  const [tpls, setTpls] = useState(null); // [{ name, label, body, ativo }]
   const [carregando, setCarregando] = useState(true);
   const [passo, setPasso] = useState('aprovar'); // aprovar | confirmar | progresso
   const [enviando, setEnviando] = useState(false);
   const [lote, setLote] = useState(null);
   const [prog, setProg] = useState(null); // { enviado, erro, pend, total }
+  const [resumo, setResumo] = useState(null); // resposta do enfileirar (pulados etc)
 
   useEffect(() => {
     (async () => {
+      const nomes = tplDefs.map(t => t.name);
       const { data } = await supabase
         .from('lojas_whats_templates')
-        .select('body_text, ativo')
-        .eq('name', templateName)
-        .maybeSingle();
-      setBody(data && data.ativo ? data.body_text : null);
+        .select('name, body_text, ativo')
+        .in('name', nomes);
+      const byName = new Map((data || []).map(d => [d.name, d]));
+      setTpls(tplDefs.map(t => ({
+        ...t,
+        body: byName.get(t.name)?.body_text || null,
+        ativo: !!byName.get(t.name)?.ativo,
+      })));
       setCarregando(false);
     })();
-  }, [templateName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etapa]);
 
   // polling do progresso da fila do lote
   useEffect(() => {
@@ -710,7 +740,7 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
     return () => { vivo = false; clearInterval(iv); };
   }, [passo, lote]);
 
-  const preview = body ? body.replaceAll('{{1}}', 'Maria').replaceAll('{{2}}', 'X') : null;
+  const faltando = (tpls || []).filter(t => !t.ativo || !t.body).map(t => t.name);
 
   const disparar = async () => {
     setEnviando(true);
@@ -721,7 +751,7 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
       });
       const d = await r.json();
       if (!r.ok || d.error) { alert('Erro: ' + (d.error || r.status)); return; }
-      setLote(d.lote_id); setPasso('progresso');
+      setResumo(d); setLote(d.lote_id); setPasso('progresso');
     } catch (e) {
       alert('Erro: ' + e.message);
     } finally {
@@ -750,10 +780,10 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
     </div>
   );
 
-  if (passo === 'aprovar' && !body) return wrap(
+  if (passo === 'aprovar' && faltando.length > 0) return wrap(
     <div>
       <div style={{ fontSize: fz(13), color: palette.alert, background: palette.alertSoft, padding: 12, borderRadius: 8, marginBottom: 14 }}>
-        O template <strong>{templateName}</strong> ainda não existe (ou está inativo). Crie e aprove ele na Meta primeiro.
+        Falta aprovar na Meta: <strong>{faltando.join(', ')}</strong>. Assim que ficar ativo, o envio libera sozinho.
       </div>
       <button onClick={onClose} style={{ ...btnBase, width: '100%', background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>Fechar</button>
     </div>
@@ -761,14 +791,21 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
 
   if (passo === 'aprovar') return wrap(
     <div>
-      <div style={{ fontSize: fz(12), color: palette.inkSoft, marginBottom: 6 }}>
-        Mensagem escolhida pela Sofia (<strong>{templateName}</strong>):
-      </div>
-      <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: 12,
-        fontSize: fz(13), color: palette.ink, whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: 240, overflowY: 'auto', marginBottom: 14 }}>
-        {preview}
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
+      {etapa !== 'inativo' && (
+        <div style={{ fontSize: fz(12), color: palette.inkSoft, marginBottom: 10, lineHeight: 1.5 }}>
+          A Sofia escolhe a versão por cliente: quem comprou a distância (ou pela Vesti) recebe a que fala de entrega; quem comprou na loja recebe a neutra. Quem já era cliente (mesmo telefone em cadastro anterior) é pulado.
+        </div>
+      )}
+      {tpls.map(t => (
+        <div key={t.name} style={{ marginBottom: 12 }}>
+          {t.label && <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 4, fontWeight: 600 }}>{t.label}</div>}
+          <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: 12,
+            fontSize: fz(13), color: palette.ink, whiteSpace: 'pre-wrap', lineHeight: 1.5, maxHeight: 200, overflowY: 'auto' }}>
+            {t.body.replaceAll('{{1}}', 'Maria')}
+          </div>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
         <button onClick={onClose} style={{ ...btnBase, flex: 1, background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>Cancelar</button>
         <button onClick={() => setPasso('confirmar')} style={{ ...btnBase, flex: 1, background: palette.accent, color: palette.bg }}>Aprovar mensagem</button>
       </div>
@@ -778,8 +815,15 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
   if (passo === 'confirmar') return wrap(
     <div>
       <div style={{ fontSize: fz(15), color: palette.ink, textAlign: 'center', margin: '8px 0 16px', lineHeight: 1.5 }}>
-        <strong>{clienteIds.length}</strong> mensagem(ns) serão enviadas
-        <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>etapa {etapa} · template {templateName} · envio irreversível</div>
+        <strong>{clienteIds.length}</strong> cliente(s) selecionado(s)
+        <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
+          etapa {etapa} · {etapa === 'inativo' ? 'template inativos_v1' : 'a Sofia escolhe a versão por cliente'} · envio irreversível
+        </div>
+        {etapa !== 'inativo' && (
+          <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 4 }}>
+            quem já era cliente é pulado automaticamente
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={() => setPasso('aprovar')} disabled={enviando} style={{ ...btnBase, flex: 1, background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}` }}>Voltar</button>
@@ -806,10 +850,16 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
       <div style={{ fontSize: fz(18), fontWeight: 700, color: palette.ok }}>
         {enviado} enviada(s) com sucesso
       </div>
-      <div style={{ fontSize: fz(13), color: palette.inkSoft, margin: '4px 0 14px' }}>
+      <div style={{ fontSize: fz(13), color: palette.inkSoft, margin: '4px 0 8px' }}>
         {done ? `de ${total} · concluído` : `enviando… ${enviado + erro}/${total}`}
         {erro > 0 && <span style={{ color: palette.alert }}> · {erro} erro(s)</span>}
       </div>
+      {resumo && (resumo.pulados_ja_cliente > 0 || resumo.pulados_template_inativo > 0) && (
+        <div style={{ fontSize: fz(12), color: palette.inkMuted, marginBottom: 12 }}>
+          {resumo.pulados_ja_cliente > 0 && <span>{resumo.pulados_ja_cliente} pulado(s): já eram clientes</span>}
+          {resumo.pulados_template_inativo > 0 && <span> · {resumo.pulados_template_inativo} sem template ativo</span>}
+        </div>
+      )}
       <button onClick={onEnviado} style={{ ...btnBase, width: '100%', background: palette.accent, color: palette.bg }}>
         {done ? 'Fechar' : 'Fechar (continua em segundo plano)'}
       </button>
