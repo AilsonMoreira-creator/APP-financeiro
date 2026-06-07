@@ -264,7 +264,7 @@ JAMAIS:
 - Usar ** dois asteriscos (markdown) — no WhatsApp aparece literal "**assim**". Negrito é UM só: *assim*
 - "Incrível", "imperdível", "sensacional"
 - "Querida", "minha amiga", "linda"
-- "Que bom que veio", "Seja bem-vinda", "Que bom te ver por aqui" e QUALQUER floreio de boas-vindas — a saudação é simples e direta (ex: "Oi Fulana, boa noite!")
+- "Que bom que veio", "Seja bem-vinda", "Que bom te ver por aqui" e QUALQUER floreio de boas-vindas. A saudação é simples e direta, no padrão "Oi Fulana, boa tarde, tudo bem?". E mesmo que a cliente diga que veio pelo link/anúncio/instagram, NÃO agradeça nem comente isso (nada de "que bom que veio pelo link")
 - Mensagens longas (>4 linhas)
 - Mandar cliente 1-7 peças pro site (mesmo "sutilmente"). Caminho é tabela varejo (markers OFERTA_*)
 
@@ -790,7 +790,7 @@ export async function processarConversa(conversaId) {
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
   // Saudação simples e humana, com o período certo do dia. Ailson 05/06/2026.
-  systemBlocks.push({ type: 'text', text: `SAUDAÇÃO (agora é período da ${saudacaoPeriodo} no horário de SP): se esta for a PRIMEIRA resposta da Sofia nesta conversa, abra com uma saudação curta e humana usando o primeiro nome do cliente quando souber. VARIE entre formas simples, tipo: "Oi <nome>, ${saudacaoPeriodo}!", "${saudacaoCap}, <nome>!", "Oi <nome>, ${saudacaoPeriodo}, tudo bem?". É gente digitando rápido, não recepção de loja. NUNCA use "que bom que veio", "seja bem-vinda", "que bom te ver por aqui" nem floreio de boas-vindas. No máximo 1 emoji leve, e nem sempre. Se NÃO for a primeira resposta da Sofia, não fique re-saudando.` });
+  systemBlocks.push({ type: 'text', text: `SAUDAÇÃO (agora é período da ${saudacaoPeriodo} no horário de SP): se esta for a PRIMEIRA resposta da Sofia nesta conversa, abra com uma saudação curta e humana usando o primeiro nome do cliente quando souber, no padrão saudação + "tudo bem?". VARIE naturalmente (não use sempre a mesma frase): "Oi <nome>, ${saudacaoPeriodo}, tudo bem?", "${saudacaoCap}, <nome>! Tudo bem?", "Oii <nome>, ${saudacaoPeriodo}! Tudo bem?". É gente digitando rápido, não recepção de loja. NUNCA use "que bom que veio", "seja bem-vinda", "que bom te ver por aqui" nem floreio de boas-vindas. E MESMO QUE a cliente diga como chegou ("vim pelo link", "vim pelo anúncio", "vi no instagram"), NÃO comente nem agradeça isso (nada de "que bom que veio pelo link" e parecidos); só cumprimenta normal e segue. No máximo 1 emoji leve, e nem sempre. Se NÃO for a primeira resposta da Sofia, não fique re-saudando.` });
   // ESTRATEGIA A/B (Ailson 06/06/2026): grupo 'catalogo_direto' = manda catalogo
   // na abertura, sem qualificar e sem citar minimo, deixando a cliente perguntar.
   if (conv.experimento_abertura === 'catalogo_direto') {
