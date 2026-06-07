@@ -475,7 +475,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
           if (status === 'respondeu' || status === 'dispensado') continue;
           if (bloqueadosRef.current.has(k.cliente_id)) continue; // exclui bloqueado no carregamento
           const dd = dedupMap.get(k.cliente_id);
-          if (dd && dd.falso_novo) { ocult++; continue; } // já era cliente (mesmo telefone ou grupo em cadastro anterior)
+          if (dd && dd.falso_novo) { ocult++; continue; } // já era cliente (mesmo telefone, grupo ou CNPJ em cadastro anterior)
           const c = cadMap.get(k.cliente_id) || {};
           out.push({
             cliente_id: k.cliente_id,
@@ -508,7 +508,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
       <SectionTitle icon={MessageSquare}>{visiveis.length} cliente(s)</SectionTitle>
       {ocultados > 0 && (
         <div style={{ fontSize: fz(11), color: palette.inkMuted, margin: '-4px 0 8px' }}>
-          {ocultados} oculto(s): já eram clientes (mesmo telefone ou grupo em cadastro anterior)
+          {ocultados} oculto(s): já eram clientes (mesmo telefone, grupo ou CNPJ em cadastro anterior)
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -793,7 +793,7 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
     <div>
       {etapa !== 'inativo' && (
         <div style={{ fontSize: fz(12), color: palette.inkSoft, marginBottom: 10, lineHeight: 1.5 }}>
-          A Sofia escolhe a versão por cliente: quem comprou a distância (ou pela Vesti) recebe a que fala de entrega; quem comprou na loja recebe a neutra. Quem já era cliente (mesmo telefone ou grupo em cadastro anterior) é pulado.
+          A Sofia escolhe a versão por cliente: quem comprou a distância (ou pela Vesti) recebe a que fala de entrega; quem comprou na loja recebe a neutra. Quem já era cliente (mesmo telefone, grupo ou CNPJ em cadastro anterior) é pulado.
         </div>
       )}
       {tpls.map(t => (
