@@ -1,21 +1,23 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // /api/lojas-whats-cron-catalogo
 // ═══════════════════════════════════════════════════════════════════════════
-// Roda 1x por hora. Dois estagios:
+// Roda de hora em hora + uma rodada dedicada às 19:30 BRT. Dois estágios:
 //
-// FASE 1 — 6h apos catalogo enviado, cliente nao respondeu:
-//   - Sofia gera msg automatica ("ficou alguma duvida? conseguiu olhar?")
-//   - Envia DIRETO via Meta (sem passar por Tamara — Ailson 27/05/2026)
-//   - Marca catalogo_followup_6h_em=NOW
+// FASE 1 — follow-up do catálogo (Ailson 08/06/2026):
+//   - Dispara às 19:30 do mesmo dia se o catálogo foi recebido ANTES das 18h;
+//     se recebido às 18h ou depois, dispara às 9h do dia seguinte (fluxo antigo).
+//   - Objetivo: pegar a lojista num horário que ela tem mais tempo pra olhar.
+//   - Só dentro da janela de 24h (free text). Se já passou, perde o envio (a
+//     FASE 2 manda o HSM).
+//   - Mensagem padrão: "Aproveita esse minutinho pra olhar com calma nosso
+//     catálogo 😉". Vesti mantém pergunta do link + PDF.
+//   - Envia DIRETO via Meta (sem passar por Tamara). Marca catalogo_followup_6h_em.
 //
-// FASE 2 — 24h apos a msg de 6h, cliente ainda nao respondeu:
-//   - Move conversa pra etapa='follow_up' com tag '1d'
-//   - cron-followup ja existente pega normal pra gerar msg de retomada
+// FASE 2 — 24h após o catálogo, cliente ainda não respondeu:
+//   - Envia o HSM followup_catalogo_24h_v1 e move pra etapa='follow_up' (tag 1d).
 //
-// Webhook reseta catalogo_enviado_em e catalogo_followup_6h_em quando
-// cliente manda QUALQUER msg — entao cron so pega conversas silentes.
-//
-// Ailson 27/05/2026
+// Webhook reseta catalogo_enviado_em e catalogo_followup_6h_em quando o cliente
+// manda QUALQUER msg — então o cron só pega conversas silentes.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, log, logErro, contarSofiaSemResposta, getConfig } from './_lojas-whats-helpers.js';
@@ -43,6 +45,21 @@ function escolherMsg6h(conversaId, nomeCliente) {
     : template.replace('Oi {nome}!', 'Oi!').replace('Oi {nome},', 'Oi, tudo bem?').replace('Olá {nome}!', 'Olá!');
 }
 
+// Mensagem do follow-up de catálogo padrão (novo horário 19:30/9h). Ailson 08/06/2026.
+const MSG_CATALOGO_FOLLOWUP = 'Aproveita esse minutinho pra olhar com calma nosso catálogo 😉';
+
+// Horário agendado do follow-up de catálogo (Date UTC):
+//   catálogo recebido < 18h BRT  → MESMO dia 19:30 BRT (22:30 UTC)
+//   catálogo recebido >= 18h BRT → dia SEGUINTE 09:00 BRT (12:00 UTC) [fluxo antigo]
+// BRT = UTC-3 fixo (sem horário de verão). Ailson 08/06/2026.
+function agendadoPara(catalogoEnviadoEm) {
+  const brt = new Date(new Date(catalogoEnviadoEm).getTime() - 3 * 3600 * 1000);
+  const y = brt.getUTCFullYear(), m = brt.getUTCMonth(), d = brt.getUTCDate(), h = brt.getUTCHours();
+  return h < 18
+    ? new Date(Date.UTC(y, m, d, 22, 30, 0))     // mesmo dia 19:30 BRT
+    : new Date(Date.UTC(y, m, d + 1, 12, 0, 0));  // dia seguinte 09:00 BRT
+}
+
 export default async function handler(req, res) {
   const ua = req.headers?.['user-agent'] || '';
   const ehCron = ua.startsWith('vercel-cron') || !!req.headers?.['x-vercel-cron'];
@@ -62,7 +79,6 @@ export default async function handler(req, res) {
     const dentroJanela9_20 = horaBRT >= 9 && horaBRT < 20 && !ehDomingo;
 
     const agora = new Date();
-    const cutoff6h  = new Date(Date.now() - 6  * 60 * 60 * 1000).toISOString();
     const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     // ─── FASE 1 — 6h, dispara msg automatica ──────────────────────────────
@@ -74,9 +90,8 @@ export default async function handler(req, res) {
     } else {
       const { data: f1Data, error: errF1 } = await supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, etapa, catalogo_formato')
+        .select('id, telefone, nome_cliente, etapa, catalogo_formato, catalogo_enviado_em')
         .not('catalogo_enviado_em', 'is', null)
-        .lt('catalogo_enviado_em', cutoff6h)
         .is('catalogo_followup_6h_em', null)
         .eq('catalogo_followup_pausado', false)
         .in('etapa', ['conversando', 'quente']);
@@ -99,6 +114,19 @@ export default async function handler(req, res) {
 
       for (const conv of f1) {
         try {
+          // Agendamento novo (Ailson 08/06/2026): em vez de 6h, manda às 19:30
+          // (catálogo recebido antes das 18h) ou 9h do dia seguinte (>= 18h).
+          const sched = agendadoPara(conv.catalogo_enviado_em);
+          if (agora < sched) {
+            f1Resultados.push({ id: conv.id, motivo: 'aguardando_horario', agendado: sched.toISOString() });
+            continue;
+          }
+          // Free text só sai dentro da janela de 24h. Se já passou, perde o envio
+          // (a FASE 2 manda o HSM). Ailson 08/06/2026.
+          if (agora.getTime() - new Date(conv.catalogo_enviado_em).getTime() > 24 * 60 * 60 * 1000) {
+            f1Resultados.push({ id: conv.id, motivo: 'fora_da_janela_24h' });
+            continue;
+          }
           // Regra Ailson 30/05/2026: catálogo + 6h + 24h = 3 toques legítimos.
           // Jamais a 4a sem resposta (>= 3 sem resposta -> nao envia mais).
           if (await contarSofiaSemResposta(conv.id) >= 3) {
@@ -176,7 +204,7 @@ export default async function handler(req, res) {
             f1Resultados.push({ id: conv.id, tel: conv.telefone, ok: true, vesti: true });
             log('cron-catalogo/6h', `conv=${conv.id} VESTI 6h (pergunta + PDF) enviado`);
           } else {
-            const texto = escolherMsg6h(conv.id, conv.nome_cliente);
+            const texto = MSG_CATALOGO_FOLLOWUP;
             const r = await enviarTexto(conv.telefone, texto);
             const metaMsgId = r?.messages?.[0]?.id || null;
             if (!metaMsgId) throw new Error('meta_sem_message_id');
@@ -209,8 +237,8 @@ export default async function handler(req, res) {
     const { data: f2, error: errF2 } = await supabase
       .from('lojas_whats_conversas')
       .select('id, telefone, nome_cliente, etapa')
-      .not('catalogo_followup_6h_em', 'is', null)
-      .lt('catalogo_followup_6h_em', cutoff24h)
+      .not('catalogo_enviado_em', 'is', null)
+      .lt('catalogo_enviado_em', cutoff24h)
       .eq('catalogo_followup_pausado', false)
       .in('etapa', ['conversando', 'quente']);
     if (errF2) throw errF2;
@@ -250,7 +278,7 @@ export default async function handler(req, res) {
             })
             .eq('id', conv.id)
             .in('etapa', ['conversando', 'quente'])
-            .not('catalogo_followup_6h_em', 'is', null)
+            .not('catalogo_enviado_em', 'is', null)
             .select('id');
           if (!claimed?.length) {
             f2Resultados.push({ id: conv.id, motivo: 'ja_claimed' });

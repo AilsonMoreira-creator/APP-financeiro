@@ -232,6 +232,10 @@
       "schedule": "15 * * * *"
     },
     {
+      "path": "/api/lojas-whats-cron-catalogo",
+      "schedule": "30 22 * * *"
+    },
+    {
       "path": "/api/site-amicia-drive-cron",
       "schedule": "0 11 * * *"
     },

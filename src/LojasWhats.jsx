@@ -4821,18 +4821,20 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           seguinte. Ailson 29/05/2026. */}
       {conversa.catalogo_enviado_em && !['vendeu', 'perdida'].includes(conversa.etapa) && (() => {
         const fase24 = !!conversa.catalogo_followup_6h_em;
-        const baseMs = fase24
-          ? new Date(conversa.catalogo_followup_6h_em).getTime() + 24 * 3600 * 1000
-          : new Date(conversa.catalogo_enviado_em).getTime() + 6 * 3600 * 1000;
-        const base = new Date(baseMs);
-        const horaBRT = parseInt(base.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }), 10);
-        let alvo = base; let adiado = false;
-        if (horaBRT < 9 || horaBRT >= 20) {
-          adiado = true;
-          const d = new Date(base);
-          if (horaBRT >= 20) d.setUTCDate(d.getUTCDate() + 1);
-          const dataBRT = d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-          alvo = new Date(`${dataBRT}T09:00:00-03:00`);
+        // FASE 1 pendente: 19:30 do mesmo dia (catálogo < 18h BRT) ou 9h do dia
+        // seguinte (>= 18h). FASE 2: HSM 24h após o catálogo. Ailson 08/06/2026.
+        let alvo; let adiado = false;
+        if (fase24) {
+          alvo = new Date(new Date(conversa.catalogo_enviado_em).getTime() + 24 * 3600 * 1000);
+        } else {
+          const recvBRT = new Date(new Date(conversa.catalogo_enviado_em).getTime() - 3 * 3600 * 1000);
+          const y = recvBRT.getUTCFullYear(), m = recvBRT.getUTCMonth(), d = recvBRT.getUTCDate(), h = recvBRT.getUTCHours();
+          if (h < 18) {
+            alvo = new Date(Date.UTC(y, m, d, 22, 30, 0));      // 19:30 BRT
+          } else {
+            alvo = new Date(Date.UTC(y, m, d + 1, 12, 0, 0));    // 9h BRT dia seguinte
+            adiado = true;
+          }
         }
         const quando = alvo.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
         const pausado = conversa.catalogo_followup_pausado;
@@ -4848,7 +4850,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
               <span style={{ fontSize: fz(13) }}>{pausado ? '🔕' : '⏰'}</span>
               {pausado
                 ? <span>Follow-up do catálogo <b>desmarcado</b> — não vai sair automático</span>
-                : <span>Follow-up <b>{fase24 ? '24h' : '6h'}</b> automático {adiado ? 'previsto' : '~'} <b>{quando}</b>{adiado ? ' (fora do horário → foi pra 9h)' : ''}</span>}
+                : <span>Follow-up {fase24 ? <b>final 24h</b> : 'do catálogo'} automático ~ <b>{quando}</b>{adiado && !fase24 ? ' (recebido após 18h → vai às 9h)' : ''}</span>}
             </span>
             <button onClick={toggleCatalogoFollowup} style={{
               marginLeft: 'auto',
