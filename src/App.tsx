@@ -8000,6 +8000,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
       gasto,
       acessos:lpv,
       cpc:lpv>0?gasto/lpv:0,
+      cpcLink:cliques>0?gasto/cliques:0,
       compras,
       conv:lpv>0?(compras/lpv)*100:0,
       cpa:compras>0?gasto/compras:0,
@@ -8034,6 +8035,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
     vendas:acc.vendas+l.vendas,impressoes:acc.impressoes+l.impressoes,cliques:acc.cliques+l.cliques,carrinhos:acc.carrinhos+l.carrinhos,
   }),{gasto:0,acessos:0,compras:0,vendas:0,impressoes:0,cliques:0,carrinhos:0});
   const totalCpc=totals.acessos>0?totals.gasto/totals.acessos:0;
+  const totalCpcLink=totals.cliques>0?totals.gasto/totals.cliques:0;
   const totalConv=totals.acessos>0?(totals.compras/totals.acessos)*100:0;
   const totalCpa=totals.compras>0?totals.gasto/totals.compras:0;
   const totalRoas=totals.gasto>0?totals.vendas/totals.gasto:0;
@@ -8041,8 +8043,9 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
   // Totais período anterior (mesmas campanhas visíveis) pra Δ% do TOTAL
   const totalsAnt=Object.values(linhasAntMap)
     .filter(l=>!ocultarPausadas||l.status==='ACTIVE')
-    .reduce((acc,l)=>({gasto:acc.gasto+l.gasto,acessos:acc.acessos+l.acessos,compras:acc.compras+l.compras}),{gasto:0,acessos:0,compras:0});
+    .reduce((acc,l)=>({gasto:acc.gasto+l.gasto,acessos:acc.acessos+l.acessos,compras:acc.compras+l.compras,cliques:acc.cliques+l.cliques}),{gasto:0,acessos:0,compras:0,cliques:0});
   const totalCpcAnt=totalsAnt.acessos>0?totalsAnt.gasto/totalsAnt.acessos:0;
+  const totalCpcLinkAnt=totalsAnt.cliques>0?totalsAnt.gasto/totalsAnt.cliques:0;
   const totalConvAnt=totalsAnt.acessos>0?(totalsAnt.compras/totalsAnt.acessos)*100:0;
   const totalCpaAnt=totalsAnt.compras>0?totalsAnt.gasto/totalsAnt.compras:0;
 
@@ -8129,7 +8132,8 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                 <th style={{...th,textAlign:'left'}}>Campanha</th>
                 <th style={{...th,textAlign:'right'}}>Gasto</th>
                 <th style={{...th,textAlign:'right'}}>Acessos</th>
-                <th style={{...th,textAlign:'right'}}>CPC</th>
+                <th style={{...th,textAlign:'right'}}>Custo/acesso</th>
+                <th style={{...th,textAlign:'right'}}>CPC link</th>
                 <th style={{...th,textAlign:'right'}}>Compras</th>
                 <th style={{...th,textAlign:'right'}}>Conv%</th>
                 <th style={{...th,textAlign:'right'}}>CPA</th>
@@ -8138,10 +8142,10 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
             </thead>
             <tbody>
               {loading&&!dados&&(
-                <tr><td colSpan={9} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Carregando dados Meta Ads...</td></tr>
+                <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Carregando dados Meta Ads...</td></tr>
               )}
               {!loading&&linhasFiltradas.length===0&&!erro&&(
-                <tr><td colSpan={9} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>
+                <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>
                   {ocultarPausadas?'Nenhuma campanha ativa no período. Desmarque "Ocultar pausadas" pra ver todas.':'Nenhuma campanha no período.'}
                 </td></tr>
               )}
@@ -8161,6 +8165,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                     {cellNum(`R$ ${fmtR(l.gasto)}`,ant?delta(l.gasto,ant.gasto,false):null)}
                     {cellNum(fmtI(l.acessos),ant?delta(l.acessos,ant.acessos,true):null)}
                     {cellNum(`R$ ${fmtR(l.cpc)}`,ant?delta(l.cpc,ant.cpc,false):null)}
+                    {cellNum(`R$ ${fmtR(l.cpcLink)}`,ant?delta(l.cpcLink,ant.cpcLink,false):null)}
                     {cellNum(fmtI(l.compras),ant?delta(l.compras,ant.compras,true):null)}
                     {cellNum(`${l.conv.toFixed(2)}%`,ant?delta(l.conv,ant.conv,true):null)}
                     {cellNum(l.cpa>0?`R$ ${fmtR(l.cpa)}`:'—',ant&&l.cpa>0&&ant.cpa>0?delta(l.cpa,ant.cpa,false):null)}
@@ -8174,6 +8179,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                     {cellNum(`R$ ${fmtR(a.gasto)}`)}
                     {cellNum(fmtI(a.acessos))}
                     {cellNum(`R$ ${fmtR(a.cpc)}`)}
+                    {cellNum(`R$ ${fmtR(a.cpcLink)}`)}
                     {cellNum(fmtI(a.compras))}
                     {cellNum(`${a.conv.toFixed(2)}%`)}
                     {cellNum(a.cpa>0?`R$ ${fmtR(a.cpa)}`:'—')}
@@ -8191,6 +8197,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                   {cellNum(<b>R$ {fmtR(totals.gasto)}</b>,totalsAnt.gasto>0?delta(totals.gasto,totalsAnt.gasto,false):null)}
                   {cellNum(<b>{fmtI(totals.acessos)}</b>,totalsAnt.acessos>0?delta(totals.acessos,totalsAnt.acessos,true):null)}
                   {cellNum(<b>R$ {fmtR(totalCpc)}</b>,totalCpcAnt>0?delta(totalCpc,totalCpcAnt,false):null)}
+                  {cellNum(<b>R$ {fmtR(totalCpcLink)}</b>,totalCpcLinkAnt>0?delta(totalCpcLink,totalCpcLinkAnt,false):null)}
                   {cellNum(<b>{fmtI(totals.compras)}</b>,totalsAnt.compras>0?delta(totals.compras,totalsAnt.compras,true):null)}
                   {cellNum(<b>{totalConv.toFixed(2)}%</b>,totalConvAnt>0?delta(totalConv,totalConvAnt,true):null)}
                   {cellNum(<b>{totalCpa>0?`R$ ${fmtR(totalCpa)}`:'—'}</b>,totalCpaAnt>0&&totalCpa>0?delta(totalCpa,totalCpaAnt,false):null)}
