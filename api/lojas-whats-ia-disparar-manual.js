@@ -87,18 +87,33 @@ export default async function handler(req, res) {
     // (Ailson 27/05/2026 — substituiu o modal de templates tecnicos)
     const { data: conv } = await supabase
       .from('lojas_whats_conversas')
-      .select('id, telefone, nome_cliente, qtd_pecas, catalogo_enviado_em')
+      .select('id, telefone, nome_cliente, qtd_pecas, catalogo_enviado_em, etapa, cliente_id')
       .eq('id', conversa_id)
       .maybeSingle();
     if (!conv) return res.status(404).json({ error: 'conversa_nao_encontrada' });
 
-    // Regra de escolha:
-    //  catalogo enviado <48h → followup_catalogo_24h_v1
-    //  qtd_pecas >= 1       → carrinho_abandonado_site_amicia_v2
-    //  else (so visitou)    → visita_site_amicia_v1
+    // Regra de escolha do template:
+    //  - etapa 'feedback' → template de feedback por perfil (distância × presencial)
+    //  - etapa 'inativo'  → inativos_v1
+    //  - catalogo enviado <48h → followup_catalogo_24h_v1
+    //  - qtd_pecas >= 1       → carrinho_abandonado_site_amicia_v2
+    //  - else (so visitou)    → visita_site_amicia_v1
     const agora48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
     let templateName;
-    if (conv.catalogo_enviado_em && new Date(conv.catalogo_enviado_em) > agora48h) {
+    if (conv.etapa === 'feedback') {
+      let distancia = false;
+      if (conv.cliente_id) {
+        const { data: pf } = await supabase
+          .from('vw_lojas_clientes_feedback')
+          .select('perfil_entrega')
+          .eq('cliente_id', conv.cliente_id)
+          .maybeSingle();
+        distancia = pf?.perfil_entrega === 'distancia';
+      }
+      templateName = distancia ? 'feedback_v1' : 'feedback_loja_v1';
+    } else if (conv.etapa === 'inativo') {
+      templateName = 'inativos_v1';
+    } else if (conv.catalogo_enviado_em && new Date(conv.catalogo_enviado_em) > agora48h) {
       templateName = 'followup_catalogo_24h_v1';
     } else if (Number(conv.qtd_pecas || 0) >= 1) {
       templateName = 'carrinho_abandonado_site_amicia_v2';
