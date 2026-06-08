@@ -219,6 +219,21 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
     }
   }
 
+  // OFERTA varejo/upgrade: Sofia marca [OFERTA_VAREJO] (3-7 peças, varejo que
+  // vendemos) ou [OFERTA_UPGRADE] (1-2 peças, varejo abaixo do mínimo). Os dois
+  // são público varejo e alimentam a aba Varejo (sinal de qualidade de campanha).
+  // Remove o marcador do texto e seta oferta_varejo_em; o cron-varejo move pra
+  // aba em 24h sem resposta. Ailson 07/06/2026 — antes só o mensagem-enviar.js
+  // (envio manual) tratava, então a aba ficava sempre vazia no fluxo da Sofia.
+  let setOfertaVarejo = false;
+  if (sug.tipo !== 'primeira_mensagem') {
+    const reOferta = /^\s*\[(OFERTA_VAREJO|OFERTA_UPGRADE)\]\s*/i;
+    if (reOferta.test(textoFinalBruto)) {
+      setOfertaVarejo = true;
+      textoFinal = textoFinal.replace(reOferta, '').trim();
+    }
+  }
+
   // Envia via Meta
   let metaResp = null;
   let metaMsgId = null;
@@ -401,6 +416,8 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
     ultima_atividade_em: agora,
     atualizado_em: agora,
   };
+  // Marcador OFERTA detectado → dispara timer pra aba Varejo (cron-varejo, 24h).
+  if (setOfertaVarejo) updatesConv.oferta_varejo_em = agora;
   if (sug.tipo === 'primeira_mensagem') {
     updatesConv.etapa = 'enviada';
     updatesConv.primeira_msg_enviada_em = agora;
