@@ -836,6 +836,19 @@ export async function processarConversa(conversaId) {
   if (blocoPadroes) systemBlocks.push({ type: 'text', text: blocoPadroes });
   if (blocoObs) systemBlocks.push({ type: 'text', text: blocoObs });
 
+  // ─── ROTEIRO FEEDBACK PÓS-COMPRA (Ailson) ──────────────────────────────────
+  // Conversas etapa='feedback' são retorno de pesquisa pós-1ª-compra, NÃO venda.
+  // Vem por último pra ter precedência sobre blocos de oferta/qualificação acima.
+  if (conv.etapa === 'feedback') {
+    systemBlocks.push({ type: 'text', text:
+`ATENDIMENTO DE FEEDBACK PÓS-COMPRA (IMPORTANTE, vale acima de qualquer instrução anterior): esta conversa é um retorno de feedback sobre a primeira compra da cliente, NÃO é uma venda nova. IGNORE qualquer orientação acima de oferecer catálogo, qualificar a cliente (se revende, se tem loja) ou puxar venda. Aqui o objetivo é ouvir, acolher e deixar a cliente bem.
+- Responde curto e humano ao que ela disser. Se elogiar, agradece simples. Se relatar problema (entrega, peça, tamanho, cor), acolhe de verdade e diz que vai verificar ou encaminhar pra equipe, sem prometer o que não dá.
+- NÃO empurre produto. Só fale de peça se a própria cliente abrir gancho.
+
+SE A CLIENTE DISSER QUE JÁ COMPRA COM UMA VENDEDORA (ex: "eu já compro com a fulana", "já tenho minha vendedora", "falo com a [nome]"): NUNCA tente assumir a cliente nem competir com a vendedora. Deixa claro, de um jeito leve e natural, que vc está ali só pra AUXILIAR: tirar dúvida, ajudar no que precisar, e que pode até indicar modelos que casam bem com o que ela já levou. Mas reforça que QUEM CONTINUA cuidando dela e fechando a venda é a vendedora dela. Passa a impressão de que vc está ali pra somar e deixar a experiência dela melhor, não pra substituir ninguém. Espírito da fala (varie, não copie): "Ahh que bom que vc já é cliente da [nome]! Ela continua te atendendo certinho, viu. Eu fico por aqui só pra te ajudar no que precisar e, se quiser, te mostro umas peças que combinam com o que vc levou. Mas é sempre com ela que vc fecha 😊". Se souber o nome da vendedora pelo contexto, usa; senão fala genérico ("sua vendedora").
+NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por vc é melhor ou mais rápido. O tom é de apoio, não de captura.` });
+  }
+
   const cl = await chamarClaude({
     modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
     systemBlocks,

@@ -337,10 +337,27 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
   const [refreshTick, setRefreshTick] = useState(0);
   // Push notif desktop: 'desabilitado' (no SW/permission), 'inscrito', 'naoinscrito', null=loading
   const [pushStatus, setPushStatus] = useState(null);
+  // Badge "clientes em aberto": conversas do módulo Clientes (feedback/inativo) com msg do cliente ainda não vista.
+  const [clientesAbertos, setClientesAbertos] = useState(0);
 
   useEffect(() => {
     statusSubscriptionSofia().then(setPushStatus).catch(() => setPushStatus('desabilitado'));
   }, []);
+
+  useEffect(() => {
+    let vivo = true;
+    const contar = async () => {
+      const { count } = await supabase
+        .from('lojas_whats_conversas')
+        .select('id', { count: 'exact', head: true })
+        .in('etapa', ['feedback', 'inativo'])
+        .gt('unread_count', 0);
+      if (vivo) setClientesAbertos(count || 0);
+    };
+    contar();
+    const t = setInterval(contar, 30000);
+    return () => { vivo = false; clearInterval(t); };
+  }, [refreshTick]);
 
   const togglePush = async () => {
     if (pushStatus === 'inscrito') {
@@ -385,7 +402,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'aprendizado', label: 'Aprendizado', icon: Brain },
     { id: 'midias',      label: 'Mídias',      icon: Paperclip },
     { id: 'config',      label: 'Config',      icon: Settings },
-    { id: 'clientes',    label: 'Clientes',    icon: Users },
+    { id: 'clientes',    label: 'Clientes',    icon: Users, badge: clientesAbertos },
   ];
 
   return (

@@ -260,6 +260,13 @@ export const TabBar = ({ tabs, activeTab, onChange }) => (
         }}>
           <Icon size={sz(18)} />
           {tab.label}
+          {tab.badge > 0 && (
+            <span style={{
+              background: '#c0392b', color: '#fff', borderRadius: 999,
+              minWidth: 18, height: 18, padding: '0 5px', fontSize: fz(11), fontWeight: 700,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: 2,
+            }}>{tab.badge > 99 ? '99+' : tab.badge}</span>
+          )}
         </button>
       );
     })}
