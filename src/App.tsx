@@ -7920,6 +7920,10 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
   const [ocultarPausadas,setOcultarPausadas]=useState(true);
   const [dados,setDados]=useState(null);
   const [dadosAnt,setDadosAnt]=useState(null);
+  const [dadosAds,setDadosAds]=useState(null); // level=ad (criativos do período)
+  const [expandidas,setExpandidas]=useState(()=>new Set()); // campanhas expandidas (mostram criativos)
+  const [verTodosCriativos,setVerTodosCriativos]=useState(false);
+  const [ordemCriativos,setOrdemCriativos]=useState('vendas'); // 'vendas' | 'roas'
   const [loading,setLoading]=useState(false);
   const [erro,setErro]=useState(null);
   const [ultimaAtt,setUltimaAtt]=useState(null);
@@ -7955,13 +7959,16 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
       const{since,until}=calcJanela(periodo);
       const{since:sA,until:uA}=calcJanelaAnt(periodo);
       const base=`/api/meta-ads-analise?account=${META_ACCOUNT}&level=campaign`;
-      const[r1,r2]=await Promise.all([
+      const baseAd=`/api/meta-ads-analise?account=${META_ACCOUNT}&level=ad`;
+      const[r1,r2,r3]=await Promise.all([
         fetch(`${base}&since=${since}&until=${until}`).then(r=>r.json()),
         fetch(`${base}&since=${sA}&until=${uA}`).then(r=>r.json()),
+        fetch(`${baseAd}&since=${since}&until=${until}`).then(r=>r.json()),
       ]);
       if(!r1.ok){throw new Error(r1.error||r1.meta_error?.message||'Erro Meta API');}
       setDados(r1);
       setDadosAnt(r2.ok?r2:null);
+      setDadosAds(r3.ok?r3:null);
       setUltimaAtt(new Date());
     }catch(e){
       setErro(e.message||'Erro ao carregar');
@@ -7981,9 +7988,14 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
     const lpv=findAction(c.actions,'landing_page_view');
     const compras=findAction(c.actions,'omni_purchase');
     const gasto=parseFloat(c.spend)||0;
+    const impressoes=parseFloat(c.impressions)||0;
+    const cliques=findAction(c.actions,'link_click')||parseFloat(c.clicks)||0;
+    const carrinhos=findAction(c.actions,'omni_add_to_cart')||findAction(c.actions,'add_to_cart');
+    const vendas=findAction(c.action_values,'omni_purchase');
     return{
-      id:c.campaign_id,
-      nome:c.campaign_name,
+      id:c.ad_id||c.campaign_id,
+      campanhaId:c.campaign_id,
+      nome:c.ad_name||c.campaign_name,
       status:c.effective_status||c.status,
       gasto,
       acessos:lpv,
@@ -7991,6 +8003,11 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
       compras,
       conv:lpv>0?(compras/lpv)*100:0,
       cpa:compras>0?gasto/compras:0,
+      impressoes,
+      cliques,
+      carrinhos,
+      vendas,
+      roas:gasto>0?vendas/gasto:0,
     };
   };
 
@@ -8014,10 +8031,12 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
 
   const totals=linhasFiltradas.reduce((acc,l)=>({
     gasto:acc.gasto+l.gasto,acessos:acc.acessos+l.acessos,compras:acc.compras+l.compras,
-  }),{gasto:0,acessos:0,compras:0});
+    vendas:acc.vendas+l.vendas,impressoes:acc.impressoes+l.impressoes,cliques:acc.cliques+l.cliques,carrinhos:acc.carrinhos+l.carrinhos,
+  }),{gasto:0,acessos:0,compras:0,vendas:0,impressoes:0,cliques:0,carrinhos:0});
   const totalCpc=totals.acessos>0?totals.gasto/totals.acessos:0;
   const totalConv=totals.acessos>0?(totals.compras/totals.acessos)*100:0;
   const totalCpa=totals.compras>0?totals.gasto/totals.compras:0;
+  const totalRoas=totals.gasto>0?totals.vendas/totals.gasto:0;
 
   // Totais período anterior (mesmas campanhas visíveis) pra Δ% do TOTAL
   const totalsAnt=Object.values(linhasAntMap)
@@ -8026,6 +8045,14 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
   const totalCpcAnt=totalsAnt.acessos>0?totalsAnt.gasto/totalsAnt.acessos:0;
   const totalConvAnt=totalsAnt.acessos>0?(totalsAnt.compras/totalsAnt.acessos)*100:0;
   const totalCpaAnt=totalsAnt.compras>0?totalsAnt.gasto/totalsAnt.compras:0;
+
+  // Criativos (level=ad) do período: "ativos" = tiveram entrega (impressão/gasto) no período.
+  const criativos=(dadosAds?.data||[]).map(extrair).filter(a=>a.impressoes>0||a.gasto>0);
+  const adsPorCampanha={};
+  criativos.forEach(a=>{(adsPorCampanha[a.campanhaId]=adsPorCampanha[a.campanhaId]||[]).push(a);});
+  Object.values(adsPorCampanha).forEach(arr=>arr.sort((x,y)=>y.gasto-x.gasto));
+  const criativosOrdenados=[...criativos].sort((a,b)=>ordemCriativos==='roas'?b.roas-a.roas:b.vendas-a.vendas);
+  const toggleExpand=(id)=>setExpandidas(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
 
   const haMin=ultimaAtt?Math.floor((tickAgora-ultimaAtt.getTime())/60000):0;
   const haTxt=haMin<1?'agora':haMin===1?'há 1 min':`há ${haMin} min`;
@@ -8106,31 +8133,54 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                 <th style={{...th,textAlign:'right'}}>Compras</th>
                 <th style={{...th,textAlign:'right'}}>Conv%</th>
                 <th style={{...th,textAlign:'right'}}>CPA</th>
+                <th style={{...th,textAlign:'right'}}>ROAS</th>
               </tr>
             </thead>
             <tbody>
               {loading&&!dados&&(
-                <tr><td colSpan={8} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Carregando dados Meta Ads...</td></tr>
+                <tr><td colSpan={9} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Carregando dados Meta Ads...</td></tr>
               )}
               {!loading&&linhasFiltradas.length===0&&!erro&&(
-                <tr><td colSpan={8} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>
+                <tr><td colSpan={9} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>
                   {ocultarPausadas?'Nenhuma campanha ativa no período. Desmarque "Ocultar pausadas" pra ver todas.':'Nenhuma campanha no período.'}
                 </td></tr>
               )}
               {linhasFiltradas.map(l=>{
                 const ant=linhasAntMap[l.id];
-                return(
+                const ads=adsPorCampanha[l.id]||[];
+                const aberta=expandidas.has(l.id);
+                const rows=[
                   <tr key={l.id} style={{borderBottom:'1px solid #f0ebe4'}}>
                     <td style={{padding:'8px 4px',textAlign:'center'}}>{statusBadge(l.status)}</td>
-                    <td style={{...td,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={l.nome}>{l.nome}</td>
+                    <td style={{...td,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={l.nome}>
+                      {ads.length>0
+                        ?<span onClick={()=>toggleExpand(l.id)} style={{cursor:'pointer',color:'#4a7fa5',marginRight:6,userSelect:'none',fontWeight:700}}>{aberta?'▾':'▸'}</span>
+                        :<span style={{marginRight:6,color:'#cfc7bd'}}>·</span>}
+                      {l.nome}{ads.length>0&&<span style={{fontSize:10,color:'#a89f94',marginLeft:6}}>({ads.length})</span>}
+                    </td>
                     {cellNum(`R$ ${fmtR(l.gasto)}`,ant?delta(l.gasto,ant.gasto,false):null)}
                     {cellNum(fmtI(l.acessos),ant?delta(l.acessos,ant.acessos,true):null)}
                     {cellNum(`R$ ${fmtR(l.cpc)}`,ant?delta(l.cpc,ant.cpc,false):null)}
                     {cellNum(fmtI(l.compras),ant?delta(l.compras,ant.compras,true):null)}
                     {cellNum(`${l.conv.toFixed(2)}%`,ant?delta(l.conv,ant.conv,true):null)}
                     {cellNum(l.cpa>0?`R$ ${fmtR(l.cpa)}`:'—',ant&&l.cpa>0&&ant.cpa>0?delta(l.cpa,ant.cpa,false):null)}
+                    {cellNum(l.roas>0?`${l.roas.toFixed(2)}x`:'—')}
                   </tr>
-                );
+                ];
+                if(aberta)ads.forEach(a=>rows.push(
+                  <tr key={a.id} style={{borderBottom:'1px solid #f0ebe4',background:'#faf8f5'}}>
+                    <td></td>
+                    <td style={{...td,paddingLeft:24,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#6b7b86'}} title={a.nome}>↳ {a.nome}</td>
+                    {cellNum(`R$ ${fmtR(a.gasto)}`)}
+                    {cellNum(fmtI(a.acessos))}
+                    {cellNum(`R$ ${fmtR(a.cpc)}`)}
+                    {cellNum(fmtI(a.compras))}
+                    {cellNum(`${a.conv.toFixed(2)}%`)}
+                    {cellNum(a.cpa>0?`R$ ${fmtR(a.cpa)}`:'—')}
+                    {cellNum(a.roas>0?`${a.roas.toFixed(2)}x`:'—')}
+                  </tr>
+                ));
+                return rows;
               })}
             </tbody>
             {linhasFiltradas.length>0&&(
@@ -8144,11 +8194,80 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                   {cellNum(<b>{fmtI(totals.compras)}</b>,totalsAnt.compras>0?delta(totals.compras,totalsAnt.compras,true):null)}
                   {cellNum(<b>{totalConv.toFixed(2)}%</b>,totalConvAnt>0?delta(totalConv,totalConvAnt,true):null)}
                   {cellNum(<b>{totalCpa>0?`R$ ${fmtR(totalCpa)}`:'—'}</b>,totalCpaAnt>0&&totalCpa>0?delta(totalCpa,totalCpaAnt,false):null)}
+                  {cellNum(<b>{totalRoas>0?`${totalRoas.toFixed(2)}x`:'—'}</b>)}
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
+
+        {/* Ver todos os criativos ativos no período (ordenável) */}
+        <div style={{marginTop:14}}>
+          <button onClick={()=>setVerTodosCriativos(v=>!v)} style={{background:'#fff',border:'1px solid #e8e2da',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:12,color:'#4a7fa5',fontFamily:'Georgia,serif',fontWeight:600}}>
+            {verTodosCriativos?'▾':'▸'} Ver todos os criativos ({criativos.length})
+          </button>
+          {verTodosCriativos&&(
+            <div style={{marginTop:10,background:'#fff',border:'1px solid #e8e2da',borderRadius:8,overflow:'auto'}}>
+              <div style={{display:'flex',gap:6,padding:'10px 12px',borderBottom:'1px solid #f0ebe4',alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:11,color:'#8a9aa4'}}>Ordenar por:</span>
+                <button onClick={()=>setOrdemCriativos('vendas')} style={{background:ordemCriativos==='vendas'?'#2c3e50':'#fff',color:ordemCriativos==='vendas'?'#fff':'#2c3e50',border:'1px solid #e8e2da',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',fontFamily:'Georgia,serif'}}>Maiores vendas</button>
+                <button onClick={()=>setOrdemCriativos('roas')} style={{background:ordemCriativos==='roas'?'#2c3e50':'#fff',color:ordemCriativos==='roas'?'#fff':'#2c3e50',border:'1px solid #e8e2da',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',fontFamily:'Georgia,serif'}}>Maior ROAS</button>
+              </div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:680}}>
+                <thead><tr style={{background:'#4a7fa5',color:'#fff'}}>
+                  <th style={{...th,textAlign:'left'}}>Criativo</th>
+                  <th style={{...th,textAlign:'right'}}>Gasto</th>
+                  <th style={{...th,textAlign:'right'}}>Compras</th>
+                  <th style={{...th,textAlign:'right'}}>Vendas</th>
+                  <th style={{...th,textAlign:'right'}}>ROAS</th>
+                </tr></thead>
+                <tbody>
+                  {criativosOrdenados.map(a=>(
+                    <tr key={a.id} style={{borderBottom:'1px solid #f0ebe4'}}>
+                      <td style={{...td,maxWidth:320,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={a.nome}>{a.nome}</td>
+                      <td style={tdNum}>R$ {fmtR(a.gasto)}</td>
+                      <td style={tdNum}>{fmtI(a.compras)}</td>
+                      <td style={tdNum}>R$ {fmtR(a.vendas)}</td>
+                      <td style={tdNum}>{a.roas>0?`${a.roas.toFixed(2)}x`:'—'}</td>
+                    </tr>
+                  ))}
+                  {criativosOrdenados.length===0&&<tr><td colSpan={5} style={{padding:20,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Nenhum criativo com entrega no período.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Funil do período */}
+        {linhasFiltradas.length>0&&(()=>{
+          const etapas=[
+            {nome:'Visualizações',valor:totals.impressoes,cor:'#2c3e50'},
+            {nome:'Cliques',valor:totals.cliques,cor:'#3d6a8a'},
+            {nome:'Carrinhos',valor:totals.carrinhos,cor:'#4a7fa5'},
+            {nome:'Compras',valor:totals.compras,cor:'#7ba8c9'},
+          ];
+          const maxV=Math.max(...etapas.map(e=>e.valor),1);
+          return(
+            <div style={{marginTop:18,background:'#fff',border:'1px solid #e8e2da',borderRadius:8,padding:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:'#2c3e50',marginBottom:12}}>Funil do período</div>
+              <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'center'}}>
+                {etapas.map((e,i)=>{
+                  const larg=Math.max((e.valor/maxV)*100,10);
+                  const conv=i>0&&etapas[i-1].valor>0?(e.valor/etapas[i-1].valor)*100:null;
+                  return(
+                    <div key={e.nome} style={{width:`${larg}%`,minWidth:130}}>
+                      <div style={{background:e.cor,color:'#fff',borderRadius:6,padding:'10px 12px',textAlign:'center'}}>
+                        <div style={{fontSize:11,opacity:0.85}}>{e.nome}</div>
+                        <div style={{fontSize:16,fontWeight:700,fontFamily:'Calibri,\'Segoe UI\',Arial,sans-serif'}}>{fmtI(e.valor)}</div>
+                      </div>
+                      {conv!=null&&<div style={{textAlign:'center',fontSize:10,color:'#8a9aa4',margin:'1px 0'}}>↓ {conv.toFixed(1)}%</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         <div style={{marginTop:10,fontSize:10,color:'#a89f94',textAlign:'center',fontStyle:'italic'}}>
           Conta: Meluni B2C · Cache 5min no servidor · Δ% compara com período anterior de mesma duração
