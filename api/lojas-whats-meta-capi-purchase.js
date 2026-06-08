@@ -142,6 +142,7 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
     event_time: Math.floor(Date.now() / 1000),
     event_id: eventId,
     action_source: 'business_messaging',  // CTWA flow
+    messaging_channel: 'whatsapp',         // obrigatorio quando action_source=business_messaging (Meta subcode 2804063)
     user_data,
     custom_data: {
       currency: 'BRL',
@@ -273,6 +274,7 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
     event_time: Math.floor(Date.now() / 1000),
     event_id: eventId,
     action_source: 'business_messaging',
+    messaging_channel: 'whatsapp',         // obrigatorio quando action_source=business_messaging (Meta subcode 2804063)
     user_data,
     custom_data: {
       currency: 'BRL',
