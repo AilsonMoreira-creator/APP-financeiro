@@ -915,6 +915,8 @@ function AprovarTab({ userId, refreshTick, onReload }) {
   const [capDiario, setCapDiario] = useState(null);
   const [capInput, setCapInput] = useState('');
   const [salvandoCap, setSalvandoCap] = useState(false);
+  const [feedbackAuto, setFeedbackAuto] = useState('manual');
+  const [salvandoFb, setSalvandoFb] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -932,6 +934,9 @@ function AprovarTab({ userId, refreshTick, onReload }) {
         setCapDiario(jResumo.data?.cap_diario);
         setCapInput(String(jResumo.data?.cap_diario || ''));
       }
+      const { data: cfgFb } = await supabase
+        .from('lojas_whats_config').select('valor').eq('chave', 'feedback_auto').maybeSingle();
+      setFeedbackAuto(cfgFb?.valor === 'auto' ? 'auto' : 'manual');
     } catch (e) {
       setErroGlobal(`Erro: ${e.message}`);
     } finally {
@@ -957,6 +962,23 @@ function AprovarTab({ userId, refreshTick, onReload }) {
       alert(`Erro salvar cap: ${e.message}`);
     } finally {
       setSalvandoCap(false);
+    }
+  };
+
+  const salvarFeedbackAuto = async (modo) => {
+    if (modo === feedbackAuto) return;
+    setSalvandoFb(true);
+    try {
+      const { error } = await supabase
+        .from('lojas_whats_config')
+        .update({ valor: modo, updated_at: new Date().toISOString() })
+        .eq('chave', 'feedback_auto');
+      if (error) throw error;
+      setFeedbackAuto(modo);
+    } catch (e) {
+      alert(`Erro salvar modo feedback: ${e.message}`);
+    } finally {
+      setSalvandoFb(false);
     }
   };
 
@@ -1105,6 +1127,35 @@ function AprovarTab({ userId, refreshTick, onReload }) {
           >
             {salvandoCap ? '...' : 'Salvar'}
           </button>
+        </div>
+      </div>
+
+      {/* Disparo de feedback pós-1ª-compra: manual (aprovo) × automático */}
+      <div style={{
+        background: palette.surface, padding: 10, borderRadius: 10,
+        marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        border: `1px solid ${palette.beige}`,
+      }}>
+        <div style={{ fontSize: fz(13), color: palette.ink }}>
+          <strong>Feedback pós-compra:</strong> dispara no 15º dia da 1ª compra (domingo cai pra segunda).{' '}
+          {feedbackAuto === 'auto'
+            ? 'Hoje envia sozinho.'
+            : 'Hoje monta o lote e espera vc aprovar em 1 toque na aba Clientes.'}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['manual', 'auto'].map(m => (
+            <button key={m} onClick={() => salvarFeedbackAuto(m)} disabled={salvandoFb}
+              style={{
+                padding: '4px 12px', fontSize: fz(12), borderRadius: 6, cursor: 'pointer', fontFamily: FONT,
+                border: `1px solid ${palette.beige}`,
+                background: feedbackAuto === m ? palette.accent : palette.surface,
+                color: feedbackAuto === m ? '#fff' : palette.ink,
+                opacity: salvandoFb ? 0.6 : 1,
+              }}>
+              {m === 'manual' ? 'Manual (aprovo)' : 'Automático'}
+            </button>
+          ))}
         </div>
       </div>
 

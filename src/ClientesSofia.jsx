@@ -232,10 +232,13 @@ export default function ClientesTab({ userId, refreshTick }) {
         onRefresh={() => setTickLocal(t => t + 1)} />
 
       {subTab === 'feedback' && (
-        <FeedbackTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
-          bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
-          onAbrir={abrirChat} abrindoId={abrindoId}
-          selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
+        <>
+          <LoteFeedbackBanner tick={tick} onAprovado={() => setTickLocal(t => t + 1)} />
+          <FeedbackTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
+            bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
+            onAbrir={abrirChat} abrindoId={abrindoId}
+            selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
+        </>
       )}
       {subTab === 'inativos' && (
         <InativosTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
@@ -423,6 +426,69 @@ function ordenarLista(lista, modo) {
 // ═══════════════════════════════════════════════════════════════════════════
 // SUB-ABA FEEDBACK
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BANNER "LOTE DO DIA" — clientes que o cron deixou prontos no 15º dia.
+// Aprovação em 1 toque (libera todos de uma vez e dispara).
+// ═══════════════════════════════════════════════════════════════════════════
+function LoteFeedbackBanner({ tick, onAprovado }) {
+  const [n, setN] = useState(0);
+  const [enviando, setEnviando] = useState(false);
+  const [tickLocal, setTickLocal] = useState(0);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const { count } = await supabase
+        .from('clientes_sofia_fila')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'aguardando_aprovacao')
+        .eq('etapa', 'feedback');
+      if (vivo) setN(count || 0);
+    })();
+    return () => { vivo = false; };
+  }, [tick, tickLocal]);
+
+  if (n === 0) return null;
+
+  const aprovar = async () => {
+    if (enviando) return;
+    if (!window.confirm(`Aprovar e enviar o feedback pra ${n} cliente(s) agora?`)) return;
+    setEnviando(true);
+    try {
+      const r = await fetch('/api/lojas-whats-clientes-aprovar-lote', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'erro');
+      setN(0);
+      setTickLocal(t => t + 1);
+      if (onAprovado) onAprovado();
+    } catch (e) {
+      alert('Erro ao aprovar: ' + (e.message || e));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div style={{
+      margin: '12px 16px 0', padding: '12px 14px', borderRadius: 10,
+      background: palette.warnSoft, border: `1px solid ${palette.warn}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+      fontFamily: FONT,
+    }}>
+      <div style={{ fontSize: fz(13), color: palette.ink }}>
+        <b>Lote do dia:</b> {n} cliente(s) no 15º dia, prontos pra disparar o feedback.
+      </div>
+      <button onClick={aprovar} disabled={enviando} style={{
+        background: palette.ok, color: '#fff', border: 'none', borderRadius: 8,
+        padding: '8px 14px', fontSize: fz(13), fontWeight: 600, cursor: enviando ? 'not-allowed' : 'pointer',
+        fontFamily: FONT, opacity: enviando ? 0.6 : 1,
+      }}>
+        {enviando ? 'Enviando...' : 'Aprovar e enviar todos'}
+      </button>
+    </div>
+  );
+}
 
 function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, envio, vendFiltro }) {
   const [linhas, setLinhas] = useState([]);

@@ -98,6 +98,9 @@
     "api/lojas-whats-cron-capi-match.js": {
       "maxDuration": 300
     },
+    "api/lojas-whats-cron-feedback.js": {
+      "maxDuration": 300
+    },
     "api/lojas-whats-cron-responder.js": {
       "maxDuration": 120
     },
@@ -327,6 +330,10 @@
     {
       "path": "/api/lojas-whats-clientes-fila-cron",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/lojas-whats-cron-feedback",
+      "schedule": "0 13 * * *"
     }
   ]
 }
