@@ -970,6 +970,60 @@ async function aplicarUpsert(tipo, registros, importacaoId, extras = {}) {
       });
       const docToId = new Map(clientes.map(c => [c.documento, c.id]));
 
+      // ─── CRIA CLIENTE FALTANTE A PARTIR DA VENDA (Ailson 09/06/2026) ────
+      // BUG REAL: cliente cujo 1o pedido e posterior ao cadastro-mestre (congelado
+      // ~abr/2026) entrava SEM cliente_id (venda orfa) e sumia da carteira. Toda a
+      // regua de "cliente novo / janela de 15 dias" dependia do cadastro existir.
+      // Fix: se o documento (CPF 11 / CNPJ 14) da venda nao esta em lojas_clientes,
+      // cria o cliente aqui com os dados da propria venda. O recalc de KPI logo
+      // abaixo (clientesAfetados) ja preenche os KPIs do novo cliente.
+      const docsFaltantes = documentos.filter(d =>
+        !docToId.has(d) && (String(d).length === 11 || String(d).length === 14)
+      );
+      if (docsFaltantes.length) {
+        const faltSet = new Set(docsFaltantes);
+        const fonteCli = new Map(); // documento -> venda mais recente (p/ nome/whats/vendedora)
+        for (const r of filtrados) {
+          const d = r.documento_cliente_raw;
+          if (!d || !faltSet.has(d)) continue;
+          const atual = fonteCli.get(d);
+          if (!atual || (r.data_venda || '') > (atual.data_venda || '')) fonteCli.set(d, r);
+        }
+        const novosClientes = [...fonteCli.values()].map(r => {
+          const doc = r.documento_cliente_raw;
+          const wpp = String(r.cliente_whatsapp_raw || '').replace(/\D/g, '');
+          const razao = String(r.cliente_razao_raw || '').trim() || ('CLIENTE ' + doc);
+          return {
+            documento: doc,
+            tipo_documento: doc.length === 14 ? 'cnpj' : 'cpf',
+            razao_social: razao,
+            nome_fantasia: razao,
+            telefone_principal: wpp || null,
+            telefone_principal_origem: wpp.length >= 10 ? 'whatsapp' : null,
+            telefone_principal_valido: wpp.length >= 10,
+            loja_origem: r.loja || null,
+            sistema_origem: 'futura',
+            canal_cadastro: 'fisico',
+            vendedora_id: r.vendedora_id || null,
+            vendedor_a_definir: !r.vendedora_id,
+            fonte_atribuicao: 'venda_sem_cadastro',
+            data_atribuicao: new Date().toISOString(),
+            created_by: 'import_vendas',
+            updated_by: 'import_vendas',
+          };
+        });
+        try {
+          await upsertEmLotes('lojas_clientes', novosClientes, 'documento');
+          const criados = await selectInBatches('lojas_clientes', 'documento', docsFaltantes, {
+            select: 'id, documento',
+          });
+          criados.forEach(c => docToId.set(c.documento, c.id));
+          console.log(`[import-vendas] clientes criados a partir de venda: ${novosClientes.length}`);
+        } catch (e) {
+          console.warn('[import-vendas] erro criando clientes faltantes:', e?.message);
+        }
+      }
+
       filtrados.forEach(r => {
         r.cliente_id = docToId.get(r.documento_cliente_raw) || null;
       });
