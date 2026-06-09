@@ -854,16 +854,9 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
       const mesNum = mesDestino === 'seguinte' ? mesSeg : mesComp;
       escrever(mesNum, { [coluna]: valor.toFixed(2) });
     }
-    // Vale -> mês corrente (mesSeg), igual ao cron dia 20. Só se ainda não estiver lá.
-    if (valeValor > 0) {
-      const arr = payload.auxDataPorMes[mesSeg]?.['Funcionários'] || [];
-      const alvo = norm(f.nome_planilha || f.nome_display);
-      const linha = arr.find(r => norm(r.nome) === alvo);
-      if (linha) {
-        const valeAtual = parseFloat(linha.vale || 0);
-        if (Math.abs(valeAtual - valeValor) > 0.01) linha.vale = valeValor.toFixed(2);
-      }
-    }
+    // Vale: NAO escreve aqui. O vale e responsabilidade EXCLUSIVA do cron do dia 20
+    // (api/folha-aplicar-vales-cron.js), que grava no mes de competencia corrente.
+    // Marcar a folha como pago (inclusive de mes anterior) nao deve mexer no vale. Ailson 08/06/2026.
     return { r1, r2 };
   }
 
@@ -883,7 +876,7 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
       `Vai escrever na planilha:\n` +
       `• Salário R$ ${salarioTotal.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} (mês de pagamento)\n` +
       `• Comissão R$ ${comissaoTotal.toFixed(2).replace('.',',')} → ${nomeMes(competencia)} (competência)\n` +
-      (valeValor > 0 ? `• Vale R$ ${valeValor.toFixed(2).replace('.',',')} → ${nomeMes(compSeguinte)} (se ainda não estiver lá)\n` : '') +
+      (valeValor > 0 ? `• Vale R$ ${valeValor.toFixed(2).replace('.',',')} → lançado pelo cron no dia 20 (não mexo agora)\n` : '') +
       (acrescimosResumo ? acrescimosResumo + '\n' : '') +
       `\nContinuar?`
     )) return;
