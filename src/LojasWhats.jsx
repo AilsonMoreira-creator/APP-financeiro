@@ -4471,6 +4471,10 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   // descem pra linha de baixo; ao enviar/desfocar volta ao normal. Desktop intacto.
   const isDesktop = useIsDesktop();
   const textareaRef = useRef(null);
+  const inputBarRef = useRef(null);
+  // Mobile: ao focar, o campo expande "um pouco" (~3 linhas) pra digitar melhor;
+  // ao tocar fora da barra volta EXATAMENTE ao tamanho original. Ailson 08/06/2026.
+  const [msgFoco, setMsgFoco] = useState(false);
   // Mobile: campo de mensagem cresce conforme o texto e volta sozinho ao limpar,
   // SEM depender de foco/blur (no iOS o blur nao dispara ao tocar numa area vazia,
   // por isso o campo ficava grande e nao recolhia). Ailson 07/06/2026.
@@ -4480,6 +4484,18 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 140) + 'px';
   };
+  // Mobile: no iOS o blur NAO dispara ao tocar numa area vazia, entao o campo
+  // ficava expandido. Aqui, enquanto focado, qualquer toque FORA da barra de
+  // input forca o blur -> o campo recolhe ao original. Ailson 08/06/2026.
+  useEffect(() => {
+    if (isDesktop || !msgFoco) return;
+    const onDocDown = (ev) => {
+      const bar = inputBarRef.current;
+      if (bar && !bar.contains(ev.target)) textareaRef.current?.blur();
+    };
+    document.addEventListener('pointerdown', onDocDown, true);
+    return () => document.removeEventListener('pointerdown', onDocDown, true);
+  }, [isDesktop, msgFoco]);
   const fimChatRef = useRef(null);
 
   // ─── Trava de presença (Ailson 30/05/2026) ──────────────────────────────
@@ -5035,7 +5051,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
       )}
 
       {/* INPUT BAR */}
-      <div style={{
+      <div ref={inputBarRef} style={{
         padding: 10, background: palette.surface,
         borderTop: `1px solid ${palette.beige}`,
         display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0,
@@ -5203,14 +5219,23 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           ref={textareaRef}
           value={novoTexto}
           onChange={e => { setNovoTexto(e.target.value); ajustarAlturaMsg(); }}
+          onFocus={() => { if (!isDesktop) setMsgFoco(true); }}
+          onBlur={() => {
+            if (isDesktop) return;
+            setMsgFoco(false);
+            // vazio -> volta exatamente ao tamanho original (minHeight 36)
+            if (!novoTexto.trim() && textareaRef.current) textareaRef.current.style.height = '';
+          }}
           placeholder="Mensagem (Enter quebra linha · clica no botao verde pra enviar)"
           rows={1}
           style={{
             flex: 1, padding: '8px 12px', borderRadius: 18,
             border: `1px solid ${palette.beige}`, fontFamily: FONT_CHAT,
             fontSize: fz(13), color: palette.ink, background: palette.bg,
-            resize: 'none', minHeight: 36, maxHeight: isDesktop ? 120 : 140, lineHeight: 1.4,
+            resize: 'none', minHeight: (!isDesktop && msgFoco) ? 72 : 36,
+            maxHeight: isDesktop ? 120 : 140, lineHeight: 1.4,
             boxSizing: 'border-box', overflowY: 'auto',
+            transition: 'min-height 0.12s ease',
           }}
         />
         <button onClick={enviar} disabled={enviando || (!novoTexto.trim() && midiasAnexadas.length === 0)}
