@@ -8732,13 +8732,13 @@ function CardHome(props){
         {!ativo?<div style={{color:"#c8c0b8",fontSize:12}}>—</div>
         :isCusto?(
           show?<div style={{textAlign:"center"}}>
-            <div style={{fontFamily:_FN,fontSize:26,fontWeight:800,color:_S}}>{fmtRFT(custo)}</div>
+            <div style={{fontFamily:_FN,fontSize:"clamp(18px,5vw,26px)",fontWeight:800,color:_S}}>{fmtRFT(custo)}</div>
             <button onClick={function(){setShow(false);}} style={{marginTop:8,background:"none",border:"none",fontSize:10,color:_LB,cursor:"pointer",textDecoration:"underline"}}>ocultar</button>
           </div>
           :<button onClick={function(){setShow(true);}} style={{background:"#f7f4f0",border:"1px solid "+_BD,borderRadius:8,padding:"8px 14px",fontSize:12,color:"#6b7c8a",cursor:"pointer",fontFamily:_GE,fontWeight:600,whiteSpace:"nowrap"}}>Ver custo</button>
         )
-        :preco?<div style={{fontFamily:_FN,fontSize:28,fontWeight:800,color:_S,textAlign:"center"}}>{fmtRFT(preco)}</div>
-        :<div style={{textAlign:"center"}}><div style={{fontSize:9,color:_TX2,fontStyle:"italic",marginBottom:2}}>SUGERIDO</div><div style={{fontFamily:_FN,fontSize:22,fontWeight:700,color:_TX2,fontStyle:"italic"}}>{fmtRFT(sugerido)}</div></div>}
+        :preco?<div style={{fontFamily:_FN,fontSize:"clamp(18px,5vw,28px)",fontWeight:800,color:_S,textAlign:"center"}}>{fmtRFT(preco)}</div>
+        :<div style={{textAlign:"center"}}><div style={{fontSize:9,color:_TX2,fontStyle:"italic",marginBottom:2}}>SUGERIDO</div><div style={{fontFamily:_FN,fontSize:"clamp(15px,4.2vw,22px)",fontWeight:700,color:_TX2,fontStyle:"italic"}}>{fmtRFT(sugerido)}</div></div>}
       </div>
     </div>
   );
@@ -9426,7 +9426,7 @@ const FichaTecnicaContent=()=>{
         </div>)}
 
         {/* 4 Cards — SÓ EXIBEM, sem edição */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
           {CANAIS.map(function(canal){
             var isC=canal.id==="custo";var pr=produtoAtivo?(isC?custoSel:getPreco(produtoAtivo.ref,canal.id)):null;
             var sg=produtoAtivo&&!isC?sugeridos[canal.id]:null;
