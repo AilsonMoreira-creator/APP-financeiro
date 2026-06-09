@@ -1543,14 +1543,25 @@ const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
     return m;
   }, [vendedoras]);
 
+  // "Novos clientes" = 1a compra nos ultimos 30 dias (Ailson 09/06/2026)
+  const cutoffNovos = useMemo(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  }, []);
+  const ehNovo = useCallback((c) => {
+    const pc = c?.kpi?.primeira_compra;
+    return !!pc && String(pc).slice(0, 10) >= cutoffNovos;
+  }, [cutoffNovos]);
+
   // Filtra + ordena
   const clientesFiltrados = useMemo(() => {
     const buscaNorm = busca.trim().toLowerCase();
     let arr = (clientes || []).filter(c => {
       // Filtro vendedora
       if (filtroVendedoraId !== 'todas' && c.vendedora_id !== filtroVendedoraId) return false;
-      // Filtro status
-      if (filtroStatus !== 'todos' && c.statusAtual !== filtroStatus) return false;
+      // Filtro status (aba "novos" = 1a compra nos ultimos 30 dias)
+      if (filtroStatus === 'novos') { if (!ehNovo(c)) return false; }
+      else if (filtroStatus !== 'todos' && c.statusAtual !== filtroStatus) return false;
       // Busca por nome, apelido, cnpj/cpf
       if (buscaNorm) {
         const campos = [
@@ -1580,7 +1591,7 @@ const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
     }
 
     return arr;
-  }, [clientes, busca, filtroVendedoraId, filtroStatus, ordenacao]);
+  }, [clientes, busca, filtroVendedoraId, filtroStatus, ordenacao, ehNovo]);
 
   // Contadores por status (sempre com filtros de vendedora + busca aplicados,
   // mas SEM o filtro de status, pra mostrar quantos tem em cada categoria)
@@ -1600,6 +1611,7 @@ const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
     });
     return {
       todos: aplicavel.length,
+      novos: aplicavel.filter(ehNovo).length,
       ativo: aplicavel.filter(c => c.statusAtual === 'ativo').length,
       separandoSacola: aplicavel.filter(c => c.statusAtual === 'separandoSacola').length,
       atencao: aplicavel.filter(c => c.statusAtual === 'atencao').length,
@@ -1607,7 +1619,7 @@ const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
       inativo: aplicavel.filter(c => c.statusAtual === 'inativo').length,
       arquivo: aplicavel.filter(c => c.statusAtual === 'arquivo').length,
     };
-  }, [clientes, busca, filtroVendedoraId]);
+  }, [clientes, busca, filtroVendedoraId, ehNovo]);
 
   // Vendedoras ativas pra o select
   const vendedorasOrdenadas = useMemo(() => {
@@ -1685,6 +1697,7 @@ const CarteiraGeralTab = ({ lojas, onSelectCliente }) => {
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
         {[
           { id: 'todos', label: 'Todos', cor: palette.ink },
+          { id: 'novos', label: 'Novos', cor: '#4a7fa5' },
           { id: 'ativo', label: 'Ativos', cor: statusMap.ativo.cor },
           { id: 'separandoSacola', label: 'Sacola', cor: statusMap.separandoSacola.cor },
           { id: 'atencao', label: 'Atenção', cor: statusMap.atencao.cor },
