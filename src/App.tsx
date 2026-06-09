@@ -2062,7 +2062,7 @@ const AuxSimplesPanel=({auxAberta,auxData,updateLinhaAux,removeLinhaAux,addLinha
 };
 
 
-const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta,cortes=[],onMesAnterior,onMesProximo,onMesAtual})=>{
+const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:setRecProp,auxData:auxProp,setAuxData:setAuxProp,categorias:catsProp,setCategorias:setCatsProp,boletos,setBoletos,prestadores,setPrestadores,fixosConfig,setFixosConfig,fixosNomesFunc,setFixosNomesFunc,setFolhaAberta,cortes=[],abasRecorrentes=[],onToggleRecorrente,onMesAnterior,onMesProximo,onMesAtual})=>{
   // 🛡️ AVISO ADMIN-ONLY (Ailson 17/05/2026)
   // Lê sessão do localStorage pra detectar se é admin. Só admin salva
   // alterações em Lançamentos hoje (regra em src/App.tsx ~linha 8978).
@@ -2388,7 +2388,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                   return(
                     <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else abrirAux(cat);}}}>
                       <td style={{padding:"7px 12px"}}>
-                        <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
+                        <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor,display:"flex",alignItems:"center"}}>{cat}{onToggleRecorrente&&!isAuto&&cat!=="Funcionários"&&(<span onClick={e=>{e.stopPropagation();onToggleRecorrente(cat);}} title={abasRecorrentes.includes(cat)?"Recorrente: recria as linhas zeradas todo mes (clique pra desativar)":"Marcar como recorrente (recria as linhas zeradas todo mes)"} style={{cursor:"pointer",fontSize:11,marginLeft:6,lineHeight:1,color:abasRecorrentes.includes(cat)?"#4a7fa5":"#d4ccc4",fontWeight:700,userSelect:"none"}}>⟳</span>)}</div>
                         {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
                       </td>
                       <td style={{padding:"7px 12px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:valWeight,color:valColor,whiteSpace:"nowrap",borderLeft:"1px solid #ede8e0"}}>
@@ -2501,7 +2501,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                     return(
                       <tr key={cat} style={{borderBottom:"1px solid #f0ebe4",cursor:isAuto?"default":"pointer",background:rowBg,borderLeft:leftBorder}} onClick={()=>{if(!isAuto){if(CATS_RAPIDAS.includes(cat))abrirModalRapido(cat);else abrirAux(cat);}}}>
                         <td style={{padding:"7px 14px"}}>
-                          <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor}}>{cat}</div>
+                          <div style={{fontSize:catSize,fontWeight:catWeight,color:catColor,display:"flex",alignItems:"center"}}>{cat}{onToggleRecorrente&&!isAuto&&cat!=="Funcionários"&&(<span onClick={e=>{e.stopPropagation();onToggleRecorrente(cat);}} title={abasRecorrentes.includes(cat)?"Recorrente: recria as linhas zeradas todo mes (clique pra desativar)":"Marcar como recorrente (recria as linhas zeradas todo mes)"} style={{cursor:"pointer",fontSize:11,marginLeft:6,lineHeight:1,color:abasRecorrentes.includes(cat)?"#4a7fa5":"#d4ccc4",fontWeight:700,userSelect:"none"}}>⟳</span>)}</div>
                           {regra&&<div style={{fontSize:9,color:"#a89f94",marginTop:1}}>{regra}</div>}
                         </td>
                         <td style={{padding:"7px 14px",textAlign:"right",fontFamily:_FN,fontSize:_FS,fontWeight:valWeight,color:valColor,whiteSpace:"nowrap",borderLeft:"1px solid #ede8e0"}}>
@@ -7084,6 +7084,27 @@ const calcDadosMes=(mesNum,recMes={},auxMes={})=>{
 
 const inicializarMesNovo=()=>{const novo={};CATS.forEach(cat=>{novo[cat]=[];});return novo;};
 
+// Zera uma linha de aba recorrente pro mes seguinte: mantem o rotulo (descricao/empresa/prestador),
+// zera valor e data, limpa nro nota, e descarta vinculo de boleto e flag de linha nova.
+const zerarLinhaRecorrente=(row)=>{
+  const r={...row,valor:"",data:""};
+  delete r._novo; delete r._boletoid;
+  if("nroNota" in r) r.nroNota="";
+  return r;
+};
+// Busca, pro mes `m`, as linhas recorrentes (zeradas) de uma categoria, pegando o mes anterior
+// mais recente que tenha linhas MANUAIS (ignora linhas vindas de boleto). Devolve null se nao achar.
+const linhasRecorrentesDoMesAnterior=(auxPorMes,cat,m)=>{
+  for(let mm=m-1;mm>=1;mm--){
+    const linhas=(auxPorMes[mm]||{})[cat];
+    if(Array.isArray(linhas)){
+      const manuais=linhas.filter(l=>l&&!l._boletoid);
+      if(manuais.length>0)return manuais.map(zerarLinhaRecorrente);
+    }
+  }
+  return null;
+};
+
 // ═════════════════════════════════════════════════════════════════════════════
 // CALCULADORA DE PREÇOS — Módulo isolado
 // ═════════════════════════════════════════════════════════════════════════════
@@ -9462,6 +9483,8 @@ export default function App(){
   const [prestadores,setPrestadores]=useState(PRESTADORES_INICIAL);
   const [fixosConfig,setFixosConfig]=useState(FIXOS_TEMPLATE);
   const [fixosNomesFunc,setFixosNomesFunc]=useState(FIXOS_NOMES_FUNC);
+  // Abas de despesa que SEMPRE recriam as linhas do mes anterior (zeradas). Default = as 4 fixas.
+  const [abasRecorrentes,setAbasRecorrentes]=useState([...CATS_FIXAS]);
   const [cortes,setCortes]=useState([]);
   const [produtos,setProdutos]=useState([
     {ref:"2700",descricao:"VESTIDO LINHO SEM ELASTANO",marca:"Meluni",valorUnit:1,tecido:"Linho s/ elastano"},
@@ -11018,6 +11041,46 @@ export default function App(){
   const setAuxMes=(m,fn)=>setAuxDataPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||{}):fn}));
   const setCatsMes=(m,fn)=>setCategoriasPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||[...CATS]):fn}));
 
+  // ── ABAS RECORRENTES: estrutura persiste, valores zeram todo mes ────────────
+  const ehAdminApp=!!(usuarioLogado&&(usuarioLogado.id===1||usuarioLogado.usuario==='admin'||usuarioLogado.admin===true));
+  // Preenche as abas recorrentes de um mes (so as que estiverem vazias) com as linhas
+  // do mes anterior, zeradas. Idempotente: nunca sobrescreve linhas ja existentes.
+  const garantirRecorrentes=(m)=>{
+    if(!Array.isArray(abasRecorrentes)||abasRecorrentes.length===0)return;
+    setAuxDataPorMes(prev=>{
+      const mesAux=prev[m]||{};
+      let mudou=false; const novo={...mesAux};
+      abasRecorrentes.forEach(cat=>{
+        if(cat==="Funcionários")return; // tem mecanismo proprio
+        const atuais=novo[cat];
+        if(Array.isArray(atuais)&&atuais.length>0)return; // ja tem linhas, nao mexe
+        const semente=linhasRecorrentesDoMesAnterior(prev,cat,m);
+        if(semente){novo[cat]=semente;mudou=true;}
+      });
+      return mudou?{...prev,[m]:novo}:prev;
+    });
+  };
+  const toggleAbaRecorrente=(cat)=>{
+    setAbasRecorrentes(prev=>{
+      const novo=prev.includes(cat)?prev.filter(c=>c!==cat):[...prev,cat];
+      if(ehAdminApp){try{supabase.from('amicia_data').upsert({user_id:'despesas-config',payload:{abasRecorrentes:novo}},{onConflict:'user_id'});}catch(e){console.error('despesas-config save',e);}}
+      return novo;
+    });
+  };
+  // Carrega a config de abas recorrentes (chave separada no amicia_data)
+  useEffect(()=>{(async()=>{
+    try{
+      const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','despesas-config').maybeSingle();
+      if(data?.payload?.abasRecorrentes&&Array.isArray(data.payload.abasRecorrentes))setAbasRecorrentes(data.payload.abasRecorrentes);
+    }catch(e){console.error('despesas-config load',e);}
+  })();},[]);
+  // Ao entrar em Lancamentos ou trocar de mes, garante as abas recorrentes daquele mes
+  useEffect(()=>{
+    if(active==='lancamentos')garantirRecorrentes(mesLanc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[active,mesLanc,abasRecorrentes]);
+
+
   // ── MODAL SESSÃO EXPIRADA ────────────────────────────────────────────────────
   if(sessaoExpirada){
     // Detecta motivo: se versão local !== APP_VERSION → atualização. Senão → inatividade (session foi limpa).
@@ -11232,7 +11295,7 @@ export default function App(){
           );
         })()}
         {active==="dashboard"&&<DashboardContent dadosMensais={dadosMensais} mesAtual={MES_ATUAL}/>}
-        {active==="lancamentos"&&<LancamentosContent mes={mesLanc} mktMensal={getMktMensal(mesLanc)} receitas={getReceitasMes(mesLanc)} setReceitas={(fn)=>setReceitasMes(mesLanc,fn)} auxData={auxDataPorMes[mesLanc]||{}} setAuxData={(fn)=>setAuxMes(mesLanc,fn)} categorias={categoriasPorMes[mesLanc]||[...CATS]} setCategorias={(fn)=>setCatsMes(mesLanc,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta} cortes={cortes} onMesAnterior={()=>setMesLanc(m=>Math.max(1,m-1))} onMesProximo={()=>setMesLanc(m=>Math.min(12,m+1))} onMesAtual={()=>setMesLanc(MES_ATUAL)}/>}
+        {active==="lancamentos"&&<LancamentosContent mes={mesLanc} mktMensal={getMktMensal(mesLanc)} receitas={getReceitasMes(mesLanc)} setReceitas={(fn)=>setReceitasMes(mesLanc,fn)} auxData={auxDataPorMes[mesLanc]||{}} setAuxData={(fn)=>setAuxMes(mesLanc,fn)} categorias={categoriasPorMes[mesLanc]||[...CATS]} setCategorias={(fn)=>setCatsMes(mesLanc,fn)} boletos={boletosShared} setBoletos={setBoletosShared} prestadores={prestadores} setPrestadores={setPrestadores} setAuxDataPorMes={setAuxDataPorMes} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta} cortes={cortes} abasRecorrentes={abasRecorrentes} onToggleRecorrente={toggleAbaRecorrente} onMesAnterior={()=>setMesLanc(m=>Math.max(1,m-1))} onMesProximo={()=>setMesLanc(m=>Math.min(12,m+1))} onMesAtual={()=>setMesLanc(MES_ATUAL)}/>}
         {active==="boletos"&&<BoletosContent boletos={boletosShared} setBoletos={setBoletosShared} setAuxDataPorMes={setAuxDataPorMes}/>}
         {active==="agenda"&&<AgendaContent/>}
         {active==="historico"&&<HistoricoContent boletosShared={boletosShared} setBoletosShared={setBoletosShared} getReceitasMes={getReceitasMes} setReceitasMes={setReceitasMes} getMktMensal={getMktMensal} auxDataPorMes={auxDataPorMes} setAuxDataPorMes={setAuxDataPorMes} categoriasPorMes={categoriasPorMes} setCategoriasPorMes={setCategoriasPorMes} dadosMensais={dadosMensais} mesAtual={MES_ATUAL} prestadores={prestadores} setPrestadores={setPrestadores} fixosConfig={fixosConfig} setFixosConfig={setFixosConfig} fixosNomesFunc={fixosNomesFunc} setFixosNomesFunc={setFixosNomesFunc} setFolhaAberta={setFolhaAberta}/>}
