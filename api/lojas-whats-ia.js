@@ -446,6 +446,43 @@ export default async function handler(req, res) {
 
 // ─── PROCESSAR 1 CONVERSA ─────────────────────────────────────────────────
 // Exportada: o cron lojas-whats-cron-responder chama in-process (sem hop HTTP).
+// ─── ESTOQUE FINO (planilha do dia: ref + cor + tamanho) ──────────────────
+// Disponibilidade por cor e tamanho da tabela lojas_estoque_grade (importada
+// do Drive 1x/dia). So lista o que TEM (disponivel > 0). Ailson 09/06/2026.
+async function montarEstoqueFino() {
+  try {
+    const { data, error } = await supabase
+      .from('lojas_estoque_grade')
+      .select('ref, cor, tam, data_arquivo')
+      .gt('disponivel', 0);
+    if (error || !data || !data.length) return null;
+    const ordemTam = { PP: 0, P: 1, M: 2, G: 3, GG: 4, G1: 5, G2: 6, G3: 7 };
+    const porRef = new Map();
+    let dataArq = null;
+    for (const r of data) {
+      if (!dataArq && r.data_arquivo) dataArq = r.data_arquivo;
+      if (!porRef.has(r.ref)) porRef.set(r.ref, new Map());
+      const cores = porRef.get(r.ref);
+      if (!cores.has(r.cor)) cores.set(r.cor, new Set());
+      cores.get(r.cor).add(r.tam);
+    }
+    const linhas = [];
+    for (const [ref, cores] of [...porRef.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'pt'))) {
+      const partes = [...cores.entries()]
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'pt'))
+        .map(([cor, tams]) => {
+          const ts = [...tams].sort((x, y) => (ordemTam[String(x).toUpperCase()] ?? 9) - (ordemTam[String(y).toUpperCase()] ?? 9));
+          return `${cor}:${ts.join('/')}`;
+        });
+      linhas.push(`${ref} -> ${partes.join(' | ')}`);
+    }
+    return { texto: linhas.join('\n'), data: dataArq };
+  } catch (e) {
+    logErro('ia/estoque-fino', e);
+    return null;
+  }
+}
+
 export async function processarConversa(conversaId) {
   // 1. Busca conversa + últimas mensagens
   const { data: conv, error: errConv } = await supabase
@@ -805,7 +842,19 @@ export async function processarConversa(conversaId) {
   }
   // Lista ampla pra RECONHECER a peca que a cliente mandar (print/foto/modelo).
   if (listaRefsAtivas) {
-    systemBlocks.push({ type: 'text', text: `REFERENCIAS ATIVAS DA AMICIA (o que temos COM ESTOQUE agora — use pra RECONHECER a peca que a cliente mandar por print, foto ou nome. NAO e a lista do que oferecer sozinha; pra oferecer proativamente use o cardapio acima):\n${listaRefsAtivas}\n\nCOMO USAR ESTA LISTA:\n- Cliente mandou print/foto ou citou um modelo: cruze com esta lista pra achar a REF e a descricao certa, e fale da peca com naturalidade.\n- "estoque" e um SEMAFORO por referencia (soma de todas as cores/tamanhos): "bastante" = vende tranquila; "tem disponivel" = tem, mas confirme se for pedido grande; "pouco (ta saindo)" = avisa que ta saindo e conduz pra fechar logo. NUNCA fale o numero exato de pecas, nem prometa cor/tamanho especifico — a disponibilidade fina por cor e tamanho a separacao confirma na hora de fechar.\n- "cores do ultimo corte" sao as cores que sairam na producao mais recente da peca: pode dizer as cores, mas pra cor+tamanho exatos confirma na separacao.\n- quando a linha trouxer "ficha:" sao dados tecnicos da peca (tecido, composicao, forro, caimento, com o que combina, tamanho que a modelo veste, preco atacado) — use pra tirar duvida com naturalidade, sem despejar tudo de uma vez.\n- Se a peca que a cliente mandou NAO aparece aqui (sem estoque), pode estar em reposicao: se vier info de producao no contexto usa, senao diz que vai confirmar com a equipe. Nunca diga que a peca "nao existe" so porque nao esta nesta lista.` });
+    systemBlocks.push({ type: 'text', text: `REFERENCIAS ATIVAS DA AMICIA (o que temos COM ESTOQUE agora — use pra RECONHECER a peca que a cliente mandar por print, foto ou nome. NAO e a lista do que oferecer sozinha; pra oferecer proativamente use o cardapio acima):\n${listaRefsAtivas}\n\nCOMO USAR ESTA LISTA:\n- Cliente mandou print/foto ou citou um modelo: cruze com esta lista pra achar a REF e a descricao certa, e fale da peca com naturalidade.\n- "estoque" e um SEMAFORO por referencia (soma de todas as cores/tamanhos): "bastante" = vende tranquila; "tem disponivel" = tem, mas confirme se for pedido grande; "pouco (ta saindo)" = avisa que ta saindo e conduz pra fechar logo. NUNCA fale o numero exato de pecas. A disponibilidade fina por COR e TAMANHO vem do bloco ESTOQUE FINO (planilha do dia), quando ele aparecer abaixo — pode confirmar cor+tam com base nele (sem dizer quantidade); se a peca, cor ou tam NAO estiver la, ai sim a separacao confirma na hora.\n- "cores do ultimo corte" sao as cores que sairam na producao mais recente da peca: pode dizer as cores, mas pra cor+tamanho exatos confirma na separacao.\n- quando a linha trouxer "ficha:" sao dados tecnicos da peca (tecido, composicao, forro, caimento, com o que combina, tamanho que a modelo veste, preco atacado) — use pra tirar duvida com naturalidade, sem despejar tudo de uma vez.\n- Se a peca que a cliente mandou NAO aparece aqui (sem estoque), pode estar em reposicao: se vier info de producao no contexto usa, senao diz que vai confirmar com a equipe. Nunca diga que a peca "nao existe" so porque nao esta nesta lista.` });
+  }
+  // ESTOQUE FINO (cor x tamanho): carrega so quando a conversa esta "em produto"
+  // (veio print/foto, tem ref no carrinho, ou a cliente fala de cor/tam/ref) pra
+  // nao pesar o prompt em saudacao/preco. Ailson 09/06/2026.
+  const _temImagemRecente = (msgs || []).some(m => m.direcao === 'entrada' && m.tipo_midia === 'image');
+  const _falaProduto = /\b\d{3,4}\b|\bcor(es)?\b|\btamanho|\bdisponiv|\btem (no|na|em|de)\b|\bpp\b|\bgg?\b|\bg[123]\b/i.test(textoCliente || '');
+  if (_temImagemRecente || (refsCarrinho && refsCarrinho.length) || _falaProduto) {
+    const ef = await montarEstoqueFino();
+    if (ef && ef.texto) {
+      const dataFmt = ef.data ? ` ${String(ef.data).split('-').reverse().join('/')}` : '';
+      systemBlocks.push({ type: 'text', text: `ESTOQUE FINO — DISPONIBILIDADE POR COR E TAMANHO (planilha do dia${dataFmt}):\nLista do que TEM disponivel agora, por REF -> cor: tamanhos.\n\n${ef.texto}\n\nCOMO USAR (ESTOQUE FINO):\n- NUNCA diga a quantidade. So diga que TEM ("tem no P areia"), nunca "tem 2".\n- So existe o que esta listado aqui. Cor ou tamanho que NAO aparece pra aquela ref: NAO tem agora.\n- Cliente mandou print/foto e vc identificou a REF: confirma a peca e lista as CORES que tem, e oferece ver os tamanhos. Ex: "Essa camisa tricoline, ref 2631\\nTemos preto/bege/caqui/marinho\\nQuer confirmar os tamanhos? So me falar a cor 😊". Se vier varios prints, faz isso pra CADA peca.\n- Cliente falou UMA cor: lista os tamanhos daquela cor. Ex: "No preto tem disponivel M/G/GG".\n- Cliente quer todas as cores e tamanhos de uma vez: manda tudo junto, uma cor por linha. Ex: "Temos disponiveis:\\nareia P/M/G\\npreto M/G/GG".\n- A cor/tam que a cliente quer nao esta disponivel: avisa que nessa nao tem agora e oferece o que TEM ("nessa cor ta so no G hoje, mas tenho no preto em P/M/G").` });
+    }
   }
   if (fichasFoco) {
     systemBlocks.push({ type: 'text', text: `BASE DE CONHECIMENTO — FICHA DETALHADA DA(S) PECA(S) QUE A CLIENTE ESTA VENDO / NO CARRINHO:\n${fichasFoco}\n\nISTO E PRA VC SE BASEAR, NAO PRA COLAR. Use so o trecho relevante pra pergunta da cliente (tecido, caimento, forro, com o que combina, etc.), sempre com as SUAS palavras e no momento certo. NUNCA mande a descricao inteira nem um textao tecnico do nada.` });
