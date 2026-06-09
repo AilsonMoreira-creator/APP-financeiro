@@ -1034,10 +1034,17 @@ function classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCl
     /\biniciando\b/.test(txt);
   if (candidatos.some(ehQualificacao)) return { auto: true, fase: 'catalogo', motivo: 'qualificacao_resposta' };
 
-  // 5. Confirmacao curta a uma oferta de catalogo da Sofia (avalia a ULTIMA msg)
-  const confirmaCurta = t.length <= 25
-    && /^(sim|claro|pode( sim)?|por favor|pode mandar|manda|aguardando|ok|isso|quero)\b/.test(t);
-  if (confirmaCurta && sofiaOfereceuCatalogo) {
+  // 5. Confirmacao curta a uma oferta de catalogo da Sofia. A cliente costuma
+  // mandar "Oi" + "Quero sim por favor" — que chegam juntos como UMA msg com
+  // quebra de linha. Antes avaliava so o inicio do texto combinado (comecava com
+  // "Oi" e furava o gate); agora avalia CADA linha/msg nova. Ailson 09/06/2026.
+  const ehConfirmaCurta = txt => txt.length <= 30
+    && /^(sim|claro|pode( sim)?|por favor|pode mandar|manda|aguardando|ok|isso|quero)\b/.test(txt);
+  const linhasNovas = candidatos
+    .flatMap(c => String(c).split(/\n+/))
+    .map(s => s.trim())
+    .filter(Boolean);
+  if (sofiaOfereceuCatalogo && linhasNovas.some(ehConfirmaCurta)) {
     return { auto: true, fase: 'catalogo', motivo: 'confirmacao_pos_oferta' };
   }
 
