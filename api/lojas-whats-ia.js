@@ -951,8 +951,13 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
     if (m.direcao === 'saida') break;       // para na ultima saida (resposta) anterior
     if (m.direcao === 'entrada') textosNovos.push(m.audio_transcricao || m.texto || '');
   }
-  const sofiaOfereceuCatalogo = !!(ultimaSaida && /catal[oa]g/i.test(ultimaSaida.texto || '')
-    && /(quer|posso|te mando|te envio|\bmando\b|gostaria de ver|quer que eu)/i.test(ultimaSaida.texto || ''));
+  // Normaliza (tira acento) antes de testar: /catal/ NAO casa com "catálogo" (á),
+  // entao sofiaOfereceuCatalogo vinha sempre false e a confirmacao pos-oferta
+  // ("pode sim") nunca auto-enviava. Ailson 09/06/2026.
+  const _txtUltSaida = String(ultimaSaida?.texto || '')
+    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const sofiaOfereceuCatalogo = !!(ultimaSaida && /catal[oa]g/.test(_txtUltSaida)
+    && /(quer|posso|te mando|te envio|\bmando\b|gostaria de ver|quer que eu)/.test(_txtUltSaida));
   const cls = classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo });
 
   // Garante o catalogo nos gatilhos de catalogo (Ailson 31/05/2026): se o gate
