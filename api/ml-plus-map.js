@@ -1,9 +1,7 @@
 // api/ml-plus-map.js — Teste: mapeia anúncios regulares → plus size por similaridade de título
 // Roda: GET /api/ml-plus-map (ou /api/ml-plus-map?brand=exitus)
 
-import { getValidToken } from './_ml-helpers.js';
-import { createClient } from '@supabase/supabase-js';
-const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+import { getValidToken, supabase } from './_ml-helpers.js';
 const ML_API = 'https://api.mercadolibre.com';
 
 // Palavras que NÃO identificam o produto (remover antes de comparar)

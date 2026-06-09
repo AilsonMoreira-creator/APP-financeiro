@@ -1,9 +1,7 @@
 // api/ml-charts-check.js — Verifica quais anúncios têm tabela de medidas vinculada
 // GET /api/ml-charts-check?brand=Exitus  (ou sem filtro pra todas)
 
-import { getValidToken } from './_ml-helpers.js';
-import { createClient } from '@supabase/supabase-js';
-const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+import { getValidToken, supabase } from './_ml-helpers.js';
 const ML_API = 'https://api.mercadolibre.com';
 
 async function fetchAllItemIds(sellerId, token) {
