@@ -2232,30 +2232,33 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
       )}
       {/* Navegacao de mes (so na aba Lancamentos — Historico tem seu proprio
           voltar). Abaixo do card SALDO. Ailson 01/06/2026. */}
-      {!auxAberta&&onMesAnterior&&(()=>{
+      {/* Abas (esquerda) + navegacao de mes (direita) numa unica linha. Ailson 08/06/2026. */}
+      {!auxAberta&&(()=>{
         const ano=new Date().getFullYear();
         const navBtn={padding:"5px 12px",borderRadius:6,border:"1px solid #c8d8e4",background:"#fff",color:"#2c3e50",fontSize:12,fontFamily:"Georgia,serif",cursor:"pointer",fontWeight:600};
         const navBtnOff={...navBtn,opacity:0.4,cursor:"default"};
         return(
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-            <button onClick={mes>1?onMesAnterior:undefined} disabled={mes<=1} style={mes>1?navBtn:navBtnOff}>← {MESES[Math.max(0,mes-2)]}</button>
-            <span style={{fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif",minWidth:96,textAlign:"center"}}>{MESES[mes-1]} {ano}</span>
-            {mes!==mesHojeAtual&&(
-              <>
-                <button onClick={mes<12?onMesProximo:undefined} disabled={mes>=12} style={mes<12?navBtn:navBtnOff}>{MESES[Math.min(11,mes)]} →</button>
-                <button onClick={onMesAtual} style={{...navBtn,background:"#2c3e50",color:"#fff",border:"1px solid #2c3e50"}}>Mês atual ({MESES[mesHojeAtual-1]})</button>
-              </>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #e8e2da",marginBottom:0,gap:8,flexWrap:"wrap"}}>
+            <div style={{display:"flex",gap:0}}>
+              <button onClick={()=>setAba("geral")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="geral"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="geral"?"#2c3e50":"#8a9aa4"}}>Geral</button>
+              <button onClick={()=>setAba("receitas")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="receitas"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="receitas"?"#2c3e50":"#8a9aa4",display:"flex",alignItems:"center",gap:4}}><IconReceitas ativo={aba==="receitas"}/>Receitas</button>
+              <button onClick={()=>setAba("despesas")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="despesas"?"2px solid #c0392b":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="despesas"?"#c0392b":"#8a9aa4",display:"flex",alignItems:"center",gap:4}}><IconDespesas ativo={aba==="despesas"}/>Despesas</button>
+            </div>
+            {onMesAnterior&&(
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <button onClick={mes>1?onMesAnterior:undefined} disabled={mes<=1} style={mes>1?navBtn:navBtnOff}>← {MESES[Math.max(0,mes-2)]}</button>
+                <span style={{fontSize:13,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif",minWidth:96,textAlign:"center"}}>{MESES[mes-1]} {ano}</span>
+                {mes!==mesHojeAtual&&(
+                  <>
+                    <button onClick={mes<12?onMesProximo:undefined} disabled={mes>=12} style={mes<12?navBtn:navBtnOff}>{MESES[Math.min(11,mes)]} →</button>
+                    <button onClick={onMesAtual} style={{...navBtn,background:"#2c3e50",color:"#fff",border:"1px solid #2c3e50"}}>Mês atual ({MESES[mesHojeAtual-1]})</button>
+                  </>
+                )}
+              </div>
             )}
           </div>
         );
       })()}
-      {!auxAberta&&(
-        <div style={{display:"flex",gap:0,borderBottom:"1px solid #e8e2da",marginBottom:0}}>
-          <button onClick={()=>setAba("geral")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="geral"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="geral"?"#2c3e50":"#8a9aa4"}}>Geral</button>
-          <button onClick={()=>setAba("receitas")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="receitas"?"2px solid #2c3e50":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="receitas"?"#2c3e50":"#8a9aa4",display:"flex",alignItems:"center",gap:4}}><IconReceitas ativo={aba==="receitas"}/>Receitas</button>
-          <button onClick={()=>setAba("despesas")} style={{padding:"6px 16px",border:"none",background:"transparent",borderBottom:aba==="despesas"?"2px solid #c0392b":"2px solid transparent",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif",color:aba==="despesas"?"#c0392b":"#8a9aa4",display:"flex",alignItems:"center",gap:4}}><IconDespesas ativo={aba==="despesas"}/>Despesas</button>
-        </div>
-      )}
       {aba==="receitas"&&!auxAberta&&(
         <div style={{background:"#fff",borderRadius:"0 0 12px 12px",border:"1px solid #e8e2da",borderTop:"none",overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"48px 1fr 1fr 1fr",background:"#4a7fa5",position:"sticky",top:0,zIndex:2}}>
