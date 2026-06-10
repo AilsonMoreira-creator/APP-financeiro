@@ -4806,6 +4806,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [syncing,setSyncing]=useState(false);
   const [syncCatalogo,setSyncCatalogo]=useState(false);
   const [syncCatalogoMsg,setSyncCatalogoMsg]=useState(null);
+  const [syncBlingEst,setSyncBlingEst]=useState(false);
   const [periodo,setPeriodo]=useState("semana"); // "semana" | "mes" | "anual"
   const [calcDesc,setCalcDesc]=useState({}); // ref → descricao da Calculadora
   // Sprint 8 (Ailson 16/05/2026) — Card de variações enxuto:
@@ -4952,6 +4953,26 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       },3000);
     }catch(e){setSyncCatalogoMsg("❌ Erro: "+e.message);}
     finally{setSyncCatalogo(false);}
+  };
+
+  const sincronizarEstoqueBling=async(limpar)=>{
+    if(syncBlingEst)return;
+    setSyncBlingEst(true);setSyncCatalogoMsg("⏳ Lendo estoque do Bling (Exitus)...");
+    try{
+      const url='/api/bling-estoque-sync?conta=exitus'+(limpar?'&limpar=1':'');
+      const r=await fetch(url);
+      const d=await r.json();
+      if(d.erros&&d.erros.length){setSyncCatalogoMsg("❌ "+d.erros[0]);}
+      else{
+        const partes=[`${d.linhas||0} linhas`,`${(d.calc_refs!=null?d.calc_refs:'?')} refs na calc`];
+        if(d.fora_calc)partes.push(`${d.fora_calc} fora da calc puladas`);
+        if(d.removidas_fora_calc)partes.push(`${d.removidas_fora_calc} antigas removidas`);
+        setSyncCatalogoMsg(`✓ Estoque Bling lido · ${partes.join(" · ")} (${Math.round((d.ms||0)/1000)}s)`);
+      }
+      await carregar();
+      setTimeout(()=>setSyncCatalogoMsg(null),9000);
+    }catch(e){setSyncCatalogoMsg("❌ Erro: "+e.message);}
+    finally{setSyncBlingEst(false);}
   };
 
   useEffect(()=>{carregarCalc();carregar();carregarMatrizProjetada();carregarTopCoresBling();},[]);
@@ -5135,6 +5156,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       </div>
       <div style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>última sync: <b style={{color:"#2c3e50"}}>{ultSync}</b></div>
       <button onClick={sincronizarCatalogo} disabled={syncCatalogo} title="Lê o catálogo do Bling (Lumia) e popula SKU→ref pra refs novas/sem mapeamento" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ catálogo":"📚 sync catálogo Bling"}</button>
+      <button onClick={()=>sincronizarEstoqueBling(false)} disabled={syncBlingEst} title="Lê as QUANTIDADES de estoque do Bling (Exitus, depósito Geral) pras refs da calculadora" style={{background:"#fff",border:"1px solid #2c3e50",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncBlingEst?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#2c3e50",opacity:syncBlingEst?0.5:1,fontWeight:600}}>{syncBlingEst?"⏳ estoque":"🟦 estoque Bling"}</button>
       <button onClick={forcarSync} disabled={syncing} title="Força recálculo do estoque ML agora" style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#4a7fa5",opacity:syncing?0.5:1}}>{syncing?"⏳":"🔄"}</button>
       <div style={{display:"flex",background:"#faf8f5",border:"1px solid #e8e2da",borderRadius:8,padding:3,gap:2}}>
         <button onClick={()=>setView("grid")} style={{background:view==="grid"?"#2c3e50":"transparent",color:view==="grid"?"#fff":"#8a9aa4",border:"none",padding:"5px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontFamily:"Georgia,serif",fontWeight:600}}>▦ Grid</button>
