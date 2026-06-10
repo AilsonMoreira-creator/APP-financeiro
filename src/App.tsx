@@ -4832,7 +4832,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         for(const co of cores){
           const folhas=Number(co.folhas)||0;
           if(folhas<=0)continue;
-          const corNorm=String(co.nome||'').toLowerCase().trim();
+          const corNorm=normCorBling(co.nome);
           for(const tm of tamanhos){
             const grade=Number(tm.grade)||0;
             if(grade<=0)continue;
@@ -4851,7 +4851,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       const raw=localStorage.getItem("amica_bling_cores_top");
       if(!raw)return;
       const parsed=JSON.parse(raw);
-      const set=new Set((parsed?.cores||[]).map(c=>String(c.nome||'').toLowerCase().trim()));
+      const set=new Set((parsed?.cores||[]).map(c=>normCorBling(c.nome)));
       setTopCoresBling(set);
     }catch(e){console.error('top cores:',e.message);}
   };
@@ -5132,7 +5132,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       // Sprint 8 — matriz projetada da REF (módulo Oficina · cortes ativos)
       const refNorm=String(modalRef).replace(/\D/g,'').replace(/^0+/,'');
       const matrizRef=matrizProjPorRef[refNorm]||{};
-      const getProj=(cor,tam)=>matrizRef[`${String(cor||'').toLowerCase().trim()}|${String(tam||'').toLowerCase().trim()}`]||0;
+      const getProj=(cor,tam)=>matrizRef[`${normCorBling(cor)}|${String(tam||'').toLowerCase().trim()}`]||0;
       // Aliases de cor por REF (Ailson 17/05/2026 — duplicações ML vs fabricação):
       //   REF 2601: "marrom-escuro" / "marrom escuro" → "Marrom" (SOMA o estoque)
       //   REF 395 (0395): "branco" → oculta+zera (Offwhite já tem o valor real)
@@ -5181,7 +5181,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       const vars=varsTodas.filter(v=>{
         const q=v.qtd||0;
         if(q>0)return true;
-        if(topCoresBling.has(String(v.cor||'').toLowerCase().trim()))return true;
+        if(topCoresBling.has(normCorBling(v.cor)))return true;
         return getProj(v.cor,v.tam)>0;
       });
       const ocultas=varsTodas.length-vars.length;
@@ -5230,6 +5230,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     })()}
   </div>);
 };
+
+// Normaliza nome de cor pra casar fontes diferentes: vendas usa "azul marinho",
+// estoque usa "azul-marinho"; tambem "rose"/"rosê", "off white"/"offwhite". Tira
+// acento e tudo que nao for alfanumerico, evitando que o zerado de cor top suma
+// no card de variacoes do Bling. Ailson 09/06/2026.
+function normCorBling(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+}
 
 const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=null,produtos=[]})=>{
   const [tela,setTela]=useState("dash");
