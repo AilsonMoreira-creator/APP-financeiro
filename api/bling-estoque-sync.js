@@ -66,6 +66,22 @@ export default async function handler(req, res) {
     resumo.deposito = depositoId;
     resumo.deposito_nome = depositoNome;
 
+    // Guarda o depósito geral pra escrita/webhook reusarem sem redetectar.
+    if (!dryRun) {
+      await supabase.from('amicia_data').upsert({ user_id: 'bling-estoque-config', payload: { conta, deposito_geral: depositoId, deposito_nome: depositoNome, atualizado_em: new Date().toISOString() } }, { onConflict: 'user_id' });
+    }
+
+    // Fallback de ref: SKU -> ref via ml_sku_ref_map (cobre produtos cujo nome
+    // do Bling nao traz "(ref XXXX)" e cairiam em sem_ref).
+    const skuRefMap = new Map();
+    for (let off = 0; off < 60000; off += 1000) {
+      const { data: mp } = await supabase.from('ml_sku_ref_map').select('sku,ref').range(off, off + 999);
+      if (!mp || !mp.length) break;
+      for (const m of mp) if (m.sku && m.ref) skuRefMap.set(m.sku, String(m.ref));
+      if (mp.length < 1000) break;
+    }
+    resumo.sku_ref_map = skuRefMap.size;
+
     // ── 2. Paginar /produtos → skuMap ────────────────────────────────────
     const skuMap = new Map(); // sku -> { ref, cor, tam, idProduto }
     for (let pagina = 1; pagina <= MAX_PAGES; pagina++) {
@@ -86,7 +102,8 @@ export default async function handler(req, res) {
         const sku = (p.codigo || '').trim();
         if (!sku) { resumo.sem_sku++; continue; }
         const parsed = parseDescricao(p.nome || '');
-        const ref = normRef(parsed.ref);
+        let ref = normRef(parsed.ref);
+        if (!ref) ref = normRef(skuRefMap.get(sku) || '');
         if (!ref) { resumo.sem_ref++; continue; }
         skuMap.set(sku, { ref, cor: parsed.cor || '', tam: (parsed.tamanho || '').toUpperCase(), idProduto: p.id || null });
       }

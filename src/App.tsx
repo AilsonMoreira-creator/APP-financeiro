@@ -4833,9 +4833,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     if(isNaN(nova)||nova<0){alert('Quantidade inválida');return;}
     setSalvandoAjuste(true);
     try{
+      // 1) Grava no Bling (balanço no depósito geral). Só espelha local se aceitar.
+      const rb=await fetch('/api/bling-estoque-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:'exitus',ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,qtd:nova})});
+      const jb=await rb.json().catch(()=>({}));
+      if(!rb.ok){alert('Não consegui gravar no Bling: '+(jb.error||('HTTP '+rb.status))+(jb.detalhe?'\n'+JSON.stringify(jb.detalhe).slice(0,200):''));setSalvandoAjuste(false);return;}
+      // 2) Espelha no app + log de auditoria
       const {data:atualRow}=await supabase.from('bling_estoque').select('qtd').eq('ref',ba.refNorm).eq('cor_norm',ba.cor_norm).eq('tam',ba.tam).maybeSingle();
       const anterior=atualRow?atualRow.qtd:null;
-      const {error:e1}=await supabase.from('bling_estoque').upsert({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,cor_label:ba.cor||null,qtd:nova,atualizado_em:new Date().toISOString(),atualizado_por:usuarioSessao||null},{onConflict:'ref,cor_norm,tam'});
+      const {error:e1}=await supabase.from('bling_estoque').upsert({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,cor_label:ba.cor||null,qtd:nova,bling_produto_id:jb.produtoId||null,atualizado_em:new Date().toISOString(),atualizado_por:usuarioSessao||null},{onConflict:'ref,cor_norm,tam'});
       if(e1)throw e1;
       await supabase.from('bling_estoque_logs').insert({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,cor_label:ba.cor||null,qtd_anterior:anterior,qtd_nova:nova,delta:(anterior==null?nova:nova-anterior),motivo:ajusteMotivo||null,usuario:usuarioSessao||null,origem:'manual'});
       setBlingEstoque(prev=>({...prev,[`${ba.refNorm}|${ba.cor_norm}|${ba.tam}`]:nova}));
