@@ -19,33 +19,41 @@ const API = 'https://api.bling.com.br/Api/v3';
 const CONTA = 'exitus';
 
 export default async function handler(req, res) {
+  // grava o último evento recebido (debug) e responde
+  const respond = async (obj, raw) => {
+    try {
+      await supabase.from('amicia_data').upsert({ user_id: 'bling-webhook-debug', payload: { at: new Date().toISOString(), metodo: req.method, query: req.query || {}, resultado: obj, raw: raw !== undefined ? raw : null } }, { onConflict: 'user_id' });
+    } catch {}
+    return res.status(obj.__status || 200).json(obj.__status ? { ...obj, __status: undefined } : obj);
+  };
   try {
     // auth por segredo na URL
     const secret = process.env.BLING_WEBHOOK_SECRET;
     if (secret && String(req.query.key || '') !== secret) return res.status(401).json({ error: 'unauthorized' });
 
-    if (req.method !== 'POST') return res.status(200).json({ ok: true, ignored: 'method' });
+    if (req.method !== 'POST') return respond({ ok: true, ignored: 'method' });
 
     let body = req.body;
     if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
     body = body || {};
+    const rawDbg = JSON.parse(JSON.stringify(body)); // snapshot pro debug
 
     // Só estoque físico. Estoque virtual herda config mas não deve duplicar aqui.
     const evento = String(body.event || '');
-    if (evento.includes('virtual')) return res.status(200).json({ ok: true, ignored: 'virtual_stock' });
+    if (evento.includes('virtual')) return respond({ ok: true, ignored: 'virtual_stock', evento }, rawDbg);
 
     const data = body.data || body; // envelope {…, data} ou payload direto
     const produtoId = String(data?.produto?.id ?? data?.id ?? data?.idProduto ?? data?.estoque?.produto?.id ?? data?.produtoId ?? '');
     const codigo = String(data?.produto?.codigo ?? data?.codigo ?? data?.sku ?? '');
-    if (!produtoId && !codigo) return res.status(200).json({ ok: true, ignored: 'sem produto id/codigo' });
+    if (!produtoId && !codigo) return respond({ ok: true, ignored: 'sem produto id/codigo', produtoId, codigo }, rawDbg);
 
     // Só age em produto que já rastreamos (refs da calculadora em bling_estoque)
     let q = supabase.from('bling_estoque').select('ref,cor_norm,tam,cor_label,qtd,bling_sku,bling_produto_id');
     q = produtoId ? q.eq('bling_produto_id', produtoId) : q.eq('bling_sku', codigo);
     const { data: linhas } = await q;
-    if (!linhas || !linhas.length) return res.status(200).json({ ok: true, ignored: 'produto não rastreado' });
+    if (!linhas || !linhas.length) return respond({ ok: true, ignored: 'produto não rastreado', produtoId, codigo }, rawDbg);
     const pid = produtoId || linhas[0].bling_produto_id;
-    if (!pid) return res.status(200).json({ ok: true, ignored: 'sem id pra consultar saldo' });
+    if (!pid) return respond({ ok: true, ignored: 'sem id pra consultar saldo' }, rawDbg);
 
     // depósito geral do config
     const { data: cfg } = await supabase.from('amicia_data').select('payload').eq('user_id', 'bling-estoque-config').maybeSingle();
@@ -57,13 +65,13 @@ export default async function handler(req, res) {
     const r = await blingFetch(`${API}/estoques/saldos?idsProdutos[]=${encodeURIComponent(pid)}`, headers);
     const j = await r.json().catch(() => ({}));
     const s = (j.data || [])[0];
-    if (!s) return res.status(200).json({ ok: true, ignored: 'saldo não retornado' });
+    if (!s) return respond({ ok: true, ignored: 'saldo não retornado', pid }, rawDbg);
     let saldo = null;
     const deps = s.depositos || [];
     const dep = depositoId ? deps.find(d => String(d.id ?? d.deposito?.id) === String(depositoId)) : null;
     if (dep) saldo = dep.saldoFisico ?? dep.saldo ?? dep.deposito?.saldoFisico ?? null;
     if (saldo == null) saldo = s.saldoFisicoTotal ?? s.estoqueAtual ?? null;
-    if (saldo == null) return res.status(200).json({ ok: true, ignored: 'sem saldo geral' });
+    if (saldo == null) return respond({ ok: true, ignored: 'sem saldo geral', pid }, rawDbg);
     const qtd = Math.max(0, Math.round(Number(saldo) || 0));
 
     // Atualiza só o que mudou + log de auditoria
@@ -75,10 +83,10 @@ export default async function handler(req, res) {
       await supabase.from('bling_estoque_logs').insert({ ref: ln.ref, cor_norm: ln.cor_norm, tam: ln.tam, cor_label: ln.cor_label, qtd_anterior: ln.qtd ?? null, qtd_nova: qtd, delta: (ln.qtd == null ? qtd : qtd - ln.qtd), motivo: 'webhook estoque Bling', usuario: null, origem: 'webhook' });
       mudou++;
     }
-    return res.status(200).json({ ok: true, produtoId: pid, qtd, atualizadas: mudou });
+    return respond({ ok: true, produtoId: pid, qtd, atualizadas: mudou }, rawDbg);
   } catch (e) {
     console.error('bling-webhook:', e.message || e);
     // Responde 200 mesmo em erro pra não fazer o Bling desabilitar o webhook
-    return res.status(200).json({ ok: false, erro: e.message || String(e) });
+    return respond({ ok: false, erro: e.message || String(e) });
   }
 }
