@@ -5027,6 +5027,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const totalGeral=dados?.stats?.total_geral||0;
   const qtdRefsAtivas=refs.length;
   const qtdVariacoes=useMemo(()=>refs.reduce((a,r)=>a+(r.variations?.length||0),0),[refs]);
+  const totalSoBling=useMemo(()=>soBlingRefs.reduce((a,r)=>a+(r.qtd_total||0),0),[soBlingRefs]);
+  const totalExibido=totalGeral+totalSoBling; // total do header inclui o estoque Bling das refs novas
 
   // Histórico — depende do período selecionado
   // Semana: últimos 7 dias (do diário) · Mês: dias do mês corrente (do diário) · Anual: 12 meses (do mensal)
@@ -5114,7 +5116,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:"16px 20px",marginBottom:14,display:"grid",gridTemplateColumns:"auto 1fr",gap:28,alignItems:"center"}}>
       <div style={{borderRight:"1px solid #e8e2da",paddingRight:28}}>
         <div style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Estoque total</div>
-        <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:38,fontWeight:700,color:"#2c3e50",lineHeight:1,margin:"4px 0 2px"}}>{totalGeral.toLocaleString('pt-BR')}</div>
+        <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:38,fontWeight:700,color:"#2c3e50",lineHeight:1,margin:"4px 0 2px"}}>{totalExibido.toLocaleString('pt-BR')}</div>
         <div style={{fontSize:11,color:"#8a9aa4"}}>em <b style={{color:"#2c3e50",fontWeight:700}}>{qtdRefsAtivas} refs ativas</b> · <b style={{color:"#2c3e50",fontWeight:700}}>{qtdVariacoes} variações</b></div>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
