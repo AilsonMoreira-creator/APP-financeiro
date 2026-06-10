@@ -393,6 +393,7 @@ function FiltroBar({ ordenar, setOrdenar, envio, setEnvio, vendFiltro, setVendFi
       <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Ordenar</span>
       <OptOrd id="lifetime" label="Maior valor" Icon={ArrowDown01} />
       <OptOrd id="az" label="A–Z" Icon={ArrowDownAZ} />
+      <OptOrd id="recentes" label="Recentes" Icon={Clock} />
       <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 6 }}>Envio</span>
       <OptEnv id="todos" label="Todos" />
       <OptEnv id="enviadas" label="Com msg enviada" />
@@ -419,6 +420,8 @@ function FiltroBar({ ordenar, setOrdenar, envio, setEnvio, vendFiltro, setVendFi
 function ordenarLista(lista, modo) {
   const arr = [...lista];
   if (modo === 'az') arr.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
+  else if (modo === 'recentes') arr.sort((a, b) =>
+    String(b.primeira_compra || b.ultima_compra || '').localeCompare(String(a.primeira_compra || a.ultima_compra || '')));
   else arr.sort((a, b) => Number(b.lifetime_total || 0) - Number(a.lifetime_total || 0));
   return arr;
 }
