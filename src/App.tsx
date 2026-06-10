@@ -4821,6 +4821,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [projModal,setProjModal]=useState(null);   // {refNorm,cor,tam} — clicou no projetado
   const [matrizCorteAberto,setMatrizCorteAberto]=useState(null); // id do corte com matriz expandida
   const [blingEstoque,setBlingEstoque]=useState({}); // {"refNorm|cor_norm|TAM": qtd}
+  const [soBlingRefs,setSoBlingRefs]=useState([]); // refs na calculadora c/ Bling mas sem espelho ML (produto novo)
   const [blingAjuste,setBlingAjuste]=useState(null); // {refNorm,cor,tam,cor_norm,atual,desc} — modal de ajuste
   const usuarioSessao=(()=>{try{return JSON.parse(localStorage.getItem('amica_session')||'{}').usuario||'';}catch{return '';}})();
   const [ajusteValor,setAjusteValor]=useState('');
@@ -4968,8 +4969,31 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     recarregarBling(refNorm);
   },[modalRef]);
 
+  // Refs que estão na CALCULADORA e têm estoque no Bling, mas ainda não têm
+  // espelho no ML (produto novo). Como o ML virou 1 SKU = 1 anúncio, produto
+  // novo demora a aparecer no espelho ML; aqui ele vira card direto do Bling.
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const norm=s=>String(s||'').replace(/\D/g,'').replace(/^0+/,'')||'';
+        const mlSet=new Set((dados?.refs||[]).map(r=>norm(r.ref)));
+        const candidatas=Object.keys(calcDesc||{}).filter(r=>r&&!mlSet.has(r));
+        if(!candidatas.length){setSoBlingRefs([]);return;}
+        const {data}=await supabase.from('bling_estoque').select('ref,cor_norm,tam,cor_label,qtd,bling_sku').in('ref',candidatas);
+        const byRef={};
+        (data||[]).forEach(b=>{
+          const rn=norm(b.ref);if(!rn)return;
+          if(!byRef[rn])byRef[rn]={ref:rn,descricao:calcDesc[rn]||'',variations:[],qtd_total:0,_soBling:true};
+          byRef[rn].variations.push({cor:b.cor_label||b.cor_norm,tam:String(b.tam||'').toUpperCase(),qtd:0,sku:b.bling_sku||null});
+          byRef[rn].qtd_total+=(b.qtd||0);
+        });
+        setSoBlingRefs(Object.values(byRef));
+      }catch(e){console.error('soBling refs:',e.message);}
+    })();
+  },[dados,calcDesc]);
+
   const refs=useMemo(()=>{
-    const arr=(dados?.refs||[]).filter(r=>!r.sem_dados);
+    const arr=[...(dados?.refs||[]).filter(r=>!r.sem_dados),...soBlingRefs];
     const q=busca.trim().toLowerCase();
     if(!q)return arr;
     return arr.filter(r=>{
@@ -4977,7 +5001,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       const desc=(calcDesc[r.ref]||r.descricao||'').toLowerCase();
       return rk.includes(q)||desc.includes(q);
     });
-  },[dados,busca,calcDesc]);
+  },[dados,busca,calcDesc,soBlingRefs]);
 
   const totalGeral=dados?.stats?.total_geral||0;
   const qtdRefsAtivas=refs.length;
@@ -5045,7 +5069,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     return Math.round(((atual-ant)/ant)*1000)/10;
   })();
 
-  const selectedRef=modalRef?(dados?.refs||[]).find(r=>r.ref===modalRef):null;
+  const selectedRef=modalRef?[...(dados?.refs||[]),...soBlingRefs].find(r=>String(r.ref)===String(modalRef)):null;
 
   if(loading){
     return <div style={{padding:40,textAlign:"center",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>Carregando estoque...</div>;
@@ -5135,12 +5159,12 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             {low&&<div style={{position:"absolute",top:6,left:6,background:"#c0392b",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2,zIndex:2}}>BAIXO</div>}
             <FotoProdLarge sbUrl={sbUrl} refProd={refN} onZoom={handleZoom}/>
             <div style={{padding:"8px 10px 10px"}}>
-              <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",letterSpacing:0.3,marginBottom:2}}>{refN}</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",letterSpacing:0.3,marginBottom:2,display:"flex",alignItems:"center",gap:5}}>{refN}{r._soBling&&<span style={{background:"#2c3e50",color:"#fff",fontSize:7,fontWeight:700,padding:"1px 4px",borderRadius:6,letterSpacing:0.3}}>BLING</span>}</div>
               <div style={{fontSize:10.5,color:"#2c3e50",lineHeight:1.25,minHeight:26,marginBottom:6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{desc}</div>
               <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",paddingTop:6,borderTop:"1px solid #e8e2da"}}>
                 <div>
                   <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:18,fontWeight:700,color:"#2c3e50",lineHeight:1}}>{qtd.toLocaleString('pt-BR')}</div>
-                  <div style={{fontSize:8,color:"#8a9aa4",letterSpacing:0.3,textTransform:"uppercase",marginTop:1}}>estoque</div>
+                  <div style={{fontSize:8,color:"#8a9aa4",letterSpacing:0.3,textTransform:"uppercase",marginTop:1}}>{r._soBling?'bling':'estoque'}</div>
                 </div>
                 <div style={{fontSize:9,color:"#8a9aa4"}}>{r.variations?.length||0} var</div>
               </div>
@@ -5166,12 +5190,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 {refN}
                 {r.alerta_duplicata&&<span style={{background:"#c19a3e",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2}}>⚠ DUP</span>}
                 {low&&<span style={{background:"#c0392b",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2}}>BAIXO</span>}
+                {r._soBling&&<span style={{background:"#2c3e50",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2}}>BLING</span>}
               </div>
               <div style={{fontSize:12,color:"#2c3e50",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{desc}</div>
             </div>
             <div style={{textAlign:"right"}}>
               <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:20,fontWeight:700,color:"#2c3e50",lineHeight:1}}>{qtd.toLocaleString('pt-BR')}</div>
-              <div style={{fontSize:8,color:"#8a9aa4",letterSpacing:0.3,textTransform:"uppercase",marginTop:1}}>estoque · {r.variations?.length||0} var</div>
+              <div style={{fontSize:8,color:"#8a9aa4",letterSpacing:0.3,textTransform:"uppercase",marginTop:1}}>{r._soBling?'bling':'estoque'} · {r.variations?.length||0} var</div>
             </div>
           </div>);
         })}
@@ -5263,10 +5288,12 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         const tamOrder={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
         return (tamOrder[a.tam]||99)-(tamOrder[b.tam]||99);
       });
-      // Filtragem: q>0 OU cor top Bling OU corte ativo (reposição prevista)
+      // Filtragem: q>0 OU Bling>0 OU cor top Bling OU corte ativo (reposição prevista)
       const vars=varsGrade.filter(v=>{
         const q=v.qtd||0;
         if(q>0)return true;
+        const bk=`${refNorm}|${normCorBling(v.cor)}|${String(v.tam||'').toUpperCase().trim()}`;
+        if((blingEstoque[bk]||0)>0)return true;
         if(topCoresBling.has(normCorBling(v.cor)))return true;
         return getProj(v.cor,v.tam)>0;
       });
