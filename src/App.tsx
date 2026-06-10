@@ -4815,13 +4815,41 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [matrizProjPorRef,setMatrizProjPorRef]=useState({}); // {refNorm: {"cor|tam": qtd}}
   const [topCoresBling,setTopCoresBling]=useState(new Set()); // Set<cor.toLowerCase()>
   const [corProjNomes,setCorProjNomes]=useState({}); // {refNorm:{corNorm:nomeDisplay}} — p/ sintetizar cores so-projecao
+  // Bling/Estoque (Ailson 10/06/2026): cortes brutos p/ modal de reposição prevista,
+  // coluna Bling ajustavel + logs. usuarioSessao alimenta motivo/auditoria.
+  const [cortesProjPorRef,setCortesProjPorRef]=useState({}); // {refNorm:[{id,nCorte,oficina,data,qtd,descricao,cores,tamanhos}]}
+  const [projModal,setProjModal]=useState(null);   // {refNorm,cor,tam} — clicou no projetado
+  const [matrizCorteAberto,setMatrizCorteAberto]=useState(null); // id do corte com matriz expandida
+  const [blingEstoque,setBlingEstoque]=useState({}); // {"refNorm|cor_norm|TAM": qtd}
+  const [blingAjuste,setBlingAjuste]=useState(null); // {refNorm,cor,tam,cor_norm,atual,desc} — modal de ajuste
+  const usuarioSessao=(()=>{try{return JSON.parse(localStorage.getItem('amica_session')||'{}').usuario||'';}catch{return '';}})();
+  const [ajusteValor,setAjusteValor]=useState('');
+  const [ajusteMotivo,setAjusteMotivo]=useState('');
+  const [salvandoAjuste,setSalvandoAjuste]=useState(false);
+  const salvarAjusteBling=async()=>{
+    if(!blingAjuste||salvandoAjuste)return;
+    const ba=blingAjuste;
+    const nova=parseInt(ajusteValor,10);
+    if(isNaN(nova)||nova<0){alert('Quantidade inválida');return;}
+    setSalvandoAjuste(true);
+    try{
+      const {data:atualRow}=await supabase.from('bling_estoque').select('qtd').eq('ref',ba.refNorm).eq('cor_norm',ba.cor_norm).eq('tam',ba.tam).maybeSingle();
+      const anterior=atualRow?atualRow.qtd:null;
+      const {error:e1}=await supabase.from('bling_estoque').upsert({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,cor_label:ba.cor||null,qtd:nova,atualizado_em:new Date().toISOString(),atualizado_por:usuarioSessao||null},{onConflict:'ref,cor_norm,tam'});
+      if(e1)throw e1;
+      await supabase.from('bling_estoque_logs').insert({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,cor_label:ba.cor||null,qtd_anterior:anterior,qtd_nova:nova,delta:(anterior==null?nova:nova-anterior),motivo:ajusteMotivo||null,usuario:usuarioSessao||null,origem:'manual'});
+      setBlingEstoque(prev=>({...prev,[`${ba.refNorm}|${ba.cor_norm}|${ba.tam}`]:nova}));
+      setBlingAjuste(null);
+    }catch(e){alert('Erro ao salvar ajuste: '+(e.message||e));}
+    finally{setSalvandoAjuste(false);}
+  };
 
   const carregarMatrizProjetada=async()=>{
     try{
       const {data}=await supabase.from('amicia_data')
         .select('payload').eq('user_id','ailson_cortes').maybeSingle();
       const cortes=data?.payload?.cortes||[];
-      const result={};const nomes={};
+      const result={};const nomes={};const cortesRaw={};
       for(const c of cortes){
         if(c?.entregue===true)continue; // só cortes ainda na oficina
         const refRaw=String(c.ref||'').replace(/\D/g,'').replace(/^0+/,'');
@@ -4830,6 +4858,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         const tamanhos=c.detalhes?.tamanhos||[];
         if(!cores.length||!tamanhos.length)continue;
         if(!result[refRaw])result[refRaw]={};
+        if(!cortesRaw[refRaw])cortesRaw[refRaw]=[];
+        cortesRaw[refRaw].push({id:c.id,nCorte:c.nCorte||'',oficina:c.oficina||'',data:c.data||'',qtd:Number(c.qtd)||0,descricao:c.descricao||'',cores,tamanhos});
         for(const co of cores){
           const folhas=Number(co.folhas)||0;
           if(folhas<=0)continue;
@@ -4847,6 +4877,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       }
       setMatrizProjPorRef(result);
       setCorProjNomes(nomes);
+      setCortesProjPorRef(cortesRaw);
     }catch(e){console.error('matriz proj:',e.message);}
   };
 
@@ -4918,6 +4949,19 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   };
 
   useEffect(()=>{carregarCalc();carregar();carregarMatrizProjetada();carregarTopCoresBling();},[]);
+  // Carrega o estoque Bling da ref aberta (coluna ajustavel). Ailson 10/06/2026.
+  const recarregarBling=async(refNorm)=>{
+    try{
+      const {data}=await supabase.from('bling_estoque').select('cor_norm,tam,qtd').eq('ref',refNorm);
+      const m={};(data||[]).forEach(r=>{m[`${refNorm}|${r.cor_norm}|${String(r.tam).toUpperCase()}`]=r.qtd;});
+      setBlingEstoque(m);
+    }catch(e){console.error('bling estoque:',e.message);}
+  };
+  useEffect(()=>{
+    if(!modalRef){setBlingEstoque({});return;}
+    const refNorm=String(modalRef).replace(/\D/g,'').replace(/^0+/,'');
+    recarregarBling(refNorm);
+  },[modalRef]);
 
   const refs=useMemo(()=>{
     const arr=(dados?.refs||[]).filter(r=>!r.sem_dados);
@@ -5222,7 +5266,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         return getProj(v.cor,v.tam)>0;
       });
       const ocultas=varsGrade.length-vars.length;
-      return <div onClick={()=>setModalRef(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:100,overflowY:"auto",backdropFilter:"blur(3px)"}}>
+      return (<><div onClick={()=>setModalRef(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:100,overflowY:"auto",backdropFilter:"blur(3px)"}}>
         <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:680,overflow:"hidden",boxShadow:"0 20px 50px rgba(0,0,0,0.25)"}}>
           <div style={{display:"flex",gap:14,padding:"18px 20px",borderBottom:"1px solid #e8e2da",background:"#faf8f5",alignItems:"flex-start"}}>
             <div style={{width:64,height:84,borderRadius:8,background:"#e8e2da",flexShrink:0,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={modalRef} onZoom={handleZoom}/></div>
@@ -5243,6 +5287,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Cor</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Tamanho</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>SKU</th>
+                <th style={{background:"#2c3e50",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right"}}>Bling</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right"}}>Estoque</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right",opacity:0.85}}>Estoque proj.</th>
               </tr></thead>
@@ -5250,12 +5295,16 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 {vars.map((v,i)=>{
                   const q=v.qtd||0;const cls=q===0?"#c0392b":q<=3?"#c19a3e":"#2c3e50";
                   const proj=getProj(v.cor,v.tam);
+                  const corNorm=normCorBling(v.cor);const tamU=String(v.tam||'').toUpperCase().trim();
+                  const blingKey=`${refNorm}|${corNorm}|${tamU}`;
+                  const blingQtd=blingEstoque[blingKey];const temBling=blingQtd!=null;
                   return<tr key={i} style={{background:i%2===0?"#fff":"#faf8f5",borderBottom:"1px solid #e8e2da"}}>
                     <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{v.cor||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{v.tam||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Courier New,monospace",fontSize:10,color:"#8a9aa4"}}>{v.sku&&!String(v.sku).startsWith('_SINT_')?v.sku:'—'}</td>
+                    <td onClick={()=>{setBlingAjuste({refNorm,cor:v.cor||'',tam:tamU,cor_norm:corNorm,atual:temBling?blingQtd:0,desc});setAjusteValor(String(temBling?blingQtd:0));setAjusteMotivo(usuarioSessao);}} title="Ajustar estoque Bling" style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:temBling?"#2c3e50":"#b9c2c9",cursor:"pointer",background:"#f4f7fb",borderLeft:"1px solid #e3ebf2",borderRight:"1px solid #e3ebf2"}}>{temBling?blingQtd:'·'}</td>
                     <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:cls}}>{q}</td>
-                    <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:500,fontSize:11,color:proj>0?"#8a9aa4":"#cdd4d9"}}>{proj>0?`+${proj}`:'—'}</td>
+                    <td onClick={proj>0?()=>setProjModal({refNorm,cor:v.cor||'',tam:tamU}):undefined} title={proj>0?"Ver cortes que geram a reposição":undefined} style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:500,fontSize:11,color:proj>0?"#4a7fa5":"#cdd4d9",cursor:proj>0?"pointer":"default",textDecoration:proj>0?"underline":"none"}}>{proj>0?`+${proj}`:'—'}</td>
                   </tr>;
                 })}
               </tbody>
@@ -5263,7 +5312,93 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             {ocultas>0&&<div style={{fontSize:10,color:"#8a9aa4",marginTop:8,fontStyle:"italic"}}>{ocultas} variaç{ocultas===1?'ão oculta':'ões ocultas'} (estoque 0 sem reposição prevista nem cor top).</div>}
           </div>
         </div>
-      </div>;
+      </div>
+      {/* ── Modal: cortes do Oficinas que geram a reposição prevista (Ailson 10/06/2026) ── */}
+      {projModal&&(()=>{
+        const pm=projModal;
+        const cortesRef=cortesProjPorRef[pm.refNorm]||[];
+        const alvo=normCorBling(pm.cor);
+        const lista=cortesRef.filter(ct=>(ct.cores||[]).some(co=>normCorBling(co.nome)===alvo));
+        const fechar=()=>{setProjModal(null);setMatrizCorteAberto(null);};
+        return <div onClick={fechar} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:110,overflowY:"auto",backdropFilter:"blur(3px)"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:560,width:"100%",boxShadow:"0 12px 40px rgba(0,0,0,0.25)",overflow:"hidden"}}>
+            <div style={{padding:"14px 18px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:11,color:"#4a7fa5",fontWeight:700}}>Reposição prevista · REF {pm.refNorm}</div>
+                <div style={{fontSize:14,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif"}}>{pm.cor}</div>
+              </div>
+              <button onClick={fechar} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{padding:"12px 16px"}}>
+              {lista.length===0&&<div style={{fontSize:12,color:"#8a9aa4",fontStyle:"italic"}}>Nenhum corte ativo encontrado pra essa cor.</div>}
+              {lista.map(ct=>{
+                const aberto=matrizCorteAberto===ct.id;
+                const tams=ct.tamanhos||[];const cores=ct.cores||[];
+                return <div key={ct.id} style={{border:"1px solid #e3ebf2",borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#f4f7fb"}}>
+                    <button onClick={()=>setMatrizCorteAberto(aberto?null:ct.id)} title="Ver matriz cor × tamanho" style={{width:24,height:24,borderRadius:5,background:"#fff",border:"1px solid #c8d8e4",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><SvgMatrixDet color="#4a7fa5"/></button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>Corte {ct.nCorte||'—'} · {ct.oficina||'—'}</div>
+                      <div style={{fontSize:11,color:"#6b7c8a"}}>Retirada: {ct.data?String(ct.data).split('-').reverse().join('/'):'—'} · {ct.qtd} peças</div>
+                    </div>
+                  </div>
+                  {aberto&&<div style={{padding:"8px 10px",overflowX:"auto"}}>
+                    <table style={{borderCollapse:"collapse",fontSize:11,width:"100%"}}>
+                      <thead><tr>
+                        <th style={{textAlign:"left",padding:"3px 6px",color:"#8a9aa4",fontWeight:700}}>Cor</th>
+                        {tams.map((t,ti)=><th key={ti} style={{textAlign:"center",padding:"3px 6px",color:"#8a9aa4",fontWeight:700}}>{t.tam}</th>)}
+                        <th style={{textAlign:"right",padding:"3px 6px",color:"#4a7fa5",fontWeight:700}}>Total</th>
+                      </tr></thead>
+                      <tbody>
+                        {cores.map((co,ci)=>{
+                          const folhas=Number(co.folhas)||0;
+                          const destaca=normCorBling(co.nome)===alvo;
+                          const totCor=folhas*tams.reduce((s,t)=>s+(Number(t.grade)||0),0);
+                          return <tr key={ci} style={{background:destaca?"#eef5fb":(ci%2?"#faf8f5":"#fff")}}>
+                            <td style={{padding:"3px 6px",fontWeight:destaca?700:600,color:"#2c3e50"}}>{co.nome}</td>
+                            {tams.map((t,ti)=><td key={ti} style={{textAlign:"center",padding:"3px 6px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#2c3e50"}}>{folhas*(Number(t.grade)||0)}</td>)}
+                            <td style={{textAlign:"right",padding:"3px 6px",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#4a7fa5"}}>{totCor}</td>
+                          </tr>;
+                        })}
+                      </tbody>
+                    </table>
+                  </div>}
+                </div>;
+              })}
+            </div>
+          </div>
+        </div>;
+      })()}
+      {/* ── Modal: ajuste de estoque Bling (sobrescreve + log de auditoria) ── */}
+      {blingAjuste&&(()=>{
+        const ba=blingAjuste;
+        return <div onClick={()=>!salvandoAjuste&&setBlingAjuste(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:110,overflowY:"auto",backdropFilter:"blur(3px)"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:420,width:"100%",boxShadow:"0 12px 40px rgba(0,0,0,0.25)",overflow:"hidden"}}>
+            <div style={{padding:"14px 18px",background:"#2c3e50",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:14,fontWeight:700,fontFamily:"Georgia,serif"}}>Ajuste de estoque · Bling</div>
+              <button onClick={()=>!salvandoAjuste&&setBlingAjuste(null)} style={{background:"none",border:"none",fontSize:22,color:"#cdd4d9",cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{padding:"16px 18px"}}>
+              <div style={{fontSize:12,color:"#6b7c8a",marginBottom:2}}>REF {ba.refNorm}{ba.desc?` · ${ba.desc}`:''}</div>
+              <div style={{fontSize:15,fontWeight:700,color:"#2c3e50",marginBottom:12}}>{ba.cor} · {ba.tam}</div>
+              <div style={{fontSize:12,color:"#6b7c8a",marginBottom:14}}>Estoque Bling atual: <b style={{color:"#2c3e50",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:14}}>{ba.atual}</b></div>
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:11,color:"#2c3e50",fontWeight:700,marginBottom:3}}>Nova quantidade</div>
+                <input type="number" min="0" value={ajusteValor} onChange={e=>setAjusteValor(e.target.value)} autoFocus style={{width:"100%",boxSizing:"border-box",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:15,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",outline:"none"}}/>
+              </div>
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,color:"#2c3e50",fontWeight:700,marginBottom:3}}>Motivo</div>
+                <input value={ajusteMotivo} onChange={e=>setAjusteMotivo(e.target.value)} placeholder="nome de quem ajustou" style={{width:"100%",boxSizing:"border-box",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:13,outline:"none"}}/>
+              </div>
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                <button onClick={()=>!salvandoAjuste&&setBlingAjuste(null)} style={{background:"#fff",color:"#6b7c8a",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 16px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}}>Cancelar</button>
+                <button onClick={salvarAjusteBling} disabled={salvandoAjuste} style={{background:salvandoAjuste?"#9bb4c8":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"8px 18px",fontSize:13,cursor:salvandoAjuste?"default":"pointer",fontFamily:"Georgia,serif",fontWeight:700}}>{salvandoAjuste?"Salvando…":"Salvar"}</button>
+              </div>
+            </div>
+          </div>
+        </div>;
+      })()}
+      </>);
     })()}
   </div>);
 };
