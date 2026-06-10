@@ -79,11 +79,13 @@ export default async function handler(req, res) {
     if (errUpd) return res.status(500).json({ error: errUpd.message });
 
     // Atualiza conversa -> etapa 'atendida' + vendedora atribuida
+    // atendida_desde = momento que a vendedora ACEITOU (relogio do follow_up 3d).
     const { error: errCv } = await supabase
       .from('lojas_whats_conversas')
       .update({
         etapa: 'atendida',
         vendedora_atribuida_id: vendedora_id,
+        atendida_desde: agora.toISOString(),
         atualizado_em: agora.toISOString(),
       })
       .eq('id', handoff.conversa_id);

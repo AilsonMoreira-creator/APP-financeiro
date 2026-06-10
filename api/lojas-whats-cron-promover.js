@@ -87,11 +87,11 @@ async function preview(req, res) {
         .eq('etapa', 'quente')
         .is('esfriando_desde', null)
         .lt('ultima_atividade_em', cutoffEsfriando),
-      // Atendida sem venda há > diasAtendidaFup → follow_up
+      // Atendida sem venda há > diasAtendidaFup → follow_up (relogio = atendida_desde)
       supabase.from('lojas_whats_conversas')
         .select('*', { count: 'exact', head: true })
         .eq('etapa', 'atendida')
-        .lt('ultima_atividade_em', cutoffAtendida),
+        .or(`atendida_desde.lt.${cutoffAtendida},and(atendida_desde.is.null,atualizado_em.lt.${cutoffAtendida})`),
       // Etapa ativa (exceto atendida/follow_up/vendeu/etc) sem atividade > diasPerdida
       supabase.from('lojas_whats_conversas')
         .select('*', { count: 'exact', head: true })
@@ -163,22 +163,28 @@ async function executar() {
   if (err1) logErro('cron-promover/esfriando', err1);
 
   // ─── 2. Atendida sem venda há > diasAtendidaFup → follow_up ────────────
-  // Regra Ailson 06/06: o card fica na aba Atendida ate ~3 dias. Quem vendeu
-  // ja saiu pra 'vendeu' (capi-match / leads-conversoes-cron), entao quem
-  // CONTINUA em 'atendida' apos 3d e justamente quem NAO vendeu → follow_up.
+  // Regra Ailson 06/06 (corrigida 09/06): o relogio comeca no momento que a
+  // vendedora ACEITOU o handoff (atendida_desde), NAO na ultima atividade.
+  // Quem vendeu ja saiu pra 'vendeu' (capi-match / leads-conversoes-cron),
+  // entao quem CONTINUA em 'atendida' apos Xd e quem NAO vendeu → follow_up.
   // NAO seta follow_up_vence_em de proposito: o card so estaciona na aba, SEM
   // disparar HSM (o cron-followup so atua em quem tem follow_up_vence_em).
+  // BUG FIX 09/06: follow_up_origem TEM que bater com o CHECK constraint
+  // lojas_whats_conversas_follow_up_origem_check (valores: sofia_detectou,
+  // vendedora_manual, atendida_3d_sem_venda). Antes usava 'cron_atendida_sem_venda'
+  // (invalido) → UPDATE falhava silencioso e NENHUM card ia pra follow_up.
+  // Fallback p/ cards legados sem atendida_desde: usa atualizado_em.
   const { data: paraFollowup, error: errFup } = await supabase
     .from('lojas_whats_conversas')
     .update({
       etapa: 'follow_up',
       follow_up_entrou_em: agora,
-      follow_up_origem: 'cron_atendida_sem_venda',
+      follow_up_origem: 'atendida_3d_sem_venda',
       follow_up_motivo: 'sem_venda_apos_atendida',
       atualizado_em: agora
     })
     .eq('etapa', 'atendida')
-    .lt('ultima_atividade_em', cutoffAtendida)
+    .or(`atendida_desde.lt.${cutoffAtendida},and(atendida_desde.is.null,atualizado_em.lt.${cutoffAtendida})`)
     .select('id');
   if (errFup) logErro('cron-promover/atendida-followup', errFup);
 
