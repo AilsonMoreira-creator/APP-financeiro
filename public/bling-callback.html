@@ -42,10 +42,26 @@
   if(!code||!state){showError('Parâmetros inválidos. Feche e tente novamente.');return;}
 
   // Lê credenciais da conta específica (salvas pelo App antes de abrir o auth URL)
-  const clientId=localStorage.getItem('bling_auth_id');
-  const clientSecret=localStorage.getItem('bling_auth_secret');
+  let clientId=localStorage.getItem('bling_auth_id');
+  let clientSecret=localStorage.getItem('bling_auth_secret');
 
-  if(!clientId||!clientSecret){showError('Credenciais não encontradas. Configure no módulo Bling primeiro.');return;}
+  // Fallback: se a autorização foi iniciada FORA do módulo (localStorage vazio),
+  // busca as credenciais da conta no Supabase por state (exitus/lumia/muniam).
+  if(!clientId||!clientSecret){
+    try{
+      const SB_URL=localStorage.getItem('sb_url');
+      const SB_KEY=localStorage.getItem('sb_key');
+      if(SB_URL&&SB_KEY){
+        st.textContent='⏳ Buscando credenciais da conta...';
+        const cr=await fetch(SB_URL+'/rest/v1/amicia_data?user_id=eq.bling-creds&select=payload',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+        const arr=await cr.json();
+        const conta=(arr&&arr[0]&&arr[0].payload&&arr[0].payload[state])||null;
+        if(conta&&conta.id&&conta.secret){clientId=conta.id;clientSecret=conta.secret;}
+      }
+    }catch(e){/* cai no erro abaixo */}
+  }
+
+  if(!clientId||!clientSecret){showError('Credenciais não encontradas. Abra o módulo Bling do app (pra carregar as credenciais) e clique em Conectar por lá.');return;}
 
   try{
     const callback=window.location.origin+'/bling-callback.html';
