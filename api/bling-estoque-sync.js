@@ -82,6 +82,17 @@ export default async function handler(req, res) {
     }
     resumo.sku_ref_map = skuRefMap.size;
 
+    // Whitelist: só sincroniza refs cadastradas na CALCULADORA (calc-meluni),
+    // pra não importar refs antigas e criar card. ?todas=1 ignora o filtro.
+    const calcRefs = new Set();
+    {
+      const { data: cm } = await supabase.from('amicia_data').select('payload').eq('user_id', 'calc-meluni').maybeSingle();
+      for (const p of (cm?.payload?.prods || [])) { const r = normRef(p.ref); if (r) calcRefs.add(r); }
+    }
+    resumo.calc_refs = calcRefs.size;
+    const filtrarCalc = req.query.todas !== '1' && calcRefs.size > 0;
+    resumo.filtro_calculadora = filtrarCalc;
+
     // ── 2. Paginar /produtos → skuMap ────────────────────────────────────
     const skuMap = new Map(); // sku -> { ref, cor, tam, idProduto }
     for (let pagina = 1; pagina <= MAX_PAGES; pagina++) {
@@ -105,6 +116,7 @@ export default async function handler(req, res) {
         let ref = normRef(parsed.ref);
         if (!ref) ref = normRef(skuRefMap.get(sku) || '');
         if (!ref) { resumo.sem_ref++; continue; }
+        if (filtrarCalc && !calcRefs.has(ref)) { resumo.fora_calc = (resumo.fora_calc || 0) + 1; continue; }
         skuMap.set(sku, { ref, cor: parsed.cor || '', tam: (parsed.tamanho || '').toUpperCase(), idProduto: p.id || null });
       }
       if (produtos.length < PAGE_SIZE) break;
@@ -164,6 +176,16 @@ export default async function handler(req, res) {
         if (error) resumo.erros.push(`upsert ${j}: ${error.message}`);
         else resumo.upserted += Math.min(500, rows.length - j);
       }
+    }
+
+    // Limpeza opcional (?limpar=1): remove refs que NÃO estão na calculadora.
+    if (!dryRun && filtrarCalc && req.query.limpar === '1') {
+      const keep = [...calcRefs];
+      const { error: delErr, count } = await supabase.from('bling_estoque')
+        .delete({ count: 'exact' })
+        .not('ref', 'in', `(${keep.join(',')})`);
+      if (delErr) resumo.erros.push(`limpeza: ${delErr.message}`);
+      else resumo.removidas_fora_calc = count || 0;
     }
 
     resumo.ms = Date.now() - t0;
