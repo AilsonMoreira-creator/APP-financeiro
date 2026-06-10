@@ -5179,11 +5179,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 4px 14px rgba(44,62,80,0.08)";e.currentTarget.style.borderColor="#4a7fa5";}}
             onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";e.currentTarget.style.borderColor="#e8e2da";}}
           >
-            {r.alerta_duplicata&&<div style={{position:"absolute",top:6,right:6,background:"#c19a3e",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2,zIndex:2}}>⚠ DUP</div>}
             {low&&<div style={{position:"absolute",top:6,left:6,background:"#c0392b",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2,zIndex:2}}>BAIXO</div>}
             <FotoProdLarge sbUrl={sbUrl} refProd={refN} onZoom={handleZoom}/>
             <div style={{padding:"8px 10px 10px"}}>
-              <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",letterSpacing:0.3,marginBottom:2,display:"flex",alignItems:"center",gap:5}}>{refN}{r._soBling&&<span style={{background:"#2c3e50",color:"#fff",fontSize:7,fontWeight:700,padding:"1px 4px",borderRadius:6,letterSpacing:0.3}}>BLING</span>}</div>
+              <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",letterSpacing:0.3,marginBottom:2,display:"flex",alignItems:"center",gap:5}}>{refN}{r._soBling&&<span style={{fontSize:8,color:"#8a9aa4",fontWeight:700,letterSpacing:0.3}}>BLING</span>}</div>
               <div style={{fontSize:10.5,color:"#2c3e50",lineHeight:1.25,minHeight:26,marginBottom:6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{desc}</div>
               <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",paddingTop:6,borderTop:"1px solid #e8e2da"}}>
                 <div>
@@ -5214,7 +5213,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 {refN}
                 {r.alerta_duplicata&&<span style={{background:"#c19a3e",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2}}>⚠ DUP</span>}
                 {low&&<span style={{background:"#c0392b",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2}}>BAIXO</span>}
-                {r._soBling&&<span style={{background:"#2c3e50",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2}}>BLING</span>}
+                {r._soBling&&<span style={{fontSize:8,color:"#8a9aa4",fontWeight:700,letterSpacing:0.3}}>BLING</span>}
               </div>
               <div style={{fontSize:12,color:"#2c3e50",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{desc}</div>
             </div>
