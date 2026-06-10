@@ -342,6 +342,10 @@
     {
       "path": "/api/lojas-whats-cron-feedback",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/bling-estoque-sync",
+      "schedule": "0 9 * * *"
     }
   ]
 }
