@@ -4814,13 +4814,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   //   3) Aviso de duplicata removido
   const [matrizProjPorRef,setMatrizProjPorRef]=useState({}); // {refNorm: {"cor|tam": qtd}}
   const [topCoresBling,setTopCoresBling]=useState(new Set()); // Set<cor.toLowerCase()>
+  const [corProjNomes,setCorProjNomes]=useState({}); // {refNorm:{corNorm:nomeDisplay}} — p/ sintetizar cores so-projecao
 
   const carregarMatrizProjetada=async()=>{
     try{
       const {data}=await supabase.from('amicia_data')
         .select('payload').eq('user_id','ailson_cortes').maybeSingle();
       const cortes=data?.payload?.cortes||[];
-      const result={};
+      const result={};const nomes={};
       for(const c of cortes){
         if(c?.entregue===true)continue; // só cortes ainda na oficina
         const refRaw=String(c.ref||'').replace(/\D/g,'').replace(/^0+/,'');
@@ -4833,6 +4834,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           const folhas=Number(co.folhas)||0;
           if(folhas<=0)continue;
           const corNorm=normCorBling(co.nome);
+          if(!nomes[refRaw])nomes[refRaw]={};
+          if(co.nome&&!nomes[refRaw][corNorm])nomes[refRaw][corNorm]=String(co.nome).trim();
           for(const tm of tamanhos){
             const grade=Number(tm.grade)||0;
             if(grade<=0)continue;
@@ -4843,6 +4846,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         }
       }
       setMatrizProjPorRef(result);
+      setCorProjNomes(nomes);
     }catch(e){console.error('matriz proj:',e.message);}
   };
 
@@ -5177,14 +5181,47 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         const tamOrder={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
         return (tamOrder[a.tam]||99)-(tamOrder[b.tam]||99);
       });
+      // Sintetiza tamanhos/cores faltantes (Ailson 09/06/2026): o Bling as vezes
+      // so cadastra alguns tamanhos de uma cor (ex: REF 2927 so tem Marrom P) e o
+      // filtro so mexia em linha existente. Pra cor que faz parte da regra (top
+      // Bling OU com corte ativo) completamos a grade com linhas 0; cores que so
+      // existem na projecao (ex: Telha/Terracota sendo cortadas) tambem aparecem.
+      const ordemTamG={p:1,m:2,g:3,gg:4,g1:5,g2:6,g3:7};
+      const nomesProj=corProjNomes[refNorm]||{};
+      const tamsUniverso=(()=>{
+        const s=new Set();
+        varsTodas.forEach(v=>{const t=String(v.tam||'').trim();if(t)s.add(t.toUpperCase());});
+        Object.keys(matrizRef).forEach(k=>{const t=(k.split('|')[1]||'').toUpperCase();if(t)s.add(t);});
+        return [...s].sort((a,b)=>(ordemTamG[a.toLowerCase()]||99)-(ordemTamG[b.toLowerCase()]||99));
+      })();
+      const corDisplay={};
+      varsTodas.forEach(v=>{const k=normCorBling(v.cor);if(k&&!corDisplay[k])corDisplay[k]=v.cor;});
+      Object.entries(nomesProj).forEach(([k,nome])=>{if(k&&!corDisplay[k])corDisplay[k]=nome;});
+      const existeCorTam=new Set(varsTodas.map(v=>`${normCorBling(v.cor)}|${String(v.tam||'').toLowerCase().trim()}`));
+      const coresCandidatas=new Set([...varsTodas.map(v=>normCorBling(v.cor)),...Object.keys(nomesProj)].filter(Boolean));
+      const sinteticas=[];
+      coresCandidatas.forEach(ck=>{
+        const temProj=Object.keys(matrizRef).some(k=>k.split('|')[0]===ck);
+        if(!topCoresBling.has(ck)&&!temProj)return; // nao faz parte da regra
+        for(const t of tamsUniverso){
+          if(existeCorTam.has(`${ck}|${t.toLowerCase()}`))continue;
+          sinteticas.push({cor:corDisplay[ck]||ck,tam:t,qtd:0,sku:null});
+        }
+      });
+      const varsGrade=[...varsTodas,...sinteticas].sort((a,b)=>{
+        const corA=a.cor||'';const corB=b.cor||'';
+        if(corA!==corB)return corA.localeCompare(corB);
+        const tamOrder={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
+        return (tamOrder[a.tam]||99)-(tamOrder[b.tam]||99);
+      });
       // Filtragem: q>0 OU cor top Bling OU corte ativo (reposição prevista)
-      const vars=varsTodas.filter(v=>{
+      const vars=varsGrade.filter(v=>{
         const q=v.qtd||0;
         if(q>0)return true;
         if(topCoresBling.has(normCorBling(v.cor)))return true;
         return getProj(v.cor,v.tam)>0;
       });
-      const ocultas=varsTodas.length-vars.length;
+      const ocultas=varsGrade.length-vars.length;
       return <div onClick={()=>setModalRef(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:100,overflowY:"auto",backdropFilter:"blur(3px)"}}>
         <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:680,overflow:"hidden",boxShadow:"0 20px 50px rgba(0,0,0,0.25)"}}>
           <div style={{display:"flex",gap:14,padding:"18px 20px",borderBottom:"1px solid #e8e2da",background:"#faf8f5",alignItems:"flex-start"}}>
@@ -5194,7 +5231,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <div style={{fontSize:17,fontWeight:700,color:"#2c3e50",margin:"2px 0 6px",lineHeight:1.25}}>{desc||"(sem descrição)"}</div>
               <div style={{display:"flex",gap:14,fontSize:11,color:"#8a9aa4",flexWrap:"wrap"}}>
                 <span>Total: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:40}}>{(selectedRef.qtd_total||0).toLocaleString('pt-BR')}</b></span>
-                <span>· Variações: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:13}}>{vars.length}{ocultas>0&&<span style={{color:"#8a9aa4",fontWeight:400,fontSize:11}}> de {varsTodas.length}</span>}</b></span>
+                <span>· Variações: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:13}}>{vars.length}{ocultas>0&&<span style={{color:"#8a9aa4",fontWeight:400,fontSize:11}}> de {varsGrade.length}</span>}</b></span>
               </div>
             </div>
             <button onClick={()=>setModalRef(null)} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer",padding:"0 4px",lineHeight:1}}>×</button>
