@@ -8,6 +8,7 @@
 
 import { supabase, normalizarTelefone } from './_lojas-whats-helpers.js';
 import { enviarTemplate } from './_lojas-whats-meta-client.js';
+import { primeiroNome as primeiroNomeProprio } from './_lojas-whats-helpers.js';
 
 function montarVars(declaradas, valorPorChave) {
   const arr = [];
@@ -108,7 +109,8 @@ export async function processarFila(limite = 40) {
       }
 
       // envia HSM
-      const primeiroNome = (nome || 'cliente').split(' ')[0];
+      // Nome SEMPRE com inicial maiúscula (LUCIMARA → Lucimara). Ailson 11/06/2026.
+      const primeiroNome = primeiroNomeProprio(nome || 'cliente');
       const vars = montarVars(tpl.variables, { '1': primeiroNome });
       let metaResp, metaMsgId;
       try {

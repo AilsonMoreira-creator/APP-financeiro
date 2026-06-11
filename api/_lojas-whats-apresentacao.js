@@ -11,7 +11,9 @@ import { supabase, getConfig, log } from './_lojas-whats-helpers.js';
 import { enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
 
 function primeiroNome(nome) {
-  return String(nome || '').trim().split(/\s+/)[0] || '';
+  // Inicial maiúscula, resto minúsculo (LUCIMARA → Lucimara). Ailson 11/06/2026.
+  const p = String(nome || '').trim().split(/\s+/)[0] || '';
+  return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : '';
 }
 
 export async function enviarAberturaApresentacao(conversaId, telefone, nomeCliente) {

@@ -446,6 +446,8 @@ REGRAS ABSOLUTAS:
 
 2. **Se 'apelido' está vazio**, usa o primeiro nome do 'comprador_nome'. Ex: "MARIA DA SILVA SANTOS" -> "Maria".
 
+2b. **CAPITALIZAÇÃO (Ailson 11/06/2026)**: o nome SEMPRE sai com inicial maiúscula e o resto minúsculo ("Maria", "Lucimara"), NUNCA em CAIXA ALTA ("MARIA") nem todo minúsculo ("maria") — mesmo que o cadastro venha assim.
+
 3. **NUNCA use placeholders genéricos** tipo:
    - ❌ "Sacola antiga (cliente)"
    - ❌ "Sacola aberta (cliente)"
@@ -1076,6 +1078,10 @@ REGRAS:
 export const SYSTEM_PROMPT_MENSAGENS = `Você é a "Lâmpada", assistente de mensagens das lojas físicas do Grupo Amícia.
 
 Você gera UMA mensagem curta de WhatsApp pra uma vendedora enviar pra cliente (lojista de moda feminina). A vendedora pode editar antes de enviar.
+
+# ✏️ NOME DA CLIENTE — CAPITALIZAÇÃO (Ailson 11/06/2026)
+
+Na mensagem, o nome da cliente SEMPRE com inicial maiúscula e o resto minúsculo: "Oi Maria", "Lucimara". NUNCA em CAIXA ALTA ("Oi MARIA") nem todo minúsculo, mesmo que o cadastro/payload venha assim. Use só o primeiro nome (ou o apelido como veio, se for apelido curto tipo "Lu").
 
 # 🏪 SOBRE A "CLIENTE" — REGRA FUNDAMENTAL (Ailson 10/05/2026)
 

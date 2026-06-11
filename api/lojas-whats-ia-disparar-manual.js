@@ -133,7 +133,8 @@ export default async function handler(req, res) {
     // Importante: enviar parameter a mais pra Meta = template rejeitado.
     // Ex: visita_site_amicia_v1 tem so [{nome:'1'}] → vars = {'1': nome}
     //     carrinho_abandonado_site_amicia_v2 tem [{nome:'1'},{nome:'2'}] → +qtd
-    const primeiroNome = (conv.nome_cliente || 'cliente').split(' ')[0];
+    const brutoNm = (conv.nome_cliente || 'cliente').split(' ')[0];
+    const primeiroNome = brutoNm.charAt(0).toUpperCase() + brutoNm.slice(1).toLowerCase(); // LUCIMARA → Lucimara (Ailson 11/06/2026)
     const valorPorChave = {
       '1': primeiroNome,
       '2': String(conv.qtd_pecas || 0),

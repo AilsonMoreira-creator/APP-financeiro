@@ -264,12 +264,21 @@ async function handleGerarSugestoes(req, res, auth) {
     return /\(cliente\)|^cliente$|sacola.*\(.*\)|^a cliente$|^a aluna$/i.test(t);
   };
   const resolverNomeDisplay = (s) => {
-    if (s.alvo_tipo !== 'cliente') return s.alvo_nome_display || null;
+    // Nome em CAIXA ALTA vira Title Case (Ailson 11/06/2026): "MARIA SILVA" →
+    // "Maria Silva". Só converte se estiver TODO em maiúsculas (preserva
+    // apelidos com capitalização intencional tipo "Lu" ou "Medida Certa Lobo").
+    const titleSeCaps = (nome) => {
+      if (!nome) return nome;
+      const str = String(nome);
+      if (str !== str.toUpperCase() || !/[A-ZÀ-Ú]/.test(str)) return str;
+      return str.toLowerCase().replace(/(^|\s)([a-zà-ú])/g, (m, sp, ch) => sp + ch.toUpperCase());
+    };
+    if (s.alvo_tipo !== 'cliente') return titleSeCaps(s.alvo_nome_display) || null;
     const apelidoReal = apelidoPorCliente.get(s.alvo_id);
     if (apelidoReal && ehPlaceholderGenerico(s.alvo_nome_display)) {
-      return apelidoReal;
+      return titleSeCaps(apelidoReal);
     }
-    return s.alvo_nome_display || apelidoReal || null;
+    return titleSeCaps(s.alvo_nome_display || apelidoReal) || null;
   };
 
   // 10. Insere as novas

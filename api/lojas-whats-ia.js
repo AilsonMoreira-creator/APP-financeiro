@@ -1116,7 +1116,13 @@ function classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCl
 
 function montarContextoConversa(conv) {
   const linhas = [];
-  linhas.push(`Cliente: ${conv.nome_cliente || '(sem nome)'} ${conv.tipo_documento || ''}`);
+  // Nome SEMPRE com inicial maiúscula no contexto — razão social vem em CAIXA
+  // ALTA e a IA copiava ("Oii LUCIMARA!"). Ailson 11/06/2026.
+  const nomeBonito = String(conv.nome_cliente || '(sem nome)')
+    .toLowerCase()
+    .replace(/(^|\s)([a-zà-ú])/g, (m, sp, ch) => sp + ch.toUpperCase());
+  linhas.push(`Cliente: ${nomeBonito} ${conv.tipo_documento || ''}`);
+  linhas.push(`(regra: ao usar o nome da cliente na mensagem, use só o primeiro nome, com inicial maiúscula e o resto minúsculo — NUNCA em CAIXA ALTA)`);
   if (conv.qtd_pecas) linhas.push(`Carrinho original: ${conv.qtd_pecas} peças`);
   if (conv.valor_carrinho) linhas.push(`Valor carrinho: R$ ${Number(conv.valor_carrinho).toFixed(2)}`);
   if (conv.iniciada_em) {

@@ -39,7 +39,8 @@ function escolherMsg6h(conversaId, nomeCliente) {
   for (let i = 0; i < idStr.length; i++) h = (h * 31 + idStr.charCodeAt(i)) | 0;
   const template = VARIACOES_MSG_6H[Math.abs(h) % VARIACOES_MSG_6H.length];
   // Pega primeiro nome — mais natural. Se vazio, fallback educado.
-  const primeiroNome = (nomeCliente || '').split(' ')[0].trim();
+  const bruto = (nomeCliente || '').split(' ')[0].trim();
+  const primeiroNome = bruto ? bruto.charAt(0).toUpperCase() + bruto.slice(1).toLowerCase() : ''; // LUCIMARA → Lucimara (Ailson 11/06/2026)
   return primeiroNome
     ? template.replace('{nome}', primeiroNome)
     : template.replace('Oi {nome}!', 'Oi!').replace('Oi {nome},', 'Oi, tudo bem?').replace('Olá {nome}!', 'Olá!');
@@ -156,7 +157,8 @@ export default async function handler(req, res) {
             // VESTI 6h (Ailson 04/06/2026): a cliente recebeu o LINK. No follow-up
             // de 6h a Sofia pergunta se ela conseguiu abrir e manda o PDF tambem,
             // caso prefira ver por aqui. 1 toque = 2 mensagens (texto + PDF).
-            const primeiroNome = (conv.nome_cliente || '').split(' ')[0].trim();
+            const brutoV = (conv.nome_cliente || '').split(' ')[0].trim();
+            const primeiroNome = brutoV ? brutoV.charAt(0).toUpperCase() + brutoV.slice(1).toLowerCase() : ''; // title case (Ailson 11/06/2026)
             const tplVesti = await getConfig('vesti_followup_6h',
               'Oii {nome} 😊 vc conseguiu abrir o link do catálogo?? Tô te encaminhando o catálogo em PDF também, caso vc prefira ver por aqui');
             const texto = primeiroNome
@@ -285,7 +287,8 @@ export default async function handler(req, res) {
             continue;
           }
 
-          const primeiroNome = (conv.nome_cliente || 'cliente').split(' ')[0];
+          const bruto24 = (conv.nome_cliente || 'cliente').split(' ')[0];
+          const primeiroNome = bruto24.charAt(0).toUpperCase() + bruto24.slice(1).toLowerCase(); // title case (Ailson 11/06/2026)
           const r = await enviarTemplate(conv.telefone, 'followup_catalogo_24h_v1', [primeiroNome]);
           const metaMsgId = r?.messages?.[0]?.id || null;
           if (!metaMsgId) throw new Error('meta_sem_message_id');
