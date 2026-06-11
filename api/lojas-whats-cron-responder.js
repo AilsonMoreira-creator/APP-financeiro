@@ -24,6 +24,7 @@
 import { supabase, log, logErro, getConfig } from './_lojas-whats-helpers.js';
 import { processarConversa } from './lojas-whats-ia.js';
 import { processarUma } from './lojas-whats-aprovar.js';
+import { enviarAberturaApresentacao } from './_lojas-whats-apresentacao.js';
 
 // Quanto pegamos por run. Mantido modesto: cada processarConversa faz 1 chamada
 // ao Claude (alguns segundos). 12 * ~5s = ~60s, folgado dentro do maxDuration.
@@ -53,7 +54,7 @@ export default async function handler(req, res) {
     // 1. Conversas com debounce vencido e ultima msg do cliente.
     const { data: conversas, error: errSel } = await supabase
       .from('lojas_whats_conversas')
-      .select('id, etapa, responder_em, ultima_msg_direcao')
+      .select('id, etapa, responder_em, ultima_msg_direcao, apresentacao_grupo, apresentacao_enviada_em, telefone, nome_cliente')
       .not('responder_em', 'is', null)
       .lte('responder_em', agoraIso)
       .eq('ultima_msg_direcao', 'entrada')
@@ -76,6 +77,35 @@ export default async function handler(req, res) {
         pulados++;
         detalhe.push({ id: c.id, motivo: 'etapa_fechada', etapa: c.etapa });
         continue;
+      }
+
+      // Abertura com vídeo da Tamara (teste A/B): a PRIMEIRA resposta do grupo
+      // apresentacao é o vídeo + legenda. Depois disso segue o fluxo normal
+      // (Sofia oferece o catálogo ou o cliente pede). Ailson 10/06/2026.
+      if (c.apresentacao_grupo && !c.apresentacao_enviada_em) {
+        await zerarResponderEm(c.id);
+        let raOk = false;
+        try {
+          const ra = await enviarAberturaApresentacao(c.id, c.telefone, c.nome_cliente);
+          raOk = !!ra.ok;
+          if (!ra.ok) logErro('cron-responder/apresentacao', new Error(ra.erro || 'falha'));
+        } catch (e) {
+          logErro('cron-responder/apresentacao', e);
+        }
+        // Marca como enviada SEMPRE (mesmo em falha) pra não repetir o vídeo.
+        await supabase
+          .from('lojas_whats_conversas')
+          .update(raOk
+            ? { apresentacao_enviada_em: new Date().toISOString(), ultima_msg_direcao: 'saida' }
+            : { apresentacao_enviada_em: new Date().toISOString() })
+          .eq('id', c.id);
+        if (raOk) {
+          gerados++;
+          detalhe.push({ id: c.id, motivo: 'apresentacao_video' });
+          continue; // próximo toque (catálogo) vem depois, no fluxo normal
+        }
+        // Falhou (ex: .mov rejeitado): cai pro fluxo normal abaixo pra o lead
+        // ainda receber uma resposta.
       }
 
       // Claim: zera responder_em ANTES de processar pra reduzir janela de

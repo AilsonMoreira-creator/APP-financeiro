@@ -601,16 +601,17 @@ async function acharOuCriarConversa(telefone, nomeCliente, refInfo) {
   const origem = detectarOrigemLead(refInfo);
   log('conversa', `nova conversa inbound: tel=${telefone} origem=${origem.origem} conf=${origem.confianca}`);
 
-  // Teste A/B catalogo Vesti (Ailson 01/06/2026): so pras 3 origens
-  // (stories/linktree/ads), sorteia % (config vesti_teste_pct, default 30) pra
-  // receber o catalogo VIRTUAL Vesti no lugar do PDF. Sticky: decidido 1x aqui.
-  // Carrinho e demais origens = 'pdf' sempre.
-  const ORIGENS_TESTE_VESTI = ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram'];
-  let catalogoFormato = 'pdf';
-  if (ORIGENS_TESTE_VESTI.includes(origem.origem)) {
-    const pct = Number(await getConfig('vesti_teste_pct', 30)) || 0;
-    if (Math.random() * 100 < pct) catalogoFormato = 'vesti';
+  // Teste A/B "abertura com vídeo da Tamara" (Ailson 10/06/2026): nas mesmas
+  // origens (stories/linktree/ads), sorteia % (config apresentacao_teste_pct,
+  // default 50) pra receber o VÍDEO de apresentação como PRIMEIRA resposta.
+  // Sticky: decidido 1x aqui. Vesti DESLIGADO (catalogo sempre pdf).
+  const ORIGENS_TESTE_APRESENTACAO = ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram'];
+  let apresentacaoGrupo = false;
+  if (ORIGENS_TESTE_APRESENTACAO.includes(origem.origem)) {
+    const pct = Number(await getConfig('apresentacao_teste_pct', 50)) || 0;
+    if (Math.random() * 100 < pct) apresentacaoGrupo = true;
   }
+  const catalogoFormato = 'pdf';
 
   const { data: nova, error } = await supabase
     .from('lojas_whats_conversas')
@@ -624,6 +625,7 @@ async function acharOuCriarConversa(telefone, nomeCliente, refInfo) {
       origem_lead: origem.origem,
       origem_lead_confianca: origem.confianca,
       catalogo_formato: catalogoFormato,
+      apresentacao_grupo: apresentacaoGrupo,
       ctwa_clid: origem.meta.ctwa_clid || null,
       meta_ad_source_id: origem.meta.ad_source_id || null,
       meta_ad_headline: origem.meta.ad_headline || null,
