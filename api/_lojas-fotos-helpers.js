@@ -87,20 +87,21 @@ export async function resolverFotosSugestoes(supabase, linhas) {
     console.warn('[lojas-fotos] bucket produtos indisponivel:', e?.message);
   }
 
-  // 4) Composição por sugestão: sofia da ref principal → ficha da principal →
-  //    sofia das secundárias → ficha das secundárias. Dedup por URL, cap 5.
+  // 4) Composição por sugestão: 1 FOTO POR REF (refs distintas — Ailson 11/06:
+  //    "mínimo 2 fotos" significa refs DIFERENTES, nunca 2 fotos da mesma ref).
+  //    Por ref: foto da Sofia mídias (mais recente) > ficha técnica. Cap 5.
+  //    Se a sugestão só cita 1 ref, vai 1 foto mesmo (não duplica).
   linhas.forEach((l, i) => {
     const refs = refsPorLinha[i];
     if (!refs.length) { l.fotos = null; return; }
     const fotos = [];
-    const addUnico = (f) => {
-      if (!f) return;
-      if (fotos.length >= 5) return;
-      if (fotos.some((x) => x.url === f.url)) return;
+    for (const rn of refs) {
+      if (fotos.length >= 5) break;
+      const f = (sofiaPorRef[rn] || [])[0] || fichaPorRef[rn];
+      if (!f) continue;
+      if (fotos.some((x) => x.url === f.url)) continue;
       fotos.push({ url: f.url, ref: f.ref, origem: f.origem });
-    };
-    for (const rn of refs) (sofiaPorRef[rn] || []).slice(0, 2).forEach(addUnico);
-    for (const rn of refs) addUnico(fichaPorRef[rn]);
+    }
     l.fotos = fotos.length ? fotos : null;
   });
 }

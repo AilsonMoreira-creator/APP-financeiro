@@ -65,11 +65,15 @@ export async function gerarPngDeElemento(el, filename = 'corte.png') {
 // Retorno: { ok, via } · { ok:false, erro:'gesto', files } quando o iOS perdeu
 // o gesto do usuário (geração demorou) — o caller guarda os files e pede um
 // 2º toque, que chama de novo com os files prontos (share imediato funciona).
-export async function compartilharArquivos(files, { titulo = '' } = {}) {
+export async function compartilharArquivos(files, { titulo = '', texto = '' } = {}) {
   if (!files || files.length === 0) return { ok: false, erro: 'sem arquivos' };
   if (navigator.canShare && navigator.canShare({ files })) {
     try {
-      await navigator.share({ files, title: titulo });
+      // texto junto: alguns alvos (WhatsApp Android) usam como legenda;
+      // outros ignoram — por isso quem chama também copia pro clipboard.
+      const payload = { files, title: titulo };
+      if (texto) payload.text = texto;
+      await navigator.share(payload);
       return { ok: true, via: 'share' };
     } catch (e) {
       if (e && e.name === 'AbortError') return { ok: true, via: 'cancelado' };

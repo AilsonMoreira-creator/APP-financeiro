@@ -50,7 +50,7 @@ import {
   palette, FONT, statusMap, subtipoSacolaMap, faseClienteNovaMap,
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
   fz, sz, TelefoneCopiavel, FotoProdutoLojas, saudacaoHora, emojiHora, fraseDoDia,
-  adminComSaudacao, supabase, spinKeyframes, refDisplay,
+  adminComSaudacao, supabase, spinKeyframes, refDisplay, formatarTelefone,
 } from './Lojas_Shared.jsx';
 
 // Aba 'Produtos' (admin only) — raio-x de produtos. Isolado em arquivo
@@ -2531,6 +2531,23 @@ export const CardDiaScreen = ({
             textDecoration: riscada ? 'line-through' : 'none',
           }}>{titulo}</div>
           <div style={{ fontSize: fz(14), color: palette.inkSoft }}>{s.contexto || ''}</div>
+          {/* Indicador de WhatsApp em TODO card (Ailson 11/06/2026): a vendedora
+              vê na lista quem já tem cadastro antes de abrir a sugestão */}
+          {cliente && (
+            <div style={{ marginTop: 5 }}>
+              {(cliente.telefone_principal || '').trim() ? (
+                <span style={{
+                  fontSize: fz(11.5), fontWeight: 700, padding: '1px 7px', borderRadius: 5,
+                  background: '#eafbf0', color: '#1e8e4e', border: '1px solid #b8dfc8',
+                }}>📱 tem WhatsApp</span>
+              ) : (
+                <span style={{
+                  fontSize: fz(11.5), fontWeight: 700, padding: '1px 7px', borderRadius: 5,
+                  background: '#fdeaea', color: '#c0392b', border: '1px solid #f4b8b8',
+                }}>⚠️ sem WhatsApp</span>
+              )}
+            </div>
+          )}
           {/* Miniaturas das fotos anexadas (Ailson 11/06/2026) */}
           {Array.isArray(s.fotos) && s.fotos.length > 0 && (
             <div style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'center' }}>
@@ -2926,45 +2943,9 @@ export const SugestaoScreen = ({
   const [apelidoEdit, setApelidoEdit] = useState(false);
   const [salvandoApelido, setSalvandoApelido] = useState(false);
   const [enviandoWhats, setEnviandoWhats] = useState(false);
-  // ─── Enviar fotos da sugestão (Ailson 11/06/2026) ───────────────────────
-  // Baixa as fotos anexadas e abre o share sheet nativo (mesmo padrão do envio
-  // em massa da Ordem de Corte). Se o iOS "perder o gesto" durante o download
-  // (NotAllowedError), guarda os arquivos e o 2º toque compartilha na hora.
-  const [enviandoFotos, setEnviandoFotos] = useState(false);
-  const fotosProntasRef = useRef(null);
-  const enviarFotosSugestao = async () => {
-    if (enviandoFotos) return;
-    const fotos = Array.isArray(sugestao.fotos) ? sugestao.fotos : [];
-    if (!fotos.length) return;
-    if (fotosProntasRef.current) {
-      const r = await compartilharArquivos(fotosProntasRef.current, { titulo: 'Fotos das peças' });
-      if (r.ok) fotosProntasRef.current = null;
-      return;
-    }
-    setEnviandoFotos(true);
-    try {
-      const files = [];
-      for (const f of fotos) {
-        try {
-          const resp = await fetch(f.url, { cache: 'force-cache' });
-          if (!resp.ok) continue;
-          const blob = await resp.blob();
-          const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-          files.push(new File([blob], `ref-${f.ref}-${files.length + 1}.${ext}`, { type: blob.type || 'image/jpeg' }));
-        } catch { /* pula foto com erro */ }
-      }
-      if (!files.length) { alert('Não consegui baixar as fotos — tenta de novo'); return; }
-      const r = await compartilharArquivos(files, { titulo: 'Fotos das peças' });
-      if (!r.ok && r.erro === 'gesto') {
-        fotosProntasRef.current = files;
-        alert('Fotos prontas! Toca de novo no botão pra enviar');
-      } else if (!r.ok) {
-        alert('Não consegui compartilhar: ' + (r.erro || 'erro'));
-      }
-    } finally {
-      setEnviandoFotos(false);
-    }
-  };
+  // Fotos da sugestão: SÓ visualização aqui — o envio acontece junto com a
+  // mensagem no ModalMensagem (Ailson 11/06/2026 v2).
+  const [dadosExpandido, setDadosExpandido] = useState(false); // "mais dados" da cliente
   const [showCadTelefone, setShowCadTelefone] = useState(false);  // modal cadastrar tel
   const [telefoneInput, setTelefoneInput] = useState('');
   const [salvandoTelefone, setSalvandoTelefone] = useState(false);
@@ -3035,22 +3016,17 @@ export const SugestaoScreen = ({
       setShowCadTelefone(true);
       return;
     }
-    setEnviandoWhats(true);
-    try {
-      // Marca como enviada antes de redirecionar (idempotente)
-      await handleMarcarSugestaoExecutada(sugestao.id, null);
-      // Abre WhatsApp sem mensagem pre-definida (so atalho pra conversa)
-      const numeroLimpo = tel.replace(/\D/g, '');
-      const numero = numeroLimpo.length === 11 || numeroLimpo.length === 10
-        ? '55' + numeroLimpo  // celular brasileiro sem 55
-        : numeroLimpo;
-      window.location.href = `https://wa.me/${numero}`;
-      onMarcarEnviada && onMarcarEnviada();
-    } catch (e) {
-      alert('Erro ao abrir WhatsApp: ' + e.message);
-    } finally {
-      setEnviandoWhats(false);
-    }
+    // FIX 11/06/2026 (Ailson): o await da API rodava ANTES do redirect — se a
+    // chamada demorasse/falhasse, o WhatsApp nunca abria ("clico e não vai").
+    // Agora: redireciona NA HORA (gesto do toque preservado) e marca executada
+    // em background, fire-and-forget.
+    const numeroLimpo = tel.replace(/\D/g, '');
+    const numero = numeroLimpo.length === 11 || numeroLimpo.length === 10
+      ? '55' + numeroLimpo  // celular brasileiro sem 55
+      : numeroLimpo;
+    try { handleMarcarSugestaoExecutada(sugestao.id, null).catch(() => {}); } catch { /* não bloqueia */ }
+    onMarcarEnviada && onMarcarEnviada();
+    window.location.href = `https://wa.me/${numero}`;
   };
 
   // Salva telefone do cliente. Comportamento depende da origem:
@@ -3076,11 +3052,12 @@ export const SugestaoScreen = ({
       }
       setShowCadTelefone(false);
       // So abre WhatsApp se a origem foi o botao WhatsApp
+      // (redirect primeiro, marca executada em background — fix 11/06/2026)
       if (origemModalTel === 'whats') {
-        await handleMarcarSugestaoExecutada(sugestao.id, null);
+        try { handleMarcarSugestaoExecutada(sugestao.id, null).catch(() => {}); } catch { /* não bloqueia */ }
         const numero = tel.length === 11 || tel.length === 10 ? '55' + tel : tel;
-        window.location.href = `https://wa.me/${numero}`;
         onMarcarEnviada && onMarcarEnviada();
+        window.location.href = `https://wa.me/${numero}`;
       }
     } catch (e) {
       alert('Erro ao salvar telefone: ' + e.message);
@@ -3150,6 +3127,65 @@ export const SugestaoScreen = ({
                 <span style={{ fontSize: fz(13) }}>RAZÃO SOCIAL</span>
               </div>
               <div style={{ color: palette.ink, fontWeight: 600, fontSize: fz(15) }}>{cliente.razao_social}</div>
+
+              {/* ─── WhatsApp visível + dados expansíveis (Ailson 11/06/2026) ── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                {(cliente.telefone_principal || '').trim() ? (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    fontSize: fz(13.5), fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+                    background: '#eafbf0', color: '#1e8e4e', border: '1px solid #b8dfc8',
+                  }}>📱 {formatarTelefone(cliente.telefone_principal)}</span>
+                ) : (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    fontSize: fz(13.5), fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+                    background: '#fdeaea', color: '#c0392b', border: '1px solid #f4b8b8',
+                  }}>⚠️ sem WhatsApp</span>
+                )}
+                <button onClick={() => {
+                  setTelefoneInput(cliente.telefone_principal || '');
+                  setOrigemModalTel('edicao');
+                  setShowCadTelefone(true);
+                }} style={{
+                  background: 'transparent', border: `1px solid ${palette.beige}`, borderRadius: 6,
+                  padding: '3px 9px', fontSize: fz(12.5), color: palette.inkSoft,
+                  cursor: 'pointer', fontFamily: FONT,
+                }}>{(cliente.telefone_principal || '').trim() ? '✏️ editar' : '➕ cadastrar'}</button>
+                <button onClick={() => setDadosExpandido(v => !v)} style={{
+                  background: 'transparent', border: 'none', padding: '3px 4px',
+                  fontSize: fz(12.5), color: palette.accent, cursor: 'pointer',
+                  fontFamily: FONT, fontWeight: 600, marginLeft: 'auto',
+                }}>{dadosExpandido ? 'menos dados ▴' : 'mais dados ▾'}</button>
+              </div>
+
+              {dadosExpandido && (
+                <div style={{
+                  marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${palette.beige}`,
+                  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px', fontSize: fz(13.5),
+                }}>
+                  {cliente.comprador_nome && (
+                    <div><span style={{ color: palette.inkMuted, fontSize: fz(11.5) }}>COMPRADOR(A)</span><br />
+                      <span style={{ color: palette.ink }}>{cliente.comprador_nome}</span></div>
+                  )}
+                  {cliente.documento && (
+                    <div><span style={{ color: palette.inkMuted, fontSize: fz(11.5) }}>{(cliente.tipo_documento || 'DOC').toUpperCase()}</span><br />
+                      <span style={{ color: palette.ink }}>{cliente.documento}</span></div>
+                  )}
+                  {(cliente.endereco_cidade || cliente.endereco_uf) && (
+                    <div><span style={{ color: palette.inkMuted, fontSize: fz(11.5) }}>CIDADE</span><br />
+                      <span style={{ color: palette.ink }}>{[cliente.endereco_cidade, cliente.endereco_uf].filter(Boolean).join(' / ')}</span></div>
+                  )}
+                  {cliente.instagram && (
+                    <div><span style={{ color: palette.inkMuted, fontSize: fz(11.5) }}>INSTAGRAM</span><br />
+                      <span style={{ color: palette.ink }}>{cliente.instagram}</span></div>
+                  )}
+                  {cliente.email && (
+                    <div style={{ gridColumn: '1 / -1' }}><span style={{ color: palette.inkMuted, fontSize: fz(11.5) }}>E-MAIL</span><br />
+                      <span style={{ color: palette.ink }}>{cliente.email}</span></div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${palette.beige}` }}>
                 <Pencil size={sz(15)} color={palette.inkSoft} />
@@ -3257,41 +3293,32 @@ export const SugestaoScreen = ({
         )}
 
         {/* Produto sugerido */}
-        {/* ─── Fotos pra enviar (Ailson 11/06/2026) ───────────────────────
-            Fotos resolvidas na geração (Sofia mídias + ficha técnica).
-            Botão usa o share sheet nativo: a vendedora escolhe o WhatsApp e
-            as fotos vão todas juntas pra conversa da cliente. */}
+        {/* ─── Fotos da sugestão (Ailson 11/06/2026 v2) ───────────────────
+            SÓ visualização: a vendedora vê o que vai junto. O envio acontece
+            no fluxo da mensagem (Pedir sugestão → revisar/excluir → enviar
+            foto + mensagem juntas). */}
         {Array.isArray(sugestao.fotos) && sugestao.fotos.length > 0 && (
           <>
-            <SectionTitle icon={Package}>Fotos pra enviar ({sugestao.fotos.length})</SectionTitle>
+            <SectionTitle icon={Package}>Fotos da sugestão ({sugestao.fotos.length})</SectionTitle>
             <div style={{
               background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10,
               padding: 12, marginBottom: 18,
             }}>
               <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
                 {sugestao.fotos.map((f, i) => (
-                  <a key={i} href={f.url} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+                  <div key={i} style={{ flexShrink: 0 }}>
                     <img src={f.url} alt={`REF ${f.ref}`} loading="lazy" style={{
-                      width: sz(86), height: sz(110), objectFit: 'cover', borderRadius: 8,
+                      width: sz(72), height: sz(92), objectFit: 'cover', borderRadius: 8,
                       border: `1px solid ${palette.beige}`, background: palette.beigeSoft, display: 'block',
                     }} onError={e => { e.target.parentElement.style.display = 'none'; }} />
                     <div style={{ fontSize: fz(11), color: palette.inkMuted, textAlign: 'center', marginTop: 2 }}>
                       REF {refDisplay(f.ref)}
                     </div>
-                  </a>
+                  </div>
                 ))}
               </div>
-              <button onClick={enviarFotosSugestao} disabled={enviandoFotos} style={{
-                marginTop: 10, width: '100%', background: enviandoFotos ? '#9bb4c8' : '#25d366',
-                color: '#fff', border: 'none', borderRadius: 9, padding: '11px 14px',
-                fontSize: fz(15), fontWeight: 700, fontFamily: FONT,
-                cursor: enviandoFotos ? 'wait' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}>
-                {enviandoFotos ? 'Preparando fotos…' : '📤 Enviar fotos pelo WhatsApp'}
-              </button>
-              <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 6, textAlign: 'center' }}>
-                Abre o compartilhamento — escolhe o WhatsApp e a conversa da cliente
+              <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 6 }}>
+                As fotos vão junto na hora de enviar a mensagem — dá pra tirar alguma antes de mandar
               </div>
             </div>
           </>
@@ -6673,6 +6700,64 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   const [telInput, setTelInput] = useState('');
   const [salvandoTel, setSalvandoTel] = useState(false);
 
+  // ─── Fotos da sugestão no fluxo da mensagem (Ailson 11/06/2026 v2) ──────
+  // A vendedora revisa as fotos junto com a mensagem: pode tirar alguma (X) e
+  // o envio vai TUDO junto pelo share sheet (fotos + texto como legenda quando
+  // o WhatsApp aceita; a mensagem também é copiada — é só colar se precisar).
+  const [fotosSel, setFotosSel] = useState(() =>
+    Array.isArray(sugestao?.fotos) ? sugestao.fotos.slice() : []);
+  const [enviandoFotosMsg, setEnviandoFotosMsg] = useState(false);
+  const fotosProntasModalRef = useRef(null); // iOS "perdeu o gesto": 2º toque envia
+  const removerFoto = (idx) => {
+    setFotosSel(prev => prev.filter((_, i) => i !== idx));
+    fotosProntasModalRef.current = null; // seleção mudou: invalida o cache
+  };
+
+  const enviarFotosEMensagem = async () => {
+    if (enviandoFotosMsg || !fotosSel.length) return;
+    // Copia a mensagem ANTES de qualquer await (gesto + garantia)
+    try { await navigator.clipboard.writeText(mensagem); } catch { /* segue */ }
+    // 2º toque depois do "perdeu o gesto" (iOS): compartilha na hora
+    if (fotosProntasModalRef.current) {
+      const r = await compartilharArquivos(fotosProntasModalRef.current, { titulo: 'Fotos das peças', texto: mensagem });
+      if (r.ok) {
+        fotosProntasModalRef.current = null;
+        if (r.via !== 'cancelado') {
+          if (sugestao) { try { handleMarcarSugestaoExecutada(sugestao.id, mensagem).catch(() => {}); } catch { /* bg */ } }
+          onEnviada && onEnviada();
+        }
+      }
+      return;
+    }
+    setEnviandoFotosMsg(true);
+    try {
+      const files = [];
+      for (const f of fotosSel) {
+        try {
+          const resp = await fetch(f.url, { cache: 'force-cache' });
+          if (!resp.ok) continue;
+          const blob = await resp.blob();
+          const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+          files.push(new File([blob], `ref-${f.ref}-${files.length + 1}.${ext}`, { type: blob.type || 'image/jpeg' }));
+        } catch { /* pula foto com erro */ }
+      }
+      if (!files.length) { alert('Não consegui baixar as fotos — tenta de novo'); return; }
+      const r = await compartilharArquivos(files, { titulo: 'Fotos das peças', texto: mensagem });
+      if (!r.ok && r.erro === 'gesto') {
+        fotosProntasModalRef.current = files;
+        alert('Fotos prontas! Toca de novo no botão pra enviar');
+        return;
+      }
+      if (!r.ok) { alert('Não consegui compartilhar: ' + (r.erro || 'erro')); return; }
+      if (r.via !== 'cancelado') {
+        if (sugestao) { try { handleMarcarSugestaoExecutada(sugestao.id, mensagem).catch(() => {}); } catch { /* bg */ } }
+        onEnviada && onEnviada();
+      }
+    } finally {
+      setEnviandoFotosMsg(false);
+    }
+  };
+
   // Modal de recusa "Nao faz sentido"
   const [showRecusa, setShowRecusa] = useState(false);
 
@@ -6869,9 +6954,10 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
     }
     setEnviandoWhats(true);
     try {
-      // Marca enviada (idempotente) com a mensagem que vai ser enviada
+      // FIX 11/06/2026 (Ailson): redireciona PRIMEIRO (gesto preservado),
+      // marca enviada em background — antes o await podia travar o redirect.
       if (sugestao) {
-        await handleMarcarSugestaoExecutada(sugestao.id, mensagem);
+        try { handleMarcarSugestaoExecutada(sugestao.id, mensagem).catch(() => {}); } catch { /* bg */ }
       }
       const numeroLimpo = tel.replace(/\D/g, '');
       const numero = numeroLimpo.length === 11 || numeroLimpo.length === 10
@@ -6879,8 +6965,8 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
         : numeroLimpo;
       // Mensagem pre-preenchida, encoded
       const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;
-      window.location.href = url;
       onEnviada && onEnviada();
+      window.location.href = url;
     } catch (e) {
       alert('Erro ao abrir WhatsApp: ' + e.message);
     } finally {
@@ -6902,12 +6988,12 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       }
       setShowCadTel(false);
       if (sugestao) {
-        await handleMarcarSugestaoExecutada(sugestao.id, mensagem);
+        try { handleMarcarSugestaoExecutada(sugestao.id, mensagem).catch(() => {}); } catch { /* bg */ }
       }
       const numero = tel.length === 11 || tel.length === 10 ? '55' + tel : tel;
       const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;
-      window.location.href = url;
       onEnviada && onEnviada();
+      window.location.href = url;
     } catch (e) {
       alert('Erro ao salvar telefone: ' + e.message);
     } finally {
@@ -7262,7 +7348,60 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
 
             {/* 3 botoes de acao — so aparecem fora do modo edicao */}
             {!editandoMsg && (
+              <>
+                {/* Fotos que vão junto (Ailson 11/06/2026 v2): X remove antes de enviar */}
+                {fotosSel.length > 0 && (
+                  <div style={{
+                    background: palette.beigeSoft, border: `1px solid ${palette.beige}`,
+                    borderRadius: 10, padding: 10, marginBottom: 10,
+                  }}>
+                    <div style={{ fontSize: fz(12), color: palette.inkSoft, marginBottom: 6, fontWeight: 600 }}>
+                      📎 Fotos que vão junto ({fotosSel.length}) — toca no ✕ pra tirar
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+                      {fotosSel.map((f, i) => (
+                        <div key={`${f.url}-${i}`} style={{ position: 'relative', flexShrink: 0 }}>
+                          <img src={f.url} alt={`REF ${f.ref}`} loading="lazy" style={{
+                            width: sz(58), height: sz(74), objectFit: 'cover', borderRadius: 7,
+                            border: `1px solid ${palette.beige}`, background: palette.surface, display: 'block',
+                          }} onError={e => { e.target.parentElement.style.display = 'none'; }} />
+                          <button onClick={() => removerFoto(i)} aria-label="Tirar foto" style={{
+                            position: 'absolute', top: -6, right: -6,
+                            width: 20, height: 20, borderRadius: 10, border: 'none',
+                            background: '#c0392b', color: '#fff', fontSize: fz(11), fontWeight: 700,
+                            cursor: 'pointer', lineHeight: 1, display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', padding: 0,
+                          }}>✕</button>
+                          <div style={{ fontSize: fz(10), color: palette.inkMuted, textAlign: 'center', marginTop: 2 }}>
+                            {refDisplay(f.ref)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {fotosSel.length > 0 ? (
+                  <>
+                    <button onClick={enviarFotosEMensagem} disabled={enviandoFotosMsg} style={{
+                      flex: '1 1 100%',
+                      background: enviandoFotosMsg ? '#9bb4c8' : '#25D366', color: 'white',
+                      border: 'none', borderRadius: 10, padding: '13px',
+                      fontSize: fz(16), fontWeight: 700, cursor: enviandoFotosMsg ? 'wait' : 'pointer', fontFamily: FONT,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      boxShadow: '0 2px 6px rgba(37,211,102,0.35)',
+                    }}>
+                      <MessageCircle size={sz(20)} /> {enviandoFotosMsg ? 'Preparando fotos…' : `📤 Enviar fotos + mensagem`}
+                    </button>
+                    <div style={{ flex: '1 1 100%', fontSize: fz(11.5), color: palette.inkMuted, textAlign: 'center', marginTop: -4 }}>
+                      A mensagem fica copiada — se o WhatsApp não colar sozinho como legenda, é só colar na conversa.{' '}
+                      <button onClick={abrirWhatsAppComMsg} style={{
+                        background: 'transparent', border: 'none', color: palette.accent,
+                        fontSize: fz(11.5), cursor: 'pointer', fontFamily: FONT, textDecoration: 'underline', padding: 0,
+                      }}>Enviar só o texto</button>
+                    </div>
+                  </>
+                ) : (
                 <button onClick={abrirWhatsAppComMsg} disabled={enviandoWhats} style={{
                   flex: '1 1 100%',
                   background: '#25D366', color: 'white',
@@ -7274,6 +7413,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
                 }}>
                   <MessageCircle size={sz(20)} /> {enviandoWhats ? 'Abrindo…' : 'WhatsApp'}
                 </button>
+                )}
                 <button onClick={marcarEnviada} disabled={marcandoEnviada} style={{
                   flex: 1, background: palette.surface, color: palette.accent,
                   border: `1.5px solid ${palette.accent}`, borderRadius: 10, padding: '11px',
@@ -7293,6 +7433,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 }}><X size={sz(17)} /> Não faz sentido</button>
               </div>
+              </>
             )}
           </div>
         )}
