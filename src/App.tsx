@@ -6641,9 +6641,34 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
       const {cortesSala:cs,salas:sl,logSC:lg}=ultimoEstadoRef.current;
       // sendBeacon não rola pra Supabase com auth header, então usa fetch async-blocking
       // (browser geralmente espera ~5s no pagehide pra completar fetches em curso)
-      try{
-        scDb.save({cortes:cs||[],salas:sl||[],logs:lg||[]});
-      }catch(e){console.error('flush salas-corte:',e);}
+      // FIX 11/06/2026 (Ailson): o flush gravava o estado local CRU por cima do
+      // remoto. Se a API tinha acabado de criar um corte (ordem→na_sala) que o
+      // app aberto ainda não conhecia, o flush APAGAVA esse corte (foi o que
+      // sumiu com o grupo 6 da REF 2832). Agora relê e mergeia por id, igual ao
+      // save com debounce. Se o fetch não completar no pagehide, simplesmente
+      // não salva — bem melhor que destruir dado.
+      (async()=>{
+        try{
+          const remote=await scDb.load();
+          const remoteCortes=remote?.cortes||[];
+          const localMap=new Map((cs||[]).map(c=>[c.id,c]));
+          const remoteMap=new Map(remoteCortes.map(c=>[c.id,c]));
+          const merged=[];
+          for(const [id,lc] of localMap){
+            const rc=remoteMap.get(id);
+            if(!rc){merged.push(lc);}
+            else{merged.push((lc._mod||0)>=(rc._mod||0)?lc:rc);}
+          }
+          for(const [id,rc] of remoteMap){
+            if(!localMap.has(id)&&!deletedIdsRef.current.has(id))merged.push(rc);
+          }
+          const mergedSalas=[...new Set([...(sl||[]),...(remote?.salas||[])])];
+          const localLogIds=new Set((lg||[]).map(l=>l.id));
+          const remoteLogsOnly=(remote?.logs||[]).filter(l=>!localLogIds.has(l.id));
+          const mergedLogs=[...(lg||[]),...remoteLogsOnly].sort((a,b)=>new Date(b.data)-new Date(a.data)).slice(0,200);
+          await scDb.save({cortes:merged,salas:mergedSalas,logs:mergedLogs});
+        }catch(e){console.error('flush salas-corte:',e);}
+      })();
     };
     const onVis=()=>{if(document.visibilityState==='hidden')flush();};
     window.addEventListener('pagehide',flush);

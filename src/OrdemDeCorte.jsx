@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { compartilharElementoComoImagem } from './compartilhar-card.js';
+import { compartilharElementoComoImagem, gerarPngDeElemento, compartilharArquivos } from './compartilhar-card.js';
 import { listarCoresManuais, adicionarCorManual, removerCorManual, resolverHexCor } from './cores-manuais.js';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import { ModalDefinirSala, SALAS_PADRAO } from './FilaDeCorte';
@@ -252,6 +252,54 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
   const ordemEditando = ordens.find(o => o.id === editandoId);
   const ordemExcluindo = ordens.find(o => o.id === excluindoId);
 
+  // ── Envio em massa pelo Whats (Ailson 11/06/2026) ─────────────────────────
+  // Checkbox em cada card → barra flutuante "Enviar pelo Whats" gera 1 PNG por
+  // card selecionado e abre o share sheet com todas as imagens juntas.
+  // iOS pode "perder o gesto" se a geração demorar (NotAllowedError) — nesse
+  // caso guarda os arquivos e o botão vira "Toque pra enviar" (2º toque
+  // compartilha na hora, sem gerar de novo).
+  const [selecionados, setSelecionados] = useState(() => new Set());
+  const [gerandoMassa, setGerandoMassa] = useState(false);
+  const [filesProntos, setFilesProntos] = useState(null);
+  const cardRefs = useRef(new Map());
+  const toggleSelecionado = (id) => {
+    setFilesProntos(null); // seleção mudou → invalida PNGs já gerados
+    setSelecionados(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+  const enviarMassa = async () => {
+    if (gerandoMassa) return;
+    if (filesProntos) {
+      const r = await compartilharArquivos(filesProntos, { titulo: 'Ordens de corte' });
+      if (r.ok) setFilesProntos(null);
+      return;
+    }
+    setGerandoMassa(true);
+    try {
+      const files = [];
+      for (const o of ordensFiltradas) {
+        if (!selecionados.has(o.id)) continue;
+        const el = cardRefs.current.get(o.id);
+        if (!el) continue;
+        files.push(await gerarPngDeElemento(el, `corte-${o.ref}${o.grupo != null ? '-g' + o.grupo : ''}.png`));
+      }
+      if (files.length === 0) { alert('Nenhum card selecionado visível na tela'); return; }
+      const r = await compartilharArquivos(files, { titulo: 'Ordens de corte' });
+      if (!r.ok && r.erro === 'gesto') {
+        setFilesProntos(files);
+      } else if (!r.ok) {
+        alert('Não consegui compartilhar: ' + (r.erro || 'erro'));
+      }
+    } catch (e) {
+      alert('Erro ao gerar imagens: ' + (e?.message || e));
+    } finally {
+      setGerandoMassa(false);
+    }
+  };
+
   return (
     <div style={{ fontFamily: SERIF, color: '#2c3e50', padding: 16, maxWidth: 1300, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
@@ -319,9 +367,39 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
             onExcluir={() => setExcluindoId(o.id)}
             onAbrirMatrix={() => setMatrixOrdem(o)}
             onDefinirSala={() => setDefinindoSala(o)}
+            selecionado={selecionados.has(o.id)}
+            onToggleSelecionado={() => toggleSelecionado(o.id)}
+            registrarRef={(node) => {
+              if (node) cardRefs.current.set(o.id, node);
+              else cardRefs.current.delete(o.id);
+            }}
           />
         ))}
       </div>
+
+      {/* Barra flutuante de envio em massa (Ailson 11/06/2026) */}
+      {selecionados.size > 0 && (
+        <div style={{
+          position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 60, background: '#2c3e50', color: '#fff', borderRadius: 26,
+          padding: '9px 12px 9px 16px', display: 'flex', gap: 10, alignItems: 'center',
+          boxShadow: '0 6px 22px rgba(0,0,0,0.3)', whiteSpace: 'nowrap',
+        }}>
+          <span style={{ fontSize: 13 }}>{selecionados.size} selecionada{selecionados.size > 1 ? 's' : ''}</span>
+          <button onClick={enviarMassa} disabled={gerandoMassa} style={{
+            background: filesProntos ? '#e67e22' : '#25d366', color: '#fff', border: 'none',
+            borderRadius: 18, padding: '8px 14px', fontSize: 13, fontWeight: 700,
+            cursor: gerandoMassa ? 'wait' : 'pointer', fontFamily: SERIF,
+            opacity: gerandoMassa ? 0.6 : 1,
+          }}>
+            {gerandoMassa ? 'Gerando…' : filesProntos ? '📤 Toque pra enviar' : '📤 Enviar pelo Whats'}
+          </button>
+          <button onClick={() => { setSelecionados(new Set()); setFilesProntos(null); }} title="Limpar seleção" style={{
+            background: 'rgba(255,255,255,0.12)', color: '#fff', border: 'none',
+            borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', fontSize: 14,
+          }}>✕</button>
+        </div>
+      )}
 
       {definindoSala && (
         <ModalDefinirSala
@@ -363,7 +441,7 @@ export default function OrdemDeCorte({ supabase, usuarioLogado, mediaRef = {} })
 // CARD DE ORDEM (intocado)
 // ════════════════════════════════════════════════════════════════════════════
 
-function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix, onDefinirSala }) {
+function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAbrirMatrix, onDefinirSala, selecionado, onToggleSelecionado, registrarRef }) {
   const status = STATUS_PILL[ordem.status] || STATUS_PILL.aguardando;
   const cores = ordem.cores || [];
   const isFinalizada = ordem.status === 'na_sala' || ordem.status === 'concluido' || ordem.status === 'cancelado';
@@ -399,10 +477,22 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
   };
 
   return (
-    <div ref={cardRef} style={{
-      background: '#fff', border: '1px solid #e8e2da', borderRadius: 10, padding: 14,
+    <div ref={(node) => { cardRef.current = node; if (registrarRef) registrarRef(node); }} style={{
+      background: '#fff', border: selecionado ? '1px solid #27ae60' : '1px solid #e8e2da', borderRadius: 10, padding: 14,
       opacity: isFinalizada ? 0.85 : 1, position: 'relative',
+      boxShadow: selecionado ? '0 0 0 1px #27ae60' : 'none',
     }}>
+      {/* Checkbox de seleção pra envio em massa (Ailson 11/06/2026) */}
+      <button onClick={onToggleSelecionado} data-noshot="1" title="Selecionar pra envio em massa" style={{
+        position: 'absolute', top: 10, right: 48, zIndex: 3,
+        width: 27, height: 27, borderRadius: 8,
+        border: selecionado ? '1px solid #27ae60' : '1px solid #d6cfc6',
+        background: selecionado ? '#27ae60' : '#fff', color: '#fff',
+        cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        fontSize: 14, lineHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {selecionado ? '✓' : ''}
+      </button>
       <button onClick={handleCompartilhar} disabled={gerandoImg} data-noshot="1" title="Compartilhar como imagem (WhatsApp)" style={{
         position: 'absolute', top: 10, right: 10, zIndex: 3,
         padding: 6, background: '#fff', border: '1px solid #d6cfc6', borderRadius: 8,
@@ -463,7 +553,7 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
           </div>
         )}
 
-        <div data-noshot="1" style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexShrink: 0, marginRight: 36 }}>
+        <div data-noshot="1" style={{ display: 'flex', gap: 4, marginLeft: 'auto', flexShrink: 0, marginRight: 76 }}>
           {/* Ailson 28/05/2026: admin pode definir a sala direto do card
               quando tecido ja foi separado — antes so era possivel via
               FilaDeCorte mobile. */}
