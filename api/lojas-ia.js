@@ -650,7 +650,7 @@ async function handleGerarMensagem(req, res, auth) {
   ) {
     const ageSec = (Date.now() - new Date(sug.mensagem_gerada_em).getTime()) / 1000;
     if (ageSec < cacheTtlSeg) {
-      return res.json({ ok: true, mensagem: sug.mensagem_gerada, cached: true });
+      return res.json({ ok: true, mensagem: sug.mensagem_gerada, cached: true, fotos: sug.fotos || null });
     }
   }
 
@@ -840,6 +840,7 @@ async function handleGerarMensagem(req, res, auth) {
     cached: false,
     usage: r.usage,
     latencia_ms: r.latencia_ms,
+    fotos: sug.fotos || null,
   });
 }
 
@@ -3677,6 +3678,21 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
     }
     console.error('[avulsa] erro criar sugestao:', errCriar);
     return res.status(500).json({ error: 'Erro ao criar sugestão: ' + errCriar.message });
+  }
+
+  // Fotos na avulsa (Ailson 11/06/2026): mesma regra das sugestões do dia —
+  // 1 foto por REF (Sofia mídias > ficha técnica). A vendedora revisa no
+  // modal e o envio vai foto + mensagem junto.
+  try {
+    const { resolverFotosSugestoes } = await import('./_lojas-fotos-helpers.js');
+    await resolverFotosSugestoes(supabase, [sugCriada]); // muta in-place
+    if (sugCriada.fotos) {
+      await supabase.from('lojas_sugestoes_diarias')
+        .update({ fotos: sugCriada.fotos })
+        .eq('id', sugCriada.id);
+    }
+  } catch (e) {
+    console.warn('[avulsa] resolverFotos falhou (segue sem fotos):', e?.message);
   }
 
   // 4. Reusa handleGerarMensagem injetando o sugestao_id criado

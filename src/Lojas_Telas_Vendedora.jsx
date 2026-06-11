@@ -6785,7 +6785,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       return r?.mensagem || r; // compatibilidade — antes retornava string
     } else if (clienteEfetivo && lojas.handleGerarMensagemAvulsa) {
       const r = await lojas.handleGerarMensagemAvulsa(clienteEfetivo.id, ctxExtra);
-      return r.mensagem;
+      return r; // objeto completo: { mensagem, fotos, ... } — Ailson 11/06/2026
     }
     return '(não foi possível gerar mensagem — cliente não identificado)';
   }, [sugestao, clienteEfetivo, handleGerarMensagem, lojas]);
@@ -6840,6 +6840,11 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       }
 
       const msg = typeof r === 'string' ? r : r?.mensagem;
+      // Fotos na avulsa (Ailson 11/06/2026): backend resolve pela mesma regra
+      // (1 por REF) e devolve no response — entra no fluxo foto+mensagem.
+      if (r && typeof r === 'object' && Array.isArray(r.fotos) && r.fotos.length && fotosSel.length === 0) {
+        setFotosSel(r.fotos.slice());
+      }
       setMensagem(msg);
       setMensagemOriginal(msg);
       setStep('pronta');
@@ -7179,6 +7184,9 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
                   const r = await lojas.handleGerarMensagemAvulsa(clienteEfetivo.id, { apelido_atual: apelido || null }, true);
                   const msg = typeof r === 'string' ? r : r?.mensagem;
                   if (!msg) { setErro('IA não retornou mensagem'); setStep('erro'); return; }
+                  if (r && typeof r === 'object' && Array.isArray(r.fotos) && r.fotos.length && fotosSel.length === 0) {
+                    setFotosSel(r.fotos.slice()); // fotos na avulsa forçada (Ailson 11/06/2026)
+                  }
                   setMensagem(msg);
                   setMensagemOriginal(msg);
                   setStep('pronta');
