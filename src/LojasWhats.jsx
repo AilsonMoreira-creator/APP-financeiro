@@ -4496,6 +4496,25 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
     document.addEventListener('pointerdown', onDocDown, true);
     return () => document.removeEventListener('pointerdown', onDocDown, true);
   }, [isDesktop, msgFoco]);
+  // Mobile/iOS: quando o teclado fecha por QUALQUER caminho (botao do
+  // teclado, swipe, blur), o visualViewport volta ao tamanho cheio mas a
+  // janela fica deslocada (header fora da tela). Reancora no topo.
+  // Ailson 11/06/2026.
+  useEffect(() => {
+    if (isDesktop) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onVvResize = () => {
+      // teclado fechou: viewport visivel ~= altura total da janela
+      if (vv.height >= window.innerHeight - 60) {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+      }
+    };
+    vv.addEventListener('resize', onVvResize);
+    return () => vv.removeEventListener('resize', onVvResize);
+  }, [isDesktop]);
   const fimChatRef = useRef(null);
 
   // ─── Trava de presença (Ailson 30/05/2026) ──────────────────────────────
@@ -5055,6 +5074,9 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
         padding: 10, background: palette.surface,
         borderTop: `1px solid ${palette.beige}`,
         display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0,
+        // Mobile focado: permite quebrar linha — textarea+enviar em cima,
+        // icones embaixo. Ailson 11/06/2026.
+        flexWrap: (!isDesktop && msgFoco) ? 'wrap' : 'nowrap',
         opacity: bloqueado ? 0.55 : 1, pointerEvents: bloqueado ? 'none' : 'auto',
       }}>
         {/* Botao emoji picker — à esquerda junto dos demais (Ailson 28/05/2026) */}
@@ -5225,13 +5247,30 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             setMsgFoco(false);
             // vazio -> volta exatamente ao tamanho original (minHeight 36)
             if (!novoTexto.trim() && textareaRef.current) textareaRef.current.style.height = '';
+            // iOS scrolla a janela pra mostrar o input quando o teclado abre
+            // e nao reancora ao fechar (header sumia). Forca volta ao topo.
+            // Ailson 11/06/2026.
+            setTimeout(() => {
+              window.scrollTo(0, 0);
+              document.documentElement.scrollTop = 0;
+              document.body.scrollTop = 0;
+            }, 80);
           }}
           placeholder="Mensagem (Enter quebra linha · clica no botao verde pra enviar)"
           rows={1}
           style={{
-            flex: 1, padding: '8px 12px', borderRadius: 18,
+            // Mobile focado: textarea toma a linha inteira (junto do botao
+            // enviar) e os icones quebram pra linha de baixo (flexWrap no
+            // container + order negativo aqui). Ailson 11/06/2026.
+            flex: (!isDesktop && msgFoco) ? '1 1 calc(100% - 54px)' : 1,
+            order: (!isDesktop && msgFoco) ? -2 : 0,
+            padding: '8px 12px', borderRadius: 18,
             border: `1px solid ${palette.beige}`, fontFamily: FONT_CHAT,
-            fontSize: fz(13), color: palette.ink, background: palette.bg,
+            // iOS faz zoom automatico em input com fonte <16px e o zoom NAO
+            // desfaz no blur (header sumia, tinha que pincar pra voltar).
+            // Mobile = 16px sempre. Ailson 11/06/2026.
+            fontSize: isDesktop ? fz(13) : fz(16),
+            color: palette.ink, background: palette.bg,
             resize: 'none', minHeight: (!isDesktop && msgFoco) ? 72 : 36,
             maxHeight: isDesktop ? 120 : 140, lineHeight: 1.4,
             boxSizing: 'border-box', overflowY: 'auto',
@@ -5245,6 +5284,8 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             width: 38, height: 38, cursor: enviando ? 'wait' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0, opacity: (!novoTexto.trim() && midiasAnexadas.length === 0) ? 0.5 : 1,
+            // Mobile focado: acompanha o textarea na primeira linha. Ailson 11/06/2026.
+            order: (!isDesktop && msgFoco) ? -1 : 0,
           }}>
           <Send size={sz(16)} />
         </button>
