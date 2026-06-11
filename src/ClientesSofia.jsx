@@ -120,7 +120,22 @@ async function fetchEnvioInfo(ids, size = 200) {
         (falhas || []).forEach(m => {
           const cid = convPorId.get(m.conversa_id);
           if (!cid) return;
-          map.set(cid, { status: 'nao_entregue', erro: m.erro || 'entrega falhou', em: m.enviada_em });
+          const atual = map.get(cid) || {};
+          map.set(cid, { ...atual, status: 'nao_entregue', erro: m.erro || 'entrega falhou', em: m.enviada_em });
+        });
+        // Última RESPOSTA da cliente (Ailson 11/06/2026): resposta a qualquer
+        // momento sobe o card pro topo e ganha badge 💬.
+        const { data: respostas } = await supabase
+          .from('lojas_whats_mensagens')
+          .select('conversa_id, enviada_em')
+          .in('conversa_id', [...convPorId.keys()])
+          .eq('direcao', 'entrada')
+          .order('enviada_em', { ascending: false });
+        (respostas || []).forEach(m => {
+          const cid = convPorId.get(m.conversa_id);
+          if (!cid) return;
+          const atual = map.get(cid) || { status: null, erro: null, em: null };
+          if (!atual.resposta_em) map.set(cid, { ...atual, resposta_em: m.enviada_em });
         });
       }
     }
@@ -138,12 +153,21 @@ function EnvioBadge({ envio }) {
     erro:         { txt: `❌ erro: ${String(envio.erro || '').slice(0, 38)}`, bg: '#fdeaea', fg: '#c0392b', bd: '#f4b8b8' },
     nao_entregue: { txt: `❌ não entregue: ${String(envio.erro || '').slice(0, 30)}`, bg: '#fdeaea', fg: '#c0392b', bd: '#f4b8b8' },
   }[envio.status];
-  if (!cfg) return null;
   return (
-    <span title={envio.erro || cfg.txt} style={{
-      fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
-      background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.bd}`, whiteSpace: 'nowrap',
-    }}>{cfg.txt}</span>
+    <>
+      {cfg && (
+        <span title={envio.erro || cfg.txt} style={{
+          fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+          background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.bd}`, whiteSpace: 'nowrap',
+        }}>{cfg.txt}</span>
+      )}
+      {envio.resposta_em && (
+        <span title="Cliente respondeu — abre a conversa pra ver" style={{
+          fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+          background: '#e8f1fa', color: '#2667a3', border: '1px solid #bcd6ee', whiteSpace: 'nowrap',
+        }}>💬 respondeu {fmtHora(envio.resposta_em)}</span>
+      )}
+    </>
   );
 }
 
@@ -488,12 +512,18 @@ function ordenarLista(lista, modo) {
   else if (modo === 'recentes') arr.sort((a, b) =>
     String(b.primeira_compra || b.ultima_compra || '').localeCompare(String(a.primeira_compra || a.ultima_compra || '')));
   else arr.sort((a, b) => Number(b.lifetime_total || 0) - Number(a.lifetime_total || 0));
-  // Atividade de envio nas últimas 24h SOBE pro topo (mais recente primeiro),
-  // independente do modo — assim a Tamara vê na hora o que acabou de sair
-  // (inclusive os erros). Depois de 24h o card volta pra posição natural e vai
-  // "descendo" conforme entram envios novos. Ailson 11/06/2026.
+  // Atividade sobe pro topo, independente do modo de ordenação:
+  //   1º) RESPOSTA da cliente — sobe SEMPRE, em qualquer momento (Ailson 11/06)
+  //   2º) envio nas últimas 24h (inclusive erros)
+  // Depois o card volta pra posição natural e vai "descendo" conforme entram
+  // atividades novas.
   const corte = Date.now() - 24 * 60 * 60 * 1000;
-  const ts = (l) => { const t = l.envio?.em ? new Date(l.envio.em).getTime() : 0; return t > corte ? t : 0; };
+  const ts = (l) => {
+    const resp = l.envio?.resposta_em ? new Date(l.envio.resposta_em).getTime() : 0;
+    if (resp) return resp + 1e15; // respostas sempre acima dos envios
+    const env = l.envio?.em ? new Date(l.envio.em).getTime() : 0;
+    return env > corte ? env : 0;
+  };
   arr.sort((a, b) => ts(b) - ts(a) || 0);
   return arr;
 }
