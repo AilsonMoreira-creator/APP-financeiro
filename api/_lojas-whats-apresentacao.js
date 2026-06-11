@@ -7,13 +7,98 @@
  *
  * Chamado pelo cron-responder antes de gerar a réplica normal.
  */
-import { supabase, getConfig, log } from './_lojas-whats-helpers.js';
+import { supabase, getConfig, log, logErro } from './_lojas-whats-helpers.js';
 import { enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
+import { enviarTexto } from './_lojas-whats-meta-client.js';
 
 function primeiroNome(nome) {
   // Inicial maiúscula, resto minúsculo (LUCIMARA → Lucimara). Ailson 11/06/2026.
   const p = String(nome || '').trim().split(/\s+/)[0] || '';
   return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : '';
+}
+
+function saudacaoBRT() {
+  // Hora em BRT (UTC-3) sem depender do TZ do servidor
+  const h = (new Date().getUTCHours() + 21) % 24;
+  if (h < 12) return 'bom dia';
+  if (h < 18) return 'boa tarde';
+  return 'boa noite';
+}
+
+/**
+ * Abertura TEXTO + FOTOS (braço B do A/B — Ailson 11/06/2026):
+ * 1ª mensagem: texto curto do atacado (config apresentacao_texto_msg).
+ * Na sequência: as fotos ativas com ref='abertura' (as 4 que o Ailson subiu
+ * nas Mídias — troca de foto = só retaguear no módulo Mídias).
+ * Depois disso a Sofia espera a interação e segue o fluxo normal.
+ */
+export async function enviarAberturaTextoFotos(conversaId, telefone, nomeCliente) {
+  // 1) texto curto (config editável; {nome} e {saudacao} são placeholders)
+  const tpl = await getConfig(
+    'apresentacao_texto_msg',
+    'Oii {nome}, {saudacao}!!\n\nNosso atacado são 12 peças, pode misturar os modelos à vontade'
+  );
+  const nome = primeiroNome(nomeCliente);
+  let texto = String(tpl).replace('{nome}', nome).replace('{saudacao}', saudacaoBRT());
+  texto = texto.replace(/\bOii\s+,/, 'Oii,').replace(/[ \t]{2,}/g, ' ').trim();
+
+  let r;
+  try {
+    r = await enviarTexto(telefone, texto);
+  } catch (e) {
+    return { ok: false, erro: 'envio_texto_falhou: ' + e.message };
+  }
+  await supabase.from('lojas_whats_mensagens').insert({
+    conversa_id: conversaId,
+    direcao: 'saida',
+    autor: 'sofia_ia',
+    tipo_midia: 'texto',
+    texto,
+    meta_message_id: r?.messages?.[0]?.id || null,
+    status: 'enviando',
+    enviada_em: new Date().toISOString(),
+  });
+
+  // 2) fotos da abertura (ref='abertura', ativas, ordem do nome: 1.jpg, 2.jpg…)
+  const { data: fotos } = await supabase
+    .from('lojas_whats_midias')
+    .select('*')
+    .eq('tipo', 'foto')
+    .eq('ativa', true)
+    .eq('ref', 'abertura')
+    .order('nome_arquivo', { ascending: true });
+  let fotosOk = 0;
+  for (const midia of (fotos || [])) {
+    try {
+      const rm = await enviarMidiaSofia({
+        telefone, midia, caption: null, conversaId,
+        mensagemId: null, decididaPor: 'apresentacao_texto_fotos',
+      });
+      if (!rm.ok) { logErro('apresentacao-fotos', new Error(rm.erro || 'falha')); continue; }
+      let midiaUrl = null;
+      try {
+        const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(midia.storage_path);
+        midiaUrl = pub?.publicUrl || null;
+      } catch {}
+      await supabase.from('lojas_whats_mensagens').insert({
+        conversa_id: conversaId,
+        direcao: 'saida',
+        autor: 'sofia_ia',
+        tipo_midia: 'foto',
+        texto: null,
+        midia_url: midiaUrl,
+        meta_message_id: rm.message_id || null,
+        status: 'enviando',
+        enviada_em: new Date().toISOString(),
+      });
+      fotosOk++;
+    } catch (e) {
+      logErro('apresentacao-fotos', e);
+    }
+  }
+
+  log('apresentacao', `conversa=${conversaId} abertura texto+fotos enviada (${fotosOk} fotos)`);
+  return { ok: true, fotos: fotosOk };
 }
 
 export async function enviarAberturaApresentacao(conversaId, telefone, nomeCliente) {

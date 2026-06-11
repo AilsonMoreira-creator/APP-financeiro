@@ -601,15 +601,19 @@ async function acharOuCriarConversa(telefone, nomeCliente, refInfo) {
   const origem = detectarOrigemLead(refInfo);
   log('conversa', `nova conversa inbound: tel=${telefone} origem=${origem.origem} conf=${origem.confianca}`);
 
-  // Teste A/B "abertura com vídeo da Tamara" (Ailson 10/06/2026): nas mesmas
-  // origens (stories/linktree/ads), sorteia % (config apresentacao_teste_pct,
-  // default 50) pra receber o VÍDEO de apresentação como PRIMEIRA resposta.
+  // Teste A/B da ABERTURA (Ailson 11/06/2026): nas origens de lead
+  // (stories/linktree/ads), TODA conversa nova entra no teste:
+  //   'video'       → vídeo da Tamara como 1ª resposta (definido 10/06)
+  //   'texto_fotos' → texto curto do atacado + fotos ref='abertura'
+  // Config apresentacao_teste_pct = % que recebe o VÍDEO (default 50).
   // Sticky: decidido 1x aqui. Vesti DESLIGADO (catalogo sempre pdf).
   const ORIGENS_TESTE_APRESENTACAO = ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram'];
   let apresentacaoGrupo = false;
+  let apresentacaoVariante = null;
   if (ORIGENS_TESTE_APRESENTACAO.includes(origem.origem)) {
+    apresentacaoGrupo = true;
     const pct = Number(await getConfig('apresentacao_teste_pct', 50)) || 0;
-    if (Math.random() * 100 < pct) apresentacaoGrupo = true;
+    apresentacaoVariante = Math.random() * 100 < pct ? 'video' : 'texto_fotos';
   }
   const catalogoFormato = 'pdf';
 
@@ -626,6 +630,7 @@ async function acharOuCriarConversa(telefone, nomeCliente, refInfo) {
       origem_lead_confianca: origem.confianca,
       catalogo_formato: catalogoFormato,
       apresentacao_grupo: apresentacaoGrupo,
+      apresentacao_variante: apresentacaoVariante,
       ctwa_clid: origem.meta.ctwa_clid || null,
       meta_ad_source_id: origem.meta.ad_source_id || null,
       meta_ad_headline: origem.meta.ad_headline || null,

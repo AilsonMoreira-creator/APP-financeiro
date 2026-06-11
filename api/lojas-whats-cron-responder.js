@@ -24,7 +24,7 @@
 import { supabase, log, logErro, getConfig } from './_lojas-whats-helpers.js';
 import { processarConversa } from './lojas-whats-ia.js';
 import { processarUma } from './lojas-whats-aprovar.js';
-import { enviarAberturaApresentacao } from './_lojas-whats-apresentacao.js';
+import { enviarAberturaApresentacao, enviarAberturaTextoFotos } from './_lojas-whats-apresentacao.js';
 
 // Quanto pegamos por run. Mantido modesto: cada processarConversa faz 1 chamada
 // ao Claude (alguns segundos). 12 * ~5s = ~60s, folgado dentro do maxDuration.
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     // 1. Conversas com debounce vencido e ultima msg do cliente.
     const { data: conversas, error: errSel } = await supabase
       .from('lojas_whats_conversas')
-      .select('id, etapa, responder_em, ultima_msg_direcao, apresentacao_grupo, apresentacao_enviada_em, telefone, nome_cliente')
+      .select('id, etapa, responder_em, ultima_msg_direcao, apresentacao_grupo, apresentacao_variante, apresentacao_enviada_em, telefone, nome_cliente')
       .not('responder_em', 'is', null)
       .lte('responder_em', agoraIso)
       .eq('ultima_msg_direcao', 'entrada')
@@ -79,20 +79,26 @@ export default async function handler(req, res) {
         continue;
       }
 
-      // Abertura com vídeo da Tamara (teste A/B): a PRIMEIRA resposta do grupo
-      // apresentacao é o vídeo + legenda. Depois disso segue o fluxo normal
-      // (Sofia oferece o catálogo ou o cliente pede). Ailson 10/06/2026.
+      // Abertura A/B (Ailson 11/06/2026): a PRIMEIRA resposta do grupo
+      // apresentacao depende da variante sorteada no webhook:
+      //   'video'       → vídeo da Tamara + legenda
+      //   'texto_fotos' → texto curto do atacado + fotos ref='abertura'
+      // Depois disso a Sofia espera a interação e segue o fluxo normal
+      // (oferece o catálogo ou o cliente pede).
       if (c.apresentacao_grupo && !c.apresentacao_enviada_em) {
         await zerarResponderEm(c.id);
+        const variante = c.apresentacao_variante === 'texto_fotos' ? 'texto_fotos' : 'video';
         let raOk = false;
         try {
-          const ra = await enviarAberturaApresentacao(c.id, c.telefone, c.nome_cliente);
+          const ra = variante === 'texto_fotos'
+            ? await enviarAberturaTextoFotos(c.id, c.telefone, c.nome_cliente)
+            : await enviarAberturaApresentacao(c.id, c.telefone, c.nome_cliente);
           raOk = !!ra.ok;
           if (!ra.ok) logErro('cron-responder/apresentacao', new Error(ra.erro || 'falha'));
         } catch (e) {
           logErro('cron-responder/apresentacao', e);
         }
-        // Marca como enviada SEMPRE (mesmo em falha) pra não repetir o vídeo.
+        // Marca como enviada SEMPRE (mesmo em falha) pra não repetir a abertura.
         await supabase
           .from('lojas_whats_conversas')
           .update(raOk
@@ -101,7 +107,7 @@ export default async function handler(req, res) {
           .eq('id', c.id);
         if (raOk) {
           gerados++;
-          detalhe.push({ id: c.id, motivo: 'apresentacao_video' });
+          detalhe.push({ id: c.id, motivo: variante === 'texto_fotos' ? 'apresentacao_texto_fotos' : 'apresentacao_video' });
           continue; // próximo toque (catálogo) vem depois, no fluxo normal
         }
         // Falhou (ex: .mov rejeitado): cai pro fluxo normal abaixo pra o lead
