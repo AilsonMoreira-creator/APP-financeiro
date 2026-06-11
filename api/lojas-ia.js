@@ -521,6 +521,17 @@ async function handleGerarSugestoes(req, res, auth) {
     });
   }
 
+  // ─── Fotos anexadas (Ailson 11/06/2026) ─────────────────────────────
+  // Resolve fotos das REFs citadas (produto_ref + metadados.refs_fotos):
+  // Sofia mídias primeiro (mais recente), ficha técnica complementa.
+  // Mín 2 / máx 5. Falha aqui NÃO bloqueia as sugestões.
+  try {
+    const { resolverFotosSugestoes } = await import('./_lojas-fotos-helpers.js');
+    await resolverFotosSugestoes(supabase, linhas);
+  } catch (e) {
+    console.warn('[lojas-ia] resolverFotosSugestoes falhou:', e?.message);
+  }
+
   const { error: errIns } = await supabase
     .from('lojas_sugestoes_diarias')
     .insert(linhas);
@@ -3239,6 +3250,16 @@ function montarMessagesMensagem(sug, ctx, contextoExtra) {
     // link" sem ter o URL aqui. Se null, IA so pode mencionar Vesti
     // sem URL especifica. NAO altere a URL.
     vesti_link_vendedora: ctx.vestiLinkAtivo || null,
+    // DDD + REGIÃO DO CLIENTE — Ailson 11/06/2026
+    // Pra regra de clima: NÃO oferecer couro / peças de frio pesado pra cliente
+    // do Norte/Nordeste. DDD extraído do telefone principal. Se null, IA não
+    // pode usar gancho de couro condicionado a região (usa gancho neutro).
+    ddd_cliente: (() => {
+      const tel = String(ctx.cliente?.telefone_principal || '').replace(/\D/g, '');
+      const semDdi = tel.startsWith('55') && tel.length >= 12 ? tel.slice(2) : tel;
+      const ddd = semDdi.slice(0, 2);
+      return /^[1-9][0-9]$/.test(ddd) ? ddd : null;
+    })(),
     // ANTI-CLONE — Ailson 22/05/2026
     // Mensagens que VOCE MESMA (mesma vendedora) ja escreveu hoje pra outros
     // clientes. Use pra NAO repetir abertura, produto destacado nem gancho.

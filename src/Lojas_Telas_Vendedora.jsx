@@ -31,6 +31,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { compartilharArquivos } from './compartilhar-card.js';
 import {
   ArrowLeft, RefreshCw, ChevronRight, Search, Settings,
   Users, Star, Lightbulb, Check, X, Sparkles, Flame, AlertTriangle,
@@ -2508,6 +2509,21 @@ export const CardDiaScreen = ({
             textDecoration: riscada ? 'line-through' : 'none',
           }}>{titulo}</div>
           <div style={{ fontSize: fz(14), color: palette.inkSoft }}>{s.contexto || ''}</div>
+          {/* Miniaturas das fotos anexadas (Ailson 11/06/2026) */}
+          {Array.isArray(s.fotos) && s.fotos.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'center' }}>
+              {s.fotos.slice(0, 4).map((f, i) => (
+                <img key={i} src={f.url} alt="" loading="lazy" style={{
+                  width: sz(30), height: sz(38), objectFit: 'cover', borderRadius: 5,
+                  border: `1px solid ${palette.beige}`, background: palette.beigeSoft,
+                }} onError={e => { e.target.style.display = 'none'; }} />
+              ))}
+              {s.fotos.length > 4 && (
+                <span style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>+{s.fotos.length - 4}</span>
+              )}
+              <span style={{ fontSize: fz(11), color: palette.inkMuted }}>📎 {s.fotos.length} foto{s.fotos.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
           {riscada && (
             <div style={{ marginTop: 6, fontSize: fz(13), color: palette.ok, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
               <Check size={sz(14)} /> Enviada
@@ -2822,6 +2838,45 @@ export const SugestaoScreen = ({
   const [apelidoEdit, setApelidoEdit] = useState(false);
   const [salvandoApelido, setSalvandoApelido] = useState(false);
   const [enviandoWhats, setEnviandoWhats] = useState(false);
+  // ─── Enviar fotos da sugestão (Ailson 11/06/2026) ───────────────────────
+  // Baixa as fotos anexadas e abre o share sheet nativo (mesmo padrão do envio
+  // em massa da Ordem de Corte). Se o iOS "perder o gesto" durante o download
+  // (NotAllowedError), guarda os arquivos e o 2º toque compartilha na hora.
+  const [enviandoFotos, setEnviandoFotos] = useState(false);
+  const fotosProntasRef = useRef(null);
+  const enviarFotosSugestao = async () => {
+    if (enviandoFotos) return;
+    const fotos = Array.isArray(sugestao.fotos) ? sugestao.fotos : [];
+    if (!fotos.length) return;
+    if (fotosProntasRef.current) {
+      const r = await compartilharArquivos(fotosProntasRef.current, { titulo: 'Fotos das peças' });
+      if (r.ok) fotosProntasRef.current = null;
+      return;
+    }
+    setEnviandoFotos(true);
+    try {
+      const files = [];
+      for (const f of fotos) {
+        try {
+          const resp = await fetch(f.url, { cache: 'force-cache' });
+          if (!resp.ok) continue;
+          const blob = await resp.blob();
+          const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+          files.push(new File([blob], `ref-${f.ref}-${files.length + 1}.${ext}`, { type: blob.type || 'image/jpeg' }));
+        } catch { /* pula foto com erro */ }
+      }
+      if (!files.length) { alert('Não consegui baixar as fotos — tenta de novo'); return; }
+      const r = await compartilharArquivos(files, { titulo: 'Fotos das peças' });
+      if (!r.ok && r.erro === 'gesto') {
+        fotosProntasRef.current = files;
+        alert('Fotos prontas! Toca de novo no botão pra enviar');
+      } else if (!r.ok) {
+        alert('Não consegui compartilhar: ' + (r.erro || 'erro'));
+      }
+    } finally {
+      setEnviandoFotos(false);
+    }
+  };
   const [showCadTelefone, setShowCadTelefone] = useState(false);  // modal cadastrar tel
   const [telefoneInput, setTelefoneInput] = useState('');
   const [salvandoTelefone, setSalvandoTelefone] = useState(false);
@@ -3114,6 +3169,46 @@ export const SugestaoScreen = ({
         )}
 
         {/* Produto sugerido */}
+        {/* ─── Fotos pra enviar (Ailson 11/06/2026) ───────────────────────
+            Fotos resolvidas na geração (Sofia mídias + ficha técnica).
+            Botão usa o share sheet nativo: a vendedora escolhe o WhatsApp e
+            as fotos vão todas juntas pra conversa da cliente. */}
+        {Array.isArray(sugestao.fotos) && sugestao.fotos.length > 0 && (
+          <>
+            <SectionTitle icon={Package}>Fotos pra enviar ({sugestao.fotos.length})</SectionTitle>
+            <div style={{
+              background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10,
+              padding: 12, marginBottom: 18,
+            }}>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+                {sugestao.fotos.map((f, i) => (
+                  <a key={i} href={f.url} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+                    <img src={f.url} alt={`REF ${f.ref}`} loading="lazy" style={{
+                      width: sz(86), height: sz(110), objectFit: 'cover', borderRadius: 8,
+                      border: `1px solid ${palette.beige}`, background: palette.beigeSoft, display: 'block',
+                    }} onError={e => { e.target.parentElement.style.display = 'none'; }} />
+                    <div style={{ fontSize: fz(11), color: palette.inkMuted, textAlign: 'center', marginTop: 2 }}>
+                      REF {refDisplay(f.ref)}
+                    </div>
+                  </a>
+                ))}
+              </div>
+              <button onClick={enviarFotosSugestao} disabled={enviandoFotos} style={{
+                marginTop: 10, width: '100%', background: enviandoFotos ? '#9bb4c8' : '#25d366',
+                color: '#fff', border: 'none', borderRadius: 9, padding: '11px 14px',
+                fontSize: fz(15), fontWeight: 700, fontFamily: FONT,
+                cursor: enviandoFotos ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}>
+                {enviandoFotos ? 'Preparando fotos…' : '📤 Enviar fotos pelo WhatsApp'}
+              </button>
+              <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 6, textAlign: 'center' }}>
+                Abre o compartilhamento — escolhe o WhatsApp e a conversa da cliente
+              </div>
+            </div>
+          </>
+        )}
+
         {produto && (
           <>
             <SectionTitle icon={Package}>Produto sugerido</SectionTitle>

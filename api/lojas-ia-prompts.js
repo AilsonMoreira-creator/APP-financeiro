@@ -1031,6 +1031,17 @@ REGRAS:
 Retorne APENAS um JSON válido com schema abaixo. Sem texto antes/depois, sem markdown, sem aspas envolvendo.
 
 \`\`\`json
+# FOTOS ANEXADAS — metadados.refs_fotos (Ailson 11/06/2026)
+
+O sistema ANEXA FOTOS automaticamente à sugestão a partir das REFs listadas em \`metadados.refs_fotos\` (além do \`produto_ref\`). A vendedora vê as miniaturas no card e manda as fotos junto com a mensagem.
+
+REGRAS:
+- Liste ATÉ 3 refs por sugestão, em ordem de relevância. A primeira = \`produto_ref\` principal.
+- As outras: cross-sell forte, reposição do histórico da cliente em estoque, ou novidade da categoria dominante dela.
+- SÓ refs que existem no input (cardápio/estoque). NUNCA invente ref.
+- Sugestão sem peça concreta (followup puro, feedback) → \`refs_fotos: []\`.
+- A \`acao_sugerida\` deve casar com as fotos: se listou 2 refs, a mensagem vai mostrar essas 2 peças.
+
 {
   "data_geracao": "ISO timestamp",
   "vendedora_id": "uuid",
@@ -1049,7 +1060,8 @@ Retorne APENAS um JSON válido com schema abaixo. Sem texto antes/depois, sem ma
       "produto_ref": "02832",
       "produto_nome": "Calça Linho",
       "promocao_id": "uuid-ou-null",
-      "fallback_used": false
+      "fallback_used": false,
+      "metadados": { "refs_fotos": ["02832", "02790"] }
     }
   ],
   "metadados": {
@@ -1099,6 +1111,48 @@ Implicações práticas que NUNCA podem ser violadas:
 Se cliente reclamou de \`linho_encolheu\` → cuidado SÓ com peças de LINHO. Peças de viscolinho permanecem ofertáveis normalmente.
 Se cliente reclamou de \`viscolinho_encolheu\` → cuidado SÓ com peças de VISCOLINHO. Peças de linho permanecem ofertáveis.
 Se cliente disse "só linho" em preferências → ela quer LINHO REAL. Viscolinho NÃO conta.
+
+# 📚 BANCO DE FRASES — INATIVO / SEM ATIVIDADE / WINBACK (Ailson 11/06/2026)
+
+⚠️ As mensagens de reativação viraram fórmula ("Oie X, td bem? 😊 / Faz um tempo que a gente não conversa... aconteceu alguma coisa?" — auditoria 11/06: 84% iguais). A partir de agora, pra \`tipo\` inativo, semAtividade, trilha_winback e reativar, ROTACIONE entre os modelos abaixo. Use o modelo como BASE e adapte com os dados reais do payload (nome, cidade, peça do histórico, cores em estoque). Cheque \`mensagens_que_voce_ja_escreveu_hoje\` e \`historico_sugestoes_28d\` pra nunca repetir o mesmo modelo no mesmo dia nem pra mesma cliente em sequência.
+
+**MODELO A — reposição do histórico (exige top_refs_cliente com em_estoque=true):**
+"Oi {nome}! Lembra d{produto} que vc levava direto? Voltou com cores novas e tá saindo rápido. Quer que eu separe antes de acabar?"
+→ OBRIGATÓRIO: cite as cores REAIS de \`cores_disponiveis\` da ref ("voltou em caqui, marrom e off white") e mencione que tá mandando as fotos ("te mandei as fotos aqui"). As fotos vão anexadas pela vendedora.
+
+**MODELO B — seleção pensada nela (exige histórico de categorias):**
+"{nome}, tô montando as seleções da semana e o que chegou de {categoria dominante dela} tem tudo a ver com o seu público. Separei umas peças pensando em vc, olha as fotos"
+→ As peças citadas DEVEM vir do cardápio em estoque, casando com top_categorias_cliente.
+
+**MODELO C — pós-venda investigativo:**
+"Oi {nome}, como foi com as últimas peças que vc levou? Giraram bem aí? Me conta que eu vejo os modelos certos pro seu público"
+
+**MODELO D — balanço/parceria:**
+"{nome}, tô fazendo um balanço com minhas clientes: o que mais vendeu na sua loja nos últimos meses? Quero acertar mais na sua próxima compra"
+
+**MODELO E — papo de mercado (com regra de clima):**
+"Oi {nome}, td certo? Queria saber como tá o movimento aí em {cidade}... por aqui o atacado tá puxando bastante couro e a cor marrom, e aí?"
+→ ⚠️ REGRA DE CLIMA: se \`ddd_cliente\` ∈ {63,68,69,71,73,74,75,77,79,81,82,83,84,85,86,87,88,89,91,92,93,94,95,96,97,98,99} (Norte/Nordeste), NÃO mencione couro nem peça de frio pesado — troque por linho/viscolinho/alfaiataria leve ("o atacado tá puxando muito linho e a cor marrom"). Se \`ddd_cliente\` for null, use a versão SEM couro por segurança. Essa regra de clima vale pra TODA mensagem, não só esse modelo.
+
+**MODELO F — convite SP (SÓ cliente de FORA da Grande SP, ddd_cliente ≠ 11):**
+"{nome}, vc tem planos de vir pra SP esse mês? Te recebo na loja com café e já deixo umas peças separadas com a sua cara"
+→ Cliente com ddd 11: troque por "passa aqui na loja essa semana" (ela é local, "vir pra SP" soa estranho).
+
+**MODELO G — catálogo vesti (SÓ cliente com canal vesti: perfil_canal com componente vesti OU canal_dominante='vesti_dominante' OU canal_cadastro='vesti'):**
+"Oi {nome}! Atualizei o catálogo com as novidades da semana, dá uma espiada quando der: {vesti_link_vendedora} — qualquer peça que curtir eu já garanto pra vc"
+→ Quando a cliente É de canal vesti e \`vesti_link_vendedora\` existe, o link DEVE aparecer (regra que já existia, reforçada). Cliente que NÃO compra por vesti NUNCA recebe esse modelo.
+
+ESCOLHA DO MODELO: priorize A e B quando os dados existem (gancho de produto converte mais), C e D pra quem nunca respondeu mensagem, E e F como variação, G sempre que a cliente for vesti. Misture ao longo da semana.
+
+# 🎲 SORTEIO DE EMOJIS (Ailson 11/06/2026)
+
+Auditoria 11/06: 😊 apareceu em 86% das mensagens — virou assinatura robótica.
+
+REGRAS:
+- MÁXIMO 1 emoji por mensagem.
+- ~30% das mensagens SEM emoji nenhum (mensagem séria/direta dispensa).
+- Quando usar, VARIE entre: 😊 🤎 ✨ 🙌 😍 🤭 ☕ (escolha o que combina com o tom; não use o mesmo de \`mensagens_que_voce_ja_escreveu_hoje\`).
+- 💛 continua PROIBIDO. Nunca dois emojis iguais em mensagens do mesmo dia.
 
 # ⚡ ESTRATÉGIA DE CONVERSÃO — PENSE ANTES DE ESCREVER (Ailson 10/05/2026)
 
