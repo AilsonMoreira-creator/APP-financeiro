@@ -3527,12 +3527,19 @@ const CORES_OUTRAS_INICIAL=[];
 // Helper: corte tem detalhamento válido (tamanhos + cores preenchidos)
 const temDetalhe=(c)=>!!(c?.detalhes&&Array.isArray(c.detalhes.tamanhos)&&c.detalhes.tamanhos.length>0&&Array.isArray(c.detalhes.cores)&&c.detalhes.cores.length>0);
 
-// Soma das peças via matriz: Σ(grade_tam) × Σ(folhas_cor)
+// Valor efetivo de uma célula cor×tam: usa o override manual (detalhes.celulas,
+// chave "nome|tam") se existir, senão folhas×grade. Ailson 11/06/2026 — permite
+// editar tamanhos específicos quando 2 cortes são juntados na sala (grade varia).
+const celulaCorte=(detalhes,corNome,tam,folhas,grade)=>{
+  const ov=detalhes?.celulas?.[`${corNome}|${tam}`];
+  return (ov==null||ov==='')?((parseInt(folhas)||0)*(parseInt(grade)||0)):(parseInt(ov)||0);
+};
+// Soma das peças via matriz, considerando overrides de célula. Ailson 11/06/2026.
 const calcQtdCalculada=(c)=>{
   if(!temDetalhe(c))return 0;
-  const somaGrades=(c.detalhes.tamanhos||[]).reduce((s,t)=>s+(parseInt(t.grade)||0),0);
-  const somaFolhas=(c.detalhes.cores||[]).reduce((s,co)=>s+(parseInt(co.folhas)||0),0);
-  return somaGrades*somaFolhas;
+  let tot=0;
+  (c.detalhes.cores||[]).forEach(co=>{(c.detalhes.tamanhos||[]).forEach(t=>{tot+=celulaCorte(c.detalhes,co.nome,t.tam,co.folhas,t.grade);});});
+  return tot;
 };
 
 // 🔴 DIVERGÊNCIA TRACKING (Ailson 17/05/2026)
@@ -3596,6 +3603,7 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
   const [tamSel,setTamSel]=useState(()=>(corte.detalhes?.tamanhos||[]).map(t=>t.tam));
   const [grades,setGrades]=useState(()=>{const g={};(corte.detalhes?.tamanhos||[]).forEach(t=>{g[t.tam]=t.grade;});return g;});
   const [coresSel,setCoresSel]=useState(()=>(corte.detalhes?.cores||[]).map(c=>({...c})));
+  const [celulas,setCelulas]=useState(()=>({...(corte.detalhes?.celulas||{})})); // override "nome|tam" → qtd
   const [verTodas,setVerTodas]=useState(false);
   const [novaCorNome,setNovaCorNome]=useState("");
   const [novaCorHex,setNovaCorHex]=useState("#888888");
@@ -3644,17 +3652,29 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
 
   const somaGrades=tamSel.reduce((s,t)=>s+(parseInt(grades[t])||0),0);
   const somaFolhas=coresSel.reduce((s,c)=>s+(c.folhas||0),0);
-  const qtdCalculada=somaGrades*somaFolhas;
+  const baseCelula=(c,t)=>(parseInt(grades[t])||0)*(c.folhas||0);
+  const valCelula=(c,t)=>{const ov=celulas[`${c.nome}|${t}`];return (ov==null||ov==='')?baseCelula(c,t):(parseInt(ov)||0);};
+  const isOverride=(c,t)=>{const ov=celulas[`${c.nome}|${t}`];return ov!=null&&ov!=='';};
+  const setCelula=(c,t,v)=>{if(ehLeitura)return;setCelulas(prev=>{const k=`${c.nome}|${t}`;const nx={...prev};if(v===""||v==null){delete nx[k];}else{const n=parseInt(v)||0;if(n===baseCelula(c,t))delete nx[k];else nx[k]=n;}return nx;});};
+  const matriz=tamSel.length&&coresSel.length?coresSel.map(c=>{const linha=tamSel.map(t=>valCelula(c,t));return{cor:c,valores:linha,total:linha.reduce((a,b)=>a+b,0)};}):[];
+  const totaisPorTam=tamSel.map((t,i)=>matriz.reduce((s,row)=>s+row.valores[i],0));
+  const qtdCalculada=matriz.reduce((s,row)=>s+row.total,0);
   const qtdManual=parseFloat(corte.qtd)||0;
   const divergencia=qtdManual-qtdCalculada;
-  const matriz=tamSel.length&&coresSel.length?coresSel.map(c=>{const linha=tamSel.map(t=>(parseInt(grades[t])||0)*(c.folhas||0));return{cor:c,valores:linha,total:linha.reduce((a,b)=>a+b,0)};}):[];
-  const totaisPorTam=tamSel.map((t,i)=>matriz.reduce((s,row)=>s+row.valores[i],0));
 
   const salvar=()=>{
-    const detalhes={
-      tamanhos:tamSel.map(t=>({tam:t,grade:parseInt(grades[t])||0})).filter(x=>x.grade>0),
-      cores:coresSel.filter(c=>c.folhas>0).map(c=>({nome:c.nome,hex:c.hex,folhas:c.folhas})),
-    };
+    const tamanhos=tamSel.map(t=>({tam:t,grade:parseInt(grades[t])||0})).filter(x=>x.grade>0);
+    const cores=coresSel.filter(c=>c.folhas>0).map(c=>({nome:c.nome,hex:c.hex,folhas:c.folhas}));
+    // overrides válidos: cor+tam ainda existem e diferem do cálculo folhas×grade
+    const celulasOut={};
+    cores.forEach(c=>tamanhos.forEach(t=>{
+      const k=`${c.nome}|${t.tam}`;const ov=celulas[k];
+      if(ov==null||ov==='')return;
+      const n=parseInt(ov)||0;
+      if(n!==(c.folhas*t.grade))celulasOut[k]=n;
+    }));
+    const detalhes={tamanhos,cores};
+    if(Object.keys(celulasOut).length)detalhes.celulas=celulasOut;
     onSave(corte.id,detalhes);
     setEstado("salvo");
   };
@@ -3778,7 +3798,10 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
         {/* MATRIZ */}
         {coresSel.length>0&&tamSel.length>0&&somaFolhas>0&&somaGrades>0&&(
           <div style={{marginBottom:20}}>
-            <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10,fontWeight:600}}>Matriz · peças por tamanho × cor</div>
+            <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+              <span style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>Matriz · peças por tamanho × cor</span>
+              {!ehLeitura&&<span style={{fontSize:10,color:C.blue,fontWeight:500}}>· clique numa célula pra ajustar um tamanho</span>}
+            </div>
             <div style={{background:"#fff",border:`1px solid ${C.sand}`,borderRadius:10,overflow:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,fontFamily:FONT}}>
                 <thead><tr style={{background:C.cream}}>
@@ -3790,7 +3813,14 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
                   {matriz.map((row,ri)=>(
                     <tr key={ri} style={{borderBottom:`1px solid ${C.cream}`}}>
                       <td style={{padding:"7px 10px"}}><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:12,height:12,borderRadius:"50%",background:row.cor.hex,border:`1px solid ${C.sand}`}}/><span style={{fontSize:12,color:C.navy,fontWeight:500}}>{row.cor.nome}</span></div></td>
-                      {row.valores.map((v,i)=><td key={i} style={{padding:"7px 10px",textAlign:"center",color:C.navy,fontFamily:MONO}}>{v}</td>)}
+                      {row.valores.map((v,i)=>{
+                        const t=tamSel[i];const ov=isOverride(row.cor,t);
+                        return <td key={i} style={{padding:"4px 6px",textAlign:"center"}}>
+                          {ehLeitura
+                            ? <span style={{color:ov?C.blue:C.navy,fontFamily:MONO,fontWeight:ov?700:400}}>{v}</span>
+                            : <input type="number" min="0" value={v} onChange={e=>setCelula(row.cor,t,e.target.value)} onFocus={e=>e.target.select()} title={ov?`Editado manual · cálculo seria ${baseCelula(row.cor,t)}`:"Edite só este tamanho"} style={{width:48,textAlign:"center",fontFamily:MONO,fontWeight:ov?700:600,fontSize:13,border:`1px solid ${ov?C.blue:C.softBlueBorder}`,borderRadius:5,padding:"5px 2px",color:ov?C.blue:C.navy,background:ov?C.softBlue:"#fff",outline:"none",boxSizing:"border-box"}}/>}
+                        </td>;
+                      })}
                       <td style={{padding:"7px 10px",textAlign:"center",color:C.blue,fontFamily:MONO,fontWeight:700}}>{row.total}</td>
                     </tr>
                   ))}
@@ -4866,7 +4896,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         if(!cores.length||!tamanhos.length)continue;
         if(!result[refRaw])result[refRaw]={};
         if(!cortesRaw[refRaw])cortesRaw[refRaw]=[];
-        cortesRaw[refRaw].push({id:c.id,nCorte:c.nCorte||'',oficina:c.oficina||'',data:c.data||'',qtd:Number(c.qtd)||0,descricao:c.descricao||'',cores,tamanhos});
+        cortesRaw[refRaw].push({id:c.id,nCorte:c.nCorte||'',oficina:c.oficina||'',data:c.data||'',qtd:Number(c.qtd)||0,descricao:c.descricao||'',cores,tamanhos,celulas:c.detalhes?.celulas||{}});
         for(const co of cores){
           const folhas=Number(co.folhas)||0;
           if(folhas<=0)continue;
@@ -4878,7 +4908,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             if(grade<=0)continue;
             const tamNorm=String(tm.tam||'').toLowerCase().trim();
             const key=`${corNorm}|${tamNorm}`;
-            result[refRaw][key]=(result[refRaw][key]||0)+(folhas*grade);
+            result[refRaw][key]=(result[refRaw][key]||0)+celulaCorte(c.detalhes,co.nome,tm.tam,folhas,grade);
           }
         }
       }
@@ -5407,10 +5437,11 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                         {cores.map((co,ci)=>{
                           const folhas=Number(co.folhas)||0;
                           const destaca=normCorBling(co.nome)===alvo;
-                          const totCor=folhas*tams.reduce((s,t)=>s+(Number(t.grade)||0),0);
+                          const celDet={celulas:ct.celulas||{}};
+                          const totCor=tams.reduce((s,t)=>s+celulaCorte(celDet,co.nome,t.tam,folhas,t.grade),0);
                           return <tr key={ci} style={{background:destaca?"#eef5fb":(ci%2?"#faf8f5":"#fff")}}>
                             <td style={{padding:"3px 6px",fontWeight:destaca?700:600,color:"#2c3e50"}}>{co.nome}</td>
-                            {tams.map((t,ti)=><td key={ti} style={{textAlign:"center",padding:"3px 6px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#2c3e50"}}>{folhas*(Number(t.grade)||0)}</td>)}
+                            {tams.map((t,ti)=><td key={ti} style={{textAlign:"center",padding:"3px 6px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#2c3e50"}}>{celulaCorte(celDet,co.nome,t.tam,folhas,t.grade)}</td>)}
                             <td style={{textAlign:"right",padding:"3px 6px",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#4a7fa5"}}>{totCor}</td>
                           </tr>;
                         })}
