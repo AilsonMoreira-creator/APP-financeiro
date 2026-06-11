@@ -107,9 +107,16 @@ async function fetchEnvioInfo(ids, size = 200) {
       // Falhas de entrega (webhook da Meta marca a mensagem como failed)
       const { data: convs } = await supabase
         .from('lojas_whats_conversas')
-        .select('id, cliente_id')
+        .select('id, cliente_id, unread_count')
         .in('cliente_id', fatia);
       const convPorId = new Map((convs || []).map(c => [c.id, c.cliente_id]));
+      // Não lidas por cliente (indicador vermelho no card, igual o CRM da
+      // Sofia). Ailson 11/06/2026.
+      (convs || []).forEach(c => {
+        if (!c.cliente_id || !(c.unread_count > 0)) return;
+        const atual = map.get(c.cliente_id) || { status: null, erro: null, em: null };
+        map.set(c.cliente_id, { ...atual, unread: (atual.unread || 0) + c.unread_count });
+      });
       if (convPorId.size > 0) {
         const { data: falhas } = await supabase
           .from('lojas_whats_mensagens')
@@ -166,6 +173,15 @@ function EnvioBadge({ envio }) {
           fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
           background: '#e8f1fa', color: '#2667a3', border: '1px solid #bcd6ee', whiteSpace: 'nowrap',
         }}>💬 respondeu {fmtHora(envio.resposta_em)}</span>
+      )}
+      {/* Badge VERMELHO de não lidas — mesmo estilo do CRM da Sofia (Ailson 11/06/2026) */}
+      {envio.unread > 0 && (
+        <span title={`${envio.unread} mensagem(ns) nova(s) do cliente — não vista(s)`} style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          minWidth: 18, height: 18, padding: '0 5px',
+          borderRadius: 9, fontSize: fz(10), fontWeight: 700,
+          background: '#dc2626', color: '#fff', lineHeight: 1, flexShrink: 0,
+        }}>{envio.unread}</span>
       )}
     </>
   );
@@ -296,6 +312,13 @@ export default function ClientesTab({ userId, refreshTick }) {
       });
       const d = await r.json();
       if (!r.ok || !d.conversa_id) { alert('Erro ao abrir conversa: ' + (d.error || r.status)); return; }
+      // Zera o contador de não lidas (Ailson 11/06/2026): antes só o CRM da
+      // Sofia zerava — abrir pelo módulo Clientes deixava o badge fantasma
+      // no botão "Clientes" pra sempre.
+      fetch('/api/lojas-whats-conversa-vista', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_id: d.conversa_id }),
+      }).catch(() => {});
       setChatId(d.conversa_id);
     } catch (e) {
       alert('Erro ao abrir conversa: ' + e.message);
