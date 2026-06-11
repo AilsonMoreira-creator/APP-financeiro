@@ -4858,8 +4858,39 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [ajusteValor,setAjusteValor]=useState('');
   const [ajusteMotivo,setAjusteMotivo]=useState('');
   const [salvandoAjuste,setSalvandoAjuste]=useState(false);
+  // ── Trava de presença por variação (Ailson 11/06/2026) ──────────────────
+  // 2 usuários abrindo o MESMO ref|cor|tam: o 1º segura a trava em
+  // bling_estoque_locks (heartbeat 20s); o 2º vê "fulana já está editando" e
+  // fica só-leitura. Trava sem heartbeat >60s é obsoleta e pode ser tomada.
+  // Fechar/salvar o modal solta a trava (cleanup do effect).
+  const [ajusteLockPor,setAjusteLockPor]=useState(null); // nome de quem segura, ou null
+  useEffect(()=>{
+    if(!blingAjuste){setAjusteLockPor(null);return;}
+    const chave=`${blingAjuste.refNorm}|${blingAjuste.cor_norm}|${blingAjuste.tam}`;
+    const me=usuarioSessao||'anônimo';
+    let vivo=true;let hb=null;let souDono=false;
+    (async()=>{
+      try{
+        const {data:lk}=await supabase.from('bling_estoque_locks').select('usuario,locked_at').eq('chave',chave).maybeSingle();
+        const obsoleta=lk&&(Date.now()-new Date(lk.locked_at).getTime()>60000);
+        if(lk&&!obsoleta&&lk.usuario!==me){if(vivo)setAjusteLockPor(lk.usuario);return;}
+        await supabase.from('bling_estoque_locks').upsert({chave,usuario:me,locked_at:new Date().toISOString()},{onConflict:'chave'});
+        // anti-empate: 2 upserts simultâneos → relê; quem ficou na linha é o dono
+        const {data:v}=await supabase.from('bling_estoque_locks').select('usuario').eq('chave',chave).maybeSingle();
+        if(!vivo)return;
+        if(v&&v.usuario!==me){setAjusteLockPor(v.usuario);return;}
+        souDono=true;setAjusteLockPor(null);
+        hb=setInterval(()=>{supabase.from('bling_estoque_locks').update({locked_at:new Date().toISOString()}).eq('chave',chave).eq('usuario',me).then(()=>{});},20000);
+      }catch(e){console.error('lock ajuste:',e?.message||e);if(vivo)setAjusteLockPor(null);} // erro de rede → não trava ninguém
+    })();
+    return()=>{
+      vivo=false;if(hb)clearInterval(hb);
+      if(souDono)supabase.from('bling_estoque_locks').delete().eq('chave',chave).eq('usuario',me).then(()=>{});
+    };
+  },[blingAjuste]);
   const salvarAjusteBling=async()=>{
     if(!blingAjuste||salvandoAjuste)return;
+    if(ajusteLockPor){alert(`${ajusteLockPor} já está editando essa variação — aguarde.`);return;}
     const ba=blingAjuste;
     const nova=parseInt(ajusteValor,10);
     if(isNaN(nova)||nova<0){alert('Quantidade inválida');return;}
@@ -5472,21 +5503,26 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <div style={{fontSize:14,fontWeight:700,fontFamily:"Georgia,serif"}}>Ajuste de estoque · Bling</div>
               <button onClick={()=>!salvandoAjuste&&setBlingAjuste(null)} style={{background:"none",border:"none",fontSize:22,color:"#cdd4d9",cursor:"pointer"}}>×</button>
             </div>
+            {ajusteLockPor&&(
+              <div style={{padding:"9px 18px",background:"#fff4e5",color:"#9c5b00",fontSize:12.5,fontWeight:600,borderBottom:"1px solid #f0c98a",display:"flex",alignItems:"center",gap:6}}>
+                🔒 <b>{ajusteLockPor}</b>&nbsp;já está editando essa variação — somente leitura até ela terminar
+              </div>
+            )}
             <div style={{padding:"16px 18px"}}>
               <div style={{fontSize:12,color:"#6b7c8a",marginBottom:2}}>REF {ba.refNorm}{ba.desc?` · ${ba.desc}`:''}</div>
               <div style={{fontSize:15,fontWeight:700,color:"#2c3e50",marginBottom:12}}>{ba.cor} · {ba.tam}</div>
               <div style={{fontSize:12,color:"#6b7c8a",marginBottom:14}}>Estoque Bling atual: <b style={{color:"#2c3e50",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:14}}>{ba.atual}</b></div>
-              <div style={{marginBottom:12}}>
+              <div style={{marginBottom:12,opacity:ajusteLockPor?0.5:1}}>
                 <div style={{fontSize:11,color:"#2c3e50",fontWeight:700,marginBottom:3}}>Nova quantidade</div>
-                <input type="number" min="0" value={ajusteValor} onChange={e=>setAjusteValor(e.target.value)} autoFocus style={{width:"100%",boxSizing:"border-box",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:15,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",outline:"none"}}/>
+                <input type="number" min="0" value={ajusteValor} onChange={e=>setAjusteValor(e.target.value)} autoFocus disabled={!!ajusteLockPor} style={{width:"100%",boxSizing:"border-box",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:15,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",outline:"none"}}/>
               </div>
-              <div style={{marginBottom:16}}>
+              <div style={{marginBottom:16,opacity:ajusteLockPor?0.5:1}}>
                 <div style={{fontSize:11,color:"#2c3e50",fontWeight:700,marginBottom:3}}>Motivo</div>
-                <input value={ajusteMotivo} onChange={e=>setAjusteMotivo(e.target.value)} placeholder="nome de quem ajustou" style={{width:"100%",boxSizing:"border-box",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:13,outline:"none"}}/>
+                <input value={ajusteMotivo} onChange={e=>setAjusteMotivo(e.target.value)} placeholder="nome de quem ajustou" disabled={!!ajusteLockPor} style={{width:"100%",boxSizing:"border-box",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:13,outline:"none"}}/>
               </div>
               <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
                 <button onClick={()=>!salvandoAjuste&&setBlingAjuste(null)} style={{background:"#fff",color:"#6b7c8a",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 16px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}}>Cancelar</button>
-                <button onClick={salvarAjusteBling} disabled={salvandoAjuste} style={{background:salvandoAjuste?"#9bb4c8":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"8px 18px",fontSize:13,cursor:salvandoAjuste?"default":"pointer",fontFamily:"Georgia,serif",fontWeight:700}}>{salvandoAjuste?"Salvando…":"Salvar"}</button>
+                <button onClick={salvarAjusteBling} disabled={salvandoAjuste||!!ajusteLockPor} style={{background:(salvandoAjuste||ajusteLockPor)?"#9bb4c8":"#4a7fa5",color:"#fff",border:"none",borderRadius:6,padding:"8px 18px",fontSize:13,cursor:(salvandoAjuste||ajusteLockPor)?"default":"pointer",fontFamily:"Georgia,serif",fontWeight:700}}>{salvandoAjuste?"Salvando…":ajusteLockPor?"🔒 Bloqueado":"Salvar"}</button>
               </div>
             </div>
           </div>
