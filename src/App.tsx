@@ -4864,6 +4864,25 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // fica só-leitura. Trava sem heartbeat >60s é obsoleta e pode ser tomada.
   // Fechar/salvar o modal solta a trava (cleanup do effect).
   const [ajusteLockPor,setAjusteLockPor]=useState(null); // nome de quem segura, ou null
+  // ── Modal de logs do estoque Bling (Ailson 11/06/2026) ──────────────────
+  // Botão 📜 Logs na barra: lista bling_estoque_logs (300 últimos) com filtro
+  // por ref e origem (manual / bling_sync / webhook).
+  const [logsBlingAberto,setLogsBlingAberto]=useState(false);
+  const [logsBling,setLogsBling]=useState([]);
+  const [logsBlingLoading,setLogsBlingLoading]=useState(false);
+  const [logsBlingBusca,setLogsBlingBusca]=useState('');
+  const [logsBlingOrigem,setLogsBlingOrigem]=useState('todas');
+  const abrirLogsBling=async()=>{
+    setLogsBlingAberto(true);setLogsBlingLoading(true);
+    try{
+      const {data,error}=await supabase.from('bling_estoque_logs')
+        .select('id,ref,cor_norm,tam,cor_label,qtd_anterior,qtd_nova,delta,motivo,usuario,origem,criado_em')
+        .order('criado_em',{ascending:false}).limit(300);
+      if(error)throw error;
+      setLogsBling(data||[]);
+    }catch(e){console.error('logs bling:',e?.message||e);setLogsBling([]);}
+    finally{setLogsBlingLoading(false);}
+  };
   useEffect(()=>{
     if(!blingAjuste){setAjusteLockPor(null);return;}
     const chave=`${blingAjuste.refNorm}|${blingAjuste.cor_norm}|${blingAjuste.tam}`;
@@ -5229,6 +5248,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       <div style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>última sync: <b style={{color:"#2c3e50"}}>{ultSync}</b></div>
       <button onClick={sincronizarCatalogo} disabled={syncCatalogo} title="Lê o catálogo do Bling (Lumia) e popula SKU→ref pra refs novas/sem mapeamento" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ catálogo":"📚 sync catálogo Bling"}</button>
       <button onClick={()=>sincronizarEstoqueBling(false)} disabled={syncBlingEst} title="Lê as QUANTIDADES de estoque do Bling (Exitus, depósito Geral) pras refs da calculadora" style={{background:"#fff",border:"1px solid #2c3e50",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncBlingEst?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#2c3e50",opacity:syncBlingEst?0.5:1,fontWeight:600}}>{syncBlingEst?"⏳ estoque":"🟦 estoque Bling"}</button>
+      <button onClick={abrirLogsBling} title="Histórico de alterações de estoque (ajustes manuais, sync, webhook)" style={{background:"#fff",border:"1px solid #8a9aa4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600}}>📜 Logs</button>
       <button onClick={forcarSync} disabled={syncing} title="Força recálculo do estoque ML agora" style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#4a7fa5",opacity:syncing?0.5:1}}>{syncing?"⏳":"🔄"}</button>
       <div style={{display:"flex",background:"#faf8f5",border:"1px solid #e8e2da",borderRadius:8,padding:3,gap:2}}>
         <button onClick={()=>setView("grid")} style={{background:view==="grid"?"#2c3e50":"transparent",color:view==="grid"?"#fff":"#8a9aa4",border:"none",padding:"5px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontFamily:"Georgia,serif",fontWeight:600}}>▦ Grid</button>
@@ -5495,6 +5515,46 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         </div>;
       })()}
       {/* ── Modal: ajuste de estoque Bling (sobrescreve + log de auditoria) ── */}
+      {logsBlingAberto&&(()=>{
+        const norm=s=>String(s||'').replace(/\D/g,'').replace(/^0+/,'');
+        const q=norm(logsBlingBusca);
+        const lista=logsBling.filter(l=>(logsBlingOrigem==='todas'||l.origem===logsBlingOrigem)&&(!q||norm(l.ref).includes(q)));
+        const ORIGENS=[['todas','Todas'],['manual','✏️ Manual'],['bling_sync','🟦 Sync'],['webhook','⚡ Webhook']];
+        const fmtDt=(d)=>{try{const x=new Date(d);return x.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+x.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}catch{return '';}};
+        return <div onClick={()=>setLogsBlingAberto(false)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"30px 14px",zIndex:110,overflowY:"auto",backdropFilter:"blur(3px)"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:760,width:"100%",boxShadow:"0 12px 40px rgba(0,0,0,0.25)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 60px)"}}>
+            <div style={{padding:"12px 16px",background:"#2c3e50",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+              <div style={{fontSize:14,fontWeight:700,fontFamily:"Georgia,serif"}}>📜 Logs de estoque Bling</div>
+              <button onClick={()=>setLogsBlingAberto(false)} style={{background:"none",border:"none",fontSize:22,color:"#cdd4d9",cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{padding:"8px 12px",borderBottom:"1px solid #e8e2da",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+              <input value={logsBlingBusca} onChange={e=>setLogsBlingBusca(e.target.value)} placeholder="filtrar por REF..." style={{flex:"1 1 120px",minWidth:100,border:"1px solid #e8e2da",borderRadius:6,padding:"5px 9px",fontSize:12,fontFamily:"Georgia,serif",outline:"none",background:"#faf8f5"}}/>
+              {ORIGENS.map(([v,lbl])=>(
+                <button key={v} onClick={()=>setLogsBlingOrigem(v)} style={{background:logsBlingOrigem===v?"#2c3e50":"#faf8f5",color:logsBlingOrigem===v?"#fff":"#5a6470",border:"1px solid "+(logsBlingOrigem===v?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"5px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,whiteSpace:"nowrap"}}>{lbl}</button>
+              ))}
+              <span style={{fontSize:10.5,color:"#8a9aa4",marginLeft:"auto",whiteSpace:"nowrap"}}>{lista.length} registro{lista.length!==1?'s':''}</span>
+            </div>
+            <div style={{overflowY:"auto",flex:1}}>
+              {logsBlingLoading&&<div style={{padding:24,textAlign:"center",color:"#8a9aa4",fontSize:13}}>Carregando…</div>}
+              {!logsBlingLoading&&lista.length===0&&<div style={{padding:24,textAlign:"center",color:"#8a9aa4",fontSize:13}}>Nenhum log encontrado</div>}
+              {!logsBlingLoading&&lista.map(l=>{
+                const dlt=l.delta==null?null:Number(l.delta);
+                const origIco=l.origem==='manual'?'✏️':l.origem==='webhook'?'⚡':'🟦';
+                return <div key={l.id} style={{padding:"7px 14px",borderBottom:"1px solid #f0ece6",display:"flex",gap:8,alignItems:"baseline",flexWrap:"wrap",fontSize:12}}>
+                  <span style={{color:"#8a9aa4",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:11,whiteSpace:"nowrap"}}>{fmtDt(l.criado_em)}</span>
+                  <b style={{color:"#2c3e50",whiteSpace:"nowrap"}}>REF {l.ref}</b>
+                  <span style={{color:"#5a6470",whiteSpace:"nowrap"}}>{l.cor_label||l.cor_norm} · {String(l.tam||'').toUpperCase()}</span>
+                  <span style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,color:"#2c3e50",whiteSpace:"nowrap"}}>{l.qtd_anterior==null?'—':l.qtd_anterior} → {l.qtd_nova}</span>
+                  {dlt!=null&&dlt!==0&&<span style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:11,color:dlt>0?"#27ae60":"#c0392b",whiteSpace:"nowrap"}}>{dlt>0?'+':''}{dlt}</span>}
+                  <span title={l.origem} style={{fontSize:11}}>{origIco}</span>
+                  {l.usuario&&<span style={{color:"#8a9aa4",fontSize:11,whiteSpace:"nowrap"}}>por <b style={{color:"#5a6470"}}>{l.usuario}</b></span>}
+                  {l.motivo&&<span style={{color:"#8a9aa4",fontSize:11,fontStyle:"italic"}}>“{l.motivo}”</span>}
+                </div>;
+              })}
+            </div>
+          </div>
+        </div>;
+      })()}
       {blingAjuste&&(()=>{
         const ba=blingAjuste;
         return <div onClick={()=>!salvandoAjuste&&setBlingAjuste(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:110,overflowY:"auto",backdropFilter:"blur(3px)"}}>
