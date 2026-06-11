@@ -65,6 +65,9 @@
     "api/lojas-ia-cron-semanal.js": {
       "maxDuration": 600
     },
+    "api/lojas-tema-quinta-cron.js": {
+      "maxDuration": 120
+    },
     "api/lojas-produtos-raiox-refresh.js": {
       "maxDuration": 60
     },
@@ -206,6 +209,10 @@
     {
       "path": "/api/lojas-ia-cron-semanal",
       "schedule": "0 10 * * 2"
+    },
+    {
+      "path": "/api/lojas-tema-quinta-cron",
+      "schedule": "0 10 * * 4"
     },
     {
       "path": "/api/lojas-push-cron-1030",

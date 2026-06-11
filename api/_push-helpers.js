@@ -31,6 +31,17 @@ const MENSAGENS_LEMBRETE = [
   (nome) => `E aí ${nome}! 🌟 Tem fila pra atender, abre o app pra ver as sugestões! 🛍️`,
   (nome) => `${nome}, bom dia! ☕ Pega um cafezinho e abre o app, tem novidade 💌`,
   (nome) => `Bom dia, ${nome}! 🌞 Suas clientes top tão querendo novidade — abre o app ✨`,
+  // Ampliação 11/06/2026 (Ailson) — mais variedade pro dia a dia
+  (nome) => `${nome}! 🔥 A IA já separou as clientes do dia. Vem ver quem tá esperando vc!`,
+  (nome) => `Bom dia ${nome}! 🍀 Dia bom pra resgatar aquela cliente sumida... as sugestões já tão prontas`,
+  (nome) => `Oi ${nome}! 📲 7 sugestões fresquinhas te esperando — qual vc fecha primeiro?`,
+  (nome) => `${nome}, bom dia! 🌷 Quem manda mensagem cedo pega a cliente de bom humor. Bora?`,
+  (nome) => `Acorda pra vender, ${nome}! 😄 Suas sugestões do dia já chegaram quentinhas`,
+  (nome) => `Bom dia ${nome}! ✨ Tem cliente na janela de compra hoje — não deixa ela esfriar!`,
+  (nome) => `${nome}! 💼 Meta do dia: 7 de 7. A primeira mensagem é a mais difícil, bora!`,
+  (nome) => `Oi ${nome}! 🙌 Cliente lembrada é cliente que volta. O app já sabe quem chamar hoje`,
+  (nome) => `Bom dia, ${nome}! 🛍️ Chegou peça nova com a cara das suas clientes — vem conferir`,
+  (nome) => `${nome}, partiu? 🚀 Hoje tem reposição que vende sozinha. Abre o app e confere`,
 ];
 
 // Mensagens admin (Tamara) — tom de gestao, "ver o que ta rolando"
@@ -40,6 +51,12 @@ const MENSAGENS_ADMIN = [
   (nome) => `Oi ${nome}! 👋 Abre o app e dá uma conferida nas sugestões do dia 📋`,
   (nome) => `Bom dia, ${nome}! ✨ Vamos ver como tão as carteiras hoje? Abre o app 💼`,
   (nome) => `${nome}! ☀️ Café passado? Abre o app pra ver o que tá pintando pras meninas 📲`,
+  // Ampliação 11/06/2026 (Ailson)
+  (nome) => `Bom dia ${nome}! 🔎 Vale espiar quem ainda não executou as sugestões de ontem`,
+  (nome) => `${nome}, bom dia! 📈 As conversões da semana tão andando? Dá uma conferida`,
+  (nome) => `Oi ${nome}! 🗂️ Sofia tem aprovações pendentes? Melhor olhar antes do movimento`,
+  (nome) => `Bom dia ${nome}! 🙌 Começa pelo funil: leads novos primeiro, depois as meninas`,
+  (nome) => `${nome}! ☕ Dia de acompanhar de perto — abre o app e vê quem precisa de um toque`,
 ];
 
 export function escolherMensagem(nome) {

@@ -3928,7 +3928,7 @@ async function gerarResumoVendedora(vendedora, semana_inicio, semana_fim) {
       system: 'Você é uma coach motivacional pra vendedoras de moda. Tom: otimista, próximo, brasileiro descontraído. Frases curtas (máximo 3-4 frases). Use emojis com moderação. Valoriza o esforço sem ser piegas.',
       messages: [{ role: 'user', content: promptMotivacional }],
     });
-    mensagem_motivacional = resp?.content?.[0]?.text?.trim() || null;
+    mensagem_motivacional = resp?.content?.find(b => b?.type === 'text')?.text?.trim() || null;
     tokens_input = resp?.usage?.input_tokens || 0;
     tokens_output = resp?.usage?.output_tokens || 0;
     // logarChamadaIA já calcula custo
@@ -3940,7 +3940,13 @@ async function gerarResumoVendedora(vendedora, semana_inicio, semana_fim) {
     });
   } catch (e) {
     console.error('[resumo-semanal] erro Claude:', e);
-    mensagem_motivacional = `Olá ${vendedora.nome}! Mais uma semana se foi. Bora pra próxima! 💪`;
+  }
+  // FIX 11/06/2026 (Ailson): o fallback só rodava em exceção — quando a IA
+  // respondia mas o texto vinha vazio (ex: bloco thinking em content[0]),
+  // mensagem_motivacional ia NULL pro banco e a vendedora via resumo sem
+  // mensagem. Fallback agora é garantido.
+  if (!mensagem_motivacional) {
+    mensagem_motivacional = `Olá ${vendedora.nome}! Mais uma semana fechada. Bora pra próxima! 💪`;
   }
 
   // ─── 5. Salva (upsert pela chave única vendedora_id+semana_inicio) ────

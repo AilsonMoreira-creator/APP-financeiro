@@ -2341,6 +2341,28 @@ export const CardDiaScreen = ({
   const [leadsSofia, setLeadsSofia] = useState([]);
   const [leadsSofiaErro, setLeadsSofiaErro] = useState(null);
 
+  // ─── Tema da quinta (Ailson 11/06/2026) ──────────────────────────────────
+  // Quinta-feira: card com a edição da semana (tendência/dica/prática) gerada
+  // pelo cron lojas-tema-quinta-cron. Só busca no dia 4 pra não pesar.
+  const [temaQuinta, setTemaQuinta] = useState(null);
+  const [temaAberto, setTemaAberto] = useState(false);
+  useEffect(() => {
+    if (new Date().getDay() !== 4) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('lojas_temas_quinta')
+          .select('titulo, conteudo, emoji, semana_inicio')
+          .order('semana_inicio', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (vivo && data) setTemaQuinta(data);
+      } catch { /* sem tema, sem card */ }
+    })();
+    return () => { vivo = false; };
+  }, []);
+
   useEffect(() => {
     if (!vendedora?.id) return;
     let cancelado = false;
@@ -2600,6 +2622,72 @@ export const CardDiaScreen = ({
             </div>
             <ChevronRight size={sz(20)} color={palette.purple} />
           </button>
+        )}
+
+        {/* Card de QUINTA-FEIRA — Tema da semana (Ailson 11/06/2026):
+            edição curta com tendência / dica de abordagem / melhores práticas,
+            gerada pelo cron lojas-tema-quinta-cron (1 por semana, igual pra
+            todas). Toque abre o modal de leitura. */}
+        {new Date().getDay() === 4 && temaQuinta && (
+          <button
+            onClick={() => setTemaAberto(true)}
+            style={{
+              width: '100%',
+              background: `linear-gradient(135deg, ${palette.warnSoft} 0%, ${palette.bg} 100%)`,
+              border: `1px solid ${palette.warn}40`,
+              borderRadius: 14, padding: 14, marginBottom: 12,
+              cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}
+          >
+            <div style={{
+              width: 44, height: 44, borderRadius: '50%', background: palette.surface,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: `2px solid ${palette.warn}`, flexShrink: 0, fontSize: fz(20),
+            }}>
+              {temaQuinta.emoji || '💡'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: fz(15), fontWeight: 700, color: palette.ink, marginBottom: 2 }}>
+                Tema da quinta: {temaQuinta.titulo}
+              </div>
+              <div style={{ fontSize: fz(13), color: palette.inkSoft }}>
+                Leitura de 1 minuto pra vender melhor essa semana
+              </div>
+            </div>
+            <ChevronRight size={sz(20)} color={palette.warn} />
+          </button>
+        )}
+        {temaAberto && temaQuinta && (
+          <div onClick={() => setTemaAberto(false)} style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: palette.bg, borderRadius: 14, padding: 18, maxWidth: 480,
+              width: '100%', maxHeight: '85vh', overflowY: 'auto', fontFamily: FONT,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                <div style={{ fontSize: fz(18), fontWeight: 700, color: palette.ink, lineHeight: 1.3 }}>
+                  {temaQuinta.emoji || '💡'} {temaQuinta.titulo}
+                </div>
+                <button onClick={() => setTemaAberto(false)} style={{
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  color: palette.inkMuted, fontSize: 22, lineHeight: 1, padding: 4, flexShrink: 0,
+                }}>×</button>
+              </div>
+              <div style={{ fontSize: fz(15), color: palette.inkSoft, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                {temaQuinta.conteudo}
+              </div>
+              <button onClick={() => setTemaAberto(false)} style={{
+                marginTop: 16, width: '100%', background: palette.accent, color: '#fff',
+                border: 'none', borderRadius: 9, padding: '11px 14px',
+                fontSize: fz(15), fontWeight: 700, fontFamily: FONT, cursor: 'pointer',
+              }}>
+                Bora aplicar! 🙌
+              </button>
+            </div>
+          </div>
         )}
 
         <div style={{
@@ -5393,6 +5481,28 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
   const [conversoes, setConversoes] = useState(null);
   const [carregandoConv, setCarregandoConv] = useState(true);
 
+  // ─── Frase de fechamento do resumo (Ailson 11/06/2026) ──────────────────
+  // Antes era SEMPRE "💛 A relação com cliente se constrói no tempo..." — agora
+  // rotaciona por semana (mesma frase a semana toda, troca toda terça).
+  const fraseFechoSemana = useMemo(() => {
+    const FRASES_FECHO = [
+      { titulo: 'Continue firme!', sub: 'Cada mensagem conta', frase: '🤎 "A relação com cliente se constrói no tempo, uma mensagem por vez."' },
+      { titulo: 'Semente plantada!', sub: 'Colheita vem depois', frase: '✨ "Cliente bem cuidada hoje é pedido garantido amanhã."' },
+      { titulo: 'Você no controle!', sub: 'Constância vence talento', frase: '🙌 "Não é a mensagem perfeita que vende, é a mensagem enviada."' },
+      { titulo: 'Olho no detalhe!', sub: 'É isso que diferencia', frase: '🌟 "Lembrar o que a cliente vende bem vale mais que qualquer desconto."' },
+      { titulo: 'Bora pra mais uma!', sub: 'Semana nova, chance nova', frase: '🚀 "Toda lojista sumida é uma venda esperando alguém que se importe."' },
+      { titulo: 'Tá no caminho!', sub: 'Relacionamento dá trabalho', frase: '☕ "Vender no atacado é igual café coado: sem pressa, mas sem parar."' },
+      { titulo: 'Energia boa!', sub: 'Cliente sente o cuidado', frase: '🌸 "Quem responde rápido e lembra do histórico nunca fica sem pedido."' },
+      { titulo: 'Pequenos gestos!', sub: 'Grandes resultados', frase: '👏 "Uma foto certa na hora certa vale por dez catálogos."' },
+      { titulo: 'Confia no processo!', sub: 'Número é consequência', frase: '🍀 "Carteira aquecida não esfria: mexe nela um pouquinho todo dia."' },
+      { titulo: 'Seu toque importa!', sub: 'Ninguém vende como você', frase: '💪 "A IA sugere, mas é o seu jeito que fecha a venda."' },
+    ];
+    // Semana ISO aproximada: dias desde 05/01/2026 (segunda) / 7
+    const base = new Date(2026, 0, 5).getTime();
+    const semana = Math.floor((Date.now() - base) / (7 * 24 * 60 * 60 * 1000));
+    return FRASES_FECHO[((semana % FRASES_FECHO.length) + FRASES_FECHO.length) % FRASES_FECHO.length];
+  }, []);
+
   // KPIs da semana
   const stats = useMemo(() => {
     const carteira = clientesEnriquecidos.filter(c => c.vendedora_id === vendedora?.id);
@@ -5584,8 +5694,8 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
               <Award size={sz(28)} color={palette.warn} />
             </div>
             <div>
-              <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>Continue firme!</div>
-              <div style={{ fontSize: fz(13), color: palette.inkMuted }}>Cada mensagem conta</div>
+              <div style={{ fontSize: fz(17), fontWeight: 600, color: palette.ink }}>{fraseFechoSemana.titulo}</div>
+              <div style={{ fontSize: fz(13), color: palette.inkMuted }}>{fraseFechoSemana.sub}</div>
             </div>
           </div>
           <div style={{
@@ -5593,7 +5703,7 @@ export const DestaquesScreen = ({ lojas, vendedora, onBack }) => {
             fontSize: fz(14), color: palette.inkSoft, fontStyle: 'italic',
             border: `1px solid ${palette.warn}30`,
           }}>
-            💛 "A relação com cliente se constrói no tempo, uma mensagem por vez."
+            {fraseFechoSemana.frase}
           </div>
         </div>
       </div>
