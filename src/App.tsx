@@ -5023,14 +5023,22 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // Refs que estão na CALCULADORA e têm estoque no Bling, mas ainda não têm
   // espelho no ML (produto novo). Como o ML virou 1 SKU = 1 anúncio, produto
   // novo demora a aparecer no espelho ML; aqui ele vira card direto do Bling.
+  // FIX 11/06/2026 (Ailson): antes rodava com `dados` ainda null (mlSet vazio)
+  // → TODAS as refs da calculadora viravam "só Bling" e a query velha resolvia
+  // DEPOIS da recomputação correta, sobrescrevendo-a — o header somava
+  // ML + Bling inteiro (estoque dobrado: 29.689 + 29.076 = 58.765). Agora:
+  // espera o espelho ML carregar e cancela respostas obsoletas.
   useEffect(()=>{
+    if(!dados){setSoBlingRefs([]);return;} // espelho ML ainda não carregou
+    let vivo=true;
     (async()=>{
       try{
         const norm=s=>String(s||'').replace(/\D/g,'').replace(/^0+/,'')||'';
         const mlSet=new Set((dados?.refs||[]).map(r=>norm(r.ref)));
         const candidatas=Object.keys(calcDesc||{}).filter(r=>r&&!mlSet.has(r));
-        if(!candidatas.length){setSoBlingRefs([]);return;}
+        if(!candidatas.length){if(vivo)setSoBlingRefs([]);return;}
         const {data}=await supabase.from('bling_estoque').select('ref,cor_norm,tam,cor_label,qtd,bling_sku').in('ref',candidatas);
+        if(!vivo)return; // resposta obsoleta — outra rodada já assumiu
         const byRef={};
         (data||[]).forEach(b=>{
           const rn=norm(b.ref);if(!rn)return;
@@ -5041,6 +5049,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         setSoBlingRefs(Object.values(byRef));
       }catch(e){console.error('soBling refs:',e.message);}
     })();
+    return()=>{vivo=false;};
   },[dados,calcDesc]);
 
   const refs=useMemo(()=>{
