@@ -82,6 +82,71 @@ async function fetchEnviadoSet(ids, size = 200) {
   return set;
 }
 
+// ─── Status detalhado do envio (Ailson 11/06/2026) ──────────────────────────
+// Map cliente_id → { status: 'na_fila'|'enviada'|'erro'|'nao_entregue', erro, em }
+// Combina 2 fontes:
+//   1. clientes_sofia_fila (item mais recente por cliente): pendente/enviado/erro
+//   2. lojas_whats_mensagens: template com status='failed' = Meta aceitou mas a
+//      entrega falhou ("Message undeliverable" — nº sem Whats etc). Antes esses
+//      erros ficavam invisíveis na tela ("2 erros" sem dizer quais).
+async function fetchEnvioInfo(ids, size = 200) {
+  const map = new Map();
+  try {
+    for (let i = 0; i < ids.length; i += size) {
+      const fatia = ids.slice(i, i + size);
+      const { data: fila } = await supabase
+        .from('clientes_sofia_fila')
+        .select('cliente_id, status, erro, processado_em, criado_em')
+        .in('cliente_id', fatia)
+        .order('criado_em', { ascending: false });
+      (fila || []).forEach(f => {
+        if (!f.cliente_id || map.has(f.cliente_id)) return; // pega só o mais recente
+        const status = f.status === 'enviado' ? 'enviada' : f.status === 'erro' ? 'erro' : 'na_fila';
+        map.set(f.cliente_id, { status, erro: f.erro || null, em: f.processado_em || f.criado_em });
+      });
+      // Falhas de entrega (webhook da Meta marca a mensagem como failed)
+      const { data: convs } = await supabase
+        .from('lojas_whats_conversas')
+        .select('id, cliente_id')
+        .in('cliente_id', fatia);
+      const convPorId = new Map((convs || []).map(c => [c.id, c.cliente_id]));
+      if (convPorId.size > 0) {
+        const { data: falhas } = await supabase
+          .from('lojas_whats_mensagens')
+          .select('conversa_id, erro, enviada_em')
+          .in('conversa_id', [...convPorId.keys()])
+          .eq('tipo_midia', 'template')
+          .eq('status', 'failed');
+        (falhas || []).forEach(m => {
+          const cid = convPorId.get(m.conversa_id);
+          if (!cid) return;
+          map.set(cid, { status: 'nao_entregue', erro: m.erro || 'entrega falhou', em: m.enviada_em });
+        });
+      }
+    }
+  } catch (e) { console.error('fetchEnvioInfo:', e?.message); }
+  return map;
+}
+
+// Badge do status de envio no card (Ailson 11/06/2026)
+function EnvioBadge({ envio }) {
+  if (!envio) return null;
+  const fmtHora = (d) => { try { const x = new Date(d); return x.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + x.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
+  const cfg = {
+    enviada:      { txt: `✓ enviada ${fmtHora(envio.em)}`, bg: '#eafbf0', fg: '#1e8e4e', bd: '#b8dfc8' },
+    na_fila:      { txt: '🕐 na fila de envio',            bg: palette.beigeSoft, fg: palette.inkSoft, bd: palette.beige },
+    erro:         { txt: `❌ erro: ${String(envio.erro || '').slice(0, 38)}`, bg: '#fdeaea', fg: '#c0392b', bd: '#f4b8b8' },
+    nao_entregue: { txt: `❌ não entregue: ${String(envio.erro || '').slice(0, 30)}`, bg: '#fdeaea', fg: '#c0392b', bd: '#f4b8b8' },
+  }[envio.status];
+  if (!cfg) return null;
+  return (
+    <span title={envio.erro || cfg.txt} style={{
+      fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+      background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.bd}`, whiteSpace: 'nowrap',
+    }}>{cfg.txt}</span>
+  );
+}
+
 // Map cliente_id → vendedora_id da ÚLTIMA venda (quem atende; cadastro vem 81% nulo)
 async function fetchVendedoraSet(ids, size = 200) {
   const map = new Map();
@@ -423,6 +488,13 @@ function ordenarLista(lista, modo) {
   else if (modo === 'recentes') arr.sort((a, b) =>
     String(b.primeira_compra || b.ultima_compra || '').localeCompare(String(a.primeira_compra || a.ultima_compra || '')));
   else arr.sort((a, b) => Number(b.lifetime_total || 0) - Number(a.lifetime_total || 0));
+  // Atividade de envio nas últimas 24h SOBE pro topo (mais recente primeiro),
+  // independente do modo — assim a Tamara vê na hora o que acabou de sair
+  // (inclusive os erros). Depois de 24h o card volta pra posição natural e vai
+  // "descendo" conforme entram envios novos. Ailson 11/06/2026.
+  const corte = Date.now() - 24 * 60 * 60 * 1000;
+  const ts = (l) => { const t = l.envio?.em ? new Date(l.envio.em).getTime() : 0; return t > corte ? t : 0; };
+  arr.sort((a, b) => ts(b) - ts(a) || 0);
   return arr;
 }
 
@@ -518,7 +590,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = elegiveis.map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, fbs, vendas, enviadoSet, vendaVendMap, dedup] = await Promise.all([
+        const [cads, fbs, vendas, enviadoSet, vendaVendMap, dedup, envioInfo] = await Promise.all([
           selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
           selectInBatches('clientes_sofia_feedback', 'cliente_id, status', 'cliente_id', ids),
           supabase.from('lojas_vendas')
@@ -529,6 +601,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
           fetchEnviadoSet(ids),
           fetchVendedoraSet(ids),
           selectInBatches('vw_lojas_clientes_feedback', 'cliente_id, perfil_entrega, falso_novo', 'cliente_id', ids),
+          fetchEnvioInfo(ids),
         ]);
 
         const cadMap = new Map(cads.map(c => [c.id, c]));
@@ -558,6 +631,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             perfil: dd?.perfil_entrega || 'presencial',
             status,
             enviado: enviadoSet.has(k.cliente_id),
+            envio: envioInfo.get(k.cliente_id) || null,
           });
         }
         if (vivo) { setLinhas(out); setOcultados(ocult); }
@@ -589,6 +663,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
               {l.perfil === 'distancia' ? 'a distância' : 'na loja'}
             </span>
             <StatusBadge status={l.status} />
+            <EnvioBadge envio={l.envio} />
           </ClienteCard>
         ))}
       </div>
@@ -620,10 +695,11 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = (kpis || []).map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, enviadoSet, vendaVendMap] = await Promise.all([
+        const [cads, enviadoSet, vendaVendMap, envioInfo] = await Promise.all([
           selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
           fetchEnviadoSet(ids),
           fetchVendedoraSet(ids),
+          fetchEnvioInfo(ids),
         ]);
         const cadMap = new Map(cads.map(c => [c.id, c]));
 
@@ -642,6 +718,7 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             dias_sem_comprar: k.dias_sem_comprar,
             ultima_compra: k.ultima_compra,
             enviado: enviadoSet.has(k.cliente_id),
+            envio: envioInfo.get(k.cliente_id) || null,
           });
         }
         if (vivo) setLinhas(out);
@@ -665,6 +742,7 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             <Campo Icon={ShoppingCart} label="lifetime" valor={fmtMoney(l.lifetime_total)} destaque />
             <Campo label="compras" valor={String(l.qtd_compras ?? 0)} />
             <Campo label="sem comprar" valor={`${l.dias_sem_comprar ?? '—'}d`} alerta />
+            <EnvioBadge envio={l.envio} />
           </ClienteCard>
         ))}
       </div>

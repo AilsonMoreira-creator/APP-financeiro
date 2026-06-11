@@ -78,13 +78,26 @@ export async function processarFila(limite = 40) {
       let conversaId;
       const { data: existentes } = await supabase
         .from('lojas_whats_conversas')
-        .select('id')
+        .select('id, etapa')
         .eq('cliente_id', item.cliente_id)
         .not('etapa', 'in', '(vendeu,perdida)')
         .order('atualizado_em', { ascending: false })
         .limit(1);
       if (existentes && existentes.length > 0) {
         conversaId = existentes[0].id;
+        // FIX 11/06/2026 (Ailson): conversa REUSADA ficava com a etapa antiga e
+        // com sugestões pendentes de outro contexto (ex: Lucimara tinha pendente
+        // o script de "visita ao site" dentro da conversa que virou feedback).
+        // Agora: atualiza a etapa pro fluxo do módulo e descarta pendentes velhas.
+        if (existentes[0].etapa !== item.etapa) {
+          await supabase.from('lojas_whats_conversas')
+            .update({ etapa: item.etapa, atualizado_em: agora() })
+            .eq('id', conversaId);
+        }
+        await supabase.from('lojas_whats_sugestoes')
+          .update({ status: 'descartada', atualizada_em: agora() })
+          .eq('conversa_id', conversaId)
+          .eq('status', 'pendente');
       } else {
         const { data: nova, error: eN } = await supabase
           .from('lojas_whats_conversas')
@@ -107,10 +120,16 @@ export async function processarFila(limite = 40) {
       }
 
       // grava msg + marca enviada (sem mudar etapa)
+      // FIX 11/06/2026 (Ailson): texto era null → bolha VAZIA no chat da Tamara.
+      // Agora renderiza o body_text do template com as vars e grava.
+      let textoRenderizado = String(tpl.body_text || '');
+      for (const [k, v] of Object.entries(vars)) {
+        textoRenderizado = textoRenderizado.replaceAll(`{{${k}}}`, v);
+      }
       const ts = agora();
       await supabase.from('lojas_whats_mensagens').insert({
         conversa_id: conversaId, direcao: 'saida', autor: 'sofia_ia',
-        tipo_midia: 'template', texto: null,
+        tipo_midia: 'template', texto: textoRenderizado || null,
         template_name: tpl.name, template_vars: { '1': primeiroNome },
         meta_message_id: metaMsgId, status: 'enviando', meta_response: metaResp, enviada_em: ts,
       });
