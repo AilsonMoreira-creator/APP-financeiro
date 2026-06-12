@@ -128,6 +128,95 @@ export async function enviarTexto(telefone, texto, opts = {}) {
   });
 }
 
+// ─── DIVISAO HUMANIZADA DE MENSAGENS ─────────────────────────────────────
+// Ailson 12/06/2026: humano nao manda textao de 3-4 linhas de uma vez.
+// Regra: ate 2 linhas = 1 mensagem; 3+ linhas divide em 2 (cap 3 pra textos
+// muito longos). Quebra em ponto natural (paragrafo > linha > sentenca),
+// nunca no meio de lista/valores (R$, bullets), que humano manda junto.
+
+const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const _ehLinhaLista = (l) => /^\s*([-•*✔✓]|\d+[.)])\s/.test(l) || /R\$\s?\d/.test(l);
+
+export function dividirMensagemHumana(texto) {
+  if (!texto) return [texto];
+  const t = String(texto).trim();
+  const linhasUteis = t.split('\n').filter(l => l.trim());
+  if (linhasUteis.length <= 2 && t.length <= 240) return [t];
+
+  let blocos;
+  let sep = '\n\n';
+  const paragrafos = t.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+
+  if (paragrafos.length >= 2) {
+    blocos = paragrafos;
+  } else {
+    // Um paragrafo so: quebra por linhas, mantendo blocos de lista juntos
+    sep = '\n';
+    const ls = t.split('\n');
+    blocos = [];
+    let buf = [];
+    for (let i = 0; i < ls.length; i++) {
+      buf.push(ls[i]);
+      const prox = ls[i + 1];
+      const continuaLista = prox !== undefined && _ehLinhaLista(ls[i]) && _ehLinhaLista(prox);
+      if (!continuaLista) { blocos.push(buf.join('\n')); buf = []; }
+    }
+    if (buf.length) blocos.push(buf.join('\n'));
+    blocos = blocos.filter(b => b.trim());
+    if (blocos.length < 2) {
+      // Linha unica muito longa: quebra por sentenca
+      if (t.length <= 300) return [t];
+      sep = ' ';
+      blocos = t.split(/(?<=[.!?…])\s+/).filter(Boolean);
+      if (blocos.length < 2) return [t];
+    }
+  }
+
+  // Agrupa blocos em N partes balanceadas por tamanho
+  const total = blocos.reduce((s, b) => s + b.length, 0);
+  const nPartes = (linhasUteis.length > 8 || t.length > 600) && blocos.length >= 3 ? 3 : 2;
+  const alvo = total / nPartes;
+  const partes = [];
+  let cur = [], curLen = 0;
+  for (const b of blocos) {
+    if (cur.length && curLen >= alvo * 0.8 && partes.length < nPartes - 1) {
+      partes.push(cur.join(sep)); cur = []; curLen = 0;
+    }
+    cur.push(b); curLen += b.length + sep.length;
+  }
+  if (cur.length) partes.push(cur.join(sep));
+  return partes.map(p => p.trim()).filter(Boolean);
+}
+
+/**
+ * Envia texto livre FRACIONADO como humano: divide em 2-3 mensagens com
+ * delay de digitacao (1,8-3,5s) entre elas. A parte 1 e retornada como
+ * metaResp pro caller registrar como mensagem principal; as partes extras
+ * sao registradas aqui em lojas_whats_mensagens (precisa receber supabase).
+ *
+ * @returns {{ metaResp, textoPrimeiraParte, totalPartes }}
+ */
+export async function enviarTextoFracionado({ telefone, texto, conversaId, supabase, autor = 'sofia_ia' }) {
+  const partes = dividirMensagemHumana(texto);
+  const metaResp = await enviarTexto(telefone, partes[0]);
+  for (let i = 1; i < partes.length; i++) {
+    try {
+      await _sleep(1800 + Math.floor(Math.random() * 1700));
+      const r = await enviarTexto(telefone, partes[i]);
+      if (conversaId && supabase) {
+        await supabase.from('lojas_whats_mensagens').insert({
+          conversa_id: conversaId, direcao: 'saida', autor, tipo_midia: 'text',
+          texto: partes[i], meta_message_id: r?.messages?.[0]?.id || null,
+          status: 'enviando', enviada_em: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      console.error('[whats/fracionado] falha parte', i + 1, e.message);
+    }
+  }
+  return { metaResp, textoPrimeiraParte: partes[0], totalPartes: partes.length };
+}
+
 /**
  * Envia mensagem de TEMPLATE HSM (primeira mensagem ou fora da janela 24h).
  * Template precisa estar APROVADO na Meta antes.

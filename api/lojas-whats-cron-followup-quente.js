@@ -29,7 +29,7 @@
 
 import { supabase, setCors, log, logErro, getConfig, dentroDaJanela, limparEstiloSofia } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
-import { enviarTexto } from './_lojas-whats-meta-client.js';
+import { enviarTextoFracionado } from './_lojas-whats-meta-client.js';
 
 const MODELO_DEFAULT = 'claude-sonnet-4-6';
 const H = 3600 * 1000;
@@ -146,16 +146,19 @@ async function executar() {
         if (!texto) { r.erros.push({ id: c.id, motivo: 'claude_vazio' }); continue; }
 
         let metaMsgId = null;
+        let textoMsg1 = texto;
         try {
-          const resp = await enviarTexto(c.telefone, texto);
-          metaMsgId = resp?.messages?.[0]?.id || null;
+          // Ailson 12/06/2026: fracionado como humano (3+ linhas vira 2 mensagens)
+          const frac = await enviarTextoFracionado({ telefone: c.telefone, texto, conversaId: c.id, supabase });
+          metaMsgId = frac.metaResp?.messages?.[0]?.id || null;
+          textoMsg1 = frac.textoPrimeiraParte;
         } catch (e) {
           r.erros.push({ id: c.id, motivo: 'envio', detalhe: e.message });
           continue;
         }
         await supabase.from('lojas_whats_mensagens').insert({
           conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
-          texto, meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
+          texto: textoMsg1, meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
         });
         await supabase.from('lojas_whats_conversas').update({
           fup_disparado_em: agora, fup_ja_rodou: true,

@@ -30,7 +30,7 @@ import {
   primeiroNome,
   getConfig
 } from './_lojas-whats-helpers.js';
-import { enviarTemplate, enviarTexto } from './_lojas-whats-meta-client.js';
+import { enviarTemplate, enviarTexto, enviarTextoFracionado } from './_lojas-whats-meta-client.js';
 import { parseMarcadoresMidia, resolverMidia, enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
 
 export default async function handler(req, res) {
@@ -203,6 +203,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   // Pra primeira_mensagem (template HSM) NAO usa marcadores — template tem
   // estrutura propria. So aplica em reply de texto.
   let textoFinal = textoFinalBruto;
+  let textoMsgPrincipal = null; // se fracionado: registro principal = so a parte 1
   let midiaParaEnviar = null;
   if (sug.tipo !== 'primeira_mensagem') {
     const parsed = parseMarcadoresMidia(textoFinalBruto);
@@ -301,7 +302,13 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
         }
       } else {
         // Sem midia OU catalogo PDF padrao (PDF nao tem caption): envia texto.
-        metaResp = await enviarTexto(sug.conversa.telefone, textoFinal);
+        // Ailson 12/06/2026: fracionado como humano (3+ linhas vira 2 mensagens)
+        const frac = await enviarTextoFracionado({
+          telefone: sug.conversa.telefone, texto: textoFinal,
+          conversaId: sug.conversa.id, supabase,
+        });
+        metaResp = frac.metaResp;
+        textoMsgPrincipal = frac.textoPrimeiraParte;
         if (midiaParaEnviar && midiaParaEnviar.tipo === 'catalogo') {
           // Padrao: envia documento PDF depois do texto (separado)
           const r = await enviarMidiaSofia({
@@ -368,7 +375,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
       direcao: 'saida',
       autor: 'sofia_ia',
       tipo_midia: tipoMidiaMsg,
-      texto: textoFinal,
+      texto: textoMsgPrincipal || textoFinal,
       midia_url: midiaUrlMsg,
       template_name: sug.template_name,
       template_vars: sug.template_vars,
