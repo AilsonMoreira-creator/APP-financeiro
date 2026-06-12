@@ -6713,13 +6713,16 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
     fotosProntasModalRef.current = null; // seleção mudou: invalida o cache
   };
 
+  const [textoEnviado, setTextoEnviado] = useState(false); // passo 1 feito (Ailson 12/06/2026)
+
   const enviarFotosEMensagem = async () => {
     if (enviandoFotosMsg || !fotosSel.length) return;
-    // Copia a mensagem ANTES de qualquer await (gesto + garantia)
-    try { await navigator.clipboard.writeText(mensagem); } catch { /* segue */ }
-    // 2º toque depois do "perdeu o gesto" (iOS): compartilha na hora
+    // Fluxo 2 passos (Ailson 12/06/2026, vendedoras no Android): o texto vai
+    // ANTES via wa.me (abre direto o cliente). Aqui compartilha SÓ as fotos —
+    // sem legenda pra não duplicar a mensagem. No share, o cliente aparece no
+    // topo das conversas recentes porque acabou de receber a mensagem.
     if (fotosProntasModalRef.current) {
-      const r = await compartilharArquivos(fotosProntasModalRef.current, { titulo: 'Fotos das peças', texto: mensagem });
+      const r = await compartilharArquivos(fotosProntasModalRef.current, { titulo: 'Fotos das peças' });
       if (r.ok) {
         fotosProntasModalRef.current = null;
         if (r.via !== 'cancelado') {
@@ -6742,7 +6745,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
         } catch { /* pula foto com erro */ }
       }
       if (!files.length) { alert('Não consegui baixar as fotos — tenta de novo'); return; }
-      const r = await compartilharArquivos(files, { titulo: 'Fotos das peças', texto: mensagem });
+      const r = await compartilharArquivos(files, { titulo: 'Fotos das peças' });
       if (!r.ok && r.erro === 'gesto') {
         fotosProntasModalRef.current = files;
         alert('Fotos prontas! Toca de novo no botão pra enviar');
@@ -6949,7 +6952,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
 
   // Abre WhatsApp Business COM mensagem pre-preenchida + marca enviada.
   // Se cliente nao tem telefone, abre modal pra cadastrar primeiro.
-  const abrirWhatsAppComMsg = async () => {
+  const abrirWhatsAppComMsg = async (opts = {}) => {
     if (!clienteEfetivo) return;
     const tel = (clienteEfetivo.telefone_principal || '').trim();
     if (!tel) {
@@ -6970,7 +6973,9 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
         : numeroLimpo;
       // Mensagem pre-preenchida, encoded
       const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;
-      onEnviada && onEnviada();
+      // manterAberto (Ailson 12/06/2026): no fluxo com fotos o modal fica
+      // aberto pro passo 2 (compartilhar as fotos) depois que ela voltar.
+      if (!(opts && opts.manterAberto === true)) { onEnviada && onEnviada(); }
       window.location.href = url;
     } catch (e) {
       alert('Erro ao abrir WhatsApp: ' + e.message);
@@ -7391,22 +7396,34 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {fotosSel.length > 0 ? (
                   <>
+                    {/* Passo 1: texto via wa.me — abre DIRETO o cliente (Ailson 12/06/2026) */}
+                    <button onClick={() => { setTextoEnviado(true); abrirWhatsAppComMsg({ manterAberto: true }); }} disabled={enviandoWhats} style={{
+                      flex: '1 1 100%',
+                      background: textoEnviado ? '#eafbf0' : '#25D366',
+                      color: textoEnviado ? '#1e8e4e' : 'white',
+                      border: textoEnviado ? '1.5px solid #b8dfc8' : 'none',
+                      borderRadius: 10, padding: '13px',
+                      fontSize: fz(16), fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      boxShadow: textoEnviado ? 'none' : '0 2px 6px rgba(37,211,102,0.35)',
+                    }}>
+                      <MessageCircle size={sz(20)} /> {textoEnviado ? '✓ 1. Mensagem enviada' : '1. Enviar mensagem'}
+                    </button>
+                    {/* Passo 2: fotos via share (cliente no topo das recentes) */}
                     <button onClick={enviarFotosEMensagem} disabled={enviandoFotosMsg} style={{
                       flex: '1 1 100%',
-                      background: enviandoFotosMsg ? '#9bb4c8' : '#25D366', color: 'white',
-                      border: 'none', borderRadius: 10, padding: '13px',
+                      background: enviandoFotosMsg ? '#9bb4c8' : (textoEnviado ? '#25D366' : '#fff'),
+                      color: textoEnviado ? 'white' : '#1e8e4e',
+                      border: textoEnviado || enviandoFotosMsg ? 'none' : '1.5px solid #25D366',
+                      borderRadius: 10, padding: '13px',
                       fontSize: fz(16), fontWeight: 700, cursor: enviandoFotosMsg ? 'wait' : 'pointer', fontFamily: FONT,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      boxShadow: '0 2px 6px rgba(37,211,102,0.35)',
+                      boxShadow: textoEnviado && !enviandoFotosMsg ? '0 2px 6px rgba(37,211,102,0.35)' : 'none',
                     }}>
-                      <MessageCircle size={sz(20)} /> {enviandoFotosMsg ? 'Preparando fotos…' : `📤 Enviar fotos + mensagem`}
+                      📤 {enviandoFotosMsg ? 'Preparando fotos…' : `2. Enviar as fotos (${fotosSel.length})`}
                     </button>
                     <div style={{ flex: '1 1 100%', fontSize: fz(11.5), color: palette.inkMuted, textAlign: 'center', marginTop: -4 }}>
-                      A mensagem fica copiada — se o WhatsApp não colar sozinho como legenda, é só colar na conversa.{' '}
-                      <button onClick={abrirWhatsAppComMsg} style={{
-                        background: 'transparent', border: 'none', color: palette.accent,
-                        fontSize: fz(11.5), cursor: 'pointer', fontFamily: FONT, textDecoration: 'underline', padding: 0,
-                      }}>Enviar só o texto</button>
+                      Manda a mensagem primeiro: na hora das fotos o cliente aparece no topo das conversas recentes do WhatsApp.
                     </div>
                   </>
                 ) : (
