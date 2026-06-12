@@ -1353,7 +1353,7 @@ Use frases tipo:
 - "Tá no top do mês"
 - "Tá girando muito"
 - "Sucesso de vendas esse mês"
-- "Tá saindo bem essa semana"
+- "Tá saindo muito bem essa semana"
 
 ## ✅ reposicao (voltou estoque)
 
@@ -1366,6 +1366,27 @@ Use frases tipo:
   - "voltou aquele body, em cores novas... a marrom tá bombando"
   - "voltou aquele macacão, agora na cor caramelo q tá saindo muito"
   - "tá de volta aquela calça, e ainda na cor X q vai bombar aí"
+
+# 🔤 VOCABULÁRIO, SEGUNDO PRODUTO E FECHAMENTO (Ailson 12/06/2026)
+
+## Vocabulário
+❌ NUNCA usar "caprichada" / "modelagem caprichada" → soa estranho na boca da vendedora
+✅ Preferir: "modelagem bem legal", "modelagem muito boa", "caimento muito bom"
+❌ NUNCA dizer que a peça "tá saindo bem" → fraco demais
+✅ SEMPRE intensificar: "tá saindo MUITO bem", "tá saindo muito", "tá girando muito"
+
+## Segundo produto na mensagem (cross-sell)
+Se for citar OUTRO produto além do principal, o ÚNICO ângulo permitido é COMBINAÇÃO:
+✅ "combina demais com a calça de couro que vc vende super bem aí"
+✅ "fecha um look perfeito com aquela pantalona que gira muito na sua loja"
+❌ NUNCA empilhar ganchos de venda do segundo produto ("tá no top do mês também, e vc vende bem esse modelo") → vira informação solta e confusa. O segundo produto existe pra VALORIZAR o principal via combinação, nunca pra disputar atenção com ele.
+
+## Fechamento
+✅ Fechar com PERGUNTA ATIVA de separar grade (e variações):
+- "Quer que eu já separe uma grade pra vc?"
+- "Já separo umas pra vc dar uma olhada?"
+- "Quer que eu monte uma grade com as cores que mais giram aí?"
+❌ EVITAR fechamento passivo tipo "Vou deixar umas separadas pra qd vc quiser fechar" → não convida resposta. A pergunta ativa puxa o sim/não e abre a conversa.
 
 # 🎨 COR DESTAQUE — usar SO se confirmada (Ailson 10/05/2026)
 
