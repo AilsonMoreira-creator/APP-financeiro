@@ -31,17 +31,30 @@ async function metaFetch(path, options = {}) {
     'Content-Type': 'application/json',
     ...(options.headers || {})
   };
-  const res = await fetch(url, { ...options, headers });
-  const text = await res.text();
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch (_) { /* nao eh json */ }
-  if (!res.ok) {
+  // Retry transitório (Ailson 12/06/2026): a Meta às vezes responde
+  // OAuthException code 1/2 com is_transient ("retry your request later").
+  // Antes isso virava sugestão 'falhou' na primeira tentativa. Agora tenta
+  // até 3x com backoff curto antes de desistir — só pra erro transitório.
+  const MAX_TENTATIVAS = 3;
+  let ultimoErr = null;
+  for (let tent = 1; tent <= MAX_TENTATIVAS; tent++) {
+    const res = await fetch(url, { ...options, headers });
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch (_) { /* nao eh json */ }
+    if (res.ok) return json;
+
     const err = new Error(`Meta API ${res.status}: ${json?.error?.message || text}`);
     err.status = res.status;
     err.metaResponse = json;
-    throw err;
+    const e = json?.error || {};
+    const transitorio = e.is_transient === true || e.code === 1 || e.code === 2 || res.status >= 500;
+    if (!transitorio || tent === MAX_TENTATIVAS) throw err;
+    ultimoErr = err;
+    log('meta-fetch', `erro transitorio (code=${e.code} tent=${tent}/${MAX_TENTATIVAS}) — retry em ${tent}s`);
+    await new Promise(r => setTimeout(r, tent * 1000));
   }
-  return json;
+  throw ultimoErr; // inalcançável, mas garante
 }
 
 // ─── VERIFY WEBHOOK (handshake GET na primeira config Meta) ───────────────
