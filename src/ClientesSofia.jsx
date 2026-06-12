@@ -96,26 +96,37 @@ async function fetchEnvioInfo(ids, size = 200) {
       const fatia = ids.slice(i, i + size);
       const { data: fila } = await supabase
         .from('clientes_sofia_fila')
-        .select('cliente_id, status, erro, processado_em, criado_em')
+        .select('cliente_id, status, etapa, erro, processado_em, criado_em')
         .in('cliente_id', fatia)
         .order('criado_em', { ascending: false });
       (fila || []).forEach(f => {
         if (!f.cliente_id || map.has(f.cliente_id)) return; // pega só o mais recente
         const status = f.status === 'enviado' ? 'enviada' : f.status === 'erro' ? 'erro' : 'na_fila';
-        map.set(f.cliente_id, { status, erro: f.erro || null, em: f.processado_em || f.criado_em });
+        map.set(f.cliente_id, {
+          status, erro: f.erro || null, em: f.processado_em || f.criado_em,
+          etapa: f.etapa || null,
+          // disparo_em: marco da régua — base pra 'conversando' e 'reativado' (Ailson 12/06/2026)
+          disparo_em: f.status === 'enviado' ? (f.processado_em || f.criado_em) : null,
+        });
       });
       // Falhas de entrega (webhook da Meta marca a mensagem como failed)
       const { data: convs } = await supabase
         .from('lojas_whats_conversas')
-        .select('id, cliente_id, unread_count')
+        .select('id, cliente_id, unread_count, ultima_atividade_em')
         .in('cliente_id', fatia);
       const convPorId = new Map((convs || []).map(c => [c.id, c.cliente_id]));
       // Não lidas por cliente (indicador vermelho no card, igual o CRM da
       // Sofia). Ailson 11/06/2026.
       (convs || []).forEach(c => {
-        if (!c.cliente_id || !(c.unread_count > 0)) return;
+        if (!c.cliente_id) return;
         const atual = map.get(c.cliente_id) || { status: null, erro: null, em: null };
-        map.set(c.cliente_id, { ...atual, unread: (atual.unread || 0) + c.unread_count });
+        const patch = {};
+        if (c.unread_count > 0) patch.unread = (atual.unread || 0) + c.unread_count;
+        // última atividade (qualquer direção) — régua dos 3 dias do 'conversando'
+        if (c.ultima_atividade_em && (!atual.ultima_atividade || c.ultima_atividade_em > atual.ultima_atividade)) {
+          patch.ultima_atividade = c.ultima_atividade_em;
+        }
+        if (Object.keys(patch).length) map.set(c.cliente_id, { ...atual, ...patch });
       });
       if (convPorId.size > 0) {
         const { data: falhas } = await supabase
@@ -148,6 +159,19 @@ async function fetchEnvioInfo(ids, size = 200) {
     }
   } catch (e) { console.error('fetchEnvioInfo:', e?.message); }
   return map;
+}
+
+// ─── Estado 'conversando' (Ailson 12/06/2026) ───────────────────────────────
+// Cliente respondeu DEPOIS do disparo da régua e a conversa teve atividade
+// nos últimos 3 dias. Depois de 3d parado: sai do 'conversando' e volta pro
+// fluxo normal da aba. Se ele mandar mensagem de novo (a qualquer momento),
+// resposta_em atualiza e ele volta direto pro 'conversando' com o histórico.
+const TRES_DIAS_MS = 3 * 86400000;
+function ehConversando(envio) {
+  if (!envio?.resposta_em || !envio?.disparo_em) return false;
+  if (new Date(envio.resposta_em).getTime() <= new Date(envio.disparo_em).getTime()) return false;
+  const ult = envio.ultima_atividade || envio.resposta_em;
+  return (Date.now() - new Date(ult).getTime()) <= TRES_DIAS_MS;
 }
 
 // Badge do status de envio no card (Ailson 11/06/2026)
@@ -305,7 +329,7 @@ export default function ClientesTab({ userId, refreshTick }) {
     if (abrindoId) return;
     setAbrindoId(clienteId);
     try {
-      const etapa = subTab === 'inativos' ? 'inativo' : 'feedback';
+      const etapa = (subTab.startsWith('inativo') || subTab === 'reativados') ? 'inativo' : 'feedback';
       const r = await fetch('/api/lojas-whats-conversa-abrir-cliente', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cliente_id: clienteId, etapa }),
@@ -331,11 +355,14 @@ export default function ClientesTab({ userId, refreshTick }) {
     <div style={{ background: palette.bg, minHeight: 'calc(100vh - 110px)', fontFamily: FONT }}>
       {/* sub-abas Feedback | Inativos */}
       <div style={{
-        display: 'flex', gap: 6, padding: '10px 16px 0',
+        display: 'flex', gap: 6, padding: '10px 16px 0', overflowX: 'auto',
         background: palette.surface, borderBottom: `1px solid ${palette.beige}`,
       }}>
         <SubTab id="feedback" label="Feedback" Icon={MessageSquare} ativo={subTab === 'feedback'} onClick={setSubTab} />
+        <SubTab id="feedback_conv" label="Fb 💬" Icon={MessageSquare} ativo={subTab === 'feedback_conv'} onClick={setSubTab} />
         <SubTab id="inativos" label="Inativos" Icon={Clock} ativo={subTab === 'inativos'} onClick={setSubTab} />
+        <SubTab id="inativos_conv" label="In 💬" Icon={Clock} ativo={subTab === 'inativos_conv'} onClick={setSubTab} />
+        <SubTab id="reativados" label="Reativados" Icon={ShoppingCart} ativo={subTab === 'reativados'} onClick={setSubTab} />
       </div>
 
       {/* filtro único (vale pra sub-aba ativa) */}
@@ -357,6 +384,19 @@ export default function ClientesTab({ userId, refreshTick }) {
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
           onAbrir={abrirChat} abrindoId={abrindoId}
           selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
+      )}
+      {(subTab === 'feedback_conv' || subTab === 'inativos_conv') && (
+        <ConversandoTab key={subTab} etapa={subTab === 'inativos_conv' ? 'inativo' : 'feedback'}
+          refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
+          bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
+          onAbrir={abrirChat} abrindoId={abrindoId}
+          selecionados={selecionados} onToggleSel={toggleSel} />
+      )}
+      {subTab === 'reativados' && (
+        <ReativadosTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
+          bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
+          onAbrir={abrirChat} abrindoId={abrindoId}
+          selecionados={selecionados} onToggleSel={toggleSel} />
       )}
 
       {/* Barra de ação em massa (aparece quando há seleção) */}
@@ -387,7 +427,7 @@ export default function ClientesTab({ userId, refreshTick }) {
       {modalMassa && (
         <ModalMassa
           clienteIds={[...selecionados]}
-          etapa={subTab === 'inativos' ? 'inativo' : 'feedback'}
+          etapa={subTab.startsWith('inativo') || subTab === 'reativados' ? 'inativo' : 'feedback'}
           onClose={() => setModalMassa(false)}
           onEnviado={() => { setModalMassa(false); setSelecionados(new Set()); }}
         />
@@ -671,6 +711,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
           if (bloqueadosRef.current.has(k.cliente_id)) continue; // exclui bloqueado no carregamento
           const dd = dedupMap.get(k.cliente_id);
           if (dd && dd.falso_novo) { ocult++; continue; } // já era cliente (mesmo telefone, grupo ou CNPJ em cadastro anterior)
+          if (ehConversando(envioInfo.get(k.cliente_id))) continue; // está na aba Fb 💬 (Ailson 12/06/2026)
           const c = cadMap.get(k.cliente_id) || {};
           out.push({
             cliente_id: k.cliente_id,
@@ -748,19 +789,56 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = (kpis || []).map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, enviadoSet, vendaVendMap, envioInfo] = await Promise.all([
-          selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
+        const [cads, enviadoSet, vendaVendMap, envioInfo, reaRes] = await Promise.all([
+          selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id, grupo_id', 'id', ids),
           fetchEnviadoSet(ids),
           fetchVendedoraSet(ids),
           fetchEnvioInfo(ids),
+          supabase.from('vw_clientes_sofia_reativados').select('cliente_id'),
         ]);
         const cadMap = new Map(cads.map(c => [c.id, c]));
+        const reativados = new Set((reaRes?.data || []).map(r => r.cliente_id));
+
+        // ─── Regra de GRUPOS (Ailson 12/06/2026, mesma do módulo Lojas) ─────
+        // 1. Grupo com QUALQUER CNPJ ativo (compra <180d) → grupo inteiro sai
+        //    da lista (mesmo dono já comprando por outro CNPJ).
+        // 2. Grupo todo inativo → mostra SÓ o CNPJ principal (maior lifetime),
+        //    com badge do grupo.
+        const grupoIds = [...new Set(cads.map(c => c.grupo_id).filter(Boolean))];
+        const grupoAtivo = new Set();          // grupos com algum doc ativo
+        const principalDoGrupo = new Map();    // grupo_id → cliente_id principal
+        const docsPorGrupo = new Map();        // grupo_id → qtd CNPJs
+        if (grupoIds.length > 0) {
+          const docs = await selectInBatches('lojas_clientes', 'id, grupo_id', 'grupo_id', grupoIds);
+          const docIds = docs.map(d => d.id);
+          const kdocs = await selectInBatches('lojas_clientes_kpis', 'cliente_id, dias_sem_comprar, lifetime_total', 'cliente_id', docIds);
+          const kdocMap = new Map(kdocs.map(k => [k.cliente_id, k]));
+          for (const g of grupoIds) {
+            const dg = docs.filter(d => d.grupo_id === g);
+            docsPorGrupo.set(g, dg.length);
+            let melhor = null, melhorLt = -1;
+            for (const d of dg) {
+              const kd = kdocMap.get(d.id) || {};
+              if ((kd.dias_sem_comprar ?? 9999) < 180) grupoAtivo.add(g);
+              const lt = Number(kd.lifetime_total || 0);
+              if (lt > melhorLt) { melhorLt = lt; melhor = d.id; }
+            }
+            principalDoGrupo.set(g, melhor);
+          }
+        }
 
         const out = [];
         for (const k of (kpis || [])) {
           if (bloqueadosRef.current.has(k.cliente_id)) continue;
+          if (reativados.has(k.cliente_id)) continue;                 // está na aba Reativados
+          if (ehConversando(envioInfo.get(k.cliente_id))) continue;   // está na aba In 💬
           const c = cadMap.get(k.cliente_id) || {};
+          if (c.grupo_id) {
+            if (grupoAtivo.has(c.grupo_id)) continue;                       // grupo tem CNPJ ativo
+            if (principalDoGrupo.get(c.grupo_id) !== k.cliente_id) continue; // só o principal aparece
+          }
           out.push({
+            grupo_qtd: c.grupo_id ? (docsPorGrupo.get(c.grupo_id) || 0) : 0,
             cliente_id: k.cliente_id,
             nome: c.razao_social || c.comprador_nome || '—',
             telefone: c.telefone_principal,
@@ -795,6 +873,12 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             <Campo Icon={ShoppingCart} label="lifetime" valor={fmtMoney(l.lifetime_total)} destaque />
             <Campo label="compras" valor={String(l.qtd_compras ?? 0)} />
             <Campo label="sem comprar" valor={`${l.dias_sem_comprar ?? '—'}d`} alerta />
+            {l.grupo_qtd > 1 && (
+              <span title={`Grupo com ${l.grupo_qtd} CNPJs — mostrando só o principal (maior lifetime)`} style={{
+                fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+                background: '#eef0fa', color: '#4a5ba5', border: '1px solid #c9d0ee', whiteSpace: 'nowrap',
+              }}>🏢 grupo · {l.grupo_qtd} CNPJs</span>
+            )}
             <EnvioBadge envio={l.envio} />
           </ClienteCard>
         ))}
@@ -806,6 +890,179 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
 // ═══════════════════════════════════════════════════════════════════════════
 // CARD (nome + vendedora que atende + contato + campos + toggle bloqueio)
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ABA CONVERSANDO (Fb 💬 / In 💬) — Ailson 12/06/2026
+// Quem respondeu ao disparo da régua e teve atividade nos últimos 3 dias.
+// Depois de 3d parado, sai daqui: feedback some (fluxo normal mostra só
+// novos), inativo volta pra aba Inativos. O histórico fica na conversa —
+// nova mensagem do cliente o traz de volta automaticamente.
+// ═══════════════════════════════════════════════════════════════════════════
+function ConversandoTab({ etapa, refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, vendFiltro }) {
+  const [linhas, setLinhas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      setLoading(true); setErro(null);
+      try {
+        const { data: fila, error: e1 } = await supabase
+          .from('clientes_sofia_fila')
+          .select('cliente_id')
+          .eq('etapa', etapa).eq('status', 'enviado');
+        if (e1) throw e1;
+        const ids = [...new Set((fila || []).map(f => f.cliente_id).filter(Boolean))];
+        if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
+
+        let reativados = new Set();
+        if (etapa === 'inativo') {
+          const { data: rea } = await supabase.from('vw_clientes_sofia_reativados').select('cliente_id');
+          reativados = new Set((rea || []).map(r => r.cliente_id));
+        }
+
+        const [cads, kpis, vendaVendMap, envioInfo] = await Promise.all([
+          selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal', 'id', ids),
+          selectInBatches('lojas_clientes_kpis', 'cliente_id, lifetime_total, qtd_compras, dias_sem_comprar', 'cliente_id', ids),
+          fetchVendedoraSet(ids),
+          fetchEnvioInfo(ids),
+        ]);
+        const cadMap = new Map(cads.map(c => [c.id, c]));
+        const kpiMap = new Map(kpis.map(k => [k.cliente_id, k]));
+
+        const out = [];
+        for (const id of ids) {
+          if (bloqueadosRef.current.has(id)) continue;
+          if (reativados.has(id)) continue; // já comprou: tá na aba Reativados
+          const envio = envioInfo.get(id);
+          if (!ehConversando(envio)) continue;
+          const c = cadMap.get(id) || {};
+          const k = kpiMap.get(id) || {};
+          out.push({
+            cliente_id: id,
+            nome: c.razao_social || c.comprador_nome || '—',
+            telefone: c.telefone_principal,
+            vendedora_id: vendaVendMap.get(id) || null,
+            vendedora_nome: vendMap.get(vendaVendMap.get(id)) || '—',
+            lifetime_total: k.lifetime_total ?? 0,
+            qtd_compras: k.qtd_compras,
+            dias_sem_comprar: k.dias_sem_comprar,
+            enviado: true,
+            envio,
+          });
+        }
+        if (vivo) setLinhas(out);
+      } catch (err) { if (vivo) setErro(err.message || String(err)); }
+      finally { if (vivo) setLoading(false); }
+    })();
+    return () => { vivo = false; };
+  }, [refreshTick, vendMap, etapa]);
+
+  const visiveis = ordenarLista(filtrarVend(linhas, vendFiltro), ordenar);
+  if (loading) return <Carregando />;
+  if (erro) return <ErroBox msg={erro} />;
+  if (visiveis.length === 0) return <Vazio msg="Ninguém conversando agora. Quem responder aos disparos aparece aqui." />;
+
+  return (
+    <div style={{ padding: '12px 16px' }}>
+      <SectionTitle icon={MessageSquare}>{visiveis.length} cliente(s) conversando</SectionTitle>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {visiveis.map(l => (
+          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id} selecionado={selecionados.has(l.cliente_id)} onToggleSel={onToggleSel}>
+            <Campo Icon={ShoppingCart} label="lifetime" valor={fmtMoney(l.lifetime_total)} destaque />
+            {etapa === 'inativo' && <Campo label="sem comprar" valor={`${l.dias_sem_comprar ?? '—'}d`} alerta />}
+            <EnvioBadge envio={l.envio} />
+          </ClienteCard>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ABA REATIVADOS — Ailson 12/06/2026
+// Inativo que recebeu mensagem e COMPROU em até 7 dias (venda do Miré em
+// lojas_vendas). Fica aqui pra sempre: é o placar da régua de reativação.
+// Mandou mensagem depois? A conversa abre normal daqui de dentro.
+// ═══════════════════════════════════════════════════════════════════════════
+function ReativadosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, vendFiltro }) {
+  const [linhas, setLinhas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      setLoading(true); setErro(null);
+      try {
+        const { data: rea, error: e1 } = await supabase
+          .from('vw_clientes_sofia_reativados')
+          .select('cliente_id, data_mensagem, data_venda, valor_venda, dias_ate_compra');
+        if (e1) throw e1;
+        const ids = (rea || []).map(r => r.cliente_id);
+        if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
+
+        const [cads, kpis, vendaVendMap, envioInfo] = await Promise.all([
+          selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal', 'id', ids),
+          selectInBatches('lojas_clientes_kpis', 'cliente_id, lifetime_total, qtd_compras', 'cliente_id', ids),
+          fetchVendedoraSet(ids),
+          fetchEnvioInfo(ids),
+        ]);
+        const cadMap = new Map(cads.map(c => [c.id, c]));
+        const kpiMap = new Map(kpis.map(k => [k.cliente_id, k]));
+
+        const out = [];
+        for (const r of (rea || [])) {
+          if (bloqueadosRef.current.has(r.cliente_id)) continue;
+          const c = cadMap.get(r.cliente_id) || {};
+          const k = kpiMap.get(r.cliente_id) || {};
+          out.push({
+            cliente_id: r.cliente_id,
+            nome: c.razao_social || c.comprador_nome || '—',
+            telefone: c.telefone_principal,
+            vendedora_id: vendaVendMap.get(r.cliente_id) || null,
+            vendedora_nome: vendMap.get(vendaVendMap.get(r.cliente_id)) || '—',
+            lifetime_total: k.lifetime_total ?? 0,
+            qtd_compras: k.qtd_compras,
+            valor_venda: r.valor_venda,
+            data_venda: r.data_venda,
+            dias_ate_compra: r.dias_ate_compra,
+            enviado: true,
+            envio: envioInfo.get(r.cliente_id) || null,
+          });
+        }
+        if (vivo) setLinhas(out);
+      } catch (err) { if (vivo) setErro(err.message || String(err)); }
+      finally { if (vivo) setLoading(false); }
+    })();
+    return () => { vivo = false; };
+  }, [refreshTick, vendMap]);
+
+  const fmtData = (d) => { try { return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }); } catch { return d; } };
+  const visiveis = ordenarLista(filtrarVend(linhas, vendFiltro), ordenar);
+  if (loading) return <Carregando />;
+  if (erro) return <ErroBox msg={erro} />;
+  if (visiveis.length === 0) return <Vazio msg="Nenhum reativado ainda. Inativo que comprar em até 7 dias após a mensagem aparece aqui." />;
+
+  return (
+    <div style={{ padding: '12px 16px' }}>
+      <SectionTitle icon={ShoppingCart}>{visiveis.length} cliente(s) reativado(s) 🎉</SectionTitle>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {visiveis.map(l => (
+          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id} selecionado={selecionados.has(l.cliente_id)} onToggleSel={onToggleSel}>
+            <span style={{
+              fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+              background: '#eafbf0', color: '#1e8e4e', border: '1px solid #b8dfc8', whiteSpace: 'nowrap',
+            }}>💰 {fmtMoney(l.valor_venda)} · {fmtData(l.data_venda)} · {l.dias_ate_compra}d após msg</span>
+            <Campo Icon={ShoppingCart} label="lifetime" valor={fmtMoney(l.lifetime_total)} destaque />
+            <EnvioBadge envio={l.envio} />
+          </ClienteCard>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, selecionado, onToggleSel, children }) {
   return (
