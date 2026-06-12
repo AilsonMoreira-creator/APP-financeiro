@@ -84,7 +84,7 @@ export async function enviarAberturaTextoFotos(conversaId, telefone, nomeCliente
         conversa_id: conversaId,
         direcao: 'saida',
         autor: 'sofia_ia',
-        tipo_midia: 'foto',
+        tipo_midia: 'image',
         texto: null,
         midia_url: midiaUrl,
         meta_message_id: rm.message_id || null,
