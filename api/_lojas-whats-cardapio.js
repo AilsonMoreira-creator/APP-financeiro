@@ -315,8 +315,21 @@ export async function montarListaReferenciasAtivas() {
       .order('qtd_estoque', { ascending: false })
       .range(0, 199);
 
-    // 2. Cores por ref: do corte mais recente (por data) que tenha cores.
-    //    Cor e caracteristica do modelo, entao o corte recente reflete as atuais.
+    // 2. Cores DISPONIVEIS por ref (planilha do dia, disponivel>0) — fonte
+    //    autoritativa pro casamento foto->peca; sai INLINE em cada linha pra
+    //    facilitar a Sofia reconhecer pela cor. Ailson 13/06/2026.
+    const mapaCoresDisp = {};
+    try {
+      const { data: grade } = await supabase
+        .from('lojas_estoque_grade').select('ref, cor').gt('disponivel', 0);
+      for (const g of grade || []) {
+        const refN = String(g.ref).replace(/^0+/, '') || '0';
+        if (!mapaCoresDisp[refN]) mapaCoresDisp[refN] = new Set();
+        if (g.cor) mapaCoresDisp[refN].add(String(g.cor).trim());
+      }
+    } catch (e) { logErro('cardapio/cores-grade', e); }
+
+    // 2b. Cores do ultimo corte (fallback quando a ref nao esta na planilha do dia).
     const mapaCores = {};
     try {
       const { data: ac } = await supabase
@@ -334,13 +347,14 @@ export async function montarListaReferenciasAtivas() {
     // 3. Formata uma linha por ref
     const linhas = (prods || []).map(p => {
       const refN = String(p.ref).replace(/^0+/, '') || '0';
-      const cores = mapaCores[refN];
       const partes = [
         `REF ${p.ref}`,
         `${p.descricao || 's/ descricao'}${p.categoria ? ` (${String(p.categoria).toLowerCase()})` : ''}`,
         `estoque: ${semaforoEstoque(p.qtd_estoque)}`,
       ];
-      if (cores && cores.length) partes.push(`cores do ultimo corte: ${cores.join(', ')}`);
+      const coresDisp = mapaCoresDisp[refN] && mapaCoresDisp[refN].size ? [...mapaCoresDisp[refN]] : null;
+      if (coresDisp) partes.push(`cores disponiveis: ${coresDisp.join(', ').toLowerCase()}`);
+      else if (mapaCores[refN] && mapaCores[refN].length) partes.push(`cores do ultimo corte: ${mapaCores[refN].join(', ')}`);
       const ficha = fichaCurtaModelo(refN);
       if (ficha) partes.push(`ficha: ${ficha}`);
       return '- ' + partes.join(' | ');
@@ -353,5 +367,58 @@ export async function montarListaReferenciasAtivas() {
   } catch (e) {
     logErro('cardapio/refs-ativas', e);
     return '';
+  }
+}
+
+// ─── FOTOS DE REFERENCIA PRO CASAMENTO VISUAL (foto da cliente x catalogo) ──
+// Retorna ate `limite` fotos (1 por REF) das pecas COM ESTOQUE que tem foto,
+// ordenadas por estoque desc. Usado quando a cliente manda foto, pra Sofia
+// comparar imagem com imagem (mais confiavel que casar foto x texto). URL
+// publica do bucket sofia-midias. Ailson 13/06/2026.
+const cacheFotosRec = { data: null, expiresAt: 0 };
+export async function montarFotosReconhecimento(limite = 60) {
+  const lim = Math.max(1, Number(limite) || 60);
+  if (cacheFotosRec.data && cacheFotosRec.expiresAt > Date.now()) {
+    return cacheFotosRec.data.slice(0, lim);
+  }
+  try {
+    const { data: prods } = await supabase
+      .from('lojas_produtos')
+      .select('ref, qtd_estoque')
+      .gt('qtd_estoque', 0)
+      .order('qtd_estoque', { ascending: false })
+      .range(0, 199);
+    if (!prods || !prods.length) return [];
+    const ordemRef = [];
+    const seen = new Set();
+    for (const p of prods) {
+      const refN = String(p.ref).replace(/^0+/, '') || '0';
+      if (!seen.has(refN)) { seen.add(refN); ordemRef.push(refN); }
+    }
+    const { data: fotos } = await supabase
+      .from('lojas_whats_midias')
+      .select('ref, storage_path, criada_em')
+      .eq('tipo', 'foto')
+      .not('ativa', 'is', false)
+      .not('storage_path', 'is', null)
+      .order('criada_em', { ascending: false });
+    const fotoPorRef = new Map();
+    for (const f of fotos || []) {
+      const refN = String(f.ref).replace(/^0+/, '') || '0';
+      if (!fotoPorRef.has(refN) && f.storage_path) fotoPorRef.set(refN, f.storage_path);
+    }
+    const out = [];
+    for (const refN of ordemRef) {
+      const sp = fotoPorRef.get(refN);
+      if (!sp) continue;
+      const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(sp);
+      if (pub?.publicUrl) out.push({ ref: refN, url: pub.publicUrl });
+    }
+    cacheFotosRec.data = out;
+    cacheFotosRec.expiresAt = Date.now() + CACHE_TTL_MS;
+    return out.slice(0, lim);
+  } catch (e) {
+    logErro('cardapio/fotos-reconhecimento', e);
+    return [];
   }
 }

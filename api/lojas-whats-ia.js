@@ -20,7 +20,7 @@
 
 import { supabase, setCors, log, logErro, getConfig, limparEstiloSofia } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
-import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa, montarListaReferenciasAtivas, montarFichasDetalhadas } from './_lojas-whats-cardapio.js';
+import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa, montarListaReferenciasAtivas, montarFichasDetalhadas, montarFotosReconhecimento } from './_lojas-whats-cardapio.js';
 import { montarBlocoPadroes, decidirModo } from './_lojas-whats-padroes.js';
 
 // ─── GATILHOS QUENTE (lista fechada — definida pelo Ailson) ────────────────
@@ -284,10 +284,12 @@ SEMPRE:
 CLIENTE MANDOU UM PRINT OU FOTO DE UMA PEÇA (muito comum)
 ═══════════════════════════════════════════════════════════════════
 Quando o cliente manda uma imagem (print do catálogo, foto de uma peça, screenshot), vc CONSEGUE VER a imagem de verdade. JAMAIS peça pra ele "explicar", "descrever" ou "dizer qual modelo" — isso entrega na hora que é robô e irrita. Aja como uma vendedora que recebeu a foto:
-- Olhe a imagem e leia a peça: tipo (vestido, macacão, conjunto, saia...), tecido aparente, cor, detalhes (manga, comprimento, decote, fenda).
-- Cruze com o CATALOGO/produtos que vc conhece pra achar o modelo e a REF. Se bater, fala dele com naturalidade ("esse é o nosso macacão de linho").
+- Olhe a imagem e leia a peça: tipo (vestido, macacão, conjunto, saia, jaqueta/casaco...), tecido aparente, cor, detalhes (manga, comprimento, decote, fenda, zíper, elástico na cintura...).
+- ACHE A REF: VARRA a lista REFERENCIAS ATIVAS e o ESTOQUE FINO procurando a peça igual ou mais parecida. Trate categorias como FAMÍLIA, não palavra exata: jaqueta = casaco = casaquinho = blazer = sobretudo; calça = pantalona = alfaiataria; blusa = body = cropped = regata; vestido = chemise. As descrições do catálogo vêm ABREVIADAS (ex: "CASAQ.ALFAIAT.ELASTICO CINTURA" = casaquinho de alfaiataria com elástico na cintura) — interprete a abreviação. Um detalhe que bate (ex: "elástico na cintura") + o tipo da família + a cor já é match suficiente.
+- Se vierem FOTOS DE REFERENCIA do catálogo anexadas junto da mensagem da cliente, compare a foto dela com elas (imagem com imagem) — é o jeito mais certeiro de achar a REF.
+- Achou: fala da peça com naturalidade ("esse é o nosso casaquinho de alfaiataria") e JÁ confirma as cores que temos pelo ESTOQUE FINO. NÃO precisa dizer o número da REF pra cliente.
 - Se ficar entre 2 modelos bem parecidos, faz UMA pergunta curta de desempate (a cor, um detalhe), nunca um questionário.
-- Se de fato não houver nada parecido no que vc tem, aí sim diz que vai confirmar com a equipe se essa peça específica tá disponível, sem mandar ele explicar.
+- NÃO desista cedo: só diz que "vai confirmar com a equipe" DEPOIS de varrer a lista e o estoque fino e não achar NADA parecido. NUNCA diga "não temos esse modelo" / "não é um modelo do nosso catálogo" só porque a descrição abreviada não bateu de cara — quase sempre a peça ESTÁ lá com outro nome.
 - Já avança: comenta a peça, e conduz pro próximo passo (cor que ela quer, quantidade, fechar).
 NUNCA diga "não consigo ver imagens", "me descreve a peça" ou "qual o nome do modelo?".
 
@@ -909,6 +911,45 @@ export async function processarConversa(conversaId) {
 
 SE A CLIENTE DISSER QUE JÁ COMPRA COM UMA VENDEDORA (ex: "eu já compro com a fulana", "já tenho minha vendedora", "falo com a [nome]"): NUNCA tente assumir a cliente nem competir com a vendedora. Deixa claro, de um jeito leve e natural, que vc está ali só pra AUXILIAR: tirar dúvida, ajudar no que precisar, e que pode até indicar modelos que casam bem com o que ela já levou. Mas reforça que QUEM CONTINUA cuidando dela e fechando a venda é a vendedora dela. Passa a impressão de que vc está ali pra somar e deixar a experiência dela melhor, não pra substituir ninguém. Espírito da fala (varie, não copie): "Ahh que bom que vc já é cliente da [nome]! Ela continua te atendendo certinho, viu. Eu fico por aqui só pra te ajudar no que precisar e, se quiser, te mostro umas peças que combinam com o que vc levou. Mas é sempre com ela que vc fecha 😊". Se souber o nome da vendedora pelo contexto, usa; senão fala genérico ("sua vendedora").
 NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por vc é melhor ou mais rápido. O tom é de apoio, não de captura.` });
+  }
+
+  // ─── FIX 2: CASAMENTO POR IMAGEM (foto da cliente x fotos do catalogo) ──────
+  // Quando a cliente manda foto e ainda nao travamos a peca, anexa fotos de
+  // referencia (1 por REF com estoque) na MESMA mensagem de user, pra Sofia
+  // comparar imagem com imagem. Bloco de imagem so pode ir em msg role 'user'.
+  // Configuravel: sofia_match_imagem_ativo (on/off) / sofia_match_imagem_max
+  // (quantas fotos no maximo). Ailson 13/06/2026.
+  let _nFotosRef = 0;
+  const _precisaMatchVisual = _temImagemRecente && !(refsCarrinho && refsCarrinho.length);
+  if (_precisaMatchVisual) {
+    try {
+      const matchAtivo = await getConfig('sofia_match_imagem_ativo', true);
+      if (matchAtivo) {
+        const maxFotos = Number(await getConfig('sofia_match_imagem_max', 80)) || 80;
+        const cands = await montarFotosReconhecimento(maxFotos);
+        if (cands && cands.length) {
+          let idxUser = -1;
+          for (let i = msgsClaude.length - 1; i >= 0; i--) {
+            if (msgsClaude[i].role === 'user') { idxUser = i; break; }
+          }
+          if (idxUser >= 0) {
+            const msg = msgsClaude[idxUser];
+            const blocks = Array.isArray(msg.content)
+              ? [...msg.content]
+              : [{ type: 'text', text: String(msg.content || '') }];
+            blocks.push({ type: 'text', text: '--- FOTOS DE REFERENCIA DO CATALOGO (compare a foto que a cliente mandou ACIMA com estas pra achar a REF certa; cada foto vem com a REF logo antes dela) ---' });
+            for (const c of cands) {
+              blocks.push({ type: 'text', text: `REF ${c.ref}:` });
+              blocks.push({ type: 'image', source: { type: 'url', url: c.url } });
+            }
+            msgsClaude[idxUser] = { ...msg, content: blocks };
+            _nFotosRef = cands.length;
+            systemBlocks.push({ type: 'text', text: 'CASAMENTO POR IMAGEM: a cliente mandou uma foto. Na ULTIMA mensagem dela vao anexadas varias FOTOS DE REFERENCIA do nosso catalogo, cada uma com a REF logo antes. Compare a foto da cliente com essas pra achar a peca igual ou mais parecida; ao achar, trata como a nossa peca e usa as cores do ESTOQUE FINO. So diz que vai confirmar com a equipe se NENHUMA bater de verdade.' });
+            log('ia', `conversa=${conversaId} match-imagem: ${cands.length} fotos de referencia anexadas`);
+          }
+        }
+      }
+    } catch (e) { logErro('ia/match-imagem', e); }
   }
 
   const cl = await chamarClaude({
