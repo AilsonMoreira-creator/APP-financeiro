@@ -1168,6 +1168,26 @@ function classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCl
     /\btabela de pre/.test(txt);                               // tabela de precos
   if (candidatos.some(perguntaPreco)) return { auto: true, fase: 'catalogo', motivo: 'pergunta_preco' };
 
+  // 3c. Outras perguntas-FAQ com resposta padrao e segura -> auto, mas fase
+  // 'resposta' (NAO forca o catalogo junto). Frete/entrega, pedido minimo e
+  // formas de pagamento. Ailson 13/06/2026.
+  const perguntaFrete = txt =>
+    /\bfrete\b/.test(txt) || /\bentrega/.test(txt) || /\benvio\b/.test(txt) ||
+    /\bsedex\b/.test(txt) || /\bcorreio/.test(txt) || /\bmotoboy\b/.test(txt) ||
+    /\bvoce?s?\s+entreg/.test(txt) || /\benvi(am|a)\s+(pra|para)\b/.test(txt) ||
+    /\bprazo\b.*\bentrega\b/.test(txt) || /\bchega.*\bquantos?\s+dias?\b/.test(txt);
+  const perguntaMinimo = txt =>
+    /\bminim[ao]/.test(txt) ||              // minimo, minima (texto ja sem acento)
+    /\bpedido min/.test(txt) || /\bquantidade min/.test(txt) ||
+    /\bqtd min/.test(txt) || /\bcompra min/.test(txt);
+  const perguntaPagamento = txt =>
+    /\bpagament/.test(txt) || /\bforma(s)?\s+de\s+pag/.test(txt) ||
+    /\bpix\b/.test(txt) || /\bcart[aã]o/.test(txt) || /\bparcel/.test(txt) ||
+    /\bboleto\b/.test(txt) || /\bcomo\s+(pago|paga|pagar)\b/.test(txt) ||
+    /\baceita(m)?\s+(cartao|pix|boleto)\b/.test(txt);
+  if (candidatos.some(t => perguntaFrete(t) || perguntaMinimo(t) || perguntaPagamento(t)))
+    return { auto: true, fase: 'resposta', motivo: 'pergunta_faq' };
+
   // 4. Resposta de qualificacao (ja revende / tem loja / trabalha com roupas / comecando)
   const ehQualificacao = txt =>
     /\b(ja )?vend[oe]\b/.test(txt) ||
