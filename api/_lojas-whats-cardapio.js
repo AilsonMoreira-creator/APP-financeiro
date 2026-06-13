@@ -371,54 +371,64 @@ export async function montarListaReferenciasAtivas() {
 }
 
 // ─── FOTOS DE REFERENCIA PRO CASAMENTO VISUAL (foto da cliente x catalogo) ──
-// Retorna ate `limite` fotos (1 por REF) das pecas COM ESTOQUE que tem foto,
-// ordenadas por estoque desc. Usado quando a cliente manda foto, pra Sofia
-// comparar imagem com imagem (mais confiavel que casar foto x texto). URL
-// publica do bucket sofia-midias. Ailson 13/06/2026.
+// Retorna ate `limite` fotos (1 por REF) das pecas COM ESTOQUE que tem foto.
+// Se `categorias` (array, ex: ['BLAZER','CASAQUINHO']) vier, filtra so essas —
+// evita mandar dezenas de imagens (estoura contexto + custo). Cache da lista
+// completa; o filtro/cap roda na volta. URL publica do bucket sofia-midias.
+// Ailson 13/06/2026.
 const cacheFotosRec = { data: null, expiresAt: 0 };
-export async function montarFotosReconhecimento(limite = 60) {
-  const lim = Math.max(1, Number(limite) || 60);
-  if (cacheFotosRec.data && cacheFotosRec.expiresAt > Date.now()) {
-    return cacheFotosRec.data.slice(0, lim);
+export async function montarFotosReconhecimento(limite = 16, categorias = null) {
+  const lim = Math.max(1, Number(limite) || 16);
+  const cats = Array.isArray(categorias) && categorias.length
+    ? categorias.map(c => String(c).toUpperCase()) : null;
+  let base = (cacheFotosRec.data && cacheFotosRec.expiresAt > Date.now()) ? cacheFotosRec.data : null;
+  if (!base) {
+    try {
+      const { data: prods } = await supabase
+        .from('lojas_produtos')
+        .select('ref, qtd_estoque, categoria')
+        .gt('qtd_estoque', 0)
+        .order('qtd_estoque', { ascending: false })
+        .range(0, 199);
+      if (!prods || !prods.length) return [];
+      const ordemRef = [];
+      const catPorRef = {};
+      const seen = new Set();
+      for (const p of prods) {
+        const refN = String(p.ref).replace(/^0+/, '') || '0';
+        if (!seen.has(refN)) { seen.add(refN); ordemRef.push(refN); catPorRef[refN] = (p.categoria || '').toUpperCase(); }
+      }
+      const { data: fotos } = await supabase
+        .from('lojas_whats_midias')
+        .select('ref, storage_path, criada_em')
+        .eq('tipo', 'foto')
+        .not('ativa', 'is', false)
+        .not('storage_path', 'is', null)
+        .order('criada_em', { ascending: false });
+      const fotoPorRef = new Map();
+      for (const f of fotos || []) {
+        const refN = String(f.ref).replace(/^0+/, '') || '0';
+        if (!fotoPorRef.has(refN) && f.storage_path) fotoPorRef.set(refN, f.storage_path);
+      }
+      base = [];
+      for (const refN of ordemRef) {
+        const sp = fotoPorRef.get(refN);
+        if (!sp) continue;
+        const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(sp);
+        if (pub?.publicUrl) base.push({ ref: refN, url: pub.publicUrl, categoria: catPorRef[refN] || '' });
+      }
+      cacheFotosRec.data = base;
+      cacheFotosRec.expiresAt = Date.now() + CACHE_TTL_MS;
+    } catch (e) {
+      logErro('cardapio/fotos-reconhecimento', e);
+      return [];
+    }
   }
-  try {
-    const { data: prods } = await supabase
-      .from('lojas_produtos')
-      .select('ref, qtd_estoque')
-      .gt('qtd_estoque', 0)
-      .order('qtd_estoque', { ascending: false })
-      .range(0, 199);
-    if (!prods || !prods.length) return [];
-    const ordemRef = [];
-    const seen = new Set();
-    for (const p of prods) {
-      const refN = String(p.ref).replace(/^0+/, '') || '0';
-      if (!seen.has(refN)) { seen.add(refN); ordemRef.push(refN); }
-    }
-    const { data: fotos } = await supabase
-      .from('lojas_whats_midias')
-      .select('ref, storage_path, criada_em')
-      .eq('tipo', 'foto')
-      .not('ativa', 'is', false)
-      .not('storage_path', 'is', null)
-      .order('criada_em', { ascending: false });
-    const fotoPorRef = new Map();
-    for (const f of fotos || []) {
-      const refN = String(f.ref).replace(/^0+/, '') || '0';
-      if (!fotoPorRef.has(refN) && f.storage_path) fotoPorRef.set(refN, f.storage_path);
-    }
-    const out = [];
-    for (const refN of ordemRef) {
-      const sp = fotoPorRef.get(refN);
-      if (!sp) continue;
-      const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(sp);
-      if (pub?.publicUrl) out.push({ ref: refN, url: pub.publicUrl });
-    }
-    cacheFotosRec.data = out;
-    cacheFotosRec.expiresAt = Date.now() + CACHE_TTL_MS;
-    return out.slice(0, lim);
-  } catch (e) {
-    logErro('cardapio/fotos-reconhecimento', e);
-    return [];
+  let lista = base;
+  if (cats) {
+    const filt = base.filter(x => cats.includes(x.categoria));
+    if (filt.length) lista = filt; // se o filtro nao achar nada, cai pro geral capado
   }
+  return lista.slice(0, lim).map(({ ref, url }) => ({ ref, url }));
 }
+

@@ -920,9 +920,9 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
   // mandar dezenas de imagens quando o texto ja resolveu. Bloco de imagem so vai
   // em msg role 'user'. Config: sofia_match_imagem_ativo / sofia_match_imagem_max.
   // Ailson 13/06/2026.
-  const anexarFotosReferencia = async () => {
-    const maxFotos = Number(await getConfig('sofia_match_imagem_max', 80)) || 80;
-    const cands = await montarFotosReconhecimento(maxFotos);
+  const anexarFotosReferencia = async (categorias) => {
+    const maxFotos = Number(await getConfig('sofia_match_imagem_max', 16)) || 16;
+    const cands = await montarFotosReconhecimento(maxFotos, categorias);
     if (!cands || !cands.length) return 0;
     let idxUser = -1;
     for (let i = msgsClaude.length - 1; i >= 0; i--) {
@@ -969,9 +969,27 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
       try {
         const matchAtivo = await getConfig('sofia_match_imagem_ativo', true);
         if (matchAtivo) {
-          const n = await anexarFotosReferencia();
+          // Infere a CATEGORIA pela descricao que a propria Sofia deu na 1a passada,
+          // pra mandar so as fotos da familia certa (poucas) em vez de todas (estoura
+          // contexto + custo). Categorias reais: BLUSA/VESTIDO/CONJUNTO/CALÇA/SHORTS/
+          // SAIA/MACACÃO/BLAZER/CASAQUINHO/CROPPED.
+          const desc = (cl.texto || '').toLowerCase();
+          const mapaCat = [
+            { re: /jaqueta|casaco|casaquinho|blazer|sobretudo|agasalho|moletom|tricot|cardig|parka|corta\s*vento/, cats: ['BLAZER', 'CASAQUINHO'] },
+            { re: /vestido|chemise/, cats: ['VESTIDO'] },
+            { re: /macac|jardineira/, cats: ['MACACÃO'] },
+            { re: /conjunto|twin|conjuntinho/, cats: ['CONJUNTO'] },
+            { re: /pantalona|cal[çc]a|alfaiat/, cats: ['CALÇA'] },
+            { re: /short|bermuda/, cats: ['SHORTS'] },
+            { re: /\bsaia\b/, cats: ['SAIA'] },
+            { re: /blusa|camisa|cropped|body|regata|\btop\b|bata|blusinha|camiseta/, cats: ['BLUSA', 'CROPPED'] },
+          ];
+          const setCat = new Set();
+          for (const m of mapaCat) if (m.re.test(desc)) m.cats.forEach(c => setCat.add(c));
+          const categorias = setCat.size ? [...setCat] : null;
+          const n = await anexarFotosReferencia(categorias);
           if (n > 0) {
-            log('ia', `conversa=${conversaId} fix1 incerto -> escalando match-imagem (${n} fotos)`);
+            log('ia', `conversa=${conversaId} fix1 incerto -> escalando match-imagem (${n} fotos${categorias ? ', cat: ' + categorias.join('/') : ', geral'})`);
             const cl2 = await chamarClaude({
               modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
               systemBlocks,
