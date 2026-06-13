@@ -1141,9 +1141,13 @@ function montarMensagensClaude(msgs, conv) {
   // tempo todo. Passamos a imagem DE VERDADE pro modelo (multimodal). Pra segurar
   // custo, so as 3 imagens mais recentes do cliente (com URL publica) entram como
   // imagem real; imagens antigas viram placeholder de texto.
+  // SO imagens do CLIENTE (entrada) viram bloco de imagem real. A API da Anthropic
+  // rejeita bloco de imagem em mensagem de role 'assistant' (= nossas imagens de
+  // saida, ex: catalogo que a Sofia mandou) -> erro 400 -> claude_falhou -> ia_falhou.
+  // Alem disso a Sofia nao precisa "ver" as fotos que ela mesma enviou. Ailson 13/06/2026.
   const idsImagemReal = new Set(
     ordenadas
-      .filter(m => m.tipo_midia === 'image' && typeof m.midia_url === 'string' && m.midia_url.startsWith('http'))
+      .filter(m => m.direcao === 'entrada' && m.tipo_midia === 'image' && typeof m.midia_url === 'string' && m.midia_url.startsWith('http'))
       .slice(-3)
       .map(m => m.id)
   );
@@ -1161,7 +1165,7 @@ function montarMensagensClaude(msgs, conv) {
       if (legenda) blocks.push({ type: 'text', text: legenda });
     } else {
       let txt = m.audio_transcricao || m.texto || '';
-      if (!txt && m.tipo_midia === 'image') txt = '[cliente enviou uma imagem]';
+      if (!txt && m.tipo_midia === 'image') txt = isCliente ? '[cliente enviou uma imagem]' : '[Sofia enviou uma foto do catálogo]';
       if (!txt && m.tipo_midia === 'audio') txt = '[cliente enviou áudio sem transcrição]';
       if (!txt) continue;
       blocks.push({ type: 'text', text: txt });
