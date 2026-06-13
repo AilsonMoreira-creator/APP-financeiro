@@ -5385,6 +5385,42 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
   const [editText, setEditText] = useState(sug.texto_proposto || '');
   const [acaoEm, setAcaoEm] = useState(false);
 
+  // Edicao da sugestao: o textarea fica DENTRO do chat rolavel, entao focar/
+  // selecionar texto fazia a tela pular, e o Cancelar nao voltava pra posicao
+  // original (o teclado fechando reancorava no topo). Mesma ideia da caixa de
+  // mensagem: guarda a posicao ao abrir, centraliza o campo (pra pintar texto
+  // sem pulo) e devolve a posicao ao fechar. Ailson 13/06/2026.
+  const wrapRef = useRef(null);
+  const editTaRef = useRef(null);
+  const scrollInfoRef = useRef(null); // { el, top }
+  const acharScrollParent = (node) => {
+    let el = node?.parentElement;
+    while (el) {
+      const oy = getComputedStyle(el).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) return el;
+      el = el.parentElement;
+    }
+    return null;
+  };
+  useEffect(() => {
+    if (editando) {
+      const sc = acharScrollParent(wrapRef.current);
+      if (sc) scrollInfoRef.current = { el: sc, top: sc.scrollTop };
+      requestAnimationFrame(() => {
+        editTaRef.current?.scrollIntoView({ block: 'center', behavior: 'auto' });
+      });
+    } else {
+      const info = scrollInfoRef.current;
+      if (info?.el) {
+        const restaura = () => { info.el.scrollTop = info.top; };
+        requestAnimationFrame(restaura);
+        // o teclado fechando dispara um reanchor async — reforca o restore
+        setTimeout(restaura, 120);
+        setTimeout(restaura, 320);
+      }
+    }
+  }, [editando]);
+
   const horario = sug.criada_em ? new Date(sug.criada_em).toLocaleString('pt-BR', {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   }) : '';
@@ -5418,7 +5454,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
 
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, fontFamily: FONT }}>
-      <div style={{
+      <div ref={wrapRef} style={{
         maxWidth: '85%', background: '#fff8e0',
         border: '2px solid #f0c050', borderRadius: 10, padding: 10,
       }}>
@@ -5429,6 +5465,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
         {editando ? (
           <>
             <textarea
+              ref={editTaRef}
               value={editText}
               onChange={e => setEditText(e.target.value)}
               style={{
