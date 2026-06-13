@@ -10737,6 +10737,32 @@ export default function App(){
   // Retorna {ok, motivo} — se ok=false, o save DEVE ser abortado.
   // Regra ÚNICA e conservadora: só bloqueia se state TOTALMENTE VAZIO quando load tinha dados.
   // Perdas parciais (ate deleções legítimas de um mês) passam e são tratadas pelo merge profundo.
+  // ── IDs nos lançamentos de despesa (Ailson 12/06/2026) ──────────────────
+  // Causa raiz da perda recorrente de despesas: o merge do auxDataPorMes era
+  // tudo-ou-nada por categoria (local vencia inteiro e descartava itens do
+  // remoto). Agora cada item ganha id + _c (criado em) e o merge decide POR
+  // ITEM. Receitas e boletos nunca perderam justamente porque têm merge fino.
+  const auxGerarId=()=>`d${Date.now().toString(36)}${Math.random().toString(36).slice(2,8)}`;
+  const normalizarAuxIds=(aux)=>{
+    let mudou=false;const out={};
+    for(const m of Object.keys(aux||{})){
+      const mes=aux[m];if(!mes||typeof mes!=='object'||Array.isArray(mes)){out[m]=mes;continue;}
+      const novoMes={};
+      for(const cat of Object.keys(mes)){
+        const arr=mes[cat];
+        if(!Array.isArray(arr)){novoMes[cat]=arr;continue;}
+        novoMes[cat]=arr.map(it=>{
+          if(it&&typeof it==='object'&&!it.id){mudou=true;return{...it,id:auxGerarId(),_c:Date.now()};}
+          return it;
+        });
+      }
+      out[m]=novoMes;
+    }
+    return{aux:out,mudou};
+  };
+  // Conteúdo do item sem os metadados (pra dedup de itens legados sem id)
+  const auxStrip=(it)=>{try{const{id,_c,_m,...r}=it;return JSON.stringify(r);}catch(e){return JSON.stringify(it);}};
+
   const checarIntegridadePayload=useCallback((payload)=>{
     const snap=dbSnapshot.current;
     // Se nunca carregou dados, não tem como comparar — deixa passar
@@ -10768,6 +10794,9 @@ export default function App(){
     }
     setSyncStatus('saving');
     try{
+      // Normaliza ids dos lançamentos ANTES do merge (itens novos/legados ganham id+_c)
+      const normAux=normalizarAuxIds(payload.auxDataPorMes||{});
+      payload={...payload,auxDataPorMes:normAux.aux};
       // READ: busca dados atuais do Supabase antes de salvar
       const {data:remoteData}=await supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single();
       const remote=remoteData?.payload||{};
@@ -10840,8 +10869,18 @@ export default function App(){
         mergedPayload.receitasPorMes=merged;
       }
 
-      // AuxData: merge POR CATEGORIA dentro do mês (cada mês tem {Funcionários:[], Tecidos:[], ...})
+      // AuxData (DESPESAS): merge POR ITEM (Ailson 12/06/2026)
+      // Antes: categoria presente nos 2 lados → local vencia INTEIRO e itens do
+      // remoto eram descartados (causa raiz da perda recorrente de 1-2 dias de
+      // despesas quando uma sessão com snapshot velho salvava). Agora:
+      //  • item nos 2 lados (mesmo id): edit mais novo (_m) vence
+      //  • item só no remoto criado DEPOIS do último load deste device → outra
+      //    sessão lançou → PRESERVA
+      //  • item só no remoto mais velho que o snapshot deste device → foi
+      //    excluído aqui de propósito (ex: desmarcar corte pago) → respeita
+      //  • dedups extras: corte_id (Oficinas Costura) e conteúdo (legados sem id)
       if(remote.auxDataPorMes){
+        const snapTs=dbCarregadoTs.current||0;
         const localAux=payload.auxDataPorMes||{};
         const remoteAux=remote.auxDataPorMes||{};
         const merged={};
@@ -10852,21 +10891,39 @@ export default function App(){
           const remoteMes=remoteAux[m];
           if(!localMes||Object.keys(localMes).length===0){if(remoteMes)merged[m]=remoteMes;continue;}
           if(!remoteMes||Object.keys(remoteMes).length===0){merged[m]=localMes;continue;}
-          // Ambos têm mês: merge por CATEGORIA
           const mergedMes={...localMes};
           for(const cat of Object.keys(remoteMes)){
             const localCat=localMes[cat];
             const remoteCat=remoteMes[cat];
-            // Categoria só no remoto → preserva
+            if(!Array.isArray(remoteCat)||remoteCat.length===0)continue;
+            // Categoria só no remoto → preserva inteira
             if(!localCat||(Array.isArray(localCat)&&localCat.length===0)){
-              if(Array.isArray(remoteCat)&&remoteCat.length>0){mergedMes[cat]=remoteCat;itensPreservados+=remoteCat.length;}
-              continue;
+              mergedMes[cat]=remoteCat;itensPreservados+=remoteCat.length;continue;
             }
-            // Ambos têm: mantém local (edit do usuário vence). auxData não tem IDs, merge por array é arriscado.
+            if(!Array.isArray(localCat))continue;
+            const out=[...localCat];
+            const idsLoc=new Set(localCat.filter(i=>i&&i.id).map(i=>i.id));
+            const cortesLoc=new Set(localCat.filter(i=>i&&i.corte_id!=null).map(i=>String(i.corte_id)));
+            const jsonLoc=new Set(localCat.filter(i=>i&&typeof i==='object').map(auxStrip));
+            for(const r of remoteCat){
+              if(!r||typeof r!=='object')continue;
+              if(r.id&&idsLoc.has(r.id)){
+                const idx=out.findIndex(i=>i&&i.id===r.id);
+                if(idx>=0&&(r._m||0)>(out[idx]._m||0))out[idx]=r; // edit remoto mais novo vence
+                continue;
+              }
+              if(r.corte_id!=null&&cortesLoc.has(String(r.corte_id)))continue; // corte já lançado aqui
+              if(jsonLoc.has(auxStrip(r)))continue; // mesmo conteúdo já presente
+              const nasc=r._c||r._m||0;
+              if(nasc===0){out.push(r);itensPreservados++;continue;} // legado sem rastro: nunca perder
+              if(nasc>snapTs){out.push(r);itensPreservados++;continue;} // criado após meu snapshot: preserva
+              // mais velho que meu snapshot e ausente local = exclusão deliberada → respeita
+            }
+            mergedMes[cat]=out;
           }
           merged[m]=mergedMes;
         }
-        if(itensPreservados>0)console.log("SUPABASE-SAVE: merge auxData preservou",itensPreservados,"itens do remoto");
+        if(itensPreservados>0)console.log("SUPABASE-SAVE: merge auxData POR ITEM preservou",itensPreservados,"lançamentos do remoto");
         mergedPayload.auxDataPorMes=merged;
       }
 
@@ -10905,6 +10962,8 @@ export default function App(){
       }else{
         try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
         localStorage.setItem("amica_pending_sync","false");
+        // Fixa os ids dos lançamentos no state (só adiciona onde falta, não toca em edits)
+        setAuxDataPorMes(prev=>{const n=normalizarAuxIds(prev);return n.mudou?n.aux:prev;});
         dbCarregadoTs.current=ts; // marca o ts do save pra próximos guards compararem corretamente
         // 🛡️ Atualiza snapshot com o que acabou de ser salvo (pra próximos guards)
         dbSnapshot.current={
