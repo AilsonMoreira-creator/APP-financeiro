@@ -1157,6 +1157,17 @@ function classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCl
   };
   if (candidatos.some(atacadoCurto)) return { auto: true, fase: 'catalogo', motivo: 'atacado_sozinho' };
 
+  // 3b. Pergunta de PRECO / VALOR -> auto. A resposta e a faixa de atacado +
+  // oferta de catalogo: informativa e segura, nao precisa de aprovacao. (texto ja
+  // vem sem acento por causa do norm). Ailson 13/06/2026.
+  const perguntaPreco = txt =>
+    /\bpre[cç]o/.test(txt) ||                                   // preco, preço
+    /\bvalor(es)?\b/.test(txt) ||                               // valor, valores
+    /\bquanto\s+(custa|sai|fica|e|ta|tao|sao|cada|por)\b/.test(txt) ||
+    /\bquanto\s+(que\s+)?(e|ta|fica)\b/.test(txt) ||
+    /\btabela de pre/.test(txt);                               // tabela de precos
+  if (candidatos.some(perguntaPreco)) return { auto: true, fase: 'catalogo', motivo: 'pergunta_preco' };
+
   // 4. Resposta de qualificacao (ja revende / tem loja / trabalha com roupas / comecando)
   const ehQualificacao = txt =>
     /\b(ja )?vend[oe]\b/.test(txt) ||
