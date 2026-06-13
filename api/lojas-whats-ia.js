@@ -914,43 +914,34 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
   }
 
   // ─── FIX 2: CASAMENTO POR IMAGEM (foto da cliente x fotos do catalogo) ──────
-  // Quando a cliente manda foto e ainda nao travamos a peca, anexa fotos de
-  // referencia (1 por REF com estoque) na MESMA mensagem de user, pra Sofia
-  // comparar imagem com imagem. Bloco de imagem so pode ir em msg role 'user'.
-  // Configuravel: sofia_match_imagem_ativo (on/off) / sofia_match_imagem_max
-  // (quantas fotos no maximo). Ailson 13/06/2026.
-  let _nFotosRef = 0;
-  const _precisaMatchVisual = _temImagemRecente && !(refsCarrinho && refsCarrinho.length);
-  if (_precisaMatchVisual) {
-    try {
-      const matchAtivo = await getConfig('sofia_match_imagem_ativo', true);
-      if (matchAtivo) {
-        const maxFotos = Number(await getConfig('sofia_match_imagem_max', 80)) || 80;
-        const cands = await montarFotosReconhecimento(maxFotos);
-        if (cands && cands.length) {
-          let idxUser = -1;
-          for (let i = msgsClaude.length - 1; i >= 0; i--) {
-            if (msgsClaude[i].role === 'user') { idxUser = i; break; }
-          }
-          if (idxUser >= 0) {
-            const msg = msgsClaude[idxUser];
-            const blocks = Array.isArray(msg.content)
-              ? [...msg.content]
-              : [{ type: 'text', text: String(msg.content || '') }];
-            blocks.push({ type: 'text', text: '--- FOTOS DE REFERENCIA DO CATALOGO (compare a foto que a cliente mandou ACIMA com estas pra achar a REF certa; cada foto vem com a REF logo antes dela) ---' });
-            for (const c of cands) {
-              blocks.push({ type: 'text', text: `REF ${c.ref}:` });
-              blocks.push({ type: 'image', source: { type: 'url', url: c.url } });
-            }
-            msgsClaude[idxUser] = { ...msg, content: blocks };
-            _nFotosRef = cands.length;
-            systemBlocks.push({ type: 'text', text: 'CASAMENTO POR IMAGEM: a cliente mandou uma foto. Na ULTIMA mensagem dela vao anexadas varias FOTOS DE REFERENCIA do nosso catalogo, cada uma com a REF logo antes. Compare a foto da cliente com essas pra achar a peca igual ou mais parecida; ao achar, trata como a nossa peca e usa as cores do ESTOQUE FINO. So diz que vai confirmar com a equipe se NENHUMA bater de verdade.' });
-            log('ia', `conversa=${conversaId} match-imagem: ${cands.length} fotos de referencia anexadas`);
-          }
-        }
-      }
-    } catch (e) { logErro('ia/match-imagem', e); }
-  }
+  // ESCALONADO: o FIX 1 (texto) roda primeiro (chamada abaixo). So se a resposta
+  // dele cair na incerteza ("vou confirmar com a equipe / nao temos") e que a
+  // gente reenvia anexando as fotos do catalogo pra comparacao visual — evita
+  // mandar dezenas de imagens quando o texto ja resolveu. Bloco de imagem so vai
+  // em msg role 'user'. Config: sofia_match_imagem_ativo / sofia_match_imagem_max.
+  // Ailson 13/06/2026.
+  const anexarFotosReferencia = async () => {
+    const maxFotos = Number(await getConfig('sofia_match_imagem_max', 80)) || 80;
+    const cands = await montarFotosReconhecimento(maxFotos);
+    if (!cands || !cands.length) return 0;
+    let idxUser = -1;
+    for (let i = msgsClaude.length - 1; i >= 0; i--) {
+      if (msgsClaude[i].role === 'user') { idxUser = i; break; }
+    }
+    if (idxUser < 0) return 0;
+    const msg = msgsClaude[idxUser];
+    const blocks = Array.isArray(msg.content)
+      ? [...msg.content]
+      : [{ type: 'text', text: String(msg.content || '') }];
+    blocks.push({ type: 'text', text: '--- FOTOS DE REFERENCIA DO CATALOGO (compare a foto que a cliente mandou ACIMA com estas pra achar a REF certa; cada foto vem com a REF logo antes dela) ---' });
+    for (const c of cands) {
+      blocks.push({ type: 'text', text: `REF ${c.ref}:` });
+      blocks.push({ type: 'image', source: { type: 'url', url: c.url } });
+    }
+    msgsClaude[idxUser] = { ...msg, content: blocks };
+    systemBlocks.push({ type: 'text', text: 'CASAMENTO POR IMAGEM: a cliente mandou uma foto. Na ULTIMA mensagem dela vao anexadas varias FOTOS DE REFERENCIA do nosso catalogo, cada uma com a REF logo antes. Compare a foto da cliente com essas pra achar a peca igual ou mais parecida; ao achar, trata como a nossa peca e usa as cores do ESTOQUE FINO. So diz que vai confirmar com a equipe se NENHUMA bater de verdade.' });
+    return cands.length;
+  };
 
   const cl = await chamarClaude({
     modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
@@ -967,6 +958,38 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
 
   let textoProposto = (cl.texto || '').trim();
   if (!textoProposto) throw new Error('claude_retornou_vazio');
+
+  // FIX 2 escalonado: a cliente mandou foto, a peca nao estava travada, e o FIX 1
+  // (texto) NAO teve certeza (caiu no "vou confirmar com a equipe / nao temos").
+  // So nesse caso reenvia anexando as fotos do catalogo pra comparacao visual e
+  // usa a resposta nova. Assim as dezenas de imagens so entram quando precisam.
+  if (_temImagemRecente && !(refsCarrinho && refsCarrinho.length)) {
+    const fix1Incerto = /(confirmar|verificar|checar) com (a |minha |nossa )?equipe|n[aã]o (e|é|eh) (um|uma) modelo|n[aã]o temos (esse|essa|esse modelo|essa pe[cç]a)|n[aã]o (faz parte|est[aá]) (no |do )?(nosso )?cat[aá]logo|fora do (nosso )?cat[aá]logo|n[aã]o (achei|encontrei|identifiquei)/i.test(cl.texto || '');
+    if (fix1Incerto) {
+      try {
+        const matchAtivo = await getConfig('sofia_match_imagem_ativo', true);
+        if (matchAtivo) {
+          const n = await anexarFotosReferencia();
+          if (n > 0) {
+            log('ia', `conversa=${conversaId} fix1 incerto -> escalando match-imagem (${n} fotos)`);
+            const cl2 = await chamarClaude({
+              modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
+              systemBlocks,
+              messages: msgsClaude,
+              max_tokens: 400,
+              temperature: 0.6
+            });
+            if (cl2.ok && (cl2.texto || '').trim()) {
+              textoProposto = cl2.texto.trim();
+              log('ia', `conversa=${conversaId} match-imagem aplicado (resposta substituida)`);
+            } else if (!cl2.ok) {
+              logErro('ia/match-imagem-call', cl2.erro);
+            }
+          }
+        }
+      } catch (e) { logErro('ia/match-imagem-escalonado', e); }
+    }
+  }
 
   // GUARD ANTI-REENVIO DO CATALOGO PDF (Ailson 30/05, ajustado 06/06):
   // Bloqueia o marcador SO se o PDF ja foi enviado de fato. No modo Vesti, ter
