@@ -939,7 +939,7 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
       blocks.push({ type: 'image', source: { type: 'url', url: c.url } });
     }
     msgsClaude[idxUser] = { ...msg, content: blocks };
-    systemBlocks.push({ type: 'text', text: 'CASAMENTO POR IMAGEM: a cliente mandou uma foto. Na ULTIMA mensagem dela vao anexadas varias FOTOS DE REFERENCIA do nosso catalogo, cada uma com a REF logo antes. Compare a foto da cliente com essas pra achar a peca igual ou mais parecida; ao achar, trata como a nossa peca e usa as cores do ESTOQUE FINO. So diz que vai confirmar com a equipe se NENHUMA bater de verdade.' });
+    systemBlocks.push({ type: 'text', text: 'CASAMENTO POR IMAGEM (vale acima de qualquer descrição escrita): a cliente mandou uma foto. Na ULTIMA mensagem dela vão anexadas FOTOS DE REFERENCIA do nosso catalogo, cada uma com a REF logo antes. A IDENTIFICAÇÃO é decidida SÓ pela imagem: escolha a REF cuja FOTO bate visualmente com a foto da cliente. As descrições/fichas escritas podem ENGANAR (outro modelo pode ter texto parecido, ex: duas jaquetas de zíper diferentes) — NUNCA escolha a peca pelo texto, só pela foto. Se a peca que vc mencionou antes NÃO bate com nenhuma foto anexada, CORRIJA. Depois de achar a REF pela foto, use SÓ as cores daquela REF no ESTOQUE FINO (nunca as cores ou o nome de outra REF). Se nenhuma foto bater de verdade, aí sim diz que vai confirmar com a equipe.' });
     return cands.length;
   };
 
@@ -959,54 +959,51 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
   let textoProposto = (cl.texto || '').trim();
   if (!textoProposto) throw new Error('claude_retornou_vazio');
 
-  // FIX 2 escalonado: a cliente mandou foto, a peca nao estava travada, e o FIX 1
-  // (texto) NAO teve certeza (caiu no "vou confirmar com a equipe / nao temos").
-  // So nesse caso reenvia anexando as fotos do catalogo pra comparacao visual e
-  // usa a resposta nova. Assim as dezenas de imagens so entram quando precisam.
+  // FIX 2: CASAMENTO POR IMAGEM. Quando a cliente manda foto e a peca ainda nao
+  // foi travada, SEMPRE compara por foto (nao so quando o texto vem incerto): a
+  // passada de texto pode estar CONFIANTE E ERRADA (casar com a "sosia" que tem
+  // ficha rica, ex: 3190 Trunia no lugar da 3210). A foto e o juiz. Filtra pela
+  // categoria que a Sofia descreveu (poucas fotos, barato). Ailson 13/06/2026.
   if (_temImagemRecente && !(refsCarrinho && refsCarrinho.length)) {
-    const fix1Incerto = /(confirmar|verificar|checar) com (a |minha |nossa )?equipe|n[aã]o (e|é|eh) (um|uma) modelo|n[aã]o temos (esse|essa|esse modelo|essa pe[cç]a)|n[aã]o (faz parte|est[aá]) (no |do )?(nosso )?cat[aá]logo|fora do (nosso )?cat[aá]logo|n[aã]o (achei|encontrei|identifiquei)/i.test(cl.texto || '');
-    if (fix1Incerto) {
-      try {
-        const matchAtivo = await getConfig('sofia_match_imagem_ativo', true);
-        if (matchAtivo) {
-          // Infere a CATEGORIA pela descricao que a propria Sofia deu na 1a passada,
-          // pra mandar so as fotos da familia certa (poucas) em vez de todas (estoura
-          // contexto + custo). Categorias reais: BLUSA/VESTIDO/CONJUNTO/CALÇA/SHORTS/
-          // SAIA/MACACÃO/BLAZER/CASAQUINHO/CROPPED.
-          const desc = (cl.texto || '').toLowerCase();
-          const mapaCat = [
-            { re: /jaqueta|casaco|casaquinho|blazer|sobretudo|agasalho|moletom|tricot|cardig|parka|corta\s*vento/, cats: ['BLAZER', 'CASAQUINHO'] },
-            { re: /vestido|chemise/, cats: ['VESTIDO'] },
-            { re: /macac|jardineira/, cats: ['MACACÃO'] },
-            { re: /conjunto|twin|conjuntinho/, cats: ['CONJUNTO'] },
-            { re: /pantalona|cal[çc]a|alfaiat/, cats: ['CALÇA'] },
-            { re: /short|bermuda/, cats: ['SHORTS'] },
-            { re: /\bsaia\b/, cats: ['SAIA'] },
-            { re: /blusa|camisa|cropped|body|regata|\btop\b|bata|blusinha|camiseta/, cats: ['BLUSA', 'CROPPED'] },
-          ];
-          const setCat = new Set();
-          for (const m of mapaCat) if (m.re.test(desc)) m.cats.forEach(c => setCat.add(c));
-          const categorias = setCat.size ? [...setCat] : null;
-          const n = await anexarFotosReferencia(categorias);
-          if (n > 0) {
-            log('ia', `conversa=${conversaId} fix1 incerto -> escalando match-imagem (${n} fotos${categorias ? ', cat: ' + categorias.join('/') : ', geral'})`);
-            const cl2 = await chamarClaude({
-              modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
-              systemBlocks,
-              messages: msgsClaude,
-              max_tokens: 400,
-              temperature: 0.6
-            });
-            if (cl2.ok && (cl2.texto || '').trim()) {
-              textoProposto = cl2.texto.trim();
-              log('ia', `conversa=${conversaId} match-imagem aplicado (resposta substituida)`);
-            } else if (!cl2.ok) {
-              logErro('ia/match-imagem-call', cl2.erro);
-            }
+    try {
+      const matchAtivo = await getConfig('sofia_match_imagem_ativo', true);
+      if (matchAtivo) {
+        // Infere a CATEGORIA pela descricao que a propria Sofia deu na 1a passada,
+        // pra mandar so as fotos da familia certa. Categorias reais: BLUSA/VESTIDO/
+        // CONJUNTO/CALÇA/SHORTS/SAIA/MACACÃO/BLAZER/CASAQUINHO/CROPPED.
+        const desc = (cl.texto || '').toLowerCase();
+        const mapaCat = [
+          { re: /jaqueta|casaco|casaquinho|blazer|sobretudo|agasalho|moletom|tricot|cardig|parka|corta\s*vento/, cats: ['BLAZER', 'CASAQUINHO'] },
+          { re: /vestido|chemise/, cats: ['VESTIDO'] },
+          { re: /macac|jardineira/, cats: ['MACACÃO'] },
+          { re: /conjunto|twin|conjuntinho/, cats: ['CONJUNTO'] },
+          { re: /pantalona|cal[çc]a|alfaiat/, cats: ['CALÇA'] },
+          { re: /short|bermuda/, cats: ['SHORTS'] },
+          { re: /\bsaia\b/, cats: ['SAIA'] },
+          { re: /blusa|camisa|cropped|body|regata|\btop\b|bata|blusinha|camiseta/, cats: ['BLUSA', 'CROPPED'] },
+        ];
+        const setCat = new Set();
+        for (const m of mapaCat) if (m.re.test(desc)) m.cats.forEach(c => setCat.add(c));
+        const categorias = setCat.size ? [...setCat] : null;
+        const n = await anexarFotosReferencia(categorias);
+        if (n > 0) {
+          log('ia', `conversa=${conversaId} match-imagem: comparando ${n} fotos${categorias ? ' (cat: ' + categorias.join('/') + ')' : ' (geral)'}`);
+          const cl2 = await chamarClaude({
+            modelo: await getConfig('modelo_ia', 'claude-sonnet-4-6'),
+            systemBlocks,
+            messages: msgsClaude,
+            max_tokens: 400,
+            temperature: 0.6
+          });
+          if (cl2.ok && (cl2.texto || '').trim()) {
+            textoProposto = cl2.texto.trim();
+            log('ia', `conversa=${conversaId} match-imagem aplicado (resposta confirmada/corrigida pela foto)`);
+          } else if (!cl2.ok) {
+            logErro('ia/match-imagem-call', cl2.erro);
           }
         }
-      } catch (e) { logErro('ia/match-imagem-escalonado', e); }
-    }
+      }
+    } catch (e) { logErro('ia/match-imagem-escalonado', e); }
   }
 
   // GUARD ANTI-REENVIO DO CATALOGO PDF (Ailson 30/05, ajustado 06/06):
