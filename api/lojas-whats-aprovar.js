@@ -6,7 +6,7 @@
 //
 //   - APROVAR (envia direto a sugestão original)
 //   - EDITAR + APROVAR (muda texto e envia)
-//   - DISPENSAR (descarta a sugestão, conversa vai pra perdida)
+//   - DISPENSAR (descarta só a sugestão; conversa NÃO vira perdida)
 //   - APROVAR EM LOTE (vários IDs de uma vez)
 //
 // Métodos:
@@ -19,7 +19,7 @@
 // AÇÕES:
 //   - 'aprovar'        → envia HSM via Meta, marca sugestao=enviada
 //   - 'editar_aprovar' → mesma coisa mas com texto_editado
-//   - 'dispensar'      → sugestao=dispensada, conversa=perdida
+//   - 'dispensar'      → sugestao=dispensada (etapa da conversa intacta)
 // ═══════════════════════════════════════════════════════════════════════════
 
 import {
@@ -172,6 +172,10 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   const agora = new Date().toISOString();
 
   // ─── DISPENSAR ──────────────────────────────────────────
+  // Apenas descarta a sugestão. NÃO mexe na etapa da conversa: muitas vezes a
+  // Tamara/Ailson só quer limpar a sugestão pra mandar uma mensagem manual, sem
+  // perder o lead. Pra marcar como perdida de propósito, usar o seletor de etapa.
+  // Ailson 13/06/2026.
   if (acao === 'dispensar') {
     await supabase.from('lojas_whats_sugestoes').update({
       status: 'dispensada',
@@ -179,14 +183,6 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
       aprovada_em: agora,
       atualizada_em: agora
     }).eq('id', sugestaoId);
-
-    // Marca conversa como perdida
-    await supabase.from('lojas_whats_conversas').update({
-      etapa: 'perdida',
-      motivo_perdida: 'dispensada_tamara',
-      perdida_em: agora,
-      atualizado_em: agora
-    }).eq('id', sug.conversa.id);
 
     return { acao: 'dispensada' };
   }

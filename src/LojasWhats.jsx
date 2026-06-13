@@ -1063,7 +1063,6 @@ function AprovarTab({ userId, refreshTick, onReload }) {
 
   const aprovar = (id) => acionar([id], 'aprovar');
   const dispensar = (id) => {
-    if (!confirm('Dispensar essa sugestão? A conversa vai pra Perdida.')) return;
     acionar([id], 'dispensar');
   };
   const salvarEdicaoEEnviar = () => {
@@ -1942,7 +1941,7 @@ const INFO_ETAPA = {
       'Texto pode ser editado antes de aprovar.',
       'Cada envio consome 1 conversa HSM da WABA.',
     ],
-    acoes: ['Aprovar (envia HSM)', 'Editar texto', 'Dispensar lead', 'Anexar midia'],
+    acoes: ['Aprovar (envia HSM)', 'Editar texto', 'Dispensar sugestão', 'Anexar midia'],
   },
   enviada: {
     titulo: 'Enviada',
@@ -5529,11 +5528,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
                 }}
               >✏️ Editar</button>
               <button
-                onClick={() => {
-                  if (confirm('Dispensar essa sugestão? A conversa vai pra Perdida.')) {
-                    acionar('dispensar');
-                  }
-                }}
+                onClick={() => acionar('dispensar')}
                 disabled={acaoEm}
                 style={{
                   padding: '6px 10px', background: '#fff', color: '#a23',
