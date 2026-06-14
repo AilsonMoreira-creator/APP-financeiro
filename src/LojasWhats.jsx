@@ -5270,10 +5270,9 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             // Mobile = 16px sempre. Ailson 11/06/2026.
             fontSize: isDesktop ? fz(13) : fz(16),
             color: palette.ink, background: palette.bg,
-            resize: 'none', minHeight: (!isDesktop && msgFoco) ? 72 : 36,
+            resize: 'none', minHeight: (!isDesktop && msgFoco) ? 56 : 36,
             maxHeight: isDesktop ? 120 : 140, lineHeight: 1.4,
             boxSizing: 'border-box', overflowY: 'auto',
-            transition: 'min-height 0.12s ease',
           }}
         />
         <button onClick={enviar} disabled={enviando || (!novoTexto.trim() && midiasAnexadas.length === 0)}
