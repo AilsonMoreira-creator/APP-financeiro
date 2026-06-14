@@ -211,16 +211,19 @@ async function executarSelecao(req, res) {
       });
     }
 
-    // 5. Filtra os que JÁ têm conversa Sofia ativa (não duplicar)
+    // 5. Filtra telefone que JÁ teve QUALQUER conversa Sofia (qualquer etapa).
+    //    Ailson 14/06/2026: cada telefone/carrinho é contatado UMA vez só.
+    //    Antes excluía só conversa ativa (etapa != perdida/vendeu), o que fazia
+    //    leads 'perdida' (sem resposta em 3d) voltarem pra fila enquanto ainda
+    //    estavam dentro da janela de 5d. Agora bloqueia se existe qualquer conversa.
     const telefones = candidatos.map(c => c._telE164);
-    const { data: convAtivas } = await supabase
+    const { data: convExistentes } = await supabase
       .from('lojas_whats_conversas')
-      .select('telefone, etapa')
-      .in('telefone', telefones)
-      .not('etapa', 'in', '(perdida,vendeu)');
-    const telefonesComConvAtiva = new Set((convAtivas || []).map(c => c.telefone));
-    const candidatosUnicos = candidatos.filter(c => !telefonesComConvAtiva.has(c._telE164));
-    log('selecionar', `${candidatosUnicos.length} candidatos únicos (${candidatos.length - candidatosUnicos.length} já em fila)`);
+      .select('telefone')
+      .in('telefone', telefones);
+    const telefonesJaTrabalhados = new Set((convExistentes || []).map(c => c.telefone));
+    const candidatosUnicos = candidatos.filter(c => !telefonesJaTrabalhados.has(c._telE164));
+    log('selecionar', `${candidatosUnicos.length} candidatos únicos (${candidatos.length - candidatosUnicos.length} já tiveram conversa)`);
 
     // 6. Ordena: CNPJ primeiro, depois empate por data mais recente
     //    (Ailson sessao tarde 26/05/2026 — fila visivel pra assistente)
