@@ -769,12 +769,40 @@ export async function processarConversa(conversaId) {
   let blocoTecidos = '';
   try {
     const roteiros = await getConfig('roteiros_estrategicos', {});
-    const chave = conv.origem_lead === 'carrinho_site_amicialoja' ? 'A_carrinho_site_amicialoja'
+    // Reativacao (Ailson 12/06/2026): etapa='inativo' = cliente 6+ meses parado.
+    // Usa roteiro E + injeta o HISTORICO do cliente (kpis) pra Sofia personalizar.
+    const ehReativacao = conv.etapa === 'inativo';
+    const chave = ehReativacao ? 'E_reativacao'
+                : conv.origem_lead === 'carrinho_site_amicialoja' ? 'A_carrinho_site_amicialoja'
                 : (conv.origem_lead === 'anuncio_instagram' || conv.origem_lead === 'anuncio_facebook') ? 'B_anuncio_meta'
                 : (conv.origem_lead === 'instagram_stories' || conv.origem_lead === 'instagram_linktree') ? 'C_instagram_organico'
                 : null;
     if (chave && roteiros[chave] && typeof roteiros[chave] === 'object') {
-      blocoRoteiro = `ROTEIRO ESTRATEGICO PRA ESTA CONVERSA (origem=${conv.origem_lead}):\n${JSON.stringify(roteiros[chave], null, 2)}\n\nIMPORTANTE: NUNCA pergunte diretamente o perfil do lead. Mapeia pelos sinais nas mensagens. Adapte tom e ganchos baseado em quem voce detectar.`;
+      blocoRoteiro = `ROTEIRO ESTRATEGICO PRA ESTA CONVERSA (${ehReativacao ? 'REATIVACAO de cliente inativo' : 'origem=' + conv.origem_lead}):\n${JSON.stringify(roteiros[chave], null, 2)}\n\nIMPORTANTE: NUNCA pergunte diretamente o perfil do lead. Mapeia pelos sinais nas mensagens. Adapte tom e ganchos baseado em quem voce detectar.`;
+    }
+    // Bloco HISTORICO — so na reativacao, OBRIGATORIO antes de sugerir (roteiro E)
+    if (ehReativacao && conv.cliente_id) {
+      try {
+        const { data: k } = await supabase.from('lojas_clientes_kpis')
+          .select('qtd_compras, qtd_pecas, lifetime_total, ticket_medio, ultima_compra, canal_dominante, pct_compras_presenciais, estilo_dominante, tamanhos_frequentes, classificacao_abc, dias_sem_comprar')
+          .eq('cliente_id', conv.cliente_id).maybeSingle();
+        if (k) {
+          const compraOnde = (k.pct_compras_presenciais ?? 0) >= 60 ? 'COMPRA NA LOJA FISICA (presencial)'
+                           : (k.pct_compras_presenciais ?? 0) <= 40 ? 'COMPRA A DISTANCIA (envio/marketplace)'
+                           : 'MISTO (loja fisica + distancia)';
+          const faixaLifetime = (k.qtd_compras ?? 0) >= 5 ? 'CLIENTE IMPORTANTE (5+ compras) — usar abordagem de cliente especial/recorrente que faz falta'
+                              : 'CLIENTE ATE 4 COMPRAS — abordagem geral investigativa, entender por que nao engatou';
+          blocoRoteiro += `\n\nHISTORICO DESTE CLIENTE (leia ANTES de sugerir qualquer mensagem — regra do roteiro E):\n`
+            + `- Compras lifetime: ${k.qtd_compras ?? '?'} (${k.qtd_pecas ?? '?'} pecas no total)\n`
+            + `- ${faixaLifetime}\n`
+            + `- Onde compra: ${compraOnde}\n`
+            + `- Categorias/estilo que mais comprou: ${k.estilo_dominante || 'sem dado — pergunte com jeito ou veja conversas'}\n`
+            + `- Tamanhos frequentes: ${k.tamanhos_frequentes || 'sem dado'}\n`
+            + `- Ticket medio: ${k.ticket_medio ? 'R$ ' + Number(k.ticket_medio).toFixed(0) : 'sem dado'} | Classificacao ABC: ${k.classificacao_abc || '-'}\n`
+            + `- Ultima compra: ${k.ultima_compra || '?'} (${k.dias_sem_comprar ?? '?'} dias sem comprar)\n`
+            + `USE este historico pra: sugerir pecas certeiras do perfil dele (NUNCA generico), escolher o tom (loja fisica = pode convidar pra passar na loja; distancia = foca em envio), e priorizar conforme o lifetime. Fotos avulsas (media 3) sempre do estilo que ele mais compra.`;
+        }
+      } catch (e) { logErro('ia/historico-reativacao', e); }
     }
     const politicas = await getConfig('politicas_comerciais', null);
     if (politicas) {
