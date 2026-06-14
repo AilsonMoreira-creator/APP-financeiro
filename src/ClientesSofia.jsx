@@ -798,7 +798,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = elegiveis.map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, fbs, vendas, enviadoSet, vendaVendMap, dedup, envioInfo] = await Promise.all([
+        const [cads, fbs, vendas, enviadoSet, vendaVendMap, dedup, envioInfo, fasesMap] = await Promise.all([
           selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id', 'id', ids),
           selectInBatches('clientes_sofia_feedback', 'cliente_id, status', 'cliente_id', ids),
           supabase.from('lojas_vendas')
@@ -810,6 +810,7 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
           fetchVendedoraSet(ids),
           selectInBatches('vw_lojas_clientes_feedback', 'cliente_id, perfil_entrega, falso_novo', 'cliente_id', ids),
           fetchEnvioInfo(ids),
+          fetchFases('feedback'),
         ]);
 
         const cadMap = new Map(cads.map(c => [c.id, c]));
@@ -826,10 +827,14 @@ function FeedbackTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
           if (bloqueadosRef.current.has(k.cliente_id)) continue; // exclui bloqueado no carregamento
           const dd = dedupMap.get(k.cliente_id);
           if (dd && dd.falso_novo) { ocult++; continue; } // já era cliente (mesmo telefone, grupo ou CNPJ em cadastro anterior)
-          if (ehConversando(envioInfo.get(k.cliente_id))) continue; // está na aba Fb 💬 (Ailson 12/06/2026)
+          // Carteira esconde quem está em outra fase (enviados/conversando/followup).
+          // Quem voltou (3d sem resposta) reaparece aqui com a tag enviado_sem_resposta.
+          const faseCli = fasesMap.get(k.cliente_id);
+          if (faseCli && faseCli.fase !== 'arquivar') continue; // está em Enviados/Conversando/Follow-up
           const c = cadMap.get(k.cliente_id) || {};
           out.push({
             cliente_id: k.cliente_id,
+            tagVolta: faseCli && faseCli.tag === 'enviado_sem_resposta' ? 'enviado_sem_resposta' : null,
             nome: c.razao_social || c.comprador_nome || '—',
             telefone: c.telefone_principal,
             vendedora_id: vendaVendMap.get(k.cliente_id) || null,
@@ -904,12 +909,13 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = (kpis || []).map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, enviadoSet, vendaVendMap, envioInfo, reaRes] = await Promise.all([
+        const [cads, enviadoSet, vendaVendMap, envioInfo, reaRes, fasesMap] = await Promise.all([
           selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id, grupo_id', 'id', ids),
           fetchEnviadoSet(ids),
           fetchVendedoraSet(ids),
           fetchEnvioInfo(ids),
           supabase.from('vw_clientes_sofia_reativados').select('cliente_id'),
+          fetchFases('inativo'),
         ]);
         const cadMap = new Map(cads.map(c => [c.id, c]));
         const reativados = new Set((reaRes?.data || []).map(r => r.cliente_id));
@@ -946,7 +952,8 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         for (const k of (kpis || [])) {
           if (bloqueadosRef.current.has(k.cliente_id)) continue;
           if (reativados.has(k.cliente_id)) continue;                 // está na aba Reativados
-          if (ehConversando(envioInfo.get(k.cliente_id))) continue;   // está na aba In 💬
+          const faseCli = fasesMap.get(k.cliente_id);
+          if (faseCli && faseCli.fase !== 'arquivar') continue;       // Enviados/Conversando/Follow-up
           const c = cadMap.get(k.cliente_id) || {};
           if (c.grupo_id) {
             if (grupoAtivo.has(c.grupo_id)) continue;                       // grupo tem CNPJ ativo
