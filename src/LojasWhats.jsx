@@ -5385,40 +5385,18 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
   const [editText, setEditText] = useState(sug.texto_proposto || '');
   const [acaoEm, setAcaoEm] = useState(false);
 
-  // Edicao da sugestao: o textarea fica DENTRO do chat rolavel, entao focar/
-  // selecionar texto fazia a tela pular, e o Cancelar nao voltava pra posicao
-  // original (o teclado fechando reancorava no topo). Mesma ideia da caixa de
-  // mensagem: guarda a posicao ao abrir, centraliza o campo (pra pintar texto
-  // sem pulo) e devolve a posicao ao fechar. Ailson 13/06/2026.
-  const wrapRef = useRef(null);
+  // Edicao da sugestao agora abre num OVERLAY FIXO (dialog ancorado no topo),
+  // fora do chat rolavel. Antes era inline na thread e o teclado do iOS
+  // reancorava a tela: scroll pulava ao digitar, a caixa abria cortada e ao
+  // fechar nao voltava pra posicao. Com overlay fixo o chat nao se mexe.
+  // Ailson 14/06/2026.
   const editTaRef = useRef(null);
-  const scrollInfoRef = useRef(null); // { el, top }
-  const acharScrollParent = (node) => {
-    let el = node?.parentElement;
-    while (el) {
-      const oy = getComputedStyle(el).overflowY;
-      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) return el;
-      el = el.parentElement;
-    }
-    return null;
-  };
+  const isDesktop = useIsDesktop();
   useEffect(() => {
-    if (editando) {
-      const sc = acharScrollParent(wrapRef.current);
-      if (sc) scrollInfoRef.current = { el: sc, top: sc.scrollTop };
-      requestAnimationFrame(() => {
-        editTaRef.current?.scrollIntoView({ block: 'center', behavior: 'auto' });
-      });
-    } else {
-      const info = scrollInfoRef.current;
-      if (info?.el) {
-        const restaura = () => { info.el.scrollTop = info.top; };
-        requestAnimationFrame(restaura);
-        // o teclado fechando dispara um reanchor async — reforca o restore
-        setTimeout(restaura, 120);
-        setTimeout(restaura, 320);
-      }
-    }
+    if (!editando) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';   // trava scroll de fundo enquanto edita
+    return () => { document.body.style.overflow = prev; };
   }, [editando]);
 
   const horario = sug.criada_em ? new Date(sug.criada_em).toLocaleString('pt-BR', {
@@ -5454,7 +5432,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
 
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10, fontFamily: FONT }}>
-      <div ref={wrapRef} style={{
+      <div style={{
         maxWidth: '85%', background: '#fff8e0',
         border: '2px solid #f0c050', borderRadius: 10, padding: 10,
       }}>
@@ -5462,38 +5440,7 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
           <Bot size={12} strokeWidth={2} /> Sofia sugeriu — aguardando sua aprovação
         </div>
 
-        {editando ? (
-          <>
-            <textarea
-              ref={editTaRef}
-              value={editText}
-              onChange={e => setEditText(e.target.value)}
-              style={{
-                width: '100%', minHeight: 90, padding: 8, borderRadius: 6,
-                border: '1px solid #d0c080', fontSize: fz(13), fontFamily: FONT,
-                resize: 'vertical', whiteSpace: 'pre-wrap',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              <button
-                onClick={() => acionar('editar_aprovar', editText)}
-                disabled={acaoEm}
-                style={{
-                  padding: '6px 12px', background: '#2c7a4f', color: '#fff',
-                  border: 'none', borderRadius: 6, fontSize: fz(12), cursor: 'pointer',
-                }}
-              >Salvar e enviar</button>
-              <button
-                onClick={() => { setEditando(false); setEditText(sug.texto_proposto); }}
-                disabled={acaoEm}
-                style={{
-                  padding: '6px 12px', background: '#ccc', color: '#333',
-                  border: 'none', borderRadius: 6, fontSize: fz(12), cursor: 'pointer',
-                }}
-              >Cancelar</button>
-            </div>
-          </>
-        ) : (
+        <>
           <>
             <div style={{
               fontSize: fz(13), lineHeight: 1.5, whiteSpace: 'pre-wrap',
@@ -5574,13 +5521,69 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
               >✕ Dispensar</button>
             </div>
           </>
-        )}
+        </>
         {horario && (
           <div style={{ fontSize: fz(9), color: '#888', marginTop: 6, textAlign: 'right' }}>
             {horario}
           </div>
         )}
       </div>
+      {editando && (
+        <div
+          onClick={() => { setEditando(false); setEditText(sug.texto_proposto); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(20,16,8,0.45)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            padding: isDesktop ? '8vh 16px 16px' : '40px 10px 10px',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 560, background: '#fff8e0',
+              border: '2px solid #f0c050', borderRadius: 12, padding: 14,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
+              display: 'flex', flexDirection: 'column', fontFamily: FONT,
+            }}
+          >
+            <div style={{ fontSize: fz(11), color: '#7a5a00', fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Bot size={13} strokeWidth={2} /> Editar mensagem da Sofia
+            </div>
+            <textarea
+              ref={editTaRef}
+              autoFocus
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              style={{
+                width: '100%', minHeight: 150, maxHeight: '46vh', padding: 10,
+                borderRadius: 8, border: '1px solid #d0c080',
+                fontSize: '16px', fontFamily: FONT, lineHeight: 1.5,
+                resize: 'none', whiteSpace: 'pre-wrap', boxSizing: 'border-box',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => acionar('editar_aprovar', editText)}
+                disabled={acaoEm}
+                style={{
+                  flex: 1, padding: '12px', background: '#2c7a4f', color: '#fff',
+                  border: 'none', borderRadius: 8, fontSize: fz(14), fontWeight: 600,
+                  cursor: 'pointer', opacity: acaoEm ? 0.6 : 1,
+                }}
+              >{acaoEm ? 'Enviando...' : 'Salvar e enviar'}</button>
+              <button
+                onClick={() => { setEditando(false); setEditText(sug.texto_proposto); }}
+                disabled={acaoEm}
+                style={{
+                  padding: '12px 16px', background: '#e8e2da', color: '#333',
+                  border: 'none', borderRadius: 8, fontSize: fz(14), cursor: 'pointer',
+                }}
+              >Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
