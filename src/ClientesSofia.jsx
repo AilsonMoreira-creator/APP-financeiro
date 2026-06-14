@@ -296,6 +296,7 @@ function TagFase({ tag }) {
 
 export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos', abaInicial = null, soVendedora = false, vendedoraId = null, onVoltarHome = null, onVoltarSofia = null }) {
   const isDesktop = useIsDesktop();           // split: desktop = 2 paineis; mobile = tela cheia
+  const isMobile = !isDesktop;                // labels curtos / controles compactos no celular
   const [chatId, setChatId] = useState(null); // conversa aberta no split (antes era overlay no parent)
   const [modalEditar, setModalEditar] = useState(null);
   const [modalEnviar, setModalEnviar] = useState(null);
@@ -422,7 +423,7 @@ export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos
     <div style={{ background: palette.bg, minHeight: 'calc(100vh - 110px)', fontFamily: FONT }}>
       {/* HEADER da régua: título + troca de régua (admin) / voltar (vendedora) */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
+        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', flexWrap: 'wrap',
         background: palette.surface, borderBottom: `1px solid ${palette.beige}`,
       }}>
         {soVendedora ? (
@@ -438,14 +439,14 @@ export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos
               color: regua === 'novos' ? palette.bg : palette.inkMuted,
               border: regua === 'novos' ? 'none' : `1px solid ${palette.beige}`,
             }}>
-              <UserIcon size={sz(14)} /> Novos Clientes
+              <UserIcon size={sz(14)} /> {isMobile ? 'Novos' : 'Novos Clientes'}
             </button>
             <button onClick={() => { setRegua('reativar'); setAba('carteira'); }} style={{
               ...btnBase, gap: 5, background: regua === 'reativar' ? palette.accent : 'transparent',
               color: regua === 'reativar' ? palette.bg : palette.inkMuted,
               border: regua === 'reativar' ? 'none' : `1px solid ${palette.beige}`,
             }}>
-              <RefreshCw size={sz(14)} /> Reativar Clientes
+              <RefreshCw size={sz(14)} /> {isMobile ? 'Reativar' : 'Reativar Clientes'}
             </button>
             {onVoltarSofia && (
               <button onClick={onVoltarSofia} style={{ ...btnBase, marginLeft: 'auto', background: 'transparent', gap: 5, color: palette.inkMuted, border: `1px solid ${palette.beige}` }}>
@@ -523,12 +524,12 @@ export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos
           borderTop: `1px solid ${palette.beige}`,
         }}>
           <span style={{ color: palette.bg, fontSize: fz(13), fontWeight: 600 }}>
-            {selecionados.size} selecionado(s)
+            {selecionados.size} {isMobile ? 'sel.' : 'selecionado(s)'}
           </span>
           <button onClick={() => setModalMassa(true)} style={{
             ...btnBase, marginLeft: 'auto', background: palette.accent, color: palette.bg, gap: 5,
           }}>
-            <Send size={sz(14)} /> Enviar em massa
+            <Send size={sz(14)} /> {isMobile ? 'Enviar' : 'Enviar em massa'}
           </button>
           <button onClick={() => setSelecionados(new Set())} style={{
             ...btnBase, background: 'transparent', color: palette.bg,
@@ -616,8 +617,9 @@ export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos
 function SubTab({ id, label, Icon, ativo, onClick }) {
   return (
     <button onClick={() => onClick(id)} style={{
-      ...btnBase, padding: '8px 14px', fontSize: fz(14),
+      ...btnBase, padding: '8px 12px', fontSize: fz(14),
       background: 'transparent', borderRadius: 0, gap: 6,
+      flexShrink: 0, whiteSpace: 'nowrap',
       color: ativo ? palette.ink : palette.inkMuted, fontWeight: ativo ? 600 : 400,
       borderBottom: ativo ? `2.5px solid ${palette.accent}` : '2.5px solid transparent',
     }}>
@@ -627,6 +629,7 @@ function SubTab({ id, label, Icon, ativo, onClick }) {
 }
 
 function FiltroBar({ ordenar, setOrdenar, envio, setEnvio, vendFiltro, setVendFiltro, vendMap, onRefresh }) {
+  const isMobile = !useIsDesktop();
   const vendOpts = Array.from((vendMap || new Map()).entries())
     .map(([id, nome]) => ({ id, nome }))
     .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
@@ -655,16 +658,16 @@ function FiltroBar({ ordenar, setOrdenar, envio, setEnvio, vendFiltro, setVendFi
     );
   };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', flexWrap: 'wrap',
+    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 5 : 6, padding: isMobile ? '6px 12px' : '8px 16px', flexWrap: 'wrap',
       background: palette.surface, borderBottom: `1px solid ${palette.beige}` }}>
       <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Ordenar</span>
-      <OptOrd id="lifetime" label="Maior valor" Icon={ArrowDown01} />
+      <OptOrd id="lifetime" label={isMobile ? 'Valor' : 'Maior valor'} Icon={ArrowDown01} />
       <OptOrd id="az" label="A–Z" Icon={ArrowDownAZ} />
       <OptOrd id="recentes" label="Recentes" Icon={Clock} />
       <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 6 }}>Envio</span>
       <OptEnv id="todos" label="Todos" />
-      <OptEnv id="enviadas" label="Com msg enviada" />
-      <OptEnv id="nao_enviadas" label="Sem msg enviada" />
+      <OptEnv id="enviadas" label={isMobile ? 'Enviadas' : 'Com msg enviada'} />
+      <OptEnv id="nao_enviadas" label={isMobile ? 'Sem envio' : 'Sem msg enviada'} />
       <span style={{ fontSize: fz(11), color: palette.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 6 }}>Vendedora</span>
       <select value={vendFiltro} onChange={e => setVendFiltro(e.target.value)} style={{
         padding: '5px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`,
@@ -1083,7 +1086,7 @@ function FaseTab({ fase, regua, refreshTick, ordenar, vendForcado, vendFiltro, b
             <button onClick={(e) => { e.stopPropagation(); setFollowup(l.cliente_id, regua, !ehFollowup, userId).then(() => onTick && onTick()); }}
               title={ehFollowup ? 'Tirar do follow-up (volta pra régua geral)' : 'Mover pra follow-up (não some)'}
               style={{
-                fontSize: fz(10.5), padding: '2px 9px', borderRadius: 5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                fontSize: fz(10.5), padding: '6px 11px', borderRadius: 5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
                 background: ehFollowup ? '#fef3c7' : '#eef0fa', color: ehFollowup ? '#b45309' : '#4a5ba5',
                 border: `1px solid ${ehFollowup ? '#fcd34d' : '#c9d0ee'}`,
               }}>
