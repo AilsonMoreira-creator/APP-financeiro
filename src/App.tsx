@@ -11,6 +11,7 @@ import OsAmicia from './os-amicia/OsAmicia';
 import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
 import LojasModule from './Lojas';
 import LojasWhats from './LojasWhats.jsx';
+import { ClientesReativarModule } from './ClientesSofia.jsx';
 import FolhaPagamento from './FolhaPagamento.jsx';
 import ReviewsMeli from './Reviews_meli.jsx';
 import { listarCoresManuais, adicionarCorManual, removerCorManual, resolverHexCor } from './cores-manuais.js';
@@ -553,6 +554,9 @@ const modules = [
   // mas aparece como checkbox no editor de usuarios pra dar permissao granular.
   // Quem tem 'sofia' em modulos[] (ou eh admin) ve a tab Sofia dentro do modulo Lojas.
   { id:"sofia", Icon:SvgSofia, label:"Sofia", hideFromMenu: true },
+  // Reativar Clientes - card da home (Sofia reativa clientes 6+ meses parados).
+  // Vendedora vê só os cards dela. hideFromMenu: só card na home + checkbox em Usuários.
+  { id:"reativar", Icon:SvgSofia, label:"Reativar", hideFromMenu: true },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -4584,7 +4588,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia","lojas","sofia"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia","lojas","sofia","reativar"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true,moduloPadrao:"home"},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas","salascorte"],admin:false,moduloPadrao:"oficinas"},
@@ -10031,6 +10035,7 @@ export default function App(){
   const [homeAgendaHoje,setHomeAgendaHoje]=useState(0);
   const [homeLojasPending,setHomeLojasPending]=useState(0);
   const [homeSofiaPending,setHomeSofiaPending]=useState(0);
+  const [homeReativarPending,setHomeReativarPending]=useState(0);
   const [homeCaseadoAbertos,setHomeCaseadoAbertos]=useState(0);
   const [oficinasAbaPedida,setOficinasAbaPedida]=useState(null);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
@@ -10647,6 +10652,14 @@ export default function App(){
     if(temSofia){
       fetch('/api/lojas-whats-home-kpi').then(r=>r.json()).then(d=>{
         if(typeof d?.naoRespondidas==='number')setHomeSofiaPending(d.naoRespondidas);
+      }).catch(()=>{});
+    }
+    // Reativar Clientes: conversando nao respondidas (admin = total; vendedora = só dela)
+    const temReativar=usuarioLogado?.admin===true || modulosUser.includes('reativar');
+    if(temReativar){
+      const vparam=usuarioLogado?.admin===true?'':`?vendedora=${encodeURIComponent(usuarioLogado?.usuario||'')}`;
+      fetch(`/api/clientes-reativar-kpi${vparam}`).then(r=>r.json()).then(d=>{
+        if(typeof d?.naoRespondidas==='number')setHomeReativarPending(d.naoRespondidas);
       }).catch(()=>{});
     }
   },[dbCarregado]);
@@ -11711,6 +11724,10 @@ export default function App(){
               kpiValue:homeSofiaPending>0?`${homeSofiaPending}`:"✓",
               kpiLabel:homeSofiaPending>0?"esperando resposta":"sem pendências",
               detail:homeSofiaPending>0?"Mensagens nas últimas 24h":"WhatsApp B2B · IA atendente"},
+            {id:"reativar",label:"Reativar Clientes",Icon:SvgSofia,color:"#a05a8b",bg:"#f9f0f6",border:"#e8cfe0",
+              kpiValue:homeReativarPending>0?`${homeReativarPending}`:"✓",
+              kpiLabel:homeReativarPending>0?"esperando resposta":"sem pendências",
+              detail:homeReativarPending>0?"Clientes conversando com a Sofia":"Clientes 6+ meses · Sofia reativa"},
           ].filter(m=>usuarioLogado.modulos.includes(m.gate||m.id));
 
           return(
@@ -11767,6 +11784,7 @@ export default function App(){
         {active==="osamicia"&&usuarioLogado?.modulos?.includes('osamicia')&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={String(usuarioLogado?.usuario||'').toLowerCase()==='ailson' ? {...usuarioLogado, admin:true} : usuarioLogado}/></ModuleErrorBoundary>}
         {active==="lojas"&&<ModuleErrorBoundary><LojasModule supabase={supabase} userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sofia"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('sofia'))&&<ModuleErrorBoundary><LojasWhats userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
+        {active==="reativar"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('reativar'))&&<ModuleErrorBoundary><ClientesReativarModule userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent

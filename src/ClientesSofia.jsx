@@ -1560,3 +1560,42 @@ function Vazio({ msg }) {
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MÓDULO "REATIVAR CLIENTES" (card da home) — Ailson 12/06/2026
+// Admin: abre o ClientesTab completo na régua Reativar (pode trocar de régua).
+// Vendedora: resolve a vendedora pelo user_id e abre travado na régua Reativar,
+//   aba Conversando, vendo SÓ os cards dela. Sofia é protagonista; ela acompanha.
+// ═══════════════════════════════════════════════════════════════════════════
+export function ClientesReativarModule({ userId, isAdmin, onBack }) {
+  const [vendedoraId, setVendedoraId] = useState(undefined); // undefined=carregando, null=admin/sem vínculo
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      if (isAdmin) { if (vivo) setVendedoraId(null); return; }
+      // vincula pelo user_id do usuário logado
+      const { data } = await supabase.from('lojas_vendedoras')
+        .select('id').eq('user_id', userId).maybeSingle();
+      if (vivo) setVendedoraId(data?.id || null);
+    })();
+    return () => { vivo = false; };
+  }, [userId, isAdmin]);
+
+  if (vendedoraId === undefined) {
+    return <div style={{ padding: 40, textAlign: 'center', color: palette.inkMuted, fontFamily: FONT }}>Carregando…</div>;
+  }
+
+  // Admin entra na régua reativar com tudo liberado; vendedora trava em modo dela.
+  return (
+    <ClientesTab
+      userId={userId}
+      refreshTick={0}
+      reguaInicial="reativar"
+      abaInicial={isAdmin ? 'carteira' : 'conversando'}
+      soVendedora={!isAdmin}
+      vendedoraId={vendedoraId}
+      onVoltarHome={onBack}
+      onVoltarSofia={isAdmin ? onBack : null}
+    />
+  );
+}
