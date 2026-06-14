@@ -28,7 +28,8 @@ function setCors(res) {
 
 const TPL_FEEDBACK_DISTANCIA = 'feedback_v1';
 const TPL_FEEDBACK_PRESENCIAL = 'feedback_loja_v1';
-const TPL_INATIVO = 'inativos_v1';
+const TPL_REATIVACAO_ATE4 = 'reativacao_ate4_v1';   // ≤4 compras lifetime
+const TPL_REATIVACAO_5MAIS = 'reativacao_5mais_v1';  // ≥5 compras lifetime
 
 const LIMITE = 1000;
 const PRIMEIRO_LOTE = 25; // processa inline pra dar feedback imediato
@@ -79,7 +80,19 @@ export default async function handler(req, res) {
     let puladosJaCliente = 0;
 
     if (etapaFinal === 'inativo') {
-      assignments = cliente_ids.map(cid => ({ cliente_id: cid, template_name: TPL_INATIVO }));
+      // Template por lifetime (Ailson 12/06/2026): ≤4 compras = tom geral
+      // investigativo; ≥5 = cliente importante "vc faz falta".
+      const lifetimeMap = new Map();
+      for (let i = 0; i < cliente_ids.length; i += 500) {
+        const { data } = await supabase.from('lojas_clientes_kpis')
+          .select('cliente_id, qtd_compras')
+          .in('cliente_id', cliente_ids.slice(i, i + 500));
+        for (const r of (data || [])) lifetimeMap.set(r.cliente_id, r.qtd_compras || 0);
+      }
+      assignments = cliente_ids.map(cid => ({
+        cliente_id: cid,
+        template_name: (lifetimeMap.get(cid) || 0) >= 5 ? TPL_REATIVACAO_5MAIS : TPL_REATIVACAO_ATE4,
+      }));
     } else {
       const perfis = await lerPerfis(cliente_ids);
       for (const cid of cliente_ids) {

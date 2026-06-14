@@ -24,7 +24,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2, AlertCircle, Phone, ShoppingCart, User as UserIcon,
   Ban, ArrowDownAZ, ArrowDown01, Clock, MessageSquare, CheckCircle2,
-  Send, X, RefreshCw,
+  Send, X, RefreshCw, ArrowLeft,
 } from 'lucide-react';
 import { supabase, palette, FONT, SectionTitle } from './Lojas_Shared.jsx';
 // Reuso do chat e do split do Sofia (import circular seguro: uso so em render).
@@ -248,15 +248,61 @@ const STATUS_FB = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// CRM CLIENTES — 2 RÉGUAS (Novos Clientes / Reativar), 4+1 abas cada
+// (Ailson 12/06/2026). As réguas NUNCA cruzam cards: 'feedback' e 'inativo'
+// são populações separadas; só compartilham a estrutura visual e o chat.
+// Fases (carteira/enviados/conversando/followup) vêm de fn_clientes_sofia_fases.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Busca o mapa de fases da régua (cliente_id → {fase, tag, ...}) via RPC.
+async function fetchFases(reguaEtapa) {
+  const { data, error } = await supabase.rpc('fn_clientes_sofia_fases', { p_regua: reguaEtapa });
+  if (error) { console.error('fetchFases:', error.message); return new Map(); }
+  const m = new Map();
+  (data || []).forEach(r => m.set(r.cliente_id, r));
+  return m;
+}
+
+// Move cliente PRA / DE follow-up (estado manual persistente)
+async function setFollowup(clienteId, regua, ligar, userId) {
+  if (ligar) {
+    return supabase.from('clientes_sofia_acompanhamento')
+      .upsert({ cliente_id: clienteId, regua, movido_por: userId || null }, { onConflict: 'cliente_id,regua' });
+  }
+  return supabase.from('clientes_sofia_acompanhamento')
+    .delete().eq('cliente_id', clienteId).eq('regua', regua);
+}
+
+// Tag visual da fase (tag vinda da fn)
+function TagFase({ tag }) {
+  const cfg = {
+    conversando:           { txt: '💬 conversando',            bg: '#e8f1fa', fg: '#2667a3', bd: '#bcd6ee' },
+    enviado:               { txt: '📤 enviada',                bg: '#eafbf0', fg: '#1e8e4e', bd: '#b8dfc8' },
+    enviado_sem_resposta:  { txt: '📤 enviada · sem resposta', bg: palette.beigeSoft, fg: palette.inkSoft, bd: palette.beige },
+    followup:              { txt: '📌 follow-up',              bg: '#fdf3e3', fg: '#b9772a', bd: '#f0d9b5' },
+  }[tag];
+  if (!cfg) return null;
+  return (
+    <span style={{
+      fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+      background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.bd}`, whiteSpace: 'nowrap',
+    }}>{cfg.txt}</span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE DE ABA (renderizado dentro do Sofia)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function ClientesTab({ userId, refreshTick }) {
+export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos', abaInicial = null, soVendedora = false, vendedoraId = null, onVoltarHome = null, onVoltarSofia = null }) {
   const isDesktop = useIsDesktop();           // split: desktop = 2 paineis; mobile = tela cheia
   const [chatId, setChatId] = useState(null); // conversa aberta no split (antes era overlay no parent)
   const [modalEditar, setModalEditar] = useState(null);
   const [modalEnviar, setModalEnviar] = useState(null);
-  const [subTab, setSubTab] = useState('feedback'); // 'feedback' | 'inativos'
+  // Régua ativa: 'novos' (feedback) | 'reativar' (inativo). Vendedora trava em 'reativar'.
+  const [regua, setRegua] = useState(soVendedora ? 'reativar' : reguaInicial);
+  // Aba dentro da régua: 'carteira' | 'enviados' | 'conversando' | 'followup' | 'reativados'
+  const [aba, setAba] = useState(abaInicial || (soVendedora ? 'conversando' : 'carteira'));
   const [ordenar, setOrdenar] = useState('lifetime'); // 'lifetime' | 'az'
   const [envio, setEnvio] = useState('todos'); // 'todos' | 'enviadas' | 'nao_enviadas'
   const [abrindoId, setAbrindoId] = useState(null);   // cliente_id sendo aberto no chat
@@ -265,6 +311,11 @@ export default function ClientesTab({ userId, refreshTick }) {
   const [vendFiltro, setVendFiltro] = useState('todas');
   const [tickLocal, setTickLocal] = useState(0);
   const tick = refreshTick + tickLocal;
+
+  // Etapa no banco da régua atual (feedback = novos clientes; inativo = reativar)
+  const reguaEtapa = regua === 'reativar' ? 'inativo' : 'feedback';
+  // Vendedora vê só os cards dela em todas as abas (filtro forçado)
+  const vendForcado = soVendedora ? vendedoraId : null;
 
   const toggleSel = useCallback((id) => {
     setSelecionados(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -329,7 +380,7 @@ export default function ClientesTab({ userId, refreshTick }) {
     if (abrindoId) return;
     setAbrindoId(clienteId);
     try {
-      const etapa = (subTab.startsWith('inativo') || subTab === 'reativados') ? 'inativo' : 'feedback';
+      const etapa = reguaEtapa;
       const r = await fetch('/api/lojas-whats-conversa-abrir-cliente', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cliente_id: clienteId, etapa }),
@@ -349,51 +400,115 @@ export default function ClientesTab({ userId, refreshTick }) {
     } finally {
       setAbrindoId(null);
     }
-  }, [abrindoId, subTab]);
+  }, [abrindoId, reguaEtapa]);
+
+  // Abas da régua ativa. Reativar tem Reativados a mais. (Ailson 12/06/2026)
+  const ABAS_REGUA = regua === 'reativar'
+    ? [
+        { id: 'carteira', label: 'Carteira', Icon: UserIcon },
+        { id: 'enviados', label: 'Enviados', Icon: Send },
+        { id: 'conversando', label: 'Conversando', Icon: MessageSquare },
+        { id: 'followup', label: 'Follow-up', Icon: CheckCircle2 },
+        { id: 'reativados', label: 'Reativados', Icon: ShoppingCart },
+      ]
+    : [
+        { id: 'carteira', label: 'Carteira', Icon: UserIcon },
+        { id: 'enviados', label: 'Enviados', Icon: Send },
+        { id: 'conversando', label: 'Conversando', Icon: MessageSquare },
+        { id: 'followup', label: 'Follow-up', Icon: CheckCircle2 },
+      ];
 
   const conteudoLista = (
     <div style={{ background: palette.bg, minHeight: 'calc(100vh - 110px)', fontFamily: FONT }}>
-      {/* sub-abas Feedback | Inativos */}
+      {/* HEADER da régua: título + troca de régua (admin) / voltar (vendedora) */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px',
+        background: palette.surface, borderBottom: `1px solid ${palette.beige}`,
+      }}>
+        {soVendedora ? (
+          onVoltarHome && (
+            <button onClick={onVoltarHome} style={{ ...btnBase, background: 'transparent', gap: 5, color: palette.inkMuted }}>
+              <ArrowLeft size={sz(16)} /> Home
+            </button>
+          )
+        ) : (
+          <>
+            <button onClick={() => { setRegua('novos'); setAba('carteira'); }} style={{
+              ...btnBase, gap: 5, background: regua === 'novos' ? palette.accent : 'transparent',
+              color: regua === 'novos' ? palette.bg : palette.inkMuted,
+              border: regua === 'novos' ? 'none' : `1px solid ${palette.beige}`,
+            }}>
+              <UserIcon size={sz(14)} /> Novos Clientes
+            </button>
+            <button onClick={() => { setRegua('reativar'); setAba('carteira'); }} style={{
+              ...btnBase, gap: 5, background: regua === 'reativar' ? palette.accent : 'transparent',
+              color: regua === 'reativar' ? palette.bg : palette.inkMuted,
+              border: regua === 'reativar' ? 'none' : `1px solid ${palette.beige}`,
+            }}>
+              <RefreshCw size={sz(14)} /> Reativar Clientes
+            </button>
+            {onVoltarSofia && (
+              <button onClick={onVoltarSofia} style={{ ...btnBase, marginLeft: 'auto', background: 'transparent', gap: 5, color: palette.inkMuted, border: `1px solid ${palette.beige}` }}>
+                <ArrowLeft size={sz(14)} /> Sofia
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Abas da régua */}
       <div style={{
         display: 'flex', gap: 6, padding: '10px 16px 0', overflowX: 'auto',
         background: palette.surface, borderBottom: `1px solid ${palette.beige}`,
       }}>
-        <SubTab id="feedback" label="Feedback" Icon={MessageSquare} ativo={subTab === 'feedback'} onClick={setSubTab} />
-        <SubTab id="feedback_conv" label="Fb 💬" Icon={MessageSquare} ativo={subTab === 'feedback_conv'} onClick={setSubTab} />
-        <SubTab id="inativos" label="Inativos" Icon={Clock} ativo={subTab === 'inativos'} onClick={setSubTab} />
-        <SubTab id="inativos_conv" label="In 💬" Icon={Clock} ativo={subTab === 'inativos_conv'} onClick={setSubTab} />
-        <SubTab id="reativados" label="Reativados" Icon={ShoppingCart} ativo={subTab === 'reativados'} onClick={setSubTab} />
+        {ABAS_REGUA.map(a => (
+          <SubTab key={a.id} id={a.id} label={a.label} Icon={a.Icon} ativo={aba === a.id} onClick={setAba} />
+        ))}
       </div>
 
-      {/* filtro único (vale pra sub-aba ativa) */}
+      {/* filtro (vendedora não vê filtro de vendedora — já é forçado) */}
       <FiltroBar ordenar={ordenar} setOrdenar={setOrdenar} envio={envio} setEnvio={setEnvio}
-        vendFiltro={vendFiltro} setVendFiltro={setVendFiltro} vendMap={vendMap}
+        vendFiltro={soVendedora ? null : vendFiltro} setVendFiltro={setVendFiltro} vendMap={vendMap}
         onRefresh={() => setTickLocal(t => t + 1)} />
 
-      {subTab === 'feedback' && (
+      {/* ── CARTEIRA ── novos=feedback / reativar=inativos (exclui quem está em outra fase) */}
+      {aba === 'carteira' && regua === 'novos' && (
         <>
           <LoteFeedbackBanner tick={tick} onAprovado={() => setTickLocal(t => t + 1)} />
-          <FeedbackTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
+          <FeedbackTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendForcado || vendFiltro}
             bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
             onAbrir={abrirChat} abrindoId={abrindoId}
             selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
         </>
       )}
-      {subTab === 'inativos' && (
-        <InativosTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
+      {aba === 'carteira' && regua === 'reativar' && (
+        <InativosTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendForcado || vendFiltro}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
           onAbrir={abrirChat} abrindoId={abrindoId}
           selecionados={selecionados} onToggleSel={toggleSel} envio={envio} />
       )}
-      {(subTab === 'feedback_conv' || subTab === 'inativos_conv') && (
-        <ConversandoTab key={subTab} etapa={subTab === 'inativos_conv' ? 'inativo' : 'feedback'}
-          refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
+
+      {/* ── ENVIADOS / FOLLOW-UP ── via fn_clientes_sofia_fases */}
+      {(aba === 'enviados' || aba === 'followup') && (
+        <FaseTab key={`${regua}-${aba}`} fase={aba} regua={reguaEtapa}
+          refreshTick={tick} ordenar={ordenar} vendForcado={vendForcado} vendFiltro={vendFiltro}
+          bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
+          onAbrir={abrirChat} abrindoId={abrindoId} userId={userId}
+          selecionados={selecionados} onToggleSel={toggleSel} onTick={() => setTickLocal(t => t + 1)} />
+      )}
+
+      {/* ── CONVERSANDO ── */}
+      {aba === 'conversando' && (
+        <ConversandoTab key={`${regua}-conv`} etapa={reguaEtapa}
+          refreshTick={tick} ordenar={ordenar} vendFiltro={vendForcado || vendFiltro}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
           onAbrir={abrirChat} abrindoId={abrindoId}
           selecionados={selecionados} onToggleSel={toggleSel} />
       )}
-      {subTab === 'reativados' && (
-        <ReativadosTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendFiltro}
+
+      {/* ── REATIVADOS ── só na régua reativar */}
+      {aba === 'reativados' && regua === 'reativar' && (
+        <ReativadosTab refreshTick={tick} ordenar={ordenar} vendFiltro={vendForcado || vendFiltro}
           bloqueadosRef={bloqueadosRef} bloqueados={bloqueados} onToggle={toggleBloqueio} vendMap={vendMap}
           onAbrir={abrirChat} abrindoId={abrindoId}
           selecionados={selecionados} onToggleSel={toggleSel} />
@@ -427,7 +542,7 @@ export default function ClientesTab({ userId, refreshTick }) {
       {modalMassa && (
         <ModalMassa
           clienteIds={[...selecionados]}
-          etapa={subTab.startsWith('inativo') || subTab === 'reativados' ? 'inativo' : 'feedback'}
+          etapa={reguaEtapa}
           onClose={() => setModalMassa(false)}
           onEnviado={() => { setModalMassa(false); setSelecionados(new Set()); }}
         />
@@ -888,6 +1003,93 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ABA FASE — Enviados / Follow-up (Ailson 12/06/2026)
+// Usa fn_clientes_sofia_fases(regua): 'enviados' = disparado <3d sem resposta;
+// 'followup' = marcado manualmente (permanente até a vendedora soltar).
+// ═══════════════════════════════════════════════════════════════════════════
+function FaseTab({ fase, regua, refreshTick, ordenar, vendForcado, vendFiltro, bloqueadosRef, bloqueados, onToggle, vendMap, onAbrir, abrindoId, selecionados, onToggleSel, userId, onTick }) {
+  const [linhas, setLinhas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      setLoading(true); setErro(null);
+      try {
+        const fasesMap = await fetchFases(regua);
+        let alvo = [...fasesMap.values()].filter(f => f.fase === fase);
+        if (alvo.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
+        const ids = alvo.map(f => f.cliente_id).filter(id => !bloqueadosRef.current.has(id));
+        if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
+
+        const [cads, kpis, vendaVendMap] = await Promise.all([
+          selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal', 'id', ids),
+          selectInBatches('lojas_clientes_kpis', 'cliente_id, lifetime_total, qtd_compras, dias_sem_comprar', 'cliente_id', ids),
+          fetchVendedoraSet(ids),
+        ]);
+        const cadMap = new Map(cads.map(c => [c.id, c]));
+        const kpiMap = new Map(kpis.map(k => [k.cliente_id, k]));
+
+        const out = [];
+        for (const id of ids) {
+          const f = fasesMap.get(id) || {};
+          const c = cadMap.get(id) || {};
+          const k = kpiMap.get(id) || {};
+          out.push({
+            cliente_id: id,
+            nome: c.razao_social || c.comprador_nome || '—',
+            telefone: c.telefone_principal,
+            vendedora_id: vendaVendMap.get(id) || null,
+            vendedora_nome: vendMap.get(vendaVendMap.get(id)) || '—',
+            lifetime_total: k.lifetime_total ?? 0,
+            qtd_compras: k.qtd_compras,
+            dias_sem_comprar: k.dias_sem_comprar,
+            tag: f.tag,
+          });
+        }
+        if (vivo) setLinhas(out);
+      } catch (err) { if (vivo) setErro(err.message || String(err)); }
+      finally { if (vivo) setLoading(false); }
+    })();
+    return () => { vivo = false; };
+  }, [refreshTick, fase, regua, vendMap]);
+
+  const ehFollowup = fase === 'followup';
+  const visiveis = ordenarLista(filtrarVend(linhas, vendForcado || vendFiltro), ordenar);
+  if (loading) return <Carregando />;
+  if (erro) return <ErroBox msg={erro} />;
+  if (visiveis.length === 0) return <Vazio msg={ehFollowup ? 'Nenhum cliente em follow-up.' : 'Ninguém enviado aguardando resposta.'} />;
+
+  return (
+    <div style={{ padding: '12px 16px' }}>
+      <SectionTitle icon={ehFollowup ? CheckCircle2 : Send}>
+        {visiveis.length} {ehFollowup ? 'em follow-up' : 'enviado(s), aguardando'}
+      </SectionTitle>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {visiveis.map(l => (
+          <ClienteCard key={l.cliente_id} l={l} bloqueado={bloqueados.has(l.cliente_id)} onToggle={onToggle} onAbrir={onAbrir} abrindo={abrindoId === l.cliente_id} selecionado={selecionados.has(l.cliente_id)} onToggleSel={onToggleSel}>
+            {l.tag === 'enviado' && <span style={{ fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fef3c7', color: '#926a1e', border: '1px solid #fcd34d', whiteSpace: 'nowrap' }}>🕐 aguardando</span>}
+            <Campo Icon={ShoppingCart} label="lifetime" valor={fmtMoney(l.lifetime_total)} destaque />
+            <Campo label="compras" valor={String(l.qtd_compras ?? 0)} />
+            <Campo label="sem comprar" valor={`${l.dias_sem_comprar ?? '—'}d`} alerta />
+            <button onClick={(e) => { e.stopPropagation(); setFollowup(l.cliente_id, regua, !ehFollowup, userId).then(() => onTick && onTick()); }}
+              title={ehFollowup ? 'Tirar do follow-up (volta pra régua geral)' : 'Mover pra follow-up (não some)'}
+              style={{
+                fontSize: fz(10.5), padding: '2px 9px', borderRadius: 5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                background: ehFollowup ? '#fef3c7' : '#eef0fa', color: ehFollowup ? '#b45309' : '#4a5ba5',
+                border: `1px solid ${ehFollowup ? '#fcd34d' : '#c9d0ee'}`,
+              }}>
+              {ehFollowup ? '📌 tirar' : '📌 follow-up'}
+            </button>
+          </ClienteCard>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // CARD (nome + vendedora que atende + contato + campos + toggle bloqueio)
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1142,10 +1344,13 @@ function StatusBadge({ status }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
-  // feedback usa 2 templates (a distância × presencial); a Sofia escolhe por cliente.
-  // inativo usa 1 só. Nomes batem com os cadastrados na Meta (tudo minúsculo).
+  // feedback usa 2 templates (a distância × presencial); inativo usa 2 (por
+  // lifetime: ≤4 × ≥5). A regra escolhe por cliente no backend (massa).
   const tplDefs = etapa === 'inativo'
-    ? [{ name: 'inativos_v1', label: null }]
+    ? [
+        { name: 'reativacao_ate4_v1', label: 'Até 4 compras (geral)' },
+        { name: 'reativacao_5mais_v1', label: '5+ compras (cliente importante)' },
+      ]
     : [
         { name: 'feedback_v1', label: 'A distância (fala de entrega)' },
         { name: 'feedback_loja_v1', label: 'Presencial / na loja' },
@@ -1274,7 +1479,7 @@ function ModalMassa({ clienteIds, etapa, onClose, onEnviado }) {
       <div style={{ fontSize: fz(15), color: palette.ink, textAlign: 'center', margin: '8px 0 16px', lineHeight: 1.5 }}>
         <strong>{clienteIds.length}</strong> cliente(s) selecionado(s)
         <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 4 }}>
-          etapa {etapa} · {etapa === 'inativo' ? 'template inativos_v1' : 'a Sofia escolhe a versão por cliente'} · envio irreversível
+          etapa {etapa} · {'a Sofia escolhe a versão por cliente'} · envio irreversível
         </div>
         {etapa !== 'inativo' && (
           <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 4 }}>
