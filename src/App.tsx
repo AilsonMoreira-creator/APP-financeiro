@@ -4831,6 +4831,9 @@ const FotoProdLarge=({sbUrl,refProd,onZoom})=>{
 
 // ── Tela de Estoque (ML Lumia proxy) ─────────────────────────────────────────
 const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
+  const [vw,setVw]=useState(typeof window!=="undefined"?window.innerWidth:900);
+  useEffect(()=>{const h=()=>setVw(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+  const mobile=vw<640;
   const [dados,setDados]=useState(null); // {total_geral, refs, historico, ultimaSync}
   const [loading,setLoading]=useState(true);
   const [erro,setErro]=useState(null);
@@ -5206,10 +5209,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
 
   return(<div>
     {/* TOPO: total geral + gráfico evolução */}
-    <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:"16px 20px",marginBottom:14,display:"grid",gridTemplateColumns:"auto 1fr",gap:28,alignItems:"center"}}>
-      <div style={{borderRight:"1px solid #e8e2da",paddingRight:28}}>
+    <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:mobile?"14px 16px":"16px 20px",marginBottom:14,display:"grid",gridTemplateColumns:"auto 1fr",gap:mobile?14:28,alignItems:"center"}}>
+      <div style={{borderRight:"1px solid #e8e2da",paddingRight:mobile?14:28}}>
         <div style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Estoque total</div>
-        <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:38,fontWeight:700,color:"#2c3e50",lineHeight:1,margin:"4px 0 2px"}}>{totalExibido.toLocaleString('pt-BR')}</div>
+        <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:mobile?30:38,fontWeight:700,color:"#2c3e50",lineHeight:1,margin:"4px 0 2px"}}>{totalExibido.toLocaleString('pt-BR')}</div>
         <div style={{fontSize:11,color:"#8a9aa4"}}>em <b style={{color:"#2c3e50",fontWeight:700}}>{qtdRefsAtivas} refs ativas</b> · <b style={{color:"#2c3e50",fontWeight:700}}>{qtdVariacoes} variações</b></div>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -5416,13 +5419,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       const ocultas=varsGrade.length-vars.length;
       return (<><div onClick={()=>setModalRef(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:100,overflowY:"auto",backdropFilter:"blur(3px)"}}>
         <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:680,overflow:"hidden",boxShadow:"0 20px 50px rgba(0,0,0,0.25)"}}>
-          <div style={{display:"flex",gap:14,padding:"18px 20px",borderBottom:"1px solid #e8e2da",background:"#faf8f5",alignItems:"flex-start"}}>
-            <div style={{width:64,height:84,borderRadius:8,background:"#e8e2da",flexShrink:0,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={modalRef} onZoom={handleZoom}/></div>
+          <div style={{display:"flex",gap:mobile?10:14,padding:mobile?"14px 16px":"18px 20px",borderBottom:"1px solid #e8e2da",background:"#faf8f5",alignItems:"flex-start"}}>
+            <div style={{width:mobile?52:64,height:mobile?68:84,borderRadius:8,background:"#e8e2da",flexShrink:0,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={modalRef} onZoom={handleZoom}/></div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:11,color:"#4a7fa5",fontWeight:700,letterSpacing:0.4}}>REF {modalRef}</div>
-              <div style={{fontSize:17,fontWeight:700,color:"#2c3e50",margin:"2px 0 6px",lineHeight:1.25}}>{desc||"(sem descrição)"}</div>
-              <div style={{display:"flex",gap:14,fontSize:11,color:"#8a9aa4",flexWrap:"wrap"}}>
-                <span>Total: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:40}}>{(selectedRef.qtd_total||0).toLocaleString('pt-BR')}</b></span>
+              <div style={{fontSize:mobile?15:17,fontWeight:700,color:"#2c3e50",margin:"2px 0 6px",lineHeight:1.25}}>{desc||"(sem descrição)"}</div>
+              <div style={{display:"flex",gap:14,fontSize:11,color:"#8a9aa4",flexWrap:"wrap",alignItems:"baseline"}}>
+                <span>Total: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:mobile?28:40}}>{(selectedRef.qtd_total||0).toLocaleString('pt-BR')}</b></span>
                 <span>· Variações: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:13}}>{vars.length}{ocultas>0&&<span style={{color:"#8a9aa4",fontWeight:400,fontSize:11}}> de {varsGrade.length}</span>}</b></span>
               </div>
             </div>
@@ -5430,7 +5433,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           </div>
           <div style={{padding:"16px 20px"}}>
             <div style={{fontSize:10,color:"#8a9aa4",fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Variações · Estoque atual</div>
-            <table style={{width:"auto",margin:"0 auto",borderCollapse:"separate",borderSpacing:0,fontSize:12}}>
+            <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",margin:mobile?"0 -16px":"0",padding:mobile?"0 16px":"0"}}>
+            <table style={{width:mobile?"100%":"auto",margin:"0 auto",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth:mobile?440:"auto"}}>
               <thead><tr>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Cor</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Tamanho</th>
@@ -5457,6 +5461,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 })}
               </tbody>
             </table>
+            </div>
             {ocultas>0&&<div style={{fontSize:10,color:"#8a9aa4",marginTop:8,fontStyle:"italic"}}>{ocultas} variaç{ocultas===1?'ão oculta':'ões ocultas'} (estoque 0 sem reposição prevista nem cor top).</div>}
           </div>
         </div>
@@ -6467,9 +6472,9 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
               {prods.length===0?(
                 <div style={{background:"#fff",borderRadius:12,border:"1px dashed #d0c8c0",padding:40,textAlign:"center"}}><div style={{fontSize:14,color:"#a89f94"}}>Sem dados de produto neste período</div></div>
               ):(
-                <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
+                <div style={{display:"flex",flexDirection:mobile?"column":"row",gap:14,alignItems:"stretch"}}>
                   {/* Ranking */}
-                  <div style={{flex:"1 1 50%",background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
+                  <div style={{flex:mobile?"0 0 auto":"1 1 50%",width:mobile?"100%":"auto",background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                     <div style={{padding:"7px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 30</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
                     <div style={{maxHeight:900,overflowY:"auto"}}>
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
@@ -6486,7 +6491,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                     </div>
                   </div>
                   {/* Tamanhos + Cores */}
-                  <div style={{flex:"1 1 46%",display:"flex",flexDirection:"column",gap:12}}>
+                  <div style={{flex:mobile?"0 0 auto":"1 1 46%",width:mobile?"100%":"auto",display:"flex",flexDirection:"column",gap:12}}>
                     <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
                       <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",fontSize:12,fontWeight:700,color:"#2c3e50"}}>📏 Vendas por Tamanho</div>
                       <div style={{padding:"12px 16px"}}>
