@@ -502,6 +502,12 @@ const REGEX_AD_PRONTA = /n[ãa]o\s+apague\s+esta\s+mensagem/i;
 // (so aplica quando ja tem referral=ad — sem referral nao e anuncio).
 const REGEX_AD_FACEBOOK = /tenho\s+interesse\s+e\s+queria\s+mais\s+informa\w*[\s\S]{0,20}atacado/i;
 
+// SAC do site Amícia (Ailson 14/06/2026): botão de atendimento do site usa o
+// prefill "Olá!! vim do site Amícia / Preciso tirar uma dúvida". Assinatura
+// única "vim do site" — nenhuma outra origem usa essa frase. Não tem referral
+// (não é anúncio), então a detecção é por texto, igual stories/linktree.
+const REGEX_SAC_SITE = /\bvim\s+do\s+site\b/i;
+
 function detectarOrigemLead(refInfo) {
   if (!refInfo) return { origem: 'desconhecida', confianca: 0, meta: {} };
 
@@ -541,6 +547,12 @@ function detectarOrigemLead(refInfo) {
   //    CTA generico pq a frase do linktree e identica ao CTA do anuncio
   //    (so distingue por nao ter referral=ad — ja descartado no passo 1).
   if (refInfo.primeiraTexto) {
+    // SAC do site Amícia — assinatura única "vim do site". Checa antes de tudo.
+    // Não recebe a abertura de captação (não está em ORIGENS_TESTE_APRESENTACAO):
+    // cai direto na dúvida do cliente. Ailson 14/06/2026.
+    if (REGEX_SAC_SITE.test(refInfo.primeiraTexto)) {
+      return { origem: 'sac', confianca: 0.95, meta: { via: 'site_amicia' } };
+    }
     if (REGEX_INSTA_STORIES.test(refInfo.primeiraTexto)) {
       return { origem: 'instagram_stories', confianca: 0.95, meta: {} };
     }

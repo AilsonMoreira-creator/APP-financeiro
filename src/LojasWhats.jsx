@@ -124,6 +124,7 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
     : c.origem_lead === 'anuncio_instagram' ? 'ads'
     : c.origem_lead === 'instagram_stories' ? 'stories'
     : c.origem_lead === 'instagram_linktree' ? 'linktree'
+    : c.origem_lead === 'sac' ? 'sac'
     : null;
   return (
     <div
@@ -208,6 +209,12 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               background: '#e6f7ee', color: '#1f7a48',
               fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
             }}>🔗 linktree</span>
+          )}
+          {origem === 'sac' && (
+            <span title="Atendimento iniciado pelo botão do site Amícia (SAC)" style={{
+              background: '#eaf1f7', color: '#2c5d86',
+              fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
+            }}>🎧 SAC</span>
           )}
           {ehPJ && (
             <span style={{
@@ -2330,6 +2337,12 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
                 background: '#e6f7ee', color: '#1f7a48', fontWeight: 700,
               }}>🔗 linktree</span>
             )}
+            {c.origem_lead === 'sac' && (
+              <span title="Atendimento iniciado pelo botão do site Amícia (SAC)" style={{
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: '#eaf1f7', color: '#2c5d86', fontWeight: 700,
+              }}>🎧 SAC</span>
+            )}
             {/* Relógio de follow-up do catálogo — clicável: desmarca/reativa o
                 envio automático 6h/24h sem abrir o chat. Ailson 29/05/2026. */}
             {c.catalogo_enviado_em && !['vendeu', 'perdida'].includes(c.etapa) && (() => {
@@ -3546,6 +3559,7 @@ function CapiMetaAdsBloco({ dataInicio, dataFim, refreshTick }) {
                         {e.origem_lead === 'carrinho_site_amicialoja' && ' · 🛒 carrinho'}
                         {e.origem_lead === 'instagram_stories' && ' · 📸 stories'}
                         {e.origem_lead === 'instagram_linktree' && ' · 🔗 linktree'}
+                        {e.origem_lead === 'sac' && ' · 🎧 SAC'}
                       </div>
                     </div>
                     <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ok, flexShrink: 0 }}>
