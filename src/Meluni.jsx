@@ -25,6 +25,7 @@ import {
   Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
+import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
 
 const ASSISTANT_NAME = 'Lara';
 const MELUNI = '#9b59b6';      // roxo da marca Meluni (consistente com o resto do app)
@@ -409,9 +410,7 @@ function SecaoMarketing() {
     <div>
       <SubTabs tabs={tabs} active={aba} onChange={setAba} />
       {aba === 'meta_ads' && (
-        <Placeholder>
-          Tela principal de Meta Ads do Meluni: campanhas, gasto, ROAS e criativos, reaproveitando <code>meluni_meta_ads_historico</code> (conta 943539471358534). Monto os números quando for a vez dela.
-        </Placeholder>
+        <CalcMetaAdsMeluni onVoltar={() => setAba('analise')} mobile={typeof window !== 'undefined' && window.innerWidth < 640} />
       )}
       {aba === 'analise' && (
         <Placeholder>Análise de campanhas (Meta Ads / GA4) com a visão mais completa.</Placeholder>
