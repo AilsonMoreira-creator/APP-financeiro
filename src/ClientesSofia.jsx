@@ -1321,12 +1321,12 @@ function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, selecionado, on
           </div>
           <div style={{ fontSize: fz(12), color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span><Phone size={sz(11)} style={{ verticalAlign: 'middle' }} /> {fmtPhone(l.telefone)}</span>
-            {(!l.telefone || l.tel_valido === false) && (
-              <span title="Sem WhatsApp cadastrado (ou número inválido) — a Sofia não consegue enviar" style={{
+            {(!l.telefone || String(l.telefone).trim() === '') && (
+              <span title="Sem número cadastrado — a Sofia não consegue enviar" style={{
                 fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
                 background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4', whiteSpace: 'nowrap',
                 display: 'inline-flex', alignItems: 'center', gap: 3,
-              }}>📵 sem WhatsApp</span>
+              }}>📵 sem número</span>
             )}
             {children}
           </div>
