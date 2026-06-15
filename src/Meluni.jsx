@@ -227,21 +227,85 @@ function SecaoClientes() {
 }
 
 // ─── SEÇÃO: CARRINHO ABANDONADO ─────────────────────────────────────────────
+function CarrinhoCard({ c, sel, onSel }) {
+  const tel = c.cliente_whatsapp || c.telefone;
+  const nome = c.cliente_nome || c.nome;
+  const itens = Array.isArray(c.itens) ? c.itens : [];
+  return (
+    <div style={{ background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${palette.beige}` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <input type="checkbox" checked={sel} onChange={onSel} style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
+        <ShoppingCart size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: palette.ink }}>{fmtBRL(c.valor)}</span>
+            {nome && <span style={{ fontSize: 13, color: palette.inkSoft }}>{nome}</span>}
+          </div>
+          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
+            {!tel && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4' }}>📵 sem número</span>}
+            <CampoKPI label="itens" valor={String(itens.reduce((a, i) => a + (i.qtd || 1), 0))} />
+            <span>{fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
+          </div>
+          {itens.length > 0 && (
+            <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {itens.map(i => `${i.qtd}x ${i.sku}`).join('  ·  ')}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SecaoCarrinho() {
   const [aba, setAba] = useState('processando');
+  const [carrinhos, setCarrinhos] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [sel, setSel] = useState(new Set());
+  const LIM = 60;
   const tabs = [
     { id: 'processando', label: 'Processando' },
     { id: 'aprovar', label: 'Aprovar / Enviar' },
     { id: 'conversando', label: 'Conversando' },
     { id: 'follow_up', label: 'Follow up' },
   ];
+  const carregar = useCallback(async (off = 0) => {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/meluni-carrinhos-list?status=${aba}&limite=${LIM}&offset=${off}`);
+      const j = await r.json();
+      if (j.ok) { setTotal(j.total || 0); setCarrinhos(prev => off ? [...prev, ...j.carrinhos] : j.carrinhos); }
+    } catch (e) { /* ignora */ }
+    setLoading(false);
+  }, [aba]);
+  useEffect(() => { setSel(new Set()); carregar(0); }, [carregar]);
+  const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const selTodos = () => setSel(sel.size === carrinhos.length ? new Set() : new Set(carrinhos.map(c => c.id)));
+
   return (
     <div>
       <SubTabs tabs={tabs} active={aba} onChange={setAba} />
-      <Placeholder>
-        Funil de carrinho abandonado (igual à Sofia): chega na planilha do Drive → <b>Processando</b> (selecionar todos) →
-        <b> Aprovar/Enviar</b> (disparo em massa via template) → <b>Conversando</b> → <b>Follow up</b>.
-      </Placeholder>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button onClick={selTodos} style={{ ...selStyle, fontWeight: 700 }}>
+          {sel.size === carrinhos.length && carrinhos.length ? 'Limpar' : 'Selecionar todos'}
+        </button>
+        <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
+          {loading ? 'carregando…' : `${total} no funil`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
+        </span>
+        {sel.size > 0 && <span style={{ fontSize: 11, color: palette.warn, fontFamily: FONT }}>o disparo em massa liga quando o número da Lara estiver configurado</span>}
+      </div>
+      {!loading && carrinhos.length === 0 && <Placeholder>Nenhum carrinho nesse estágio.</Placeholder>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {carrinhos.map(c => <CarrinhoCard key={c.id} c={c} sel={sel.has(c.id)} onSel={() => toggleSel(c.id)} />)}
+      </div>
+      {carrinhos.length < total && (
+        <button onClick={() => carregar(carrinhos.length)} disabled={loading}
+          style={{ ...selStyle, marginTop: 10, width: '100%', padding: 8, fontWeight: 700 }}>
+          {loading ? 'carregando…' : `Carregar mais (${total - carrinhos.length} restantes)`}
+        </button>
+      )}
     </div>
   );
 }
@@ -275,14 +339,61 @@ function SecaoSac() {
 }
 
 // ─── SEÇÃO: DEVOLUÇÃO ───────────────────────────────────────────────────────
+function DevolucaoCard({ d }) {
+  const STA = { Aprovado: palette.ok, Pendente: palette.warn, Recusado: palette.alert, Cancelado: palette.alert };
+  const cor = STA[d.status] || palette.inkSoft;
+  return (
+    <div style={{ background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${palette.beige}` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <RotateCcw size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{d.nome || '—'}</span>
+            <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: palette.surface, color: cor, border: `1px solid ${cor}` }}>{d.status || '—'}</span>
+            {d.pedido_ref && <span style={{ fontSize: 11, color: palette.inkMuted }}>pedido {d.pedido_ref}</span>}
+          </div>
+          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
+            <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(d.telefone)}</span>
+            <CampoKPI label="motivo" valor={d.motivo || '—'} />
+            <CampoKPI label="total" valor={fmtBRL(d.total)} destaque />
+            <span>{fmtData(d.data_devolucao)}</span>
+          </div>
+          <div style={{ fontSize: 11, color: palette.inkSoft }}>
+            {d.itens.map((i, k) => (
+              <div key={k}>• {i.produto}{i.tamanho ? ` (${String(i.tamanho).replace('Tamanho : ', '')})` : ''} — {fmtBRL(i.valor)}</div>
+            ))}
+          </div>
+          {d.mensagem && <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 4, fontStyle: 'italic' }}>"{d.mensagem}"</div>}
+          <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button style={{ ...selStyle, fontWeight: 700, color: MELUNI, borderColor: MELUNI }}>
+              <MessageCircle size={12} style={{ verticalAlign: 'middle' }} /> abrir conversa
+            </button>
+            <span style={{ fontSize: 10.5, color: palette.inkMuted }}>
+              {d.rastreio ? `rastreio: ${d.rastreio}` : 'aviso de código de rastreio entra aqui'}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SecaoDevolucao() {
+  const [devs, setDevs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    setLoading(true);
+    fetch('/api/meluni-devolucoes-list').then(r => r.json())
+      .then(j => { if (j.ok) setDevs(j.devolucoes || []); })
+      .catch(() => {}).finally(() => setLoading(false));
+  }, []);
   return (
     <div>
-      <SectionTitle icon={RotateCcw}>Devoluções</SectionTitle>
-      <Placeholder>
-        Planilha diária do Drive com as devoluções. Card com dados do cliente + dados da devolução.
-        Estrutura pronta (<code>meluni_devolucoes</code> com <code>dados_extra</code>); encaixo as colunas quando vc mandar a planilha.
-      </Placeholder>
+      <SectionTitle icon={RotateCcw}>{loading ? 'Devoluções…' : `${devs.length} devolução(ões)`}</SectionTitle>
+      {!loading && devs.length === 0 && <Placeholder>Nenhuma devolução importada ainda.</Placeholder>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {devs.map(d => <DevolucaoCard key={d.chave} d={d} />)}
+      </div>
     </div>
   );
 }
