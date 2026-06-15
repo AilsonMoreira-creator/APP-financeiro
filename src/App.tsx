@@ -8357,6 +8357,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
   const [ultimaAtt,setUltimaAtt]=useState(null);
   const [tickAgora,setTickAgora]=useState(Date.now());
   const [blingVendas,setBlingVendas]=useState(null); // {pedidos, receita} reais Meluni = Bling conta lumia / canal Outros (só atendidas)
+  const [ga4,setGa4]=useState(null); // novos x recorrentes (GA4 property Meluni)
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
   // Mostrar/ocultar colunas (persistente por aparelho). Default: tudo visível.
   const [colVis,setColVis]=useState(()=>{try{return JSON.parse(localStorage.getItem('calc_meluni_cols_v1')||'{}')||{};}catch(_){return{};}});
@@ -8417,6 +8418,11 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
         const receita=(bv||[]).reduce((s,r)=>s+(parseFloat(r.total_pedido)||0),0);
         setBlingVendas({pedidos,receita});
       }catch(_){setBlingVendas(null);}
+      // GA4: novos x recorrentes (site Meluni, property 529125151)
+      try{
+        const g=await fetch(`/api/ga4-analise?property=529125151&start_date=${since}&end_date=${until}&dimensions=newVsReturning&metrics=sessions,ecommercePurchases,purchaseRevenue`).then(r=>r.json());
+        setGa4(g&&g.ok?(g.rows||[]):null);
+      }catch(_){setGa4(null);}
     }catch(e){
       setErro(e.message||'Erro ao carregar');
     }finally{
@@ -8511,6 +8517,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
   const fmtI=(v)=>Math.round(v).toLocaleString('pt-BR');
   // ROAS por faixa: >=2 verde (saudável), 1-2 âmbar (fino), <1 vermelho (perde), 0/— neutro
   const corRoas=(r)=>r>=2?'#1f8a4c':r>=1?'#c77d11':r>0?'#c0392b':'#a89f94';
+  const calFont="Calibri,'Segoe UI',Arial,sans-serif";
   const roasCell=(r)=><span style={{color:corRoas(r),fontWeight:700}}>{r>0?`${r.toFixed(2)}x`:'—'}</span>;
   // REF do nome do criativo: prefere 'ref_NNNN', senão 1º número de 4 dígitos (2277,2601,2700...). Ignora seq tipo 'ad_01_'.
   const refDoCriativo=(nome)=>{const s=String(nome||'');const m=s.match(/ref[_-]?(\d{3,5})/i)||s.match(/(?:^|[_\s])(\d{4})(?:[_\s]|$)/);return m?m[1]:null;};
@@ -8757,6 +8764,39 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
               </div>
               <div style={{marginTop:16,textAlign:'center',background:'#f0f6f1',border:'1px solid #cfe6d6',borderRadius:8,padding:'9px 12px',color:'#1f6b40',fontSize:12}}>
                 <b style={{fontFamily:calFont,fontSize:15}}>{convCliquesCompra.toFixed(2)}%</b> dos cliques viraram compra <span style={{color:'#6b9a7e'}}>· venda real do Bling</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {ga4&&ga4.length>0&&(()=>{
+          const norm=(s)=>String(s||'').toLowerCase();
+          const pick=(pred)=>ga4.find(r=>pred(norm(r.newVsReturning)))||{};
+          const mk=(rotulo,r,cor)=>{
+            const ss=r.sessions||0,co=r.ecommercePurchases||0,rev=r.purchaseRevenue||0;
+            return {rotulo,ss,co,rev,cv:ss>0?(co/ss)*100:0,cor};
+          };
+          const L=[
+            mk('Novos',pick(s=>s.startsWith('new')),'#4a7fa5'),
+            mk('Recorrentes',pick(s=>s.startsWith('return')),'#1f8a4c'),
+          ].filter(x=>x.ss>0||x.co>0);
+          if(L.length===0)return null;
+          return(
+            <div style={{marginTop:18,background:'#fff',border:'1px solid #e8e2da',borderRadius:8,padding:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:'#2c3e50'}}>Novos x Recorrentes <span style={{fontSize:10,color:'#a89f94',fontWeight:400}}>· GA4 · site Meluni</span></div>
+              <div style={{fontSize:11,color:'#8a9aa4',margin:'4px 0 12px'}}>cv% = compras ÷ sessões. Quem volta costuma converter melhor.</div>
+              <div style={{display:'grid',gridTemplateColumns:mobile?'1fr':'1fr 1fr',gap:10}}>
+                {L.map(x=>(
+                  <div key={x.rotulo} style={{border:'1px solid #e8e2da',borderLeft:`4px solid ${x.cor}`,borderRadius:8,padding:'10px 12px'}}>
+                    <div style={{fontSize:12,fontWeight:700,color:'#2c3e50',marginBottom:8}}>{x.rotulo}</div>
+                    <div style={{display:'flex',gap:16,flexWrap:'wrap',fontFamily:calFont}}>
+                      <div><div style={{fontSize:9,color:'#a89f94',textTransform:'uppercase',letterSpacing:0.3}}>Sessões</div><div style={{fontSize:17,fontWeight:700,color:'#2c3e50'}}>{fmtI(x.ss)}</div></div>
+                      <div><div style={{fontSize:9,color:'#a89f94',textTransform:'uppercase',letterSpacing:0.3}}>Compras</div><div style={{fontSize:17,fontWeight:700,color:'#2c3e50'}}>{fmtI(x.co)}</div></div>
+                      <div><div style={{fontSize:9,color:'#a89f94',textTransform:'uppercase',letterSpacing:0.3}}>cv%</div><div style={{fontSize:17,fontWeight:700,color:x.cor}}>{x.cv.toFixed(2)}%</div></div>
+                      <div><div style={{fontSize:9,color:'#a89f94',textTransform:'uppercase',letterSpacing:0.3}}>Receita</div><div style={{fontSize:15,fontWeight:700,color:'#2c3e50'}}>R$ {fmtR(x.rev)}</div></div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           );
