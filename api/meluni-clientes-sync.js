@@ -17,6 +17,7 @@ export const config = { maxDuration: 300 };
 
 const API = 'https://api.bling.com.br/Api/v3';
 const soDigitos = (s) => (s ? String(s).replace(/\D/g, '') : '') || null;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));  // throttle anti rate-limit Bling (~3 req/s)
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -62,6 +63,7 @@ export default async function handler(req, res) {
     const contatoIds = new Set();
     for (const p of pendentes) {
       try {
+        await sleep(340);
         const r = await blingFetch(`${API}/pedidos/vendas/${p.pedido_id}`, headers);
         const j = await r.json();
         const c = j?.data?.contato;
@@ -74,8 +76,10 @@ export default async function handler(req, res) {
 
     // 4. Pra cada contato unico: nome, CPF, telefone/celular, email
     const contatoInfo = {};
+    let contatoErros = 0;
     for (const cid of contatoIds) {
       try {
+        await sleep(340);
         const r = await blingFetch(`${API}/contatos/${cid}`, headers);
         const j = await r.json();
         const d = j?.data;
@@ -85,7 +89,8 @@ export default async function handler(req, res) {
           telefone: soDigitos(d.celular) || soDigitos(d.telefone),
           email: d.email || null,
         };
-      } catch (e) { /* segue */ }
+        else contatoErros++;
+      } catch (e) { contatoErros++; }
     }
 
     // 5. Upsert clientes (por bling_contato_id). Nao toca em whatsapp/dados_extra
@@ -145,13 +150,21 @@ export default async function handler(req, res) {
       }).eq('id', clienteId);
     }
 
+    // 8. Casa comprador (Bling) com cadastro (Convertr) por CPF e preenche
+    //    whatsapp/nome faltantes; tambem reconcilia carrinho/devolucao.
+    let reconciliado = false;
+    try { await supabase.rpc('fn_meluni_reconciliar_contatos'); reconciliado = true; }
+    catch (e) { /* nao bloqueia o sync */ }
+
     return res.json({
       ok: true,
       janela_dias: dias,
       pedidos_pendentes: pendentes.length,
       vendas_gravadas: novos,
       contatos_bling: contatoIds.size,
+      contatos_sem_dado: contatoErros,
       clientes_kpi_recalc: afetados.length,
+      reconciliado,
     });
   } catch (e) {
     console.error('[meluni-clientes-sync] ERRO:', e?.message || e);

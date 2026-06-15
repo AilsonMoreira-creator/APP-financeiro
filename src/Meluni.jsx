@@ -109,7 +109,7 @@ function CampoKPI({ Icon, label, valor, destaque, alerta }) {
 }
 
 // card de cliente — mesmo formato da Sofia (ícone + nome + chips de KPI + bloquear)
-function MeluniClienteCard({ c, onToggle }) {
+function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle }) {
   const tel = c.whatsapp || c.telefone;
   const semCompra = !c.n_compras;
   return (
@@ -119,19 +119,23 @@ function MeluniClienteCard({ c, onToggle }) {
       opacity: c.bloqueado ? 0.6 : 1,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <User size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{c.nome || '—'}</span>
-            {semCompra && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>só cadastro</span>}
-          </div>
-          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
-            {!tel && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4' }}>📵 sem número</span>}
-            <CampoKPI Icon={ShoppingCart} label="lifetime" valor={fmtBRL(c.valor_lifetime)} destaque />
-            <CampoKPI label="compras" valor={String(c.n_compras || 0)} />
-            <CampoKPI label="ticket" valor={fmtBRL(c.ticket_medio)} />
-            <CampoKPI label="última" valor={fmtData(c.ultima_compra)} />
+        <input type="checkbox" checked={sel} onClick={(e) => e.stopPropagation()} onChange={onSel}
+          style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
+        <div onClick={onAbrir} title="Abrir conversa" style={{ flex: 1, minWidth: 0, cursor: 'pointer', display: 'flex', gap: 8 }}>
+          <User size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{c.nome || '—'}</span>
+              {semCompra && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>só cadastro</span>}
+            </div>
+            <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
+              {!tel && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4' }}>📵 sem número</span>}
+              <CampoKPI Icon={ShoppingCart} label="lifetime" valor={fmtBRL(c.valor_lifetime)} destaque />
+              <CampoKPI label="compras" valor={String(c.n_compras || 0)} />
+              <CampoKPI label="ticket" valor={fmtBRL(c.ticket_medio)} />
+              <CampoKPI label="última" valor={fmtData(c.ultima_compra)} />
+            </div>
           </div>
         </div>
         <button onClick={onToggle} title={c.bloqueado ? 'Desbloquear' : 'Bloquear dos disparos'}
@@ -148,20 +152,52 @@ function MeluniClienteCard({ c, onToggle }) {
   );
 }
 
+// chat do cliente (abre ao clicar no card). Conversa real entra quando a Lara/WhatsApp ligar.
+function MeluniChatDrawer({ cliente, onClose }) {
+  const tel = cliente.whatsapp || cliente.telefone;
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(460px, 100%)', height: '100%', background: palette.bg, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px rgba(0,0,0,0.15)' }}>
+        <div style={{ background: MELUNI, color: '#fff', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, fontFamily: FONT }}>{cliente.nome || 'Cliente'}</div>
+            <div style={{ fontSize: 12, opacity: 0.85, fontFamily: FONT }}>{fmtTel(tel) || 'sem número'}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: FONT, fontSize: 12 }}>fechar</button>
+        </div>
+        <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, fontFamily: FONT, flexWrap: 'wrap' }}>
+          <span>lifetime <b>{fmtBRL(cliente.valor_lifetime)}</b></span>
+          <span>compras <b>{cliente.n_compras || 0}</b></span>
+          <span>ticket <b>{fmtBRL(cliente.ticket_medio)}</b></span>
+          <span>última <b>{fmtData(cliente.ultima_compra)}</b></span>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, fontFamily: FONT, fontSize: 13, textAlign: 'center', gap: 8 }}>
+          <MessageCircle size={28} color={palette.beige} />
+          A conversa da Lara aparece aqui assim que o número do WhatsApp B2C estiver ligado.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SecaoClientes() {
-  const [aba, setAba] = useState('clientes');
+  const [etapa, setEtapa] = useState('carteira');
   const [ordenar, setOrdenar] = useState('valor');
+  const [nome, setNome] = useState('');
   const [periodo, setPeriodo] = useState('');
   const [janela, setJanela] = useState('');
   const [msgDias, setMsgDias] = useState('');
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
+  const [sel, setSel] = useState(new Set());
+  const [chat, setChat] = useState(null);
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro('');
     try {
-      const p = new URLSearchParams({ aba, ordenar });
+      const p = new URLSearchParams({ etapa, ordenar });
+      if (nome.trim()) p.set('nome', nome.trim());
       if (periodo) p.set('periodo_dias', periodo);
       if (janela) { const [a, b] = janela.split('-'); p.set('janela_min', a); p.set('janela_max', b); }
       if (msgDias) p.set('msg_dias', msgDias);
@@ -170,13 +206,14 @@ function SecaoClientes() {
       if (j.ok) setClientes(j.clientes || []); else setErro(j.erro || 'erro ao carregar');
     } catch (e) { setErro(String(e?.message || e)); }
     setLoading(false);
-  }, [aba, ordenar, periodo, janela, msgDias]);
+  }, [etapa, ordenar, nome, periodo, janela, msgDias]);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { const t = setTimeout(carregar, 300); return () => clearTimeout(t); }, [carregar]);
+  useEffect(() => { setSel(new Set()); }, [etapa]);
 
   const toggleBloqueio = async (c) => {
     const novo = !c.bloqueado;
-    if (novo && !window.confirm(`Bloquear ${c.nome || fmtTel(c.telefone)} dos disparos?`)) return;
+    if (novo && !window.confirm(`Bloquear ${c.nome || fmtTel(c.whatsapp || c.telefone)} dos disparos?`)) return;
     setClientes(prev => prev.map(x => x.id === c.id ? { ...x, bloqueado: novo } : x));
     try {
       await fetch('/api/meluni-cliente-bloquear', {
@@ -186,18 +223,30 @@ function SecaoClientes() {
     } catch (e) { carregar(); }
   };
 
+  const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const comFone = clientes.filter(c => (c.whatsapp || c.telefone) && !c.bloqueado);
+  const selTodos = () => setSel(sel.size === comFone.length && comFone.length ? new Set() : new Set(comFone.map(c => c.id)));
+
+  const tabs = [
+    { id: 'carteira', label: 'Carteira' },
+    { id: 'enviados', label: 'Enviados' },
+    { id: 'conversando', label: 'Conversando' },
+    { id: 'follow_up', label: 'Follow up' },
+  ];
+
   return (
     <div>
-      <SubTabs tabs={[{ id: 'carteira', label: 'Carteira' }, { id: 'clientes', label: 'Clientes' }]}
-        active={aba} onChange={setAba} />
+      <SubTabs tabs={tabs} active={etapa} onChange={setEtapa} />
 
       {/* barra de filtros */}
       <div style={{
         display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center',
-        marginBottom: 12, padding: 10, background: palette.surface,
+        marginBottom: 10, padding: 10, background: palette.surface,
         border: `1px solid ${palette.beige}`, borderRadius: 10,
       }}>
         <Filter size={15} color={palette.inkMuted} />
+        <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Buscar por nome"
+          style={{ ...selStyle, minWidth: 150 }} />
         <select style={selStyle} value={periodo} onChange={e => setPeriodo(e.target.value)}>
           <option value="">Período: todos</option><option value="30">Últimos 30 dias</option>
           <option value="60">Últimos 60 dias</option><option value="90">Últimos 90 dias</option>
@@ -211,19 +260,35 @@ function SecaoClientes() {
         <select style={selStyle} value={msgDias} onChange={e => setMsgDias(e.target.value)}>
           <option value="">Recebeu msg: ignorar</option><option value="30">Últimos 30 dias</option><option value="90">Até 90 dias</option>
         </select>
-        <span style={{ fontSize: 11, color: palette.inkMuted, marginLeft: 'auto', fontFamily: FONT }}>
-          {loading ? 'carregando…' : `${clientes.length} clientes`}
-        </span>
       </div>
 
-      <SectionTitle icon={Users}>{aba === 'carteira' ? 'Carteira de clientes' : 'Todos os clientes'}</SectionTitle>
+      {/* barra de seleção em massa */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button onClick={selTodos} style={{ ...selStyle, fontWeight: 700 }}>
+          {sel.size === comFone.length && comFone.length ? 'Limpar' : 'Selecionar todos'}
+        </button>
+        <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
+          {loading ? 'carregando…' : `${clientes.length} clientes`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
+        </span>
+        {sel.size > 0 && <span style={{ fontSize: 11, color: palette.warn, fontFamily: FONT }}>o disparo em massa liga quando o número da Lara estiver configurado</span>}
+      </div>
+
       {erro && <Placeholder><span style={{ color: palette.alert }}>{erro}</span></Placeholder>}
       {!erro && !loading && clientes.length === 0 && (
-        <Placeholder>Sem clientes nesse filtro. Quando o sync do Bling (lumia/Outros) rodar, os compradores entram aqui.</Placeholder>
+        <Placeholder>
+          {etapa === 'carteira'
+            ? 'Nenhum cliente nesse filtro.'
+            : 'Ninguém nessa etapa ainda — enche quando os disparos da Lara começarem.'}
+        </Placeholder>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {clientes.map(c => <MeluniClienteCard key={c.id} c={c} onToggle={() => toggleBloqueio(c)} />)}
+        {clientes.map(c => (
+          <MeluniClienteCard key={c.id} c={c} sel={sel.has(c.id)}
+            onSel={() => toggleSel(c.id)} onAbrir={() => setChat(c)} onToggle={() => toggleBloqueio(c)} />
+        ))}
       </div>
+
+      {chat && <MeluniChatDrawer cliente={chat} onClose={() => setChat(null)} />}
     </div>
   );
 }
