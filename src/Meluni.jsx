@@ -22,7 +22,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
-  Instagram, Globe, Lock, Filter, Ban, Bot, Calculator, Megaphone, User, Phone,
+  Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 
@@ -399,40 +399,94 @@ function SecaoDevolucao() {
 }
 
 // ─── SEÇÃO: MARKETPLACES ────────────────────────────────────────────────────
-function SecaoMarketplaces() {
-  const btn = {
-    border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.ink,
-    borderRadius: 10, padding: '12px 16px', cursor: 'pointer', fontFamily: FONT,
-    fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8,
-  };
+function SecaoMarketing() {
+  const [aba, setAba] = useState('meta_ads');
+  const tabs = [
+    { id: 'meta_ads', label: 'Meta Ads Meluni' },
+    { id: 'analise', label: 'Análise' },
+  ];
   return (
     <div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-        <button style={btn}><Calculator size={16} color={MELUNI} /> Calculadora</button>
-        <button style={btn}><BarChart3 size={16} color={MELUNI} /> Análise Meluni</button>
-        <button style={btn}><Megaphone size={16} color={MELUNI} /> Meta Ads Meluni</button>
-      </div>
-      <Placeholder>Os botões da calculadora + análise de campanhas (Meta Ads / GA4) entram aqui, com as campanhas mais completas. Reaproveita <code>meluni_meta_ads_historico</code>.</Placeholder>
+      <SubTabs tabs={tabs} active={aba} onChange={setAba} />
+      {aba === 'meta_ads' && (
+        <Placeholder>
+          Tela principal de Meta Ads do Meluni: campanhas, gasto, ROAS e criativos, reaproveitando <code>meluni_meta_ads_historico</code> (conta 943539471358534). Monto os números quando for a vez dela.
+        </Placeholder>
+      )}
+      {aba === 'analise' && (
+        <Placeholder>Análise de campanhas (Meta Ads / GA4) com a visão mais completa.</Placeholder>
+      )}
     </div>
   );
 }
 
 // ─── SEÇÃO: DASHBOARD ───────────────────────────────────────────────────────
+function KpiTile({ label, valor, sub, destaque }) {
+  return (
+    <div style={{
+      flex: '1 1 150px', minWidth: 140,
+      background: destaque ? MELUNI_SOFT : palette.surface,
+      border: `1px solid ${destaque ? MELUNI : palette.beige}`, borderRadius: 12, padding: '12px 14px',
+    }}>
+      <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: destaque ? MELUNI : palette.ink, fontFamily: FONT }}>{valor}</div>
+      {sub && <div style={{ fontSize: 11, color: palette.inkSoft, fontFamily: FONT, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function MiniBarras({ serie }) {
+  if (!serie || !serie.length) return null;
+  const max = Math.max(...serie.map(s => s.vendas_valor), 1);
+  return (
+    <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 14, marginTop: 12 }}>
+      <div style={{ fontSize: 12, color: palette.inkSoft, fontFamily: FONT, marginBottom: 10, fontWeight: 600 }}>Vendas por dia (R$)</div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 120 }}>
+        {serie.map(s => (
+          <div key={s.data} title={`${fmtData(s.data)}: ${fmtBRL(s.vendas_valor)} · ${s.vendas_qtd} venda(s)`}
+            style={{
+              flex: 1, minWidth: 2, background: MELUNI, borderRadius: '3px 3px 0 0',
+              height: `${Math.max(2, (s.vendas_valor / max) * 100)}%`, opacity: 0.85,
+            }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SecaoDashboard() {
-  const [aba, setAba] = useState('vendas');
-  const tabs = [
-    { id: 'vendas', label: 'Vendas' },
-    { id: 'devolucao', label: 'Devolução' },
-    { id: 'carrinho', label: 'Conversão de carrinho' },
-  ];
+  const [periodo, setPeriodo] = useState('30');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    setLoading(true);
+    const qs = periodo === 'tudo' ? 'tudo=1' : `dias=${periodo}`;
+    fetch(`/api/meluni-dashboard?${qs}`).then(r => r.json())
+      .then(j => { if (j.ok) setData(j); }).catch(() => {}).finally(() => setLoading(false));
+  }, [periodo]);
+  const d = data || {};
   return (
     <div>
-      <SubTabs tabs={tabs} active={aba} onChange={setAba} />
-      <Placeholder>
-        {aba === 'vendas' && <>Vendas Meluni (com filtros). Venda conta até 7 dias depois da mensagem, cruzando com o Bling.</>}
-        {aba === 'devolucao' && <>Devoluções (com filtros).</>}
-        {aba === 'carrinho' && <>Nº de carrinhos por dia, taxa de resposta e taxa de conversão.</>}
-      </Placeholder>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <Filter size={15} color={palette.inkMuted} />
+        <select style={selStyle} value={periodo} onChange={e => setPeriodo(e.target.value)}>
+          <option value="30">Últimos 30 dias</option>
+          <option value="60">Últimos 60 dias</option>
+          <option value="90">Últimos 90 dias</option>
+          <option value="tudo">Tudo</option>
+        </select>
+        <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginLeft: 'auto' }}>
+          {loading ? 'carregando…' : (d.periodo ? `${fmtData(d.periodo.de)} a ${fmtData(d.periodo.ate)}` : '')}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <KpiTile label="Vendas" valor={fmtBRL(d.vendas?.soma)} sub={`${d.vendas?.qtd || 0} pedidos`} />
+        <KpiTile label="Devoluções" valor={fmtBRL(d.devolucoes?.soma)} sub={`${d.devolucoes?.qtd || 0} devoluções`} />
+        <KpiTile label="Valor real (vendas - devolução)" valor={fmtBRL(d.valor_real)} destaque />
+        <KpiTile label="Ticket médio" valor={fmtBRL(d.ticket)} />
+        <KpiTile label="Carrinhos" valor={String(d.carrinhos?.qtd || 0)} sub="no período" />
+      </div>
+      <MiniBarras serie={d.serie || []} />
     </div>
   );
 }
@@ -450,7 +504,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
     { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
     { id: 'sac', label: 'SAC', icon: MessageCircle },
     { id: 'devolucao', label: 'Devolução', icon: RotateCcw },
-    { id: 'marketplaces', label: 'Marketplaces', icon: TrendingUp },
+    { id: 'marketing', label: 'Marketing', icon: TrendingUp },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   ];
   return (
@@ -468,7 +522,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
         {secao === 'carrinho' && <SecaoCarrinho />}
         {secao === 'sac' && <SecaoSac />}
         {secao === 'devolucao' && <SecaoDevolucao />}
-        {secao === 'marketplaces' && <SecaoMarketplaces />}
+        {secao === 'marketing' && <SecaoMarketing />}
         {secao === 'dashboard' && <SecaoDashboard />}
       </div>
     </div>
