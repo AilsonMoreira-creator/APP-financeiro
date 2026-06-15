@@ -8356,6 +8356,8 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
   const [erro,setErro]=useState(null);
   const [ultimaAtt,setUltimaAtt]=useState(null);
   const [tickAgora,setTickAgora]=useState(Date.now());
+  const [blingVendas,setBlingVendas]=useState(null); // {pedidos, receita} reais Meluni = Bling conta lumia / canal Outros (só atendidas)
+  const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
 
   // "há X min" atualiza sozinho sem novo fetch
   useEffect(()=>{
@@ -8398,6 +8400,16 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
       setDadosAnt(r2.ok?r2:null);
       setDadosAds(r3.ok?r3:null);
       setUltimaAtt(new Date());
+      // Vendas REAIS Meluni no período = Bling conta 'lumia' canal 'Outros' (só atendidas; cancelado nem entra na tabela).
+      try{
+        const{data:bv}=await supabase.from('bling_vendas_detalhe')
+          .select('total_pedido')
+          .eq('conta','lumia').eq('canal_geral','Outros')
+          .gte('data_pedido',since).lte('data_pedido',until);
+        const pedidos=(bv||[]).length;
+        const receita=(bv||[]).reduce((s,r)=>s+(parseFloat(r.total_pedido)||0),0);
+        setBlingVendas({pedidos,receita});
+      }catch(_){setBlingVendas(null);}
     }catch(e){
       setErro(e.message||'Erro ao carregar');
     }finally{
@@ -8490,6 +8502,11 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
 
   const fmtR=(v)=>v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const fmtI=(v)=>Math.round(v).toLocaleString('pt-BR');
+  // ROAS por faixa: >=2 verde (saudável), 1-2 âmbar (fino), <1 vermelho (perde), 0/— neutro
+  const corRoas=(r)=>r>=2?'#1f8a4c':r>=1?'#c77d11':r>0?'#c0392b':'#a89f94';
+  const roasCell=(r)=><span style={{color:corRoas(r),fontWeight:700}}>{r>0?`${r.toFixed(2)}x`:'—'}</span>;
+  // REF do nome do criativo: prefere 'ref_NNNN', senão 1º número de 4 dígitos (2277,2601,2700...). Ignora seq tipo 'ad_01_'.
+  const refDoCriativo=(nome)=>{const s=String(nome||'');const m=s.match(/ref[_-]?(\d{3,5})/i)||s.match(/(?:^|[_\s])(\d{4})(?:[_\s]|$)/);return m?m[1]:null;};
 
   const btnPer=(p,label)=>(
     <button key={p} onClick={()=>setPeriodo(p)} style={{
@@ -8507,7 +8524,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
 
   const tdNum={padding:'8px 10px',textAlign:'right',color:'#2c3e50',fontFamily:'Calibri,\'Segoe UI\',Arial,sans-serif',fontSize:13};
   const td={padding:'8px 10px',color:'#2c3e50',fontSize:12};
-  const th={padding:'10px 10px',fontWeight:600,fontFamily:'Georgia,serif',fontSize:11,letterSpacing:0.3,textTransform:'uppercase'};
+  const th={padding:'10px 10px',fontWeight:600,fontFamily:'Georgia,serif',fontSize:11,letterSpacing:0.3,textTransform:'uppercase',position:'sticky',top:0,zIndex:1,background:'#2c3e50'};
 
   const cellNum=(num,d)=>(
     <td style={tdNum}>
@@ -8552,13 +8569,14 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
         )}
 
         {/* Tabela */}
-        <div style={{background:'#fff',border:'1px solid #e8e2da',borderRadius:8,overflow:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:760}}>
+        <div style={{background:'#fff',border:'1px solid #e8e2da',borderRadius:8,overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:820}}>
             <thead>
               <tr style={{background:'#2c3e50',color:'#f7f4f0'}}>
                 <th style={{...th,textAlign:'center',width:40}}></th>
                 <th style={{...th,textAlign:'left'}}>Campanha</th>
                 <th style={{...th,textAlign:'right'}}>Gasto</th>
+                <th style={{...th,textAlign:'right'}}>Visualizações</th>
                 <th style={{...th,textAlign:'right'}}>Acessos</th>
                 <th style={{...th,textAlign:'right'}}>Custo/acesso</th>
                 <th style={{...th,textAlign:'right'}}>CPC link</th>
@@ -8570,48 +8588,50 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
             </thead>
             <tbody>
               {loading&&!dados&&(
-                <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Carregando dados Meta Ads...</td></tr>
+                <tr><td colSpan={11} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Carregando dados Meta Ads...</td></tr>
               )}
               {!loading&&linhasFiltradas.length===0&&!erro&&(
-                <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>
+                <tr><td colSpan={11} style={{padding:24,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>
                   {ocultarPausadas?'Nenhuma campanha ativa no período. Desmarque "Ocultar pausadas" pra ver todas.':'Nenhuma campanha no período.'}
                 </td></tr>
               )}
-              {linhasFiltradas.map(l=>{
+              {linhasFiltradas.map((l,idx)=>{
                 const ant=linhasAntMap[l.id];
                 const ads=adsPorCampanha[l.id]||[];
                 const aberta=expandidas.has(l.id);
                 const rows=[
-                  <tr key={l.id} style={{borderBottom:'1px solid #f0ebe4'}}>
+                  <tr key={l.id} style={{borderBottom:'1px solid #f0ebe4',background:idx%2?'#faf8f5':'#fff'}}>
                     <td style={{padding:'8px 4px',textAlign:'center'}}>{statusBadge(l.status)}</td>
-                    <td style={{...td,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={l.nome}>
+                    <td style={{...td,fontSize:13,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={l.nome}>
                       {ads.length>0
                         ?<span onClick={()=>toggleExpand(l.id)} style={{cursor:'pointer',color:'#4a7fa5',marginRight:6,userSelect:'none',fontWeight:700}}>{aberta?'▾':'▸'}</span>
                         :<span style={{marginRight:6,color:'#cfc7bd'}}>·</span>}
                       {l.nome}{ads.length>0&&<span style={{fontSize:10,color:'#a89f94',marginLeft:6}}>({ads.length})</span>}
                     </td>
                     {cellNum(`R$ ${fmtR(l.gasto)}`,ant?delta(l.gasto,ant.gasto,false):null)}
+                    {cellNum(fmtI(l.impressoes))}
                     {cellNum(fmtI(l.acessos),ant?delta(l.acessos,ant.acessos,true):null)}
                     {cellNum(`R$ ${fmtR(l.cpc)}`,ant?delta(l.cpc,ant.cpc,false):null)}
                     {cellNum(`R$ ${fmtR(l.cpcLink)}`,ant?delta(l.cpcLink,ant.cpcLink,false):null)}
                     {cellNum(fmtI(l.compras),ant?delta(l.compras,ant.compras,true):null)}
                     {cellNum(`${l.conv.toFixed(2)}%`,ant?delta(l.conv,ant.conv,true):null)}
                     {cellNum(l.cpa>0?`R$ ${fmtR(l.cpa)}`:'—',ant&&l.cpa>0&&ant.cpa>0?delta(l.cpa,ant.cpa,false):null)}
-                    {cellNum(l.roas>0?`${l.roas.toFixed(2)}x`:'—')}
+                    {cellNum(roasCell(l.roas))}
                   </tr>
                 ];
                 if(aberta)ads.forEach(a=>rows.push(
-                  <tr key={a.id} style={{borderBottom:'1px solid #f0ebe4',background:'#faf8f5'}}>
+                  <tr key={a.id} style={{borderBottom:'1px solid #f0ebe4',background:'#f3eee7'}}>
                     <td></td>
                     <td style={{...td,paddingLeft:24,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#6b7b86'}} title={a.nome}>↳ {a.nome}</td>
                     {cellNum(`R$ ${fmtR(a.gasto)}`)}
+                    {cellNum(fmtI(a.impressoes))}
                     {cellNum(fmtI(a.acessos))}
                     {cellNum(`R$ ${fmtR(a.cpc)}`)}
                     {cellNum(`R$ ${fmtR(a.cpcLink)}`)}
                     {cellNum(fmtI(a.compras))}
                     {cellNum(`${a.conv.toFixed(2)}%`)}
                     {cellNum(a.cpa>0?`R$ ${fmtR(a.cpa)}`:'—')}
-                    {cellNum(a.roas>0?`${a.roas.toFixed(2)}x`:'—')}
+                    {cellNum(roasCell(a.roas))}
                   </tr>
                 ));
                 return rows;
@@ -8623,13 +8643,14 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                   <td style={{padding:'10px 4px'}}></td>
                   <td style={{...td,fontWeight:700}}>TOTAL ({linhasFiltradas.length})</td>
                   {cellNum(<b>R$ {fmtR(totals.gasto)}</b>,totalsAnt.gasto>0?delta(totals.gasto,totalsAnt.gasto,false):null)}
+                  {cellNum(<b>{fmtI(totals.impressoes)}</b>)}
                   {cellNum(<b>{fmtI(totals.acessos)}</b>,totalsAnt.acessos>0?delta(totals.acessos,totalsAnt.acessos,true):null)}
                   {cellNum(<b>R$ {fmtR(totalCpc)}</b>,totalCpcAnt>0?delta(totalCpc,totalCpcAnt,false):null)}
                   {cellNum(<b>R$ {fmtR(totalCpcLink)}</b>,totalCpcLinkAnt>0?delta(totalCpcLink,totalCpcLinkAnt,false):null)}
                   {cellNum(<b>{fmtI(totals.compras)}</b>,totalsAnt.compras>0?delta(totals.compras,totalsAnt.compras,true):null)}
                   {cellNum(<b>{totalConv.toFixed(2)}%</b>,totalConvAnt>0?delta(totalConv,totalConvAnt,true):null)}
                   {cellNum(<b>{totalCpa>0?`R$ ${fmtR(totalCpa)}`:'—'}</b>,totalCpaAnt>0&&totalCpa>0?delta(totalCpa,totalCpaAnt,false):null)}
-                  {cellNum(<b>{totalRoas>0?`${totalRoas.toFixed(2)}x`:'—'}</b>)}
+                  {cellNum(<b>{roasCell(totalRoas)}</b>)}
                 </tr>
               </tfoot>
             )}
@@ -8642,31 +8663,40 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
             {verTodosCriativos?'▾':'▸'} Ver todos os criativos ({criativos.length})
           </button>
           {verTodosCriativos&&(
-            <div style={{marginTop:10,background:'#fff',border:'1px solid #e8e2da',borderRadius:8,overflow:'auto'}}>
+            <div style={{marginTop:10,background:'#fff',border:'1px solid #e8e2da',borderRadius:8,overflowX:'auto'}}>
               <div style={{display:'flex',gap:6,padding:'10px 12px',borderBottom:'1px solid #f0ebe4',alignItems:'center',flexWrap:'wrap'}}>
                 <span style={{fontSize:11,color:'#8a9aa4'}}>Ordenar por:</span>
                 <button onClick={()=>setOrdemCriativos('vendas')} style={{background:ordemCriativos==='vendas'?'#2c3e50':'#fff',color:ordemCriativos==='vendas'?'#fff':'#2c3e50',border:'1px solid #e8e2da',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',fontFamily:'Georgia,serif'}}>Maiores vendas</button>
                 <button onClick={()=>setOrdemCriativos('roas')} style={{background:ordemCriativos==='roas'?'#2c3e50':'#fff',color:ordemCriativos==='roas'?'#fff':'#2c3e50',border:'1px solid #e8e2da',borderRadius:6,padding:'4px 10px',fontSize:11,cursor:'pointer',fontFamily:'Georgia,serif'}}>Maior ROAS</button>
               </div>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:680}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:720}}>
                 <thead><tr style={{background:'#4a7fa5',color:'#fff'}}>
-                  <th style={{...th,textAlign:'left'}}>Criativo</th>
-                  <th style={{...th,textAlign:'right'}}>Gasto</th>
-                  <th style={{...th,textAlign:'right'}}>Compras</th>
-                  <th style={{...th,textAlign:'right'}}>Vendas</th>
-                  <th style={{...th,textAlign:'right'}}>ROAS</th>
+                  <th style={{...th,background:'#4a7fa5',textAlign:'left'}}>Criativo</th>
+                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Gasto</th>
+                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Visualizações</th>
+                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Compras</th>
+                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Vendas</th>
+                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>ROAS</th>
                 </tr></thead>
                 <tbody>
-                  {criativosOrdenados.map(a=>(
-                    <tr key={a.id} style={{borderBottom:'1px solid #f0ebe4'}}>
-                      <td style={{...td,maxWidth:320,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={a.nome}>{a.nome}</td>
+                  {criativosOrdenados.map((a,idx)=>{const ref=refDoCriativo(a.nome);return(
+                    <tr key={a.id} style={{borderBottom:'1px solid #f0ebe4',background:idx%2?'#faf8f5':'#fff'}}>
+                      <td style={{...td,maxWidth:340}} title={a.nome}>
+                        <div style={{display:'flex',alignItems:'center',gap:8}}>
+                          {ref
+                            ?<><FotoProd sbUrl={sbUrl} refProd={ref} onZoom={null}/><div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'none',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div></>
+                            :<div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:11,opacity:0.35}}>🎬</span></div>}
+                          <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nome}</span>
+                        </div>
+                      </td>
                       <td style={tdNum}>R$ {fmtR(a.gasto)}</td>
+                      <td style={tdNum}>{fmtI(a.impressoes)}</td>
                       <td style={tdNum}>{fmtI(a.compras)}</td>
                       <td style={tdNum}>R$ {fmtR(a.vendas)}</td>
-                      <td style={tdNum}>{a.roas>0?`${a.roas.toFixed(2)}x`:'—'}</td>
+                      <td style={tdNum}>{roasCell(a.roas)}</td>
                     </tr>
-                  ))}
-                  {criativosOrdenados.length===0&&<tr><td colSpan={5} style={{padding:20,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Nenhum criativo com entrega no período.</td></tr>}
+                  );})}
+                  {criativosOrdenados.length===0&&<tr><td colSpan={6} style={{padding:20,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Nenhum criativo com entrega no período.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -8675,37 +8705,44 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
 
         {/* Funil do período */}
         {linhasFiltradas.length>0&&(()=>{
+          const comprasReais=blingVendas?blingVendas.pedidos:totals.compras;       // Bling real (fallback Meta se Bling não carregou)
+          const receitaReal=blingVendas?blingVendas.receita:totals.vendas;
           const etapas=[
-            {nome:'Visualizações',valor:totals.impressoes,cor:'#2c3e50'},
-            {nome:'Cliques',valor:totals.cliques,cor:'#3d6a8a'},
-            {nome:'Carrinhos',valor:totals.carrinhos,cor:'#4a7fa5'},
-            {nome:'Compras',valor:totals.compras,cor:'#7ba8c9'},
+            {nome:'Visualizações',valor:totals.impressoes,cor:'#2c3e50',sub:null},
+            {nome:'Cliques',valor:totals.cliques,cor:'#3a5f80',sub:null},
+            {nome:'Carrinhos',valor:totals.carrinhos,cor:'#4a7fa5',sub:'pixel Meta'},
+            {nome:'Compras',valor:comprasReais,cor:'#1f8a4c',sub:`R$ ${fmtR(receitaReal)} · Bling real`},
           ];
-          const maxV=Math.max(...etapas.map(e=>e.valor),1);
+          const larguras=[100,74,52,34]; // taper fixo: impressões achatariam o resto se fosse por valor
+          const convCliquesCompra=totals.cliques>0?(comprasReais/totals.cliques)*100:0;
+          const calFont='Calibri,\'Segoe UI\',Arial,sans-serif';
           return(
-            <div style={{marginTop:18,background:'#fff',border:'1px solid #e8e2da',borderRadius:8,padding:16}}>
-              <div style={{fontSize:13,fontWeight:700,color:'#2c3e50',marginBottom:12}}>Funil do período</div>
-              <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'center'}}>
+            <div style={{marginTop:18,background:'#fff',border:'1px solid #e8e2da',borderRadius:8,padding:'18px 16px'}}>
+              <div style={{fontSize:13,fontWeight:700,color:'#2c3e50',marginBottom:14}}>Funil do período</div>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
                 {etapas.map((e,i)=>{
-                  const larg=Math.max((e.valor/maxV)*100,10);
                   const conv=i>0&&etapas[i-1].valor>0?(e.valor/etapas[i-1].valor)*100:null;
                   return(
-                    <div key={e.nome} style={{width:`${larg}%`,minWidth:130}}>
-                      <div style={{background:e.cor,color:'#fff',borderRadius:6,padding:'10px 12px',textAlign:'center'}}>
-                        <div style={{fontSize:11,opacity:0.85}}>{e.nome}</div>
-                        <div style={{fontSize:16,fontWeight:700,fontFamily:'Calibri,\'Segoe UI\',Arial,sans-serif'}}>{fmtI(e.valor)}</div>
+                    <div key={e.nome} style={{width:'100%',display:'flex',flexDirection:'column',alignItems:'center'}}>
+                      {conv!=null&&<div style={{fontSize:10,color:'#8a9aa4',margin:'4px 0'}}>↓ {conv.toFixed(1)}%</div>}
+                      <div style={{width:`${larguras[i]}%`,minWidth:150,background:e.cor,color:'#fff',borderRadius:8,padding:'12px 14px',textAlign:'center',boxShadow:'0 1px 3px rgba(0,0,0,0.12)'}}>
+                        <div style={{fontSize:11,opacity:0.85,letterSpacing:0.3}}>{e.nome}</div>
+                        <div style={{fontSize:20,fontWeight:700,fontFamily:calFont,lineHeight:1.1}}>{fmtI(e.valor)}</div>
+                        {e.sub&&<div style={{fontSize:9.5,opacity:0.82,marginTop:2}}>{e.sub}</div>}
                       </div>
-                      {conv!=null&&<div style={{textAlign:'center',fontSize:10,color:'#8a9aa4',margin:'1px 0'}}>↓ {conv.toFixed(1)}%</div>}
                     </div>
                   );
                 })}
+              </div>
+              <div style={{marginTop:16,textAlign:'center',background:'#f0f6f1',border:'1px solid #cfe6d6',borderRadius:8,padding:'9px 12px',color:'#1f6b40',fontSize:12}}>
+                <b style={{fontFamily:calFont,fontSize:15}}>{convCliquesCompra.toFixed(2)}%</b> dos cliques viraram compra <span style={{color:'#6b9a7e'}}>· venda real do Bling</span>
               </div>
             </div>
           );
         })()}
 
         <div style={{marginTop:10,fontSize:10,color:'#a89f94',textAlign:'center',fontStyle:'italic'}}>
-          Conta: Meluni B2C · Cache 5min no servidor · Δ% compara com período anterior de mesma duração
+          Conta: Meluni B2C · Tabela e ROAS = Meta · Compras/receita do funil = Bling real (lumia/Outros, só atendidas) · Cache 5min · Δ% vs período anterior de mesma duração
         </div>
       </div>
     </div>
