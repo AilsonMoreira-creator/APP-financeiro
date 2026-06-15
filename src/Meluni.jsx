@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
+import MeluniAnalise from './CalcAnaliseMeluni';
 
 const ASSISTANT_NAME = 'Lara';
 const MELUNI = '#9b59b6';      // roxo da marca Meluni (consistente com o resto do app)
@@ -413,7 +414,7 @@ function SecaoMarketing() {
         <CalcMetaAdsMeluni onVoltar={() => setAba('analise')} mobile={typeof window !== 'undefined' && window.innerWidth < 640} />
       )}
       {aba === 'analise' && (
-        <Placeholder>Análise de campanhas (Meta Ads / GA4) com a visão mais completa.</Placeholder>
+        <MeluniAnalise onVoltar={() => setAba('meta_ads')} mobile={typeof window !== 'undefined' && window.innerWidth < 640} />
       )}
     </div>
   );
