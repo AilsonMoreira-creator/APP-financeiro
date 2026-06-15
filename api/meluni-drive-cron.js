@@ -139,7 +139,12 @@ export default async function handler(req, res) {
         erros.push({ arquivo: arq.name, erro: e?.message || String(e) });
       }
     }
-    return res.json({ ok: erros.length === 0, processados: Object.keys(resumo).length, resumo, erros });
+    // casa carrinho/devolucao com o cadastro (telefone/cliente_id) apos importar
+    let reconciliado = false;
+    try { await supabase.rpc('fn_meluni_reconciliar_contatos'); reconciliado = true; }
+    catch (e) { erros.push({ etapa: 'reconciliacao', erro: e?.message || String(e) }); }
+
+    return res.json({ ok: erros.length === 0, processados: Object.keys(resumo).length, reconciliado, resumo, erros });
   } catch (e) {
     console.error('[meluni-drive-cron] ERRO:', e?.message || e);
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });

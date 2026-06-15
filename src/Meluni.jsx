@@ -22,7 +22,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
-  Instagram, Globe, Lock, Filter, Ban, Bot, Calculator, Megaphone,
+  Instagram, Globe, Lock, Filter, Ban, Bot, Calculator, Megaphone, User, Phone,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 
@@ -96,8 +96,58 @@ const fmtTel = (t) => {
 };
 const fmtData = (d) => d ? String(d).split('-').reverse().join('/') : '—';
 
+function CampoKPI({ Icon, label, valor, destaque, alerta }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      {Icon && <Icon size={11} style={{ verticalAlign: 'middle' }} />}
+      <span style={{ color: palette.inkMuted }}>{label}:</span>
+      <strong style={{ color: alerta ? palette.alert : (destaque ? palette.ok : palette.inkSoft), fontWeight: 600 }}>{valor}</strong>
+    </span>
+  );
+}
+
+// card de cliente — mesmo formato da Sofia (ícone + nome + chips de KPI + bloquear)
+function MeluniClienteCard({ c, onToggle }) {
+  const tel = c.whatsapp || c.telefone;
+  const semCompra = !c.n_compras;
+  return (
+    <div style={{
+      background: palette.surface, borderRadius: 12, padding: 12,
+      border: `1px solid ${c.bloqueado ? palette.alert : palette.beige}`,
+      opacity: c.bloqueado ? 0.6 : 1,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <User size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{c.nome || '—'}</span>
+            {semCompra && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>só cadastro</span>}
+          </div>
+          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
+            {!tel && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4' }}>📵 sem número</span>}
+            <CampoKPI Icon={ShoppingCart} label="lifetime" valor={fmtBRL(c.valor_lifetime)} destaque />
+            <CampoKPI label="compras" valor={String(c.n_compras || 0)} />
+            <CampoKPI label="ticket" valor={fmtBRL(c.ticket_medio)} />
+            <CampoKPI label="última" valor={fmtData(c.ultima_compra)} />
+          </div>
+        </div>
+        <button onClick={onToggle} title={c.bloqueado ? 'Desbloquear' : 'Bloquear dos disparos'}
+          style={{
+            flexShrink: 0, padding: '5px 9px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: FONT,
+            background: c.bloqueado ? palette.alert : palette.surface, color: c.bloqueado ? '#fff' : palette.alert,
+            border: `1px solid ${c.bloqueado ? palette.alert : palette.beige}`,
+          }}>
+          <Ban size={13} /> {c.bloqueado ? 'Bloqueado' : 'Bloquear'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SecaoClientes() {
-  const [aba, setAba] = useState('carteira');
+  const [aba, setAba] = useState('clientes');
   const [ordenar, setOrdenar] = useState('valor');
   const [periodo, setPeriodo] = useState('');
   const [janela, setJanela] = useState('');
@@ -134,7 +184,6 @@ function SecaoClientes() {
     } catch (e) { carregar(); }
   };
 
-  const COLS = ['Cliente', 'WhatsApp', 'Nº compras', 'Lifetime', 'Ticket', 'Última compra', ''];
   return (
     <div>
       <SubTabs tabs={[{ id: 'carteira', label: 'Carteira' }, { id: 'clientes', label: 'Clientes' }]}
@@ -166,40 +215,12 @@ function SecaoClientes() {
       </div>
 
       <SectionTitle icon={Users}>{aba === 'carteira' ? 'Carteira de clientes' : 'Todos os clientes'}</SectionTitle>
-      <div style={{ overflowX: 'auto', border: `1px solid ${palette.beige}`, borderRadius: 10, background: palette.surface }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: FONT, fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: MELUNI_SOFT }}>
-              {COLS.map((c, i) => (
-                <th key={i} style={{ textAlign: i >= 2 && i <= 4 ? 'right' : 'left', padding: '9px 12px', color: palette.inkSoft, fontWeight: 700, whiteSpace: 'nowrap' }}>{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {erro && <tr><td colSpan={COLS.length} style={{ padding: 24, textAlign: 'center', color: palette.alert }}>{erro}</td></tr>}
-            {!erro && !loading && clientes.length === 0 && (
-              <tr><td colSpan={COLS.length} style={{ padding: 30, textAlign: 'center', color: palette.inkMuted }}>
-                Sem clientes ainda. Quando o sync do Bling (lumia/Outros) rodar, eles aparecem aqui.
-              </td></tr>
-            )}
-            {clientes.map(c => (
-              <tr key={c.id} style={{ borderTop: `1px solid ${palette.beigeSoft}`, opacity: c.bloqueado ? 0.5 : 1 }}>
-                <td style={{ padding: '8px 12px', color: palette.ink, fontWeight: 600 }}>{c.nome || '—'}</td>
-                <td style={{ padding: '8px 12px', color: palette.inkSoft }}>{fmtTel(c.whatsapp || c.telefone)}</td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', color: palette.ink }}>{c.n_compras || 0}</td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', color: palette.ink, fontWeight: 700 }}>{fmtBRL(c.valor_lifetime)}</td>
-                <td style={{ padding: '8px 12px', textAlign: 'right', color: palette.inkSoft }}>{fmtBRL(c.ticket_medio)}</td>
-                <td style={{ padding: '8px 12px', color: palette.inkSoft }}>{fmtData(c.ultima_compra)}</td>
-                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                  <button onClick={() => toggleBloqueio(c)} title={c.bloqueado ? 'Desbloquear' : 'Bloquear dos disparos'}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.bloqueado ? palette.alert : palette.inkMuted }}>
-                    <Ban size={15} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {erro && <Placeholder><span style={{ color: palette.alert }}>{erro}</span></Placeholder>}
+      {!erro && !loading && clientes.length === 0 && (
+        <Placeholder>Sem clientes nesse filtro. Quando o sync do Bling (lumia/Outros) rodar, os compradores entram aqui.</Placeholder>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {clientes.map(c => <MeluniClienteCard key={c.id} c={c} onToggle={() => toggleBloqueio(c)} />)}
       </div>
     </div>
   );
