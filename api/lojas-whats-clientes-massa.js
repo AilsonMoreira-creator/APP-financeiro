@@ -80,6 +80,13 @@ export default async function handler(req, res) {
     let puladosJaCliente = 0;
 
     if (etapaFinal === 'inativo') {
+      // Pula quem tem cadastro ATIVO gêmeo (mesmo doc/raiz CNPJ/telefone): é o
+      // mesmo dono comprando por outro cadastro — não pode levar reativação.
+      // Ailson 14/06/2026.
+      const { data: gemeos } = await supabase
+        .from('vw_lojas_inativo_ativo_outro')
+        .select('cliente_id');
+      const ativoOutro = new Set((gemeos || []).map(r => r.cliente_id));
       // Template por lifetime (Ailson 12/06/2026): ≤4 compras = tom geral
       // investigativo; ≥5 = cliente importante "vc faz falta".
       const lifetimeMap = new Map();
@@ -89,10 +96,14 @@ export default async function handler(req, res) {
           .in('cliente_id', cliente_ids.slice(i, i + 500));
         for (const r of (data || [])) lifetimeMap.set(r.cliente_id, r.qtd_compras || 0);
       }
-      assignments = cliente_ids.map(cid => ({
-        cliente_id: cid,
-        template_name: (lifetimeMap.get(cid) || 0) >= 5 ? TPL_REATIVACAO_5MAIS : TPL_REATIVACAO_ATE4,
-      }));
+      assignments = [];
+      for (const cid of cliente_ids) {
+        if (ativoOutro.has(cid)) { puladosJaCliente++; continue; } // já ativo em outro cadastro
+        assignments.push({
+          cliente_id: cid,
+          template_name: (lifetimeMap.get(cid) || 0) >= 5 ? TPL_REATIVACAO_5MAIS : TPL_REATIVACAO_ATE4,
+        });
+      }
     } else {
       const perfis = await lerPerfis(cliente_ids);
       for (const cid of cliente_ids) {

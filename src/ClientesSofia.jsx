@@ -912,16 +912,20 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
         const ids = (kpis || []).map(k => k.cliente_id);
         if (ids.length === 0) { if (vivo) { setLinhas([]); setLoading(false); } return; }
 
-        const [cads, enviadoSet, vendaVendMap, envioInfo, reaRes, fasesMap] = await Promise.all([
-          selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, vendedora_id, grupo_id', 'id', ids),
+        const [cads, enviadoSet, vendaVendMap, envioInfo, reaRes, fasesMap, gemeosRes] = await Promise.all([
+          selectInBatches('lojas_clientes', 'id, razao_social, comprador_nome, telefone_principal, telefone_principal_valido, vendedora_id, grupo_id', 'id', ids),
           fetchEnviadoSet(ids),
           fetchVendedoraSet(ids),
           fetchEnvioInfo(ids),
           supabase.from('vw_clientes_sofia_reativados').select('cliente_id'),
           fetchFases('inativo'),
+          supabase.from('vw_lojas_inativo_ativo_outro').select('cliente_id'),
         ]);
         const cadMap = new Map(cads.map(c => [c.id, c]));
         const reativados = new Set((reaRes?.data || []).map(r => r.cliente_id));
+        // Cadastro ATIVO gêmeo (mesmo doc/raiz CNPJ/telefone) fora do grupo:
+        // mesmo dono comprando por outro cadastro → não é inativo de verdade.
+        const ativoOutroSet = new Set((gemeosRes?.data || []).map(r => r.cliente_id));
 
         // ─── Regra de GRUPOS (Ailson 12/06/2026, mesma do módulo Lojas) ─────
         // 1. Grupo com QUALQUER CNPJ ativo (compra <180d) → grupo inteiro sai
@@ -967,6 +971,8 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             cliente_id: k.cliente_id,
             nome: c.razao_social || c.comprador_nome || '—',
             telefone: c.telefone_principal,
+            tel_valido: c.telefone_principal_valido,
+            ativo_outro: ativoOutroSet.has(k.cliente_id),
             vendedora_id: vendaVendMap.get(k.cliente_id) || null,
             vendedora_nome: vendMap.get(vendaVendMap.get(k.cliente_id)) || '—',
             lifetime_total: k.lifetime_total,
@@ -998,6 +1004,12 @@ function InativosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onToggle
             <Campo Icon={ShoppingCart} label="lifetime" valor={fmtMoney(l.lifetime_total)} destaque />
             <Campo label="compras" valor={String(l.qtd_compras ?? 0)} />
             <Campo label="sem comprar" valor={`${l.dias_sem_comprar ?? '—'}d`} alerta />
+            {l.ativo_outro && (
+              <span title="Mesmo dono já comprando por OUTRO cadastro ativo (mesmo CNPJ/raiz ou telefone). Não recebe reativação." style={{
+                fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+                background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4', whiteSpace: 'nowrap',
+              }}>🔁 ativo em outro cadastro</span>
+            )}
             {l.grupo_qtd > 1 && (
               <span title={`Grupo com ${l.grupo_qtd} CNPJs — mostrando só o principal (maior lifetime)`} style={{
                 fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
@@ -1309,6 +1321,13 @@ function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, selecionado, on
           </div>
           <div style={{ fontSize: fz(12), color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span><Phone size={sz(11)} style={{ verticalAlign: 'middle' }} /> {fmtPhone(l.telefone)}</span>
+            {(!l.telefone || l.tel_valido === false) && (
+              <span title="Sem WhatsApp cadastrado (ou número inválido) — a Sofia não consegue enviar" style={{
+                fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+                background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4', whiteSpace: 'nowrap',
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+              }}>📵 sem WhatsApp</span>
+            )}
             {children}
           </div>
         </div>
