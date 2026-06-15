@@ -4485,9 +4485,6 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   const isDesktop = useIsDesktop();
   const textareaRef = useRef(null);
   const inputBarRef = useRef(null);
-  // Mobile: ao focar, o campo expande "um pouco" (~3 linhas) pra digitar melhor;
-  // ao tocar fora da barra volta EXATAMENTE ao tamanho original. Ailson 08/06/2026.
-  const [msgFoco, setMsgFoco] = useState(false);
   // Mobile: campo de mensagem cresce conforme o texto e volta sozinho ao limpar,
   // SEM depender de foco/blur (no iOS o blur nao dispara ao tocar numa area vazia,
   // por isso o campo ficava grande e nao recolhia). Ailson 07/06/2026.
@@ -4497,18 +4494,6 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 140) + 'px';
   };
-  // Mobile: no iOS o blur NAO dispara ao tocar numa area vazia, entao o campo
-  // ficava expandido. Aqui, enquanto focado, qualquer toque FORA da barra de
-  // input forca o blur -> o campo recolhe ao original. Ailson 08/06/2026.
-  useEffect(() => {
-    if (isDesktop || !msgFoco) return;
-    const onDocDown = (ev) => {
-      const bar = inputBarRef.current;
-      if (bar && !bar.contains(ev.target)) textareaRef.current?.blur();
-    };
-    document.addEventListener('pointerdown', onDocDown, true);
-    return () => document.removeEventListener('pointerdown', onDocDown, true);
-  }, [isDesktop, msgFoco]);
   // Mobile/iOS: quando o teclado fecha por QUALQUER caminho (botao do
   // teclado, swipe, blur), o visualViewport volta ao tamanho cheio mas a
   // janela fica deslocada (header fora da tela). Reancora no topo.
@@ -5087,9 +5072,10 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
         padding: 10, background: palette.surface,
         borderTop: `1px solid ${palette.beige}`,
         display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0,
-        // Mobile focado: permite quebrar linha — textarea+enviar em cima,
-        // icones embaixo. Ailson 11/06/2026.
-        flexWrap: (!isDesktop && msgFoco) ? 'wrap' : 'nowrap',
+        // Layout estável: a caixa cresce pelo conteúdo (auto-grow), sem
+        // reorganizar a barra ao focar (o reflow no foco abortava o toque no
+        // iOS e fazia a caixa encolher ao digitar). Ailson 15/06/2026.
+        flexWrap: 'nowrap',
         opacity: bloqueado ? 0.55 : 1, pointerEvents: bloqueado ? 'none' : 'auto',
       }}>
         {/* Botao emoji picker — à esquerda junto dos demais (Ailson 28/05/2026) */}
@@ -5254,15 +5240,10 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           ref={textareaRef}
           value={novoTexto}
           onChange={e => { setNovoTexto(e.target.value); ajustarAlturaMsg(); }}
-          onFocus={() => { if (!isDesktop) setMsgFoco(true); }}
           onBlur={() => {
             if (isDesktop) return;
-            setMsgFoco(false);
-            // vazio -> volta exatamente ao tamanho original (minHeight 36)
-            if (!novoTexto.trim() && textareaRef.current) textareaRef.current.style.height = '';
-            // iOS scrolla a janela pra mostrar o input quando o teclado abre
-            // e nao reancora ao fechar (header sumia). Forca volta ao topo.
-            // Ailson 11/06/2026.
+            // iOS: ao fechar o teclado a janela fica deslocada (header sai da
+            // tela). Reancora no topo. Ailson 11/06/2026.
             setTimeout(() => {
               window.scrollTo(0, 0);
               document.documentElement.scrollTop = 0;
@@ -5272,11 +5253,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           placeholder="Mensagem (Enter quebra linha · clica no botao verde pra enviar)"
           rows={1}
           style={{
-            // Mobile focado: textarea toma a linha inteira (junto do botao
-            // enviar) e os icones quebram pra linha de baixo (flexWrap no
-            // container + order negativo aqui). Ailson 11/06/2026.
-            flex: (!isDesktop && msgFoco) ? '1 1 calc(100% - 54px)' : 1,
-            order: (!isDesktop && msgFoco) ? -2 : 0,
+            flex: 1,
             padding: '8px 12px', borderRadius: 18,
             border: `1px solid ${palette.beige}`, fontFamily: FONT_CHAT,
             // iOS faz zoom automatico em input com fonte <16px e o zoom NAO
@@ -5284,7 +5261,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             // Mobile = 16px sempre. Ailson 11/06/2026.
             fontSize: isDesktop ? fz(13) : fz(16),
             color: palette.ink, background: palette.bg,
-            resize: 'none', minHeight: (!isDesktop && msgFoco) ? 56 : 36,
+            resize: 'none', minHeight: isDesktop ? 36 : 42,
             maxHeight: isDesktop ? 120 : 140, lineHeight: 1.4,
             boxSizing: 'border-box', overflowY: 'auto',
           }}
@@ -5296,8 +5273,6 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             width: 38, height: 38, cursor: enviando ? 'wait' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0, opacity: (!novoTexto.trim() && midiasAnexadas.length === 0) ? 0.5 : 1,
-            // Mobile focado: acompanha o textarea na primeira linha. Ailson 11/06/2026.
-            order: (!isDesktop && msgFoco) ? -1 : 0,
           }}>
           <Send size={sz(16)} />
         </button>
