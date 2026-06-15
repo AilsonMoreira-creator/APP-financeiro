@@ -19,7 +19,7 @@
  * sprints (endpoints de leitura + planilhas). Ailson 13/06/2026.
  * ═══════════════════════════════════════════════════════════════════════════
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Globe, Lock, Filter, Ban, Bot, Calculator, Megaphone,
@@ -85,8 +85,55 @@ function Tag({ cor, bg, children }) {
 }
 
 // ─── SEÇÃO: CLIENTES ────────────────────────────────────────────────────────
+const fmtBRL = (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtTel = (t) => {
+  const d = String(t || '').replace(/\D/g, '');
+  if (!d) return '—';
+  const n = d.length > 11 ? d.slice(-11) : d;
+  if (n.length === 11) return `(${n.slice(0, 2)}) ${n.slice(2, 7)}-${n.slice(7)}`;
+  if (n.length === 10) return `(${n.slice(0, 2)}) ${n.slice(2, 6)}-${n.slice(6)}`;
+  return t;
+};
+const fmtData = (d) => d ? String(d).split('-').reverse().join('/') : '—';
+
 function SecaoClientes() {
   const [aba, setAba] = useState('carteira');
+  const [ordenar, setOrdenar] = useState('valor');
+  const [periodo, setPeriodo] = useState('');
+  const [janela, setJanela] = useState('');
+  const [msgDias, setMsgDias] = useState('');
+  const [clientes, setClientes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState('');
+
+  const carregar = useCallback(async () => {
+    setLoading(true); setErro('');
+    try {
+      const p = new URLSearchParams({ aba, ordenar });
+      if (periodo) p.set('periodo_dias', periodo);
+      if (janela) { const [a, b] = janela.split('-'); p.set('janela_min', a); p.set('janela_max', b); }
+      if (msgDias) p.set('msg_dias', msgDias);
+      const r = await fetch('/api/meluni-clientes-list?' + p.toString());
+      const j = await r.json();
+      if (j.ok) setClientes(j.clientes || []); else setErro(j.erro || 'erro ao carregar');
+    } catch (e) { setErro(String(e?.message || e)); }
+    setLoading(false);
+  }, [aba, ordenar, periodo, janela, msgDias]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const toggleBloqueio = async (c) => {
+    const novo = !c.bloqueado;
+    if (novo && !window.confirm(`Bloquear ${c.nome || fmtTel(c.telefone)} dos disparos?`)) return;
+    setClientes(prev => prev.map(x => x.id === c.id ? { ...x, bloqueado: novo } : x));
+    try {
+      await fetch('/api/meluni-cliente-bloquear', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_id: c.id, telefone: c.telefone, bloquear: novo }),
+      });
+    } catch (e) { carregar(); }
+  };
+
   const COLS = ['Cliente', 'WhatsApp', 'Nº compras', 'Lifetime', 'Ticket', 'Última compra', ''];
   return (
     <div>
@@ -100,10 +147,22 @@ function SecaoClientes() {
         border: `1px solid ${palette.beige}`, borderRadius: 10,
       }}>
         <Filter size={15} color={palette.inkMuted} />
-        <select style={selStyle}><option>Período: todos</option><option>Últimos 30 dias</option><option>Personalizado</option></select>
-        <select style={selStyle}><option>Janela última compra</option><option>10 a 15 dias</option><option>Personalizada</option></select>
-        <select style={selStyle}><option>Ordenar: maior valor</option><option>Nº de compras</option><option>Mais recente</option></select>
-        <select style={selStyle}><option>Recebeu msg: ignorar</option><option>Últimos 30 dias</option><option>Até 90 dias (personalizado)</option></select>
+        <select style={selStyle} value={periodo} onChange={e => setPeriodo(e.target.value)}>
+          <option value="">Período: todos</option><option value="30">Últimos 30 dias</option>
+          <option value="60">Últimos 60 dias</option><option value="90">Últimos 90 dias</option>
+        </select>
+        <select style={selStyle} value={janela} onChange={e => setJanela(e.target.value)}>
+          <option value="">Janela última compra</option><option value="10-15">10 a 15 dias</option><option value="15-30">15 a 30 dias</option>
+        </select>
+        <select style={selStyle} value={ordenar} onChange={e => setOrdenar(e.target.value)}>
+          <option value="valor">Ordenar: maior valor</option><option value="compras">Nº de compras</option><option value="recente">Mais recente</option>
+        </select>
+        <select style={selStyle} value={msgDias} onChange={e => setMsgDias(e.target.value)}>
+          <option value="">Recebeu msg: ignorar</option><option value="30">Últimos 30 dias</option><option value="90">Até 90 dias</option>
+        </select>
+        <span style={{ fontSize: 11, color: palette.inkMuted, marginLeft: 'auto', fontFamily: FONT }}>
+          {loading ? 'carregando…' : `${clientes.length} clientes`}
+        </span>
       </div>
 
       <SectionTitle icon={Users}>{aba === 'carteira' ? 'Carteira de clientes' : 'Todos os clientes'}</SectionTitle>
@@ -117,14 +176,30 @@ function SecaoClientes() {
             </tr>
           </thead>
           <tbody>
-            <tr><td colSpan={COLS.length} style={{ padding: 30, textAlign: 'center', color: palette.inkMuted }}>
-              Sem clientes ainda. Os dados entram quando o sync do Bling (lumia/Outros) rodar e cruzarmos com a planilha de cadastro do Convertr.
-            </td></tr>
+            {erro && <tr><td colSpan={COLS.length} style={{ padding: 24, textAlign: 'center', color: palette.alert }}>{erro}</td></tr>}
+            {!erro && !loading && clientes.length === 0 && (
+              <tr><td colSpan={COLS.length} style={{ padding: 30, textAlign: 'center', color: palette.inkMuted }}>
+                Sem clientes ainda. Quando o sync do Bling (lumia/Outros) rodar, eles aparecem aqui.
+              </td></tr>
+            )}
+            {clientes.map(c => (
+              <tr key={c.id} style={{ borderTop: `1px solid ${palette.beigeSoft}`, opacity: c.bloqueado ? 0.5 : 1 }}>
+                <td style={{ padding: '8px 12px', color: palette.ink, fontWeight: 600 }}>{c.nome || '—'}</td>
+                <td style={{ padding: '8px 12px', color: palette.inkSoft }}>{fmtTel(c.whatsapp || c.telefone)}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: palette.ink }}>{c.n_compras || 0}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: palette.ink, fontWeight: 700 }}>{fmtBRL(c.valor_lifetime)}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'right', color: palette.inkSoft }}>{fmtBRL(c.ticket_medio)}</td>
+                <td style={{ padding: '8px 12px', color: palette.inkSoft }}>{fmtData(c.ultima_compra)}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                  <button onClick={() => toggleBloqueio(c)} title={c.bloqueado ? 'Desbloquear' : 'Bloquear dos disparos'}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.bloqueado ? palette.alert : palette.inkMuted }}>
+                    <Ban size={15} />
+                  </button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      </div>
-      <div style={{ marginTop: 8, fontSize: 11, color: palette.inkMuted, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Ban size={12} /> cada card terá o botão <b>bloquear</b> pra tirar o cliente dos disparos em massa.
       </div>
     </div>
   );
