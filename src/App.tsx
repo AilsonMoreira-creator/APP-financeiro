@@ -8358,6 +8358,13 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
   const [tickAgora,setTickAgora]=useState(Date.now());
   const [blingVendas,setBlingVendas]=useState(null); // {pedidos, receita} reais Meluni = Bling conta lumia / canal Outros (só atendidas)
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
+  // Mostrar/ocultar colunas (persistente por aparelho). Default: tudo visível.
+  const [colVis,setColVis]=useState(()=>{try{return JSON.parse(localStorage.getItem('calc_meluni_cols_v1')||'{}')||{};}catch(_){return{};}});
+  useEffect(()=>{try{localStorage.setItem('calc_meluni_cols_v1',JSON.stringify(colVis));}catch(_){}},[colVis]);
+  const [menuCols,setMenuCols]=useState(false);
+  const vis=(k)=>colVis[k]!==false;
+  const toggleCol=(k)=>setColVis(p=>({...p,[k]:p[k]===false}));
+  const COLUNAS=[['gasto','Gasto'],['impressoes','Visualizações'],['acessos','Acessos'],['custo','Custo/acesso'],['cpclink','CPC link'],['compras','Compras'],['conv','Conv%'],['cpa','CPA'],['vendas','Vendas (criativos)'],['roas','ROAS']];
 
   // "há X min" atualiza sozinho sem novo fetch
   useEffect(()=>{
@@ -8560,6 +8567,20 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
           <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:12,color:'#2c3e50'}}>
             <input type="checkbox" checked={ocultarPausadas} onChange={e=>setOcultarPausadas(e.target.checked)}/> Ocultar pausadas
           </label>
+          <div style={{position:'relative',marginLeft:'auto'}}>
+            <button onClick={()=>setMenuCols(v=>!v)} style={{background:menuCols?'#2c3e50':'#fff',color:menuCols?'#fff':'#2c3e50',border:'1px solid #e8e2da',borderRadius:6,padding:'6px 10px',fontSize:12,cursor:'pointer',fontFamily:'Georgia,serif'}}>⋮ Colunas</button>
+            {menuCols&&(<>
+              <div onClick={()=>setMenuCols(false)} style={{position:'fixed',inset:0,zIndex:10}}/>
+              <div style={{position:'absolute',right:0,top:'calc(100% + 6px)',zIndex:11,background:'#fff',border:'1px solid #e8e2da',borderRadius:8,boxShadow:'0 6px 24px rgba(0,0,0,0.15)',padding:8,minWidth:180}}>
+                <div style={{fontSize:10,color:'#a89f94',textTransform:'uppercase',letterSpacing:0.5,padding:'2px 6px 6px'}}>Mostrar colunas</div>
+                {COLUNAS.map(([k,label])=>(
+                  <label key={k} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 6px',fontSize:12,color:'#2c3e50',cursor:'pointer'}}>
+                    <input type="checkbox" checked={vis(k)} onChange={()=>toggleCol(k)}/> {label}
+                  </label>
+                ))}
+              </div>
+            </>)}
+          </div>
         </div>
 
         {erro&&(
@@ -8575,15 +8596,15 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
               <tr style={{background:'#2c3e50',color:'#f7f4f0'}}>
                 <th style={{...th,textAlign:'center',width:40}}></th>
                 <th style={{...th,textAlign:'left'}}>Campanha</th>
-                <th style={{...th,textAlign:'right'}}>Gasto</th>
-                <th style={{...th,textAlign:'right'}}>Visualizações</th>
-                <th style={{...th,textAlign:'right'}}>Acessos</th>
-                <th style={{...th,textAlign:'right'}}>Custo/acesso</th>
-                <th style={{...th,textAlign:'right'}}>CPC link</th>
-                <th style={{...th,textAlign:'right'}}>Compras</th>
-                <th style={{...th,textAlign:'right'}}>Conv%</th>
-                <th style={{...th,textAlign:'right'}}>CPA</th>
-                <th style={{...th,textAlign:'right'}}>ROAS</th>
+                {vis('gasto')&&<th style={{...th,textAlign:'right'}}>Gasto</th>}
+                {vis('impressoes')&&<th style={{...th,textAlign:'right'}}>Visualizações</th>}
+                {vis('acessos')&&<th style={{...th,textAlign:'right'}}>Acessos</th>}
+                {vis('custo')&&<th style={{...th,textAlign:'right'}}>Custo/acesso</th>}
+                {vis('cpclink')&&<th style={{...th,textAlign:'right'}}>CPC link</th>}
+                {vis('compras')&&<th style={{...th,textAlign:'right'}}>Compras</th>}
+                {vis('conv')&&<th style={{...th,textAlign:'right'}}>Conv%</th>}
+                {vis('cpa')&&<th style={{...th,textAlign:'right'}}>CPA</th>}
+                {vis('roas')&&<th style={{...th,textAlign:'right'}}>ROAS</th>}
               </tr>
             </thead>
             <tbody>
@@ -8608,30 +8629,30 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                         :<span style={{marginRight:6,color:'#cfc7bd'}}>·</span>}
                       {l.nome}{ads.length>0&&<span style={{fontSize:10,color:'#a89f94',marginLeft:6}}>({ads.length})</span>}
                     </td>
-                    {cellNum(`R$ ${fmtR(l.gasto)}`,ant?delta(l.gasto,ant.gasto,false):null)}
-                    {cellNum(fmtI(l.impressoes))}
-                    {cellNum(fmtI(l.acessos),ant?delta(l.acessos,ant.acessos,true):null)}
-                    {cellNum(`R$ ${fmtR(l.cpc)}`,ant?delta(l.cpc,ant.cpc,false):null)}
-                    {cellNum(`R$ ${fmtR(l.cpcLink)}`,ant?delta(l.cpcLink,ant.cpcLink,false):null)}
-                    {cellNum(fmtI(l.compras),ant?delta(l.compras,ant.compras,true):null)}
-                    {cellNum(`${l.conv.toFixed(2)}%`,ant?delta(l.conv,ant.conv,true):null)}
-                    {cellNum(l.cpa>0?`R$ ${fmtR(l.cpa)}`:'—',ant&&l.cpa>0&&ant.cpa>0?delta(l.cpa,ant.cpa,false):null)}
-                    {cellNum(roasCell(l.roas))}
+                    {vis('gasto')&&cellNum(`R$ ${fmtR(l.gasto)}`,ant?delta(l.gasto,ant.gasto,false):null)}
+                    {vis('impressoes')&&cellNum(fmtI(l.impressoes))}
+                    {vis('acessos')&&cellNum(fmtI(l.acessos),ant?delta(l.acessos,ant.acessos,true):null)}
+                    {vis('custo')&&cellNum(`R$ ${fmtR(l.cpc)}`,ant?delta(l.cpc,ant.cpc,false):null)}
+                    {vis('cpclink')&&cellNum(`R$ ${fmtR(l.cpcLink)}`,ant?delta(l.cpcLink,ant.cpcLink,false):null)}
+                    {vis('compras')&&cellNum(fmtI(l.compras),ant?delta(l.compras,ant.compras,true):null)}
+                    {vis('conv')&&cellNum(`${l.conv.toFixed(2)}%`,ant?delta(l.conv,ant.conv,true):null)}
+                    {vis('cpa')&&cellNum(l.cpa>0?`R$ ${fmtR(l.cpa)}`:'—',ant&&l.cpa>0&&ant.cpa>0?delta(l.cpa,ant.cpa,false):null)}
+                    {vis('roas')&&cellNum(roasCell(l.roas))}
                   </tr>
                 ];
                 if(aberta)ads.forEach(a=>rows.push(
                   <tr key={a.id} style={{borderBottom:'1px solid #f0ebe4',background:'#f3eee7'}}>
                     <td></td>
                     <td style={{...td,paddingLeft:24,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#6b7b86'}} title={a.nome}>↳ {a.nome}</td>
-                    {cellNum(`R$ ${fmtR(a.gasto)}`)}
-                    {cellNum(fmtI(a.impressoes))}
-                    {cellNum(fmtI(a.acessos))}
-                    {cellNum(`R$ ${fmtR(a.cpc)}`)}
-                    {cellNum(`R$ ${fmtR(a.cpcLink)}`)}
-                    {cellNum(fmtI(a.compras))}
-                    {cellNum(`${a.conv.toFixed(2)}%`)}
-                    {cellNum(a.cpa>0?`R$ ${fmtR(a.cpa)}`:'—')}
-                    {cellNum(roasCell(a.roas))}
+                    {vis('gasto')&&cellNum(`R$ ${fmtR(a.gasto)}`)}
+                    {vis('impressoes')&&cellNum(fmtI(a.impressoes))}
+                    {vis('acessos')&&cellNum(fmtI(a.acessos))}
+                    {vis('custo')&&cellNum(`R$ ${fmtR(a.cpc)}`)}
+                    {vis('cpclink')&&cellNum(`R$ ${fmtR(a.cpcLink)}`)}
+                    {vis('compras')&&cellNum(fmtI(a.compras))}
+                    {vis('conv')&&cellNum(`${a.conv.toFixed(2)}%`)}
+                    {vis('cpa')&&cellNum(a.cpa>0?`R$ ${fmtR(a.cpa)}`:'—')}
+                    {vis('roas')&&cellNum(roasCell(a.roas))}
                   </tr>
                 ));
                 return rows;
@@ -8642,15 +8663,15 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                 <tr style={{background:'#f7f4f0',borderTop:'2px solid #2c3e50'}}>
                   <td style={{padding:'10px 4px'}}></td>
                   <td style={{...td,fontWeight:700}}>TOTAL ({linhasFiltradas.length})</td>
-                  {cellNum(<b>R$ {fmtR(totals.gasto)}</b>,totalsAnt.gasto>0?delta(totals.gasto,totalsAnt.gasto,false):null)}
-                  {cellNum(<b>{fmtI(totals.impressoes)}</b>)}
-                  {cellNum(<b>{fmtI(totals.acessos)}</b>,totalsAnt.acessos>0?delta(totals.acessos,totalsAnt.acessos,true):null)}
-                  {cellNum(<b>R$ {fmtR(totalCpc)}</b>,totalCpcAnt>0?delta(totalCpc,totalCpcAnt,false):null)}
-                  {cellNum(<b>R$ {fmtR(totalCpcLink)}</b>,totalCpcLinkAnt>0?delta(totalCpcLink,totalCpcLinkAnt,false):null)}
-                  {cellNum(<b>{fmtI(totals.compras)}</b>,totalsAnt.compras>0?delta(totals.compras,totalsAnt.compras,true):null)}
-                  {cellNum(<b>{totalConv.toFixed(2)}%</b>,totalConvAnt>0?delta(totalConv,totalConvAnt,true):null)}
-                  {cellNum(<b>{totalCpa>0?`R$ ${fmtR(totalCpa)}`:'—'}</b>,totalCpaAnt>0&&totalCpa>0?delta(totalCpa,totalCpaAnt,false):null)}
-                  {cellNum(<b>{roasCell(totalRoas)}</b>)}
+                  {vis('gasto')&&cellNum(<b>R$ {fmtR(totals.gasto)}</b>,totalsAnt.gasto>0?delta(totals.gasto,totalsAnt.gasto,false):null)}
+                  {vis('impressoes')&&cellNum(<b>{fmtI(totals.impressoes)}</b>)}
+                  {vis('acessos')&&cellNum(<b>{fmtI(totals.acessos)}</b>,totalsAnt.acessos>0?delta(totals.acessos,totalsAnt.acessos,true):null)}
+                  {vis('custo')&&cellNum(<b>R$ {fmtR(totalCpc)}</b>,totalCpcAnt>0?delta(totalCpc,totalCpcAnt,false):null)}
+                  {vis('cpclink')&&cellNum(<b>R$ {fmtR(totalCpcLink)}</b>,totalCpcLinkAnt>0?delta(totalCpcLink,totalCpcLinkAnt,false):null)}
+                  {vis('compras')&&cellNum(<b>{fmtI(totals.compras)}</b>,totalsAnt.compras>0?delta(totals.compras,totalsAnt.compras,true):null)}
+                  {vis('conv')&&cellNum(<b>{totalConv.toFixed(2)}%</b>,totalConvAnt>0?delta(totalConv,totalConvAnt,true):null)}
+                  {vis('cpa')&&cellNum(<b>{totalCpa>0?`R$ ${fmtR(totalCpa)}`:'—'}</b>,totalCpaAnt>0&&totalCpa>0?delta(totalCpa,totalCpaAnt,false):null)}
+                  {vis('roas')&&cellNum(<b>{roasCell(totalRoas)}</b>)}
                 </tr>
               </tfoot>
             )}
@@ -8672,11 +8693,11 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
               <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:720}}>
                 <thead><tr style={{background:'#4a7fa5',color:'#fff'}}>
                   <th style={{...th,background:'#4a7fa5',textAlign:'left'}}>Criativo</th>
-                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Gasto</th>
-                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Visualizações</th>
-                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Compras</th>
-                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Vendas</th>
-                  <th style={{...th,background:'#4a7fa5',textAlign:'right'}}>ROAS</th>
+                  {vis('gasto')&&<th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Gasto</th>}
+                  {vis('impressoes')&&<th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Visualizações</th>}
+                  {vis('compras')&&<th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Compras</th>}
+                  {vis('vendas')&&<th style={{...th,background:'#4a7fa5',textAlign:'right'}}>Vendas</th>}
+                  {vis('roas')&&<th style={{...th,background:'#4a7fa5',textAlign:'right'}}>ROAS</th>}
                 </tr></thead>
                 <tbody>
                   {criativosOrdenados.map((a,idx)=>{const ref=refDoCriativo(a.nome);return(
@@ -8689,11 +8710,11 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                           <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nome}</span>
                         </div>
                       </td>
-                      <td style={tdNum}>R$ {fmtR(a.gasto)}</td>
-                      <td style={tdNum}>{fmtI(a.impressoes)}</td>
-                      <td style={tdNum}>{fmtI(a.compras)}</td>
-                      <td style={tdNum}>R$ {fmtR(a.vendas)}</td>
-                      <td style={tdNum}>{roasCell(a.roas)}</td>
+                      {vis('gasto')&&<td style={tdNum}>R$ {fmtR(a.gasto)}</td>}
+                      {vis('impressoes')&&<td style={tdNum}>{fmtI(a.impressoes)}</td>}
+                      {vis('compras')&&<td style={tdNum}>{fmtI(a.compras)}</td>}
+                      {vis('vendas')&&<td style={tdNum}>R$ {fmtR(a.vendas)}</td>}
+                      {vis('roas')&&<td style={tdNum}>{roasCell(a.roas)}</td>}
                     </tr>
                   );})}
                   {criativosOrdenados.length===0&&<tr><td colSpan={6} style={{padding:20,textAlign:'center',color:'#a89f94',fontStyle:'italic'}}>Nenhum criativo com entrega no período.</td></tr>}
