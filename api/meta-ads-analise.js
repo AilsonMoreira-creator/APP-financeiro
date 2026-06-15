@@ -275,6 +275,43 @@ export default async function handler(req, res) {
       }
     }
 
+    // Enriquecimento com thumbnail do criativo (só level=ad). Best-effort:
+    // se a conta bloquear leitura de criativo, ignora e segue (o frontend cai
+    // na foto do produto por REF). Ailson 14/06/2026.
+    const enrichThumb = req.query.enrich_thumbnail !== 'false' && level === 'ad';
+    let duracaoThumb = 0;
+    let avisoThumb = null;
+    if (enrichThumb && dataEnriquecida.length > 0) {
+      const adIds = dataEnriquecida.map(r => r.ad_id).filter(Boolean).slice(0, 50);
+      if (adIds.length > 0) {
+        const tThumb = Date.now();
+        const thumbUrl =
+          `https://graph.facebook.com/${META_API_VERSION}/?ids=${adIds.join(',')}` +
+          `&fields=${encodeURIComponent('creative{thumbnail_url}')}` +
+          `&access_token=${META_ADS_TOKEN}`;
+        try {
+          const thumbResp = await fetch(thumbUrl);
+          const thumbData = await thumbResp.json();
+          duracaoThumb = Date.now() - tThumb;
+          if (thumbData.error) {
+            avisoThumb = `Falha thumbnail: ${thumbData.error.message}`;
+          } else {
+            const thumbMap = {};
+            Object.entries(thumbData).forEach(([id, obj]) => {
+              const t = obj && obj.creative && obj.creative.thumbnail_url;
+              if (t) thumbMap[id] = t;
+            });
+            dataEnriquecida = dataEnriquecida.map(r => ({
+              ...r,
+              creative_thumb: thumbMap[r.ad_id] || null,
+            }));
+          }
+        } catch (errThumb) {
+          avisoThumb = `Exceção thumbnail: ${errThumb.message}`;
+        }
+      }
+    }
+
     const result = {
       ok: true,
       account_id: account,
@@ -284,12 +321,15 @@ export default async function handler(req, res) {
       increment,
       fields_pedidos: fields,
       enrich_status: enrichStatus,
+      enrich_thumbnail: enrichThumb,
       total: dataEnriquecida.length,
       data: dataEnriquecida,
       paging: metaData.paging || null,
       _duracao_meta_ms: duracaoMeta,
       _duracao_status_ms: duracaoStatus,
+      _duracao_thumb_ms: duracaoThumb,
       _aviso_status: avisoStatus,
+      _aviso_thumb: avisoThumb,
       _duracao_total_ms: Date.now() - tInicio,
       _cached: false,
     };

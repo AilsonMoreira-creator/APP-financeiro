@@ -8462,6 +8462,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
       carrinhos,
       vendas,
       roas:gasto>0?vendas/gasto:0,
+      creativeThumb:c.creative_thumb||null,
     };
   };
 
@@ -8711,9 +8712,11 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                     <tr key={a.id} style={{borderBottom:'1px solid #f0ebe4',background:idx%2?'#faf8f5':'#fff'}}>
                       <td style={{...td,maxWidth:340}} title={a.nome}>
                         <div style={{display:'flex',alignItems:'center',gap:8}}>
-                          {ref
-                            ?<><FotoProd sbUrl={sbUrl} refProd={ref} onZoom={null}/><div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'none',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div></>
-                            :<div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:11,opacity:0.35}}>🎬</span></div>}
+                          {a.creativeThumb
+                            ?<><img src={a.creativeThumb} alt="" referrerPolicy="no-referrer" onError={(e)=>{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}} style={{width:34,height:44,objectFit:'cover',borderRadius:4,border:'1px solid #e8e2da',flexShrink:0}}/><div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'none',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:11,opacity:0.35}}>🎬</span></div></>
+                            :ref
+                              ?<><FotoProd sbUrl={sbUrl} refProd={ref} onZoom={null}/><div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'none',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div></>
+                              :<div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:11,opacity:0.35}}>🎬</span></div>}
                           <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nome}</span>
                         </div>
                       </td>
