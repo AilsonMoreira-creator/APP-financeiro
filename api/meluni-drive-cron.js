@@ -1,0 +1,147 @@
+// ============================================================================
+// MELUNI — cron diário do Google Drive.
+// ----------------------------------------------------------------------------
+// Lê as planilhas da pasta  lojas_app / Site Meluni  e popula:
+//   carrinhos_DD.MM.YYYY  -> meluni_carrinhos   (upsert por uuid/planilha_ref, insert-only)
+//   clientes_DD.MM.YYYY   -> meluni_clientes    (upsert por convertr_id, atualiza cadastro)
+//   devolucoes_DD.MM.YYYY -> meluni_devolucoes  (upsert por convertr_id+ref, insert-only)
+//
+// Idempotente. Por padrão processa os arquivos dos últimos `dias` (default 7).
+// Reusa os helpers de Drive do módulo Lojas (OAuth via env GOOGLE_*). A pasta
+// raiz é GOOGLE_DRIVE_FOLDER_ID (lojas_app); filtra pela subpasta "Site Meluni".
+// Ailson 13/06/2026.
+// ============================================================================
+import { listarArquivosDrive, baixarArquivoDrive } from './_lojas-drive-helpers.js';
+import { supabase } from './_bling-helpers.js';
+
+export const config = { maxDuration: 300 };
+
+const norm = (s) => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const dig = (s) => { const d = String(s || '').replace(/\D/g, ''); return d || null; };
+const num = (s) => { const n = parseFloat(String(s ?? '').replace(/[^0-9.\-]/g, '')); return Number.isFinite(n) ? n : null; };
+
+// CSV robusto (campos com aspas, vírgulas e quebras de linha dentro de aspas)
+function parseCSV(text) {
+  text = String(text || '').replace(/^\uFEFF/, '');
+  const rows = []; let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\r') { /* ignora */ }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else field += c;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+function toObjects(text) {
+  const rows = parseCSV(text);
+  if (!rows.length) return [];
+  const head = rows[0].map(h => h.trim());
+  return rows.slice(1)
+    .filter(r => r.some(v => (v || '').trim() !== ''))
+    .map(r => { const o = {}; head.forEach((h, i) => { o[h] = r[i] !== undefined ? r[i] : ''; }); return o; });
+}
+
+const tipoDoNome = (nome) => {
+  const n = norm(nome);
+  if (n.startsWith('carrinhos')) return 'carrinhos';
+  if (n.startsWith('clientes')) return 'clientes';
+  if (n.startsWith('devolu')) return 'devolucoes';
+  return null;
+};
+const dataDoNome = (nome) => { const m = String(nome).match(/(\d{2})\.(\d{2})\.(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+
+// ── mapeamentos CSV -> linha da tabela ──
+function mapCliente(r) {
+  const tel = dig(r.phone);
+  const nome = [r.first_name, r.last_name].map(x => (x || '').trim()).filter(Boolean).join(' ') || null;
+  return {
+    convertr_id: r.id || null, nome, cpf: dig(r.taxvat), email: (r.email || '').trim() || null,
+    telefone: tel, whatsapp: tel, origem_cadastro: 'convertr',
+    dados_extra: { convertr_id: r.id, grupo: r.group, endereco: r.address },
+    atualizado_em: new Date().toISOString(),
+  };
+}
+function mapCarrinho(r) {
+  const itens = [...String(r.produtos || '').matchAll(/(\d+)x\s*(\S+)/g)].map(m => ({ qtd: +m[1], sku: m[2] }));
+  const cr = String(r.created_at || '').replace(', ', 'T').replace(/\//g, '-') || null;
+  return {
+    planilha_ref: r.uuid || null, nome: null, telefone: dig(r.customer_phone), email: (r.customer_email || '').trim() || null,
+    valor: num(r.total), itens, data_carrinho: cr, status: 'processando',
+    dados_extra: { convertr_id: r.id, customer_id: r.customer_id || null, link: r.link, items_count: r.items_count },
+  };
+}
+function mapDevolucao(r) {
+  const m = String(r.created_at || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  const nome = [r.customer_first_name, r.customer_last_name].map(x => (x || '').trim()).filter(Boolean).join(' ') || null;
+  return {
+    convertr_id: r.id || null, nome, telefone: dig(r.customer_phone), pedido_ref: r.order_increment_id || null,
+    produto: r.items_item_name || null, ref: r.items_item_sku || null, motivo: r.reason || null,
+    status: r.status || null, valor: num(r.items_item_price), data_devolucao: m ? `${m[3]}-${m[2]}-${m[1]}` : null,
+    dados_extra: {
+      convertr_id: r.id, order_id: r.order_id, tipo: r.refund_type, mensagem: r.message,
+      tamanho: r.items_item_options, cpf: dig(r.customer_taxvat), email: r.customer_email,
+      order_total: r.order_total, historico: r.historico,
+    },
+  };
+}
+
+async function importarTabela(tipo, linhas) {
+  if (!linhas.length) return 0;
+  if (tipo === 'clientes') {
+    const { error } = await supabase.from('meluni_clientes').upsert(linhas.map(mapCliente), { onConflict: 'convertr_id' });
+    if (error) throw new Error('clientes: ' + error.message);
+  } else if (tipo === 'carrinhos') {
+    const { error } = await supabase.from('meluni_carrinhos').upsert(linhas.map(mapCarrinho), { onConflict: 'planilha_ref', ignoreDuplicates: true });
+    if (error) throw new Error('carrinhos: ' + error.message);
+  } else if (tipo === 'devolucoes') {
+    const { error } = await supabase.from('meluni_devolucoes').upsert(linhas.map(mapDevolucao), { onConflict: 'convertr_id,ref', ignoreDuplicates: true });
+    if (error) throw new Error('devolucoes: ' + error.message);
+  }
+  return linhas.length;
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const q = { ...(req.query || {}), ...(req.body || {}) };
+  const dias = Math.max(1, parseInt(q.dias || '7', 10) || 7);
+  const corteData = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
+
+  try {
+    const folderRaiz = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    if (!folderRaiz) return res.status(500).json({ ok: false, erro: 'GOOGLE_DRIVE_FOLDER_ID nao configurado' });
+
+    const arquivos = await listarArquivosDrive(folderRaiz);
+    // só os da subpasta "Site Meluni" e que são planilhas conhecidas
+    const meluni = (arquivos || []).filter(a => norm(a.parentName) === 'site meluni' && tipoDoNome(a.name));
+    if (!meluni.length) return res.json({ ok: true, msg: 'nenhum arquivo na pasta Site Meluni', total: 0 });
+
+    // janela de dias (pela data no nome); sem data no nome -> processa
+    const naJanela = meluni.filter(a => { const d = dataDoNome(a.name); return !d || d >= corteData; });
+
+    const resumo = {};
+    const erros = [];
+    for (const arq of naJanela) {
+      const tipo = tipoDoNome(arq.name);
+      try {
+        const texto = await baixarArquivoDrive(arq.id);
+        const linhas = toObjects(texto);
+        const n = await importarTabela(tipo, linhas);
+        resumo[arq.name] = { tipo, linhas: n };
+      } catch (e) {
+        erros.push({ arquivo: arq.name, erro: e?.message || String(e) });
+      }
+    }
+    return res.json({ ok: erros.length === 0, processados: Object.keys(resumo).length, resumo, erros });
+  } catch (e) {
+    console.error('[meluni-drive-cron] ERRO:', e?.message || e);
+    return res.status(500).json({ ok: false, erro: e?.message || String(e) });
+  }
+}
