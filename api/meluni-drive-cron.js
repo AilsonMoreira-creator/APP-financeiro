@@ -48,13 +48,13 @@ function toObjects(text) {
 }
 
 const tipoDoNome = (nome) => {
-  const n = norm(nome);
-  if (n.startsWith('carrinhos')) return 'carrinhos';
-  if (n.startsWith('clientes')) return 'clientes';
-  if (n.startsWith('devolu')) return 'devolucoes';
+  const n = norm(nome);                       // norm tira acento e cedilha (ç->c)
+  if (n.startsWith('carrinho')) return 'carrinhos';   // carrinho(s)
+  if (n.startsWith('cliente')) return 'clientes';     // cliente(s)
+  if (n.startsWith('devolu')) return 'devolucoes';    // devolução / devolucoes / devolucao
   return null;
 };
-const dataDoNome = (nome) => { const m = String(nome).match(/(\d{2})\.(\d{2})\.(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+const dataDoNome = (nome) => { const m = String(nome).match(/(\d{2})[._\-/](\d{2})[._\-/](\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
 
 // ── mapeamentos CSV -> linha da tabela ──
 function mapCliente(r) {
@@ -115,13 +115,13 @@ export default async function handler(req, res) {
   const corteData = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
 
   try {
-    const folderRaiz = process.env.GOOGLE_DRIVE_FOLDER_ID;
-    if (!folderRaiz) return res.status(500).json({ ok: false, erro: 'GOOGLE_DRIVE_FOLDER_ID nao configurado' });
+    // pasta lojas_app / Site Meluni (ID do Drive). Override por env se mudar.
+    const folderMeluni = process.env.MELUNI_DRIVE_FOLDER_ID || '1o1MDKt6B765x7TGtPGsZ1EVP6FEFffAW';
 
-    const arquivos = await listarArquivosDrive(folderRaiz);
-    // só os da subpasta "Site Meluni" e que são planilhas conhecidas
-    const meluni = (arquivos || []).filter(a => norm(a.parentName) === 'site meluni' && tipoDoNome(a.name));
-    if (!meluni.length) return res.json({ ok: true, msg: 'nenhum arquivo na pasta Site Meluni', total: 0 });
+    const arquivos = await listarArquivosDrive(folderMeluni, { includeSubfolders: false });
+    // só as planilhas conhecidas (carrinhos / clientes / devolucoes), nome tolerante a acento/ç
+    const meluni = (arquivos || []).filter(a => tipoDoNome(a.name));
+    if (!meluni.length) return res.json({ ok: true, msg: 'nenhuma planilha reconhecida na pasta Site Meluni', total: 0 });
 
     // janela de dias (pela data no nome); sem data no nome -> processa
     const naJanela = meluni.filter(a => { const d = dataDoNome(a.name); return !d || d >= corteData; });
