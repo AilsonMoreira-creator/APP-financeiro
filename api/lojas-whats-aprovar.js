@@ -202,6 +202,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   let textoMsgPrincipal = null; // se fracionado: registro principal = so a parte 1
   let midiaParaEnviar = null;
   let midiasExtras = []; // fotos adicionais (showcase de categoria, ate 5) — Ailson 16/06/2026
+  let extrasEnviadas = []; // {midia, message_id} das extras realmente enviadas — pra gravar no historico
   if (sug.tipo !== 'primeira_mensagem') {
     const parsed = parseMarcadoresMidia(textoFinalBruto);
     textoFinal = parsed.textoLimpo;
@@ -288,7 +289,8 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
               mensagemId: null,
               decididaPor: 'ia_automatica',
             });
-            if (!rx.ok) log('aprovar', `foto extra ${mx.ref} nao enviou: ${rx.erro}`);
+            if (rx.ok) extrasEnviadas.push({ midia: mx, message_id: rx.message_id });
+            else log('aprovar', `foto extra ${mx.ref} nao enviou: ${rx.erro}`);
           } catch (e) { logErro('aprovar/foto-extra-envio', e); }
         }
       } else if (midiaParaEnviar && midiaParaEnviar.tipo === 'catalogo' && sug.conversa.catalogo_formato === 'vesti') {
@@ -407,6 +409,33 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
     .select('id')
     .single();
   if (errMsg) logErro('aprovar/insert-msg', errMsg);
+
+  // Fotos extras do showcase (ex: 5 bodys) — grava 1 registro por foto pra TODAS
+  // aparecerem no historico do painel (Ailson 16/06/2026). enviada_em incrementado
+  // 1s por foto pra ordenar logo depois da principal.
+  if (extrasEnviadas.length > 0) {
+    const baseMs = Date.parse(agora);
+    const linhasExtras = extrasEnviadas.map((ex, i) => {
+      let url = null;
+      if (ex.midia?.storage_path) {
+        const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(ex.midia.storage_path);
+        url = pub?.publicUrl || null;
+      }
+      return {
+        conversa_id: sug.conversa.id,
+        direcao: 'saida',
+        autor: 'sofia_ia',
+        tipo_midia: 'image',
+        texto: null,
+        midia_url: url,
+        meta_message_id: ex.message_id || null,
+        status: 'enviando',
+        enviada_em: new Date(baseMs + (i + 1) * 1000).toISOString(),
+      };
+    });
+    const { error: errExtras } = await supabase.from('lojas_whats_mensagens').insert(linhasExtras);
+    if (errExtras) logErro('aprovar/insert-msg-extras', errExtras);
+  }
 
   // Backfill: atualiza lojas_whats_midias_usos com mensagem_id real
   // (vesti nao envia midia, entao nao ha uso pra casar)
