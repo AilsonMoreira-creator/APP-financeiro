@@ -57,6 +57,27 @@ export default async function handler(req, res) {
       return { ...c, conversa_pendente: !!pend };
     });
 
+    // SKU -> ref + descrição (mesmo caminho do módulo Bling vendas: ml_sku_ref_map)
+    const skus = [...new Set(
+      lista.flatMap(c => Array.isArray(c.itens) ? c.itens.map(i => i?.sku).filter(Boolean) : [])
+    )];
+    if (skus.length) {
+      const mapaSku = new Map();
+      for (let i = 0; i < skus.length; i += 300) {
+        const { data: rows } = await supabase.from('ml_sku_ref_map')
+          .select('sku, ref, desc_limpa').in('sku', skus.slice(i, i + 300));
+        for (const r of (rows || [])) mapaSku.set(r.sku, r);
+      }
+      lista = lista.map(c => {
+        if (!Array.isArray(c.itens)) return c;
+        const itens = c.itens.map(it => {
+          const r = it?.sku ? mapaSku.get(it.sku) : null;
+          return { ...it, ref: r?.ref || it.ref || null, descricao: r?.desc_limpa || it.descricao || null };
+        });
+        return { ...c, itens };
+      });
+    }
+
     return res.json({ ok: true, total: count ?? lista.length, offset, limite, unread, carrinhos: lista });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });

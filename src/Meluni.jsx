@@ -528,7 +528,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
           </div>
           {itens.length > 0 && (
             <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {itens.map(i => `${i.qtd}x ${i.sku}`).join('  ·  ')}
+              {itens.map(i => `${i.qtd}x ${i.ref ? 'ref ' + i.ref : (i.sku || '')}`).join('  ·  ')}
             </div>
           )}
         </div>
@@ -554,7 +554,7 @@ function ChatCarrinhoBody({ c }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {itens.map((i, k) => (
             <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, color: palette.ink }}>
-              {i.qtd}x {i.sku}{i.descLimpa ? ` · ${i.descLimpa}` : ''}
+              {i.qtd}x {i.ref ? <b>ref {i.ref}</b> : (i.sku || '')}{i.descricao ? ` · ${i.descricao}` : (i.descLimpa ? ` · ${i.descLimpa}` : '')}
             </div>
           ))}
         </div>

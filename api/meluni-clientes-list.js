@@ -30,6 +30,13 @@ export default async function handler(req, res) {
   try {
     let qy = supabase.from('meluni_clientes').select('*');
 
+    // CARTEIRA = só clientes de verdade (com compra). Cadastros sem compra ficam
+    // ocultos aqui, mas continuam no banco pra alimentar o match de carrinho.
+    // Ailson 16/06/2026.
+    if (!etapa || etapa === 'carteira') {
+      qy = qy.or('n_compras.gt.0,valor_lifetime.gt.0');
+    }
+
     // etapas enviados/conversando/follow_up vem do funil de conversas (origem cliente)
     if (etapa && etapa !== 'carteira') {
       const { data: convs } = await supabase

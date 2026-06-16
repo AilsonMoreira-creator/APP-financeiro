@@ -69,9 +69,11 @@ async function atualizarSkuRefMap() {
         if (!sku || !ref) { stats.sem_sku_ou_ref++; continue; }
 
         const ts = p.data_pedido || p.created_at;
+        const desc = (it.descLimpa || '').trim() || null;
         const existing = skuAgregado.get(sku);
         if (!existing) {
-          skuAgregado.set(sku, { ref, primeira: ts, ultima: ts, qtd: 1 });
+          // itens vem ordenado por data_pedido DESC -> o primeiro visto e o mais recente
+          skuAgregado.set(sku, { ref, primeira: ts, ultima: ts, qtd: 1, desc });
         } else {
           // Mantém primeira_venda como a mais antiga, ultima como a mais recente
           if (ts < existing.primeira) existing.primeira = ts;
@@ -79,6 +81,8 @@ async function atualizarSkuRefMap() {
           existing.qtd++;
           // Se houver divergência de ref (raro), última escrita vence
           if (existing.ref !== ref) existing.ref = ref;
+          // desc: só preenche se ainda não tinha (preserva a mais recente, vista primeiro)
+          if (!existing.desc && desc) existing.desc = desc;
         }
       }
     }
@@ -104,6 +108,7 @@ async function atualizarSkuRefMap() {
       primeira_venda: info.primeira,
       ultima_venda: info.ultima,
       qtd_pedidos: info.qtd,
+      desc_limpa: info.desc || null,
       fonte: 'bling_vendas',
       updated_at: agora,
     });
