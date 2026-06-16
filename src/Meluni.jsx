@@ -185,26 +185,16 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
   );
 }
 
-// chat do cliente — split estilo Sofia: painel inline no desktop (lista reduzida ao lado),
-// overlay tela cheia no mobile. Setas passam/voltam entre os clientes da lista.
-function MeluniChatPanel({ cliente, onClose, overlay, onPrev, onNext, hasPrev, hasNext }) {
-  const tel = cliente.whatsapp || cliente.telefone;
-  const [hist, setHist] = useState(null);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    setLoading(true);
-    fetch(`/api/meluni-cliente-historico?cliente_id=${cliente.id}`)
-      .then(r => r.json()).then(j => { if (j.ok) setHist(j); })
-      .catch(() => {}).finally(() => setLoading(false));
-  }, [cliente.id]);
-  const pedidos = hist?.pedidos || [];
-
+// ── SHELL genérico do chat (split estilo Sofia) — usado por Clientes/Carrinho/Devolução.
+// Cabeçalho roxo: setas ‹ › (passa/volta) + título/subtítulo + fechar. Corpo = children.
+// Inline (painel à direita) no desktop; overlay tela cheia no mobile. Setas e título mudam
+// por seção; o miolo (children) é o que cada seção renderiza.
+function MeluniChatShell({ titulo, subtitulo, overlay, onClose, onPrev, onNext, hasPrev, hasNext, children }) {
   const setaStyle = (on) => ({
     background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff', borderRadius: 7,
     width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: on ? 'pointer' : 'default', opacity: on ? 1 : 0.35, padding: 0, flexShrink: 0,
   });
-
   const corpo = (
     <>
       <div style={{ background: MELUNI, color: '#fff', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -214,20 +204,85 @@ function MeluniChatPanel({ cliente, onClose, overlay, onPrev, onNext, hasPrev, h
             <button onClick={hasNext ? onNext : undefined} disabled={!hasNext} title="Próximo" style={setaStyle(hasNext)}><ChevronRight size={16} /></button>
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cliente.nome || 'Cliente'}</div>
-            <div style={{ fontSize: 12, opacity: 0.85, fontFamily: FONT }}>{fmtTel(tel) || 'sem número'}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{titulo || '—'}</div>
+            {subtitulo != null && <div style={{ fontSize: 12, opacity: 0.85, fontFamily: FONT }}>{subtitulo}</div>}
           </div>
         </div>
         <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: FONT, fontSize: 12, flexShrink: 0 }}>fechar</button>
       </div>
-      <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, fontFamily: FONT, flexWrap: 'wrap' }}>
+      <div style={{ flex: 1, overflowY: 'auto', fontFamily: FONT }}>{children}</div>
+    </>
+  );
+  if (overlay) {
+    return (
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(460px, 100%)', height: '100%', background: palette.bg, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px rgba(0,0,0,0.15)' }}>
+          {corpo}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ flex: '0 0 430px', maxWidth: 430, alignSelf: 'flex-start', position: 'sticky', top: 8, maxHeight: 'calc(100vh - 90px)', background: palette.bg, border: `1px solid ${palette.beige}`, borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+      {corpo}
+    </div>
+  );
+}
+
+// ── ORQUESTRADOR do split: lista (compacta quando o chat abre no desktop) + shell do chat.
+// Cada seção passa: itens, getId, qual está aberto (abertoId/setAbertoId), título/subtítulo,
+// e dois render-props — renderCard(item,{compact,ativo,onAbrir}) e renderChat(item).
+function MeluniSplitChat({ itens, getId, abertoId, setAbertoId, isDesktop, tituloDe, subtituloDe, renderCard, renderChat, listaRodape }) {
+  const idx = abertoId != null ? itens.findIndex(it => getId(it) === abertoId) : -1;
+  const aberto = idx >= 0 ? itens[idx] : null;
+  const irPara = (i) => { if (i >= 0 && i < itens.length) setAbertoId(getId(itens[i])); };
+  const nav = {
+    onClose: () => setAbertoId(null),
+    onPrev: () => irPara(idx - 1),
+    onNext: () => irPara(idx + 1),
+    hasPrev: idx > 0,
+    hasNext: idx >= 0 && idx < itens.length - 1,
+  };
+  const split = !!(aberto && isDesktop);
+  const head = aberto ? { titulo: tituloDe(aberto), subtitulo: subtituloDe ? subtituloDe(aberto) : null } : {};
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: split ? 6 : 8 }}>
+          {itens.map(it => (
+            <React.Fragment key={getId(it)}>
+              {renderCard(it, { compact: split, ativo: aberto && getId(it) === abertoId, onAbrir: () => setAbertoId(getId(it)) })}
+            </React.Fragment>
+          ))}
+          {listaRodape}
+        </div>
+        {split && <MeluniChatShell {...head} {...nav}>{renderChat(aberto)}</MeluniChatShell>}
+      </div>
+      {aberto && !isDesktop && <MeluniChatShell overlay {...head} {...nav}>{renderChat(aberto)}</MeluniChatShell>}
+    </>
+  );
+}
+
+// corpo do chat de CLIENTE: faixa de KPIs + histórico de compras (pra Lara personalizar/cross-sell)
+function ChatClienteBody({ cliente }) {
+  const [hist, setHist] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/meluni-cliente-historico?cliente_id=${cliente.id}`)
+      .then(r => r.json()).then(j => { if (j.ok) setHist(j); })
+      .catch(() => {}).finally(() => setLoading(false));
+  }, [cliente.id]);
+  const pedidos = hist?.pedidos || [];
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, flexWrap: 'wrap' }}>
         <span>lifetime <b>{fmtBRL(cliente.valor_lifetime)}</b></span>
         <span>compras <b>{cliente.n_compras || 0}</b></span>
         <span>ticket <b>{fmtBRL(cliente.ticket_medio)}</b></span>
         <span>última <b>{fmtData(cliente.ultima_compra)}</b></span>
       </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, fontFamily: FONT }}>
+      <div style={{ padding: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>
           Histórico de compras {pedidos.length > 0 ? `(${pedidos.length})` : ''}
         </div>
@@ -253,7 +308,6 @@ function MeluniChatPanel({ cliente, onClose, overlay, onPrev, onNext, hasPrev, h
             </div>
           ))}
         </div>
-
         <div style={{ marginTop: 16, padding: 12, background: MELUNI_SOFT, borderRadius: 10, fontSize: 12, color: palette.inkSoft, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
           <MessageCircle size={16} color={MELUNI} style={{ marginTop: 1, flexShrink: 0 }} />
           <span>A Lara usa esse histórico pra personalizar e indicar cross-sell. A conversa em si abre aqui quando o número do WhatsApp B2C estiver ligado.</span>
@@ -261,19 +315,14 @@ function MeluniChatPanel({ cliente, onClose, overlay, onPrev, onNext, hasPrev, h
       </div>
     </>
   );
+}
 
-  if (overlay) {
-    return (
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(460px, 100%)', height: '100%', background: palette.bg, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px rgba(0,0,0,0.15)' }}>
-          {corpo}
-        </div>
-      </div>
-    );
-  }
+// nota padrão de rodapé do chat (conversa real só quando a Lara/WhatsApp ligar)
+function NotaLara({ children }) {
   return (
-    <div style={{ flex: '0 0 430px', maxWidth: 430, alignSelf: 'flex-start', position: 'sticky', top: 8, maxHeight: 'calc(100vh - 90px)', background: palette.bg, border: `1px solid ${palette.beige}`, borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-      {corpo}
+    <div style={{ margin: 16, padding: 12, background: MELUNI_SOFT, borderRadius: 10, fontSize: 12, color: palette.inkSoft, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+      <MessageCircle size={16} color={MELUNI} style={{ marginTop: 1, flexShrink: 0 }} />
+      <span>{children}</span>
     </div>
   );
 }
@@ -289,7 +338,7 @@ function SecaoClientes() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sel, setSel] = useState(new Set());
-  const [chat, setChat] = useState(null);
+  const [chatId, setChatId] = useState(null);
   const isDesktop = useIsDesktop();
 
   const carregar = useCallback(async () => {
@@ -381,46 +430,53 @@ function SecaoClientes() {
             : 'Ninguém nessa etapa ainda — enche quando os disparos da Lara começarem.'}
         </Placeholder>
       )}
-      {(() => {
-        const idx = chat ? clientes.findIndex(c => c.id === chat.id) : -1;
-        const irPara = (i) => { if (i >= 0 && i < clientes.length) setChat(clientes[i]); };
-        const navProps = {
-          onClose: () => setChat(null),
-          onPrev: () => irPara(idx - 1),
-          onNext: () => irPara(idx + 1),
-          hasPrev: idx > 0,
-          hasNext: idx >= 0 && idx < clientes.length - 1,
-        };
-        const splitAtivo = chat && isDesktop;
-        return (
-          <>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: splitAtivo ? 6 : 8 }}>
-                {clientes.map(c => (
-                  <MeluniClienteCard key={c.id} c={c} sel={sel.has(c.id)}
-                    compact={splitAtivo} ativo={chat?.id === c.id}
-                    onSel={() => toggleSel(c.id)} onAbrir={() => setChat(c)} onToggle={() => toggleBloqueio(c)} />
-                ))}
-              </div>
-              {splitAtivo && <MeluniChatPanel cliente={chat} {...navProps} />}
-            </div>
-            {chat && !isDesktop && <MeluniChatPanel overlay cliente={chat} {...navProps} />}
-          </>
-        );
-      })()}
+      {(!erro && clientes.length > 0) && (
+        <MeluniSplitChat
+          itens={clientes} getId={(c) => c.id}
+          abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
+          tituloDe={(c) => c.nome || 'Cliente'}
+          subtituloDe={(c) => fmtTel(c.whatsapp || c.telefone) || 'sem número'}
+          renderCard={(c, p) => (
+            <MeluniClienteCard c={c} sel={sel.has(c.id)}
+              onSel={() => toggleSel(c.id)} onToggle={() => toggleBloqueio(c)} {...p} />
+          )}
+          renderChat={(c) => <ChatClienteBody cliente={c} />}
+        />
+      )}
     </div>
   );
 }
 
 // ─── SEÇÃO: CARRINHO ABANDONADO ─────────────────────────────────────────────
-function CarrinhoCard({ c, sel, onSel }) {
+function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
   const tel = c.cliente_whatsapp || c.telefone;
   const nome = c.cliente_nome || c.nome;
   const itens = Array.isArray(c.itens) ? c.itens : [];
+
+  if (compact) {
+    return (
+      <div onClick={onAbrir} title="Abrir conversa" style={{
+        background: ativo ? MELUNI_SOFT : palette.surface, borderRadius: 10, padding: '8px 10px', cursor: 'pointer',
+        border: `1px solid ${ativo ? MELUNI : palette.beige}`, display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <input type="checkbox" checked={sel} onClick={(e) => e.stopPropagation()} onChange={onSel}
+          style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }} />
+        <ShoppingCart size={13} color={MELUNI} style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {fmtBRL(c.valor)}{nome ? ` · ${nome}` : ''}
+          </div>
+          <div style={{ fontSize: 11, color: palette.inkMuted }}>{itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · {fmtData(String(c.data_carrinho || '').slice(0, 10))}</div>
+        </div>
+        {!tel && <span title="sem número" style={{ fontSize: 12, flexShrink: 0 }}>📵</span>}
+      </div>
+    );
+  }
+
   return (
-    <div style={{ background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${palette.beige}` }}>
+    <div onClick={onAbrir} title={onAbrir ? 'Abrir conversa' : undefined} style={{ background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${palette.beige}`, cursor: onAbrir ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <input type="checkbox" checked={sel} onChange={onSel} style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
+        <input type="checkbox" checked={sel} onClick={(e) => e.stopPropagation()} onChange={onSel} style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
         <ShoppingCart size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
@@ -444,12 +500,40 @@ function CarrinhoCard({ c, sel, onSel }) {
   );
 }
 
+// corpo do chat de CARRINHO: contato + itens do carrinho + nota da Lara
+function ChatCarrinhoBody({ c }) {
+  const itens = Array.isArray(c.itens) ? c.itens : [];
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, flexWrap: 'wrap' }}>
+        <span>valor <b>{fmtBRL(c.valor)}</b></span>
+        <span>itens <b>{itens.reduce((a, i) => a + (i.qtd || 1), 0)}</b></span>
+        <span>data <b>{fmtData(String(c.data_carrinho || '').slice(0, 10))}</b></span>
+      </div>
+      <div style={{ padding: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>Carrinho</div>
+        {itens.length === 0 && <div style={{ fontSize: 13, color: palette.inkMuted }}>Sem itens detalhados.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {itens.map((i, k) => (
+            <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, color: palette.ink }}>
+              {i.qtd}x {i.sku}{i.descLimpa ? ` · ${i.descLimpa}` : ''}
+            </div>
+          ))}
+        </div>
+      </div>
+      <NotaLara>A Lara puxa esse carrinho pra recuperar a venda. A conversa abre aqui quando o número do WhatsApp B2C estiver ligado.</NotaLara>
+    </>
+  );
+}
+
 function SecaoCarrinho() {
   const [aba, setAba] = useState('processando');
   const [carrinhos, setCarrinhos] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(new Set());
+  const [chatId, setChatId] = useState(null);
+  const isDesktop = useIsDesktop();
   const LIM = 60;
   const tabs = [
     { id: 'processando', label: 'Processando' },
@@ -466,9 +550,16 @@ function SecaoCarrinho() {
     } catch (e) { /* ignora */ }
     setLoading(false);
   }, [aba]);
-  useEffect(() => { setSel(new Set()); carregar(0); }, [carregar]);
+  useEffect(() => { setSel(new Set()); setChatId(null); carregar(0); }, [carregar]);
   const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selTodos = () => setSel(sel.size === carrinhos.length ? new Set() : new Set(carrinhos.map(c => c.id)));
+
+  const carregarMais = carrinhos.length < total ? (
+    <button onClick={() => carregar(carrinhos.length)} disabled={loading}
+      style={{ ...selStyle, marginTop: 4, width: '100%', padding: 8, fontWeight: 700 }}>
+      {loading ? 'carregando…' : `Carregar mais (${total - carrinhos.length} restantes)`}
+    </button>
+  ) : null;
 
   return (
     <div>
@@ -483,14 +574,18 @@ function SecaoCarrinho() {
         {sel.size > 0 && <span style={{ fontSize: 11, color: palette.warn, fontFamily: FONT }}>o disparo em massa liga quando o número da Lara estiver configurado</span>}
       </div>
       {!loading && carrinhos.length === 0 && <Placeholder>Nenhum carrinho nesse estágio.</Placeholder>}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {carrinhos.map(c => <CarrinhoCard key={c.id} c={c} sel={sel.has(c.id)} onSel={() => toggleSel(c.id)} />)}
-      </div>
-      {carrinhos.length < total && (
-        <button onClick={() => carregar(carrinhos.length)} disabled={loading}
-          style={{ ...selStyle, marginTop: 10, width: '100%', padding: 8, fontWeight: 700 }}>
-          {loading ? 'carregando…' : `Carregar mais (${total - carrinhos.length} restantes)`}
-        </button>
+      {carrinhos.length > 0 && (
+        <MeluniSplitChat
+          itens={carrinhos} getId={(c) => c.id}
+          abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
+          tituloDe={(c) => c.cliente_nome || c.nome || fmtBRL(c.valor)}
+          subtituloDe={(c) => fmtTel(c.cliente_whatsapp || c.telefone) || 'sem número'}
+          renderCard={(c, p) => (
+            <CarrinhoCard c={c} sel={sel.has(c.id)} onSel={() => toggleSel(c.id)} {...p} />
+          )}
+          renderChat={(c) => <ChatCarrinhoBody c={c} />}
+          listaRodape={carregarMais}
+        />
       )}
     </div>
   );
@@ -525,11 +620,28 @@ function SecaoSac() {
 }
 
 // ─── SEÇÃO: DEVOLUÇÃO ───────────────────────────────────────────────────────
-function DevolucaoCard({ d }) {
+function DevolucaoCard({ d, compact, ativo, onAbrir }) {
   const STA = { Aprovado: palette.ok, Pendente: palette.warn, Recusado: palette.alert, Cancelado: palette.alert };
   const cor = STA[d.status] || palette.inkSoft;
+
+  if (compact) {
+    return (
+      <div onClick={onAbrir} title="Abrir conversa" style={{
+        background: ativo ? MELUNI_SOFT : palette.surface, borderRadius: 10, padding: '8px 10px', cursor: 'pointer',
+        border: `1px solid ${ativo ? MELUNI : palette.beige}`, display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <RotateCcw size={13} color={MELUNI} style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.nome || '—'}</div>
+          <div style={{ fontSize: 11, color: palette.inkMuted }}>{fmtBRL(d.total)} · {d.motivo || 'sem motivo'}</div>
+        </div>
+        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700, color: cor, border: `1px solid ${cor}`, flexShrink: 0 }}>{d.status || '—'}</span>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${palette.beige}` }}>
+    <div onClick={onAbrir} title={onAbrir ? 'Abrir conversa' : undefined} style={{ background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${palette.beige}`, cursor: onAbrir ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <RotateCcw size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -550,13 +662,8 @@ function DevolucaoCard({ d }) {
             ))}
           </div>
           {d.mensagem && <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 4, fontStyle: 'italic' }}>"{d.mensagem}"</div>}
-          <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <button style={{ ...selStyle, fontWeight: 700, color: MELUNI, borderColor: MELUNI }}>
-              <MessageCircle size={12} style={{ verticalAlign: 'middle' }} /> abrir conversa
-            </button>
-            <span style={{ fontSize: 10.5, color: palette.inkMuted }}>
-              {d.rastreio ? `rastreio: ${d.rastreio}` : 'aviso de código de rastreio entra aqui'}
-            </span>
+          <div style={{ marginTop: 8, fontSize: 10.5, color: palette.inkMuted }}>
+            {d.rastreio ? `rastreio: ${d.rastreio}` : 'aviso de código de rastreio entra aqui'}
           </div>
         </div>
       </div>
@@ -564,9 +671,42 @@ function DevolucaoCard({ d }) {
   );
 }
 
+// corpo do chat de DEVOLUÇÃO: status/motivo/itens + rastreio + nota da Lara
+function ChatDevolucaoBody({ d }) {
+  const STA = { Aprovado: palette.ok, Pendente: palette.warn, Recusado: palette.alert, Cancelado: palette.alert };
+  const cor = STA[d.status] || palette.inkSoft;
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: cor, border: `1px solid ${cor}` }}>{d.status || '—'}</span>
+        <span>total <b>{fmtBRL(d.total)}</b></span>
+        {d.pedido_ref && <span>pedido <b>{d.pedido_ref}</b></span>}
+        <span>{fmtData(d.data_devolucao)}</span>
+      </div>
+      <div style={{ padding: 16 }}>
+        <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 10 }}>motivo: <b>{d.motivo || '—'}</b></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {d.itens.map((i, k) => (
+            <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, color: palette.ink }}>
+              {i.produto}{i.tamanho ? ` (${String(i.tamanho).replace('Tamanho : ', '')})` : ''} — {fmtBRL(i.valor)}
+            </div>
+          ))}
+        </div>
+        {d.mensagem && <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 10, fontStyle: 'italic' }}>"{d.mensagem}"</div>}
+        <div style={{ marginTop: 12, fontSize: 11.5, color: palette.inkMuted }}>
+          {d.rastreio ? `rastreio: ${d.rastreio}` : 'o código de rastreio é enviado por aqui quando a devolução for aprovada'}
+        </div>
+      </div>
+      <NotaLara>A Lara conduz a devolução por aqui (status + rastreio). A conversa abre quando o número do WhatsApp B2C estiver ligado.</NotaLara>
+    </>
+  );
+}
+
 function SecaoDevolucao() {
   const [devs, setDevs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [chatId, setChatId] = useState(null);
+  const isDesktop = useIsDesktop();
   useEffect(() => {
     setLoading(true);
     fetch('/api/meluni-devolucoes-list').then(r => r.json())
@@ -577,9 +717,16 @@ function SecaoDevolucao() {
     <div>
       <SectionTitle icon={RotateCcw}>{loading ? 'Devoluções…' : `${devs.length} devolução(ões)`}</SectionTitle>
       {!loading && devs.length === 0 && <Placeholder>Nenhuma devolução importada ainda.</Placeholder>}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {devs.map(d => <DevolucaoCard key={d.chave} d={d} />)}
-      </div>
+      {devs.length > 0 && (
+        <MeluniSplitChat
+          itens={devs} getId={(d) => d.chave}
+          abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
+          tituloDe={(d) => d.nome || 'Devolução'}
+          subtituloDe={(d) => fmtTel(d.telefone) || 'sem número'}
+          renderCard={(d, p) => <DevolucaoCard d={d} {...p} />}
+          renderChat={(d) => <ChatDevolucaoBody d={d} />}
+        />
+      )}
     </div>
   );
 }
