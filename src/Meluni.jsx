@@ -19,7 +19,7 @@
  * sprints (endpoints de leitura + planilhas). Ailson 13/06/2026.
  * ═══════════════════════════════════════════════════════════════════════════
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
@@ -219,6 +219,121 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
   );
 }
 
+// ── THREAD da Lara: mensagens reais + sugestão pendente (aprovar/editar/enviar/
+// descartar) + envio manual. Reutilizável: passa telefone OU conversaId.
+// Polla a cada 5s (estilo live chat da Sofia). Ailson 16/06/2026.
+function LaraThread({ telefone, conversaId, nome }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [rascunho, setRascunho] = useState('');
+  const [editando, setEditando] = useState(false);
+  const [sugTexto, setSugTexto] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fimRef = useRef(null);
+
+  const qs = conversaId ? `conversa_id=${conversaId}` : `telefone=${encodeURIComponent(telefone || '')}`;
+  const carregar = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/meluni-whats-conversa?${qs}`);
+      const j = await r.json();
+      if (j.ok) setData(j);
+    } catch { /* ignora */ } finally { setLoading(false); }
+  }, [qs]);
+
+  useEffect(() => {
+    carregar();
+    const t = setInterval(carregar, 5000);
+    return () => clearInterval(t);
+  }, [carregar]);
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [data?.mensagens?.length, data?.sugestao?.id]);
+
+  const conv = data?.conversa;
+  const msgs = data?.mensagens || [];
+  const sug = data?.sugestao;
+
+  async function post(url, body) {
+    setBusy(true);
+    try {
+      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      await carregar();
+    } catch { /* ignora */ } finally { setBusy(false); }
+  }
+  const aprovar = (txt) => { setEditando(false); return post('/api/meluni-whats-aprovar', { id: sug.id, acao: 'aprovar', texto: txt || null, operador: 'atendente' }); };
+  const descartar = () => post('/api/meluni-whats-aprovar', { id: sug.id, acao: 'descartar', operador: 'atendente' });
+  const enviarManual = () => {
+    const t = rascunho.trim(); if (!t) return;
+    const body = conv?.id ? { conversa_id: conv.id, texto: t } : { telefone, texto: t };
+    setRascunho('');
+    return post('/api/meluni-whats-enviar', { ...body, operador: 'atendente' });
+  };
+
+  return (
+    <div style={{ borderTop: `1px solid ${palette.beige}`, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.3, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <MessageCircle size={13} color={MELUNI} /> Conversa (Lara · WhatsApp)
+      </div>
+
+      {/* histórico */}
+      <div style={{ padding: '4px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
+        {loading && <div style={{ fontSize: 12, color: palette.inkMuted }}>carregando…</div>}
+        {!loading && msgs.length === 0 && (
+          <div style={{ fontSize: 12, color: palette.inkMuted, padding: '6px 0' }}>
+            Ainda sem conversa. Quando {nome ? nome.split(' ')[0] : 'a cliente'} escrever pro WhatsApp da Lara, as mensagens aparecem aqui.
+          </div>
+        )}
+        {msgs.map(m => {
+          const entrada = m.direcao === 'entrada';
+          return (
+            <div key={m.id} style={{ alignSelf: entrada ? 'flex-start' : 'flex-end', maxWidth: '80%' }}>
+              <div style={{ background: entrada ? palette.surface : MELUNI_SOFT, border: `1px solid ${entrada ? palette.beige : 'transparent'}`, color: palette.ink, borderRadius: 10, padding: '6px 10px', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {m.texto || (m.tipo_midia && m.tipo_midia !== 'text' ? `[${m.tipo_midia}]` : '')}
+              </div>
+              <div style={{ fontSize: 9.5, color: palette.inkMuted, textAlign: entrada ? 'left' : 'right', marginTop: 1 }}>{fmtDH(m.enviada_em)}{!entrada && m.autor && m.autor !== 'lara_auto' ? ` · ${m.autor}` : ''}</div>
+            </div>
+          );
+        })}
+        <div ref={fimRef} />
+      </div>
+
+      {/* sugestão pendente da Lara */}
+      {sug && (
+        <div style={{ margin: '0 14px 10px', border: `1px solid ${MELUNI}`, borderRadius: 10, padding: 10, background: MELUNI_SOFT }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: MELUNI, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3 }}>sugestão da Lara</div>
+          {editando ? (
+            <textarea value={sugTexto} onChange={e => setSugTexto(e.target.value)} rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'vertical' }} />
+          ) : (
+            <div style={{ fontSize: 12.5, color: palette.ink, whiteSpace: 'pre-wrap', marginBottom: 8 }}>{sug.texto}</div>
+          )}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+            {editando ? (
+              <>
+                <button disabled={busy} onClick={() => aprovar(sugTexto)} style={fbtn(MELUNI, '#fff')}>enviar editado</button>
+                <button disabled={busy} onClick={() => setEditando(false)} style={fbtn(palette.surface, palette.inkSoft, palette.beige)}>cancelar</button>
+              </>
+            ) : (
+              <>
+                <button disabled={busy} onClick={() => aprovar()} style={fbtn(MELUNI, '#fff')}>aprovar e enviar</button>
+                <button disabled={busy} onClick={() => { setSugTexto(sug.texto); setEditando(true); }} style={fbtn(palette.surface, MELUNI, palette.beige)}>editar</button>
+                <button disabled={busy} onClick={descartar} style={fbtn(palette.surface, palette.alert, '#f4c7c7')}>descartar</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* envio manual */}
+      <div style={{ display: 'flex', gap: 6, padding: '0 14px 12px', alignItems: 'flex-end' }}>
+        <textarea value={rascunho} onChange={e => setRascunho(e.target.value)} rows={1} placeholder={conv ? 'escrever pra cliente…' : 'cliente precisa escrever primeiro'}
+          disabled={!conv || busy}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarManual(); } }}
+          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'none', opacity: conv ? 1 : 0.6 }} />
+        <button disabled={!conv || busy || !rascunho.trim()} onClick={enviarManual} style={fbtn(MELUNI, '#fff')}>enviar</button>
+      </div>
+    </div>
+  );
+}
+
 // ── SHELL genérico do chat (split estilo Sofia) — usado por Clientes/Carrinho/Devolução.
 // Cabeçalho roxo: setas ‹ › (passa/volta) + título/subtítulo + fechar. Corpo = children.
 // Inline (painel à direita) no desktop; overlay tela cheia no mobile. Setas e título mudam
@@ -342,11 +457,8 @@ function ChatClienteBody({ cliente }) {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 16, padding: 12, background: MELUNI_SOFT, borderRadius: 10, fontSize: 12, color: palette.inkSoft, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <MessageCircle size={16} color={MELUNI} style={{ marginTop: 1, flexShrink: 0 }} />
-          <span>A Lara usa esse histórico pra personalizar e indicar cross-sell. A conversa em si abre aqui quando o número do WhatsApp B2C estiver ligado.</span>
-        </div>
       </div>
+      <LaraThread telefone={cliente.whatsapp || cliente.telefone} nome={cliente.nome} />
     </>
   );
 }
@@ -560,7 +672,7 @@ function ChatCarrinhoBody({ c }) {
           ))}
         </div>
       </div>
-      <NotaLara>A Lara puxa esse carrinho pra recuperar a venda. A conversa abre aqui quando o número do WhatsApp B2C estiver ligado.</NotaLara>
+      <LaraThread telefone={c.telefone || c.whatsapp} nome={c.nome} />
     </>
   );
 }
@@ -634,27 +746,68 @@ function SecaoCarrinho() {
 // ─── SEÇÃO: SAC ─────────────────────────────────────────────────────────────
 function SecaoSac() {
   const [aba, setAba] = useState('conversando');
+  const [conversas, setConversas] = useState([]);
+  const [cont, setCont] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [chatId, setChatId] = useState(null);
+  const isDesktop = useIsDesktop();
+
+  const carregar = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/meluni-whats-sac-list?aba=${aba}`);
+      const j = await r.json();
+      if (j.ok) { setConversas(j.conversas || []); setCont(j.contadores || {}); }
+    } catch { /* ignora */ } finally { setLoading(false); }
+  }, [aba]);
+  useEffect(() => { setChatId(null); carregar(); const t = setInterval(carregar, 15000); return () => clearInterval(t); }, [carregar]);
+
   const tabs = [
-    { id: 'conversando', label: 'Conversando' },
-    { id: 'follow_up', label: 'Follow up' },
-    { id: 'arquivo', label: 'Arquivo' },
+    { id: 'conversando', label: 'Conversando', unread: cont.conversando },
+    { id: 'follow_up', label: 'Follow up', unread: cont.follow_up },
+    { id: 'arquivo', label: 'Arquivo', unread: cont.arquivo },
   ];
   return (
     <div>
       <SubTabs tabs={tabs} active={aba} onChange={setAba} />
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center' }}>
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>Canais:</span>
-        <Tag cor={palette.accent} bg={palette.accentSoft}><Globe size={11} /> site</Tag>
+        <Tag cor={MELUNI} bg={MELUNI_SOFT}><Phone size={11} /> whatsapp</Tag>
         <Tag cor={MELUNI} bg={MELUNI_SOFT}><Instagram size={11} /> direct insta</Tag>
       </div>
-      <Placeholder>
-        {aba === 'conversando' && <>Chat espelhado da Sofia. Card com campo de <b>anotações</b> + tag de quem está atendendo. Conversa fria há 3 dias vai pro <b>Arquivo</b>.</>}
-        {aba === 'follow_up' && <>Cards que precisam de atenção futura. Botão amarelo <b>acompanhar</b> (fixo no topo) e verde <b>resolvido</b> (após 24h vai pro Arquivo).</>}
-        {aba === 'arquivo' && <>Conversas encerradas ou frias.</>}
-      </Placeholder>
-      <div style={{ marginTop: 8, fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>
-        O Direct do Insta entra aqui com a tag <b>direct insta</b> quando a Instagram Messaging API estiver ligada (token/permissão à parte do token de Ads).
+      {loading && conversas.length === 0 && <Placeholder>carregando…</Placeholder>}
+      {!loading && conversas.length === 0 && <Placeholder>Nenhuma conversa nessa aba ainda. Entra aqui quando a cliente escrever pro WhatsApp da Lara (ou pelo Direct).</Placeholder>}
+      {conversas.length > 0 && (
+        <MeluniSplitChat
+          itens={conversas} getId={(c) => c.id}
+          abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
+          tituloDe={(c) => c.nome_cliente || fmtTel(c.telefone) || 'Cliente'}
+          subtituloDe={(c) => (c.canal === 'direct_insta' ? 'Direct Insta' : (fmtTel(c.telefone) || 'whatsapp'))}
+          renderCard={(c, p) => <SacConversaCard c={c} {...p} />}
+          renderChat={(c) => <LaraThread conversaId={c.id} nome={c.nome_cliente} />}
+        />
+      )}
+    </div>
+  );
+}
+
+// card de conversa no inbox SAC (lista)
+function SacConversaCard({ c, compact, ativo, onAbrir }) {
+  const Icone = c.canal === 'direct_insta' ? Instagram : Phone;
+  return (
+    <div onClick={onAbrir} title="Abrir conversa" style={{
+      background: ativo ? MELUNI_SOFT : palette.surface, borderRadius: compact ? 10 : 12,
+      padding: compact ? '8px 10px' : 12, cursor: 'pointer',
+      border: `1px solid ${ativo ? MELUNI : palette.beige}`, display: 'flex', alignItems: 'center', gap: 8,
+    }}>
+      <Icone size={compact ? 13 : 15} color={MELUNI} style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: compact ? 13 : 14, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {c.nome_cliente || fmtTel(c.telefone) || 'Cliente'}
+        </div>
+        <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.preview || '—'}</div>
       </div>
+      {c.unread && <DotConversa />}
     </div>
   );
 }
@@ -1020,6 +1173,8 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
           )}
         </div>
       </div>
+
+      <LaraThread telefone={d.telefone} nome={d.nome} />
 
       {/* MODAL CANCELAR */}
       {cancelOpen && (
