@@ -59,8 +59,14 @@ export function parseMarcadoresMidia(texto) {
     .replace(/\n{3,}/g, '\n\n')        // no maximo 1 linha em branco entre paragrafos
     .trim();
 
-  // Limita a 1 midia (Ailson)
-  return { textoLimpo, marcadores: marcadores.slice(0, 1) };
+  // Regra de midias (Ailson 16/06/2026):
+  //  - catalogo/video: 1 por mensagem (pega o primeiro, ignora o resto)
+  //  - fotos de modelo: ate 5 (showcase de categoria, ex: "manda mais bodys")
+  // Se houver QUALQUER catalogo/video, manda so o primeiro marcador (nao mistura).
+  // Se forem so fotos, manda ate 5.
+  const temNaoFoto = marcadores.some(m => m.tipo !== 'foto');
+  const saida = temNaoFoto ? marcadores.slice(0, 1) : marcadores.slice(0, 5);
+  return { textoLimpo, marcadores: saida };
 }
 
 /**

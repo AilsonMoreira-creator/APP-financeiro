@@ -201,6 +201,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   let textoFinal = textoFinalBruto;
   let textoMsgPrincipal = null; // se fracionado: registro principal = so a parte 1
   let midiaParaEnviar = null;
+  let midiasExtras = []; // fotos adicionais (showcase de categoria, ate 5) — Ailson 16/06/2026
   if (sug.tipo !== 'primeira_mensagem') {
     const parsed = parseMarcadoresMidia(textoFinalBruto);
     textoFinal = parsed.textoLimpo;
@@ -212,6 +213,16 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
         }
       } catch (e) {
         logErro('aprovar/parse-midia', e);
+      }
+      // fotos extras (so quando o primeiro tambem e foto — showcase de categoria)
+      if (parsed.marcadores.length > 1 && parsed.marcadores[0].tipo === 'foto') {
+        for (const mk of parsed.marcadores.slice(1)) {
+          if (mk.tipo !== 'foto') continue;
+          try {
+            const mx = await resolverMidia(mk);
+            if (mx) midiasExtras.push(mx);
+          } catch (e) { logErro('aprovar/parse-midia-extra', e); }
+        }
       }
     }
   }
@@ -267,6 +278,19 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
         });
         if (!r.ok) throw new Error(r.erro || 'envio_midia_falhou');
         metaResp = { messages: [{ id: r.message_id }], _midia: true };
+        // fotos extras do showcase de categoria — 1 por mensagem, sem caption
+        for (const mx of midiasExtras) {
+          try {
+            const rx = await enviarMidiaSofia({
+              telefone: sug.conversa.telefone,
+              midia: mx,
+              conversaId: sug.conversa.id,
+              mensagemId: null,
+              decididaPor: 'ia_automatica',
+            });
+            if (!rx.ok) log('aprovar', `foto extra ${mx.ref} nao enviou: ${rx.erro}`);
+          } catch (e) { logErro('aprovar/foto-extra-envio', e); }
+        }
       } else if (midiaParaEnviar && midiaParaEnviar.tipo === 'catalogo' && sug.conversa.catalogo_formato === 'vesti') {
         // VESTI (teste A/B) — Ailson 04/06/2026: catalogo VIRTUAL em 2 mensagens,
         // SEM PDF e SEM a fala generica do catalogo (que era pensada pro PDF).
