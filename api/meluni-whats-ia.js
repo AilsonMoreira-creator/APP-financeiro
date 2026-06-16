@@ -59,12 +59,23 @@ function montarMensagens(msgs) {
   for (const m of msgs) {
     const role = m.direcao === 'entrada' ? 'user' : 'assistant';
     const txt = (m.texto || '').trim() || (m.tipo_midia && m.tipo_midia !== 'text' ? `[${m.tipo_midia}]` : '');
-    if (!txt) continue;
+    // imagem da cliente com URL pública -> bloco de visão (Lara "vê" a foto)
+    const ehImg = role === 'user' && m.tipo_midia === 'image' && typeof m.midia_url === 'string' && m.midia_url.startsWith('http');
+    const blocks = [];
+    if (txt) blocks.push({ type: 'text', text: txt });
+    if (ehImg) blocks.push({ type: 'image', source: { type: 'url', url: m.midia_url } });
+    if (!blocks.length) continue;
     if (out.length && out[out.length - 1].role === role) {
-      out[out.length - 1].content += `\n${txt}`;       // merge mesmo papel
+      const prev = out[out.length - 1];
+      const prevBlocks = Array.isArray(prev.content) ? prev.content : [{ type: 'text', text: String(prev.content) }];
+      prev.content = [...prevBlocks, ...blocks];                 // merge mesmo papel
     } else {
-      out.push({ role, content: txt });
+      out.push({ role, content: blocks });
     }
+  }
+  // colapsa mensagens que ficaram só com um bloco de texto -> string (mais limpo)
+  for (const o of out) {
+    if (Array.isArray(o.content) && o.content.length === 1 && o.content[0].type === 'text') o.content = o.content[0].text;
   }
   // Claude exige começar com 'user'
   while (out.length && out[0].role !== 'user') out.shift();
@@ -79,7 +90,7 @@ export async function processarConversaMeluni(conversaId) {
 
   // 2. histórico
   const { data: msgs } = await supabase.from('meluni_mensagens')
-    .select('direcao, texto, tipo_midia, enviada_em')
+    .select('direcao, texto, tipo_midia, midia_url, enviada_em')
     .eq('conversa_id', conversaId)
     .order('enviada_em', { ascending: true })
     .limit(120);

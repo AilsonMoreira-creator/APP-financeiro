@@ -286,7 +286,19 @@ function LaraThread({ telefone, conversaId, nome }) {
           return (
             <div key={m.id} style={{ alignSelf: entrada ? 'flex-start' : 'flex-end', maxWidth: '80%' }}>
               <div style={{ background: entrada ? palette.surface : MELUNI_SOFT, border: `1px solid ${entrada ? palette.beige : 'transparent'}`, color: palette.ink, borderRadius: 10, padding: '6px 10px', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {m.texto || (m.tipo_midia && m.tipo_midia !== 'text' ? `[${m.tipo_midia}]` : '')}
+                {m.tipo_midia === 'image' && m.midia_url && m.midia_url.startsWith('http') ? (
+                  <>
+                    <img src={m.midia_url} alt="foto" style={{ maxWidth: 180, maxHeight: 220, borderRadius: 8, display: 'block', objectFit: 'cover' }} />
+                    {m.texto && m.texto !== '[image]' ? <div style={{ marginTop: 4 }}>{m.texto}</div> : null}
+                  </>
+                ) : m.tipo_midia === 'audio' && m.midia_url && m.midia_url.startsWith('http') ? (
+                  <>
+                    <audio controls src={m.midia_url} style={{ maxWidth: 210, display: 'block' }} />
+                    {m.texto && m.texto !== '[áudio]' ? <div style={{ marginTop: 4, fontStyle: 'italic', color: palette.inkSoft }}>{m.texto}</div> : null}
+                  </>
+                ) : (
+                  m.texto || (m.tipo_midia && m.tipo_midia !== 'text' ? `[${m.tipo_midia}]` : '')
+                )}
               </div>
               <div style={{ fontSize: 9.5, color: palette.inkMuted, textAlign: entrada ? 'left' : 'right', marginTop: 1 }}>{fmtDH(m.enviada_em)}{!entrada && m.autor && m.autor !== 'lara_auto' ? ` · ${m.autor}` : ''}</div>
             </div>

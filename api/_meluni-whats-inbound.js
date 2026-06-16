@@ -6,18 +6,65 @@
 // value.metadata.phone_number_id == META_WA_PHONE_ID_LARA. Grava no MESMO inbox
 // do Meluni (meluni_conversas / meluni_mensagens), canal='whatsapp'.
 //
-// S1 = só RECEBER: cria/acha a conversa, grava a mensagem de entrada, seta o
-// debounce (responder_em) pro futuro cron-responder da Lara (S2). Mídia entra
-// como referência (download/transcrição ficam pra S2, junto da IA).
+// S1 = RECEBER: cria/acha a conversa, grava a entrada, seta o debounce
+// (responder_em) pro cron-responder da Lara. Mídia é baixada e salva no Storage
+// (bucket sofia-midias, prefixo meluni-inbound/); áudio é transcrito no Whisper
+// (texto = transcrição) e imagem fica com URL pública pra IA "ver" (visão na ia).
 //
 // Dedup por meta_message_id (índice único parcial) — a Meta reenvia em retry.
 // Ailson 16/06/2026.
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
+import { obterUrlMidia, baixarMidia } from './_lojas-whats-meta-client.js';
 
 const DEBOUNCE_MS = 60 * 1000; // 60s — agrupa rajada antes da IA (igual Sofia)
 
+const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions';
+const WHISPER_MODEL = 'whisper-1';
+const MIDIA_TIMEOUT_MS = 30000;
+
 const normTel = (s) => String(s || '').replace(/\D/g, '');
+
+// Baixa a mídia da Meta (mesmo token da Sofia) e salva no Storage público
+// (bucket sofia-midias, prefixo meluni-inbound/). Retorna { url, buffer, mime }.
+// Falha não derruba a ingestão — quem chama trata o null.
+async function baixarESalvarMidia(midiaId) {
+  const meta = await obterUrlMidia(midiaId);
+  if (!meta?.url) return null;
+  const buffer = await baixarMidia(meta.url);
+  const mime = (meta.mime_type || '').split(';')[0].trim() || 'application/octet-stream';
+  const ext = mime.split('/').pop() || 'bin';
+  const path = `meluni-inbound/${Date.now()}_${midiaId}.${ext}`;
+  const { error } = await supabase.storage.from('sofia-midias').upload(path, buffer, { contentType: mime, upsert: false });
+  if (error) { console.error('[meluni-inbound] upload midia:', error.message); return null; }
+  const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(path);
+  return { url: pub?.publicUrl || null, buffer, mime };
+}
+
+// Transcreve um buffer de áudio direto no Whisper (sem re-download). pt-BR.
+async function transcreverBuffer(buffer, mime) {
+  if (!process.env.OPENAI_API_KEY) return null;
+  if (!buffer || buffer.length === 0 || buffer.length > 25 * 1024 * 1024) return null;
+  try {
+    const form = new FormData();
+    form.append('file', new Blob([buffer], { type: mime || 'audio/ogg' }), 'audio.ogg');
+    form.append('model', WHISPER_MODEL);
+    form.append('language', 'pt');
+    form.append('response_format', 'json');
+    const r = await fetch(WHISPER_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      body: form,
+      signal: AbortSignal.timeout(MIDIA_TIMEOUT_MS),
+    });
+    if (!r.ok) { console.error('[meluni-inbound] whisper status', r.status); return null; }
+    const j = await r.json();
+    return (j.text || '').trim() || null;
+  } catch (e) {
+    console.error('[meluni-inbound] transcrever:', e?.message || e);
+    return null;
+  }
+}
 
 // extrai tipo + texto + media_id da mensagem do WhatsApp
 function conteudoMsg(msg) {
@@ -84,10 +131,31 @@ export async function processarMensagemMeluni(msg, value) {
     if (!conversaId) return;
 
     const c = conteudoMsg(msg);
-    // S1: mídia entra como referência (meta:<id>); download + transcrição na S2.
-    const texto = c.texto || (c.tipo !== 'text' && c.tipo !== 'outro' ? `[${c.tipo}]` : null);
-    const midiaUrl = c.midiaId ? `meta:${c.midiaId}` : null;
     const ts = parseInt(msg.timestamp, 10);
+
+    // baixa/salva a mídia (imagem/áudio/vídeo/doc/sticker); em áudio, transcreve.
+    // download/transcrição nunca derrubam a ingestão — caem no fallback meta:<id>.
+    let texto = c.texto || null;
+    let midiaUrl = null;
+    let transcricao = null;
+    if (c.midiaId) {
+      let salvo = null;
+      try { salvo = await baixarESalvarMidia(c.midiaId); } catch (e) { console.error('[meluni-inbound] midia:', e?.message || e); }
+      if (salvo?.url) {
+        midiaUrl = salvo.url;
+        if (c.tipo === 'audio') {
+          transcricao = await transcreverBuffer(salvo.buffer, salvo.mime);
+          texto = transcricao || '[áudio]';
+        } else if (!texto) {
+          texto = `[${c.tipo}]`;
+        }
+      } else {
+        midiaUrl = `meta:${c.midiaId}`;
+        if (!texto) texto = `[${c.tipo}]`;
+      }
+    } else if (!texto && c.tipo !== 'text' && c.tipo !== 'outro') {
+      texto = `[${c.tipo}]`;
+    }
     const enviadaEm = new Date((Number.isFinite(ts) ? ts * 1000 : Date.now())).toISOString();
 
     const ins = await supabase.from('meluni_mensagens').insert({
@@ -97,6 +165,7 @@ export async function processarMensagemMeluni(msg, value) {
       tipo_midia: c.tipo,
       texto,
       midia_url: midiaUrl,
+      audio_transcricao: transcricao,
       meta_message_id: msg.id,
       enviada_em: enviadaEm,
     });
