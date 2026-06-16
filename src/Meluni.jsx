@@ -829,9 +829,10 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
   const itens = Array.isArray(d.itens) ? d.itens : [];
   const n = d.n_pecas || itens.length || 1;
   const stepLabel = devolStepInfo(d).curto;
+  const it0 = itens[0];
   const resumoItens = n > 1
-    ? `${n} peças: ${itens.map(i => i.produto).filter(Boolean).join(', ')}`
-    : (itens[0]?.produto || d.produto || '—');
+    ? `${n} peças: ${itens.map(i => String(i?.descricao || i?.produto || '').trim()).filter(Boolean).join(', ')}`
+    : [it0?.ref || it0?.sku, String(it0?.descricao || it0?.produto || d.produto || '—').trim()].filter(Boolean).join(' · ');
 
   if (compact) {
     return (
@@ -923,13 +924,15 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
           {itens.map((it, k) => {
             const { cor, tam } = parseCorTam(it.tamanho);
-            const desc = String(it.produto || '—').replace(/\s{2,}/g, ' ').trim();
+            const ref = it.ref || it.sku || '';
+            const desc = String(it.descricao || it.produto || '—').replace(/\s{2,}/g, ' ').trim();
             return (
               <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 12.5, color: palette.ink, fontWeight: 600, lineHeight: 1.25 }}>{desc}</div>
-                  {(cor || tam) && (
+                  {(ref || cor || tam) && (
                     <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                      {ref && <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 4, background: palette.bg, color: palette.inkMuted, fontWeight: 700, border: `1px solid ${palette.beige}`, letterSpacing: 0.2 }}>REF {ref}</span>}
                       {cor && <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 600 }}>{cor}</span>}
                       {tam && <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 4, background: palette.bg, color: palette.inkSoft, fontWeight: 700, border: `1px solid ${palette.beige}` }}>{tam}</span>}
                     </div>
