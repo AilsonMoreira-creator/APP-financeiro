@@ -23,7 +23,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
-  FileText, Package, Truck, Search, CheckCircle, X,
+  CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
@@ -672,93 +672,149 @@ const DEVOL_FLUXO = {
   cancelada:           { label: 'cancelada',           cor: palette.alert },
 };
 
-// régua de SLA por estado (em dias). Ajuste livre — só config.
-const SLA_DEVOL = {
-  aprovada:            { alerta: 1 },                  // avisar etiqueta no mesmo dia
-  aguardando_postagem: { alerta: 7 },                 // normal até 7d
-  aguardando_conferir: { alerta: 1 },
-  aguardando_estorno:  { alerta: 1, critico: 2 },
-  completa:            { alerta: 1, soSeNaoAvisado: true }, // estorno feito, cliente não avisado
-};
+// SLA por etapa ATIVA. Regra geral: amarelo a partir de 1d de atraso, vermelho com mais de 1d.
+// Exceção etiqueta enviada -> devolução chegar: 7d normal, 7–10 amarelo, acima de 10 vermelho.
 const AMBAR = '#e6a23c';
 
 function slaDevol(d) {
-  const cfg = SLA_DEVOL[d.fluxo_status];
-  if (!cfg) return null;
-  if (cfg.soSeNaoAvisado && (!d.estornado_em || d.cliente_avisado_em)) return null;
-  const dias = diasDesde(d.fluxo_desde);
+  let base, alerta, critico, rotulo;
+  switch (d.fluxo_status) {
+    case 'aprovada':            base = d.fluxo_desde;                          alerta = 1;  critico = 2;  rotulo = 'etiqueta';  break;
+    case 'aguardando_postagem': base = d.etiqueta_avisado_em || d.fluxo_desde; alerta = 7;  critico = 11; rotulo = 'a chegar'; break;
+    case 'aguardando_conferir': base = d.recebido_efetivo || d.fluxo_desde;    alerta = 1;  critico = 2;  rotulo = 'conferir';  break;
+    case 'aguardando_estorno':  base = d.conferido_em || d.fluxo_desde;        alerta = 1;  critico = 2;  rotulo = 'pagamento'; break;
+    case 'completa':
+      if (d.estornado_em && !d.cliente_avisado_em) { base = d.estornado_em; alerta = 1; critico = 2; rotulo = 'avisar'; break; }
+      return null;
+    default: return null;
+  }
+  const dias = diasDesde(base);
   let cor = palette.ok, nivel = 'ok';
-  if (cfg.critico != null && dias >= cfg.critico) { cor = palette.alert; nivel = 'critico'; }
-  else if (cfg.alerta != null && dias >= cfg.alerta) { cor = AMBAR; nivel = 'alerta'; }
-  const rotulo = {
-    aprovada: 'avisar etiqueta', aguardando_postagem: 'postagem',
-    aguardando_conferir: 'conferir', aguardando_estorno: 'estorno',
-    completa: 'avisar cliente',
-  }[d.fluxo_status] || '';
-  return { txt: `${rotulo} · ${dias <= 0 ? 'hoje' : dias + 'd'}`, cor, nivel };
+  if (dias >= critico)     { cor = palette.alert; nivel = 'critico'; }
+  else if (dias >= alerta) { cor = AMBAR;         nivel = 'alerta'; }
+  return { dias, cor, nivel, txt: `${rotulo} · ${dias <= 0 ? 'hoje' : dias + 'd'}` };
 }
 
 const fmtTam = (t) => t ? String(t).replace(/tamanho\s*:?\s*/i, '') : '';
 
-// ─── LINHA DO TEMPO (estilo da imagem): 5 etapas com linha conectando ───────
+// ─── LINHA DO TEMPO — fluxo real da devolução Meluni (6 etapas) ──────────────
+// Aprovada (o import só traz aprovadas) → Etiqueta enviada → Recebida e conferida
+// (as duas contam como uma) → Aguardando pagamento → Estorno pago → Mensagem
+// enviada (confirma o estorno).
 const DEVOL_STEPS = [
-  { id: 'solicitada',   label: 'Solicitação\nrecebida', Icon: FileText },
-  { id: 'aguard_envio', label: 'Aguardando\nenvio',     Icon: Package },
-  { id: 'enviada',      label: 'Devolução\nenviada',    Icon: Truck },
-  { id: 'analise',      label: 'Em\nanálise',           Icon: Search },
-  { id: 'concluida',    label: 'Devolução\nconcluída',  Icon: CheckCircle },
+  { id: 'aprovada',  label: 'Aprovada',              curto: 'aprovada',  Icon: ThumbsUp },
+  { id: 'etiqueta',  label: 'Etiqueta\nenviada',     curto: 'etiqueta',  Icon: IconTag },
+  { id: 'recebida',  label: 'Recebida e\nconferida', curto: 'conferir',  Icon: PackageCheck },
+  { id: 'pagamento', label: 'Aguardando\npagamento', curto: 'pagamento', Icon: Clock },
+  { id: 'estorno',   label: 'Estorno\npago',         curto: 'estorno',   Icon: DollarSign },
+  { id: 'avisada',   label: 'Mensagem\nenviada',     curto: 'avisar',    Icon: Send },
 ];
-// fluxo_status -> índice da etapa alcançada. aprovada cai automático em "Aguardando envio".
-function stepDevol(fs) {
-  switch (fs) {
-    case 'cancelada': return -1;
-    case 'em_analise': return 0;
-    case 'aprovada':
-    case 'aguardando_postagem': return 1;
-    case 'aguardando_conferir': return 2;
-    case 'aguardando_estorno': return 3;
-    case 'completa': return 4;
-    default: return 0;
+// índice da etapa ATIVA (as anteriores ficam concluídas). >=6 = tudo concluído. -2 = cancelada.
+function stepDevol(d) {
+  switch (d?.fluxo_status) {
+    case 'cancelada':           return -2;
+    case 'em_analise':          return 0;  // ainda não aprovada (raro; import já traz aprovada)
+    case 'aprovada':            return 1;  // aprovada ok, falta avisar a etiqueta
+    case 'aguardando_postagem': return 2;  // etiqueta enviada, aguardando chegar/conferir
+    case 'aguardando_conferir': return 2;  // chegou, falta conferir (mesma etapa)
+    case 'aguardando_estorno':  return 3;  // conferida, aguardando pagamento
+    case 'completa':            return (d.estornado_em && !d.cliente_avisado_em) ? 5 : 6;
+    default:                    return 1;
   }
 }
-// timeline horizontal conectada. size: 'mini' (card) | 'full' (chat)
-function TimelineDevol({ fluxoStatus, size = 'full' }) {
-  const mini = size === 'mini';
-  const atual = stepDevol(fluxoStatus);
-  const D = mini ? 22 : 38, IS = mini ? 12 : 20, FS = mini ? 8 : 12;
+// rótulo curto da etapa ativa (pills dos cards)
+function devolStepInfo(d) {
+  const i = stepDevol(d);
+  if (i === -2) return { i, curto: 'cancelada', label: 'cancelada' };
+  if (i >= DEVOL_STEPS.length) return { i, curto: 'concluída', label: 'Concluída' };
+  return { i, curto: DEVOL_STEPS[i].curto, label: DEVOL_STEPS[i].label };
+}
 
-  if (fluxoStatus === 'cancelada') {
+// "Cor : MARROM ESCURO;\r\nTamanho : G" -> { cor:'Marrom escuro', tam:'G' }
+function parseCorTam(s) {
+  if (!s) return { cor: '', tam: '' };
+  const str = String(s);
+  const pega = (re) => { const r = str.match(re); return r ? r[1].replace(/[;\r\n]+/g, ' ').trim() : ''; };
+  let cor = pega(/cor\s*:?\s*([^;\r\n]+)/i);
+  let tam = pega(/tamanho\s*:?\s*([^;\r\n]+)/i);
+  if (cor) cor = cor.charAt(0).toUpperCase() + cor.slice(1).toLowerCase();
+  if (!cor && !tam) tam = str.replace(/[;\r\n]+/g, ' ').trim();
+  return { cor, tam };
+}
+
+// timeline horizontal conectada. size: 'mini' (card, compacta) | 'full' (chat)
+function TimelineDevol({ d, size = 'full' }) {
+  const full = size === 'full';
+  const atual = stepDevol(d);
+  const sla = slaDevol(d);
+  // etapa ativa acende vermelho/âmbar no atraso; senão é o preto de "em andamento"
+  const corAtiva = sla && sla.nivel === 'critico' ? palette.alert
+                 : sla && sla.nivel === 'alerta'  ? AMBAR
+                 : '#1a1a1a';
+
+  if (d?.fluxo_status === 'cancelada') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ width: D, height: D, borderRadius: '50%', background: palette.alert, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <X size={IS} color="#fff" />
+        <span style={{ width: 28, height: 28, borderRadius: '50%', background: palette.alert, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <X size={15} color="#fff" />
         </span>
-        <span style={{ fontSize: mini ? 11 : 13, fontWeight: 700, color: palette.alert }}>Devolução cancelada</span>
+        <span style={{ fontSize: full ? 13 : 12, fontWeight: 700, color: palette.alert }}>Devolução cancelada</span>
       </div>
     );
   }
 
+  const concluida = atual >= DEVOL_STEPS.length;
+
+  // ── MINI (card): etapa ativa em destaque + bolinhas de progresso. Compacta. ──
+  if (!full) {
+    const Icon = concluida ? CheckCircle : DEVOL_STEPS[atual].Icon;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{ width: 30, height: 30, borderRadius: '50%', background: concluida ? palette.ok : corAtiva, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon size={16} color="#fff" strokeWidth={1.9} />
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: palette.ink, lineHeight: 1.1 }}>
+            {concluida ? 'Concluída' : DEVOL_STEPS[atual].label.replace('\n', ' ')}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+            {DEVOL_STEPS.map((s, i) => {
+              const cor = (i < atual || concluida) ? MELUNI : i === atual ? corAtiva : palette.beige;
+              return <span key={s.id} style={{ width: (i === atual && !concluida) ? 9 : 6, height: 6, borderRadius: 3, background: cor }} />;
+            })}
+            {sla && sla.nivel !== 'ok' && (
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: sla.cor, marginLeft: 3 }}>{sla.dias}d atraso</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── FULL (chat): 6 nós com rótulo, conectados; etapa ativa acende no atraso. ──
+  const D = 36, IS = 18, FS = 10.5;
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
       {DEVOL_STEPS.map((s, i) => {
-        const feito = i <= atual;
-        const ehAtual = i === atual;
-        const bg = i < atual ? MELUNI : ehAtual ? '#1a1a1a' : palette.surface;
-        const bd = feito ? (ehAtual ? '#1a1a1a' : MELUNI) : palette.beige;
-        const ic = feito ? '#fff' : palette.inkMuted;
-        const corLinha = i < atual ? MELUNI : palette.beige;
+        const feito = concluida || i < atual;
+        const ehAtual = !concluida && i === atual;
+        const bg = feito ? MELUNI : ehAtual ? corAtiva : palette.surface;
+        const bd = feito ? MELUNI : ehAtual ? corAtiva : palette.beige;
+        const ic = (feito || ehAtual) ? '#fff' : palette.inkMuted;
+        const corLinha = (concluida || i < atual) ? MELUNI : palette.beige;
         return (
           <React.Fragment key={s.id}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: D }}>
               <span style={{ width: D, height: D, borderRadius: '50%', background: bg, border: `1.5px solid ${bd}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                 <s.Icon size={IS} color={ic} strokeWidth={1.8} />
               </span>
-              {!mini && (
-                <span style={{ fontSize: FS, color: feito ? palette.ink : palette.inkMuted, textAlign: 'center', marginTop: 6, lineHeight: 1.15, whiteSpace: 'pre-line', fontWeight: ehAtual ? 700 : 400 }}>{s.label}</span>
+              <span style={{ fontSize: FS, color: (feito || ehAtual) ? palette.ink : palette.inkMuted, textAlign: 'center', marginTop: 6, lineHeight: 1.15, whiteSpace: 'pre-line', fontWeight: ehAtual ? 700 : 400 }}>{s.label}</span>
+              {ehAtual && sla && sla.nivel !== 'ok' && (
+                <span style={{ fontSize: 9.5, fontWeight: 700, color: sla.cor, marginTop: 2 }}>{sla.dias}d atraso</span>
               )}
             </div>
             {i < DEVOL_STEPS.length - 1 && (
-              <div style={{ flex: 1, height: 1.5, background: corLinha, marginTop: D / 2 - 0.75, minWidth: mini ? 8 : 14 }} />
+              <div style={{ flex: 1, height: 1.5, background: corLinha, marginTop: D / 2 - 0.75, minWidth: 8 }} />
             )}
           </React.Fragment>
         );
@@ -772,8 +828,7 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
   const apagada = d.fluxo_status === 'completa' || d.fluxo_status === 'cancelada';
   const itens = Array.isArray(d.itens) ? d.itens : [];
   const n = d.n_pecas || itens.length || 1;
-  const atual = stepDevol(d.fluxo_status);
-  const stepLabel = d.fluxo_status === 'cancelada' ? 'cancelada' : (DEVOL_STEPS[atual]?.label || '').replace('\n', ' ');
+  const stepLabel = devolStepInfo(d).curto;
   const resumoItens = n > 1
     ? `${n} peças: ${itens.map(i => i.produto).filter(Boolean).join(', ')}`
     : (itens[0]?.produto || d.produto || '—');
@@ -791,7 +846,7 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
           <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtBRL(d.valor)} · {n > 1 ? `${n} peças` : resumoItens}</div>
         </div>
         {d.conversa_pendente && <DotConversa />}
-        <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, fontWeight: 700, color: d.fluxo_status === 'cancelada' ? palette.alert : MELUNI, border: `1px solid ${d.fluxo_status === 'cancelada' ? palette.alert : palette.beige}`, flexShrink: 0, whiteSpace: 'nowrap' }}>{stepLabel}</span>
+        <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, fontWeight: 700, color: d.fluxo_status === 'cancelada' ? palette.alert : (sla && sla.nivel !== 'ok' ? sla.cor : MELUNI), border: `1px solid ${d.fluxo_status === 'cancelada' ? palette.alert : (sla && sla.nivel !== 'ok' ? sla.cor : palette.beige)}`, flexShrink: 0, whiteSpace: 'nowrap' }}>{stepLabel}</span>
       </div>
     );
   }
@@ -817,7 +872,7 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
           </div>
           <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumoItens}</div>
           {/* linha do tempo pequena no card */}
-          <TimelineDevol fluxoStatus={d.fluxo_status} size="mini" />
+          <TimelineDevol d={d} size="mini" />
         </div>
       </div>
     </div>
@@ -867,11 +922,20 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
         <div style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>{n > 1 ? `Peças devolvidas (${n})` : 'Peça devolvida'}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
           {itens.map((it, k) => {
-            const tam = fmtTam(it.tamanho);
+            const { cor, tam } = parseCorTam(it.tamanho);
+            const desc = String(it.produto || '—').replace(/\s{2,}/g, ' ').trim();
             return (
-              <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12.5, color: palette.ink, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span>{it.produto || '—'}{tam ? ` · ${tam}` : ''}</span>
-                {it.valor != null && <span style={{ color: palette.inkMuted, flexShrink: 0 }}>{fmtBRL(it.valor)}</span>}
+              <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '8px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, color: palette.ink, fontWeight: 600, lineHeight: 1.25 }}>{desc}</div>
+                  {(cor || tam) && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                      {cor && <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 600 }}>{cor}</span>}
+                      {tam && <span style={{ fontSize: 10.5, padding: '1px 7px', borderRadius: 4, background: palette.bg, color: palette.inkSoft, fontWeight: 700, border: `1px solid ${palette.beige}` }}>{tam}</span>}
+                    </div>
+                  )}
+                </div>
+                {it.valor != null && <span style={{ fontSize: 12.5, color: palette.inkSoft, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtBRL(it.valor)}</span>}
               </div>
             );
           })}
@@ -882,7 +946,7 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
         {/* LINHA DO TEMPO (horizontal, conectada) */}
         <div style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.3 }}>Linha do tempo</div>
         <div style={{ marginBottom: 18, padding: '0 4px' }}>
-          <TimelineDevol fluxoStatus={st} size="full" />
+          <TimelineDevol d={d} size="full" />
         </div>
         {/* detalhes dos carimbos (quem/quando) */}
         {(d.etiqueta_avisado_em || d.recebido_efetivo || d.conferido_em || d.estornado_em || d.cliente_avisado_em) && (
