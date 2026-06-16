@@ -23,6 +23,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
+  FileText, Package, Truck, Search, CheckCircle, X,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
@@ -697,13 +698,85 @@ function slaDevol(d) {
   return { txt: `${rotulo} · ${dias <= 0 ? 'hoje' : dias + 'd'}`, cor, nivel };
 }
 
-const fmtTam = (t) => t ? String(t).replace('Tamanho : ', '') : '';
+const fmtTam = (t) => t ? String(t).replace(/tamanho\s*:?\s*/i, '') : '';
+
+// ─── LINHA DO TEMPO (estilo da imagem): 5 etapas com linha conectando ───────
+const DEVOL_STEPS = [
+  { id: 'solicitada',   label: 'Solicitação\nrecebida', Icon: FileText },
+  { id: 'aguard_envio', label: 'Aguardando\nenvio',     Icon: Package },
+  { id: 'enviada',      label: 'Devolução\nenviada',    Icon: Truck },
+  { id: 'analise',      label: 'Em\nanálise',           Icon: Search },
+  { id: 'concluida',    label: 'Devolução\nconcluída',  Icon: CheckCircle },
+];
+// fluxo_status -> índice da etapa alcançada. aprovada cai automático em "Aguardando envio".
+function stepDevol(fs) {
+  switch (fs) {
+    case 'cancelada': return -1;
+    case 'em_analise': return 0;
+    case 'aprovada':
+    case 'aguardando_postagem': return 1;
+    case 'aguardando_conferir': return 2;
+    case 'aguardando_estorno': return 3;
+    case 'completa': return 4;
+    default: return 0;
+  }
+}
+// timeline horizontal conectada. size: 'mini' (card) | 'full' (chat)
+function TimelineDevol({ fluxoStatus, size = 'full' }) {
+  const mini = size === 'mini';
+  const atual = stepDevol(fluxoStatus);
+  const D = mini ? 22 : 38, IS = mini ? 12 : 20, FS = mini ? 8 : 12;
+
+  if (fluxoStatus === 'cancelada') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: D, height: D, borderRadius: '50%', background: palette.alert, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <X size={IS} color="#fff" />
+        </span>
+        <span style={{ fontSize: mini ? 11 : 13, fontWeight: 700, color: palette.alert }}>Devolução cancelada</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
+      {DEVOL_STEPS.map((s, i) => {
+        const feito = i <= atual;
+        const ehAtual = i === atual;
+        const bg = i < atual ? MELUNI : ehAtual ? '#1a1a1a' : palette.surface;
+        const bd = feito ? (ehAtual ? '#1a1a1a' : MELUNI) : palette.beige;
+        const ic = feito ? '#fff' : palette.inkMuted;
+        const corLinha = i < atual ? MELUNI : palette.beige;
+        return (
+          <React.Fragment key={s.id}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: D }}>
+              <span style={{ width: D, height: D, borderRadius: '50%', background: bg, border: `1.5px solid ${bd}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                <s.Icon size={IS} color={ic} strokeWidth={1.8} />
+              </span>
+              {!mini && (
+                <span style={{ fontSize: FS, color: feito ? palette.ink : palette.inkMuted, textAlign: 'center', marginTop: 6, lineHeight: 1.15, whiteSpace: 'pre-line', fontWeight: ehAtual ? 700 : 400 }}>{s.label}</span>
+              )}
+            </div>
+            {i < DEVOL_STEPS.length - 1 && (
+              <div style={{ flex: 1, height: 1.5, background: corLinha, marginTop: D / 2 - 0.75, minWidth: mini ? 8 : 14 }} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 function DevolucaoCard({ d, compact, ativo, onAbrir }) {
-  const fl = DEVOL_FLUXO[d.fluxo_status] || { label: d.fluxo_status, cor: palette.inkSoft };
   const sla = slaDevol(d);
   const apagada = d.fluxo_status === 'completa' || d.fluxo_status === 'cancelada';
-  const tam = fmtTam(d.tamanho);
+  const itens = Array.isArray(d.itens) ? d.itens : [];
+  const n = d.n_pecas || itens.length || 1;
+  const atual = stepDevol(d.fluxo_status);
+  const stepLabel = d.fluxo_status === 'cancelada' ? 'cancelada' : (DEVOL_STEPS[atual]?.label || '').replace('\n', ' ');
+  const resumoItens = n > 1
+    ? `${n} peças: ${itens.map(i => i.produto).filter(Boolean).join(', ')}`
+    : (itens[0]?.produto || d.produto || '—');
 
   if (compact) {
     return (
@@ -715,10 +788,10 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
         <RotateCcw size={13} color={MELUNI} style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.nome || '—'}</div>
-          <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtBRL(d.valor)} · {d.produto}</div>
+          <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtBRL(d.valor)} · {n > 1 ? `${n} peças` : resumoItens}</div>
         </div>
         {d.conversa_pendente && <DotConversa />}
-        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700, color: fl.cor, border: `1px solid ${fl.cor}`, flexShrink: 0 }}>{fl.label}</span>
+        <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, fontWeight: 700, color: d.fluxo_status === 'cancelada' ? palette.alert : MELUNI, border: `1px solid ${d.fluxo_status === 'cancelada' ? palette.alert : palette.beige}`, flexShrink: 0, whiteSpace: 'nowrap' }}>{stepLabel}</span>
       </div>
     );
   }
@@ -733,32 +806,19 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{d.nome || '—'}</span>
-            <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: fl.cor, border: `1px solid ${fl.cor}` }}>{fl.label}</span>
+            {n > 1 && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>{n} peças</span>}
             {d.conversa_pendente && <PillConversa />}
             {sla && sla.nivel !== 'ok' && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: '#fff', background: sla.cor }}>{sla.txt}</span>}
           </div>
-          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
             <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(d.telefone)}</span>
-            <span>{d.produto}{tam ? ` (${tam})` : ''}{d.ref ? ` · ref ${d.ref}` : ''}</span>
             <CampoKPI label="valor" valor={fmtBRL(d.valor)} destaque />
             {d.pedido_ref && <span>pedido {d.pedido_ref}</span>}
           </div>
+          <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumoItens}</div>
+          {/* linha do tempo pequena no card */}
+          <TimelineDevol fluxoStatus={d.fluxo_status} size="mini" />
         </div>
-      </div>
-    </div>
-  );
-}
-
-// passo da linha do tempo
-function PassoTL({ feito, label, quando, quem, extra }) {
-  return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-      <div style={{ width: 10, height: 10, borderRadius: '50%', marginTop: 3, flexShrink: 0, background: feito ? MELUNI : 'transparent', border: `2px solid ${feito ? MELUNI : palette.beige}` }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, color: feito ? palette.ink : palette.inkMuted, fontWeight: feito ? 600 : 400 }}>{label}</div>
-        {feito && (quando || quem) && (
-          <div style={{ fontSize: 11, color: palette.inkMuted }}>{quando}{quem ? ` · ${quem}` : ''}{extra ? ` · ${extra}` : ''}</div>
-        )}
       </div>
     </div>
   );
@@ -781,7 +841,8 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
 
   const st = d.fluxo_status;
   const mensagem = d.dados_extra?.mensagem;
-  const tam = fmtTam(d.tamanho);
+  const itens = Array.isArray(d.itens) ? d.itens : [];
+  const n = d.n_pecas || itens.length || 1;
 
   const run = async (acao, payload) => {
     setBusy(true);
@@ -792,8 +853,8 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   return (
     <>
       <div style={{ display: 'flex', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: (DEVOL_FLUXO[st] || {}).cor || palette.inkSoft, border: `1px solid ${(DEVOL_FLUXO[st] || {}).cor || palette.inkSoft}` }}>{(DEVOL_FLUXO[st] || {}).label || st}</span>
-        <span>valor <b>{fmtBRL(d.valor)}</b></span>
+        <span>valor total <b>{fmtBRL(d.valor)}</b></span>
+        <span>{n > 1 ? <b>{n} peças</b> : '1 peça'}</span>
         {d.pedido_ref && <span>pedido <b>{d.pedido_ref}</b></span>}
       </div>
 
@@ -802,21 +863,37 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
           <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8, background: '#fdecea', color: palette.alert, fontSize: 12, fontWeight: 600 }}>💬 conversa sem resposta</div>
         )}
 
-        <div style={{ fontSize: 13, color: palette.ink, marginBottom: 2 }}>{d.produto}{tam ? ` (${tam})` : ''}</div>
-        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12 }}>{d.ref ? `ref ${d.ref} · ` : ''}motivo: {d.motivo || '—'}</div>
+        {/* PEÇAS DA DEVOLUÇÃO (1 ou várias, do mesmo pedido) */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>{n > 1 ? `Peças devolvidas (${n})` : 'Peça devolvida'}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+          {itens.map((it, k) => {
+            const tam = fmtTam(it.tamanho);
+            return (
+              <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12.5, color: palette.ink, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span>{it.produto || '—'}{tam ? ` · ${tam}` : ''}</span>
+                {it.valor != null && <span style={{ color: palette.inkMuted, flexShrink: 0 }}>{fmtBRL(it.valor)}</span>}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12 }}>motivo: {d.motivo || '—'}</div>
         {mensagem && <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12, fontStyle: 'italic' }}>"{mensagem}"</div>}
 
-        {/* LINHA DO TEMPO */}
-        <div style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>Linha do tempo</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-          <PassoTL feito label="Solicitada" quando={fmtData(d.data_devolucao)} />
-          <PassoTL feito={!!d.etiqueta_avisado_em} label="Etiqueta avisada ao cliente" quando={fmtDH(d.etiqueta_avisado_em)} quem={d.etiqueta_avisado_por} />
-          <PassoTL feito={!!d.recebido_efetivo} label="Produto recebido" quando={fmtDH(d.recebido_efetivo)} />
-          <PassoTL feito={!!d.conferido_em} label="Conferida" quando={fmtDH(d.conferido_em)} quem={d.conferido_por} />
-          <PassoTL feito={!!d.estornado_em} label="Estorno efetivado" quando={fmtDH(d.estornado_em)} quem={d.estornado_por}
-            extra={d.estornado_em ? `${fmtBRL(d.estorno_valor)} ${d.estorno_forma || ''}`.trim() : ''} />
-          <PassoTL feito={!!d.cliente_avisado_em} label="Cliente avisada do estorno" quando={fmtDH(d.cliente_avisado_em)} quem={d.cliente_avisado_por} />
+        {/* LINHA DO TEMPO (horizontal, conectada) */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.3 }}>Linha do tempo</div>
+        <div style={{ marginBottom: 18, padding: '0 4px' }}>
+          <TimelineDevol fluxoStatus={st} size="full" />
         </div>
+        {/* detalhes dos carimbos (quem/quando) */}
+        {(d.etiqueta_avisado_em || d.recebido_efetivo || d.conferido_em || d.estornado_em || d.cliente_avisado_em) && (
+          <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {d.etiqueta_avisado_em && <span>Etiqueta avisada: {fmtDH(d.etiqueta_avisado_em)}{d.etiqueta_avisado_por ? ` · ${d.etiqueta_avisado_por}` : ''}</span>}
+            {d.recebido_efetivo && <span>Produto recebido: {fmtDH(d.recebido_efetivo)}</span>}
+            {d.conferido_em && <span>Conferida: {fmtDH(d.conferido_em)}{d.conferido_por ? ` · ${d.conferido_por}` : ''}</span>}
+            {d.estornado_em && <span>Estorno: {fmtDH(d.estornado_em)} · {fmtBRL(d.estorno_valor)} {d.estorno_forma || ''}{d.estornado_por ? ` · ${d.estornado_por}` : ''}</span>}
+            {d.cliente_avisado_em && <span>Cliente avisada: {fmtDH(d.cliente_avisado_em)}{d.cliente_avisado_por ? ` · ${d.cliente_avisado_por}` : ''}</span>}
+          </div>
+        )}
 
         {/* AÇÃO DO PASSO ATUAL */}
         {st === 'em_analise' ? (
@@ -949,7 +1026,7 @@ function SecaoDevolucao({ userId, isAdmin }) {
   return (
     <div>
       <SubTabs tabs={tabs} active={etapa} onChange={setEtapa} />
-      <SectionTitle icon={RotateCcw}>{loading ? 'Devoluções…' : `${devs.length} peça(s)`}</SectionTitle>
+      <SectionTitle icon={RotateCcw}>{loading ? 'Devoluções…' : `${devs.length} devolução(ões)`}</SectionTitle>
       {!loading && devs.length === 0 && <Placeholder>Nenhuma devolução nessa aba.</Placeholder>}
       {devs.length > 0 && (
         <MeluniSplitChat

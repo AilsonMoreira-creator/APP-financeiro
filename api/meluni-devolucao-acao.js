@@ -64,10 +64,16 @@ export default async function handler(req, res) {
         return res.status(400).json({ ok: false, erro: `acao desconhecida: ${acao}` });
     }
 
-    const { error } = await supabase.from('meluni_devolucoes').update(patch).eq('id', id);
-    if (error) throw new Error(error.message);
+    // o card agora é por PEDIDO (id = convertr_id do grupo). Carimba TODAS as
+    // peças do mesmo retorno. Fallback por id (caso raro de convertr_id nulo).
+    const upd = await supabase.from('meluni_devolucoes').update(patch).eq('convertr_id', id).select('id');
+    if (upd.error) throw new Error(upd.error.message);
+    if (!upd.data || upd.data.length === 0) {
+      const upd2 = await supabase.from('meluni_devolucoes').update(patch).eq('id', id);
+      if (upd2.error) throw new Error(upd2.error.message);
+    }
 
-    // relê da view pra devolver fluxo_status atualizado
+    // relê da view (agrupada) pra devolver fluxo_status atualizado
     const { data: row } = await supabase.from('vw_meluni_devolucoes').select('*').eq('id', id).maybeSingle();
     return res.json({ ok: true, devolucao: row || null });
   } catch (e) {
