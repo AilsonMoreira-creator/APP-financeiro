@@ -39,24 +39,36 @@ function SubTabs({ tabs, active, onChange }) {
       {tabs.map(t => {
         const on = active === t.id;
         return (
-          <button key={t.id} onClick={() => onChange(t.id)} style={{
-            border: `1px solid ${on ? MELUNI : palette.beige}`,
-            background: on ? MELUNI : palette.surface,
-            color: on ? '#fff' : palette.inkSoft,
-            borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
-            fontFamily: FONT, fontSize: 13, fontWeight: on ? 700 : 500,
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            {t.label}
-            {t.badge > 0 && (
+          <div key={t.id} style={{ position: 'relative', display: 'inline-flex' }}>
+            <button onClick={() => onChange(t.id)} style={{
+              border: `1px solid ${on ? MELUNI : palette.beige}`,
+              background: on ? MELUNI : palette.surface,
+              color: on ? '#fff' : palette.inkSoft,
+              borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
+              fontFamily: FONT, fontSize: 13, fontWeight: on ? 700 : 500,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              {t.label}
+              {t.badge > 0 && (
+                <span style={{
+                  background: on ? '#fff' : MELUNI, color: on ? MELUNI : '#fff',
+                  borderRadius: 999, minWidth: 16, height: 16, padding: '0 4px',
+                  fontSize: 10, fontWeight: 700, display: 'inline-flex',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>{t.badge}</span>
+              )}
+            </button>
+            {/* badge VERMELHO de conversa sem resposta — idêntico Sofia */}
+            {t.unread > 0 && (
               <span style={{
-                background: on ? '#fff' : MELUNI, color: on ? MELUNI : '#fff',
-                borderRadius: 999, minWidth: 16, height: 16, padding: '0 4px',
-                fontSize: 10, fontWeight: 700, display: 'inline-flex',
-                alignItems: 'center', justifyContent: 'center',
-              }}>{t.badge}</span>
+                position: 'absolute', top: -4, right: -4, zIndex: 1,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8,
+                fontSize: 9, fontWeight: 700, background: '#dc2626', color: '#fff',
+                lineHeight: 1, border: '2px solid #fff', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+              }}>{t.unread}</span>
             )}
-          </button>
+          </div>
         );
       })}
     </div>
@@ -134,6 +146,10 @@ function useIsDesktop(bp = 760) {
   return d;
 }
 
+// marcação de conversa sem resposta — vermelho idêntico Sofia (#dc2626)
+const DotConversa = () => <span title="conversa sem resposta" style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626', flexShrink: 0 }} />;
+const PillConversa = () => <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#dc2626', border: '1px solid #f4c7c7' }}>💬 sem resposta</span>;
+
 // card de cliente — mesmo formato da Sofia (ícone + nome + chips de KPI + bloquear)
 // compact: versão reduzida (usada na lista da esquerda quando o chat tá aberto no desktop)
 // ativo: card atualmente aberto no chat (fica destacado)
@@ -155,6 +171,7 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
           <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nome || '—'}</div>
           <div style={{ fontSize: 11, color: palette.inkMuted }}>{fmtBRL(c.valor_lifetime)} · {c.n_compras || 0} compras</div>
         </div>
+        {c.conversa_pendente && <DotConversa />}
         {!tel && <span title="sem número" style={{ fontSize: 12, flexShrink: 0 }}>📵</span>}
       </div>
     );
@@ -174,6 +191,7 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{c.nome || '—'}</span>
+              {c.conversa_pendente && <PillConversa />}
               {semCompra && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>só cadastro</span>}
             </div>
             <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -354,6 +372,7 @@ function SecaoClientes() {
   const [erro, setErro] = useState('');
   const [sel, setSel] = useState(new Set());
   const [chatId, setChatId] = useState(null);
+  const [unread, setUnread] = useState({});
   const isDesktop = useIsDesktop();
 
   const carregar = useCallback(async () => {
@@ -366,7 +385,7 @@ function SecaoClientes() {
       if (msgDias) p.set('msg_dias', msgDias);
       const r = await fetch('/api/meluni-clientes-list?' + p.toString());
       const j = await r.json();
-      if (j.ok) setClientes(j.clientes || []); else setErro(j.erro || 'erro ao carregar');
+      if (j.ok) { setClientes(j.clientes || []); setUnread(j.unread || {}); } else setErro(j.erro || 'erro ao carregar');
     } catch (e) { setErro(String(e?.message || e)); }
     setLoading(false);
   }, [etapa, ordenar, nome, periodo, janela, msgDias]);
@@ -391,11 +410,11 @@ function SecaoClientes() {
   const selTodos = () => setSel(sel.size === comFone.length && comFone.length ? new Set() : new Set(comFone.map(c => c.id)));
 
   const tabs = [
-    { id: 'carteira', label: 'Carteira' },
-    { id: 'enviados', label: 'Enviados' },
-    { id: 'conversando', label: 'Conversando' },
-    { id: 'follow_up', label: 'Follow up' },
-    { id: 'conversao', label: 'Conversão' },
+    { id: 'carteira', label: 'Carteira', unread: unread.carteira },
+    { id: 'enviados', label: 'Enviados', unread: unread.enviados },
+    { id: 'conversando', label: 'Conversando', unread: unread.conversando },
+    { id: 'follow_up', label: 'Follow up', unread: unread.follow_up },
+    { id: 'conversao', label: 'Conversão', unread: unread.conversao },
   ];
 
   return (
@@ -483,6 +502,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
           </div>
           <div style={{ fontSize: 11, color: palette.inkMuted }}>{itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · {fmtData(String(c.data_carrinho || '').slice(0, 10))}</div>
         </div>
+        {c.conversa_pendente && <DotConversa />}
         {c.is_cliente && <span title="já é cliente" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700, flexShrink: 0 }}>cliente</span>}
       </div>
     );
@@ -497,6 +517,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 15, fontWeight: 700, color: palette.ink }}>{fmtBRL(c.valor)}</span>
             {nome && <span style={{ fontSize: 13, color: palette.inkSoft }}>{nome}</span>}
+            {c.conversa_pendente && <PillConversa />}
             {c.is_cliente && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>já é cliente</span>}
           </div>
           <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -550,20 +571,21 @@ function SecaoCarrinho() {
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(new Set());
   const [chatId, setChatId] = useState(null);
+  const [unread, setUnread] = useState({});
   const isDesktop = useIsDesktop();
   const LIM = 60;
   const tabs = [
-    { id: 'processando', label: 'Processando' },
-    { id: 'aprovar', label: 'Aprovar / Enviar' },
-    { id: 'conversando', label: 'Conversando' },
-    { id: 'follow_up', label: 'Follow up' },
+    { id: 'processando', label: 'Processando', unread: unread.processando },
+    { id: 'aprovar', label: 'Aprovar / Enviar', unread: unread.aprovar },
+    { id: 'conversando', label: 'Conversando', unread: unread.conversando },
+    { id: 'follow_up', label: 'Follow up', unread: unread.follow_up },
   ];
   const carregar = useCallback(async (off = 0) => {
     setLoading(true);
     try {
       const r = await fetch(`/api/meluni-carrinhos-list?status=${aba}&limite=${LIM}&offset=${off}`);
       const j = await r.json();
-      if (j.ok) { setTotal(j.total || 0); setCarrinhos(prev => off ? [...prev, ...j.carrinhos] : j.carrinhos); }
+      if (j.ok) { setTotal(j.total || 0); setUnread(j.unread || {}); setCarrinhos(prev => off ? [...prev, ...j.carrinhos] : j.carrinhos); }
     } catch (e) { /* ignora */ }
     setLoading(false);
   }, [aba]);
@@ -695,7 +717,7 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
           <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.nome || '—'}</div>
           <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtBRL(d.valor)} · {d.produto}</div>
         </div>
-        {d.conversa_pendente && <span title="conversa sem resposta" style={{ width: 8, height: 8, borderRadius: '50%', background: palette.alert, flexShrink: 0 }} />}
+        {d.conversa_pendente && <DotConversa />}
         <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700, color: fl.cor, border: `1px solid ${fl.cor}`, flexShrink: 0 }}>{fl.label}</span>
       </div>
     );
@@ -712,7 +734,7 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{d.nome || '—'}</span>
             <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: fl.cor, border: `1px solid ${fl.cor}` }}>{fl.label}</span>
-            {d.conversa_pendente && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: palette.alert, border: '1px solid #f1c9c4' }}>💬 sem resposta</span>}
+            {d.conversa_pendente && <PillConversa />}
             {sla && sla.nivel !== 'ok' && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: '#fff', background: sla.cor }}>{sla.txt}</span>}
           </div>
           <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -893,18 +915,19 @@ function SecaoDevolucao({ userId, isAdmin }) {
   const [loading, setLoading] = useState(false);
   const [chatId, setChatId] = useState(null);
   const isDesktop = useIsDesktop();
+  const [unread, setUnread] = useState({});
   const tabs = [
-    { id: 'todas', label: 'Todas' },
-    { id: 'aguardando_conferir', label: 'Aguardando conferir' },
-    { id: 'aguardando_estorno', label: 'Aguardando estorno' },
-    { id: 'canceladas', label: 'Canceladas' },
+    { id: 'todas', label: 'Todas', unread: unread.todas },
+    { id: 'aguardando_conferir', label: 'Aguardando conferir', unread: unread.aguardando_conferir },
+    { id: 'aguardando_estorno', label: 'Aguardando estorno', unread: unread.aguardando_estorno },
+    { id: 'canceladas', label: 'Canceladas', unread: unread.canceladas },
   ];
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
       const r = await fetch(`/api/meluni-devolucoes-list?etapa=${etapa}`);
       const j = await r.json();
-      if (j.ok) setDevs(j.devolucoes || []);
+      if (j.ok) { setDevs(j.devolucoes || []); setUnread(j.unread || {}); }
     } catch (e) { /* ignora */ }
     setLoading(false);
   }, [etapa]);

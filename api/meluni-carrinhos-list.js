@@ -37,7 +37,27 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.json({ ok: true, total: count ?? lista.length, offset, limite, carrinhos: lista });
+    // conversa sem resposta (origem carrinho, última msg "in")
+    const { data: convsPend } = await supabase.from('meluni_conversas')
+      .select('cliente_id, telefone, etapa')
+      .eq('origem', 'carrinho')
+      .eq('ultima_msg_direcao', 'in');
+    const pendCli = new Set(), pendTel = new Set();
+    const unread = {};
+    for (const c of (convsPend || [])) {
+      if (c.cliente_id) pendCli.add(c.cliente_id);
+      const t = (c.telefone || '').replace(/\D/g, '');
+      if (t.length >= 10) pendTel.add(t.slice(-10));
+      const et = c.etapa || 'conversando';
+      unread[et] = (unread[et] || 0) + 1;
+    }
+    lista = lista.map(c => {
+      const t = (c.cliente_whatsapp || c.telefone || '').replace(/\D/g, '').slice(-10);
+      const pend = (c.cliente_id && pendCli.has(c.cliente_id)) || (t && pendTel.has(t));
+      return { ...c, conversa_pendente: !!pend };
+    });
+
+    return res.json({ ok: true, total: count ?? lista.length, offset, limite, unread, carrinhos: lista });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });
   }

@@ -72,7 +72,27 @@ export default async function handler(req, res) {
       lista = lista.filter(c => comMsg.has(c.whatsapp || c.telefone));
     }
 
-    return res.json({ ok: true, total: lista.length, etapa, clientes: lista });
+    // conversa sem resposta (origem cliente, última msg "in") — marca card + conta por aba
+    const { data: convsPend } = await supabase.from('meluni_conversas')
+      .select('cliente_id, telefone, etapa')
+      .eq('origem', 'cliente')
+      .eq('ultima_msg_direcao', 'in');
+    const pendCli = new Set(), pendTel = new Set();
+    const unread = {};
+    for (const c of (convsPend || [])) {
+      if (c.cliente_id) pendCli.add(c.cliente_id);
+      const t = (c.telefone || '').replace(/\D/g, '');
+      if (t.length >= 10) pendTel.add(t.slice(-10));
+      const et = c.etapa || 'conversando';
+      unread[et] = (unread[et] || 0) + 1;
+    }
+    lista = lista.map(c => {
+      const t = (c.whatsapp || c.telefone || '').replace(/\D/g, '').slice(-10);
+      const pend = (pendCli.has(c.id)) || (t && pendTel.has(t));
+      return { ...c, conversa_pendente: !!pend };
+    });
+
+    return res.json({ ok: true, total: lista.length, etapa, unread, clientes: lista });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });
   }

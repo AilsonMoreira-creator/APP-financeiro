@@ -49,7 +49,23 @@ export default async function handler(req, res) {
       return { ...d, conversa_pendente: !!pend };
     });
 
-    return res.json({ ok: true, etapa, total: lista.length, devolucoes: lista });
+    // contagem de conversas sem resposta por aba (badge vermelho, idêntico Sofia)
+    const unread = { todas: 0, aguardando_conferir: 0, aguardando_estorno: 0, canceladas: 0 };
+    if (convCli.size || convTel.size) {
+      const { data: todos } = await supabase.from('vw_meluni_devolucoes')
+        .select('cliente_id,telefone,fluxo_status');
+      for (const d of (todos || [])) {
+        const t = (d.telefone || '').replace(/\D/g, '').slice(-10);
+        const pend = (d.cliente_id && convCli.has(d.cliente_id)) || (t && convTel.has(t));
+        if (!pend) continue;
+        unread.todas++;
+        if (d.fluxo_status === 'aguardando_conferir') unread.aguardando_conferir++;
+        else if (d.fluxo_status === 'aguardando_estorno') unread.aguardando_estorno++;
+        else if (d.fluxo_status === 'cancelada') unread.canceladas++;
+      }
+    }
+
+    return res.json({ ok: true, etapa, total: lista.length, unread, devolucoes: lista });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });
   }
