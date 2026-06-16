@@ -765,34 +765,9 @@ function TimelineDevol({ d, size = 'full' }) {
 
   const concluida = atual >= DEVOL_STEPS.length;
 
-  // ── MINI (card): etapa ativa em destaque + bolinhas de progresso. Compacta. ──
-  if (!full) {
-    const Icon = concluida ? CheckCircle : DEVOL_STEPS[atual].Icon;
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        <span style={{ width: 30, height: 30, borderRadius: '50%', background: concluida ? palette.ok : corAtiva, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Icon size={16} color="#fff" strokeWidth={1.9} />
-        </span>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: palette.ink, lineHeight: 1.1 }}>
-            {concluida ? 'Concluída' : DEVOL_STEPS[atual].label.replace('\n', ' ')}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-            {DEVOL_STEPS.map((s, i) => {
-              const cor = (i < atual || concluida) ? MELUNI : i === atual ? corAtiva : palette.beige;
-              return <span key={s.id} style={{ width: (i === atual && !concluida) ? 9 : 6, height: 6, borderRadius: 3, background: cor }} />;
-            })}
-            {sla && sla.nivel !== 'ok' && (
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: sla.cor, marginLeft: 3 }}>{sla.dias}d atraso</span>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── FULL (chat): 6 nós com rótulo, conectados; etapa ativa acende no atraso. ──
-  const D = 36, IS = 18, FS = 10.5;
+  // 6 nós conectados com rótulo; etapa ativa acende no atraso.
+  // mini (card da lista) = mesma linha, só um pouco menor que o full (chat).
+  const D = full ? 36 : 30, IS = full ? 18 : 15, FS = full ? 10.5 : 9.5;
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
       {DEVOL_STEPS.map((s, i) => {
@@ -808,13 +783,13 @@ function TimelineDevol({ d, size = 'full' }) {
               <span style={{ width: D, height: D, borderRadius: '50%', background: bg, border: `1.5px solid ${bd}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                 <s.Icon size={IS} color={ic} strokeWidth={1.8} />
               </span>
-              <span style={{ fontSize: FS, color: (feito || ehAtual) ? palette.ink : palette.inkMuted, textAlign: 'center', marginTop: 6, lineHeight: 1.15, whiteSpace: 'pre-line', fontWeight: ehAtual ? 700 : 400 }}>{s.label}</span>
+              <span style={{ fontSize: FS, color: (feito || ehAtual) ? palette.ink : palette.inkMuted, textAlign: 'center', marginTop: full ? 6 : 5, lineHeight: 1.15, whiteSpace: 'pre-line', fontWeight: ehAtual ? 700 : 400 }}>{s.label}</span>
               {ehAtual && sla && sla.nivel !== 'ok' && (
-                <span style={{ fontSize: 9.5, fontWeight: 700, color: sla.cor, marginTop: 2 }}>{sla.dias}d atraso</span>
+                <span style={{ fontSize: full ? 9.5 : 9, fontWeight: 700, color: sla.cor, marginTop: 2 }}>{sla.dias}d atraso</span>
               )}
             </div>
             {i < DEVOL_STEPS.length - 1 && (
-              <div style={{ flex: 1, height: 1.5, background: corLinha, marginTop: D / 2 - 0.75, minWidth: 8 }} />
+              <div style={{ flex: 1, height: 1.5, background: corLinha, marginTop: D / 2 - 0.75, minWidth: full ? 8 : 6 }} />
             )}
           </React.Fragment>
         );
