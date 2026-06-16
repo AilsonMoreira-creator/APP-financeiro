@@ -155,6 +155,16 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle }) {
 // chat do cliente (abre ao clicar no card). Conversa real entra quando a Lara/WhatsApp ligar.
 function MeluniChatDrawer({ cliente, onClose }) {
   const tel = cliente.whatsapp || cliente.telefone;
+  const [hist, setHist] = useState(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/meluni-cliente-historico?cliente_id=${cliente.id}`)
+      .then(r => r.json()).then(j => { if (j.ok) setHist(j); })
+      .catch(() => {}).finally(() => setLoading(false));
+  }, [cliente.id]);
+  const pedidos = hist?.pedidos || [];
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(460px, 100%)', height: '100%', background: palette.bg, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px rgba(0,0,0,0.15)' }}>
@@ -171,9 +181,38 @@ function MeluniChatDrawer({ cliente, onClose }) {
           <span>ticket <b>{fmtBRL(cliente.ticket_medio)}</b></span>
           <span>última <b>{fmtData(cliente.ultima_compra)}</b></span>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: palette.inkMuted, fontFamily: FONT, fontSize: 13, textAlign: 'center', gap: 8 }}>
-          <MessageCircle size={28} color={palette.beige} />
-          A conversa da Lara aparece aqui assim que o número do WhatsApp B2C estiver ligado.
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16, fontFamily: FONT }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            Histórico de compras {pedidos.length > 0 ? `(${pedidos.length})` : ''}
+          </div>
+          {loading && <div style={{ fontSize: 13, color: palette.inkMuted }}>carregando…</div>}
+          {!loading && pedidos.length === 0 && (
+            <div style={{ fontSize: 13, color: palette.inkMuted }}>Ainda sem compras registradas (só cadastro).</div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {pedidos.map(p => (
+              <div key={p.pedido_id} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 12, color: palette.inkSoft }}>
+                  <span>{fmtData(p.data)}</span>
+                  <strong style={{ color: palette.ink }}>{fmtBRL(p.total)}</strong>
+                </div>
+                {p.itens.map((i, k) => (
+                  <div key={k} style={{ fontSize: 12, color: palette.ink, padding: '3px 0', borderTop: k ? `1px solid ${palette.beigeSoft}` : 'none' }}>
+                    <span>{i.qtd}x {i.produto}</span>
+                    <span style={{ color: palette.inkMuted }}>
+                      {i.ref ? ` · ref ${i.ref}` : ''}{i.cor ? ` · ${i.cor}` : ''}{i.tamanho ? ` · ${i.tamanho}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 16, padding: 12, background: MELUNI_SOFT, borderRadius: 10, fontSize: 12, color: palette.inkSoft, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <MessageCircle size={16} color={MELUNI} style={{ marginTop: 1, flexShrink: 0 }} />
+            <span>A Lara usa esse histórico pra personalizar e indicar cross-sell. A conversa em si abre aqui quando o número do WhatsApp B2C estiver ligado.</span>
+          </div>
         </div>
       </div>
     </div>
@@ -232,6 +271,7 @@ function SecaoClientes() {
     { id: 'enviados', label: 'Enviados' },
     { id: 'conversando', label: 'Conversando' },
     { id: 'follow_up', label: 'Follow up' },
+    { id: 'conversao', label: 'Conversão' },
   ];
 
   return (
