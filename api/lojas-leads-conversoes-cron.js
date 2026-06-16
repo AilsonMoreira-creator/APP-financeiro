@@ -124,6 +124,29 @@ export default async function handler(req, res) {
     }
 
     // ───────────────────────────────────────────────────────────────
+    // 1E. Auto-vendeu por NOME + vendedora (Ailson 16/06/2026)
+    // Casa venda (atacado/varejo) com conversa Sofia ABERTA da MESMA vendedora
+    // pelo nome do cliente, dentro de 7d da ultima atividade. Resolve casos sem
+    // whats/doc na venda (ex: Rayane). 'perdida' nao revive sozinha — esses casos
+    // ficam na view de revisao vw_lojas_whats_vendas_nome_revisar.
+    // ───────────────────────────────────────────────────────────────
+    let nomeConvVendeu = 0;
+    let nomeValorVendeu = 0;
+    try {
+      const { data: dataNome, error: errNome } = await supabase
+        .rpc('lojas_whats_auto_vendeu_por_nome', { p_janela: 7 })
+        .maybeSingle();
+      if (errNome) {
+        console.error('[lojas-leads-conversoes-cron] erro auto-vendeu nome:', errNome);
+      } else {
+        nomeConvVendeu = dataNome?.conversas_atualizadas || 0;
+        nomeValorVendeu = dataNome?.valor_total || 0;
+      }
+    } catch (e) {
+      console.error('[lojas-leads-conversoes-cron] excecao auto-vendeu nome:', e.message);
+    }
+
+    // ───────────────────────────────────────────────────────────────
     // 2. EXTENSÃO Ailson 18/05/2026 — Aviso venda_site_organica
     // ───────────────────────────────────────────────────────────────
     // Pra vendas no site dos últimos 2 dias que NÃO entraram em
@@ -240,6 +263,9 @@ export default async function handler(req, res) {
       // Vesti auto-vendeu (teste A/B Fase 2) — Ailson 02/06/2026
       vesti_conv_vendeu: vestiConvVendeu,
       vesti_valor_vendeu: vestiValorVendeu,
+      // Auto-vendeu por nome+vendedora — Ailson 16/06/2026
+      nome_conv_vendeu: nomeConvVendeu,
+      nome_valor_vendeu: nomeValorVendeu,
     });
   } catch (e) {
     console.error('[lojas-leads-conversoes-cron] exception:', e);
