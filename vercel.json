@@ -335,6 +335,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/meluni-whats-cron-responder",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/lojas-whats-cron-aprendizado",
       "schedule": "0 11 * * 1"
     },
