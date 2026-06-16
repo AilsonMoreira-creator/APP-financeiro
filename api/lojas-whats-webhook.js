@@ -42,6 +42,7 @@ import {
 } from './_lojas-whats-meta-client.js';
 import { enviarPushSofia } from './_push-helpers.js';
 import { transcreverAudio } from './lojas-whats-transcrever.js';
+import { processarMensagemMeluni } from './_meluni-whats-inbound.js';
 
 // IMPORTANT: precisamos do body CRU pra validar HMAC.
 // Vercel/Next API por padrao parseia body. Desligamos isso aqui:
@@ -129,15 +130,22 @@ async function processarEvento(payload) {
     for (const change of entry.changes || []) {
       const value = change.value || {};
 
+      // Roteamento por número (mesma WABA, 2 linhas): a Lara (Meluni B2C) cai
+      // no inbox do Meluni; a Sofia (B2B) segue o fluxo de sempre. Ailson 16/06.
+      const phoneId = value.metadata?.phone_number_id || null;
+      const ehLara = !!phoneId && phoneId === process.env.META_WA_PHONE_ID_LARA;
+
       // Mensagens recebidas dos clientes
       if (value.messages?.length) {
         for (const msg of value.messages) {
-          await processarMensagemRecebida(msg, value);
+          if (ehLara) await processarMensagemMeluni(msg, value);
+          else await processarMensagemRecebida(msg, value);
         }
       }
 
-      // Status de mensagens enviadas (sent/delivered/read/failed)
-      if (value.statuses?.length) {
+      // Status de mensagens enviadas (sent/delivered/read/failed) — por número.
+      // A Lara terá tratamento próprio na S2; por ora ignora os status dela.
+      if (value.statuses?.length && !ehLara) {
         for (const st of value.statuses) {
           await processarStatusMensagem(st);
         }
@@ -147,6 +155,7 @@ async function processarEvento(payload) {
       // Ailson 25/05/2026: antes nao tinha handler — banco ficava parado
       // em 'pendente_aprovacao' mesmo apos Meta aprovar. Tinha que UPDATE
       // manual. Agora sincroniza automatico via webhook.
+      // (Template é no nível da WABA — vale pros dois números.)
       if (change.field === 'message_template_status_update' && value.event) {
         await processarStatusTemplate(value);
       }
