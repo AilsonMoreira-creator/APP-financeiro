@@ -22,7 +22,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
-  Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone,
+  Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
@@ -108,10 +108,43 @@ function CampoKPI({ Icon, label, valor, destaque, alerta }) {
   );
 }
 
+// detecta desktop pra decidir layout split (lista + chat lado a lado) vs overlay no mobile
+function useIsDesktop(bp = 760) {
+  const [d, setD] = useState(typeof window !== 'undefined' ? window.innerWidth >= bp : true);
+  useEffect(() => {
+    const h = () => setD(window.innerWidth >= bp);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, [bp]);
+  return d;
+}
+
 // card de cliente — mesmo formato da Sofia (ícone + nome + chips de KPI + bloquear)
-function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle }) {
+// compact: versão reduzida (usada na lista da esquerda quando o chat tá aberto no desktop)
+// ativo: card atualmente aberto no chat (fica destacado)
+function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo }) {
   const tel = c.whatsapp || c.telefone;
   const semCompra = !c.n_compras;
+
+  if (compact) {
+    return (
+      <div onClick={onAbrir} title="Abrir conversa" style={{
+        background: ativo ? MELUNI_SOFT : palette.surface, borderRadius: 10, padding: '8px 10px', cursor: 'pointer',
+        border: `1px solid ${ativo ? MELUNI : palette.beige}`, opacity: c.bloqueado ? 0.6 : 1,
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <input type="checkbox" checked={sel} onClick={(e) => e.stopPropagation()} onChange={onSel}
+          style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }} />
+        <User size={13} color={MELUNI} style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nome || '—'}</div>
+          <div style={{ fontSize: 11, color: palette.inkMuted }}>{fmtBRL(c.valor_lifetime)} · {c.n_compras || 0} compras</div>
+        </div>
+        {!tel && <span title="sem número" style={{ fontSize: 12, flexShrink: 0 }}>📵</span>}
+      </div>
+    );
+  }
+
   return (
     <div style={{
       background: palette.surface, borderRadius: 12, padding: 12,
@@ -152,8 +185,9 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle }) {
   );
 }
 
-// chat do cliente (abre ao clicar no card). Conversa real entra quando a Lara/WhatsApp ligar.
-function MeluniChatDrawer({ cliente, onClose }) {
+// chat do cliente — split estilo Sofia: painel inline no desktop (lista reduzida ao lado),
+// overlay tela cheia no mobile. Setas passam/voltam entre os clientes da lista.
+function MeluniChatPanel({ cliente, onClose, overlay, onPrev, onNext, hasPrev, hasNext }) {
   const tel = cliente.whatsapp || cliente.telefone;
   const [hist, setHist] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -165,56 +199,81 @@ function MeluniChatDrawer({ cliente, onClose }) {
   }, [cliente.id]);
   const pedidos = hist?.pedidos || [];
 
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(460px, 100%)', height: '100%', background: palette.bg, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px rgba(0,0,0,0.15)' }}>
-        <div style={{ background: MELUNI, color: '#fff', padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+  const setaStyle = (on) => ({
+    background: 'rgba(255,255,255,0.18)', border: 'none', color: '#fff', borderRadius: 7,
+    width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: on ? 'pointer' : 'default', opacity: on ? 1 : 0.35, padding: 0, flexShrink: 0,
+  });
+
+  const corpo = (
+    <>
+      <div style={{ background: MELUNI, color: '#fff', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            <button onClick={hasPrev ? onPrev : undefined} disabled={!hasPrev} title="Anterior" style={setaStyle(hasPrev)}><ChevronLeft size={16} /></button>
+            <button onClick={hasNext ? onNext : undefined} disabled={!hasNext} title="Próximo" style={setaStyle(hasNext)}><ChevronRight size={16} /></button>
+          </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, fontFamily: FONT }}>{cliente.nome || 'Cliente'}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, fontFamily: FONT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cliente.nome || 'Cliente'}</div>
             <div style={{ fontSize: 12, opacity: 0.85, fontFamily: FONT }}>{fmtTel(tel) || 'sem número'}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: FONT, fontSize: 12 }}>fechar</button>
         </div>
-        <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, fontFamily: FONT, flexWrap: 'wrap' }}>
-          <span>lifetime <b>{fmtBRL(cliente.valor_lifetime)}</b></span>
-          <span>compras <b>{cliente.n_compras || 0}</b></span>
-          <span>ticket <b>{fmtBRL(cliente.ticket_medio)}</b></span>
-          <span>última <b>{fmtData(cliente.ultima_compra)}</b></span>
-        </div>
+        <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: FONT, fontSize: 12, flexShrink: 0 }}>fechar</button>
+      </div>
+      <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, fontFamily: FONT, flexWrap: 'wrap' }}>
+        <span>lifetime <b>{fmtBRL(cliente.valor_lifetime)}</b></span>
+        <span>compras <b>{cliente.n_compras || 0}</b></span>
+        <span>ticket <b>{fmtBRL(cliente.ticket_medio)}</b></span>
+        <span>última <b>{fmtData(cliente.ultima_compra)}</b></span>
+      </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16, fontFamily: FONT }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-            Histórico de compras {pedidos.length > 0 ? `(${pedidos.length})` : ''}
-          </div>
-          {loading && <div style={{ fontSize: 13, color: palette.inkMuted }}>carregando…</div>}
-          {!loading && pedidos.length === 0 && (
-            <div style={{ fontSize: 13, color: palette.inkMuted }}>Ainda sem compras registradas (só cadastro).</div>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {pedidos.map(p => (
-              <div key={p.pedido_id} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 12, color: palette.inkSoft }}>
-                  <span>{fmtData(p.data)}</span>
-                  <strong style={{ color: palette.ink }}>{fmtBRL(p.total)}</strong>
-                </div>
-                {p.itens.map((i, k) => (
-                  <div key={k} style={{ fontSize: 12, color: palette.ink, padding: '3px 0', borderTop: k ? `1px solid ${palette.beigeSoft}` : 'none' }}>
-                    <span>{i.qtd}x {i.produto}</span>
-                    <span style={{ color: palette.inkMuted }}>
-                      {i.ref ? ` · ref ${i.ref}` : ''}{i.cor ? ` · ${i.cor}` : ''}{i.tamanho ? ` · ${i.tamanho}` : ''}
-                    </span>
-                  </div>
-                ))}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16, fontFamily: FONT }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+          Histórico de compras {pedidos.length > 0 ? `(${pedidos.length})` : ''}
+        </div>
+        {loading && <div style={{ fontSize: 13, color: palette.inkMuted }}>carregando…</div>}
+        {!loading && pedidos.length === 0 && (
+          <div style={{ fontSize: 13, color: palette.inkMuted }}>Ainda sem compras registradas (só cadastro).</div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {pedidos.map(p => (
+            <div key={p.pedido_id} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 12, color: palette.inkSoft }}>
+                <span>{fmtData(p.data)}</span>
+                <strong style={{ color: palette.ink }}>{fmtBRL(p.total)}</strong>
               </div>
-            ))}
-          </div>
+              {p.itens.map((i, k) => (
+                <div key={k} style={{ fontSize: 12, color: palette.ink, padding: '3px 0', borderTop: k ? `1px solid ${palette.beigeSoft}` : 'none' }}>
+                  <span>{i.qtd}x {i.produto}</span>
+                  <span style={{ color: palette.inkMuted }}>
+                    {i.ref ? ` · ref ${i.ref}` : ''}{i.cor ? ` · ${i.cor}` : ''}{i.tamanho ? ` · ${i.tamanho}` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
 
-          <div style={{ marginTop: 16, padding: 12, background: MELUNI_SOFT, borderRadius: 10, fontSize: 12, color: palette.inkSoft, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <MessageCircle size={16} color={MELUNI} style={{ marginTop: 1, flexShrink: 0 }} />
-            <span>A Lara usa esse histórico pra personalizar e indicar cross-sell. A conversa em si abre aqui quando o número do WhatsApp B2C estiver ligado.</span>
-          </div>
+        <div style={{ marginTop: 16, padding: 12, background: MELUNI_SOFT, borderRadius: 10, fontSize: 12, color: palette.inkSoft, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <MessageCircle size={16} color={MELUNI} style={{ marginTop: 1, flexShrink: 0 }} />
+          <span>A Lara usa esse histórico pra personalizar e indicar cross-sell. A conversa em si abre aqui quando o número do WhatsApp B2C estiver ligado.</span>
         </div>
       </div>
+    </>
+  );
+
+  if (overlay) {
+    return (
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(460px, 100%)', height: '100%', background: palette.bg, display: 'flex', flexDirection: 'column', boxShadow: '-4px 0 20px rgba(0,0,0,0.15)' }}>
+          {corpo}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ flex: '0 0 430px', maxWidth: 430, alignSelf: 'flex-start', position: 'sticky', top: 8, maxHeight: 'calc(100vh - 90px)', background: palette.bg, border: `1px solid ${palette.beige}`, borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+      {corpo}
     </div>
   );
 }
@@ -231,6 +290,7 @@ function SecaoClientes() {
   const [erro, setErro] = useState('');
   const [sel, setSel] = useState(new Set());
   const [chat, setChat] = useState(null);
+  const isDesktop = useIsDesktop();
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro('');
@@ -321,14 +381,33 @@ function SecaoClientes() {
             : 'Ninguém nessa etapa ainda — enche quando os disparos da Lara começarem.'}
         </Placeholder>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {clientes.map(c => (
-          <MeluniClienteCard key={c.id} c={c} sel={sel.has(c.id)}
-            onSel={() => toggleSel(c.id)} onAbrir={() => setChat(c)} onToggle={() => toggleBloqueio(c)} />
-        ))}
-      </div>
-
-      {chat && <MeluniChatDrawer cliente={chat} onClose={() => setChat(null)} />}
+      {(() => {
+        const idx = chat ? clientes.findIndex(c => c.id === chat.id) : -1;
+        const irPara = (i) => { if (i >= 0 && i < clientes.length) setChat(clientes[i]); };
+        const navProps = {
+          onClose: () => setChat(null),
+          onPrev: () => irPara(idx - 1),
+          onNext: () => irPara(idx + 1),
+          hasPrev: idx > 0,
+          hasNext: idx >= 0 && idx < clientes.length - 1,
+        };
+        const splitAtivo = chat && isDesktop;
+        return (
+          <>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: splitAtivo ? 6 : 8 }}>
+                {clientes.map(c => (
+                  <MeluniClienteCard key={c.id} c={c} sel={sel.has(c.id)}
+                    compact={splitAtivo} ativo={chat?.id === c.id}
+                    onSel={() => toggleSel(c.id)} onAbrir={() => setChat(c)} onToggle={() => toggleBloqueio(c)} />
+                ))}
+              </div>
+              {splitAtivo && <MeluniChatPanel cliente={chat} {...navProps} />}
+            </div>
+            {chat && !isDesktop && <MeluniChatPanel overlay cliente={chat} {...navProps} />}
+          </>
+        );
+      })()}
     </div>
   );
 }
