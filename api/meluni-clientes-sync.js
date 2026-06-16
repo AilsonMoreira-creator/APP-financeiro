@@ -53,10 +53,50 @@ export default async function handler(req, res) {
       for (const v of jt || []) jaTemSet.add(Number(v.pedido_id));
     }
     const pendentes = todos.filter(p => !jaTemSet.has(Number(p.pedido_id))).slice(0, limite);
-    if (!pendentes.length) return res.json({ ok: true, novos: 0, msg: 'nada novo (tudo ja sincronizado)' });
 
     const token = await refreshBlingToken('lumia');
     const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
+
+    // BACKFILL: clientes que JA existem com bling_contato_id mas sem nome/CPF
+    // (o contato falhou num sync anterior). Re-busca o contato no Bling, com throttle.
+    // Roda mesmo quando nao ha pedido novo.
+    const backfillLimite = Math.max(0, Math.min(300, parseInt(q.backfill_limite || '130', 10) || 130));
+    let backfillFeitos = 0, backfillSemDado = 0;
+    {
+      const { data: faltando } = await supabase
+        .from('meluni_clientes')
+        .select('id, bling_contato_id')
+        .not('bling_contato_id', 'is', null)
+        .or('nome.is.null,cpf.is.null')
+        .limit(backfillLimite);
+      for (const cl of faltando || []) {
+        try {
+          await sleep(340);
+          const r = await blingFetch(`${API}/contatos/${cl.bling_contato_id}`, headers);
+          const j = await r.json();
+          const d = j?.data;
+          if (d && (d.nome || d.numeroDocumento)) {
+            await supabase.from('meluni_clientes').update({
+              nome: d.nome || null,
+              cpf: soDigitos(d.numeroDocumento),
+              telefone: soDigitos(d.celular) || soDigitos(d.telefone),
+              email: d.email || null,
+              atualizado_em: new Date().toISOString(),
+            }).eq('id', cl.id);
+            backfillFeitos++;
+          } else backfillSemDado++;
+        } catch (e) { backfillSemDado++; }
+      }
+    }
+
+    if (!pendentes.length) {
+      let reconciliado = false;
+      try { await supabase.rpc('fn_meluni_reconciliar_contatos'); reconciliado = true; } catch (e) { /* segue */ }
+      return res.json({
+        ok: true, novos: 0, msg: 'sem pedido novo; backfill de contato executado',
+        backfill_feitos: backfillFeitos, backfill_sem_dado: backfillSemDado, reconciliado,
+      });
+    }
 
     // 3. Pra cada pedido: pega contato.id (detalhe do pedido)
     const pedidoContato = {}; // pedido_id -> contatoId
@@ -163,6 +203,8 @@ export default async function handler(req, res) {
       vendas_gravadas: novos,
       contatos_bling: contatoIds.size,
       contatos_sem_dado: contatoErros,
+      backfill_feitos: backfillFeitos,
+      backfill_sem_dado: backfillSemDado,
       clientes_kpi_recalc: afetados.length,
       reconciliado,
     });
