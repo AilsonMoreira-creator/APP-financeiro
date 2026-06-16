@@ -640,6 +640,7 @@ function SecaoSac() {
 
 // rótulo + cor de cada estado do fluxo (aprovada fica discreta)
 const DEVOL_FLUXO = {
+  em_analise:          { label: 'em análise',          cor: palette.inkSoft },
   aprovada:            { label: 'aprovada',            cor: palette.inkSoft },
   aguardando_postagem: { label: 'aguardando postagem', cor: palette.inkSoft },
   aguardando_conferir: { label: 'conferir',            cor: palette.warn },
@@ -661,7 +662,7 @@ const AMBAR = '#e6a23c';
 function slaDevol(d) {
   const cfg = SLA_DEVOL[d.fluxo_status];
   if (!cfg) return null;
-  if (cfg.soSeNaoAvisado && d.cliente_avisado_em) return null;
+  if (cfg.soSeNaoAvisado && (!d.estornado_em || d.cliente_avisado_em)) return null;
   const dias = diasDesde(d.fluxo_desde);
   let cor = palette.ok, nivel = 'ok';
   if (cfg.critico != null && dias >= cfg.critico) { cor = palette.alert; nivel = 'critico'; }
@@ -750,7 +751,7 @@ const fbtn = (bg, fg, bd) => ({
 function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   const [valor, setValor] = useState(d.estorno_valor != null ? String(d.estorno_valor) : (d.valor != null ? String(d.valor) : ''));
   const [desc, setDesc] = useState(d.estorno_desconto_libere != null ? String(d.estorno_desconto_libere) : '');
-  const [forma, setForma] = useState(d.estorno_forma || 'pix');
+  const [forma, setForma] = useState(d.estorno_forma || (String(d.tipo || '').toLowerCase().includes('cr') && String(d.tipo || '').toLowerCase().includes('dito') ? 'credito' : 'pix'));
   const [chave, setChave] = useState(d.estorno_pix_chave || '');
   const [busy, setBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -796,10 +797,13 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
         </div>
 
         {/* AÇÃO DO PASSO ATUAL */}
-        {st === 'cancelada' ? (
+        {st === 'em_analise' ? (
+          <div style={{ padding: '10px 12px', borderRadius: 9, background: palette.surface, border: `1px solid ${palette.beige}`, color: palette.inkSoft, fontSize: 12.5 }}>Em análise no Convertr. A etiqueta é avisada ao cliente quando a devolução for aprovada.</div>
+        ) : st === 'cancelada' ? (
           <div style={{ padding: '10px 12px', borderRadius: 9, background: '#fdecea', color: palette.alert, fontSize: 12.5 }}>
-            Cancelada {d.cancelada_por ? `por ${d.cancelada_por}` : ''}{d.cancelada_em ? ` em ${fmtDH(d.cancelada_em)}` : ''}.<br />
-            <b>Motivo:</b> {d.cancelada_motivo || '—'}
+            {d.cancelada_em || d.cancelada_por ? (
+              <>Cancelada {d.cancelada_por ? `por ${d.cancelada_por}` : ''}{d.cancelada_em ? ` em ${fmtDH(d.cancelada_em)}` : ''}.<br /><b>Motivo:</b> {d.cancelada_motivo || '—'}</>
+            ) : 'Cancelada (importada do Convertr).'}
           </div>
         ) : st === 'aprovada' ? (
           <button disabled={busy} onClick={() => run('avisar_etiqueta')} style={fbtn(MELUNI, '#fff')}>
@@ -841,12 +845,14 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
               confirmar estorno
             </button>
           </div>
-        ) : st === 'completa' && !d.cliente_avisado_em ? (
+        ) : st === 'completa' && d.estornado_em && !d.cliente_avisado_em ? (
           <button disabled={busy} onClick={() => run('avisar_estorno')} style={fbtn(palette.ok, '#fff')}>
             <MessageCircle size={14} /> avisar cliente do estorno
           </button>
         ) : st === 'completa' ? (
-          <div style={{ padding: '10px 12px', borderRadius: 9, background: '#eafbf0', color: palette.ok, fontSize: 12.5, fontWeight: 600 }}>Concluída. Cliente avisada do estorno.</div>
+          <div style={{ padding: '10px 12px', borderRadius: 9, background: '#eafbf0', color: palette.ok, fontSize: 12.5, fontWeight: 600 }}>
+            {d.estornado_em ? 'Concluída. Cliente avisada do estorno.' : 'Concluída (importada como Completo do Convertr).'}
+          </div>
         ) : null}
 
         {/* CANCELAR / ARQUIVAR */}
