@@ -1,8 +1,10 @@
 // ============================================================================
-// MELUNI — leitura dos carrinhos abandonados (cards, via service-role).
-// Query: status (default processando), limite (default 60), offset (0),
-//   so_contato (bool: só com telefone/email). Junta nome/whatsapp do cliente.
-// Ailson 13/06/2026.
+// MELUNI — leitura dos carrinhos RECUPERÁVEIS (cards, via service-role).
+// Lê de vw_meluni_carrinhos, que já aplica as regras: só carrinho com PEÇAS
+// (>=1) e com TELEFONE. A view também marca is_cliente (telefone/email bate
+// com um comprador). Carrinho sem peça ou sem contato nem aparece.
+// Query: status (default processando), limite (default 60), offset (0).
+// Junta nome/whatsapp do cliente vinculado. Ailson 15/06/2026.
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
 
@@ -14,21 +16,17 @@ export default async function handler(req, res) {
   const status = q.status || 'processando';
   const limite = Math.min(200, parseInt(q.limite || '60', 10) || 60);
   const offset = Math.max(0, parseInt(q.offset || '0', 10) || 0);
-  const soContato = q.so_contato === '1' || q.so_contato === 'true';
 
   try {
-    let qy = supabase.from('meluni_carrinhos')
-      .select('id,nome,telefone,email,valor,itens,data_carrinho,status,planilha_ref,cliente_id', { count: 'exact' })
+    const { data, count, error } = await supabase.from('vw_meluni_carrinhos')
+      .select('id,cliente_id,nome,telefone,email,valor,itens,data_carrinho,status,planilha_ref,n_itens,is_cliente', { count: 'exact' })
       .eq('status', status)
       .order('data_carrinho', { ascending: false, nullsFirst: false })
       .range(offset, offset + limite - 1);
-    if (soContato) qy = qy.not('telefone', 'is', null);
-
-    const { data, count, error } = await qy;
     if (error) throw new Error(error.message);
     let lista = data || [];
 
-    // enriquece com nome/whatsapp do cliente vinculado
+    // enriquece com nome/whatsapp do cliente vinculado (quando houver)
     const ids = [...new Set(lista.map(c => c.cliente_id).filter(Boolean))];
     if (ids.length) {
       const { data: cls } = await supabase.from('meluni_clientes').select('id,nome,whatsapp').in('id', ids);

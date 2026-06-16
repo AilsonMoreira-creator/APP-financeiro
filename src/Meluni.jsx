@@ -468,7 +468,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
           </div>
           <div style={{ fontSize: 11, color: palette.inkMuted }}>{itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · {fmtData(String(c.data_carrinho || '').slice(0, 10))}</div>
         </div>
-        {!tel && <span title="sem número" style={{ fontSize: 12, flexShrink: 0 }}>📵</span>}
+        {c.is_cliente && <span title="já é cliente" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700, flexShrink: 0 }}>cliente</span>}
       </div>
     );
   }
@@ -482,6 +482,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 15, fontWeight: 700, color: palette.ink }}>{fmtBRL(c.valor)}</span>
             {nome && <span style={{ fontSize: 13, color: palette.inkSoft }}>{nome}</span>}
+            {c.is_cliente && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>já é cliente</span>}
           </div>
           <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
@@ -505,10 +506,11 @@ function ChatCarrinhoBody({ c }) {
   const itens = Array.isArray(c.itens) ? c.itens : [];
   return (
     <>
-      <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, flexWrap: 'wrap', alignItems: 'center' }}>
         <span>valor <b>{fmtBRL(c.valor)}</b></span>
         <span>itens <b>{itens.reduce((a, i) => a + (i.qtd || 1), 0)}</b></span>
         <span>data <b>{fmtData(String(c.data_carrinho || '').slice(0, 10))}</b></span>
+        {c.is_cliente && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>já é cliente</span>}
       </div>
       <div style={{ padding: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>Carrinho</div>
