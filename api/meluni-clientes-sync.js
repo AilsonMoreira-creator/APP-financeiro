@@ -57,10 +57,10 @@ export default async function handler(req, res) {
     const token = await refreshBlingToken('lumia');
     const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
 
-    // BACKFILL: clientes que JA existem com bling_contato_id mas sem nome/CPF
-    // (o contato falhou num sync anterior). Re-busca o contato no Bling, com throttle.
-    // Roda mesmo quando nao ha pedido novo.
-    const backfillLimite = Math.max(0, Math.min(300, parseInt(q.backfill_limite || '130', 10) || 130));
+    // BACKFILL: clientes que JA existem com bling_contato_id mas sem nome/CPF.
+    // O endpoint /contatos esta bloqueado (escopo), MAS o contato vem DENTRO do
+    // pedido (nome + numeroDocumento/CPF). Entao re-leio o pedido do cliente.
+    const backfillLimite = Math.max(0, Math.min(400, parseInt(q.backfill_limite || '200', 10) || 200));
     let backfillFeitos = 0, backfillSemDado = 0;
     {
       const { data: faltando } = await supabase
@@ -69,18 +69,26 @@ export default async function handler(req, res) {
         .not('bling_contato_id', 'is', null)
         .or('nome.is.null,cpf.is.null')
         .limit(backfillLimite);
+      // mapeia contato -> um pedido_id (o contato vem dentro do pedido)
+      const cids = (faltando || []).map(c => c.bling_contato_id);
+      const pedidoPorContato = {};
+      for (let i = 0; i < cids.length; i += 200) {
+        const { data: vs } = await supabase.from('meluni_vendas')
+          .select('pedido_id, bling_contato_id').in('bling_contato_id', cids.slice(i, i + 200));
+        for (const v of vs || []) if (!pedidoPorContato[v.bling_contato_id]) pedidoPorContato[v.bling_contato_id] = v.pedido_id;
+      }
       for (const cl of faltando || []) {
+        const ped = pedidoPorContato[cl.bling_contato_id];
+        if (!ped) { backfillSemDado++; continue; }
         try {
           await sleep(340);
-          const r = await blingFetch(`${API}/contatos/${cl.bling_contato_id}`, headers);
+          const r = await blingFetch(`${API}/pedidos/vendas/${ped}`, headers);
           const j = await r.json();
-          const d = j?.data;
-          if (d && (d.nome || d.numeroDocumento)) {
+          const c = j?.data?.contato;
+          if (c && (c.nome || c.numeroDocumento)) {
             await supabase.from('meluni_clientes').update({
-              nome: d.nome || null,
-              cpf: soDigitos(d.numeroDocumento),
-              telefone: soDigitos(d.celular) || soDigitos(d.telefone),
-              email: d.email || null,
+              nome: c.nome || null,
+              cpf: soDigitos(c.numeroDocumento),
               atualizado_em: new Date().toISOString(),
             }).eq('id', cl.id);
             backfillFeitos++;
@@ -98,9 +106,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // 3. Pra cada pedido: pega contato.id (detalhe do pedido)
+    // 3. Pra cada pedido: pega o contato JA embutido no pedido (id, nome, CPF).
+    //    Telefone nao vem no pedido -> entra depois pela reconciliacao por CPF.
     const pedidoContato = {}; // pedido_id -> contatoId
     const contatoIds = new Set();
+    const contatoInfo = {};
     for (const p of pendentes) {
       try {
         await sleep(340);
@@ -108,29 +118,17 @@ export default async function handler(req, res) {
         const j = await r.json();
         const c = j?.data?.contato;
         if (c?.id) {
-          pedidoContato[p.pedido_id] = String(c.id);
-          contatoIds.add(String(c.id));
+          const cid = String(c.id);
+          pedidoContato[p.pedido_id] = cid;
+          contatoIds.add(cid);
+          if (!contatoInfo[cid]) contatoInfo[cid] = {
+            nome: c.nome || null,
+            cpf: soDigitos(c.numeroDocumento),
+            telefone: null,
+            email: null,
+          };
         }
       } catch (e) { /* segue sem contato; venda ainda entra */ }
-    }
-
-    // 4. Pra cada contato unico: nome, CPF, telefone/celular, email
-    const contatoInfo = {};
-    let contatoErros = 0;
-    for (const cid of contatoIds) {
-      try {
-        await sleep(340);
-        const r = await blingFetch(`${API}/contatos/${cid}`, headers);
-        const j = await r.json();
-        const d = j?.data;
-        if (d) contatoInfo[cid] = {
-          nome: d.nome || null,
-          cpf: soDigitos(d.numeroDocumento),
-          telefone: soDigitos(d.celular) || soDigitos(d.telefone),
-          email: d.email || null,
-        };
-        else contatoErros++;
-      } catch (e) { contatoErros++; }
     }
 
     // 5. Upsert clientes (por bling_contato_id). Nao toca em whatsapp/dados_extra
@@ -202,7 +200,6 @@ export default async function handler(req, res) {
       pedidos_pendentes: pendentes.length,
       vendas_gravadas: novos,
       contatos_bling: contatoIds.size,
-      contatos_sem_dado: contatoErros,
       backfill_feitos: backfillFeitos,
       backfill_sem_dado: backfillSemDado,
       clientes_kpi_recalc: afetados.length,
