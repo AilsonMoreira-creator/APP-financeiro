@@ -36,7 +36,7 @@ export default async function handler(req, res) {
       const { data: convs } = await supabase.from('meluni_conversas')
         .select('cliente_id,telefone,ultima_msg_direcao,etapa')
         .eq('origem', 'devolucao')
-        .eq('ultima_msg_direcao', 'in');
+        .in('ultima_msg_direcao', ['in', 'entrada']);
       for (const c of (convs || [])) {
         if (c.cliente_id) convCli.add(c.cliente_id);
         const t = (c.telefone || '').replace(/\D/g, '');

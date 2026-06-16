@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     const { data: convsPend } = await supabase.from('meluni_conversas')
       .select('cliente_id, telefone, etapa')
       .eq('origem', 'carrinho')
-      .eq('ultima_msg_direcao', 'in');
+      .in('ultima_msg_direcao', ['in', 'entrada']);
     const pendCli = new Set(), pendTel = new Set();
     const unread = {};
     for (const c of (convsPend || [])) {
