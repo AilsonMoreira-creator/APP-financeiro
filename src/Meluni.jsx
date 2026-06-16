@@ -97,6 +97,21 @@ const fmtTel = (t) => {
   return t;
 };
 const fmtData = (d) => d ? String(d).split('-').reverse().join('/') : '—';
+// data + hora a partir de timestamptz (pra linha do tempo da devolução)
+const fmtDH = (ts) => {
+  if (!ts) return '';
+  const dt = new Date(ts);
+  if (isNaN(dt)) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(dt.getDate())}/${p(dt.getMonth() + 1)} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
+};
+// dias inteiros desde um timestamp (base do SLA)
+const diasDesde = (ts) => {
+  if (!ts) return 0;
+  const dt = new Date(ts);
+  if (isNaN(dt)) return 0;
+  return Math.floor((Date.now() - dt.getTime()) / 86400000);
+};
 
 function CampoKPI({ Icon, label, valor, destaque, alerta }) {
   return (
@@ -621,51 +636,89 @@ function SecaoSac() {
   );
 }
 
-// ─── SEÇÃO: DEVOLUÇÃO ───────────────────────────────────────────────────────
+// ─── SEÇÃO: DEVOLUÇÃO (por peça, fluxo completo) ────────────────────────────
+
+// rótulo + cor de cada estado do fluxo (aprovada fica discreta)
+const DEVOL_FLUXO = {
+  aprovada:            { label: 'aprovada',            cor: palette.inkSoft },
+  aguardando_postagem: { label: 'aguardando postagem', cor: palette.inkSoft },
+  aguardando_conferir: { label: 'conferir',            cor: palette.warn },
+  aguardando_estorno:  { label: 'estornar',            cor: palette.warn },
+  completa:            { label: 'completa',            cor: palette.ok },
+  cancelada:           { label: 'cancelada',           cor: palette.alert },
+};
+
+// régua de SLA por estado (em dias). Ajuste livre — só config.
+const SLA_DEVOL = {
+  aprovada:            { alerta: 1 },                  // avisar etiqueta no mesmo dia
+  aguardando_postagem: { alerta: 7 },                 // normal até 7d
+  aguardando_conferir: { alerta: 1 },
+  aguardando_estorno:  { alerta: 1, critico: 2 },
+  completa:            { alerta: 1, soSeNaoAvisado: true }, // estorno feito, cliente não avisado
+};
+const AMBAR = '#e6a23c';
+
+function slaDevol(d) {
+  const cfg = SLA_DEVOL[d.fluxo_status];
+  if (!cfg) return null;
+  if (cfg.soSeNaoAvisado && d.cliente_avisado_em) return null;
+  const dias = diasDesde(d.fluxo_desde);
+  let cor = palette.ok, nivel = 'ok';
+  if (cfg.critico != null && dias >= cfg.critico) { cor = palette.alert; nivel = 'critico'; }
+  else if (cfg.alerta != null && dias >= cfg.alerta) { cor = AMBAR; nivel = 'alerta'; }
+  const rotulo = {
+    aprovada: 'avisar etiqueta', aguardando_postagem: 'postagem',
+    aguardando_conferir: 'conferir', aguardando_estorno: 'estorno',
+    completa: 'avisar cliente',
+  }[d.fluxo_status] || '';
+  return { txt: `${rotulo} · ${dias <= 0 ? 'hoje' : dias + 'd'}`, cor, nivel };
+}
+
+const fmtTam = (t) => t ? String(t).replace('Tamanho : ', '') : '';
+
 function DevolucaoCard({ d, compact, ativo, onAbrir }) {
-  const STA = { Aprovado: palette.ok, Pendente: palette.warn, Recusado: palette.alert, Cancelado: palette.alert };
-  const cor = STA[d.status] || palette.inkSoft;
+  const fl = DEVOL_FLUXO[d.fluxo_status] || { label: d.fluxo_status, cor: palette.inkSoft };
+  const sla = slaDevol(d);
+  const apagada = d.fluxo_status === 'completa' || d.fluxo_status === 'cancelada';
+  const tam = fmtTam(d.tamanho);
 
   if (compact) {
     return (
-      <div onClick={onAbrir} title="Abrir conversa" style={{
+      <div onClick={onAbrir} title="Abrir" style={{
         background: ativo ? MELUNI_SOFT : palette.surface, borderRadius: 10, padding: '8px 10px', cursor: 'pointer',
         border: `1px solid ${ativo ? MELUNI : palette.beige}`, display: 'flex', alignItems: 'center', gap: 8,
+        opacity: apagada && !ativo ? 0.5 : 1,
       }}>
         <RotateCcw size={13} color={MELUNI} style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.nome || '—'}</div>
-          <div style={{ fontSize: 11, color: palette.inkMuted }}>{fmtBRL(d.total)} · {d.motivo || 'sem motivo'}</div>
+          <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fmtBRL(d.valor)} · {d.produto}</div>
         </div>
-        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700, color: cor, border: `1px solid ${cor}`, flexShrink: 0 }}>{d.status || '—'}</span>
+        {d.conversa_pendente && <span title="conversa sem resposta" style={{ width: 8, height: 8, borderRadius: '50%', background: palette.alert, flexShrink: 0 }} />}
+        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700, color: fl.cor, border: `1px solid ${fl.cor}`, flexShrink: 0 }}>{fl.label}</span>
       </div>
     );
   }
 
   return (
-    <div onClick={onAbrir} title={onAbrir ? 'Abrir conversa' : undefined} style={{ background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${palette.beige}`, cursor: onAbrir ? 'pointer' : 'default' }}>
+    <div onClick={onAbrir} title={onAbrir ? 'Abrir' : undefined} style={{
+      background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${ativo ? MELUNI : palette.beige}`,
+      cursor: onAbrir ? 'pointer' : 'default', opacity: apagada ? 0.6 : 1,
+    }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <RotateCcw size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{d.nome || '—'}</span>
-            <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: palette.surface, color: cor, border: `1px solid ${cor}` }}>{d.status || '—'}</span>
-            {d.pedido_ref && <span style={{ fontSize: 11, color: palette.inkMuted }}>pedido {d.pedido_ref}</span>}
+            <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: fl.cor, border: `1px solid ${fl.cor}` }}>{fl.label}</span>
+            {d.conversa_pendente && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: palette.alert, border: '1px solid #f1c9c4' }}>💬 sem resposta</span>}
+            {sla && sla.nivel !== 'ok' && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: '#fff', background: sla.cor }}>{sla.txt}</span>}
           </div>
-          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(d.telefone)}</span>
-            <CampoKPI label="motivo" valor={d.motivo || '—'} />
-            <CampoKPI label="total" valor={fmtBRL(d.total)} destaque />
-            <span>{fmtData(d.data_devolucao)}</span>
-          </div>
-          <div style={{ fontSize: 11, color: palette.inkSoft }}>
-            {d.itens.map((i, k) => (
-              <div key={k}>• {i.produto}{i.tamanho ? ` (${String(i.tamanho).replace('Tamanho : ', '')})` : ''} — {fmtBRL(i.valor)}</div>
-            ))}
-          </div>
-          {d.mensagem && <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 4, fontStyle: 'italic' }}>"{d.mensagem}"</div>}
-          <div style={{ marginTop: 8, fontSize: 10.5, color: palette.inkMuted }}>
-            {d.rastreio ? `rastreio: ${d.rastreio}` : 'aviso de código de rastreio entra aqui'}
+            <span>{d.produto}{tam ? ` (${tam})` : ''}{d.ref ? ` · ref ${d.ref}` : ''}</span>
+            <CampoKPI label="valor" valor={fmtBRL(d.valor)} destaque />
+            {d.pedido_ref && <span>pedido {d.pedido_ref}</span>}
           </div>
         </div>
       </div>
@@ -673,60 +726,210 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
   );
 }
 
-// corpo do chat de DEVOLUÇÃO: status/motivo/itens + rastreio + nota da Lara
-function ChatDevolucaoBody({ d }) {
-  const STA = { Aprovado: palette.ok, Pendente: palette.warn, Recusado: palette.alert, Cancelado: palette.alert };
-  const cor = STA[d.status] || palette.inkSoft;
+// passo da linha do tempo
+function PassoTL({ feito, label, quando, quem, extra }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+      <div style={{ width: 10, height: 10, borderRadius: '50%', marginTop: 3, flexShrink: 0, background: feito ? MELUNI : 'transparent', border: `2px solid ${feito ? MELUNI : palette.beige}` }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, color: feito ? palette.ink : palette.inkMuted, fontWeight: feito ? 600 : 400 }}>{label}</div>
+        {feito && (quando || quem) && (
+          <div style={{ fontSize: 11, color: palette.inkMuted }}>{quando}{quem ? ` · ${quem}` : ''}{extra ? ` · ${extra}` : ''}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const fbtn = (bg, fg, bd) => ({
+  padding: '8px 12px', borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+  background: bg, color: fg, border: `1px solid ${bd || bg}`, display: 'inline-flex', alignItems: 'center', gap: 6,
+});
+
+// corpo do chat de DEVOLUÇÃO: linha do tempo + ação do passo atual + cancelar/arquivar
+function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
+  const [valor, setValor] = useState(d.estorno_valor != null ? String(d.estorno_valor) : (d.valor != null ? String(d.valor) : ''));
+  const [desc, setDesc] = useState(d.estorno_desconto_libere != null ? String(d.estorno_desconto_libere) : '');
+  const [forma, setForma] = useState(d.estorno_forma || 'pix');
+  const [chave, setChave] = useState(d.estorno_pix_chave || '');
+  const [busy, setBusy] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [motivo, setMotivo] = useState('');
+
+  const st = d.fluxo_status;
+  const mensagem = d.dados_extra?.mensagem;
+  const tam = fmtTam(d.tamanho);
+
+  const run = async (acao, payload) => {
+    setBusy(true);
+    await onAcao(acao, payload);
+    setBusy(false);
+  };
+
   return (
     <>
       <div style={{ display: 'flex', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: cor, border: `1px solid ${cor}` }}>{d.status || '—'}</span>
-        <span>total <b>{fmtBRL(d.total)}</b></span>
+        <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: (DEVOL_FLUXO[st] || {}).cor || palette.inkSoft, border: `1px solid ${(DEVOL_FLUXO[st] || {}).cor || palette.inkSoft}` }}>{(DEVOL_FLUXO[st] || {}).label || st}</span>
+        <span>valor <b>{fmtBRL(d.valor)}</b></span>
         {d.pedido_ref && <span>pedido <b>{d.pedido_ref}</b></span>}
-        <span>{fmtData(d.data_devolucao)}</span>
       </div>
+
       <div style={{ padding: 16 }}>
-        <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 10 }}>motivo: <b>{d.motivo || '—'}</b></div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {d.itens.map((i, k) => (
-            <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, color: palette.ink }}>
-              {i.produto}{i.tamanho ? ` (${String(i.tamanho).replace('Tamanho : ', '')})` : ''} — {fmtBRL(i.valor)}
-            </div>
-          ))}
+        {d.conversa_pendente && (
+          <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8, background: '#fdecea', color: palette.alert, fontSize: 12, fontWeight: 600 }}>💬 conversa sem resposta</div>
+        )}
+
+        <div style={{ fontSize: 13, color: palette.ink, marginBottom: 2 }}>{d.produto}{tam ? ` (${tam})` : ''}</div>
+        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12 }}>{d.ref ? `ref ${d.ref} · ` : ''}motivo: {d.motivo || '—'}</div>
+        {mensagem && <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12, fontStyle: 'italic' }}>"{mensagem}"</div>}
+
+        {/* LINHA DO TEMPO */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>Linha do tempo</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          <PassoTL feito label="Solicitada" quando={fmtData(d.data_devolucao)} />
+          <PassoTL feito={!!d.etiqueta_avisado_em} label="Etiqueta avisada ao cliente" quando={fmtDH(d.etiqueta_avisado_em)} quem={d.etiqueta_avisado_por} />
+          <PassoTL feito={!!d.recebido_efetivo} label="Produto recebido" quando={fmtDH(d.recebido_efetivo)} />
+          <PassoTL feito={!!d.conferido_em} label="Conferida" quando={fmtDH(d.conferido_em)} quem={d.conferido_por} />
+          <PassoTL feito={!!d.estornado_em} label="Estorno efetivado" quando={fmtDH(d.estornado_em)} quem={d.estornado_por}
+            extra={d.estornado_em ? `${fmtBRL(d.estorno_valor)} ${d.estorno_forma || ''}`.trim() : ''} />
+          <PassoTL feito={!!d.cliente_avisado_em} label="Cliente avisada do estorno" quando={fmtDH(d.cliente_avisado_em)} quem={d.cliente_avisado_por} />
         </div>
-        {d.mensagem && <div style={{ fontSize: 12, color: palette.inkMuted, marginTop: 10, fontStyle: 'italic' }}>"{d.mensagem}"</div>}
-        <div style={{ marginTop: 12, fontSize: 11.5, color: palette.inkMuted }}>
-          {d.rastreio ? `rastreio: ${d.rastreio}` : 'o código de rastreio é enviado por aqui quando a devolução for aprovada'}
+
+        {/* AÇÃO DO PASSO ATUAL */}
+        {st === 'cancelada' ? (
+          <div style={{ padding: '10px 12px', borderRadius: 9, background: '#fdecea', color: palette.alert, fontSize: 12.5 }}>
+            Cancelada {d.cancelada_por ? `por ${d.cancelada_por}` : ''}{d.cancelada_em ? ` em ${fmtDH(d.cancelada_em)}` : ''}.<br />
+            <b>Motivo:</b> {d.cancelada_motivo || '—'}
+          </div>
+        ) : st === 'aprovada' ? (
+          <button disabled={busy} onClick={() => run('avisar_etiqueta')} style={fbtn(MELUNI, '#fff')}>
+            <MessageCircle size={14} /> avisar cliente da etiqueta
+          </button>
+        ) : st === 'aguardando_postagem' ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12.5, color: palette.inkSoft }}>aguardando o cliente postar.</span>
+            <button disabled={busy} onClick={() => run('marcar_recebido')} style={fbtn(palette.surface, MELUNI, palette.beige)}>marcar recebido</button>
+          </div>
+        ) : st === 'aguardando_conferir' ? (
+          <button disabled={busy} onClick={() => run('conferir')} style={fbtn(MELUNI, '#fff')}>conferir devolução</button>
+        ) : st === 'aguardando_estorno' ? (
+          <div style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 8 }}>Estorno</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+              <label style={{ fontSize: 11, color: palette.inkMuted }}>valor
+                <input value={valor} onChange={e => setValor(e.target.value)} inputMode="decimal"
+                  style={{ display: 'block', width: 90, padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+              </label>
+              <label style={{ fontSize: 11, color: palette.inkMuted }}>desconto Libere
+                <input value={desc} onChange={e => setDesc(e.target.value)} inputMode="decimal" placeholder="0"
+                  style={{ display: 'block', width: 90, padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+              </label>
+              <label style={{ fontSize: 11, color: palette.inkMuted }}>forma
+                <select value={forma} onChange={e => setForma(e.target.value)}
+                  style={{ display: 'block', padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }}>
+                  <option value="pix">Pix</option>
+                  <option value="cartao">Cartão</option>
+                  <option value="credito">Crédito</option>
+                </select>
+              </label>
+            </div>
+            {forma === 'pix' && (
+              <input value={chave} onChange={e => setChave(e.target.value)} placeholder="chave pix (vem do cliente no chat)"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginBottom: 8 }} />
+            )}
+            <button disabled={busy} onClick={() => run('estornar', { estorno_valor: valor, estorno_desconto_libere: desc, estorno_forma: forma, estorno_pix_chave: chave })} style={fbtn(MELUNI, '#fff')}>
+              confirmar estorno
+            </button>
+          </div>
+        ) : st === 'completa' && !d.cliente_avisado_em ? (
+          <button disabled={busy} onClick={() => run('avisar_estorno')} style={fbtn(palette.ok, '#fff')}>
+            <MessageCircle size={14} /> avisar cliente do estorno
+          </button>
+        ) : st === 'completa' ? (
+          <div style={{ padding: '10px 12px', borderRadius: 9, background: '#eafbf0', color: palette.ok, fontSize: 12.5, fontWeight: 600 }}>Concluída. Cliente avisada do estorno.</div>
+        ) : null}
+
+        {/* CANCELAR / ARQUIVAR */}
+        <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          {st !== 'cancelada' && st !== 'completa' && (
+            <button disabled={busy} onClick={() => setCancelOpen(true)} style={fbtn(palette.surface, palette.alert, palette.beige)}>cancelar devolução</button>
+          )}
+          {isAdmin && (
+            <button disabled={busy} onClick={() => { if (window.confirm('Arquivar? Some de todas as contagens.')) run('arquivar'); }} style={fbtn(palette.surface, palette.inkMuted, palette.beige)}>arquivar</button>
+          )}
         </div>
       </div>
-      <NotaLara>A Lara conduz a devolução por aqui (status + rastreio). A conversa abre quando o número do WhatsApp B2C estiver ligado.</NotaLara>
+
+      <NotaLara>A Lara conduz a devolução por aqui. A conversa em si abre quando o número do WhatsApp B2C estiver ligado.</NotaLara>
+
+      {/* MODAL CANCELAR */}
+      {cancelOpen && (
+        <div onClick={() => setCancelOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: palette.bg, borderRadius: 12, padding: 16, width: 'min(380px, 100%)', fontFamily: FONT }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: palette.ink, marginBottom: 8 }}>Cancelar devolução</div>
+            <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 8 }}>Trava todo o fluxo. Fica registrado.</div>
+            <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="motivo do cancelamento" rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', padding: 8, borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginBottom: 10 }} />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setCancelOpen(false)} style={fbtn(palette.surface, palette.inkSoft, palette.beige)}>voltar</button>
+              <button disabled={busy || !motivo.trim()} onClick={async () => { await run('cancelar', { motivo }); setCancelOpen(false); }} style={fbtn(palette.alert, '#fff')}>confirmar cancelamento</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
 
-function SecaoDevolucao() {
+function SecaoDevolucao({ userId, isAdmin }) {
+  const [etapa, setEtapa] = useState('todas');
   const [devs, setDevs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [chatId, setChatId] = useState(null);
   const isDesktop = useIsDesktop();
-  useEffect(() => {
+  const tabs = [
+    { id: 'todas', label: 'Todas' },
+    { id: 'aguardando_conferir', label: 'Aguardando conferir' },
+    { id: 'aguardando_estorno', label: 'Aguardando estorno' },
+    { id: 'canceladas', label: 'Canceladas' },
+  ];
+  const carregar = useCallback(async () => {
     setLoading(true);
-    fetch('/api/meluni-devolucoes-list').then(r => r.json())
-      .then(j => { if (j.ok) setDevs(j.devolucoes || []); })
-      .catch(() => {}).finally(() => setLoading(false));
-  }, []);
+    try {
+      const r = await fetch(`/api/meluni-devolucoes-list?etapa=${etapa}`);
+      const j = await r.json();
+      if (j.ok) setDevs(j.devolucoes || []);
+    } catch (e) { /* ignora */ }
+    setLoading(false);
+  }, [etapa]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const onAcao = useCallback(async (id, acao, payload = {}) => {
+    try {
+      const r = await fetch('/api/meluni-devolucao-acao', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, acao, operador: userId, isAdmin, ...payload }),
+      });
+      const j = await r.json();
+      if (!j.ok) { window.alert(j.erro || 'falhou'); return false; }
+      await carregar();
+      return true;
+    } catch (e) { window.alert(String(e)); return false; }
+  }, [userId, isAdmin, carregar]);
+
   return (
     <div>
-      <SectionTitle icon={RotateCcw}>{loading ? 'Devoluções…' : `${devs.length} devolução(ões)`}</SectionTitle>
-      {!loading && devs.length === 0 && <Placeholder>Nenhuma devolução importada ainda.</Placeholder>}
+      <SubTabs tabs={tabs} active={etapa} onChange={setEtapa} />
+      <SectionTitle icon={RotateCcw}>{loading ? 'Devoluções…' : `${devs.length} peça(s)`}</SectionTitle>
+      {!loading && devs.length === 0 && <Placeholder>Nenhuma devolução nessa aba.</Placeholder>}
       {devs.length > 0 && (
         <MeluniSplitChat
-          itens={devs} getId={(d) => d.chave}
+          itens={devs} getId={(d) => d.id}
           abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
           tituloDe={(d) => d.nome || 'Devolução'}
           subtituloDe={(d) => fmtTel(d.telefone) || 'sem número'}
           renderCard={(d, p) => <DevolucaoCard d={d} {...p} />}
-          renderChat={(d) => <ChatDevolucaoBody d={d} />}
+          renderChat={(d) => <ChatDevolucaoBody d={d} isAdmin={isAdmin} onAcao={(acao, payload) => onAcao(d.id, acao, payload)} />}
         />
       )}
     </div>
@@ -854,7 +1057,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
         {secao === 'clientes' && <SecaoClientes />}
         {secao === 'carrinho' && <SecaoCarrinho />}
         {secao === 'sac' && <SecaoSac />}
-        {secao === 'devolucao' && <SecaoDevolucao />}
+        {secao === 'devolucao' && <SecaoDevolucao userId={userId} isAdmin={isAdmin} />}
         {secao === 'marketing' && <SecaoMarketing />}
         {secao === 'dashboard' && <SecaoDashboard />}
       </div>
