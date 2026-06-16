@@ -769,7 +769,7 @@ function TimelineDevol({ d, size = 'full' }) {
   // mini (card da lista) = mesma linha, só um pouco menor que o full (chat).
   const D = full ? 36 : 30, IS = full ? 18 : 15, FS = full ? 10.5 : 9.5;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%', maxWidth: full ? '100%' : '70%' }}>
       {DEVOL_STEPS.map((s, i) => {
         const feito = concluida || i < atual;
         const ehAtual = !concluida && i === atual;
@@ -841,13 +841,28 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
             {d.conversa_pendente && <PillConversa />}
             {sla && sla.nivel !== 'ok' && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, color: '#fff', background: sla.cor }}>{sla.txt}</span>}
           </div>
-          <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 4 }}>
-            <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(d.telefone)}</span>
-            <CampoKPI label="valor" valor={fmtBRL(d.valor)} destaque />
-            {d.pedido_ref && <span>pedido {d.pedido_ref}</span>}
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 8 }}>
+            {/* esquerda: contato + pedido */}
+            <div style={{ flex: '1 1 230px', minWidth: 0, fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', alignContent: 'flex-start' }}>
+              <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(d.telefone)}</span>
+              <CampoKPI label="valor" valor={fmtBRL(d.valor)} destaque />
+              {d.pedido_ref && <span>pedido {d.pedido_ref}</span>}
+            </div>
+            {/* direita: peças uma embaixo da outra (até 3); mais que isso abre o card */}
+            <div style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {itens.slice(0, 3).map((it, k) => {
+                const r = it?.ref || it?.sku;
+                const t = String(it?.descricao || it?.produto || '—').trim();
+                return (
+                  <div key={k} style={{ fontSize: 12, color: palette.inkSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {r && <span style={{ color: palette.inkMuted, fontWeight: 700 }}>{r}</span>}{r ? ' · ' : ''}{t}
+                  </div>
+                );
+              })}
+              {itens.length > 3 && <div style={{ fontSize: 11, color: MELUNI, fontWeight: 600 }}>+{itens.length - 3} peça(s) — abrir pra ver</div>}
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: palette.inkSoft, marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumoItens}</div>
-          {/* linha do tempo pequena no card */}
+          {/* linha do tempo (reduzida pra não pegar o card todo) */}
           <TimelineDevol d={d} size="mini" />
         </div>
       </div>
@@ -863,7 +878,6 @@ const fbtn = (bg, fg, bd) => ({
 // corpo do chat de DEVOLUÇÃO: linha do tempo + ação do passo atual + cancelar/arquivar
 function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   const [valor, setValor] = useState(d.estorno_valor != null ? String(d.estorno_valor) : (d.valor != null ? String(d.valor) : ''));
-  const [desc, setDesc] = useState(d.estorno_desconto_libere != null ? String(d.estorno_desconto_libere) : '');
   const [forma, setForma] = useState(d.estorno_forma || (String(d.tipo || '').toLowerCase().includes('cr') && String(d.tipo || '').toLowerCase().includes('dito') ? 'credito' : 'pix'));
   const [chave, setChave] = useState(d.estorno_pix_chave || '');
   const [busy, setBusy] = useState(false);
@@ -963,11 +977,7 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
               <label style={{ fontSize: 11, color: palette.inkMuted }}>valor
                 <input value={valor} onChange={e => setValor(e.target.value)} inputMode="decimal"
-                  style={{ display: 'block', width: 90, padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
-              </label>
-              <label style={{ fontSize: 11, color: palette.inkMuted }}>desconto Libere
-                <input value={desc} onChange={e => setDesc(e.target.value)} inputMode="decimal" placeholder="0"
-                  style={{ display: 'block', width: 90, padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+                  style={{ display: 'block', width: 100, padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
               </label>
               <label style={{ fontSize: 11, color: palette.inkMuted }}>forma
                 <select value={forma} onChange={e => setForma(e.target.value)}
@@ -979,12 +989,16 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
               </label>
             </div>
             {forma === 'pix' && (
-              <input value={chave} onChange={e => setChave(e.target.value)} placeholder="chave pix (vem do cliente no chat)"
+              <input value={chave} onChange={e => setChave(e.target.value)} placeholder="chave pix"
                 style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginBottom: 8 }} />
             )}
-            <button disabled={busy} onClick={() => run('estornar', { estorno_valor: valor, estorno_desconto_libere: desc, estorno_forma: forma, estorno_pix_chave: chave })} style={fbtn(MELUNI, '#fff')}>
-              confirmar estorno
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button disabled={busy} onClick={() => run('salvar_estorno', { estorno_valor: valor, estorno_forma: forma, estorno_pix_chave: chave })} style={fbtn(palette.surface, MELUNI, palette.beige)}>salvar</button>
+              <button disabled={busy} onClick={() => run('estornar', { estorno_valor: valor, estorno_forma: forma, estorno_pix_chave: chave })} style={fbtn(MELUNI, '#fff')}>
+                <DollarSign size={14} /> confirmar estorno (pago)
+              </button>
+            </div>
+            <div style={{ fontSize: 10.5, color: palette.inkMuted, marginTop: 8 }}>a Lara salva o valor e a forma; confirme o estorno depois que o pagamento sair.</div>
           </div>
         ) : st === 'completa' && d.estornado_em && !d.cliente_avisado_em ? (
           <button disabled={busy} onClick={() => run('avisar_estorno')} style={fbtn(palette.ok, '#fff')}>
@@ -1006,8 +1020,6 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
           )}
         </div>
       </div>
-
-      <NotaLara>A Lara conduz a devolução por aqui. A conversa em si abre quando o número do WhatsApp B2C estiver ligado.</NotaLara>
 
       {/* MODAL CANCELAR */}
       {cancelOpen && (

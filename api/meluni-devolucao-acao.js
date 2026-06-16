@@ -1,8 +1,8 @@
 // ============================================================================
 // MELUNI — ações do fluxo de devolução (por peça). POST.
 // body: { id, acao, operador, isAdmin, ...payload }
-// acoes: avisar_etiqueta | marcar_recebido | conferir | estornar |
-//        avisar_estorno | cancelar | arquivar
+// acoes: avisar_etiqueta | marcar_recebido | conferir | salvar_estorno |
+//        estornar | avisar_estorno | cancelar | arquivar
 // Carimba _em (now) e _por (operador) em cada passo. Devolve a linha atualizada
 // já relida da view (fluxo_status recalculado). Ailson 15/06/2026.
 // ============================================================================
@@ -32,14 +32,24 @@ export default async function handler(req, res) {
       case 'conferir':
         patch = { conferido: true, conferido_em: agora, conferido_por: operador };
         break;
-      case 'estornar': {
+      case 'salvar_estorno': {
+        // a assistente preenche e SALVA (não marca como pago). Sem estornado_em.
         const valor = b.estorno_valor != null && b.estorno_valor !== '' ? Number(b.estorno_valor) : null;
-        const desc = b.estorno_desconto_libere != null && b.estorno_desconto_libere !== '' ? Number(b.estorno_desconto_libere) : null;
+        const forma = ['pix', 'cartao', 'credito'].includes(b.estorno_forma) ? b.estorno_forma : null;
+        patch = {
+          estorno_valor: valor,
+          estorno_forma: forma,
+          estorno_pix_chave: forma === 'pix' ? (b.estorno_pix_chave || null) : null,
+        };
+        break;
+      }
+      case 'estornar': {
+        // confirmação do pagamento (Ailson paga e confirma). Carimba estornado_em.
+        const valor = b.estorno_valor != null && b.estorno_valor !== '' ? Number(b.estorno_valor) : null;
         const forma = ['pix', 'cartao', 'credito'].includes(b.estorno_forma) ? b.estorno_forma : null;
         if (valor == null || !forma) return res.status(400).json({ ok: false, erro: 'estorno_valor e estorno_forma (pix|cartao|credito) obrigatorios' });
         patch = {
           estorno_valor: valor,
-          estorno_desconto_libere: desc,
           estorno_forma: forma,
           estorno_pix_chave: forma === 'pix' ? (b.estorno_pix_chave || null) : null,
           estornado_em: agora,

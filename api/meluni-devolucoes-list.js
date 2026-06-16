@@ -65,9 +65,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // SKU -> REF + descrição (mesmo caminho do módulo Bling vendas / carrinho:
-    // ml_sku_ref_map). Na devolução o SKU vem no campo `ref` do item; guardamos o
-    // SKU em `sku` e colocamos a REF amigável em `ref` + a descrição limpa.
+    // SKU -> REF (ml_sku_ref_map, igual Bling vendas/carrinho) + título curto da
+    // calculadora (calc-meluni: descrições mais curtas que o desc_limpa). O SKU
+    // vem no campo `ref` do item; guardamos em `sku` e pomos a REF amigável + título.
     const skus = [...new Set(
       lista.flatMap(d => Array.isArray(d.itens) ? d.itens.map(i => i?.ref).filter(Boolean) : [])
     )];
@@ -78,11 +78,28 @@ export default async function handler(req, res) {
           .select('sku, ref, desc_limpa').in('sku', skus.slice(i, i + 300));
         for (const r of (rows || [])) mapaSku.set(r.sku, r);
       }
+      // título curto pela calculadora (calc-meluni), indexado por REF sem zero
+      const semZero = (r) => String(r || '').replace(/^0+/, '') || '0';
+      const tituloCaso = (s) => String(s || '').trim().toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+      const calcMap = new Map();
+      try {
+        const { data: calc } = await supabase.from('amicia_data').select('payload').eq('user_id', 'calc-meluni').maybeSingle();
+        const prods = calc?.payload?.prods;
+        if (Array.isArray(prods)) {
+          for (const p of prods) {
+            if (p?.ref && p?.descricao) calcMap.set(semZero(p.ref), tituloCaso(p.descricao));
+          }
+        }
+      } catch { /* segue sem título da calc */ }
       lista = lista.map(d => {
         if (!Array.isArray(d.itens)) return d;
         const itens = d.itens.map(it => {
           const r = it?.ref ? mapaSku.get(it.ref) : null;
-          return { ...it, sku: it.ref || it.sku || null, ref: r?.ref || null, descricao: r?.desc_limpa || it.descricao || it.produto || null };
+          const refReal = r?.ref || null;
+          const titulo = (refReal && calcMap.get(semZero(refReal))) || r?.desc_limpa || it.descricao || it.produto || null;
+          return { ...it, sku: it.ref || it.sku || null, ref: refReal, descricao: titulo };
         });
         return { ...d, itens };
       });
