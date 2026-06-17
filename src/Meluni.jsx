@@ -19,7 +19,7 @@
  * sprints (endpoints de leitura + planilhas). Ailson 13/06/2026.
  * ═══════════════════════════════════════════════════════════════════════════
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
@@ -32,6 +32,38 @@ import MeluniAnalise from './CalcAnaliseMeluni';
 const ASSISTANT_NAME = 'Lara';
 const MELUNI = '#9b59b6';      // roxo da marca Meluni (consistente com o resto do app)
 const MELUNI_SOFT = '#f6f0f9';
+
+// ─── trava de presença (Ailson 16/06/2026) ─────────────────────────────────
+// userId via Context (o front da Meluni é por API; o claim/release vai em
+// /api/meluni-lock). 1 atendente por chat/devolução; os demais ficam só-leitura
+// e veem quem está atendendo. Lock obsoleto (>45s sem heartbeat 20s) é tomado.
+const MeluniUserCtx = React.createContext('');
+
+function useMeluniLock(tipo, id) {
+  const userId = useContext(MeluniUserCtx);
+  const [lockPor, setLockPor] = useState(null);
+  useEffect(() => {
+    if (!id || !userId) { setLockPor(null); return; }
+    let vivo = true;
+    const body = (acao) => JSON.stringify({ tipo, id, acao, userId });
+    const claim = async () => {
+      try {
+        const r = await fetch('/api/meluni-lock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body('claim') });
+        const j = await r.json();
+        if (vivo && j.ok) setLockPor(j.lockPor || null);
+      } catch { /* ignora */ }
+    };
+    const release = () => {
+      try { fetch('/api/meluni-lock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body('release'), keepalive: true }); } catch { /* */ }
+    };
+    claim();
+    const hb = setInterval(claim, 20000);
+    window.addEventListener('pagehide', release);
+    return () => { vivo = false; clearInterval(hb); window.removeEventListener('pagehide', release); release(); };
+  }, [tipo, id, userId]);
+  const bloqueado = !!lockPor && lockPor !== userId;
+  return { lockPor, bloqueado };
+}
 
 // ─── sub-abas leves (dentro de cada seção) ──────────────────────────────────
 function SubTabs({ tabs, active, onChange }) {
@@ -250,6 +282,7 @@ function LaraThread({ telefone, conversaId, nome }) {
   const conv = data?.conversa;
   const msgs = data?.mensagens || [];
   const sug = data?.sugestao;
+  const { lockPor, bloqueado } = useMeluniLock('conversa', conv?.id);
 
   async function post(url, body) {
     setBusy(true);
@@ -258,9 +291,10 @@ function LaraThread({ telefone, conversaId, nome }) {
       await carregar();
     } catch { /* ignora */ } finally { setBusy(false); }
   }
-  const aprovar = (txt) => { setEditando(false); return post('/api/meluni-whats-aprovar', { id: sug.id, acao: 'aprovar', texto: txt || null, operador: 'atendente' }); };
-  const descartar = () => post('/api/meluni-whats-aprovar', { id: sug.id, acao: 'descartar', operador: 'atendente' });
+  const aprovar = (txt) => { if (bloqueado) return; setEditando(false); return post('/api/meluni-whats-aprovar', { id: sug.id, acao: 'aprovar', texto: txt || null, operador: 'atendente' }); };
+  const descartar = () => { if (bloqueado) return; return post('/api/meluni-whats-aprovar', { id: sug.id, acao: 'descartar', operador: 'atendente' }); };
   const enviarManual = () => {
+    if (bloqueado) return;
     const t = rascunho.trim(); if (!t) return;
     const body = conv?.id ? { conversa_id: conv.id, texto: t } : { telefone, texto: t };
     setRascunho('');
@@ -271,6 +305,11 @@ function LaraThread({ telefone, conversaId, nome }) {
     <div style={{ borderTop: `1px solid ${palette.beige}`, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '8px 14px', fontSize: 11, fontWeight: 700, color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.3, display: 'flex', alignItems: 'center', gap: 6 }}>
         <MessageCircle size={13} color={MELUNI} /> Conversa (Lara · WhatsApp)
+        {bloqueado && (
+          <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0, fontSize: 11, fontWeight: 700, color: '#8a5a00', background: '#fff4dd', border: '1px solid #f0d8a0', borderRadius: 6, padding: '2px 8px' }}>
+            🔒 {lockPor} está respondendo
+          </span>
+        )}
       </div>
 
       {/* histórico */}
@@ -309,7 +348,7 @@ function LaraThread({ telefone, conversaId, nome }) {
 
       {/* sugestão pendente da Lara */}
       {sug && (
-        <div style={{ margin: '0 14px 10px', border: `1px solid ${MELUNI}`, borderRadius: 10, padding: 10, background: MELUNI_SOFT }}>
+        <div style={{ margin: '0 14px 10px', border: `1px solid ${MELUNI}`, borderRadius: 10, padding: 10, background: MELUNI_SOFT, opacity: bloqueado ? 0.55 : 1, pointerEvents: bloqueado ? 'none' : 'auto' }}>
           <div style={{ fontSize: 10.5, fontWeight: 700, color: MELUNI, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3 }}>sugestão da Lara</div>
           {editando ? (
             <textarea value={sugTexto} onChange={e => setSugTexto(e.target.value)} rows={3}
@@ -336,11 +375,11 @@ function LaraThread({ telefone, conversaId, nome }) {
 
       {/* envio manual */}
       <div style={{ display: 'flex', gap: 6, padding: '0 14px 12px', alignItems: 'flex-end' }}>
-        <textarea value={rascunho} onChange={e => setRascunho(e.target.value)} rows={1} placeholder={conv ? 'escrever pra cliente…' : 'cliente precisa escrever primeiro'}
-          disabled={!conv || busy}
+        <textarea value={rascunho} onChange={e => setRascunho(e.target.value)} rows={1} placeholder={bloqueado ? `${lockPor} está respondendo…` : (conv ? 'escrever pra cliente…' : 'cliente precisa escrever primeiro')}
+          disabled={!conv || busy || bloqueado}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarManual(); } }}
-          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'none', opacity: conv ? 1 : 0.6 }} />
-        <button disabled={!conv || busy || !rascunho.trim()} onClick={enviarManual} style={fbtn(MELUNI, '#fff')}>enviar</button>
+          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'none', opacity: (conv && !bloqueado) ? 1 : 0.6 }} />
+        <button disabled={!conv || busy || bloqueado || !rascunho.trim()} onClick={enviarManual} style={fbtn(MELUNI, '#fff')}>enviar</button>
       </div>
     </div>
   );
@@ -1048,6 +1087,7 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   const [busy, setBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [motivo, setMotivo] = useState('');
+  const { lockPor, bloqueado } = useMeluniLock('devolucao', d.id);
 
   const st = d.fluxo_status;
   const mensagem = d.dados_extra?.mensagem;
@@ -1055,6 +1095,7 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   const n = d.n_pecas || itens.length || 1;
 
   const run = async (acao, payload) => {
+    if (bloqueado) return;
     setBusy(true);
     await onAcao(acao, payload);
     setBusy(false);
@@ -1068,7 +1109,12 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
         {d.pedido_ref && <span>pedido <b>{d.pedido_ref}</b></span>}
       </div>
 
-      <div style={{ padding: 16 }}>
+      {bloqueado && (
+        <div style={{ margin: '10px 16px 0', padding: '8px 10px', borderRadius: 8, background: '#fff4dd', border: '1px solid #f0d8a0', color: '#8a5a00', fontSize: 12.5, fontWeight: 700 }}>
+          🔒 {lockPor} está atendendo esta devolução — somente leitura até essa pessoa sair.
+        </div>
+      )}
+      <div style={{ padding: 16, opacity: bloqueado ? 0.55 : 1, pointerEvents: bloqueado ? 'none' : 'auto' }}>
         {d.conversa_pendente && (
           <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8, background: '#fdecea', color: palette.alert, fontSize: 12, fontWeight: 600 }}>💬 conversa sem resposta</div>
         )}
@@ -1371,6 +1417,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   ];
   return (
+    <MeluniUserCtx.Provider value={userId}>
     <div style={{ minHeight: '100vh', background: palette.bg, fontFamily: FONT }}>
       <Header
         title={`Meluni · ${ASSISTANT_NAME}`}
@@ -1380,7 +1427,6 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
       />
       <TabBar tabs={tabs} activeTab={secao} onChange={setSecao} />
       <div style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
-        {/* presence lock: card aberto fica read-only pros outros — ligado quando os cards forem montados */}
         {secao === 'clientes' && <SecaoClientes />}
         {secao === 'carrinho' && <SecaoCarrinho />}
         {secao === 'sac' && <SecaoSac />}
@@ -1389,5 +1435,6 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
         {secao === 'dashboard' && <SecaoDashboard />}
       </div>
     </div>
+    </MeluniUserCtx.Provider>
   );
 }
