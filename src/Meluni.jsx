@@ -1647,17 +1647,11 @@ function SecaoDashboard() {
   const [periodo, setPeriodo] = useState('30');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [carts, setCarts] = useState([]);
   useEffect(() => {
     setLoading(true);
     const qs = periodo === 'tudo' ? 'tudo=1' : `dias=${periodo}`;
     fetch(`/api/meluni-dashboard?${qs}`).then(r => r.json())
       .then(j => { if (j.ok) setData(j); }).catch(() => {}).finally(() => setLoading(false));
-  }, [periodo]);
-  useEffect(() => {
-    const dias = periodo === 'tudo' ? 3650 : periodo;
-    fetch(`/api/meluni-carrinhos-list?status=processando&limite=30&dias=${dias}`)
-      .then(r => r.json()).then(j => { if (j.ok) setCarts(j.carrinhos || []); }).catch(() => {});
   }, [periodo]);
   const d = data || {};
   return (
@@ -1682,15 +1676,6 @@ function SecaoDashboard() {
         <KpiTile label="Carrinhos" valor={String(d.carrinhos?.qtd || 0)} sub="no período" />
       </div>
       <MiniBarras serie={d.serie || []} />
-      <div style={{ marginTop: 18 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-          Carrinhos abandonados · processando ({carts.length})
-        </div>
-        {carts.length === 0 && <div style={{ fontSize: 13, color: palette.inkMuted }}>Nenhum carrinho em processando no período.</div>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {carts.map(c => <DashCarrinhoRow key={c.id} c={c} />)}
-        </div>
-      </div>
     </div>
   );
 }
