@@ -798,6 +798,8 @@ function SecaoClientes() {
 function relogioCarrinho(c) {
   const map = { enviada: ['enviado_em', 24, '2º envio'], segundo_envio: ['segundo_envio_em', 48, 'perdidos'], conversando: ['ultima_interacao_em', 72, 'perdidos'] };
   const cfg = map[c?.status]; if (!cfg) return null;
+  // o cronômetro que aponta pra "perdidos" é controle interno — não mostra na UI.
+  if (cfg[2] === 'perdidos') return null;
   const base = c[cfg[0]] || c.enviado_em; if (!base) return null;
   const rest = new Date(base).getTime() + cfg[1] * 3600e3 - Date.now();
   if (rest <= 0) return { texto: `vencido → ${cfg[2]}`, urgente: true };
