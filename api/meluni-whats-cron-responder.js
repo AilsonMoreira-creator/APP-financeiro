@@ -56,7 +56,7 @@ export default async function handler(req, res) {
         } else {
           pulados++;
         }
-        detalhe.push({ id: c.id, motivo: r.motivo });
+        detalhe.push({ id: c.id, motivo: r.motivo, erro: r.erro || null });
       } catch (e) {
         erros++;
         await zerar(c.id);
