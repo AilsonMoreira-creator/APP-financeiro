@@ -10,7 +10,7 @@
 // e MOVE o carrinho pra status 'enviada' (enviado_em/enviado_template).
 // Ailson 17/06/2026.
 // ============================================================================
-import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
+import { supabase, cfgMeluni, dentroJanelaEnvio } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverResumoItens, resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
 
@@ -130,6 +130,8 @@ export default async function handler(req, res) {
   const ativo = (await cfgMeluni('lara_carrinho_disparo_ativo', false)) === true;
   const ignoraGate = force && req.query?.teste === '1';
   if (!ativo && !ignoraGate) return res.status(200).json({ ok: true, gate: 'desligado', enviados: 0 });
+  // janela de envio automático (seg–sáb 09–20). Fora dela segura pra próxima janela.
+  if (!ignoraGate && !dentroJanelaEnvio()) return res.status(200).json({ ok: true, gate: 'fora_da_janela', janela: 'seg-sab 09:00-20:00', enviados: 0 });
 
   const idadeMinH = Number(await cfgMeluni('lara_carrinho_idade_min_horas', 2)) || 2;
   const idadeMaxD = Number(await cfgMeluni('lara_carrinho_idade_max_dias', 30)) || 30;

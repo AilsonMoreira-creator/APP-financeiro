@@ -10,7 +10,7 @@
 // Ordem: conversões -> 2º envio -> perdidas (pra não perder quem acabou de ser 2º-enviado).
 // Ailson 17/06/2026.
 // ============================================================================
-import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
+import { supabase, cfgMeluni, dentroJanelaEnvio } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
 
@@ -50,7 +50,10 @@ export default async function handler(req, res) {
 
     const funilAtivo = (await cfgMeluni('lara_funil_ativo', false)) === true;
 
-    if (funilAtivo) {
+    // 2º envio e perdidas só rodam na janela de envio (seg–sáb 09–20); fora dela
+    // segura pra próxima janela. Conversões (acima) rodam sempre — não mandam msg.
+    const janelaOk = dentroJanelaEnvio();
+    if (funilAtivo && janelaOk) {
       // 2) 2º envio: enviada >24h, sem conversão, com nome
       const lote = Number(await cfgMeluni('lara_segundo_envio_lote', 30)) || 30;
       const descontoBody = (((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates || {})?.desconto?.body || '';
@@ -90,7 +93,7 @@ export default async function handler(req, res) {
       perdidas = Number(pd) || 0;
     }
 
-    return res.status(200).json({ ok: true, funilAtivo: (await cfgMeluni('lara_funil_ativo', false)) === true, conversoes, segundo, segundoPulado, perdidas, erros, detalhe });
+    return res.status(200).json({ ok: true, funilAtivo: (await cfgMeluni('lara_funil_ativo', false)) === true, janela: janelaOk ? 'aberta' : 'fora (seg-sab 09-20)', conversoes, segundo, segundoPulado, perdidas, erros, detalhe });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: String(e?.message || e), conversoes, segundo, perdidas });
   }
