@@ -57,9 +57,10 @@ export default async function handler(req, res) {
   if (!process.env.META_WA_ACCESS_TOKEN) {
     return res.status(500).json({ erro: 'META_WA_ACCESS_TOKEN ausente' });
   }
-  const spec = await cfgMeluni('lara_templates_carrinho', null);
+  const chaveCfg = req.query?.cfg || 'lara_templates_carrinho';
+  const spec = await cfgMeluni(chaveCfg, null);
   const tpls = spec?.templates;
-  if (!tpls) return res.status(404).json({ erro: 'spec lara_templates_carrinho nao encontrada no meluni_config' });
+  if (!tpls) return res.status(404).json({ erro: `spec ${chaveCfg} nao encontrada no meluni_config` });
 
   const todas = Object.keys(tpls).filter(k => tpls[k]?.name && tpls[k]?.body);
   const only = (req.query?.only || '').split(',').map(s => s.trim()).filter(Boolean);
