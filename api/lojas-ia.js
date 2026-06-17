@@ -1597,6 +1597,39 @@ async function montarContextoSugestoes(vendedoraId) {
     .lte('data_inicio', hoje)
     .gte('data_fim', hoje);
 
+  // ─── CAMPANHA: compradores de promoção (Ailson 17/06/2026) ─────────────
+  // Durante a campanha 30% off (17→22/06), a IA prioriza clientes DESTA
+  // vendedora que já compraram em promoção antes — ordem ativo > atencao >
+  // semAtividade (prioridade 1..3 na view). Alvo: 4 cards/dia. A mensagem do
+  // 30% vem da Ação vigente (incorporada automaticamente).
+  const CAMPANHA_PROMO_INI = '2026-06-17';
+  const CAMPANHA_PROMO_FIM = '2026-06-22';
+  let compradoresPromo = [];
+  if (hoje >= CAMPANHA_PROMO_INI && hoje <= CAMPANHA_PROMO_FIM) {
+    const { data: cp } = await supabase
+      .from('vw_lojas_compradores_promo')
+      .select('cliente_id, status_atual, prioridade, promo_recorrente, compras_promo, ult_compra_promo')
+      .lte('prioridade', 3)
+      .order('prioridade', { ascending: true })
+      .order('promo_recorrente', { ascending: false })
+      .order('ult_compra_promo', { ascending: false })
+      .limit(500);
+    const ids = (cp || []).map(x => x.cliente_id);
+    if (ids.length) {
+      const { data: meus } = await supabase
+        .from('lojas_clientes')
+        .select('id, apelido, comprador_nome, razao_social')
+        .eq('vendedora_id', vendedoraId)
+        .in('id', ids);
+      const nomeDe = {};
+      (meus || []).forEach(c => { nomeDe[c.id] = c.apelido || c.comprador_nome || (c.razao_social ? c.razao_social.split(' ').slice(0, 3).join(' ') : 'cliente'); });
+      compradoresPromo = (cp || [])
+        .filter(x => nomeDe[x.cliente_id] !== undefined)
+        .slice(0, 12)
+        .map(x => ({ cliente_id: x.cliente_id, apelido: nomeDe[x.cliente_id], status: x.status_atual, recorrente: x.promo_recorrente, compras_promo: x.compras_promo }));
+    }
+  }
+
   // ─── AVISO DEDICADO PRO DIA ───────────────────────────────────────────
   // Disparo único pra essa vendedora (ou todas) hoje. IA cria sugestão
   // dedicada no slot 1 e marca como consumido após o cron.
@@ -1774,6 +1807,7 @@ async function montarContextoSugestoes(vendedoraId) {
     totalCarteira,           // tamanho da carteira da vendedora (pra IA priorizar conversao em carteiras pequenas)
     promocoes: promocoes || [],
     acoesVigentes: acoesVigentes || [],
+    compradoresPromo,
     avisosDestaVendedora,
     coresEmAlta,
     // Link Vesti escolhido pela vendedora (pode ser null = livre)
@@ -3018,6 +3052,16 @@ function montarMessagesSugestoes(ctx) {
       texto: a.texto,
       vence_em: a.data_fim,
     })),
+    // CAMPANHA 30% off (Ailson 17/06/2026): priorizar compradores de promoção.
+    campanha_promo: (ctx.compradoresPromo && ctx.compradoresPromo.length)
+      ? {
+          ativa: true,
+          vence_em: '2026-06-22',
+          alvo_por_dia: 4,
+          instrucao: 'Campanha 30% off ativa. INCLUA ATÉ 4 sugestões priorizando os clientes listados em clientes_alvo — são clientes que JÁ COMPRARAM EM PROMOÇÃO antes e têm alta chance de comprar de novo. Ordem de prioridade: status ativo, depois atencao, depois semAtividade (a lista já vem nessa ordem; prefira tambem os recorrente=true). Redistribua o mix usual (pode reduzir novidade/atencao) pra abrir espaço pra esses ate 4 cards. A mensagem deve usar a Ação vigente do 30% off. Nao repita cliente que ja recebeu sugestao recente.',
+          clientes_alvo: ctx.compradoresPromo,
+        }
+      : null,
     // Aviso DEDICADO pra essa vendedora hoje. Se presente, IA DEVE criar a
     // sugestao prioridade=1 baseada no texto, em vez do reativar usual.
     aviso_dedicado_hoje: (ctx.avisosDestaVendedora || []).length > 0
