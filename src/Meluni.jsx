@@ -23,7 +23,7 @@ import React, { useState, useEffect, useCallback, useRef, useContext } from 'rea
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
-  CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send,
+  CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send, Paperclip, Smile,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
@@ -280,6 +280,30 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
   );
 }
 
+// reduz a imagem (foto de celular costuma ser grande) e devolve base64 jpeg
+function fileToBase64Scaled(file, maxDim = 1600, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (Math.max(width, height) > maxDim) {
+        const r = maxDim / Math.max(width, height);
+        width = Math.round(width * r); height = Math.round(height * r);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      try { resolve({ base64: canvas.toDataURL('image/jpeg', quality).split(',')[1], mime: 'image/jpeg' }); }
+      catch (e) { reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('falha ao ler imagem')); };
+    img.src = url;
+  });
+}
+const EMOJIS_CHAT = ['😊', '😍', '🥰', '😉', '😅', '🙏', '👏', '✨', '💕', '💜', '🤍', '🔥', '🎉', '👗', '👜', '🛍️', '✅', '👇', '💬', '😂'];
+
 // ── THREAD da Lara: mensagens reais + sugestão pendente (aprovar/editar/enviar/
 // descartar) + envio manual. Reutilizável: passa telefone OU conversaId.
 // Polla a cada 5s (estilo live chat da Sofia). Ailson 16/06/2026.
@@ -292,6 +316,9 @@ function LaraThread({ telefone, conversaId, nome }) {
   const [busy, setBusy] = useState(false);
   const [aviso, setAviso] = useState('');
   const [gerando, setGerando] = useState(false);
+  const [anexando, setAnexando] = useState(false);
+  const [emojiAberto, setEmojiAberto] = useState(false);
+  const fileRef = useRef(null);
   const fimRef = useRef(null);
 
   const qs = conversaId ? `conversa_id=${conversaId}` : `telefone=${encodeURIComponent(telefone || '')}`;
@@ -353,6 +380,31 @@ function LaraThread({ telefone, conversaId, nome }) {
       }
       await carregar();
     } catch { setAviso('Falha ao gerar a mensagem.'); } finally { setGerando(false); }
+  };
+  const enviarImagem = async (file) => {
+    if (!file || !conv?.id || anexando || bloqueado) return;
+    setAnexando(true); setAviso('');
+    try {
+      let payload;
+      try { payload = await fileToBase64Scaled(file); }
+      catch {
+        const raw = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',').pop()); fr.onerror = rej; fr.readAsDataURL(file); });
+        payload = { base64: raw, mime: file.type || 'image/jpeg' };
+      }
+      const r = await fetch('/api/meluni-whats-midia-enviar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_id: conv.id, caption: rascunho.trim(), operador: 'atendente', ...payload }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) { setRascunho(''); }
+      else {
+        const e = String(j.erro || '');
+        setAviso(/24|janela|reengag|131047|outside|escrito antes|nao encontrada/i.test(e)
+          ? 'Fora da janela de 24h. Só dá pra anexar depois que a cliente responder.'
+          : (e || 'Não consegui enviar a imagem.'));
+      }
+      await carregar();
+    } catch { setAviso('Falha ao enviar a imagem.'); } finally { setAnexando(false); }
   };
 
   return (
@@ -447,10 +499,30 @@ function LaraThread({ telefone, conversaId, nome }) {
           Janela de 24h fechada — só dá pra enviar texto livre depois que {nome ? nome.split(' ')[0] : 'a cliente'} responder. Antes disso, use template.
         </div>
       )}
+      {emojiAberto && (
+        <div style={{ margin: '0 14px 6px', padding: '8px 10px', background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {EMOJIS_CHAT.map(e => (
+            <button key={e} onClick={() => { setRascunho(r => r + e); if (aviso) setAviso(''); }}
+              style={{ fontSize: 20, lineHeight: 1, background: 'none', border: 'none', cursor: 'pointer', padding: 2, borderRadius: 6 }}>{e}</button>
+          ))}
+        </div>
+      )}
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) enviarImagem(f); }} />
       <div style={{ display: 'flex', gap: 6, padding: '0 14px 12px', alignItems: 'flex-end' }}>
+        <button onClick={() => fileRef.current?.click()} disabled={!conv || busy || bloqueado || !janelaAberta || anexando}
+          title="anexar foto da fototeca/arquivos"
+          style={{ ...fbtn(palette.surface, MELUNI, palette.beige), padding: '8px 10px', opacity: (conv && janelaAberta && !bloqueado && !anexando) ? 1 : 0.5 }}>
+          <Paperclip size={16} />
+        </button>
+        <button onClick={() => setEmojiAberto(v => !v)} disabled={bloqueado}
+          title="emojis"
+          style={{ ...fbtn(emojiAberto ? MELUNI_SOFT : palette.surface, MELUNI, palette.beige), padding: '8px 10px' }}>
+          <Smile size={16} />
+        </button>
         <textarea value={rascunho} onChange={e => { setRascunho(e.target.value); if (aviso) setAviso(''); }} rows={1}
-          placeholder={bloqueado ? `${lockPor} está respondendo…` : !conv ? 'cliente precisa escrever primeiro' : !janelaAberta ? 'fora da janela de 24h — só template' : 'escrever pra cliente…'}
-          disabled={!conv || busy || bloqueado || !janelaAberta}
+          placeholder={bloqueado ? `${lockPor} está respondendo…` : !conv ? 'cliente precisa escrever primeiro' : !janelaAberta ? 'fora da janela de 24h — só template' : anexando ? 'enviando imagem…' : 'escrever pra cliente…'}
+          disabled={!conv || busy || bloqueado || !janelaAberta || anexando}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarManual(); } }}
           style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'none', opacity: (conv && janelaAberta && !bloqueado) ? 1 : 0.6 }} />
         <button disabled={!conv || busy || bloqueado || !janelaAberta || !rascunho.trim()} onClick={enviarManual} style={fbtn(VERDE_ENVIAR, '#fff')}>enviar</button>

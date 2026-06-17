@@ -37,6 +37,19 @@ async function laraFetch(path, body) {
   throw ultimoErr;
 }
 
+// imagem por link público (só dentro da janela 24h, como texto livre)
+export async function enviarImagemLara(telefone, link, caption = '') {
+  const id = phoneIdLara();
+  if (!id) throw new Error('META_WA_PHONE_ID_LARA nao configurado');
+  return await laraFetch(`/${id}/messages`, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: telefone,
+    type: 'image',
+    image: { link, ...(caption ? { caption: caption.slice(0, 1024) } : {}) },
+  });
+}
+
 // texto livre (só dentro da janela 24h; 1ª msg fora da janela exige template)
 export async function enviarTextoLara(telefone, texto, opts = {}) {
   const id = phoneIdLara();
