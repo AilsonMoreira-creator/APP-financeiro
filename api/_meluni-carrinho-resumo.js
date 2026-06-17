@@ -15,6 +15,7 @@
 // Ailson 16/06/2026.
 // ============================================================================
 import { supabase, refreshBlingToken, blingFetch } from './_bling-helpers.js';
+import { cfgMeluni } from './_meluni-whats-helpers.js';
 
 const refSemZero = (r) => String(r ?? '').replace(/^0+/, '') || '0';
 
@@ -79,6 +80,17 @@ async function prodsCalc() {
   return mapa;
 }
 
+// ── curadoria ref -> nome curto (meluni_config.lara_carrinho_nomes_curto) ──
+let _curadosCache = { mapa: null, em: 0 };
+async function nomesCurados() {
+  if (_curadosCache.mapa && (Date.now() - _curadosCache.em) < 5 * 60 * 1000) return _curadosCache.mapa;
+  const obj = (await cfgMeluni('lara_carrinho_nomes_curto', {})) || {};
+  const mapa = new Map();
+  for (const [k, v] of Object.entries(obj)) { if (v) mapa.set(refSemZero(k), v); }
+  _curadosCache = { mapa, em: Date.now() };
+  return mapa;
+}
+
 async function blingNome(produtoId) {
   if (!produtoId) return null;
   try {
@@ -108,9 +120,12 @@ async function mapearSkus(skus) {
   return mapa;
 }
 
-async function nomeDaPeca(info, calc) {
+async function nomeDaPeca(info, calc, curados) {
   if (!info) return null;
   const ref = info.ref ? refSemZero(info.ref) : null;
+  // 1) curadoria (nome pronto, não passa pela heurística)
+  if (ref && curados.has(ref)) return curados.get(ref);
+  // 2) calc -> 3) desc_limpa -> 4) Bling, tudo encurtado pro núcleo
   const fonte = (ref && calc.get(ref)) || info.desc_limpa || (await blingNome(info.bling_produto_id));
   return nucleoNome(fonte);
 }
@@ -123,10 +138,10 @@ export async function resolverResumoItens(itens) {
   if (!lista.length) return { resumo: null, principalNome: null, nPecas: 0 };
 
   const skus = [...new Set(lista.map(i => i.sku))];
-  const [skuMap, calc] = await Promise.all([mapearSkus(skus), prodsCalc()]);
+  const [skuMap, calc, curados] = await Promise.all([mapearSkus(skus), prodsCalc(), nomesCurados()]);
 
   const principal = lista[0]; // sem preço por item -> 1º
-  const principalNome = await nomeDaPeca(skuMap.get(principal.sku), calc);
+  const principalNome = await nomeDaPeca(skuMap.get(principal.sku), calc, curados);
 
   let resumo = null;
   if (principalNome) {
