@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const [vd, dv, cr] = await Promise.all([
       supabase.from('meluni_vendas').select('data_pedido,total_pedido').gte('data_pedido', de).lte('data_pedido', ate),
       supabase.from('meluni_devolucoes').select('data_devolucao,valor,convertr_id,pedido_ref').gte('data_devolucao', de).lte('data_devolucao', ate),
-      supabase.from('meluni_carrinhos').select('data_carrinho,valor').gte('data_carrinho', de).lte('data_carrinho', ate + 'T23:59:59'),
+      supabase.from('meluni_carrinhos').select('data_carrinho,valor,telefone').gte('data_carrinho', de).lte('data_carrinho', ate + 'T23:59:59'),
     ]);
     if (vd.error) throw new Error('vendas: ' + vd.error.message);
     const vendas = vd.data || [], devol = dv.data || [], carr = cr.data || [];
@@ -38,8 +38,8 @@ export default async function handler(req, res) {
     };
     vendas.forEach(v => { add(v.data_pedido, 'vendas_valor', Number(v.total_pedido) || 0); add(v.data_pedido, 'vendas_qtd', 1); });
     devol.forEach(v => add(v.data_devolucao, 'devol_valor', Number(v.valor) || 0));
-    // só conta carrinho VÁLIDO (com valor > 0); carrinho vazio é ruído. Ailson 17/06/2026.
-    carr.forEach(v => { if (Number(v.valor) > 0) add(String(v.data_carrinho || '').slice(0, 10), 'carrinhos_qtd', 1); });
+    // carrinho VÁLIDO = valor > 0 E com telefone (recuperável). Ailson 17/06/2026.
+    carr.forEach(v => { if (Number(v.valor) > 0 && v.telefone) add(String(v.data_carrinho || '').slice(0, 10), 'carrinhos_qtd', 1); });
     const serie = Object.values(dias).sort((a, b) => (a.data < b.data ? -1 : 1));
 
     return res.json({
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
       devolucoes: { qtd: devolQtd, soma: dSoma },
       valor_real: vSoma - dSoma,
       ticket: vendas.length ? vSoma / vendas.length : 0,
-      carrinhos: { qtd: carr.filter(c => Number(c.valor) > 0).length },
+      carrinhos: { qtd: carr.filter(c => Number(c.valor) > 0 && c.telefone).length },
       serie,
     });
   } catch (e) {
