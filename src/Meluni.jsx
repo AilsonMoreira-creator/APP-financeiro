@@ -819,19 +819,19 @@ function SecaoCarrinho() {
   const LIM = 60;
   const tabs = [
     { id: 'processando', label: 'Processando', unread: unread.processando,
-      help: 'Carrinhos abandonados que ainda NÃO receberam mensagem.\nSelecione os que quiser e clique em "Gerar mensagem e disparar" — a Lara escolhe o template e envia na hora. O card vai pra Enviadas.\nDispare aos poucos enquanto o número está aquecendo.' },
+      help: 'Aqui ficam os carrinhos que a cliente montou no site mas não finalizou, e que ainda não receberam nenhuma mensagem nossa.\n\nPra agir: selecione os que quiser e clique em "Gerar mensagem e disparar". A Lara monta o texto e envia pra cliente na hora, e o carrinho passa pra Enviadas.\n\nDica: comece com poucos por vez, porque o número da Lara ainda está ganhando confiança no WhatsApp.' },
     { id: 'enviada', label: 'Enviadas', unread: unread.enviada,
-      help: 'Já receberam o 1º contato da Lara. O relógio conta 24h.\n• Cliente responde → Conversando\n• Cliente compra → Conversão\n• 24h sem nada → 2º envio (template de desconto), automático' },
+      help: 'São as clientes que já receberam a primeira mensagem da Lara sobre o carrinho. Agora a gente dá 24 horas pra ela reagir (é o relógio no card).\n\nSe ela responder, vai sozinha pra Conversando. Se comprar, vai pra Conversão. Se passar as 24 horas sem responder e sem comprar, a Lara manda sozinha uma segunda mensagem com desconto e o carrinho vai pra 2º envio.\n\nAqui vocês não precisam fazer nada, é só acompanhar.' },
     { id: 'segundo_envio', label: '2º envio', unread: unread.segundo_envio,
-      help: 'Receberam o 2º contato (até 20% off: cupom 1ª compra + desconto do carrinho). Relógio de 48h.\n• Responde → Conversando\n• Compra → Conversão\n• 48h sem interação e sem compra → Perdidos (automático)' },
+      help: 'Aqui estão as clientes que não responderam à primeira mensagem e receberam um segundo empurrãozinho: uma oferta de até 20% (o cupom de primeira compra somado ao desconto que o próprio carrinho libera pelo valor).\n\nAgora o relógio é de 48 horas. Se responder, vai pra Conversando. Se comprar, pra Conversão. Se passar as 48 horas sem nada, vai pra Perdidos. Tudo automático.' },
     { id: 'conversando', label: 'Conversando', unread: unread.conversando,
-      help: 'Clientes que responderam — atendimento da Lara/atendente aqui mesmo.\n• Compra → Conversão\n• 3 dias sem nenhuma interação → Perdidos (automático)' },
+      help: 'São as clientes que responderam a Lara. Aqui é a hora do atendimento de verdade: tirar dúvida, ajudar a escolher, fechar a venda, tudo pela própria conversa.\n\nSe a cliente comprar, o carrinho vai pra Conversão. Se ela ficar 3 dias sem dar nenhum retorno, vai pra Perdidos. Então vale dar atenção pra não esfriar.' },
     { id: 'conversao', label: 'Conversão', unread: unread.conversao,
-      help: 'Compraram depois do contato. O match é automático por telefone, e-mail, nome ou cliente, com a venda a partir da data do envio.\nEtapa final positiva — não precisa fazer nada.' },
+      help: 'Essas são as vitórias: clientes que compraram depois do nosso contato.\n\nO sistema reconhece a compra sozinho, cruzando o telefone, o e-mail, o nome ou o cadastro da cliente com as vendas feitas a partir do dia do envio.\n\nÉ a etapa final boa. Não precisa fazer nada, é só comemorar.' },
     { id: 'follow_up', label: 'Follow up', unread: unread.follow_up,
-      help: 'Só entram aqui quando VOCÊ move manualmente (botão "mover pra ▾" dentro do carrinho).\nFicam parados aqui até você decidir o que fazer — não saem sozinhos.' },
+      help: 'Esta aba é manual: o carrinho só chega aqui quando vocês movem ele de propósito (pelo botão "mover pra" dentro do carrinho).\n\nServe pra separar as clientes que vocês querem acompanhar com calma, do jeito de vocês. Eles ficam parados aqui até vocês decidirem o que fazer, não saem sozinhos.' },
     { id: 'perdida', label: 'Perdidos', unread: unread.perdida,
-      help: 'Passaram do prazo sem interação nem compra. Etapa final.\nSe a cliente voltar a falar, o carrinho volta sozinho pra Conversando. Você também pode reabrir movendo manualmente.' },
+      help: 'São os carrinhos que passaram do prazo sem a cliente responder nem comprar.\n\nMas não é o fim: se a cliente voltar a mandar mensagem, o carrinho reabre sozinho e volta pra Conversando. E vocês também podem reabrir na mão, movendo ele de volta, se quiserem retomar.' },
   ];
   const carregar = useCallback(async (off = 0) => {
     setLoading(true);
