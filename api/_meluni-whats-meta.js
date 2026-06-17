@@ -50,6 +50,29 @@ export async function enviarTextoLara(telefone, texto, opts = {}) {
   });
 }
 
+// template aprovado (abre conversa fora da janela 24h).
+// bodyParams = ordem das variáveis do BODY: leve -> [nome, resumo]; elegante -> [nome].
+// botão é URL estática (não dinâmica) -> não precisa de component de button.
+export async function enviarTemplateLara(telefone, name, bodyParams = [], opts = {}) {
+  const id = phoneIdLara();
+  if (!id) throw new Error('META_WA_PHONE_ID_LARA nao configurado');
+  const components = [];
+  if (bodyParams.length) {
+    components.push({ type: 'body', parameters: bodyParams.map(t => ({ type: 'text', text: String(t) })) });
+  }
+  return await laraFetch(`/${id}/messages`, {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: telefone,
+    type: 'template',
+    template: {
+      name,
+      language: { code: opts.language || 'pt_BR' },
+      ...(components.length ? { components } : {}),
+    },
+  });
+}
+
 export async function marcarLidaLara(messageId) {
   const id = phoneIdLara();
   if (!id) return null;
