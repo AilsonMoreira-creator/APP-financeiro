@@ -31,7 +31,8 @@ export default async function handler(req, res) {
       return 'conversando';
     };
 
-    const filtradas = (convs || []).filter(c => bucketDe(c) === aba);
+    // SAC não mostra conversas do funil de carrinho (essas vivem na aba Carrinho)
+    const filtradas = (convs || []).filter(c => c.origem !== 'carrinho' && bucketDe(c) === aba);
 
     // preview da última mensagem de cada conversa filtrada
     const ids = filtradas.map(c => c.id);
