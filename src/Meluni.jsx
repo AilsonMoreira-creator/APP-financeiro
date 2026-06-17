@@ -736,6 +736,7 @@ function SecaoCarrinho() {
   const [sel, setSel] = useState(new Set());
   const [chatId, setChatId] = useState(null);
   const [unread, setUnread] = useState({});
+  const [dias, setDias] = useState(30); // só últimos 30 dias por padrão (0 = todos)
   const isDesktop = useIsDesktop();
   const LIM = 60;
   const tabs = [
@@ -747,12 +748,12 @@ function SecaoCarrinho() {
   const carregar = useCallback(async (off = 0) => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/meluni-carrinhos-list?status=${aba}&limite=${LIM}&offset=${off}`);
+      const r = await fetch(`/api/meluni-carrinhos-list?status=${aba}&limite=${LIM}&offset=${off}&dias=${dias}`);
       const j = await r.json();
       if (j.ok) { setTotal(j.total || 0); setUnread(j.unread || {}); setCarrinhos(prev => off ? [...prev, ...j.carrinhos] : j.carrinhos); }
     } catch (e) { /* ignora */ }
     setLoading(false);
-  }, [aba]);
+  }, [aba, dias]);
   useEffect(() => { setSel(new Set()); setChatId(null); carregar(0); }, [carregar]);
   const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selTodos = () => setSel(sel.size === carrinhos.length ? new Set() : new Set(carrinhos.map(c => c.id)));
@@ -770,6 +771,10 @@ function SecaoCarrinho() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
         <button onClick={selTodos} style={{ ...selStyle, fontWeight: 700 }}>
           {sel.size === carrinhos.length && carrinhos.length ? 'Limpar' : 'Selecionar todos'}
+        </button>
+        <button onClick={() => setDias(d => d > 0 ? 0 : 30)} title="alterna entre últimos 30 dias e todos os períodos"
+          style={{ ...selStyle, fontWeight: 700, color: dias > 0 ? MELUNI : palette.inkMuted, borderColor: dias > 0 ? MELUNI : palette.beige }}>
+          {dias > 0 ? '🕒 últimos 30 dias' : 'todos os períodos'}
         </button>
         <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
           {loading ? 'carregando…' : `${total} no funil`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}

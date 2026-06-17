@@ -16,11 +16,14 @@ export default async function handler(req, res) {
   const status = q.status || 'processando';
   const limite = Math.min(200, parseInt(q.limite || '60', 10) || 60);
   const offset = Math.max(0, parseInt(q.offset || '0', 10) || 0);
+  const dias = q.dias !== undefined ? (parseInt(q.dias, 10) || 0) : 30; // default: só últimos 30 dias; dias=0 = todos
 
   try {
-    const { data, count, error } = await supabase.from('vw_meluni_carrinhos')
+    let query = supabase.from('vw_meluni_carrinhos')
       .select('id,cliente_id,nome,telefone,email,valor,itens,data_carrinho,status,planilha_ref,n_itens,is_cliente', { count: 'exact' })
-      .eq('status', status)
+      .eq('status', status);
+    if (dias > 0) query = query.gte('data_carrinho', new Date(Date.now() - dias * 86400000).toISOString());
+    const { data, count, error } = await query
       .order('data_carrinho', { ascending: false, nullsFirst: false })
       .range(offset, offset + limite - 1);
     if (error) throw new Error(error.message);
