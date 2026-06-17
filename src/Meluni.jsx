@@ -290,6 +290,7 @@ function LaraThread({ telefone, conversaId, nome }) {
   const [editando, setEditando] = useState(false);
   const [sugTexto, setSugTexto] = useState('');
   const [busy, setBusy] = useState(false);
+  const [aviso, setAviso] = useState('');
   const fimRef = useRef(null);
 
   const qs = conversaId ? `conversa_id=${conversaId}` : `telefone=${encodeURIComponent(telefone || '')}`;
@@ -311,14 +312,25 @@ function LaraThread({ telefone, conversaId, nome }) {
   const conv = data?.conversa;
   const msgs = data?.mensagens || [];
   const sug = data?.sugestao;
+  const ultEntradaMs = msgs.filter(m => m.direcao === 'entrada').reduce((a, m) => Math.max(a, +new Date(m.enviada_em) || 0), 0);
+  const janelaAberta = ultEntradaMs > 0 && (Date.now() - ultEntradaMs) < 24 * 3600e3;
   const { lockPor, bloqueado } = useMeluniLock('conversa', conv?.id);
 
   async function post(url, body) {
-    setBusy(true);
+    setBusy(true); setAviso('');
     try {
-      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (j && j.ok === false) {
+        const e = String(j.erro || '');
+        if (/24|janela|reengag|re-engage|131047|outside|escrito antes|nao encontrada/i.test(e)) {
+          setAviso('Fora da janela de 24h. O WhatsApp só deixa enviar texto livre depois que a cliente responder. Até lá, só dá pra usar template (1º/2º envio).');
+        } else {
+          setAviso(e || 'Não consegui enviar.');
+        }
+      }
       await carregar();
-    } catch { /* ignora */ } finally { setBusy(false); }
+    } catch { setAviso('Falha de conexão ao enviar.'); } finally { setBusy(false); }
   }
   const aprovar = (txt) => { if (bloqueado) return; setEditando(false); return post('/api/meluni-whats-aprovar', { id: sug.id, acao: 'aprovar', texto: txt || null, operador: 'atendente' }); };
   const descartar = () => { if (bloqueado) return; return post('/api/meluni-whats-aprovar', { id: sug.id, acao: 'descartar', operador: 'atendente' }); };
@@ -403,12 +415,21 @@ function LaraThread({ telefone, conversaId, nome }) {
       )}
 
       {/* envio manual */}
+      {aviso && (
+        <div style={{ margin: '0 14px 8px', fontSize: 11.5, fontWeight: 600, color: '#b4453a', background: '#fdecea', border: '1px solid #f1c9c4', borderRadius: 8, padding: '6px 10px' }}>{aviso}</div>
+      )}
+      {conv && !janelaAberta && !bloqueado && (
+        <div style={{ margin: '0 14px 6px', fontSize: 11, color: palette.inkMuted, fontStyle: 'italic' }}>
+          Janela de 24h fechada — só dá pra enviar texto livre depois que {nome ? nome.split(' ')[0] : 'a cliente'} responder. Antes disso, use template.
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 6, padding: '0 14px 12px', alignItems: 'flex-end' }}>
-        <textarea value={rascunho} onChange={e => setRascunho(e.target.value)} rows={1} placeholder={bloqueado ? `${lockPor} está respondendo…` : (conv ? 'escrever pra cliente…' : 'cliente precisa escrever primeiro')}
-          disabled={!conv || busy || bloqueado}
+        <textarea value={rascunho} onChange={e => { setRascunho(e.target.value); if (aviso) setAviso(''); }} rows={1}
+          placeholder={bloqueado ? `${lockPor} está respondendo…` : !conv ? 'cliente precisa escrever primeiro' : !janelaAberta ? 'fora da janela de 24h — só template' : 'escrever pra cliente…'}
+          disabled={!conv || busy || bloqueado || !janelaAberta}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarManual(); } }}
-          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'none', opacity: (conv && !bloqueado) ? 1 : 0.6 }} />
-        <button disabled={!conv || busy || bloqueado || !rascunho.trim()} onClick={enviarManual} style={fbtn(VERDE_ENVIAR, '#fff')}>enviar</button>
+          style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'none', opacity: (conv && janelaAberta && !bloqueado) ? 1 : 0.6 }} />
+        <button disabled={!conv || busy || bloqueado || !janelaAberta || !rascunho.trim()} onClick={enviarManual} style={fbtn(VERDE_ENVIAR, '#fff')}>enviar</button>
       </div>
     </div>
   );
