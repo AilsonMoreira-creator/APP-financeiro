@@ -184,6 +184,22 @@ export async function processarMensagemMeluni(msg, value) {
     }).eq('id', conversaId);
 
     console.log(`[meluni-inbound] msg de ${telefone} (${c.tipo}) -> conversa ${conversaId}`);
+
+    // se essa cliente tem carrinho no funil (enviada/segundo_envio), a resposta dela
+    // move pra 'conversando' e marca a interação (alimenta o relógio de 3 dias).
+    try {
+      const tel10 = telefone.replace(/\D/g, '').slice(-10);
+      const { data: carts } = await supabase.from('meluni_carrinhos')
+        .select('id, telefone')
+        .in('status', ['enviada', 'segundo_envio'])
+        .is('convertido_em', null);
+      const alvo = (carts || []).find(x => (x.telefone || '').replace(/\D/g, '').slice(-10) === tel10);
+      if (alvo) {
+        await supabase.from('meluni_carrinhos').update({
+          status: 'conversando', ultima_interacao_em: new Date().toISOString(),
+        }).eq('id', alvo.id);
+      }
+    } catch (e) { console.error('[meluni-inbound] carrinho->conversando:', e?.message || e); }
   } catch (e) {
     console.error('[meluni-inbound] ERRO:', e?.message || e);
   }

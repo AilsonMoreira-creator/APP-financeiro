@@ -343,6 +343,10 @@
       "schedule": "0 13,17,21 * * *"
     },
     {
+      "path": "/api/meluni-carrinho-funil-cron",
+      "schedule": "30 * * * *"
+    },
+    {
       "path": "/api/lojas-whats-cron-aprendizado",
       "schedule": "0 11 * * 1"
     },
