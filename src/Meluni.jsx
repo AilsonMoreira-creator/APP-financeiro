@@ -1427,7 +1427,15 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
       const r = await fetch('/api/meluni-drive-cron?dias=7', { method: 'POST' });
       const j = await r.json();
       if (j.processados) {
-        setSyncMsg(`✓ ${j.processados} planilha(s)`);
+        const tot = { carrinhos: 0, devolucoes: 0, clientes: 0 };
+        for (const v of Object.values(j.resumo || {})) {
+          if (v?.tipo && tot[v.tipo] != null) tot[v.tipo] += Number(v.linhas) || 0;
+        }
+        const partes = [];
+        if (tot.carrinhos) partes.push(`${tot.carrinhos} carrinho${tot.carrinhos > 1 ? 's' : ''}`);
+        if (tot.devolucoes) partes.push(`${tot.devolucoes} ${tot.devolucoes > 1 ? 'devoluções' : 'devolução'}`);
+        if (tot.clientes) partes.push(`${tot.clientes} cliente${tot.clientes > 1 ? 's' : ''}`);
+        setSyncMsg(partes.length ? `✓ ${partes.join(' · ')}` : '✓ nada novo');
         setSyncTick(t => t + 1); // remonta as seções pra puxar os dados novos
       } else {
         setSyncMsg(j.msg || 'nada novo');
