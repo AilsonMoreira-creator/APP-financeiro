@@ -24,6 +24,13 @@ const WHISPER_MODEL = 'whisper-1';
 const MIDIA_TIMEOUT_MS = 30000;
 
 const normTel = (s) => String(s || '').replace(/\D/g, '');
+// Canônico BR: tira o DDI 55 quando vem com 12/13 dígitos, pra bater com o
+// telefone que o disparo de carrinho grava (sem 55). Ailson 17/06/2026.
+const canonTel = (s) => {
+  let d = String(s || '').replace(/\D/g, '');
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+  return d;
+};
 
 // Baixa a mídia da Meta (mesmo token da Sofia) e salva no Storage público
 // (bucket sofia-midias, prefixo meluni-inbound/). Retorna { url, buffer, mime }.
@@ -85,15 +92,22 @@ function conteudoMsg(msg) {
 }
 
 async function acharOuCriarConversa(telefone, nome, ref) {
-  const { data: ex } = await supabase
+  // casa por SUFIXO (últimos 11 e, como fallback, 10 dígitos) pra cobrir números
+  // gravados com e sem o DDI 55 — senão a resposta cria conversa duplicada no SAC.
+  const d = String(telefone || '').replace(/\D/g, '');
+  const suf11 = d.slice(-11);
+  const { data: cand } = await supabase
     .from('meluni_conversas')
-    .select('id')
+    .select('id, telefone, origem, ultima_msg_em')
     .eq('canal', 'whatsapp')
-    .eq('telefone', telefone)
+    .ilike('telefone', `%${suf11}`)
     .order('ultima_msg_em', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (ex?.id) return ex.id;
+    .limit(10);
+  const norm = (t) => String(t || '').replace(/\D/g, '');
+  const match =
+    (cand || []).find(c => norm(c.telefone).slice(-11) === suf11) ||
+    (cand || []).find(c => norm(c.telefone).slice(-10) === d.slice(-10));
+  if (match?.id) return match.id;
 
   const { data: nova, error } = await supabase
     .from('meluni_conversas')
@@ -120,7 +134,7 @@ async function acharOuCriarConversa(telefone, nome, ref) {
 
 export async function processarMensagemMeluni(msg, value) {
   try {
-    const telefone = normTel(msg.from);
+    const telefone = canonTel(msg.from);
     if (!telefone) return;
     const nome = value?.contacts?.[0]?.profile?.name || null;
     const ref = msg.referral

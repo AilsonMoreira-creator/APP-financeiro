@@ -56,9 +56,9 @@ export default async function handler(req, res) {
       unread: c.ultima_msg_direcao === 'entrada',
     }));
 
-    // contadores das abas (badge)
+    // contadores das abas (badge) — exclui carrinho, igual a lista
     const cont = { conversando: 0, follow_up: 0, arquivo: 0 };
-    for (const c of (convs || [])) cont[bucketDe(c)]++;
+    for (const c of (convs || [])) { if (c.origem === 'carrinho') continue; cont[bucketDe(c)]++; }
 
     return res.json({ ok: true, conversas: lista, contadores: cont });
   } catch (e) {
