@@ -137,7 +137,7 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
   // 5. grava sugestão pendente
   const { data: sug, error } = await supabase.from('meluni_sugestoes').insert({
     conversa_id: conversaId, texto, tipo_midia: 'text', status: 'pendente',
-    origem: 'lara_ia', modelo, custo_brl: custo,
+    origem: 'lara_ia', modelo, custo_brl: (custo && typeof custo === 'object') ? (custo.custo_brl ?? null) : (custo ?? null),
   }).select('id').single();
   if (error) return { motivo: 'erro_gravar_sugestao', erro: error.message };
 
