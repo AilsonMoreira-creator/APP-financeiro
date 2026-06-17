@@ -479,17 +479,6 @@ function LaraThread({ telefone, conversaId, nome }) {
         </div>
       )}
 
-      {/* gerar mensagem sob demanda (robô) — quando não há sugestão pendente */}
-      {conv && !sug && (
-        <div style={{ display: 'flex', gap: 6, padding: '0 14px 8px' }}>
-          <button onClick={gerarSugestao} disabled={gerando || bloqueado}
-            title="pedir pra Lara escrever uma mensagem agora"
-            style={{ ...fbtn(palette.surface, MELUNI, MELUNI), display: 'flex', alignItems: 'center', gap: 6, opacity: gerando ? 0.7 : 1 }}>
-            <Bot size={14} /> {gerando ? 'gerando…' : 'gerar mensagem'}
-          </button>
-        </div>
-      )}
-
       {/* envio manual */}
       {aviso && (
         <div style={{ margin: '0 14px 8px', fontSize: 11.5, fontWeight: 600, color: '#b4453a', background: '#fdecea', border: '1px solid #f1c9c4', borderRadius: 8, padding: '6px 10px' }}>{aviso}</div>
@@ -510,6 +499,11 @@ function LaraThread({ telefone, conversaId, nome }) {
       <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) enviarImagem(f); }} />
       <div style={{ display: 'flex', gap: 6, padding: '0 14px 12px', alignItems: 'flex-end' }}>
+        <button onClick={gerarSugestao} disabled={!conv || gerando || bloqueado}
+          title="pedir pra Lara gerar uma mensagem"
+          style={{ ...fbtn(palette.surface, MELUNI, palette.beige), padding: '8px 10px', opacity: (conv && !gerando && !bloqueado) ? 1 : 0.5 }}>
+          <Bot size={16} />
+        </button>
         <button onClick={() => fileRef.current?.click()} disabled={!conv || busy || bloqueado || !janelaAberta || anexando}
           title="anexar foto da fototeca/arquivos"
           style={{ ...fbtn(palette.surface, MELUNI, palette.beige), padding: '8px 10px', opacity: (conv && janelaAberta && !bloqueado && !anexando) ? 1 : 0.5 }}>
@@ -613,6 +607,7 @@ function MeluniSplitChat({ itens, getId, abertoId, setAbertoId, isDesktop, titul
 function ChatClienteBody({ cliente }) {
   const [hist, setHist] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [histAberto, setHistAberto] = useState(false);
   useEffect(() => {
     setLoading(true);
     fetch(`/api/meluni-cliente-historico?cliente_id=${cliente.id}`)
@@ -628,32 +623,39 @@ function ChatClienteBody({ cliente }) {
         <span>ticket <b>{fmtBRL(cliente.ticket_medio)}</b></span>
         <span>última <b>{fmtData(cliente.ultima_compra)}</b></span>
       </div>
-      <div style={{ padding: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-          Histórico de compras {pedidos.length > 0 ? `(${pedidos.length})` : ''}
-        </div>
-        {loading && <div style={{ fontSize: 13, color: palette.inkMuted }}>carregando…</div>}
-        {!loading && pedidos.length === 0 && (
-          <div style={{ fontSize: 13, color: palette.inkMuted }}>Ainda sem compras registradas (só cadastro).</div>
-        )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {pedidos.map(p => (
-            <div key={p.pedido_id} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 12, color: palette.inkSoft }}>
-                <span>{fmtData(p.data)}</span>
-                <strong style={{ color: palette.ink }}>{fmtBRL(p.total)}</strong>
-              </div>
-              {p.itens.map((i, k) => (
-                <div key={k} style={{ fontSize: 12, color: palette.ink, padding: '3px 0', borderTop: k ? `1px solid ${palette.beigeSoft}` : 'none' }}>
-                  <span>{i.qtd}x {i.produto}</span>
-                  <span style={{ color: palette.inkMuted }}>
-                    {i.ref ? ` · ref ${i.ref}` : ''}{i.cor ? ` · ${i.cor}` : ''}{i.tamanho ? ` · ${i.tamanho}` : ''}
-                  </span>
+      <div style={{ padding: '10px 16px', borderBottom: `1px solid ${palette.beige}` }}>
+        <button onClick={() => setHistAberto(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', background: 'none', border: 'none', padding: 0, fontFamily: FONT }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            {histAberto ? '▾' : '▸'} Histórico de compras {pedidos.length > 0 ? `(${pedidos.length})` : ''}
+          </span>
+        </button>
+        {histAberto && (
+          <div style={{ marginTop: 10 }}>
+            {loading && <div style={{ fontSize: 13, color: palette.inkMuted }}>carregando…</div>}
+            {!loading && pedidos.length === 0 && (
+              <div style={{ fontSize: 13, color: palette.inkMuted }}>Ainda sem compras registradas (só cadastro).</div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {pedidos.map(p => (
+                <div key={p.pedido_id} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, fontSize: 12, color: palette.inkSoft }}>
+                    <span>{fmtData(p.data)}</span>
+                    <strong style={{ color: palette.ink }}>{fmtBRL(p.total)}</strong>
+                  </div>
+                  {p.itens.map((i, k) => (
+                    <div key={k} style={{ fontSize: 12, color: palette.ink, padding: '3px 0', borderTop: k ? `1px solid ${palette.beigeSoft}` : 'none' }}>
+                      <span>{i.qtd}x {i.produto}</span>
+                      <span style={{ color: palette.inkMuted }}>
+                        {i.ref ? ` · ref ${i.ref}` : ''}{i.cor ? ` · ${i.cor}` : ''}{i.tamanho ? ` · ${i.tamanho}` : ''}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
       <LaraThread telefone={cliente.whatsapp || cliente.telefone} nome={cliente.nome} />
     </>
@@ -1245,6 +1247,7 @@ function TimelineDevol({ d, size = 'full' }) {
 }
 
 function DevolucaoCard({ d, compact, ativo, onAbrir }) {
+  const [maisAberto, setMaisAberto] = useState(false);
   const sla = slaDevol(d);
   const apagada = d.fluxo_status === 'completa' || d.fluxo_status === 'cancelada';
   const itens = Array.isArray(d.itens) ? d.itens : [];
@@ -1294,9 +1297,9 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
               <CampoKPI label="valor" valor={fmtBRL(d.valor)} destaque />
               {d.pedido_ref && <span>pedido {d.pedido_ref}</span>}
             </div>
-            {/* direita: peças uma embaixo da outra (até 3); mais que isso abre o card */}
+            {/* direita: 1ª peça sempre; demais recolhidas (clica pra expandir no card) */}
             <div style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {itens.slice(0, 3).map((it, k) => {
+              {(maisAberto ? itens : itens.slice(0, 1)).map((it, k) => {
                 const r = it?.ref || it?.sku;
                 const t = String(it?.descricao || it?.produto || '—').trim();
                 return (
@@ -1305,7 +1308,12 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
                   </div>
                 );
               })}
-              {itens.length > 3 && <div style={{ fontSize: 11, color: MELUNI, fontWeight: 600 }}>+{itens.length - 3} peça(s) — abrir pra ver</div>}
+              {itens.length > 1 && (
+                <button onClick={(e) => { e.stopPropagation(); setMaisAberto(v => !v); }}
+                  style={{ alignSelf: 'flex-start', fontSize: 11, color: MELUNI, fontWeight: 700, background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontFamily: FONT }}>
+                  {maisAberto ? '▾ recolher' : `▸ +${itens.length - 1} peça(s)`}
+                </button>
+              )}
             </div>
           </div>
           {/* linha do tempo (reduzida pra não pegar o card todo) */}
@@ -1329,6 +1337,7 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   const [busy, setBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [motivo, setMotivo] = useState('');
+  const [devAberto, setDevAberto] = useState(false);
   const { lockPor, bloqueado } = useMeluniLock('devolucao', d.id);
 
   const st = d.fluxo_status;
@@ -1361,8 +1370,14 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
           <div style={{ marginBottom: 12, padding: '8px 10px', borderRadius: 8, background: '#fdecea', color: palette.alert, fontSize: 12, fontWeight: 600 }}>💬 conversa sem resposta</div>
         )}
 
-        {/* PEÇAS DA DEVOLUÇÃO (1 ou várias, do mesmo pedido) */}
-        <div style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>{n > 1 ? `Peças devolvidas (${n})` : 'Peça devolvida'}</div>
+        {/* PEÇAS DA DEVOLUÇÃO + motivo (recolhido por padrão) */}
+        <button onClick={() => setDevAberto(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', background: 'none', border: 'none', padding: 0, marginBottom: devAberto ? 8 : 12, fontFamily: FONT }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            {devAberto ? '▾' : '▸'} {n > 1 ? `Peças devolvidas (${n})` : 'Peça devolvida'} · motivo
+          </span>
+        </button>
+        {devAberto && (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
           {itens.map((it, k) => {
             const { cor, tam } = parseCorTam(it.tamanho);
@@ -1387,6 +1402,7 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
         </div>
         <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12 }}>motivo: {d.motivo || '—'}</div>
         {mensagem && <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12, fontStyle: 'italic' }}>"{mensagem}"</div>}
+        </>)}
 
         {/* LINHA DO TEMPO (horizontal, conectada) */}
         <div style={{ fontSize: 11, fontWeight: 700, color: palette.inkSoft, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.3 }}>Linha do tempo</div>
@@ -1605,15 +1621,43 @@ function MiniBarras({ serie }) {
   );
 }
 
+function DashCarrinhoRow({ c }) {
+  const itens = Array.isArray(c.itens) ? c.itens : [];
+  return (
+    <div style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: '8px 12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontWeight: 700, color: palette.ink, fontSize: 13 }}>
+          <ShoppingCart size={13} color={MELUNI} style={{ verticalAlign: 'middle', marginRight: 5 }} />
+          {fmtBRL(c.valor)}{c.nome ? ` · ${c.nome}` : ''}
+        </span>
+        <span style={{ fontSize: 12, color: palette.inkMuted }}>
+          <Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(c.telefone)} · {fmtData(String(c.data_carrinho || '').slice(0, 10))}
+        </span>
+      </div>
+      {itens.length > 0 && (
+        <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 3 }}>
+          {itens.map(i => `${i.qtd}x ${i.ref ? 'ref ' + i.ref : (i.sku || '')}`).join('  ·  ')}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SecaoDashboard() {
   const [periodo, setPeriodo] = useState('30');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [carts, setCarts] = useState([]);
   useEffect(() => {
     setLoading(true);
     const qs = periodo === 'tudo' ? 'tudo=1' : `dias=${periodo}`;
     fetch(`/api/meluni-dashboard?${qs}`).then(r => r.json())
       .then(j => { if (j.ok) setData(j); }).catch(() => {}).finally(() => setLoading(false));
+  }, [periodo]);
+  useEffect(() => {
+    const dias = periodo === 'tudo' ? 3650 : periodo;
+    fetch(`/api/meluni-carrinhos-list?status=processando&limite=30&dias=${dias}`)
+      .then(r => r.json()).then(j => { if (j.ok) setCarts(j.carrinhos || []); }).catch(() => {});
   }, [periodo]);
   const d = data || {};
   return (
@@ -1638,6 +1682,15 @@ function SecaoDashboard() {
         <KpiTile label="Carrinhos" valor={String(d.carrinhos?.qtd || 0)} sub="no período" />
       </div>
       <MiniBarras serie={d.serie || []} />
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+          Carrinhos abandonados · processando ({carts.length})
+        </div>
+        {carts.length === 0 && <div style={{ fontSize: 13, color: palette.inkMuted }}>Nenhum carrinho em processando no período.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {carts.map(c => <DashCarrinhoRow key={c.id} c={c} />)}
+        </div>
+      </div>
     </div>
   );
 }
