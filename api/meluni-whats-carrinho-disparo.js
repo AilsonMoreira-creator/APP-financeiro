@@ -87,7 +87,11 @@ export default async function handler(req, res) {
   const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', false)) === true;
 
   // ── MODO MANUAL: ids selecionados (botão "gerar e disparar") ──
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : null;
+  // aceita POST {ids:[...]} ou, pra teste/diagnóstico, GET/POST ?force=1&ids=a,b
+  const idsBody = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : null;
+  const idsQs = (req.query?.force === '1' && req.query?.ids)
+    ? String(req.query.ids).split(',').map(s => s.trim()).filter(Boolean) : null;
+  const ids = idsBody || idsQs;
   if (ids) {
     if (!ids.length) return res.status(400).json({ ok: false, erro: 'ids vazio' });
     let enviados = 0, pulados = 0, erros = 0; const detalhe = [];
