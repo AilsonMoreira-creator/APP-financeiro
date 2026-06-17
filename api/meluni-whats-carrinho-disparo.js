@@ -86,9 +86,14 @@ export default async function handler(req, res) {
   const pctLeve = Number(await cfgMeluni('lara_carrinho_ab_pct_leve', 50));
   const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', false)) === true;
 
+  // corpo pode chegar como objeto (parse automático) ou string crua — trata os dois.
+  let body = req.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
+  if (!body || typeof body !== 'object') body = {};
+
   // ── MODO MANUAL: ids selecionados (botão "gerar e disparar") ──
   // aceita POST {ids:[...]} ou, pra teste/diagnóstico, GET/POST ?force=1&ids=a,b
-  const idsBody = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : null;
+  const idsBody = Array.isArray(body.ids) ? body.ids.filter(Boolean) : null;
   const idsQs = (req.query?.force === '1' && req.query?.ids)
     ? String(req.query.ids).split(',').map(s => s.trim()).filter(Boolean) : null;
   const ids = idsBody || idsQs;
