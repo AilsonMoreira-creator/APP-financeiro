@@ -20,7 +20,7 @@ export default async function handler(req, res) {
 
   try {
     let query = supabase.from('vw_meluni_carrinhos')
-      .select('id,cliente_id,nome,telefone,email,valor,itens,data_carrinho,status,planilha_ref,n_itens,is_cliente', { count: 'exact' })
+      .select('id,cliente_id,nome,telefone,email,valor,itens,data_carrinho,status,planilha_ref,n_itens,is_cliente,enviado_em,segundo_envio_em,ultima_interacao_em,convertido_em', { count: 'exact' })
       .eq('status', status);
     if (dias > 0) query = query.gte('data_carrinho', new Date(Date.now() - dias * 86400000).toISOString());
     const { data, count, error } = await query

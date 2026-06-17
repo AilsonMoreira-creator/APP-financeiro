@@ -647,6 +647,27 @@ function SecaoClientes() {
 }
 
 // ─── SEÇÃO: CARRINHO ABANDONADO ─────────────────────────────────────────────
+// relógio do funil: tempo restante até a próxima transição automática (Sprint 2).
+function relogioCarrinho(c) {
+  const map = { enviada: ['enviado_em', 24, '2º envio'], segundo_envio: ['segundo_envio_em', 48, 'perdidos'], conversando: ['ultima_interacao_em', 72, 'perdidos'] };
+  const cfg = map[c?.status]; if (!cfg) return null;
+  const base = c[cfg[0]] || c.enviado_em; if (!base) return null;
+  const rest = new Date(base).getTime() + cfg[1] * 3600e3 - Date.now();
+  if (rest <= 0) return { texto: `vencido → ${cfg[2]}`, urgente: true };
+  const h = Math.floor(rest / 3600e3);
+  const txt = h >= 24 ? `${Math.floor(h / 24)}d${h % 24 ? ' ' + (h % 24) + 'h' : ''}` : `${h}h`;
+  return { texto: `${txt} → ${cfg[2]}`, urgente: h < 6 };
+}
+function RelogioBadge({ c }) {
+  const r = relogioCarrinho(c); if (!r) return null;
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 700, padding: '1px 7px', borderRadius: 5, whiteSpace: 'nowrap',
+      background: r.urgente ? '#fdecea' : '#fff4dd', color: r.urgente ? '#b4453a' : '#8a5a00', border: `1px solid ${r.urgente ? '#f1c9c4' : '#f0d8a0'}` }}>
+      🕒 {r.texto}
+    </span>
+  );
+}
+
 function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
   const tel = c.cliente_whatsapp || c.telefone;
   const nome = c.cliente_nome || c.nome;
@@ -665,7 +686,10 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
           <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {fmtBRL(c.valor)}{nome ? ` · ${nome}` : ''}
           </div>
-          <div style={{ fontSize: 11, color: palette.inkMuted }}>{itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · {fmtData(String(c.data_carrinho || '').slice(0, 10))}</div>
+          <div style={{ fontSize: 11, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>{itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · {fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
+            <RelogioBadge c={c} />
+          </div>
         </div>
         {c.conversa_pendente && <DotConversa />}
         {c.is_cliente && <span title="já é cliente" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700, flexShrink: 0 }}>cliente</span>}
@@ -690,6 +714,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
             {!tel && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4' }}>📵 sem número</span>}
             <CampoKPI label="itens" valor={String(itens.reduce((a, i) => a + (i.qtd || 1), 0))} />
             <span>{fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
+            <RelogioBadge c={c} />
           </div>
           {itens.length > 0 && (
             <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -703,8 +728,23 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
 }
 
 // corpo do chat de CARRINHO: contato + itens do carrinho + nota da Lara
-function ChatCarrinhoBody({ c }) {
+function ChatCarrinhoBody({ c, onMoved }) {
   const itens = Array.isArray(c.itens) ? c.itens : [];
+  const [movendo, setMovendo] = useState(false);
+  const DESTINOS = [
+    { v: 'follow_up', l: 'Follow up' }, { v: 'conversando', l: 'Conversando' },
+    { v: 'conversao', l: 'Conversão' }, { v: 'perdida', l: 'Perdidos' },
+    { v: 'enviada', l: 'Enviadas' }, { v: 'processando', l: 'Processando' },
+  ].filter(d => d.v !== c.status);
+  const mover = async (status) => {
+    if (!status || movendo) return;
+    setMovendo(true);
+    try {
+      await fetch('/api/meluni-carrinho-mover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id, status }) });
+      onMoved?.();
+    } catch { /* */ }
+    setMovendo(false);
+  };
   return (
     <>
       <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, color: palette.inkSoft, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -712,6 +752,13 @@ function ChatCarrinhoBody({ c }) {
         <span>itens <b>{itens.reduce((a, i) => a + (i.qtd || 1), 0)}</b></span>
         <span>data <b>{fmtData(String(c.data_carrinho || '').slice(0, 10))}</b></span>
         {c.is_cliente && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>já é cliente</span>}
+        <RelogioBadge c={c} />
+        <select value="" disabled={movendo} onChange={(e) => mover(e.target.value)}
+          title="mover este carrinho de etapa"
+          style={{ marginLeft: 'auto', fontFamily: FONT, fontSize: 12, fontWeight: 700, color: MELUNI, background: '#fff', border: `1px solid ${MELUNI}`, borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>
+          <option value="" disabled>{movendo ? 'movendo…' : 'mover pra ▾'}</option>
+          {DESTINOS.map(d => <option key={d.v} value={d.v}>{d.l}</option>)}
+        </select>
       </div>
       <div style={{ padding: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>Carrinho</div>
@@ -821,7 +868,7 @@ function SecaoCarrinho() {
           renderCard={(c, p) => (
             <CarrinhoCard c={c} sel={sel.has(c.id)} onSel={() => toggleSel(c.id)} {...p} />
           )}
-          renderChat={(c) => <ChatCarrinhoBody c={c} />}
+          renderChat={(c) => <ChatCarrinhoBody c={c} onMoved={() => { setChatId(null); carregar(0); }} />}
           listaRodape={carregarMais}
         />
       )}
