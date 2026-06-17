@@ -16,6 +16,13 @@ import { resolverResumoItens, resolverPrimeiroNome } from './_meluni-carrinho-re
 
 const ETAPAS_FECHADAS = ['vendeu', 'perdida', 'resolvido'];
 
+// renderiza o corpo do template (com {{1}},{{2}}) pro texto real que a cliente recebe
+function renderTpl(body, params) {
+  let t = String(body || '');
+  (params || []).forEach((p, i) => { t = t.split(`{{${i + 1}}}`).join(p == null ? '' : String(p)); });
+  return t.trim();
+}
+
 async function acharOuCriarConversa(telefone, nome) {
   const { data: ex } = await supabase.from('meluni_conversas').select('id, etapa')
     .eq('canal', 'whatsapp').eq('telefone', telefone)
@@ -30,7 +37,7 @@ async function acharOuCriarConversa(telefone, nome) {
 }
 
 // envia o 1º template pra um carrinho e move pra 'enviada'. Retorna {ok}|{skip}.
-async function enviarCarrinho(c, pctLeve, exigirNome) {
+async function enviarCarrinho(c, pctLeve, exigirNome, tpls) {
   const itens = Array.isArray(c.itens) ? c.itens.filter(i => i?.sku) : [];
   if (!itens.length) return { skip: 'sem_itens' };
   if (c.enviado_em || c.dados_extra?.lara_template_enviado_em) return { skip: 'ja_enviado' };
@@ -58,10 +65,12 @@ async function enviarCarrinho(c, pctLeve, exigirNome) {
   const nowIso = new Date().toISOString();
 
   if (conv?.id) {
+    const textoReal = renderTpl(tpls?.[versao]?.body, bodyParams)
+      || (versao === 'sem_nome' ? resumo : versao === 'leve' ? `${nome}: ${resumo}` : nome);
     await supabase.from('meluni_mensagens').insert({
       conversa_id: conv.id, direcao: 'saida', autor: 'lara_carrinho',
       tipo_midia: 'template', template_usado: nameTpl,
-      texto: versao === 'sem_nome' ? `[carrinho] ${resumo}` : versao === 'leve' ? `[carrinho] ${nome}: ${resumo}` : `[carrinho] ${nome}`,
+      texto: textoReal,
       meta_message_id: metaMsgId, enviada_em: nowIso,
     });
     await supabase.from('meluni_conversas').update({
@@ -85,6 +94,7 @@ export default async function handler(req, res) {
 
   const pctLeve = Number(await cfgMeluni('lara_carrinho_ab_pct_leve', 50));
   const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', false)) === true;
+  const tpls = ((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates || {};
 
   // corpo pode chegar como objeto (parse automático) ou string crua — trata os dois.
   let body = req.body;
@@ -103,7 +113,7 @@ export default async function handler(req, res) {
     const { data: carts } = await supabase.from('meluni_carrinhos').select(COLS).in('id', ids).eq('status', 'processando');
     for (const c of (carts || [])) {
       try {
-        const r = await enviarCarrinho(c, pctLeve, exigirNome);
+        const r = await enviarCarrinho(c, pctLeve, exigirNome, tpls);
         if (r.ok) { enviados++; detalhe.push({ id: c.id, versao: r.versao }); }
         else { pulados++; detalhe.push({ id: c.id, pulado: r.skip }); }
       } catch (e) { erros++; detalhe.push({ id: c.id, erro: String(e?.message || e) }); }
@@ -139,7 +149,7 @@ export default async function handler(req, res) {
     for (const c of (carts || [])) {
       if (enviados >= limite) break;
       try {
-        const r = await enviarCarrinho(c, pctLeve, exigirNome);
+        const r = await enviarCarrinho(c, pctLeve, exigirNome, tpls);
         if (r.ok) { enviados++; detalhe.push({ id: c.id, versao: r.versao }); }
         else { pulados++; }
       } catch (e) { erros++; detalhe.push({ id: c.id, erro: String(e?.message || e) }); }

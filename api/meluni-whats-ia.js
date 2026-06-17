@@ -90,7 +90,7 @@ function montarMensagens(msgs) {
   return out;
 }
 
-export async function processarConversaMeluni(conversaId) {
+export async function processarConversaMeluni(conversaId, opts = {}) {
   // 1. conversa
   const { data: conv } = await supabase.from('meluni_conversas').select('*').eq('id', conversaId).maybeSingle();
   if (!conv) return { motivo: 'conversa_inexistente' };
@@ -105,14 +105,14 @@ export async function processarConversaMeluni(conversaId) {
   if (!msgs?.length) return { motivo: 'sem_mensagens' };
 
   const ultima = msgs[msgs.length - 1];
-  if (ultima.direcao !== 'entrada') return { motivo: 'ultima_nao_e_do_cliente' };
+  if (!opts.forcar && ultima.direcao !== 'entrada') return { motivo: 'ultima_nao_e_do_cliente' };
   const ultClienteEm = ultima.enviada_em;
 
   // 3. já tem sugestão cobrindo a última msg do cliente?
   const { data: pend } = await supabase.from('meluni_sugestoes')
     .select('id, criado_em').eq('conversa_id', conversaId).eq('status', 'pendente');
   if (pend?.length) {
-    const cobre = pend.some(p => new Date(p.criado_em) >= new Date(ultClienteEm));
+    const cobre = !opts.forcar && pend.some(p => new Date(p.criado_em) >= new Date(ultClienteEm));
     if (cobre) return { motivo: 'ja_tem_sugestao_pendente' };
     // cliente respondeu depois → descarta as velhas e regenera
     await supabase.from('meluni_sugestoes').update({ status: 'descartada' })

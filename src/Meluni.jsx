@@ -291,6 +291,7 @@ function LaraThread({ telefone, conversaId, nome }) {
   const [sugTexto, setSugTexto] = useState('');
   const [busy, setBusy] = useState(false);
   const [aviso, setAviso] = useState('');
+  const [gerando, setGerando] = useState(false);
   const fimRef = useRef(null);
 
   const qs = conversaId ? `conversa_id=${conversaId}` : `telefone=${encodeURIComponent(telefone || '')}`;
@@ -341,6 +342,18 @@ function LaraThread({ telefone, conversaId, nome }) {
     setRascunho('');
     return post('/api/meluni-whats-enviar', { ...body, operador: 'atendente' });
   };
+  const gerarSugestao = async () => {
+    if (!conv?.id || gerando || bloqueado) return;
+    setGerando(true); setAviso('');
+    try {
+      const r = await fetch('/api/meluni-whats-sugerir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversa_id: conv.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!j.ok || (j.motivo && j.motivo !== 'sugestao_criada')) {
+        setAviso(j.motivo === 'sem_mensagens' ? 'Ainda não há histórico pra Lara escrever.' : j.motivo === 'claude_falhou' ? 'A IA não respondeu agora, tenta de novo.' : (j.erro || 'Não consegui gerar a mensagem agora.'));
+      }
+      await carregar();
+    } catch { setAviso('Falha ao gerar a mensagem.'); } finally { setGerando(false); }
+  };
 
   return (
     <div style={{ borderTop: `1px solid ${palette.beige}`, display: 'flex', flexDirection: 'column' }}>
@@ -354,7 +367,7 @@ function LaraThread({ telefone, conversaId, nome }) {
       </div>
 
       {/* histórico */}
-      <div style={{ padding: '4px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
+      <div style={{ padding: '4px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 430, overflowY: 'auto' }}>
         {loading && <div style={{ fontSize: 12, color: palette.inkMuted }}>carregando…</div>}
         {!loading && msgs.length === 0 && (
           <div style={{ fontSize: 12, color: palette.inkMuted, padding: '6px 0' }}>
@@ -411,6 +424,17 @@ function LaraThread({ telefone, conversaId, nome }) {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* gerar mensagem sob demanda (robô) — quando não há sugestão pendente */}
+      {conv && !sug && (
+        <div style={{ display: 'flex', gap: 6, padding: '0 14px 8px' }}>
+          <button onClick={gerarSugestao} disabled={gerando || bloqueado}
+            title="pedir pra Lara escrever uma mensagem agora"
+            style={{ ...fbtn(palette.surface, MELUNI, MELUNI), display: 'flex', alignItems: 'center', gap: 6, opacity: gerando ? 0.7 : 1 }}>
+            <Bot size={14} /> {gerando ? 'gerando…' : 'gerar mensagem'}
+          </button>
         </div>
       )}
 
@@ -473,7 +497,7 @@ function MeluniChatShell({ titulo, subtitulo, overlay, onClose, onPrev, onNext, 
     );
   }
   return (
-    <div style={{ flex: '0 0 430px', maxWidth: 430, alignSelf: 'flex-start', position: 'sticky', top: 8, maxHeight: 'calc(100vh - 90px)', background: palette.bg, border: `1px solid ${palette.beige}`, borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+    <div style={{ flex: '0 0 560px', maxWidth: 560, alignSelf: 'flex-start', position: 'sticky', top: 8, maxHeight: 'calc(100vh - 70px)', background: palette.bg, border: `1px solid ${palette.beige}`, borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
       {corpo}
     </div>
   );
@@ -780,6 +804,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
 function ChatCarrinhoBody({ c, onMoved }) {
   const itens = Array.isArray(c.itens) ? c.itens : [];
   const [movendo, setMovendo] = useState(false);
+  const [carAberto, setCarAberto] = useState(false);
   const DESTINOS = [
     { v: 'follow_up', l: 'Follow up' }, { v: 'conversando', l: 'Conversando' },
     { v: 'conversao', l: 'Conversão' }, { v: 'perdida', l: 'Perdidos' },
@@ -809,16 +834,23 @@ function ChatCarrinhoBody({ c, onMoved }) {
           {DESTINOS.map(d => <option key={d.v} value={d.v}>{d.l}</option>)}
         </select>
       </div>
-      <div style={{ padding: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>Carrinho</div>
-        {itens.length === 0 && <div style={{ fontSize: 13, color: palette.inkMuted }}>Sem itens detalhados.</div>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {itens.map((i, k) => (
-            <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, color: palette.ink }}>
-              {i.qtd}x {i.ref ? <b>ref {i.ref}</b> : (i.sku || '')}{i.descricao ? ` · ${i.descricao}` : (i.descLimpa ? ` · ${i.descLimpa}` : '')}
-            </div>
-          ))}
-        </div>
+      <div style={{ padding: '10px 16px', borderBottom: `1px solid ${palette.beige}` }}>
+        <button onClick={() => setCarAberto(v => !v)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', background: 'none', border: 'none', padding: 0, fontFamily: FONT }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+            {carAberto ? '▾' : '▸'} Carrinho · {itens.length} {itens.length === 1 ? 'item' : 'itens'}
+          </span>
+        </button>
+        {carAberto && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+            {itens.length === 0 && <div style={{ fontSize: 13, color: palette.inkMuted }}>Sem itens detalhados.</div>}
+            {itens.map((i, k) => (
+              <div key={k} style={{ background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, color: palette.ink }}>
+                {i.qtd}x {i.ref ? <b>ref {i.ref}</b> : (i.sku || '')}{i.descricao ? ` · ${i.descricao}` : (i.descLimpa ? ` · ${i.descLimpa}` : '')}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <LaraThread telefone={c.telefone || c.whatsapp} nome={c.nome} />
     </>

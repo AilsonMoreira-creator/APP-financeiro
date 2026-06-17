@@ -14,6 +14,12 @@ import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
 
+function renderTpl(body, params) {
+  let t = String(body || '');
+  (params || []).forEach((p, i) => { t = t.split(`{{${i + 1}}}`).join(p == null ? '' : String(p)); });
+  return t.trim();
+}
+
 async function acharOuCriarConversa(telefone, nome) {
   const { data: ex } = await supabase.from('meluni_conversas').select('id, etapa')
     .eq('canal', 'whatsapp').eq('telefone', telefone)
@@ -47,6 +53,7 @@ export default async function handler(req, res) {
     if (funilAtivo) {
       // 2) 2º envio: enviada >24h, sem conversão, com nome
       const lote = Number(await cfgMeluni('lara_segundo_envio_lote', 30)) || 30;
+      const descontoBody = (((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates || {})?.desconto?.body || '';
       const corte = new Date(Date.now() - 24 * 3600e3).toISOString();
       const { data: carts } = await supabase.from('meluni_carrinhos')
         .select('id, nome, telefone, enviado_em, dados_extra')
@@ -66,7 +73,7 @@ export default async function handler(req, res) {
             await supabase.from('meluni_mensagens').insert({
               conversa_id: convId, direcao: 'saida', autor: 'lara_carrinho_2',
               tipo_midia: 'template', template_usado: 'meluni_carrinho_desconto',
-              texto: `[carrinho 2º envio] ${nome}`, meta_message_id: metaMsgId, enviada_em: nowIso,
+              texto: renderTpl(descontoBody, [nome]) || `${nome}`, meta_message_id: metaMsgId, enviada_em: nowIso,
             });
             await supabase.from('meluni_conversas').update({ ultima_msg_direcao: 'saida', ultima_msg_em: nowIso, responder_em: null }).eq('id', convId);
           }
