@@ -1,17 +1,14 @@
 // ============================================================================
-// /api/meluni-whats-carrinho-disparo — dispara template de carrinho abandonado.
+// /api/meluni-whats-carrinho-disparo — 1º disparo do carrinho abandonado.
 // ----------------------------------------------------------------------------
-// Lê meluni_carrinhos parados (status processando, com telefone + itens, dentro
-// da janela de idade), escolhe versão A/B (leve x elegante), monta {{1}}/{{2}},
-// envia via enviarTemplateLara e registra em meluni_mensagens + atualiza a conversa.
-//
-// GATE: só roda de verdade se config lara_carrinho_disparo_ativo=true (default
-// false — liga só depois dos templates aprovados). ?force=1 ignora o cron-check
-// mas continua respeitando o gate; ?force=1&teste=1 ignora o gate (dry/real teste).
-//
-// Idempotência: marca dados_extra.lara_template_enviado_em; o filtro pula quem já tem.
-// Janela 24h: irrelevante p/ template (template é justamente o que reabre fora dela).
-// Ailson 16/06/2026.
+// Dois modos:
+//  - MANUAL: POST { ids:[...] } -> dispara só os carrinhos selecionados (status
+//    processando), sem gate/idade. É o botão "gerar mensagem e disparar".
+//  - CRON/GATE: sem ids -> varre processando dentro da janela, respeita
+//    lara_carrinho_disparo_ativo (?force=1&teste=1 ignora o gate).
+// Em ambos: escolhe versão (leve/elegante/sem_nome), envia, registra na conversa
+// e MOVE o carrinho pra status 'enviada' (enviado_em/enviado_template).
+// Ailson 17/06/2026.
 // ============================================================================
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
@@ -32,101 +29,112 @@ async function acharOuCriarConversa(telefone, nome) {
   return nova || null;
 }
 
+// envia o 1º template pra um carrinho e move pra 'enviada'. Retorna {ok}|{skip}.
+async function enviarCarrinho(c, pctLeve, exigirNome) {
+  const itens = Array.isArray(c.itens) ? c.itens.filter(i => i?.sku) : [];
+  if (!itens.length) return { skip: 'sem_itens' };
+  if (c.enviado_em || c.dados_extra?.lara_template_enviado_em) return { skip: 'ja_enviado' };
+
+  const nome = await resolverPrimeiroNome(c.telefone, c.nome);
+  if (!nome && exigirNome) return { skip: 'sem_nome' };
+  const { resumo } = await resolverResumoItens(itens);
+
+  let versao, nameTpl, bodyParams;
+  if (nome) {
+    versao = Math.random() * 100 < pctLeve ? 'leve' : 'elegante';
+    if (versao === 'leve' && !resumo) versao = 'elegante';
+    nameTpl = versao === 'leve' ? 'meluni_carrinho_leve' : 'meluni_carrinho_elegante';
+    bodyParams = versao === 'leve' ? [nome, resumo] : [nome];
+  } else {
+    if (!resumo) return { skip: 'sem_nome_sem_resumo' };
+    versao = 'sem_nome'; nameTpl = 'meluni_carrinho_sem_nome'; bodyParams = [resumo];
+  }
+
+  const conv = await acharOuCriarConversa(c.telefone, nome);
+  if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) return { skip: 'conversa_fechada' };
+
+  const r = await enviarTemplateLara(c.telefone, nameTpl, bodyParams);
+  const metaMsgId = r?.messages?.[0]?.id || null;
+  const nowIso = new Date().toISOString();
+
+  if (conv?.id) {
+    await supabase.from('meluni_mensagens').insert({
+      conversa_id: conv.id, direcao: 'saida', autor: 'lara_carrinho',
+      tipo_midia: 'template', template_usado: nameTpl,
+      texto: versao === 'sem_nome' ? `[carrinho] ${resumo}` : versao === 'leve' ? `[carrinho] ${nome}: ${resumo}` : `[carrinho] ${nome}`,
+      meta_message_id: metaMsgId, enviada_em: nowIso,
+    });
+    await supabase.from('meluni_conversas').update({
+      ultima_msg_direcao: 'saida', ultima_msg_em: nowIso, responder_em: null,
+    }).eq('id', conv.id);
+  }
+
+  await supabase.from('meluni_carrinhos').update({
+    status: 'enviada', enviado_em: nowIso, enviado_template: nameTpl,
+    dados_extra: { ...(c.dados_extra || {}), lara_template_enviado_em: nowIso, lara_template_versao: versao, lara_template_name: nameTpl },
+  }).eq('id', c.id);
+
+  return { ok: true, versao, meta_message_id: metaMsgId };
+}
+
+const COLS = 'id, nome, telefone, itens, dados_extra, data_carrinho, status, enviado_em';
+
 export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const pctLeve = Number(await cfgMeluni('lara_carrinho_ab_pct_leve', 50));
+  const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', false)) === true;
+
+  // ── MODO MANUAL: ids selecionados (botão "gerar e disparar") ──
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : null;
+  if (ids) {
+    if (!ids.length) return res.status(400).json({ ok: false, erro: 'ids vazio' });
+    let enviados = 0, pulados = 0, erros = 0; const detalhe = [];
+    const { data: carts } = await supabase.from('meluni_carrinhos').select(COLS).in('id', ids).eq('status', 'processando');
+    for (const c of (carts || [])) {
+      try {
+        const r = await enviarCarrinho(c, pctLeve, exigirNome);
+        if (r.ok) { enviados++; detalhe.push({ id: c.id, versao: r.versao }); }
+        else { pulados++; detalhe.push({ id: c.id, pulado: r.skip }); }
+      } catch (e) { erros++; detalhe.push({ id: c.id, erro: String(e?.message || e) }); }
+    }
+    return res.status(200).json({ ok: true, modo: 'manual', enviados, pulados, erros, detalhe });
+  }
+
+  // ── MODO CRON/GATE ──
   const ua = req.headers?.['user-agent'] || '';
   const ehCron = ua.startsWith('vercel-cron') || !!req.headers?.['x-vercel-cron'];
   const force = req.query?.force === '1';
-  if (!ehCron && !force) return res.status(403).json({ erro: 'Cron only. Use ?force=1 pra teste.' });
+  if (!ehCron && !force) return res.status(403).json({ erro: 'Cron only. Use ?force=1 ou POST {ids}.' });
 
   const ativo = (await cfgMeluni('lara_carrinho_disparo_ativo', false)) === true;
   const ignoraGate = force && req.query?.teste === '1';
-  if (!ativo && !ignoraGate) {
-    return res.status(200).json({ ok: true, gate: 'desligado', enviados: 0, nota: 'lara_carrinho_disparo_ativo=false; ?force=1&teste=1 ignora.' });
-  }
+  if (!ativo && !ignoraGate) return res.status(200).json({ ok: true, gate: 'desligado', enviados: 0 });
 
   const idadeMinH = Number(await cfgMeluni('lara_carrinho_idade_min_horas', 2)) || 2;
   const idadeMaxD = Number(await cfgMeluni('lara_carrinho_idade_max_dias', 30)) || 30;
-  const pctLeve = Number(await cfgMeluni('lara_carrinho_ab_pct_leve', 50));
   const lote = Number(await cfgMeluni('lara_carrinho_lote', 20)) || 20;
-  const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', false)) === true;
   const limite = force ? Math.min(lote, Number(req.query?.n) || lote) : lote;
-
   const agora = Date.now();
-  const teto = new Date(agora - idadeMinH * 3600e3).toISOString();   // mais velho que isso
-  const piso = new Date(agora - idadeMaxD * 86400e3).toISOString();  // mais novo que isso
+  const teto = new Date(agora - idadeMinH * 3600e3).toISOString();
+  const piso = new Date(agora - idadeMaxD * 86400e3).toISOString();
 
-  let enviados = 0, pulados = 0, erros = 0;
-  const detalhe = [];
-
+  let enviados = 0, pulados = 0, erros = 0; const detalhe = [];
   try {
-    const { data: carts, error } = await supabase.from('meluni_carrinhos')
-      .select('id, nome, telefone, itens, dados_extra, data_carrinho, status')
-      .eq('status', 'processando')
-      .not('telefone', 'is', null)
-      .lte('data_carrinho', teto)
-      .gte('data_carrinho', piso)
-      .order('data_carrinho', { ascending: false })
-      .limit(limite * 3); // folga: muitos serão pulados por já-enviado/sem-item
+    const { data: carts, error } = await supabase.from('meluni_carrinhos').select(COLS)
+      .eq('status', 'processando').not('telefone', 'is', null)
+      .lte('data_carrinho', teto).gte('data_carrinho', piso)
+      .order('data_carrinho', { ascending: false }).limit(limite * 3);
     if (error) throw error;
-
     for (const c of (carts || [])) {
       if (enviados >= limite) break;
-      const itens = Array.isArray(c.itens) ? c.itens.filter(i => i?.sku) : [];
-      if (!itens.length) { pulados++; continue; }
-      if (c.dados_extra?.lara_template_enviado_em) { pulados++; continue; }
-
-      const nome = await resolverPrimeiroNome(c.telefone, c.nome);
-      if (!nome && exigirNome) { pulados++; detalhe.push({ id: c.id, pulado: 'sem_nome' }); continue; }
-
-      const { resumo } = await resolverResumoItens(itens);
-
-      // com nome -> A/B leve x elegante; sem nome -> template sem_nome (carrega resumo).
-      let versao, nameTpl, bodyParams;
-      if (nome) {
-        versao = Math.random() * 100 < pctLeve ? 'leve' : 'elegante';
-        if (versao === 'leve' && !resumo) versao = 'elegante'; // leve precisa do {{2}}
-        nameTpl = versao === 'leve' ? 'meluni_carrinho_leve' : 'meluni_carrinho_elegante';
-        bodyParams = versao === 'leve' ? [nome, resumo] : [nome];
-      } else {
-        if (!resumo) { pulados++; detalhe.push({ id: c.id, pulado: 'sem_nome_sem_resumo' }); continue; }
-        versao = 'sem_nome';
-        nameTpl = 'meluni_carrinho_sem_nome';
-        bodyParams = [resumo];
-      }
-
-      const conv = await acharOuCriarConversa(c.telefone, nome);
-      if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) { pulados++; detalhe.push({ id: c.id, pulado: 'conversa_fechada' }); continue; }
-
       try {
-        const r = await enviarTemplateLara(c.telefone, nameTpl, bodyParams);
-        const metaMsgId = r?.messages?.[0]?.id || null;
-        const nowIso = new Date().toISOString();
-
-        if (conv?.id) {
-          await supabase.from('meluni_mensagens').insert({
-            conversa_id: conv.id, direcao: 'saida', autor: 'lara_carrinho',
-            tipo_midia: 'template', template_usado: nameTpl,
-            texto: versao === 'sem_nome' ? `[carrinho] ${resumo}`
-              : versao === 'leve' ? `[carrinho] ${nome}: ${resumo}` : `[carrinho] ${nome}`,
-            meta_message_id: metaMsgId, enviada_em: nowIso,
-          });
-          await supabase.from('meluni_conversas').update({
-            ultima_msg_direcao: 'saida', ultima_msg_em: nowIso, responder_em: null,
-          }).eq('id', conv.id);
-        }
-
-        await supabase.from('meluni_carrinhos').update({
-          dados_extra: { ...(c.dados_extra || {}), lara_template_enviado_em: nowIso, lara_template_versao: versao, lara_template_name: nameTpl },
-        }).eq('id', c.id);
-
-        enviados++;
-        detalhe.push({ id: c.id, telefone: c.telefone, versao, resumo: versao === 'leve' ? resumo : null, meta_message_id: metaMsgId });
-      } catch (e) {
-        erros++;
-        detalhe.push({ id: c.id, erro: String(e?.message || e) });
-      }
+        const r = await enviarCarrinho(c, pctLeve, exigirNome);
+        if (r.ok) { enviados++; detalhe.push({ id: c.id, versao: r.versao }); }
+        else { pulados++; }
+      } catch (e) { erros++; detalhe.push({ id: c.id, erro: String(e?.message || e) }); }
     }
-
     return res.status(200).json({ ok: true, gate: ativo ? 'ligado' : 'teste', enviados, pulados, erros, limite, detalhe });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: String(e?.message || e), enviados, pulados, erros });

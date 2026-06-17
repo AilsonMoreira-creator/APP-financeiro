@@ -32,6 +32,7 @@ import MeluniAnalise from './CalcAnaliseMeluni';
 const ASSISTANT_NAME = 'Lara';
 const MELUNI = '#9b59b6';      // roxo da marca Meluni (consistente com o resto do app)
 const MELUNI_SOFT = '#f6f0f9';
+const VERDE_ENVIAR = '#25d366'; // verde WhatsApp (igual Sofia) pros botões de enviar mensagem
 
 // ─── trava de presença (Ailson 16/06/2026) ─────────────────────────────────
 // userId via Context (o front da Meluni é por API; o claim/release vai em
@@ -359,12 +360,12 @@ function LaraThread({ telefone, conversaId, nome }) {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
             {editando ? (
               <>
-                <button disabled={busy} onClick={() => aprovar(sugTexto)} style={fbtn(MELUNI, '#fff')}>enviar editado</button>
+                <button disabled={busy} onClick={() => aprovar(sugTexto)} style={fbtn(VERDE_ENVIAR, '#fff')}>enviar editado</button>
                 <button disabled={busy} onClick={() => setEditando(false)} style={fbtn(palette.surface, palette.inkSoft, palette.beige)}>cancelar</button>
               </>
             ) : (
               <>
-                <button disabled={busy} onClick={() => aprovar()} style={fbtn(MELUNI, '#fff')}>aprovar e enviar</button>
+                <button disabled={busy} onClick={() => aprovar()} style={fbtn(VERDE_ENVIAR, '#fff')}>aprovar e enviar</button>
                 <button disabled={busy} onClick={() => { setSugTexto(sug.texto); setEditando(true); }} style={fbtn(palette.surface, MELUNI, palette.beige)}>editar</button>
                 <button disabled={busy} onClick={descartar} style={fbtn(palette.surface, palette.alert, '#f4c7c7')}>descartar</button>
               </>
@@ -379,7 +380,7 @@ function LaraThread({ telefone, conversaId, nome }) {
           disabled={!conv || busy || bloqueado}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarManual(); } }}
           style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'none', opacity: (conv && !bloqueado) ? 1 : 0.6 }} />
-        <button disabled={!conv || busy || bloqueado || !rascunho.trim()} onClick={enviarManual} style={fbtn(MELUNI, '#fff')}>enviar</button>
+        <button disabled={!conv || busy || bloqueado || !rascunho.trim()} onClick={enviarManual} style={fbtn(VERDE_ENVIAR, '#fff')}>enviar</button>
       </div>
     </div>
   );
@@ -737,13 +738,18 @@ function SecaoCarrinho() {
   const [chatId, setChatId] = useState(null);
   const [unread, setUnread] = useState({});
   const [dias, setDias] = useState(30); // só últimos 30 dias por padrão (0 = todos)
+  const [disparando, setDisparando] = useState(false);
+  const [dispMsg, setDispMsg] = useState('');
   const isDesktop = useIsDesktop();
   const LIM = 60;
   const tabs = [
     { id: 'processando', label: 'Processando', unread: unread.processando },
-    { id: 'aprovar', label: 'Aprovar / Enviar', unread: unread.aprovar },
+    { id: 'enviada', label: 'Enviadas', unread: unread.enviada },
+    { id: 'segundo_envio', label: '2º envio', unread: unread.segundo_envio },
     { id: 'conversando', label: 'Conversando', unread: unread.conversando },
+    { id: 'conversao', label: 'Conversão', unread: unread.conversao },
     { id: 'follow_up', label: 'Follow up', unread: unread.follow_up },
+    { id: 'perdida', label: 'Perdidos', unread: unread.perdida },
   ];
   const carregar = useCallback(async (off = 0) => {
     setLoading(true);
@@ -757,6 +763,24 @@ function SecaoCarrinho() {
   useEffect(() => { setSel(new Set()); setChatId(null); carregar(0); }, [carregar]);
   const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selTodos = () => setSel(sel.size === carrinhos.length ? new Set() : new Set(carrinhos.map(c => c.id)));
+
+  const dispararSel = async () => {
+    if (disparando || !sel.size) return;
+    setDisparando(true); setDispMsg('');
+    try {
+      const r = await fetch('/api/meluni-whats-carrinho-disparo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...sel] }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        setDispMsg(`✓ ${j.enviados} enviado(s)${j.pulados ? ` · ${j.pulados} pulado(s)` : ''}${j.erros ? ` · ${j.erros} erro(s)` : ''}`);
+        setSel(new Set()); carregar(0);
+      } else { setDispMsg(j.erro || 'falhou'); }
+    } catch { setDispMsg('falhou'); }
+    setDisparando(false);
+    setTimeout(() => setDispMsg(''), 8000);
+  };
 
   const carregarMais = carrinhos.length < total ? (
     <button onClick={() => carregar(carrinhos.length)} disabled={loading}
@@ -779,7 +803,13 @@ function SecaoCarrinho() {
         <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
           {loading ? 'carregando…' : `${total} no funil`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
         </span>
-        {sel.size > 0 && <span style={{ fontSize: 11, color: palette.warn, fontFamily: FONT }}>o disparo em massa liga quando o número da Lara estiver configurado</span>}
+        {aba === 'processando' && sel.size > 0 && (
+          <button onClick={dispararSel} disabled={disparando}
+            style={{ ...fbtn(VERDE_ENVIAR, '#fff'), opacity: disparando ? 0.7 : 1 }}>
+            {disparando ? 'disparando…' : `Gerar mensagem e disparar (${sel.size})`}
+          </button>
+        )}
+        {dispMsg && <span style={{ fontSize: 11.5, fontWeight: 600, color: palette.inkSoft, fontFamily: FONT }}>{dispMsg}</span>}
       </div>
       {!loading && carrinhos.length === 0 && <Placeholder>Nenhum carrinho nesse estágio.</Placeholder>}
       {carrinhos.length > 0 && (
