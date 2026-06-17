@@ -191,7 +191,7 @@ export async function processarMensagemMeluni(msg, value) {
       const tel10 = telefone.replace(/\D/g, '').slice(-10);
       const { data: carts } = await supabase.from('meluni_carrinhos')
         .select('id, telefone')
-        .in('status', ['enviada', 'segundo_envio'])
+        .in('status', ['enviada', 'segundo_envio', 'perdida'])
         .is('convertido_em', null);
       const alvo = (carts || []).find(x => (x.telefone || '').replace(/\D/g, '').slice(-10) === tel10);
       if (alvo) {

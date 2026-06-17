@@ -68,43 +68,71 @@ function useMeluniLock(tipo, id) {
 
 // ─── sub-abas leves (dentro de cada seção) ──────────────────────────────────
 function SubTabs({ tabs, active, onChange }) {
+  const [helpOpen, setHelpOpen] = useState(null);
+  const aberto = tabs.find(t => t.id === helpOpen && t.help);
   return (
-    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 14 }}>
-      {tabs.map(t => {
-        const on = active === t.id;
-        return (
-          <div key={t.id} style={{ position: 'relative', display: 'inline-flex' }}>
-            <button onClick={() => onChange(t.id)} style={{
-              border: `1px solid ${on ? MELUNI : palette.beige}`,
-              background: on ? MELUNI : palette.surface,
-              color: on ? '#fff' : palette.inkSoft,
-              borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
-              fontFamily: FONT, fontSize: 13, fontWeight: on ? 700 : 500,
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              {t.label}
-              {t.badge > 0 && (
-                <span style={{
-                  background: on ? '#fff' : MELUNI, color: on ? MELUNI : '#fff',
-                  borderRadius: 999, minWidth: 16, height: 16, padding: '0 4px',
-                  fontSize: 10, fontWeight: 700, display: 'inline-flex',
-                  alignItems: 'center', justifyContent: 'center',
-                }}>{t.badge}</span>
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {tabs.map(t => {
+          const on = active === t.id;
+          return (
+            <div key={t.id} style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+              <button onClick={() => onChange(t.id)} style={{
+                border: `1px solid ${on ? MELUNI : palette.beige}`,
+                background: on ? MELUNI : palette.surface,
+                color: on ? '#fff' : palette.inkSoft,
+                borderRadius: 8, padding: '6px 14px', cursor: 'pointer',
+                fontFamily: FONT, fontSize: 13, fontWeight: on ? 700 : 500,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                {t.label}
+                {t.badge > 0 && (
+                  <span style={{
+                    background: on ? '#fff' : MELUNI, color: on ? MELUNI : '#fff',
+                    borderRadius: 999, minWidth: 16, height: 16, padding: '0 4px',
+                    fontSize: 10, fontWeight: 700, display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>{t.badge}</span>
+                )}
+              </button>
+              {t.help && (
+                <button onClick={(e) => { e.stopPropagation(); setHelpOpen(helpOpen === t.id ? null : t.id); }}
+                  title="como funciona esta etapa" style={{
+                    marginLeft: 3, width: 17, height: 17, flexShrink: 0, borderRadius: 999, cursor: 'pointer',
+                    border: `1px solid ${helpOpen === t.id ? MELUNI : palette.beige}`,
+                    background: helpOpen === t.id ? MELUNI : palette.surface,
+                    color: helpOpen === t.id ? '#fff' : palette.inkMuted,
+                    fontSize: 11, fontWeight: 700, fontFamily: FONT, lineHeight: 1, padding: 0,
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}>?</button>
               )}
-            </button>
-            {/* badge VERMELHO de conversa sem resposta — idêntico Sofia */}
-            {t.unread > 0 && (
-              <span style={{
-                position: 'absolute', top: -4, right: -4, zIndex: 1,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8,
-                fontSize: 9, fontWeight: 700, background: '#dc2626', color: '#fff',
-                lineHeight: 1, border: '2px solid #fff', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-              }}>{t.unread}</span>
-            )}
-          </div>
-        );
-      })}
+              {t.unread > 0 && (
+                <span style={{
+                  position: 'absolute', top: -4, right: -4, zIndex: 1,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8,
+                  fontSize: 9, fontWeight: 700, background: '#dc2626', color: '#fff',
+                  lineHeight: 1, border: '2px solid #fff', boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                }}>{t.unread}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {aberto && (
+        <div style={{
+          marginTop: 8, background: MELUNI_SOFT, border: `1px solid ${MELUNI}`, borderRadius: 10,
+          padding: '10px 30px 10px 12px', fontFamily: FONT, fontSize: 12.5, color: palette.ink,
+          lineHeight: 1.5, whiteSpace: 'pre-line', position: 'relative',
+        }}>
+          <button onClick={() => setHelpOpen(null)} title="fechar" style={{
+            position: 'absolute', top: 6, right: 8, border: 'none', background: 'none',
+            cursor: 'pointer', fontSize: 16, color: palette.inkMuted, lineHeight: 1, padding: 0,
+          }}>×</button>
+          <div style={{ fontWeight: 700, color: MELUNI, marginBottom: 4 }}>{aberto.label}</div>
+          {aberto.help}
+        </div>
+      )}
     </div>
   );
 }
@@ -790,13 +818,20 @@ function SecaoCarrinho() {
   const isDesktop = useIsDesktop();
   const LIM = 60;
   const tabs = [
-    { id: 'processando', label: 'Processando', unread: unread.processando },
-    { id: 'enviada', label: 'Enviadas', unread: unread.enviada },
-    { id: 'segundo_envio', label: '2º envio', unread: unread.segundo_envio },
-    { id: 'conversando', label: 'Conversando', unread: unread.conversando },
-    { id: 'conversao', label: 'Conversão', unread: unread.conversao },
-    { id: 'follow_up', label: 'Follow up', unread: unread.follow_up },
-    { id: 'perdida', label: 'Perdidos', unread: unread.perdida },
+    { id: 'processando', label: 'Processando', unread: unread.processando,
+      help: 'Carrinhos abandonados que ainda NÃO receberam mensagem.\nSelecione os que quiser e clique em "Gerar mensagem e disparar" — a Lara escolhe o template e envia na hora. O card vai pra Enviadas.\nDispare aos poucos enquanto o número está aquecendo.' },
+    { id: 'enviada', label: 'Enviadas', unread: unread.enviada,
+      help: 'Já receberam o 1º contato da Lara. O relógio conta 24h.\n• Cliente responde → Conversando\n• Cliente compra → Conversão\n• 24h sem nada → 2º envio (template de desconto), automático' },
+    { id: 'segundo_envio', label: '2º envio', unread: unread.segundo_envio,
+      help: 'Receberam o 2º contato (até 20% off: cupom 1ª compra + desconto do carrinho). Relógio de 48h.\n• Responde → Conversando\n• Compra → Conversão\n• 48h sem interação e sem compra → Perdidos (automático)' },
+    { id: 'conversando', label: 'Conversando', unread: unread.conversando,
+      help: 'Clientes que responderam — atendimento da Lara/atendente aqui mesmo.\n• Compra → Conversão\n• 3 dias sem nenhuma interação → Perdidos (automático)' },
+    { id: 'conversao', label: 'Conversão', unread: unread.conversao,
+      help: 'Compraram depois do contato. O match é automático por telefone, e-mail, nome ou cliente, com a venda a partir da data do envio.\nEtapa final positiva — não precisa fazer nada.' },
+    { id: 'follow_up', label: 'Follow up', unread: unread.follow_up,
+      help: 'Só entram aqui quando VOCÊ move manualmente (botão "mover pra ▾" dentro do carrinho).\nFicam parados aqui até você decidir o que fazer — não saem sozinhos.' },
+    { id: 'perdida', label: 'Perdidos', unread: unread.perdida,
+      help: 'Passaram do prazo sem interação nem compra. Etapa final.\nSe a cliente voltar a falar, o carrinho volta sozinho pra Conversando. Você também pode reabrir movendo manualmente.' },
   ];
   const carregar = useCallback(async (off = 0) => {
     setLoading(true);
