@@ -555,8 +555,12 @@ export function detectarTipoArquivo(nomeArquivo, parentName = '') {
   const n = nomeArquivo.toLowerCase();
   const p = (parentName || '').toLowerCase();
 
-  // PDF de sacola
-  if (n.endsWith('.pdf') && /pedidos?[-_ ]espera|sacola/i.test(n)) {
+  // PDF de sacola — detecta por NOME ou por estar numa pasta Sacola_*
+  // Ailson 17/06/2026: a exportação automática de sacola às vezes salva com
+  // nome truncado (ex: 'pe.pdf', 'ped.pdf'). Antes esse PDF não batia na regra
+  // de nome e caía no fallback de vendas, vencia o dedupe e descartava o CSV
+  // de vendas real. Agora qualquer PDF na pasta Sacola_* é tratado como sacola.
+  if (n.endsWith('.pdf') && (/pedidos?[-_ ]espera|sacola/i.test(n) || /sacola/i.test(p))) {
     if (/_st_|_st\./i.test(n) || /silva.?teles/i.test(p)) {
       return { tipo: 'sacola_st', loja: 'Silva Teles' };
     }
@@ -600,8 +604,12 @@ export function detectarTipoArquivo(nomeArquivo, parentName = '') {
     return { tipo: `relatorio_bi${sufixo}`, loja };
   }
   // Fallback: arquivo na pasta Silva_Teles/ ou Bom_Retiro/ que não deu match
-  // específico, assume "vendas semanal"
-  if (/silva.?teles|bom.?retiro/i.test(p) && !/_inicial/i.test(p)) {
+  // específico, assume "vendas semanal".
+  // Ailson 17/06/2026: NUNCA classificar PDF nem arquivo de pasta Sacola_* como
+  // vendas — senão um PDF de sacola com nome truncado vence o dedupe e descarta
+  // o CSV de vendas real. Vendas é sempre CSV/XLSX nas pastas Silva_Teles/Bom_Retiro.
+  if (/silva.?teles|bom.?retiro/i.test(p) && !/_inicial/i.test(p)
+      && !/sacola/i.test(p) && !n.endsWith('.pdf')) {
     return { tipo: `vendas_semanal${sufixo}`, loja };
   }
 
