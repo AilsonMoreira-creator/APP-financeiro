@@ -13,6 +13,19 @@ export default async function handler(req, res) {
   if (req.query?.force !== '1') return res.status(403).json({ erro: 'Use ?force=1' });
   const telefone = String(req.query?.telefone || '').replace(/\D/g, '');
   if (!telefone) return res.status(400).json({ erro: 'telefone obrigatorio (só dígitos)' });
+
+  // modo genérico: ?tpl=NOME&params=a,b  -> manda qualquer template aprovado
+  if (req.query?.tpl) {
+    const nameTpl = String(req.query.tpl);
+    const params = String(req.query?.params || '').split('|').map(s => s.trim()).filter(Boolean);
+    try {
+      const r = await enviarTemplateLara(telefone, nameTpl, params);
+      return res.status(200).json({ ok: true, telefone, nameTpl, params, meta_message_id: r?.messages?.[0]?.id || null });
+    } catch (e) {
+      return res.status(500).json({ ok: false, erro: String(e?.message || e), nameTpl, params });
+    }
+  }
+
   const nome = req.query?.nome ? String(req.query.nome).trim() : null;
   const primeiroNome = nome ? nome.split(/\s+/)[0] : null;
   const refs = String(req.query?.refs || '').split(',').map(s => s.trim()).filter(Boolean);

@@ -7,6 +7,36 @@
 // já relida da view (fluxo_status recalculado). Ailson 15/06/2026.
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
+import { enviarTemplateLara } from './_meluni-whats-meta.js';
+import { cfgMeluni } from './_meluni-whats-helpers.js';
+
+// forma/etapa -> chave da spec em meluni_config.lara_template_devolucao.templates
+const SPEC_KEY = { etiqueta: 'instrucoes', pix: 'estorno_pix', cartao: 'estorno_cartao', credito: 'estorno_credito' };
+
+function telBR(t) {
+  const d = String(t || '').replace(/\D/g, '');
+  return (d.length >= 10 && d.length <= 11 && !d.startsWith('55')) ? '55' + d : d;
+}
+function primeiroNome(n) {
+  const p = String(n || '').trim().split(/\s+/)[0] || '';
+  return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : null;
+}
+async function nomeTpl(specKey) {
+  const spec = await cfgMeluni('lara_template_devolucao', null);
+  return spec?.templates?.[specKey]?.name || null;
+}
+async function acharOuCriarConversa(telefone, nome) {
+  const { data: ex } = await supabase.from('meluni_conversas').select('id')
+    .eq('canal', 'whatsapp').eq('telefone', telefone)
+    .order('ultima_msg_em', { ascending: false }).limit(1).maybeSingle();
+  if (ex?.id) return ex.id;
+  const { data: nova } = await supabase.from('meluni_conversas').insert({
+    canal: 'whatsapp', telefone, externo_id: telefone, nome_cliente: nome || null,
+    origem: 'devolucao', etapa: 'conversando',
+    ultima_msg_direcao: 'saida', ultima_msg_em: new Date().toISOString(),
+  }).select('id').single();
+  return nova?.id || null;
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -74,6 +104,45 @@ export default async function handler(req, res) {
         return res.status(400).json({ ok: false, erro: `acao desconhecida: ${acao}` });
     }
 
+    // ── envio do WhatsApp (template) pras ações de aviso ──
+    let envio = null;
+    if (acao === 'avisar_etiqueta' || acao === 'avisar_estorno') {
+      let dev = (await supabase.from('meluni_devolucoes')
+        .select('nome, telefone, estorno_forma').eq('convertr_id', id).limit(1)).data?.[0];
+      if (!dev) dev = (await supabase.from('meluni_devolucoes')
+        .select('nome, telefone, estorno_forma').eq('id', id).maybeSingle()).data;
+
+      const tel = telBR(dev?.telefone);
+      const pn = primeiroNome(dev?.nome);
+      if (!tel) return res.status(400).json({ ok: false, erro: 'cliente sem telefone cadastrado' });
+      if (!pn) return res.status(400).json({ ok: false, erro: 'cliente sem nome cadastrado' });
+
+      const chave = acao === 'avisar_etiqueta' ? 'etiqueta' : dev?.estorno_forma;
+      const specKey = SPEC_KEY[chave];
+      if (!specKey) return res.status(400).json({ ok: false, erro: 'defina a forma de estorno (pix, cartão ou crédito) antes de avisar' });
+      const tplName = await nomeTpl(specKey);
+      if (!tplName) return res.status(400).json({ ok: false, erro: `template não configurado pra ${specKey}` });
+
+      try {
+        const r = await enviarTemplateLara(tel, tplName, [pn]);
+        const metaMsgId = r?.messages?.[0]?.id || null;
+        envio = { ok: true, template: tplName, meta_message_id: metaMsgId };
+        const convId = await acharOuCriarConversa(tel, pn);
+        if (convId) {
+          await supabase.from('meluni_mensagens').insert({
+            conversa_id: convId, direcao: 'saida', autor: `devolucao:${operador}`,
+            tipo_midia: 'template', template_usado: tplName,
+            texto: `[devolução] ${chave}`, meta_message_id: metaMsgId, enviada_em: agora,
+          });
+          await supabase.from('meluni_conversas').update({
+            ultima_msg_direcao: 'saida', ultima_msg_em: agora, responder_em: null,
+          }).eq('id', convId);
+        }
+      } catch (e) {
+        return res.status(502).json({ ok: false, erro: `falha ao enviar WhatsApp: ${e?.message || e}` });
+      }
+    }
+
     // o card agora é por PEDIDO (id = convertr_id do grupo). Carimba TODAS as
     // peças do mesmo retorno. Fallback por id (caso raro de convertr_id nulo).
     const upd = await supabase.from('meluni_devolucoes').update(patch).eq('convertr_id', id).select('id');
@@ -85,7 +154,7 @@ export default async function handler(req, res) {
 
     // relê da view (agrupada) pra devolver fluxo_status atualizado
     const { data: row } = await supabase.from('vw_meluni_devolucoes').select('*').eq('id', id).maybeSingle();
-    return res.json({ ok: true, devolucao: row || null });
+    return res.json({ ok: true, devolucao: row || null, envio });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });
   }
