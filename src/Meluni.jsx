@@ -1408,6 +1408,9 @@ const selStyle = {
 // ─── ROOT ───────────────────────────────────────────────────────────────────
 export default function Meluni({ userId = '', isAdmin = false, onBack }) {
   const [secao, setSecao] = useState('clientes');
+  const [syncTick, setSyncTick] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
   const tabs = [
     { id: 'clientes', label: 'Clientes', icon: Users },
     { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
@@ -1416,21 +1419,54 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
     { id: 'marketing', label: 'Marketing', icon: TrendingUp },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   ];
+
+  const sincronizar = useCallback(async () => {
+    if (syncing) return;
+    setSyncing(true); setSyncMsg('');
+    try {
+      const r = await fetch('/api/meluni-drive-cron?dias=7', { method: 'POST' });
+      const j = await r.json();
+      if (j.processados) {
+        setSyncMsg(`✓ ${j.processados} planilha(s)`);
+        setSyncTick(t => t + 1); // remonta as seções pra puxar os dados novos
+      } else {
+        setSyncMsg(j.msg || 'nada novo');
+      }
+    } catch {
+      setSyncMsg('falhou');
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(''), 6000);
+    }
+  }, [syncing]);
+
   return (
     <MeluniUserCtx.Provider value={userId}>
     <div style={{ minHeight: '100vh', background: palette.bg, fontFamily: FONT }}>
+      <style>{`@keyframes meluniSpin{to{transform:rotate(360deg)}}`}</style>
       <Header
         title={`Meluni · ${ASSISTANT_NAME}`}
         subtitle="WhatsApp B2C · IA atendente"
         onBack={onBack}
-        rightContent={<span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: MELUNI, borderRadius: 6, padding: '3px 9px' }}>B2C</span>}
+        rightContent={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {syncMsg && <span style={{ fontSize: 11, fontWeight: 600, color: palette.inkSoft }}>{syncMsg}</span>}
+            <button onClick={sincronizar} disabled={syncing}
+              title="Importa as planilhas do Drive (carrinhos, devoluções, clientes)"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: MELUNI, color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, fontWeight: 700, fontFamily: FONT, cursor: syncing ? 'default' : 'pointer', opacity: syncing ? 0.7 : 1 }}>
+              <RotateCcw size={13} style={{ animation: syncing ? 'meluniSpin 0.8s linear infinite' : 'none' }} />
+              {syncing ? 'sincronizando…' : 'Sync'}
+            </button>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: MELUNI, borderRadius: 6, padding: '3px 9px' }}>B2C</span>
+          </div>
+        }
       />
       <TabBar tabs={tabs} activeTab={secao} onChange={setSecao} />
       <div style={{ maxWidth: 960, margin: '0 auto', padding: 16 }}>
-        {secao === 'clientes' && <SecaoClientes />}
-        {secao === 'carrinho' && <SecaoCarrinho />}
+        {secao === 'clientes' && <SecaoClientes key={syncTick} />}
+        {secao === 'carrinho' && <SecaoCarrinho key={syncTick} />}
         {secao === 'sac' && <SecaoSac />}
-        {secao === 'devolucao' && <SecaoDevolucao userId={userId} isAdmin={isAdmin} />}
+        {secao === 'devolucao' && <SecaoDevolucao key={syncTick} userId={userId} isAdmin={isAdmin} />}
         {secao === 'marketing' && <SecaoMarketing />}
         {secao === 'dashboard' && <SecaoDashboard />}
       </div>
