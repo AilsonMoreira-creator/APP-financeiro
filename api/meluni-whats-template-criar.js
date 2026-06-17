@@ -61,7 +61,10 @@ export default async function handler(req, res) {
   const tpls = spec?.templates;
   if (!tpls) return res.status(404).json({ erro: 'spec lara_templates_carrinho nao encontrada no meluni_config' });
 
-  const alvos = ['leve', 'elegante'].filter(k => tpls[k]?.name && tpls[k]?.body);
+  const todas = Object.keys(tpls).filter(k => tpls[k]?.name && tpls[k]?.body);
+  const only = (req.query?.only || '').split(',').map(s => s.trim()).filter(Boolean);
+  const alvos = only.length ? todas.filter(k => only.includes(k)) : todas;
+  if (!alvos.length) return res.status(404).json({ erro: 'nenhuma versao alvo', disponiveis: todas });
   const resultados = [];
   for (const k of alvos) {
     try {

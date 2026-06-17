@@ -48,7 +48,7 @@ export default async function handler(req, res) {
   const idadeMaxD = Number(await cfgMeluni('lara_carrinho_idade_max_dias', 30)) || 30;
   const pctLeve = Number(await cfgMeluni('lara_carrinho_ab_pct_leve', 50));
   const lote = Number(await cfgMeluni('lara_carrinho_lote', 20)) || 20;
-  const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', true)) !== false;
+  const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', false)) === true;
   const limite = force ? Math.min(lote, Number(req.query?.n) || lote) : lote;
 
   const agora = Date.now();
@@ -77,15 +77,22 @@ export default async function handler(req, res) {
 
       const nome = await resolverPrimeiroNome(c.telefone, c.nome);
       if (!nome && exigirNome) { pulados++; detalhe.push({ id: c.id, pulado: 'sem_nome' }); continue; }
-      const nome1 = nome || 'tudo bem'; // só usado se exigirNome=false
 
       const { resumo } = await resolverResumoItens(itens);
 
-      // versão: leve precisa de {{2}}; se resumo não resolveu, cai pra elegante.
-      let versao = Math.random() * 100 < pctLeve ? 'leve' : 'elegante';
-      if (versao === 'leve' && !resumo) versao = 'elegante';
-      const nameTpl = versao === 'leve' ? 'meluni_carrinho_leve' : 'meluni_carrinho_elegante';
-      const bodyParams = versao === 'leve' ? [nome1, resumo] : [nome1];
+      // com nome -> A/B leve x elegante; sem nome -> template sem_nome (carrega resumo).
+      let versao, nameTpl, bodyParams;
+      if (nome) {
+        versao = Math.random() * 100 < pctLeve ? 'leve' : 'elegante';
+        if (versao === 'leve' && !resumo) versao = 'elegante'; // leve precisa do {{2}}
+        nameTpl = versao === 'leve' ? 'meluni_carrinho_leve' : 'meluni_carrinho_elegante';
+        bodyParams = versao === 'leve' ? [nome, resumo] : [nome];
+      } else {
+        if (!resumo) { pulados++; detalhe.push({ id: c.id, pulado: 'sem_nome_sem_resumo' }); continue; }
+        versao = 'sem_nome';
+        nameTpl = 'meluni_carrinho_sem_nome';
+        bodyParams = [resumo];
+      }
 
       const conv = await acharOuCriarConversa(c.telefone, nome);
       if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) { pulados++; detalhe.push({ id: c.id, pulado: 'conversa_fechada' }); continue; }
@@ -99,7 +106,8 @@ export default async function handler(req, res) {
           await supabase.from('meluni_mensagens').insert({
             conversa_id: conv.id, direcao: 'saida', autor: 'lara_carrinho',
             tipo_midia: 'template', template_usado: nameTpl,
-            texto: versao === 'leve' ? `[carrinho] ${nome1}: ${resumo}` : `[carrinho] ${nome1}`,
+            texto: versao === 'sem_nome' ? `[carrinho] ${resumo}`
+              : versao === 'leve' ? `[carrinho] ${nome}: ${resumo}` : `[carrinho] ${nome}`,
             meta_message_id: metaMsgId, enviada_em: nowIso,
           });
           await supabase.from('meluni_conversas').update({
