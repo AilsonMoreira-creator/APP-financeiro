@@ -32,7 +32,8 @@ export default async function handler(req, res) {
     if (sku) itens.push({ sku, qtd: 1 });
   }
 
-  const { resumo, principalNome } = await resolverResumoItens(itens);
+  const { resumo: resumoCalc, principalNome } = await resolverResumoItens(itens);
+  const resumo = req.query?.resumo ? String(req.query.resumo) : resumoCalc;
 
   const nameTpl = versao === 'leve' ? 'meluni_carrinho_leve'
     : versao === 'elegante' ? 'meluni_carrinho_elegante' : 'meluni_carrinho_sem_nome';
