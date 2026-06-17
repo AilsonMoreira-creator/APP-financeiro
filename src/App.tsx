@@ -64,6 +64,16 @@ const SvgDashboard = ({ size = 32 }) => {
   );
 };
 
+const SvgMeluni = ({ size = 32 }) => (
+  <img
+    src="/icone-meluni.png"
+    alt="Meluni"
+    width={size}
+    height={size}
+    style={{ objectFit: 'contain', display: 'block' }}
+  />
+);
+
 const SvgLancamentos = ({ size = 32 }) => (
   <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
     <rect x="10" y="14" width="46" height="50" rx="4" fill="#d8d0c4"/>
@@ -10851,7 +10861,7 @@ export default function App(){
               kpiValue:homeReativarPending>0?`${homeReativarPending}`:"✓",
               kpiLabel:homeReativarPending>0?"esperando resposta":"sem pendências",
               detail:homeReativarPending>0?"Clientes conversando com a Sofia":"Clientes 6+ meses · Sofia reativa"},
-            {id:"meluni",gate:"sofia",label:"Meluni",Icon:SvgSofia,color:"#9b59b6",bg:"#f6f0f9",border:"#e3d2ec",
+            {id:"meluni",gate:"sofia",label:"Meluni",Icon:SvgMeluni,color:"#9b59b6",bg:"#f6f0f9",border:"#e3d2ec",
               kpiValue:"—",kpiLabel:"B2C · Lara",detail:"WhatsApp B2C · IA atendente"},
           ].filter(m=>usuarioLogado.modulos.includes(m.gate||m.id));
 
