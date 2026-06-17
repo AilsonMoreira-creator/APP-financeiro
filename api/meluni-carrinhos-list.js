@@ -42,12 +42,13 @@ export default async function handler(req, res) {
 
     // conversa sem resposta (origem carrinho, última msg "in")
     const { data: convsPend } = await supabase.from('meluni_conversas')
-      .select('cliente_id, telefone, etapa')
+      .select('cliente_id, telefone, etapa, visto_em, ultima_msg_em')
       .eq('origem', 'carrinho')
       .in('ultima_msg_direcao', ['in', 'entrada']);
     const pendCli = new Set(), pendTel = new Set();
     const unread = {};
     for (const c of (convsPend || [])) {
+      if (c.visto_em && c.ultima_msg_em && new Date(c.ultima_msg_em) <= new Date(c.visto_em)) continue;
       if (c.cliente_id) pendCli.add(c.cliente_id);
       const t = (c.telefone || '').replace(/\D/g, '');
       if (t.length >= 10) pendTel.add(t.slice(-10));

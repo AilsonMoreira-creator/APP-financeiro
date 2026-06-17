@@ -38,6 +38,12 @@ export default async function handler(req, res) {
       .order('enviada_em', { ascending: true })
       .limit(200);
 
+    // marca a conversa como vista AGORA → zera o badge de não-lido dela.
+    // (o front faz poll enquanto aberta, então msgs que chegam com a conversa
+    //  aberta já entram como vistas; ao fechar, o visto_em congela e uma nova
+    //  entrada posterior volta a marcar como não-lida.)
+    try { await supabase.from('meluni_conversas').update({ visto_em: new Date().toISOString() }).eq('id', conversaId); } catch { /* não bloqueia a leitura */ }
+
     const { data: sugestao } = await supabase.from('meluni_sugestoes')
       .select('id, texto, status, criado_em')
       .eq('conversa_id', conversaId).eq('status', 'pendente')

@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   const aba = req.query.aba || 'conversando';
   try {
     const { data: convs, error } = await supabase.from('meluni_conversas')
-      .select('id, telefone, nome_cliente, cliente_id, canal, origem, etapa, acompanhar, resolvido_em, ultima_msg_em, ultima_msg_direcao')
+      .select('id, telefone, nome_cliente, cliente_id, canal, origem, etapa, acompanhar, resolvido_em, ultima_msg_em, ultima_msg_direcao, visto_em')
       .in('canal', ['whatsapp', 'direct_insta'])
       .order('ultima_msg_em', { ascending: false, nullsFirst: false })
       .limit(300);
@@ -30,6 +30,11 @@ export default async function handler(req, res) {
       if (c.acompanhar) return 'follow_up';
       return 'conversando';
     };
+
+    // "precisa de ação" = última msg é da cliente (entrada) E ainda não foi vista.
+    // Abrir a conversa grava visto_em; resposta que não pede ação some do badge.
+    const precisaAcao = (c) => c.ultima_msg_direcao === 'entrada'
+      && (!c.visto_em || new Date(c.ultima_msg_em) > new Date(c.visto_em));
 
     // SAC não mostra conversas do funil de carrinho (essas vivem na aba Carrinho)
     const filtradas = (convs || []).filter(c => c.origem !== 'carrinho' && bucketDe(c) === aba);
@@ -53,12 +58,12 @@ export default async function handler(req, res) {
     const lista = filtradas.map(c => ({
       ...c,
       preview: previews[c.id] || '',
-      unread: c.ultima_msg_direcao === 'entrada',
+      unread: precisaAcao(c),
     }));
 
-    // contadores das abas (badge) — exclui carrinho, igual a lista
+    // contadores das abas (badge) = só o que PRECISA DE AÇÃO (não-lido), exclui carrinho.
     const cont = { conversando: 0, follow_up: 0, arquivo: 0 };
-    for (const c of (convs || [])) { if (c.origem === 'carrinho') continue; cont[bucketDe(c)]++; }
+    for (const c of (convs || [])) { if (c.origem === 'carrinho') continue; if (precisaAcao(c)) cont[bucketDe(c)]++; }
 
     return res.json({ ok: true, conversas: lista, contadores: cont });
   } catch (e) {
