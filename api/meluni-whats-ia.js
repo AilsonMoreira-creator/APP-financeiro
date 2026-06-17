@@ -13,6 +13,7 @@
 // ============================================================================
 import { chamarClaude, calcularCustoBRL } from './_lojas-helpers.js';
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
+import { rankingSnapshot, rankingBloco, contextoCarrinho } from './_meluni-ranking.js';
 
 const MAX_HIST = 24;          // últimas mensagens enviadas ao Claude
 const ETAPAS_FECHADAS = ['vendeu', 'perdida', 'resolvido'];
@@ -32,11 +33,12 @@ PLUS SIZE: alguns modelos têm versão Plus (G1/G2/G3) — vale buscar "plus siz
 TRANSPARÊNCIA: cores claras sem forro podem ter leve transparência; só levante isso se perguntarem.`;
 
 // ─── PERSONA / REGRAS DA LARA ────────────────────────────────────────────────
-async function systemBlocksLara() {
+async function systemBlocksLara(snap = null, extra = '') {
   const politicas = await cfgMeluni('lara_politicas_loja', '');
   const politicasBloco = politicas
     ? `\n\nPOLÍTICAS DA LOJA (fonte de consulta para PAGAMENTO, FRETE/ENTREGA, TROCA/DEVOLUÇÃO e ERRO DE SITE). Responda SÓ o que a cliente perguntou, curto e com as suas palavras, no contexto. NUNCA cole esse texto inteiro nem despeje tudo de uma vez:\n${politicas}`
     : '';
+  const rankBloco = snap ? `\n\n${rankingBloco(snap)}` : '';
   const persona = `Você é a Lara, consultora da Meluni — loja própria de moda feminina (linho, alfaiataria, peças elegantes). Você atende clientes no WhatsApp.
 
 SEU PAPEL: consultora de CONVERSÃO. Tira a dúvida da cliente com segurança, desperta o desejo pela peça e SEMPRE conduz a compra pro site oficial: meluniloja.com.br. Você é simpática, próxima e direta — fala como uma pessoa de verdade no WhatsApp, não como robô.
@@ -51,10 +53,12 @@ REGRAS DURAS:
 
 PROIBIÇÕES DE LINGUAGEM (nunca escreva): "incrível", "imperdível", "sensacional", travessão (—), o emoji 💛, "saudade", "última oportunidade", "te mando foto", "alinha pgto", "girando", "perfil". Não prometa desconto/cupom. Não invente medidas em cm. Não cite refs/números internos.
 
-${BASE_CONHECIMENTO}${politicasBloco}
+${BASE_CONHECIMENTO}${politicasBloco}${rankBloco}
 
 Responda APENAS com o texto da mensagem que a Lara enviaria agora pra cliente (sem aspas, sem rótulos, sem explicação).`;
-  return [{ type: 'text', text: persona, cache_control: { type: 'ephemeral' } }];
+  const blocks = [{ type: 'text', text: persona, cache_control: { type: 'ephemeral' } }];
+  if (extra) blocks.push({ type: 'text', text: extra }); // contexto do carrinho (dinâmico, sem cache)
+  return blocks;
 }
 
 // histórico meluni_mensagens -> mensagens Claude (alterna user/assistant)
@@ -119,7 +123,10 @@ export async function processarConversaMeluni(conversaId) {
   const mensagens = montarMensagens(msgs.slice(-MAX_HIST));
   if (!mensagens.length) return { motivo: 'historico_vazio' };
   const modelo = await cfgMeluni('modelo_ia', 'claude-sonnet-4-6');
-  const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(), messages: mensagens, max_tokens: 400, temperature: 0.7 });
+  const snap = await rankingSnapshot();
+  let extra = '';
+  try { extra = await contextoCarrinho(conv.telefone, snap); } catch { /* ignora */ }
+  const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(snap, extra), messages: mensagens, max_tokens: 400, temperature: 0.7 });
   if (!cl.ok) return { motivo: 'claude_falhou', erro: cl.erro };
   const texto = (cl.texto || '').trim();
   if (!texto) return { motivo: 'claude_vazio' };
