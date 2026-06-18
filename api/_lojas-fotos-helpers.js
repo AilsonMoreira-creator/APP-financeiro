@@ -108,12 +108,11 @@ export async function resolverFotosSugestoes(supabase, linhas) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Catálogo de promoção (Ailson 18/06/2026)
-// Durante o prazo de uma promoção (lojas_promocoes ativa e current_date dentro
-// de [data_inicio, data_fim]), a co-piloto manda o CATÁLOGO DE PROMOÇÃO no lugar
-// das fotos. O catálogo vem da config 'promocao_ativa' (chave catalogo = trecho
-// do nome_arquivo do PDF em lojas_whats_midias, tipo='catalogo').
-// Retorna { url, nome } pública pra vendedora encaminhar, ou null (fora do prazo
-// ou sem catálogo). Nunca lança.
+// Regra simples: se existe um CATÁLOGO DE PROMOÇÃO ativo nas mídias da Sofia
+// (lojas_whats_midias tipo='catalogo', ativa, nome contendo "promo"), a co-piloto
+// manda ele no lugar das fotos. Quando a promoção acaba, é só desativar esse
+// catálogo nas mídias da Sofia que volta às fotos sozinho.
+// Retorna { url, nome } pública pra vendedora encaminhar, ou null. Nunca lança.
 // ─────────────────────────────────────────────────────────────────────────────
 const _semAcc = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 const _semExt = (n) => String(n || '').replace(/\.[^.]+$/, '');
@@ -121,37 +120,14 @@ const _semExt = (n) => String(n || '').replace(/\.[^.]+$/, '');
 export async function resolverCatalogoPromoAtivo(supabase) {
   try {
     if (!SUPABASE_URL) return null;
-    const hoje = new Date().toISOString().slice(0, 10);
-    // 1) tem promoção dentro do prazo?
-    const { data: promo } = await supabase
-      .from('lojas_promocoes')
-      .select('id')
-      .eq('ativo', true)
-      .lte('data_inicio', hoje)
-      .gte('data_fim', hoje)
-      .limit(1)
-      .maybeSingle();
-    if (!promo) return null;
-
-    // 2) qual catálogo? (config promocao_ativa.catalogo = trecho do nome)
-    const { data: cfg } = await supabase
-      .from('lojas_whats_config')
-      .select('valor')
-      .eq('chave', 'promocao_ativa')
-      .maybeSingle();
-    const catalogoChave = _semAcc(cfg?.valor?.catalogo || '');
-    if (!catalogoChave) return null;
-
-    // 3) resolve o PDF em lojas_whats_midias (tipo catalogo, ativa)
     const { data: cats } = await supabase
       .from('lojas_whats_midias')
       .select('nome_arquivo, storage_path')
       .eq('tipo', 'catalogo')
       .eq('ativa', true)
       .order('criada_em', { ascending: false });
-    const hit = (cats || []).find(c => _semAcc(c.nome_arquivo).includes(catalogoChave));
+    const hit = (cats || []).find(c => _semAcc(c.nome_arquivo).includes('promo'));
     if (!hit?.storage_path) return null;
-
     return {
       url: `${SUPABASE_URL}/storage/v1/object/public/sofia-midias/${hit.storage_path}`,
       nome: _semExt(hit.nome_arquivo),

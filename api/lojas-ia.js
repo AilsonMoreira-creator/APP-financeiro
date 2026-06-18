@@ -1587,13 +1587,11 @@ async function montarContextoSugestoes(vendedoraId) {
     console.warn('[lojas-ia] sem reposicoes (view ausente?):', e?.message);
   }
 
-  // Promoções ativas (exclui as 'catalogo_gate' — essas servem só de prazo pro
-  // anexo do catálogo na co-piloto, não viram texto no prompt. Ailson 18/06/2026)
+  // Promoções ativas
   const { data: promocoes } = await supabase
     .from('lojas_promocoes')
     .select('id, nome_curto, descricao_completa, categoria, data_inicio, data_fim, pedido_minimo, desconto_pct')
     .eq('ativo', true)
-    .neq('categoria', 'catalogo_gate')
     .gte('data_fim', hoje)
     .order('data_fim');
 
