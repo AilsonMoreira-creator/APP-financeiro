@@ -7,8 +7,11 @@
 // canal='direct_insta' (que o SAC já lista) e a conversa é chaveada pelo IGSID
 // do cliente (externo_id), telefone fica null.
 //
-// Token: o mesmo System User do app "claude" (META_WA_ACCESS_TOKEN) — já tem
-// instagram_basic / instagram_manage_messages / instagram_manage_comments.
+// Token p/ resolver o NOME do remetente: precisa de um token com acesso ao
+// Instagram (instagram_basic / instagram_manage_messages). O do WhatsApp pode
+// não ter — então tentamos, em ordem: META_IG_ACCESS_TOKEN (dedicado, se houver),
+// META_ADS_TOKEN (token de negócio) e META_WA_ACCESS_TOKEN. O 1º que devolver
+// nome vence. (Os logs dizem qual funcionou / por que falhou.)
 // Mídia (imagem/áudio/vídeo) vem com URL direta no attachment: baixa e salva no
 // Storage (bucket sofia-midias, prefixo meluni-ig-inbound/); áudio é transcrito
 // no Whisper. Eco (mensagem que NÓS enviamos) e recibos são ignorados.
@@ -18,7 +21,11 @@
 import { supabase } from './_bling-helpers.js';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
-const TOKEN = process.env.META_WA_ACCESS_TOKEN;
+const TOKENS_NOME = [
+  ['IG', process.env.META_IG_ACCESS_TOKEN],
+  ['ADS', process.env.META_ADS_TOKEN],
+  ['WA', process.env.META_WA_ACCESS_TOKEN],
+].filter(([, t]) => !!t);
 const MELUNI_IG_ID = '17841467501146555'; // @meluni.loja
 const AMICIA_IG_ID = '17841400655798460'; // @amicia.fashion (excluir; divide o app)
 const IG_VERIFY = 'meluni-ig-verify-9b3f'; // token de verificação do Passo 3 (digitar igual no painel)
@@ -63,14 +70,27 @@ async function transcreverBuffer(buffer, mime) {
   } catch (e) { console.error('[meluni-ig] transcrever:', e?.message || e); return null; }
 }
 
-// username do remetente (best effort; o webhook não traz)
+// nome/@ do remetente do Direct (best effort; o webhook não traz).
+// Tenta cada token e cada conjunto de campos; loga status/resposta pra
+// diagnóstico (aparece nos runtime logs do Vercel). 1º nome encontrado vence.
 async function nomeDoIgsid(igsid) {
-  try {
-    const r = await fetch(`${GRAPH}/${igsid}?fields=username,name&access_token=${enc(TOKEN)}`);
-    if (!r.ok) return null;
-    const j = await r.json();
-    return j.username ? '@' + j.username : (j.name || null);
-  } catch { return null; }
+  for (const [rotulo, tk] of TOKENS_NOME) {
+    for (const campos of ['name,username', 'name']) {
+      try {
+        const r = await fetch(`${GRAPH}/${igsid}?fields=${campos}&access_token=${enc(tk)}`);
+        const txt = await r.text();
+        let j = {}; try { j = JSON.parse(txt); } catch { /* resposta não-JSON */ }
+        if (!r.ok || j.error) {
+          console.warn(`[meluni-ig] nome ${rotulo}/${campos} status=${r.status} resp=${txt.slice(0, 200)}`);
+          continue;
+        }
+        const nome = j.username ? '@' + j.username : (j.name || null);
+        if (nome) { console.log(`[meluni-ig] nome resolvido via ${rotulo}: ${nome}`); return nome; }
+        console.warn(`[meluni-ig] nome ${rotulo}/${campos} sem name/username: ${txt.slice(0, 200)}`);
+      } catch (e) { console.warn(`[meluni-ig] nome ${rotulo} erro:`, e?.message || e); }
+    }
+  }
+  return null;
 }
 
 async function acharOuCriarConversaIG(igsid, nome) {
