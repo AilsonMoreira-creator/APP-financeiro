@@ -2549,7 +2549,7 @@ export const CardDiaScreen = ({
             </div>
           )}
           {/* Miniaturas das fotos anexadas (Ailson 11/06/2026) */}
-          {Array.isArray(s.fotos) && s.fotos.length > 0 && (
+          {Array.isArray(s.fotos) && s.fotos.length > 0 && !s.catalogo && (
             <div style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'center' }}>
               {s.fotos.slice(0, 4).map((f, i) => (
                 <img key={i} src={f.url} alt="" loading="lazy" style={{
@@ -2561,6 +2561,12 @@ export const CardDiaScreen = ({
                 <span style={{ fontSize: fz(12), color: palette.inkMuted, fontWeight: 600 }}>+{s.fotos.length - 4}</span>
               )}
               <span style={{ fontSize: fz(11), color: palette.inkMuted }}>📎 {s.fotos.length} foto{s.fotos.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
+          {/* Catálogo de promoção no lugar das fotos (Ailson 18/06/2026) */}
+          {s.catalogo && s.catalogo.url && (
+            <div style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: fz(11), color: '#9b59b6', fontWeight: 700 }}>📋 Catálogo de promoção</span>
             </div>
           )}
           {riscada && (
@@ -3319,6 +3325,33 @@ export const SugestaoScreen = ({
               </div>
               <div style={{ fontSize: fz(12), color: palette.inkMuted, marginTop: 6 }}>
                 As fotos vão junto na hora de enviar a mensagem — dá pra tirar alguma antes de mandar
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Catálogo de promoção no lugar das fotos (Ailson 18/06/2026) */}
+        {sugestao.catalogo && sugestao.catalogo.url && (
+          <>
+            <SectionTitle icon={Package}>Catálogo de promoção</SectionTitle>
+            <div style={{
+              background: '#f6f0f9', border: '1px solid #e3d2ec', borderRadius: 10,
+              padding: 12, marginBottom: 18,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: fz(26) }}>📋</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: fz(13), fontWeight: 700, color: '#9b59b6' }}>
+                    {sugestao.catalogo.nome || 'Catálogo de promoção'}
+                  </div>
+                  <div style={{ fontSize: fz(12), color: palette.inkMuted }}>
+                    Tá rolando promoção: encaminhe o catálogo pro cliente no lugar das fotos.
+                  </div>
+                </div>
+                <a href={sugestao.catalogo.url} target="_blank" rel="noopener noreferrer" style={{
+                  flexShrink: 0, background: '#9b59b6', color: '#fff', textDecoration: 'none',
+                  fontSize: fz(13), fontWeight: 700, padding: '8px 12px', borderRadius: 8,
+                }}>Abrir catálogo</a>
               </div>
             </div>
           </>
