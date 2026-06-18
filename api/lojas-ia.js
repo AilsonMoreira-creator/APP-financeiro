@@ -534,16 +534,18 @@ async function handleGerarSugestoes(req, res, auth) {
   // Resolve fotos das REFs citadas (produto_ref + metadados.refs_fotos):
   // Sofia mídias primeiro (mais recente), ficha técnica complementa.
   // Mín 2 / máx 5. Falha aqui NÃO bloqueia as sugestões.
-  // EXCEÇÃO (Ailson 18/06/2026): durante o prazo de promoção, a co-piloto
-  // manda o CATÁLOGO DE PROMOÇÃO no lugar das fotos.
+  // EXCEÇÃO (Ailson 18/06/2026): a sugestão que FALA da promoção (30% off)
+  // leva o CATÁLOGO DE PROMOÇÃO no lugar das fotos. As de novidade seguem
+  // com fotos normais.
   try {
-    const { resolverFotosSugestoes, resolverCatalogoPromoAtivo } = await import('./_lojas-fotos-helpers.js');
+    const { resolverFotosSugestoes, resolverCatalogoPromoAtivo, sugestaoFalaDePromo } = await import('./_lojas-fotos-helpers.js');
     const catPromo = await resolverCatalogoPromoAtivo(supabase);
-    if (catPromo) {
-      for (const l of linhas) { l.catalogo = catPromo; l.fotos = null; }
-    } else {
-      await resolverFotosSugestoes(supabase, linhas);
+    const comFoto = [];
+    for (const l of linhas) {
+      if (catPromo && sugestaoFalaDePromo(l)) { l.catalogo = catPromo; l.fotos = null; }
+      else comFoto.push(l);
     }
+    if (comFoto.length) await resolverFotosSugestoes(supabase, comFoto);
   } catch (e) {
     console.warn('[lojas-ia] resolverFotosSugestoes falhou:', e?.message);
   }
@@ -3735,22 +3737,16 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
   // Fotos na avulsa (Ailson 11/06/2026): mesma regra das sugestões do dia —
   // 1 foto por REF (Sofia mídias > ficha técnica). A vendedora revisa no
   // modal e o envio vai foto + mensagem junto.
-  // EXCEÇÃO (Ailson 18/06/2026): durante o prazo de promoção, manda o CATÁLOGO.
+  // Obs: avulsa NÃO troca por catálogo de promoção — a mensagem (e a menção
+  // do 30%) só é gerada depois daqui, então não dá pra detectar promo com
+  // segurança. Avulsa segue sempre com fotos. (Ailson 18/06/2026)
   try {
-    const { resolverFotosSugestoes, resolverCatalogoPromoAtivo } = await import('./_lojas-fotos-helpers.js');
-    const catPromo = await resolverCatalogoPromoAtivo(supabase);
-    if (catPromo) {
-      sugCriada.catalogo = catPromo; sugCriada.fotos = null;
+    const { resolverFotosSugestoes } = await import('./_lojas-fotos-helpers.js');
+    await resolverFotosSugestoes(supabase, [sugCriada]); // muta in-place
+    if (sugCriada.fotos) {
       await supabase.from('lojas_sugestoes_diarias')
-        .update({ catalogo: catPromo, fotos: null })
+        .update({ fotos: sugCriada.fotos })
         .eq('id', sugCriada.id);
-    } else {
-      await resolverFotosSugestoes(supabase, [sugCriada]); // muta in-place
-      if (sugCriada.fotos) {
-        await supabase.from('lojas_sugestoes_diarias')
-          .update({ fotos: sugCriada.fotos })
-          .eq('id', sugCriada.id);
-      }
     }
   } catch (e) {
     console.warn('[avulsa] resolverFotos falhou (segue sem fotos):', e?.message);

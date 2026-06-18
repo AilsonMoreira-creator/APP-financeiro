@@ -137,3 +137,14 @@ export async function resolverCatalogoPromoAtivo(supabase) {
     return null;
   }
 }
+
+// Detecta se a sugestão FALA da promoção (30% off etc.). Só essas levam o
+// catálogo de promoção; as de novidade seguem com as fotos. (Ailson 18/06/2026)
+export function sugestaoFalaDePromo(sug) {
+  if (!sug) return false;
+  const fatos = Array.isArray(sug.fatos)
+    ? sug.fatos.join(' ')
+    : (sug.fatos && typeof sug.fatos === 'object' ? JSON.stringify(sug.fatos) : (sug.fatos || ''));
+  const txt = _semAcc([sug.titulo, sug.contexto, sug.acao_sugerida, fatos].filter(Boolean).join(' '));
+  return /promoc|desconto|\boff\b|cupom/.test(txt);
+}
