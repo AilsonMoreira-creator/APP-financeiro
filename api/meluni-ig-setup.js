@@ -50,7 +50,7 @@ export default async function handler(req, res) {
   if (pg.ok && pg.json?.access_token) {
     const pageToken = pg.json.access_token;
     const subPage = await meta('POST', `/${PAGE_ID}/subscribed_apps`, {
-      subscribed_fields: 'messages,messaging_postbacks,message_reactions,comments',
+      subscribed_fields: 'messages,messaging_postbacks,message_reactions',
       access_token: pageToken,
     });
     out.inscricao_pagina = subPage.ok ? subPage.json : { erro: subPage.json?.error?.message || subPage.status };
