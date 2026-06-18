@@ -775,9 +775,26 @@ export async function processarConversa(conversaId) {
         linhas.push('    → use [ENVIAR_VIDEO:REF] SOMENTE em fechamento');
       }
       if (catalogos.length > 0) {
-        nomeCatalogoAtual = catalogos[0].nome_arquivo.replace(/\.[^.]+$/, '');
-        linhas.push(`  CATALOGOS: ${catalogos.slice(0, 10).map(c => c.nome_arquivo.replace(/\.[^.]+$/, '')).join(', ')}`);
+        // Catalogo de PROMOCAO (se ativo no config promocao_ativa) eh tratado
+        // separado do geral: so vai quando o CLIENTE pede/pergunta da promo. O
+        // catalogo de abertura/geral continua sendo o mais recente que NAO eh
+        // promocao. A distribuicao da promo vai pela co-piloto. Ailson 18/06/2026.
+        const promoCfg = await getConfig('promocao_ativa', null);
+        const promoNome = (promoCfg && promoCfg.ativa && promoCfg.catalogo)
+          ? String(promoCfg.catalogo).toLowerCase().trim() : null;
+        const semExt = (n) => (n || '').replace(/\.[^.]+$/, '');
+        const ehPromo = (m) => promoNome && semExt(m.nome_arquivo).toLowerCase().includes(promoNome);
+        const catalogosGerais = catalogos.filter(m => !ehPromo(m));
+        const catalogoPromo = catalogos.find(ehPromo) || null;
+        const base = catalogosGerais[0] || catalogos[0];
+        nomeCatalogoAtual = semExt(base.nome_arquivo);  // abertura/force-inject = SEMPRE o geral
+        const listaGeral = (catalogosGerais.length ? catalogosGerais : [base]).slice(0, 10).map(c => semExt(c.nome_arquivo)).join(', ');
+        linhas.push(`  CATALOGO GERAL (abertura/padrao): ${listaGeral}`);
         linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes. Quando o cliente responder que JA revende / tem loja / e sacoleira / esta comecando, acolhe rapido e JA manda o catalogo (sem ficar perguntando mais).');
+        if (catalogoPromo) {
+          linhas.push(`  CATALOGO DE PROMOCAO: ${semExt(catalogoPromo.nome_arquivo)}`);
+          linhas.push(`    → REGRA DA PROMOCAO: o catalogo de abertura/geral NUNCA eh o de promocao. So mande o de promocao ([ENVIAR_CATALOGO:${semExt(catalogoPromo.nome_arquivo)}]) SE o cliente PERGUNTAR da promocao ou PEDIR pra ver a promo. NUNCA ofereca foto solta de peca ([ENVIAR_FOTO:REF]) como se fosse "da promocao" — vc NAO sabe quais pecas entram na promo alem do que esta nesse catalogo. Se o cliente quiser saber o que tem na promo, mande esse catalogo em vez de citar pecas avulsas.`);
+        }
       }
       blocoMidias = linhas.join('\n');
     }
