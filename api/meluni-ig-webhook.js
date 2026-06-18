@@ -21,6 +21,7 @@ const GRAPH = 'https://graph.facebook.com/v21.0';
 const TOKEN = process.env.META_WA_ACCESS_TOKEN;
 const MELUNI_IG_ID = '17841467501146555'; // @meluni.loja
 const AMICIA_IG_ID = '17841400655798460'; // @amicia.fashion (excluir; divide o app)
+const IG_VERIFY = 'meluni-ig-verify-9b3f'; // token de verificação do Passo 3 (digitar igual no painel)
 const DEBOUNCE_MS = 60 * 1000;
 const MIDIA_TIMEOUT_MS = 30000;
 const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions';
@@ -165,7 +166,7 @@ export default async function handler(req, res) {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
-    if (mode === 'subscribe' && token && token === process.env.META_WA_VERIFY_TOKEN) {
+    if (mode === 'subscribe' && token && (token === process.env.META_WA_VERIFY_TOKEN || token === IG_VERIFY)) {
       return res.status(200).send(String(challenge ?? ''));
     }
     return res.status(403).send('forbidden');
