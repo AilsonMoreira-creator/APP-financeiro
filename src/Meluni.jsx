@@ -1107,9 +1107,9 @@ function SecaoSac() {
         <MeluniSplitChat
           itens={conversas} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
-          tituloDe={(c) => c.nome_cliente || fmtTel(c.telefone) || 'Cliente'}
+          tituloDe={(c) => c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente')}
           subtituloDe={(c) => (c.canal === 'direct_insta' ? 'Direct Insta' : (fmtTel(c.telefone) || 'whatsapp'))}
-          renderCard={(c, p) => <SacConversaCard c={c} {...p} />}
+          renderCard={(c, p) => <SacConversaCard c={c} onChanged={carregar} aba={aba} {...p} />}
           renderChat={(c) => <LaraThread conversaId={c.id} nome={c.nome_cliente} />}
         />
       )}
@@ -1118,22 +1118,51 @@ function SecaoSac() {
 }
 
 // card de conversa no inbox SAC (lista)
-function SacConversaCard({ c, compact, ativo, onAbrir }) {
+function SacConversaCard({ c, compact, ativo, onAbrir, onChanged, aba }) {
   const Icone = c.canal === 'direct_insta' ? Instagram : Phone;
+  const [busy, setBusy] = useState(false);
+  const acao = async (body) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fetch('/api/meluni-conversa-acao', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: c.id, ...body }),
+      });
+      onChanged?.();
+    } catch { /* */ }
+    setBusy(false);
+  };
+  const DESTINOS = [
+    { v: 'conversando', l: 'Conversando' }, { v: 'follow_up', l: 'Follow up' }, { v: 'arquivo', l: 'Arquivo' },
+  ].filter(d => d.v !== aba);
+  const nome = c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente');
   return (
     <div onClick={onAbrir} title="Abrir conversa" style={{
       background: ativo ? MELUNI_SOFT : palette.surface, borderRadius: compact ? 10 : 12,
       padding: compact ? '8px 10px' : 12, cursor: 'pointer',
       border: `1px solid ${ativo ? MELUNI : palette.beige}`, display: 'flex', alignItems: 'center', gap: 8,
     }}>
+      <button onClick={(e) => { e.stopPropagation(); acao({ prioridade: !c.prioridade }); }}
+        disabled={busy} title={c.prioridade ? 'tirar prioridade' : 'marcar como prioridade'}
+        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, lineHeight: 1, fontSize: compact ? 15 : 17, color: c.prioridade ? '#e6b800' : palette.beige }}>
+        {c.prioridade ? '★' : '☆'}
+      </button>
       <Icone size={compact ? 13 : 15} color={MELUNI} style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: compact ? 13 : 14, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {c.nome_cliente || fmtTel(c.telefone) || 'Cliente'}
+          {nome}
         </div>
         <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.preview || '—'}</div>
       </div>
       {c.unread && <DotConversa />}
+      <select value="" disabled={busy} onClick={(e) => e.stopPropagation()}
+        onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) acao({ mover: v }); }}
+        title="mover de etapa"
+        style={{ flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700, color: MELUNI, background: '#fff', border: `1px solid ${MELUNI}`, borderRadius: 6, padding: '2px 4px', cursor: 'pointer' }}>
+        <option value="">⋯</option>
+        {DESTINOS.map(d => <option key={d.v} value={d.v}>{d.l}</option>)}
+      </select>
     </div>
   );
 }

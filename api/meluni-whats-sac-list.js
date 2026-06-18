@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   const aba = req.query.aba || 'conversando';
   try {
     const { data: convs, error } = await supabase.from('meluni_conversas')
-      .select('id, telefone, nome_cliente, cliente_id, canal, origem, etapa, acompanhar, resolvido_em, ultima_msg_em, ultima_msg_direcao, visto_em')
+      .select('id, telefone, nome_cliente, cliente_id, canal, origem, etapa, acompanhar, prioridade, resolvido_em, ultima_msg_em, ultima_msg_direcao, visto_em')
       .in('canal', ['whatsapp', 'direct_insta'])
       .order('ultima_msg_em', { ascending: false, nullsFirst: false })
       .limit(300);
@@ -61,6 +61,8 @@ export default async function handler(req, res) {
       preview: previews[c.id] || '',
       unread: precisaAcao(c),
     }));
+    // prioridade (estrela) primeiro; dentro disso mantém ordem por ultima_msg_em
+    lista.sort((a, b) => (b.prioridade ? 1 : 0) - (a.prioridade ? 1 : 0));
 
     // contadores das abas (badge) = só o que PRECISA DE AÇÃO (não-lido); exclui carrinho e cliente.
     const cont = { conversando: 0, follow_up: 0, arquivo: 0 };
