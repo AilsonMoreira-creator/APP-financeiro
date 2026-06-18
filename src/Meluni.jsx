@@ -457,8 +457,8 @@ function LaraThread({ telefone, conversaId, nome }) {
         <div style={{ margin: '0 14px 10px', border: `1px solid ${MELUNI}`, borderRadius: 10, padding: 10, background: MELUNI_SOFT, opacity: bloqueado ? 0.55 : 1, pointerEvents: bloqueado ? 'none' : 'auto' }}>
           <div style={{ fontSize: 10.5, fontWeight: 700, color: MELUNI, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3 }}>sugestão da Lara</div>
           {editando ? (
-            <textarea value={sugTexto} onChange={e => setSugTexto(e.target.value)} rows={3}
-              style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12.5, resize: 'vertical' }} />
+            <textarea value={sugTexto} onChange={e => setSugTexto(e.target.value)}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, lineHeight: 1.45, minHeight: 120, maxHeight: '42vh', overflowY: 'auto', resize: 'vertical' }} />
           ) : (
             <div style={{ fontSize: 12.5, color: palette.ink, whiteSpace: 'pre-wrap', marginBottom: 8 }}>{sug.texto}</div>
           )}

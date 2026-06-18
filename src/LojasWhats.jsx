@@ -5544,10 +5544,10 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
               value={editText}
               onChange={e => setEditText(e.target.value)}
               style={{
-                width: '100%', minHeight: 150, maxHeight: '46vh', padding: 10,
+                width: '100%', minHeight: isDesktop ? 200 : 150, maxHeight: isDesktop ? '60vh' : '46vh', padding: 10,
                 borderRadius: 8, border: '1px solid #d0c080',
-                fontSize: '16px', fontFamily: FONT, lineHeight: 1.5,
-                resize: 'none', whiteSpace: 'pre-wrap', boxSizing: 'border-box',
+                fontSize: isDesktop ? '14px' : '16px', fontFamily: FONT, lineHeight: 1.5,
+                resize: 'vertical', overflowY: 'auto', whiteSpace: 'pre-wrap', boxSizing: 'border-box',
               }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
