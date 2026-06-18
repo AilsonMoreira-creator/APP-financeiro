@@ -1722,10 +1722,27 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
   const [syncTick, setSyncTick] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState('');
+  const [pend, setPend] = useState({ clientes: 0, carrinho: 0, sac: 0 });
+
+  // contagem de pendências (badge vermelho das abas) — recarrega ao trocar de aba e a cada 20s
+  useEffect(() => {
+    let parar = false;
+    const carregar = async () => {
+      try {
+        const r = await fetch('/api/meluni-pendencias');
+        const j = await r.json();
+        if (!parar && j?.ok) setPend({ clientes: j.clientes || 0, carrinho: j.carrinho || 0, sac: j.sac || 0 });
+      } catch { /* silencioso */ }
+    };
+    carregar();
+    const t = setInterval(carregar, 20000);
+    return () => { parar = true; clearInterval(t); };
+  }, [secao, syncTick]);
+
   const tabs = [
-    { id: 'clientes', label: 'Clientes', icon: Users },
-    { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart },
-    { id: 'sac', label: 'SAC', icon: MessageCircle },
+    { id: 'clientes', label: 'Clientes', icon: Users, badge: pend.clientes },
+    { id: 'carrinho', label: 'Carrinho', icon: ShoppingCart, badge: pend.carrinho },
+    { id: 'sac', label: 'SAC', icon: MessageCircle, badge: pend.sac },
     { id: 'devolucao', label: 'Devolução', icon: RotateCcw },
     { id: 'marketing', label: 'Marketing', icon: TrendingUp },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
