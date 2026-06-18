@@ -20,6 +20,7 @@ import { supabase } from './_bling-helpers.js';
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const TOKEN = process.env.META_WA_ACCESS_TOKEN;
 const MELUNI_IG_ID = '17841467501146555'; // @meluni.loja
+const AMICIA_IG_ID = '17841400655798460'; // @amicia.fashion (excluir; divide o app)
 const DEBOUNCE_MS = 60 * 1000;
 const MIDIA_TIMEOUT_MS = 30000;
 const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions';
@@ -175,7 +176,7 @@ export default async function handler(req, res) {
     const body = req.body || {};
     if (body.object !== 'instagram') return res.status(200).json({ ok: true, ignorado: body.object || null });
     for (const entry of (body.entry || [])) {
-      if (entry.id && entry.id !== MELUNI_IG_ID) continue; // só Meluni (Amícia divide o app)
+      if (entry.id && entry.id === AMICIA_IG_ID) continue; // só exclui Amícia; Meluni passa
       for (const m of (entry.messaging || [])) {
         await processarDM(m);
       }
