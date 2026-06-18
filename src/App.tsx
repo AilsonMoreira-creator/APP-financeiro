@@ -570,6 +570,9 @@ const modules = [
   // Reativar Clientes - card da home (Sofia reativa clientes 6+ meses parados).
   // Vendedora vê só os cards dela. hideFromMenu: só card na home + checkbox em Usuários.
   { id:"reativar", Icon:SvgSofia, label:"Reativar", hideFromMenu: true },
+  // Meluni - B2C WhatsApp/Direct (Lara). Acessado pelo card da home, nao pelo
+  // menu do topo. hideFromMenu: so card na home + checkbox no editor de Usuarios.
+  { id:"meluni", Icon:SvgMeluni, label:"Meluni", hideFromMenu: true },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -10861,7 +10864,7 @@ export default function App(){
               kpiValue:homeReativarPending>0?`${homeReativarPending}`:"✓",
               kpiLabel:homeReativarPending>0?"esperando resposta":"sem pendências",
               detail:homeReativarPending>0?"Clientes conversando com a Sofia":"Clientes 6+ meses · Sofia reativa"},
-            {id:"meluni",gate:"sofia",label:"Meluni",Icon:SvgMeluni,color:"#9b59b6",bg:"#f6f0f9",border:"#e3d2ec",
+            {id:"meluni",gate:"meluni",label:"Meluni",Icon:SvgMeluni,color:"#9b59b6",bg:"#f6f0f9",border:"#e3d2ec",
               kpiValue:"—",kpiLabel:"B2C · Lara",detail:"WhatsApp B2C · IA atendente"},
           ].filter(m=>usuarioLogado.modulos.includes(m.gate||m.id));
 
@@ -10919,7 +10922,7 @@ export default function App(){
         {active==="osamicia"&&usuarioLogado?.modulos?.includes('osamicia')&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={String(usuarioLogado?.usuario||'').toLowerCase()==='ailson' ? {...usuarioLogado, admin:true} : usuarioLogado}/></ModuleErrorBoundary>}
         {active==="lojas"&&<ModuleErrorBoundary><LojasModule supabase={supabase} userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sofia"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('sofia'))&&<ModuleErrorBoundary><LojasWhats userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
-        {active==="meluni"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('sofia')||(usuarioLogado?.modulos||[]).includes('meluni'))&&<ModuleErrorBoundary><Meluni userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
+        {active==="meluni"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('meluni'))&&<ModuleErrorBoundary><Meluni userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="reativar"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('reativar'))&&<ModuleErrorBoundary><ClientesReativarModule userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
