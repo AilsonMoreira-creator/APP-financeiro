@@ -685,6 +685,7 @@ function SecaoClientes() {
   const [sel, setSel] = useState(new Set());
   const [chatId, setChatId] = useState(null);
   const [unread, setUnread] = useState({});
+  const [disparando, setDisparando] = useState(false);
   const isDesktop = useIsDesktop();
 
   const carregar = useCallback(async () => {
@@ -720,6 +721,29 @@ function SecaoClientes() {
   const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const comFone = clientes.filter(c => (c.whatsapp || c.telefone) && !c.bloqueado);
   const selTodos = () => setSel(sel.size === comFone.length && comFone.length ? new Set() : new Set(comFone.map(c => c.id)));
+
+  const dispararSel = async () => {
+    const ids = Array.from(sel);
+    if (!ids.length || disparando) return;
+    const aviso = ids.length > 30
+      ? `Você selecionou ${ids.length}. Vão sair os primeiros 30 agora (repita pra continuar). Disparar a mensagem pós-compra da Lara?`
+      : `Disparar a mensagem pós-compra da Lara pra ${ids.length} cliente(s)? Envia agora no WhatsApp.`;
+    if (!window.confirm(aviso)) return;
+    setDisparando(true);
+    try {
+      const r = await fetch('/api/meluni-clientes-disparo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        alert(`Enviados: ${j.enviados} · Pulados: ${j.pulados}${j.erros ? ` · Erros: ${j.erros}` : ''}`);
+        setSel(new Set());
+        carregar();
+      } else { alert('Falhou: ' + (j.erro || 'erro')); }
+    } catch (e) { alert('Erro: ' + (e?.message || e)); }
+    setDisparando(false);
+  };
 
   const tabs = [
     { id: 'carteira', label: 'Carteira', unread: unread.carteira },
@@ -765,7 +789,12 @@ function SecaoClientes() {
         <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
           {loading ? 'carregando…' : `${clientes.length} clientes`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
         </span>
-        {sel.size > 0 && <span style={{ fontSize: 11, color: palette.warn, fontFamily: FONT }}>o disparo em massa liga quando o número da Lara estiver configurado</span>}
+        {sel.size > 0 && (
+          <button onClick={dispararSel} disabled={disparando}
+            style={{ ...selStyle, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', cursor: disparando ? 'default' : 'pointer', opacity: disparando ? 0.6 : 1 }}>
+            {disparando ? 'enviando…' : `Gerar e disparar (${sel.size})`}
+          </button>
+        )}
       </div>
 
       {erro && <Placeholder><span style={{ color: palette.alert }}>{erro}</span></Placeholder>}
