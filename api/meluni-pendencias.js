@@ -21,8 +21,8 @@ export default async function handler(req, res) {
     for (const c of (convs || [])) {
       if (!naoVisto(c)) continue;
       if (c.origem === 'carrinho') { carrinho++; continue; }
-      if (c.origem === 'cliente') clientes++;
-      // SAC = site + Direct (whatsapp/direct_insta), exclui carrinho, entrada não-vista
+      if (c.origem === 'cliente') { clientes++; continue; }
+      // SAC = site + Direct (whatsapp/direct_insta), exclui carrinho/cliente, entrada não-vista
       if (['whatsapp', 'direct_insta'].includes(c.canal) && c.ultima_msg_direcao === 'entrada') sac++;
     }
     return res.json({ ok: true, clientes, carrinho, sac });

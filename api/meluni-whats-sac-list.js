@@ -36,8 +36,9 @@ export default async function handler(req, res) {
     const precisaAcao = (c) => c.ultima_msg_direcao === 'entrada'
       && (!c.visto_em || new Date(c.ultima_msg_em) > new Date(c.visto_em));
 
-    // SAC não mostra conversas do funil de carrinho (essas vivem na aba Carrinho)
-    const filtradas = (convs || []).filter(c => c.origem !== 'carrinho' && bucketDe(c) === aba);
+    // SAC = dúvidas do site + Direct do Insta. Não mostra carrinho (aba Carrinho)
+    // nem cliente (disparo da carteira vive na aba Clientes).
+    const filtradas = (convs || []).filter(c => c.origem !== 'carrinho' && c.origem !== 'cliente' && bucketDe(c) === aba);
 
     // preview da última mensagem de cada conversa filtrada
     const ids = filtradas.map(c => c.id);
@@ -61,9 +62,9 @@ export default async function handler(req, res) {
       unread: precisaAcao(c),
     }));
 
-    // contadores das abas (badge) = só o que PRECISA DE AÇÃO (não-lido), exclui carrinho.
+    // contadores das abas (badge) = só o que PRECISA DE AÇÃO (não-lido); exclui carrinho e cliente.
     const cont = { conversando: 0, follow_up: 0, arquivo: 0 };
-    for (const c of (convs || [])) { if (c.origem === 'carrinho') continue; if (precisaAcao(c)) cont[bucketDe(c)]++; }
+    for (const c of (convs || [])) { if (c.origem === 'carrinho' || c.origem === 'cliente') continue; if (precisaAcao(c)) cont[bucketDe(c)]++; }
 
     return res.json({ ok: true, conversas: lista, contadores: cont });
   } catch (e) {
