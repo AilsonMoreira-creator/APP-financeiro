@@ -33,7 +33,7 @@ PLUS SIZE: alguns modelos têm versão Plus (G1/G2/G3) — vale buscar "plus siz
 TRANSPARÊNCIA: cores claras sem forro podem ter leve transparência; só levante isso se perguntarem.`;
 
 // ─── PERSONA / REGRAS DA LARA ────────────────────────────────────────────────
-async function systemBlocksLara(snap = null, extra = '') {
+async function systemBlocksLara(snap = null, extra = '', canal = 'whatsapp') {
   const politicas = await cfgMeluni('lara_politicas_loja', '');
   const politicasBloco = politicas
     ? `\n\nPOLÍTICAS DA LOJA (fonte de consulta para PAGAMENTO, FRETE/ENTREGA, TROCA/DEVOLUÇÃO e ERRO DE SITE). Responda SÓ o que a cliente perguntou, curto e com as suas palavras, no contexto. NUNCA cole esse texto inteiro nem despeje tudo de uma vez:\n${politicas}`
@@ -57,6 +57,15 @@ ${BASE_CONHECIMENTO}${politicasBloco}${rankBloco}
 
 Responda APENAS com o texto da mensagem que a Lara enviaria agora pra cliente (sem aspas, sem rótulos, sem explicação).`;
   const blocks = [{ type: 'text', text: persona, cache_control: { type: 'ephemeral' } }];
+  if (canal === 'email') {
+    blocks.push({ type: 'text', text: `CANAL: E-MAIL. Esta conversa é por e-mail (não WhatsApp). As regras de venda, preço, proibições de linguagem e a condução pro site continuam valendo igual; muda só o FORMATO:
+- Comece com uma saudação curta com o primeiro nome da cliente quando houver (ex.: "Olá, Maria,").
+- Tom formal e cordial, sem exagero e sem rebuscar: claro e acolhedor.
+- Pode usar um parágrafo curto (2 a 4 frases); não precisa ser de 1 linha como no WhatsApp.
+- Feche com uma linha cordial curta (ex.: "Qualquer dúvida, é só responder este e-mail.").
+- NÃO escreva assunto, cabeçalho "De:/Para:", nem assinatura/despedida com o nome da loja: o sistema adiciona o assunto e a assinatura sozinho. Escreva só o corpo da resposta.
+- Continue tratando por "vc".` });
+  }
   if (extra) blocks.push({ type: 'text', text: extra }); // contexto do carrinho (dinâmico, sem cache)
   return blocks;
 }
@@ -126,7 +135,7 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
   const snap = await rankingSnapshot();
   let extra = '';
   try { extra = await contextoCarrinho(conv.telefone, snap); } catch { /* ignora */ }
-  const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(snap, extra), messages: mensagens, max_tokens: 400, temperature: 0.7 });
+  const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(snap, extra, conv.canal), messages: mensagens, max_tokens: 400, temperature: 0.7 });
   if (!cl.ok) return { motivo: 'claude_falhou', erro: cl.erro };
   const texto = (cl.texto || '').trim();
   if (!texto) return { motivo: 'claude_vazio' };
