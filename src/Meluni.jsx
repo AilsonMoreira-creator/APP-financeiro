@@ -22,7 +22,7 @@
 import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
-  Instagram, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
+  Instagram, Mail, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
   CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send, Paperclip, Smile,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
@@ -341,7 +341,9 @@ function LaraThread({ telefone, conversaId, nome }) {
   const msgs = data?.mensagens || [];
   const sug = data?.sugestao;
   const ultEntradaMs = msgs.filter(m => m.direcao === 'entrada').reduce((a, m) => Math.max(a, +new Date(m.enviada_em) || 0), 0);
-  const janelaAberta = ultEntradaMs > 0 && (Date.now() - ultEntradaMs) < 24 * 3600e3;
+  const ehEmail = conv?.canal === 'email';
+  // e-mail não tem janela de 24h (isso é regra do WhatsApp): está sempre aberto.
+  const janelaAberta = ehEmail || (ultEntradaMs > 0 && (Date.now() - ultEntradaMs) < 24 * 3600e3);
   const { lockPor, bloqueado } = useMeluniLock('conversa', conv?.id);
 
   async function post(url, body) {
@@ -504,9 +506,9 @@ function LaraThread({ telefone, conversaId, nome }) {
           style={{ ...fbtn(palette.surface, MELUNI, palette.beige), padding: '8px 10px', opacity: (conv && !gerando && !bloqueado) ? 1 : 0.5 }}>
           <Bot size={16} />
         </button>
-        <button onClick={() => fileRef.current?.click()} disabled={!conv || busy || bloqueado || !janelaAberta || anexando}
-          title="anexar foto da fototeca/arquivos"
-          style={{ ...fbtn(palette.surface, MELUNI, palette.beige), padding: '8px 10px', opacity: (conv && janelaAberta && !bloqueado && !anexando) ? 1 : 0.5 }}>
+        <button onClick={() => fileRef.current?.click()} disabled={!conv || busy || bloqueado || !janelaAberta || anexando || ehEmail}
+          title={ehEmail ? 'anexo de saída no e-mail em breve' : 'anexar foto da fototeca/arquivos'}
+          style={{ ...fbtn(palette.surface, MELUNI, palette.beige), padding: '8px 10px', opacity: (conv && janelaAberta && !bloqueado && !anexando && !ehEmail) ? 1 : 0.5 }}>
           <Paperclip size={16} />
         </button>
         <button onClick={() => setEmojiAberto(v => !v)} disabled={bloqueado}
@@ -1100,6 +1102,7 @@ function SecaoSac() {
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>Canais:</span>
         <Tag cor={MELUNI} bg={MELUNI_SOFT}><Phone size={11} /> whatsapp</Tag>
         <Tag cor={MELUNI} bg={MELUNI_SOFT}><Instagram size={11} /> direct insta</Tag>
+        <Tag cor={MELUNI} bg={MELUNI_SOFT}><Mail size={11} /> e-mail</Tag>
       </div>
       {loading && conversas.length === 0 && <Placeholder>carregando…</Placeholder>}
       {!loading && conversas.length === 0 && <Placeholder>Nenhuma conversa nessa aba ainda. Entra aqui quando a cliente escrever pro WhatsApp da Lara (ou pelo Direct).</Placeholder>}
@@ -1107,8 +1110,8 @@ function SecaoSac() {
         <MeluniSplitChat
           itens={conversas} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
-          tituloDe={(c) => c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente')}
-          subtituloDe={(c) => (c.canal === 'direct_insta' ? 'Direct Insta' : (fmtTel(c.telefone) || 'whatsapp'))}
+          tituloDe={(c) => c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'email' ? c.externo_id : '') || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente')}
+          subtituloDe={(c) => (c.canal === 'email' ? (c.externo_id || 'e-mail') : c.canal === 'direct_insta' ? 'Direct Insta' : (fmtTel(c.telefone) || 'whatsapp'))}
           renderCard={(c, p) => <SacConversaCard c={c} onChanged={carregar} aba={aba} {...p} />}
           renderChat={(c) => <LaraThread conversaId={c.id} nome={c.nome_cliente} />}
         />
@@ -1119,7 +1122,7 @@ function SecaoSac() {
 
 // card de conversa no inbox SAC (lista)
 function SacConversaCard({ c, compact, ativo, onAbrir, onChanged, aba }) {
-  const Icone = c.canal === 'direct_insta' ? Instagram : Phone;
+  const Icone = c.canal === 'email' ? Mail : c.canal === 'direct_insta' ? Instagram : Phone;
   const [busy, setBusy] = useState(false);
   const acao = async (body) => {
     if (busy) return;
@@ -1136,7 +1139,7 @@ function SacConversaCard({ c, compact, ativo, onAbrir, onChanged, aba }) {
   const DESTINOS = [
     { v: 'conversando', l: 'Conversando' }, { v: 'follow_up', l: 'Follow up' }, { v: 'arquivo', l: 'Arquivo' },
   ].filter(d => d.v !== aba);
-  const nome = c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente');
+  const nome = c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'email' ? c.externo_id : '') || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente');
   return (
     <div onClick={onAbrir} title="Abrir conversa" style={{
       background: ativo ? MELUNI_SOFT : palette.surface, borderRadius: compact ? 10 : 12,

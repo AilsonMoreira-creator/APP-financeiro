@@ -16,8 +16,8 @@ export default async function handler(req, res) {
   const aba = req.query.aba || 'conversando';
   try {
     const { data: convs, error } = await supabase.from('meluni_conversas')
-      .select('id, telefone, nome_cliente, cliente_id, canal, origem, etapa, acompanhar, prioridade, resolvido_em, ultima_msg_em, ultima_msg_direcao, visto_em')
-      .in('canal', ['whatsapp', 'direct_insta'])
+      .select('id, telefone, nome_cliente, cliente_id, canal, externo_id, origem, etapa, acompanhar, prioridade, resolvido_em, ultima_msg_em, ultima_msg_direcao, visto_em')
+      .in('canal', ['whatsapp', 'direct_insta', 'email'])
       .order('ultima_msg_em', { ascending: false, nullsFirst: false })
       .limit(300);
     if (error) throw error;
