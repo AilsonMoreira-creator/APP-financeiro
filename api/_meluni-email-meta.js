@@ -19,13 +19,16 @@ const SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send',
 ];
-const FROM_EMAIL = process.env.GOOGLE_IMPERSONATE || 'contato@meluniloja.com.br';
+// Endereço PÚBLICO do SAC: filtro de entrada (só o que chega nele) + remetente
+// de saída. Pode ser um ALIAS da caixa. A impersonation (DWD) usa o e-mail
+// PRIMÁRIO da caixa via GOOGLE_IMPERSONATE (definido no _google-sa.js).
+const FROM_EMAIL = (process.env.MELUNI_EMAIL_ADDR || 'contato@meluniloja.com.br').toLowerCase();
 const FROM_NOME = 'Meluni';
 const SITE = 'meluniloja.com.br';
 
 // ---------- helpers HTTP ----------
 async function gfetch(path, { method = 'GET', query, body } = {}) {
-  const tk = await tokenGoogle(SCOPES, FROM_EMAIL);
+  const tk = await tokenGoogle(SCOPES); // subject = GOOGLE_IMPERSONATE (caixa primária)
   let url = `${API}${path}`;
   if (query) url += '?' + new URLSearchParams(query).toString();
   const r = await fetch(url, {
@@ -41,7 +44,9 @@ async function gfetch(path, { method = 'GET', query, body } = {}) {
 
 // ---------- entrada ----------
 export async function listarNaoLidos(max = 10) {
-  const j = await gfetch('/messages', { query: { q: 'is:unread -in:sent', maxResults: String(max) } });
+  // só o que chegou no endereço público (contato@); ignora exclusivo@, financeiro@ etc.
+  const q = `is:unread -in:sent (to:${FROM_EMAIL} OR deliveredto:${FROM_EMAIL})`;
+  const j = await gfetch('/messages', { query: { q, maxResults: String(max) } });
   return (j?.messages || []).map(m => ({ id: m.id, threadId: m.threadId }));
 }
 

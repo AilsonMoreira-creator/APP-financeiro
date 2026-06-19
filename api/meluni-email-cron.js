@@ -9,7 +9,7 @@
 import { supabase } from './_meluni-whats-helpers.js';
 import { listarNaoLidos, pegarMensagem, pegarAnexo, marcarLido } from './_meluni-email-meta.js';
 
-const FROM_EMAIL = (process.env.GOOGLE_IMPERSONATE || 'contato@meluniloja.com.br').toLowerCase();
+const FROM_EMAIL = (process.env.MELUNI_EMAIL_ADDR || 'contato@meluniloja.com.br').toLowerCase();
 const DEBOUNCE_MS = 15 * 1000;
 const MAX_LOTE = 10;
 
