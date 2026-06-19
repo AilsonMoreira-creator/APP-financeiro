@@ -8,6 +8,7 @@
 // ============================================================================
 import { supabase } from './_meluni-whats-helpers.js';
 import { enviarTextoLara } from './_meluni-whats-meta.js';
+import { enviarTextoIG } from './_meluni-ig-meta.js';
 
 export async function aprovarSugestao(sugestaoId, operador = 'sistema', textoOverride = null) {
   const { data: sug } = await supabase.from('meluni_sugestoes').select('*').eq('id', sugestaoId).maybeSingle();
@@ -15,16 +16,27 @@ export async function aprovarSugestao(sugestaoId, operador = 'sistema', textoOve
   if (sug.status !== 'pendente') return { ok: false, erro: `sugestao_${sug.status}` };
 
   const { data: conv } = await supabase.from('meluni_conversas').select('*').eq('id', sug.conversa_id).maybeSingle();
-  if (!conv?.telefone) return { ok: false, erro: 'conversa_sem_telefone' };
+  if (!conv) return { ok: false, erro: 'conversa_inexistente' };
+
+  // canal define o destino e o transporte: Direct usa IGSID (externo_id) +
+  // envio pelo Instagram; os demais usam telefone + WhatsApp da Lara.
+  const ehIG = conv.canal === 'direct_insta';
+  const destino = ehIG ? conv.externo_id : conv.telefone;
+  if (!destino) return { ok: false, erro: ehIG ? 'conversa_sem_externo_id' : 'conversa_sem_telefone' };
 
   const texto = (textoOverride || sug.texto || '').trim();
   if (!texto) return { ok: false, erro: 'texto_vazio' };
 
-  // envia pela Lara
+  // envia pela Lara (IG ou WhatsApp conforme o canal)
   let metaMsgId = null;
   try {
-    const resp = await enviarTextoLara(conv.telefone, texto);
-    metaMsgId = resp?.messages?.[0]?.id || null;
+    if (ehIG) {
+      const resp = await enviarTextoIG(destino, texto);
+      metaMsgId = resp?.message_id || null;
+    } else {
+      const resp = await enviarTextoLara(destino, texto);
+      metaMsgId = resp?.messages?.[0]?.id || null;
+    }
   } catch (e) {
     return { ok: false, erro: `envio_falhou: ${e?.message || e}` };
   }
