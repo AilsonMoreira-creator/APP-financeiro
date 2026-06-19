@@ -38,6 +38,9 @@
     }
   ],
   "functions": {
+    "api/meluni-email-cron.js": {
+      "maxDuration": 60
+    },
     "api/ia-cron.js": {
       "maxDuration": 120
     },
@@ -373,6 +376,10 @@
     {
       "path": "/api/meluni-drive-cron",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/meluni-email-cron",
+      "schedule": "*/2 * * * *"
     }
   ]
 }
