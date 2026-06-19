@@ -55,7 +55,9 @@ export default async function handler(req, res) {
     if (funilAtivo && janelaOk) {
       // 2) 2º envio: enviada >24h, sem conversão, com nome
       const lote = Number(await cfgMeluni('lara_segundo_envio_lote', 30)) || 30;
-      const descontoBody = (((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates || {})?.desconto?.body || '';
+      const tplsCfg = (((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates) || {};
+      const descontoBody = tplsCfg?.desconto?.body || '';
+      const descontoSemNomeBody = tplsCfg?.desconto_sem_nome?.body || '';
       const corte = new Date(Date.now() - 24 * 3600e3).toISOString();
       const { data: carts } = await supabase.from('meluni_carrinhos')
         .select('id, nome, telefone, enviado_em, dados_extra')
@@ -65,26 +67,29 @@ export default async function handler(req, res) {
 
       for (const c of (carts || [])) {
         const nome = await resolverPrimeiroNome(c.telefone, c.nome);
-        if (!nome) { segundoPulado++; continue; } // sem nome -> cai pra perdida no passo 3
-        if (!c.nome) { try { await supabase.from('meluni_carrinhos').update({ nome }).eq('id', c.id); } catch {} }
+        if (nome && !c.nome) { try { await supabase.from('meluni_carrinhos').update({ nome }).eq('id', c.id); } catch {} }
+        // tem nome -> template com nome; sem nome -> versão sem nome (fallback, igual o 1º envio)
+        const tplDesc = nome ? 'meluni_carrinho_desconto' : 'meluni_carrinho_desconto_sem_nome';
+        const bodyParams = nome ? [nome] : [];
+        const textoMsg = (nome ? renderTpl(descontoBody, [nome]) : descontoSemNomeBody) || (nome || 'desconto carrinho');
         try {
-          const r = await enviarTemplateLara(c.telefone, 'meluni_carrinho_desconto', [nome]);
+          const r = await enviarTemplateLara(c.telefone, tplDesc, bodyParams);
           const metaMsgId = r?.messages?.[0]?.id || null;
           const nowIso = new Date().toISOString();
           const convId = await acharOuCriarConversa(c.telefone, nome);
           if (convId) {
             await supabase.from('meluni_mensagens').insert({
               conversa_id: convId, direcao: 'saida', autor: 'lara_carrinho_2',
-              tipo_midia: 'template', template_usado: 'meluni_carrinho_desconto',
-              texto: renderTpl(descontoBody, [nome]) || `${nome}`, meta_message_id: metaMsgId, enviada_em: nowIso,
+              tipo_midia: 'template', template_usado: tplDesc,
+              texto: textoMsg, meta_message_id: metaMsgId, enviada_em: nowIso,
             });
             await supabase.from('meluni_conversas').update({ ultima_msg_direcao: 'saida', ultima_msg_em: nowIso, responder_em: null }).eq('id', convId);
           }
           await supabase.from('meluni_carrinhos').update({
-            status: 'segundo_envio', segundo_envio_em: nowIso, segundo_template: 'meluni_carrinho_desconto',
+            status: 'segundo_envio', segundo_envio_em: nowIso, segundo_template: tplDesc,
           }).eq('id', c.id);
           segundo++;
-          detalhe.push({ id: c.id, segundo: true });
+          detalhe.push({ id: c.id, segundo: true, semNome: !nome });
         } catch (e) { erros++; detalhe.push({ id: c.id, erro: String(e?.message || e) }); }
       }
 
