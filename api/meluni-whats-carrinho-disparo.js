@@ -13,6 +13,7 @@
 import { supabase, cfgMeluni, dentroJanelaEnvio } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverResumoItens, resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
+import { acharConversaWhats } from './_meluni-tel.js';
 
 const ETAPAS_FECHADAS = ['vendeu', 'perdida', 'resolvido'];
 
@@ -24,9 +25,7 @@ function renderTpl(body, params) {
 }
 
 async function acharOuCriarConversa(telefone, nome) {
-  const { data: ex } = await supabase.from('meluni_conversas').select('id, etapa')
-    .eq('canal', 'whatsapp').eq('telefone', telefone)
-    .order('ultima_msg_em', { ascending: false }).limit(1).maybeSingle();
+  const ex = await acharConversaWhats(supabase, telefone);
   if (ex?.id) return ex;
   const { data: nova } = await supabase.from('meluni_conversas').insert({
     canal: 'whatsapp', telefone, externo_id: telefone, nome_cliente: nome || null,
@@ -43,6 +42,7 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls) {
   if (c.enviado_em || c.dados_extra?.lara_template_enviado_em) return { skip: 'ja_enviado' };
 
   const nome = await resolverPrimeiroNome(c.telefone, c.nome);
+  if (nome && !c.nome) { try { await supabase.from('meluni_carrinhos').update({ nome }).eq('id', c.id); } catch {} }
   if (!nome && exigirNome) return { skip: 'sem_nome' };
   const { resumo } = await resolverResumoItens(itens);
 

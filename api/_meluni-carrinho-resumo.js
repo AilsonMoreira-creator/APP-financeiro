@@ -16,6 +16,7 @@
 // ============================================================================
 import { supabase, refreshBlingToken, blingFetch } from './_bling-helpers.js';
 import { cfgMeluni } from './_meluni-whats-helpers.js';
+import { chaveTel, suf8 } from './_meluni-tel.js';
 
 const refSemZero = (r) => String(r ?? '').replace(/^0+/, '') || '0';
 
@@ -155,15 +156,18 @@ export async function resolverResumoItens(itens) {
 // primeiro nome ({{1}}) — carrinho não tem; vem de meluni_clientes, senão conversa.
 export async function resolverPrimeiroNome(telefone, nomeCarrinho) {
   let bruto = (nomeCarrinho && nomeCarrinho.trim()) || null;
-  if (!bruto) {
-    const { data: cli } = await supabase.from('meluni_clientes').select('nome').eq('telefone', telefone)
-      .not('nome', 'is', null).limit(1).maybeSingle();
-    bruto = cli?.nome || null;
+  const ch = chaveTel(telefone);
+  if (!bruto && ch) {
+    // busca por telefone canônico (ignora 55 e o 9º dígito) — antes era telefone exato
+    const { data: clis } = await supabase.from('meluni_clientes').select('telefone, nome')
+      .not('nome', 'is', null).ilike('telefone', `%${suf8(telefone)}`).limit(20);
+    bruto = (clis || []).find(c => chaveTel(c.telefone) === ch)?.nome || null;
   }
-  if (!bruto) {
-    const { data: conv } = await supabase.from('meluni_conversas').select('nome_cliente').eq('telefone', telefone)
-      .not('nome_cliente', 'is', null).order('ultima_msg_em', { ascending: false }).limit(1).maybeSingle();
-    bruto = conv?.nome_cliente || null;
+  if (!bruto && ch) {
+    const { data: convs } = await supabase.from('meluni_conversas').select('telefone, nome_cliente')
+      .eq('canal', 'whatsapp').not('nome_cliente', 'is', null)
+      .ilike('telefone', `%${suf8(telefone)}`).order('ultima_msg_em', { ascending: false }).limit(20);
+    bruto = (convs || []).find(c => chaveTel(c.telefone) === ch)?.nome_cliente || null;
   }
   if (!bruto) return null;
   const primeiro = String(bruto).trim().split(/\s+/)[0];

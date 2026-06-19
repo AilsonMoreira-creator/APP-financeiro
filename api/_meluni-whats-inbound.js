@@ -16,6 +16,7 @@
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
 import { obterUrlMidia, baixarMidia } from './_lojas-whats-meta-client.js';
+import { acharConversaWhats, soDigitos } from './_meluni-tel.js';
 
 const DEBOUNCE_MS = 60 * 1000; // 60s — agrupa rajada antes da IA (igual Sofia)
 
@@ -92,22 +93,19 @@ function conteudoMsg(msg) {
 }
 
 async function acharOuCriarConversa(telefone, nome, ref) {
-  // casa por SUFIXO (últimos 11 e, como fallback, 10 dígitos) pra cobrir números
-  // gravados com e sem o DDI 55 — senão a resposta cria conversa duplicada no SAC.
-  const d = String(telefone || '').replace(/\D/g, '');
-  const suf11 = d.slice(-11);
-  const { data: cand } = await supabase
-    .from('meluni_conversas')
-    .select('id, telefone, origem, ultima_msg_em')
-    .eq('canal', 'whatsapp')
-    .ilike('telefone', `%${suf11}`)
-    .order('ultima_msg_em', { ascending: false })
-    .limit(10);
-  const norm = (t) => String(t || '').replace(/\D/g, '');
-  const match =
-    (cand || []).find(c => norm(c.telefone).slice(-11) === suf11) ||
-    (cand || []).find(c => norm(c.telefone).slice(-10) === d.slice(-10));
-  if (match?.id) return match.id;
+  // casa por telefone canônico (ignora DDI 55 e o 9º dígito do meio) pra não
+  // duplicar conversa quando o disparo de carrinho gravou com o 9 e a resposta
+  // chega sem ele. Ailson 19/06/2026.
+  const match = await acharConversaWhats(supabase, telefone);
+  if (match?.id) {
+    // padroniza o telefone pro formato que o WhatsApp usa (wa_id real), pra resposta sair certa
+    if (soDigitos(match.telefone) !== soDigitos(telefone)) {
+      await supabase.from('meluni_conversas')
+        .update({ telefone, externo_id: telefone })
+        .eq('id', match.id);
+    }
+    return match.id;
+  }
 
   const { data: nova, error } = await supabase
     .from('meluni_conversas')

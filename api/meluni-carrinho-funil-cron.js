@@ -13,6 +13,7 @@
 import { supabase, cfgMeluni, dentroJanelaEnvio } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
+import { acharConversaWhats } from './_meluni-tel.js';
 
 function renderTpl(body, params) {
   let t = String(body || '');
@@ -21,9 +22,7 @@ function renderTpl(body, params) {
 }
 
 async function acharOuCriarConversa(telefone, nome) {
-  const { data: ex } = await supabase.from('meluni_conversas').select('id, etapa')
-    .eq('canal', 'whatsapp').eq('telefone', telefone)
-    .order('ultima_msg_em', { ascending: false }).limit(1).maybeSingle();
+  const ex = await acharConversaWhats(supabase, telefone);
   if (ex?.id) return ex.id;
   const { data: nova } = await supabase.from('meluni_conversas').insert({
     canal: 'whatsapp', telefone, externo_id: telefone, nome_cliente: nome || null,
@@ -67,6 +66,7 @@ export default async function handler(req, res) {
       for (const c of (carts || [])) {
         const nome = await resolverPrimeiroNome(c.telefone, c.nome);
         if (!nome) { segundoPulado++; continue; } // sem nome -> cai pra perdida no passo 3
+        if (!c.nome) { try { await supabase.from('meluni_carrinhos').update({ nome }).eq('id', c.id); } catch {} }
         try {
           const r = await enviarTemplateLara(c.telefone, 'meluni_carrinho_desconto', [nome]);
           const metaMsgId = r?.messages?.[0]?.id || null;
