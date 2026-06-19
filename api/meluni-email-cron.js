@@ -49,10 +49,22 @@ async function acharOuCriarConversa(email, nome) {
   return nova?.id || null;
 }
 
+// bounce / auto-resposta / mensagem de sistema -> nao e cliente, ignora
+function ehAutomatico(m) {
+  const from = (m.fromEmail || '').toLowerCase();
+  const subj = (m.assunto || '').toLowerCase();
+  if (/(mailer-daemon|postmaster|no-?reply|do-?not-?reply|donotreply|mail-?delivery|mdaemon|bounce)/.test(from)) return true;
+  if (m.autoSubmitted && m.autoSubmitted !== 'no') return true;            // RFC 3834
+  if (['bulk', 'auto_reply', 'junk', 'list'].includes(m.precedence)) return true;
+  if (/(delivery status notification|undelivered mail|mail delivery (sub)?system|returned to sender|failure notice|delivery has failed|automatic reply|auto-?reply|out of office|resposta autom|aus[êe]ncia)/.test(subj)) return true;
+  return false;
+}
+
 async function processarEmail(ref) {
   const m = await pegarMensagem(ref.id);
   if (!m?.fromEmail) return 'sem_remetente';
   if (m.fromEmail === FROM_EMAIL) { await marcarLido(ref.id); return 'proprio'; } // evita loop
+  if (ehAutomatico(m)) { await marcarLido(ref.id); return 'auto'; } // bounce / auto-reply / sistema
 
   const conversaId = await acharOuCriarConversa(m.fromEmail, m.fromNome);
   if (!conversaId) return 'sem_conversa';
@@ -108,12 +120,13 @@ export default async function handler(req, res) {
   }
   try {
     const refs = await listarNaoLidos(MAX_LOTE);
-    const cont = { ok: 0, proprio: 0, erro: 0, outros: 0 };
+    const cont = { ok: 0, proprio: 0, auto: 0, erro: 0, outros: 0 };
     for (const ref of refs) {
       try {
         const r = await processarEmail(ref);
         if (r === 'ok') cont.ok++;
         else if (r === 'proprio') cont.proprio++;
+        else if (r === 'auto') cont.auto++;
         else cont.outros++;
       } catch (e) {
         cont.erro++;

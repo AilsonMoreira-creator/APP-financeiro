@@ -126,6 +126,8 @@ export async function pegarMensagem(id) {
     threadId: j.threadId,
     messageId: header(hs, 'Message-ID') || header(hs, 'Message-Id'),
     assunto: header(hs, 'Subject') || '',
+    autoSubmitted: (header(hs, 'Auto-Submitted') || '').toLowerCase(),
+    precedence: (header(hs, 'Precedence') || '').toLowerCase(),
     fromNome: nome,
     fromEmail: email,
     data: Number(j.internalDate) || Date.now(),
