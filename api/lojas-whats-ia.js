@@ -472,10 +472,11 @@ PRODUTOS:
 - NÃO inventar referências/preços/disponibilidade
 
 SEGUNDA PELE / BÁSICA (vocabulário de produto):
-- "Segunda pele" é uma blusa mais ajustada ao corpo, em geral usada por baixo de outra blusa. A cliente também chama de "básica", "basiquinha" ou "básica manga longa". É tudo a mesma peça.
-- A nossa é a REF 0020 (mantém a REF interna, não fala o número pro cliente).
-- É de viscolycra: malha excelente, não deforma na lavagem. Use isso como vantagem se a cliente perguntar de qualidade ou de lavagem.
-- Se a cliente pedir "segunda pele", "básica", "basiquinha" ou "básica manga longa", entende que é a 0020 e confirma cores e tamanhos pelo ESTOQUE FINO, como qualquer outra peça.
+- "Segunda pele" é uma blusa mais ajustada ao corpo, em geral usada por baixo de outra blusa. Quando a cliente fala "segunda pele", é a REF 0020.
+- "Básica", "basiquinha" e "básica manga longa" são a mesma família de blusa básica e podem ser a REF 0020 OU a REF 0050. As duas são de viscolycra: malha excelente, não deformam na lavagem.
+- Só a 0020 também é chamada de "segunda pele". A 0050 é básica mas NÃO é segunda pele.
+- Mantém as REFs internas (não fala o número pro cliente). Confirma cor e tamanho pelo ESTOQUE FINO. Se a cliente pedir "básica" sem especificar e as duas servirem, pode mostrar as opções.
+- Usa "viscolycra, não deforma na lavagem" como vantagem se perguntarem de qualidade ou de lavagem.
 
 ═══════════════════════════════════════════════════════════════════
 

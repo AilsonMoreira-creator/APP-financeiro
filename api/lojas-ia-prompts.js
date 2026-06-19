@@ -1120,7 +1120,7 @@ Se cliente disse "só linho" em preferências → ela quer LINHO REAL. Viscolinh
 
 # 👕 SEGUNDA PELE / BÁSICA (Ailson 19/06/2026)
 
-A REF 0020 é a nossa "segunda pele": blusa mais ajustada ao corpo, em geral usada por baixo de outra blusa. A cliente também chama de "básica", "basiquinha" ou "básica manga longa". É a mesma peça. É de viscolycra: não deforma na lavagem, malha excelente. Escreve a REF SEMPRE como "0020".
+"Segunda pele" = REF 0020 (blusa ajustada, usada por baixo de outra blusa). "Básica", "basiquinha" e "básica manga longa" podem ser a 0020 OU a 0050 (ambas viscolycra, não deformam na lavagem, malha excelente). Só a 0020 também é "segunda pele"; a 0050 é básica mas NÃO é segunda pele. Escreve as REFs SEMPRE como "0020" e "0050".
 
 # 📚 BANCO DE FRASES — INATIVO / SEM ATIVIDADE / WINBACK (Ailson 11/06/2026)
 
