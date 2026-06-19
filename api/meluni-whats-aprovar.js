@@ -9,6 +9,7 @@
 import { supabase } from './_meluni-whats-helpers.js';
 import { enviarTextoLara } from './_meluni-whats-meta.js';
 import { enviarTextoIG } from './_meluni-ig-meta.js';
+import { enviarEmail } from './_meluni-email-meta.js';
 
 export async function aprovarSugestao(sugestaoId, operador = 'sistema', textoOverride = null) {
   const { data: sug } = await supabase.from('meluni_sugestoes').select('*').eq('id', sugestaoId).maybeSingle();
@@ -18,19 +19,28 @@ export async function aprovarSugestao(sugestaoId, operador = 'sistema', textoOve
   const { data: conv } = await supabase.from('meluni_conversas').select('*').eq('id', sug.conversa_id).maybeSingle();
   if (!conv) return { ok: false, erro: 'conversa_inexistente' };
 
-  // canal define o destino e o transporte: Direct usa IGSID (externo_id) +
-  // envio pelo Instagram; os demais usam telefone + WhatsApp da Lara.
+  // canal define destino e transporte:
+  //  - direct_insta -> IGSID (externo_id) via Instagram
+  //  - email        -> e-mail (externo_id) via Gmail (assunto/thread/msg-id da conversa)
+  //  - demais       -> telefone via WhatsApp da Lara
   const ehIG = conv.canal === 'direct_insta';
-  const destino = ehIG ? conv.externo_id : conv.telefone;
-  if (!destino) return { ok: false, erro: ehIG ? 'conversa_sem_externo_id' : 'conversa_sem_telefone' };
+  const ehEmail = conv.canal === 'email';
+  const destino = (ehIG || ehEmail) ? conv.externo_id : conv.telefone;
+  if (!destino) return { ok: false, erro: 'conversa_sem_destino' };
 
   const texto = (textoOverride || sug.texto || '').trim();
   if (!texto) return { ok: false, erro: 'texto_vazio' };
 
-  // envia pela Lara (IG ou WhatsApp conforme o canal)
+  // envia pela Lara conforme o canal
   let metaMsgId = null;
   try {
-    if (ehIG) {
+    if (ehEmail) {
+      const resp = await enviarEmail({
+        para: destino, nome: conv.nome_cliente, assunto: conv.email_assunto,
+        corpo: texto, inReplyTo: conv.email_msg_id, threadId: conv.email_thread_id,
+      });
+      metaMsgId = resp?.id || null;
+    } else if (ehIG) {
       const resp = await enviarTextoIG(destino, texto);
       metaMsgId = resp?.message_id || null;
     } else {
