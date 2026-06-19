@@ -1712,22 +1712,49 @@ function SecaoDashboard() {
   const [periodo, setPeriodo] = useState('30');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [gasto, setGasto] = useState(null);
+  const [loadingGasto, setLoadingGasto] = useState(false);
+
   useEffect(() => {
     setLoading(true);
-    const qs = periodo === 'tudo' ? 'tudo=1' : `dias=${periodo}`;
+    let qs;
+    if (periodo === 'mes') {
+      const n = new Date();
+      qs = `de=${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-01`;
+    } else {
+      qs = `dias=${periodo}`;
+    }
     fetch(`/api/meluni-dashboard?${qs}`).then(r => r.json())
       .then(j => { if (j.ok) setData(j); }).catch(() => {}).finally(() => setLoading(false));
   }, [periodo]);
+
   const d = data || {};
+
+  // Gasto Meta Ads (conta Meluni) ao vivo, na MESMA janela que o dashboard devolveu.
+  useEffect(() => {
+    const de = data?.periodo?.de, ate = data?.periodo?.ate;
+    if (!de || !ate) return;
+    setLoadingGasto(true); setGasto(null);
+    fetch(`/api/meta-ads-analise?account=943539471358534&since=${de}&until=${ate}`)
+      .then(r => r.json())
+      .then(j => {
+        if (!Array.isArray(j?.data)) { setGasto(null); return; }
+        setGasto(j.data.reduce((a, r) => a + (Number(r.spend) || 0), 0));
+      })
+      .catch(() => setGasto(null))
+      .finally(() => setLoadingGasto(false));
+  }, [data?.periodo?.de, data?.periodo?.ate]);
+
+  const roas = (gasto && gasto > 0) ? (Number(d.vendas?.soma) || 0) / gasto : null;
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
         <Filter size={15} color={palette.inkMuted} />
         <select style={selStyle} value={periodo} onChange={e => setPeriodo(e.target.value)}>
+          <option value="mes">Esse mês</option>
+          <option value="7">Últimos 7 dias</option>
           <option value="30">Últimos 30 dias</option>
-          <option value="60">Últimos 60 dias</option>
-          <option value="90">Últimos 90 dias</option>
-          <option value="tudo">Tudo</option>
         </select>
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginLeft: 'auto' }}>
           {loading ? 'carregando…' : (d.periodo ? `${fmtData(d.periodo.de)} a ${fmtData(d.periodo.ate)}` : '')}
@@ -1739,6 +1766,8 @@ function SecaoDashboard() {
         <KpiTile label="Valor real (vendas - devolução)" valor={fmtBRL(d.valor_real)} destaque />
         <KpiTile label="Ticket médio" valor={fmtBRL(d.ticket)} />
         <KpiTile label="Carrinhos" valor={String(d.carrinhos?.qtd || 0)} sub="no período" />
+        <KpiTile label="Gasto Meta Ads" valor={loadingGasto ? '…' : (gasto == null ? '—' : fmtBRL(gasto))} sub="conta Meluni" />
+        <KpiTile label="ROAS (venda ÷ gasto)" valor={loadingGasto ? '…' : (roas == null ? '—' : roas.toFixed(2) + 'x')} destaque />
       </div>
       <MiniBarras serie={d.serie || []} />
     </div>
