@@ -33,6 +33,19 @@ export default async function handler(req, res) {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT || `https://${host}/api/meluni-email-oauth`;
 
+  // diagnóstico (sem segredo: client_id e redirect_uri são públicos; só booleans pro resto)
+  if (req.query?.debug === '1') {
+    return res.status(200).json({
+      client_id: CLIENT_ID || null,
+      client_id_len: CLIENT_ID ? CLIENT_ID.length : 0,
+      client_id_termina_ok: CLIENT_ID ? CLIENT_ID.endsWith('.apps.googleusercontent.com') : false,
+      redirect_uri: redirectUri,
+      redirect_env_set: !!process.env.GOOGLE_OAUTH_REDIRECT,
+      tem_secret: !!CLIENT_SECRET,
+      tem_setup_key: !!SETUP_KEY,
+    });
+  }
+
   if (!CLIENT_ID || !CLIENT_SECRET) {
     return html(res, 500, '<h3>Falta configurar</h3><p>Defina <code>GOOGLE_OAUTH_CLIENT_ID</code> e <code>GOOGLE_OAUTH_CLIENT_SECRET</code> no Vercel.</p>');
   }
