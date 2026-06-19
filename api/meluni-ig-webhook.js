@@ -70,26 +70,62 @@ async function transcreverBuffer(buffer, mime) {
   } catch (e) { console.error('[meluni-ig] transcrever:', e?.message || e); return null; }
 }
 
-// nome/@ do remetente do Direct (best effort; o webhook não traz).
-// Tenta cada token e cada conjunto de campos; loga status/resposta pra
-// diagnóstico (aparece nos runtime logs do Vercel). 1º nome encontrado vence.
-async function nomeDoIgsid(igsid) {
-  for (const [rotulo, tk] of TOKENS_NOME) {
-    for (const campos of ['name,username', 'name']) {
-      try {
-        const r = await fetch(`${GRAPH}/${igsid}?fields=${campos}&access_token=${enc(tk)}`);
-        const txt = await r.text();
-        let j = {}; try { j = JSON.parse(txt); } catch { /* resposta não-JSON */ }
-        if (!r.ok || j.error) {
-          console.warn(`[meluni-ig] nome ${rotulo}/${campos} status=${r.status} resp=${txt.slice(0, 200)}`);
-          continue;
-        }
-        const nome = j.username ? '@' + j.username : (j.name || null);
-        if (nome) { console.log(`[meluni-ig] nome resolvido via ${rotulo}: ${nome}`); return nome; }
-        console.warn(`[meluni-ig] nome ${rotulo}/${campos} sem name/username: ${txt.slice(0, 200)}`);
-      } catch (e) { console.warn(`[meluni-ig] nome ${rotulo} erro:`, e?.message || e); }
-    }
+// Token da PÁGINA do Facebook ligada ao @meluni.loja. O lookup do nome de quem
+// manda Direct (sabor Facebook Login) PRECISA ser feito com o token da Página —
+// com o do System User direto dá "(#100) The page is not linked to an Instagram
+// account". Derivamos do System User (META_IG_ACCESS_TOKEN) via /me/accounts e
+// cacheamos (o token de página de um System User permanente é longevo).
+let _pageTokenCache = { token: null, ts: 0 };
+const PAGE_TOKEN_TTL_MS = 50 * 60 * 1000;
+
+async function tokenDaPaginaMeluni(force = false) {
+  const su = process.env.META_IG_ACCESS_TOKEN;
+  if (!su) return null;
+  if (!force && _pageTokenCache.token && (Date.now() - _pageTokenCache.ts) < PAGE_TOKEN_TTL_MS) {
+    return _pageTokenCache.token;
   }
+  try {
+    const r = await fetch(`${GRAPH}/me/accounts?fields=id,access_token,instagram_business_account{id}&access_token=${enc(su)}`);
+    const txt = await r.text();
+    let j = {}; try { j = JSON.parse(txt); } catch { /* não-JSON */ }
+    if (!r.ok || j.error) { console.warn(`[meluni-ig] /me/accounts status=${r.status} resp=${txt.slice(0, 200)}`); return _pageTokenCache.token; }
+    const pages = j.data || [];
+    let pg = pages.find(p => p.instagram_business_account && String(p.instagram_business_account.id) === MELUNI_IG_ID && p.access_token);
+    if (!pg) pg = pages.find(p => p.instagram_business_account && p.access_token); // fallback: 1ª página com IG+token
+    if (pg && pg.access_token) { _pageTokenCache = { token: pg.access_token, ts: Date.now() }; return pg.access_token; }
+    console.warn('[meluni-ig] nenhuma página com IG+token em /me/accounts');
+    return _pageTokenCache.token;
+  } catch (e) { console.warn('[meluni-ig] tokenDaPaginaMeluni erro:', e?.message || e); return _pageTokenCache.token; }
+}
+
+async function lookupNomeComToken(igsid, tk) {
+  for (const campos of ['name,username', 'username', 'name']) {
+    try {
+      const r = await fetch(`${GRAPH}/${igsid}?fields=${campos}&access_token=${enc(tk)}`);
+      const txt = await r.text();
+      let j = {}; try { j = JSON.parse(txt); } catch { /* não-JSON */ }
+      if (!r.ok || j.error) continue;
+      const nome = j.username ? '@' + j.username : (j.name || null);
+      if (nome) return nome;
+    } catch { /* tenta próximo campo */ }
+  }
+  return null;
+}
+
+// nome/@ do remetente do Direct. Primário: token da Página (funciona).
+// Fallback: tokens soltos (IG/ADS/WA), caso a página não resolva.
+async function nomeDoIgsid(igsid) {
+  let pageTk = await tokenDaPaginaMeluni();
+  if (pageTk) {
+    let nome = await lookupNomeComToken(igsid, pageTk);
+    if (!nome) { pageTk = await tokenDaPaginaMeluni(true); if (pageTk) nome = await lookupNomeComToken(igsid, pageTk); }
+    if (nome) { console.log(`[meluni-ig] nome resolvido via PAGINA: ${nome}`); return nome; }
+  }
+  for (const [rotulo, tk] of TOKENS_NOME) {
+    const nome = await lookupNomeComToken(igsid, tk);
+    if (nome) { console.log(`[meluni-ig] nome resolvido via ${rotulo}: ${nome}`); return nome; }
+  }
+  console.warn(`[meluni-ig] nome NAO resolvido pro igsid=${igsid}`);
   return null;
 }
 
