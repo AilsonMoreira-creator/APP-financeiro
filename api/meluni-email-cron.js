@@ -8,6 +8,7 @@
 // ============================================================================
 import { supabase } from './_meluni-whats-helpers.js';
 import { listarNaoLidos, pegarMensagem, pegarAnexo, marcarLido } from './_meluni-email-meta.js';
+import { googleOAuthOk } from './_google-oauth.js';
 
 const FROM_EMAIL = (process.env.MELUNI_EMAIL_ADDR || 'contato@meluniloja.com.br').toLowerCase();
 const DEBOUNCE_MS = 15 * 1000;
@@ -102,8 +103,8 @@ async function processarEmail(ref) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  if (!process.env.GOOGLE_SA_JSON) {
-    return res.status(200).json({ ok: true, skip: 'sem GOOGLE_SA_JSON (credencial do Google nao configurada)' });
+  if (!(await googleOAuthOk())) {
+    return res.status(200).json({ ok: true, skip: 'OAuth do Google nao configurado (rode /api/meluni-email-oauth)' });
   }
   try {
     const refs = await listarNaoLidos(MAX_LOTE);

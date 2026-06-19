@@ -5,14 +5,16 @@
 //          baixa anexo, marca como lido.
 // Saída:   enviarEmail() monta o MIME (Re: assunto + assinatura + threading
 //          via In-Reply-To/References + threadId) e manda pelo Gmail API.
-// Auth via service account com DWD impersonando contato@ (_google-sa.js).
+// Auth via OAuth (refresh token) — _google-oauth.js. O token pertence à caixa
+// primária que autorizou (ex.: exclusivo@meluniloja.com.br).
 //
 // Env:
-//   GOOGLE_SA_JSON, GOOGLE_IMPERSONATE (default contato@meluniloja.com.br)
+//   GOOGLE_OAUTH_CLIENT_ID/SECRET (refresh token capturado em /api/meluni-email-oauth)
+//   MELUNI_EMAIL_ADDR -> endereço público do SAC (default contato@meluniloja.com.br)
 //   MELUNI_LARA_WHATS -> número da Lara só dígitos (ex.: 5511999999999) p/ rodapé.
 // Ailson 19/06/2026.
 // ============================================================================
-import { tokenGoogle } from './_google-sa.js';
+import { tokenGoogle } from './_google-oauth.js';
 
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const SCOPES = [
@@ -20,15 +22,15 @@ const SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
 ];
 // Endereço PÚBLICO do SAC: filtro de entrada (só o que chega nele) + remetente
-// de saída. Pode ser um ALIAS da caixa. A impersonation (DWD) usa o e-mail
-// PRIMÁRIO da caixa via GOOGLE_IMPERSONATE (definido no _google-sa.js).
+// de saída. Pode ser um ALIAS da caixa que autorizou no OAuth (precisa estar como
+// "Enviar e-mail como" no Gmail dessa conta pra sair com esse remetente).
 const FROM_EMAIL = (process.env.MELUNI_EMAIL_ADDR || 'contato@meluniloja.com.br').toLowerCase();
 const FROM_NOME = 'Meluni';
 const SITE = 'meluniloja.com.br';
 
 // ---------- helpers HTTP ----------
 async function gfetch(path, { method = 'GET', query, body } = {}) {
-  const tk = await tokenGoogle(SCOPES); // subject = GOOGLE_IMPERSONATE (caixa primária)
+  const tk = await tokenGoogle(); // OAuth: access token do dono da caixa (via refresh token)
   let url = `${API}${path}`;
   if (query) url += '?' + new URLSearchParams(query).toString();
   const r = await fetch(url, {
