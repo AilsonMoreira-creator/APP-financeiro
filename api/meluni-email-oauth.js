@@ -27,11 +27,11 @@ function html(res, status, corpo) {
 }
 
 export default async function handler(req, res) {
-  const CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
-  const CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-  const SETUP_KEY = process.env.GOOGLE_OAUTH_SETUP_KEY;
+  const CLIENT_ID = (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim();
+  const CLIENT_SECRET = (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim();
+  const SETUP_KEY = (process.env.GOOGLE_OAUTH_SETUP_KEY || '').trim();
   const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT || `https://${host}/api/meluni-email-oauth`;
+  const redirectUri = (process.env.GOOGLE_OAUTH_REDIRECT || `https://${host}/api/meluni-email-oauth`).trim();
 
   // diagnóstico (sem segredo: client_id e redirect_uri são públicos; só booleans pro resto)
   if (req.query?.debug === '1') {

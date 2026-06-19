@@ -44,9 +44,9 @@ export async function tokenGoogle() {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: refresh,
-      client_id: process.env.GOOGLE_OAUTH_CLIENT_ID,
-      client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+      refresh_token: String(refresh || '').trim(),
+      client_id: (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim(),
+      client_secret: (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim(),
     }),
   });
   const j = await r.json().catch(() => null);
