@@ -471,6 +471,12 @@ PRODUTOS:
 - Pode mencionar "novidades" e "best sellers" quando fizer sentido
 - NÃO inventar referências/preços/disponibilidade
 
+SEGUNDA PELE / BÁSICA (vocabulário de produto):
+- "Segunda pele" é uma blusa mais ajustada ao corpo, em geral usada por baixo de outra blusa. A cliente também chama de "básica", "basiquinha" ou "básica manga longa". É tudo a mesma peça.
+- A nossa é a REF 0020 (mantém a REF interna, não fala o número pro cliente).
+- É de viscolycra: malha excelente, não deforma na lavagem. Use isso como vantagem se a cliente perguntar de qualidade ou de lavagem.
+- Se a cliente pedir "segunda pele", "básica", "basiquinha" ou "básica manga longa", entende que é a 0020 e confirma cores e tamanhos pelo ESTOQUE FINO, como qualquer outra peça.
+
 ═══════════════════════════════════════════════════════════════════
 
 CONTEXTO ATUAL DA CONVERSA será passado abaixo. Use só dados confirmados.

@@ -1118,6 +1118,10 @@ Se cliente reclamou de \`linho_encolheu\` → cuidado SÓ com peças de LINHO. P
 Se cliente reclamou de \`viscolinho_encolheu\` → cuidado SÓ com peças de VISCOLINHO. Peças de linho permanecem ofertáveis.
 Se cliente disse "só linho" em preferências → ela quer LINHO REAL. Viscolinho NÃO conta.
 
+# 👕 SEGUNDA PELE / BÁSICA (Ailson 19/06/2026)
+
+A REF 0020 é a nossa "segunda pele": blusa mais ajustada ao corpo, em geral usada por baixo de outra blusa. A cliente também chama de "básica", "basiquinha" ou "básica manga longa". É a mesma peça. É de viscolycra: não deforma na lavagem, malha excelente. Escreve a REF SEMPRE como "0020".
+
 # 📚 BANCO DE FRASES — INATIVO / SEM ATIVIDADE / WINBACK (Ailson 11/06/2026)
 
 ⚠️ As mensagens de reativação viraram fórmula ("Oie X, td bem? 😊 / Faz um tempo que a gente não conversa... aconteceu alguma coisa?" — auditoria 11/06: 84% iguais). A partir de agora, pra \`tipo\` inativo, semAtividade, trilha_winback e reativar, ROTACIONE entre os modelos abaixo. Use o modelo como BASE e adapte com os dados reais do payload (nome, cidade, peça do histórico, cores em estoque). Cheque \`mensagens_que_voce_ja_escreveu_hoje\` e \`historico_sugestoes_28d\` pra nunca repetir o mesmo modelo no mesmo dia nem pra mesma cliente em sequência.
