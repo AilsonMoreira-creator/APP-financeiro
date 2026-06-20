@@ -1856,6 +1856,8 @@ function ComposerEmail({ selCount = 0, onClose }) {
   const [utm, setUtm] = useState('utm_source=email&utm_medium=carrinho&utm_campaign=recuperacao');
   const [assinatura, setAssinatura] = useState('Equipe Meluni');
   const [avancado, setAvancado] = useState(false);
+  const [ajuda, setAjuda] = useState(false);
+  const [comNome, setComNome] = useState(true);
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoad, setPreviewLoad] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -1884,7 +1886,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
       try {
         const r = await fetch('/api/meluni-email-mkt-preview', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ campanha }),
+          body: JSON.stringify({ campanha, carrinho: { nome: comNome ? 'Maria' : null, valor: 289.9, resumo: 'Vestido de Linho e mais 1 peça' } }),
         });
         const j = await r.json();
         if (vivo && j.ok) setPreviewHtml(j.html || '');
@@ -1892,7 +1894,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
       if (vivo) setPreviewLoad(false);
     }, 450);
     return () => { vivo = false; clearTimeout(t); };
-  }, [campKey]); // eslint-disable-line
+  }, [campKey, comNome]); // eslint-disable-line
 
   const gerar = async () => {
     if (!brief.trim()) return;
@@ -1949,6 +1951,10 @@ function ComposerEmail({ selCount = 0, onClose }) {
       color: vista === id ? '#fff' : palette.inkSoft, borderColor: vista === id ? MELUNI : palette.beige,
     }}>{txt}</button>
   );
+  const segBtn = (on) => ({
+    ...selStyle, padding: '3px 9px', fontSize: 11, fontWeight: 700,
+    background: on ? MELUNI : '#fff', color: on ? '#fff' : palette.inkSoft, borderColor: on ? MELUNI : palette.beige,
+  });
 
   const editor = (
     <div style={{ flex: wide ? '0 0 50%' : '1 1 auto', maxWidth: wide ? 560 : '100%', overflowY: 'auto', padding: 16, boxSizing: 'border-box' }}>
@@ -1999,7 +2005,8 @@ function ComposerEmail({ selCount = 0, onClose }) {
           </button>
         )}
         <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginTop: 6, lineHeight: 1.5 }}>
-          Melhor formato: <strong>1200px de largura</strong> (mín. 600), proporção <strong>1:1 ou 4:5</strong> (retrato cai bem em moda; evite imagem muito alta pra não empurrar o texto). JPG, PNG ou WebP. Pode subir até ~10MB — a imagem é reduzida e otimizada automático.
+          <strong>1200px largura x 1600px altura</strong> · máximo 5 MB · JPG, PNG ou WebP.
+          <br>A imagem é otimizada automaticamente. Toque no “?” lá em cima pra ver como fazer.
         </div>
       </CampoEmail>
 
@@ -2030,8 +2037,12 @@ function ComposerEmail({ selCount = 0, onClose }) {
     <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', background: palette.beigeSoft, borderLeft: wide ? `1px solid ${palette.beige}` : 'none' }}>
       <div style={{ padding: '8px 14px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, fontFamily: FONT, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 8 }}>
         <strong style={{ color: palette.inkMuted, fontWeight: 700 }}>Assunto:</strong>
-        <span style={{ color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{assunto || '—'}</span>
-        {previewLoad && <span style={{ marginLeft: 'auto', fontSize: 11, color: palette.inkMuted }}>atualizando…</span>}
+        <span style={{ color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '0 1 auto' }}>{assunto || '—'}</span>
+        {previewLoad && <span style={{ fontSize: 11, color: palette.inkMuted }}>•••</span>}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
+          <button onClick={() => setComNome(true)} style={segBtn(comNome)}>Com nome</button>
+          <button onClick={() => setComNome(false)} style={segBtn(!comNome)}>Sem nome</button>
+        </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <iframe title="preview" srcDoc={previewHtml} style={{ width: '100%', height: '100%', border: 0, background: '#fff' }} />
@@ -2043,6 +2054,8 @@ function ComposerEmail({ selCount = 0, onClose }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: palette.bg, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${palette.beige}`, background: '#fff', flexWrap: 'wrap' }}>
         <strong style={{ fontFamily: FONT, fontSize: 16, color: palette.ink }}>✉️ Criar e-mail</strong>
+        <button onClick={() => setAjuda(true)} title="Como fazer o criativo"
+          style={{ width: 24, height: 24, borderRadius: 999, border: `1px solid ${MELUNI}`, background: MELUNI_SOFT, color: MELUNI, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}>?</button>
         {!wide && <div style={{ display: 'flex', gap: 6 }}>{btnVista('editor', 'Editar')}{btnVista('preview', 'Preview')}</div>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={salvar} disabled={salvando} style={{ ...fbtn('#fff', palette.ink, palette.beige), opacity: salvando ? 0.6 : 1 }}>
@@ -2059,6 +2072,33 @@ function ComposerEmail({ selCount = 0, onClose }) {
         {(wide || vista === 'editor') && editor}
         {(wide || vista === 'preview') && preview}
       </div>
+      {ajuda && (
+        <div onClick={() => setAjuda(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(44,62,80,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 14, maxWidth: 460, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 20, fontFamily: FONT, boxShadow: '0 10px 40px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+              <strong style={{ fontSize: 17, color: palette.ink }}>Como fazer o criativo</strong>
+              <button onClick={() => setAjuda(false)} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige), marginLeft: 'auto' }}>✕</button>
+            </div>
+            {[
+              ['📐 Tamanho', '1200px de largura x 1600px de altura (retrato 3:4). É o que fica mais bonito no e-mail.'],
+              ['💾 Peso', 'Máximo 5 MB. Pode subir maior que o app reduz e otimiza sozinho.'],
+              ['🖼️ Formatos', 'JPG, PNG ou WebP. Foto do iPhone funciona normal.'],
+              ['👗 O que mostrar', 'A peça em destaque (linho ou alfaiataria), de preferência a modelo vestindo. Peça grande e centralizada.'],
+              ['💡 Fundo e luz', 'Fundo limpo e claro, boa iluminação. Evite imagem escura ou poluída.'],
+              ['🚫 Sem texto na imagem', 'O texto vai no corpo do e-mail. A imagem é só o visual da peça.'],
+              ['↕️ Lembre', 'Ela aparece no topo, ocupando a largura toda. Algo vertical e nítido fica melhor.'],
+            ].map(([t, d]) => (
+              <div key={t} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: palette.ink, marginBottom: 2 }}>{t}</div>
+                <div style={{ fontSize: 13.5, color: palette.inkSoft, lineHeight: 1.5 }}>{d}</div>
+              </div>
+            ))}
+            <button onClick={() => setAjuda(false)} style={{ ...fbtn(MELUNI, '#fff'), width: '100%', justifyContent: 'center', marginTop: 4 }}>Entendi</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
