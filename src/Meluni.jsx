@@ -2015,6 +2015,8 @@ function ComposerEmail({ selCount = 0, onClose }) {
     } catch { alert('Falha ao enviar.'); }
     setEnviando(false);
   };
+
+  const assLen = assunto.length;
   const btnVista = (id, txt) => (
     <button onClick={() => setVista(id)} style={{
       ...selStyle, fontWeight: 700, background: vista === id ? MELUNI : '#fff',
