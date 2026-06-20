@@ -1824,6 +1824,242 @@ function EmailMktCard({ c, etapa, sel, onSel, onBloquear }) {
   );
 }
 
+// ── Composer "Criar e-mail" ────────────────────────────────────────────────
+const inEmail = {
+  width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 9,
+  border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 14, color: palette.ink,
+  background: '#fff', outline: 'none',
+};
+function CampoEmail({ label, dica, children }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, fontFamily: FONT, marginBottom: 4 }}>
+        {label}{dica && <span style={{ fontWeight: 400, color: palette.inkMuted }}> · {dica}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ComposerEmail({ selCount = 0, onClose }) {
+  const [brief, setBrief] = useState('');
+  const [gerando, setGerando] = useState(false);
+  const [assunto, setAssunto] = useState('');
+  const [titulo, setTitulo] = useState('');
+  const [corpo, setCorpo] = useState('');
+  const [criativoUrl, setCriativoUrl] = useState('');
+  const [subindo, setSubindo] = useState(false);
+  const [cupom, setCupom] = useState('VOLTE10');
+  const [cupomValidade, setCupomValidade] = useState('24 horas');
+  const [ctaLabel, setCtaLabel] = useState('Voltar pro meu carrinho');
+  const [ctaUrl, setCtaUrl] = useState('https://meluniloja.com.br');
+  const [utm, setUtm] = useState('utm_source=email&utm_medium=carrinho&utm_campaign=recuperacao');
+  const [assinatura, setAssinatura] = useState('Equipe Meluni');
+  const [avancado, setAvancado] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewLoad, setPreviewLoad] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [campanhaId, setCampanhaId] = useState(null);
+  const [vista, setVista] = useState('editor');
+  const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    const onR = () => setW(window.innerWidth);
+    window.addEventListener('resize', onR);
+    return () => window.removeEventListener('resize', onR);
+  }, []);
+  const wide = w >= 900;
+
+  const campanha = {
+    assunto, titulo, corpo, criativo_url: criativoUrl,
+    cta_label: ctaLabel, cta_url: ctaUrl, cupom, cupom_validade: cupomValidade, utm, assinatura,
+  };
+  const campKey = JSON.stringify(campanha);
+
+  useEffect(() => {
+    let vivo = true;
+    setPreviewLoad(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/meluni-email-mkt-preview', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campanha }),
+        });
+        const j = await r.json();
+        if (vivo && j.ok) setPreviewHtml(j.html || '');
+      } catch { /* */ }
+      if (vivo) setPreviewLoad(false);
+    }, 450);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [campKey]); // eslint-disable-line
+
+  const gerar = async () => {
+    if (!brief.trim()) return;
+    setGerando(true);
+    try {
+      const r = await fetch('/api/meluni-email-mkt-lara', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief, cupom, cupom_validade: cupomValidade }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        if (j.assunto) setAssunto(j.assunto);
+        if (j.titulo) setTitulo(j.titulo);
+        if (j.corpo) setCorpo(j.corpo);
+        if (!wide) setVista('preview');
+      } else alert(j.erro || 'A Lara não conseguiu agora.');
+    } catch { alert('Falha ao falar com a Lara.'); }
+    setGerando(false);
+  };
+
+  const subirCriativo = async (file) => {
+    if (!file) return;
+    setSubindo(true);
+    try {
+      const { base64, mime } = await fileToBase64Scaled(file);
+      const r = await fetch('/api/meluni-email-mkt-upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64, mime }),
+      });
+      const j = await r.json();
+      if (j.ok && j.url) setCriativoUrl(j.url); else alert(j.erro || 'Falha no upload.');
+    } catch { alert('Falha ao subir o criativo.'); }
+    setSubindo(false);
+  };
+
+  const salvar = async () => {
+    if (!assunto.trim() || !corpo.trim()) { alert('Preencha pelo menos assunto e corpo.'); return; }
+    setSalvando(true);
+    try {
+      const r = await fetch('/api/meluni-email-mkt-campanha', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: campanhaId, ...campanha, status: 'rascunho' }),
+      });
+      const j = await r.json();
+      if (j.ok) { setCampanhaId(j.id); alert('Campanha salva ✓'); } else alert(j.erro || 'Falha ao salvar.');
+    } catch { alert('Falha ao salvar.'); }
+    setSalvando(false);
+  };
+
+  const assLen = assunto.length;
+  const btnVista = (id, txt) => (
+    <button onClick={() => setVista(id)} style={{
+      ...selStyle, fontWeight: 700, background: vista === id ? MELUNI : '#fff',
+      color: vista === id ? '#fff' : palette.inkSoft, borderColor: vista === id ? MELUNI : palette.beige,
+    }}>{txt}</button>
+  );
+
+  const editor = (
+    <div style={{ flex: wide ? '0 0 50%' : '1 1 auto', maxWidth: wide ? 560 : '100%', overflowY: 'auto', padding: 16, boxSizing: 'border-box' }}>
+      {/* Brief / Lara */}
+      <div style={{ background: MELUNI_SOFT, border: `1px solid ${MELUNI}`, borderRadius: 12, padding: 12, marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: palette.ink, fontFamily: FONT, marginBottom: 6 }}>
+          ✦ Diga o que vc quer e a Lara escreve
+        </div>
+        <textarea value={brief} onChange={e => setBrief(e.target.value)} rows={3}
+          placeholder="Ex: faz um copy de carrinho abandonado e fala do cupom VOLTE10 que dá 10%, focando linho e alfaiataria."
+          style={{ ...inEmail, resize: 'vertical' }} />
+        <button onClick={gerar} disabled={gerando || !brief.trim()}
+          style={{ ...fbtn(MELUNI, '#fff'), marginTop: 8, opacity: (gerando || !brief.trim()) ? 0.5 : 1, cursor: (gerando || !brief.trim()) ? 'default' : 'pointer' }}>
+          {gerando ? 'a Lara está escrevendo…' : '✨ Gerar com a Lara'}
+        </button>
+        <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginTop: 6 }}>
+          Tudo o que ela gerar fica editável abaixo. O nome da cliente entra sozinho via {'{{nome}}'}.
+        </div>
+      </div>
+
+      <CampoEmail label="Assunto" dica={`${assLen}/40 ${assLen > 40 ? '· longo p/ mobile' : ''}`}>
+        <input value={assunto} onChange={e => setAssunto(e.target.value)}
+          placeholder="Suas peças continuam aqui, {{nome}}" style={inEmail} />
+      </CampoEmail>
+
+      <CampoEmail label="Título (abertura dentro do e-mail)">
+        <input value={titulo} onChange={e => setTitulo(e.target.value)} style={inEmail} />
+      </CampoEmail>
+
+      <CampoEmail label="Corpo">
+        <textarea value={corpo} onChange={e => setCorpo(e.target.value)} rows={6}
+          style={{ ...inEmail, resize: 'vertical', lineHeight: 1.5 }} />
+      </CampoEmail>
+
+      <CampoEmail label="Criativo (imagem do topo)">
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) subirCriativo(f); e.target.value = ''; }} />
+        {criativoUrl ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src={criativoUrl} alt="" style={{ width: 90, height: 60, objectFit: 'cover', borderRadius: 8, border: `1px solid ${palette.beige}` }} />
+            <button onClick={() => fileRef.current?.click()} style={{ ...selStyle }}>Trocar</button>
+            <button onClick={() => setCriativoUrl('')} style={{ ...selStyle, color: palette.alert, borderColor: palette.alert }}>Remover</button>
+          </div>
+        ) : (
+          <button onClick={() => fileRef.current?.click()} disabled={subindo}
+            style={{ ...fbtn('#fff', palette.inkSoft, palette.beige), opacity: subindo ? 0.6 : 1 }}>
+            {subindo ? 'subindo…' : '⬆ Subir criativo'}
+          </button>
+        )}
+      </CampoEmail>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <CampoEmail label="Cupom"><input value={cupom} onChange={e => setCupom(e.target.value)} style={inEmail} /></CampoEmail>
+        <CampoEmail label="Validade do cupom"><input value={cupomValidade} onChange={e => setCupomValidade(e.target.value)} placeholder="24 horas" style={inEmail} /></CampoEmail>
+      </div>
+
+      {/* Avançado: botão / UTM / assinatura */}
+      <button onClick={() => setAvancado(v => !v)}
+        style={{ ...selStyle, width: '100%', textAlign: 'left', fontWeight: 700, marginBottom: avancado ? 12 : 0 }}>
+        {avancado ? '▾' : '▸'} Botão, UTM e assinatura (padrão pronto, edite se quiser)
+      </button>
+      {avancado && (
+        <div style={{ borderLeft: `2px solid ${palette.beige}`, paddingLeft: 12 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <CampoEmail label="Texto do botão"><input value={ctaLabel} onChange={e => setCtaLabel(e.target.value)} style={inEmail} /></CampoEmail>
+            <CampoEmail label="Link do botão"><input value={ctaUrl} onChange={e => setCtaUrl(e.target.value)} style={inEmail} /></CampoEmail>
+          </div>
+          <CampoEmail label="UTM (rastreio)"><input value={utm} onChange={e => setUtm(e.target.value)} style={{ ...inEmail, fontSize: 12 }} /></CampoEmail>
+          <CampoEmail label="Assinatura"><textarea value={assinatura} onChange={e => setAssinatura(e.target.value)} rows={2} style={{ ...inEmail, resize: 'vertical' }} /></CampoEmail>
+        </div>
+      )}
+    </div>
+  );
+
+  const preview = (
+    <div style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', background: palette.beigeSoft, borderLeft: wide ? `1px solid ${palette.beige}` : 'none' }}>
+      <div style={{ padding: '8px 14px', borderBottom: `1px solid ${palette.beige}`, fontSize: 12, fontFamily: FONT, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <strong style={{ color: palette.inkMuted, fontWeight: 700 }}>Assunto:</strong>
+        <span style={{ color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{assunto || '—'}</span>
+        {previewLoad && <span style={{ marginLeft: 'auto', fontSize: 11, color: palette.inkMuted }}>atualizando…</span>}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <iframe title="preview" srcDoc={previewHtml} style={{ width: '100%', height: '100%', border: 0, background: '#fff' }} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: palette.bg, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${palette.beige}`, background: '#fff', flexWrap: 'wrap' }}>
+        <strong style={{ fontFamily: FONT, fontSize: 16, color: palette.ink }}>✉️ Criar e-mail</strong>
+        {!wide && <div style={{ display: 'flex', gap: 6 }}>{btnVista('editor', 'Editar')}{btnVista('preview', 'Preview')}</div>}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={salvar} disabled={salvando} style={{ ...fbtn('#fff', palette.ink, palette.beige), opacity: salvando ? 0.6 : 1 }}>
+            {salvando ? 'salvando…' : (campanhaId ? 'Salvar ✓' : 'Salvar')}
+          </button>
+          <button disabled title="Disponível quando o Resend (chave + domínio) estiver configurado"
+            style={{ ...fbtn(MELUNI, '#fff'), opacity: 0.45, cursor: 'not-allowed' }}>
+            Disparar{selCount ? ` · ${selCount}` : ''}
+          </button>
+          <button onClick={onClose} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige) }}>✕</button>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {(wide || vista === 'editor') && editor}
+        {(wide || vista === 'preview') && preview}
+      </div>
+    </div>
+  );
+}
+
 function SecaoEmailMkt() {
   const [aba, setAba] = useState('processando');
   const [periodo, setPeriodo] = useState('mes_atual');
@@ -1832,6 +2068,7 @@ function SecaoEmailMkt() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(new Set());
+  const [criar, setCriar] = useState(false);
   const LIM = 80;
 
   const carregar = useCallback(async (off = 0) => {
@@ -1897,9 +2134,9 @@ function SecaoEmailMkt() {
           {loading ? 'carregando…' : `${total} ${rotuloTotal}`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
         </span>
         {aba === 'processando' && (
-          <button disabled title="Fica disponível quando o Resend estiver configurado"
-            style={{ ...fbtn(MELUNI, '#fff'), opacity: 0.45, cursor: 'not-allowed', marginLeft: 'auto' }}>
-            ✉️ Criar e-mail (em breve)
+          <button onClick={() => setCriar(true)}
+            style={{ ...fbtn(MELUNI, '#fff'), marginLeft: 'auto' }}>
+            ✉️ Criar e-mail
           </button>
         )}
       </div>
@@ -1912,6 +2149,7 @@ function SecaoEmailMkt() {
         ))}
       </div>
       {carregarMais}
+      {criar && <ComposerEmail selCount={sel.size} onClose={() => setCriar(false)} />}
     </div>
   );
 }
