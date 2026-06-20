@@ -1774,6 +1774,148 @@ function SecaoDashboard() {
   );
 }
 
+// ─── SEÇÃO: E-MAIL MKT (carrinho abandonado por e-mail, mesmo padrão do Carrinho, SEM chat) ──
+const EMAIL_PERIODOS = [
+  { v: 'mes_atual', l: 'Mês atual' },
+  { v: '15d', l: 'Últimos 15 dias' },
+  { v: '7d', l: 'Últimos 7 dias' },
+  { v: 'mes_passado', l: 'Último mês' },
+];
+
+function EmailMktCard({ c, etapa, sel, onSel, onBloquear }) {
+  const [bloq, setBloq] = useState(false);
+  const dataFmt = fmtData(String(c.data || '').slice(0, 10));
+  const rotuloData = etapa === 'processando' ? 'carrinho' : (etapa === 'abertura' ? 'aberto' : 'enviado');
+  const abriu = etapa === 'abertura' || (etapa === 'enviados' && c.aberto_em);
+  return (
+    <div style={{
+      background: palette.surface, borderRadius: 12, padding: 12,
+      border: `1px solid ${palette.beige}`, display: 'flex', alignItems: 'flex-start', gap: 10,
+    }}>
+      {etapa === 'processando' && (
+        <input type="checkbox" checked={sel} onChange={onSel}
+          style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
+      )}
+      <Mail size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: palette.ink }}>{c.nome || 'Cliente do Direct'}</span>
+          {abriu && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: '#e9f7ef', color: '#1e8449', fontWeight: 700 }}>abriu</span>}
+        </div>
+        <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>📧 {c.email || '—'}</span>
+          <span>valor <b style={{ color: palette.ink }}>{fmtBRL(c.valor)}</b></span>
+          <span>{rotuloData} <b>{dataFmt}</b></span>
+        </div>
+      </div>
+      {etapa === 'processando' && (
+        <button onClick={async () => { setBloq(true); await onBloquear(); }} disabled={bloq}
+          title="Não enviar e-mail pra esse carrinho"
+          style={{
+            flexShrink: 0, padding: '5px 9px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: FONT,
+            background: palette.surface, color: palette.alert, border: `1px solid ${palette.beige}`,
+            opacity: bloq ? 0.6 : 1,
+          }}>
+          <Ban size={13} /> Bloquear
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SecaoEmailMkt() {
+  const [aba, setAba] = useState('processando');
+  const [periodo, setPeriodo] = useState('mes_atual');
+  const [cards, setCards] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [sel, setSel] = useState(new Set());
+  const LIM = 80;
+
+  const carregar = useCallback(async (off = 0) => {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/meluni-email-mkt-list?etapa=${aba}&periodo=${periodo}&limite=${LIM}&offset=${off}`);
+      const j = await r.json();
+      if (j.ok) {
+        setCounts(j.counts || {});
+        setTotal(j.total || 0);
+        setCards(prev => off ? [...prev, ...j.cards] : j.cards);
+      }
+    } catch { /* */ }
+    setLoading(false);
+  }, [aba, periodo]);
+
+  useEffect(() => { setSel(new Set()); carregar(0); }, [carregar]);
+
+  const tabs = [
+    { id: 'processando', label: 'Processando', unread: counts.processando,
+      help: 'Carrinhos abandonados que têm e-mail e peças e ainda não receberam e-mail mkt.\n\nSelecione os que quiser, clique em "Criar e-mail", monte a mensagem (a Lara ajuda) e dispare. Quem recebe passa pra Enviados.' },
+    { id: 'enviados', label: 'Enviados', unread: counts.enviados,
+      help: 'Leads que já receberam o e-mail mkt no período escolhido.' },
+    { id: 'abertura', label: 'Abertura', unread: counts.abertura,
+      help: 'Leads que abriram o e-mail (medido pelo Resend).\n\nA abertura é aproximada: alguns apps de e-mail inflam (Apple Mail) e outros bloqueiam o pixel de leitura.' },
+  ];
+
+  const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const selTodos = () => setSel(sel.size === cards.length ? new Set() : new Set(cards.map(c => c.id)));
+
+  const bloquear = async (carrinho_id) => {
+    try {
+      await fetch('/api/meluni-email-mkt-bloquear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ carrinho_id, bloquear: true }) });
+      setCards(prev => prev.filter(c => c.carrinho_id !== carrinho_id));
+      setSel(p => { const n = new Set(p); n.delete(carrinho_id); return n; });
+      setCounts(c => ({ ...c, processando: Math.max(0, (c.processando || 1) - 1) }));
+      setTotal(t => Math.max(0, t - 1));
+    } catch { /* */ }
+  };
+
+  const carregarMais = cards.length < total ? (
+    <button onClick={() => carregar(cards.length)} disabled={loading}
+      style={{ ...selStyle, marginTop: 4, width: '100%', padding: 8, fontWeight: 700 }}>
+      {loading ? 'carregando…' : `Carregar mais (${total - cards.length} restantes)`}
+    </button>
+  ) : null;
+
+  const rotuloTotal = aba === 'processando' ? 'elegíveis' : (aba === 'abertura' ? 'aberturas' : 'enviados');
+
+  return (
+    <div>
+      <SubTabs tabs={tabs} active={aba} onChange={setAba} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <select style={selStyle} value={periodo} onChange={e => setPeriodo(e.target.value)}>
+          {EMAIL_PERIODOS.map(p => <option key={p.v} value={p.v}>{p.l}</option>)}
+        </select>
+        {aba === 'processando' && (
+          <button onClick={selTodos} style={{ ...selStyle, fontWeight: 700 }}>
+            {sel.size === cards.length && cards.length ? 'Limpar' : 'Selecionar todos'}
+          </button>
+        )}
+        <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
+          {loading ? 'carregando…' : `${total} ${rotuloTotal}`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
+        </span>
+        {aba === 'processando' && (
+          <button disabled title="Fica disponível quando o Resend estiver configurado"
+            style={{ ...fbtn(MELUNI, '#fff'), opacity: 0.45, cursor: 'not-allowed', marginLeft: 'auto' }}>
+            ✉️ Criar e-mail (em breve)
+          </button>
+        )}
+      </div>
+      {!loading && cards.length === 0 && <Placeholder>Nada nessa etapa no período.</Placeholder>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {cards.map(c => (
+          <EmailMktCard key={c.id} c={c} etapa={aba}
+            sel={sel.has(c.id)} onSel={() => toggleSel(c.id)}
+            onBloquear={() => bloquear(c.carrinho_id)} />
+        ))}
+      </div>
+      {carregarMais}
+    </div>
+  );
+}
+
 const selStyle = {
   border: `1px solid ${palette.beige}`, borderRadius: 7, padding: '5px 8px',
   fontFamily: FONT, fontSize: 12, color: palette.inkSoft, background: palette.surface, cursor: 'pointer',
@@ -1808,6 +1950,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
     { id: 'sac', label: 'SAC', icon: MessageCircle, badge: pend.sac },
     { id: 'devolucao', label: 'Devolução', icon: RotateCcw },
     { id: 'marketing', label: 'Marketing', icon: TrendingUp },
+    { id: 'emailmkt', label: 'E-mail Mkt', icon: Mail },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   ];
 
@@ -1867,6 +2010,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
         {secao === 'sac' && <SecaoSac />}
         {secao === 'devolucao' && <SecaoDevolucao key={syncTick} userId={userId} isAdmin={isAdmin} />}
         {secao === 'marketing' && <SecaoMarketing />}
+        {secao === 'emailmkt' && <SecaoEmailMkt />}
         {secao === 'dashboard' && <SecaoDashboard />}
       </div>
     </div>
