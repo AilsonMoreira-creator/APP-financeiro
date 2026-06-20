@@ -103,17 +103,23 @@ export async function contextoCarrinho(telefone, snap) {
   const itens = Array.isArray(cart?.itens) ? cart.itens.filter(i => i?.sku) : [];
   if (!itens.length) return '';
 
+  const skus = [...new Set(itens.map(i => i.sku))];
+  const { data: estoque } = await supabase.from('bling_estoque')
+    .select('bling_sku, ref, cor_label, tam, qtd').in('bling_sku', skus);
+  const estBySku = new Map((estoque || []).map(r => [r.bling_sku, r]));
+
+  const curados = await nomesCurados();
+
+  // item principal (1o) -> contexto de cor alta / alternativas
   const sku = itens[0].sku;
-  let ref = null, cor = null;
-  const { data: bl } = await supabase.from('bling_estoque').select('ref, cor_label').eq('bling_sku', sku).limit(1).maybeSingle();
-  if (bl) { ref = refZ(bl.ref); cor = bl.cor_label || null; }
+  const b0 = estBySku.get(sku) || null;
+  let ref = b0 ? refZ(b0.ref) : null, cor = b0?.cor_label || null;
   if (!ref) {
     const { data: ml } = await supabase.from('ml_sku_ref_map').select('ref').eq('sku', sku).limit(1).maybeSingle();
     if (ml) ref = refZ(ml.ref);
   }
   if (!ref) return '';
 
-  const curados = await nomesCurados();
   const nome = curados.get(ref) || `Ref ${ref}`;
   const tipo = tipoDe(curados.get(ref) || nome);
   const corNorm = semAcc(cor || '').toLowerCase().trim();
@@ -123,7 +129,24 @@ export async function contextoCarrinho(telefone, snap) {
   )].filter(n => n !== nome).slice(0, 2);
 
   const linhas = [`CONTEXTO DESTE LEAD (veio de carrinho): peça ${nome}${cor ? `, cor escolhida ${cor}` : ''}.`];
-  if (corAlta) linhas.push(`A cor ${cor} está entre as mais vendidas — vale comentar que tá saindo muito.`);
+  if (corAlta) linhas.push(`A cor ${cor} está entre as mais vendidas, vale comentar que tá saindo muito.`);
   if (mesmaCat.length) linhas.push(`Se fizer sentido oferecer alternativa da mesma categoria (${tipo}), as mais vendidas são: ${mesmaCat.join(', ')}.`);
+
+  // ESTOQUE (Bling) por peça/cor/tamanho do carrinho
+  const estLinhas = [];
+  for (const it of itens.slice(0, 5)) {
+    const b = estBySku.get(it.sku);
+    if (!b) continue;
+    const nm = curados.get(refZ(b.ref)) || `Ref ${refZ(b.ref)}`;
+    const partes = [nm];
+    if (b.cor_label) partes.push(`cor ${b.cor_label}`);
+    if (b.tam) partes.push(`tam ${b.tam}`);
+    const q = Number(b.qtd) || 0;
+    estLinhas.push(`- ${partes.join(', ')}: ${q > 0 ? `${q} em estoque` : 'esgotado no Bling'}`);
+  }
+  if (estLinhas.length) {
+    linhas.push(`\nESTOQUE (Bling = fonte de verdade do estoque; o site é atualizado na mão e pode estar errado):\n${estLinhas.join('\n')}`);
+  }
+
   return linhas.join('\n');
 }
