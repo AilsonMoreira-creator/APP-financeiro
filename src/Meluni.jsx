@@ -1841,7 +1841,7 @@ function CampoEmail({ label, dica, children }) {
   );
 }
 
-function ComposerEmail({ selCount = 0, onClose }) {
+function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
   const [brief, setBrief] = useState('');
   const [gerando, setGerando] = useState(false);
   const [assunto, setAssunto] = useState('');
@@ -1866,6 +1866,8 @@ function ComposerEmail({ selCount = 0, onClose }) {
   const [previewLoad, setPreviewLoad] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [disparando, setDisparando] = useState(false);
+  const [progresso, setProgresso] = useState(null);
   const [campanhaId, setCampanhaId] = useState(null);
   const [vista, setVista] = useState('editor');
   const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -2017,6 +2019,36 @@ function ComposerEmail({ selCount = 0, onClose }) {
   };
 
   const assLen = assunto.length;
+
+  const dispararSelecionados = async () => {
+    if (!selIds.length) { alert('Selecione pelo menos um carrinho na lista antes de disparar.'); return; }
+    if (!assunto.trim() || !corpo.trim()) { alert('Preencha pelo menos assunto e corpo antes de disparar.'); return; }
+    if (!window.confirm(`Disparar este e-mail pra ${selIds.length} carrinho(s) selecionado(s)?`)) return;
+    setDisparando(true);
+    let campId = campanhaId || null;
+    let ok = 0, falha = 0;
+    const CHUNK = 8;
+    try {
+      for (let i = 0; i < selIds.length; i += CHUNK) {
+        const lote = selIds.slice(i, i + CHUNK);
+        setProgresso({ feito: i, total: selIds.length });
+        const r = await fetch('/api/meluni-email-mkt-disparar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campanha, campanha_id: campId, carrinho_ids: lote }),
+        });
+        const j = await r.json();
+        if (!j.ok) { alert(j.erro || 'Falha no disparo.'); break; }
+        if (j.campanha_id) campId = j.campanha_id;
+        for (const rr of (j.resultados || [])) { rr.ok ? ok++ : falha++; }
+        setProgresso({ feito: Math.min(i + CHUNK, selIds.length), total: selIds.length });
+      }
+      alert(`Disparo concluído: ${ok} enviado(s)${falha ? `, ${falha} pulado(s)/falha(s)` : ''}.`);
+      if (onDone) onDone();
+      if (onClose) onClose();
+    } catch { alert('Falha no disparo.'); }
+    setDisparando(false);
+    setProgresso(null);
+  };
   const btnVista = (id, txt) => (
     <button onClick={() => setVista(id)} style={{
       ...selStyle, fontWeight: 700, background: vista === id ? MELUNI : '#fff',
@@ -2135,9 +2167,10 @@ function ComposerEmail({ selCount = 0, onClose }) {
             style={{ ...fbtn('#fff', MELUNI, MELUNI), opacity: enviando ? 0.6 : 1 }}>
             {enviando ? 'enviando…' : '✉️ Enviar'}
           </button>
-          <button disabled title="Disparo em massa: disponível quando o Resend (chave + domínio) estiver configurado"
-            style={{ ...fbtn(MELUNI, '#fff'), opacity: 0.45, cursor: 'not-allowed' }}>
-            Disparar{selCount ? ` · ${selCount}` : ''}
+          <button onClick={dispararSelecionados} disabled={disparando || !selCount}
+            title={selCount ? `Disparar pros ${selCount} carrinhos selecionados` : 'Selecione carrinhos na lista primeiro'}
+            style={{ ...fbtn(MELUNI, '#fff'), opacity: (disparando || !selCount) ? 0.55 : 1, cursor: (disparando || !selCount) ? 'not-allowed' : 'pointer' }}>
+            {disparando ? (progresso ? `disparando ${progresso.feito}/${progresso.total}…` : 'disparando…') : `Disparar${selCount ? ` · ${selCount}` : ''}`}
           </button>
           <button onClick={onClose} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige) }}>✕</button>
         </div>
@@ -2300,7 +2333,7 @@ function SecaoEmailMkt() {
         ))}
       </div>
       {carregarMais}
-      {criar && <ComposerEmail selCount={sel.size} onClose={() => setCriar(false)} />}
+      {criar && <ComposerEmail selCount={sel.size} selIds={[...sel]} onClose={() => setCriar(false)} onDone={() => { setSel(new Set()); carregar(0); }} />}
     </div>
   );
 }
