@@ -1848,7 +1848,11 @@ function ComposerEmail({ selCount = 0, onClose }) {
   const [titulo, setTitulo] = useState('');
   const [corpo, setCorpo] = useState('');
   const [criativoUrl, setCriativoUrl] = useState('');
+  const [criativoPath, setCriativoPath] = useState('');
   const [subindo, setSubindo] = useState(false);
+  const [galeria, setGaleria] = useState(false);
+  const [criativos, setCriativos] = useState([]);
+  const [loadGal, setLoadGal] = useState(false);
   const [cupom, setCupom] = useState('VOLTE10');
   const [cupomValidade, setCupomValidade] = useState('24 horas');
   const [ctaLabel, setCtaLabel] = useState('Voltar pro meu carrinho');
@@ -1925,9 +1929,55 @@ function ComposerEmail({ selCount = 0, onClose }) {
         body: JSON.stringify({ base64, mime }),
       });
       const j = await r.json();
-      if (j.ok && j.url) setCriativoUrl(j.url); else alert(j.erro || 'Falha no upload.');
+      if (j.ok && j.url) { setCriativoUrl(j.url); setCriativoPath(j.path || ''); }
+      else alert(j.erro || 'Falha no upload.');
     } catch { alert('Falha ao subir o criativo.'); }
     setSubindo(false);
+  };
+
+  const abrirGaleria = async () => {
+    setGaleria(true); setLoadGal(true);
+    try {
+      const r = await fetch('/api/meluni-email-mkt-criativos');
+      const j = await r.json();
+      if (j.ok) setCriativos(j.criativos || []);
+    } catch { /* */ }
+    setLoadGal(false);
+  };
+  const salvarCriativo = async () => {
+    if (!criativoUrl) return;
+    const nome = prompt('Nome do criativo (pra achar depois):', '');
+    if (nome === null) return;
+    try {
+      const r = await fetch('/api/meluni-email-mkt-criativos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'salvar', nome: nome || 'Criativo', url: criativoUrl, path: criativoPath }),
+      });
+      const j = await r.json();
+      if (j.ok) alert('Criativo salvo na pasta ✓'); else alert(j.erro || 'Falha ao salvar.');
+    } catch { alert('Falha ao salvar.'); }
+  };
+  const usarCriativo = (c) => { setCriativoUrl(c.url); setCriativoPath(c.path || ''); setGaleria(false); };
+  const renomearCriativo = async (c) => {
+    const nome = prompt('Novo nome:', c.nome || '');
+    if (nome === null) return;
+    try {
+      await fetch('/api/meluni-email-mkt-criativos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'renomear', id: c.id, nome }),
+      });
+      setCriativos(prev => prev.map(x => x.id === c.id ? { ...x, nome } : x));
+    } catch { /* */ }
+  };
+  const excluirCriativo = async (c) => {
+    if (!confirm(`Excluir "${c.nome || 'criativo'}" da pasta?`)) return;
+    try {
+      await fetch('/api/meluni-email-mkt-criativos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'excluir', id: c.id }),
+      });
+      setCriativos(prev => prev.filter(x => x.id !== c.id));
+    } catch { /* */ }
   };
 
   const salvar = async () => {
@@ -1992,20 +2042,18 @@ function ComposerEmail({ selCount = 0, onClose }) {
       <CampoEmail label="Criativo (imagem do topo)">
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/*" style={{ display: 'none' }}
           onChange={e => { const f = e.target.files?.[0]; if (f) subirCriativo(f); e.target.value = ''; }} />
-        {criativoUrl ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src={criativoUrl} alt="" style={{ width: 90, height: 60, objectFit: 'cover', borderRadius: 8, border: `1px solid ${palette.beige}` }} />
-            <button onClick={() => fileRef.current?.click()} style={{ ...selStyle }}>Trocar</button>
-            <button onClick={() => setCriativoUrl('')} style={{ ...selStyle, color: palette.alert, borderColor: palette.alert }}>Remover</button>
-          </div>
-        ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {criativoUrl && <img src={criativoUrl} alt="" style={{ width: 90, height: 60, objectFit: 'cover', borderRadius: 8, border: `1px solid ${palette.beige}` }} />}
           <button onClick={() => fileRef.current?.click()} disabled={subindo}
             style={{ ...fbtn('#fff', palette.inkSoft, palette.beige), opacity: subindo ? 0.6 : 1 }}>
-            {subindo ? 'subindo…' : '⬆ Subir criativo'}
+            {subindo ? 'subindo…' : (criativoUrl ? 'Trocar' : '⬆ Subir criativo')}
           </button>
-        )}
+          <button onClick={abrirGaleria} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige) }}>📁 Criativos salvos</button>
+          {criativoUrl && <button onClick={salvarCriativo} style={{ ...fbtn('#fff', MELUNI, MELUNI) }}>💾 Salvar na pasta</button>}
+          {criativoUrl && <button onClick={() => { setCriativoUrl(''); setCriativoPath(''); }} style={{ ...selStyle, color: palette.alert, borderColor: palette.alert }}>Remover</button>}
+        </div>
         <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginTop: 6, lineHeight: 1.5 }}>
-          <strong>1200px largura x 1600px altura</strong> · máximo 5 MB · JPG, PNG ou WebP.
+          <strong>1200px largura x 1500px altura</strong> (4:5) · máximo 5 MB · JPG, PNG ou WebP.
           <br />A imagem é otimizada automaticamente. Toque no “?” lá em cima pra ver como fazer.
         </div>
       </CampoEmail>
@@ -2082,7 +2130,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
               <button onClick={() => setAjuda(false)} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige), marginLeft: 'auto' }}>✕</button>
             </div>
             {[
-              ['📐 Tamanho', '1200px de largura x 1600px de altura (retrato 3:4). É o que fica mais bonito no e-mail.'],
+              ['📐 Tamanho', '1200px de largura x 1500px de altura (proporção 4:5, retrato). É o que fica mais bonito em moda. Se quiser o título e o botão aparecendo mais cedo, 1200x1200 (quadrado) também funciona.'],
               ['💾 Peso', 'Máximo 5 MB. Pode subir maior que o app reduz e otimiza sozinho.'],
               ['🖼️ Formatos', 'JPG, PNG ou WebP. Foto do iPhone funciona normal.'],
               ['👗 O que mostrar', 'A peça em destaque (linho ou alfaiataria), de preferência a modelo vestindo. Peça grande e centralizada.'],
@@ -2096,6 +2144,40 @@ function ComposerEmail({ selCount = 0, onClose }) {
               </div>
             ))}
             <button onClick={() => setAjuda(false)} style={{ ...fbtn(MELUNI, '#fff'), width: '100%', justifyContent: 'center', marginTop: 4 }}>Entendi</button>
+          </div>
+        </div>
+      )}
+      {galeria && (
+        <div onClick={() => setGaleria(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(44,62,80,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 14, maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 20, fontFamily: FONT, boxShadow: '0 10px 40px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+              <strong style={{ fontSize: 17, color: palette.ink }}>📁 Criativos salvos</strong>
+              <button onClick={() => setGaleria(false)} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige), marginLeft: 'auto' }}>✕</button>
+            </div>
+            {loadGal ? (
+              <div style={{ color: palette.inkMuted, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>carregando…</div>
+            ) : criativos.length === 0 ? (
+              <div style={{ color: palette.inkMuted, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Nenhum criativo salvo ainda. Suba um e clique em “Salvar na pasta”.</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 12 }}>
+                {criativos.map(c => (
+                  <div key={c.id} style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, overflow: 'hidden', background: palette.beigeSoft }}>
+                    <img src={c.url} alt="" onClick={() => usarCriativo(c)}
+                      style={{ width: '100%', height: 120, objectFit: 'cover', cursor: 'pointer', display: 'block' }} />
+                    <div style={{ padding: '6px 8px' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nome || 'Sem nome'}</div>
+                      <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+                        <button onClick={() => usarCriativo(c)} style={{ ...selStyle, flex: 1, padding: '4px 6px', fontSize: 11, fontWeight: 700, background: MELUNI, color: '#fff', borderColor: MELUNI }}>Usar</button>
+                        <button onClick={() => renomearCriativo(c)} title="Renomear" style={{ ...selStyle, padding: '4px 7px', fontSize: 11 }}>✏️</button>
+                        <button onClick={() => excluirCriativo(c)} title="Excluir" style={{ ...selStyle, padding: '4px 7px', fontSize: 11, color: palette.alert, borderColor: palette.alert }}>🗑️</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
