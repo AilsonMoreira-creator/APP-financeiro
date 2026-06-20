@@ -2121,7 +2121,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: palette.bg, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${palette.beige}`, background: '#fff', flexWrap: 'wrap' }}>
-        <strong style={{ fontFamily: FONT, fontSize: 16, color: palette.ink }}>✉️ Criar e-mail</strong>
+        <strong style={{ fontFamily: FONT, fontSize: 16, color: palette.ink }}>✉️ Criar template</strong>
         <button onClick={() => setAjuda(true)} title="Como fazer o criativo"
           style={{ width: 24, height: 24, borderRadius: 999, border: `1px solid ${MELUNI}`, background: MELUNI_SOFT, color: MELUNI, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}>?</button>
         {!wide && <div style={{ display: 'flex', gap: 6 }}>{btnVista('editor', 'Editar')}{btnVista('preview', 'Preview')}</div>}
@@ -2238,7 +2238,7 @@ function SecaoEmailMkt() {
 
   const tabs = [
     { id: 'processando', label: 'Processando', unread: counts.processando,
-      help: 'Carrinhos abandonados que têm e-mail e peças e ainda não receberam e-mail mkt.\n\nSelecione os que quiser, clique em "Criar e-mail", monte a mensagem (a Lara ajuda) e dispare. Quem recebe passa pra Enviados.' },
+      help: 'Carrinhos abandonados que têm e-mail e peças e ainda não receberam e-mail mkt.\n\nSelecione os que quiser, clique em "Criar template", monte a mensagem (a Lara ajuda) e dispare. Quem recebe passa pra Enviados.' },
     { id: 'enviados', label: 'Enviados', unread: counts.enviados,
       help: 'Leads que já receberam o e-mail mkt no período escolhido.' },
     { id: 'abertura', label: 'Abertura', unread: counts.abertura,
@@ -2285,7 +2285,7 @@ function SecaoEmailMkt() {
         {aba === 'processando' && (
           <button onClick={() => setCriar(true)}
             style={{ ...fbtn(MELUNI, '#fff'), marginLeft: 'auto' }}>
-            ✉️ Criar e-mail
+            ✉️ Criar template
           </button>
         )}
       </div>
