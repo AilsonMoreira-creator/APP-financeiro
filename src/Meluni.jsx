@@ -1799,7 +1799,7 @@ function EmailMktCard({ c, etapa, sel, onSel, onBloquear }) {
       <Mail size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: palette.ink }}>{c.nome || 'Cliente do Direct'}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: palette.ink }}>{c.nome || 'Cliente'}</span>
           {abriu && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: '#e9f7ef', color: '#1e8449', fontWeight: 700 }}>abriu</span>}
         </div>
         <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
