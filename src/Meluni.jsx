@@ -1984,7 +1984,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
       </CampoEmail>
 
       <CampoEmail label="Criativo (imagem do topo)">
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/*" style={{ display: 'none' }}
           onChange={e => { const f = e.target.files?.[0]; if (f) subirCriativo(f); e.target.value = ''; }} />
         {criativoUrl ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1998,6 +1998,9 @@ function ComposerEmail({ selCount = 0, onClose }) {
             {subindo ? 'subindo…' : '⬆ Subir criativo'}
           </button>
         )}
+        <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginTop: 6, lineHeight: 1.5 }}>
+          Melhor formato: <strong>1200px de largura</strong> (mín. 600), proporção <strong>1:1 ou 4:5</strong> (retrato cai bem em moda; evite imagem muito alta pra não empurrar o texto). JPG, PNG ou WebP. Pode subir até ~10MB — a imagem é reduzida e otimizada automático.
+        </div>
       </CampoEmail>
 
       <div style={{ display: 'flex', gap: 10 }}>
