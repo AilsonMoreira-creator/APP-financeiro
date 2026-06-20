@@ -2006,7 +2006,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
         )}
         <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginTop: 6, lineHeight: 1.5 }}>
           <strong>1200px largura x 1600px altura</strong> · máximo 5 MB · JPG, PNG ou WebP.
-          <br>A imagem é otimizada automaticamente. Toque no “?” lá em cima pra ver como fazer.
+          <br />A imagem é otimizada automaticamente. Toque no “?” lá em cima pra ver como fazer.
         </div>
       </CampoEmail>
 
