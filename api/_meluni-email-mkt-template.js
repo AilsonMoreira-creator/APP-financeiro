@@ -81,6 +81,7 @@ export function renderEmailHtml({ campanha = {}, carrinho = {}, unsubscribeUrl =
   const nome = primeiroNome(carrinho?.nome);
   const pecas = contarPecas(carrinho?.itens);
   const valor = carrinho?.valor;
+  const resumoItens = carrinho?.resumo ? String(carrinho.resumo).trim() : '';
 
   const tituloHtml = aplicarTokens(c.titulo, nome);
   const corpoHtml = corpoToHtml(c.corpo, nome);
@@ -91,11 +92,13 @@ export function renderEmailHtml({ campanha = {}, carrinho = {}, unsubscribeUrl =
     ? `<tr><td style="padding:0;"><img src="${esc(c.criativo_url)}" alt="" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>`
     : '';
 
-  const blocoCarrinho = (pecas > 0 || valor)
+  const blocoCarrinho = (resumoItens || pecas > 0 || valor)
     ? `<tr><td style="padding:0 32px;">
          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FUNDO};border:1px solid ${BORDA};border-radius:10px;margin:4px 0 18px;">
            <tr><td style="padding:14px 18px;font-size:15px;color:${ESCURO};">
-             ${pecas > 0 ? `<strong>${pecas}</strong> peça${pecas > 1 ? 's' : ''} esperando vc` : 'Suas peças esperando vc'}
+             ${resumoItens
+               ? esc(resumoItens)
+               : (pecas > 0 ? `<strong>${pecas}</strong> peça${pecas > 1 ? 's' : ''} esperando vc` : 'Suas peças esperando vc')}
              ${valor ? `<span style="float:right;font-weight:700;color:${ROXO};">${esc(moeda(valor))}</span>` : ''}
            </td></tr>
          </table>

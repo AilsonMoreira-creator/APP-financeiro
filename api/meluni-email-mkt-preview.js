@@ -7,7 +7,7 @@
 // ============================================================================
 import { renderEmailHtml, EMAIL_DEFAULTS } from './_meluni-email-mkt-template.js';
 
-const CARRINHO_AMOSTRA = { nome: 'Maria', valor: 289.9, itens: [{ qtd: 1 }, { qtd: 1 }] };
+const CARRINHO_AMOSTRA = { nome: 'Maria', valor: 289.9, resumo: 'Vestido de Linho e mais 1 peça', itens: [{ qtd: 1 }, { qtd: 1 }] };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
