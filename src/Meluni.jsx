@@ -1865,6 +1865,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoad, setPreviewLoad] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
   const [campanhaId, setCampanhaId] = useState(null);
   const [vista, setVista] = useState('editor');
   const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
@@ -1994,7 +1995,26 @@ function ComposerEmail({ selCount = 0, onClose }) {
     setSalvando(false);
   };
 
-  const assLen = assunto.length;
+  const enviarManual = async () => {
+    if (!assunto.trim() || !corpo.trim()) { alert('Preencha pelo menos assunto e corpo antes de enviar.'); return; }
+    const email = (window.prompt('Enviar este e-mail (teste/manual) para qual endereço?', '') || '').trim();
+    if (!email) return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { alert('E-mail inválido.'); return; }
+    setEnviando(true);
+    try {
+      const r = await fetch('/api/meluni-email-mkt-enviar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email, campanha,
+          carrinho: { nome: comNome ? 'Maria' : null, valor: 289.9, resumo: 'Vestido de Linho e mais 1 peça' },
+        }),
+      });
+      const j = await r.json();
+      if (j.ok) alert('E-mail enviado ✓  Confere a caixa de entrada (e o spam).');
+      else alert(j.erro || 'Falha ao enviar.');
+    } catch { alert('Falha ao enviar.'); }
+    setEnviando(false);
+  };
   const btnVista = (id, txt) => (
     <button onClick={() => setVista(id)} style={{
       ...selStyle, fontWeight: 700, background: vista === id ? MELUNI : '#fff',
@@ -2014,7 +2034,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
           ✦ Diga o que vc quer e a Lara escreve
         </div>
         <textarea value={brief} onChange={e => setBrief(e.target.value)} rows={3}
-          placeholder="Ex: faz um copy de carrinho abandonado e fala do cupom VOLTE10 que dá 10%, focando linho e alfaiataria."
+          placeholder="Ex: faz um copy de carrinho abandonado e fala do cupom VOLTE10 que dá 10%, com um tom elegante e atemporal."
           style={{ ...inEmail, resize: 'vertical' }} />
         <button onClick={gerar} disabled={gerando || !brief.trim()}
           style={{ ...fbtn(MELUNI, '#fff'), marginTop: 8, opacity: (gerando || !brief.trim()) ? 0.5 : 1, cursor: (gerando || !brief.trim()) ? 'default' : 'pointer' }}>
@@ -2109,7 +2129,11 @@ function ComposerEmail({ selCount = 0, onClose }) {
           <button onClick={salvar} disabled={salvando} style={{ ...fbtn('#fff', palette.ink, palette.beige), opacity: salvando ? 0.6 : 1 }}>
             {salvando ? 'salvando…' : (campanhaId ? 'Salvar ✓' : 'Salvar')}
           </button>
-          <button disabled title="Disponível quando o Resend (chave + domínio) estiver configurado"
+          <button onClick={enviarManual} disabled={enviando} title="Enviar este e-mail pra um endereço (teste ou manual)"
+            style={{ ...fbtn('#fff', MELUNI, MELUNI), opacity: enviando ? 0.6 : 1 }}>
+            {enviando ? 'enviando…' : '✉️ Enviar'}
+          </button>
+          <button disabled title="Disparo em massa: disponível quando o Resend (chave + domínio) estiver configurado"
             style={{ ...fbtn(MELUNI, '#fff'), opacity: 0.45, cursor: 'not-allowed' }}>
             Disparar{selCount ? ` · ${selCount}` : ''}
           </button>
@@ -2133,7 +2157,7 @@ function ComposerEmail({ selCount = 0, onClose }) {
               ['📐 Tamanho', '1200px de largura x 1500px de altura (proporção 4:5, retrato). É o que fica mais bonito em moda. Se quiser o título e o botão aparecendo mais cedo, 1200x1200 (quadrado) também funciona.'],
               ['💾 Peso', 'Máximo 5 MB. Pode subir maior que o app reduz e otimiza sozinho.'],
               ['🖼️ Formatos', 'JPG, PNG ou WebP. Foto do iPhone funciona normal.'],
-              ['👗 O que mostrar', 'A peça em destaque (linho ou alfaiataria), de preferência a modelo vestindo. Peça grande e centralizada.'],
+              ['👗 O que mostrar', 'A peça em destaque, de preferência a modelo vestindo. Peça grande e centralizada.'],
               ['💡 Fundo e luz', 'Fundo limpo e claro, boa iluminação. Evite imagem escura ou poluída.'],
               ['🚫 Sem texto na imagem', 'O texto vai no corpo do e-mail. A imagem é só o visual da peça.'],
               ['↕️ Lembre', 'Ela aparece no topo, ocupando a largura toda. Algo vertical e nítido fica melhor.'],

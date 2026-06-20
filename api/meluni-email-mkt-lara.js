@@ -12,7 +12,7 @@ Escreve um e-mail curto de recuperação de carrinho abandonado.
 
 VOZ E REGRAS (obrigatórias):
 - Português BR, informal e acolhedor. Use sempre "vc" (nunca "você").
-- Foco em linho e alfaiataria. Não enfatize viscolinho.
+- A Meluni e especialista em pecas elegantes e atemporais. NAO fale em alfaiataria (isso e da Amicia, nao da Meluni). Pode citar a peca em si (ex: um vestido) com naturalidade.
 - Consumidora final: NUNCA fale em "grade", "atacado", "separar grade" ou revenda.
 - PROIBIDO usar estas palavras: incrível, imperdível, sensacional, caprichada, saudade, perfil.
 - PROIBIDO usar (gatilho de spam): promoção, só hoje, grátis, free, desconto, oferta relâmpago.

@@ -27,7 +27,7 @@ function esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function primeiroNome(nome) {
+export function primeiroNome(nome) {
   if (!nome) return '';
   const limpo = String(nome).trim();
   if (!limpo || /cliente do direct/i.test(limpo)) return '';
@@ -36,7 +36,7 @@ function primeiroNome(nome) {
 }
 
 // substitui {{nome}} e limpa quando vazio ("Oi, !" -> "Oi!", " ," -> ",")
-function aplicarTokens(texto, nome) {
+export function aplicarTokens(texto, nome) {
   let t = String(texto || '').replace(/\{\{\s*nome\s*\}\}/gi, nome || '');
   t = t.replace(/([,!?])\s*([,!?])/g, '$1')      // pontuação dupla
        .replace(/\s+,/g, ',').replace(/,\s*!/g, '!')
@@ -143,13 +143,13 @@ export function renderEmailHtml({ campanha = {}, carrinho = {}, unsubscribeUrl =
       ${blocoCupom}
       ${cta}
       ${assinaturaHtml}
-      <tr><td style="padding:18px 32px 22px;">
-        <hr style="border:0;border-top:1px solid ${BORDA};margin:0 0 12px;">
-        <p style="margin:0 0 6px;font-size:12px;color:${CINZA};line-height:1.5;">
-          Vc recebeu este e-mail porque iniciou uma compra na Meluni. Moda feminina em linho e alfaiataria.
+      <tr><td style="padding:16px 32px 20px;">
+        <hr style="border:0;border-top:1px solid ${BORDA};margin:0 0 10px;">
+        <p style="margin:0 0 4px;font-size:11px;color:${CINZA};line-height:1.45;">
+          Vc recebeu este e-mail porque iniciou uma compra na Meluni, moda feminina elegante e atemporal.
         </p>
-        <p style="margin:0;font-size:12px;color:${CINZA};">
-          <a href="${esc(unsubscribeUrl)}" style="color:${CINZA};text-decoration:underline;">Não quero mais receber estes e-mails</a>
+        <p style="margin:0;font-size:11px;color:${CINZA};">
+          <a href="${esc(unsubscribeUrl)}" style="color:${CINZA};text-decoration:underline;">Não quero mais receber</a>
         </p>
       </td></tr>
     </table>
