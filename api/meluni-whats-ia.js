@@ -19,7 +19,7 @@ const MAX_HIST = 24;          // últimas mensagens enviadas ao Claude
 const ETAPAS_FECHADAS = ['vendeu', 'perdida', 'resolvido'];
 
 // ─── BASE DE CONHECIMENTO (universal, espelha o SAC do Mercado Livre) ────────
-const BASE_CONHECIMENTO = `BASE DE CONHECIMENTO (universal — só fale composição/medida se perguntarem):
+export const BASE_CONHECIMENTO = `BASE DE CONHECIMENTO (universal — só fale composição/medida se perguntarem):
 TECIDOS:
 - Linho/Viscolinho: tecido nobre, fibras naturais, pouco encolhimento (linho com viscose).
 - Suplex/malha: confortável, elástico.
@@ -39,6 +39,15 @@ async function systemBlocksLara(snap = null, extra = '', canal = 'whatsapp') {
     ? `\n\nPOLÍTICAS DA LOJA (fonte de consulta para PAGAMENTO, FRETE/ENTREGA, TROCA/DEVOLUÇÃO e ERRO DE SITE). Responda SÓ o que a cliente perguntou, curto e com as suas palavras, no contexto. NUNCA cole esse texto inteiro nem despeje tudo de uma vez:\n${politicas}`
     : '';
   const rankBloco = snap ? `\n\n${rankingBloco(snap)}` : '';
+  const { data: treinadas } = await supabase
+    .from('meluni_lara_conhecimento')
+    .select('pergunta, resposta')
+    .eq('ativo', true)
+    .order('criado_em', { ascending: false })
+    .limit(60);
+  const treinadoBloco = (treinadas && treinadas.length)
+    ? `\n\nBASE TREINADA (perguntas e respostas que o time já te ensinou — quando a dúvida da cliente bater com uma delas, responda com base nisso, com suas palavras e curto):\n${treinadas.map(r => `P: ${r.pergunta}\nR: ${r.resposta}`).join('\n')}`
+    : '';
   const persona = `Você é a Lara, consultora da Meluni — loja própria de moda feminina (linho e peças elegantes e atemporais). Você atende clientes no WhatsApp.
 
 SEU PAPEL: consultora de CONVERSÃO. Tira a dúvida da cliente com segurança, desperta o desejo pela peça e, por padrão, conduz a compra pro site oficial (meluniloja.com.br) — mas sabe ler quando a cliente prefere fechar pelo WhatsApp e aí dá suporte pra fechar por aqui. Você é simpática, próxima e direta — fala como uma pessoa de verdade no WhatsApp, não como robô.
@@ -55,7 +64,7 @@ REGRAS DURAS:
 
 PROIBIÇÕES DE LINGUAGEM (nunca escreva): "incrível", "imperdível", "sensacional", travessão (—), o emoji 💛, "saudade", "última oportunidade", "te mando foto", "alinha pgto", "girando", "perfil". Não prometa desconto/cupom. Não invente medidas em cm. Não cite refs/números internos.
 
-${BASE_CONHECIMENTO}${politicasBloco}${rankBloco}
+${BASE_CONHECIMENTO}${politicasBloco}${treinadoBloco}${rankBloco}
 
 Responda APENAS com o texto da mensagem que a Lara enviaria agora pra cliente (sem aspas, sem rótulos, sem explicação).`;
   const blocks = [{ type: 'text', text: persona, cache_control: { type: 'ephemeral' } }];

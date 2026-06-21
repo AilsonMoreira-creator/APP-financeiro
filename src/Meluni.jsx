@@ -23,7 +23,7 @@ import React, { useState, useEffect, useCallback, useRef, useContext } from 'rea
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Mail, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
-  CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send, Paperclip, Smile,
+  CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send, Paperclip, Smile, GraduationCap,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
@@ -2338,6 +2338,252 @@ function SecaoEmailMkt() {
   );
 }
 
+// ─── TREINAR LARA (banco de conhecimento próprio da Lara) ────────────────────
+const CATS_TREINO = ['produto', 'tamanho/medidas', 'tecido/cuidados', 'pagamento', 'frete/entrega', 'troca/devolução', 'site/pedido', 'outros'];
+const tInput = { width: '100%', boxSizing: 'border-box', border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '9px 11px', fontFamily: FONT, fontSize: 13, color: palette.ink, background: palette.surface, resize: 'vertical' };
+const tBtn = (bg = MELUNI) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, background: bg, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontFamily: FONT, fontSize: 12.5, fontWeight: 700, cursor: 'pointer' });
+const tCard = { background: palette.surface, border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12 };
+const tBadge = (bg, fg) => ({ fontSize: 10.5, fontWeight: 700, color: fg, background: bg, borderRadius: 5, padding: '2px 7px' });
+
+function TreinoEuPergunto({ onSalvar }) {
+  const [pergunta, setPergunta] = useState('');
+  const [resposta, setResposta] = useState('');
+  const [categoria, setCategoria] = useState('outros');
+  const [carregando, setCarregando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [ok, setOk] = useState(false);
+
+  const perguntar = async () => {
+    if (!pergunta.trim() || carregando) return;
+    setCarregando(true); setResposta(''); setOk(false);
+    try {
+      const r = await fetch('/api/meluni-lara-treino', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'responder', pergunta }) });
+      const j = await r.json();
+      setResposta(j.ok ? (j.resposta || '') : `(a Lara não respondeu: ${j.erro || 'erro'})`);
+    } catch { setResposta('(falhou)'); }
+    setCarregando(false);
+  };
+  const salvar = async () => {
+    if (!pergunta.trim() || !resposta.trim() || salvando) return;
+    setSalvando(true);
+    const sucesso = await onSalvar({ pergunta, resposta, categoria, origem: 'eu_pergunto' });
+    setSalvando(false);
+    if (sucesso) { setOk(true); setPergunta(''); setResposta(''); setCategoria('outros'); setTimeout(() => setOk(false), 2500); }
+  };
+
+  return (
+    <div style={{ ...tCard, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 12.5, color: palette.inkSoft }}>Escreva uma pergunta de cliente. A Lara responde com o que sabe — você aprova ou ajusta e salva na base dela.</div>
+      <textarea value={pergunta} onChange={e => setPergunta(e.target.value)} rows={2} placeholder="Ex: o vestido de linho amassa muito?" style={tInput} />
+      <div>
+        <button onClick={perguntar} disabled={carregando || !pergunta.trim()} style={{ ...tBtn(), opacity: carregando || !pergunta.trim() ? 0.6 : 1 }}>
+          <Bot size={14} />{carregando ? 'pensando…' : 'Perguntar pra Lara'}
+        </button>
+      </div>
+      {resposta && (
+        <>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: palette.inkSoft }}>Resposta da Lara (edite se precisar):</div>
+          <textarea value={resposta} onChange={e => setResposta(e.target.value)} rows={3} style={tInput} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <select value={categoria} onChange={e => setCategoria(e.target.value)} style={selStyle}>
+              {CATS_TREINO.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={salvar} disabled={salvando} style={{ ...tBtn(VERDE_ENVIAR), opacity: salvando ? 0.6 : 1 }}>
+              <CheckCircle size={14} />{salvando ? 'salvando…' : 'Salvar na base'}
+            </button>
+            {ok && <span style={{ fontSize: 12, fontWeight: 700, color: VERDE_ENVIAR }}>✓ salvo</span>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function QuizCard({ item, onResponder }) {
+  const [outros, setOutros] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const pick = async (texto) => {
+    if (!texto.trim() || salvando) return;
+    setSalvando(true);
+    await onResponder(texto.trim());
+    setSalvando(false);
+  };
+  if (item.status === 'salvo') {
+    return (
+      <div style={{ ...tCard, borderColor: VERDE_ENVIAR, background: '#f3fcf6' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: palette.ink }}>{item.pergunta}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: VERDE_ENVIAR, marginTop: 6 }}>✓ ensinado pra Lara</div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ ...tCard, display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: palette.ink }}>{item.pergunta}</div>
+        <span style={tBadge(MELUNI_SOFT, MELUNI)}>{item.categoria}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {item.alternativas.map((a, i) => (
+          <button key={i} onClick={() => pick(a)} disabled={salvando}
+            style={{ textAlign: 'left', border: `1px solid ${palette.beige}`, background: palette.bg, borderRadius: 8, padding: '8px 10px', fontFamily: FONT, fontSize: 12.5, color: palette.ink, cursor: 'pointer' }}>
+            {a}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+        <textarea value={outros} onChange={e => setOutros(e.target.value)} rows={2} placeholder="Outros — escreva a resposta certa…" style={{ ...tInput, flex: 1 }} />
+        <button onClick={() => pick(outros)} disabled={salvando || !outros.trim()} style={{ ...tBtn(), opacity: salvando || !outros.trim() ? 0.6 : 1, whiteSpace: 'nowrap' }}>Salvar</button>
+      </div>
+    </div>
+  );
+}
+
+function TreinoLaraPergunta({ onSalvar }) {
+  const [itens, setItens] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState('');
+  const gerar = async () => {
+    if (carregando) return;
+    setCarregando(true); setErro('');
+    try {
+      const r = await fetch('/api/meluni-lara-treino', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'gerar_quiz', qtd: 5 }) });
+      const j = await r.json();
+      if (j.ok) setItens((j.itens || []).map((x, i) => ({ ...x, key: `${Date.now()}_${i}`, status: 'aberto' })));
+      else setErro(j.erro || 'falhou');
+    } catch { setErro('falhou'); }
+    setCarregando(false);
+  };
+  const responder = async (key, texto, item) => {
+    const sucesso = await onSalvar({ pergunta: item.pergunta, resposta: texto, categoria: item.categoria, origem: 'quiz_lara' });
+    if (sucesso) setItens(prev => prev.map(it => it.key === key ? { ...it, status: 'salvo' } : it));
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ ...tCard, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12.5, color: palette.inkSoft, flex: 1, minWidth: 180 }}>A Lara varre a base de conhecimento e as conversas reais e levanta o que ela ainda não sabe responder. Clique numa alternativa ou escreva a resposta certa.</div>
+        <button onClick={gerar} disabled={carregando} style={{ ...tBtn(), opacity: carregando ? 0.6 : 1 }}>
+          <Bot size={14} />{carregando ? 'varrendo…' : 'Gerar perguntas'}
+        </button>
+      </div>
+      {erro && <div style={{ fontSize: 12, color: '#c0392b' }}>Não rolou: {erro}</div>}
+      {itens.map(it => <QuizCard key={it.key} item={it} onResponder={(texto) => responder(it.key, texto, it)} />)}
+    </div>
+  );
+}
+
+function ItemTreinado({ item, onExcluir, onSalvar }) {
+  const [editando, setEditando] = useState(false);
+  const [pergunta, setPergunta] = useState(item.pergunta);
+  const [resposta, setResposta] = useState(item.resposta);
+  const [categoria, setCategoria] = useState(item.categoria || 'outros');
+  const [salvando, setSalvando] = useState(false);
+  const salvar = async () => {
+    if (salvando) return;
+    setSalvando(true);
+    const ok = await onSalvar({ id: item.id, pergunta, resposta, categoria });
+    setSalvando(false);
+    if (ok) setEditando(false);
+  };
+  const origemLabel = { quiz_lara: 'quiz', eu_pergunto: 'eu perguntei', manual: 'manual' }[item.origem] || item.origem;
+  if (editando) {
+    return (
+      <div style={{ ...tCard, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <textarea value={pergunta} onChange={e => setPergunta(e.target.value)} rows={2} style={tInput} />
+        <textarea value={resposta} onChange={e => setResposta(e.target.value)} rows={3} style={tInput} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={categoria} onChange={e => setCategoria(e.target.value)} style={selStyle}>
+            {CATS_TREINO.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button onClick={salvar} disabled={salvando} style={{ ...tBtn(VERDE_ENVIAR), opacity: salvando ? 0.6 : 1 }}>Salvar</button>
+          <button onClick={() => { setEditando(false); setPergunta(item.pergunta); setResposta(item.resposta); setCategoria(item.categoria || 'outros'); }} style={tBtn('#999')}>Cancelar</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ ...tCard, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: palette.ink }}>{item.pergunta}</div>
+        <span style={tBadge(MELUNI_SOFT, MELUNI)}>{item.categoria || 'outros'}</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: palette.inkSoft, whiteSpace: 'pre-wrap' }}>{item.resposta}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 10.5, color: palette.inkSoft, opacity: 0.7 }}>{origemLabel}</span>
+        <button onClick={() => setEditando(true)} style={{ background: 'none', border: 'none', color: MELUNI, fontFamily: FONT, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>editar</button>
+        <button onClick={() => onExcluir(item.id)} style={{ background: 'none', border: 'none', color: '#c0392b', fontFamily: FONT, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>excluir</button>
+      </div>
+    </div>
+  );
+}
+
+function BaseTreinada({ itens, loading, onExcluir, onSalvar }) {
+  const [busca, setBusca] = useState('');
+  const filtrados = itens.filter(i => {
+    const q = busca.trim().toLowerCase();
+    if (!q) return true;
+    return (i.pergunta || '').toLowerCase().includes(q) || (i.resposta || '').toLowerCase().includes(q) || (i.categoria || '').toLowerCase().includes(q);
+  });
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+        <SectionTitle>Base treinada ({itens.length})</SectionTitle>
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="buscar…" style={{ ...selStyle, minWidth: 160 }} />
+      </div>
+      {loading ? <div style={{ fontSize: 12.5, color: palette.inkSoft }}>carregando…</div>
+        : filtrados.length === 0 ? <div style={{ fontSize: 12.5, color: palette.inkSoft }}>{itens.length ? 'nada encontrado.' : 'a base ainda está vazia — comece treinando acima.'}</div>
+        : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{filtrados.map(it => <ItemTreinado key={it.id} item={it} onExcluir={onExcluir} onSalvar={onSalvar} />)}</div>}
+    </div>
+  );
+}
+
+function SecaoTreinar() {
+  const userId = useContext(MeluniUserCtx);
+  const [aba, setAba] = useState('eu');
+  const [base, setBase] = useState([]);
+  const [loadingBase, setLoadingBase] = useState(true);
+
+  const carregarBase = useCallback(async () => {
+    setLoadingBase(true);
+    try {
+      const r = await fetch('/api/meluni-lara-treino?acao=list');
+      const j = await r.json();
+      if (j.ok) setBase(j.itens || []);
+    } catch { /* ignora */ }
+    setLoadingBase(false);
+  }, []);
+  useEffect(() => { carregarBase(); }, [carregarBase]);
+
+  const salvar = useCallback(async ({ id, pergunta, resposta, categoria, origem }) => {
+    try {
+      const r = await fetch('/api/meluni-lara-treino', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'salvar', id, pergunta, resposta, categoria, origem, criado_por: userId }) });
+      const j = await r.json();
+      if (j.ok) carregarBase();
+      return j.ok;
+    } catch { return false; }
+  }, [userId, carregarBase]);
+
+  const excluir = useCallback(async (id) => {
+    if (typeof window !== 'undefined' && !window.confirm('Excluir esse conhecimento da Lara?')) return;
+    try {
+      const r = await fetch('/api/meluni-lara-treino', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ acao: 'excluir', id }) });
+      const j = await r.json();
+      if (j.ok) carregarBase();
+    } catch { /* ignora */ }
+  }, [carregarBase]);
+
+  const tabs = [{ id: 'eu', label: 'Eu pergunto' }, { id: 'lara', label: 'Lara pergunta' }];
+  return (
+    <div>
+      <SubTabs tabs={tabs} active={aba} onChange={setAba} />
+      <div style={{ marginTop: 14 }}>
+        {aba === 'eu' && <TreinoEuPergunto onSalvar={salvar} />}
+        {aba === 'lara' && <TreinoLaraPergunta onSalvar={salvar} />}
+      </div>
+      <BaseTreinada itens={base} loading={loadingBase} onExcluir={excluir} onSalvar={salvar} />
+    </div>
+  );
+}
+
 const selStyle = {
   border: `1px solid ${palette.beige}`, borderRadius: 7, padding: '5px 8px',
   fontFamily: FONT, fontSize: 12, color: palette.inkSoft, background: palette.surface, cursor: 'pointer',
@@ -2374,6 +2620,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
     { id: 'marketing', label: 'Marketing', icon: TrendingUp },
     { id: 'emailmkt', label: 'E-mail Mkt', icon: Mail },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+    { id: 'treinar', label: 'Treinar Lara', icon: GraduationCap },
   ];
 
   const sincronizar = useCallback(async () => {
@@ -2434,6 +2681,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
         {secao === 'marketing' && <SecaoMarketing />}
         {secao === 'emailmkt' && <SecaoEmailMkt />}
         {secao === 'dashboard' && <SecaoDashboard />}
+        {secao === 'treinar' && <SecaoTreinar />}
       </div>
     </div>
     </MeluniUserCtx.Provider>
