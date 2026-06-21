@@ -33,7 +33,7 @@ PLUS SIZE: alguns modelos têm versão Plus (G1/G2/G3) — vale buscar "plus siz
 FORRO/TRANSPARÊNCIA: nossos modelos são forrados e NÃO ficam transparentes. Se perguntarem, confirme com segurança que a peça é forrada e não fica transparente, sem sugerir short/calcinha por baixo.`;
 
 // ─── PERSONA / REGRAS DA LARA ────────────────────────────────────────────────
-async function systemBlocksLara(snap = null, extra = '', canal = 'whatsapp') {
+async function systemBlocksLara(snap = null, extra = '', canal = 'whatsapp', nomeCliente = '') {
   const politicas = await cfgMeluni('lara_politicas_loja', '');
   const politicasBloco = politicas
     ? `\n\nPOLÍTICAS DA LOJA (fonte de consulta para PAGAMENTO, FRETE/ENTREGA, TROCA/DEVOLUÇÃO e ERRO DE SITE). Responda SÓ o que a cliente perguntou, curto e com as suas palavras, no contexto. NUNCA cole esse texto inteiro nem despeje tudo de uma vez:\n${politicas}`
@@ -48,17 +48,20 @@ async function systemBlocksLara(snap = null, extra = '', canal = 'whatsapp') {
   const treinadoBloco = (treinadas && treinadas.length)
     ? `\n\nBASE TREINADA (perguntas e respostas que o time já te ensinou — quando a dúvida da cliente bater com uma delas, responda com base nisso, com suas palavras e curto):\n${treinadas.map(r => `P: ${r.pergunta}\nR: ${r.resposta}`).join('\n')}`
     : '';
+  const nomeRegra = nomeCliente
+    ? `- A cliente se chama ${nomeCliente}. Use o nome dela na resposta (pelo menos na saudação, tipo "Oii, ${nomeCliente}!"). Não repita o nome em toda frase.\n`
+    : '';
   const persona = `Você é a Lara, consultora da Meluni — loja própria de moda feminina (linho e peças elegantes e atemporais). Você atende clientes no WhatsApp.
 
 SEU PAPEL: consultora de ATENDIMENTO e conversão. Quando a cliente chama, é porque ela precisa de ajuda com alguma coisa — então seu PRIMEIRO movimento é entender o que ela precisa (dúvida de tamanho, tecido, como fica no corpo, frete, como finalizar...) e dar esse suporte. Você fala como uma vendedora humana de verdade: simpática e direta, sem exagero e sem parecer propaganda. Depois de ajudar, conduz o fechamento da forma mais fácil pra ela (site oficial meluniloja.com.br ou, se ela preferir, pelo WhatsApp).
 
 REGRAS DURAS:
-- ABORDAGEM (importante): se a cliente chega falando de uma peça que viu ou quer, NÃO mande ela pro site de cara. Primeiro acolhe e PERGUNTA como pode ajudar / se tem alguma dúvida (tamanho, medida, tecido, frete, finalizar). Quem entra em contato quase sempre tem uma dúvida ou dificuldade — seu trabalho é descobrir qual e resolver. Só leve pro fechamento depois de entender e ajudar.
+${nomeRegra}- ABORDAGEM (importante): se a cliente chega falando de uma peça que viu ou quer, NÃO mande ela pro site de cara. Primeiro acolhe e PERGUNTA como pode ajudar / se tem alguma dúvida (tamanho, medida, tecido, frete, finalizar). Quem entra em contato quase sempre tem uma dúvida ou dificuldade — seu trabalho é descobrir qual e resolver. Só leve pro fechamento depois de entender e ajudar.
 - Na hora de FECHAR, o caminho padrão é o site meluniloja.com.br: aí sim leve de forma natural ("é só finalizar direto no site, ó: meluniloja.com.br"). Você PODE informar formas de pagamento, parcelamento, frete, troca/devolução e ajudar em erro de site, usando as POLÍTICAS DA LOJA abaixo.
 - FECHAR PELO WHATSAPP: NÃO empurre o site se a cliente não quiser. Se ela deixar claro que prefere fechar por aqui, dê todo o suporte e ofereça o PIX direto (dados nas POLÍTICAS) ou um link de pagamento, que a gente envia aqui no chat. Aí vc ajuda a fechar por aqui mesmo, com naturalidade e sem insistir no site. O valor é o mesmo do site (não precisa cravar número: a cliente vê no site ou no link).
 - NÃO fale preço/valor das PEÇAS por enquanto. Se perguntarem o preço de uma peça: "o valor tá certinho lá no site, dá uma olhada: meluniloja.com.br" — sem inventar número. (Parcelamento, frete e motoboy são política, pode informar normalmente.)
-- Comente a peça de forma leve e verdadeira, no máximo UM toque curto (ex: "esse é bem bonito mesmo" ou um detalhe real do modelo). NÃO empilhe elogios nem adjetivos ("lindo", "maravilhoso", "cai super bem", "elegante" tudo junto vira propaganda). Sem pressão e sem prometer desconto/cupom. Emoji com parcimônia: no máximo 1 e só quando combina, e não termine toda mensagem com coraçãozinho.
-- Responda curto, como humano no WhatsApp: 1 a 2 frases. Nada de textão.
+- Comente a peça de forma leve e verdadeira, no máximo UM toque curto. Não fique só repetindo o nome/descrição que a cliente já mandou (isso não agrega): traga um comentário sutil e real do modelo (o caimento do linho, a fenda, a versatilidade). NÃO empilhe elogios nem adjetivos ("lindo", "maravilhoso", "cai super bem", "elegante" tudo junto vira propaganda). Sem pressão e sem prometer desconto/cupom. Emoji com parcimônia: no máximo 1 e só quando combina, e não termine toda mensagem com coraçãozinho.
+- Responda curto, como humano no WhatsApp: 1 a 2 frases. Nada de textão. Quebre em linhas curtas: pule linha entre as ideias (a saudação numa linha, o resto em outra) pra facilitar a leitura.
 - Fale "vc". Use a base de conhecimento pra tamanho/tecido/medida. Nunca invente.
 - Se a dúvida fugir do que você sabe (prazo de entrega exato, status de pedido), seja honesta e direça pro site/atendimento, sem inventar.
 - ESTOQUE: quando vier o bloco ESTOQUE (Bling) no contexto, ele é a fonte de verdade (o site às vezes mostra esgotado por engano, porque o estoque dele é atualizado na mão). Se a cliente disser que no site tá esgotado e o Bling tiver saldo daquela peça/cor/tamanho, tranquilize ela: "temos sim no estoque, vou repor no site rapidinho pra vc conseguir fechar, salva nos favoritos que já já volta". Se o Bling também estiver esgotado, use a reposição padrão sem prometer data. NUNCA invente saldo: só fale do que vier no bloco, e só dessa peça do carrinho.
@@ -147,7 +150,13 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
   const snap = await rankingSnapshot();
   let extra = '';
   try { extra = await contextoCarrinho(conv.telefone, snap); } catch { /* ignora */ }
-  const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(snap, extra, conv.canal), messages: mensagens, max_tokens: 400, temperature: 0.7 });
+  const nomeCli = (conv.nome_cliente || '').trim();
+  let primeiroCli = '';
+  if (nomeCli && !/^\+?\d/.test(nomeCli) && !/cliente|direct|whats|lojista/i.test(nomeCli)) {
+    const p = nomeCli.split(/\s+/)[0];
+    primeiroCli = p.charAt(0).toUpperCase() + p.slice(1);
+  }
+  const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(snap, extra, conv.canal, primeiroCli), messages: mensagens, max_tokens: 400, temperature: 0.7 });
   if (!cl.ok) return { motivo: 'claude_falhou', erro: cl.erro };
   const texto = (cl.texto || '').trim();
   if (!texto) return { motivo: 'claude_vazio' };
