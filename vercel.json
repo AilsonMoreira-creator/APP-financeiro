@@ -37,6 +37,10 @@
       ]
     }
   ],
+  "rewrites": [
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/data-deletion", "destination": "/data-deletion.html" }
+  ],
   "functions": {
     "api/meluni-email-cron.js": {
       "maxDuration": 60
