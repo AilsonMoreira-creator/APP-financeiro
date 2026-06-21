@@ -1118,6 +1118,19 @@ function SecaoSac() {
   }, [aba]);
   useEffect(() => { setChatId(null); carregar(); const t = setInterval(carregar, 15000); return () => clearInterval(t); }, [carregar]);
 
+  // ao ABRIR o chat, zera o badge da conversa na hora (backend grava visto_em ao carregar;
+  // o poll de 15s depois confirma com o banco)
+  const abrirChat = useCallback((id) => {
+    setChatId(id);
+    if (!id) return;
+    setConversas(prev => {
+      const c = prev.find(x => x.id === id);
+      if (!c || !c.unread) return prev;
+      setCont(k => ({ ...k, [aba]: Math.max(0, (k[aba] || 0) - 1) }));
+      return prev.map(x => x.id === id ? { ...x, unread: false } : x);
+    });
+  }, [aba]);
+
   const tabs = [
     { id: 'conversando', label: 'Conversando', unread: cont.conversando },
     { id: 'follow_up', label: 'Follow up', unread: cont.follow_up },
@@ -1137,7 +1150,7 @@ function SecaoSac() {
       {conversas.length > 0 && (
         <MeluniSplitChat
           itens={conversas} getId={(c) => c.id}
-          abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
+          abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'email' ? c.externo_id : '') || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente')}
           subtituloDe={(c) => (c.canal === 'email' ? (c.externo_id || 'e-mail') : c.canal === 'direct_insta' ? 'Direct Insta' : (fmtTel(c.telefone) || 'whatsapp'))}
           renderCard={(c, p) => <SacConversaCard c={c} onChanged={carregar} aba={aba} {...p} />}
