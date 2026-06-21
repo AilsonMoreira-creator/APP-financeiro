@@ -710,6 +710,18 @@ function SecaoClientes() {
   useEffect(() => { const t = setTimeout(carregar, 300); return () => clearTimeout(t); }, [carregar]);
   useEffect(() => { setSel(new Set()); }, [etapa]);
 
+  // ao ABRIR o chat, zera o badge da conversa na hora (backend grava visto_em ao carregar)
+  const abrirChat = useCallback((id) => {
+    setChatId(id);
+    if (!id) return;
+    setClientes(prev => {
+      const c = prev.find(x => x.id === id);
+      if (!c || !c.unread) return prev;
+      setUnread(u => ({ ...u, [etapa]: Math.max(0, (u[etapa] || 0) - 1) }));
+      return prev.map(x => x.id === id ? { ...x, unread: false } : x);
+    });
+  }, [etapa]);
+
   const toggleBloqueio = async (c) => {
     const novo = !c.bloqueado;
     if (novo && !window.confirm(`Bloquear ${c.nome || fmtTel(c.whatsapp || c.telefone)} dos disparos?`)) return;
@@ -812,7 +824,7 @@ function SecaoClientes() {
       {(!erro && clientes.length > 0) && (
         <MeluniSplitChat
           itens={clientes} getId={(c) => c.id}
-          abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
+          abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.nome || 'Cliente'}
           subtituloDe={(c) => fmtTel(c.whatsapp || c.telefone) || 'sem número'}
           renderCard={(c, p) => (
@@ -1005,6 +1017,20 @@ function SecaoCarrinho() {
     setLoading(false);
   }, [aba, dias]);
   useEffect(() => { setSel(new Set()); setChatId(null); carregar(0); }, [carregar]);
+
+  // ao ABRIR o chat, zera o badge daquela conversa na hora (o backend grava visto_em
+  // ao carregar a conversa; aqui só refletimos na UI sem esperar recarregar o funil).
+  const abrirChat = useCallback((id) => {
+    setChatId(id);
+    if (!id) return;
+    setCarrinhos(prev => {
+      const c = prev.find(x => x.id === id);
+      if (!c || !c.conversa_pendente) return prev;
+      const et = c.status || aba;
+      setUnread(u => ({ ...u, [et]: Math.max(0, (u[et] || 0) - 1) }));
+      return prev.map(x => x.id === id ? { ...x, conversa_pendente: false } : x);
+    });
+  }, [aba]);
   const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selTodos = () => setSel(sel.size === carrinhos.length ? new Set() : new Set(carrinhos.map(c => c.id)));
 
@@ -1059,7 +1085,7 @@ function SecaoCarrinho() {
       {carrinhos.length > 0 && (
         <MeluniSplitChat
           itens={carrinhos} getId={(c) => c.id}
-          abertoId={chatId} setAbertoId={setChatId} isDesktop={isDesktop}
+          abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.cliente_nome || c.nome || fmtBRL(c.valor)}
           subtituloDe={(c) => fmtTel(c.cliente_whatsapp || c.telefone) || 'sem número'}
           renderCard={(c, p) => (
