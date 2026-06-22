@@ -713,14 +713,17 @@ function SecaoClientes() {
   // ao ABRIR o chat, zera o badge da conversa na hora (backend grava visto_em ao carregar)
   const abrirChat = useCallback((id) => {
     setChatId(id);
-    if (!id) return;
+    // Fechou: reconcilia com o banco (o visto_em ja foi gravado ao abrir), pra o
+    // badge sumir mesmo sem a cliente responder. Sem isso o numero so recalculava
+    // ao trocar de filtro. Ailson 22/06/2026.
+    if (!id) { carregar(); return; }
     setClientes(prev => {
       const c = prev.find(x => x.id === id);
-      if (!c || !c.unread) return prev;
-      setUnread(u => ({ ...u, [etapa]: Math.max(0, (u[etapa] || 0) - 1) }));
+      if (!c) return prev;
+      if (c.unread) setUnread(u => ({ ...u, [etapa]: Math.max(0, (u[etapa] || 0) - 1) }));
       return prev.map(x => x.id === id ? { ...x, unread: false } : x);
     });
-  }, [etapa]);
+  }, [etapa, carregar]);
 
   const toggleBloqueio = async (c) => {
     const novo = !c.bloqueado;
@@ -1022,15 +1025,23 @@ function SecaoCarrinho() {
   // ao carregar a conversa; aqui só refletimos na UI sem esperar recarregar o funil).
   const abrirChat = useCallback((id) => {
     setChatId(id);
-    if (!id) return;
+    // Fechou o chat: reconcilia o funil com o banco. Ao abrir, o LaraThread grava
+    // visto_em na conversa, entao ao fechar o badge ja reflete "visto" mesmo que a
+    // cliente nao tenha respondido (algumas nem precisam responder). Antes o numero
+    // do badge do funil so recalculava ao trocar de aba/periodo, entao nunca sumia.
+    // Ailson 22/06/2026.
+    if (!id) { carregar(0); return; }
     setCarrinhos(prev => {
       const c = prev.find(x => x.id === id);
-      if (!c || !c.conversa_pendente) return prev;
-      const et = c.status || aba;
-      setUnread(u => ({ ...u, [et]: Math.max(0, (u[et] || 0) - 1) }));
+      if (!c) return prev;
+      // desconta do badge da etapa so se ele estava contando essa conversa
+      if (c.conversa_pendente) {
+        const et = c.status || aba;
+        setUnread(u => ({ ...u, [et]: Math.max(0, (u[et] || 0) - 1) }));
+      }
       return prev.map(x => x.id === id ? { ...x, conversa_pendente: false } : x);
     });
-  }, [aba]);
+  }, [aba, carregar]);
   const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selTodos = () => setSel(sel.size === carrinhos.length ? new Set() : new Set(carrinhos.map(c => c.id)));
 
