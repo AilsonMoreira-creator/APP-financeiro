@@ -764,7 +764,7 @@ export async function processarConversa(conversaId) {
   try {
     const { data: midias } = await supabase
       .from('lojas_whats_midias')
-      .select('tipo, ref, nome_arquivo, descricao')
+      .select('tipo, ref, nome_arquivo, descricao, promocao')
       .eq('ativa', true)
       .order('criada_em', { ascending: false })
       .limit(200);
@@ -782,25 +782,28 @@ export async function processarConversa(conversaId) {
         linhas.push('    → use [ENVIAR_VIDEO:REF] SOMENTE em fechamento');
       }
       if (catalogos.length > 0) {
-        // Catalogo de PROMOCAO (se ativo no config promocao_ativa) eh tratado
-        // separado do geral: so vai quando o CLIENTE pede/pergunta da promo. O
-        // catalogo de abertura/geral continua sendo o mais recente que NAO eh
-        // promocao. A distribuicao da promo vai pela co-piloto. Ailson 18/06/2026.
+        // PROMO eh DETERMINISTICO: flag promocao=true no banco OU nome do arquivo
+        // contem "promo". NUNCA depende de string de config (isso dava drift e ja
+        // mandou o catalogo de promocao como ABERTURA por engano). O config
+        // promocao_ativa.ativa so liga/desliga a OFERTA. O catalogo de
+        // abertura/geral NUNCA pode ser um de promocao. Ailson 22/06/2026.
         const promoCfg = await getConfig('promocao_ativa', null);
-        const promoNome = (promoCfg && promoCfg.ativa && promoCfg.catalogo)
-          ? String(promoCfg.catalogo).toLowerCase().trim() : null;
+        const promoAtiva = !!(promoCfg && promoCfg.ativa);
         const semExt = (n) => (n || '').replace(/\.[^.]+$/, '');
-        const ehPromo = (m) => promoNome && semExt(m.nome_arquivo).toLowerCase().includes(promoNome);
+        const ehPromo = (m) => m.promocao === true || /promo/i.test(semExt(m.nome_arquivo || ''));
         const catalogosGerais = catalogos.filter(m => !ehPromo(m));
-        const catalogoPromo = catalogos.find(ehPromo) || null;
-        const base = catalogosGerais[0] || catalogos[0];
-        nomeCatalogoAtual = semExt(base.nome_arquivo);  // abertura/force-inject = SEMPRE o geral
-        const listaGeral = (catalogosGerais.length ? catalogosGerais : [base]).slice(0, 10).map(c => semExt(c.nome_arquivo)).join(', ');
-        linhas.push(`  CATALOGO GERAL (abertura/padrao): ${listaGeral}`);
-        linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes. Quando o cliente responder que JA revende / tem loja / e sacoleira / esta comecando, acolhe rapido e JA manda o catalogo (sem ficar perguntando mais).');
+        const catalogoPromo = (promoAtiva ? (catalogos.find(ehPromo) || null) : null);
+        // base (abertura/force-inject) = SEMPRE um geral; nunca cai num promo.
+        const base = catalogosGerais[0] || null;
+        nomeCatalogoAtual = base ? semExt(base.nome_arquivo) : null;
+        if (base) {
+          const listaGeral = catalogosGerais.slice(0, 10).map(c => semExt(c.nome_arquivo)).join(', ');
+          linhas.push(`  CATALOGO GERAL (abertura/padrao): ${listaGeral}`);
+          linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes. Quando o cliente responder que JA revende / tem loja / e sacoleira / esta comecando, acolhe rapido e JA manda o catalogo (sem ficar perguntando mais).');
+        }
         if (catalogoPromo) {
           linhas.push(`  CATALOGO DE PROMOCAO: ${semExt(catalogoPromo.nome_arquivo)}`);
-          linhas.push(`    → REGRA DA PROMOCAO: o catalogo de abertura/geral NUNCA eh o de promocao. Mande o de promocao ([ENVIAR_CATALOGO:${semExt(catalogoPromo.nome_arquivo)}]) quando: (a) o cliente PERGUNTAR da promocao / PEDIR pra ver a promo, OU (b) VOCE ja ofereceu a condicao/desconto da promo (ex: na resposta da pesquisa de PRECO, com os 30%) e o cliente ACEITOU / disse que quer / respondeu "sim" / pediu pra separar. No caso (b), MANDE o catalogo de promocao ANTES de pedir as pecas. REGRA DURA: NUNCA peca "me manda as pecas que vc escolheu" (nem peca pra cliente escolher) sem ter enviado o catalogo de promocao NESTA conversa — senao a cliente nao sabe o que esta na promo e a conversa trava (foi o que aconteceu e nao pode repetir). NUNCA ofereca foto solta de peca ([ENVIAR_FOTO:REF]) como se fosse "da promocao" — vc NAO sabe quais pecas entram na promo alem do que esta nesse catalogo. Se o cliente quiser saber o que tem na promo, mande esse catalogo em vez de citar pecas avulsas.`);
+          linhas.push(`    → REGRA DA PROMOCAO (robusta, leia com atencao): este catalogo NUNCA eh o de abertura/geral. Envie [ENVIAR_CATALOGO:${semExt(catalogoPromo.nome_arquivo)}] APENAS em dois casos: (a) o cliente PEDIU / PERGUNTOU da promocao; OU (b) VOCE ja ofereceu a condicao/desconto da promo NESTA conversa (ex: na resposta da pesquisa de PRECO, com os 30%) e o cliente ACEITOU / disse sim / pediu pra separar. FORA desses dois casos, JAMAIS envie o catalogo de promocao. No caso (b), MANDE o catalogo de promocao ANTES de pedir as pecas. Ao enviar, DEIXE CLARO no texto que e o catalogo da PROMOCAO (ex: "te mando o catalogo da promocao, com a condicao dos 30% 😊") — a cliente precisa saber que aquilo e a promocao. REGRA DURA: NUNCA peca "me manda as pecas que vc escolheu" sem ter enviado o catalogo de promocao nesta conversa quando o assunto e a promo. NUNCA ofereca foto solta de peca ([ENVIAR_FOTO:REF]) como se fosse "da promocao".`);
         }
       }
       blocoMidias = linhas.join('\n');
