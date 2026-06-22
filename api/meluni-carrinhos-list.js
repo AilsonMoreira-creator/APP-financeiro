@@ -7,6 +7,7 @@
 // Junta nome/whatsapp do cliente vinculado. Ailson 15/06/2026.
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
+import { chaveTel } from './_meluni-tel.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -50,14 +51,14 @@ export default async function handler(req, res) {
     for (const c of (convsPend || [])) {
       if (c.visto_em && c.ultima_msg_em && new Date(c.ultima_msg_em) <= new Date(c.visto_em)) continue;
       if (c.cliente_id) pendCli.add(c.cliente_id);
-      const t = (c.telefone || '').replace(/\D/g, '');
-      if (t.length >= 10) pendTel.add(t.slice(-10));
+      const k = chaveTel(c.telefone);
+      if (k) pendTel.add(k);
       const et = c.etapa || 'conversando';
       unread[et] = (unread[et] || 0) + 1;
     }
     lista = lista.map(c => {
-      const t = (c.cliente_whatsapp || c.telefone || '').replace(/\D/g, '').slice(-10);
-      const pend = (c.cliente_id && pendCli.has(c.cliente_id)) || (t && pendTel.has(t));
+      const k = chaveTel(c.cliente_whatsapp || c.telefone || '');
+      const pend = (c.cliente_id && pendCli.has(c.cliente_id)) || (k && pendTel.has(k));
       return { ...c, conversa_pendente: !!pend };
     });
 
