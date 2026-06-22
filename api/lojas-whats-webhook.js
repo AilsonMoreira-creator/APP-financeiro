@@ -39,6 +39,7 @@ import {
   marcarComoLida,
   obterUrlMidia,
   baixarMidia,
+  enviarTexto,
   enviarTextoFracionado
 } from './_lojas-whats-meta-client.js';
 import { enviarPushSofia } from './_push-helpers.js';
@@ -322,6 +323,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
       const motivo = motivoDoBotao(dadosMsg.botao_texto);
       const nomeFinal = pq.nome_cliente || nomeCliente;
       const agoraIso = new Date().toISOString();
+      const rp = respostaPesquisaVariante(motivo, primeiroNome(nomeFinal));
 
       await supabase.from('lojas_whats_pesquisa_respostas').insert({
         conversa_id: conversa.id,
@@ -329,6 +331,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
         nome: nomeFinal,
         template: 'sofia_pesquisa_motivo_v1',
         motivo,
+        variante: rp?.variante || null,
         botao_texto: dadosMsg.botao_texto,
         respondido_em: agoraIso,
         raw: msg,
@@ -339,16 +342,17 @@ async function processarMensagemRecebida(msg, valueCtx) {
         pesquisa_motivo: motivo,
         pesquisa_respondida_em: agoraIso,
         catalogo_auto_bloqueado: true,   // trava catalogo auto + follow-up daqui pra frente
+        auto_resposta_bloqueada: true,   // no recontato a Sofia gera resposta mas espera aprovacao
         unread_count: (conversa.unread_count || 0) + 1,
         ultima_atividade_em: agoraIso,
         atualizado_em: agoraIso,
       };
 
-      // Resposta scriptada por motivo (outros = sem resposta por enquanto)
-      const resposta = respostaPesquisa(motivo, primeiroNome(nomeFinal));
-      if (resposta) {
+      // Resposta scriptada por motivo, em 2 mensagens (outros = sem resposta).
+      // Variante sorteada (registrada acima) pra medir qual performa melhor.
+      if (rp?.partes?.length) {
         try {
-          await enviarTextoFracionado({ telefone, texto: resposta, conversaId: conversa.id, supabase, autor: 'sofia_ia' });
+          await enviarDuasPartes(telefone, conversa.id, rp.partes);
           updPq.pesquisa_recontato_em = agoraIso;
         } catch (e) {
           logErro('pesquisa-resposta', e);
@@ -439,18 +443,66 @@ function motivoDoBotao(txt) {
   return 'outros';
 }
 
-function respostaPesquisa(motivo, primeiro) {
+function respostaPesquisaVariante(motivo, primeiro) {
   const ola = primeiro ? `${primeiro}, ` : '';
-  if (motivo === 'minimo_pecas') {
-    return `${ola}que bom que vc respondeu! Como recebemos bastante retorno sobre quantidade de peças, até o fim de junho a gente liberou o mínimo de 6 peças pra vc conhecer os modelos da Amícia, ver a qualidade, o acabamento e como vende bem na sua loja. Quer que eu já separe uma grade pra vc?`;
+  const variantes = {
+    minimo_pecas: [
+      ['A', [
+        `${ola}que bom que vc respondeu! Como recebemos bastante retorno sobre quantidade de peças, até o fim de junho a gente liberou o mínimo de 6 peças.`,
+        `Aí dá pra vc conhecer os modelos da Amícia, ver a qualidade e o acabamento de perto, e sentir como vende bem na sua loja. Quer que eu já separe uma grade pra vc?`,
+      ]],
+      ['B', [
+        `${ola}fico feliz que vc respondeu! Sobre o número de peças, ouvimos bastante isso, então até o fim de junho liberamos um mínimo de 6 peças pra começar mais leve.`,
+        `É uma boa pra vc provar os modelos da Amícia, ver acabamento e qualidade, e ver o que sai na sua loja. Posso montar uma gradinha de 6 pra vc?`,
+      ]],
+    ],
+    preco: [
+      ['A', [
+        `${ola}que bom que vc respondeu! Sobre o valor, tô com uma condição de 30% de desconto rodando agora.`,
+        `É uma boa pra vc conhecer os modelos da Amícia com um custo menor, ver a qualidade e como vende bem. Quer que eu separe uma grade pra vc aproveitar?`,
+      ]],
+      ['B', [
+        `${ola}obrigada por responder! Sobre preço, a gente tá com 30% de desconto agora, então dá pra entrar com um valor bem melhor.`,
+        `Bom momento pra testar os modelos da Amícia, ver a qualidade de perto e como giram na sua loja. Separo uma grade pra vc já com o desconto?`,
+      ]],
+    ],
+    variedade: [
+      ['A', [
+        `${ola}que bom que vc respondeu! Sobre variedade, quero te ajudar a acertar no que vende.`,
+        `Me conta: qual tipo de modelo tem mais saída na sua loja? Com base no que gira bem aí, eu monto um pedido junto com vc.`,
+      ]],
+      ['B', [
+        `${ola}obrigada por responder! Dá pra montar bem direcionado pro seu público.`,
+        `Qual estilo costuma sair mais na sua loja? Me fala que eu seleciono uma grade em cima do que vende bem aí, junto com vc.`,
+      ]],
+    ],
+  };
+  const lista = variantes[motivo];
+  if (!lista) return null; // outros: sem resposta por enquanto
+  const escolha = lista[Math.floor(Math.random() * lista.length)];
+  return { variante: escolha[0], partes: escolha[1] };
+}
+
+// Envia a resposta da pesquisa em 2 mensagens (mais humano), com delay entre
+// elas, e registra AS DUAS em lojas_whats_mensagens (o enviarTextoFracionado
+// nao loga a 1a parte). Ailson 21/06/2026.
+async function enviarDuasPartes(telefone, conversaId, partes) {
+  for (let i = 0; i < partes.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 1800 + Math.floor(Math.random() * 1700)));
+    let metaId = null;
+    try {
+      const r = await enviarTexto(telefone, partes[i]);
+      metaId = r?.messages?.[0]?.id || null;
+    } catch (e) {
+      logErro('pesquisa-parte', e);
+      continue;
+    }
+    await supabase.from('lojas_whats_mensagens').insert({
+      conversa_id: conversaId, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+      texto: partes[i], meta_message_id: metaId, status: 'enviando',
+      enviada_em: new Date().toISOString(),
+    });
   }
-  if (motivo === 'preco') {
-    return `${ola}que bom que vc respondeu! Sobre o valor, tô com uma condição de 30% de desconto agora, ótima pra vc conhecer os modelos da Amícia, ver a qualidade e como vende bem na sua loja. Quer que eu já separe uma grade pra vc aproveitar?`;
-  }
-  if (motivo === 'variedade') {
-    return `${ola}que bom que vc respondeu! Pra te ajudar com a variedade certa, me conta: qual tipo de modelo tem mais saída na sua loja? Com base no que vende bem aí, eu monto um pedido junto com vc.`;
-  }
-  return null; // outros: sem resposta por enquanto
 }
 
 function extrairConteudo(msg) {

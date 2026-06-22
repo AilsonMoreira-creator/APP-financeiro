@@ -1212,6 +1212,12 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
 //   - Confirmacao curta ("sim/pode/claro") SO se a Sofia acabou de oferecer catalogo -> auto
 //   - Qualquer outra coisa -> pendente (aprovacao)
 function classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo }) {
+  // Lead que respondeu a pesquisa de motivo: no recontato a Sofia GERA a resposta
+  // mas SEMPRE espera aprovacao (nunca auto-envia), mesmo com auto global ligado.
+  // Ailson 21/06/2026.
+  if (conv && conv.auto_resposta_bloqueada) {
+    return { auto: false, motivo: 'pesquisa_recontato_requer_aprovacao' };
+  }
   // Grupo do teste A/B (Ailson 06/06/2026): na abertura manda o catalogo direto e
   // ja auto-envia, independente da origem/texto da 1a msg. fase=catalogo garante
   // que o force-inject anexe o catalogo.
