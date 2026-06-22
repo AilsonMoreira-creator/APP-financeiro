@@ -126,6 +126,17 @@ export function normalizarTelefone(raw) {
   return null; // formato invalido
 }
 
+// Chave canonica de telefone BR, tolerante ao 9o digito e ao 55. Usada pra
+// casar a MESMA pessoa quando o wa_id da Meta vem ora COM o 9 ora SEM
+// (ex: 5531998331534 e 553198331534 -> ambos '3198331534'). Ailson 22/06/2026.
+export function chaveTel(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2);          // tira pais
+  if (d.length === 11 && d[2] === '9') d = d.slice(0, 2) + d.slice(3); // tira 9 do meio
+  if (d.length >= 10) return d.slice(0, 2) + d.slice(-8);            // DDD + ultimos 8
+  return d;
+}
+
 /**
  * Valida se um numero esta em formato E.164 brasileiro plausivel.
  * Aceita 12 ou 13 digitos comecando com 55.

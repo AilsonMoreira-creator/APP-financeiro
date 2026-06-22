@@ -30,6 +30,7 @@ import {
   log,
   logErro,
   normalizarTelefone,
+  chaveTel,
   primeiroNome,
   getConfig
 } from './_lojas-whats-helpers.js';
@@ -750,13 +751,20 @@ async function acharOuCriarConversa(telefone, nomeCliente, refInfo) {
   // cards (parecia "mensagem sumindo"). Agora reativa o MESMO card: a msg cai
   // na thread existente e o handler principal move perdida->conversando.
   // Mensagens nunca sao apagadas; a thread fica continua. Ailson 01/06/2026.
-  const { data: existente } = await supabase
+  // Match tolerante ao 9o digito: o wa_id da Meta as vezes vem COM o 9, as
+  // vezes SEM (ex: 5531998331534 vs 553198331534) e o .eq exato criava conversa
+  // DUPLICADA (o historico ficava partido em dois cards). Agora casa por sufixo
+  // de 8 digitos + confirma a chave canonica (chaveTel). Pega a mais recente.
+  // Ailson 22/06/2026.
+  const suf8 = String(telefone).replace(/\D/g, '').slice(-8);
+  const chaveAlvo = chaveTel(telefone);
+  const { data: cands } = await supabase
     .from('lojas_whats_conversas')
     .select('*')
-    .eq('telefone', telefone)
+    .ilike('telefone', `%${suf8}`)
     .order('iniciada_em', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
+  const existente = (cands || []).find(c => chaveTel(c.telefone) === chaveAlvo) || null;
   if (existente) {
     // Se existente nao tinha ctwa_clid e agora veio um, atualiza
     // (cliente pode ter voltado pelo anuncio depois de uma conversa antiga)
