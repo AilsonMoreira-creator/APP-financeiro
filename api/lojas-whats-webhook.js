@@ -38,7 +38,8 @@ import {
   verifyWebhookSignature,
   marcarComoLida,
   obterUrlMidia,
-  baixarMidia
+  baixarMidia,
+  enviarTextoFracionado
 } from './_lojas-whats-meta-client.js';
 import { enviarPushSofia } from './_push-helpers.js';
 import { transcreverAudio } from './lojas-whats-transcrever.js';
@@ -306,6 +307,69 @@ async function processarMensagemRecebida(msg, valueCtx) {
     }
   }
 
+  // ─── 3.5 PESQUISA DE MOTIVO: clique em botao do template sofia_pesquisa_motivo
+  // Se a conversa tem pesquisa enviada e ainda nao respondida, este clique e a
+  // resposta. Grava o motivo, move pra aba 'pesquisa', trava catalogo automatico
+  // e dispara a resposta scriptada (determinística, NAO IA). Desvia do fluxo
+  // normal (nao seta responder_em, nao volta pra 'conversando'). Ailson 21/06/2026.
+  if (dadosMsg.botao) {
+    const { data: pq } = await supabase
+      .from('lojas_whats_conversas')
+      .select('pesquisa_enviada_em, pesquisa_respondida_em, nome_cliente')
+      .eq('id', conversa.id)
+      .maybeSingle();
+    if (pq?.pesquisa_enviada_em && !pq?.pesquisa_respondida_em) {
+      const motivo = motivoDoBotao(dadosMsg.botao_texto);
+      const nomeFinal = pq.nome_cliente || nomeCliente;
+      const agoraIso = new Date().toISOString();
+
+      await supabase.from('lojas_whats_pesquisa_respostas').insert({
+        conversa_id: conversa.id,
+        telefone,
+        nome: nomeFinal,
+        template: 'sofia_pesquisa_motivo_v1',
+        motivo,
+        botao_texto: dadosMsg.botao_texto,
+        respondido_em: agoraIso,
+        raw: msg,
+      });
+
+      const updPq = {
+        etapa: 'pesquisa',
+        pesquisa_motivo: motivo,
+        pesquisa_respondida_em: agoraIso,
+        catalogo_auto_bloqueado: true,   // trava catalogo auto + follow-up daqui pra frente
+        unread_count: (conversa.unread_count || 0) + 1,
+        ultima_atividade_em: agoraIso,
+        atualizado_em: agoraIso,
+      };
+
+      // Resposta scriptada por motivo (outros = sem resposta por enquanto)
+      const resposta = respostaPesquisa(motivo, primeiroNome(nomeFinal));
+      if (resposta) {
+        try {
+          await enviarTextoFracionado({ telefone, texto: resposta, conversaId: conversa.id, supabase, autor: 'sofia_ia' });
+          updPq.pesquisa_recontato_em = agoraIso;
+        } catch (e) {
+          logErro('pesquisa-resposta', e);
+        }
+      }
+
+      await supabase.from('lojas_whats_conversas').update(updPq).eq('id', conversa.id);
+      await marcarComoLida(msg.id);
+
+      enviarPushSofia({
+        titulo: `📋 Pesquisa · ${primeiroNome(nomeFinal) || 'Cliente'}`,
+        mensagem: `Motivo: ${dadosMsg.botao_texto}`,
+        url: '/?modulo=sofia',
+        tag: `sofia-conv-${conversa.id}`,
+      }).catch(e => console.warn('[lojas-whats-webhook] push pesquisa falhou:', e.message));
+
+      log('pesquisa', `conversa ${conversa.id} respondeu motivo=${motivo} (${dadosMsg.botao_texto})`);
+      return; // bypassa fluxo normal de inbound
+    }
+  }
+
   // 4. Avanca etapa quando cliente responde
   const updates = {
     ultima_atividade_em: new Date().toISOString(),
@@ -334,7 +398,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
   // subir na lista + badge unread, e a assistente move manual pra conversando
   // se quiser. O cron-responder ja nao responde 'vendeu', entao a Sofia nao
   // fala sozinha aqui).
-  const ETAPAS_QUE_VOLTAM = ['enviada', 'follow_up', 'atendida', 'perdida', 'varejo'];
+  const ETAPAS_QUE_VOLTAM = ['enviada', 'follow_up', 'atendida', 'perdida', 'varejo', 'pesquisa'];
   if (ETAPAS_QUE_VOLTAM.includes(conversa.etapa)) {
     updates.etapa = 'conversando';
     updates.cliente_respondeu_em = new Date().toISOString();
@@ -365,6 +429,30 @@ async function processarMensagemRecebida(msg, valueCtx) {
   //    Ailson 29/05/2026.
 }
 
+// ─── PESQUISA DE MOTIVO: mapeamento botao -> motivo + respostas scriptadas ──
+
+function motivoDoBotao(txt) {
+  const t = (txt || '').toLowerCase();
+  if (t.includes('12') || t.includes('peç') || t.includes('pec')) return 'minimo_pecas';
+  if (t.includes('preç') || t.includes('prec') || t.includes('valor')) return 'preco';
+  if (t.includes('variedade')) return 'variedade';
+  return 'outros';
+}
+
+function respostaPesquisa(motivo, primeiro) {
+  const ola = primeiro ? `${primeiro}, ` : '';
+  if (motivo === 'minimo_pecas') {
+    return `${ola}que bom que vc respondeu! Como recebemos bastante retorno sobre quantidade de peças, até o fim de junho a gente liberou o mínimo de 6 peças pra vc conhecer os modelos da Amícia, ver a qualidade, o acabamento e como vende bem na sua loja. Quer que eu já separe uma grade pra vc?`;
+  }
+  if (motivo === 'preco') {
+    return `${ola}que bom que vc respondeu! Sobre o valor, tô com uma condição de 30% de desconto agora, ótima pra vc conhecer os modelos da Amícia, ver a qualidade e como vende bem na sua loja. Quer que eu já separe uma grade pra vc aproveitar?`;
+  }
+  if (motivo === 'variedade') {
+    return `${ola}que bom que vc respondeu! Pra te ajudar com a variedade certa, me conta: qual tipo de modelo tem mais saída na sua loja? Com base no que vende bem aí, eu monto um pedido junto com vc.`;
+  }
+  return null; // outros: sem resposta por enquanto
+}
+
 function extrairConteudo(msg) {
   switch (msg.type) {
     case 'text':
@@ -386,6 +474,18 @@ function extrairConteudo(msg) {
       // e virava "[tipo nao suportado: reaction]". Ailson 29/05/2026.
       const emo = msg.reaction?.emoji;
       return { tipo: 'text', texto: emo ? `[reagiu com ${emo}]` : '[removeu a reação]', midia_url: null, mime: null };
+    }
+    case 'button': {
+      // Clique em botao de TEMPLATE (quick reply). Vem em msg.button.{text,payload}.
+      // Antes caia no default e virava "[tipo nao suportado: button]". Ailson 21/06/2026.
+      const bt = msg.button?.text || msg.button?.payload || '';
+      return { tipo: 'text', texto: bt, midia_url: null, mime: null, botao: true, botao_texto: bt };
+    }
+    case 'interactive': {
+      // Botoes/listas interativas (nao-template): button_reply.title / list_reply.title.
+      const ir = msg.interactive || {};
+      const t = ir.button_reply?.title || ir.list_reply?.title || ir.nfm_reply?.name || '';
+      return { tipo: 'text', texto: t, midia_url: null, mime: null, botao: true, botao_texto: t };
     }
     default:
       // Meta classifica como 'unsupported' arquivos que a Cloud API não consegue
