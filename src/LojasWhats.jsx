@@ -1694,6 +1694,44 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
 
   const ehAbaProcessando = filtroEtapa === 'processando';
   const ehAbaAprovar = filtroEtapa === 'aprovar';
+  const ehAbaPerdida = filtroEtapa === 'perdida';
+
+  // Envia a pesquisa de motivo pros leads selecionados (so os elegiveis recebem,
+  // o endpoint filtra pela view). Ailson 21/06/2026.
+  const enviarPesquisaSelecionados = async () => {
+    if (selecionados.size === 0) return;
+    if (!confirm(`Enviar pesquisa pra ${selecionados.size} lead(s)? (só os elegíveis recebem)`)) return;
+    setProcessandoFila(true);
+    try {
+      const r = await fetch('/api/lojas-whats-pesquisa-enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selecionados) }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error || j.ok === false) {
+        setFeedback({ tipo: 'erro', msg: j.error || (j.motivo === 'template_nao_aprovado' ? 'Template ainda não aprovado pela Meta' : j.motivo) || 'Falha ao enviar' });
+      } else {
+        setFeedback({ tipo: 'ok', msg: `Pesquisa: ${j.enviadas || 0} enviada(s), ${j.falhas || 0} falha(s)` });
+        setSelecionados(new Set());
+        setReloadTick(t => t + 1);
+      }
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+    setProcessandoFila(false);
+  };
+
+  // Seleciona ate 30 leads ELEGIVEIS que estejam visiveis nesta lista.
+  const selecionar30Pesquisa = async () => {
+    try {
+      const r = await fetch('/api/lojas-whats-pesquisa-enviar');
+      const j = await r.json();
+      if (j.error) { setFeedback({ tipo: 'erro', msg: j.error }); return; }
+      const elegiveis = new Set((j.elegiveis || []).map(e => e.id));
+      const naAba = (conversas || []).map(c => c.id).filter(id => elegiveis.has(id)).slice(0, 30);
+      setSelecionados(new Set(naAba));
+      if (naAba.length === 0) setFeedback({ tipo: 'erro', msg: 'Nenhum elegível visível nesta lista (role/expanda pra carregar mais)' });
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+  };
 
   // Aprovar em lote (aba Aprovar): mapeia as conversas selecionadas pras suas
   // sugestoes pendentes e aprova/envia todas de uma vez. Ailson 01/06/2026.
@@ -1745,7 +1783,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       </div>
 
       {/* Barra de selecao multipla — abas processando e aprovar */}
-      {(ehAbaProcessando || ehAbaAprovar) && conversas.length > 0 && (
+      {(ehAbaProcessando || ehAbaAprovar || ehAbaPerdida) && conversas.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
           padding: '8px 12px', borderRadius: 8,
@@ -1764,10 +1802,21 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
             />
             <span style={{ color: palette.inkSoft }}>
               {selecionados.size === 0
-                ? (ehAbaAprovar ? 'Selecionar todos' : `${conversas.length} na fila`)
+                ? (ehAbaAprovar ? 'Selecionar todos' : ehAbaPerdida ? 'Selecionar leads' : `${conversas.length} na fila`)
                 : `${selecionados.size} de ${conversas.length} selecionados`}
             </span>
           </label>
+          {ehAbaPerdida && (
+            <button onClick={selecionar30Pesquisa} disabled={processandoFila}
+              style={{
+                marginLeft: 'auto', padding: '6px 12px', borderRadius: 6,
+                background: palette.surface, color: palette.ink,
+                border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                fontSize: fz(12), fontWeight: 600, cursor: 'pointer',
+              }}>
+              Selecionar 30
+            </button>
+          )}
           {selecionados.size > 0 && (
             ehAbaAprovar ? (
               <button onClick={aprovarSelecionados} disabled={processandoFila}
@@ -1779,6 +1828,17 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
                   cursor: processandoFila ? 'wait' : 'pointer',
                 }}>
                 {processandoFila ? 'Aprovando…' : `✓ Aprovar ${selecionados.size}`}
+              </button>
+            ) : ehAbaPerdida ? (
+              <button onClick={enviarPesquisaSelecionados} disabled={processandoFila}
+                style={{
+                  padding: '6px 14px', borderRadius: 6,
+                  background: processandoFila ? '#bdc3c7' : palette.accent,
+                  color: '#fff', border: 'none', fontFamily: FONT,
+                  fontSize: fz(13), fontWeight: 700,
+                  cursor: processandoFila ? 'wait' : 'pointer',
+                }}>
+                {processandoFila ? 'Enviando…' : `Enviar pesquisa (${selecionados.size})`}
               </button>
             ) : (
               <button onClick={processarSelecionados} disabled={processandoFila}
@@ -1816,7 +1876,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
               <ConversaRow key={c.id} c={c}
                 vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : null}
                 vendedorasMap={vendedorasMap}
-                selecionavel={ehAbaProcessando || ehAbaAprovar}
+                selecionavel={ehAbaProcessando || ehAbaAprovar || ehAbaPerdida}
                 selecionado={selecionados.has(c.id)}
                 onToggleSelecao={() => toggleSelecao(c.id)}
                 onContinuarSofia={() => onContinuarSofia(c)}
