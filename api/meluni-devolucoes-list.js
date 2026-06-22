@@ -34,10 +34,14 @@ export default async function handler(req, res) {
     let convCli = new Set(), convTel = new Set();
     if (cids.length || tels.length) {
       const { data: convs } = await supabase.from('meluni_conversas')
-        .select('cliente_id,telefone,ultima_msg_direcao,etapa')
+        .select('cliente_id,telefone,ultima_msg_direcao,etapa,visto_em,ultima_msg_em')
         .eq('origem', 'devolucao')
         .in('ultima_msg_direcao', ['in', 'entrada']);
       for (const c of (convs || [])) {
+        // só conta como pendente se NÃO foi vista desde a última msg recebida.
+        // Abrir o chat grava visto_em (meluni-whats-conversa), igual Clientes/SAC,
+        // então o badge some ao abrir e volta só com msg nova. Ailson 22/06/2026.
+        if (c.visto_em && c.ultima_msg_em && new Date(c.ultima_msg_em) <= new Date(c.visto_em)) continue;
         if (c.cliente_id) convCli.add(c.cliente_id);
         const t = (c.telefone || '').replace(/\D/g, '');
         if (t.length >= 10) convTel.add(t.slice(-10));
