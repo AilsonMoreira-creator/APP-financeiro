@@ -408,6 +408,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'conversao',   label: 'Conversão',   icon: TrendingUp },
     { id: 'aprendizado', label: 'Aprendizado', icon: Brain },
     { id: 'midias',      label: 'Mídias',      icon: Paperclip },
+    { id: 'pesquisa',    label: 'Pesquisa',    icon: FileText },
     { id: 'config',      label: 'Config',      icon: Settings },
     { id: 'clientes',    label: 'Clientes',    icon: Users, badge: clientesAbertos },
   ];
@@ -460,6 +461,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'conversao' && <ConversaoTab refreshTick={refreshTick} />}
       {activeTab === 'aprendizado' && <AprendizadoTab refreshTick={refreshTick} />}
       {activeTab === 'midias' && <MidiasTab refreshTick={refreshTick} />}
+      {activeTab === 'pesquisa' && <PesquisaTab refreshTick={refreshTick} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
       {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} />}
     </div>
@@ -5950,6 +5952,116 @@ function SeletorMidiaModal({ onClose, onSelect }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 8: MIDIAS SOFIA
 // ═══════════════════════════════════════════════════════════════════════════
+
+function PesquisaTab({ refreshTick }) {
+  const [respostas, setRespostas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
+  const [feedback, setFeedback] = useState(null);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  const carregar = async () => {
+    setLoading(true); setErro(null);
+    try {
+      const { data: resp, error } = await supabase
+        .from('lojas_whats_pesquisa_respostas')
+        .select('id, conversa_id, telefone, nome, motivo, variante, botao_texto, respondido_em')
+        .order('respondido_em', { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const ids = [...new Set((resp || []).map(r => r.conversa_id).filter(Boolean))];
+      const etapaPorConversa = {};
+      if (ids.length) {
+        const { data: convs } = await supabase
+          .from('lojas_whats_conversas')
+          .select('id, etapa')
+          .in('id', ids);
+        (convs || []).forEach(c => { etapaPorConversa[c.id] = c.etapa; });
+      }
+      setRespostas((resp || []).map(r => ({ ...r, etapaAtual: etapaPorConversa[r.conversa_id] || null })));
+    } catch (e) { setErro(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { carregar(); }, [refreshTick, reloadTick]);
+
+  const moverPara = async (conversaId, etapa) => {
+    try {
+      const r = await fetch('/api/lojas-whats-conversa-editar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_id: conversaId, campos: { etapa } }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) setFeedback({ tipo: 'erro', msg: j.error || 'Erro ao mover' });
+      else { setFeedback({ tipo: 'ok', msg: `Movido para ${etapa}` }); setReloadTick(t => t + 1); }
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+  };
+
+  if (loading) return <div style={{ padding: sz(20), textAlign: 'center' }}><Loader2 size={sz(24)} className="spin" /></div>;
+  if (erro) return <div style={{ padding: sz(16), color: palette.alert }}>{erro}</div>;
+
+  const LABELS = { minimo_pecas: 'Mínimo de peças', preco: 'Preço', variedade: 'Variedade', outros: 'Outros motivos' };
+  const ORDEM = ['minimo_pecas', 'preco', 'variedade', 'outros'];
+  const grupos = {}; ORDEM.forEach(m => { grupos[m] = []; });
+  (respostas || []).forEach(r => { (grupos[r.motivo] || (grupos[r.motivo] = [])).push(r); });
+
+  const btnMover = (conversaId, et) => (
+    <button key={et} onClick={() => moverPara(conversaId, et)}
+      style={{ fontSize: sz(11), padding: `${sz(4)}px ${sz(8)}px`, borderRadius: sz(6),
+        border: `1px solid ${palette.beige}`, background: palette.bg, color: palette.ink,
+        cursor: 'pointer', fontFamily: FONT }}>
+      → {et}
+    </button>
+  );
+
+  return (
+    <div style={{ padding: sz(12), fontFamily: FONT }}>
+      {feedback && (
+        <div style={{ marginBottom: sz(8), fontSize: sz(12), color: feedback.tipo === 'erro' ? palette.alert : palette.ok }}>
+          {feedback.msg}
+        </div>
+      )}
+      <div style={{ fontSize: sz(12), color: palette.inkMuted, marginBottom: sz(12) }}>
+        Leads que responderam a pesquisa (já receberam a resposta automática da Sofia). Aqui vc dá sequência e decide pra qual aba mandar.
+      </div>
+      {ORDEM.map(m => {
+        const lista = grupos[m] || [];
+        return (
+          <div key={m} style={{ marginBottom: sz(18) }}>
+            <div style={{ fontWeight: 700, fontSize: sz(14), marginBottom: sz(6), color: palette.ink }}>
+              {LABELS[m]} <span style={{ color: palette.inkMuted, fontWeight: 400 }}>({lista.length})</span>
+            </div>
+            {lista.length === 0 && <div style={{ fontSize: sz(12), color: palette.inkMuted }}>Nenhum ainda.</div>}
+            {lista.map(r => {
+              const tel = (r.telefone || '').replace(/\D/g, '');
+              return (
+                <div key={r.id} style={{ border: `1px solid ${palette.beige}`, borderRadius: sz(10), padding: sz(10), marginBottom: sz(8), background: palette.surface }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: sz(8) }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: sz(13), color: palette.ink }}>{r.nome || r.telefone || 'Lead'}</div>
+                      <div style={{ fontSize: sz(11), color: palette.inkMuted, marginTop: sz(2) }}>
+                        {r.telefone || '—'} · variante {r.variante || '-'}{r.etapaAtual ? ` · agora: ${r.etapaAtual}` : ''}
+                      </div>
+                    </div>
+                    {tel && (
+                      <a href={`https://wa.me/${tel}`} target="_blank" rel="noreferrer"
+                        style={{ fontSize: sz(12), color: palette.accent, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                        WhatsApp
+                      </a>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: sz(6), marginTop: sz(8), flexWrap: 'wrap' }}>
+                    {['conversando', 'quente', 'atendida', 'perdida'].map(et => btnMover(r.conversa_id, et))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function MidiasTab({ refreshTick }) {
   const [midias, setMidias] = useState([]);
