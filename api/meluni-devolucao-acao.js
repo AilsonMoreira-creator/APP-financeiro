@@ -90,6 +90,19 @@ export default async function handler(req, res) {
       case 'avisar_estorno':
         patch = { cliente_avisado_em: agora, cliente_avisado_por: operador };
         break;
+      case 'concluir_manual': {
+        // Marca TODAS as etapas como concluidas SEM enviar mensagem (pros clientes
+        // que ja receberam a msg durante o teste). So preenche os marcos vazios,
+        // sem sobrescrever timestamps reais. NAO dispara WhatsApp. Ailson 22/06/2026.
+        const { data: cur } = await supabase.from('vw_meluni_devolucoes').select('*').eq('id', id).maybeSingle();
+        patch = {};
+        if (!cur?.etiqueta_avisado_em) { patch.etiqueta_avisado_em = agora; patch.etiqueta_avisado_por = operador; }
+        if (!cur?.recebido_em && !cur?.recebido_efetivo) patch.recebido_em = agora;
+        if (!cur?.conferido) { patch.conferido = true; patch.conferido_em = agora; patch.conferido_por = operador; }
+        if (!cur?.estornado_em) { patch.estornado_em = agora; patch.estornado_por = operador; }
+        if (!cur?.cliente_avisado_em) { patch.cliente_avisado_em = agora; patch.cliente_avisado_por = operador; }
+        break;
+      }
       case 'cancelar': {
         const motivo = (b.motivo || '').toString().trim();
         if (!motivo) return res.status(400).json({ ok: false, erro: 'motivo obrigatorio' });

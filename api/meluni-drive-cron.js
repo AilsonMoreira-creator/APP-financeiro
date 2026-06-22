@@ -100,7 +100,11 @@ async function importarTabela(tipo, linhas) {
     const { error } = await supabase.from('meluni_carrinhos').upsert(linhas.map(mapCarrinho), { onConflict: 'planilha_ref', ignoreDuplicates: true });
     if (error) throw new Error('carrinhos: ' + error.message);
   } else if (tipo === 'devolucoes') {
-    const { error } = await supabase.from('meluni_devolucoes').upsert(linhas.map(mapDevolucao), { onConflict: 'convertr_id,ref', ignoreDuplicates: true });
+    // update-on-conflict (NAO ignoreDuplicates): o planilha e fonte da verdade do
+    // STATUS (Aprovado/Produto recebido/Completo) + historico. mapDevolucao so grava
+    // campos do planilha, entao os campos de workflow do app (etiqueta/recebido/
+    // conferido/estornado/avisado) sao preservados. Ailson 22/06/2026.
+    const { error } = await supabase.from('meluni_devolucoes').upsert(linhas.map(mapDevolucao), { onConflict: 'convertr_id,ref' });
     if (error) throw new Error('devolucoes: ' + error.message);
   }
   return linhas.length;

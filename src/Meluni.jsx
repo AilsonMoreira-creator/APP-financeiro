@@ -1270,7 +1270,7 @@ function stepDevol(d) {
     case 'aguardando_postagem': return 2;  // etiqueta enviada, aguardando chegar/conferir
     case 'aguardando_conferir': return 2;  // chegou, falta conferir (mesma etapa)
     case 'aguardando_estorno':  return 3;  // conferida, aguardando pagamento
-    case 'completa':            return (d.estornado_em && !d.cliente_avisado_em) ? 5 : 6;
+    case 'completa':            return d.cliente_avisado_em ? 6 : 5;  // Completo -> Estorno pago feito; Mensagem enviada so via app/manual (Ailson 22/06/2026)
     default:                    return 1;
   }
 }
@@ -1578,8 +1578,8 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
             <MessageCircle size={14} /> avisar cliente do estorno
           </button>
         ) : st === 'completa' ? (
-          <div style={{ padding: '10px 12px', borderRadius: 9, background: '#eafbf0', color: palette.ok, fontSize: 12.5, fontWeight: 600 }}>
-            {d.estornado_em ? 'Concluída. Cliente avisada do estorno.' : 'Concluída (importada como Completo do Convertr).'}
+          <div style={{ padding: '10px 12px', borderRadius: 9, background: d.cliente_avisado_em ? '#eafbf0' : palette.surface, border: d.cliente_avisado_em ? 'none' : `1px solid ${palette.beige}`, color: d.cliente_avisado_em ? palette.ok : palette.inkSoft, fontSize: 12.5, fontWeight: d.cliente_avisado_em ? 600 : 400 }}>
+            {d.cliente_avisado_em ? 'Concluída. Cliente avisada do estorno.' : 'Estorno pago. Falta avisar o cliente (etapa Mensagem enviada). Use "concluir tudo (sem msg)" abaixo se já avisou no teste.'}
           </div>
         ) : null}
 
@@ -1587,6 +1587,9 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
         <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {st !== 'cancelada' && st !== 'completa' && (
             <button disabled={busy} onClick={() => setCancelOpen(true)} style={fbtn(palette.surface, palette.alert, palette.beige)}>cancelar devolução</button>
+          )}
+          {st !== 'cancelada' && !d.cliente_avisado_em && (
+            <button disabled={busy} onClick={() => { if (window.confirm('Marcar TODAS as etapas como concluídas SEM enviar mensagem? Use só pra clientes que já receberam a mensagem no teste.')) run('concluir_manual'); }} style={fbtn(palette.surface, palette.ok, palette.beige)}>concluir tudo (sem msg)</button>
           )}
           {isAdmin && (
             <button disabled={busy} onClick={() => { if (window.confirm('Arquivar? Some de todas as contagens.')) run('arquivar'); }} style={fbtn(palette.surface, palette.inkMuted, palette.beige)}>arquivar</button>
