@@ -21,6 +21,15 @@ import { enviarTemplate } from './_lojas-whats-meta-client.js';
 const TEMPLATE_PESQUISA = 'sofia_pesquisa_motivo_v1';
 const LIMITE_PADRAO = 30;
 
+// Espelha o corpo + botoes do template aprovado sofia_pesquisa_motivo_v1.
+// Usado pra registrar na thread EXATAMENTE o que a cliente recebe (o
+// enviarTemplate manda o HSM mas nao loga nada em lojas_whats_mensagens, entao
+// a conversa ficava vazia). Se mudar o template na Meta, atualize aqui tambem.
+// Ailson 22/06/2026.
+const pesquisaCorpo = (nome) =>
+  `Oi ${nome}, tudo bem? Posso te fazer uma pergunta rápida: o que fez vc não seguir com a negociação?`;
+const PESQUISA_BOTOES = ['Mínimo 12 peças', 'Preço', 'Variedade', 'Outros motivos'];
+
 async function templateAprovado() {
   const { data } = await supabase
     .from('lojas_whats_templates')
@@ -45,8 +54,10 @@ export async function enviarPesquisaConversa(conv) {
   if (!claim) return { ok: false, erro: 'ja_enviada' };
 
   const nome = primeiroNome(conv.nome_cliente) || 'tudo bem';
+  let metaId = null;
   try {
-    await enviarTemplate(conv.telefone, TEMPLATE_PESQUISA, [nome], 'pt_BR');
+    const r = await enviarTemplate(conv.telefone, TEMPLATE_PESQUISA, [nome], 'pt_BR');
+    metaId = r?.messages?.[0]?.id || null;
   } catch (e) {
     logErro('pesquisa-enviar', e);
     // reverte o claim pra poder tentar de novo num proximo run
@@ -56,6 +67,21 @@ export async function enviarPesquisaConversa(conv) {
       .eq('id', conv.id);
     return { ok: false, erro: e.message };
   }
+
+  // Registra o template na thread pra a assistente ver exatamente o que a
+  // cliente recebeu no WhatsApp (corpo + botoes). Falha aqui NAO reverte o
+  // envio (a pesquisa ja foi). Ailson 22/06/2026.
+  try {
+    const textoThread = `${pesquisaCorpo(nome)}\n\n${PESQUISA_BOTOES.map(b => `[ ${b} ]`).join('  ')}`;
+    await supabase.from('lojas_whats_mensagens').insert({
+      conversa_id: conv.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+      texto: textoThread, meta_message_id: metaId, status: 'enviando',
+      enviada_em: agora,
+    });
+  } catch (e) {
+    logErro('pesquisa-enviar-log', e);
+  }
+
   return { ok: true };
 }
 

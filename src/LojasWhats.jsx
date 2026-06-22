@@ -339,6 +339,8 @@ const fmtRelTime = (iso) => {
 
 export default function LojasWhats({ userId, isAdmin, onBack }) {
   const [activeTab, setActiveTab] = useState('aprovar');
+  // Conversa que a aba Pesquisa pediu pra abrir no chat (Ailson 22/06/2026)
+  const [conversaParaAbrir, setConversaParaAbrir] = useState(null);
   const [tabAnterior, setTabAnterior] = useState('aprovar');
   const handleTabChange = (t) => { if (t === 'clientes') setTabAnterior(activeTab); setActiveTab(t); };
   const [refreshTick, setRefreshTick] = useState(0);
@@ -455,13 +457,13 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab !== 'clientes' && <TabBar tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />}
 
       {activeTab === 'funil' && <FunilTab refreshTick={refreshTick} />}
-      {activeTab === 'conversas' && <ConversasTab refreshTick={refreshTick} userId={userId} />}
+      {activeTab === 'conversas' && <ConversasTab refreshTick={refreshTick} userId={userId} conversaInicial={conversaParaAbrir} onAberturaConsumida={() => setConversaParaAbrir(null)} />}
       {activeTab === 'aprovar' && <ConversasTab refreshTick={refreshTick} userId={userId} filtroInicial="aprovar" />}
       {activeTab === 'vendedoras' && <VendedorasTab userId={userId} refreshTick={refreshTick} />}
       {activeTab === 'conversao' && <ConversaoTab refreshTick={refreshTick} />}
       {activeTab === 'aprendizado' && <AprendizadoTab refreshTick={refreshTick} />}
       {activeTab === 'midias' && <MidiasTab refreshTick={refreshTick} />}
-      {activeTab === 'pesquisa' && <PesquisaTab refreshTick={refreshTick} />}
+      {activeTab === 'pesquisa' && <PesquisaTab refreshTick={refreshTick} onAbrirChat={(id) => { setConversaParaAbrir(id); setActiveTab('conversas'); }} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
       {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} />}
     </div>
@@ -1336,7 +1338,7 @@ function SugestaoCard({
 // TAB 3: CONVERSAS
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
+function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaInicial = null, onAberturaConsumida }) {
   const [conversas, setConversas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtroEtapa, setFiltroEtapa] = useState(filtroInicial);
@@ -1368,10 +1370,25 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
   const [processandoFila, setProcessandoFila] = useState(false);
   // Modal de explicacao "?" dos chips de filtro (Ailson 27/05/2026)
   const [ajudaEtapa, setAjudaEtapa] = useState(null);
+  // Sub-filtro da aba Perdida: ver quem recebeu / nao recebeu a pesquisa de
+  // motivo. 'todos' | 'com' | 'sem'. Ailson 22/06/2026.
+  const [filtroPesquisaPerdida, setFiltroPesquisaPerdida] = useState('todos');
 
   // Sincroniza se filtroInicial mudar (ex: navegacao entre tabs Aprovar/Conversas)
   useEffect(() => { setFiltroEtapa(filtroInicial); }, [filtroInicial]);
+  // Abertura externa: clique num card da aba Pesquisa manda abrir o chat dessa
+  // conversa aqui na aba Conversas. Avisa o pai pra limpar (re-clique funciona).
+  // Ailson 22/06/2026.
+  useEffect(() => {
+    if (conversaInicial) {
+      setConversaDetalhe(conversaInicial);
+      onAberturaConsumida?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversaInicial]);
   useEffect(() => { setSelecionados(new Set()); }, [filtroEtapa]);
+  // Sai da Perdida -> zera o sub-filtro de pesquisa (Ailson 22/06/2026)
+  useEffect(() => { if (filtroEtapa !== 'perdida') setFiltroPesquisaPerdida('todos'); }, [filtroEtapa]);
 
   // Carrega contadores por etapa pros badges nos chips
   // Ailson 25/05/2026: pra etapas 'conversando' e 'quente', badge eh
@@ -1446,7 +1463,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1461,12 +1478,15 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       }
       q = q.limit(limite);
       if (filtroEtapa !== 'todas') q = q.eq('etapa', filtroEtapa);
+      // Sub-filtro da Perdida: recebeu / nao recebeu a pesquisa. Ailson 22/06/2026.
+      if (filtroEtapa === 'perdida' && filtroPesquisaPerdida === 'com') q = q.not('pesquisa_enviada_em', 'is', null);
+      else if (filtroEtapa === 'perdida' && filtroPesquisaPerdida === 'sem') q = q.is('pesquisa_enviada_em', null);
       const { data } = await q;
       setConversas(data || []);
       jaCarregouListaRef.current = true;
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick, reloadTick, expandido]);
+  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida]);
 
   useEffect(() => {
     if (!feedback) return;
@@ -1626,7 +1646,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
           }}>
             <ChipMini label="Todas" cor={palette.inkMuted}
               ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')}
-              badge={contadores.todas} unread={unreadPorEtapa.todas} />
+              badge={contadores.todas} />
             {etapasNaBarra.map(et => (
               <ChipMini key={et.id} label={et.label} cor={et.cor}
                 ativo={filtroEtapa === et.id} onClick={() => setFiltroEtapa(et.id)}
@@ -1772,7 +1792,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
       }}>
         <FiltroChip label="Todas" etapaId="todas" onAjuda={setAjudaEtapa}
           ativo={filtroEtapa === 'todas'} onClick={() => setFiltroEtapa('todas')}
-          badge={contadores.todas} unread={unreadPorEtapa.todas} />
+          badge={contadores.todas} />
         {ETAPAS.map(et => (
           <FiltroChip key={et.id} label={et.label} ativo={filtroEtapa === et.id}
             cor={et.cor} onClick={() => setFiltroEtapa(et.id)} iconNome={et.id}
@@ -1853,6 +1873,26 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas' }) {
               </button>
             )
           )}
+        </div>
+      )}
+
+      {/* Sub-filtro Perdida: quem recebeu / nao recebeu a pesquisa. Ailson 22/06/2026 */}
+      {ehAbaPerdida && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>📋 Pesquisa:</span>
+          {[['todos', 'Todos'], ['com', 'Recebeu'], ['sem', 'Não recebeu']].map(([id, label]) => {
+            const ativo = filtroPesquisaPerdida === id;
+            return (
+              <button key={id} onClick={() => setFiltroPesquisaPerdida(id)}
+                style={{
+                  fontSize: fz(11), padding: '4px 11px', borderRadius: 14,
+                  border: `1px solid ${ativo ? palette.accent : palette.beige}`,
+                  background: ativo ? palette.accent : palette.surface,
+                  color: ativo ? '#fff' : palette.ink,
+                  cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                }}>{label}</button>
+            );
+          })}
         </div>
       )}
 
@@ -2405,6 +2445,19 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
                 background: '#eaf1f7', color: '#2c5d86', fontWeight: 700,
               }}>🎧 SAC</span>
             )}
+            {/* Pesquisa de motivo (Ailson 22/06/2026): selo pra ver quem recebeu /
+                quem respondeu, principalmente na aba Perdida. */}
+            {c.pesquisa_respondida_em ? (
+              <span title={`Respondeu a pesquisa de motivo${c.pesquisa_motivo ? ' (' + c.pesquisa_motivo + ')' : ''}`} style={{
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: '#e6f7ee', color: '#1f7a48', fontWeight: 700,
+              }}>📋 {({ minimo_pecas: 'mín. peças', preco: 'preço', variedade: 'variedade', outros: 'outros' }[c.pesquisa_motivo]) || 'respondeu'}</span>
+            ) : c.pesquisa_enviada_em ? (
+              <span title="Pesquisa de motivo enviada, aguardando resposta" style={{
+                fontSize: fz(10), padding: '1px 5px', borderRadius: 8,
+                background: '#fff4e5', color: '#9c5b00', fontWeight: 700,
+              }}>📋 pesquisa</span>
+            ) : null}
             {/* Relógio de follow-up do catálogo — clicável: desmarca/reativa o
                 envio automático 6h/24h sem abrir o chat. Ailson 29/05/2026. */}
             {c.catalogo_enviado_em && !['vendeu', 'perdida'].includes(c.etapa) && (() => {
@@ -6013,7 +6066,7 @@ function SeletorMidiaModal({ onClose, onSelect }) {
 // TAB 8: MIDIAS SOFIA
 // ═══════════════════════════════════════════════════════════════════════════
 
-function PesquisaTab({ refreshTick }) {
+function PesquisaTab({ refreshTick, onAbrirChat }) {
   const [respostas, setRespostas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
@@ -6097,7 +6150,9 @@ function PesquisaTab({ refreshTick }) {
               return (
                 <div key={r.id} style={{ border: `1px solid ${palette.beige}`, borderRadius: sz(10), padding: sz(10), marginBottom: sz(8), background: palette.surface }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: sz(8) }}>
-                    <div>
+                    <div onClick={() => r.conversa_id && onAbrirChat?.(r.conversa_id)}
+                      title={r.conversa_id ? 'Abrir conversa no chat' : undefined}
+                      style={{ cursor: r.conversa_id ? 'pointer' : 'default', flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: sz(13), color: palette.ink }}>{r.nome || r.telefone || 'Lead'}</div>
                       <div style={{ fontSize: sz(11), color: palette.inkMuted, marginTop: sz(2) }}>
                         {r.telefone || '—'} · variante {r.variante || '-'}{r.etapaAtual ? ` · agora: ${r.etapaAtual}` : ''}
@@ -6111,6 +6166,14 @@ function PesquisaTab({ refreshTick }) {
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: sz(6), marginTop: sz(8), flexWrap: 'wrap' }}>
+                    {r.conversa_id && (
+                      <button onClick={() => onAbrirChat?.(r.conversa_id)}
+                        style={{ fontSize: sz(11), padding: `${sz(4)}px ${sz(8)}px`, borderRadius: sz(6),
+                          border: `1px solid ${palette.accent}`, background: palette.accent, color: '#fff',
+                          cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+                        💬 Abrir chat
+                      </button>
+                    )}
                     {['conversando', 'quente', 'atendida', 'perdida'].map(et => btnMover(r.conversa_id, et))}
                   </div>
                 </div>

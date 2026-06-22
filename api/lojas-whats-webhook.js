@@ -343,7 +343,11 @@ async function processarMensagemRecebida(msg, valueCtx) {
         pesquisa_respondida_em: agoraIso,
         catalogo_auto_bloqueado: true,   // trava catalogo auto + follow-up daqui pra frente
         auto_resposta_bloqueada: true,   // no recontato a Sofia gera resposta mas espera aprovacao
-        unread_count: (conversa.unread_count || 0) + 1,
+        // NAO incrementa unread_count aqui (Ailson 22/06/2026 — Opcao A): o
+        // clique no botao da pesquisa NAO conta como "conversa aberta". O card
+        // so vira nao-lido quando a cliente responde com TEXTO (fluxo normal
+        // abaixo, fora deste branch). Assim a pesquisa fica parada na aba
+        // Pesquisa ate ela de fato voltar a conversar.
         ultima_atividade_em: agoraIso,
         atualizado_em: agoraIso,
       };
