@@ -4962,6 +4962,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       const result={};const nomes={};const cortesRaw={};
       for(const c of cortes){
         if(c?.entregue===true)continue; // só cortes ainda na oficina
+        if(c?.arquivado===true)continue; // corte arquivado não conta na projeção (Ailson 22/06/2026)
         const refRaw=String(c.ref||'').replace(/\D/g,'').replace(/^0+/,'');
         if(!refRaw)continue;
         const cores=c.detalhes?.cores||[];
@@ -5354,6 +5355,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         const c=String(cor||'').toLowerCase().trim();
         if(refNorm==='2601'&&(c==='marrom-escuro'||c==='marrom escuro'))
           return{destino:'Marrom',ocultar:true,somar:true};
+        // 2601: a variação REAL tem SKU sob o rótulo "Azul" (I82gqdf457u527-530); o
+        // ML sintetizou um "Azul royal" duplicado (SKU _SINT_, mesma qtd). Renomeia
+        // Azul→Azul royal (mantém o SKU real) e oculta o sintético. Ailson 22/06/2026.
+        if(refNorm==='2601'&&c==='azul')
+          return{destino:'Azul royal',ocultar:true,somar:true};
+        if(refNorm==='2601'&&c==='azul royal')
+          return{destino:null,ocultar:true,somar:false};
         if(refNorm==='395'&&c==='branco')
           return{destino:null,ocultar:true,somar:false};
         return{destino:null,ocultar:false,somar:false};
@@ -5369,7 +5377,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           // 2601 marrom-escuro → soma na linha Marrom do mesmo tamanho
           const chave=`${a.destino.toLowerCase()}|${String(v.tam||'').toLowerCase()}`;
           if(!agrupado[chave]){
-            agrupado[chave]={...v,cor:a.destino,qtd:v.qtd||0,sku:null};
+            agrupado[chave]={...v,cor:a.destino,qtd:v.qtd||0,sku:v.sku||null};
           }else{
             agrupado[chave].qtd=(agrupado[chave].qtd||0)+(v.qtd||0);
           }
