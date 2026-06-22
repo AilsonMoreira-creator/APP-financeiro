@@ -230,6 +230,10 @@
       "schedule": "0 17 * * 1-5"
     },
     {
+      "path": "/api/lojas-whats-cron-pesquisa",
+      "schedule": "0 17 * * *"
+    },
+    {
       "path": "/api/lojas-produtos-raiox-refresh",
       "schedule": "0 6 * * *"
     },
