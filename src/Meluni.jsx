@@ -1411,6 +1411,7 @@ function DevolucaoCard({ d, compact, ativo, onAbrir }) {
               <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(d.telefone)}</span>
               <CampoKPI label="valor" valor={fmtBRL(d.valor)} destaque />
               {d.pedido_ref && <span>pedido {d.pedido_ref}</span>}
+              {d.data_devolucao && <span>solicitada {fmtData(d.data_devolucao)}</span>}
             </div>
             {/* direita: 1ª peça sempre; demais recolhidas (clica pra expandir no card) */}
             <div style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
