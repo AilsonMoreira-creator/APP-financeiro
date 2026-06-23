@@ -454,11 +454,11 @@ function respostaPesquisaVariante(motivo, primeiro) {
     minimo_pecas: [
       ['A', [
         `${ola}que bom que vc respondeu! Como recebemos bastante retorno sobre quantidade de peças, até o fim de junho a gente liberou o mínimo de 6 peças.`,
-        `Aí dá pra vc conhecer os modelos da Amícia, ver a qualidade e o acabamento de perto, e sentir como vende bem na sua loja. Quer que eu já separe uma grade pra vc?`,
+        `Mudou bastante coisa desde a última vez que vc deu uma olhada. Quer que eu te mande o catálogo atualizado pra vc ver as novidades?`,
       ]],
       ['B', [
         `${ola}fico feliz que vc respondeu! Sobre o número de peças, ouvimos bastante isso, então até o fim de junho liberamos um mínimo de 6 peças pra começar mais leve.`,
-        `É uma boa pra vc provar os modelos da Amícia, ver acabamento e qualidade, e ver o que sai na sua loja. Posso montar uma gradinha de 6 pra vc?`,
+        `Desde a última vez que vc viu por aqui entrou bastante novidade. Quer que eu te mande o catálogo atualizado pra vc conferir?`,
       ]],
     ],
     preco: [
