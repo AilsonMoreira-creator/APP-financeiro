@@ -1450,6 +1450,7 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   const [forma, setForma] = useState(d.estorno_forma || (String(d.tipo || '').toLowerCase().includes('cr') && String(d.tipo || '').toLowerCase().includes('dito') ? 'credito' : 'pix'));
   const [chave, setChave] = useState(d.estorno_pix_chave || '');
   const [busy, setBusy] = useState(false);
+  const [salvoOk, setSalvoOk] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [devAberto, setDevAberto] = useState(false);
@@ -1461,10 +1462,11 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   const n = d.n_pecas || itens.length || 1;
 
   const run = async (acao, payload) => {
-    if (bloqueado) return;
+    if (bloqueado) return false;
     setBusy(true);
-    await onAcao(acao, payload);
+    const ok = await onAcao(acao, payload);
     setBusy(false);
+    return ok;
   };
 
   return (
@@ -1577,10 +1579,18 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
                 style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginBottom: 8 }} />
             )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button disabled={busy} onClick={() => run('salvar_estorno', { estorno_valor: valor, estorno_forma: forma, estorno_pix_chave: chave })} style={fbtn(palette.surface, MELUNI, palette.beige)}>salvar</button>
+              <button disabled={busy} onClick={async () => {
+                const ok = await run('salvar_estorno', { estorno_valor: valor, estorno_forma: forma, estorno_pix_chave: chave });
+                if (ok) { setSalvoOk(true); setTimeout(() => setSalvoOk(false), 3000); }
+              }} style={fbtn(palette.surface, MELUNI, palette.beige)}>salvar</button>
               <button disabled={busy} onClick={() => run('estornar', { estorno_valor: valor, estorno_forma: forma, estorno_pix_chave: chave })} style={fbtn(MELUNI, '#fff')}>
                 <DollarSign size={14} /> confirmar estorno (pago)
               </button>
+              {salvoOk && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: palette.ok, fontWeight: 700, fontSize: 12.5 }}>
+                  <CheckCircle size={14} /> valor e chave salvos
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 10.5, color: palette.inkMuted, marginTop: 8 }}>a Lara salva o valor e a forma; confirme o estorno depois que o pagamento sair.</div>
           </div>

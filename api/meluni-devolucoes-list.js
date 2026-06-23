@@ -18,7 +18,9 @@ export default async function handler(req, res) {
     let qy = supabase.from('vw_meluni_devolucoes')
       .select('*')
       .order('rank_aberto', { ascending: true })
-      .order('fluxo_desde', { ascending: true, nullsFirst: false });
+      .order('importado_em', { ascending: false, nullsFirst: false })
+      .order('criado_em', { ascending: false, nullsFirst: false })
+      .order('data_devolucao', { ascending: false, nullsFirst: false });
 
     if (etapa === 'aguardando_conferir') qy = qy.eq('fluxo_status', 'aguardando_conferir');
     else if (etapa === 'aguardando_estorno') qy = qy.eq('fluxo_status', 'aguardando_estorno');

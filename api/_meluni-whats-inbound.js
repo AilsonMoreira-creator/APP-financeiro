@@ -16,7 +16,7 @@
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
 import { obterUrlMidia, baixarMidia } from './_lojas-whats-meta-client.js';
-import { acharConversaWhats, soDigitos } from './_meluni-tel.js';
+import { acharConversaWhats, soDigitos, chaveTel } from './_meluni-tel.js';
 
 const DEBOUNCE_MS = 60 * 1000; // 60s — agrupa rajada antes da IA (igual Sofia)
 
@@ -200,15 +200,19 @@ export async function processarMensagemMeluni(msg, value) {
     // se essa cliente tem carrinho no funil (enviada/segundo_envio), a resposta dela
     // move pra 'conversando' e marca a interação (alimenta o relógio de 3 dias).
     try {
-      const tel10 = telefone.replace(/\D/g, '').slice(-10);
+      const chave = chaveTel(telefone);
       const { data: carts } = await supabase.from('meluni_carrinhos')
-        .select('id, telefone')
+        .select('id, telefone, conversa_id')
         .in('status', ['enviada', 'segundo_envio', 'perdida'])
         .is('convertido_em', null);
-      const alvo = (carts || []).find(x => (x.telefone || '').replace(/\D/g, '').slice(-10) === tel10);
+      // casa por telefone canônico (DDD + 8 finais): o WhatsApp manda BR sem o 9º
+      // dígito e o carrinho grava com ele, então slice(-10) nunca casava e a
+      // resposta da cliente ficava órfã (badge travado). Ailson 23/06/2026.
+      const alvo = (carts || []).find(x => chaveTel(x.telefone) === chave);
       if (alvo) {
         await supabase.from('meluni_carrinhos').update({
           status: 'conversando', ultima_interacao_em: new Date().toISOString(),
+          ...(alvo.conversa_id ? {} : { conversa_id: conversaId }),
         }).eq('id', alvo.id);
       }
     } catch (e) { console.error('[meluni-inbound] carrinho->conversando:', e?.message || e); }
