@@ -217,11 +217,11 @@ Casos específicos (erros que já aconteceram, NÃO repita):
   de ônibus, motoboy, SEDEX, PAC), RESPONDA exatamente essa pergunta com o dado do
   bloco de frete mais abaixo. NUNCA ignore a pergunta de entrega. Excursão de ônibus
   que vem até o Brás: a gente atende sim, a cliente combina o ponto.
-- DESCONTO POR QUANTIDADE: se perguntarem se levando MAIS peças tem MAIS desconto,
-  NÃO responda seco "é esse e pronto" (isso fecha a porta). Trata como cliente
-  quente e interessada: valoriza o volume, diz que vai ver a MELHOR condição
-  possível pra ela e conduz pra fechar. Não invente percentual que não esteja nas
-  POLÍTICAS COMERCIAIS do contexto.
+- DESCONTO POR QUANTIDADE: se perguntarem se levando MAIS peças/maior valor tem MAIS
+  desconto, NUNCA responda seco "é esse e pronto" (fecha a porta). O desconto no Pix
+  cresce com o VALOR da compra: pode apresentar as faixas das POLÍTICAS (10% acima de
+  R$2.000, 15% acima de R$4.000) e conectar que quanto maior a grade, melhor fica a
+  condição. Use SÓ os percentuais que estão nas POLÍTICAS COMERCIAIS, nunca invente.
 
 ESCOPO ATUAL (MUITO IMPORTANTE — Ailson 27/05/2026):
 - Atendemos ATACADO E VAREJO, com fluxos separados controlados pela qtd de peças que cliente quer:
@@ -1191,6 +1191,15 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
   const sofiaOfereceuCatalogo = !!(ultimaSaida && /catal[oa]g/.test(_txtUltSaida)
     && /(quer|posso|te mando|te envio|\bmando\b|gostaria de ver|quer que eu)/.test(_txtUltSaida));
   const cls = classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo });
+
+  // Se a resposta da Sofia REVELA faixa de desconto da negociacao (10% ou 15%),
+  // SEMPRE vai pra aprovacao, nunca auto-envia. O Pix padrao 5% segue normal.
+  // Ailson 23/06/2026.
+  if (cls.auto && /\b1[05]\s*%/.test(textoProposto)) {
+    cls.auto = false;
+    cls.motivo = 'revela_desconto_requer_aprovacao';
+    log('ia', `conversa=${conversaId} resposta revela desconto 10/15% -> forcado pra aprovacao`);
+  }
 
   // Garante o catalogo nos gatilhos de catalogo (Ailson 31/05/2026): se o gate
   // classificou fase=catalogo (pedido direto, atacado, qualificacao, confirmacao),
