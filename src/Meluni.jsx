@@ -1846,10 +1846,10 @@ const EMAIL_PERIODOS = [
   { v: 'mes_passado', l: 'Último mês' },
 ];
 
-function EmailMktCard({ c, etapa, sel, onSel, onBloquear }) {
+function EmailMktCard({ c, etapa, sel, onSel, onBloquear, onDesarquivar }) {
   const [bloq, setBloq] = useState(false);
   const dataFmt = fmtData(String(c.data || '').slice(0, 10));
-  const rotuloData = etapa === 'processando' ? 'carrinho' : (etapa === 'abertura' ? 'aberto' : 'enviado');
+  const rotuloData = etapa === 'processando' ? 'carrinho' : (etapa === 'abertura' ? 'aberto' : (etapa === 'arquivadas' ? 'arquivado' : 'enviado'));
   const abriu = etapa === 'abertura' || (etapa === 'enviados' && c.aberto_em);
   return (
     <div style={{
@@ -1882,6 +1882,18 @@ function EmailMktCard({ c, etapa, sel, onSel, onBloquear }) {
             opacity: bloq ? 0.6 : 1,
           }}>
           <Ban size={13} /> Bloquear
+        </button>
+      )}
+      {etapa === 'arquivadas' && (
+        <button onClick={async () => { setBloq(true); await onDesarquivar(); }} disabled={bloq}
+          title="Voltar a permitir o e-mail do app pra esse carrinho"
+          style={{
+            flexShrink: 0, padding: '5px 9px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: FONT,
+            background: palette.surface, color: MELUNI, border: `1px solid ${palette.beige}`,
+            opacity: bloq ? 0.6 : 1,
+          }}>
+          <RotateCcw size={13} /> Desarquivar
         </button>
       )}
     </div>
@@ -2343,6 +2355,8 @@ function SecaoEmailMkt() {
       help: 'Leads que já receberam o e-mail mkt no período escolhido.' },
     { id: 'abertura', label: 'Abertura', unread: counts.abertura,
       help: 'Leads que abriram o e-mail (medido pelo Resend).\n\nA abertura é aproximada: alguns apps de e-mail inflam (Apple Mail) e outros bloqueiam o pixel de leitura.' },
+    { id: 'arquivadas', label: 'Arquivadas', unread: counts.arquivadas,
+      help: 'Carrinhos que vc arquivou pra não receber o e-mail do app (evita duplicar com o Convertr). Não entram em nenhum disparo. Dá pra desarquivar se quiser.' },
   ];
 
   const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -2391,6 +2405,15 @@ function SecaoEmailMkt() {
     setArquivando(false);
   };
 
+  const desarquivar = async (carrinho_id) => {
+    try {
+      await fetch('/api/meluni-email-mkt-bloquear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ carrinho_id, bloquear: false }) });
+      setCards(prev => prev.filter(c => c.carrinho_id !== carrinho_id));
+      setCounts(c => ({ ...c, arquivadas: Math.max(0, (c.arquivadas || 1) - 1) }));
+      setTotal(t => Math.max(0, t - 1));
+    } catch { /* */ }
+  };
+
   const carregarMais = cards.length < total ? (
     <button onClick={() => carregar(cards.length)} disabled={loading}
       style={{ ...selStyle, marginTop: 4, width: '100%', padding: 8, fontWeight: 700 }}>
@@ -2398,7 +2421,7 @@ function SecaoEmailMkt() {
     </button>
   ) : null;
 
-  const rotuloTotal = aba === 'processando' ? 'elegíveis' : (aba === 'abertura' ? 'aberturas' : 'enviados');
+  const rotuloTotal = aba === 'processando' ? 'elegíveis' : aba === 'abertura' ? 'aberturas' : aba === 'arquivadas' ? 'arquivadas' : 'enviados';
 
   return (
     <div>
@@ -2440,7 +2463,8 @@ function SecaoEmailMkt() {
         {cards.map(c => (
           <EmailMktCard key={c.id} c={c} etapa={aba}
             sel={sel.has(c.id)} onSel={() => toggleSel(c.id)}
-            onBloquear={() => bloquear(c.carrinho_id)} />
+            onBloquear={() => bloquear(c.carrinho_id)}
+            onDesarquivar={() => desarquivar(c.carrinho_id)} />
         ))}
       </div>
       {carregarMais}

@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const q = req.query || {};
-  const etapa = ['processando', 'enviados', 'abertura'].includes(q.etapa) ? q.etapa : 'processando';
+  const etapa = ['processando', 'enviados', 'abertura', 'arquivadas'].includes(q.etapa) ? q.etapa : 'processando';
   const periodo = q.periodo || 'mes_atual';
   const limite = Math.min(200, parseInt(q.limite || '80', 10) || 80);
   const offset = Math.max(0, parseInt(q.offset || '0', 10) || 0);
@@ -41,12 +41,13 @@ export default async function handler(req, res) {
 
   try {
     // contagens das 3 abas (badges), todas no período escolhido
-    const [cProc, cEnv, cAb] = await Promise.all([
+    const [cProc, cEnv, cAb, cArq] = await Promise.all([
       contar('vw_meluni_email_elegiveis', 'data_carrinho', de, ate),
       contar('meluni_email_envios', 'enviado_em', de, ate),
       contar('meluni_email_envios', 'aberto_em', de, ate, 'aberto'),
+      contar('meluni_carrinhos', 'email_mkt_bloqueado_em', de, ate),
     ]);
-    const counts = { processando: cProc, enviados: cEnv, abertura: cAb };
+    const counts = { processando: cProc, enviados: cEnv, abertura: cAb, arquivadas: cArq };
 
     let cards = [], total = 0;
 
@@ -63,6 +64,21 @@ export default async function handler(req, res) {
       cards = (data || []).map(c => ({
         id: c.id, carrinho_id: c.id, nome: c.nome, email: c.email,
         valor: c.valor, itens: c.itens, data: c.data_carrinho,
+      }));
+    } else if (etapa === 'arquivadas') {
+      let query = supabase.from('meluni_carrinhos')
+        .select('id,nome,email,valor,itens,data_carrinho,email_mkt_bloqueado_em', { count: 'exact' })
+        .not('email_mkt_bloqueado_em', 'is', null)
+        .gte('email_mkt_bloqueado_em', de);
+      if (ate) query = query.lt('email_mkt_bloqueado_em', ate);
+      const { data, count, error } = await query
+        .order('email_mkt_bloqueado_em', { ascending: false, nullsFirst: false })
+        .range(offset, offset + limite - 1);
+      if (error) throw new Error(error.message);
+      total = count || 0;
+      cards = (data || []).map(c => ({
+        id: c.id, carrinho_id: c.id, nome: c.nome, email: c.email,
+        valor: c.valor, itens: c.itens, data: c.email_mkt_bloqueado_em,
       }));
     } else {
       const campo = etapa === 'abertura' ? 'aberto_em' : 'enviado_em';
