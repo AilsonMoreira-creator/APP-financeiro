@@ -9955,28 +9955,13 @@ export default function App(){
       const normAux=normalizarAuxIds(payload.auxDataPorMes||{});
       payload={...payload,auxDataPorMes:normAux.aux};
       // READ: busca dados atuais do Supabase antes de salvar
-      const {data:remoteData}=await supabase.from('amicia_data').select('payload').eq('user_id',USER_ID).single();
+      // ── CAS LOOP (rev): le remoto+rev, mescla e grava SO se rev nao mudou. ──
+      // Substitui a antiga comparacao de relogio entre devices (fonte da perda recorrente).
+      // Um device com dado velho NAO consegue mais sobrescrever: o update bate em 0 linhas e ele re-le.
+      for(let _tent=1;_tent<=6;_tent++){
+      const {data:remoteData}=await supabase.from('amicia_data').select('payload,rev').eq('user_id',USER_ID).single();
       const remote=remoteData?.payload||{};
-
-      // ⚡ GUARD CRÍTICO (Sprint 6.8.3): se remoto tem edits mais novos que este device nunca viu, ABORTA.
-      // Cenário que protege: device com cache stale (ex: iPhone em background) prestes a sobrescrever
-      // edits que outro device (MacBook) fez depois. dbCarregadoTs = quando ESTE device baixou remoto pela última vez.
-      const remoteTs=remote._updated||0;
-      if(remoteTs>0&&dbCarregadoTs.current>0&&remoteTs>dbCarregadoTs.current+2000){
-        // Remoto tem edits novos pós-load deste device. Recarrega state em vez de sobrescrever.
-        console.warn("SUPABASE-SAVE: ABORTADO — remoto ts:",new Date(remoteTs).toLocaleString("pt-BR"),"> último load deste device:",new Date(dbCarregadoTs.current).toLocaleString("pt-BR"),"(diff:",remoteTs-dbCarregadoTs.current,"ms). Recarregando state pra não sobrescrever edits de outro device.");
-        // Atualiza state com dados remotos (edits de outro device)
-        if(remote.receitasPorMes)setReceitasPorMes(remote.receitasPorMes);
-        if(remote.auxDataPorMes)setAuxDataPorMes(remote.auxDataPorMes);
-        if(remote.categoriasPorMes)setCategoriasPorMes(remote.categoriasPorMes);
-        if(remote.boletosShared&&remote.boletosShared.length>0)setBoletosShared(deduplicarBoletos(remote.boletosShared));
-        // Atualiza localStorage E marca dbCarregadoTs novo (para próximos saves saberem)
-        try{localStorage.setItem("amica_financeiro",JSON.stringify({...remote,_updated:remoteTs}));}catch(e){}
-        dbCarregadoTs.current=remoteTs;
-        setSyncStatus('error');
-        setTimeout(()=>setSyncStatus(null),5000);
-        return;
-      }
+      const baseRev=remoteData?.rev||0;
 
       // MERGE PROFUNDO: protege contra perda de dados dia-a-dia, não só por mês inteiro
       const mergedPayload={...payload};
@@ -10104,34 +10089,50 @@ export default function App(){
         mergedPayload.boletosShared=[...bolMap.values()];
       }
 
-      // WRITE: salva o resultado mergeado
+      // WRITE (CAS): grava SO se rev continua == baseRev. Se outro device gravou no meio, 0 linhas → re-tenta.
       const ts=Date.now();
       lastSaveTs.current=ts;
       const payloadComTs={...mergedPayload,_updated:ts};
       const recMeses=Object.keys(payloadComTs.receitasPorMes||{}).length;
       const bolCount=payloadComTs.boletosShared?.length||0;
-      console.log("SUPABASE-SAVE: enviando merge, ts:",ts,",",recMeses,"meses receitas,",bolCount,"boletos");
-
-      const {error}=await supabase.from('amicia_data').upsert({user_id:USER_ID,payload:payloadComTs},{onConflict:'user_id'});
+      const {data:upd,error}=await supabase.from('amicia_data')
+        .update({payload:payloadComTs,rev:baseRev+1,updated_at:new Date().toISOString()})
+        .eq('user_id',USER_ID).eq('rev',baseRev).select('rev');
       if(error){
         console.error("SUPABASE-SAVE: erro:",error);
         setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);
-      }else{
-        try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
-        localStorage.setItem("amica_pending_sync","false");
-        // Fixa os ids dos lançamentos no state (só adiciona onde falta, não toca em edits)
-        setAuxDataPorMes(prev=>{const n=normalizarAuxIds(prev);return n.mudou?n.aux:prev;});
-        dbCarregadoTs.current=ts; // marca o ts do save pra próximos guards compararem corretamente
-        // 🛡️ Atualiza snapshot com o que acabou de ser salvo (pra próximos guards)
-        dbSnapshot.current={
-          ...dbSnapshot.current,
-          receitasMesesCount:recMeses,
-          boletosCount:bolCount,
-          auxMesesCount:Object.keys(payloadComTs.auxDataPorMes||{}).length,
-        };
-        setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
-        console.log("SUPABASE-SAVE: sucesso, ts:",ts);
+        return;
       }
+      if(!upd||upd.length===0){
+        // CONFLITO: rev mudou entre o read e o write (outro device gravou). Re-le e remescla.
+        console.warn("SUPABASE-SAVE: conflito de rev (tentativa",_tent,"/6, baseRev",baseRev,") — relendo e remesclando");
+        continue;
+      }
+      // SUCESSO
+      const novoRev=upd[0]?.rev??(baseRev+1);
+      // snapshot de historico (best-effort, nao bloqueia) + prune ocasional p/ nao crescer infinito
+      supabase.from('amicia_data_historico').insert({user_id:USER_ID,payload:payloadComTs,rev:novoRev}).then(()=>{
+        if(Math.random()<0.12)supabase.rpc('fn_amicia_hist_prune',{p_user:USER_ID,p_manter:40}).then(()=>{},()=>{});
+      },()=>{});
+      try{localStorage.setItem("amica_financeiro",JSON.stringify(payloadComTs));}catch(e){console.error(e);}
+      localStorage.setItem("amica_pending_sync","false");
+      // Fixa os ids dos lançamentos no state (só adiciona onde falta, não toca em edits)
+      setAuxDataPorMes(prev=>{const n=normalizarAuxIds(prev);return n.mudou?n.aux:prev;});
+      dbCarregadoTs.current=ts;
+      // 🛡️ Atualiza snapshot com o que acabou de ser salvo (pra próximos guards)
+      dbSnapshot.current={
+        ...dbSnapshot.current,
+        receitasMesesCount:recMeses,
+        boletosCount:bolCount,
+        auxMesesCount:Object.keys(payloadComTs.auxDataPorMes||{}).length,
+      };
+      setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2500);
+      console.log("SUPABASE-SAVE: sucesso CAS, rev:",novoRev,"ts:",ts);
+      return;
+      } // ── fim do for CAS ──
+      // Esgotou as 6 tentativas sem gravar (conflito persistente, raríssimo): mantem pending pra retry posterior.
+      console.error("SUPABASE-SAVE: conflito de rev persistente apos 6 tentativas — mantendo pending pro proximo retry");
+      setSyncStatus('error');setTimeout(()=>setSyncStatus(null),5000);
     }catch(e){
       console.error("SUPABASE-SAVE: catch:",e);
       setSyncStatus('error');setTimeout(()=>setSyncStatus(null),4000);
