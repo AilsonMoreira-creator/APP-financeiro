@@ -205,14 +205,14 @@ a equipe e já te falo". Nesse caso diz isso com naturalidade e segue o resto da
 conversa normalmente, sem travar.
 
 Casos específicos (erros que já aconteceram, NÃO repita):
-- MEDIDAS: você NÃO tem tabela de medidas em cm nem padrão de numeração. NUNCA
-  invente algo como "P=36/38, M=40/42". Se perguntarem medida ou numeração, diz
-  que confirma a medida certinha da peça com a equipe e pergunta qual modelo a
-  cliente tá de olho (a medida varia de peça pra peça).
-- FOTOS / DIVULGAÇÃO: NÃO existe regra de "foto exclusiva" nem "só libera divulgar
-  depois do 1º pedido". NUNCA invente restrição de uso das fotos. Se a cliente quer
-  usar as fotos pra pré-venda ou divulgar pro público dela, isso é BEM-VINDO (é
-  revenda, é o que a gente quer). Incentiva, não trava.
+- MEDIDAS: você TEM a tabela de medidas no bloco TABELA DE MEDIDAS abaixo (P/M/G/GG,
+  em cm). Responda SEMPRE com base nela. A Amícia só trabalha P, M, G e GG. NUNCA
+  invente medida fora dessa tabela nem cite outro tamanho. Numeração (38, 40...)
+  varia entre marcas, então o que vale é a medida em cm.
+- FOTOS / DIVULGAÇÃO: cliente PODE usar as fotos do catálogo pra divulgar nas redes
+  sociais (revenda/pré-venda é bem-vindo). NÃO pode usar pra banner. Só fale dessa
+  regra SE a cliente perguntar; NUNCA traga do nada (inventar restrição foi erro).
+  NUNCA diga que as fotos são exclusivas nem que libera só depois do 1º pedido.
 - ENTREGA / FRETE: se a cliente perguntar uma forma de entrega específica (excursão
   de ônibus, motoboy, SEDEX, PAC), RESPONDA exatamente essa pergunta com o dado do
   bloco de frete mais abaixo. NUNCA ignore a pergunta de entrega. Excursão de ônibus
@@ -873,6 +873,7 @@ export async function processarConversa(conversaId) {
   let blocoRoteiro = '';
   let blocoPoliticas = '';
   let blocoTecidos = '';
+  let blocoMedidas = '';
   try {
     const roteiros = await getConfig('roteiros_estrategicos', {});
     // Reativacao (Ailson 12/06/2026): etapa='inativo' = cliente 6+ meses parado.
@@ -917,6 +918,17 @@ export async function processarConversa(conversaId) {
     const tecidos = await getConfig('tecidos', null);
     if (tecidos) {
       blocoTecidos = `TECIDOS AMICIA (info detalhada quando cliente perguntar):\n${JSON.stringify(tecidos, null, 2)}\n\nREGRAS DE OURO TECIDOS:\n- Viscolinho NAO tem linho (eh viscose + elastano com trama slub)\n- Suplex eh POLIAMIDA, nao poliester (diferencial)\n- Viscose estampada: estampa digital EXCLUSIVA Amicia`;
+    }
+    const medidas = await getConfig('tabela_medidas', null);
+    if (medidas) {
+      blocoMedidas = `TABELA DE MEDIDAS AMICIA (use quando a cliente perguntar medida/tamanho):
+${JSON.stringify(medidas, null, 2)}
+
+REGRAS DE OURO MEDIDAS:
+- A Amicia trabalha SO com P, M, G, GG. Nao existe outro tamanho.
+- Quando perguntarem medida, passe os cm desta tabela (busto/cintura/quadril) do(s) tamanho(s) pedido(s). NUNCA invente medida fora dela.
+- Numeracao (38, 40...) varia entre marcas; o que vale e a medida em cm.
+- Medidas caindo em tamanhos diferentes: recomende o MAIOR e diga que a costureira ajusta. NUNCA recomende tamanho menor do que cabe.`;
     }
   } catch (e) {
     logErro('ia/roteiro-config', e);
@@ -1031,6 +1043,7 @@ export async function processarConversa(conversaId) {
   if (blocoRoteiro) systemBlocks.push({ type: 'text', text: blocoRoteiro });
   if (blocoPoliticas) systemBlocks.push({ type: 'text', text: blocoPoliticas });
   if (blocoTecidos) systemBlocks.push({ type: 'text', text: blocoTecidos });
+  if (blocoMedidas) systemBlocks.push({ type: 'text', text: blocoMedidas });
   if (blocoPadroes) systemBlocks.push({ type: 'text', text: blocoPadroes });
   if (blocoObs) systemBlocks.push({ type: 'text', text: blocoObs });
 
