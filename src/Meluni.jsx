@@ -2317,6 +2317,7 @@ function SecaoEmailMkt() {
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(new Set());
   const [criar, setCriar] = useState(false);
+  const [arquivando, setArquivando] = useState(false);
   const LIM = 80;
 
   const carregar = useCallback(async (off = 0) => {
@@ -2357,6 +2358,39 @@ function SecaoEmailMkt() {
     } catch { /* */ }
   };
 
+  const arquivarSel = async () => {
+    if (arquivando || !sel.size) return;
+    if (!window.confirm(`Arquivar ${sel.size} carrinho(s)? Eles param de receber o e-mail do app, assim não duplica com o Convertr. Dá pra reverter.`)) return;
+    setArquivando(true);
+    const ids = [...sel];
+    try {
+      const r = await fetch('/api/meluni-email-mkt-bloquear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ carrinho_ids: ids, bloquear: true }) });
+      const j = await r.json();
+      if (j.ok) {
+        const idset = new Set(ids);
+        setCards(prev => prev.filter(c => !idset.has(c.id)));
+        setCounts(c => ({ ...c, processando: Math.max(0, (c.processando || 0) - (j.n || ids.length)) }));
+        setTotal(t => Math.max(0, t - (j.n || ids.length)));
+        setSel(new Set());
+      }
+    } catch { /* */ }
+    setArquivando(false);
+  };
+
+  const arquivarTodos = async () => {
+    if (arquivando) return;
+    if (!window.confirm('Arquivar TODOS os carrinhos elegíveis (qualquer data)? Todos param de receber o e-mail do app, assim não duplica com o Convertr. Dá pra reverter.')) return;
+    setArquivando(true);
+    try {
+      const r = await fetch('/api/meluni-email-mkt-bloquear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ todos: true, bloquear: true }) });
+      const j = await r.json();
+      setSel(new Set());
+      await carregar(0);
+      if (j.ok) window.alert(`${j.n || 0} carrinho(s) arquivado(s). Não recebem mais o e-mail do app.`);
+    } catch { /* */ }
+    setArquivando(false);
+  };
+
   const carregarMais = cards.length < total ? (
     <button onClick={() => carregar(cards.length)} disabled={loading}
       style={{ ...selStyle, marginTop: 4, width: '100%', padding: 8, fontWeight: 700 }}>
@@ -2382,10 +2416,23 @@ function SecaoEmailMkt() {
           {loading ? 'carregando…' : `${total} ${rotuloTotal}`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
         </span>
         {aba === 'processando' && (
-          <button onClick={() => setCriar(true)}
-            style={{ ...fbtn(MELUNI, '#fff'), marginLeft: 'auto' }}>
-            ✉️ Criar template
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {sel.size > 0 && (
+              <button onClick={arquivarSel} disabled={arquivando}
+                title="Arquivar os selecionados (não enviam e-mail do app)"
+                style={{ ...selStyle, fontWeight: 700, color: palette.alert, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Ban size={13} /> {arquivando ? 'arquivando…' : `Arquivar (${sel.size})`}
+              </button>
+            )}
+            <button onClick={arquivarTodos} disabled={arquivando}
+              title="Arquivar todos os carrinhos elegíveis (qualquer data) pra não duplicar com o Convertr"
+              style={{ ...selStyle, fontWeight: 700, color: palette.alert }}>
+              {arquivando ? 'arquivando…' : 'Arquivar todos'}
+            </button>
+            <button onClick={() => setCriar(true)} style={fbtn(MELUNI, '#fff')}>
+              ✉️ Criar template
+            </button>
+          </div>
         )}
       </div>
       {!loading && cards.length === 0 && <Placeholder>Nada nessa etapa no período.</Placeholder>}
