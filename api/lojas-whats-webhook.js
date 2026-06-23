@@ -44,6 +44,7 @@ import {
   enviarTextoFracionado
 } from './_lojas-whats-meta-client.js';
 import { enviarPushSofia } from './_push-helpers.js';
+import { enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
 import { transcreverAudio } from './lojas-whats-transcrever.js';
 import { processarMensagemMeluni } from './_meluni-whats-inbound.js';
 
@@ -342,6 +343,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
         etapa: 'pesquisa',
         pesquisa_motivo: motivo,
         pesquisa_respondida_em: agoraIso,
+        pesquisa_recontato_em: rp?.partes?.length ? agoraIso : null,
         catalogo_auto_bloqueado: true,   // trava catalogo auto + follow-up daqui pra frente
         auto_resposta_bloqueada: true,   // no recontato a Sofia gera resposta mas espera aprovacao
         // NAO incrementa unread_count aqui (Ailson 22/06/2026 — Opcao A): o
@@ -353,18 +355,28 @@ async function processarMensagemRecebida(msg, valueCtx) {
         atualizado_em: agoraIso,
       };
 
-      // Resposta scriptada por motivo, em 2 mensagens (outros = sem resposta).
-      // Variante sorteada (registrada acima) pra medir qual performa melhor.
+      // Marca respondida + trava ANTES de enviar: se a Meta reentregar o webhook
+      // durante os envios (texto + catalogo), o branch nao reprocessa. Ailson 23/06/2026.
+      await supabase.from('lojas_whats_conversas').update(updPq).eq('id', conversa.id);
+
+      // Resposta scriptada por motivo, em 2 mensagens (outros = sem resposta) +
+      // catalogo amarrado ao motivo (deterministico, NAO depende da IA):
+      //   preco -> catalogo de PROMOCAO ; quantidade de pecas -> catalogo ATUALIZADO/normal.
       if (rp?.partes?.length) {
         try {
           await enviarDuasPartes(telefone, conversa.id, rp.partes);
-          updPq.pesquisa_recontato_em = agoraIso;
+          if (motivo === 'preco') {
+            await new Promise(r => setTimeout(r, 1800 + Math.floor(Math.random() * 1200)));
+            await enviarCatalogoPesquisa(telefone, conversa.id, true);
+          } else if (motivo === 'minimo_pecas') {
+            await new Promise(r => setTimeout(r, 1800 + Math.floor(Math.random() * 1200)));
+            await enviarCatalogoPesquisa(telefone, conversa.id, false);
+          }
         } catch (e) {
           logErro('pesquisa-resposta', e);
         }
       }
 
-      await supabase.from('lojas_whats_conversas').update(updPq).eq('id', conversa.id);
       await marcarComoLida(msg.id);
 
       enviarPushSofia({
@@ -454,21 +466,21 @@ function respostaPesquisaVariante(motivo, primeiro) {
     minimo_pecas: [
       ['A', [
         `${ola}que bom que vc respondeu! Como recebemos bastante retorno sobre quantidade de peças, até o fim de junho a gente liberou o mínimo de 6 peças.`,
-        `Mudou bastante coisa desde a última vez que vc deu uma olhada. Quer que eu te mande o catálogo atualizado pra vc ver as novidades?`,
+        `Mudou bastante coisa desde a última vez que vc deu uma olhada. Vou te mandar aqui o catálogo atualizado pra vc ver as novidades.`,
       ]],
       ['B', [
         `${ola}fico feliz que vc respondeu! Sobre o número de peças, ouvimos bastante isso, então até o fim de junho liberamos um mínimo de 6 peças pra começar mais leve.`,
-        `Desde a última vez que vc viu por aqui entrou bastante novidade. Quer que eu te mande o catálogo atualizado pra vc conferir?`,
+        `Desde a última vez que vc viu por aqui entrou bastante novidade. Te mando aqui o catálogo atualizado pra vc conferir.`,
       ]],
     ],
     preco: [
       ['A', [
         `${ola}que bom que vc respondeu! Sobre o valor, tô com uma condição de 30% de desconto rodando agora.`,
-        `É uma boa pra vc conhecer os modelos da Amícia com um custo menor, ver a qualidade e como vende bem. Quer que eu te mande o catálogo da promoção pra vc dar uma olhada?`,
+        `É uma boa pra vc conhecer os modelos da Amícia com um custo menor, ver a qualidade e como vende bem. Vou te mandar aqui o catálogo da promoção pra vc dar uma olhada.`,
       ]],
       ['B', [
         `${ola}obrigada por responder! Sobre preço, a gente tá com 30% de desconto agora, então dá pra entrar com um valor bem melhor.`,
-        `Bom momento pra testar os modelos da Amícia, ver a qualidade de perto e como giram na sua loja. Quer que eu te mande o catálogo com a promoção?`,
+        `Bom momento pra testar os modelos da Amícia, ver a qualidade de perto e como giram na sua loja. Te mando aqui o catálogo com a promoção.`,
       ]],
     ],
     variedade: [
@@ -507,6 +519,25 @@ async function enviarDuasPartes(telefone, conversaId, partes) {
       texto: partes[i], meta_message_id: metaId, status: 'enviando',
       enviada_em: new Date().toISOString(),
     });
+  }
+}
+
+// Catalogo amarrado ao motivo da pesquisa (deterministico, NAO depende da IA).
+// querPromo=true  -> catalogo de PROMOCAO (promocao=true)
+// querPromo=false -> catalogo geral/ATUALIZADO mais recente (promocao=false)
+// Ailson 23/06/2026.
+async function enviarCatalogoPesquisa(telefone, conversaId, querPromo) {
+  try {
+    const { data: cat } = await supabase
+      .from('lojas_whats_midias')
+      .select('id, tipo, ref, nome_arquivo, storage_path, mime_type, size_bytes, descricao')
+      .eq('tipo', 'catalogo').eq('ativa', true).eq('promocao', !!querPromo)
+      .order('criada_em', { ascending: false }).limit(1).maybeSingle();
+    if (!cat) { log('pesquisa', `catalogo (promocao=${!!querPromo}) nao encontrado`); return; }
+    const r = await enviarMidiaSofia({ telefone, midia: cat, conversaId, mensagemId: null, decididaPor: 'pesquisa' });
+    if (!r?.ok) log('pesquisa', `catalogo pesquisa erro: ${r?.erro || 'desconhecido'}`);
+  } catch (e) {
+    logErro('pesquisa-catalogo', e);
   }
 }
 
