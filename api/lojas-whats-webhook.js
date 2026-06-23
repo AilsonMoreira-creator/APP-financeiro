@@ -464,11 +464,11 @@ function respostaPesquisaVariante(motivo, primeiro) {
     preco: [
       ['A', [
         `${ola}que bom que vc respondeu! Sobre o valor, tô com uma condição de 30% de desconto rodando agora.`,
-        `É uma boa pra vc conhecer os modelos da Amícia com um custo menor, ver a qualidade e como vende bem. Quer que eu separe uma grade pra vc aproveitar?`,
+        `É uma boa pra vc conhecer os modelos da Amícia com um custo menor, ver a qualidade e como vende bem. Quer que eu te mande o catálogo da promoção pra vc dar uma olhada?`,
       ]],
       ['B', [
         `${ola}obrigada por responder! Sobre preço, a gente tá com 30% de desconto agora, então dá pra entrar com um valor bem melhor.`,
-        `Bom momento pra testar os modelos da Amícia, ver a qualidade de perto e como giram na sua loja. Separo uma grade pra vc já com o desconto?`,
+        `Bom momento pra testar os modelos da Amícia, ver a qualidade de perto e como giram na sua loja. Quer que eu te mande o catálogo com a promoção?`,
       ]],
     ],
     variedade: [
