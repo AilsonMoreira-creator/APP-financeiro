@@ -690,6 +690,7 @@ function SecaoClientes() {
   const [chatId, setChatId] = useState(null);
   const [unread, setUnread] = useState({});
   const [disparando, setDisparando] = useState(false);
+  const [campanha, setCampanha] = useState('poscompra');
   const isDesktop = useIsDesktop();
 
   const carregar = useCallback(async () => {
@@ -744,13 +745,16 @@ function SecaoClientes() {
   const dispararSel = async () => {
     const ids = Array.from(sel);
     if (!ids.length || disparando) return;
+    const ehNovidade = campanha === 'novidade';
+    const nomeCampanha = ehNovidade ? 'a novidade (moletinho)' : 'a mensagem pós-compra da Lara';
     const aviso = ids.length > 30
-      ? `Você selecionou ${ids.length}. Vão sair os primeiros 30 agora (repita pra continuar). Disparar a mensagem pós-compra da Lara?`
-      : `Disparar a mensagem pós-compra da Lara pra ${ids.length} cliente(s)? Envia agora no WhatsApp.`;
+      ? `Você selecionou ${ids.length}. Vão sair os primeiros 30 agora (repita pra continuar). Disparar ${nomeCampanha}?`
+      : `Disparar ${nomeCampanha} pra ${ids.length} cliente(s)? Envia agora no WhatsApp.`;
     if (!window.confirm(aviso)) return;
     setDisparando(true);
     try {
-      const r = await fetch('/api/meluni-clientes-disparo', {
+      const url = ehNovidade ? '/api/meluni-clientes-novidade-disparo' : '/api/meluni-clientes-disparo';
+      const r = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),
       });
@@ -790,7 +794,7 @@ function SecaoClientes() {
           <option value="60">Últimos 60 dias</option><option value="90">Últimos 90 dias</option>
         </select>
         <select style={selStyle} value={janela} onChange={e => setJanela(e.target.value)}>
-          <option value="">Janela última compra</option><option value="10-15">10 a 15 dias</option><option value="15-30">15 a 30 dias</option>
+          <option value="">Janela última compra</option><option value="7-">+7 dias (já recebeu)</option><option value="10-15">10 a 15 dias</option><option value="15-30">15 a 30 dias</option>
         </select>
         <select style={selStyle} value={ordenar} onChange={e => setOrdenar(e.target.value)}>
           <option value="valor">Ordenar: maior valor</option><option value="compras">Nº de compras</option><option value="recente">Mais recente</option>
@@ -809,10 +813,16 @@ function SecaoClientes() {
           {loading ? 'carregando…' : `${clientes.length} clientes`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
         </span>
         {sel.size > 0 && (
-          <button onClick={dispararSel} disabled={disparando}
-            style={{ ...selStyle, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', cursor: disparando ? 'default' : 'pointer', opacity: disparando ? 0.6 : 1 }}>
-            {disparando ? 'enviando…' : `Gerar e disparar (${sel.size})`}
-          </button>
+          <>
+            <select style={selStyle} value={campanha} onChange={e => setCampanha(e.target.value)} disabled={disparando}>
+              <option value="poscompra">Pós-compra</option>
+              <option value="novidade">Novidade: moletinho</option>
+            </select>
+            <button onClick={dispararSel} disabled={disparando}
+              style={{ ...selStyle, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', cursor: disparando ? 'default' : 'pointer', opacity: disparando ? 0.6 : 1 }}>
+              {disparando ? 'enviando…' : (campanha === 'novidade' ? `Disparar novidade (${sel.size})` : `Gerar e disparar (${sel.size})`)}
+            </button>
+          </>
         )}
       </div>
 

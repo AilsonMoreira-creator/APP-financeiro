@@ -70,6 +70,9 @@ export async function enviarTemplateLara(telefone, name, bodyParams = [], opts =
   const id = phoneIdLara();
   if (!id) throw new Error('META_WA_PHONE_ID_LARA nao configurado');
   const components = [];
+  if (opts.headerImage) {
+    components.push({ type: 'header', parameters: [{ type: 'image', image: { link: opts.headerImage } }] });
+  }
   if (bodyParams.length) {
     components.push({ type: 'body', parameters: bodyParams.map(t => ({ type: 'text', text: String(t) })) });
   }
