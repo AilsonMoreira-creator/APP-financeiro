@@ -1951,6 +1951,9 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
   const [galeria, setGaleria] = useState(false);
   const [criativos, setCriativos] = useState([]);
   const [loadGal, setLoadGal] = useState(false);
+  const [galeriaTpl, setGaleriaTpl] = useState(false);
+  const [tpls, setTpls] = useState([]);
+  const [loadTpl, setLoadTpl] = useState(false);
   const [cupom, setCupom] = useState('VOLTE10');
   const [cupomValidade, setCupomValidade] = useState('24 horas');
   const [ctaLabel, setCtaLabel] = useState('Voltar pro meu carrinho');
@@ -2059,6 +2062,37 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
     } catch { alert('Falha ao salvar.'); }
   };
   const usarCriativo = (c) => { setCriativoUrl(c.url); setCriativoPath(c.path || ''); setGaleria(false); };
+
+  const abrirGaleriaTpl = async () => {
+    setGaleriaTpl(true); setLoadTpl(true);
+    try {
+      const r = await fetch('/api/meluni-email-mkt-campanha');
+      const j = await r.json();
+      if (j.ok) setTpls(j.campanhas || []);
+    } catch { /* */ }
+    setLoadTpl(false);
+  };
+  const usarTpl = async (id) => {
+    try {
+      const r = await fetch('/api/meluni-email-mkt-campanha?id=' + encodeURIComponent(id));
+      const j = await r.json();
+      const c = j?.campanha;
+      if (!j.ok || !c) { alert('Não consegui abrir esse template.'); return; }
+      setAssunto(c.assunto || '');
+      setTitulo(c.titulo || '');
+      setCorpo(c.corpo_html || '');
+      setCriativoUrl(c.criativo_url || '');
+      setCriativoPath('');
+      setCtaLabel(c.cta_label || 'Voltar pro meu carrinho');
+      setCtaUrl(c.cta_url || 'https://meluniloja.com.br');
+      setCupom(c.cupom || '');
+      setCupomValidade(c.cupom_validade || '');
+      setUtm(c.utm || '');
+      setAssinatura(c.assinatura || 'Equipe Meluni');
+      setCampanhaId(c.id);
+      setGaleriaTpl(false);
+    } catch { alert('Não consegui abrir esse template.'); }
+  };
   const renomearCriativo = async (c) => {
     const nome = prompt('Novo nome:', c.nome || '');
     if (nome === null) return;
@@ -2258,6 +2292,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
           style={{ width: 24, height: 24, borderRadius: 999, border: `1px solid ${MELUNI}`, background: MELUNI_SOFT, color: MELUNI, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}>?</button>
         {!wide && <div style={{ display: 'flex', gap: 6 }}>{btnVista('editor', 'Editar')}{btnVista('preview', 'Preview')}</div>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={abrirGaleriaTpl} title="Abrir um template salvo" style={{ ...fbtn('#fff', palette.inkSoft, palette.beige) }}>📁 Templates salvos</button>
           <button onClick={salvar} disabled={salvando} style={{ ...fbtn('#fff', palette.ink, palette.beige), opacity: salvando ? 0.6 : 1 }}>
             {salvando ? 'salvando…' : (campanhaId ? 'Salvar ✓' : 'Salvar')}
           </button>
@@ -2331,6 +2366,35 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
                         <button onClick={() => excluirCriativo(c)} title="Excluir" style={{ ...selStyle, padding: '4px 7px', fontSize: 11, color: palette.alert, borderColor: palette.alert }}>🗑️</button>
                       </div>
                     </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {galeriaTpl && (
+        <div onClick={() => setGaleriaTpl(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(44,62,80,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 14, maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 20, fontFamily: FONT, boxShadow: '0 10px 40px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+              <strong style={{ fontSize: 17, color: palette.ink }}>📁 Templates salvos</strong>
+              <button onClick={() => setGaleriaTpl(false)} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige), marginLeft: 'auto' }}>✕</button>
+            </div>
+            {loadTpl ? (
+              <div style={{ color: palette.inkMuted, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>carregando…</div>
+            ) : tpls.length === 0 ? (
+              <div style={{ color: palette.inkMuted, fontSize: 13, padding: '20px 0', textAlign: 'center' }}>Nenhum template salvo ainda. Monte um e clique em “Salvar”.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {tpls.map(t => (
+                  <div key={t.id} style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, padding: '10px 12px', background: palette.beigeSoft, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assunto || t.titulo || 'Sem assunto'}</div>
+                      <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 2 }}>{t.status || 'rascunho'}{t.criado_em ? ` · ${new Date(t.criado_em).toLocaleDateString('pt-BR')}` : ''}</div>
+                    </div>
+                    <button onClick={() => usarTpl(t.id)} style={{ ...selStyle, padding: '6px 12px', fontSize: 12, fontWeight: 700, background: MELUNI, color: '#fff', borderColor: MELUNI }}>Abrir</button>
                   </div>
                 ))}
               </div>
