@@ -43,7 +43,7 @@ async function enviarResend({ to, subject, html, unsubscribeUrl }) {
   return j?.id || null;
 }
 
-const temPeca = (c) => (Number(c.n_itens) > 0) || (Array.isArray(c.itens) && c.itens.length > 0);
+const temPeca = (c) => Array.isArray(c.itens) && c.itens.length > 0;
 
 export default async function handler(req, res) {
   const ua = String(req.headers['user-agent'] || '');
@@ -70,7 +70,7 @@ export default async function handler(req, res) {
     const teto = new Date(agora - IDADE_MIN_H * 3600e3).toISOString();
     const piso = new Date(agora - IDADE_MAX_D * 86400e3).toISOString();
     const { data: cand, error: errC } = await supabase.from('meluni_carrinhos')
-      .select('id, nome, email, valor, itens, n_itens, data_carrinho, status, convertido_em, email_mkt_bloqueado_em')
+      .select('id, nome, email, valor, itens, data_carrinho, status, convertido_em, email_mkt_bloqueado_em')
       .not('email', 'is', null).neq('email', '')
       .neq('status', 'conversao').is('convertido_em', null).is('email_mkt_bloqueado_em', null)
       .lte('data_carrinho', teto).gte('data_carrinho', piso)
