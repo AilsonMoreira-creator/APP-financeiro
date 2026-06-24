@@ -5633,7 +5633,6 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
       </div>
       {editando && (
         <div
-          onClick={() => { setEditando(false); setEditText(sug.texto_proposto); }}
           style={{
             position: 'fixed', inset: 0, zIndex: 1000,
             background: 'rgba(20,16,8,0.45)',
