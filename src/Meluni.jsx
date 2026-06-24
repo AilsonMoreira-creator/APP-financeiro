@@ -1992,6 +1992,8 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
   const [disparando, setDisparando] = useState(false);
   const [progresso, setProgresso] = useState(null);
   const [campanhaId, setCampanhaId] = useState(null);
+  const [autoAtivo, setAutoAtivo] = useState(false);
+  const [autoBusy, setAutoBusy] = useState(false);
   const [vista, setVista] = useState('editor');
   const [w, setW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   const fileRef = useRef(null);
@@ -2113,6 +2115,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
       setUtm(c.utm || '');
       setAssinatura(c.assinatura || 'Equipe Meluni');
       setCampanhaId(c.id);
+      refreshAuto(c.id);
       setGaleriaTpl(false);
     } catch { alert('Não consegui abrir esse template.'); }
   };
@@ -2150,6 +2153,50 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
       if (j.ok) { setCampanhaId(j.id); alert('Campanha salva ✓'); } else alert(j.erro || 'Falha ao salvar.');
     } catch { alert('Falha ao salvar.'); }
     setSalvando(false);
+  };
+
+  // reflete se ESTE template é o do disparo automático
+  const refreshAuto = async (id) => {
+    if (!id) { setAutoAtivo(false); return; }
+    try {
+      const r = await fetch('/api/meluni-email-mkt-auto');
+      const j = await r.json();
+      setAutoAtivo(!!(j?.ativo && String(j.ativo.id) === String(id)));
+    } catch { /* noop */ }
+  };
+
+  // liga/desliga o disparo automático com este template (exclusivo)
+  const toggleAuto = async () => {
+    if (autoBusy) return;
+    setAutoBusy(true);
+    try {
+      if (!autoAtivo) {
+        if (!assunto.trim() || !corpo.trim()) { alert('Preencha pelo menos assunto e corpo antes de ativar o disparo automático.'); setAutoBusy(false); return; }
+        // salva o estado atual (cria/atualiza) pra o cron usar exatamente o que está na tela
+        const r = await fetch('/api/meluni-email-mkt-campanha', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: campanhaId, ...campanha, status: 'rascunho' }),
+        });
+        const j = await r.json();
+        if (!j.ok) { alert(j.erro || 'Falha ao salvar o template.'); setAutoBusy(false); return; }
+        const id = j.id; setCampanhaId(id);
+        if (!window.confirm('Ativar o DISPARO AUTOMÁTICO com este template?\n\n1x por dia o sistema vai mandar este e-mail sozinho pros carrinhos abandonados que têm e-mail e ainda não receberam (não reenvia). Só um template fica ativo por vez.')) { setAutoBusy(false); return; }
+        const r2 = await fetch('/api/meluni-email-mkt-auto', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, ativo: true }),
+        });
+        const j2 = await r2.json();
+        if (j2.ok) setAutoAtivo(true); else alert(j2.erro || 'Falha ao ativar.');
+      } else {
+        const r = await fetch('/api/meluni-email-mkt-auto', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: campanhaId, ativo: false }),
+        });
+        const j = await r.json();
+        if (j.ok) setAutoAtivo(false); else alert(j.erro || 'Falha ao desativar.');
+      }
+    } catch { alert('Falha no disparo automático.'); }
+    setAutoBusy(false);
   };
 
   const enviarManual = async () => {
@@ -2326,6 +2373,11 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
           <button onClick={enviarManual} disabled={enviando} title="Enviar este e-mail pra um endereço (teste ou manual)"
             style={{ ...fbtn('#fff', MELUNI, MELUNI), opacity: enviando ? 0.6 : 1 }}>
             {enviando ? 'enviando…' : '✉️ Enviar'}
+          </button>
+          <button onClick={toggleAuto} disabled={autoBusy}
+            title={autoAtivo ? 'Disparo automático LIGADO: 1x/dia manda este template pros carrinhos abandonados com e-mail. Clique pra desligar.' : 'Ligar disparo automático: manda este template sozinho pros carrinhos abandonados com e-mail (1x/dia, não reenvia).'}
+            style={{ ...fbtn(autoAtivo ? palette.ok : '#fff', autoAtivo ? '#fff' : palette.inkSoft, autoAtivo ? palette.ok : palette.beige), opacity: autoBusy ? 0.6 : 1 }}>
+            {autoBusy ? '…' : (autoAtivo ? 'Auto: ligado' : 'Auto: desligado')}
           </button>
           <button onClick={dispararSelecionados} disabled={disparando || !selCount}
             title={selCount ? `Disparar pros ${selCount} carrinhos selecionados` : 'Selecione carrinhos na lista primeiro'}

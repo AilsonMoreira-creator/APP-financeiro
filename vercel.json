@@ -48,6 +48,9 @@
     "api/meluni-email-cron.js": {
       "maxDuration": 60
     },
+    "api/meluni-email-mkt-auto-cron.js": {
+      "maxDuration": 120
+    },
     "api/ia-cron.js": {
       "maxDuration": 120
     },
@@ -395,6 +398,10 @@
     {
       "path": "/api/meluni-novidade-cron",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/meluni-email-mkt-auto-cron",
+      "schedule": "0 14 * * *"
     }
   ]
 }
