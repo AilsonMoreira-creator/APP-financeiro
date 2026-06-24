@@ -433,7 +433,7 @@ function LaraThread({ telefone, conversaId, nome }) {
           return (
             <div key={m.id} style={{ alignSelf: entrada ? 'flex-start' : 'flex-end', maxWidth: '80%' }}>
               <div style={{ background: entrada ? palette.surface : MELUNI_SOFT, border: `1px solid ${entrada ? palette.beige : 'transparent'}`, color: palette.ink, borderRadius: 10, padding: '6px 10px', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {m.tipo_midia === 'image' && m.midia_url && m.midia_url.startsWith('http') ? (
+                {(m.tipo_midia === 'image' || m.tipo_midia === 'template') && m.midia_url && m.midia_url.startsWith('http') ? (
                   <>
                     <a href={m.midia_url} target="_blank" rel="noopener noreferrer" title="abrir imagem em tamanho original">
                       <img src={m.midia_url} alt="foto" style={{ maxWidth: 200, maxHeight: 240, borderRadius: 8, display: 'block', objectFit: 'contain', cursor: 'zoom-in', background: '#fff' }} />

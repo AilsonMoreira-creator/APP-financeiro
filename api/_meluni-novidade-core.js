@@ -114,7 +114,7 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
         await supabase.from('meluni_mensagens').insert({
           conversa_id: conv.id, direcao: 'saida', autor: 'lara_clientes',
           tipo_midia: 'template', template_usado: tpl.name,
-          texto: renderTpl(tpl.body, [nome]),
+          texto: renderTpl(tpl.body, [nome]), midia_url: headerImage || null,
           meta_message_id: metaMsgId, enviada_em: nowIso,
         });
         await supabase.from('meluni_conversas').update({
