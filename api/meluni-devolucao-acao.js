@@ -113,6 +113,41 @@ export default async function handler(req, res) {
         if (b.isAdmin !== true) return res.status(403).json({ ok: false, erro: 'somente admin pode arquivar' });
         patch = { arquivada: true, arquivada_em: agora, arquivada_por: operador };
         break;
+      case 'mover_etapa': {
+        // Move manual de etapa. Carimba a ENTRADA da etapa escolhida = agora e
+        // limpa os marcos posteriores -> a view recalcula fluxo_status pra essa
+        // etapa e fluxo_desde = agora, entao o prazo ZERA ao chegar na etapa.
+        // Nao dispara WhatsApp. Ailson 24/06/2026.
+        const etapa = (b.etapa || '').toString();
+        const limparEstorno = { estornado_em: null, estornado_por: null };
+        const limparAviso = { cliente_avisado_em: null, cliente_avisado_por: null };
+        if (etapa === 'etiqueta') {
+          patch = {
+            etiqueta_avisado_em: agora, etiqueta_avisado_por: operador,
+            recebido_em: null, conferido: false, conferido_em: null, conferido_por: null,
+            ...limparEstorno, ...limparAviso,
+          };
+        } else if (etapa === 'recebida') {
+          patch = {
+            recebido_em: agora,
+            conferido: false, conferido_em: null, conferido_por: null,
+            ...limparEstorno, ...limparAviso,
+          };
+        } else if (etapa === 'pagamento') {
+          patch = {
+            conferido: true, conferido_em: agora, conferido_por: operador,
+            ...limparEstorno, ...limparAviso,
+          };
+        } else if (etapa === 'estorno') {
+          patch = {
+            estornado_em: agora, estornado_por: operador,
+            ...limparAviso,
+          };
+        } else {
+          return res.status(400).json({ ok: false, erro: 'etapa invalida (use etiqueta|recebida|pagamento|estorno)' });
+        }
+        break;
+      }
       default:
         return res.status(400).json({ ok: false, erro: `acao desconhecida: ${acao}` });
     }

@@ -1627,6 +1627,27 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
           </div>
         ) : null}
 
+        {/* MUDAR ETAPA (manual) — carimba a entrada da etapa = agora; o prazo reinicia do zero nessa etapa. Ailson 24/06/2026 */}
+        {st !== 'cancelada' && (
+          <div style={{ marginTop: 14, borderTop: `1px dashed ${palette.beige}`, paddingTop: 12 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: palette.inkSoft, marginBottom: 7 }}>
+              mudar etapa <span style={{ fontWeight: 400, color: palette.inkMuted }}>· marca a entrada agora; o prazo reinicia do zero nessa etapa</span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[
+                ['etiqueta', 'Etiqueta enviada'],
+                ['recebida', 'Recebida e conferida'],
+                ['pagamento', 'Aguardando pagamento'],
+                ['estorno', 'Estorno pago'],
+              ].map(([et, lbl]) => (
+                <button key={et} disabled={busy}
+                  onClick={() => { if (window.confirm(`Mover esta devolução para "${lbl}"? O prazo reinicia do zero nessa etapa.`)) run('mover_etapa', { etapa: et }); }}
+                  style={fbtn(palette.surface, palette.inkSoft, palette.beige)}>{lbl}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* CANCELAR / ARQUIVAR */}
         <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {st !== 'cancelada' && st !== 'completa' && (
