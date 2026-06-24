@@ -699,17 +699,20 @@ function SecaoClientes() {
       const p = new URLSearchParams({ etapa, ordenar });
       if (nome.trim()) p.set('nome', nome.trim());
       if (periodo) p.set('periodo_dias', periodo);
-      if (janela) { const [a, b] = janela.split('-'); p.set('janela_min', a); p.set('janela_max', b); }
+      // Na Carteira a janela é travada pela campanha (pós-compra = 10-15 dias;
+      // novidade = +7 dias). Nas outras abas vale o filtro manual de janela.
+      const janelaEff = etapa === 'carteira' ? (campanha === 'novidade' ? '7-' : '10-15') : janela;
+      if (janelaEff) { const [a, b] = janelaEff.split('-'); p.set('janela_min', a); p.set('janela_max', b); }
       if (msgDias) p.set('msg_dias', msgDias);
       const r = await fetch('/api/meluni-clientes-list?' + p.toString());
       const j = await r.json();
       if (j.ok) { setClientes(j.clientes || []); setUnread(j.unread || {}); } else setErro(j.erro || 'erro ao carregar');
     } catch (e) { setErro(String(e?.message || e)); }
     setLoading(false);
-  }, [etapa, ordenar, nome, periodo, janela, msgDias]);
+  }, [etapa, ordenar, nome, periodo, janela, msgDias, campanha]);
 
   useEffect(() => { const t = setTimeout(carregar, 300); return () => clearTimeout(t); }, [carregar]);
-  useEffect(() => { setSel(new Set()); }, [etapa]);
+  useEffect(() => { setSel(new Set()); }, [etapa, campanha]);
 
   // ao ABRIR o chat, zera o badge da conversa na hora (backend grava visto_em ao carregar)
   const abrirChat = useCallback((id) => {
@@ -793,9 +796,16 @@ function SecaoClientes() {
           <option value="">Período: todos</option><option value="30">Últimos 30 dias</option>
           <option value="60">Últimos 60 dias</option><option value="90">Últimos 90 dias</option>
         </select>
-        <select style={selStyle} value={janela} onChange={e => setJanela(e.target.value)}>
-          <option value="">Janela última compra</option><option value="7-">+7 dias (já recebeu)</option><option value="10-15">10 a 15 dias</option><option value="15-30">15 a 30 dias</option>
-        </select>
+        {etapa === 'carteira' ? (
+          <select style={selStyle} value={campanha} onChange={e => setCampanha(e.target.value)} title="Campanha do disparo (define a janela)">
+            <option value="poscompra">Pós-compra · 10 a 15 dias</option>
+            <option value="novidade">Novidade · +7 dias</option>
+          </select>
+        ) : (
+          <select style={selStyle} value={janela} onChange={e => setJanela(e.target.value)}>
+            <option value="">Janela última compra</option><option value="7-">+7 dias (já recebeu)</option><option value="10-15">10 a 15 dias</option><option value="15-30">15 a 30 dias</option>
+          </select>
+        )}
         <select style={selStyle} value={ordenar} onChange={e => setOrdenar(e.target.value)}>
           <option value="valor">Ordenar: maior valor</option><option value="compras">Nº de compras</option><option value="recente">Mais recente</option>
         </select>
@@ -814,10 +824,12 @@ function SecaoClientes() {
         </span>
         {sel.size > 0 && (
           <>
-            <select style={selStyle} value={campanha} onChange={e => setCampanha(e.target.value)} disabled={disparando}>
-              <option value="poscompra">Pós-compra</option>
-              <option value="novidade">Novidade: moletinho</option>
-            </select>
+            {etapa !== 'carteira' && (
+              <select style={selStyle} value={campanha} onChange={e => setCampanha(e.target.value)} disabled={disparando}>
+                <option value="poscompra">Pós-compra</option>
+                <option value="novidade">Novidade: moletinho</option>
+              </select>
+            )}
             <button onClick={dispararSel} disabled={disparando}
               style={{ ...selStyle, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', cursor: disparando ? 'default' : 'pointer', opacity: disparando ? 0.6 : 1 }}>
               {disparando ? 'enviando…' : (campanha === 'novidade' ? `Disparar novidade (${sel.size})` : `Gerar e disparar (${sel.size})`)}
