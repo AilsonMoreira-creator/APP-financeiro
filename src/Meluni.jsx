@@ -2246,10 +2246,13 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
         </div>
       </CampoEmail>
 
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <CampoEmail label="Cupom"><input value={cupom} onChange={e => setCupom(e.target.value)} style={inEmail} /></CampoEmail>
         <CampoEmail label="Validade do cupom"><input value={cupomValidade} onChange={e => setCupomValidade(e.target.value)} placeholder="24 horas" style={inEmail} /></CampoEmail>
-        <CampoEmail label="Desconto total (%)" dica="soma c/ os outros descontos do site"><input value={desconto} onChange={e => setDesconto(e.target.value.replace(/[^\d]/g, ''))} placeholder="10" inputMode="numeric" style={inEmail} /></CampoEmail>
+        <CampoEmail label="Desconto total (%)"><input value={desconto} onChange={e => setDesconto(e.target.value.replace(/[^\d]/g, ''))} placeholder="10" inputMode="numeric" style={inEmail} /></CampoEmail>
+      </div>
+      <div style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT, marginTop: -4, marginBottom: 12 }}>
+        Desconto total = a soma deste cupom com os outros descontos do site (é o número que aparece no e-mail).
       </div>
 
       {/* Avançado: botão / UTM / assinatura */}

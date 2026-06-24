@@ -113,7 +113,7 @@ export function renderEmailHtml({ campanha = {}, carrinho = {}, unsubscribeUrl =
            <tr><td align="center" style="padding:14px 12px;font-size:15px;color:${ESCURO};">
              Use o cupom <strong style="color:${ROXO};letter-spacing:.5px;">${esc(c.cupom)}</strong> e garanta <strong>até ${descNum}% no carrinho</strong>
              ${c.cupom_validade ? `<br><span style="font-size:12px;color:${CINZA};">válido por ${esc(c.cupom_validade)}</span>` : ''}
-             <br><span style="font-size:11px;color:${CINZA};">o "até ${descNum}%" é a soma deste cupom com os outros descontos da loja</span>
+             <br><span style="font-size:11px;color:${CINZA};">até ${descNum}% é a soma deste cupom com os outros descontos da loja</span>
            </td></tr>
          </table>
        </td></tr>`
