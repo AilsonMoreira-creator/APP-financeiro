@@ -57,7 +57,7 @@ export default async function handler(req, res) {
         assunto: campanha.assunto || '', titulo: campanha.titulo || '', corpo_html: campanha.corpo || '',
         criativo_url: campanha.criativo_url || null, cta_label: campanha.cta_label || null,
         cta_url: campanha.cta_url || null, utm: campanha.utm || null, cupom: campanha.cupom || null,
-        cupom_validade: campanha.cupom_validade || null, assinatura: campanha.assinatura || null,
+        cupom_validade: campanha.cupom_validade || null, desconto: campanha.desconto || null, assinatura: campanha.assinatura || null,
         status: 'ativa', ativado_em: new Date().toISOString(), criado_por: campanha.criado_por || 'ailson',
       }).select('id').single();
       if (errCamp) return res.status(500).json({ ok: false, erro: 'Falha ao criar a campanha: ' + errCamp.message });

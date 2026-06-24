@@ -23,6 +23,7 @@ export default async function handler(req, res) {
         criativo_url: q.criativo_url || '',
         cupom: q.cupom || 'VOLTE10',
         cupom_validade: q.cupom_validade || '24 horas',
+        desconto: q.desconto || '10',
         cta_label: q.cta_label || EMAIL_DEFAULTS.cta_label,
         cta_url: q.cta_url || EMAIL_DEFAULTS.cta_url,
         utm: q.utm || EMAIL_DEFAULTS.utm,

@@ -25,8 +25,8 @@ ASSUNTO:
 CORPO:
 - Curto: 2 a 4 frases curtas (até ~70 palavras). Valor antes de vender.
 - Um único caminho: voltar pro carrinho/site. Não escreva botão nem link (o botão é separado).
-- Se houver cupom, comunique a vantagem de 10% PELO CUPOM sem usar a palavra "desconto"
-  (ex: "10% no cupom VOLTE10", "essa condição", "essa vantagem"). Urgência honesta pela validade.
+- Se houver cupom, comunique a vantagem PELO CUPOM sem usar a palavra "desconto"
+  (ex: "essa condição no cupom VOLTE10", "essa vantagem"). A porcentagem exata vem no pedido. Urgência honesta pela validade.
 
 TÍTULO:
 - Uma linha de abertura dentro do e-mail (pode repassar a ideia do assunto, com mais respiro).
@@ -47,13 +47,14 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false, erro: 'use POST' });
 
-  const { brief, cupom, cupom_validade, nome_exemplo } = req.body || {};
+  const { brief, cupom, cupom_validade, desconto, nome_exemplo } = req.body || {};
   if (!brief || !String(brief).trim()) {
     return res.status(400).json({ ok: false, erro: 'descreva o que vc quer no e-mail (brief)' });
   }
 
   const partes = [`Pedido do Ailson: ${String(brief).trim()}`];
-  if (cupom) partes.push(`Cupom a citar: ${cupom} (10% no carrinho)${cupom_validade ? `, válido por ${cupom_validade}` : ''}.`);
+  const descPct = String(desconto == null ? '' : desconto).replace(/[^\d]/g, '') || '10';
+  if (cupom) partes.push(`Cupom a citar: ${cupom} (a vantagem é "até ${descPct}% no carrinho", que é a soma deste cupom com os outros descontos do site)${cupom_validade ? `, válido por ${cupom_validade}` : ''}.`);
   if (nome_exemplo) partes.push(`Exemplo de nome (só pra calibrar o tom): ${nome_exemplo}.`);
   partes.push('Lembre: use {{nome}} como placeholder e devolva só o JSON.');
 

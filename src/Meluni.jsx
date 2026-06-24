@@ -1956,6 +1956,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
   const [loadTpl, setLoadTpl] = useState(false);
   const [cupom, setCupom] = useState('VOLTE10');
   const [cupomValidade, setCupomValidade] = useState('24 horas');
+  const [desconto, setDesconto] = useState('10');
   const [ctaLabel, setCtaLabel] = useState('Voltar pro meu carrinho');
   const [ctaUrl, setCtaUrl] = useState('https://meluniloja.com.br');
   const [utm, setUtm] = useState('utm_source=email&utm_medium=carrinho&utm_campaign=recuperacao');
@@ -1983,7 +1984,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
 
   const campanha = {
     assunto, titulo, corpo, criativo_url: criativoUrl,
-    cta_label: ctaLabel, cta_url: ctaUrl, cupom, cupom_validade: cupomValidade, utm, assinatura,
+    cta_label: ctaLabel, cta_url: ctaUrl, cupom, cupom_validade: cupomValidade, desconto, utm, assinatura,
   };
   const campKey = JSON.stringify(campanha);
 
@@ -2010,7 +2011,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
     try {
       const r = await fetch('/api/meluni-email-mkt-lara', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief, cupom, cupom_validade: cupomValidade }),
+        body: JSON.stringify({ brief, cupom, cupom_validade: cupomValidade, desconto }),
       });
       const j = await r.json();
       if (j.ok) {
@@ -2087,6 +2088,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
       setCtaUrl(c.cta_url || 'https://meluniloja.com.br');
       setCupom(c.cupom || '');
       setCupomValidade(c.cupom_validade || '');
+      setDesconto(c.desconto || '10');
       setUtm(c.utm || '');
       setAssinatura(c.assinatura || 'Equipe Meluni');
       setCampanhaId(c.id);
@@ -2247,6 +2249,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
       <div style={{ display: 'flex', gap: 10 }}>
         <CampoEmail label="Cupom"><input value={cupom} onChange={e => setCupom(e.target.value)} style={inEmail} /></CampoEmail>
         <CampoEmail label="Validade do cupom"><input value={cupomValidade} onChange={e => setCupomValidade(e.target.value)} placeholder="24 horas" style={inEmail} /></CampoEmail>
+        <CampoEmail label="Desconto total (%)" dica="soma c/ os outros descontos do site"><input value={desconto} onChange={e => setDesconto(e.target.value.replace(/[^\d]/g, ''))} placeholder="10" inputMode="numeric" style={inEmail} /></CampoEmail>
       </div>
 
       {/* Avançado: botão / UTM / assinatura */}

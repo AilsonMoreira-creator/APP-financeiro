@@ -9,7 +9,7 @@
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
 
-const CAMPOS = ['assunto', 'titulo', 'criativo_url', 'cta_label', 'cta_url', 'cupom', 'cupom_validade', 'utm', 'assinatura'];
+const CAMPOS = ['assunto', 'titulo', 'criativo_url', 'cta_label', 'cta_url', 'cupom', 'cupom_validade', 'desconto', 'utm', 'assinatura'];
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

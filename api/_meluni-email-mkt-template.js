@@ -15,6 +15,7 @@ export const EMAIL_DEFAULTS = {
   cta_url: 'https://meluniloja.com.br',
   cupom: '',
   cupom_validade: '',
+  desconto: '10',
   utm: 'utm_source=email&utm_medium=carrinho&utm_campaign=recuperacao',
   assinatura: 'Equipe Meluni',
 };
@@ -105,12 +106,14 @@ export function renderEmailHtml({ campanha = {}, carrinho = {}, unsubscribeUrl =
        </td></tr>`
     : '';
 
+  const descNum = String(c.desconto == null ? '' : c.desconto).replace(/[^\d]/g, '') || '10';
   const blocoCupom = c.cupom
     ? `<tr><td style="padding:0 32px 4px;">
          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px dashed ${ROXO};border-radius:10px;margin:0 0 18px;">
            <tr><td align="center" style="padding:14px 12px;font-size:15px;color:${ESCURO};">
-             Use o cupom <strong style="color:${ROXO};letter-spacing:.5px;">${esc(c.cupom)}</strong> e garanta <strong>10% no carrinho</strong>
+             Use o cupom <strong style="color:${ROXO};letter-spacing:.5px;">${esc(c.cupom)}</strong> e garanta <strong>até ${descNum}% no carrinho</strong>
              ${c.cupom_validade ? `<br><span style="font-size:12px;color:${CINZA};">válido por ${esc(c.cupom_validade)}</span>` : ''}
+             <br><span style="font-size:11px;color:${CINZA};">o "até ${descNum}%" é a soma deste cupom com os outros descontos da loja</span>
            </td></tr>
          </table>
        </td></tr>`
