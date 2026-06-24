@@ -12,29 +12,69 @@ import { cfgMeluni } from './_meluni-whats-helpers.js';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 const WABA = process.env.META_WA_WABA_ID_LARA || '912339361863904';
+const APP_ID = process.env.META_WA_APP_ID || '1862054317831156'; // app "claude" (resumable upload do sample do header)
 
-function montarComponents(t) {
-  const comps = [{
+function montarComponents(t, headerHandle) {
+  const comps = [];
+  if (headerHandle) {
+    comps.push({ type: 'HEADER', format: 'IMAGE', example: { header_handle: [headerHandle] } });
+  }
+  comps.push({
     type: 'BODY',
     text: t.body,
     ...(Array.isArray(t.exemplo) && t.exemplo.length ? { example: { body_text: [t.exemplo] } } : {}),
-  }];
+  });
   if (t.botao?.url) {
     comps.push({ type: 'BUTTONS', buttons: [{ type: 'URL', text: t.botao.text || 'Abrir', url: t.botao.url }] });
   }
   return comps;
 }
 
+// Sobe a imagem de amostra do header (resumable upload no app) e devolve o
+// header_handle, exigido pra criar template com HEADER IMAGE. Ailson 23/06/2026.
+async function subirSampleHeader(sampleUrl, token) {
+  const imgR = await fetch(sampleUrl);
+  if (!imgR.ok) throw new Error(`baixar sample_url (HTTP ${imgR.status})`);
+  const bytes = Buffer.from(await imgR.arrayBuffer());
+  const mime = imgR.headers.get('content-type') || 'image/png';
+  const fname = (sampleUrl.split('?')[0].split('/').pop()) || 'sample.png';
+
+  // 1. inicia a sessao de upload
+  const startR = await fetch(
+    `${GRAPH}/${APP_ID}/uploads?file_name=${encodeURIComponent(fname)}&file_length=${bytes.length}&file_type=${encodeURIComponent(mime)}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+  );
+  const startTxt = await startR.text();
+  let startJ = null; try { startJ = startTxt ? JSON.parse(startTxt) : null; } catch { /* */ }
+  if (!startR.ok || !startJ?.id) throw new Error('upload start: ' + startTxt);
+
+  // 2. envia os bytes (offset 0) -> { h: handle }
+  const upR = await fetch(`${GRAPH}/${startJ.id}`, {
+    method: 'POST',
+    headers: { Authorization: `OAuth ${token}`, file_offset: '0', 'Content-Type': mime },
+    body: bytes,
+  });
+  const upTxt = await upR.text();
+  let upJ = null; try { upJ = upTxt ? JSON.parse(upTxt) : null; } catch { /* */ }
+  if (!upR.ok || !upJ?.h) throw new Error('upload bytes: ' + upTxt);
+  return upJ.h;
+}
+
 async function criarUm(t, idiomaPadrao, categoriaPadrao) {
+  const token = process.env.META_WA_ACCESS_TOKEN;
+  let headerHandle = null;
+  if (t.header?.format === 'IMAGE' && t.header?.sample_url) {
+    headerHandle = await subirSampleHeader(t.header.sample_url, token);
+  }
   const payload = {
     name: t.name,
     language: t.language || idiomaPadrao || 'pt_BR',
     category: t.category || categoriaPadrao || 'MARKETING',
-    components: montarComponents(t),
+    components: montarComponents(t, headerHandle),
   };
   const r = await fetch(`${GRAPH}/${WABA}/message_templates`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.META_WA_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   const txt = await r.text();
