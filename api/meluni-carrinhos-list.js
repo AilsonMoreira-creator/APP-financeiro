@@ -8,6 +8,7 @@
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
 import { chaveTel } from './_meluni-tel.js';
+import { telefonesConvertidos, pendenciaCarrinho } from './_meluni-pendencias-core.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -42,15 +43,9 @@ export default async function handler(req, res) {
     }
 
     // carrinhos já convertidos (cliente comprou) não pingam mais o badge de recuperação.
-    // Match por telefone canônico (chaveTel): o cliente_id diverge entre as tabelas, e o
-    // telefone vem em formatos diferentes (DDI 55 / 9º dígito). Sem isso, cliente que já
-    // comprou e segue mandando elogio mantinha a conversa em 'conversando' e o badge nunca
-    // zerava (o card dela nem aparece na aba, está em Conversão). Ailson 24/06/2026.
-    const { data: convRows } = await supabase.from('meluni_carrinhos')
-      .select('telefone')
-      .or('status.eq.conversao,convertido_em.not.is.null');
-    const convTel = new Set();
-    for (const r of (convRows || [])) { const k = chaveTel(r.telefone); if (k) convTel.add(k); }
+    // Regra centralizada em _meluni-pendencias-core — a MESMA que o badge das abas
+    // (meluni-pendencias) usa, pra os dois nunca divergirem. Ailson 24/06/2026.
+    const convTel = await telefonesConvertidos(supabase);
 
     // conversa sem resposta (origem carrinho, última msg "in")
     const { data: convsPend } = await supabase.from('meluni_conversas')
@@ -60,9 +55,8 @@ export default async function handler(req, res) {
     const pendCli = new Set(), pendTel = new Set();
     const unread = {};
     for (const c of (convsPend || [])) {
-      if (c.visto_em && c.ultima_msg_em && new Date(c.ultima_msg_em) <= new Date(c.visto_em)) continue;
+      if (!pendenciaCarrinho(c, convTel)) continue;   // não-vista E não é quem já comprou
       const k = chaveTel(c.telefone);
-      if (k && convTel.has(k)) continue;   // já comprou: não é pendência de recuperação
       if (c.cliente_id) pendCli.add(c.cliente_id);
       if (k) pendTel.add(k);
       const et = c.etapa || 'conversando';
