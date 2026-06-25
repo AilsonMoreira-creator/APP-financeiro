@@ -21,6 +21,22 @@ function primeiroNome(n) {
   const p = String(n || '').trim().split(/\s+/)[0] || '';
   return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : null;
 }
+// valor em reais aceitando vírgula decimal BR ("119,90" / "R$ 1.199,90" / "119.90").
+// Sem isso, Number("119,90") = NaN e o valor do estorno salvava como null. Ailson 25/06/2026.
+function parseValorBR(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  let s = String(v).trim().replace(/[^\d.,-]/g, '');
+  if (!s) return null;
+  if (s.includes(',') && s.includes('.')) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.'); // 1.199,90
+    else s = s.replace(/,/g, '');                                                              // 1,199.90
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');                                                                   // 119,90
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
 async function nomeTpl(specKey) {
   const spec = await cfgMeluni('lara_template_devolucao', null);
   return spec?.templates?.[specKey]?.name || null;
@@ -64,7 +80,7 @@ export default async function handler(req, res) {
         break;
       case 'salvar_estorno': {
         // a assistente preenche e SALVA (não marca como pago). Sem estornado_em.
-        const valor = b.estorno_valor != null && b.estorno_valor !== '' ? Number(b.estorno_valor) : null;
+        const valor = parseValorBR(b.estorno_valor);
         const forma = ['pix', 'cartao', 'credito'].includes(b.estorno_forma) ? b.estorno_forma : null;
         patch = {
           estorno_valor: valor,
@@ -75,7 +91,7 @@ export default async function handler(req, res) {
       }
       case 'estornar': {
         // confirmação do pagamento (Ailson paga e confirma). Carimba estornado_em.
-        const valor = b.estorno_valor != null && b.estorno_valor !== '' ? Number(b.estorno_valor) : null;
+        const valor = parseValorBR(b.estorno_valor);
         const forma = ['pix', 'cartao', 'credito'].includes(b.estorno_forma) ? b.estorno_forma : null;
         if (valor == null || !forma) return res.status(400).json({ ok: false, erro: 'estorno_valor e estorno_forma (pix|cartao|credito) obrigatorios' });
         patch = {

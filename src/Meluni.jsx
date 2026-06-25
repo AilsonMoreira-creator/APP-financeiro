@@ -221,7 +221,9 @@ function tempoSemResposta(ts) {
   return `${Math.floor(h / 24)}d`;
 }
 // cards sem resposta nas primeiras posições (mantém o resto na ordem que veio).
-const ordPend = (arr) => [...(arr || [])].sort((a, b) => (b.conversa_pendente ? 1 : 0) - (a.conversa_pendente ? 1 : 0));
+// Clientes/Carrinho usam conversa_pendente; SAC usa unread — cobre os dois.
+const ehPendente = (x) => !!(x && (x.conversa_pendente || x.unread));
+const ordPend = (arr) => [...(arr || [])].sort((a, b) => (ehPendente(b) ? 1 : 0) - (ehPendente(a) ? 1 : 0));
 const DotConversa = ({ tempo }) => (
   <span title="conversa sem resposta" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
     <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626' }} />
@@ -1200,7 +1202,7 @@ function SecaoSac() {
       {!loading && conversas.length === 0 && <Placeholder>Nenhuma conversa nessa aba ainda. Entra aqui quando a cliente escrever pro WhatsApp da Lara (ou pelo Direct).</Placeholder>}
       {conversas.length > 0 && (
         <MeluniSplitChat
-          itens={conversas} getId={(c) => c.id}
+          itens={ordPend(conversas)} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'email' ? c.externo_id : '') || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente')}
           subtituloDe={(c) => (c.canal === 'email' ? (c.externo_id || 'e-mail') : c.canal === 'direct_insta' ? 'Direct Insta' : (fmtTel(c.telefone) || 'whatsapp'))}
@@ -1250,7 +1252,7 @@ function SacConversaCard({ c, compact, ativo, onAbrir, onChanged, aba }) {
         </div>
         <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.preview || '—'}</div>
       </div>
-      {c.unread && <DotConversa />}
+      {c.unread && <DotConversa tempo={tempoSemResposta(c.ultima_msg_em)} />}
       <select value="" disabled={busy} onClick={(e) => e.stopPropagation()}
         onChange={(e) => { const v = e.target.value; e.target.value = ''; if (v) acao({ mover: v }); }}
         title="mover de etapa"
