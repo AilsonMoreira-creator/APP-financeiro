@@ -470,7 +470,7 @@ const LeadCard = ({ lead, userId, isAdmin, vendedoraId, vendedoraNome, limitesDi
                   lineHeight: 1.5, fontFamily: FONT,
                 }}>
                   Oiii{vendedoraNome ? ` ${vendedoraNome.split(' ')[0]}` : ''} 😉
-                  {' '}por enquanto o limite é de <strong>1 lead CNPJ</strong> e <strong>1 CPF</strong> diários. Tenta de novo amanhã!
+                  {' '}por enquanto o limite é de <strong>2 CNPJ</strong> e <strong>4 CPF</strong> diários. Tenta de novo amanhã!
                 </div>
               )}
 

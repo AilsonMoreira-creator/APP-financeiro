@@ -11,7 +11,7 @@
  * 2) POST { action: 'marcar_enviada', lead_id, texto, telefone_wa }
  *    → Marca lead como mensagem_enviada
  *    → Insere em lojas_lead_mensagens (histórico)
- *    → Valida limite diário (1 PJ + 2 PF por vendedora)
+ *    → Valida limite diário (2 PJ + 4 PF por vendedora)
  *    → Retorna ok + url do wa.me pronta pra abrir
  *
  * Sessão Ailson 12/05/2026 — Onda 3 (IA + envio).
@@ -24,8 +24,8 @@ const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 // e a tela ficar branca ao pedir sugestão. Ailson 20/05/2026.
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 
-const LIMITE_PJ_DIA = 1;
-const LIMITE_PF_DIA = 1;
+const LIMITE_PJ_DIA = 2;
+const LIMITE_PF_DIA = 4;
 
 // ═══════════════════════════════════════════════════════════════════
 // PROMPT — Mensagem pra LEAD de carrinho abandonado (B2B atacado)

@@ -222,6 +222,17 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               fontSize: fz(9), fontWeight: 700, padding: '2px 6px', borderRadius: 6,
             }}>PJ</span>
           )}
+          {c.pesquisa_respondida_em ? (
+            <span title={`Respondeu a pesquisa${c.pesquisa_motivo ? ' (' + c.pesquisa_motivo + ')' : ''}`} style={{
+              background: '#e6f7ee', color: '#1f7a48',
+              fontSize: fz(9), fontWeight: 700, padding: '2px 6px', borderRadius: 6,
+            }}>📋 {({ minimo_pecas: 'mín. peças', preco: 'preço', variedade: 'variedade', outros: 'outros' }[c.pesquisa_motivo]) || 'respondeu'}</span>
+          ) : c.pesquisa_enviada_em ? (
+            <span title="Pesquisa de motivo enviada, aguardando resposta" style={{
+              background: '#fff4e5', color: '#9c5b00',
+              fontSize: fz(9), fontWeight: 700, padding: '2px 6px', borderRadius: 6,
+            }}>📋 pesquisa</span>
+          ) : null}
           {c.etapa === 'atendida' && vendedoraNome && (
             <span title={`Atendida por ${vendedoraNome}`} style={{
               background: '#f3eafc', color: '#6b3aa0',

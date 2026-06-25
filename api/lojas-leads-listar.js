@@ -290,7 +290,7 @@ export default async function handler(req, res) {
       .select('*')
       .maybeSingle();
 
-    // ─── Envios hoje da vendedora (limite diário 1 PJ + 2 PF) ──────
+    // ─── Envios hoje da vendedora (limite diário 2 PJ + 4 PF) ──────
     let enviosHoje = { qtd_pj_hoje: 0, qtd_pf_hoje: 0 };
     if (auth.vendedoraId) {
       const { data: env } = await supabase
@@ -299,9 +299,9 @@ export default async function handler(req, res) {
       if (env) enviosHoje = env;
     }
 
-    // Limites Ailson 12/05/2026: 1 PJ + 1 PF por dia
-    const LIMITE_PJ_DIA = 1;
-    const LIMITE_PF_DIA = 1;
+    // Limites Ailson 25/06/2026: 2 PJ + 4 PF por dia
+    const LIMITE_PJ_DIA = 2;
+    const LIMITE_PF_DIA = 4;
 
     return res.json({
       ok: true,
