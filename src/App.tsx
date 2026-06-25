@@ -2235,7 +2235,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
         </div>
       )}
       {!auxAberta&&(
-        <div style={{display:"flex",gap:8,marginBottom:8,flexDirection:mobile?"column":"row"}}>
+        <div style={{display:"flex",gap:8,marginBottom:8,flexDirection:mobile?"column":"row",position:"sticky",top:0,zIndex:30,background:"#f7f4f0",paddingTop:6}}>
           <div style={{flex:1,background:"#fff",borderRadius:8,padding:"6px 14px",border:"1px solid #e8e2da",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{fontSize:10,color:"#a89f94",letterSpacing:1}}>RECEITA</span>
             <span style={{fontSize:16,fontWeight:800,color:"#4a7fa5",fontFamily:_FN}}>{fmt(totalGeral)}</span>
@@ -2456,7 +2456,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
               <div/>
               {["Silva Teles","Bom Retiro","Marketplaces"].map(h=>(<div key={h} style={{padding:"8px 10px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,borderLeft:"1px solid rgba(255,255,255,0.25)"}}>{h}</div>))}
             </div>
-            <div style={{maxHeight:792,overflowY:"auto"}} >
+            <div style={{maxHeight:"calc(100dvh - 300px)",minHeight:200,overflowY:"auto"}} >
               {Array.from({length:31},(_,i)=>i+1).map(dia=>{
                 const d=receitas[dia]||{};const isDom=(DOMINGOS_MES[mes]||DOMINGOS_MAR).includes(dia);const feriado=getFeriado(dia,mes);const futuro=mesFechado?false:dia>hoje;
                 const rowBg=isDom?"#c8c2b8":feriado?"#d4ecd4":"#fff";
@@ -2504,7 +2504,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                 </tr>
               </thead>
             </table>
-            <div style={{maxHeight:792,overflowY:"auto"}}>
+            <div style={{maxHeight:"calc(100dvh - 300px)",minHeight:200,overflowY:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed"}}>
                 <colgroup><col/><col style={{width:"35%"}}/><col style={{width:22}}/></colgroup>
                 <tbody>
