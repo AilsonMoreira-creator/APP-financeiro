@@ -209,8 +209,26 @@ function useIsDesktop(bp = 760) {
 }
 
 // marcação de conversa sem resposta — vermelho idêntico Sofia (#dc2626)
-const DotConversa = () => <span title="conversa sem resposta" style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626', flexShrink: 0 }} />;
-const PillConversa = () => <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#dc2626', border: '1px solid #f4c7c7' }}>💬 sem resposta</span>;
+// tempo desde a última msg da cliente, mesmo formato do Sofia (agora / Xmin / Xh / Xd).
+function tempoSemResposta(ts) {
+  if (!ts) return null;
+  const min = Math.floor((Date.now() - new Date(ts).getTime()) / 60000);
+  if (min < 0) return null;
+  if (min < 1) return 'agora';
+  if (min < 60) return `${min}min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+// cards sem resposta nas primeiras posições (mantém o resto na ordem que veio).
+const ordPend = (arr) => [...(arr || [])].sort((a, b) => (b.conversa_pendente ? 1 : 0) - (a.conversa_pendente ? 1 : 0));
+const DotConversa = ({ tempo }) => (
+  <span title="conversa sem resposta" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#dc2626' }} />
+    {tempo && <span style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', fontFamily: FONT }}>{tempo}</span>}
+  </span>
+);
+const PillConversa = ({ tempo }) => <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#dc2626', border: '1px solid #f4c7c7' }}>💬 sem resposta{tempo ? ` · ${tempo}` : ''}</span>;
 
 // card de cliente — mesmo formato da Sofia (ícone + nome + chips de KPI + bloquear)
 // compact: versão reduzida (usada na lista da esquerda quando o chat tá aberto no desktop)
@@ -233,7 +251,7 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
           <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nome || '—'}</div>
           <div style={{ fontSize: 11, color: palette.inkMuted }}>{fmtBRL(c.valor_lifetime)} · {c.n_compras || 0} compras</div>
         </div>
-        {c.conversa_pendente && <DotConversa />}
+        {c.conversa_pendente && <DotConversa tempo={tempoSemResposta(c.pendente_em)} />}
         {!tel && <span title="sem número" style={{ fontSize: 12, flexShrink: 0 }}>📵</span>}
       </div>
     );
@@ -253,7 +271,7 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{c.nome || '—'}</span>
-              {c.conversa_pendente && <PillConversa />}
+              {c.conversa_pendente && <PillConversa tempo={tempoSemResposta(c.pendente_em)} />}
               {semCompra && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>só cadastro</span>}
             </div>
             <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -848,7 +866,7 @@ function SecaoClientes() {
       )}
       {(!erro && clientes.length > 0) && (
         <MeluniSplitChat
-          itens={clientes} getId={(c) => c.id}
+          itens={ordPend(clientes)} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.nome || 'Cliente'}
           subtituloDe={(c) => fmtTel(c.whatsapp || c.telefone) || 'sem número'}
@@ -910,7 +928,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
             <RelogioBadge c={c} />
           </div>
         </div>
-        {c.conversa_pendente && <DotConversa />}
+        {c.conversa_pendente && <DotConversa tempo={tempoSemResposta(c.pendente_em)} />}
         {c.is_cliente && <span title="já é cliente" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700, flexShrink: 0 }}>cliente</span>}
       </div>
     );
@@ -925,7 +943,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 15, fontWeight: 700, color: palette.ink }}>{fmtBRL(c.valor)}</span>
             {nome && <span style={{ fontSize: 13, color: palette.inkSoft }}>{nome}</span>}
-            {c.conversa_pendente && <PillConversa />}
+            {c.conversa_pendente && <PillConversa tempo={tempoSemResposta(c.pendente_em)} />}
             {c.is_cliente && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>já é cliente</span>}
           </div>
           <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1117,7 +1135,7 @@ function SecaoCarrinho() {
       {!loading && carrinhos.length === 0 && <Placeholder>Nenhum carrinho nesse estágio.</Placeholder>}
       {carrinhos.length > 0 && (
         <MeluniSplitChat
-          itens={carrinhos} getId={(c) => c.id}
+          itens={ordPend(carrinhos)} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.cliente_nome || c.nome || fmtBRL(c.valor)}
           subtituloDe={(c) => fmtTel(c.cliente_whatsapp || c.telefone) || 'sem número'}
@@ -2361,6 +2379,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: palette.bg, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${palette.beige}`, background: '#fff', flexWrap: 'wrap' }}>
+        {!wide && <button onClick={onClose} title="Voltar" style={{ ...fbtn('#fff', palette.inkSoft, palette.beige), flexShrink: 0, fontWeight: 700 }}>‹ Voltar</button>}
         <strong style={{ fontFamily: FONT, fontSize: 16, color: palette.ink }}>✉️ Criar template</strong>
         <button onClick={() => setAjuda(true)} title="Como fazer o criativo"
           style={{ width: 24, height: 24, borderRadius: 999, border: `1px solid ${MELUNI}`, background: MELUNI_SOFT, color: MELUNI, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}>?</button>
@@ -2384,7 +2403,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
             style={{ ...fbtn(MELUNI, '#fff'), opacity: (disparando || !selCount) ? 0.55 : 1, cursor: (disparando || !selCount) ? 'not-allowed' : 'pointer' }}>
             {disparando ? (progresso ? `disparando ${progresso.feito}/${progresso.total}…` : 'disparando…') : `Disparar${selCount ? ` · ${selCount}` : ''}`}
           </button>
-          <button onClick={onClose} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige) }}>✕</button>
+          {wide && <button onClick={onClose} style={{ ...fbtn('#fff', palette.inkSoft, palette.beige) }}>✕</button>}
         </div>
       </div>
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>

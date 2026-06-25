@@ -53,19 +53,21 @@ export default async function handler(req, res) {
       .eq('origem', 'carrinho')
       .in('ultima_msg_direcao', ['in', 'entrada']);
     const pendCli = new Set(), pendTel = new Set();
+    const pendEmCli = new Map(), pendEmTel = new Map(); // quando a cliente mandou a última msg
     const unread = {};
     for (const c of (convsPend || [])) {
       if (!pendenciaCarrinho(c, convTel)) continue;   // não-vista E não é quem já comprou
       const k = chaveTel(c.telefone);
-      if (c.cliente_id) pendCli.add(c.cliente_id);
-      if (k) pendTel.add(k);
+      if (c.cliente_id) { pendCli.add(c.cliente_id); pendEmCli.set(c.cliente_id, c.ultima_msg_em); }
+      if (k) { pendTel.add(k); pendEmTel.set(k, c.ultima_msg_em); }
       const et = c.etapa || 'conversando';
       unread[et] = (unread[et] || 0) + 1;
     }
     lista = lista.map(c => {
       const k = chaveTel(c.cliente_whatsapp || c.telefone || '');
       const pend = (c.cliente_id && pendCli.has(c.cliente_id)) || (k && pendTel.has(k));
-      return { ...c, conversa_pendente: !!pend };
+      const pendente_em = pend ? ((c.cliente_id && pendEmCli.get(c.cliente_id)) || (k && pendEmTel.get(k)) || null) : null;
+      return { ...c, conversa_pendente: !!pend, pendente_em };
     });
 
     // SKU -> ref + descrição (mesmo caminho do módulo Bling vendas: ml_sku_ref_map)
