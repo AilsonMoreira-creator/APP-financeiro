@@ -4938,6 +4938,32 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             </span>
           </div>
         </div>
+        {/* Estrela de prioridade direto no chat — sem precisar voltar pra lista.
+            Escondida na etapa perdida (perdida nunca prioriza). Ailson 25/06/2026. */}
+        {conversa.etapa !== 'perdida' && (
+          <button
+            onClick={async () => {
+              const novo = !conversa.lead_prioritario;
+              setConversa(prev => prev ? { ...prev, lead_prioritario: novo } : prev);
+              try {
+                await fetch('/api/lojas-whats-conversa-editar', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ conversa_id: conversa.id, campos: { prioridade: novo ? 1 : 0 } }),
+                });
+              } catch {
+                setConversa(prev => prev ? { ...prev, lead_prioritario: !novo } : prev);
+              }
+            }}
+            title={conversa.lead_prioritario ? 'Remover prioridade' : 'Marcar como prioridade'}
+            style={{
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+              color: palette.bg, padding: '6px 9px', borderRadius: 6, cursor: 'pointer',
+              display: 'flex', alignItems: 'center',
+            }}>
+            <Star size={sz(15)} fill={conversa.lead_prioritario ? '#f5c84e' : 'none'}
+              color={conversa.lead_prioritario ? '#f5c84e' : palette.bg} />
+          </button>
+        )}
         <button onClick={() => onEditarLead && onEditarLead(conversa)} title="Editar lead"
           style={{
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
