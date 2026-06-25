@@ -13,6 +13,17 @@ import { cfgMeluni } from './_meluni-whats-helpers.js';
 // forma/etapa -> chave da spec em meluni_config.lara_template_devolucao.templates
 const SPEC_KEY = { etiqueta: 'instrucoes', pix: 'estorno_pix', cartao: 'estorno_cartao', credito: 'estorno_credito' };
 
+// valor BR ("108,11" / "1.234,56") ou US ("108.11") -> número (ou null). NaN nunca vai pro numeric.
+function parseValorBR(s) {
+  if (s == null || s === '') return null;
+  if (typeof s === 'number') return Number.isFinite(s) ? s : null;
+  let t = String(s).trim();
+  if (t === '') return null;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
 function telBR(t) {
   const d = String(t || '').replace(/\D/g, '');
   return (d.length >= 10 && d.length <= 11 && !d.startsWith('55')) ? '55' + d : d;

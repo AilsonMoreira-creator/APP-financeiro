@@ -1487,6 +1487,16 @@ const fbtn = (bg, fg, bd) => ({
   background: bg, color: fg, border: `1px solid ${bd || bg}`, display: 'inline-flex', alignItems: 'center', gap: 6,
 });
 
+// valor em formato BR ("108,11", "1.234,56") ou US ("108.11") -> número (ou null)
+const parseValorBR = (s) => {
+  if (s == null) return null;
+  let t = String(s).trim();
+  if (t === '') return null;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); // 1.234,56 -> 1234.56 ; 108,11 -> 108.11
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+};
+
 // corpo do chat de DEVOLUÇÃO: linha do tempo + ação do passo atual + cancelar/arquivar
 function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
   const [valor, setValor] = useState(d.estorno_valor != null ? String(d.estorno_valor) : (d.valor != null ? String(d.valor) : ''));
@@ -1623,10 +1633,10 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
             )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button disabled={busy} onClick={async () => {
-                const ok = await run('salvar_estorno', { estorno_valor: valor, estorno_forma: forma, estorno_pix_chave: chave });
+                const ok = await run('salvar_estorno', { estorno_valor: parseValorBR(valor), estorno_forma: forma, estorno_pix_chave: chave });
                 if (ok) { setSalvoOk(true); setTimeout(() => setSalvoOk(false), 3000); }
               }} style={fbtn(palette.surface, MELUNI, palette.beige)}>salvar</button>
-              <button disabled={busy} onClick={() => run('estornar', { estorno_valor: valor, estorno_forma: forma, estorno_pix_chave: chave })} style={fbtn(MELUNI, '#fff')}>
+              <button disabled={busy} onClick={() => run('estornar', { estorno_valor: parseValorBR(valor), estorno_forma: forma, estorno_pix_chave: chave })} style={fbtn(MELUNI, '#fff')}>
                 <DollarSign size={14} /> confirmar estorno (pago)
               </button>
               {salvoOk && (
@@ -1752,7 +1762,7 @@ function SecaoDevolucao({ userId, isAdmin }) {
           tituloDe={(d) => d.nome || 'Devolução'}
           subtituloDe={(d) => fmtTel(d.telefone) || 'sem número'}
           renderCard={(d, p) => <DevolucaoCard d={d} {...p} />}
-          renderChat={(d) => <ChatDevolucaoBody d={d} isAdmin={isAdmin} onAcao={(acao, payload) => onAcao(d.id, acao, payload)} />}
+          renderChat={(d) => <ChatDevolucaoBody key={d.id} d={d} isAdmin={isAdmin} onAcao={(acao, payload) => onAcao(d.id, acao, payload)} />}
         />
       )}
     </div>
