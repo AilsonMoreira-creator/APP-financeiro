@@ -1352,10 +1352,8 @@ function TimelineDevol({ d, size = 'full' }) {
   const full = size === 'full';
   const atual = stepDevol(d);
   const sla = slaDevol(d);
-  // etapa ativa acende vermelho/âmbar no atraso; senão é o preto de "em andamento"
-  const corAtiva = sla && sla.nivel === 'critico' ? palette.alert
-                 : sla && sla.nivel === 'alerta'  ? AMBAR
-                 : '#1a1a1a';
+  // etapa ativa: amarelo enquanto aguardando; vermelho quando atrasada (crítico). sem preto.
+  const corAtiva = sla && sla.nivel === 'critico' ? palette.alert : AMBAR;
 
   if (d?.fluxo_status === 'cancelada') {
     return (
@@ -1378,7 +1376,7 @@ function TimelineDevol({ d, size = 'full' }) {
       {DEVOL_STEPS.map((s, i) => {
         const feito = concluida || i < atual;
         const ehAtual = !concluida && i === atual;
-        const bg = feito ? MELUNI : ehAtual ? corAtiva : palette.surface;
+        const bg = feito ? MELUNI : ehAtual ? corAtiva : 'transparent';
         const bd = feito ? MELUNI : ehAtual ? corAtiva : palette.beige;
         const ic = (feito || ehAtual) ? '#fff' : palette.inkMuted;
         const corLinha = (concluida || i < atual) ? MELUNI : palette.beige;
