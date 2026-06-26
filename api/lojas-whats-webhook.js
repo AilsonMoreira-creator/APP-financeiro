@@ -346,11 +346,12 @@ async function processarMensagemRecebida(msg, valueCtx) {
         pesquisa_recontato_em: rp?.partes?.length ? agoraIso : null,
         catalogo_auto_bloqueado: true,   // trava catalogo auto + follow-up daqui pra frente
         auto_resposta_bloqueada: true,   // no recontato a Sofia gera resposta mas espera aprovacao
-        // NAO incrementa unread_count aqui (Ailson 22/06/2026 — Opcao A): o
-        // clique no botao da pesquisa NAO conta como "conversa aberta". O card
-        // so vira nao-lido quando a cliente responde com TEXTO (fluxo normal
-        // abaixo, fora deste branch). Assim a pesquisa fica parada na aba
-        // Pesquisa ate ela de fato voltar a conversar.
+        // Zera unread: o clique no botao da pesquisa NAO conta como "conversa
+        // aberta" (Ailson 22/06/2026 — Opcao A). A msg do botao ja bumpou
+        // unread_count la em cima; aqui zeramos pra pesquisa/perdida nunca ficar
+        // com badge vermelho de nao-lido. O card so vira nao-lido quando a
+        // cliente responde com TEXTO (fluxo normal abaixo, fora deste branch).
+        unread_count: 0,
         ultima_atividade_em: agoraIso,
         atualizado_em: agoraIso,
       };
