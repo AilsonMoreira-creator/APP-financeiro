@@ -91,7 +91,13 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.json({ ok: true, total: count ?? lista.length, offset, limite, unread, carrinhos: lista });
+    // conversões dos últimos 30 dias -> badge azul discreto na aba Conversão
+    const desde30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    const { count: conv30 } = await supabase.from('meluni_carrinhos')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'conversao').gte('convertido_em', desde30);
+
+    return res.json({ ok: true, total: count ?? lista.length, offset, limite, unread, conv30: conv30 || 0, carrinhos: lista });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });
   }

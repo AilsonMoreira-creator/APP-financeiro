@@ -94,6 +94,14 @@ function SubTabs({ tabs, active, onChange }) {
                     alignItems: 'center', justifyContent: 'center',
                   }}>{t.badge}</span>
                 )}
+                {t.badgeAzul > 0 && (
+                  <span title="conversões nos últimos 30 dias" style={{
+                    background: on ? '#fff' : '#2c5d86', color: on ? '#2c5d86' : '#fff',
+                    borderRadius: 999, minWidth: 16, height: 16, padding: '0 4px',
+                    fontSize: 10, fontWeight: 700, display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>{t.badgeAzul}</span>
+                )}
               </button>
               {t.help && (
                 <button onClick={(e) => { e.stopPropagation(); setHelpOpen(helpOpen === t.id ? null : t.id); }}
@@ -1073,6 +1081,7 @@ function SecaoCarrinho() {
   const [sel, setSel] = useState(new Set());
   const [chatId, setChatId] = useState(null);
   const [unread, setUnread] = useState({});
+  const [conv30, setConv30] = useState(0);
   const [dias, setDias] = useState(30); // só últimos 30 dias por padrão (0 = todos)
   const [disparando, setDisparando] = useState(false);
   const [dispMsg, setDispMsg] = useState('');
@@ -1087,7 +1096,7 @@ function SecaoCarrinho() {
       help: 'Aqui estão as clientes que não responderam à primeira mensagem e receberam um segundo empurrãozinho: uma oferta de até 20% (o cupom de primeira compra somado ao desconto que o próprio carrinho libera pelo valor).\n\nAgora o relógio é de 48 horas. Se responder, vai pra Conversando. Se comprar, pra Conversão. Se passar as 48 horas sem nada, vai pra Perdidos. Tudo automático.' },
     { id: 'conversando', label: 'Conversando', unread: unread.conversando,
       help: 'São as clientes que responderam a Lara. Aqui é a hora do atendimento de verdade: tirar dúvida, ajudar a escolher, fechar a venda, tudo pela própria conversa.\n\nSe a cliente comprar, o carrinho vai pra Conversão. Se ela ficar 3 dias sem dar nenhum retorno, vai pra Perdidos. Então vale dar atenção pra não esfriar.' },
-    { id: 'conversao', label: 'Conversão', unread: unread.conversao,
+    { id: 'conversao', label: 'Conversão', unread: unread.conversao, badgeAzul: conv30,
       help: 'Essas são as vitórias: clientes que compraram depois do nosso contato.\n\nO sistema reconhece a compra sozinho, cruzando o telefone, o e-mail, o nome ou o cadastro da cliente com as vendas feitas a partir do dia do envio.\n\nÉ a etapa final boa. Não precisa fazer nada, é só comemorar.' },
     { id: 'follow_up', label: 'Follow up', unread: unread.follow_up,
       help: 'Esta aba é manual: o carrinho só chega aqui quando vocês movem ele de propósito (pelo botão "mover pra" dentro do carrinho).\n\nServe pra separar as clientes que vocês querem acompanhar com calma, do jeito de vocês. Eles ficam parados aqui até vocês decidirem o que fazer, não saem sozinhos.' },
@@ -1099,7 +1108,7 @@ function SecaoCarrinho() {
     try {
       const r = await fetch(`/api/meluni-carrinhos-list?status=${aba}&limite=${LIM}&offset=${off}&dias=${dias}`);
       const j = await r.json();
-      if (j.ok) { setTotal(j.total || 0); setUnread(j.unread || {}); setCarrinhos(prev => off ? [...prev, ...j.carrinhos] : j.carrinhos); }
+      if (j.ok) { setTotal(j.total || 0); setUnread(j.unread || {}); setConv30(j.conv30 || 0); setCarrinhos(prev => off ? [...prev, ...j.carrinhos] : j.carrinhos); }
     } catch (e) { /* ignora */ }
     setLoading(false);
   }, [aba, dias]);
