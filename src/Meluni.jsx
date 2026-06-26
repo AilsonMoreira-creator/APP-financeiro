@@ -1672,7 +1672,7 @@ function ChatDevolucaoBody({ d, isAdmin, onAcao }) {
                   style={{ display: 'block', padding: '6px 8px', borderRadius: 7, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }}>
                   <option value="pix">Pix</option>
                   <option value="cartao">Cartão</option>
-                  <option value="credito">Crédito</option>
+                  <option value="credito">Crédito na loja</option>
                 </select>
               </label>
             </div>
