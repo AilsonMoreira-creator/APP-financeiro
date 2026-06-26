@@ -712,6 +712,26 @@ function SecaoClientes() {
   const [disparando, setDisparando] = useState(false);
   const [campanha, setCampanha] = useState('poscompra');
   const isDesktop = useIsDesktop();
+  // Liga/desliga do disparo pós-compra AUTOMÁTICO (cron seg-sáb 10h). Desligar
+  // serve pra bloquear o auto no dia de disparo de novidade/promoção. Ailson 26/06.
+  const [autoOn, setAutoOn] = useState(null);
+  const [autoBusy, setAutoBusy] = useState(false);
+  useEffect(() => {
+    fetch('/api/meluni-poscompra-auto').then(r => r.json()).then(j => { if (j?.ok) setAutoOn(!!j.ativo); }).catch(() => {});
+  }, []);
+  const toggleAuto = async () => {
+    if (autoBusy || autoOn === null) return;
+    const novo = !autoOn;
+    if (novo && !window.confirm('Ligar o disparo pós-compra AUTOMÁTICO? Vai mandar a mensagem da Lara toda manhã (seg a sáb, 10h) pras clientes de 10 a 14 dias que ainda não receberam.')) return;
+    if (!novo && !window.confirm('Desligar o disparo automático? Use isso no dia que for fazer disparo de novidade/promoção. Lembra de ligar de novo depois.')) return;
+    setAutoBusy(true); setAutoOn(novo);
+    try {
+      const r = await fetch('/api/meluni-poscompra-auto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: novo }) });
+      const j = await r.json();
+      if (!j?.ok) { setAutoOn(!novo); alert('Falhou ao salvar.'); }
+    } catch (e) { setAutoOn(!novo); alert('Erro: ' + (e?.message || e)); }
+    setAutoBusy(false);
+  };
 
   const carregar = useCallback(async () => {
     setLoading(true); setErro('');
@@ -802,6 +822,28 @@ function SecaoClientes() {
   return (
     <div>
       <SubTabs tabs={tabs} active={etapa} onChange={setEtapa} />
+
+      {/* Liga/desliga do disparo pós-compra automático (cron seg-sáb 10h).
+          Desligue no dia que for fazer disparo de novidade/promoção. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button onClick={toggleAuto} disabled={autoBusy || autoOn === null}
+          title="Liga/desliga o disparo pós-compra automático. Desligue pra fazer disparo de novidade/promoção no dia."
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            cursor: (autoBusy || autoOn === null) ? 'default' : 'pointer',
+            border: `1px solid ${autoOn ? '#1f7a48' : palette.beige}`,
+            background: autoOn ? '#e6f7ee' : palette.surface,
+            color: autoOn ? '#1f7a48' : palette.inkMuted,
+            borderRadius: 999, padding: '6px 12px', fontFamily: FONT, fontSize: 12.5, fontWeight: 700,
+            opacity: autoBusy ? 0.6 : 1,
+          }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: autoOn ? '#1f7a48' : palette.inkMuted, display: 'inline-block' }} />
+          {autoOn === null ? 'Auto pós-compra…' : (autoOn ? 'Auto pós-compra: LIGADO' : 'Auto pós-compra: desligado')}
+        </button>
+        <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>
+          seg–sáb 10h · 10 a 14 dias · 1 envio por cliente · pula quem tem devolução
+        </span>
+      </div>
 
       {/* barra de filtros */}
       <div style={{

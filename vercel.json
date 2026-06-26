@@ -51,6 +51,9 @@
     "api/meluni-email-mkt-auto-cron.js": {
       "maxDuration": 120
     },
+    "api/meluni-poscompra-cron.js": {
+      "maxDuration": 300
+    },
     "api/ia-cron.js": {
       "maxDuration": 120
     },
@@ -402,6 +405,10 @@
     {
       "path": "/api/meluni-email-mkt-auto-cron",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/meluni-poscompra-cron",
+      "schedule": "0 13 * * 1-6"
     }
   ]
 }
