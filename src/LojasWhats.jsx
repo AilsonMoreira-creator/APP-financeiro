@@ -2353,6 +2353,29 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unre
   );
 };
 
+// Botao "confirmar pago" do card (etapa atendida). Neutro/transparente por
+// padrao pra NAO passar impressao de "ja pago"; fica verde so no hover/toque.
+// Ailson 26/06/2026.
+const BotaoConfirmarPago = ({ onClick }) => {
+  const [hover, setHover] = useState(false);
+  return (
+    <span
+      onClick={(e) => { e.stopPropagation(); onClick && onClick(); }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Confirmar pagamento — registra o valor e move pra Vendeu"
+      style={{
+        fontSize: fz(10), padding: '1px 7px', borderRadius: 8, cursor: 'pointer',
+        fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3,
+        background: hover ? '#1f7a48' : 'transparent',
+        color: hover ? '#fff' : palette.inkMuted,
+        border: `1px solid ${hover ? '#1f7a48' : palette.beige}`,
+        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+      }}
+    >✓ confirmar pago</span>
+  );
+};
+
 const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onDefinirFollowUp, onEditar, onConfirmarPago, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
@@ -2520,15 +2543,7 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
               }}>👤 {vendedoraNome}</span>
             )}
             {c.etapa === 'atendida' && (
-              <span
-                onClick={(e) => { e.stopPropagation(); onConfirmarPago && onConfirmarPago(); }}
-                title="Confirmar pagamento — registra o valor e move pra Vendeu"
-                style={{
-                  fontSize: fz(10), padding: '1px 7px', borderRadius: 8, cursor: 'pointer',
-                  background: '#e6f7ee', color: '#1f7a48', fontWeight: 800,
-                  border: '1px solid #b7e4c7', display: 'inline-flex', alignItems: 'center', gap: 3,
-                }}
-              >✓ confirmar pago</span>
+              <BotaoConfirmarPago onClick={onConfirmarPago} />
             )}
             {c.etapa === 'follow_up' && vendedoraNome && (
               <span title={`Estava em atendimento com ${vendedoraNome}`} style={{
