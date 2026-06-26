@@ -1355,6 +1355,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   const [filtroEtapa, setFiltroEtapa] = useState(filtroInicial);
   const [modalEnviar, setModalEnviar] = useState(null);
   const [modalEditarLead, setModalEditarLead] = useState(null);
+  const [modalPago, setModalPago] = useState(null);
   const [conversaDetalhe, setConversaDetalhe] = useState(null);  // tela cheia chat
   // Mapa id->nome de vendedoras pra mostrar quem atendeu (aba Atendida e demais).
   // Ailson 28/05/2026.
@@ -1936,6 +1937,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                 onToggleCatalogoFollowup={() => onToggleCatalogoFollowup(c)}
                 onDefinirFollowUp={(dias) => onDefinirFollowUp(c, dias)}
                 onEditar={() => setModalEditarLead({ conversa: c })}
+                onConfirmarPago={() => setModalPago({ conversa: c })}
                 onDecidiuQuente={(id, decisao) => {
                   // Update otimista: zera sugestao quente do card (some na hora)
                   // e se aceitou tambem ja marca etapa='quente' localmente.
@@ -1998,6 +2000,15 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
           onSucesso={(msg) => { setFeedback({ tipo: 'ok', msg }); setModalEditarLead(null); setReloadTick(t => t + 1); }}
           onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
           onEnviarVendedora={(conv) => setModalEnviar({ conversa: conv })}
+        />
+      )}
+
+      {modalPago && (
+        <ModalConfirmarPago
+          conversa={modalPago.conversa}
+          onClose={() => setModalPago(null)}
+          onSucesso={(msg) => { setFeedback({ tipo: 'ok', msg }); setModalPago(null); setReloadTick(t => t + 1); }}
+          onErro={(msg) => setFeedback({ tipo: 'erro', msg })}
         />
       )}
 
@@ -2342,7 +2353,7 @@ const FiltroChip = ({ label, ativo, cor, onClick, iconNome, etapaId, badge, unre
   );
 };
 
-const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onDefinirFollowUp, onEditar, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
+const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onDefinirFollowUp, onEditar, onConfirmarPago, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
   const prioritario = !!c.lead_prioritario;
@@ -2507,6 +2518,17 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
                 fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
                 background: '#f3eafc', color: '#6b3aa0', fontWeight: 700,
               }}>👤 {vendedoraNome}</span>
+            )}
+            {c.etapa === 'atendida' && (
+              <span
+                onClick={(e) => { e.stopPropagation(); onConfirmarPago && onConfirmarPago(); }}
+                title="Confirmar pagamento — registra o valor e move pra Vendeu"
+                style={{
+                  fontSize: fz(10), padding: '1px 7px', borderRadius: 8, cursor: 'pointer',
+                  background: '#e6f7ee', color: '#1f7a48', fontWeight: 800,
+                  border: '1px solid #b7e4c7', display: 'inline-flex', alignItems: 'center', gap: 3,
+                }}
+              >✓ confirmar pago</span>
             )}
             {c.etapa === 'follow_up' && vendedoraNome && (
               <span title={`Estava em atendimento com ${vendedoraNome}`} style={{
@@ -4267,6 +4289,112 @@ function PadraoRow({ p, primeira }) {
 // MODAL EDITAR LEAD (Ailson 26/05/2026)
 // Mover etapa · Observações (Sofia + privada) · Anexar mídia · Prioridade
 // ═══════════════════════════════════════════════════════════════════════════
+
+// Modal "Confirmar pago" — aparece ao clicar na caixinha verde do card (etapa
+// atendida). Coloca o valor, grava a venda, move pra Vendeu e (se for venda de
+// anuncio Meta) dispara o Purchase pra Meta via CAPI. Ailson 26/06/2026.
+function ModalConfirmarPago({ conversa, onClose, onSucesso, onErro }) {
+  const [valor, setValor] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const ehMeta = ['anuncio_facebook', 'anuncio_instagram'].includes(conversa.origem_lead) || !!conversa.ctwa_clid;
+
+  // Parse BR: "1.234,56"->1234.56 | "799,90"->799.9 | "1234"->1234
+  const parseBR = (s) => {
+    if (!s) return NaN;
+    let t = String(s).replace(/[^\d.,]/g, '').trim();
+    if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+    return Number(t);
+  };
+
+  const confirmar = async () => {
+    const v = parseBR(valor);
+    if (!Number.isFinite(v) || v <= 0) { onErro('Coloca o valor da venda (maior que zero).'); return; }
+    setEnviando(true);
+    try {
+      const r = await fetch('/api/lojas-whats-confirmar-pago', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_id: conversa.id, valor: v }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { onErro(j.error || 'Erro ao confirmar.'); return; }
+      let msg = `Venda de ${fmtMoney(v)} confirmada. Card movido pra Vendeu.`;
+      const cs = j.capi?.status;
+      if (cs === 'enviado') msg += ' Evento enviado pra Meta (CAPI).';
+      else if (cs === 'duplicado') msg += ' (CAPI já tinha sido enviado.)';
+      else if (cs === 'falhou') msg += ' ⚠️ CAPI não enviou (confere o log).';
+      onSucesso(msg);
+    } catch (e) {
+      onErro(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 20,
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 20,
+        maxWidth: 380, width: '100%', fontFamily: FONT,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: fz(16), color: palette.ink, fontFamily: FONT, fontWeight: 700 }}>
+            Confirmar pago
+          </h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}>
+            <X size={sz(22)} color={palette.inkMuted} />
+          </button>
+        </div>
+        <div style={{ fontSize: fz(13), color: palette.inkSoft, marginBottom: 14 }}>
+          Cliente: <strong>{conversa.nome_cliente || conversa.telefone}</strong>
+        </div>
+        <label style={{ fontSize: fz(12), color: palette.inkSoft, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+          Valor da venda
+        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: ehMeta ? 10 : 16 }}>
+          <span style={{ fontSize: fz(15), color: palette.inkMuted, fontWeight: 700 }}>R$</span>
+          <input
+            autoFocus inputMode="decimal" value={valor}
+            onChange={e => setValor(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !enviando) confirmar(); }}
+            placeholder="0,00"
+            style={{
+              flex: 1, padding: '9px 10px', borderRadius: 6, border: `1px solid ${palette.beige}`,
+              fontFamily: FONT, fontSize: fz(15), color: palette.ink, background: palette.surface,
+            }}
+          />
+        </div>
+        {ehMeta && (
+          <div style={{
+            fontSize: fz(11.5), color: '#1f7a48', background: '#e6f7ee',
+            border: '1px solid #b7e4c7', borderRadius: 6, padding: '7px 9px',
+            marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <Facebook size={fz(13)} fill="#1f7a48" color="#1f7a48" strokeWidth={0} />
+            Venda de anúncio — vai enviar o evento pra Meta (CAPI) pra campanha aprender.
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} disabled={enviando} style={{
+            flex: 1, padding: '10px', borderRadius: 6, cursor: 'pointer',
+            border: `1px solid ${palette.beige}`, background: palette.surface,
+            color: palette.ink, fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
+          }}>Cancelar</button>
+          <button onClick={confirmar} disabled={enviando} style={{
+            flex: 2, padding: '10px', borderRadius: 6, cursor: enviando ? 'default' : 'pointer',
+            border: 'none', background: enviando ? '#9cc1ab' : '#1f7a48',
+            color: '#fff', fontSize: fz(13), fontWeight: 700, fontFamily: FONT,
+          }}>{enviando ? 'Confirmando...' : '✓ Confirmar pago → Vendeu'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function EditarLeadModal({ conversa, onClose, onSucesso, onErro, onEnviarVendedora }) {
   const [etapa, setEtapa] = useState(conversa.etapa);
