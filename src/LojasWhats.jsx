@@ -6102,6 +6102,29 @@ function SeletorMidiaModal({ onClose, onSelect }) {
 // TAB 8: MIDIAS SOFIA
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Chip da origem do lead (carrinho / Facebook / stories / linktree / SAC), mesmo
+// visual dos cards do funil. Retorna null (sem espaço) quando não há origem.
+// Ailson 26/06/2026.
+function ChipOrigemLead({ origem_lead, carrinho_id }) {
+  const o = (carrinho_id || origem_lead === 'carrinho_site_amicialoja') ? 'carrinho'
+    : origem_lead === 'anuncio_facebook' ? 'fb'
+    : origem_lead === 'anuncio_instagram' ? 'ads'
+    : origem_lead === 'instagram_stories' ? 'stories'
+    : origem_lead === 'instagram_linktree' ? 'linktree'
+    : origem_lead === 'sac' ? 'sac'
+    : null;
+  if (!o) return null;
+  const base = { display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap' };
+  const span =
+    o === 'fb' ? <span title="Lead de anúncio do Facebook" style={{ ...base, background: '#e7f1fc', color: '#1877f2' }}><Facebook size={fz(11)} fill="#1877f2" color="#1877f2" strokeWidth={0} /> Facebook</span>
+    : o === 'ads' ? <span style={{ ...base, background: '#e7f1fc', color: '#1877f2', fontFamily: 'Arial, sans-serif' }}>f Ads</span>
+    : o === 'carrinho' ? <span title="Lead de carrinho abandonado" style={{ ...base, background: '#fff0e0', color: '#a55a00' }}>🛒 carrinho</span>
+    : o === 'stories' ? <span title="Lead via Stories do Instagram" style={{ ...base, background: 'linear-gradient(45deg, #fbe5d2, #f4d6e5)', color: '#a8388d' }}>📸 stories</span>
+    : o === 'linktree' ? <span title="Lead via Linktree do Instagram" style={{ ...base, background: '#e6f7ee', color: '#1f7a48' }}>🔗 linktree</span>
+    : <span title="Atendimento via SAC do site" style={{ ...base, background: '#eaf1f7', color: '#2c5d86' }}>🎧 SAC</span>;
+  return <div style={{ marginTop: sz(4) }}>{span}</div>;
+}
+
 function PesquisaTab({ refreshTick, onAbrirChat }) {
   const [respostas, setRespostas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -6119,15 +6142,18 @@ function PesquisaTab({ refreshTick, onAbrirChat }) {
         .limit(500);
       if (error) throw error;
       const ids = [...new Set((resp || []).map(r => r.conversa_id).filter(Boolean))];
-      const etapaPorConversa = {};
+      const convPorId = {};
       if (ids.length) {
         const { data: convs } = await supabase
           .from('lojas_whats_conversas')
-          .select('id, etapa')
+          .select('id, etapa, origem_lead, carrinho_id')
           .in('id', ids);
-        (convs || []).forEach(c => { etapaPorConversa[c.id] = c.etapa; });
+        (convs || []).forEach(c => { convPorId[c.id] = c; });
       }
-      setRespostas((resp || []).map(r => ({ ...r, etapaAtual: etapaPorConversa[r.conversa_id] || null })));
+      setRespostas((resp || []).map(r => {
+        const cv = convPorId[r.conversa_id] || null;
+        return { ...r, etapaAtual: cv?.etapa || null, origem_lead: cv?.origem_lead || null, carrinho_id: cv?.carrinho_id || null };
+      }));
     } catch (e) { setErro(e.message); }
     setLoading(false);
   };
@@ -6190,6 +6216,7 @@ function PesquisaTab({ refreshTick, onAbrirChat }) {
                       title={r.conversa_id ? 'Abrir conversa no chat' : undefined}
                       style={{ cursor: r.conversa_id ? 'pointer' : 'default', flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: sz(13), color: palette.ink }}>{r.nome || r.telefone || 'Lead'}</div>
+                      <ChipOrigemLead origem_lead={r.origem_lead} carrinho_id={r.carrinho_id} />
                       <div style={{ fontSize: sz(11), color: palette.inkMuted, marginTop: sz(2) }}>
                         {r.telefone || '—'} · variante {r.variante || '-'}{r.etapaAtual ? ` · agora: ${r.etapaAtual}` : ''}
                       </div>
