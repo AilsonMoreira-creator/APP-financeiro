@@ -88,6 +88,8 @@ export default async function handler(req, res) {
     const alvo = limite ? plano.slice(0, limite) : plano;
     const resultado = [];
     for (const p of alvo) {
+      // resume rápido: se a base já tem o gtin alvo, pula sem chamar o Bling
+      if (p.gtin_atual && String(p.gtin_atual) === p.gtin_novo) { resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: true, obs: 'já estava' }); continue; }
       try {
         const rg = await blingFetch(`${API}/produtos/${p.produto_id}`, headers);
         const jg = await rg.json().catch(() => ({}));
