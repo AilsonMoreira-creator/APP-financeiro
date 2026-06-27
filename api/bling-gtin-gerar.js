@@ -87,26 +87,48 @@ export default async function handler(req, res) {
 
     const alvo = limite ? plano.slice(0, limite) : plano;
     const resultado = [];
+
+    // cadência: garante >=380ms entre quaisquer chamadas Bling (limite 3 req/s)
+    let lastCall = 0;
+    const pace = async () => { const w = 380 - (Date.now() - lastCall); if (w > 0) await new Promise(s => setTimeout(s, w)); lastCall = Date.now(); };
+    const inicio = Date.now();
+    let parcial = false;
+
     for (const p of alvo) {
-      // resume rápido: se a base já tem o gtin alvo, pula sem chamar o Bling
+      // resume rápido: base já tem o gtin alvo -> pula sem chamar o Bling
       if (p.gtin_atual && String(p.gtin_atual) === p.gtin_novo) { resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: true, obs: 'já estava' }); continue; }
-      try {
-        const rg = await blingFetch(`${API}/produtos/${p.produto_id}`, headers);
-        const jg = await rg.json().catch(() => ({}));
-        const prod = jg.data;
-        if (!prod) { resultado.push({ sku: p.sku, ok: false, motivo: `GET HTTP ${rg.status}` }); continue; }
-        if (String(prod.gtin || '') === p.gtin_novo) { resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: true, obs: 'já estava' }); continue; }
-        prod.gtin = p.gtin_novo;
-        const rp = await fetch(`${API}/produtos/${p.produto_id}`, { method: 'PUT', headers, body: JSON.stringify(prod) });
-        const tp = await rp.text().catch(() => '');
-        if (!rp.ok) { resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: false, motivo: `PUT HTTP ${rp.status}`, detalhe: tp.slice(0, 300) }); continue; }
-        await supabase.from('bling_estoque').update({ gtin: p.gtin_novo }).eq('bling_produto_id', p.produto_id);
-        resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: true });
-      } catch (e) { resultado.push({ sku: p.sku, ok: false, motivo: e.message }); }
-      await new Promise(s => setTimeout(s, 350));
+      // teto de tempo: retorna parcial limpo em vez de estourar timeout
+      if (Date.now() - inicio > 50000) { parcial = true; break; }
+
+      let feito = false;
+      for (let tent = 1; tent <= 3 && !feito; tent++) {
+        try {
+          await pace();
+          const rg = await blingFetch(`${API}/produtos/${p.produto_id}`, headers);
+          if (rg.status === 429) { await new Promise(s => setTimeout(s, 1300)); continue; }
+          const jg = await rg.json().catch(() => ({}));
+          const prod = jg.data;
+          if (!prod) { resultado.push({ sku: p.sku, ok: false, motivo: `GET HTTP ${rg.status}` }); feito = true; break; }
+          if (String(prod.gtin || '') === p.gtin_novo) {
+            await supabase.from('bling_estoque').update({ gtin: p.gtin_novo }).eq('bling_produto_id', p.produto_id);
+            resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: true, obs: 'já estava' }); feito = true; break;
+          }
+          prod.gtin = p.gtin_novo;
+          delete prod.camposCustomizados; // sem permissão de gravar campos customizados; omitir preserva os valores existentes
+          await pace();
+          const rp = await fetch(`${API}/produtos/${p.produto_id}`, { method: 'PUT', headers, body: JSON.stringify(prod) });
+          if (rp.status === 429) { await new Promise(s => setTimeout(s, 1300)); continue; }
+          const tp = await rp.text().catch(() => '');
+          if (!rp.ok) { resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: false, motivo: `PUT HTTP ${rp.status}`, detalhe: tp.slice(0, 200) }); feito = true; break; }
+          await supabase.from('bling_estoque').update({ gtin: p.gtin_novo }).eq('bling_produto_id', p.produto_id);
+          resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: true }); feito = true; break;
+        } catch (e) { resultado.push({ sku: p.sku, ok: false, motivo: e.message }); feito = true; break; }
+      }
+      if (!feito) resultado.push({ sku: p.sku, gtin: p.gtin_novo, ok: false, motivo: '429 após 3 tentativas' });
     }
     const ok = resultado.filter(r => r.ok).length;
-    return res.status(200).json({ ok: true, modo: 'GRAVADO', conta, ref: refDig, escritos: ok, total_alvo: alvo.length, resultado });
+    const falhas = resultado.filter(r => !r.ok).length;
+    return res.status(200).json({ ok: true, modo: parcial ? 'PARCIAL (rode de novo)' : 'GRAVADO', conta, ref: refDig, escritos: ok, falhas, total_alvo: alvo.length, processados: resultado.length, resultado });
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) });
   }
