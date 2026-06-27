@@ -117,7 +117,7 @@ export default async function handler(req, res) {
         if (!ref) ref = normRef(skuRefMap.get(sku) || '');
         if (!ref) { resumo.sem_ref++; continue; }
         if (filtrarCalc && !calcRefs.has(ref)) { resumo.fora_calc = (resumo.fora_calc || 0) + 1; continue; }
-        skuMap.set(sku, { ref, cor: parsed.cor || '', tam: (parsed.tamanho || '').toUpperCase(), idProduto: p.id || null });
+        skuMap.set(sku, { ref, cor: parsed.cor || '', tam: (parsed.tamanho || '').toUpperCase(), idProduto: p.id || null, gtin: (p.gtin || '').trim(), titulo: p.nome || '' });
       }
       if (produtos.length < PAGE_SIZE) break;
       await sleep(120);
@@ -160,7 +160,7 @@ export default async function handler(req, res) {
         const key = `${info.ref}|${cor_norm}|${info.tam}`;
         const ex = linhas.get(key);
         if (ex) { ex.qtd += qtd; }
-        else linhas.set(key, { ref: info.ref, cor_norm, tam: info.tam, cor_label: info.cor || null, qtd, bling_sku: info.sku, bling_produto_id: info.idProduto });
+        else linhas.set(key, { ref: info.ref, cor_norm, tam: info.tam, cor_label: info.cor || null, qtd, bling_sku: info.sku, bling_produto_id: info.idProduto, gtin: info.gtin || null, titulo: info.titulo || null });
       }
       await sleep(180);
     }
