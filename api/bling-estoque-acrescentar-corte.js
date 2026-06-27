@@ -1,0 +1,148 @@
+/**
+ * bling-estoque-acrescentar-corte.js — Acrescenta um corte ao estoque Bling.
+ *
+ * Difere do bling-estoque-set (que SETA saldo absoluto célula a célula):
+ * aqui recebe a MATRIZ EDITADA de um corte e, por célula, faz
+ *   nova = saldo_atual_no_bling + valor_da_matriz   (SOMA)
+ * gravando o balanço no Bling, espelhando em bling_estoque e logando
+ * (origem 'acrescentar_corte'). No fim grava um registro em
+ * bling_cortes_inseridos pra: (1) sumir o corte da projeção, (2) selo
+ * "adicionado", (3) guardar a matriz editada ("alterado").
+ *
+ * NÃO toca o payload ailson_cortes (a matriz original da oficina fica
+ * intacta — Ailson 27/06/2026).
+ *
+ * POST body: {
+ *   conta?='exitus', ref, corte_id, corte_n?, usuario?, deposito?,
+ *   matriz: [ { cor_nome, cells: { "P": 10, "M": 10, ... } } ]
+ * }
+ *   - cells = quantidade a ACRESCENTAR por tamanho (já vem editada do front)
+ *   - cor sem cadastro no Bling (nenhuma linha em bling_estoque) → ignorada
+ *     com aviso, não entra no estoque.
+ *   - corte já adicionado antes → 409 (trava reinserção / não dobra estoque).
+ */
+import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
+
+export const config = { maxDuration: 60 };
+const API = 'https://api.bling.com.br/Api/v3';
+
+const normCor = (s) =>
+  String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'use POST' });
+  let body = req.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
+
+  const conta = (body.conta || 'exitus').toLowerCase();
+  const ref = String(body.ref || '').replace(/\D/g, '').replace(/^0+/, '');
+  const corte_id = String(body.corte_id || '');
+  const corte_n = body.corte_n != null ? String(body.corte_n) : '';
+  const usuario = body.usuario ? String(body.usuario) : null;
+  const matriz = Array.isArray(body.matriz) ? body.matriz : [];
+
+  if (!ref || !corte_id || !matriz.length)
+    return res.status(400).json({ error: 'ref, corte_id e matriz obrigatórios' });
+
+  try {
+    // ── trava de reinserção ──
+    const { data: jaTem } = await supabase.from('bling_cortes_inseridos')
+      .select('id,inserido_em').eq('ref_norm', ref).eq('corte_id', corte_id).maybeSingle();
+    if (jaTem) return res.status(409).json({ error: 'corte já adicionado ao estoque', inserido_em: jaTem.inserido_em });
+
+    const token = await refreshBlingToken(conta);
+    const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
+
+    // ── depósito geral (uma vez) ──
+    let depositoId = body.deposito ? String(body.deposito) : null;
+    if (!depositoId) {
+      const { data: cfg } = await supabase.from('amicia_data').select('payload').eq('user_id', 'bling-estoque-config').maybeSingle();
+      depositoId = cfg?.payload?.deposito_geral || null;
+    }
+    if (!depositoId) {
+      const rd = await blingFetch(`${API}/depositos?pagina=1&limite=100`, headers);
+      const jd = await rd.json().catch(() => ({}));
+      const deps = jd.data || [];
+      const pick = deps.find(d => d.padrao === true) || deps.find(d => /geral/i.test(d.descricao || '')) || deps[0];
+      depositoId = pick ? String(pick.id) : null;
+    }
+    if (!depositoId) return res.status(502).json({ error: 'depósito geral não encontrado' });
+
+    const resultado = [];
+    const cores_ignoradas = [];
+
+    for (const cor of matriz) {
+      const cor_nome = String(cor?.cor_nome || '').trim();
+      const cor_norm = normCor(cor_nome);
+      const cells = cor?.cells || {};
+      if (!cor_norm) continue;
+
+      // cor cadastrada no Bling? (qualquer tamanho dessa cor nesse ref)
+      const { data: linhas } = await supabase.from('bling_estoque')
+        .select('tam,qtd,bling_produto_id,bling_sku').eq('ref', ref).eq('cor_norm', cor_norm);
+      if (!linhas || !linhas.length) { cores_ignoradas.push(cor_nome || cor_norm); continue; }
+      const porTam = {};
+      linhas.forEach(l => { porTam[String(l.tam || '').toUpperCase().trim()] = l; });
+
+      for (const [tamRaw, addRaw] of Object.entries(cells)) {
+        const tam = String(tamRaw || '').toUpperCase().trim();
+        const add = Math.round(Number(addRaw) || 0);
+        if (!tam || add <= 0) continue;
+
+        const row = porTam[tam];
+        if (!row) { resultado.push({ cor_nome, cor_norm, tam, add, ok: false, motivo: 'tamanho sem cadastro no Bling' }); continue; }
+
+        let produtoId = row.bling_produto_id || null;
+        if (!produtoId && row.bling_sku) {
+          const rp = await blingFetch(`${API}/produtos?codigo=${encodeURIComponent(row.bling_sku)}`, headers);
+          const jp = await rp.json().catch(() => ({}));
+          produtoId = jp.data?.[0]?.id || null;
+        }
+        if (!produtoId) { resultado.push({ cor_nome, cor_norm, tam, add, ok: false, motivo: 'produto não encontrado no Bling' }); continue; }
+
+        const anterior = Number(row.qtd) || 0;
+        const nova = anterior + add;
+
+        const r = await fetch(`${API}/estoques`, {
+          method: 'POST', headers,
+          body: JSON.stringify({ produto: { id: Number(produtoId) }, deposito: { id: Number(depositoId) }, operacao: 'B', quantidade: nova }),
+        });
+        if (!r.ok) {
+          const txt = await r.text().catch(() => '');
+          resultado.push({ cor_nome, cor_norm, tam, add, anterior, ok: false, motivo: `Bling HTTP ${r.status}`, detalhe: txt.slice(0, 160) });
+          continue;
+        }
+
+        // espelha local + log
+        await supabase.from('bling_estoque').upsert({
+          ref, cor_norm, tam, cor_label: cor_nome || null, qtd: nova,
+          bling_produto_id: produtoId, atualizado_em: new Date().toISOString(), atualizado_por: usuario,
+        }, { onConflict: 'ref,cor_norm,tam' });
+        await supabase.from('bling_estoque_logs').insert({
+          ref, cor_norm, tam, cor_label: cor_nome || null,
+          qtd_anterior: anterior, qtd_nova: nova, delta: add,
+          motivo: `corte ${corte_n || corte_id}`, usuario, origem: 'acrescentar_corte',
+        });
+        resultado.push({ cor_nome, cor_norm, tam, add, anterior, nova, ok: true });
+      }
+    }
+
+    const okCount = resultado.filter(r => r.ok).length;
+
+    // nada acrescentado → não grava registro (deixa ele corrigir cadastro e tentar de novo)
+    if (okCount === 0) {
+      return res.status(200).json({ ok: false, gravado: false, okCount: 0, resultado, cores_ignoradas, msg: 'nenhuma variação acrescentada' });
+    }
+
+    // grava o rastreio (some da projeção, vira "adicionado", guarda matriz editada)
+    const { error: eIns } = await supabase.from('bling_cortes_inseridos').insert({
+      ref_norm: ref, corte_id, corte_n: corte_n || null, inserido_por: usuario,
+      matriz_editada: matriz, cores_ignoradas, resultado,
+    });
+    if (eIns) return res.status(500).json({ error: 'gravou no Bling mas falhou o registro: ' + eIns.message, resultado, cores_ignoradas });
+
+    return res.status(200).json({ ok: true, gravado: true, okCount, resultado, cores_ignoradas });
+  } catch (e) {
+    return res.status(500).json({ error: e.message || String(e) });
+  }
+}
