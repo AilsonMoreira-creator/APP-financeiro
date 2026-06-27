@@ -41,11 +41,13 @@ export default async function handler(req, res) {
 
   try {
     // variações da base (já sincronizadas do Exitus)
-    const { data: vars, error: eV } = await supabase.from('bling_estoque')
+    const { data: varsRaw, error: eV } = await supabase.from('bling_estoque')
       .select('bling_sku,bling_produto_id,cor_label,tam,gtin')
       .eq('ref', refDig).not('bling_produto_id', 'is', null);
     if (eV) return res.status(500).json({ error: eV.message });
-    if (!vars || !vars.length) return res.status(404).json({ error: `nenhuma variação na base pra ref ${refDig}` });
+    // exclui o produto PAI (formato V): vem sem cor/tam na base
+    const vars = (varsRaw || []).filter(v => v.cor_label && String(v.tam || '').trim());
+    if (!vars.length) return res.status(404).json({ error: `nenhuma variação (filha) na base pra ref ${refDig}` });
 
     const ordT = { P: 1, M: 2, G: 3, GG: 4, G1: 5, G2: 6, G3: 7 };
     vars.sort((a, b) => String(a.cor_label || '').localeCompare(String(b.cor_label || '')) || (ordT[String(a.tam || '').toUpperCase()] || 99) - (ordT[String(b.tam || '').toUpperCase()] || 99));
