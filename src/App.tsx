@@ -4881,6 +4881,18 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [ajusteValor,setAjusteValor]=useState('');
   const [ajusteMotivo,setAjusteMotivo]=useState('');
   const [salvandoAjuste,setSalvandoAjuste]=useState(false);
+  // ── Acrescentar corte ao estoque (Ailson 27/06/2026) ────────────────────
+  // cortesTodosPorRef: todos os cortes (incl. entregue, exclui arquivado) p/ a
+  // lista de "acrescentar corte" (últimos 3). inseridosPorRef: cortes que já
+  // foram somados ao estoque (registro em bling_cortes_inseridos) → somem da
+  // projeção, ganham selo "adicionado" e mostram a matriz editada ("alterado").
+  const [cortesTodosPorRef,setCortesTodosPorRef]=useState({}); // {refNorm:[{id,nCorte,...,entregue}]}
+  const [inseridosPorRef,setInseridosPorRef]=useState({}); // {refNorm:{corte_id:registro}}
+  const [acrescModal,setAcrescModal]=useState(null);   // refNorm com modal aberto
+  const [acrescCorteSel,setAcrescCorteSel]=useState(null); // corte_id expandido
+  const [matrizEdit,setMatrizEdit]=useState(null);     // {tams:[{tam,grade}],cores:[{nome,cells:{TAM:qtd}}]}
+  const [acrescBusy,setAcrescBusy]=useState(false);
+  const [acrescResultado,setAcrescResultado]=useState(null); // {ok,gravado,okCount,resultado,cores_ignoradas,erro}
   // ── Trava de presença por variação (Ailson 11/06/2026) ──────────────────
   // 2 usuários abrindo o MESMO ref|cor|tam: o 1º segura a trava em
   // bling_estoque_locks (heartbeat 20s); o 2º vê "fulana já está editando" e
@@ -4956,21 +4968,39 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
 
   const carregarMatrizProjetada=async()=>{
     try{
+      // cortes já somados ao estoque → somem da projeção + selo "adicionado"
+      const {data:insRows}=await supabase.from('bling_cortes_inseridos')
+        .select('ref_norm,corte_id,corte_n,inserido_em,inserido_por,matriz_editada,cores_ignoradas,resultado');
+      const insPorRef={};const insSet=new Set();
+      (insRows||[]).forEach(r=>{
+        const rk=String(r.ref_norm||'');const ci=String(r.corte_id);
+        if(!insPorRef[rk])insPorRef[rk]={};
+        insPorRef[rk][ci]=r;
+        insSet.add(rk+'|'+ci);
+      });
+      setInseridosPorRef(insPorRef);
+
       const {data}=await supabase.from('amicia_data')
         .select('payload').eq('user_id','ailson_cortes').maybeSingle();
       const cortes=data?.payload?.cortes||[];
-      const result={};const nomes={};const cortesRaw={};
+      const result={};const nomes={};const cortesRaw={};const todos={};
       for(const c of cortes){
-        if(c?.entregue===true)continue; // só cortes ainda na oficina
-        if(c?.arquivado===true)continue; // corte arquivado não conta na projeção (Ailson 22/06/2026)
+        if(c?.arquivado===true)continue; // arquivado nunca conta (Ailson 22/06/2026)
         const refRaw=String(c.ref||'').replace(/\D/g,'').replace(/^0+/,'');
         if(!refRaw)continue;
         const cores=c.detalhes?.cores||[];
         const tamanhos=c.detalhes?.tamanhos||[];
         if(!cores.length||!tamanhos.length)continue;
+        const cru={id:c.id,nCorte:c.nCorte||'',oficina:c.oficina||'',data:c.data||'',qtd:Number(c.qtd)||0,descricao:c.descricao||'',cores,tamanhos,celulas:c.detalhes?.celulas||{},entregue:c?.entregue===true};
+        // lista "acrescentar corte": TODOS (incl. entregue, incl. já inseridos)
+        if(!todos[refRaw])todos[refRaw]=[];
+        todos[refRaw].push(cru);
+        // projeção: exclui entregue e exclui já-inseridos (Ailson 27/06/2026)
+        if(c?.entregue===true)continue;
+        if(insSet.has(refRaw+'|'+String(c.id)))continue;
         if(!result[refRaw])result[refRaw]={};
         if(!cortesRaw[refRaw])cortesRaw[refRaw]=[];
-        cortesRaw[refRaw].push({id:c.id,nCorte:c.nCorte||'',oficina:c.oficina||'',data:c.data||'',qtd:Number(c.qtd)||0,descricao:c.descricao||'',cores,tamanhos,celulas:c.detalhes?.celulas||{}});
+        cortesRaw[refRaw].push(cru);
         for(const co of cores){
           const folhas=Number(co.folhas)||0;
           if(folhas<=0)continue;
@@ -4989,7 +5019,47 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       setMatrizProjPorRef(result);
       setCorProjNomes(nomes);
       setCortesProjPorRef(cortesRaw);
+      setCortesTodosPorRef(todos);
     }catch(e){console.error('matriz proj:',e.message);}
+  };
+
+  // ── Acrescentar corte: semeia matriz editável (não toca o corte original) ──
+  const seedMatrizCorte=(ct)=>{
+    const tams=(ct.tamanhos||[]).map(t=>({tam:String(t.tam||'').toUpperCase().trim(),grade:Number(t.grade)||0}));
+    const celDet={celulas:ct.celulas||{}};
+    const cores=(ct.cores||[]).map(co=>{
+      const cells={};
+      (ct.tamanhos||[]).forEach(t=>{const tu=String(t.tam||'').toUpperCase().trim();cells[tu]=celulaCorte(celDet,co.nome,t.tam,Number(co.folhas)||0,Number(t.grade)||0);});
+      return {nome:co.nome||'',cells};
+    });
+    return {tams,cores};
+  };
+  const abrirCorteAcresc=(ct)=>{
+    if(acrescCorteSel===ct.id){setAcrescCorteSel(null);setMatrizEdit(null);return;}
+    setAcrescCorteSel(ct.id);setAcrescResultado(null);
+    const reg=(inseridosPorRef[acrescModal]||{})[String(ct.id)];
+    if(reg){setMatrizEdit(null);return;} // já inserido → snapshot read-only
+    setMatrizEdit(seedMatrizCorte(ct));
+  };
+  const submitAcrescentar=async(ct)=>{
+    if(acrescBusy||!matrizEdit)return;
+    const matriz=matrizEdit.cores
+      .map(co=>({cor_nome:co.nome,cells:co.cells}))
+      .filter(co=>String(co.cor_nome||'').trim()&&Object.values(co.cells).some(v=>Number(v)>0));
+    if(!matriz.length){alert('Nada pra acrescentar (sem cor ou quantidade).');return;}
+    setAcrescBusy(true);setAcrescResultado(null);
+    try{
+      const r=await fetch('/api/bling-estoque-acrescentar-corte',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:'exitus',ref:acrescModal,corte_id:ct.id,corte_n:ct.nCorte,usuario:usuarioSessao,matriz})});
+      const j=await r.json().catch(()=>({}));
+      if(r.status===409){setAcrescResultado({erro:'Esse corte já foi adicionado ao estoque.'});return;}
+      if(!r.ok&&!j.resultado){setAcrescResultado({erro:j.error||('HTTP '+r.status)});return;}
+      setAcrescResultado(j);
+      if(j.resultado){
+        setBlingEstoque(prev=>{const n={...prev};j.resultado.forEach(c=>{if(c.ok)n[`${acrescModal}|${c.cor_norm}|${c.tam}`]=c.nova;});return n;});
+      }
+      if(j.gravado){await carregarMatrizProjetada();} // some da projeção + vira "adicionado"
+    }catch(e){setAcrescResultado({erro:e.message||String(e)});}
+    finally{setAcrescBusy(false);}
   };
 
   const carregarTopCoresBling=()=>{
@@ -5456,6 +5526,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             <button onClick={()=>setModalRef(null)} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer",padding:"0 4px",lineHeight:1}}>×</button>
           </div>
           <div style={{padding:"16px 20px"}}>
+            <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{width:"100%",marginBottom:14,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+              <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte ao estoque
+            </button>
             <div style={{fontSize:10,color:"#8a9aa4",fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Variações · Estoque atual</div>
             <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",margin:mobile?"0 -16px":"0",padding:mobile?"0 16px":"0"}}>
             <table style={{width:mobile?"100%":"auto",margin:"0 auto",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth:mobile?440:"auto"}}>
@@ -5540,6 +5613,116 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                         })}
                       </tbody>
                     </table>
+                  </div>}
+                </div>;
+              })}
+            </div>
+          </div>
+        </div>;
+      })()}
+      {/* ── Modal: acrescentar corte ao estoque (Ailson 27/06/2026) ── */}
+      {acrescModal&&(()=>{
+        const lista=[...(cortesTodosPorRef[acrescModal]||[])].sort((a,b)=>new Date(b.data||0)-new Date(a.data||0)).slice(0,3);
+        const insRef=inseridosPorRef[acrescModal]||{};
+        const ordT={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
+        const fechar=()=>{setAcrescModal(null);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);};
+        return <div onClick={fechar} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:115,overflowY:"auto",backdropFilter:"blur(3px)"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:600,width:"100%",boxShadow:"0 12px 40px rgba(0,0,0,0.25)",overflow:"hidden"}}>
+            <div style={{padding:"14px 18px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:11,color:"#4a7fa5",fontWeight:700}}>Acrescentar corte · REF {acrescModal}</div>
+                <div style={{fontSize:11.5,color:"#8a9aa4"}}>últimos 3 cortes · soma no estoque Bling</div>
+              </div>
+              <button onClick={fechar} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{padding:"12px 16px"}}>
+              {lista.length===0&&<div style={{fontSize:12,color:"#8a9aa4",fontStyle:"italic"}}>Nenhum corte encontrado pra esse REF.</div>}
+              {lista.map(ct=>{
+                const aberto=acrescCorteSel===ct.id;
+                const reg=insRef[String(ct.id)];
+                const jaInserido=!!reg;
+                return <div key={ct.id} style={{border:"1px solid #e3ebf2",borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+                  <div onClick={()=>abrirCorteAcresc(ct)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#f4f7fb",cursor:"pointer"}}>
+                    <button style={{width:24,height:24,borderRadius:5,background:"#fff",border:"1px solid #c8d8e4",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><SvgMatrixDet color="#4a7fa5"/></button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"#2c3e50",display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                        Corte {ct.nCorte||'—'} · {ct.oficina||'—'}
+                        {jaInserido&&<span style={{fontSize:10,fontWeight:700,color:"#1f7a48",background:"#e6f7ee",border:"1px solid #b7e4c7",borderRadius:6,padding:"1px 7px"}}>adicionado</span>}
+                        {ct.entregue&&!jaInserido&&<span style={{fontSize:10,fontWeight:600,color:"#8a6a2a",background:"#fdf3e0",border:"1px solid #ecd9b0",borderRadius:6,padding:"1px 7px"}}>entregue</span>}
+                      </div>
+                      <div style={{fontSize:11,color:"#6b7c8a"}}>Retirada: {ct.data?String(ct.data).split('-').reverse().join('/'):'—'} · {ct.qtd} peças</div>
+                    </div>
+                  </div>
+                  {aberto&&<div style={{padding:"10px 12px"}}>
+                    {jaInserido?(()=>{
+                      const mz=reg.matriz_editada||[];
+                      const tamsSet=[];mz.forEach(co=>Object.keys(co.cells||{}).forEach(t=>{if(!tamsSet.includes(t))tamsSet.push(t);}));
+                      tamsSet.sort((a,b)=>(ordT[a]||99)-(ordT[b]||99));
+                      return <div>
+                        <div style={{fontSize:11,color:"#8a6a2a",fontWeight:700,marginBottom:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                          <span style={{background:"#fdf3e0",border:"1px solid #ecd9b0",borderRadius:6,padding:"1px 7px"}}>alterado</span>
+                          <span style={{color:"#8a9aa4",fontWeight:500}}>adicionado {reg.inserido_em?new Date(reg.inserido_em).toLocaleDateString('pt-BR'):''}{reg.inserido_por?' · '+reg.inserido_por:''}</span>
+                        </div>
+                        <div style={{overflowX:"auto"}}>
+                          <table style={{borderCollapse:"collapse",fontSize:11,width:"100%"}}>
+                            <thead><tr>
+                              <th style={{textAlign:"left",padding:"3px 6px",color:"#8a9aa4",fontWeight:700}}>Cor</th>
+                              {tamsSet.map((t,ti)=><th key={ti} style={{textAlign:"center",padding:"3px 6px",color:"#8a9aa4",fontWeight:700}}>{t}</th>)}
+                              <th style={{textAlign:"right",padding:"3px 6px",color:"#4a7fa5",fontWeight:700}}>Total</th>
+                            </tr></thead>
+                            <tbody>
+                              {mz.map((co,ci)=>{
+                                const tot=tamsSet.reduce((s,t)=>s+(Number(co.cells?.[t])||0),0);
+                                return <tr key={ci} style={{background:ci%2?"#faf8f5":"#fff"}}>
+                                  <td style={{padding:"3px 6px",fontWeight:600,color:"#2c3e50"}}>{co.cor_nome}</td>
+                                  {tamsSet.map((t,ti)=><td key={ti} style={{textAlign:"center",padding:"3px 6px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#2c3e50"}}>{Number(co.cells?.[t])||0}</td>)}
+                                  <td style={{textAlign:"right",padding:"3px 6px",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#4a7fa5"}}>{tot}</td>
+                                </tr>;
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        {(reg.cores_ignoradas||[]).length>0&&<div style={{fontSize:11,color:"#8a6a2a",marginTop:6}}>Cores ignoradas (sem cadastro no Bling): {(reg.cores_ignoradas||[]).join(', ')}</div>}
+                      </div>;
+                    })():(
+                      matrizEdit&&<div>
+                        <div style={{overflowX:"auto"}}>
+                          <table style={{borderCollapse:"collapse",fontSize:11,width:"100%"}}>
+                            <thead><tr>
+                              <th style={{textAlign:"left",padding:"3px 6px",color:"#8a9aa4",fontWeight:700}}>Cor</th>
+                              {matrizEdit.tams.map((t,ti)=><th key={ti} style={{textAlign:"center",padding:"3px 6px",color:"#8a9aa4",fontWeight:700}}>{t.tam}</th>)}
+                              <th style={{textAlign:"right",padding:"3px 6px",color:"#4a7fa5",fontWeight:700}}>Total</th>
+                              <th style={{width:24}}></th>
+                            </tr></thead>
+                            <tbody>
+                              {matrizEdit.cores.map((co,ci)=>{
+                                const tot=matrizEdit.tams.reduce((s,t)=>s+(Number(co.cells[t.tam])||0),0);
+                                return <tr key={ci} style={{background:ci%2?"#faf8f5":"#fff"}}>
+                                  <td style={{padding:"3px 6px"}}>
+                                    <input value={co.nome} onChange={e=>{const v=e.target.value;setMatrizEdit(m=>({...m,cores:m.cores.map((x,j)=>j===ci?{...x,nome:v}:x)}));}} placeholder="cor" style={{width:92,border:"1px solid #e3ebf2",borderRadius:5,padding:"3px 6px",fontSize:11,fontFamily:"Georgia,serif",color:"#2c3e50",outline:"none"}}/>
+                                  </td>
+                                  {matrizEdit.tams.map((t,ti)=><td key={ti} style={{textAlign:"center",padding:"3px 4px"}}>
+                                    <input inputMode="numeric" value={co.cells[t.tam]??0} onChange={e=>{const v=e.target.value.replace(/\D/g,'');setMatrizEdit(m=>({...m,cores:m.cores.map((x,j)=>j===ci?{...x,cells:{...x.cells,[t.tam]:v===''?0:parseInt(v,10)}}:x)}));}} style={{width:42,textAlign:"center",border:"1px solid #e3ebf2",borderRadius:5,padding:"3px 2px",fontSize:11,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#2c3e50",outline:"none"}}/>
+                                  </td>)}
+                                  <td style={{textAlign:"right",padding:"3px 6px",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",color:"#4a7fa5"}}>{tot}</td>
+                                  <td style={{padding:"3px 4px",textAlign:"center"}}>
+                                    <button onClick={()=>setMatrizEdit(m=>({...m,cores:m.cores.filter((_,j)=>j!==ci)}))} title="Excluir cor" style={{background:"none",border:"none",cursor:"pointer",color:"#c0392b",fontSize:13,lineHeight:1,padding:2}}>🗑</button>
+                                  </td>
+                                </tr>;
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div style={{fontSize:10.5,color:"#8a9aa4",marginTop:6,fontStyle:"italic"}}>O nome da cor tem que bater com o cadastro do Bling. Cor sem cadastro entra no aviso e não é somada.</div>
+                        {acrescResultado&&<div style={{marginTop:8,fontSize:12}}>
+                          {acrescResultado.erro&&<div style={{color:"#c0392b",fontWeight:600}}>⚠ {acrescResultado.erro}</div>}
+                          {acrescResultado.okCount>0&&<div style={{color:"#1f7a48",fontWeight:700}}>✓ {acrescResultado.okCount} variaç{acrescResultado.okCount===1?'ão somada':'ões somadas'} no estoque Bling.</div>}
+                          {(acrescResultado.cores_ignoradas||[]).length>0&&<div style={{color:"#8a6a2a",marginTop:3}}>⚠ {(acrescResultado.cores_ignoradas||[]).map(c=>`a cor ${c} não foi acrescentada (sem cadastro no Bling)`).join(' · ')}</div>}
+                          {(acrescResultado.resultado||[]).filter(r=>!r.ok).length>0&&<div style={{color:"#8a6a2a",marginTop:3,fontSize:11}}>{(acrescResultado.resultado||[]).filter(r=>!r.ok).map(r=>`${r.cor_nome} ${r.tam}: ${r.motivo}`).join(' · ')}</div>}
+                        </div>}
+                        {!acrescResultado?.gravado&&<button onClick={()=>submitAcrescentar(ct)} disabled={acrescBusy} style={{marginTop:10,width:"100%",background:acrescBusy?"#9bb3c7":"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:acrescBusy?"default":"pointer"}}>{acrescBusy?"acrescentando…":"acrescentar no estoque"}</button>}
+                      </div>
+                    )}
                   </div>}
                 </div>;
               })}
