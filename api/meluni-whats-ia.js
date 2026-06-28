@@ -123,6 +123,29 @@ function montarMensagens(msgs) {
   return out;
 }
 
+// Classifica se a réplica desta vez pode ir AUTOMÁTICA (sem aprovação), pros 2
+// casos seguros pedidos pelo Ailson (28/06/2026):
+//  (1) ABERTURA genérica no primeiro contato (ex: "visitei o site e gostaria de
+//      informações, pode me ajudar?") — a Lara só acolhe e pergunta no que ajuda;
+//  (2) cliente manda SÓ uma foto de modelo (com dúvida) e NÃO escreve nada.
+// Fora desses, segue pendente pro atendente aprovar.
+function classificarAutoEnvioLara(msgs, ultima) {
+  if (!ultima || ultima.direcao !== 'entrada') return { auto: false, caso: null };
+  const txt = (ultima.texto || '').trim();
+  // Caso 2: só imagem, sem texto.
+  if (ultima.tipo_midia === 'image' && !txt) return { auto: true, caso: 'foto_sem_texto' };
+  // Caso 1: abertura genérica no PRIMEIRO contato (a Lara ainda não respondeu nada).
+  if (txt) {
+    const jaRespondeu = msgs.some(m => m.direcao === 'saida');
+    if (!jaRespondeu) {
+      const aberturaSite = /visitei o site|gostaria de (algumas )?informa|preciso de (algumas )?informa|pode me ajudar|gostaria de saber/i.test(txt);
+      const soSaudacao = /^(oi+|ol[aá]+|e?\s*a[ií]+|bom dia|boa tarde|boa noite)[\s!.,😊🙂👋…]*$/i.test(txt);
+      if (aberturaSite || soSaudacao) return { auto: true, caso: 'abertura' };
+    }
+  }
+  return { auto: false, caso: null };
+}
+
 export async function processarConversaMeluni(conversaId, opts = {}) {
   // 1. conversa
   const { data: conv } = await supabase.from('meluni_conversas').select('*').eq('id', conversaId).maybeSingle();
@@ -180,5 +203,6 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
   }).select('id').single();
   if (error) return { motivo: 'erro_gravar_sugestao', erro: error.message };
 
-  return { motivo: 'sugestao_criada', sugestaoId: sug.id, texto };
+  const autoCls = classificarAutoEnvioLara(msgs, ultima);
+  return { motivo: 'sugestao_criada', sugestaoId: sug.id, texto, autoEnviar: autoCls.auto, autoCaso: autoCls.caso };
 }

@@ -30,6 +30,9 @@ export default async function handler(req, res) {
   const detalhe = [];
 
   const autoAtivo = (await cfgMeluni('lara_auto_resposta_ativa', false)) === true;
+  // Auto-envio só pros 2 casos seguros (abertura genérica / foto sem texto),
+  // mesmo com o global desligado. Interruptor pra desligar sem código. Ailson 28/06/2026.
+  const autoCasos = (await cfgMeluni('lara_auto_casos_simples', true)) !== false;
 
   try {
     const { data: convs, error } = await supabase.from('meluni_conversas')
@@ -49,8 +52,10 @@ export default async function handler(req, res) {
         await zerar(c.id);
         if (r.motivo === 'sugestao_criada') {
           gerados++;
-          if (autoAtivo && r.sugestaoId) {
-            const env = await aprovarSugestao(r.sugestaoId, 'lara_auto');
+          const deveEnviar = (autoAtivo || (autoCasos && r.autoEnviar)) && r.sugestaoId;
+          if (deveEnviar) {
+            const operador = r.autoEnviar ? `lara_auto_${r.autoCaso}` : 'lara_auto';
+            const env = await aprovarSugestao(r.sugestaoId, operador);
             if (env.ok) enviados++; else erros++;
           }
         } else {
