@@ -4886,6 +4886,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // Criar etiqueta → template (Ailson 28/06/2026)
   const [etqOpen,setEtqOpen]=useState(false);
   const [etqSample,setEtqSample]=useState(null);
+  const [gtinOpen,setGtinOpen]=useState(null);   // {ref,refNorm,desc} | null
+  const [gtinBusy,setGtinBusy]=useState(false);
+  const [gtinProg,setGtinProg]=useState(null);   // null=ainda não rodou; {fase,reservados,total,contas:{},erro}
   // ── Acrescentar corte ao estoque (Ailson 27/06/2026) ────────────────────
   // cortesTodosPorRef: todos os cortes (incl. entregue, exclui arquivado) p/ a
   // lista de "acrescentar corte" (últimos 3). inseridosPorRef: cortes que já
@@ -5168,6 +5171,36 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     const refNorm=String(modalRef).replace(/\D/g,'').replace(/^0+/,'');
     recarregarBling(refNorm);
   },[modalRef]);
+
+  // Cria código de barras (GTIN-13) da ref: reserva no banco (popular) e grava
+  // nas 3 contas Bling (drain por conta até zerar). Idempotente. Ailson 28/06/2026.
+  const rodarGtin=async(refNorm)=>{
+    setGtinBusy(true);
+    setGtinProg({fase:'reservando',contas:{}});
+    try{
+      const rp=await fetch('/api/bling-gtin-popular?ref='+refNorm);
+      const jp=await rp.json().catch(()=>({}));
+      setGtinProg(p=>({...p,fase:'gravando',reservados:jp?.gerados??0,total:jp?.total??0}));
+      for(const conta of ['exitus','lumia','muniam']){
+        setGtinProg(p=>({...p,contas:{...p.contas,[conta]:{status:'rodando',escritos:0,erros:0,restantes:null}}}));
+        let pass=0,esc=0,err=0,abortou=null,restantes=null,ultimoErro=null;
+        while(pass<8){
+          const r=await fetch(`/api/bling-gtin-drain?key=gtndrn7x2k9&conta=${conta}&ref=${refNorm}`);
+          const j=await r.json().catch(()=>({}));
+          const res=(j?.resultado||[])[0]||{};
+          esc+=res.escritos||0; err+=res.erros||0; restantes=res.restantes; if(res.ultimoErro)ultimoErro=res.ultimoErro;
+          setGtinProg(p=>({...p,contas:{...p.contas,[conta]:{status:'rodando',escritos:esc,erros:err,restantes}}}));
+          if(res.abortou){abortou=res.abortou;break;}
+          if((res.restantes||0)===0)break;
+          pass++;
+        }
+        setGtinProg(p=>({...p,contas:{...p.contas,[conta]:{status:abortou?'erro':'ok',escritos:esc,erros:err,restantes,abortou,ultimoErro}}}));
+      }
+      setGtinProg(p=>({...p,fase:'fim'}));
+      if(modalRef)recarregarBling(String(modalRef).replace(/\D/g,'').replace(/^0+/,''));
+    }catch(e){ setGtinProg(p=>({...(p||{}),fase:'fim',erro:e.message})); }
+    setGtinBusy(false);
+  };
 
   // Refs que estão na CALCULADORA e têm estoque no Bling, mas ainda não têm
   // espelho no ML (produto novo). Como o ML virou 1 SKU = 1 anúncio, produto
@@ -5546,6 +5579,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{width:"100%",marginBottom:14,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
               <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte ao estoque
             </button>
+            <button onClick={()=>{setGtinProg(null);setGtinOpen({ref:modalRef,refNorm,desc});}} style={{width:"100%",marginBottom:8,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+              <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5",letterSpacing:-1,fontFamily:"monospace"}}>▌║▌</span> criar código de barras (Bling)
+            </button>
             <button onClick={()=>{setEtqSample({desc,ref:modalRef,cor:vars[0]?.cor||'',tam:vars[0]?.tam||'',visiveis:[...new Set((vars||[]).map(v=>normCorBling(v.cor)))]});setEtqOpen(true);}} style={{width:"100%",marginBottom:14,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
               <span style={{fontSize:14,lineHeight:1,color:"#4a7fa5"}}>▢</span> criar etiqueta
             </button>
@@ -5641,6 +5677,44 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         </div>;
       })()}
       {etqOpen && <EtiquetaGerar sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
+      {gtinOpen && (
+        <div onClick={()=>{ if(!gtinBusy)setGtinOpen(null); }} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px",zIndex:205,backdropFilter:"blur(3px)"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:440,boxShadow:"0 20px 50px rgba(0,0,0,0.25)",overflow:"hidden",fontFamily:"Georgia,serif"}}>
+            <div style={{padding:"16px 20px",borderBottom:"1px solid #e8e2da",background:"#faf8f5"}}>
+              <div style={{fontSize:11,color:"#4a7fa5",fontWeight:700,letterSpacing:0.4}}>REF {gtinOpen.ref}</div>
+              <div style={{fontSize:16,fontWeight:700,color:"#2c3e50",marginTop:2}}>Código de barras · Bling</div>
+            </div>
+            <div style={{padding:"18px 20px"}}>
+              {!gtinProg ? (
+                <>
+                  <div style={{fontSize:13,color:"#2c3e50",lineHeight:1.55,marginBottom:16}}>Reserva os GTIN-13 das variações dessa ref e grava nas 3 contas (Exitus, Lumia, Muniam). É idempotente: SKU que já tem código é pulado.</div>
+                  <button onClick={()=>rodarGtin(gtinOpen.refNorm)} style={{width:"100%",background:"#4a7fa5",color:"#fff",border:0,borderRadius:9,padding:"12px",fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,cursor:"pointer"}}>gerar agora</button>
+                </>
+              ) : (
+                <>
+                  <div style={{fontSize:12.5,color:"#2c3e50",marginBottom:12}}>{gtinProg.fase==='reservando'?'Reservando códigos…':<>Reservados agora: <b style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif"}}>{gtinProg.reservados??0}</b>{gtinProg.total!=null?<span style={{color:"#8a9aa4"}}> · {gtinProg.total} variações</span>:null}</>}</div>
+                  {['exitus','lumia','muniam'].map(c=>{
+                    const st=gtinProg.contas?.[c];
+                    const ic=!st?'·':st.status==='rodando'?'⏳':st.status==='ok'?'✓':'⚠';
+                    const col=st?.status==='ok'?'#1e7e5a':st?.status==='erro'?'#c0392b':'#8a9aa4';
+                    return (
+                      <div key={c} style={{display:"flex",alignItems:"baseline",gap:8,padding:"7px 0",borderTop:"1px solid #f0ece6"}}>
+                        <span style={{width:16,color:col,fontWeight:700}}>{ic}</span>
+                        <span style={{width:64,fontWeight:700,color:"#2c3e50",fontSize:13,textTransform:"capitalize"}}>{c}</span>
+                        <span style={{fontSize:12,color:"#5a6b75",fontFamily:"Calibri,Segoe UI,Arial,sans-serif"}}>
+                          {!st?'—':st.abortou?<span style={{color:"#c0392b"}}>reconectar (escopo Produtos:alteração)</span>:<>{st.escritos} gravados{st.erros>0?` · ${st.erros} erro${st.erros>1?'s':''}`:''}{st.restantes>0?` · faltam ${st.restantes}`:''}</>}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {gtinProg.erro&&<div style={{marginTop:10,fontSize:12,color:"#c0392b"}}>Erro: {gtinProg.erro}</div>}
+                  {gtinProg.fase==='fim'&&<button onClick={()=>setGtinOpen(null)} style={{width:"100%",marginTop:16,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:9,padding:"11px",fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,cursor:"pointer"}}>fechar</button>}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── Modal: acrescentar corte ao estoque (Ailson 27/06/2026) ── */}
       {acrescModal&&(()=>{
         const lista=[...(cortesTodosPorRef[acrescModal]||[])].sort((a,b)=>new Date(b.data||0)-new Date(a.data||0)).slice(0,3);
