@@ -7826,6 +7826,26 @@ const CALC_PLATS={
   tiktok:{nome:"TikTok Shop",cor:"#010101",ct:"#fff",taxas:[{l:"Comissão",t:"pct",v:14},{l:"Afiliados",t:"pct",v:7},{l:"Frete",t:"fix",v:4}]},
   meluni:{nome:"Meluni",cor:"#fff",ct:"#000",bd:"#000",taxas:[{l:"Cartão/Antifraude",t:"pct",v:8},{l:"Converter",t:"pct",v:2},{l:"Cupons",t:"pct",v:7},{l:"Frete",t:"fix",v:15},{l:"Plataforma",t:"fix",v:5}]},
 };
+// Overrides de taxas editáveis (salvos no payload) — aplicados em runtime sobre
+// os defaults. calcPreco/calcLucroReal/linhas leem CALC_PLATS/CALC_GERAIS ao vivo,
+// então mutar aqui reflete em todos os produtos. Ailson 28/06/2026.
+function aplicarTaxasConfig(cfg){
+  if(!cfg||typeof cfg!=="object")return;
+  if(cfg.gerais&&typeof cfg.gerais==="object"){
+    if(typeof cfg.gerais.imposto==="number")CALC_GERAIS.imposto=cfg.gerais.imposto;
+    if(typeof cfg.gerais.custoFixo==="number")CALC_GERAIS.custoFixo=cfg.gerais.custoFixo;
+  }
+  if(cfg.plats&&typeof cfg.plats==="object"){
+    for(const k of Object.keys(cfg.plats)){
+      if(CALC_PLATS[k]&&Array.isArray(cfg.plats[k].taxas))CALC_PLATS[k].taxas=cfg.plats[k].taxas;
+    }
+  }
+}
+function serializarTaxasConfig(){
+  const cfg={gerais:{imposto:CALC_GERAIS.imposto,custoFixo:CALC_GERAIS.custoFixo},plats:{}};
+  for(const k of Object.keys(CALC_PLATS))cfg.plats[k]={taxas:CALC_PLATS[k].taxas};
+  return cfg;
+}
 const CALC_ORDEM=["mercadolivre","shopee","shein","tiktok","meluni"];
 const CALC_CK=[["tecido","Tecido"],["forro","Forro"],["oficina","Oficina Costura"],["passadoria","Passadoria"],["ziper","Zíper"],["botao","Botão/Caseado"],["aviamentos","Aviamentos"],["modelista","Modelista/Piloteiro"],["salaCorte","Sala de Corte"]];
 const calcCusto=p=>CALC_CK.reduce((s,[k])=>s+parseFloat(p[k]||0),0);
@@ -7858,6 +7878,8 @@ const CalculadoraContent=()=>{
   const[syncStatus,setSyncStatus]=useState(null); // null | 'saving' | 'saved' | 'error'
   const prodsRef=useRef([]);
   const prsRef=useRef({});
+  const taxasConfigRef=useRef(null);
+  const [cfgVer,setCfgVer]=useState(0);
   // === Análise Meluni v2: ROAS global + manuais por produto + estado da tela
   const [roasMeluniGlobal,setRoasMeluniGlobalState]=useState(10);
   const [roasMeluniManual,setRoasMeluniManualState]=useState({}); // { ref: roas }
@@ -7918,6 +7940,11 @@ const CalculadoraContent=()=>{
             setMeluniFreteSubsidiadoState(data.payload.meluniFreteSubsidiado);
             meluniFreteSubsidiadoRef.current=data.payload.meluniFreteSubsidiado;
           }
+          if(data.payload.taxasConfig&&typeof data.payload.taxasConfig==='object'){
+            aplicarTaxasConfig(data.payload.taxasConfig);
+            taxasConfigRef.current=data.payload.taxasConfig;
+            setCfgVer(v=>v+1);
+          }
           try{localStorage.setItem("amica_calc",JSON.stringify({prods:data.payload.prods||[],prs:data.payload.prs||{}}));}catch(e){console.error(e)}
         }
         setSyncStatus('saved');
@@ -7946,7 +7973,8 @@ const CalculadoraContent=()=>{
         roasMeluniGlobal:roasMeluniGlobalRef.current,
         roasMeluniManual:roasMeluniManualRef.current,
         analiseMeluniState:analiseMeluniRef.current||analiseMeluniState,
-        meluniFreteSubsidiado:meluniFreteSubsidiadoRef.current
+        meluniFreteSubsidiado:meluniFreteSubsidiadoRef.current,
+        ...((taxasConfigRef.current||remoto.taxasConfig)?{taxasConfig:taxasConfigRef.current||remoto.taxasConfig}:{})
       };
       await supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:novoPayload},{onConflict:'user_id'});
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
@@ -7993,6 +8021,17 @@ const CalculadoraContent=()=>{
     setMeluniFreteSubsidiadoState(!!v);
     salvar(prodsRef.current,prsRef.current);
   };
+  // Salva as taxas editáveis de uma plataforma (reflete em todos os produtos dela).
+  const salvarTaxas=({id,taxas,gerais})=>{
+    if(id&&CALC_PLATS[id]&&Array.isArray(taxas))CALC_PLATS[id].taxas=taxas;
+    if(gerais&&typeof gerais==="object"){
+      if(gerais.imposto!=null&&!isNaN(gerais.imposto))CALC_GERAIS.imposto=Number(gerais.imposto);
+      if(gerais.custoFixo!=null&&!isNaN(gerais.custoFixo))CALC_GERAIS.custoFixo=Number(gerais.custoFixo);
+    }
+    taxasConfigRef.current=serializarTaxasConfig();
+    setCfgVer(v=>v+1);
+    salvar(prodsRef.current,prsRef.current);
+  };
   // Helper p/ inputs number: seleciona conteúdo ao focar (Ailson v2 fix)
   const onFocusSelectAll=(e)=>e.target.select();
 
@@ -8017,7 +8056,7 @@ const CalculadoraContent=()=>{
   if(tela==="dash")return<CalcDash prods={prods} prs={prs} onVoltar={()=>setTela("home")}/>;
   if(tela==="analise")return<CalcAnaliseMeluni prods={prods} prs={prs} roasMeluniGlobal={roasMeluniGlobal} setRoasMeluniGlobal={setRoasMeluniGlobal} freteSubsidiado={meluniFreteSubsidiado} setFreteSubsidiado={setMeluniFreteSubsidiado} state={analiseMeluniState} setState={setAnaliseMeluniState} onVoltar={()=>setTela("home")} mobile={mobile}/>;
   if(tela==="meta-ads")return<CalcMetaAdsMeluni onVoltar={()=>setTela("home")} mobile={mobile}/>;
-  if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
+  if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} cfgVer={cfgVer} onSalvarTaxas={salvarTaxas} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
   const c=prod?calcCusto(prod):0;
   return(
     <div style={{background:"#f7f4f0",minHeight:"100%",padding:mobile?12:20,fontFamily:"Georgia,serif"}}>
@@ -8267,13 +8306,31 @@ const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
   </div>);
 };
 
-const CalcDetalhe=({id,prod,prs,onSalvar,onVoltar})=>{
+const CalcDetalhe=({id,prod,prs,onSalvar,onVoltar,onSalvarTaxas,cfgVer})=>{
   const[sim,setSim]=useState("");const[op,setOp]=useState(false);const[pi,setPi]=useState("");
   const[salvou,setSalvou]=useState(false);
+  const[txOpen,setTxOpen]=useState(false);
+  const[txRows,setTxRows]=useState([]);
+  const[txImp,setTxImp]=useState("");
+  const[txCf,setTxCf]=useState("");
+  const[txSalvo,setTxSalvo]=useState(false);
   const Logo=CALC_LOGOS[id];const r=CALC_PLATS[id];const c=calcCusto(prod);
   const ps=prs[`${prod.ref}|${id}`];const rm=calcPreco(id,c,CALC_LMIN);const rb=calcPreco(id,c,CALC_LBOM);
   const ls=sim?calcLucroReal(id,c,parseFloat(sim)):null;const lps=ps?calcLucroReal(id,c,ps):null;
   const linhas=(pr)=>{const p=parseFloat(pr);if(!p)return[];const ls2=[{l:"Preço de venda",v:p,t:"r"},{l:`Imposto (${CALC_GERAIS.imposto}%)`,v:-(p*CALC_GERAIS.imposto/100),t:"c"}];if(id==="shopee"){const fx=r.faixas.find(f=>p<=f.ate)||r.faixas[2];const af=r.taxas[0].v;ls2.push({l:`Comissão (${fx.cp}%)`,v:-(p*fx.cp/100),t:"c"},{l:`Afiliados (${af}%)`,v:-(p*af/100),t:"c"},{l:"Taxa faixa",v:-fx.cf,t:"c"});}else if(id==="mercadolivre"){r.taxas.forEach(t=>ls2.push({l:`${t.l} (${t.v}%)`,v:-(p*t.v/100),t:"c"}));const ff=r.fretes.find(f=>p<=f.ate)||r.fretes[1];ls2.push({l:"Frete",v:-ff.f,t:"c"});}else r.taxas.forEach(t=>ls2.push({l:t.l,v:t.t==="pct"?-(p*t.v/100):-t.v,t:"c"}));ls2.push({l:"Custo fixo",v:-CALC_GERAIS.custoFixo,t:"c"},{l:"Custo do produto",v:-c,t:"c"},{l:"Lucro líquido",v:calcLucroReal(id,c,p),t:"l"});return ls2;};
+  const abrirTaxas=()=>{
+    setTxRows((r.taxas||[]).map(t=>({l:t.l,t:t.t,v:String(t.v)})));
+    setTxImp(String(CALC_GERAIS.imposto));
+    setTxCf(String(CALC_GERAIS.custoFixo));
+    setTxOpen(true);
+  };
+  const salvarTx=()=>{
+    const taxas=txRows
+      .map(x=>({l:(x.l||"").trim(),t:x.t==="fix"?"fix":"pct",v:parseFloat(String(x.v).replace(",","."))||0}))
+      .filter(x=>x.l);
+    onSalvarTaxas&&onSalvarTaxas({id,taxas,gerais:{imposto:parseFloat(String(txImp).replace(",","."))||0,custoFixo:parseFloat(String(txCf).replace(",","."))||0}});
+    setTxOpen(false);setTxSalvo(true);setTimeout(()=>setTxSalvo(false),2500);
+  };
   return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
     <div style={{maxWidth:700,margin:"0 auto"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><Logo s={32}/><div><div style={{fontSize:18,fontWeight:700,color:"#2c3e50"}}>{r.nome}</div><div style={{fontSize:11,color:"#8a9aa4"}}>REF {prod.ref} · {prod.descricao}</div></div>
@@ -8282,8 +8339,33 @@ const CalcDetalhe=({id,prod,prs,onSalvar,onVoltar})=>{
       {ps?(<div style={{background:r.cor,border:`3px solid ${r.bd||r.cor}`,borderRadius:14,padding:20,marginBottom:16,textAlign:"center"}}><div style={{fontSize:11,color:r.ct,opacity:0.8,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>💾 Preço Definido</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:40,fontWeight:800,color:r.ct}}>R$ {calcFmt(ps)}</div><div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:8}}><div style={{width:14,height:14,borderRadius:3,background:calcTermo(lps)}}/><span style={{fontSize:14,color:r.ct,opacity:0.9,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700}}>Lucro: R$ {calcFmt(lps)}</span></div></div>):<div style={{background:"#fff",borderRadius:14,padding:16,border:"2px dashed #e8e2da",marginBottom:16,textAlign:"center",color:"#c0b8b0",fontSize:13}}>Nenhum preço definido ainda</div>}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>{[{la:CALC_LMIN,res:rm,cor:"#27ae60"},{la:CALC_LBOM,res:rb,cor:"#1a7a40"}].map(({la,res,cor})=>(<div key={la} style={{background:"#fff",borderRadius:12,padding:16,border:`2px solid ${cor}`}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Para lucro R$ {calcFmt(la)}</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:26,fontWeight:700,color:"#2c3e50"}}>R$ {calcFmt(res?.p)}</div><div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}><div style={{width:10,height:10,borderRadius:2,background:calcTermo(res?.l)}}/><span style={{fontSize:12,color:"#6b7c8a"}}>Lucro real: <b style={{color:cor,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(res?.l)}</b></span></div>{res?.fx&&<div style={{fontSize:10,color:"#a89f94",marginTop:4}}>Faixa: {res.fx}</div>}{res?.fr!==undefined&&<div style={{fontSize:10,color:"#a89f94",marginTop:4}}>Frete: R$ {res.fr}</div>}</div>))}</div>
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",marginBottom:16,overflow:"hidden"}}><div onClick={()=>setOp(p=>!p)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",cursor:"pointer",userSelect:"none"}}><div style={{fontSize:13,fontWeight:600,color:"#2c3e50"}}>Composição de custos</div><div style={{fontSize:22,color:"#4a7fa5",transition:"transform 0.2s",transform:op?"rotate(90deg)":"none"}}>›</div></div>{op&&<div style={{padding:"0 16px 14px",borderTop:"1px solid #f0ebe4"}}>{r.taxas.map((t,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #f7f4f0",fontSize:12,color:"#2c3e50"}}><span>{t.l}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700}}>{t.t==="pct"?`${t.v}%`:`R$ ${calcFmt(t.v)}`}</span></div>)}{r.faixas&&r.faixas.map((f,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a",borderBottom:"1px solid #f7f4f0"}}><span>Comissão {f.lb}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{f.cp}% + R$ {f.cf}</span></div>)}{r.fretes&&r.fretes.map((f,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a",borderBottom:"1px solid #f7f4f0"}}><span>Frete {i===0?"(até R$79)":"(acima)"}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {f.f}</span></div>)}<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a"}}><span>Imposto geral</span><span>{CALC_GERAIS.imposto}%</span></div><div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:11,color:"#6b7c8a"}}><span>Custo fixo geral</span><span>R$ {CALC_GERAIS.custoFixo}</span></div></div>}</div>
+      <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,marginTop:-6,marginBottom:16}}>{txSalvo&&<span style={{fontSize:11,color:"#27ae60",fontFamily:"Georgia,serif"}}>✓ taxas salvas</span>}<button onClick={abrirTaxas} style={{background:"#fff",border:"1px solid #c8d8e4",color:"#4a7fa5",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>✎ Definir taxas</button></div>
       <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:14}}><div style={{fontSize:11,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Simulador</div><div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="number" value={sim} onChange={e=>setSim(e.target.value)} placeholder="Digite o preço..." style={{flex:1,border:"1px solid #c8d8e4",borderRadius:8,padding:"10px 14px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none"}}/>{ls!==null&&<div style={{background:calcTermo(ls),borderRadius:8,padding:"10px 18px",textAlign:"center",minWidth:90}}><div style={{fontSize:9,color:"rgba(255,255,255,0.85)"}}>LUCRO</div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18,fontWeight:800,color:"#fff"}}>R$ {calcFmt(ls)}</div></div>}</div>{sim&&<div style={{borderTop:"1px solid #f0ebe4",paddingTop:10}}>{linhas(sim).map((l,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderTop:l.t==="l"?"2px solid "+calcTermo(ls):"1px solid #f7f4f0",marginTop:l.t==="l"?6:0,paddingTop:l.t==="l"?6:3,fontWeight:l.t==="l"?700:400,color:l.t==="l"?calcTermo(ls):l.t==="r"?"#4a7fa5":"#6b7c8a"}}><span>{l.l}</span><span style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>{l.v>=0?"R$ ":"-R$ "}{calcFmt(Math.abs(l.v))}</span></div>)}</div>}</div>
       <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",display:"flex",gap:12,alignItems:"flex-end"}}><div style={{flex:1}}><div style={{fontSize:11,color:"#a89f94",marginBottom:6}}>Definir preço final</div><input type="number" value={pi} onChange={e=>setPi(e.target.value)} placeholder="Preço de venda final..." style={{width:"100%",border:"1px solid #c8d8e4",borderRadius:8,padding:"10px 14px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/>{pi&&<div style={{fontSize:12,color:"#8a9aa4",marginTop:4}}>Lucro: <b style={{color:calcTermo(calcLucroReal(id,c,parseFloat(pi))),fontFamily:"Calibri,'Segoe UI',Arial,sans-serif"}}>R$ {calcFmt(calcLucroReal(id,c,parseFloat(pi)))}</b></div>}</div><button disabled={!pi} onClick={()=>{if(pi){onSalvar(id,parseFloat(pi));setSalvou(true);setTimeout(()=>setSalvou(false),2500);}}} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"11px 24px",fontSize:13,cursor:pi?"pointer":"not-allowed",opacity:pi?1:0.5,fontFamily:"Georgia,serif",fontWeight:600}}>💾 Salvar preço</button></div>
+      {txOpen&&<div onClick={()=>setTxOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:16,overflowY:"auto"}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,maxWidth:560,width:"100%",margin:"40px auto",padding:20,fontFamily:"Georgia,serif",boxShadow:"0 12px 40px rgba(0,0,0,0.2)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}><Logo s={26}/><div style={{fontSize:16,fontWeight:700,color:"#2c3e50"}}>Definir taxas — {r.nome}</div></div>
+          <div style={{fontSize:11,color:"#a89f94",marginBottom:16}}>O que vc salvar aqui vale pra todos os produtos desta plataforma.</div>
+          <div style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Taxas da plataforma</div>
+          {txRows.map((row,i)=><div key={i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+            <input value={row.l} onChange={e=>setTxRows(rs=>rs.map((x,j)=>j===i?{...x,l:e.target.value}:x))} placeholder="Nome da taxa" style={{flex:1,border:"1px solid #e8e2da",borderRadius:8,padding:"8px 10px",fontSize:13,fontFamily:"Georgia,serif",outline:"none",minWidth:0}}/>
+            <select value={row.t} onChange={e=>setTxRows(rs=>rs.map((x,j)=>j===i?{...x,t:e.target.value}:x))} style={{border:"1px solid #e8e2da",borderRadius:8,padding:"8px 6px",fontSize:13,fontFamily:"Georgia,serif",background:"#fff",cursor:"pointer"}}><option value="pct">%</option><option value="fix">R$</option></select>
+            <input type="number" value={row.v} onChange={e=>setTxRows(rs=>rs.map((x,j)=>j===i?{...x,v:e.target.value}:x))} style={{width:78,border:"1px solid #e8e2da",borderRadius:8,padding:"8px 10px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",textAlign:"right"}}/>
+            <button onClick={()=>setTxRows(rs=>rs.filter((_,j)=>j!==i))} title="Remover" style={{background:"#fff",border:"1px solid #f0d0c8",color:"#c0392b",borderRadius:8,width:32,height:34,cursor:"pointer",fontSize:16,flexShrink:0}}>×</button>
+          </div>)}
+          <button onClick={()=>setTxRows(rs=>[...rs,{l:"",t:"pct",v:""}])} style={{background:"#f0f5f9",border:"1px dashed #c8d8e4",color:"#4a7fa5",borderRadius:8,padding:"8px 12px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",marginBottom:16}}>+ adicionar taxa</button>
+          {(r.faixas||r.fretes)&&<div style={{fontSize:11,color:"#9a7b3e",background:"#fdf6ec",border:"1px solid #f0e0c0",borderRadius:8,padding:"8px 10px",marginBottom:14,lineHeight:1.4}}>Obs: esta plataforma usa faixas/frete por preço definidos no sistema. Aqui vc edita as taxas % e os gerais; as faixas seguem fixas no código.</div>}
+          <div style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase",marginBottom:8}}>Gerais (todas as plataformas)</div>
+          <div style={{display:"flex",gap:12,marginBottom:18}}>
+            <div style={{flex:1}}><div style={{fontSize:11,color:"#6b7c8a",marginBottom:4}}>Imposto geral (%)</div><input type="number" value={txImp} onChange={e=>setTxImp(e.target.value)} style={{width:"100%",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 10px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/></div>
+            <div style={{flex:1}}><div style={{fontSize:11,color:"#6b7c8a",marginBottom:4}}>Custo fixo geral (R$)</div><input type="number" value={txCf} onChange={e=>setTxCf(e.target.value)} style={{width:"100%",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 10px",fontSize:13,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,outline:"none",boxSizing:"border-box"}}/></div>
+          </div>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <button onClick={()=>setTxOpen(false)} style={{background:"#fff",border:"1px solid #e8e2da",color:"#6b7c8a",borderRadius:8,padding:"10px 18px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}}>Cancelar</button>
+            <button onClick={salvarTx} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"10px 22px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>Salvar taxas</button>
+          </div>
+        </div>
+      </div>}
     </div>
   </div>);
 };
