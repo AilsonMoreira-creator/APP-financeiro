@@ -14,7 +14,7 @@ import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
 import LojasModule from './Lojas';
 import LojasWhats from './LojasWhats.jsx';
 import Meluni from './Meluni.jsx';
-import EtiquetaTemplate from './EtiquetaTemplate.jsx';
+import { EtiquetaGerar } from './EtiquetaTemplate.jsx';
 import { ClientesReativarModule } from './ClientesSofia.jsx';
 import FolhaPagamento from './FolhaPagamento.jsx';
 import ReviewsMeli from './Reviews_meli.jsx';
@@ -5627,7 +5627,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           </div>
         </div>;
       })()}
-      {etqOpen && <EtiquetaTemplate sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
+      {etqOpen && <EtiquetaGerar sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
       {/* ── Modal: acrescentar corte ao estoque (Ailson 27/06/2026) ── */}
       {acrescModal&&(()=>{
         const lista=[...(cortesTodosPorRef[acrescModal]||[])].sort((a,b)=>new Date(b.data||0)-new Date(a.data||0)).slice(0,3);
