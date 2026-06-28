@@ -343,6 +343,21 @@ async function processarMensagemRecebida(msg, valueCtx) {
           url: '/?modulo=sofia',
           tag: `sofia-pico-${conversa.id}`,
         }).catch(e => console.warn('[lojas-whats-webhook] push pico falhou:', e.message));
+        // Auto-reply IMEDIATO: segura a cliente enquanto a equipe/IA confirma a
+        // grade. Ganha tempo no momento mais quente. A IA depois emenda a
+        // confirmacao itemizada (prompt manda NAO repetir essa linha).
+        try {
+          const ack = burstFotos
+            ? 'Boa, vou confirmar cada uma pra vc 😊'
+            : 'Boa, já confirmo essas pra vc 😊';
+          const rAck = await enviarTexto(telefone, ack);
+          await supabase.from('lojas_whats_mensagens').insert({
+            conversa_id: conversa.id, direcao: 'saida', autor: 'sofia_ia',
+            tipo_midia: 'text', texto: ack,
+            meta_message_id: rAck?.messages?.[0]?.id || null,
+            status: 'enviando', enviada_em: new Date().toISOString(),
+          });
+        } catch (e) { console.warn('[lojas-whats-webhook] ack pico falhou:', e.message); }
         log('pico', `conversa ${conversa.id} pick-list (fotos=${burstFotos} texto=${pediuEssas})`);
       }
     }

@@ -131,6 +131,20 @@ export async function enviarMidiaSofia({ telefone, midia, caption, conversaId, m
 
     const resp = await enviarMidia(telefone, tipoWa, payload);
 
+    // Carimba catalogo_enviado_em no CHOKEPOINT: vale pra QUALQUER caminho de
+    // envio (IA aprovada, abertura/apresentacao, anexo manual, cron). Antes so o
+    // aprovar.js marcava, entao catalogo enviado na apresentacao ou anexado a mao
+    // ficava com catalogo_enviado_em NULL e os follow-ups 6h/24h nao disparavam.
+    // Ailson 28/06/2026 (analise vendas: NULL em todas as conversas com PDF).
+    if (midia.tipo === 'catalogo' && conversaId) {
+      try {
+        await supabase.from('lojas_whats_conversas').update({
+          catalogo_enviado_em: new Date().toISOString(),
+          catalogo_followup_6h_em: null,
+        }).eq('id', conversaId);
+      } catch (e) { logErro('midia-sender/stamp-catalogo', e); }
+    }
+
     // 4. Registra uso pro aprendizado
     try {
       await supabase.from('lojas_whats_midias_usos').insert({
