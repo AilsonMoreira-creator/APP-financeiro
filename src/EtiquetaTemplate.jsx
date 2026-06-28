@@ -270,7 +270,7 @@ export default function EtiquetaTemplate({ sample, onClose }){
 // ══════════════════════════════════════════════════════════════════
 // GERAR ETIQUETAS (lote, SKUs reais do gtin_map)
 // ══════════════════════════════════════════════════════════════════
-export function EtiquetaGerar({ sample, onClose }){
+export function EtiquetaGerar({ sample, onClose, cortesPorRef, celulaCorte, normCor }){
   const refDisp = sample?.ref ?? '';
   const refNorm = String(refDisp||'').replace(/^0+/,'') || '0';
   const desc = sample?.desc || '';
@@ -280,6 +280,11 @@ export function EtiquetaGerar({ sample, onClose }){
   const [tplOpen,setTplOpen]=useState(false);
   const [gerando,setGerando]=useState(false);
   const [msg,setMsg]=useState('');
+  const [corteSel,setCorteSel]=useState('');
+  const [semCodigo,setSemCodigo]=useState(0);
+  const cortes = (cortesPorRef||{})[refNorm] || [];
+  const _nc = (s)=> (typeof normCor==='function' ? normCor(s) : String(s||'').toLowerCase().trim());
+  const _nt = (s)=> String(s||'').toLowerCase().trim();
 
   async function carregar(){
     setLoading(true);
@@ -295,7 +300,28 @@ export function EtiquetaGerar({ sample, onClose }){
 
   const total = skus.reduce((s,r)=>s+(r.qty||0),0);
   const setQty=(i,v)=>setSkus(p=>p.map((r,j)=>j===i?{...r,qty:Math.max(0,parseInt(v)||0)}:r));
-  const setTodos=(v)=>{ const n=Math.max(0,parseInt(v)||0); setSkus(p=>p.map(r=>({...r,qty:n}))); };
+  const setTodos=(v)=>{ const n=Math.max(0,parseInt(v)||0); setSkus(p=>p.map(r=>({...r,qty:n}))); setCorteSel(''); setSemCodigo(0); };
+
+  function matrizDoCorte(c){
+    const m={}; const cores=c?.detalhes?.cores||[], tams=c?.detalhes?.tamanhos||[];
+    for(const co of cores){ const folhas=Number(co.folhas)||0; if(folhas<=0) continue;
+      for(const tm of tams){ const grade=Number(tm.grade)||0; if(grade<=0) continue;
+        let q=0; try{ q=typeof celulaCorte==='function' ? celulaCorte(c.detalhes,co.nome,tm.tam,folhas,grade) : grade*folhas; }catch(e){ q=0; }
+        if(q>0){ const k=`${_nc(co.nome)}|${_nt(tm.tam)}`; m[k]=(m[k]||0)+q; }
+      }
+    }
+    return m;
+  }
+  function aplicarCorte(id){
+    setCorteSel(id);
+    const c=cortes.find(x=>String(x.id)===String(id));
+    if(!c){ setSemCodigo(0); return; }
+    const m=matrizDoCorte(c);
+    const have=new Set(skus.map(r=>`${_nc(r.cor)}|${_nt(r.tam)}`));
+    let falta=0; Object.entries(m).forEach(([k,v])=>{ if(!have.has(k)) falta+=v; });
+    setSemCodigo(falta);
+    setSkus(p=>p.map(r=>({...r, qty: m[`${_nc(r.cor)}|${_nt(r.tam)}`]||0})));
+  }
 
   async function gerar(){
     if(!lay){ setMsg('Defina um template primeiro'); return; }
@@ -330,6 +356,16 @@ export function EtiquetaGerar({ sample, onClose }){
            lay===null ? <div style={{background:'#fff8e8',border:'1px solid #f0d080',color:'#8a6500',borderRadius:10,padding:'14px 16px',fontSize:13,lineHeight:1.5}}>Nenhum template salvo ainda. Clique em <b>criar template</b> no topo, ajuste o layout e salve como padrão.</div> :
            skus.length===0 ? <div style={{background:'#fff8e8',border:'1px solid #f0d080',color:'#8a6500',borderRadius:10,padding:'14px 16px',fontSize:13,lineHeight:1.5}}>Essa ref ainda não tem código de barras gerado (gtin_map). Gere os GTINs dessa ref antes de imprimir.</div> :
            <>
+            {cortes.length>0 && (
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+                <span style={{fontSize:12,color:C.muted2,fontWeight:600}}>Puxar do corte</span>
+                <select value={corteSel} onChange={e=>aplicarCorte(e.target.value)} style={{...inpStyle,flex:1,minWidth:200}}>
+                  <option value="">— escolher corte —</option>
+                  {cortes.map(c=>(<option key={c.id} value={c.id}>{c.nCorte?('Corte '+c.nCorte):'Corte'}{c.oficina?(' · '+c.oficina):''}{c.data?(' · '+new Date(c.data).toLocaleDateString('pt-BR')):''}{c.qtd?(' · '+c.qtd+'pç'):''}</option>))}
+                </select>
+              </div>
+            )}
+            {semCodigo>0 && <div style={{fontSize:11.5,color:'#8a6500',background:'#fff8e8',border:'1px solid #f0d080',borderRadius:8,padding:'7px 10px',marginBottom:10}}>{semCodigo} peças do corte estão em cores/tamanhos sem código de barras e não entram. Gere o GTIN delas antes.</div>}
             <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10,flexWrap:'wrap'}}>
               <div style={{fontSize:12,color:C.muted2}}>{skus.length} variações com código</div>
               <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>

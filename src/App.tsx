@@ -5627,7 +5627,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           </div>
         </div>;
       })()}
-      {etqOpen && <EtiquetaGerar sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
+      {etqOpen && <EtiquetaGerar sample={etqSample} cortesPorRef={cortesTodosPorRef} celulaCorte={celulaCorte} normCor={normCorBling} onClose={()=>setEtqOpen(false)}/>}
       {/* ── Modal: acrescentar corte ao estoque (Ailson 27/06/2026) ── */}
       {acrescModal&&(()=>{
         const lista=[...(cortesTodosPorRef[acrescModal]||[])].sort((a,b)=>new Date(b.data||0)-new Date(a.data||0)).slice(0,3);
