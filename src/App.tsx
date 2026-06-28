@@ -4876,6 +4876,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [projModal,setProjModal]=useState(null);   // {refNorm,cor,tam} — clicou no projetado
   const [matrizCorteAberto,setMatrizCorteAberto]=useState(null); // id do corte com matriz expandida
   const [blingEstoque,setBlingEstoque]=useState({}); // {"refNorm|cor_norm|TAM": qtd}
+  const [blingLabel,setBlingLabel]=useState({}); // {cor_norm: cor_label} da ref aberta (p/ exibir cor que só existe no Bling)
   const [soBlingRefs,setSoBlingRefs]=useState([]); // refs na calculadora c/ Bling mas sem espelho ML (produto novo)
   const [blingAjuste,setBlingAjuste]=useState(null); // {refNorm,cor,tam,cor_norm,atual,desc} — modal de ajuste
   const usuarioSessao=(()=>{try{return JSON.parse(localStorage.getItem('amica_session')||'{}').usuario||'';}catch{return '';}})();
@@ -5157,13 +5158,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // Carrega o estoque Bling da ref aberta (coluna ajustavel). Ailson 10/06/2026.
   const recarregarBling=async(refNorm)=>{
     try{
-      const {data}=await supabase.from('bling_estoque').select('cor_norm,tam,qtd').eq('ref',refNorm);
-      const m={};(data||[]).forEach(r=>{m[`${refNorm}|${r.cor_norm}|${String(r.tam).toUpperCase()}`]=r.qtd;});
-      setBlingEstoque(m);
+      const {data}=await supabase.from('bling_estoque').select('cor_norm,tam,qtd,cor_label').eq('ref',refNorm);
+      const m={};const lbl={};(data||[]).forEach(r=>{m[`${refNorm}|${r.cor_norm}|${String(r.tam).toUpperCase()}`]=r.qtd; if(r.cor_norm&&r.cor_label&&!lbl[r.cor_norm])lbl[r.cor_norm]=r.cor_label;});
+      setBlingEstoque(m);setBlingLabel(lbl);
     }catch(e){console.error('bling estoque:',e.message);}
   };
   useEffect(()=>{
-    if(!modalRef){setBlingEstoque({});return;}
+    if(!modalRef){setBlingEstoque({});setBlingLabel({});return;}
     const refNorm=String(modalRef).replace(/\D/g,'').replace(/^0+/,'');
     recarregarBling(refNorm);
   },[modalRef]);
@@ -5479,21 +5480,33 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       // existem na projecao (ex: Telha/Terracota sendo cortadas) tambem aparecem.
       const ordemTamG={p:1,m:2,g:3,gg:4,g1:5,g2:6,g3:7};
       const nomesProj=corProjNomes[refNorm]||{};
+      // Bling Exitus = fonte da verdade. Toda cor/tam com qtd>0 no Bling tem que
+      // ganhar linha no app (mesmo sem espelho ML e sem corte). Ailson 28/06/2026.
+      const blingCorComEstoque=new Set();
+      const blingTamsRef=new Set();
+      Object.entries(blingEstoque).forEach(([k,q])=>{
+        const parts=k.split('|'); if(parts[0]!==refNorm) return;
+        const cn=parts[1]||''; const tm=String(parts[2]||'').toUpperCase();
+        if(tm) blingTamsRef.add(tm);
+        if(cn && (Number(q)||0)>0) blingCorComEstoque.add(cn);
+      });
       const tamsUniverso=(()=>{
         const s=new Set();
         varsTodas.forEach(v=>{const t=String(v.tam||'').trim();if(t)s.add(t.toUpperCase());});
         Object.keys(matrizRef).forEach(k=>{const t=(k.split('|')[1]||'').toUpperCase();if(t)s.add(t);});
+        blingTamsRef.forEach(t=>s.add(t));
         return [...s].sort((a,b)=>(ordemTamG[a.toLowerCase()]||99)-(ordemTamG[b.toLowerCase()]||99));
       })();
       const corDisplay={};
       varsTodas.forEach(v=>{const k=normCorBling(v.cor);if(k&&!corDisplay[k])corDisplay[k]=v.cor;});
       Object.entries(nomesProj).forEach(([k,nome])=>{if(k&&!corDisplay[k])corDisplay[k]=nome;});
+      Object.entries(blingLabel).forEach(([k,nome])=>{if(k&&nome&&!corDisplay[k])corDisplay[k]=nome;});
       const existeCorTam=new Set(varsTodas.map(v=>`${normCorBling(v.cor)}|${String(v.tam||'').toLowerCase().trim()}`));
-      const coresCandidatas=new Set([...varsTodas.map(v=>normCorBling(v.cor)),...Object.keys(nomesProj)].filter(Boolean));
+      const coresCandidatas=new Set([...varsTodas.map(v=>normCorBling(v.cor)),...Object.keys(nomesProj),...blingCorComEstoque].filter(Boolean));
       const sinteticas=[];
       coresCandidatas.forEach(ck=>{
         const temProj=Object.keys(matrizRef).some(k=>k.split('|')[0]===ck);
-        if(!topCoresBling.has(ck)&&!temProj)return; // nao faz parte da regra
+        if(!topCoresBling.has(ck)&&!temProj&&!blingCorComEstoque.has(ck))return; // nao faz parte da regra
         for(const t of tamsUniverso){
           if(existeCorTam.has(`${ck}|${t.toLowerCase()}`))continue;
           sinteticas.push({cor:corDisplay[ck]||ck,tam:t,qtd:0,sku:null});
