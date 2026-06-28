@@ -384,20 +384,12 @@ export async function montarFotosReconhecimento(limite = 16, categorias = null) 
   let base = (cacheFotosRec.data && cacheFotosRec.expiresAt > Date.now()) ? cacheFotosRec.data : null;
   if (!base) {
     try {
-      const { data: prods } = await supabase
-        .from('lojas_produtos')
-        .select('ref, qtd_estoque, categoria')
-        .gt('qtd_estoque', 0)
-        .order('qtd_estoque', { ascending: false })
-        .range(0, 199);
-      if (!prods || !prods.length) return [];
-      const ordemRef = [];
-      const catPorRef = {};
-      const seen = new Set();
-      for (const p of prods) {
-        const refN = String(p.ref).replace(/^0+/, '') || '0';
-        if (!seen.has(refN)) { seen.add(refN); ordemRef.push(refN); catPorRef[refN] = (p.categoria || '').toUpperCase(); }
-      }
+      // Universo de RECONHECIMENTO = refs que a gente fotografou (tipo='foto').
+      // NAO depende de estoque: identificar o modelo vem ANTES de checar
+      // disponibilidade (essa a Sofia confirma no ESTOQUE FINO). Antes o pool
+      // saia de lojas_produtos com qtd_estoque>0, entao ref vendendo mas com
+      // estoque negativo/zerado (ex: 3213 = -63) ficava INVISIVEL ao match e a
+      // Sofia casava com a mais parecida visivel (ex: 3210). Ailson 28/06/2026.
       const { data: fotos } = await supabase
         .from('lojas_whats_midias')
         .select('ref, storage_path, criada_em')
@@ -410,6 +402,29 @@ export async function montarFotosReconhecimento(limite = 16, categorias = null) 
         const refN = String(f.ref).replace(/^0+/, '') || '0';
         if (!fotoPorRef.has(refN) && f.storage_path) fotoPorRef.set(refN, f.storage_path);
       }
+      if (!fotoPorRef.size) return [];
+
+      // categoria + estoque (so pra ORDENAR) de todas as refs — sem filtrar por
+      // estoque. lojas_produtos eh bounded (~545 refs).
+      const { data: prods } = await supabase
+        .from('lojas_produtos')
+        .select('ref, qtd_estoque, categoria');
+      const catPorRef = {};
+      const estPorRef = {};
+      for (const p of prods || []) {
+        const refN = String(p.ref).replace(/^0+/, '') || '0';
+        if (!(refN in catPorRef)) {
+          catPorRef[refN] = (p.categoria || '').toUpperCase();
+          estPorRef[refN] = Number(p.qtd_estoque) || 0;
+        }
+      }
+
+      // Refs fotografadas ordenadas por estoque desc (in-stock popular primeiro
+      // quando o geral for capado), mas INCLUINDO as zeradas/negativas.
+      const ordemRef = [...fotoPorRef.keys()].sort(
+        (a, b) => (estPorRef[b] ?? -1e9) - (estPorRef[a] ?? -1e9)
+      );
+
       base = [];
       for (const refN of ordemRef) {
         const sp = fotoPorRef.get(refN);
@@ -427,7 +442,14 @@ export async function montarFotosReconhecimento(limite = 16, categorias = null) 
   let lista = base;
   if (cats) {
     const filt = base.filter(x => cats.includes(x.categoria));
-    if (filt.length) lista = filt; // se o filtro nao achar nada, cai pro geral capado
+    if (filt.length) {
+      // Categoria detectada vem PRIMEIRO (prioridade), mas completa com as
+      // outras refs ate o limite — pra nao ESCONDER a peca que a Sofia
+      // categorizou diferente (ex: viu "casaquinho" mas era CONJUNTO). O match
+      // final eh pela imagem, entao candidato extra nao atrapalha. Ailson 28/06/2026.
+      const resto = base.filter(x => !cats.includes(x.categoria));
+      lista = [...filt, ...resto];
+    }
   }
   return lista.slice(0, lim).map(({ ref, url }) => ({ ref, url }));
 }
