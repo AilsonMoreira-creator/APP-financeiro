@@ -31,6 +31,10 @@ export const config = {
 
 const LIMITES = {
   foto:      { bytes: 2  * 1024 * 1024, mimes: ['image/jpeg','image/jpg','image/png','image/webp'], pasta: 'fotos' },
+  // tipo='cores' = foto da arara com todas as cores do modelo (cor real). Ref no
+  // nome do arquivo (ex: 3213.jpg). Pasta dedicada separa da foto de modelo
+  // (tipo='foto'), que alimenta o reconhecimento. Ailson 28/06/2026.
+  cores:     { bytes: 4  * 1024 * 1024, mimes: ['image/jpeg','image/jpg','image/png','image/webp'], pasta: 'cores' },
   video:     { bytes: 16 * 1024 * 1024, mimes: ['video/mp4','video/quicktime'],                     pasta: 'videos' },
   // tipo='catalogo' aceita PDF (catalogo em si) OU imagem (capa do catalogo).
   // Imagens caem no fluxo de capa: salvas como catalogos/capa.{ext}, upsert,

@@ -26,7 +26,7 @@
 import { supabase, log, logErro } from './_lojas-whats-helpers.js';
 import { uploadMidiaParaMeta, enviarMidia } from './_lojas-whats-meta-client.js';
 
-const REGEX_MARCADOR = /\[ENVIAR_(FOTO|VIDEO|CATALOGO):\s*([^\]]+)\]/gi;
+const REGEX_MARCADOR = /\[ENVIAR_(FOTO|VIDEO|CATALOGO|CORES):\s*([^\]]+)\]/gi;
 
 /**
  * Parse marcadores no texto.
@@ -61,10 +61,10 @@ export function parseMarcadoresMidia(texto) {
 
   // Regra de midias (Ailson 16/06/2026):
   //  - catalogo/video: 1 por mensagem (pega o primeiro, ignora o resto)
-  //  - fotos de modelo: ate 5 (showcase de categoria, ex: "manda mais bodys")
+  //  - fotos de modelo / cores: ate 5, com legenda (foto de cores leva
+  //    cores+tamanhos na legenda embaixo). Ailson 28/06/2026.
   // Se houver QUALQUER catalogo/video, manda so o primeiro marcador (nao mistura).
-  // Se forem so fotos, manda ate 5.
-  const temNaoFoto = marcadores.some(m => m.tipo !== 'foto');
+  const temNaoFoto = marcadores.some(m => m.tipo !== 'foto' && m.tipo !== 'cores');
   const saida = temNaoFoto ? marcadores.slice(0, 1) : marcadores.slice(0, 5);
   return { textoLimpo, marcadores: saida };
 }
@@ -74,7 +74,7 @@ export function parseMarcadoresMidia(texto) {
  * Retorna null se nao encontrar.
  */
 export async function resolverMidia(marcador) {
-  const tipoMap = { foto: 'foto', video: 'video', catalogo: 'catalogo' };
+  const tipoMap = { foto: 'foto', video: 'video', catalogo: 'catalogo', cores: 'cores' };
   const tipo = tipoMap[marcador.tipo];
   if (!tipo) return null;
 
@@ -119,7 +119,7 @@ export async function enviarMidiaSofia({ telefone, midia, caption, conversaId, m
     const mediaId = await uploadMidiaParaMeta(buf, midia.mime_type, midia.nome_arquivo);
 
     // 3. Envia mensagem com media_id
-    const tipoWaMap = { foto: 'image', video: 'video', catalogo: 'document' };
+    const tipoWaMap = { foto: 'image', video: 'video', catalogo: 'document', cores: 'image' };
     const tipoWa = tipoWaMap[midia.tipo];
     const payload = { id: mediaId };
     if (caption && (tipoWa === 'image' || tipoWa === 'video')) {

@@ -267,7 +267,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
       // Réplica: texto livre (só funciona dentro da janela 24h)
       // Se tem midia, envia midia COM o texto como caption (foto/video) ou
       // envia texto primeiro e depois midia (catalogo PDF).
-      if (midiaParaEnviar && (midiaParaEnviar.tipo === 'foto' || midiaParaEnviar.tipo === 'video')) {
+      if (midiaParaEnviar && (midiaParaEnviar.tipo === 'foto' || midiaParaEnviar.tipo === 'video' || midiaParaEnviar.tipo === 'cores')) {
         // Caption junto com a midia (1 só request — limite 1 midia por msg)
         const r = await enviarMidiaSofia({
           telefone: sug.conversa.telefone,
