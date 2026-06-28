@@ -14,6 +14,7 @@ import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
 import LojasModule from './Lojas';
 import LojasWhats from './LojasWhats.jsx';
 import Meluni from './Meluni.jsx';
+import EtiquetaTemplate from './EtiquetaTemplate.jsx';
 import { ClientesReativarModule } from './ClientesSofia.jsx';
 import FolhaPagamento from './FolhaPagamento.jsx';
 import ReviewsMeli from './Reviews_meli.jsx';
@@ -4881,6 +4882,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [ajusteValor,setAjusteValor]=useState('');
   const [ajusteMotivo,setAjusteMotivo]=useState('');
   const [salvandoAjuste,setSalvandoAjuste]=useState(false);
+  // Criar etiqueta → template (Ailson 28/06/2026)
+  const [etqOpen,setEtqOpen]=useState(false);
+  const [etqSample,setEtqSample]=useState(null);
   // ── Acrescentar corte ao estoque (Ailson 27/06/2026) ────────────────────
   // cortesTodosPorRef: todos os cortes (incl. entregue, exclui arquivado) p/ a
   // lista de "acrescentar corte" (últimos 3). inseridosPorRef: cortes que já
@@ -5529,6 +5533,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{width:"100%",marginBottom:14,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
               <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte ao estoque
             </button>
+            <button onClick={()=>{setEtqSample({desc,ref:modalRef,cor:vars[0]?.cor||'',tam:vars[0]?.tam||''});setEtqOpen(true);}} style={{width:"100%",marginBottom:14,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+              <span style={{fontSize:14,lineHeight:1,color:"#4a7fa5"}}>▢</span> criar etiqueta
+            </button>
             <div style={{fontSize:10,color:"#8a9aa4",fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Variações · Estoque atual</div>
             <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",margin:mobile?"0 -16px":"0",padding:mobile?"0 16px":"0"}}>
             <table style={{width:mobile?"100%":"auto",margin:"0 auto",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth:mobile?440:"auto"}}>
@@ -5620,6 +5627,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           </div>
         </div>;
       })()}
+      {etqOpen && <EtiquetaTemplate sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
       {/* ── Modal: acrescentar corte ao estoque (Ailson 27/06/2026) ── */}
       {acrescModal&&(()=>{
         const lista=[...(cortesTodosPorRef[acrescModal]||[])].sort((a,b)=>new Date(b.data||0)-new Date(a.data||0)).slice(0,3);
