@@ -51,7 +51,7 @@ export default async function handler(req, res) {
 
       // Stats
       const totalBytes = midias.reduce((s, m) => s + (m.size_bytes || 0), 0);
-      const porTipo = { foto: 0, video: 0, catalogo: 0 };
+      const porTipo = { foto: 0, cores: 0, video: 0, catalogo: 0 };
       midias.forEach(m => { porTipo[m.tipo] = (porTipo[m.tipo] || 0) + 1; });
 
       return res.json({

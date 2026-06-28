@@ -6248,6 +6248,7 @@ function SeletorMidiaModal({ onClose, onSelect }) {
           {[
             { id: 'todos', label: 'Todas' },
             { id: 'foto', label: '📷 Fotos' },
+            { id: 'cores', label: '🎨 Cores' },
             { id: 'video', label: '🎬 Vídeos' },
             { id: 'catalogo', label: '📄 Catálogos' },
           ].map(f => (
@@ -6497,6 +6498,7 @@ function MidiasTab({ refreshTick }) {
   const [erro, setErro] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const [uploadAberto, setUploadAberto] = useState(false);
+  const [loteAberto, setLoteAberto] = useState(false);
   const [editando, setEditando] = useState(null);  // midia em edicao
 
   const carregar = async () => {
@@ -6559,14 +6561,24 @@ function MidiasTab({ refreshTick }) {
         <div style={{ fontSize: fz(12), color: palette.inkMuted }}>
           📦 <strong>{stats.total}</strong> mídias · {fmtMB(stats.total_bytes)} total
         </div>
-        <button onClick={() => setUploadAberto(true)} style={{
-          background: palette.ink, color: palette.bg,
-          border: 'none', borderRadius: 6, padding: '6px 12px',
-          fontSize: fz(12), fontWeight: 600, cursor: 'pointer',
-          fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5,
-        }}>
-          <Upload size={sz(14)} /> Subir mídia
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => setLoteAberto(true)} style={{
+            background: palette.surface, color: palette.ink,
+            border: `1px solid ${palette.ink}`, borderRadius: 6, padding: '6px 12px',
+            fontSize: fz(12), fontWeight: 600, cursor: 'pointer',
+            fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5,
+          }}>
+            <Upload size={sz(14)} /> Subir em lote
+          </button>
+          <button onClick={() => setUploadAberto(true)} style={{
+            background: palette.ink, color: palette.bg,
+            border: 'none', borderRadius: 6, padding: '6px 12px',
+            fontSize: fz(12), fontWeight: 600, cursor: 'pointer',
+            fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5,
+          }}>
+            <Upload size={sz(14)} /> Subir mídia
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -6574,6 +6586,7 @@ function MidiasTab({ refreshTick }) {
         {[
           { id: 'todos',    label: `Todas (${stats.total})`, icon: null },
           { id: 'foto',     label: `Fotos (${stats.por_tipo?.foto || 0})`, icon: Image },
+          { id: 'cores',    label: `Cores (${stats.por_tipo?.cores || 0})`, icon: Image },
           { id: 'video',    label: `Vídeos (${stats.por_tipo?.video || 0})`, icon: Video },
           { id: 'catalogo', label: `Catálogos (${stats.por_tipo?.catalogo || 0})`, icon: FileText },
         ].map(f => (
@@ -6661,6 +6674,14 @@ function MidiasTab({ refreshTick }) {
         />
       )}
 
+      {loteAberto && (
+        <UploadLoteModal
+          onClose={() => setLoteAberto(false)}
+          onSucesso={(n) => { setLoteAberto(false); carregar(); setFeedback({ tipo: 'ok', msg: `${n} mídia(s) subida(s)` }); }}
+          onErro={(msg) => setErro(msg)}
+        />
+      )}
+
       {/* Modal editar */}
       {editando && (
         <EditarMidiaModal
@@ -6739,6 +6760,183 @@ function MidiaCard({ m, onEditar, onExcluir }) {
             <Trash2 size={11} />
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function UploadLoteModal({ onClose, onSucesso, onErro }) {
+  const [tipo, setTipo] = useState('cores');
+  const [itens, setItens] = useState([]); // [{ file, previewUrl, ref, status, erro }]
+  const [enviando, setEnviando] = useState(false);
+  const fileRef = useRef(null);
+
+  const LIMITES_MB = { foto: 2, cores: 4, video: 16, catalogo: 20 };
+  const ACEITOS = { foto: 'image/*', cores: 'image/*', video: 'video/*', catalogo: '.pdf,image/*' };
+
+  const onPick = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const limiteMB = LIMITES_MB[tipo];
+    const novos = files.map(f => {
+      const m = (f.name || '').match(/(\d{3,6})/);
+      const grande = f.size > limiteMB * 1024 * 1024;
+      return {
+        file: f,
+        previewUrl: f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
+        ref: m ? m[1] : '',
+        status: grande ? 'grande' : 'pendente',
+        erro: grande ? `acima de ${limiteMB}MB` : null,
+      };
+    });
+    setItens(prev => [...prev, ...novos]);
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const setRefItem = (i, val) => setItens(prev => prev.map((x, j) => j === i ? { ...x, ref: val } : x));
+  const remover = (i) => setItens(prev => prev.filter((_, j) => j !== i));
+
+  const uploadUm = async (it) => {
+    const USAR_DIRETO = it.file.size > 4 * 1024 * 1024;
+    if (USAR_DIRETO) {
+      const presignRes = await fetch('/api/lojas-whats-midia-presign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo, nome_arquivo: it.file.name, size_bytes: it.file.size, mime_type: it.file.type }),
+      });
+      const presign = await presignRes.json();
+      if (!presignRes.ok || presign.error) return { ok: false, erro: presign.error || 'presign' };
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT', headers: { 'Content-Type': it.file.type, 'Authorization': `Bearer ${presign.token}`, 'x-upsert': 'false' },
+        body: it.file,
+      });
+      if (!putRes.ok) return { ok: false, erro: 'upload ' + putRes.status };
+      const regRes = await fetch('/api/lojas-whats-midia-upload?modo=register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storage_path: presign.storage_path, tipo, ref: it.ref || null, nome_arquivo: it.file.name, size_bytes: it.file.size, mime_type: it.file.type }),
+      });
+      const reg = await regRes.json();
+      if (!regRes.ok || reg.error) return { ok: false, erro: reg.error || 'registro' };
+      return { ok: true };
+    }
+    const fd = new FormData();
+    fd.append('arquivo', it.file);
+    fd.append('tipo', tipo);
+    if (it.ref) fd.append('ref', it.ref);
+    const r = await fetch('/api/lojas-whats-midia-upload', { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok || j.error) return { ok: false, erro: j.error || 'upload' };
+    return { ok: true };
+  };
+
+  const enviarTodas = async () => {
+    const fila = itens.map((it, i) => ({ it, i })).filter(({ it }) => it.status === 'pendente' || it.status === 'erro');
+    if (!fila.length) { onErro('Escolha as fotos primeiro'); return; }
+    if (tipo === 'cores' && fila.some(({ it }) => !(it.ref || '').trim())) {
+      onErro('Cada foto de cores precisa de uma ref'); return;
+    }
+    setEnviando(true);
+    let ok = 0;
+    for (const { it, i } of fila) {
+      setItens(prev => prev.map((x, j) => j === i ? { ...x, status: 'enviando' } : x));
+      try {
+        const r = await uploadUm(it);
+        setItens(prev => prev.map((x, j) => j === i ? { ...x, status: r.ok ? 'ok' : 'erro', erro: r.ok ? null : r.erro } : x));
+        if (r.ok) ok++;
+      } catch (e) {
+        setItens(prev => prev.map((x, j) => j === i ? { ...x, status: 'erro', erro: e.message } : x));
+      }
+    }
+    setEnviando(false);
+    if (ok > 0) onSucesso(ok);
+  };
+
+  const pendentes = itens.filter(x => x.status === 'pendente' || x.status === 'erro').length;
+  const faltaRef = tipo === 'cores' && itens.some(x => (x.status === 'pendente' || x.status === 'erro') && !(x.ref || '').trim());
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }} onClick={() => !enviando && onClose()}>
+      <div onClick={e => e.stopPropagation()} style={{ background: palette.bg, borderRadius: 12, padding: 20,
+        maxWidth: 520, width: '100%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: fz(16), color: palette.ink, fontWeight: 700 }}>Subir em lote</h3>
+          <button onClick={() => !enviando && onClose()} style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}>
+            <X size={sz(22)} color={palette.inkMuted} />
+          </button>
+        </div>
+
+        {/* Toggle tipo */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {['cores', 'foto', 'video', 'catalogo'].map(t => (
+            <button key={t} onClick={() => setTipo(t)} disabled={enviando} style={{
+              flex: 1, padding: '7px 6px', borderRadius: 6, cursor: enviando ? 'default' : 'pointer',
+              border: `1px solid ${tipo === t ? palette.accent : palette.beige}`,
+              background: tipo === t ? palette.accent : palette.surface,
+              color: tipo === t ? palette.bg : palette.ink,
+              fontSize: fz(12), fontWeight: 600, fontFamily: FONT, textTransform: 'capitalize',
+            }}>{t}</button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: fz(11), color: palette.inkMuted, marginBottom: 10, lineHeight: 1.4 }}>
+          {tipo === 'cores'
+            ? 'Foto de cores = a arara com todas as cores do modelo. Escolha várias e digite a ref de cada uma (a ref é obrigatória). Se o nome do arquivo tiver número, ele já preenche sozinho.'
+            : `Escolha vários arquivos de uma vez. Limite ${LIMITES_MB[tipo]}MB cada.`}
+        </div>
+
+        <input ref={fileRef} type="file" multiple accept={ACEITOS[tipo]} onChange={onPick} disabled={enviando}
+          style={{ width: '100%', padding: 6, marginBottom: 12, fontFamily: FONT, fontSize: fz(12), boxSizing: 'border-box' }} />
+
+        {/* Lista */}
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, marginBottom: 12 }}>
+          {itens.length === 0 && (
+            <div style={{ textAlign: 'center', color: palette.inkMuted, fontSize: fz(12), padding: '20px 0' }}>
+              Nenhuma foto escolhida ainda
+            </div>
+          )}
+          {itens.map((it, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8,
+              padding: 8, background: palette.surface, borderRadius: 8, border: '1px solid #e8e2da' }}>
+              {it.previewUrl
+                ? <img src={it.previewUrl} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                : <div style={{ width: 46, height: 46, borderRadius: 6, background: palette.beige, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={sz(16)} color={palette.inkMuted} /></div>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <input value={it.ref} onChange={e => setRefItem(i, e.target.value)} disabled={enviando}
+                  placeholder={tipo === 'catalogo' ? 'REF (opcional)' : 'Ref (ex: 3213)'} inputMode="numeric"
+                  style={{ width: '100%', padding: '7px 9px', borderRadius: 6, border: '1px solid #e8e2da',
+                    fontFamily: FONT, fontSize: fz(13), color: palette.ink, background: palette.bg, boxSizing: 'border-box' }} />
+                <div style={{ fontSize: fz(10), color: palette.inkMuted, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {it.file.name} · {(it.file.size / 1024 / 1024).toFixed(2)}MB
+                </div>
+              </div>
+              <div style={{ width: 24, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+                {it.status === 'ok' && <Check size={sz(16)} color={palette.ok} />}
+                {it.status === 'enviando' && <Loader2 size={sz(15)} className="spin" color={palette.accent} />}
+                {(it.status === 'erro' || it.status === 'grande') && <span title={it.erro} style={{ color: palette.alert, fontSize: fz(10), fontWeight: 700 }}>!</span>}
+                {(it.status === 'pendente') && !enviando && (
+                  <button onClick={() => remover(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.alert, display: 'flex' }}>
+                    <Trash2 size={sz(14)} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {faltaRef && (
+          <div style={{ fontSize: fz(11), color: palette.alert, marginBottom: 8 }}>
+            Falta a ref em alguma foto — preencha todas pra subir.
+          </div>
+        )}
+
+        <button onClick={enviarTodas} disabled={enviando || pendentes === 0 || faltaRef}
+          style={{ width: '100%', background: palette.accent, color: '#fff', border: 'none', borderRadius: 8,
+            padding: 12, cursor: (enviando || pendentes === 0 || faltaRef) ? 'default' : 'pointer', fontSize: fz(14),
+            fontWeight: 700, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            opacity: (enviando || pendentes === 0 || faltaRef) ? 0.6 : 1 }}>
+          {enviando ? <Loader2 size={sz(16)} className="spin" /> : <Upload size={sz(15)} />}
+          {enviando ? 'Subindo...' : `Subir ${pendentes || ''} foto(s)`}
+        </button>
       </div>
     </div>
   );
