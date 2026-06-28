@@ -294,6 +294,60 @@ async function processarMensagemRecebida(msg, valueCtx) {
     }).catch(e => console.warn('[lojas-whats-webhook] push falhou:', e.message));
   }
 
+  // ─── SLA DE PICO: cliente mandando lista de pecas = momento mais quente da
+  // venda (analise vendas x near-miss 28/06: latencia nesse ponto e o killer nº1).
+  // Detecta >=2 fotos seguidas (sem resposta da loja entre elas) OU texto "quero
+  // essas/esses". Quando dispara: liga a estrela (lead_prioritario), carimba
+  // pico_pedido_em (pra medir o gap ate a loja confirmar) e FURA A FILA com um
+  // push distinto pra quem auxilia a Sofia. So fura 1x por pico (guarda 30min).
+  if (msgInserida && msgRecente) {
+    const txtPico = (dadosMsg.texto || '').toLowerCase();
+    const pediuEssas = /quero\s+ess[ae]s?\b|vou\s+querer\s+ess|me\s+separa\s+ess|pode\s+separar\s+ess|fecha\s+ess/.test(txtPico);
+
+    let burstFotos = false;
+    if (dadosMsg.tipo === 'image') {
+      const { data: ult } = await supabase
+        .from('lojas_whats_mensagens')
+        .select('direcao, tipo_midia')
+        .eq('conversa_id', conversa.id)
+        .order('enviada_em', { ascending: false })
+        .limit(6);
+      let seq = 0;
+      for (const m of (ult || [])) {
+        if (m.direcao === 'entrada' && m.tipo_midia === 'image') seq++;
+        else break; // para na 1a saida da loja ou msg nao-imagem
+      }
+      burstFotos = seq >= 2;
+    }
+
+    if (pediuEssas || burstFotos) {
+      const { data: cPico } = await supabase
+        .from('lojas_whats_conversas')
+        .select('pico_pedido_em, nome_cliente')
+        .eq('id', conversa.id)
+        .maybeSingle();
+      const recemCarimbado = cPico?.pico_pedido_em
+        ? (Date.now() - new Date(cPico.pico_pedido_em).getTime()) < 30 * 60 * 1000
+        : false;
+      if (!recemCarimbado) {
+        const nm = primeiroNome(cPico?.nome_cliente || conversa.nome_cliente) || 'Cliente';
+        await supabase
+          .from('lojas_whats_conversas')
+          .update({ lead_prioritario: true, pico_pedido_em: new Date().toISOString() })
+          .eq('id', conversa.id);
+        enviarPushSofia({
+          titulo: `⭐ PEDIDO QUENTE · ${nm}`,
+          mensagem: burstFotos
+            ? 'Cliente mandando a lista de peças, confirmar cores e tamanhos JÁ'
+            : 'Cliente quer fechar essas peças, confirmar disponibilidade JÁ',
+          url: '/?modulo=sofia',
+          tag: `sofia-pico-${conversa.id}`,
+        }).catch(e => console.warn('[lojas-whats-webhook] push pico falhou:', e.message));
+        log('pico', `conversa ${conversa.id} pick-list (fotos=${burstFotos} texto=${pediuEssas})`);
+      }
+    }
+  }
+
   // STT automatico: se for audio, transcreve via Whisper IN-PROCESS.
   // Ailson 28/05/2026: antes chamava /api/lojas-whats-transcrever via fetch
   // HTTP (funcao Vercel -> funcao Vercel), que falhava silenciosamente (audio
