@@ -8053,7 +8053,7 @@ const CalculadoraContent=()=>{
   if(tela==="novo")return<CalcFormProd onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>[...ps,np]);setTela("home");}} onRegras={()=>setTela("regras")}/>;
   if(tela==="editar"&&editProd)return<CalcFormProd inicial={editProd} onVoltar={()=>setTela("home")} onSalvar={(np)=>{atualizarProds(ps=>ps.map(p=>p.ref===editProd.ref?np:p));if(prod?.ref===editProd.ref)setProd(np);setTela("home");}} onRegras={()=>setTela("regras")}/>;
   if(tela==="regras")return<CalcRegras onVoltar={()=>setTela("novo")} prs={prs} prods={prods} atualizarPrs={atualizarPrs}/>;
-  if(tela==="dash")return<CalcDash prods={prods} prs={prs} onVoltar={()=>setTela("home")}/>;
+  if(tela==="dash")return<CalcDash prods={prods} prs={prs} roasMeluniGlobal={roasMeluniGlobal} roasMeluniManual={roasMeluniManual} onVoltar={()=>setTela("home")}/>;
   if(tela==="analise")return<CalcAnaliseMeluni prods={prods} prs={prs} roasMeluniGlobal={roasMeluniGlobal} setRoasMeluniGlobal={setRoasMeluniGlobal} freteSubsidiado={meluniFreteSubsidiado} setFreteSubsidiado={setMeluniFreteSubsidiado} state={analiseMeluniState} setState={setAnaliseMeluniState} onVoltar={()=>setTela("home")} mobile={mobile}/>;
   if(tela==="meta-ads")return<CalcMetaAdsMeluni onVoltar={()=>setTela("home")} mobile={mobile}/>;
   if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} cfgVer={cfgVer} onSalvarTaxas={salvarTaxas} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
@@ -8502,16 +8502,60 @@ const CalcRegras=({onVoltar,prs,prods,atualizarPrs})=>{
   </div>);
 };
 
-const CalcDash=({prods,prs,onVoltar})=>{
+const CalcDash=({prods,prs,roasMeluniGlobal,roasMeluniManual,onVoltar})=>{
   const [filtroPlat,setFiltroPlat]=useState("todos");
-  const rk=[];prods.forEach(p=>{const c=calcCusto(p);CALC_ORDEM.forEach(id=>{const ps=prs[`${p.ref}|${id}`];if(ps){const l=calcLucroReal(id,c,ps);rk.push({p,id,ps,l});}});});rk.sort((a,b)=>b.l-a.l);
-  const rkFiltrado=filtroPlat==="todos"?rk:rk.filter(r=>r.id===filtroPlat);
-  const melhores=rkFiltrado.slice(0,20);
-  const piores=[...rkFiltrado].sort((a,b)=>a.l-b.l).slice(0,20);
-  const pp=CALC_ORDEM.map(id=>{const its=rk.filter(r=>r.id===id);const med=its.length?its.reduce((s,r)=>s+r.l,0)/its.length:0;return{id,qtd:its.length,med};}).filter(p=>p.qtd>0).sort((a,b)=>b.med-a.med);
+  const [dias,setDias]=useState(90);
+  const [giro,setGiro]=useState(null); // { plataforma: [{ref,qtd}] } — top 20 vendas por plataforma
+  const [carregando,setCarregando]=useState(true);
+  const [erroGiro,setErroGiro]=useState(false);
+  useEffect(()=>{
+    let vivo=true; setCarregando(true); setErroGiro(false);
+    const fmtD=d=>d.toISOString().slice(0,10);
+    const ini=fmtD(new Date(Date.now()-dias*86400000)), fim=fmtD(new Date());
+    supabase.rpc("fn_calc_giro_plataforma",{p_data_inicio:ini,p_data_fim:fim,p_limit:20}).then(({data,error})=>{
+      if(!vivo)return;
+      if(error||!data){setErroGiro(true);setGiro(null);}
+      else{const g={};for(const row of data){const pl=row.plataforma;if(!g[pl])g[pl]=[];g[pl].push({ref:String(row.ref),qtd:Number(row.qtd)});}setGiro(g);}
+      setCarregando(false);
+    }).catch(()=>{if(vivo){setErroGiro(true);setGiro(null);setCarregando(false);}});
+    return()=>{vivo=false;};
+  },[dias]);
+  const normRef=r=>String(r||"").replace(/^0+/,"")||"0";
+  const prodByRef={};for(const p of prods)prodByRef[normRef(p.ref)]=p;
+  const roasEf=ref=>{const m=roasMeluniManual&&roasMeluniManual[ref];return(typeof m==="number"&&m>0)?m:(roasMeluniGlobal||10);};
+  const usarFallback=!carregando&&erroGiro;
+  // universo = top 20 em VENDAS (giro) por plataforma; dentro disso rankeia lucro/prejuizo
+  const buildItens=id=>{
+    let fonte;
+    if(giro&&giro[id])fonte=giro[id];
+    else if(usarFallback)fonte=prods.filter(p=>prs[`${p.ref}|${id}`]!=null).map(p=>({ref:normRef(p.ref),qtd:null}));
+    else fonte=[];
+    const arr=[];
+    for(const it of fonte){
+      const prod=prodByRef[normRef(it.ref)];if(!prod)continue;
+      const ps=prs[`${prod.ref}|${id}`];if(ps==null)continue;
+      const c=calcCusto(prod);let l=calcLucroReal(id,c,ps);
+      if(id==="meluni"){const roas=roasEf(normRef(it.ref));l=l-(roas>0?ps/roas:0);} // Meluni: lucro liquido apos ROAS
+      arr.push({p:prod,id,ps,l,qtd:it.qtd});
+    }
+    return arr;
+  };
+  const itensPlat={};for(const id of CALC_ORDEM)itensPlat[id]=buildItens(id);
+  const platsTodos=CALC_ORDEM.filter(id=>id!=="meluni"); // Meluni nao entra no "Todos"
+  const universo=filtroPlat==="todos"?platsTodos.flatMap(id=>itensPlat[id]):(itensPlat[filtroPlat]||[]);
+  const melhores=[...universo].sort((a,b)=>b.l-a.l).slice(0,20);
+  const piores=[...universo].sort((a,b)=>a.l-b.l).slice(0,20);
+  const pp=platsTodos.map(id=>{const its=itensPlat[id];const med=its.length?its.reduce((s,r)=>s+r.l,0)/its.length:0;return{id,qtd:its.length,med};}).filter(p=>p.qtd>0).sort((a,b)=>b.med-a.med);
+  const semPreco=(filtroPlat!=="todos"&&giro&&giro[filtroPlat])?giro[filtroPlat].filter(x=>{const pr=prodByRef[normRef(x.ref)];return!pr||prs[`${pr.ref}|${filtroPlat}`]==null;}).length:0;
   return(<div style={{background:"#f7f4f0",minHeight:"100%",padding:20,fontFamily:"Georgia,serif"}}>
     <div style={{maxWidth:900,margin:"0 auto"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Dashboard de Preços</div><div style={{fontSize:12,color:"#8a9aa4"}}>{rk.length} preços definidos</div></div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}><button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button><div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>Dashboard de Preços</div><div style={{fontSize:12,color:"#8a9aa4"}}>{carregando?"carregando giro…":erroGiro?"giro indisponível":"ranking pelo giro (top 20 vendas/plataforma)"}</div>
+        <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+          <span style={{fontSize:10,color:"#a89f94",letterSpacing:1,textTransform:"uppercase"}}>Período:</span>
+          {[30,90,180].map(d=>(<button key={d} onClick={()=>setDias(d)} style={{padding:"5px 10px",border:`1px solid ${dias===d?"#2c3e50":"#e8e2da"}`,borderRadius:6,background:dias===d?"#2c3e50":"#fff",color:dias===d?"#fff":"#6b7c8a",cursor:"pointer",fontSize:11,fontFamily:"Georgia,serif"}}>{d}d</button>))}
+        </div>
+      </div>
+      {erroGiro&&<div style={{background:"#fdecea",border:"1px solid #f5c6c2",borderRadius:8,padding:"8px 14px",marginBottom:14,fontSize:12,color:"#a04040"}}>Não consegui carregar o giro de vendas — mostrando todos os produtos com preço definido.</div>}
       {pp.length>0&&<><div style={{fontSize:12,fontWeight:600,color:"#2c3e50",marginBottom:10}}>🏆 PLATAFORMAS — média de lucro</div><div style={{display:"flex",gap:10,marginBottom:20}}>{pp.map((p,i)=>{const r=CALC_PLATS[p.id];const Logo=CALC_LOGOS[p.id];return(<div key={p.id} style={{flex:1,background:r.cor,border:`2px solid ${r.cor}`,borderRadius:12,padding:14,position:"relative",boxShadow:"0 2px 8px rgba(0,0,0,0.08)"}}>{i===0&&<div style={{position:"absolute",top:-8,left:"50%",transform:"translateX(-50%)",background:"#c8a040",color:"#fff",fontSize:9,padding:"2px 8px",borderRadius:10,fontWeight:700}}>MELHOR</div>}<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><Logo s={22}/><div style={{fontSize:11,fontWeight:700,color:r.ct}}>{r.nome}</div></div><div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:20,fontWeight:800,color:r.ct}}>R$ {calcFmt(p.med)}</div><div style={{fontSize:10,color:r.ct,opacity:0.75,marginTop:2}}>média · {p.qtd} produto{p.qtd>1?"s":""}</div></div>);})}</div></>}
       {/* Filtro por plataforma */}
       <div style={{background:"#fff",borderRadius:10,padding:"10px 16px",border:"1px solid #e8e2da",marginBottom:14,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
@@ -8521,7 +8565,7 @@ const CalcDash=({prods,prs,onVoltar})=>{
             {id==="todos"?"Todos":CALC_PLATS[id].nome}
           </button>
         ))}
-        <span style={{marginLeft:"auto",fontSize:11,color:"#a89f94"}}>{rkFiltrado.length} resultado{rkFiltrado.length!==1?"s":""}</span>
+        <span style={{marginLeft:"auto",fontSize:11,color:"#a89f94"}}>{universo.length} no giro{semPreco>0?` · ${semPreco} sem preço`:""}</span>
       </div>
       {/* Rankings top 20 */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -8529,14 +8573,14 @@ const CalcDash=({prods,prs,onVoltar})=>{
           <div key={titulo}>
             <div style={{fontSize:12,fontWeight:600,color:cor,marginBottom:10}}>{titulo}</div>
             <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-              {itens.length===0?(<div style={{padding:20,textAlign:"center",color:"#c0b8b0",fontSize:12}}>Defina preços para ver o ranking</div>):
+              {itens.length===0?(<div style={{padding:20,textAlign:"center",color:"#c0b8b0",fontSize:12}}>{carregando?"carregando giro…":"Sem produtos com giro e preço definido"}</div>):
               itens.map((r,i)=>{const Logo=CALC_LOGOS[r.id];const pl=CALC_PLATS[r.id];return(
                 <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:"1px solid #f0ebe4",background:i%2===0?"#fff":"#f7f4f0"}}>
                   <div style={{fontSize:10,color:"#a89f94",minWidth:20,textAlign:"right"}}>{i+1}º</div>
                   <div style={{width:22,height:22,borderRadius:"50%",background:pl.cor,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Logo s={13}/></div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:11,fontWeight:600,color:"#2c3e50",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.p.ref} — {r.p.descricao}</div>
-                    <div style={{fontSize:9,color:"#a89f94"}}>{pl.nome} · R$ {calcFmt(r.ps)}</div>
+                    <div style={{fontSize:9,color:"#a89f94"}}>{pl.nome} · R$ {calcFmt(r.ps)}{r.qtd!=null?` · ${r.qtd} vend.`:""}</div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:13,fontWeight:700,color:calcTermo(r.l)}}>R$ {calcFmt(r.l)}</div>
