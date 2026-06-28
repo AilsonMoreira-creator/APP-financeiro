@@ -6291,7 +6291,7 @@ function SeletorMidiaModal({ onClose, onSelect }) {
                       width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}><Check size={12} /></span>
                   )}
-                  {m.tipo === 'foto' && m.url_publica ? (
+                  {(m.tipo === 'foto' || m.tipo === 'cores') && m.url_publica ? (
                     <img src={m.url_publica} alt="" style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 4, marginBottom: 4 }} />
                   ) : (
                     <div style={{
@@ -6698,6 +6698,7 @@ function MidiasTab({ refreshTick }) {
 function MidiaCard({ m, onEditar, onExcluir }) {
   const fmtMB = (b) => (b / 1024 / 1024).toFixed(1) + 'MB';
   const ehFoto = m.tipo === 'foto';
+  const ehCores = m.tipo === 'cores';
   const ehVideo = m.tipo === 'video';
   const ehCatalogo = m.tipo === 'catalogo';
   return (
@@ -6709,7 +6710,7 @@ function MidiaCard({ m, onEditar, onExcluir }) {
         height: 100, background: '#f0f0f0', position: 'relative',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {ehFoto && m.url_publica ? (
+        {(ehFoto || ehCores) && m.url_publica ? (
           <img src={m.url_publica} alt={m.nome_arquivo} style={{
             width: '100%', height: '100%', objectFit: 'cover',
           }} />
@@ -6717,7 +6718,7 @@ function MidiaCard({ m, onEditar, onExcluir }) {
           <div style={{ textAlign: 'center', color: palette.inkMuted }}>
             {ehVideo && <Video size={32} />}
             {ehCatalogo && <FileText size={32} />}
-            {!ehFoto && !ehVideo && !ehCatalogo && <Paperclip size={32} />}
+            {!ehFoto && !ehCores && !ehVideo && !ehCatalogo && <Paperclip size={32} />}
             <div style={{ fontSize: 10, marginTop: 4, textTransform: 'uppercase', fontWeight: 600 }}>
               {m.tipo}
             </div>
