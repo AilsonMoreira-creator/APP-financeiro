@@ -134,6 +134,14 @@ function classificarAutoEnvioLara(msgs, ultima) {
   const txt = (ultima.texto || '').trim();
   // Caso 2: só imagem, sem texto.
   if (ultima.tipo_midia === 'image' && !txt) return { auto: true, caso: 'foto_sem_texto' };
+  // Caso 3: cliente mandou um LINK do produto (site da Meluni) e NÃO escreveu a
+  // dúvida — nem da peça, nem de algum passo da finalização da compra. A Lara
+  // acolhe e pergunta no que ajudar. Ailson 28/06/2026.
+  if (txt && /https?:\/\/[^\s]*meluniloja/i.test(txt)) {
+    const resto = txt.replace(/https?:\/\/\S+/gi, ' ').replace(/\s+/g, ' ').trim();
+    const temPergunta = /\?/.test(resto) || /tamanho|medida|\bcor\b|tecido|frete|entrega|prazo|pag(ar|amento)|\bcm\b|peso|veste|serve|transparente|forr|desconto|cupom|troca|devolu|finaliz|checkout|carrinho|comprar/i.test(resto);
+    if (!resto || (!temPergunta && resto.length <= 40)) return { auto: true, caso: 'link_sem_duvida' };
+  }
   // Caso 1: abertura genérica no PRIMEIRO contato (a Lara ainda não respondeu nada).
   if (txt) {
     const jaRespondeu = msgs.some(m => m.direcao === 'saida');
