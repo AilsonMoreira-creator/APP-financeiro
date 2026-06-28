@@ -34,7 +34,7 @@ import {
   Users, MessageCircle, Settings, AlertCircle,
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
   User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
-  Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video,
+  Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video, Hash,
   Instagram, Facebook, Copy, Circle
 } from 'lucide-react';
 import {
@@ -4742,6 +4742,11 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
+  // Modal de indicação manual de refs (quando a Sofia erra/nao acha o modelo).
+  // Ailson 28/06/2026.
+  const [indicarAberto, setIndicarAberto] = useState(false);
+  const [indicarLinhas, setIndicarLinhas] = useState([]); // [{ url, ref }]
+  const [indicarEnviando, setIndicarEnviando] = useState(false);
   // Realtime atualiza a thread em background — spinner so quando troca de
   // conversa, nao a cada msg/sugestao nova. Ailson 30/05/2026.
   const convCarregadaRef = useRef(null);
@@ -5018,6 +5023,34 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
     } catch (e) { /* silencioso — proxima carga reflete */ }
   };
 
+  // Abre o modal pré-carregando as últimas fotos que a CLIENTE mandou (até 5),
+  // cada uma com uma caixa pra assistente digitar a ref certa.
+  const abrirIndicar = () => {
+    const imgs = (mensagens || [])
+      .filter(m => m.direcao === 'entrada' && m.tipo_midia === 'image' && m.midia_url)
+      .slice(-5).reverse()
+      .map(m => ({ url: m.midia_url, ref: '' }));
+    setIndicarLinhas(imgs.length ? imgs : [{ url: null, ref: '' }]);
+    setIndicarAberto(true);
+  };
+
+  const enviarIndicacao = async () => {
+    const refs = indicarLinhas.map(l => (l.ref || '').trim()).filter(Boolean);
+    if (!refs.length) { setErro('Digite ao menos uma referência'); return; }
+    setIndicarEnviando(true);
+    try {
+      const r = await fetch('/api/lojas-whats-refs-indicar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_id: conversaId, refs }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error) { setErro(j.error || 'Erro ao indicar refs'); setIndicarEnviando(false); return; }
+      setIndicarAberto(false);
+      setIndicarEnviando(false);
+      setReloadTick(t => t + 1);
+    } catch (e) { setErro(e.message); setIndicarEnviando(false); }
+  };
+
   if (loading) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
@@ -5037,6 +5070,61 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
       background: palette.beige, zIndex: 100,
       display: 'flex', flexDirection: 'column', fontFamily: FONT_CHAT,
     }}>
+      {indicarAberto && (
+        <div onClick={() => !indicarEnviando && setIndicarAberto(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 300,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: palette.surface, borderRadius: 12, maxWidth: 440, width: '100%',
+              maxHeight: '85vh', overflowY: 'auto', padding: 18, fontFamily: FONT_CHAT,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ fontSize: fz(15), fontWeight: 700, color: palette.ink, display: 'flex', alignItems: 'center', gap: 7 }}>
+                <Hash size={sz(16)} /> Indicar referências
+              </div>
+              <button onClick={() => !indicarEnviando && setIndicarAberto(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.inkMuted, display: 'flex' }}>
+                <X size={sz(18)} />
+              </button>
+            </div>
+            <div style={{ fontSize: fz(12), color: palette.inkMuted, marginBottom: 14, lineHeight: 1.4 }}>
+              Digite a ref de cada foto que a cliente mandou (até 5). A Sofia manda uma mensagem por ref com a foto de cores e os tamanhos disponíveis. Sem foto de cores, manda só o texto.
+            </div>
+            {indicarLinhas.map((l, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                {l.url
+                  ? <img src={l.url} alt="" style={{ width: 54, height: 54, objectFit: 'cover', borderRadius: 8, flexShrink: 0, border: '1px solid #e8e2da' }} />
+                  : <div style={{ width: 54, height: 54, borderRadius: 8, background: palette.beige, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Image size={sz(18)} color={palette.inkMuted} /></div>}
+                <input value={l.ref}
+                  onChange={e => setIndicarLinhas(prev => prev.map((x, j) => j === i ? { ...x, ref: e.target.value } : x))}
+                  placeholder="Ref (ex: 3213)" inputMode="numeric"
+                  style={{ flex: 1, padding: '9px 11px', borderRadius: 8, border: '1px solid #e8e2da', fontSize: fz(14), fontFamily: FONT_CHAT, color: palette.ink, background: palette.bg }} />
+                {indicarLinhas.length > 1 && (
+                  <button onClick={() => setIndicarLinhas(prev => prev.filter((_, j) => j !== i))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.alert, display: 'flex' }}>
+                    <Trash2 size={sz(16)} />
+                  </button>
+                )}
+              </div>
+            ))}
+            {indicarLinhas.length < 5 && (
+              <button onClick={() => setIndicarLinhas(prev => [...prev, { url: null, ref: '' }])}
+                style={{ background: 'none', border: '1px dashed #cfc6ba', color: palette.inkMuted, borderRadius: 8,
+                  padding: '7px 10px', cursor: 'pointer', fontSize: fz(12), fontFamily: FONT_CHAT, marginBottom: 12 }}>
+                + adicionar ref
+              </button>
+            )}
+            <button onClick={enviarIndicacao} disabled={indicarEnviando}
+              style={{ width: '100%', marginTop: 6, background: palette.accent, color: '#fff', border: 'none',
+                borderRadius: 8, padding: 11, cursor: indicarEnviando ? 'default' : 'pointer', fontSize: fz(14),
+                fontWeight: 600, fontFamily: FONT_CHAT, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 8, opacity: indicarEnviando ? 0.7 : 1 }}>
+              {indicarEnviando ? <Loader2 size={sz(16)} className="spin" /> : <Send size={sz(15)} />}
+              {indicarEnviando ? 'Enviando...' : 'Enviar pra cliente'}
+            </button>
+          </div>
+        </div>
+      )}
       {/* Wrapper centralizado: chat com max-width pra nao ficar com balöes
           nos extremos em telas largas. Fundo bege da tela cheia fica visivel
           nas laterais. Ailson 27/05/2026 */}
@@ -5107,6 +5195,14 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
               color={conversa.lead_prioritario ? '#f5c84e' : palette.bg} />
           </button>
         )}
+        <button onClick={abrirIndicar} title="Indicar referências (até 5)"
+          style={{
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
+            color: palette.bg, padding: '6px 9px', borderRadius: 6, cursor: 'pointer',
+            display: 'flex', alignItems: 'center',
+          }}>
+          <Hash size={sz(14)} />
+        </button>
         <button onClick={() => onEditarLead && onEditarLead(conversa)} title="Editar lead"
           style={{
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',

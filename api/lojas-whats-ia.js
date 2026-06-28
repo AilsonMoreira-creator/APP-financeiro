@@ -1070,6 +1070,15 @@ REGRAS DE OURO MEDIDAS:
     systemBlocks.push({ type: 'text', text: `BASE DE CONHECIMENTO — FICHA DETALHADA DA(S) PECA(S) QUE A CLIENTE ESTA VENDO / NO CARRINHO:\n${fichasFoco}\n\nISTO E PRA VC SE BASEAR, NAO PRA COLAR. Use so o trecho relevante pra pergunta da cliente (tecido, caimento, forro, com o que combina, etc.), sempre com as SUAS palavras e no momento certo. NUNCA mande a descricao inteira nem um textao tecnico do nada.` });
   }
   if (blocoMidias) systemBlocks.push({ type: 'text', text: blocoMidias });
+
+  // Refs que a ASSISTENTE confirmou manualmente (botao Indicar refs). Sinal forte:
+  // a Sofia NAO deve re-identificar nem contradizer essas pecas. Ailson 28/06/2026.
+  if (Array.isArray(conv.refs_indicadas) && conv.refs_indicadas.length && conv.refs_indicadas_em) {
+    const horasInd = (Date.now() - new Date(conv.refs_indicadas_em).getTime()) / 3.6e6;
+    if (horasInd <= 6) {
+      systemBlocks.push({ type: 'text', text: `A ASSISTENTE JA CONFIRMOU pra esta cliente as referencias: ${conv.refs_indicadas.join(', ')} (com cores e tamanhos, a partir das fotos que ela mandou). Essas refs estao CERTAS — NAO re-identifique, NAO sugira outro modelo e NAO contradiga. Trate como pecas confirmadas e conduza pro proximo passo (cor/tamanho que ela quer, quantidade, fechar a grade).` });
+    }
+  }
   // DDD 11 = São Paulo capital/região metropolitana → libera oferta de motoboy.
   // Sofia so oferece motoboy quando este aviso aparece. Ailson 01/06/2026.
   {
