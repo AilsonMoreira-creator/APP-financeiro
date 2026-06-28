@@ -12,6 +12,9 @@ import { supabase } from './supabase.js';
 const SERIF = "Georgia,serif";
 const C = { navy:"#2c3e50", blue:"#4a7fa5", muted:"#8a9aa4", muted2:"#6b7c8a", edge:"#c8d8e4", sand:"#e8e2da", soft:"#edf4fb", panel:"#fcfaf7", bg:"#f7f4f0", green:"#27ae60", red:"#c0392b" };
 const DEFAULT_LAYOUT = { rollW:100, cols:2, mLeft:0, gapC:0, gapR:2, lw:50, lh:30, fs:7, lat:2 };
+// Largura da etiqueta é AUTO: preenche o rolo dividido pelas colunas, descontando margem e gaps.
+// Assim o rolo sempre fica cheio e o gap entre colunas sempre aparece. Ailson 28/06/2026.
+const effLw=(lay)=>{ const cols=Math.max(1,Math.round(Number(lay?.cols)||1)); const v=(Number(lay?.rollW)||100)-(Number(lay?.mLeft)||0)-(cols-1)*(Number(lay?.gapC)||0); return Math.max(5, v/cols); };
 const PREPOS = new Set(['com','de','da','do','e','para','a','o','as','os','em','no','na']);
 const inpStyle={border:`1px solid ${C.edge}`,borderRadius:6,padding:'7px 9px',fontSize:14,fontFamily:SERIF,color:C.navy,background:'#fff',width:'100%',boxSizing:'border-box',outline:'none'};
 
@@ -64,7 +67,7 @@ function loadJsPDF(){
 
 // ── desenho de UMA etiqueta no PDF (compartilhado) ────────────────
 function desenharLabel(pdf, lay, cx, item){
-  const { lw, lh, lat, fs } = lay;
+  const { lh, lat, fs } = lay; const lw=effLw(lay);
   const fsEff=fs*1.15, lineMm=fsEff*0.3528*1.25;
   const ix=cx+lat, iy=0.8;
   const dCur=descCurta(item.desc), rTxt=refTxt(item.ref);
@@ -88,7 +91,7 @@ function desenharLabel(pdf, lay, cx, item){
 // ── monta PDF de uma lista de etiquetas (1 página = 1 linha do rolo) ──
 async function gerarPdfLote(lay, items){
   const { jsPDF } = await loadJsPDF();
-  const { rollW, lh, cols, mLeft, gapC, lw } = lay;
+  const { rollW, lh, cols, mLeft, gapC } = lay; const lw=effLw(lay);
   const pdf=new jsPDF({unit:'mm',format:[rollW,lh],orientation:rollW>lh?'landscape':'portrait'});
   const perRow=Math.max(1,Math.round(cols));
   let first=true;
@@ -144,7 +147,7 @@ export default function EtiquetaTemplate({ sample, onClose }){
   const dCur = descCurta(smp.desc), rTxt = refTxt(smp.ref);
   const t2 = `${(smp.cor||'').toUpperCase()} · ${(smp.tam||'').toUpperCase()}`;
 
-  const { rollW, cols, mLeft, gapC, gapR, lw, lh, fs, lat } = lay;
+  const { rollW, cols, mLeft, gapC, gapR, lh, fs, lat } = lay; const lw=effLw(lay);
   const scale = Math.max(1.2, (cw-20)/(rollW||100));
   const fontPx = fs*0.3528*scale*1.15;
   const totalH = vizRows*lh + (vizRows-1)*gapR;
@@ -171,7 +174,7 @@ export default function EtiquetaTemplate({ sample, onClose }){
       const perRow=Math.max(1,Math.round(cols));
       const n=Math.min(vizRows,20)*perRow; const items=[]; for(let i=0;i<n;i++) items.push(item);
       const pdf=await gerarPdfLote(lay, items);
-      pdf.save(`etiqueta_rolo${rollW}_${lw}x${lh}.pdf`);
+      pdf.save(`etiqueta_rolo${rollW}_${Math.round(lw)}x${lh}.pdf`);
     }catch(e){ setMsg('Falha ao gerar PDF'); setTimeout(()=>setMsg(''),2500); }
   }
 
@@ -230,7 +233,7 @@ export default function EtiquetaTemplate({ sample, onClose }){
           <div style={card}>
             <div style={leg}>Etiqueta</div>
             <div style={grid2}>
-              <Field label="Largura (mm)"><N k="lw"/></Field>
+              <Field label="Largura (auto)"><div style={{...inpStyle,background:'#f3efe9',color:C.muted2,display:'flex',alignItems:'center'}}>{effLw(lay).toFixed(1)}mm</div></Field>
               <Field label="Altura (mm)"><N k="lh"/></Field>
               <Field label="Fonte texto (pt)"><N k="fs"/></Field>
               <Field label="Espaço lateral (mm)"><N k="lat"/></Field>
@@ -249,7 +252,7 @@ export default function EtiquetaTemplate({ sample, onClose }){
 
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:8}}>
             <div style={{fontSize:11,color:C.muted2,fontWeight:600}}>Pré-visualização do rolo</div>
-            <div style={{fontSize:11,color:C.muted}}>{rollW}mm · {lw}×{lh}mm · {cols} por linha (cabe {porLinha})</div>
+            <div style={{fontSize:11,color:C.muted}}>{rollW}mm · {lw.toFixed(0)}×{lh}mm · {cols} por linha (cabe {porLinha})</div>
           </div>
           <div ref={wrapRef} style={{overflow:'auto',maxHeight:'46vh',display:'flex',justifyContent:'center',padding:10,background:'repeating-linear-gradient(45deg,#ece7df,#ece7df 8px,#f3efe8 8px,#f3efe8 16px)',border:`1px solid ${C.sand}`,borderRadius:8}}>
             <div style={{position:'relative',background:'#fff',width:rollW*scale,height:totalH*scale,boxShadow:'0 6px 22px rgba(44,62,80,.18)'}}>{labels}</div>
@@ -270,21 +273,26 @@ export default function EtiquetaTemplate({ sample, onClose }){
 // ══════════════════════════════════════════════════════════════════
 // GERAR ETIQUETAS (lote, SKUs reais do gtin_map)
 // ══════════════════════════════════════════════════════════════════
-export function EtiquetaGerar({ sample, onClose, cortesPorRef, celulaCorte, normCor }){
+export function EtiquetaGerar({ sample, onClose }){
   const refDisp = sample?.ref ?? '';
-  const refNorm = String(refDisp||'').replace(/^0+/,'') || '0';
+  const refNorm = String(refDisp||'').replace(/\D/g,'').replace(/^0+/,'') || '0';
   const desc = sample?.desc || '';
+  const visiveisSet = new Set((sample?.visiveis)||[]); // cores (normalizadas) que aparecem no estoque
   const [lay,setLay]=useState(undefined); // undefined=carregando, null=sem template
   const [skus,setSkus]=useState([]);      // [{sku,gtin,cor,tam,qty}]
+  const [cortes,setCortes]=useState([]);  // cortes da ref (carregados direto do Supabase)
   const [loading,setLoading]=useState(true);
   const [tplOpen,setTplOpen]=useState(false);
   const [gerando,setGerando]=useState(false);
   const [msg,setMsg]=useState('');
   const [corteSel,setCorteSel]=useState('');
   const [semCodigo,setSemCodigo]=useState(0);
-  const cortes = (cortesPorRef||{})[refNorm] || [];
-  const _nc = (s)=> (typeof normCor==='function' ? normCor(s) : String(s||'').toLowerCase().trim());
-  const _nt = (s)=> String(s||'').toLowerCase().trim();
+  const [expandido,setExpandido]=useState(false);
+  const _nc=(s)=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const _nt=(s)=>String(s||'').toLowerCase().trim();
+  const _celula=(celulas,cor,tam,folhas,grade)=>{ const ov=celulas?.[`${cor}|${tam}`]; return (ov==null||ov==='')?((parseInt(folhas)||0)*(parseInt(grade)||0)):(parseInt(ov)||0); };
+  const visivelRow=(r)=> expandido || visiveisSet.size===0 || visiveisSet.has(_nc(r.cor)) || (Number(r.qty)||0)>0;
+  const ocultosCount = skus.filter(r=> !(visiveisSet.size===0 || visiveisSet.has(_nc(r.cor)) || (Number(r.qty)||0)>0)).length;
 
   async function carregar(){
     setLoading(true);
@@ -292,7 +300,12 @@ export function EtiquetaGerar({ sample, onClose, cortesPorRef, celulaCorte, norm
       const {data:lrow}=await supabase.from('etiqueta_layouts').select('params').eq('padrao',true).order('atualizado_em',{ascending:false}).limit(1);
       setLay(lrow&&lrow[0] ? {...DEFAULT_LAYOUT,...(lrow[0].params||{})} : null);
       const {data}=await supabase.from('gtin_map').select('sku,gtin,cor,tam').eq('ref',refNorm).order('cor').order('tam');
-      setSkus((data||[]).map(r=>({...r,qty:1})));
+      setSkus((data||[]).map(r=>({...r,qty:0})));
+      const {data:cz}=await supabase.from('amicia_data').select('payload').eq('user_id','ailson_cortes').maybeSingle();
+      const allC=cz?.payload?.cortes||[];
+      const mine=allC.filter(c=> c?.arquivado!==true && String(c.ref||'').replace(/\D/g,'').replace(/^0+/,'')===refNorm);
+      mine.sort((a,b)=> new Date(b.data||0)-new Date(a.data||0));
+      setCortes(mine);
     }catch(e){ setLay(null); }
     setLoading(false);
   }
@@ -303,10 +316,10 @@ export function EtiquetaGerar({ sample, onClose, cortesPorRef, celulaCorte, norm
   const setTodos=(v)=>{ const n=Math.max(0,parseInt(v)||0); setSkus(p=>p.map(r=>({...r,qty:n}))); setCorteSel(''); setSemCodigo(0); };
 
   function matrizDoCorte(c){
-    const m={}; const cores=c?.detalhes?.cores||[], tams=c?.detalhes?.tamanhos||[];
+    const m={}; const cores=c?.detalhes?.cores||[], tams=c?.detalhes?.tamanhos||[]; const cel=c?.detalhes?.celulas;
     for(const co of cores){ const folhas=Number(co.folhas)||0; if(folhas<=0) continue;
       for(const tm of tams){ const grade=Number(tm.grade)||0; if(grade<=0) continue;
-        let q=0; try{ q=typeof celulaCorte==='function' ? celulaCorte(c.detalhes,co.nome,tm.tam,folhas,grade) : grade*folhas; }catch(e){ q=0; }
+        const q=_celula(cel,co.nome,tm.tam,folhas,grade);
         if(q>0){ const k=`${_nc(co.nome)}|${_nt(tm.tam)}`; m[k]=(m[k]||0)+q; }
       }
     }
@@ -370,23 +383,27 @@ export function EtiquetaGerar({ sample, onClose, cortesPorRef, celulaCorte, norm
               <div style={{fontSize:12,color:C.muted2}}>{skus.length} variações com código</div>
               <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
                 <span style={{fontSize:12,color:C.muted2}}>qtd geral</span>
-                <input type="number" min={0} defaultValue={1} onChange={e=>setTodos(e.target.value)} style={{...inpStyle,width:64}}/>
+                <input type="number" min={0} defaultValue={0} onChange={e=>setTodos(e.target.value)} style={{...inpStyle,width:64}}/>
               </div>
             </div>
             <div style={{overflowX:'auto',border:`1px solid ${C.sand}`,borderRadius:8,maxHeight:'42vh'}}>
               <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12}}>
                 <thead><tr><th style={th}>Cor</th><th style={th}>Tam</th><th style={{...th,textAlign:'right'}}>Cópias</th></tr></thead>
                 <tbody>
-                  {skus.map((r,i)=>(
+                  {skus.map((r,i)=>{
+                    if(!visivelRow(r)) return null;
+                    return (
                     <tr key={r.sku||i} style={{background:i%2?'#faf8f5':'#fff'}}>
                       <td style={{...td,fontWeight:600}}>{r.cor||'—'}</td>
                       <td style={{...td,fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontWeight:700,color:C.blue}}>{r.tam||'—'}</td>
                       <td style={{...td,textAlign:'right'}}><input type="number" min={0} value={r.qty} onChange={e=>setQty(i,e.target.value)} style={{...inpStyle,width:64,textAlign:'right',padding:'5px 7px'}}/></td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+            {ocultosCount>0 && <button onClick={()=>setExpandido(v=>!v)} style={{marginTop:8,background:'transparent',border:`1px solid ${C.sand}`,borderRadius:8,padding:'7px 12px',color:C.blue,fontFamily:SERIF,fontSize:12.5,cursor:'pointer'}}>{expandido?'recolher cores sem estoque ▴':`ver outras ${ocultosCount} cores ▾`}</button>}
             <div style={{display:'flex',alignItems:'center',gap:10,marginTop:14,flexWrap:'wrap'}}>
               <div style={{fontSize:13,color:C.navy}}>Total: <b style={{fontFamily:"Calibri,'Segoe UI',Arial,sans-serif",fontSize:18}}>{total}</b> etiqueta{total===1?'':'s'}</div>
               <button onClick={gerar} disabled={gerando||!total} style={{marginLeft:'auto',background:C.blue,color:'#fff',border:0,borderRadius:9,padding:'12px 22px',fontFamily:SERIF,fontWeight:700,fontSize:14,cursor:'pointer',opacity:(gerando||!total)?0.6:1}}>{gerando?'gerando…':'Gerar PDF'}</button>
