@@ -2,12 +2,17 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { iniciarChecagemVersao } from './version-check.ts'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,
 )
+
+// Auto-atualização por versão (resolve o cache preso no iPhone standalone).
+// Independe do SW: compara o build embutido com /version.json no foco. Ailson 28/06/2026.
+iniciarChecagemVersao();
 
 // Service Worker registration + auto-update detector
 // Ailson 08/05/2026: vendedoras estavam vendo versao stale.
