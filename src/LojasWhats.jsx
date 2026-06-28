@@ -6751,9 +6751,11 @@ function UploadMidiaModal({ onClose, onSucesso, onErro }) {
   const [descricao, setDescricao] = useState('');
   const [enviando, setEnviando] = useState(false);
 
-  const LIMITES_MB = { foto: 2, video: 16, catalogo: 20 };
+  const LIMITES_MB = { foto: 2, cores: 4, video: 16, catalogo: 20 };
   const ACEITOS = {
     foto: '.jpg,.jpeg,.png,.webp',
+    // Foto de cores (arara): ref no nome do arquivo (ex: 3213.jpg). Ailson 28/06/2026.
+    cores: '.jpg,.jpeg,.png,.webp',
     video: '.mp4,.mov',
     // Catalogo aceita PDF (catalogo em si) OU imagem (capa do catalogo).
     // Imagem cai em fluxo separado no backend: salva como catalogos/capa.{ext}
@@ -6871,7 +6873,7 @@ function UploadMidiaModal({ onClose, onSucesso, onErro }) {
 
         {/* Toggle tipo */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-          {['foto', 'video', 'catalogo'].map(t => (
+          {['foto', 'cores', 'video', 'catalogo'].map(t => (
             <button key={t} onClick={() => { setTipo(t); setArquivo(null); }} style={{
               flex: 1, padding: '8px 6px', borderRadius: 6, cursor: 'pointer',
               border: `1px solid ${tipo === t ? palette.accent : palette.beige}`,
