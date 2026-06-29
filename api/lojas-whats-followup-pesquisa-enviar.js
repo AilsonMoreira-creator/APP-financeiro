@@ -5,8 +5,9 @@
 // (fluxo normal do webhook) e corta o follow-up de catalogo. Ailson 28/06/2026.
 // ═══════════════════════════════════════════════════════════════════════════
 // Elegibilidade pra PESQUISA (view vw_lojas_followup_pesquisa_elegiveis):
-//   etapa='follow_up' + ultima_atividade_em 7+ dias + >=1 imagem do cliente
-//   + >=3 msgs do cliente + sem followup_pesq_enviada_em + com nome.
+//   etapa='follow_up' + 7+ dias desde o HANDOFF pra vendedora (atendida_desde,
+//   fallback ultima_atividade_em) + >=1 imagem do cliente + >=3 msgs do cliente
+//   + sem followup_pesq_enviada_em + com nome.
 // Quem esta 7+ dias em follow_up mas NAO satisfaz (sem print/poucas msgs) ->
 //   promovido a 'perdida' (view vw_lojas_followup_perdida_elegiveis).
 //
@@ -115,7 +116,7 @@ export async function dispararFollowupPesquisa({ limite = LIMITE_PADRAO, ids = n
   if (Array.isArray(ids) && ids.length) {
     query = query.in('id', ids).limit(Math.min(ids.length, 60));
   } else {
-    query = query.order('ultima_atividade_em', { ascending: true }).limit(Math.min(limite, LIMITE_PADRAO));
+    query = query.order('relogio_em', { ascending: true }).limit(Math.min(limite, LIMITE_PADRAO));
   }
 
   const { data: elegiveis, error } = await query;
@@ -146,11 +147,11 @@ export default async function handler(req, res) {
     // Preview: elegiveis pra pesquisa + candidatos a perdida
     const [{ data: pesq }, { data: perd }] = await Promise.all([
       supabase.from('vw_lojas_followup_pesquisa_elegiveis')
-        .select('id, telefone, nome_cliente, ultima_atividade_em, msgs_cliente, imgs_cliente')
-        .order('ultima_atividade_em', { ascending: true }).limit(300),
+        .select('id, telefone, nome_cliente, relogio_em, msgs_cliente, imgs_cliente')
+        .order('relogio_em', { ascending: true }).limit(300),
       supabase.from('vw_lojas_followup_perdida_elegiveis')
-        .select('id, nome_cliente, ultima_atividade_em, msgs_cliente, imgs_cliente')
-        .order('ultima_atividade_em', { ascending: true }).limit(300),
+        .select('id, nome_cliente, relogio_em, msgs_cliente, imgs_cliente')
+        .order('relogio_em', { ascending: true }).limit(300),
     ]);
     return res.status(200).json({
       template_aprovado: await templateAprovado(),
