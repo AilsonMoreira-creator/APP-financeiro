@@ -103,7 +103,13 @@ export default async function handler(req, res) {
       return { ...c, conversa_pendente: !!pend, pendente_em };
     });
 
-    return res.json({ ok: true, total: lista.length, etapa, unread, clientes: lista });
+    // conversões dos últimos 30 dias -> badge azul na aba Conversão (espelha o carrinho)
+    const desde30 = new Date(Date.now() - 30 * 86400000).toISOString();
+    const { count: conv30 } = await supabase.from('meluni_conversas')
+      .select('id', { count: 'exact', head: true })
+      .eq('origem', 'cliente').eq('etapa', 'conversao').gte('convertido_em', desde30);
+
+    return res.json({ ok: true, total: lista.length, etapa, unread, conv30: conv30 || 0, clientes: lista });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });
   }

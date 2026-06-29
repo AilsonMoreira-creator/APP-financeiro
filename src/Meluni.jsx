@@ -717,6 +717,7 @@ function SecaoClientes() {
   const [sel, setSel] = useState(new Set());
   const [chatId, setChatId] = useState(null);
   const [unread, setUnread] = useState({});
+  const [conv30, setConv30] = useState(0);
   const [disparando, setDisparando] = useState(false);
   const [campanha, setCampanha] = useState('poscompra');
   const isDesktop = useIsDesktop();
@@ -754,7 +755,7 @@ function SecaoClientes() {
       if (msgDias) p.set('msg_dias', msgDias);
       const r = await fetch('/api/meluni-clientes-list?' + p.toString());
       const j = await r.json();
-      if (j.ok) { setClientes(j.clientes || []); setUnread(j.unread || {}); } else setErro(j.erro || 'erro ao carregar');
+      if (j.ok) { setClientes(j.clientes || []); setUnread(j.unread || {}); setConv30(j.conv30 || 0); } else setErro(j.erro || 'erro ao carregar');
     } catch (e) { setErro(String(e?.message || e)); }
     setLoading(false);
   }, [etapa, ordenar, nome, periodo, janela, msgDias, campanha]);
@@ -824,7 +825,7 @@ function SecaoClientes() {
     { id: 'enviados', label: 'Enviados', unread: unread.enviados },
     { id: 'conversando', label: 'Conversando', unread: unread.conversando },
     { id: 'follow_up', label: 'Follow up', unread: unread.follow_up },
-    { id: 'conversao', label: 'Conversão', unread: unread.conversao },
+    { id: 'conversao', label: 'Conversão', unread: unread.conversao, badgeAzul: conv30 },
   ];
 
   return (

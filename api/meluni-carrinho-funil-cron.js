@@ -39,13 +39,21 @@ export default async function handler(req, res) {
   const ehCron = ua.startsWith('vercel-cron') || !!req.headers?.['x-vercel-cron'];
   if (!ehCron && req.query?.force !== '1') return res.status(403).json({ erro: 'Cron only. Use ?force=1.' });
 
-  let conversoes = 0, segundo = 0, segundoPulado = 0, perdidas = 0, erros = 0;
+  let conversoes = 0, conversoesClientes = 0, segundo = 0, segundoPulado = 0, perdidas = 0, erros = 0;
   const detalhe = [];
 
   try {
     // 1) conversões (sempre)
     const { data: cv } = await supabase.rpc('fn_meluni_carrinho_conversoes');
     conversoes = Number(cv) || 0;
+
+    // 1b) conversões de CLIENTES da Lara (recebeu disparo e comprou em até 7 dias).
+    //     Sempre roda, não manda mensagem. Marca meluni_conversas.etapa='conversao'.
+    //     Ailson 29/06/2026.
+    try {
+      const { data: cvc } = await supabase.rpc('fn_meluni_clientes_conversoes');
+      conversoesClientes = Number(cvc) || 0;
+    } catch (e) { /* não derruba o cron do carrinho */ }
 
     const funilAtivo = (await cfgMeluni('lara_funil_ativo', false)) === true;
 
@@ -98,7 +106,7 @@ export default async function handler(req, res) {
       perdidas = Number(pd) || 0;
     }
 
-    return res.status(200).json({ ok: true, funilAtivo: (await cfgMeluni('lara_funil_ativo', false)) === true, janela: janelaOk ? 'aberta' : 'fora (seg-sab 09-20)', conversoes, segundo, segundoPulado, perdidas, erros, detalhe });
+    return res.status(200).json({ ok: true, funilAtivo: (await cfgMeluni('lara_funil_ativo', false)) === true, janela: janelaOk ? 'aberta' : 'fora (seg-sab 09-20)', conversoes, conversoesClientes, segundo, segundoPulado, perdidas, erros, detalhe });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: String(e?.message || e), conversoes, segundo, perdidas });
   }
