@@ -79,6 +79,25 @@ export default async function handler(req, res) {
       tem_midia_na_listagem: !!produtos[0]?.midia,
     };
 
+    // imagemURL de vários produtos -> ver se varia por cor/variação
+    out.imagens_listagem = produtos.slice(0, 18).map(p => ({
+      codigo: p.codigo || null,
+      nome: (p.nome || '').replace(/^.*?Cor:/i, 'Cor:').slice(0, 60),
+      imagemURL: p.imagemURL || null,
+    }));
+
+    // dump cru do detalhe de 1 produto -> onde está a imagem de verdade
+    {
+      const r0 = await blingFetch(`${API}/produtos/${produtos[0].id}`, headers);
+      const j0 = await r0.json().catch(() => null);
+      const d0 = j0?.data || {};
+      out.detalhe_cru = {
+        campos: Object.keys(d0),
+        imagemURL: d0?.imagemURL || null,
+        midia: d0?.midia || null,
+      };
+    }
+
     // 2) agrupa por idProdutoPai e acha uma ref com 2+ variações (cores)
     const grupos = new Map();
     for (const p of produtos) {
