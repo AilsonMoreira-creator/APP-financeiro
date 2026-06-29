@@ -461,6 +461,30 @@ async function processarMensagemRecebida(msg, valueCtx) {
     }
   }
 
+  // ─── 3.6 PESQUISA DE FOLLOW-UP: se a conversa recebeu a pesquisa de follow-up
+  // (sofia_followup_motivo) e ainda nao respondeu, QUALQUER resposta (botao ou
+  // texto) marca como respondida e corta o follow-up de catalogo
+  // (catalogo_auto_bloqueado=true, mesma regra das perdidas). NAO desvia: o
+  // fluxo normal logo abaixo ja volta a conversa de 'follow_up' pra
+  // 'conversando' e a Sofia retoma o atendimento. Colunas proprias
+  // (followup_pesq_*) — nao colide com a pesquisa de perdidas. Ailson 28/06/2026.
+  {
+    const { data: fu } = await supabase
+      .from('lojas_whats_conversas')
+      .select('followup_pesq_enviada_em, followup_pesq_respondida_em')
+      .eq('id', conversa.id)
+      .maybeSingle();
+    if (fu?.followup_pesq_enviada_em && !fu?.followup_pesq_respondida_em) {
+      const fuAgora = new Date().toISOString();
+      await supabase.from('lojas_whats_conversas').update({
+        followup_pesq_respondida_em: fuAgora,
+        followup_pesq_motivo: dadosMsg.botao ? (dadosMsg.botao_texto || null) : null,
+        catalogo_auto_bloqueado: true,   // nao recebe mais follow-up de catalogo
+      }).eq('id', conversa.id);
+      log('followup-pesquisa', `conversa ${conversa.id} respondeu (${dadosMsg.botao ? dadosMsg.botao_texto : 'texto'})`);
+    }
+  }
+
   // 4. Avanca etapa quando cliente responde
   const updates = {
     ultima_atividade_em: new Date().toISOString(),

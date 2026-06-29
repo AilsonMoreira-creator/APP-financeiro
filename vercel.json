@@ -120,6 +120,9 @@
     "api/lojas-whats-cron-followup.js": {
       "maxDuration": 300
     },
+    "api/lojas-whats-cron-followup-pesquisa.js": {
+      "maxDuration": 300
+    },
     "api/lojas-whats-cron-followup-quente.js": {
       "maxDuration": 300
     },
@@ -250,6 +253,10 @@
     {
       "path": "/api/lojas-whats-cron-pesquisa",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/lojas-whats-cron-followup-pesquisa",
+      "schedule": "0 13 * * 1-6"
     },
     {
       "path": "/api/lojas-produtos-raiox-refresh",
