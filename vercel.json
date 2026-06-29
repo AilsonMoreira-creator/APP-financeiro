@@ -51,6 +51,9 @@
     { "source": "/data-deletion", "destination": "/data-deletion.html" }
   ],
   "functions": {
+    "api/bling-fotos-sync.js": {
+      "maxDuration": 300
+    },
     "api/meluni-novidade-cron.js": {
       "maxDuration": 300
     },
