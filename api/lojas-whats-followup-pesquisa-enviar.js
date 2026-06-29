@@ -23,7 +23,6 @@ import { enviarTemplate } from './_lojas-whats-meta-client.js';
 
 const LIMITE_PADRAO = 30;
 const TEMPLATE = 'sofia_followup_motivo_v1';
-const BOTOES = ['Confirmar grade', 'Preço/condição', 'Outro motivo'];
 
 // Espelha EXATAMENTE o corpo aprovado na Meta (enviarTemplate manda o HSM mas
 // nao loga nada na thread; isto registra na thread o que a cliente recebeu).
@@ -69,13 +68,12 @@ export async function enviarFollowupConversa(conv) {
     return { ok: false, erro: e.message };
   }
 
-  // Registra o template na thread (corpo + botoes) pra a assistente ver o que a
-  // cliente recebeu. Falha aqui NAO reverte o envio (a pesquisa ja foi).
+  // Registra o template na thread pra a assistente ver o que a cliente recebeu.
+  // Sem botoes: resposta vem em texto livre. Falha aqui NAO reverte o envio.
   try {
-    const textoThread = `${CORPO(nome)}\n\n${BOTOES.map(b => `[ ${b} ]`).join('  ')}`;
     await supabase.from('lojas_whats_mensagens').insert({
       conversa_id: conv.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
-      texto: textoThread, meta_message_id: metaId, status: 'enviando', enviada_em: agora,
+      texto: CORPO(nome), meta_message_id: metaId, status: 'enviando', enviada_em: agora,
     });
   } catch (e) {
     logErro('followup-pesquisa-enviar-log', e);
