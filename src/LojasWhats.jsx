@@ -119,13 +119,18 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
   // os legados sem origem_lead corretamente setada). Ailson 28/05/2026.
   // Stories/Linktree adicionados no mesmo dia — vinham faltando aqui (no
   // CardCompacto da split view), apesar de estarem corretos no ConversaRow.
-  const origem = c.carrinho_id ? 'carrinho'
+  const origem = (c.carrinho_id || c.origem_lead === 'carrinho_site_amicialoja') ? 'carrinho'
     : c.origem_lead === 'anuncio_facebook' ? 'fb'
     : c.origem_lead === 'anuncio_instagram' ? 'ads'
     : c.origem_lead === 'instagram_stories' ? 'stories'
     : c.origem_lead === 'instagram_linktree' ? 'linktree'
     : c.origem_lead === 'sac' ? 'sac'
     : null;
+  // Carrinho "fechado por fora": veio do carrinho mas a vendedora puxou/fechou
+  // sem a Sofia ter conduzido (atendido_por != 'sofia' — ex: venda_loja).
+  // Pinta o badge carrinho em cor diferente na aba Vendeu. Ailson 30/06/2026.
+  const carrinhoForaSofia = origem === 'carrinho' && c.etapa === 'vendeu'
+    && c._atendido_por && c._atendido_por !== 'sofia';
   return (
     <div
       onClick={onClick}
@@ -193,8 +198,11 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
             }}>f Ads</span>
           )}
           {origem === 'carrinho' && (
-            <span style={{
-              background: '#fff0e0', color: '#a55a00',
+            <span title={carrinhoForaSofia
+              ? 'Carrinho do site — a vendedora fechou por fora (Sofia não conduziu a venda)'
+              : 'Lead veio do carrinho do site'} style={{
+              background: carrinhoForaSofia ? '#f3e8ff' : '#fff0e0',
+              color: carrinhoForaSofia ? '#7c3aed' : '#a55a00',
               fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
             }}>🛒 carrinho</span>
           )}
@@ -1475,7 +1483,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1494,7 +1502,22 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       if (filtroEtapa === 'perdida' && filtroPesquisaPerdida === 'com') q = q.not('pesquisa_enviada_em', 'is', null);
       else if (filtroEtapa === 'perdida' && filtroPesquisaPerdida === 'sem') q = q.is('pesquisa_enviada_em', null);
       const { data } = await q;
-      setConversas(data || []);
+      let lista = data || [];
+      // Enriquece conversas VENDIDAS com atendido_por da conversao (lojas_conversoes),
+      // pra distinguir no card "carrinho fechado por fora" (venda_loja/vendedora) de
+      // "Sofia conduziu" (sofia). Lookup leve por vendeu_venda_id. Ailson 30/06/2026.
+      const vendaIds = lista
+        .filter(c => c.etapa === 'vendeu' && c.vendeu_venda_id)
+        .map(c => c.vendeu_venda_id);
+      if (vendaIds.length) {
+        const { data: convs } = await supabase
+          .from('lojas_conversoes')
+          .select('venda_id, atendido_por')
+          .in('venda_id', vendaIds);
+        const mapaAtend = Object.fromEntries((convs || []).map(c => [c.venda_id, c.atendido_por]));
+        lista = lista.map(c => ({ ...c, _atendido_por: mapaAtend[c.vendeu_venda_id] || null }));
+      }
+      setConversas(lista);
       jaCarregouListaRef.current = true;
       setLoading(false);
     })();
