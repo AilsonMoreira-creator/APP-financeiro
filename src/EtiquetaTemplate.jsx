@@ -288,6 +288,7 @@ export function EtiquetaGerar({ sample, onClose }){
   const [corteSel,setCorteSel]=useState('');
   const [semCodigo,setSemCodigo]=useState(0);
   const [expandido,setExpandido]=useState(false);
+  const [estMap,setEstMap]=useState({}); // estoque Bling Exitus da ref: {_nc(cor)|_nt(tam): qtd}
   const _nc=(s)=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
   const _nt=(s)=>String(s||'').toLowerCase().trim();
   const _celula=(celulas,cor,tam,folhas,grade)=>{ const ov=celulas?.[`${cor}|${tam}`]; return (ov==null||ov==='')?((parseInt(folhas)||0)*(parseInt(grade)||0)):(parseInt(ov)||0); };
@@ -306,12 +307,17 @@ export function EtiquetaGerar({ sample, onClose }){
       const mine=allC.filter(c=> c?.arquivado!==true && String(c.ref||'').replace(/\D/g,'').replace(/^0+/,'')===refNorm);
       mine.sort((a,b)=> new Date(b.data||0)-new Date(a.data||0));
       setCortes(mine);
+      // estoque Bling Exitus da ref (mesmo padrão dos cortes: direto do Supabase). Ailson 30/06/2026.
+      const {data:est}=await supabase.from('bling_estoque').select('cor_norm,tam,qtd').eq('ref',refNorm);
+      const em={}; (est||[]).forEach(e=>{ const k=`${_nc(e.cor_norm)}|${_nt(e.tam)}`; em[k]=(em[k]||0)+(Number(e.qtd)||0); });
+      setEstMap(em);
     }catch(e){ setLay(null); }
     setLoading(false);
   }
   useEffect(()=>{ carregar(); /* eslint-disable-next-line */ },[refNorm]);
 
   const total = skus.reduce((s,r)=>s+(r.qty||0),0);
+  const estoqueTotal = Object.values(estMap).reduce((s,v)=>s+(v||0),0);
   const setQty=(i,v)=>setSkus(p=>p.map((r,j)=>j===i?{...r,qty:Math.max(0,parseInt(v)||0)}:r));
   const setTodos=(v)=>{ const n=Math.max(0,parseInt(v)||0); setSkus(p=>p.map(r=>({...r,qty:n}))); setCorteSel(''); setSemCodigo(0); };
 
@@ -334,6 +340,13 @@ export function EtiquetaGerar({ sample, onClose }){
     let falta=0; Object.entries(m).forEach(([k,v])=>{ if(!have.has(k)) falta+=v; });
     setSemCodigo(falta);
     setSkus(p=>p.map(r=>({...r, qty: m[`${_nc(r.cor)}|${_nt(r.tam)}`]||0})));
+  }
+  function aplicarEstoque(){
+    setCorteSel('');
+    const have=new Set(skus.map(r=>`${_nc(r.cor)}|${_nt(r.tam)}`));
+    let falta=0; Object.entries(estMap).forEach(([k,v])=>{ if(!have.has(k)) falta+=v; });
+    setSemCodigo(falta);
+    setSkus(p=>p.map(r=>({...r, qty: estMap[`${_nc(r.cor)}|${_nt(r.tam)}`]||0})));
   }
 
   async function gerar(){
@@ -378,7 +391,13 @@ export function EtiquetaGerar({ sample, onClose }){
                 </select>
               </div>
             )}
-            {semCodigo>0 && <div style={{fontSize:11.5,color:'#8a6500',background:'#fff8e8',border:'1px solid #f0d080',borderRadius:8,padding:'7px 10px',marginBottom:10}}>{semCodigo} peças do corte estão em cores/tamanhos sem código de barras e não entram. Gere o GTIN delas antes.</div>}
+            {estoqueTotal>0 && (
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+                <button onClick={aplicarEstoque} style={{background:'#fff',color:C.navy,border:`1px solid ${C.edge}`,borderRadius:8,padding:'8px 12px',fontSize:12.5,fontWeight:700,fontFamily:SERIF,cursor:'pointer',whiteSpace:'nowrap'}}>🟦 puxar do estoque Bling ({estoqueTotal})</button>
+                <span style={{fontSize:11,color:C.muted2}}>cada variação recebe a qtd do estoque Exitus</span>
+              </div>
+            )}
+            {semCodigo>0 && <div style={{fontSize:11.5,color:'#8a6500',background:'#fff8e8',border:'1px solid #f0d080',borderRadius:8,padding:'7px 10px',marginBottom:10}}>{semCodigo} peças estão em cores/tamanhos sem código de barras e não entram. Gere o GTIN delas antes.</div>}
             <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10,flexWrap:'wrap'}}>
               <div style={{fontSize:12,color:C.muted2}}>{skus.length} variações com código</div>
               <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
