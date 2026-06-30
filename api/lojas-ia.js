@@ -4122,6 +4122,13 @@ function _calcularRangeConversoes(periodo) {
       label = 'Últimos 7 dias';
       break;
     }
+    case '30d': {
+      const d = new Date(hoje);
+      d.setDate(d.getDate() - 30);
+      inicio = d.toISOString().slice(0, 10);
+      label = 'Últimos 30 dias';
+      break;
+    }
     case 'mes_passado': {
       const d = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
       const fimMes = new Date(hoje.getFullYear(), hoje.getMonth(), 0);

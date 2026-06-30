@@ -1025,7 +1025,7 @@ const ModalMetaIndividual = ({ vendedora, userId, onClose }) => {
 //     que viraram venda em até 15 dias)
 //   - Valor total convertido
 //   - Breakdown por status (atenção / sem atividade / inativo)
-//   - Filtros: mês atual (default) | últimos 7d | mês passado
+//   - Filtros: últimos 30d | mês atual (default) | mês passado
 //
 const CardConversoes = ({ lojas }) => {
   const [periodo, setPeriodo] = useState('mes_atual');
@@ -1049,8 +1049,8 @@ const CardConversoes = ({ lojas }) => {
   }, [periodo]);
 
   const PERIODOS = [
+    { id: '30d',         label: 'Últimos 30d' },
     { id: 'mes_atual',   label: 'Mês atual' },
-    { id: '7d',          label: 'Últimos 7d' },
     { id: 'mes_passado', label: 'Mês passado' },
   ];
 
