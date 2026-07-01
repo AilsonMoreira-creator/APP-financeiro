@@ -4920,12 +4920,16 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [logsBlingData,setLogsBlingData]=useState(''); // 'YYYY-MM-DD' → dia específico
   const abrirLogsBling=async(refFiltro)=>{
     setLogsBlingAberto(true);setLogsBlingLoading(true);
-    // Botão de log dentro do card: já abre filtrado naquela REF e mostrando todas as origens.
-    if(refFiltro!=null){setLogsBlingBusca(String(refFiltro));setLogsBlingOrigem('todas');}
+    const doCard=refFiltro!=null;
+    const rn=doCard?String(refFiltro).replace(/\D/g,'').replace(/^0+/,''):'';
+    // Botão de log dentro do card: abre já filtrado na REF, só manual e leve (30 linhas) pra carregar rápido.
+    if(doCard){setLogsBlingBusca(String(refFiltro));setLogsBlingOrigem('manual');setLogsBlingUsuario('todos');setLogsBlingPeriodo('tudo');setLogsBlingData('');}
     try{
-      const {data,error}=await supabase.from('bling_estoque_logs')
+      let query=supabase.from('bling_estoque_logs')
         .select('id,ref,cor_norm,tam,cor_label,qtd_anterior,qtd_nova,delta,motivo,usuario,origem,criado_em')
-        .order('criado_em',{ascending:false}).limit(1000);
+        .order('criado_em',{ascending:false});
+      query=doCard?query.eq('ref',rn).eq('origem','manual').limit(30):query.limit(1000);
+      const {data,error}=await query;
       if(error)throw error;
       setLogsBling(data||[]);
     }catch(e){console.error('logs bling:',e?.message||e);setLogsBling([]);}
