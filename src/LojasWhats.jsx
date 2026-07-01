@@ -1393,6 +1393,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   // Sub-filtro da aba Perdida: ver quem recebeu / nao recebeu a pesquisa de
   // motivo. 'todos' | 'com' | 'sem'. Ailson 22/06/2026.
   const [filtroPesquisaPerdida, setFiltroPesquisaPerdida] = useState('todos');
+  // Contador de pesquisas enviadas HOJE (BRT) na etapa ativa (follow_up / perdida).
+  const [enviadosHoje, setEnviadosHoje] = useState(0);
 
   // Sincroniza se filtroInicial mudar (ex: navegacao entre tabs Aprovar/Conversas)
   useEffect(() => { setFiltroEtapa(filtroInicial); }, [filtroInicial]);
@@ -1522,6 +1524,23 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       setLoading(false);
     })();
   }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida]);
+
+  // Conta quantas pesquisas saíram HOJE (BRT) na etapa ativa: follow_up usa
+  // followup_pesq_enviada_em, perdida usa pesquisa_enviada_em. Recarrega junto
+  // com a lista (reloadTick) pra refletir envios recém-feitos.
+  useEffect(() => {
+    if (filtroEtapa !== 'follow_up' && filtroEtapa !== 'perdida') { setEnviadosHoje(0); return; }
+    let vivo = true;
+    (async () => {
+      const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+      const desde = `${ymd}T03:00:00.000Z`; // 00:00 BRT = 03:00 UTC
+      const col = filtroEtapa === 'follow_up' ? 'followup_pesq_enviada_em' : 'pesquisa_enviada_em';
+      const { count } = await supabase.from('lojas_whats_conversas')
+        .select('id', { count: 'exact', head: true }).gte(col, desde);
+      if (vivo) setEnviadosHoje(count || 0);
+    })();
+    return () => { vivo = false; };
+  }, [filtroEtapa, reloadTick, refreshTick]);
 
   useEffect(() => {
     if (!feedback) return;
@@ -1928,6 +1947,18 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                 }}>{label}</button>
             );
           })}
+        </div>
+      )}
+
+      {(filtroEtapa === 'follow_up' || filtroEtapa === 'perdida') && (
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 10,
+          padding: '6px 12px', borderRadius: 999,
+          background: palette.surface, border: `1px solid ${palette.beige}`,
+          fontFamily: FONT, fontSize: fz(12), fontWeight: 700, color: palette.inkSoft,
+        }}>
+          <Send size={13} color={palette.accent} />
+          {enviadosHoje} {enviadosHoje === 1 ? 'pesquisa enviada' : 'pesquisas enviadas'} hoje
         </div>
       )}
 

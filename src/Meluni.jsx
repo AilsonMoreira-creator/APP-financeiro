@@ -188,6 +188,26 @@ const diasDesdeCompra = (d) => {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
   return Math.round((hoje - compra) / 86400000);
 };
+
+// contador de disparos de hoje no modo Meluni (clientes / carrinho). key muda -> re-busca
+function useDisparosHoje(key) {
+  const [n, setN] = useState({ clientes: 0, carrinho: 0 });
+  useEffect(() => {
+    let vivo = true;
+    fetch('/api/meluni-disparos-hoje').then(r => r.json())
+      .then(j => { if (vivo && j?.ok) setN({ clientes: j.clientes || 0, carrinho: j.carrinho || 0 }); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, [key]);
+  return n;
+}
+const PillHoje = ({ n }) => (
+  <span title="disparos enviados hoje (a partir das 00h BRT)" style={{
+    display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 12,
+    fontWeight: 700, color: MELUNI, background: MELUNI_SOFT, border: `1px solid ${palette.beige}`,
+    borderRadius: 999, padding: '4px 11px',
+  }}><Send size={12} /> {n} enviados hoje</span>
+);
 // data + hora a partir de timestamptz (pra linha do tempo da devolução)
 const fmtDH = (ts) => {
   if (!ts) return '';
@@ -732,6 +752,8 @@ function SecaoClientes() {
   const [conv30, setConv30] = useState(0);
   const [disparando, setDisparando] = useState(false);
   const [campanha, setCampanha] = useState('poscompra');
+  const [recargaHoje, setRecargaHoje] = useState(0);
+  const disparosHoje = useDisparosHoje(recargaHoje);
   const isDesktop = useIsDesktop();
   // Liga/desliga do disparo pós-compra AUTOMÁTICO (cron seg-sáb 10h). Desligar
   // serve pra bloquear o auto no dia de disparo de novidade/promoção. Ailson 26/06.
@@ -844,6 +866,7 @@ function SecaoClientes() {
         alert(`Enviados: ${j.enviados} · Pulados: ${j.pulados}${j.erros ? ` · Erros: ${j.erros}` : ''}`);
         setSel(new Set());
         carregar();
+        setRecargaHoje(x => x + 1);
       } else { alert('Falhou: ' + (j.erro || 'erro')); }
     } catch (e) { alert('Erro: ' + (e?.message || e)); }
     setDisparando(false);
@@ -881,6 +904,7 @@ function SecaoClientes() {
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>
           seg–sáb 10h · 10 a 14 dias · 1 envio por cliente · pula quem tem devolução
         </span>
+        <span style={{ marginLeft: 'auto' }}><PillHoje n={disparosHoje.clientes} /></span>
       </div>
 
       {/* barra de filtros */}
@@ -1115,6 +1139,8 @@ function SecaoCarrinho() {
   const [dias, setDias] = useState(30); // só últimos 30 dias por padrão (0 = todos)
   const [disparando, setDisparando] = useState(false);
   const [dispMsg, setDispMsg] = useState('');
+  const [recargaHoje, setRecargaHoje] = useState(0);
+  const disparosHoje = useDisparosHoje(recargaHoje);
   const isDesktop = useIsDesktop();
   const LIM = 60;
   const tabs = [
@@ -1179,7 +1205,7 @@ function SecaoCarrinho() {
       const j = await r.json();
       if (j.ok) {
         setDispMsg(`✓ ${j.enviados} enviado(s)${j.pulados ? ` · ${j.pulados} pulado(s)` : ''}${j.erros ? ` · ${j.erros} erro(s)` : ''}`);
-        setSel(new Set()); carregar(0);
+        setSel(new Set()); carregar(0); setRecargaHoje(x => x + 1);
       } else { setDispMsg(j.erro || 'falhou'); }
     } catch { setDispMsg('falhou'); }
     setDisparando(false);
@@ -1207,6 +1233,7 @@ function SecaoCarrinho() {
         <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
           {loading ? 'carregando…' : `${total} no funil`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
         </span>
+        <span style={{ marginLeft: 'auto' }}><PillHoje n={disparosHoje.carrinho} /></span>
         {aba === 'processando' && sel.size > 0 && (
           <button onClick={dispararSel} disabled={disparando}
             style={{ ...fbtn(VERDE_ENVIAR, '#fff'), opacity: disparando ? 0.7 : 1 }}>
