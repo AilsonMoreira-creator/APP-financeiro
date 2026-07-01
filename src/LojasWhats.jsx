@@ -1548,6 +1548,23 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
     return () => { vivo = false; };
   }, [filtroEtapa, reloadTick, refreshTick]);
 
+  // Resolve o valor da venda dos cards em 'vendeu' que estao sem vendeu_valor,
+  // buscando no Mire (documento -> telefone -> nome). Roda 1x ao abrir a aba;
+  // se gravou algum, recarrega a lista pro card mostrar. Ailson 01/07/2026.
+  const resolveuValoresRef = useRef(false);
+  useEffect(() => {
+    if (filtroEtapa !== 'vendeu') { resolveuValoresRef.current = false; return; }
+    if (resolveuValoresRef.current) return;
+    resolveuValoresRef.current = true;
+    (async () => {
+      try {
+        const r = await fetch('/api/lojas-whats-vendeu-valores');
+        const j = await r.json();
+        if (j?.resolvidos?.length) setReloadTick(x => x + 1);
+      } catch { /* silencioso */ }
+    })();
+  }, [filtroEtapa]);
+
   useEffect(() => {
     if (!feedback) return;
     const t = setTimeout(() => setFeedback(null), 4000);
