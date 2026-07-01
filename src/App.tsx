@@ -4918,9 +4918,11 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [logsBlingUsuario,setLogsBlingUsuario]=useState('todos');
   const [logsBlingPeriodo,setLogsBlingPeriodo]=useState('tudo'); // 'tudo' | '7d'
   const [logsBlingData,setLogsBlingData]=useState(''); // 'YYYY-MM-DD' → dia específico
+  const [logsBlingModoCard,setLogsBlingModoCard]=useState(false); // aberto pelo card = só manual, esconde outras origens
   const abrirLogsBling=async(refFiltro)=>{
     setLogsBlingAberto(true);setLogsBlingLoading(true);
     const doCard=refFiltro!=null;
+    setLogsBlingModoCard(doCard);
     const rn=doCard?String(refFiltro).replace(/\D/g,'').replace(/^0+/,''):'';
     // Botão de log dentro do card: abre já filtrado na REF, só manual e leve (30 linhas) pra carregar rápido.
     if(doCard){setLogsBlingBusca(String(refFiltro));setLogsBlingOrigem('manual');setLogsBlingUsuario('todos');setLogsBlingPeriodo('tudo');setLogsBlingData('');}
@@ -5857,7 +5859,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           &&(logsBlingUsuario==='todos'||l.usuario===logsBlingUsuario)
           &&dentroData(l.criado_em)
         );
-        const ORIGENS=[['todas','Todas'],['manual','✏️ Manual'],['bling_sync','🟦 Sync'],['webhook','⚡ Webhook']];
+        const ORIGENS=logsBlingModoCard?[['manual','✏️ Manual']]:[['todas','Todas'],['manual','✏️ Manual'],['bling_sync','🟦 Sync'],['webhook','⚡ Webhook']];
         const fmtDt=(d)=>{try{const x=new Date(d);return x.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+x.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}catch{return '';}};
         const chipStl=(ativo)=>({background:ativo?"#2c3e50":"#faf8f5",color:ativo?"#fff":"#5a6470",border:"1px solid "+(ativo?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"5px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,whiteSpace:"nowrap"});
         const periodoTudo=logsBlingPeriodo==='tudo'&&!logsBlingData;
