@@ -371,26 +371,70 @@ export default async function handler(req, res) {
     }
 
     // ─── UPSERT clientes em batches (Supabase aceita até 1000 por vez) ──
+    // Ailson 01/07/2026 — BUG "CARRINHO SOME DA CARTEIRA":
+    // O upsert cego reescrevia status='novo' em TODO lead reimportado, inclusive
+    // os que a vendedora já tinha atendido (status=mensagem_enviada). No dia
+    // seguinte o cron das 8h derrubava o lead da carteira dela (escopo
+    // meus_carrinhos exige status in mensagem_enviada/convertido) e ele nem
+    // voltava pra fila pública (ultima_msg_enviada_em preenchido). Virava limbo.
+    // Correção (opção A): NÃO tocar em status de lead que já existe. Cliente
+    // novo entra com status inicial; existente só atualiza cadastro
+    // (telefone, nome, uf) — status e vínculo de atendimento ficam preservados.
     const BATCH = 500;
     const leadIdMap = new Map(); // convertr_customer_id → uuid do lead
-    for (let i = 0; i < leadsParaUpsert.length; i += BATCH) {
-      const batch = leadsParaUpsert.slice(i, i + BATCH);
-      const { data, error } = await supabase
+
+    // 1) Descobre quais convertr_customer_id já existem
+    const existentesSet = new Set();
+    const idsParaChecar = leadsParaUpsert.map(l => l.convertr_customer_id);
+    for (let i = 0; i < idsParaChecar.length; i += BATCH) {
+      const chunk = idsParaChecar.slice(i, i + BATCH);
+      const { data: existData, error: existErr } = await supabase
         .from('lojas_leads_carrinho')
-        .upsert(batch, { onConflict: 'convertr_customer_id', ignoreDuplicates: false })
-        .select('id, convertr_customer_id');
-
-      if (error) {
-        console.error('[lojas-leads-importar] upsert clientes batch', i, error);
-        return res.status(500).json({
-          error: 'Erro ao gravar leads',
-          details: error.message,
-          batch_failed_at: i,
-          stats,
-        });
+        .select('convertr_customer_id')
+        .in('convertr_customer_id', chunk);
+      if (existErr) {
+        console.error('[lojas-leads-importar] erro check existentes', i, existErr);
+        return res.status(500).json({ error: 'Erro ao checar leads existentes', details: existErr.message, stats });
       }
+      (existData || []).forEach(r => existentesSet.add(Number(r.convertr_customer_id)));
+    }
 
-      (data || []).forEach(r => leadIdMap.set(Number(r.convertr_customer_id), r.id));
+    // 2) Separa novos (com status inicial) vs existentes (sem status — preserva atendimento)
+    const leadsNovos = [];
+    const leadsExistentes = [];
+    for (const l of leadsParaUpsert) {
+      if (existentesSet.has(Number(l.convertr_customer_id))) {
+        const { status, ...semStatus } = l; // remove status do payload de update
+        leadsExistentes.push(semStatus);
+      } else {
+        leadsNovos.push(l);
+      }
+    }
+    stats.leads_novos = leadsNovos.length;
+    stats.leads_atualizados = leadsExistentes.length;
+
+    // 3) Upsert dos dois grupos (shapes diferentes → chamadas separadas)
+    for (const grupo of [leadsNovos, leadsExistentes]) {
+      for (let i = 0; i < grupo.length; i += BATCH) {
+        const batch = grupo.slice(i, i + BATCH);
+        if (batch.length === 0) continue;
+        const { data, error } = await supabase
+          .from('lojas_leads_carrinho')
+          .upsert(batch, { onConflict: 'convertr_customer_id', ignoreDuplicates: false })
+          .select('id, convertr_customer_id');
+
+        if (error) {
+          console.error('[lojas-leads-importar] upsert clientes batch', i, error);
+          return res.status(500).json({
+            error: 'Erro ao gravar leads',
+            details: error.message,
+            batch_failed_at: i,
+            stats,
+          });
+        }
+
+        (data || []).forEach(r => leadIdMap.set(Number(r.convertr_customer_id), r.id));
+      }
     }
 
     // ─── Processa CSV de CARRINHOS (se enviado) ───────────────────────
