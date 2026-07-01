@@ -255,6 +255,12 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               display: 'inline-flex', alignItems: 'center', gap: 3,
             }}>👤 estava com {vendedoraNome}</span>
           )}
+          {c.etapa === 'vendeu' && Number(c._valor_venda) > 0 && (
+            <span title="Valor da venda fechada" style={{
+              background: '#e6f7ee', color: '#1f7a48',
+              fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
+            }}>{fmtMoney(c._valor_venda)}</span>
+          )}
           {origem === 'carrinho' ? (
             <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas || 0} pç</span>
           ) : c.qtd_pecas > 0 && (
@@ -1514,10 +1520,11 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       if (vendaIds.length) {
         const { data: convs } = await supabase
           .from('lojas_conversoes')
-          .select('venda_id, atendido_por')
+          .select('venda_id, atendido_por, valor_venda')
           .in('venda_id', vendaIds);
         const mapaAtend = Object.fromEntries((convs || []).map(c => [c.venda_id, c.atendido_por]));
-        lista = lista.map(c => ({ ...c, _atendido_por: mapaAtend[c.vendeu_venda_id] || null }));
+        const mapaValor = Object.fromEntries((convs || []).map(c => [c.venda_id, c.valor_venda]));
+        lista = lista.map(c => ({ ...c, _atendido_por: mapaAtend[c.vendeu_venda_id] || null, _valor_venda: mapaValor[c.vendeu_venda_id] ?? null }));
       }
       setConversas(lista);
       jaCarregouListaRef.current = true;
@@ -2613,6 +2620,9 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
             )}
             {c.qtd_pecas > 0 && <span>· {c.qtd_pecas} peças</span>}
             {Number(c.valor_carrinho) > 0 && <span>· {fmtMoney(c.valor_carrinho)}</span>}
+            {c.etapa === 'vendeu' && Number(c._valor_venda) > 0 && (
+              <span style={{ fontWeight: 700, color: palette.ok }}>· venda {fmtMoney(c._valor_venda)}</span>
+            )}
           </div>
         </div>
 
