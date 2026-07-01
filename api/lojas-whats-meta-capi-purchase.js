@@ -38,6 +38,11 @@ const META_GRAPH_VERSION = 'v21.0';
 // por isso os 13 Purchase anteriores foram pro pixel errado. Ailson 01/07/2026.
 const PIXEL_B2B_ID = '1636287600816161';
 
+// Pagina FB por tras dos anuncios CTWA da conta Amicia conv cartao (626487585630124).
+// Obrigatoria em user_data.page_id quando action_source=business_messaging/whatsapp
+// (Meta subcode 2804069). O WABA via env estava errado (era o da Meluni). Ailson 01/07/2026.
+const PAGE_ID_B2B = '113310001265359';
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -137,11 +142,9 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
   if (conv.ctwa_clid) {
     user_data.ctwa_clid = conv.ctwa_clid;              // NAO hashed (Meta exige plain)
   }
-  // page_id / WABA obrigatorio quando action_source=business_messaging (Meta subcode 2804069).
-  // Usa o WhatsApp Business Account da Sofia (mesma env dos templates B2B). Plain, nao hashed.
-  if (process.env.META_WA_WABA_ID) {
-    user_data.whatsapp_business_account_id = process.env.META_WA_WABA_ID;
-  }
+  // page_id obrigatorio quando action_source=business_messaging/whatsapp (Meta subcode 2804069).
+  // Plain, nao hashed. Pagina FB dos anuncios CTWA da Amicia. Ailson 01/07/2026.
+  user_data.page_id = PAGE_ID_B2B;
   // Remove campos null
   for (const k of Object.keys(user_data)) {
     if (user_data[k] === null || user_data[k] === undefined) delete user_data[k];
@@ -275,10 +278,8 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
     fn: sha(firstName),
     ln: sha(lastName),
   };
-  // page_id / WABA obrigatorio p/ business_messaging/whatsapp (Meta subcode 2804069).
-  if (process.env.META_WA_WABA_ID) {
-    user_data.whatsapp_business_account_id = process.env.META_WA_WABA_ID;
-  }
+  // page_id obrigatorio p/ business_messaging/whatsapp (Meta subcode 2804069).
+  user_data.page_id = PAGE_ID_B2B;
   for (const k of Object.keys(user_data)) {
     if (user_data[k] === null || user_data[k] === undefined) delete user_data[k];
   }
