@@ -179,6 +179,15 @@ const fmtTel = (t) => {
   return t;
 };
 const fmtData = (d) => d ? String(d).split('-').reverse().join('/') : '—';
+// dias desde uma compra (YYYY-MM-DD) ate hoje, no fuso local (BRT no dispositivo)
+const diasDesdeCompra = (d) => {
+  if (!d) return null;
+  const [y, m, dd] = String(d).split('-').map(Number);
+  if (!y || !m || !dd) return null;
+  const compra = new Date(y, m - 1, dd);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  return Math.round((hoje - compra) / 86400000);
+};
 // data + hora a partir de timestamptz (pra linha do tempo da devolução)
 const fmtDH = (ts) => {
   if (!ts) return '';
@@ -283,6 +292,9 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
               <span style={{ fontSize: 15, fontWeight: 600, color: palette.ink }}>{c.nome || '—'}</span>
               {c.conversa_pendente && <PillConversa tempo={tempoSemResposta(c.pendente_em)} />}
               {semCompra && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>só cadastro</span>}
+              {!semCompra && (() => { const dd = diasDesdeCompra(c.ultima_compra); return dd != null && dd < 10 ? (
+                <span title="comprou há menos de 10 dias, a mercadoria pode não ter chegado" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: '#fff4e5', color: '#b26a00', fontWeight: 700, border: '1px solid #f0d9b5' }}>🚚 há {dd}d</span>
+              ) : null; })()}
             </div>
             <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
@@ -795,13 +807,30 @@ function SecaoClientes() {
   const selTodos = () => setSel(sel.size === comFone.length && comFone.length ? new Set() : new Set(comFone.map(c => c.id)));
 
   const dispararSel = async () => {
-    const ids = Array.from(sel);
+    let ids = Array.from(sel);
     if (!ids.length || disparando) return;
     const ehNovidade = campanha === 'novidade';
     const nomeCampanha = ehNovidade ? 'a novidade (moletinho)' : 'a mensagem pós-compra da Lara';
+
+    // trava pos-compra: nao dispara antes de 10 dias da compra (mercadoria pode nao ter chegado).
+    // O backend tambem barra; aqui so tira da selecao e avisa pra o numero bater.
+    let avisoRecentes = '';
+    if (!ehNovidade) {
+      const setRec = new Set(ids.filter(id => {
+        const c = clientes.find(x => x.id === id);
+        const dd = diasDesdeCompra(c?.ultima_compra);
+        return dd != null && dd < 10;
+      }));
+      if (setRec.size) {
+        ids = ids.filter(id => !setRec.has(id));
+        avisoRecentes = `${setRec.size} cliente(s) compraram há menos de 10 dias e NÃO vão receber (a mercadoria pode não ter chegado).\n\n`;
+        if (!ids.length) { alert(avisoRecentes + 'Nenhum cliente restante pra disparar.'); return; }
+      }
+    }
+
     const aviso = ids.length > 30
-      ? `Você selecionou ${ids.length}. Vão sair os primeiros 30 agora (repita pra continuar). Disparar ${nomeCampanha}?`
-      : `Disparar ${nomeCampanha} pra ${ids.length} cliente(s)? Envia agora no WhatsApp.`;
+      ? `${avisoRecentes}Você selecionou ${ids.length}. Vão sair os primeiros 30 agora (repita pra continuar). Disparar ${nomeCampanha}?`
+      : `${avisoRecentes}Disparar ${nomeCampanha} pra ${ids.length} cliente(s)? Envia agora no WhatsApp.`;
     if (!window.confirm(aviso)) return;
     setDisparando(true);
     try {

@@ -12,6 +12,7 @@ import { enviarTemplateLara } from './_meluni-whats-meta.js';
 
 const ETAPAS_FECHADAS = ['conversao', 'ganho', 'perdido'];
 const MAX_POR_CHAMADA = 30;
+const MIN_DIAS_POS_COMPRA = 10; // trava: nao dispara pos-compra manual antes de 10 dias da compra (mercadoria pode nao ter chegado)
 
 const soDigitos = (s) => String(s || '').replace(/\D/g, '');
 // canônico = sem o 55 da frente (igual ao inbound canonTel), pra casar a conversa
@@ -24,6 +25,11 @@ function renderTpl(body, params) {
   let s = String(body || '');
   params.forEach((p, i) => { s = s.split('{{' + (i + 1) + '}}').join(String(p)); });
   return s;
+}
+// data ISO (YYYY-MM-DD) de N dias atras no fuso BRT (UTC-3), igual ao cron pos-compra
+function diaBRT(offsetDias) {
+  const d = new Date(Date.now() - 3 * 3600e3 - offsetDias * 86400e3);
+  return d.toISOString().slice(0, 10);
 }
 
 async function acharOuCriarConversaCliente(tel, nome, clienteId) {
@@ -62,7 +68,7 @@ export default async function handler(req, res) {
   const lang = cfg.idioma || 'pt_BR';
 
   const { data: clientes } = await supabase.from('meluni_clientes')
-    .select('id, nome, telefone, whatsapp, bloqueado').in('id', ids);
+    .select('id, nome, telefone, whatsapp, bloqueado, ultima_compra').in('id', ids);
   const mapC = new Map((clientes || []).map(c => [c.id, c]));
 
   let enviados = 0, pulados = 0, erros = 0;
@@ -77,6 +83,13 @@ export default async function handler(req, res) {
       if (!tel || tel.length < 10) { pulados++; detalhe.push({ id, status: 'sem_telefone' }); continue; }
       const nome = primeiroNome(c.nome);
       if (!nome) { pulados++; detalhe.push({ id, status: 'sem_nome' }); continue; }
+
+      // trava pos-compra: so dispara a partir de MIN_DIAS_POS_COMPRA dias da compra.
+      // Meluni vai tudo por transportadora, antes disso a mercadoria pode nao ter chegado.
+      if (c.ultima_compra && c.ultima_compra > diaBRT(MIN_DIAS_POS_COMPRA)) {
+        const dias = Math.floor((new Date(diaBRT(0)) - new Date(c.ultima_compra)) / 86400e3);
+        pulados++; detalhe.push({ id, status: 'compra_recente', dias, minimo: MIN_DIAS_POS_COMPRA }); continue;
+      }
 
       const conv = await acharOuCriarConversaCliente(tel, c.nome, c.id);
       if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) { pulados++; detalhe.push({ id, status: 'conversa_fechada' }); continue; }
