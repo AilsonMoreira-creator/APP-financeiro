@@ -9443,6 +9443,75 @@ const FichaTecnicaContent=()=>{
 }
 
 
+// ── MERGE PROFUNDO reaproveitável (mesma lógica do salvarNoSupabase) ──────────
+// Usado tanto no save quanto no handler de Realtime, pra o Realtime MESCLAR
+// (preservar edits locais ainda não gravados) em vez de SUBSTITUIR e apagar.
+const _auxStrip=(it)=>{try{const{id,_c,_m,...r}=it;return JSON.stringify(r);}catch(e){return JSON.stringify(it);}};
+function mergeReceitasDeep(localRec,remoteRec){
+  if(!remoteRec)return localRec||{};
+  localRec=localRec||{};
+  const merged={};
+  const todosMeses=new Set([...Object.keys(localRec),...Object.keys(remoteRec)]);
+  for(const m of todosMeses){
+    const localMes=localRec[m];const remoteMes=remoteRec[m];
+    if(!localMes||(typeof localMes==='object'&&Object.keys(localMes).length===0)){
+      if(remoteMes&&Object.keys(remoteMes).length>0){merged[m]=remoteMes;continue;}
+    }
+    if(!remoteMes||Object.keys(remoteMes).length===0){merged[m]=localMes;continue;}
+    const mergedMes={...localMes};
+    for(const diaKey of Object.keys(remoteMes)){
+      const localDia=localMes[diaKey];const remoteDia=remoteMes[diaKey];
+      if(!localDia||(typeof localDia==='object'&&Object.keys(localDia).length===0)){mergedMes[diaKey]=remoteDia;continue;}
+      if(typeof localDia==='object'&&typeof remoteDia==='object'){
+        const mergedDia={...remoteDia,...localDia};
+        for(const campo of Object.keys(remoteDia)){
+          const lv=localDia[campo];const rv=remoteDia[campo];
+          const localVazio=lv===undefined||lv===null||lv===""||lv==="0"||Number(lv)===0;
+          if(localVazio&&rv!==undefined&&rv!==""&&Number(rv)>0)mergedDia[campo]=rv;
+        }
+        mergedMes[diaKey]=mergedDia;
+      }
+    }
+    merged[m]=mergedMes;
+  }
+  return merged;
+}
+function mergeAuxDeep(localAux,remoteAux,snapTs){
+  if(!remoteAux)return localAux||{};
+  localAux=localAux||{};snapTs=snapTs||0;
+  const merged={};
+  const todosMeses=new Set([...Object.keys(localAux),...Object.keys(remoteAux)]);
+  for(const m of todosMeses){
+    const localMes=localAux[m];const remoteMes=remoteAux[m];
+    if(!localMes||Object.keys(localMes).length===0){if(remoteMes)merged[m]=remoteMes;continue;}
+    if(!remoteMes||Object.keys(remoteMes).length===0){merged[m]=localMes;continue;}
+    const mergedMes={...localMes};
+    for(const cat of Object.keys(remoteMes)){
+      const localCat=localMes[cat];const remoteCat=remoteMes[cat];
+      if(!Array.isArray(remoteCat)||remoteCat.length===0)continue;
+      if(!localCat||(Array.isArray(localCat)&&localCat.length===0)){mergedMes[cat]=remoteCat;continue;}
+      if(!Array.isArray(localCat))continue;
+      const out=[...localCat];
+      const idsLoc=new Set(localCat.filter(i=>i&&i.id).map(i=>i.id));
+      const cortesLoc=new Set(localCat.filter(i=>i&&i.corte_id!=null).map(i=>String(i.corte_id)));
+      const jsonLoc=new Set(localCat.filter(i=>i&&typeof i==='object').map(_auxStrip));
+      for(const r of remoteCat){
+        if(!r||typeof r!=='object')continue;
+        if(r.id&&idsLoc.has(r.id)){const idx=out.findIndex(i=>i&&i.id===r.id);if(idx>=0&&(r._m||0)>(out[idx]._m||0))out[idx]=r;continue;}
+        if(r.corte_id!=null&&cortesLoc.has(String(r.corte_id)))continue;
+        if(jsonLoc.has(_auxStrip(r)))continue;
+        const nasc=r._c||r._m||0;
+        if(nasc===0){out.push(r);continue;}
+        if(nasc>snapTs){out.push(r);continue;}
+        // mais velho que meu snapshot e ausente local = exclusão deliberada → respeita
+      }
+      mergedMes[cat]=out;
+    }
+    merged[m]=mergedMes;
+  }
+  return merged;
+}
+
 export default function App(){
   const [usuarioLogado,setUsuarioLogado]=useState(()=>{try{const s=localStorage.getItem("amica_session");if(!s)return null;const u=JSON.parse(s);const ehAdmin=(u.id===1||u.usuario==='admin');if(ehAdmin){u.admin=true;/* Admin sempre recebe TODOS os modulos atualizados (inclui modulos novos como osamicia) */u.modulos=[...TODOS_MODULOS,"usuarios"];try{localStorage.setItem("amica_session",JSON.stringify(u));}catch{}}return u;}catch{return null;}});
   const [active,setActive]=useState(()=>{
@@ -10012,9 +10081,11 @@ export default function App(){
         }catch(e){}
         console.log("REALTIME: recebido update de outro device, timestamp:",new Date(d._updated).toLocaleString("pt-BR"));
         realtimeProcessing.current=true;
-        if(d.receitasPorMes)setReceitasPorMes(d.receitasPorMes);
-        if(d.auxDataPorMes)setAuxDataPorMes(d.auxDataPorMes);
-        if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
+        // MESCLA (não substitui): preserva despesas/receitas locais ainda não gravadas
+        // e traz junto as mudanças do outro device. Corrige o sumiço de lançamentos.
+        if(d.receitasPorMes)setReceitasPorMes(prev=>mergeReceitasDeep(prev||{},d.receitasPorMes));
+        if(d.auxDataPorMes)setAuxDataPorMes(prev=>mergeAuxDeep(prev||{},d.auxDataPorMes,dbCarregadoTs.current||0));
+        if(d.categoriasPorMes)setCategoriasPorMes(prev=>{const mm={...(prev||{})};Object.keys(d.categoriasPorMes).forEach(k=>{if(!prev||!prev[k])mm[k]=d.categoriasPorMes[k];});return mm;});
         // Merge boletos: mantém todos, mais recente por _mod ganha
         if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(prev=>{
           const rm=new Map(d.boletosShared.map(b=>[b.id,b]));
@@ -11104,9 +11175,9 @@ export default function App(){
   );
 
   const getReceitasMes=(m)=>receitasPorMes[m]||{};
-  const setReceitasMes=(m,fn)=>setReceitasPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||{}):fn}));
-  const setAuxMes=(m,fn)=>setAuxDataPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||{}):fn}));
-  const setCatsMes=(m,fn)=>setCategoriasPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||[...CATS]):fn}));
+  const setReceitasMes=(m,fn)=>{lastUserEditTs.current=Date.now();setReceitasPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||{}):fn}));};
+  const setAuxMes=(m,fn)=>{lastUserEditTs.current=Date.now();setAuxDataPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||{}):fn}));};
+  const setCatsMes=(m,fn)=>{lastUserEditTs.current=Date.now();setCategoriasPorMes(prev=>({...prev,[m]:typeof fn==="function"?fn(prev[m]||[...CATS]):fn}));};
 
   // ── ABAS RECORRENTES: estrutura persiste, valores zeram todo mes ────────────
   const ehAdminApp=!!(usuarioLogado&&(usuarioLogado.id===1||usuarioLogado.usuario==='admin'||usuarioLogado.admin===true));
