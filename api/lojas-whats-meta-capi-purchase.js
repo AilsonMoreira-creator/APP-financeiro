@@ -32,6 +32,12 @@ import { supabase, setCors, log, logErro } from './_lojas-whats-helpers.js';
 
 const META_GRAPH_VERSION = 'v21.0';
 
+// Pixel B2B correto = dataset "✓ PIXEL AMICIA B2B | Convertr" (1636287600816161),
+// usado pela conta Amicia conv cartao. A env var META_CAPI_PIXEL_B2B_ID estava
+// apontando pro pixel errado (App Vesti/Site Misturados, parado desde 26/05),
+// por isso os 13 Purchase anteriores foram pro pixel errado. Ailson 01/07/2026.
+const PIXEL_B2B_ID = '1636287600816161';
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -94,7 +100,7 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
   }
 
   // 3. Variaveis Meta
-  const pixelId = process.env.META_CAPI_PIXEL_B2B_ID;
+  const pixelId = PIXEL_B2B_ID;
   const token = process.env.META_ADS_TOKEN || process.env.META_WA_ACCESS_TOKEN;
   if (!pixelId) {
     return { status: 'falhou', erro: 'META_CAPI_PIXEL_B2B_ID nao configurado em env' };
@@ -130,6 +136,11 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
   };
   if (conv.ctwa_clid) {
     user_data.ctwa_clid = conv.ctwa_clid;              // NAO hashed (Meta exige plain)
+  }
+  // page_id / WABA obrigatorio quando action_source=business_messaging (Meta subcode 2804069).
+  // Usa o WhatsApp Business Account da Sofia (mesma env dos templates B2B). Plain, nao hashed.
+  if (process.env.META_WA_WABA_ID) {
+    user_data.whatsapp_business_account_id = process.env.META_WA_WABA_ID;
   }
   // Remove campos null
   for (const k of Object.keys(user_data)) {
@@ -223,7 +234,7 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
   } = dados_manual;
 
   // 1. Variaveis Meta
-  const pixelId = process.env.META_CAPI_PIXEL_B2B_ID;
+  const pixelId = PIXEL_B2B_ID;
   const token = process.env.META_ADS_TOKEN || process.env.META_WA_ACCESS_TOKEN;
   if (!pixelId) return { status: 'falhou', erro: 'META_CAPI_PIXEL_B2B_ID nao configurado em env' };
   if (!token) return { status: 'falhou', erro: 'token Meta nao configurado em env (META_ADS_TOKEN ou META_WA_ACCESS_TOKEN)' };
@@ -264,6 +275,10 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
     fn: sha(firstName),
     ln: sha(lastName),
   };
+  // page_id / WABA obrigatorio p/ business_messaging/whatsapp (Meta subcode 2804069).
+  if (process.env.META_WA_WABA_ID) {
+    user_data.whatsapp_business_account_id = process.env.META_WA_WABA_ID;
+  }
   for (const k of Object.keys(user_data)) {
     if (user_data[k] === null || user_data[k] === undefined) delete user_data[k];
   }
