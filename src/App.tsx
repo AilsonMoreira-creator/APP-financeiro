@@ -4840,8 +4840,8 @@ const FotoProdLarge=({sbUrl,refProd,onZoom})=>{
   return(<div style={{width:"100%",aspectRatio:"3/4",position:"relative",overflow:"hidden",background:"linear-gradient(135deg,#f0ebe3,#e8e2da)"}}>
     <img src={storageBase+urls[0]+cb}
       onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u));if(idx>=0&&idx<urls.length-1){e.target.src=storageBase+urls[idx+1]+cb;}else{e.target.style.display='none';const ph=e.target.nextSibling;if(ph)ph.style.display='flex';}}}
-      onClick={(e)=>{e.stopPropagation();onZoom&&onZoom(e.target.src);}}
-      style={{width:"100%",height:"100%",objectFit:"cover",cursor:"pointer",display:"block"}}/>
+      onClick={onZoom?(e)=>{e.stopPropagation();onZoom(e.target.src);}:undefined}
+      style={{width:"100%",height:"100%",objectFit:"cover",cursor:onZoom?"pointer":"inherit",display:"block"}}/>
     <div style={{display:"none",width:"100%",height:"100%",alignItems:"center",justifyContent:"center",color:"#c0b8b0",fontSize:10,fontFamily:"Georgia,serif",fontStyle:"italic"}}>foto ref {String(refProd)}</div>
   </div>);
 };
@@ -4914,13 +4914,18 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [logsBling,setLogsBling]=useState([]);
   const [logsBlingLoading,setLogsBlingLoading]=useState(false);
   const [logsBlingBusca,setLogsBlingBusca]=useState('');
-  const [logsBlingOrigem,setLogsBlingOrigem]=useState('todas');
-  const abrirLogsBling=async()=>{
+  const [logsBlingOrigem,setLogsBlingOrigem]=useState('manual');
+  const [logsBlingUsuario,setLogsBlingUsuario]=useState('todos');
+  const [logsBlingPeriodo,setLogsBlingPeriodo]=useState('tudo'); // 'tudo' | '7d'
+  const [logsBlingData,setLogsBlingData]=useState(''); // 'YYYY-MM-DD' → dia específico
+  const abrirLogsBling=async(refFiltro)=>{
     setLogsBlingAberto(true);setLogsBlingLoading(true);
+    // Botão de log dentro do card: já abre filtrado naquela REF e mostrando todas as origens.
+    if(refFiltro!=null){setLogsBlingBusca(String(refFiltro));setLogsBlingOrigem('todas');}
     try{
       const {data,error}=await supabase.from('bling_estoque_logs')
         .select('id,ref,cor_norm,tam,cor_label,qtd_anterior,qtd_nova,delta,motivo,usuario,origem,criado_em')
-        .order('criado_em',{ascending:false}).limit(300);
+        .order('criado_em',{ascending:false}).limit(1000);
       if(error)throw error;
       setLogsBling(data||[]);
     }catch(e){console.error('logs bling:',e?.message||e);setLogsBling([]);}
@@ -5380,7 +5385,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       <div style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>última sync: <b style={{color:"#2c3e50"}}>{ultSync}</b></div>
       <button onClick={sincronizarCatalogo} disabled={syncCatalogo} title="Lê o catálogo do Bling (Lumia) e popula SKU→ref pra refs novas/sem mapeamento" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ catálogo":"📚 sync catálogo Bling"}</button>
       <button onClick={()=>sincronizarEstoqueBling(false)} disabled={syncBlingEst} title="Lê as QUANTIDADES de estoque do Bling (Exitus, depósito Geral) pras refs da calculadora" style={{background:"#fff",border:"1px solid #2c3e50",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncBlingEst?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#2c3e50",opacity:syncBlingEst?0.5:1,fontWeight:600}}>{syncBlingEst?"⏳ estoque":"🟦 estoque Bling"}</button>
-      <button onClick={abrirLogsBling} title="Histórico de alterações de estoque (ajustes manuais, sync, webhook)" style={{background:"#fff",border:"1px solid #8a9aa4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600}}>📜 Logs</button>
+      <button onClick={()=>abrirLogsBling()} title="Histórico de alterações de estoque (ajustes manuais, sync, webhook)" style={{background:"#fff",border:"1px solid #8a9aa4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600}}>📜 Logs</button>
       <button onClick={forcarSync} disabled={syncing} title="Força recálculo do estoque ML agora" style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#4a7fa5",opacity:syncing?0.5:1}}>{syncing?"⏳":"🔄"}</button>
       <div style={{display:"flex",background:"#faf8f5",border:"1px solid #e8e2da",borderRadius:8,padding:3,gap:2}}>
         <button onClick={()=>setView("grid")} style={{background:view==="grid"?"#2c3e50":"transparent",color:view==="grid"?"#fff":"#8a9aa4",border:"none",padding:"5px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontFamily:"Georgia,serif",fontWeight:600}}>▦ Grid</button>
@@ -5402,7 +5407,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";e.currentTarget.style.borderColor="#e8e2da";}}
           >
             {low&&<div style={{position:"absolute",top:6,left:6,background:"#c0392b",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2,zIndex:2}}>BAIXO</div>}
-            <FotoProdLarge sbUrl={sbUrl} refProd={refN} onZoom={handleZoom}/>
+            <FotoProdLarge sbUrl={sbUrl} refProd={refN}/>
             <div style={{padding:"8px 10px 10px"}}>
               <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",letterSpacing:0.3,marginBottom:2}}>{refN}</div>
               <div style={{fontSize:10.5,color:"#2c3e50",lineHeight:1.25,minHeight:26,marginBottom:6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{desc}</div>
@@ -5429,7 +5434,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             onMouseEnter={e=>{e.currentTarget.style.transform="translateX(2px)";e.currentTarget.style.borderColor="#4a7fa5";}}
             onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.borderColor="#e8e2da";}}
           >
-            <div style={{width:60,aspectRatio:"3/4",borderRadius:6,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={refN} onZoom={handleZoom}/></div>
+            <div style={{width:60,aspectRatio:"3/4",borderRadius:6,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={refN}/></div>
             <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:0}}>
               <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",display:"flex",alignItems:"center",gap:6}}>
                 {refN}
@@ -5564,13 +5569,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       return (<><div onClick={()=>setModalRef(null)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"40px 20px",zIndex:100,overflowY:"auto",backdropFilter:"blur(3px)"}}>
         <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:680,overflow:"hidden",boxShadow:"0 20px 50px rgba(0,0,0,0.25)"}}>
           <div style={{display:"flex",gap:mobile?10:14,padding:mobile?"14px 16px":"18px 20px",borderBottom:"1px solid #e8e2da",background:"#faf8f5",alignItems:"flex-start"}}>
-            <div style={{width:mobile?52:64,height:mobile?68:84,borderRadius:8,background:"#e8e2da",flexShrink:0,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={modalRef} onZoom={handleZoom}/></div>
+            <div style={{width:mobile?52:64,height:mobile?68:84,borderRadius:8,background:"#e8e2da",flexShrink:0,overflow:"hidden"}}><FotoProdLarge sbUrl={sbUrl} refProd={modalRef}/></div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:11,color:"#4a7fa5",fontWeight:700,letterSpacing:0.4}}>REF {modalRef}</div>
               <div style={{fontSize:mobile?15:17,fontWeight:700,color:"#2c3e50",margin:"2px 0 6px",lineHeight:1.25}}>{desc||"(sem descrição)"}</div>
               <div style={{display:"flex",gap:14,fontSize:11,color:"#8a9aa4",flexWrap:"wrap",alignItems:"baseline"}}>
                 <span>Total: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:mobile?28:40}}>{(selectedRef.qtd_total||0).toLocaleString('pt-BR')}</b></span>
                 <span>· Variações: <b style={{color:"#2c3e50",fontWeight:700,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:13}}>{vars.length}{ocultas>0&&<span style={{color:"#8a9aa4",fontWeight:400,fontSize:11}}> de {varsGrade.length}</span>}</b></span>
+                <button onClick={()=>abrirLogsBling(refNorm)} title={`Ver logs de estoque da REF ${modalRef}`} style={{marginLeft:"auto",background:"#fff",border:"1px solid #c8d8e4",borderRadius:6,padding:"3px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600,whiteSpace:"nowrap"}}>📜 logs</button>
               </div>
             </div>
             <button onClick={()=>setModalRef(null)} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer",padding:"0 4px",lineHeight:1}}>×</button>
@@ -5579,12 +5585,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{width:"100%",marginBottom:14,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
               <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte ao estoque
             </button>
-            <button onClick={()=>{setGtinProg(null);setGtinOpen({ref:modalRef,refNorm,desc});}} style={{width:"100%",marginBottom:8,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
-              <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5",letterSpacing:-1,fontFamily:"monospace"}}>▌║▌</span> criar código de barras (Bling)
-            </button>
-            <button onClick={()=>{setEtqSample({desc,ref:modalRef,cor:vars[0]?.cor||'',tam:vars[0]?.tam||'',visiveis:[...new Set((vars||[]).map(v=>normCorBling(v.cor)))]});setEtqOpen(true);}} style={{width:"100%",marginBottom:14,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
-              <span style={{fontSize:14,lineHeight:1,color:"#4a7fa5"}}>▢</span> criar etiqueta
-            </button>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <button onClick={()=>{setGtinProg(null);setGtinOpen({ref:modalRef,refNorm,desc});}} style={{flex:1,minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <span style={{fontSize:12,lineHeight:1,color:"#4a7fa5",letterSpacing:-1,fontFamily:"monospace"}}>▌║▌</span> código de barras
+              </button>
+              <button onClick={()=>{setEtqSample({desc,ref:modalRef,cor:vars[0]?.cor||'',tam:vars[0]?.tam||'',visiveis:[...new Set((vars||[]).map(v=>normCorBling(v.cor)))]});setEtqOpen(true);}} style={{flex:1,minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>▢</span> criar etiqueta
+              </button>
+            </div>
             <div style={{fontSize:10,color:"#8a9aa4",fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Variações · Estoque atual</div>
             <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",margin:mobile?"0 -16px":"0",padding:mobile?"0 16px":"0"}}>
             <table style={{width:mobile?"100%":"auto",margin:"0 auto",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth:mobile?440:"auto"}}>
@@ -5827,39 +5835,73 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       })()}
       {/* ── Modal: ajuste de estoque Bling (sobrescreve + log de auditoria) ── */}
       {logsBlingAberto&&(()=>{
+        const CAL="Calibri,Segoe UI,Arial,sans-serif";
         const norm=s=>String(s||'').replace(/\D/g,'').replace(/^0+/,'');
         const q=norm(logsBlingBusca);
-        const lista=logsBling.filter(l=>(logsBlingOrigem==='todas'||l.origem===logsBlingOrigem)&&(!q||norm(l.ref).includes(q)));
+        const usuarios=[...new Set(logsBling.map(l=>l.usuario).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
+        const inicio7d=Date.now()-7*86400000;
+        const dentroData=(iso)=>{
+          if(!iso)return false;
+          const t=new Date(iso).getTime();
+          if(logsBlingData){const ini=new Date(logsBlingData+'T00:00:00').getTime();return t>=ini&&t<ini+86400000;}
+          if(logsBlingPeriodo==='7d')return t>=inicio7d;
+          return true;
+        };
+        const lista=logsBling.filter(l=>
+          (logsBlingOrigem==='todas'||l.origem===logsBlingOrigem)
+          &&(!q||norm(l.ref).includes(q))
+          &&(logsBlingUsuario==='todos'||l.usuario===logsBlingUsuario)
+          &&dentroData(l.criado_em)
+        );
         const ORIGENS=[['todas','Todas'],['manual','✏️ Manual'],['bling_sync','🟦 Sync'],['webhook','⚡ Webhook']];
         const fmtDt=(d)=>{try{const x=new Date(d);return x.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+x.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}catch{return '';}};
+        const chipStl=(ativo)=>({background:ativo?"#2c3e50":"#faf8f5",color:ativo?"#fff":"#5a6470",border:"1px solid "+(ativo?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"5px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,whiteSpace:"nowrap"});
+        const periodoTudo=logsBlingPeriodo==='tudo'&&!logsBlingData;
+        const periodo7d=logsBlingPeriodo==='7d'&&!logsBlingData;
         return <div onClick={()=>setLogsBlingAberto(false)} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"30px 14px",zIndex:110,overflowY:"auto",backdropFilter:"blur(3px)"}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:760,width:"100%",boxShadow:"0 12px 40px rgba(0,0,0,0.25)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 60px)"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,maxWidth:820,width:"100%",boxShadow:"0 12px 40px rgba(0,0,0,0.25)",overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 60px)"}}>
             <div style={{padding:"12px 16px",background:"#2c3e50",color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
               <div style={{fontSize:14,fontWeight:700,fontFamily:"Georgia,serif"}}>📜 Logs de estoque Bling</div>
               <button onClick={()=>setLogsBlingAberto(false)} style={{background:"none",border:"none",fontSize:22,color:"#cdd4d9",cursor:"pointer"}}>×</button>
             </div>
-            <div style={{padding:"8px 12px",borderBottom:"1px solid #e8e2da",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+            <div style={{padding:"8px 12px 4px",borderBottom:"1px solid #f0ece6",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
               <input value={logsBlingBusca} onChange={e=>setLogsBlingBusca(e.target.value)} placeholder="filtrar por REF..." style={{flex:"1 1 120px",minWidth:100,border:"1px solid #e8e2da",borderRadius:6,padding:"5px 9px",fontSize:12,fontFamily:"Georgia,serif",outline:"none",background:"#faf8f5"}}/>
               {ORIGENS.map(([v,lbl])=>(
-                <button key={v} onClick={()=>setLogsBlingOrigem(v)} style={{background:logsBlingOrigem===v?"#2c3e50":"#faf8f5",color:logsBlingOrigem===v?"#fff":"#5a6470",border:"1px solid "+(logsBlingOrigem===v?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"5px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,whiteSpace:"nowrap"}}>{lbl}</button>
+                <button key={v} onClick={()=>setLogsBlingOrigem(v)} style={chipStl(logsBlingOrigem===v)}>{lbl}</button>
               ))}
-              <span style={{fontSize:10.5,color:"#8a9aa4",marginLeft:"auto",whiteSpace:"nowrap"}}>{lista.length} registro{lista.length!==1?'s':''}</span>
+            </div>
+            <div style={{padding:"6px 12px",borderBottom:"1px solid #e8e2da",display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+              <select value={logsBlingUsuario} onChange={e=>setLogsBlingUsuario(e.target.value)} style={{border:"1px solid #e8e2da",borderRadius:6,padding:"5px 8px",fontSize:11.5,fontFamily:"Georgia,serif",outline:"none",background:"#faf8f5",color:"#5a6470",fontWeight:600,cursor:"pointer"}}>
+                <option value="todos">👤 todos</option>
+                {usuarios.map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+              <button onClick={()=>{setLogsBlingPeriodo('tudo');setLogsBlingData('');}} style={chipStl(periodoTudo)}>Tudo</button>
+              <button onClick={()=>{setLogsBlingPeriodo('7d');setLogsBlingData('');}} style={chipStl(periodo7d)}>7 dias</button>
+              <input type="date" value={logsBlingData} onChange={e=>setLogsBlingData(e.target.value)} title="dia específico" style={{border:"1px solid "+(logsBlingData?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"4px 8px",fontSize:11.5,fontFamily:"Georgia,serif",outline:"none",background:logsBlingData?"#eef3f7":"#faf8f5",color:"#5a6470",cursor:"pointer"}}/>
+              {logsBlingData&&<button onClick={()=>setLogsBlingData('')} title="limpar data" style={{background:"none",border:"none",color:"#8a9aa4",fontSize:15,cursor:"pointer",lineHeight:1,padding:"0 2px"}}>×</button>}
+              <span style={{fontSize:11,color:"#8a9aa4",marginLeft:"auto",whiteSpace:"nowrap"}}>{lista.length} registro{lista.length!==1?'s':''}</span>
             </div>
             <div style={{overflowY:"auto",flex:1}}>
               {logsBlingLoading&&<div style={{padding:24,textAlign:"center",color:"#8a9aa4",fontSize:13}}>Carregando…</div>}
               {!logsBlingLoading&&lista.length===0&&<div style={{padding:24,textAlign:"center",color:"#8a9aa4",fontSize:13}}>Nenhum log encontrado</div>}
-              {!logsBlingLoading&&lista.map(l=>{
+              {!logsBlingLoading&&lista.map((l,i)=>{
                 const dlt=l.delta==null?null:Number(l.delta);
                 const origIco=l.origem==='manual'?'✏️':l.origem==='webhook'?'⚡':'🟦';
-                return <div key={l.id} style={{padding:"7px 14px",borderBottom:"1px solid #f0ece6",display:"flex",gap:8,alignItems:"baseline",flexWrap:"wrap",fontSize:12}}>
-                  <span style={{color:"#8a9aa4",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:11,whiteSpace:"nowrap"}}>{fmtDt(l.criado_em)}</span>
+                const dCor=dlt==null?null:dlt>0?"#27ae60":dlt<0?"#c0392b":"#8a9aa4";
+                const dBg=dlt==null?null:dlt>0?"#e8f6ee":dlt<0?"#fbeae8":"#eef1f3";
+                const dTxt=dlt==null?'':dlt>0?`+${dlt}`:String(dlt);
+                return <div key={l.id} style={{padding:"8px 14px",background:i%2===1?"#f3efe8":"#fff",borderBottom:"1px solid #efe9e1",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",fontSize:13}}>
+                  <span style={{color:"#8a9aa4",fontFamily:CAL,fontSize:12,whiteSpace:"nowrap"}}>{fmtDt(l.criado_em)}</span>
                   <b style={{color:"#2c3e50",whiteSpace:"nowrap"}}>REF {l.ref}</b>
                   <span style={{color:"#5a6470",whiteSpace:"nowrap"}}>{l.cor_label||l.cor_norm} · {String(l.tam||'').toUpperCase()}</span>
-                  <span style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,color:"#2c3e50",whiteSpace:"nowrap"}}>{l.qtd_anterior==null?'—':l.qtd_anterior} → {l.qtd_nova}</span>
-                  {dlt!=null&&dlt!==0&&<span style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:11,color:dlt>0?"#27ae60":"#c0392b",whiteSpace:"nowrap"}}>{dlt>0?'+':''}{dlt}</span>}
-                  <span title={l.origem} style={{fontSize:11}}>{origIco}</span>
-                  {l.usuario&&<span style={{color:"#8a9aa4",fontSize:11,whiteSpace:"nowrap"}}>por <b style={{color:"#5a6470"}}>{l.usuario}</b></span>}
-                  {l.motivo&&<span style={{color:"#8a9aa4",fontSize:11,fontStyle:"italic"}}>“{l.motivo}”</span>}
+                  <span title={l.origem} style={{fontSize:12}}>{origIco}</span>
+                  {l.usuario&&<span style={{color:"#8a9aa4",fontSize:12,whiteSpace:"nowrap"}}>por <b style={{color:"#5a6470"}}>{l.usuario}</b></span>}
+                  <span style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",whiteSpace:"nowrap"}}>
+                    <span style={{color:"#8a9aa4",fontFamily:CAL,fontSize:12}}>de {l.qtd_anterior==null?'—':l.qtd_anterior}</span>
+                    {dlt!=null&&<span style={{background:dBg,color:dCor,fontFamily:CAL,fontWeight:700,fontSize:12.5,padding:"1px 8px",borderRadius:10}}>{dTxt}{dlt!==0?' pç':''}</span>}
+                    <span style={{color:"#2c3e50",fontFamily:CAL}}>ficou <b style={{fontSize:15}}>{l.qtd_nova}</b></span>
+                  </span>
+                  {l.motivo&&l.motivo!==l.usuario&&<span style={{color:"#8a9aa4",fontSize:12,fontStyle:"italic",flexBasis:"100%"}}>“{l.motivo}”</span>}
                 </div>;
               })}
             </div>
