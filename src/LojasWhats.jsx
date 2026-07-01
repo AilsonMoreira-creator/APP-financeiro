@@ -255,11 +255,11 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               display: 'inline-flex', alignItems: 'center', gap: 3,
             }}>👤 estava com {vendedoraNome}</span>
           )}
-          {c.etapa === 'vendeu' && Number(c._valor_venda) > 0 && (
+          {c.etapa === 'vendeu' && Number(c.vendeu_valor) > 0 && (
             <span title="Valor da venda fechada" style={{
               background: '#e6f7ee', color: '#1f7a48',
               fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
-            }}>{fmtMoney(c._valor_venda)}</span>
+            }}>{fmtMoney(c.vendeu_valor)}</span>
           )}
           {origem === 'carrinho' ? (
             <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas || 0} pç</span>
@@ -1491,7 +1491,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1520,11 +1520,10 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       if (vendaIds.length) {
         const { data: convs } = await supabase
           .from('lojas_conversoes')
-          .select('venda_id, atendido_por, valor_venda')
+          .select('venda_id, atendido_por')
           .in('venda_id', vendaIds);
         const mapaAtend = Object.fromEntries((convs || []).map(c => [c.venda_id, c.atendido_por]));
-        const mapaValor = Object.fromEntries((convs || []).map(c => [c.venda_id, c.valor_venda]));
-        lista = lista.map(c => ({ ...c, _atendido_por: mapaAtend[c.vendeu_venda_id] || null, _valor_venda: mapaValor[c.vendeu_venda_id] ?? null }));
+        lista = lista.map(c => ({ ...c, _atendido_por: mapaAtend[c.vendeu_venda_id] || null }));
       }
       setConversas(lista);
       jaCarregouListaRef.current = true;
@@ -2620,8 +2619,8 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
             )}
             {c.qtd_pecas > 0 && <span>· {c.qtd_pecas} peças</span>}
             {Number(c.valor_carrinho) > 0 && <span>· {fmtMoney(c.valor_carrinho)}</span>}
-            {c.etapa === 'vendeu' && Number(c._valor_venda) > 0 && (
-              <span style={{ fontWeight: 700, color: palette.ok }}>· venda {fmtMoney(c._valor_venda)}</span>
+            {c.etapa === 'vendeu' && Number(c.vendeu_valor) > 0 && (
+              <span style={{ fontWeight: 700, color: palette.ok }}>· venda {fmtMoney(c.vendeu_valor)}</span>
             )}
           </div>
         </div>
