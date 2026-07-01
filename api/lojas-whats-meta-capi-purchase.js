@@ -366,15 +366,23 @@ async function salvarAudit({ conversa_id, venda_info, tipo_match, pixelId, event
   // user_data hashed jamais salvar plain — payload ja vem com hashes,
   // mas removo pra evitar contaminacao no audit log
   const payloadSafe = JSON.parse(JSON.stringify(payload));
-  
-  try {
-    await supabase.from('lojas_whats_capi_eventos').insert({
+  const ev = payloadSafe?.data?.[0] || {};
+
+  // UPSERT por meta_event_id (unique idx_capi_event_id). event_id e deterministico,
+  // entao um envio posterior (ex: falhou -> enviado) SOBRESCREVE a linha anterior em
+  // vez de colidir no unique e ficar preso no status antigo. Grava tambem o
+  // action_source/event_name reais (derivados do payload) e o enviado_em do momento.
+  const { error } = await supabase
+    .from('lojas_whats_capi_eventos')
+    .upsert({
       conversa_id: conversa_id || null,
       venda_id: venda_info.venda_id || null,
       venda_categoria: venda_info.categoria || null,
       numero_pedido: venda_info.numero_pedido || null,
       meta_pixel_id: pixelId,
       meta_event_id: eventId,
+      meta_event_name: ev.event_name || 'Purchase',
+      meta_action_source: ev.action_source || null,
       tipo_match,
       ctwa_clid: ctwaClid || null,
       valor: venda_info.valor,
@@ -382,14 +390,10 @@ async function salvarAudit({ conversa_id, venda_info, tipo_match, pixelId, event
       meta_response: response,
       status,
       erro,
+      enviado_em: new Date().toISOString(),
       origem_capi: origemCapi || 'auto_cron',
       vendedora_nome: vendedoraNome || null,
       dados_manual: dadosManual || null,
-    });
-  } catch (e) {
-    // Se for unique violation no event_id, ja foi enviado antes — ok
-    if (e.code !== '23505') {
-      logErro('capi-purchase/audit', e);
-    }
-  }
+    }, { onConflict: 'meta_event_id' });
+  if (error) logErro('capi-purchase/audit', error);
 }
