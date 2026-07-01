@@ -139,12 +139,15 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
     fn: sha(firstName),                                 // first name hash
     ln: sha(lastName),                                  // last name hash
   };
-  if (conv.ctwa_clid) {
+  // Roteia pela presenca de ctwa_clid:
+  //  • TEM ctwa_clid → lead CTWA (clique em anuncio WhatsApp) → business_messaging
+  //  • NAO tem       → carrinho abandonado do site → website (Meta nao exige ctwa_clid)
+  const temCtwa = !!conv.ctwa_clid;
+  if (temCtwa) {
     user_data.ctwa_clid = conv.ctwa_clid;              // NAO hashed (Meta exige plain)
+    // page_id obrigatorio quando action_source=business_messaging/whatsapp (Meta subcode 2804069).
+    user_data.page_id = PAGE_ID_B2B;                   // Pagina FB dos anuncios CTWA da Amicia
   }
-  // page_id obrigatorio quando action_source=business_messaging/whatsapp (Meta subcode 2804069).
-  // Plain, nao hashed. Pagina FB dos anuncios CTWA da Amicia. Ailson 01/07/2026.
-  user_data.page_id = PAGE_ID_B2B;
   // Remove campos null
   for (const k of Object.keys(user_data)) {
     if (user_data[k] === null || user_data[k] === undefined) delete user_data[k];
@@ -155,8 +158,7 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
     event_name: 'Purchase',
     event_time: Math.floor(Date.now() / 1000),
     event_id: eventId,
-    action_source: 'business_messaging',  // CTWA flow
-    messaging_channel: 'whatsapp',         // obrigatorio quando action_source=business_messaging (Meta subcode 2804063)
+    action_source: temCtwa ? 'business_messaging' : 'website',
     user_data,
     custom_data: {
       currency: 'BRL',
@@ -165,6 +167,11 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
       content_category: venda_info.categoria || 'atacado',
     },
   };
+  if (temCtwa) {
+    eventData.messaging_channel = 'whatsapp';          // obrigatorio p/ business_messaging (subcode 2804063)
+  } else {
+    eventData.event_source_url = 'https://amicialoja.com.br/';  // recomendado p/ website
+  }
 
   const payload = { data: [eventData] };
 
@@ -278,8 +285,8 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
     fn: sha(firstName),
     ln: sha(lastName),
   };
-  // page_id obrigatorio p/ business_messaging/whatsapp (Meta subcode 2804069).
-  user_data.page_id = PAGE_ID_B2B;
+  // Envio manual NUNCA tem ctwa_clid → action_source=website (Meta nao exige ctwa_clid).
+  // Sem page_id/messaging_channel (esses sao so do business_messaging).
   for (const k of Object.keys(user_data)) {
     if (user_data[k] === null || user_data[k] === undefined) delete user_data[k];
   }
@@ -289,8 +296,8 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
     event_name: 'Purchase',
     event_time: Math.floor(Date.now() / 1000),
     event_id: eventId,
-    action_source: 'business_messaging',
-    messaging_channel: 'whatsapp',         // obrigatorio quando action_source=business_messaging (Meta subcode 2804063)
+    action_source: 'website',
+    event_source_url: 'https://amicialoja.com.br/',
     user_data,
     custom_data: {
       currency: 'BRL',
