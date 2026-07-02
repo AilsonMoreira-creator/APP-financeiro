@@ -86,7 +86,8 @@ async function criarUm(t, idiomaPadrao, categoriaPadrao) {
     id: j?.id || null,
     status: j?.status || null,
     category: j?.category || null,
-    erro: r.ok ? null : (j?.error?.message || txt),
+    erro: r.ok ? null : (j?.error?.error_user_msg || j?.error?.message || txt),
+    erro_detalhe: r.ok ? undefined : (j?.error || undefined),
   };
 }
 
