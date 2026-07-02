@@ -4883,6 +4883,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [ajusteValor,setAjusteValor]=useState('');
   const [ajusteMotivo,setAjusteMotivo]=useState('');
   const [salvandoAjuste,setSalvandoAjuste]=useState(false);
+  // Fila otimista de ajustes (Ailson 02/07/2026): Salvar fecha o modal na hora,
+  // célula fica âmbar "enviando" e só confirma com o 200 do POST /estoques do Bling.
+  // {"refNorm|cor_norm|TAM": {status:'enviando'|'erro', qtdNova, erroMsg}}
+  const [ajustesFila,setAjustesFila]=useState({});
   // Criar etiqueta → template (Ailson 28/06/2026)
   const [etqOpen,setEtqOpen]=useState(false);
   const [etqSample,setEtqSample]=useState(null);
@@ -4961,29 +4965,38 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       if(souDono)supabase.from('bling_estoque_locks').delete().eq('chave',chave).eq('usuario',me).then(()=>{});
     };
   },[blingAjuste]);
-  const salvarAjusteBling=async()=>{
-    if(!blingAjuste||salvandoAjuste)return;
+  const enviarAjusteBling=async(ba,nova,motivo)=>{
+    const chave=`${ba.refNorm}|${ba.cor_norm}|${ba.tam}`;
+    try{
+      // Grava no Bling (balanço) + espelho/log server-side no mesmo request.
+      // Só confirma na célula com o 200 do POST /estoques do Bling.
+      const rb=await fetch('/api/bling-estoque-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:'exitus',ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,qtd:nova,espelhar:true,usuario:usuarioSessao||null,motivo:motivo||null,cor_label:ba.cor||null})});
+      const jb=await rb.json().catch(()=>({}));
+      if(!rb.ok)throw new Error(jb.error||('HTTP '+rb.status));
+      setBlingEstoque(prev=>({...prev,[chave]:nova}));
+      setAjustesFila(prev=>{const n={...prev};delete n[chave];return n;});
+    }catch(e){
+      setAjustesFila(prev=>({...prev,[chave]:{status:'erro',qtdNova:nova,erroMsg:String(e?.message||e)}}));
+    }
+  };
+  const salvarAjusteBling=()=>{
+    if(!blingAjuste)return;
     if(ajusteLockPor){alert(`${ajusteLockPor} já está editando essa variação — aguarde.`);return;}
     const ba=blingAjuste;
     const nova=parseInt(ajusteValor,10);
     if(isNaN(nova)||nova<0){alert('Quantidade inválida');return;}
-    setSalvandoAjuste(true);
-    try{
-      // 1) Grava no Bling (balanço no depósito geral). Só espelha local se aceitar.
-      const rb=await fetch('/api/bling-estoque-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:'exitus',ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,qtd:nova})});
-      const jb=await rb.json().catch(()=>({}));
-      if(!rb.ok){alert('Não consegui gravar no Bling: '+(jb.error||('HTTP '+rb.status))+(jb.detalhe?'\n'+JSON.stringify(jb.detalhe).slice(0,200):''));setSalvandoAjuste(false);return;}
-      // 2) Espelha no app + log de auditoria
-      const {data:atualRow}=await supabase.from('bling_estoque').select('qtd').eq('ref',ba.refNorm).eq('cor_norm',ba.cor_norm).eq('tam',ba.tam).maybeSingle();
-      const anterior=atualRow?atualRow.qtd:null;
-      const {error:e1}=await supabase.from('bling_estoque').upsert({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,cor_label:ba.cor||null,qtd:nova,bling_produto_id:jb.produtoId||null,atualizado_em:new Date().toISOString(),atualizado_por:usuarioSessao||null},{onConflict:'ref,cor_norm,tam'});
-      if(e1)throw e1;
-      await supabase.from('bling_estoque_logs').insert({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,cor_label:ba.cor||null,qtd_anterior:anterior,qtd_nova:nova,delta:(anterior==null?nova:nova-anterior),motivo:ajusteMotivo||null,usuario:usuarioSessao||null,origem:'manual'});
-      setBlingEstoque(prev=>({...prev,[`${ba.refNorm}|${ba.cor_norm}|${ba.tam}`]:nova}));
-      setBlingAjuste(null);
-    }catch(e){alert('Erro ao salvar ajuste: '+(e.message||e));}
-    finally{setSalvandoAjuste(false);}
+    const chave=`${ba.refNorm}|${ba.cor_norm}|${ba.tam}`;
+    setAjustesFila(prev=>({...prev,[chave]:{status:'enviando',qtdNova:nova}}));
+    setBlingAjuste(null); // fecha na hora — envio segue em segundo plano (Ailson 02/07/2026)
+    enviarAjusteBling(ba,nova,ajusteMotivo);
   };
+  useEffect(()=>{
+    const pend=Object.values(ajustesFila).some(a=>a&&a.status==='enviando');
+    if(!pend)return;
+    const h=(e)=>{e.preventDefault();e.returnValue='Ainda tem ajuste de estoque enviando pro Bling.';};
+    window.addEventListener('beforeunload',h);
+    return()=>window.removeEventListener('beforeunload',h);
+  },[ajustesFila]);
 
   const carregarMatrizProjetada=async()=>{
     try{
@@ -5621,7 +5634,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                     <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{v.cor||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{v.tam||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Courier New,monospace",fontSize:10,color:"#8a9aa4"}}>{v.sku&&!String(v.sku).startsWith('_SINT_')?v.sku:'—'}</td>
-                    <td onClick={()=>{setBlingAjuste({refNorm,cor:v.cor||'',tam:tamU,cor_norm:corNorm,atual:temBling?blingQtd:0,desc});setAjusteValor(String(temBling?blingQtd:0));setAjusteMotivo(usuarioSessao);}} title="Ajustar estoque Bling" style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:temBling?"#2c3e50":"#b9c2c9",cursor:"pointer",background:"#f4f7fb",borderLeft:"1px solid #e3ebf2",borderRight:"1px solid #e3ebf2"}}>{temBling?blingQtd:'·'}</td>
+                    {(()=>{const fk=`${refNorm}|${corNorm}|${tamU}`;const fi=ajustesFila[fk];
+                      const env=fi&&fi.status==='enviando';const err=fi&&fi.status==='erro';
+                      return <td onClick={()=>{if(env)return;setBlingAjuste({refNorm,cor:v.cor||'',tam:tamU,cor_norm:corNorm,atual:temBling?blingQtd:0,desc});setAjusteValor(String(err?fi.qtdNova:(temBling?blingQtd:0)));setAjusteMotivo(usuarioSessao);}} title={env?'Enviando pro Bling…':err?('Falhou: '+(fi.erroMsg||'')+' — toque pra tentar de novo'):'Ajustar estoque Bling'} style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:env?"#8a6d1a":err?"#a03d3d":(temBling?"#2c3e50":"#b9c2c9"),cursor:env?"wait":"pointer",background:env?"#fdf3dd":err?"#fdeaea":"#f4f7fb",borderLeft:"1px solid #e3ebf2",borderRight:"1px solid #e3ebf2"}}>{env?(fi.qtdNova+' ⏳'):err?((temBling?blingQtd:'·')+' ⚠️'):(temBling?blingQtd:'·')}</td>;})()}
                     <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:cls}}>{q}</td>
                     <td onClick={proj>0?()=>setProjModal({refNorm,cor:v.cor||'',tam:tamU}):undefined} title={proj>0?"Ver cortes que geram a reposição":undefined} style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:500,fontSize:11,color:proj>0?"#4a7fa5":"#cdd4d9",cursor:proj>0?"pointer":"default",textDecoration:proj>0?"underline":"none"}}>{proj>0?`+${proj}`:'—'}</td>
                   </tr>;

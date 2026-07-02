@@ -63,7 +63,39 @@ export default async function handler(req, res) {
     let data; try { data = JSON.parse(txt); } catch { data = txt; }
     if (!r.ok) return res.status(502).json({ error: `Bling HTTP ${r.status}`, detalhe: data, produtoId, depositoId });
 
-    return res.status(200).json({ ok: true, ref, cor_norm, tam, qtd, produtoId, depositoId });
+    // ── Espelho + log server-side (Ailson 02/07/2026) ──
+    // Cliente novo manda espelhar:true e o endpoint mesmo grava bling_estoque
+    // + bling_estoque_logs APÓS o 200 do Bling (1 fetch em vez de 4 do celular,
+    // e sem risco de gravar no Bling e o espelho falhar no cliente).
+    // Cliente antigo (sem a flag) segue espelhando por conta própria — evita
+    // log duplicado enquanto tiver PWA velho aberto.
+    let anterior = null;
+    if (body.espelhar === true) {
+      const { data: atualRow } = await supabase.from('bling_estoque')
+        .select('qtd').eq('ref', ref).eq('cor_norm', cor_norm).eq('tam', tam).maybeSingle();
+      anterior = atualRow ? atualRow.qtd : null;
+      const { error: e1 } = await supabase.from('bling_estoque').upsert({
+        ref, cor_norm, tam,
+        cor_label: body.cor_label || null,
+        qtd,
+        bling_produto_id: produtoId || null,
+        atualizado_em: new Date().toISOString(),
+        atualizado_por: body.usuario || null,
+      }, { onConflict: 'ref,cor_norm,tam' });
+      if (e1) return res.status(200).json({ ok: true, ref, cor_norm, tam, qtd, produtoId, depositoId, espelho_erro: e1.message });
+      await supabase.from('bling_estoque_logs').insert({
+        ref, cor_norm, tam,
+        cor_label: body.cor_label || null,
+        qtd_anterior: anterior,
+        qtd_nova: qtd,
+        delta: (anterior == null ? qtd : qtd - anterior),
+        motivo: body.motivo || null,
+        usuario: body.usuario || null,
+        origem: 'manual',
+      });
+    }
+
+    return res.status(200).json({ ok: true, ref, cor_norm, tam, qtd, anterior, produtoId, depositoId });
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) });
   }
