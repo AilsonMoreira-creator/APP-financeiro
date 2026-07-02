@@ -47,33 +47,35 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
   if (!nome && exigirNome) return { skip: 'sem_nome' };
   const { resumo } = await resolverResumoItens(itens);
 
+  // ── Escolha do template (Ailson 02/07/2026): FOTO PRIMEIRO ──
+  // Com gate lara_carrinho_img_ativo ligado, nome e foto cacheada
+  // (meluni_produto_fotos, tamanho cheio): sorteio 50/50 ENTRE OS DOIS templates
+  // com imagem -> leve_img (nome+resumo) | atemporal_img (só nome).
+  // ?v=timestamp força a Meta a baixar a foto atual (path do bucket é fixo por sku).
+  // Sem foto ou gate desligado: sorteio de sempre entre os templates texto
+  // (pctLeve leve/elegante). Se o envio COM imagem falhar, cai automático pro
+  // texto correspondente (leve_img->leve, atemporal_img->elegante).
   let versao, nameTpl, bodyParams;
+  let headerImage = null, versaoTexto = null, nameTplTexto = null;
   if (nome) {
-    versao = Math.random() * 100 < pctLeve ? 'leve' : 'elegante';
-    if (versao === 'leve' && !resumo) versao = 'elegante';
-    nameTpl = versao === 'leve' ? 'meluni_carrinho_leve' : 'meluni_carrinho_elegante';
-    bodyParams = versao === 'leve' ? [nome, resumo] : [nome];
+    const foto = imgAtivo ? await urlFotoCarrinho(itens) : null;
+    if (foto) {
+      versao = Math.random() < 0.5 ? 'leve_img' : 'atemporal_img';
+      if (versao === 'leve_img' && !resumo) versao = 'atemporal_img';
+      nameTpl = versao === 'leve_img' ? 'meluni_carrinho_leve_img' : 'meluni_carrinho_atemporal_img';
+      bodyParams = versao === 'leve_img' ? [nome, resumo] : [nome];
+      headerImage = foto + (foto.includes('?') ? '&' : '?') + 'v=' + Date.now();
+      versaoTexto = versao === 'leve_img' ? 'leve' : 'elegante';
+      nameTplTexto = versaoTexto === 'leve' ? 'meluni_carrinho_leve' : 'meluni_carrinho_elegante';
+    } else {
+      versao = Math.random() * 100 < pctLeve ? 'leve' : 'elegante';
+      if (versao === 'leve' && !resumo) versao = 'elegante';
+      nameTpl = versao === 'leve' ? 'meluni_carrinho_leve' : 'meluni_carrinho_elegante';
+      bodyParams = versao === 'leve' ? [nome, resumo] : [nome];
+    }
   } else {
     if (!resumo) return { skip: 'sem_nome_sem_resumo' };
     versao = 'sem_nome'; nameTpl = 'meluni_carrinho_sem_nome'; bodyParams = [resumo];
-  }
-
-  // ── Variante com FOTO da peça (Ailson 02/07/2026) ──
-  // Se o gate lara_carrinho_img_ativo tá ligado, tem nome e o carrinho tem foto
-  // cacheada (meluni_produto_fotos, tamanho cheio), troca pro template _img:
-  //   leve -> leve_img (nome+resumo) | elegante -> atemporal_img (só nome).
-  // ?v=timestamp força a Meta a baixar a foto atual (path do bucket é fixo por sku).
-  // Sem foto ou gate desligado: fluxo texto de sempre. Se o envio COM imagem
-  // falhar, cai automático pro texto correspondente.
-  let headerImage = null, versaoTexto = versao, nameTplTexto = nameTpl;
-  if (imgAtivo && nome) {
-    const foto = await urlFotoCarrinho(itens);
-    if (foto) {
-      headerImage = foto + (foto.includes('?') ? '&' : '?') + 'v=' + Date.now();
-      versao = versao === 'leve' ? 'leve_img' : 'atemporal_img';
-      nameTpl = versao === 'leve_img' ? 'meluni_carrinho_leve_img' : 'meluni_carrinho_atemporal_img';
-      if (versao === 'atemporal_img') bodyParams = [nome];
-    }
   }
 
   const conv = await acharOuCriarConversa(c.telefone, nome);
@@ -94,7 +96,7 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
 
   if (conv?.id) {
     const textoReal = renderTpl(tpls?.[versao]?.body, bodyParams)
-      || (versao === 'sem_nome' ? resumo : versao === 'leve' ? `${nome}: ${resumo}` : nome);
+      || (versao === 'sem_nome' ? resumo : (versao === 'leve' || versao === 'leve_img') ? `${nome}: ${resumo}` : nome);
     await supabase.from('meluni_mensagens').insert({
       conversa_id: conv.id, direcao: 'saida', autor: 'lara_carrinho',
       tipo_midia: 'template', template_usado: nameTpl,
@@ -123,7 +125,11 @@ export default async function handler(req, res) {
   const pctLeve = Number(await cfgMeluni('lara_carrinho_ab_pct_leve', 50));
   const imgAtivo = (await cfgMeluni('lara_carrinho_img_ativo', false)) === true;
   const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', false)) === true;
-  const tpls = ((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates || {};
+  // merge: base texto + specs com foto (lara_templates_carrinho_img é a fonte
+  // de verdade pros bodies aprovados de leve_img/atemporal_img)
+  const tplsBase = ((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates || {};
+  const tplsImg = ((await cfgMeluni('lara_templates_carrinho_img', {})) || {}).templates || {};
+  const tpls = { ...tplsBase, ...tplsImg };
 
   // corpo pode chegar como objeto (parse automático) ou string crua — trata os dois.
   let body = req.body;
