@@ -93,7 +93,33 @@ async function submeter(req, res) {
     });
   }
 
-  // 2. Submete pra Meta
+  // 2. Header IMAGE (templates _img): se o rascunho aponta uma REF da
+  // biblioteca Mídias (header.sample_ref), gera signed URL do sofia-midias
+  // pro submeterTemplate baixar e subir como sample. Ailson 02/07/2026.
+  if (tpl.header?.format === 'IMAGE' && tpl.header?.sample_ref && !tpl.header?.sample_url) {
+    const refNorm = String(tpl.header.sample_ref).replace(/^0+/, '') || '0';
+    const variantes = [...new Set([refNorm, refNorm.padStart(4, '0'), refNorm.padStart(5, '0')])];
+    const { data: midia } = await supabase
+      .from('lojas_whats_midias')
+      .select('storage_path')
+      .eq('tipo', 'foto')
+      .eq('ativa', true)
+      .in('ref', variantes)
+      .limit(1)
+      .maybeSingle();
+    if (!midia) {
+      return res.status(404).json({ error: 'sample_ref_sem_foto_na_biblioteca', ref: refNorm });
+    }
+    const { data: signed, error: errSign } = await supabase.storage
+      .from('sofia-midias')
+      .createSignedUrl(midia.storage_path, 3600);
+    if (errSign || !signed?.signedUrl) {
+      return res.status(500).json({ error: 'signed_url_falhou', detalhe: errSign?.message });
+    }
+    tpl.header = { ...tpl.header, sample_url: signed.signedUrl };
+  }
+
+  // 3. Submete pra Meta
   log('template-submeter', `name=${name} waba=${process.env.META_WA_WABA_ID}`);
   let metaRes;
   try {

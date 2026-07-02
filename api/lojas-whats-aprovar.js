@@ -31,7 +31,7 @@ import {
   getConfig
 } from './_lojas-whats-helpers.js';
 import { enviarTemplate, enviarTexto, enviarTextoFracionado } from './_lojas-whats-meta-client.js';
-import { parseMarcadoresMidia, resolverMidia, enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
+import { parseMarcadoresMidia, resolverMidia, enviarMidiaSofia, uploadMidiaSofiaComoMediaId } from './_lojas-whats-midia-sender.js';
 
 export default async function handler(req, res) {
   setCors(res);
@@ -262,7 +262,32 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
         .eq('name', sug.template_name)
         .maybeSingle();
       const vars = ordenarVarsTemplate(sug.template_vars, tplDecl?.variables);
-      metaResp = await enviarTemplate(sug.conversa.telefone, sug.template_name, vars);
+      // Template _img: a foto da peça vem da biblioteca Mídias (contexto_ia.
+      // header_midia_id). Sobe pra Meta como media_id na hora do envio. Se a
+      // mídia sumiu/falhar, cai pro v2 texto (mesmo corpo e vars) pra não
+      // travar a abertura. Ailson 02/07/2026.
+      let tplParaEnviar = sug.template_name;
+      let optsEnvio = {};
+      if (sug.contexto_ia?.header_midia_id) {
+        try {
+          const { data: midia } = await supabase
+            .from('lojas_whats_midias')
+            .select('id, storage_path, mime_type, nome_arquivo')
+            .eq('id', sug.contexto_ia.header_midia_id)
+            .eq('ativa', true)
+            .maybeSingle();
+          if (!midia) throw new Error('midia_header_nao_encontrada');
+          const mediaId = await uploadMidiaSofiaComoMediaId(midia);
+          optsEnvio = { headerImageId: mediaId };
+        } catch (e) {
+          logErro('aprovar/header-img-fallback', e);
+          if (tplParaEnviar === 'carrinho_abandonado_site_amicia_img_v1') {
+            tplParaEnviar = 'carrinho_abandonado_site_amicia_v2'; // mesmo corpo/vars, sem header
+          }
+          optsEnvio = {};
+        }
+      }
+      metaResp = await enviarTemplate(sug.conversa.telefone, tplParaEnviar, vars, 'pt_BR', optsEnvio);
     } else {
       // Réplica: texto livre (só funciona dentro da janela 24h)
       // Se tem midia, envia midia COM o texto como caption (foto/video) ou

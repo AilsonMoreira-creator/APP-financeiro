@@ -97,6 +97,20 @@ export async function resolverMidia(marcador) {
 }
 
 /**
+ * Baixa uma mídia da biblioteca (sofia-midias) e sobe pra Meta, devolvendo o
+ * media_id. Usado pelo header de imagem do HSM de abertura _img (a Meta aceita
+ * image:{id} no header do template). Ailson 02/07/2026.
+ */
+export async function uploadMidiaSofiaComoMediaId(midia) {
+  const { data: blob, error: errDl } = await supabase.storage
+    .from('sofia-midias')
+    .download(midia.storage_path);
+  if (errDl) throw new Error('storage download: ' + errDl.message);
+  const buf = Buffer.from(await blob.arrayBuffer());
+  return await uploadMidiaParaMeta(buf, midia.mime_type, midia.nome_arquivo);
+}
+
+/**
  * Envia midia via WhatsApp Cloud API:
  *   1. Baixa binary do Supabase Storage (signed url)
  *   2. POST /media → media_id

@@ -240,8 +240,22 @@ export async function enviarTextoFracionado({ telefone, texto, conversaId, supab
  *                                    Ex: ['Maria', '8']
  * @param {string} language - default 'pt_BR'
  */
-export async function enviarTemplate(telefone, templateName, variables = [], language = 'pt_BR') {
+export async function enviarTemplate(telefone, templateName, variables = [], language = 'pt_BR', opts = {}) {
   const components = [];
+  // Header de IMAGEM (templates _img, ex: carrinho abandonado com foto da peça).
+  // headerImageId = media_id já upado na Meta (fotos da biblioteca Mídias da
+  // Sofia, bucket privado). headerImage = link público. Ailson 02/07/2026.
+  if (opts.headerImageId) {
+    components.push({
+      type: 'header',
+      parameters: [{ type: 'image', image: { id: opts.headerImageId } }]
+    });
+  } else if (opts.headerImage) {
+    components.push({
+      type: 'header',
+      parameters: [{ type: 'image', image: { link: opts.headerImage } }]
+    });
+  }
   if (variables.length > 0) {
     components.push({
       type: 'body',
@@ -392,9 +406,50 @@ export async function listarTemplates() {
  * IMPORTANTE: Template pertence ao WABA, nao ao Phone Number.
  * Nao precisa de numero ativo na WABA pra submeter.
  */
+// Sobe a imagem de amostra do header (resumable upload no app Meta) e devolve
+// o header_handle, exigido pra criar template com HEADER IMAGE. Portado do
+// meluni-whats-template-criar.js. Ailson 02/07/2026.
+const META_APP_ID_UPLOAD = process.env.META_WA_APP_ID || '1862054317831156'; // app "claude"
+
+async function subirSampleHeader(sampleUrl) {
+  const token = process.env.META_WA_ACCESS_TOKEN;
+  const imgR = await fetch(sampleUrl);
+  if (!imgR.ok) throw new Error(`baixar sample_url (HTTP ${imgR.status})`);
+  const bytes = Buffer.from(await imgR.arrayBuffer());
+  const mime = imgR.headers.get('content-type') || 'image/jpeg';
+  const fname = (sampleUrl.split('?')[0].split('/').pop()) || 'sample.jpg';
+
+  // 1. inicia a sessão de upload
+  const startR = await fetch(
+    `https://graph.facebook.com/v21.0/${META_APP_ID_UPLOAD}/uploads?file_name=${encodeURIComponent(fname)}&file_length=${bytes.length}&file_type=${encodeURIComponent(mime)}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+  );
+  const startTxt = await startR.text();
+  let startJ = null; try { startJ = startTxt ? JSON.parse(startTxt) : null; } catch { /* */ }
+  if (!startR.ok || !startJ?.id) throw new Error('upload start: ' + startTxt);
+
+  // 2. envia os bytes (offset 0) → { h: handle }
+  const upR = await fetch(`https://graph.facebook.com/v21.0/${startJ.id}`, {
+    method: 'POST',
+    headers: { Authorization: `OAuth ${token}`, file_offset: '0', 'Content-Type': mime },
+    body: bytes,
+  });
+  const upTxt = await upR.text();
+  let upJ = null; try { upJ = upTxt ? JSON.parse(upTxt) : null; } catch { /* */ }
+  if (!upR.ok || !upJ?.h) throw new Error('upload bytes: ' + upTxt);
+  return upJ.h;
+}
+
 export async function submeterTemplate(tplRow) {
   // 1. Monta componente BODY com exemplos das variaveis
   const components = [];
+
+  // HEADER IMAGE (opcional — templates _img): tplRow.header = { format:'IMAGE', sample_url }
+  // Ailson 02/07/2026.
+  if (tplRow.header?.format === 'IMAGE' && tplRow.header?.sample_url) {
+    const handle = await subirSampleHeader(tplRow.header.sample_url);
+    components.push({ type: 'HEADER', format: 'IMAGE', example: { header_handle: [handle] } });
+  }
 
   // BODY (sempre presente)
   const bodyComp = { type: 'BODY', text: tplRow.body_text };

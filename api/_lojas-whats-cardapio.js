@@ -231,6 +231,40 @@ export async function getRefsCarrinhoDeConversa(carrinhoId) {
   }
 }
 
+// ─── FOTO DA PEÇA DO CARRINHO (biblioteca Mídias da Sofia) ─────────────────
+// Correção Ailson 02/07/2026: a fonte de fotos do módulo Sofia é a biblioteca
+// do botão Mídias (lojas_whats_midias, tipo='foto', já referenciada por REF,
+// bucket privado sofia-midias) — NÃO o bucket produtos de outros módulos.
+// Extrai as REFs do último evento de carrinho e devolve a primeira mídia foto
+// ativa que existir na biblioteca. Retorna null se nada rastreável.
+
+export async function resolverMidiaFotoCarrinho(carrinhoId) {
+  const refs = await getRefsCarrinhoDeConversa(carrinhoId);
+  if (!refs.length) return null;
+
+  // Normaliza sem zero à esquerda, mas a biblioteca tem REFs como '0020' —
+  // então busca as variantes (norm/pad4/pad5) e compara normalizado dos 2 lados.
+  const refsNorm = [...new Set(refs.slice(0, 10).map(r => String(r).replace(/^0+/, '') || '0'))];
+  const variantes = [...new Set(refsNorm.flatMap(r => [r, r.padStart(4, '0'), r.padStart(5, '0')]))];
+
+  const { data } = await supabase
+    .from('lojas_whats_midias')
+    .select('id, tipo, ref, nome_arquivo, storage_path, mime_type, size_bytes')
+    .eq('tipo', 'foto')
+    .eq('ativa', true)
+    .in('ref', variantes)
+    .limit(variantes.length);
+
+  if (!data?.length) return null;
+  const normalizar = r => String(r || '').replace(/^0+/, '') || '0';
+  // Respeita a ordem das REFs no carrinho (primeira peça com foto ganha)
+  for (const ref of refsNorm) {
+    const m = data.find(d => normalizar(d.ref) === ref);
+    if (m) return m;
+  }
+  return data[0];
+}
+
 // ─── MONTAGEM COMPLETA DO CARDAPIO ────────────────────────────────────────
 
 export async function montarCardapio({ refsDoCarrinho = [], limite = 6 } = {}) {

@@ -22,8 +22,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, setCors, log, logErro, getConfig, primeiroNome } from './_lojas-whats-helpers.js';
+import { resolverMidiaFotoCarrinho } from './_lojas-whats-cardapio.js';
 
-async function processarConversaUnica(conv, template) {
+async function processarConversaUnica(conv, template, headerMidia = null) {
   // Monta vars SOMENTE com as chaves que o template DECLARA (evita enviar
   // parâmetro a mais → Meta rejeita). visita_site declara {{1}}; carrinho_v2
   // declara {{1}}+{{2}}. Ailson 28/05/2026 (mesma causa do caso Poliana).
@@ -57,6 +58,9 @@ async function processarConversaUnica(conv, template) {
       contexto_ia: {
         carrinho_id: conv.carrinho_id,
         processada_em: new Date().toISOString(),
+        // Foto da peça pro header do HSM _img — mídia da biblioteca Mídias da
+        // Sofia (Ailson 02/07/2026).
+        ...(headerMidia ? { header_midia_id: headerMidia.id, header_midia_ref: headerMidia.ref } : {}),
       },
     });
   if (errSug) throw errSug;
@@ -91,16 +95,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Busca os 2 templates ativos: v2 (carrinho com pecas) + visita_site (zerado)
-    // Ailson 27/05/2026: escolhe baseado em qtd_pecas da conversa.
+    // Busca os templates ativos: v2 (carrinho com pecas) + visita_site (zerado)
+    // + img_v1 (carrinho com pecas E foto resolvida — Ailson 02/07/2026).
     const { data: templates } = await supabase
       .from('lojas_whats_templates')
       .select('*')
-      .in('name', ['carrinho_abandonado_site_amicia_v2', 'visita_site_amicia_v1'])
+      .in('name', ['carrinho_abandonado_site_amicia_v2', 'visita_site_amicia_v1', 'carrinho_abandonado_site_amicia_img_v1'])
       .eq('ativo', true);
 
     const tplCarrinho = templates?.find(t => t.name === 'carrinho_abandonado_site_amicia_v2');
     const tplVisita   = templates?.find(t => t.name === 'visita_site_amicia_v1');
+    // Template com foto só entra em jogo depois de APROVADO pela Meta.
+    const tplImg      = templates?.find(t => t.name === 'carrinho_abandonado_site_amicia_img_v1' && t.status === 'aprovado');
 
     if (!tplCarrinho || !tplVisita) {
       return res.status(500).json({
@@ -146,12 +152,23 @@ export default async function handler(req, res) {
     const resultados = { processadas: 0, falhas: [], por_template: {} };
     for (const conv of conversas) {
       try {
-        // Regra Ailson 27/05/2026:
-        //   qtd_pecas >= 1 → template_v2 (carrinho com pecas)
+        // Regra Ailson 27/05/2026 + foto 02/07/2026:
+        //   qtd_pecas >= 1 + peça com foto na biblioteca Mídias → template img_v1 (header IMAGE)
+        //   qtd_pecas >= 1 sem foto → template_v2 (texto, padrão atual)
         //   qtd_pecas <= 0 / null → visita_site (apenas {{1}})
         const pecas = Number(conv.qtd_pecas || 0);
-        const template = pecas >= 1 ? tplCarrinho : tplVisita;
-        await processarConversaUnica(conv, template);
+        let template = pecas >= 1 ? tplCarrinho : tplVisita;
+        let headerMidia = null;
+        if (pecas >= 1 && tplImg) {
+          try {
+            headerMidia = await resolverMidiaFotoCarrinho(conv.carrinho_id);
+            if (headerMidia) template = tplImg;
+          } catch (e) {
+            logErro('processar/foto-carrinho', e); // sem foto → segue no v2 texto
+            headerMidia = null;
+          }
+        }
+        await processarConversaUnica(conv, template, headerMidia);
         resultados.processadas++;
         resultados.por_template[template.name] = (resultados.por_template[template.name] || 0) + 1;
       } catch (e) {
