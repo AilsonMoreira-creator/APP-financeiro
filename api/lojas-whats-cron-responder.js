@@ -25,6 +25,7 @@ import { supabase, log, logErro, getConfig } from './_lojas-whats-helpers.js';
 import { processarConversa } from './lojas-whats-ia.js';
 import { processarUma } from './lojas-whats-aprovar.js';
 import { enviarAberturaApresentacao, enviarAberturaTextoFotos } from './_lojas-whats-apresentacao.js';
+import { rodarResgates } from './_lojas-whats-resgate.js';
 
 // Quanto pegamos por run. Mantido modesto: cada processarConversa faz 1 chamada
 // ao Claude (alguns segundos). 12 * ~5s = ~60s, folgado dentro do maxDuration.
@@ -63,7 +64,16 @@ export default async function handler(req, res) {
     if (errSel) throw errSel;
 
     if (!conversas?.length) {
-      return res.status(200).json({ ok: true, total_pegos: 0, gerados, pulados, erros });
+      // Mesmo sem conversa com debounce, a fase de RESGATE roda (sugestoes
+      // pendentes paradas 30+ min nao dependem de inbound novo).
+      let resgateVazio = null;
+      try {
+        resgateVazio = await rodarResgates();
+      } catch (eRes) {
+        logErro('cron-responder/resgate', eRes);
+        resgateVazio = { erro: eRes.message };
+      }
+      return res.status(200).json({ ok: true, total_pegos: 0, gerados, pulados, erros, resgate: resgateVazio });
     }
 
     log('cron-responder', `pegou ${conversas.length} conversa(s) com debounce vencido`);
@@ -160,6 +170,19 @@ export default async function handler(req, res) {
     }
 
     log('cron-responder', `gerados=${gerados} pulados=${pulados} erros=${erros}`);
+
+    // 3. RESGATE 30 MIN (Ailson 01/07/2026): sugestoes pendentes paradas ha
+    // 30+ min sem aprovacao humana — Sofia reavalia e, se confianca >= 80 e
+    // tema nao delicado, envia sozinha (max 2 por conversa). Falha aqui nao
+    // derruba o run principal.
+    let resgate = null;
+    try {
+      resgate = await rodarResgates();
+    } catch (eRes) {
+      logErro('cron-responder/resgate', eRes);
+      resgate = { erro: eRes.message };
+    }
+
     return res.status(200).json({
       ok: true,
       total_pegos: conversas.length,
@@ -169,6 +192,7 @@ export default async function handler(req, res) {
       auto_ativo: autoAtivo,
       auto_enviadas: autoEnviadas,
       auto_falhas: autoFalhas,
+      resgate,
       detalhe,
     });
   } catch (e) {
