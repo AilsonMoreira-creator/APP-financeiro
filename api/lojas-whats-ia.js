@@ -1589,6 +1589,13 @@ function montarMensagensClaude(msgs, conv) {
       let txt = m.audio_transcricao || m.texto || '';
       if (!txt && m.tipo_midia === 'image') txt = isCliente ? '[cliente enviou uma imagem]' : '[Sofia enviou uma foto do catálogo]';
       if (!txt && m.tipo_midia === 'audio') txt = '[cliente enviou áudio sem transcrição]';
+      // Sticker/video/documento/reacao etc: NAO descartar. Se a msg descartada
+      // for a ULTIMA da cliente, o array termina em 'assistant' e o Sonnet 4.6
+      // rejeita com 400 (prefill) -> conversa entra em retry infinito sem
+      // resposta. Bug real: sticker de despedida travou 2 conversas. 01/07/2026.
+      if (!txt && m.tipo_midia && m.tipo_midia !== 'text') {
+        txt = isCliente ? `[cliente enviou ${m.tipo_midia === 'sticker' ? 'uma figurinha' : `mídia: ${m.tipo_midia}`}]` : `[Sofia enviou mídia: ${m.tipo_midia}]`;
+      }
       if (!txt) continue;
       blocks.push({ type: 'text', text: txt });
     }
@@ -1605,6 +1612,13 @@ function montarMensagensClaude(msgs, conv) {
   // Claude exige que comece com user
   if (result.length === 0 || result[0].role !== 'user') {
     result.unshift({ role: 'user', blocks: [{ type: 'text', text: '(início da conversa)' }] });
+  }
+
+  // ... e o Sonnet 4.6 exige que TERMINE com user (nao suporta prefill de
+  // assistant). Se a ultima msg da cliente foi descartada por qualquer motivo,
+  // fecha com um user sintetico pra nao dar 400. 01/07/2026.
+  if (result[result.length - 1].role !== 'user') {
+    result.push({ role: 'user', blocks: [{ type: 'text', text: '[cliente enviou uma mensagem sem texto — continue a conversa naturalmente]' }] });
   }
 
   // Normaliza: se a mensagem é só 1 bloco de texto, manda como string (econômico
