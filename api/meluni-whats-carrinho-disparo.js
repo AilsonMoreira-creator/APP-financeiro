@@ -13,6 +13,7 @@
 import { supabase, cfgMeluni, dentroJanelaEnvio } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverResumoItens, resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
+import { urlFotoCarrinho } from './_meluni-fotos.js';
 import { acharConversaWhats } from './_meluni-tel.js';
 
 const ETAPAS_FECHADAS = ['vendeu', 'perdida', 'resolvido'];
@@ -36,7 +37,7 @@ async function acharOuCriarConversa(telefone, nome) {
 }
 
 // envia o 1º template pra um carrinho e move pra 'enviada'. Retorna {ok}|{skip}.
-async function enviarCarrinho(c, pctLeve, exigirNome, tpls) {
+async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
   const itens = Array.isArray(c.itens) ? c.itens.filter(i => i?.sku) : [];
   if (!itens.length) return { skip: 'sem_itens' };
   if (c.enviado_em || c.dados_extra?.lara_template_enviado_em) return { skip: 'ja_enviado' };
@@ -57,10 +58,37 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls) {
     versao = 'sem_nome'; nameTpl = 'meluni_carrinho_sem_nome'; bodyParams = [resumo];
   }
 
+  // ── Variante com FOTO da peça (Ailson 02/07/2026) ──
+  // Se o gate lara_carrinho_img_ativo tá ligado, tem nome e o carrinho tem foto
+  // cacheada (meluni_produto_fotos, tamanho cheio), troca pro template _img:
+  //   leve -> leve_img (nome+resumo) | elegante -> atemporal_img (só nome).
+  // ?v=timestamp força a Meta a baixar a foto atual (path do bucket é fixo por sku).
+  // Sem foto ou gate desligado: fluxo texto de sempre. Se o envio COM imagem
+  // falhar, cai automático pro texto correspondente.
+  let headerImage = null, versaoTexto = versao, nameTplTexto = nameTpl;
+  if (imgAtivo && nome) {
+    const foto = await urlFotoCarrinho(itens);
+    if (foto) {
+      headerImage = foto + (foto.includes('?') ? '&' : '?') + 'v=' + Date.now();
+      versao = versao === 'leve' ? 'leve_img' : 'atemporal_img';
+      nameTpl = versao === 'leve_img' ? 'meluni_carrinho_leve_img' : 'meluni_carrinho_atemporal_img';
+      if (versao === 'atemporal_img') bodyParams = [nome];
+    }
+  }
+
   const conv = await acharOuCriarConversa(c.telefone, nome);
   if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) return { skip: 'conversa_fechada' };
 
-  const r = await enviarTemplateLara(c.telefone, nameTpl, bodyParams);
+  let r;
+  try {
+    r = await enviarTemplateLara(c.telefone, nameTpl, bodyParams, headerImage ? { headerImage } : {});
+  } catch (e) {
+    if (!headerImage) throw e;
+    // imagem falhou (foto fora do ar, template reprovado etc) -> manda o texto
+    versao = versaoTexto; nameTpl = nameTplTexto;
+    bodyParams = versao === 'leve' ? [nome, resumo] : [nome];
+    r = await enviarTemplateLara(c.telefone, nameTpl, bodyParams);
+  }
   const metaMsgId = r?.messages?.[0]?.id || null;
   const nowIso = new Date().toISOString();
 
@@ -93,6 +121,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const pctLeve = Number(await cfgMeluni('lara_carrinho_ab_pct_leve', 50));
+  const imgAtivo = (await cfgMeluni('lara_carrinho_img_ativo', false)) === true;
   const exigirNome = (await cfgMeluni('lara_carrinho_exigir_nome', false)) === true;
   const tpls = ((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates || {};
 
@@ -113,7 +142,7 @@ export default async function handler(req, res) {
     const { data: carts } = await supabase.from('meluni_carrinhos').select(COLS).in('id', ids).eq('status', 'processando');
     for (const c of (carts || [])) {
       try {
-        const r = await enviarCarrinho(c, pctLeve, exigirNome, tpls);
+        const r = await enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo);
         if (r.ok) { enviados++; detalhe.push({ id: c.id, versao: r.versao }); }
         else { pulados++; detalhe.push({ id: c.id, pulado: r.skip }); }
       } catch (e) { erros++; detalhe.push({ id: c.id, erro: String(e?.message || e) }); }
@@ -151,7 +180,7 @@ export default async function handler(req, res) {
     for (const c of (carts || [])) {
       if (enviados >= limite) break;
       try {
-        const r = await enviarCarrinho(c, pctLeve, exigirNome, tpls);
+        const r = await enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo);
         if (r.ok) { enviados++; detalhe.push({ id: c.id, versao: r.versao }); }
         else { pulados++; }
       } catch (e) { erros++; detalhe.push({ id: c.id, erro: String(e?.message || e) }); }

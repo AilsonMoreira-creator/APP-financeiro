@@ -1,29 +1,30 @@
 // ============================================================================
-// bling-fotos-sync — baixa a foto de cada variação do Bling e re-hospeda no
-// bucket sofia-midias (URL estável, sem expiração), gravando o ponteiro em
-// meluni_produto_fotos (chave = sku, o mesmo do carrinho Meluni).
+// bling-fotos-sync — baixa a foto EM TAMANHO CHEIO de cada variação do Bling e
+// re-hospeda no bucket sofia-midias (URL pública estável), gravando o ponteiro
+// em meluni_produto_fotos (chave = sku, o mesmo do carrinho Meluni).
 // ----------------------------------------------------------------------------
-// Por que re-hospedar: as URLs do Bling são S3 assinadas e EXPIRAM (horas/dias),
-// então não dá pra mandar direto no template da Meta. Aqui a foto vira nossa.
-// Fonte da imagem: imagemURL da listagem /produtos (1 req por página de 100).
-//   (Se um dia quiser foto em tamanho cheio: trocar por GET /produtos/{id} e
-//    usar midia.imagens.internas[0].link — 1 req por produto, mais lento.)
-// Idempotente: só re-baixa quando a foto mudou (bling_img_key) ou com ?force=1.
-// Roda SOB DEMANDA, em lotes, pra não estourar o timeout:
-//   /api/bling-fotos-sync?dry=1                 -> simula, não escreve
-//   /api/bling-fotos-sync?run=1                 -> executa (pág 1 em diante)
-//   /api/bling-fotos-sync?run=1&pagina=3        -> retoma da página 3
-//   /api/bling-fotos-sync?run=1&paginas=2       -> nº de páginas por chamada
-//   /api/bling-fotos-sync?run=1&conta=lumia     -> outra conta
-//   /api/bling-fotos-sync?run=1&force=1         -> re-baixa tudo
-// NÃO tem cron: só roda quando chamado. Ailson 29/06/2026.
+// v2 (Ailson 02/07/2026): a listagem /produtos só dá imagemURL MINIATURA
+// (~1.5KB) — não serve pra header de HSM. Agora cada produto que precisa de
+// foto ganha um GET /produtos/{id} e usamos midia.imagens.internas[0].link
+// (fallback externas[0], fallback pai da variação). 1 req por produto, com
+// pacing de 350ms (rate limit Bling ~3/s), então roda em LOTES com cursor:
+//   /api/bling-fotos-sync?run=1                        -> lote a partir do início
+//   /api/bling-fotos-sync?run=1&pagina=4&offset=37     -> retoma do cursor
+//   /api/bling-fotos-sync?run=1&lote=30                -> nº de downloads por chamada
+//   /api/bling-fotos-sync?run=1&force=1                -> re-baixa tudo
+//   /api/bling-fotos-sync?dry=1                        -> simula
+// Resposta traz {proxima:{pagina,offset}} pra encadear até fim=true.
+// Idempotente: bling_img_key = pathname da imagem cheia; só re-baixa se mudou.
+// NÃO tem cron: roda sob demanda. Ailson 29/06/2026, full-size 02/07/2026.
 // ============================================================================
 import { supabase, refreshBlingToken, blingFetch, parseDescricao } from './_bling-helpers.js';
 
+export const config = { maxDuration: 60 };
 const API = 'https://api.bling.com.br/Api/v3';
 const BUCKET = 'sofia-midias';
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// caminho-base da imagem no S3 (sem a querystring assinada) -> muda quando a foto troca
+// caminho-base da imagem (sem querystring assinada) -> muda quando a foto troca
 const imgKey = (url) => { try { return new URL(url).pathname; } catch { return null; } };
 
 async function baixarESubir(sku, urlBling) {
@@ -34,8 +35,14 @@ async function baixarESubir(sku, urlBling) {
   const up = await supabase.storage.from(BUCKET).upload(path, buf, { contentType: 'image/jpeg', upsert: true });
   if (up.error) throw new Error('upload ' + up.error.message);
   const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return { path, url: pub.publicUrl };
+  return { path, url: pub.publicUrl, bytes: buf.length };
 }
+
+// extrai o link da imagem cheia do detalhe do produto
+const linkDoDetalhe = (det) =>
+  det?.midia?.imagens?.internas?.[0]?.link
+  || det?.midia?.imagens?.externas?.[0]?.link
+  || null;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -49,27 +56,33 @@ export default async function handler(req, res) {
   try {
     const token = await refreshBlingToken(conta);
     const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
-    const pagInicio = parseInt(q.pagina || '1', 10);
-    const maxPags = Math.min(parseInt(q.paginas || '3', 10) || 3, 10);
+    let pagina = Math.max(1, parseInt(q.pagina || '1', 10) || 1);
+    let offset = Math.max(0, parseInt(q.offset || '0', 10) || 0);
+    const lote = Math.min(Math.max(parseInt(q.lote || '30', 10) || 30, 1), 60); // downloads por chamada
+    const t0 = Date.now();
+    const BUDGET_MS = 48000; // para antes do timeout de 60s
 
-    const out = { conta, dry, lidos: 0, baixados: 0, pulados: 0, sem_foto: 0, erros: 0, pagina_ini: pagInicio, pagina_fim: pagInicio, fim: false };
+    const out = { conta, dry, lidos: 0, baixados: 0, pulados: 0, sem_foto: 0, erros: 0, fim: false };
+    const cachePai = {}; // id do pai -> link (variações da mesma peça compartilham foto)
 
-    for (let p = pagInicio; p < pagInicio + maxPags; p++) {
-      const rl = await blingFetch(`${API}/produtos?pagina=${p}&limite=100`, headers);
+    laço:
+    while (true) {
+      const rl = await blingFetch(`${API}/produtos?pagina=${pagina}&limite=100`, headers);
       const jl = await rl.json().catch(() => null);
       if (rl.status !== 200) { out.erro_listagem = jl?.error || rl.status; break; }
       const produtos = Array.isArray(jl?.data) ? jl.data : [];
-      out.pagina_fim = p;
       if (!produtos.length) { out.fim = true; break; }
 
-      for (const prod of produtos) {
+      for (let i = offset; i < produtos.length; i++) {
+        if (out.baixados >= lote || (Date.now() - t0) > BUDGET_MS) { offset = i; break laço; }
+        const prod = produtos[i];
         out.lidos++;
         const sku = (prod.codigo || '').trim();
         if (!sku) { out.pulados++; continue; }
         const parsed = parseDescricao(prod.nome || '');
-        const url = prod.imagemURL || null;
 
-        if (!url) {
+        // sem nem thumb na listagem = produto sem foto no Bling
+        if (!prod.imagemURL) {
           out.sem_foto++;
           if (!dry) await supabase.from('meluni_produto_fotos').upsert({
             sku, ref: parsed.ref || null, cor: parsed.cor || null,
@@ -78,14 +91,40 @@ export default async function handler(req, res) {
           continue;
         }
 
-        const key = imgKey(url);
+        // detalhe do produto -> link da imagem cheia (pai como fallback)
+        await sleep(350); // rate limit Bling ~3 req/s
+        const rd = await blingFetch(`${API}/produtos/${prod.id}`, headers);
+        const jd = await rd.json().catch(() => null);
+        if (rd.status !== 200) { out.erros++; continue; }
+        const det = jd?.data || {};
+        let link = linkDoDetalhe(det);
+        const paiId = det?.variacao?.produtoPai?.id || null;
+        if (!link && paiId) {
+          if (!(paiId in cachePai)) {
+            await sleep(350);
+            const rp = await blingFetch(`${API}/produtos/${paiId}`, headers);
+            const jp = await rp.json().catch(() => null);
+            cachePai[paiId] = rp.status === 200 ? linkDoDetalhe(jp?.data || {}) : null;
+          }
+          link = cachePai[paiId];
+        }
+        if (!link) {
+          out.sem_foto++;
+          if (!dry) await supabase.from('meluni_produto_fotos').upsert({
+            sku, ref: parsed.ref || null, cor: parsed.cor || null,
+            origem: 'bling_' + conta, sem_foto: true, atualizado_em: new Date().toISOString(),
+          });
+          continue;
+        }
+
+        const key = imgKey(link);
         const { data: ex } = await supabase.from('meluni_produto_fotos')
           .select('bling_img_key').eq('sku', sku).maybeSingle();
         if (ex && ex.bling_img_key === key && !force) { out.pulados++; continue; }
         if (dry) { out.baixados++; continue; }
 
         try {
-          const { path, url: pub } = await baixarESubir(sku, url);
+          const { path, url: pub } = await baixarESubir(sku, link);
           await supabase.from('meluni_produto_fotos').upsert({
             sku, ref: parsed.ref || null, cor: parsed.cor || null,
             storage_path: path, url_publica: pub, origem: 'bling_' + conta,
@@ -97,9 +136,11 @@ export default async function handler(req, res) {
       }
 
       if (produtos.length < 100) { out.fim = true; break; }
+      pagina++; offset = 0;
     }
 
-    out.proxima_pagina = out.fim ? null : out.pagina_fim + 1;
+    out.proxima = out.fim ? null : { pagina, offset };
+    out.ms = Date.now() - t0;
     return res.json(out);
   } catch (e) {
     return res.status(500).json({ conta, erro: String(e?.message || e) });
