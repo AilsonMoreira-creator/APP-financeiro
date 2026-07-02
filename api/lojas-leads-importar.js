@@ -151,6 +151,30 @@ function parseCSV(text) {
 //     <div class="table__td-thumb" ...><img src="https://s.amicialoja.com.br/product/2026/05/vestido-curto-de-couro-amicia-preto-7.jpg?format=webp" /></div>
 //   </div>
 // Output: [{ foto_url, slug, tipo_inferido, cor_inferida }, ...]
+// Novo formato do Convertr (jun/2026): a coluna virou `produtos` e o conteúdo
+// deixou de ser HTML — agora é texto simples "Nx SKU" por linha, ex:
+//   "1x 318900203\n1x 315400203"
+// O SKU do site = REF + 3 dígitos de cor + 2 de tamanho, então a REF é o SKU
+// menos os 5 últimos dígitos (318900203 → 3189; 37600203 → 376).
+// Validado contra a biblioteca Mídias: 17/17 REFs derivadas bateram.
+// Ailson 02/07/2026.
+function parseProdutosTexto(texto) {
+  if (!texto || !texto.trim()) return [];
+  const itens = [];
+  const regex = /(\d+)\s*x\s+(\d{6,})/g;
+  let m;
+  while ((m = regex.exec(texto)) !== null) {
+    const sku = m[2];
+    itens.push({
+      qtd: parseInt(m[1]) || 1,
+      sku,
+      ref: sku.slice(0, -5).replace(/^0+/, '') || '0',
+      formato: 'produtos_texto',
+    });
+  }
+  return itens;
+}
+
 function parseItemsHtml(html) {
   if (!html || !html.trim()) return [];
   const urls = [];
@@ -491,8 +515,11 @@ export default async function handler(req, res) {
             continue;
           }
 
-          const itemsHtml = col(row, carrinhosHM, 'items') || '';
-          const itemsParsed = parseItemsHtml(itemsHtml);
+          // Convertr renomeou a coluna: era `items` (HTML), virou `produtos`
+          // (texto "Nx SKU"). Aceita as duas. Ailson 02/07/2026.
+          const itemsHtml = col(row, carrinhosHM, 'items') || col(row, carrinhosHM, 'produtos') || '';
+          let itemsParsed = parseItemsHtml(itemsHtml);
+          if (!itemsParsed.length) itemsParsed = parseProdutosTexto(itemsHtml);
 
           const parseTs = v => (v && v.length >= 10) ? v : null;
 

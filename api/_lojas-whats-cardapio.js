@@ -206,14 +206,32 @@ export async function getRefsCarrinhoDeConversa(carrinhoId) {
     // Pega evento mais recente desse lead
     const { data: evento } = await supabase
       .from('lojas_lead_carrinho_eventos')
-      .select('items_html_raw')
+      .select('items_html_raw, items_parsed')
       .eq('lead_id', carrinhoId)
       .order('created_at_convertr', { ascending: false })
       .limit(1)
       .maybeSingle();
-    if (!evento?.items_html_raw) return [];
+    if (!evento) return [];
 
-    // Chama função SQL extrair_refs_carrinho
+    // 1. items_parsed já traz ref (formato novo `produtos` do Convertr,
+    //    importador deriva REF = 4 primeiros dígitos do SKU). Ailson 02/07/2026.
+    const parsed = Array.isArray(evento.items_parsed) ? evento.items_parsed : [];
+    const refsParsed = parsed.map(i => i?.ref).filter(Boolean);
+    if (refsParsed.length) return [...new Set(refsParsed)];
+
+    if (!evento.items_html_raw) return [];
+
+    // 2. Formato texto "Nx SKU" cru (evento antigo reimportado sem parse).
+    //    REF = SKU menos os 5 últimos dígitos (cor 3 + tam 2). Ailson 02/07/2026.
+    const setNovo = new Set();
+    const reTexto = /\d+\s*x\s+(\d{6,})/g;
+    let m;
+    while ((m = reTexto.exec(evento.items_html_raw)) !== null) {
+      setNovo.add(m[1].slice(0, -5).replace(/^0+/, '') || '0');
+    }
+    if (setNovo.size) return Array.from(setNovo);
+
+    // 3. HTML legado → função SQL extrair_refs_carrinho
     const { data: refs, error } = await supabase.rpc('extrair_refs_carrinho', {
       p_items_html: evento.items_html_raw,
     });
