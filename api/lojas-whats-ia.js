@@ -68,6 +68,64 @@ function detectarGatilhosQuente(texto) {
   return [...encontrados];
 }
 
+// ─── CLASSIFICADOR DE PROMOCAO QUENTE (Ailson 01/07/2026) ──────────────────
+// O detector de keywords sozinho tinha ~89% de falso positivo (25 recusas da
+// Tamara vs 3 aceites). Padrao extraido das decisoes reais dela:
+//   ACEITA  = compra EM ANDAMENTO (vai pagar, montou pedido, combinando envio
+//             DO pedido dela) ou caso que a Sofia nao resolve (varejo <8 pecas)
+//   RECUSA  = pergunta informativa sobre condicoes (minimo? pix? frete? grade?
+//             cartao? excursao?), promessa vaga de futuro, auto-reply da cliente
+// O keyword segue como PRE-FILTRO barato; quando dispara, este classificador
+// (Sonnet temp 0, ~10 chamadas/dia) decide se vale incomodar a Tamara.
+// Fail-open: se o Claude falhar, promove como antes (comportamento atual).
+
+const SYSTEM_QUENTE = `Vc decide se uma conversa de atendimento B2B (atacado de moda feminina) deve ser passada AGORA pra uma vendedora humana fechar a venda.
+
+PASSAR (promover=true) somente quando a compra está EM ANDAMENTO:
+- Cliente montou ou está montando um pedido concreto (mandou lista de peças, escolheu grade/cores/tamanhos)
+- Cliente declarou que vai pagar ou pediu como pagar AGORA ("pagarei no pix", "pode dar continuidade", "me manda o link de pagamento")
+- Cliente está combinando o envio DO PEDIDO DELA (despacho, excursão, motoboy de um pedido real em montagem, não pergunta genérica)
+- Cliente quer comprar abaixo do mínimo de atacado (1 a 7 peças) — exige condição especial que só humano libera
+
+NÃO PASSAR (promover=false):
+- Pergunta informativa sobre condições: qual o mínimo, tem desconto no pix, quanto fica o frete, aceita cartão, entrega em excursão, tem grade, como funciona
+- Promessa vaga de futuro ("vou separar depois", "semana que vem", "vou ver com calma")
+- Mensagem automática de saudação do WhatsApp Business da própria cliente
+- Curiosidade inicial: ainda escolhendo, acabou de receber o catálogo, pedindo fotos
+
+Responda APENAS com JSON, sem markdown: {"promover": true|false, "score": 0-100, "motivo": "curto"}`;
+
+async function avaliarPromocaoQuente({ msgs, textoCliente, gatilhos }) {
+  try {
+    const historico = (msgs || [])
+      .slice(0, 8)
+      .reverse()
+      .map(m => `${m.direcao === 'entrada' ? 'CLIENTE' : 'SOFIA'}: ${(m.audio_transcricao || m.texto || `[${m.tipo_midia || 'midia'}]`).slice(0, 250)}`)
+      .join('\n');
+    const cl = await chamarClaude({
+      modelo: 'claude-sonnet-4-6',
+      systemBlocks: [{ type: 'text', text: SYSTEM_QUENTE }],
+      messages: [{
+        role: 'user',
+        content: `Palavras que dispararam o alerta: ${gatilhos.join(', ')}\n\nCONVERSA (mais antiga -> mais recente):\n${historico}\n\nÚLTIMA MENSAGEM DA CLIENTE:\n${String(textoCliente).slice(0, 400)}`,
+      }],
+      max_tokens: 150,
+      temperature: 0,
+      timeoutMs: 20000,
+    });
+    if (!cl.ok) return null;
+    const j = JSON.parse(cl.texto.replace(/```json|```/g, '').trim());
+    return {
+      promover: j.promover === true,
+      score: Math.max(0, Math.min(100, Number(j.score) || 0)),
+      motivo: String(j.motivo || '').slice(0, 180),
+    };
+  } catch (e) {
+    logErro('ia/avaliar-quente', e);
+    return null;  // fail-open: quem chama promove como antes
+  }
+}
+
 // ─── DETECTOR FOLLOW-UP (Sprint B Sofia, Ailson 25/05/2026) ────────────────
 // Quando cliente sinaliza esfriamento ("vou pensar", "vou voltar no site",
 // "amanha te falo"), Sofia marca pra retomar depois. Tag define timing:
@@ -759,17 +817,44 @@ export async function processarConversa(conversaId) {
       log('ia', `conversa=${conversaId} IGNOROU ${gatilhos.length} gatilhos quente (1a msg cliente — provavel auto-reply)`);
     } else if (!conv.sugestao_quente_pendente_em) {
       // Se ja tem sugestao pendente, nao re-criar (deixa Tamara decidir a atual)
-      const motivoSugestao = gatilhos.slice(0, 3).map(g => g.tipo || g).join(' + ');
-      await supabase.from('lojas_whats_conversas').update({
-        sugestao_quente_pendente_em: new Date().toISOString(),
-        sugestao_quente_motivo: motivoSugestao,
-        sugestao_quente_gatilhos: gatilhos,
-        score_quente: 80 + Math.min(20, gatilhos.length * 5),
-        gatilhos_detectados: gatilhos,
-        ultima_atividade_em: new Date().toISOString(),
-        atualizado_em: new Date().toISOString()
-      }).eq('id', conversaId);
-      log('ia', `conversa=${conversaId} SUGERIU promocao quente (${gatilhos.length} gatilhos) → aguardando Tamara`);
+      //
+      // CLASSIFICADOR IA (Ailson 01/07/2026): keyword e so pre-filtro. O Sonnet
+      // decide se e compra EM ANDAMENTO (promove) ou pergunta informativa
+      // (filtra). Threshold 75. Fail-open: erro no Claude = promove como antes.
+      const av = await avaliarPromocaoQuente({ msgs, textoCliente, gatilhos });
+      const devePromover = !av || (av.promover && av.score >= 75);
+
+      if (devePromover) {
+        const motivoSugestao = av
+          ? `${av.motivo} (ia ${av.score})`
+          : gatilhos.slice(0, 3).map(g => g.tipo || g).join(' + ');
+        await supabase.from('lojas_whats_conversas').update({
+          sugestao_quente_pendente_em: new Date().toISOString(),
+          sugestao_quente_motivo: motivoSugestao,
+          sugestao_quente_gatilhos: gatilhos,
+          score_quente: av ? av.score : 80 + Math.min(20, gatilhos.length * 5),
+          gatilhos_detectados: gatilhos,
+          ultima_atividade_em: new Date().toISOString(),
+          atualizado_em: new Date().toISOString()
+        }).eq('id', conversaId);
+        log('ia', `conversa=${conversaId} SUGERIU promocao quente (${gatilhos.length} gatilhos, ia=${av ? av.score : 'falhou/fail-open'}) → aguardando Tamara`);
+      } else {
+        // Filtrada pela IA: nao incomoda a Tamara, mas registra pra auditoria
+        // e recalibracao futura (mesma tabela das decisoes dela).
+        log('ia', `conversa=${conversaId} gatilhos [${gatilhos.join(',')}] FILTRADOS pela IA (promover=${av.promover} score=${av.score} motivo="${av.motivo}")`);
+        try {
+          await supabase.from('lojas_whats_sugestoes_decisoes').insert({
+            conversa_id: conversaId,
+            tipo_sugestao: 'promover_quente',
+            sugerida_em: new Date().toISOString(),
+            decidida_em: new Date().toISOString(),
+            decisao: 'filtrada_ia',
+            decidida_por: 'sofia_ia',
+            motivo: `${av.motivo} (score ${av.score})`.slice(0, 200),
+            gatilhos: gatilhos,
+          });
+        } catch (eAud) { logErro('ia/auditoria-filtrada', eAud); }
+      }
     }
     // Continua flow normal — IA AINDA gera sugestao de msg, mas Tamara pode
     // tanto aprovar o texto quanto promover pra quente independentemente.
