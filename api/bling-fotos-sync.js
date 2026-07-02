@@ -105,7 +105,10 @@ export default async function handler(req, res) {
     const token = await refreshBlingToken(conta);
     const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
     const t0 = Date.now();
-    const BUDGET_MS = ehCron ? 48000 : 20000;
+    // budget: ?budget=segundos (cap 280, maxDuration=300 no vercel.json).
+    // cron agora usa 240s por rodada (antes 48s: catálogo de ~2k SKUs levava horas).
+    const budgetQ = parseInt(q.budget || '', 10);
+    const BUDGET_MS = budgetQ > 0 ? Math.min(budgetQ, 280) * 1000 : (ehCron ? 240000 : 20000);
     const out = { conta, dry, cron: ehCron, lidos: 0, baixados: 0, pulados: 0, sem_foto: 0, erros: 0, fim: false };
     const cachePai = {};
 
