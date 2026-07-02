@@ -27,6 +27,15 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // caminho-base da imagem (sem querystring assinada) -> muda quando a foto troca
 const imgKey = (url) => { try { return new URL(url).pathname; } catch { return null; } };
 
+// cursor persistido em meluni_config (retomada automática entre chamadas)
+async function cfg(chave) {
+  const { data } = await supabase.from('meluni_config').select('valor').eq('chave', chave).maybeSingle();
+  return data?.valor ?? null;
+}
+async function cfgSet(chave, valor) {
+  await supabase.from('meluni_config').upsert({ chave, valor }, { onConflict: 'chave' });
+}
+
 async function baixarESubir(sku, urlBling) {
   const r = await fetch(urlBling);
   if (!r.ok) throw new Error('download HTTP ' + r.status);
@@ -56,11 +65,18 @@ export default async function handler(req, res) {
   try {
     const token = await refreshBlingToken(conta);
     const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
-    let pagina = Math.max(1, parseInt(q.pagina || '1', 10) || 1);
-    let offset = Math.max(0, parseInt(q.offset || '0', 10) || 0);
-    const lote = Math.min(Math.max(parseInt(q.lote || '30', 10) || 30, 1), 60); // downloads por chamada
+    // cursor: querystring manda; sem querystring, retoma do último salvo no config
+    let pagina, offset;
+    if (q.pagina != null) {
+      pagina = Math.max(1, parseInt(q.pagina, 10) || 1);
+      offset = Math.max(0, parseInt(q.offset || '0', 10) || 0);
+    } else {
+      const cur = await cfg('bling_fotos_sync_cursor_' + conta);
+      pagina = cur?.pagina || 1; offset = cur?.offset || 0;
+    }
+    const lote = Math.min(Math.max(parseInt(q.lote || '15', 10) || 15, 1), 60); // downloads por chamada
     const t0 = Date.now();
-    const BUDGET_MS = 48000; // para antes do timeout de 60s
+    const BUDGET_MS = 20000; // rodadas curtas; o cursor persiste e a próxima chamada retoma
 
     const out = { conta, dry, lidos: 0, baixados: 0, pulados: 0, sem_foto: 0, erros: 0, fim: false };
     const cachePai = {}; // id do pai -> link (variações da mesma peça compartilham foto)
@@ -140,6 +156,7 @@ export default async function handler(req, res) {
     }
 
     out.proxima = out.fim ? null : { pagina, offset };
+    await cfgSet('bling_fotos_sync_cursor_' + conta, out.fim ? null : { pagina, offset, em: new Date().toISOString() });
     out.ms = Date.now() - t0;
     return res.json(out);
   } catch (e) {
