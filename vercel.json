@@ -47,8 +47,14 @@
     }
   ],
   "rewrites": [
-    { "source": "/privacy", "destination": "/privacy.html" },
-    { "source": "/data-deletion", "destination": "/data-deletion.html" }
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/data-deletion",
+      "destination": "/data-deletion.html"
+    }
   ],
   "functions": {
     "api/bling-fotos-sync.js": {
@@ -428,6 +434,10 @@
     {
       "path": "/api/meluni-poscompra-cron",
       "schedule": "0 13 * * 1-6"
+    },
+    {
+      "path": "/api/bling-fotos-sync",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
