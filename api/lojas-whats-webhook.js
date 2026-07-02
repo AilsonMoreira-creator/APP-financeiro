@@ -559,11 +559,11 @@ function respostaPesquisaVariante(motivo, primeiro) {
   const variantes = {
     minimo_pecas: [
       ['A', [
-        `${ola}que bom que vc respondeu! Como recebemos bastante retorno sobre quantidade de peças, até o fim de junho a gente liberou o mínimo de 6 peças.`,
+        `${ola}que bom que vc respondeu! Como recebemos bastante retorno sobre quantidade de peças, essa semana a gente liberou o mínimo de 6 peças.`,
         `Mudou bastante coisa desde a última vez que vc deu uma olhada. Vou te mandar aqui o catálogo atualizado pra vc ver as novidades.`,
       ]],
       ['B', [
-        `${ola}fico feliz que vc respondeu! Sobre o número de peças, ouvimos bastante isso, então até o fim de junho liberamos um mínimo de 6 peças pra começar mais leve.`,
+        `${ola}fico feliz que vc respondeu! Sobre o número de peças, ouvimos bastante isso, então essa semana liberamos um mínimo de 6 peças pra começar mais leve.`,
         `Desde a última vez que vc viu por aqui entrou bastante novidade. Te mando aqui o catálogo atualizado pra vc conferir.`,
       ]],
     ],

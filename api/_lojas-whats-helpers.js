@@ -153,10 +153,20 @@ export function telefoneValido(num) {
  *   "joao.silva@email.com"   -> "Joao"
  *   "JOÃO"                   -> "João"
  */
+// Remove emoji, números e símbolos do nome — cliente com "💆‍♀️💆‍♀️" no perfil
+// fazia a Sofia abrir com "Oii 💆‍♀️💆‍♀️". Mantém só letras (unicode), acentos,
+// espaço, hífen e apóstrofo. Se o nome era SÓ emoji, retorna ''. Ailson 02/07/2026.
+export function sanitizarNome(nome) {
+  return String(nome || '')
+    .replace(/[\u{FE00}-\u{FE0F}\u{200B}-\u{200D}\u{20E3}]/gu, '') // variation selectors, ZWJ/ZWSP, keycap — sobreviviam como \p{M} invisível
+    .replace(/[^\p{L}\p{M}\s'’-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function primeiroNome(nomeCompleto) {
-  if (!nomeCompleto) return 'oi';
-  const limpo = String(nomeCompleto).trim().split(/[\s@.]+/)[0];
-  if (!limpo) return 'oi';
+  const limpo = sanitizarNome(nomeCompleto).split(/[\s@.]+/)[0];
+  if (!limpo || !/\p{L}/u.test(limpo)) return ''; // exige ao menos 1 letra de verdade (Ailson 02/07/2026)
   return limpo.charAt(0).toUpperCase() + limpo.slice(1).toLowerCase();
 }
 

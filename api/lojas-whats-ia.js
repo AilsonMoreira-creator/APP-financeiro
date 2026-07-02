@@ -18,7 +18,7 @@
 //   POST /api/lojas-whats-ia { conversa_id: "xxx" }
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, getConfig, limparEstiloSofia } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, getConfig, limparEstiloSofia, sanitizarNome } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
 import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa, montarListaReferenciasAtivas, montarFichasDetalhadas, montarFotosReconhecimento } from './_lojas-whats-cardapio.js';
 import { montarBlocoPadroes, decidirModo } from './_lojas-whats-padroes.js';
@@ -1056,6 +1056,13 @@ export async function processarConversa(conversaId) {
     if (politicas) {
       blocoPoliticas = `POLITICAS COMERCIAIS AMICIA (sigam SEMPRE — pgto/atacado/varejo/frete/troca):\n${JSON.stringify(politicas, null, 2)}\n\nLEMBRETE: PIX padrao 5% sempre, 10%/15% so na negociacao. Atacado 12 pecas (pode misturar). 3-7 pecas eh tabela varejo (+R$30/peca). Bojo: NENHUM modelo tem.\n\nMARCADORES OBRIGATORIOS (backend remove antes de enviar pro cliente, cliente NUNCA ve esses colchetes):\n- Cliente sinaliza 1-2 pecas e voce vai oferecer upgrade pra 3+: COMECE a resposta com [OFERTA_UPGRADE]\n- Cliente sinaliza 3-7 pecas e voce vai oferecer +R$30/peca (tabela varejo): COMECE a resposta com [OFERTA_VAREJO]\nExemplo: "[OFERTA_VAREJO] Olha, conversei com a gerente e ela liberou! Consigo fazer pra vc, mas aumentando R$30 por peca (entra na tabela varejo). Ainda vale muito a pena, viu?"\nIMPORTANTE: nao coloque o marcador se nao for esses casos especificos. Marcador serve pro backend monitorar 24h sem resposta -> move pra aba Varejo automaticamente. VAREJO eh +R$30/peca FIXO — NUNCA diga que levar mais dilui o acrescimo ou fica mais em conta por peca (eh falso). Pro 1-2 pecas: persuada a fechar 3 pelo GANHO DE REVENDA (boutique revende a ate 3x o preco, entao R$30/peca eh otima margem) e nao conceda as 2 como abertura.`;
     }
+    // CUPOM 5% PRIMEIRA COMPRA DO SITE (Ailson 02/07/2026): a Sofia negava
+    // enfaticamente, mas o site amicialoja.com.br TEM cupom de 5% de primeira
+    // compra. Regra vale SO pra lead de carrinho abandonado do site — nas
+    // outras origens comportamento inalterado.
+    if (conv.origem_lead === 'carrinho_site_amicialoja') {
+      blocoPoliticas += `\n\nCUPOM DE PRIMEIRA COMPRA (vale porque ESTA conversa veio de carrinho abandonado do site): o site amicialoja.com.br tem cupom de 5% de desconto na primeira compra. SE a cliente PERGUNTAR sobre cupom de primeira compra (ou disser que viu/ganhou um cupom no site), CONFIRME com naturalidade que o cupom de 5% funciona sim na primeira compra pelo site — nunca negue. NUNCA ofereça o cupom por iniciativa propria; so responda quando ela tocar no assunto.`;
+    }
     const tecidos = await getConfig('tecidos', null);
     if (tecidos) {
       blocoTecidos = `TECIDOS AMICIA (info detalhada quando cliente perguntar):\n${JSON.stringify(tecidos, null, 2)}\n\nREGRAS DE OURO TECIDOS:\n- Viscolinho NAO tem linho (eh viscose + elastano com trama slub)\n- Suplex eh POLIAMIDA, nao poliester (diferencial)\n- Viscose estampada: estampa digital EXCLUSIVA Amicia`;
@@ -1540,11 +1547,20 @@ function montarContextoConversa(conv) {
   const linhas = [];
   // Nome SEMPRE com inicial maiúscula no contexto — razão social vem em CAIXA
   // ALTA e a IA copiava ("Oii LUCIMARA!"). Ailson 11/06/2026.
-  const nomeBonito = String(conv.nome_cliente || '(sem nome)')
-    .toLowerCase()
-    .replace(/(^|\s)([a-zà-ú])/g, (m, sp, ch) => sp + ch.toUpperCase());
-  linhas.push(`Cliente: ${nomeBonito} ${conv.tipo_documento || ''}`);
-  linhas.push(`(regra: ao usar o nome da cliente na mensagem, use só o primeiro nome, com inicial maiúscula e o resto minúsculo — NUNCA em CAIXA ALTA)`);
+  // Sanitizado: perfil só com emoji ("💆‍♀️💆‍♀️") fazia a Sofia abrir com os
+  // emojis como se fosse nome. Agora emoji some; se sobrar vazio, a Sofia não
+  // usa nome e pergunta na conversa. Ailson 02/07/2026.
+  const nomeSan = sanitizarNome(conv.nome_cliente);
+  if (nomeSan) {
+    const nomeBonito = nomeSan
+      .toLowerCase()
+      .replace(/(^|\s)([a-zà-ú])/g, (m, sp, ch) => sp + ch.toUpperCase());
+    linhas.push(`Cliente: ${nomeBonito} ${conv.tipo_documento || ''}`);
+    linhas.push(`(regra: ao usar o nome da cliente na mensagem, use só o primeiro nome, com inicial maiúscula e o resto minúsculo — NUNCA em CAIXA ALTA)`);
+  } else {
+    linhas.push(`Cliente: (nome não cadastrado — o perfil dela só tinha emoji/símbolos) ${conv.tipo_documento || ''}`);
+    linhas.push(`(regra: NÃO invente nome e NÃO use emoji como se fosse nome. Cumprimente sem nome ("Oii, tudo bem?"). Num momento natural do começo da conversa, pergunte o nome dela de forma leve — ex: "como posso te chamar?" — e passe a usar a partir daí)`);
+  }
   if (conv.qtd_pecas) linhas.push(`Carrinho original: ${conv.qtd_pecas} peças`);
   if (conv.valor_carrinho) linhas.push(`Valor carrinho: R$ ${Number(conv.valor_carrinho).toFixed(2)}`);
   if (conv.iniciada_em) {

@@ -27,7 +27,7 @@
 // GET ?executar=1 (ou header vercel-cron) executa | GET sem param = preview.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, getConfig, dentroDaJanela, limparEstiloSofia } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, getConfig, dentroDaJanela, limparEstiloSofia, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
 import { enviarTextoFracionado } from './_lojas-whats-meta-client.js';
 
@@ -279,7 +279,7 @@ function proximo19hSP(fromMs) {
 
 // ─── MENSAGEM DE FOLLOW-UP (Claude) ──────────────────────────────────────────
 async function gerarMsgFollowupQuente({ modelo, conv, historico }) {
-  const primeiroNome = (conv.nome_cliente || '').split(/\s+/)[0] || '';
+  const primeiroNome = fmtPrimeiroNome(conv.nome_cliente); // sanitizado: emoji vira '' (Ailson 02/07/2026)
   const hist = historico.length === 0
     ? '(sem histórico)'
     : historico.map(m => {

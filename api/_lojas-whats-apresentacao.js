@@ -7,15 +7,12 @@
  *
  * Chamado pelo cron-responder antes de gerar a réplica normal.
  */
-import { supabase, getConfig, log, logErro } from './_lojas-whats-helpers.js';
+import { supabase, getConfig, log, logErro, primeiroNome } from './_lojas-whats-helpers.js';
 import { enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
 import { enviarTexto } from './_lojas-whats-meta-client.js';
 
-function primeiroNome(nome) {
-  // Inicial maiúscula, resto minúsculo (LUCIMARA → Lucimara). Ailson 11/06/2026.
-  const p = String(nome || '').trim().split(/\s+/)[0] || '';
-  return p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : '';
-}
+// primeiroNome agora vem do _lojas-whats-helpers.js já sanitizado (remove
+// emoji/símbolos; nome só emoji vira ''). Ailson 02/07/2026.
 
 function saudacaoBRT() {
   // Hora em BRT (UTC-3) sem depender do TZ do servidor

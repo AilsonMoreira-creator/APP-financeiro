@@ -20,7 +20,7 @@
 // manda QUALQUER msg — então o cron só pega conversas silentes.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, log, logErro, contarSofiaSemResposta, getConfig } from './_lojas-whats-helpers.js';
+import { supabase, log, logErro, contarSofiaSemResposta, getConfig, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
 import { enviarTexto, enviarTemplate } from './_lojas-whats-meta-client.js';
 import { enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
 
@@ -39,8 +39,7 @@ function escolherMsg6h(conversaId, nomeCliente) {
   for (let i = 0; i < idStr.length; i++) h = (h * 31 + idStr.charCodeAt(i)) | 0;
   const template = VARIACOES_MSG_6H[Math.abs(h) % VARIACOES_MSG_6H.length];
   // Pega primeiro nome — mais natural. Se vazio, fallback educado.
-  const bruto = (nomeCliente || '').split(' ')[0].trim();
-  const primeiroNome = bruto ? bruto.charAt(0).toUpperCase() + bruto.slice(1).toLowerCase() : ''; // LUCIMARA → Lucimara (Ailson 11/06/2026)
+  const primeiroNome = fmtPrimeiroNome(nomeCliente); // sanitizado: emoji/símbolo vira '' (Ailson 02/07/2026)
   return primeiroNome
     ? template.replace('{nome}', primeiroNome)
     : template.replace('Oi {nome}!', 'Oi!').replace('Oi {nome},', 'Oi, tudo bem?').replace('Olá {nome}!', 'Olá!');
@@ -158,8 +157,7 @@ export default async function handler(req, res) {
             // VESTI 6h (Ailson 04/06/2026): a cliente recebeu o LINK. No follow-up
             // de 6h a Sofia pergunta se ela conseguiu abrir e manda o PDF tambem,
             // caso prefira ver por aqui. 1 toque = 2 mensagens (texto + PDF).
-            const brutoV = (conv.nome_cliente || '').split(' ')[0].trim();
-            const primeiroNome = brutoV ? brutoV.charAt(0).toUpperCase() + brutoV.slice(1).toLowerCase() : ''; // title case (Ailson 11/06/2026)
+            const primeiroNome = fmtPrimeiroNome(conv.nome_cliente); // sanitizado: emoji vira '' (Ailson 02/07/2026)
             const tplVesti = await getConfig('vesti_followup_6h',
               'Oii {nome} 😊 vc conseguiu abrir o link do catálogo?? Tô te encaminhando o catálogo em PDF também, caso vc prefira ver por aqui');
             const texto = primeiroNome
@@ -289,8 +287,7 @@ export default async function handler(req, res) {
             continue;
           }
 
-          const bruto24 = (conv.nome_cliente || 'cliente').split(' ')[0];
-          const primeiroNome = bruto24.charAt(0).toUpperCase() + bruto24.slice(1).toLowerCase(); // title case (Ailson 11/06/2026)
+          const primeiroNome = fmtPrimeiroNome(conv.nome_cliente) || 'tudo bem'; // var de HSM não pode ser vazia (Ailson 02/07/2026)
           const r = await enviarTemplate(conv.telefone, 'followup_catalogo_24h_v1', [primeiroNome]);
           const metaMsgId = r?.messages?.[0]?.id || null;
           if (!metaMsgId) throw new Error('meta_sem_message_id');

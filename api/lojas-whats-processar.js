@@ -29,7 +29,7 @@ async function processarConversaUnica(conv, template) {
   // declara {{1}}+{{2}}. Ailson 28/05/2026 (mesma causa do caso Poliana).
   const nome = primeiroNome(conv.nome_cliente);
   const valorPorChave = {
-    '1': nome || 'cliente',
+    '1': nome || 'tudo bem', // nome só emoji vira '' → "Oi tudo bem," soa natural; Meta rejeita var vazia (Ailson 02/07/2026)
     '2': String(conv.qtd_pecas || 0),
   };
   const declaradas = Array.isArray(template.variables) ? template.variables : [];
