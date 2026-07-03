@@ -248,6 +248,8 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   let metaMsgId = null;
   let erroEnvio = null;
   let erroMetaResponse = null;
+  let headerMidiaPath = null; // storage_path da foto do header (template _img) — Ailson 03/07/2026
+  let tplEnviadoReal = null;  // nome do template que realmente saiu (fallback texto incluso)
 
   try {
     if (sug.tipo === 'primeira_mensagem' && sug.template_name) {
@@ -279,12 +281,14 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
           if (!midia) throw new Error('midia_header_nao_encontrada');
           const mediaId = await uploadMidiaSofiaComoMediaId(midia);
           optsEnvio = { headerImageId: mediaId };
+          headerMidiaPath = midia.storage_path; // pro chat mostrar a foto (midia_url)
         } catch (e) {
           logErro('aprovar/header-img-fallback', e);
           if (tplParaEnviar.startsWith('carrinho_abandonado_site_amicia_img')) {
             tplParaEnviar = 'carrinho_abandonado_site_amicia_v2'; // mesmo corpo/vars, sem header
           }
           optsEnvio = {};
+          headerMidiaPath = null;
         }
       }
       try {
@@ -296,11 +300,13 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
         if (tplParaEnviar.startsWith('carrinho_abandonado_site_amicia_img')) {
           logErro('aprovar/img-envio-fallback-texto', eImg);
           tplParaEnviar = 'carrinho_abandonado_site_amicia_v2';
+          headerMidiaPath = null; // caiu pro texto: nao gravar foto que nao foi
           metaResp = await enviarTemplate(sug.conversa.telefone, tplParaEnviar, vars, 'pt_BR', {});
         } else {
           throw eImg;
         }
       }
+      tplEnviadoReal = tplParaEnviar; // grava no historico o template que FOI (fallback incluso)
     } else {
       // Réplica: texto livre (só funciona dentro da janela 24h)
       // Se tem midia, envia midia COM o texto como caption (foto/video) ou
@@ -427,6 +433,11 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
     const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(midiaParaEnviar.storage_path);
     midiaUrlMsg = pub?.publicUrl || null;
   }
+  // Ailson 03/07/2026: HSM _img — foto do header vira midia_url pro chat mostrar
+  if (!midiaUrlMsg && headerMidiaPath) {
+    const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(headerMidiaPath);
+    midiaUrlMsg = pub?.publicUrl || null;
+  }
 
   const { data: msgRow, error: errMsg } = await supabase
     .from('lojas_whats_mensagens')
@@ -437,7 +448,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
       tipo_midia: tipoMidiaMsg,
       texto: textoMsgPrincipal || textoFinal,
       midia_url: midiaUrlMsg,
-      template_name: sug.template_name,
+      template_name: tplEnviadoReal || sug.template_name,
       template_vars: sug.template_vars,
       meta_message_id: metaMsgId,
       status: 'enviando',

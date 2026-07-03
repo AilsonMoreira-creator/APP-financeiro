@@ -6123,7 +6123,9 @@ function Bubble({ m, botao }) {
   // URL da midia: pra image renderiza thumb clicavel; pra document/video
   // mostra ícone+link clicavel. Outbound nosso e inbound do cliente ja vem
   // com URL publica do Supabase Storage (webhook baixou e salvou).
-  const ehImagem = m.tipo_midia === 'image' && m.midia_url && m.midia_url.startsWith('http');
+  // Ailson 03/07/2026: 'template' com midia_url = HSM com header IMAGE (foto da
+  // peça no carrinho abandonado) — renderiza a foto igual mensagem de imagem.
+  const ehImagem = (m.tipo_midia === 'image' || m.tipo_midia === 'template') && m.midia_url && m.midia_url.startsWith('http');
   const ehVideo = m.tipo_midia === 'video' && m.midia_url && m.midia_url.startsWith('http');
   const ehDocumento = m.tipo_midia === 'document' && m.midia_url && m.midia_url.startsWith('http');
   const ehAudio = m.tipo_midia === 'audio' && m.midia_url && m.midia_url.startsWith('http');
