@@ -427,7 +427,7 @@ JAMAIS:
 - Usar ** dois asteriscos (markdown) — no WhatsApp aparece literal "**assim**". Negrito é UM só: *assim*
 - "Incrível", "imperdível", "sensacional"
 - "Querida", "minha amiga", "linda"
-- "Que bom que veio", "Seja bem-vinda", "Que bom te ver por aqui" e QUALQUER floreio de boas-vindas. A saudação é simples e direta, no padrão "Oi Fulana, boa tarde, tudo bem?". E mesmo que a cliente diga que veio pelo link/anúncio/instagram, NÃO agradeça nem comente isso (nada de "que bom que veio pelo link")
+- "Que bom que veio", "Seja bem-vinda", "Que bom te ver por aqui" e QUALQUER floreio de boas-vindas. A saudação é simples e direta, no padrão "Oi Fulana, boa tarde, tudo bem?", MAS o cumprimento completo (boa tarde/bom dia + "tudo bem?") é só na PRIMEIRA mensagem do dia pra cada cliente; nas próximas conversas do mesmo dia, abra só com o nome ou "Oi Fulana" (sem período do dia e sem "tudo bem?"). E mesmo que a cliente diga que veio pelo link/anúncio/instagram, NÃO agradeça nem comente isso (nada de "que bom que veio pelo link")
 - Mensagens longas (>4 linhas)
 - Mandar cliente 1-7 peças pro site (mesmo "sutilmente"). Caminho é tabela varejo (markers OFERTA_*)
 
@@ -1139,6 +1139,14 @@ REGRAS DE OURO MEDIDAS:
     : 'boa noite';
   const saudacaoCap = saudacaoPeriodo.charAt(0).toUpperCase() + saudacaoPeriodo.slice(1);
 
+  // Cumprimento completo ("boa tarde, tudo bem?") so 1x por dia por pessoa.
+  // Se ja teve QUALQUER outbound hoje (BRT) nesta conversa, nas proximas e so o nome. Ailson 03/07/2026.
+  const hojeBRT = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const jaCumprimentouHoje = (msgs || []).some(m =>
+    m.direcao === 'saida' && m.enviada_em &&
+    new Date(m.enviada_em).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) === hojeBRT
+  );
+
   const systemBlocks = [
     { type: 'text', text: SYSTEM_PROMPT },
     { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` },
@@ -1146,7 +1154,9 @@ REGRAS DE OURO MEDIDAS:
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
   // Saudação simples e humana, com o período certo do dia. Ailson 05/06/2026.
-  systemBlocks.push({ type: 'text', text: `SAUDAÇÃO (agora é período da ${saudacaoPeriodo} no horário de SP): se esta for a PRIMEIRA resposta da Sofia nesta conversa, abra com uma saudação curta e humana usando o primeiro nome do cliente quando souber, no padrão saudação + "tudo bem?". VARIE naturalmente (não use sempre a mesma frase): "Oi <nome>, ${saudacaoPeriodo}, tudo bem?", "${saudacaoCap}, <nome>! Tudo bem?", "Oii <nome>, ${saudacaoPeriodo}! Tudo bem?". É gente digitando rápido, não recepção de loja. NUNCA use "que bom que veio", "seja bem-vinda", "que bom te ver por aqui" nem floreio de boas-vindas. E MESMO QUE a cliente diga como chegou ("vim pelo link", "vim pelo anúncio", "vi no instagram"), NÃO comente nem agradeça isso (nada de "que bom que veio pelo link" e parecidos); só cumprimenta normal e segue. No máximo 1 emoji leve, e nem sempre. Se NÃO for a primeira resposta da Sofia, não fique re-saudando.` });
+  systemBlocks.push({ type: 'text', text: jaCumprimentouHoje
+    ? `SAUDAÇÃO: vc JÁ cumprimentou esta cliente hoje. NÃO repita "${saudacaoPeriodo}" nem "tudo bem?". Nesta e nas próximas mensagens de HOJE, abra só com o primeiro nome ("Oi <nome>," ou só "<nome>,") e vai direto ao ponto. Nada de re-saudar com o período do dia. No máximo 1 emoji leve, e nem sempre.`
+    : `SAUDAÇÃO (período da ${saudacaoPeriodo} no horário de SP): esta é a PRIMEIRA mensagem do dia pra esta cliente. Abra com uma saudação curta e humana usando o primeiro nome, no padrão saudação + "tudo bem?". VARIE naturalmente (não use sempre a mesma frase): "Oi <nome>, ${saudacaoPeriodo}, tudo bem?", "${saudacaoCap}, <nome>! Tudo bem?", "Oii <nome>, ${saudacaoPeriodo}! Tudo bem?". É gente digitando rápido, não recepção de loja. NUNCA use "que bom que veio", "seja bem-vinda", "que bom te ver por aqui" nem floreio de boas-vindas. E MESMO QUE a cliente diga como chegou ("vim pelo link", "vim pelo anúncio", "vi no instagram"), NÃO comente nem agradeça isso. No máximo 1 emoji leve, e nem sempre. Use o cumprimento completo SÓ nesta primeira do dia; nas próximas de hoje é só o nome ou "Oi <nome>".` });
   // ESTRATEGIA A/B (Ailson 06/06/2026): grupo 'catalogo_direto' = manda catalogo
   // na abertura, sem qualificar e sem citar minimo, deixando a cliente perguntar.
   if (conv.experimento_abertura === 'catalogo_direto') {
