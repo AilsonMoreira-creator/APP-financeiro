@@ -281,13 +281,26 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
           optsEnvio = { headerImageId: mediaId };
         } catch (e) {
           logErro('aprovar/header-img-fallback', e);
-          if (tplParaEnviar === 'carrinho_abandonado_site_amicia_img_v1') {
+          if (tplParaEnviar.startsWith('carrinho_abandonado_site_amicia_img')) {
             tplParaEnviar = 'carrinho_abandonado_site_amicia_v2'; // mesmo corpo/vars, sem header
           }
           optsEnvio = {};
         }
       }
-      metaResp = await enviarTemplate(sug.conversa.telefone, tplParaEnviar, vars, 'pt_BR', optsEnvio);
+      try {
+        metaResp = await enviarTemplate(sug.conversa.telefone, tplParaEnviar, vars, 'pt_BR', optsEnvio);
+      } catch (eImg) {
+        // Meta rejeitou o HSM com foto (ex: template sem header, midia invalida):
+        // reenvia na hora como v2 texto (mesmo corpo/vars) pra nao travar o lead.
+        // Ailson 03/07/2026 (caso Linha Direta / img_v1 sem header).
+        if (tplParaEnviar.startsWith('carrinho_abandonado_site_amicia_img')) {
+          logErro('aprovar/img-envio-fallback-texto', eImg);
+          tplParaEnviar = 'carrinho_abandonado_site_amicia_v2';
+          metaResp = await enviarTemplate(sug.conversa.telefone, tplParaEnviar, vars, 'pt_BR', {});
+        } else {
+          throw eImg;
+        }
+      }
     } else {
       // Réplica: texto livre (só funciona dentro da janela 24h)
       // Se tem midia, envia midia COM o texto como caption (foto/video) ou

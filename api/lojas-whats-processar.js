@@ -96,17 +96,19 @@ export default async function handler(req, res) {
 
   try {
     // Busca os templates ativos: v2 (carrinho com pecas) + visita_site (zerado)
-    // + img_v1 (carrinho com pecas E foto resolvida — Ailson 02/07/2026).
+    // + img_v2 (carrinho com pecas E foto resolvida). v2 porque o img_v1 foi
+    // aprovado na Meta SEM o header IMAGE (submit antigo ignorava sample_ref) e
+    // rejeitava o envio com foto (#132018). Ailson 03/07/2026.
     const { data: templates } = await supabase
       .from('lojas_whats_templates')
       .select('*')
-      .in('name', ['carrinho_abandonado_site_amicia_v2', 'visita_site_amicia_v1', 'carrinho_abandonado_site_amicia_img_v1'])
+      .in('name', ['carrinho_abandonado_site_amicia_v2', 'visita_site_amicia_v1', 'carrinho_abandonado_site_amicia_img_v2'])
       .eq('ativo', true);
 
     const tplCarrinho = templates?.find(t => t.name === 'carrinho_abandonado_site_amicia_v2');
     const tplVisita   = templates?.find(t => t.name === 'visita_site_amicia_v1');
     // Template com foto só entra em jogo depois de APROVADO pela Meta.
-    const tplImg      = templates?.find(t => t.name === 'carrinho_abandonado_site_amicia_img_v1' && t.status === 'aprovado');
+    const tplImg      = templates?.find(t => t.name === 'carrinho_abandonado_site_amicia_img_v2' && t.status === 'aprovado');
 
     if (!tplCarrinho || !tplVisita) {
       return res.status(500).json({
