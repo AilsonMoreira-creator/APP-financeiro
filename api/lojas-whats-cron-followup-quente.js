@@ -107,7 +107,8 @@ async function executar() {
         const upd = { fup_relogio_em: null, fup_agendado_para: null, atualizado_em: agora };
         if (c.etapa === 'follow_up') upd.etapa = 'conversando';
         if (c.fup_disparado_em) upd.fup_ja_rodou = true; // já disparou: não reentra automático
-        await supabase.from('lojas_whats_conversas').update(upd).eq('id', c.id);
+        const { error: eUpd } = await supabase.from('lojas_whats_conversas').update(upd).eq('id', c.id);
+        if (eUpd) throw eUpd;
         if (c.etapa === 'follow_up') r.voltaram_conversando++;
         continue;
       }
@@ -119,10 +120,11 @@ async function executar() {
 
       // ── E. follow_up já disparado + 3 dias sem resposta → perdida ────────
       if (c.etapa === 'follow_up' && c.fup_disparado_em && (NOW - Date.parse(c.fup_disparado_em)) >= D3) {
-        await supabase.from('lojas_whats_conversas').update({
+        const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
           etapa: 'perdida', motivo_perdida: 'fup_quente_sem_retorno', perdida_em: agora,
           fup_relogio_em: null, fup_ja_rodou: true, atualizado_em: agora,
         }).eq('id', c.id);
+        if (eUpd) throw eUpd;
         r.perdidos_3d++;
         continue;
       }
@@ -132,10 +134,11 @@ async function executar() {
         const ultEnt = await ultimaEntradaMs(c.id);
         const janelaFim = ultEnt ? ultEnt + 24 * H : 0;
         if (!janelaFim || NOW > janelaFim) {
-          await supabase.from('lojas_whats_conversas').update({
+          const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
             etapa: 'perdida', motivo_perdida: 'fup_fora_janela', perdida_em: agora,
             fup_relogio_em: null, fup_ja_rodou: true, atualizado_em: agora,
           }).eq('id', c.id);
+        if (eUpd) throw eUpd;
           r.perdidos_janela++;
           continue;
         }
@@ -160,10 +163,11 @@ async function executar() {
           conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
           texto: textoMsg1, meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
         });
-        await supabase.from('lojas_whats_conversas').update({
+        const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
           fup_disparado_em: agora, fup_ja_rodou: true,
           ultima_atividade_em: agora, ultima_msg_direcao: 'saida', atualizado_em: agora,
         }).eq('id', c.id);
+        if (eUpd) throw eUpd;
         r.disparados++;
         log('cron-fup-quente', `conv=${c.id} disparou follow-up quente`);
         continue;
@@ -183,14 +187,15 @@ async function executar() {
           else if (NOW <= janelaFim) sendAt = NOW;   // 19h estoura a janela → marco de 12h
         }
         if (!sendAt) {
-          await supabase.from('lojas_whats_conversas').update({
+          const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
             etapa: 'perdida', motivo_perdida: 'fup_fora_janela', perdida_em: agora,
             fup_relogio_em: null, fup_ja_rodou: true, atualizado_em: agora,
           }).eq('id', c.id);
+        if (eUpd) throw eUpd;
           r.perdidos_janela++;
           continue;
         }
-        await supabase.from('lojas_whats_conversas').update({
+        const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
           etapa: 'follow_up',
           follow_up_origem: ORIGEM,
           follow_up_motivo: 'esfriou_apos_foto_produto',
@@ -199,15 +204,17 @@ async function executar() {
           fup_agendado_para: new Date(sendAt).toISOString(),
           atualizado_em: agora,
         }).eq('id', c.id);
+        if (eUpd) throw eUpd;
         r.movidos_followup++;
         continue;
       }
 
       // ── 6h → liga o relógio ──────────────────────────────────────────────
       if (horasSem >= 6 && !c.fup_relogio_em) {
-        await supabase.from('lojas_whats_conversas').update({
+        const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
           fup_relogio_em: agora, atualizado_em: agora,
         }).eq('id', c.id);
+        if (eUpd) throw eUpd;
         r.relogio_ligado++;
         continue;
       }
