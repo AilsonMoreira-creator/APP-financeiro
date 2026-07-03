@@ -40,12 +40,12 @@ function linhasCoresTams(grade, refN) {
     });
 }
 
-function montarCaption(linhas) {
+function montarCaption(refDisplay, linhas) {
   if (linhas && linhas.length) {
-    return `Esse modelo a gente tem nessas cores e tamanhos 😊\n\n${linhas.join('\n')}`;
+    return `Ref ${refDisplay}, a gente tem nessas cores e tamanhos:\n\n${linhas.join('\n')}`;
   }
-  // Sem grade do dia: ainda assim manda a foto de cores com uma fala leve.
-  return 'Esse modelo eu já confirmo as cores e os tamanhos pra vc 😊';
+  // Sem grade do dia: ainda assim manda a foto com uma fala leve.
+  return `Ref ${refDisplay}, já confirmo as cores e os tamanhos pra vc.`;
 }
 
 export default async function handler(req, res) {
@@ -74,12 +74,17 @@ export default async function handler(req, res) {
     supabase.from('lojas_estoque_grade').select('ref, cor, tam').gt('disponivel', 0),
     supabase.from('lojas_whats_midias')
       .select('id, tipo, ref, nome_arquivo, storage_path, mime_type, descricao')
-      .eq('tipo', 'cores').eq('ativa', true),
+      .in('tipo', ['cores', 'foto']).eq('ativa', true),
   ]);
+  // Prioriza foto de cores (arara). Se a ref nao tiver cores, usa a foto do
+  // produto como fallback pra sempre ir uma imagem (Ailson 03/07/2026).
   const coresPorRef = new Map();
+  const fotoPorRef = new Map();
   for (const m of midiasCores || []) {
     const rn = normRef(m.ref);
-    if (rn && !coresPorRef.has(rn) && m.storage_path) coresPorRef.set(rn, m);
+    if (!rn || !m.storage_path) continue;
+    if (m.tipo === 'cores') { if (!coresPorRef.has(rn)) coresPorRef.set(rn, m); }
+    else if (m.tipo === 'foto') { if (!fotoPorRef.has(rn)) fotoPorRef.set(rn, m); }
   }
 
   const agora = new Date().toISOString();
@@ -89,8 +94,8 @@ export default async function handler(req, res) {
 
   for (const refN of refsNorm) {
     const linhas = linhasCoresTams(grade || [], refN);
-    const caption = montarCaption(linhas);
-    const midiaCores = coresPorRef.get(refN) || null;
+    const caption = montarCaption(refN, linhas);
+    const midiaCores = coresPorRef.get(refN) || fotoPorRef.get(refN) || null;
 
     try {
       if (midiaCores) {
