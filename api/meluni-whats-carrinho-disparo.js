@@ -76,7 +76,15 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
     }
   } else {
     if (!resumo) return { skip: 'sem_nome_sem_resumo' };
-    versao = 'sem_nome'; nameTpl = 'meluni_carrinho_sem_nome'; bodyParams = [resumo];
+    // Sem nome tambem sai com foto quando da (Ailson 03/07/2026): fallback sem_nome texto.
+    const foto = imgAtivo ? await urlFotoCarrinho(itens) : null;
+    if (foto) {
+      versao = 'sem_nome_img'; nameTpl = 'meluni_carrinho_sem_nome_img'; bodyParams = [resumo];
+      headerImage = foto + (foto.includes('?') ? '&' : '?') + 'v=' + Date.now();
+      versaoTexto = 'sem_nome'; nameTplTexto = 'meluni_carrinho_sem_nome';
+    } else {
+      versao = 'sem_nome'; nameTpl = 'meluni_carrinho_sem_nome'; bodyParams = [resumo];
+    }
   }
 
   const conv = await acharOuCriarConversa(c.telefone, nome);
@@ -89,7 +97,7 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
     if (!headerImage) throw e;
     // imagem falhou (foto fora do ar, template reprovado etc) -> manda o texto
     versao = versaoTexto; nameTpl = nameTplTexto;
-    bodyParams = versao === 'leve' ? [nome, resumo] : [nome];
+    bodyParams = versao === 'leve' ? [nome, resumo] : versao === 'sem_nome' ? [resumo] : [nome];
     headerImage = null; // caiu pro texto: nao gravar foto que nao foi
     r = await enviarTemplateLara(c.telefone, nameTpl, bodyParams);
   }
@@ -98,7 +106,7 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
 
   if (conv?.id) {
     const textoReal = renderTpl(tpls?.[versao]?.body, bodyParams)
-      || (versao === 'sem_nome' ? resumo : (versao === 'leve' || versao === 'leve_img') ? `${nome}: ${resumo}` : nome);
+      || (versao === 'sem_nome' || versao === 'sem_nome_img' ? resumo : (versao === 'leve' || versao === 'leve_img') ? `${nome}: ${resumo}` : nome);
     await supabase.from('meluni_mensagens').insert({
       conversa_id: conv.id, direcao: 'saida', autor: 'lara_carrinho',
       tipo_midia: 'template', template_usado: nameTpl,
