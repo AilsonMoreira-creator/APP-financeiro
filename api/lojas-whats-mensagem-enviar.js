@@ -83,7 +83,7 @@ export default async function handler(req, res) {
     let tipoMidiaMsg = 'text';
 
     try {
-      if (midiaFinal && (midiaFinal.tipo === 'foto' || midiaFinal.tipo === 'video')) {
+      if (midiaFinal && (midiaFinal.tipo === 'foto' || midiaFinal.tipo === 'video' || midiaFinal.tipo === 'cores')) {
         const r = await enviarMidiaSofia({
           telefone: conv.telefone,
           midia: midiaFinal,
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
         });
         if (!r.ok) throw new Error(r.erro || 'envio_midia_falhou');
         metaResp = { messages: [{ id: r.message_id }] };
-        tipoMidiaMsg = midiaFinal.tipo === 'foto' ? 'image' : 'video';
+        tipoMidiaMsg = midiaFinal.tipo === 'video' ? 'video' : 'image';
       } else {
         if (textoLimpo) {
           metaResp = await enviarTexto(conv.telefone, textoLimpo);

@@ -423,7 +423,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   const tipoMidiaMsg = sug.tipo === 'primeira_mensagem'
     ? 'template'
     : (midiaParaEnviar && !ehVestiCatalogo
-        ? (midiaParaEnviar.tipo === 'foto' ? 'image'
+        ? ((midiaParaEnviar.tipo === 'foto' || midiaParaEnviar.tipo === 'cores') ? 'image'
            : midiaParaEnviar.tipo === 'video' ? 'video' : 'document')
         : 'text');
 
