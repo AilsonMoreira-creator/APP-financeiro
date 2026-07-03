@@ -1015,6 +1015,7 @@ export async function processarConversa(conversaId) {
   let blocoPoliticas = '';
   let blocoTecidos = '';
   let blocoMedidas = '';
+  let blocoConhecimento = '';
   try {
     const roteiros = await getConfig('roteiros_estrategicos', {});
     // Reativacao (Ailson 12/06/2026): etapa='inativo' = cliente 6+ meses parado.
@@ -1077,6 +1078,15 @@ REGRAS DE OURO MEDIDAS:
 - Quando perguntarem medida, passe os cm desta tabela (busto/cintura/quadril) do(s) tamanho(s) pedido(s). NUNCA invente medida fora dela.
 - Numeracao (38, 40...) varia entre marcas; o que vale e a medida em cm.
 - Medidas caindo em tamanhos diferentes: recomende o MAIOR e diga que a costureira ajusta. NUNCA recomende tamanho menor do que cabe.`;
+    }
+    // CONHECIMENTO EXTRA (Ailson 02/07/2026): bloco livre de novidades/avisos
+    // da marca (coleções chegando, cartela de cores, datas). Alimentado via
+    // config 'conhecimento_extra' — atualiza sem mexer em código.
+    const conhecimentoExtra = await getConfig('conhecimento_extra', null);
+    if (conhecimentoExtra) {
+      const txt = typeof conhecimentoExtra === 'string'
+        ? conhecimentoExtra : JSON.stringify(conhecimentoExtra, null, 2);
+      blocoConhecimento = `CONHECIMENTO ATUAL DA MARCA (novidades/avisos — use quando encaixar na conversa, sem forçar):\n${txt}`;
     }
   } catch (e) {
     logErro('ia/roteiro-config', e);
@@ -1201,6 +1211,7 @@ REGRAS DE OURO MEDIDAS:
   if (blocoPoliticas) systemBlocks.push({ type: 'text', text: blocoPoliticas });
   if (blocoTecidos) systemBlocks.push({ type: 'text', text: blocoTecidos });
   if (blocoMedidas) systemBlocks.push({ type: 'text', text: blocoMedidas });
+  if (blocoConhecimento) systemBlocks.push({ type: 'text', text: blocoConhecimento });
   if (blocoPadroes) systemBlocks.push({ type: 'text', text: blocoPadroes });
   if (blocoObs) systemBlocks.push({ type: 'text', text: blocoObs });
 
