@@ -28,11 +28,12 @@ function renderTpl(body, params) {
 async function acharOuCriarConversa(telefone, nome) {
   const ex = await acharConversaWhats(supabase, telefone);
   if (ex?.id) return ex;
-  const { data: nova } = await supabase.from('meluni_conversas').insert({
+  const { data: nova, error: eNova } = await supabase.from('meluni_conversas').insert({
     canal: 'whatsapp', telefone, externo_id: telefone, nome_cliente: nome || null,
     origem: 'carrinho', etapa: 'conversando',
     ultima_msg_direcao: 'saida', ultima_msg_em: new Date().toISOString(),
   }).select('id, etapa').single();
+  if (eNova) console.error('[meluni-carrinho] criar conversa falhou:', eNova.message, telefone);
   return nova || null;
 }
 
@@ -89,6 +90,7 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
     // imagem falhou (foto fora do ar, template reprovado etc) -> manda o texto
     versao = versaoTexto; nameTpl = nameTplTexto;
     bodyParams = versao === 'leve' ? [nome, resumo] : [nome];
+    headerImage = null; // caiu pro texto: nao gravar foto que nao foi
     r = await enviarTemplateLara(c.telefone, nameTpl, bodyParams);
   }
   const metaMsgId = r?.messages?.[0]?.id || null;
@@ -101,6 +103,7 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
       conversa_id: conv.id, direcao: 'saida', autor: 'lara_carrinho',
       tipo_midia: 'template', template_usado: nameTpl,
       texto: textoReal,
+      midia_url: headerImage || null, // foto do header HSM: chat mostra o real que o cliente recebeu (Ailson 03/07/2026)
       meta_message_id: metaMsgId, enviada_em: nowIso,
     });
     await supabase.from('meluni_conversas').update({
