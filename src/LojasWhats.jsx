@@ -604,6 +604,8 @@ function FunilTab({ refreshTick }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [importando, setImportando] = useState(false);
   const [toast, setToast] = useState(null); // { tipo: 'ok'|'erro'|'info', texto }
+  const [ajustandoEstoque, setAjustandoEstoque] = useState(false);
+  const [matchandoVendas, setMatchandoVendas] = useState(false);
 
   const carregar = useCallback(async () => {
       setLoading(true);
@@ -734,6 +736,50 @@ function FunilTab({ refreshTick }) {
     setImportando(false);
   }, []);
 
+  // Ajusta estoque: importa a planilha estoque_*.csv do Drive na hora (mesmo
+  // cron do 07:00 BRT). Ailson 03/07/2026.
+  const ajustarEstoque = useCallback(async () => {
+    setAjustandoEstoque(true);
+    setToast(null);
+    try {
+      const r = await fetch('/api/lojas-estoque-grade-cron');
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.ok === false) {
+        setToast({ tipo: 'erro', texto: 'Falha ao ajustar estoque. Tenta de novo.' });
+      } else {
+        const arq = j.arquivo ? ` (${j.arquivo})` : '';
+        setToast({ tipo: 'ok', texto: `Estoque ajustado: ${j.importadas || 0} linhas, ${j.refs_distintas || 0} refs${arq}` });
+        setReloadKey(k => k + 1);
+      }
+    } catch (e) {
+      setToast({ tipo: 'erro', texto: 'Erro de rede ao ajustar estoque.' });
+    }
+    setAjustandoEstoque(false);
+  }, []);
+
+  // Match de vendas: cruza Mire x Sofia e dispara CAPI Purchase. Pode demorar,
+  // por isso o confirm. Ailson 03/07/2026.
+  const matchVendas = useCallback(async () => {
+    if (!window.confirm('Rodar o match de vendas agora? Ele cruza as vendas com as conversas e dispara os eventos de compra (CAPI).')) return;
+    setMatchandoVendas(true);
+    setToast(null);
+    try {
+      const r = await fetch('/api/lojas-whats-cron-capi-match?executar=1');
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.ok === false) {
+        setToast({ tipo: 'erro', texto: 'Falha no match de vendas. Tenta de novo.' });
+      } else {
+        const casadas = j.com_match || 0;
+        const capi = j.capi_enviado_ok || 0;
+        setToast({ tipo: casadas > 0 ? 'ok' : 'info', texto: `Match: ${casadas} venda(s) casada(s), ${capi} CAPI enviado(s)` });
+        setReloadKey(k => k + 1);
+      }
+    } catch (e) {
+      setToast({ tipo: 'info', texto: 'O match está demorando e segue rodando em segundo plano. Confere o funil em instantes.' });
+    }
+    setMatchandoVendas(false);
+  }, []);
+
   if (loading) return <div style={{ padding: 20 }}><Loader2 size={sz(24)} className="spin" /></div>;
   if (!data) return <div style={{ padding: 20, color: palette.alert }}>Erro carregando funil</div>;
 
@@ -762,6 +808,40 @@ function FunilTab({ refreshTick }) {
           {importando
             ? <><Loader2 size={sz(14)} className="spin" /> Importando…</>
             : <><ShoppingCart size={sz(14)} /> Importar carrinhos agora</>}
+        </button>
+        <button
+          onClick={ajustarEstoque}
+          disabled={ajustandoEstoque}
+          title="Importa a planilha de estoque do Drive na hora (mesmo cron do 07:00)"
+          style={{
+            background: ajustandoEstoque ? palette.beige : palette.accent,
+            color: ajustandoEstoque ? palette.inkMuted : '#fff',
+            border: 'none', borderRadius: 8, padding: '7px 12px',
+            cursor: ajustandoEstoque ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontSize: fz(12), fontWeight: 600, fontFamily: FONT,
+          }}
+        >
+          {ajustandoEstoque
+            ? <><Loader2 size={sz(14)} className="spin" /> Ajustando…</>
+            : <><RefreshCw size={sz(14)} /> Ajustar estoque</>}
+        </button>
+        <button
+          onClick={matchVendas}
+          disabled={matchandoVendas}
+          title="Cruza as vendas com as conversas da Sofia e dispara CAPI"
+          style={{
+            background: matchandoVendas ? palette.beige : palette.accent,
+            color: matchandoVendas ? palette.inkMuted : '#fff',
+            border: 'none', borderRadius: 8, padding: '7px 12px',
+            cursor: matchandoVendas ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+            fontSize: fz(12), fontWeight: 600, fontFamily: FONT,
+          }}
+        >
+          {matchandoVendas
+            ? <><Loader2 size={sz(14)} className="spin" /> Casando…</>
+            : <><Link2 size={sz(14)} /> Match vendas</>}
         </button>
       </div>
 
