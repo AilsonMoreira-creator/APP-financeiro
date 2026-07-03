@@ -11096,17 +11096,15 @@ export default function App(){
         const mesAntInicio=d.toISOString().slice(0,8).replace(/T.*/,"")+"01";
         const mesAntFim=new Date(d.getFullYear(),d.getMonth()+1,0).toISOString().slice(0,10);
 
-        setBlingImportStatus("carregando vendas...");
-
         // Busca período completo: mês anterior até hoje
         const resp=await fetch("/api/bling-vendas-cache",{
           method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({data_inicio:mesAntInicio,data_fim:hoje})
         });
 
-        if(!resp.ok){console.error("BLING cache HTTP",resp.status);setBlingImportStatus(null);return;}
+        if(!resp.ok){console.error("BLING cache HTTP",resp.status);return;}
         const result=await resp.json();
-        if(!result.ok){console.error("BLING cache erro:",result.erro);setBlingImportStatus(null);return;}
+        if(!result.ok){console.error("BLING cache erro:",result.erro);return;}
 
         // result.vendas já vem no formato { mesKey: { diaKey: { conta: { canal: {...} } } } }
         if(result.vendas&&Object.keys(result.vendas).length>0){
@@ -11132,8 +11130,7 @@ export default function App(){
           if(totalBrutoMes>0){
             const liquido=Math.round(totalBrutoMes*0.90);
             setReceitasPorMes(prev=>{const m=prev[MES_ATUAL]||{};return{...prev,[MES_ATUAL]:{...m,[1]:{...(m[1]||{}),marketplaces:String(liquido)}}};});
-            setBlingStatus({ok:true,msg:`✓ Bling: R$ ${liquido.toLocaleString("pt-BR")}`});
-            setTimeout(()=>setBlingStatus(null),8000);
+            console.log(`BLING: R$ ${liquido.toLocaleString("pt-BR")} atualizado em Lançamentos (silencioso)`);
           }
         }else{
           // Tenta cache local enquanto cron não populou
@@ -11143,12 +11140,9 @@ export default function App(){
           }catch(e){}
         }
 
-        setBlingImportStatus(result.totalPedidos>0?`✓ ${result.totalPedidos} pedidos carregados`:null);
-        setTimeout(()=>setBlingImportStatus(null),3000);
         console.log(`BLING cache: ${result.totalPedidos} pedidos carregados`);
       }catch(e){
         console.error("BLING cache erro:",e);
-        setBlingImportStatus(null);
         // Fallback: tenta cache local
         try{
           const local=JSON.parse(localStorage.getItem("amica_bling_vendas")||"{}");
