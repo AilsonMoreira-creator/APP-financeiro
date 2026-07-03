@@ -26,6 +26,7 @@ import { processarConversa } from './lojas-whats-ia.js';
 import { processarUma } from './lojas-whats-aprovar.js';
 import { enviarAberturaApresentacao, enviarAberturaTextoFotos } from './_lojas-whats-apresentacao.js';
 import { rodarResgates } from './_lojas-whats-resgate.js';
+import { rodarCiclo24 } from './_lojas-whats-ciclo24.js';
 
 // Quanto pegamos por run. Mantido modesto: cada processarConversa faz 1 chamada
 // ao Claude (alguns segundos). 12 * ~5s = ~60s, folgado dentro do maxDuration.
@@ -73,7 +74,15 @@ export default async function handler(req, res) {
         logErro('cron-responder/resgate', eRes);
         resgateVazio = { erro: eRes.message };
       }
-      return res.status(200).json({ ok: true, total_pegos: 0, gerados, pulados, erros, resgate: resgateVazio });
+      // Ciclo 24h (relógio + gancho) roda mesmo sem debounce vencido.
+      let ciclo24Vazio = null;
+      try {
+        ciclo24Vazio = await rodarCiclo24();
+      } catch (eC24) {
+        logErro('cron-responder/ciclo24', eC24);
+        ciclo24Vazio = { erro: eC24.message };
+      }
+      return res.status(200).json({ ok: true, total_pegos: 0, gerados, pulados, erros, resgate: resgateVazio, ciclo24: ciclo24Vazio });
     }
 
     log('cron-responder', `pegou ${conversas.length} conversa(s) com debounce vencido`);
@@ -183,6 +192,16 @@ export default async function handler(req, res) {
       resgate = { erro: eRes.message };
     }
 
+    // 4. CICLO 24H (Ailson 02/07/2026): relógio da janela do WhatsApp + gancho
+    // leve da Sofia. Falha aqui não derruba o run principal.
+    let ciclo24 = null;
+    try {
+      ciclo24 = await rodarCiclo24();
+    } catch (eC24) {
+      logErro('cron-responder/ciclo24', eC24);
+      ciclo24 = { erro: eC24.message };
+    }
+
     return res.status(200).json({
       ok: true,
       total_pegos: conversas.length,
@@ -193,6 +212,7 @@ export default async function handler(req, res) {
       auto_enviadas: autoEnviadas,
       auto_falhas: autoFalhas,
       resgate,
+      ciclo24,
       detalhe,
     });
   } catch (e) {

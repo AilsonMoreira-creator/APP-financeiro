@@ -358,6 +358,39 @@ const fmtRelTime = (iso) => {
   return `${d}d`;
 };
 
+// ── Relógio do ciclo 24h (Ailson 02/07/2026) ──
+// Janela de resposta do WhatsApp fechando: relógio vermelho acende (1x por
+// conversa, via cron) faltando 4h pro fim. Ativo = vence no futuro E nenhuma
+// atividade depois que acendeu (cliente respondeu ou mandamos algo → some).
+const relogioCiclo24Ms = (c, agora = Date.now()) => {
+  if (!c?.ciclo24_vence_em || c.etapa !== 'conversando') return null;
+  const v = new Date(c.ciclo24_vence_em).getTime();
+  if (v <= agora) return null;
+  if (new Date(c.ultima_atividade_em).getTime() > v - 4 * 3600 * 1000) return null;
+  return v;
+};
+
+const RelogioCiclo24 = ({ c }) => {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick(x => x + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+  const v = relogioCiclo24Ms(c);
+  if (!v) return null;
+  const rest = v - Date.now();
+  const h = Math.floor(rest / 3600000);
+  const m = Math.floor((rest % 3600000) / 60000);
+  return (
+    <span title="Janela de 24h do WhatsApp fechando — Sofia gera um gancho leve pra manter o contato antes de vencer"
+      style={{
+        fontSize: fz(10), padding: '1px 6px', borderRadius: 8, flexShrink: 0,
+        background: '#fdecea', color: '#c0392b', fontWeight: 700,
+        border: '1px solid #f5b7b1',
+      }}>🕐 {h}:{String(m).padStart(2, '0')}</span>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1491,7 +1524,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, ciclo24_vence_em,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1524,6 +1557,20 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
           .in('venda_id', vendaIds);
         const mapaAtend = Object.fromEntries((convs || []).map(c => [c.venda_id, c.atendido_por]));
         lista = lista.map(c => ({ ...c, _atendido_por: mapaAtend[c.vendeu_venda_id] || null }));
+      }
+      // Aba Conversando (Ailson 02/07/2026): relógios do ciclo 24h ativos sobem,
+      // ficando abaixo SÓ das prioridades ⭐. Entre relógios, o mais urgente
+      // (menos tempo restante) primeiro. Resto mantém ordem por atividade.
+      if (filtroEtapa === 'conversando') {
+        const agora = Date.now();
+        lista = [...lista].sort((a, b) => {
+          const pa = a.lead_prioritario ? 1 : 0, pb = b.lead_prioritario ? 1 : 0;
+          if (pa !== pb) return pb - pa;
+          const ra = relogioCiclo24Ms(a, agora), rb = relogioCiclo24Ms(b, agora);
+          if ((ra !== null) !== (rb !== null)) return ra !== null ? -1 : 1;
+          if (ra !== null && rb !== null) return ra - rb;
+          return new Date(b.ultima_atividade_em) - new Date(a.ultima_atividade_em);
+        });
       }
       setConversas(lista);
       jaCarregouListaRef.current = true;
@@ -2528,6 +2575,8 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
                 background: '#e8f4ff', color: '#2c5d8a', fontWeight: 600,
               }}>🌐 site</span>
             )}
+            {/* Relógio do ciclo 24h (Ailson 02/07/2026): janela WhatsApp fechando */}
+            {c.etapa === 'conversando' && c.ciclo24_vence_em && <RelogioCiclo24 c={c} />}
             {/* Origem do lead — flag visual (Ailson 25/05/2026) */}
             {c.origem_lead === 'anuncio_facebook' && (
               <span title="Lead veio de anúncio do Facebook (campanha atacado)" style={{
