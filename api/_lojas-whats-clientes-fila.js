@@ -53,7 +53,7 @@ export async function processarFila(limite = 40) {
       if (tpl === undefined) {
         const { data } = await supabase
           .from('lojas_whats_templates')
-          .select('name, language, variables, ativo')
+          .select('name, language, variables, ativo, body_text')
           .eq('name', item.template_name)
           .maybeSingle();
         tpl = (data && data.ativo) ? data : null;
