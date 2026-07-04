@@ -23,6 +23,9 @@
 // ============================================================================
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
+import { refreshBlingToken, blingFetch } from './_bling-helpers.js';
+
+const API_BLING = 'https://api.bling.com.br/Api/v3';
 
 const LOTE = 150;                 // teto de envios por execução
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -161,10 +164,46 @@ export default async function handler(req, res) {
 
     const elegiveis = cands.slice(0, LOTE);
 
+    // 3b) RE-CHECA no Bling a situação dos pedidos da janela de cada candidato.
+    // O Convertr manda o pedido no checkout ANTES do pagamento e ele pode entrar
+    // como Atendido; Pix não pago vira Cancelado (12) DEPOIS do sync — e o cache
+    // é snapshot. Sem esse re-check, "cliente" de Pix nunca pago recebia o
+    // pós-compra (caso Ingrid, 04/07/2026). Só envia se ≥1 pedido Atendido (9)
+    // na janela. Poucos candidatos/dia -> barato (~3 req/s).
+    let semCompraConfirmada = 0;
+    if (elegiveis.length) {
+      const token = await refreshBlingToken('lumia');
+      const bHeaders = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
+      const confirmados = [];
+      for (const c of elegiveis) {
+        const { data: vendasJanela } = await supabase.from('meluni_vendas')
+          .select('pedido_id').eq('cliente_id', c.id)
+          .gte('data_pedido', dMin).lte('data_pedido', dMax).limit(5);
+        let temAtendido = false;
+        for (const v of (vendasJanela || [])) {
+          try {
+            await sleep(340);
+            const rr = await blingFetch(`${API_BLING}/pedidos/vendas/${v.pedido_id}`, bHeaders);
+            const jj = await rr.json().catch(() => null);
+            const sid = jj?.data?.situacao?.id ?? null;
+            await supabase.from('meluni_vendas').update({
+              situacao_id: sid, situacao_verificada_em: new Date().toISOString(),
+            }).eq('pedido_id', v.pedido_id);
+            if (sid === 9) temAtendido = true;
+          } catch { /* na dúvida não confirma por esse pedido */ }
+        }
+        if (temAtendido) confirmados.push(c);
+        else semCompraConfirmada++;
+      }
+      elegiveis.length = 0;
+      elegiveis.push(...confirmados);
+    }
+
     if (dry) {
       return res.status(200).json({
         ok: true, dry: true, ativo, dia_semana_brt: diaSemanaBRT,
         janela: { de: dMin, ate: dMax }, total_candidatos: cands.length,
+        sem_compra_confirmada: semCompraConfirmada,
         enviaria: elegiveis.length,
         amostra: elegiveis.slice(0, 20).map(c => ({ id: c.id, nome: c.nome, ultima_compra: c.ultima_compra, tel: canonTel(c.whatsapp || c.telefone) })),
       });
@@ -205,7 +244,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true, ativo, janela: { de: dMin, ate: dMax },
-      total_candidatos: cands.length, enviados, pulados, erros, lote: LOTE,
+      total_candidatos: cands.length, sem_compra_confirmada: semCompraConfirmada, enviados, pulados, erros, lote: LOTE,
     });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: String(e?.message || e) });

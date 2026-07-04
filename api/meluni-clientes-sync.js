@@ -109,6 +109,7 @@ export default async function handler(req, res) {
     // 3. Pra cada pedido: pega o contato JA embutido no pedido (id, nome, CPF).
     //    Telefone nao vem no pedido -> entra depois pela reconciliacao por CPF.
     const pedidoContato = {}; // pedido_id -> contatoId
+    const pedidoSituacaoSkip = {}; // pedido_id -> situacao_id (não-Atendido: não vira venda/cliente)
     const contatoIds = new Set();
     const contatoInfo = {};
     for (const p of pendentes) {
@@ -116,6 +117,12 @@ export default async function handler(req, res) {
         await sleep(340);
         const r = await blingFetch(`${API}/pedidos/vendas/${p.pedido_id}`, headers);
         const j = await r.json();
+        // Só Atendido (9) vira cliente/venda. Convertr manda o pedido no
+        // checkout ANTES do pagamento; Pix não pago fica Em aberto (6) ou vira
+        // Cancelado (12) — importar isso criava "cliente" falso que recebia
+        // pós-compra da Lara (caso Ingrid). Ailson 04/07/2026.
+        const sid = j?.data?.situacao?.id;
+        if (sid !== 9) { pedidoSituacaoSkip[p.pedido_id] = sid ?? 'sem_situacao'; continue; }
         const c = j?.data?.contato;
         if (c?.id) {
           const cid = String(c.id);
@@ -155,6 +162,7 @@ export default async function handler(req, res) {
     // 6. Upsert vendas (liga cliente_id)
     let novos = 0;
     for (const p of pendentes) {
+      if (pedidoSituacaoSkip[p.pedido_id] !== undefined) continue; // não-Atendido: fora
       const cid = pedidoContato[p.pedido_id];
       const clienteId = cid ? clienteIdPorContato[cid] : null;
       const { error: vErr } = await supabase.from('meluni_vendas').upsert({
@@ -165,6 +173,7 @@ export default async function handler(req, res) {
         total_pedido: p.total_pedido,
         total_produtos: p.total_produtos,
         itens: p.itens || [],
+        situacao_id: 9, situacao_verificada_em: new Date().toISOString(),
       }, { onConflict: 'pedido_id' });
       if (!vErr) novos++;
     }
@@ -198,6 +207,7 @@ export default async function handler(req, res) {
       ok: true,
       janela_dias: dias,
       pedidos_pendentes: pendentes.length,
+      pulados_nao_atendido: Object.keys(pedidoSituacaoSkip).length,
       vendas_gravadas: novos,
       contatos_bling: contatoIds.size,
       backfill_feitos: backfillFeitos,
