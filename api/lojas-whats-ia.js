@@ -890,9 +890,11 @@ export async function processarConversa(conversaId) {
   // 5. Monta cardápio dinâmico (em_alta + best_sellers + novidades + matches do carrinho)
   let cardapioStr = '';
   let refsCarrinho = [];
+  let cardapioObj = null;
   try {
     refsCarrinho = await getRefsCarrinhoDeConversa(conv.carrinho_id);
     const cardapio = await montarCardapio({ refsDoCarrinho: refsCarrinho });
+    cardapioObj = cardapio;
     cardapioStr = formatarCardapioPraIA(cardapio);
     log('ia', `conversa=${conversaId} cardapio: ${cardapio.em_alta?.length || 0} alta, ${cardapio.best_sellers?.length || 0} bs, ${cardapio.novidades?.length || 0} nov, ${refsCarrinho.length} refs carrinho, ${cardapio.matches?.length || 0} grupos match`);
   } catch (e) {
@@ -915,6 +917,45 @@ export async function processarConversa(conversaId) {
   try {
     if (refsCarrinho && refsCarrinho.length) fichasFoco = montarFichasDetalhadas(refsCarrinho);
   } catch (e) { logErro('ia/fichas-foco', e); }
+
+  // 5a-ter. CROSS-SELL SUAVE (Ailson 04/07/2026): em ~30% das conversas de
+  // carrinho (sorteio 1x por conversa, config cross_sell_carrinho_pct), a Sofia
+  // ganha um bloco com os complementos dos matches (mv_lojas_matches_90d, o
+  // "compram juntos" do raio-x de Produtos) e a instrucao de tecer UMA sugestao
+  // leve com foto QUANDO encaixar. Nunca cita estatistica pra cliente.
+  // Medicao: cross_sell_ativo (grupo do sorteio) x cross_sell_ref (a IA usou de
+  // fato) — depois compara resposta/venda dos dois grupos.
+  let blocoCrossSell = '';
+  let refsCrossSugeridas = [];
+  try {
+    if (conv.carrinho_id && refsCarrinho.length) {
+      if (conv.cross_sell_ativo === null || conv.cross_sell_ativo === undefined) {
+        const pctCross = Number(await getConfig('cross_sell_carrinho_pct', 30)) || 30;
+        conv.cross_sell_ativo = Math.random() * 100 < pctCross;
+        await supabase.from('lojas_whats_conversas')
+          .update({ cross_sell_ativo: conv.cross_sell_ativo }).eq('id', conversaId);
+        log('ia', `conversa=${conversaId} cross-sell sorteio: ${conv.cross_sell_ativo ? 'ATIVO' : 'nao'}`);
+      }
+      if (conv.cross_sell_ativo === true && !conv.cross_sell_ref && cardapioObj?.matches?.length) {
+        const linhas = [];
+        for (const g of cardapioObj.matches.slice(0, 3)) {
+          const s = (g.sugestoes || [])[0];
+          if (!s?.ref) continue;
+          linhas.push(`- com a REF ${g.ref_carrinho} do carrinho combina ${s.descricao} (REF ${s.ref})`);
+          refsCrossSugeridas.push(String(s.ref));
+        }
+        if (linhas.length) {
+          blocoCrossSell = `COMPLEMENTO DE CARRINHO (use SO SE encaixar natural, no maximo 1 vez nesta conversa):
+As pecas do carrinho dessa cliente costumam sair junto com estes modelos (vendas reais recentes)
+${linhas.join('\n')}
+
+Se a conversa der espaco (cliente engajada, falando das pecas, pedindo sugestao, ou um momento leve), teca UMA sugestao curta e natural citando a peca do carrinho pelo nome (como esta nas fichas) e o complemento, e anexe a foto com [ENVIAR_FOTO:REF_DO_COMPLEMENTO].
+Exemplo de tom (adapte, nao copie) "vi que vc separou a calca de alfaiataria 2731, temos uns bodys que combinam demais com ela, da uma olhada nesse [ENVIAR_FOTO:3105]"
+PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem levam y". PROIBIDO dois-pontos na frase pra cliente. Nada de pressao, nada de empurrar. Se nao encaixar agora, ignore este bloco por completo.`;
+        }
+      }
+    }
+  } catch (e) { logErro('ia/cross-sell', e); }
 
   // 5b. APRENDIZADO (Ailson 26/05/2026 — coracao da Sofia)
   // Decide modo: 30% explorar (gera variacao livre) / 70% replicar (usa padroes).
@@ -1153,6 +1194,7 @@ REGRAS DE OURO MEDIDAS:
     { type: 'text', text: 'REGRA ANTI-REPETICAO (IMPORTANTE): antes de perguntar qualquer coisa pra cliente (se ela ja revende, ha quanto tempo, que tipo de cliente/loja ela e, cidade, nome), releia TODO o historico da conversa acima. Se ela JA respondeu isso em qualquer momento, NUNCA pergunte de novo, use o que ela ja disse. Repetir pergunta que ela ja respondeu passa a impressao de que vc nao prestou atencao e irrita a cliente.' },
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
+  if (blocoCrossSell) systemBlocks.push({ type: 'text', text: blocoCrossSell });
   // Saudação simples e humana, com o período certo do dia. Ailson 05/06/2026.
   systemBlocks.push({ type: 'text', text: jaCumprimentouHoje
     ? `SAUDAÇÃO: vc JÁ cumprimentou esta cliente hoje. NÃO repita "${saudacaoPeriodo}" nem "tudo bem?". Nesta e nas próximas mensagens de HOJE, abra só com o primeiro nome ("Oi <nome>," ou só "<nome>,") e vai direto ao ponto. Nada de re-saudar com o período do dia. No máximo 1 emoji leve, e nem sempre.`
@@ -1388,6 +1430,17 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
       && !/\[ENVIAR_CATALOGO:[^\]]+\]/i.test(textoProposto)) {
     textoProposto = `${textoProposto}\n\n[ENVIAR_CATALOGO:${nomeCatalogoAtual}]`;
     log('ia', `conversa=${conversaId} catalogo force-inject (motivo=${cls.motivo})`);
+  }
+
+  // Cross-sell: se a IA teceu uma das refs sugeridas na resposta, carimba
+  // cross_sell_ref (medicao de uso real + nao oferecer de novo na conversa).
+  if (refsCrossSugeridas.length) {
+    const usada = refsCrossSugeridas.find(r =>
+      textoProposto.includes(`[ENVIAR_FOTO:${r}]`) || new RegExp(`\\b${r}\\b`).test(textoProposto));
+    if (usada) {
+      await supabase.from('lojas_whats_conversas').update({ cross_sell_ref: usada }).eq('id', conversaId);
+      log('ia', `conversa=${conversaId} cross-sell usado ref=${usada}`);
+    }
   }
 
   // 7. Cria sugestão pendente (captura o id pro auto-envio)
