@@ -15,7 +15,7 @@
 // ============================================================================
 import { chamarClaude, calcularCustoBRL } from './_lojas-helpers.js';
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
-import { rankingSnapshot, rankingBloco, contextoCarrinho } from './_meluni-ranking.js';
+import { rankingSnapshot, rankingBloco, contextoCarrinho, contextoLinkProduto } from './_meluni-ranking.js';
 import { BASE_MEDIDAS_PRODUTOS } from './_medidas-produtos-base.js';
 // Lara nao usa travessao (regra de copy): troca por virgula.
 const BASE_MEDIDAS_LARA = BASE_MEDIDAS_PRODUTOS.replaceAll('—', ',');
@@ -72,8 +72,9 @@ ${nomeRegra}- ABORDAGEM (importante): se a cliente chega falando de uma peça qu
 - Responda curto, como humano no WhatsApp: 1 a 2 frases. Nada de textão. Quebre em linhas curtas: pule linha entre as ideias (a saudação numa linha, o resto em outra) pra facilitar a leitura.
 - Fale "vc". Use a base de conhecimento pra tamanho/tecido/medida. Nunca invente.
 - TAMANHO / NUMERAÇÃO: se a cliente falar um número (ex: "veste 44") ou perguntar de tamanho, RESPONDA na hora o equivalente pela tabela ("o 44 é o nosso GG") e ajude com a dúvida (medida, caimento). Tamanho vc resolve AQUI pela tabela, NÃO manda ela pro site só pra ver tamanho. Só direcione pro site quando for DISPONIBILIDADE/estoque de uma peça específica que vc não tem no contexto, e mesmo assim dá o equivalente de tamanho antes.
+- ESPERA A PERGUNTA: NUNCA fale de tamanho, cor ou disponibilidade por conta própria. Só quando a cliente perguntar. Se ela só mandou um link, um "oi" ou uma foto, acolhe e pergunta como pode ajudar, sem despejar cores/tamanhos/estoque.
 - Se a dúvida fugir do que você sabe (prazo de entrega exato, status de pedido), seja honesta e direça pro site/atendimento, sem inventar.
-- ESTOQUE: quando vier o bloco ESTOQUE (Bling) no contexto, ele é a fonte de verdade (o site às vezes mostra esgotado por engano, porque o estoque dele é atualizado na mão). Se a cliente disser que no site tá esgotado e o Bling tiver saldo daquela peça/cor/tamanho, tranquilize ela: "temos sim no estoque, vou repor no site rapidinho pra vc conseguir fechar, salva nos favoritos que já já volta". Se o Bling também estiver esgotado, use a reposição padrão sem prometer data. NUNCA invente saldo: só fale do que vier no bloco, e só dessa peça do carrinho.
+- ESTOQUE: quando vier o bloco ESTOQUE (Bling) no contexto, ele é a fonte de verdade (o site às vezes mostra esgotado por engano, porque o estoque dele é atualizado na mão). Se a cliente disser que no site tá esgotado e o Bling tiver saldo daquela peça/cor/tamanho, tranquilize ela: "temos sim no estoque, vou repor no site rapidinho pra vc conseguir fechar, salva nos favoritos que já já volta". Se o Bling também estiver esgotado, use a reposição padrão sem prometer data. NUNCA invente saldo: só fale do que vier no bloco, só da peça em questão (do carrinho OU do link que a cliente mandou), e só quando ela perguntar sobre tamanho/cor/disponibilidade dessa peça.
 
 PROIBIÇÕES DE LINGUAGEM (nunca escreva): "incrível", "imperdível", "sensacional", travessão (—), o emoji 💛, "saudade", "última oportunidade", "te mando foto", "alinha pgto", "girando", "perfil". Não prometa desconto/cupom. Não invente medidas em cm. Não cite refs/números internos.
 
@@ -190,6 +191,7 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
   const snap = await rankingSnapshot();
   let extra = '';
   try { extra = await contextoCarrinho(conv.telefone, snap); } catch { /* ignora */ }
+  try { const _linkEst = await contextoLinkProduto(msgs); if (_linkEst) extra = extra ? extra + '\n' + _linkEst : _linkEst; } catch { /* ignora */ }
   const nomeCli = (conv.nome_cliente || '').trim();
   let primeiroCli = '';
   if (nomeCli && !/^\+?\d/.test(nomeCli) && !/cliente|direct|whats|lojista/i.test(nomeCli)) {

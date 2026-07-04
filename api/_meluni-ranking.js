@@ -150,3 +150,63 @@ export async function contextoCarrinho(telefone, snap) {
 
   return linhas.join('\n');
 }
+
+
+// ── Cliente colou link do site? extrai a REF (dígitos no fim do último -segmento)
+// e monta bloco ESTOQUE dessa peça (só cores/tam com saldo). Lara usa SÓ se a
+// cliente perguntar (não despeja). Ailson 04/07/2026.
+export async function contextoLinkProduto(msgs) {
+  if (!Array.isArray(msgs) || !msgs.length) return '';
+  const linkRe = /meluniloja\.com\.br\/([^\s/?#]+)/i;
+  let ref = null, corLink = null;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m.direcao !== 'entrada') continue;              // só mensagens da cliente
+    const mm = (m.texto || '').match(linkRe);
+    if (!mm) continue;
+    const last = (mm[1].split('-').pop() || '');        // ex: azulmarinho2790
+    const refM = last.match(/(\d+)$/);                  // dígitos no fim
+    if (!refM) continue;
+    ref = refZ(refM[1]);                                // 2790
+    corLink = last.slice(0, last.length - refM[1].length) || null; // azulmarinho
+    break;                                              // link mais recente
+  }
+  if (!ref) return '';
+
+  const { data: est } = await supabase.from('bling_estoque')
+    .select('cor_label, tam, qtd').eq('ref', ref);
+  if (!est || !est.length) return '';
+
+  const ordemTam = { P: 1, M: 2, G: 3, GG: 4, G1: 5, G2: 6, G3: 7 };
+  const porCor = new Map();
+  for (const r of est) {
+    if (!r.cor_label || (Number(r.qtd) || 0) <= 0) continue;
+    const k = r.cor_label.trim();
+    if (!porCor.has(k)) porCor.set(k, new Set());
+    if (r.tam) porCor.get(k).add(r.tam);
+  }
+
+  const curados = await nomesCurados();
+  const nome = curados.get(ref) || 'essa peça';
+
+  if (!porCor.size) {
+    return `\nPEÇA DO LINK QUE A CLIENTE MANDOU: ${nome}. No momento está esgotada em todas as cores/tamanhos (fonte: Bling). USE SÓ SE a cliente perguntar sobre disponibilidade dessa peça: aí use a reposição padrão, sem prometer data. NUNCA fale de estoque/cor/tamanho sem ela perguntar.`;
+  }
+
+  const corLinkNorm = corLink ? semAcc(corLink).toLowerCase().replace(/[^a-z]/g, '') : null;
+  let corLinkLabel = null;
+  for (const c of porCor.keys()) {
+    if (corLinkNorm && semAcc(c).toLowerCase().replace(/[^a-z]/g, '') === corLinkNorm) { corLinkLabel = c; break; }
+  }
+
+  const linhas = [];
+  for (const [cor, tams] of porCor) {
+    const ord = [...tams].sort((a, b) => (ordemTam[a] || 9) - (ordemTam[b] || 9));
+    linhas.push(`- ${cor}: ${ord.join(', ')}`);
+  }
+
+  const cab = `PEÇA DO LINK QUE A CLIENTE MANDOU: ${nome}${corLinkLabel ? ` (a cor do link é ${corLinkLabel})` : ''}. Fonte de verdade = Bling; o site é atualizado na mão e pode estar errado. NÃO cite número interno de referência pra cliente.`;
+  const corpo = `ESTOQUE dessa peça (só cores/tamanhos COM saldo; o que NÃO aparecer aqui está esgotado):\n${linhas.join('\n')}`;
+  const regra = `USE ISSO SÓ SE a cliente perguntar sobre tamanho, cor ou disponibilidade dessa peça. NUNCA liste cores/tamanhos por conta própria, espere a pergunta. Tradução: 44=GG, 42=G, 40=M, 38=P. Se a cor que ela quer estiver esgotada, ofereça as outras cores que têm saldo.`;
+  return `\n${cab}\n${corpo}\n${regra}`;
+}
