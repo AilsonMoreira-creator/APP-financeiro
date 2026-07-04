@@ -11108,8 +11108,12 @@ export default function App(){
 
         // result.vendas já vem no formato { mesKey: { diaKey: { conta: { canal: {...} } } } }
         if(result.vendas&&Object.keys(result.vendas).length>0){
-          setBlingVendas(result.vendas);
-          try{localStorage.setItem("amica_bling_vendas",JSON.stringify(result.vendas));}catch(e){}
+          const vendasStr=JSON.stringify(result.vendas);
+          const anterior=(()=>{try{return localStorage.getItem("amica_bling_vendas")||"";}catch(e){return "";}})();
+          if(vendasStr!==anterior){
+            setBlingVendas(result.vendas);
+            try{localStorage.setItem("amica_bling_vendas",vendasStr);}catch(e){}
+          }
 
           // Atualiza total MENSAL em Lançamentos (desconta 10% devoluções)
           const hojeMk=hoje.slice(0,7);
@@ -11129,8 +11133,16 @@ export default function App(){
           }
           if(totalBrutoMes>0){
             const liquido=Math.round(totalBrutoMes*0.90);
-            setReceitasPorMes(prev=>{const m=prev[MES_ATUAL]||{};return{...prev,[MES_ATUAL]:{...m,[1]:{...(m[1]||{}),marketplaces:String(liquido)}}};});
-            console.log(`BLING: R$ ${liquido.toLocaleString("pt-BR")} atualizado em Lançamentos (silencioso)`);
+            // Só atualiza se o valor MUDOU. Retornar prev mantém a MESMA referência:
+            // React não re-renderiza, o AUTO-SAVE não dispara, nada vai pro Supabase
+            // e o Realtime não ecoa (era isso que fechava a tela a cada 5min).
+            setReceitasPorMes(prev=>{
+              const m=prev[MES_ATUAL]||{};
+              const novo=String(liquido);
+              if(String(m[1]?.marketplaces??"")===novo)return prev;
+              console.log(`BLING: R$ ${liquido.toLocaleString("pt-BR")} atualizado em Lançamentos (silencioso)`);
+              return{...prev,[MES_ATUAL]:{...m,[1]:{...(m[1]||{}),marketplaces:novo}}};
+            });
           }
         }else{
           // Tenta cache local enquanto cron não populou
