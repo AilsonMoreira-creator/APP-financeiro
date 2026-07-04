@@ -1,8 +1,8 @@
 // ============================================================================
 // BASE ROBUSTA de produtos + medidas: tecidos, cores, TABELA de medidas,
 // traducao numero->letra (44->GG etc.) e cores sazonais.
-// FONTE UNICA — usada pelo SAC (ml-ai.js) e pela Lara (meluni-whats-ia.js).
-// Editar AQUI reflete nos dois. Ailson 04/07/2026.
+// Base da LARA (meluni-whats-ia.js). Copiada do SAC (ml-ai.js) em 04/07/2026.
+// O SAC segue com a copia dele inline e INTOCADO; edite ESTE arquivo so pra Lara.
 // ============================================================================
 export const BASE_MEDIDAS_PRODUTOS = `TECIDOS (só fale composição se perguntarem):
 • Linho/Viscolinho: tecido nobre, fibras naturais, pouco encolhimento. Composição: linho com viscose.
