@@ -43,8 +43,13 @@ export function aplicarTokens(texto, nome) {
        .replace(/\s+,/g, ',').replace(/,\s*!/g, '!')
        .replace(/(Oi|Olá|Oie|Ei)\s*,\s*!/gi, '$1!')
        .replace(/(Oi|Olá|Oie|Ei)\s*,\s*\n/gi, '$1!\n')
-       .replace(/[ \t]{2,}/g, ' ');
-  return t.trim();
+       .replace(/[ \t]{2,}/g, ' ')
+       .replace(/^\s*[,;]+\s*/, '')               // ", sua escolha..." -> "Sua escolha..." (nome era o 1º token)
+       .replace(/\s*[,;]+\s*$/, '');              // "...por aqui," -> "...por aqui" (nome era o último token)
+  // se a vírgula do começo caiu, capitaliza a 1ª letra
+  t = t.trim();
+  if (t) t = t.charAt(0).toUpperCase() + t.slice(1);
+  return t;
 }
 
 function corpoToHtml(texto, nome) {
