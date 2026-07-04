@@ -1512,6 +1512,14 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   // Sub-filtro da aba Perdida: ver quem recebeu / nao recebeu a pesquisa de
   // motivo. 'todos' | 'com' | 'sem'. Ailson 22/06/2026.
   const [filtroPesquisaPerdida, setFiltroPesquisaPerdida] = useState('todos');
+  // Filtros da reativação em massa na aba Perdida (Ailson 04/07/2026): origem
+  // do lead, data em que virou perdida e template do disparo (hoje só a
+  // pesquisa funciona; curadoria/novidades/dicas entram quando aprovar na Meta).
+  const [filtroOrigemPerdida, setFiltroOrigemPerdida] = useState('todas');
+  const [perdidaDe, setPerdidaDe] = useState('');
+  const [perdidaAte, setPerdidaAte] = useState('');
+  const [templateMassa, setTemplateMassa] = useState('pesquisa');
+  const [tplsReativacao, setTplsReativacao] = useState([]);
   // Contador de pesquisas enviadas HOJE (BRT) na etapa ativa (follow_up / perdida).
   const [enviadosHoje, setEnviadosHoje] = useState(0);
 
@@ -1604,7 +1612,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, ciclo24_vence_em,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, ciclo24_vence_em, perdida_em,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1622,6 +1630,14 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       // Sub-filtro da Perdida: recebeu / nao recebeu a pesquisa. Ailson 22/06/2026.
       if (filtroEtapa === 'perdida' && filtroPesquisaPerdida === 'com') q = q.not('pesquisa_enviada_em', 'is', null);
       else if (filtroEtapa === 'perdida' && filtroPesquisaPerdida === 'sem') q = q.is('pesquisa_enviada_em', null);
+      // Filtros de reativação da Perdida: origem do lead e data de chegada na
+      // aba (perdida_em). Ailson 04/07/2026.
+      if (filtroEtapa === 'perdida') {
+        if (filtroOrigemPerdida === 'desconhecida') q = q.or('origem_lead.eq.desconhecida,origem_lead.is.null');
+        else if (filtroOrigemPerdida !== 'todas') q = q.eq('origem_lead', filtroOrigemPerdida);
+        if (perdidaDe) q = q.gte('perdida_em', `${perdidaDe}T00:00:00-03:00`);
+        if (perdidaAte) q = q.lte('perdida_em', `${perdidaAte}T23:59:59-03:00`);
+      }
       const { data } = await q;
       let lista = data || [];
       // Enriquece conversas VENDIDAS com atendido_por da conversao (lojas_conversoes),
@@ -1656,7 +1672,23 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       jaCarregouListaRef.current = true;
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida]);
+  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, perdidaDe, perdidaAte]);
+
+  // Catálogo dos templates de reativação (curadoria/novidades/dicas) pro
+  // seletor do disparo em massa. Carrega 1x quando abre a aba Perdida.
+  useEffect(() => {
+    if (filtroEtapa !== 'perdida' || tplsReativacao.length) return;
+    fetch('/api/lojas-whats-templates-catalogo')
+      .then(r => r.json())
+      .then(j => {
+        if (j.ok) setTplsReativacao([
+          ...(j.pastas?.curadoria || []),
+          ...(j.pastas?.novidades || []),
+          ...(j.pastas?.dicas_rapidas || []),
+        ]);
+      })
+      .catch(() => {});
+  }, [filtroEtapa]);
 
   // Conta quantas pesquisas saíram HOJE (BRT) na etapa ativa: follow_up usa
   // followup_pesq_enviada_em, perdida usa pesquisa_enviada_em. Recarrega junto
@@ -2054,16 +2086,40 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                 {processandoFila ? 'Aprovando…' : `✓ Aprovar ${selecionados.size}`}
               </button>
             ) : ehAbaPerdida ? (
-              <button onClick={enviarPesquisaSelecionados} disabled={processandoFila}
-                style={{
-                  padding: '6px 14px', borderRadius: 6,
-                  background: processandoFila ? '#bdc3c7' : palette.accent,
+              <>
+                {/* Seletor do template do disparo (Ailson 04/07/2026): hoje só a
+                    pesquisa funciona; curadoria/novidades/dicas habilitam quando
+                    o template for aprovado na Meta. */}
+                <select value={templateMassa} onChange={e => setTemplateMassa(e.target.value)}
+                  style={{
+                    fontSize: fz(12), padding: '6px 8px', borderRadius: 6,
+                    border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                    background: palette.surface, color: palette.ink, maxWidth: 190,
+                  }}>
+                  <option value="pesquisa">Pesquisa de motivo</option>
+                  {tplsReativacao.map(t => {
+                    const rotulo = { curadoria: 'Curadoria', novidades: 'Novidades', dicas_rapidas: 'Dica lojista' }[t.pasta] || t.name;
+                    const pronto = t.status === 'aprovado';
+                    return (
+                      <option key={t.name} value={t.name} disabled={!pronto}>
+                        {rotulo}{pronto ? '' : ' (aguardando Meta)'}
+                      </option>
+                    );
+                  })}
+                </select>
+                <button onClick={enviarPesquisaSelecionados}
+                  disabled={processandoFila || templateMassa !== 'pesquisa'}
+                  title={templateMassa !== 'pesquisa' ? 'Disparo desse template entra quando ele for aprovado na Meta' : undefined}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6,
+                    background: (processandoFila || templateMassa !== 'pesquisa') ? '#bdc3c7' : palette.accent,
                   color: '#fff', border: 'none', fontFamily: FONT,
                   fontSize: fz(13), fontWeight: 700,
                   cursor: processandoFila ? 'wait' : 'pointer',
                 }}>
                 {processandoFila ? 'Enviando…' : `Enviar pesquisa (${selecionados.size})`}
               </button>
+              </>
             ) : (
               <button onClick={processarSelecionados} disabled={processandoFila}
                 style={{
@@ -2082,7 +2138,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
 
       {/* Sub-filtro Perdida: quem recebeu / nao recebeu a pesquisa. Ailson 22/06/2026 */}
       {ehAbaPerdida && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>📋 Pesquisa:</span>
           {[['todos', 'Todos'], ['com', 'Recebeu'], ['sem', 'Não recebeu']].map(([id, label]) => {
             const ativo = filtroPesquisaPerdida === id;
@@ -2098,6 +2154,50 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
             );
           })}
         </div>
+      )}
+
+      {/* Filtros de reativação: origem do lead + data que virou perdida. Ailson 04/07/2026 */}
+      {ehAbaPerdida && (
+        <>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>🎯 Origem:</span>
+            {[
+              ['todas', 'Todas'],
+              ['carrinho_site_amicialoja', 'Carrinho'],
+              ['instagram_stories', 'Stories'],
+              ['anuncio_facebook', 'Anúncio FB'],
+              ['anuncio_instagram', 'Anúncio IG'],
+              ['instagram_linktree', 'Linktree'],
+              ['desconhecida', 'Desconhecida'],
+            ].map(([id, label]) => {
+              const ativo = filtroOrigemPerdida === id;
+              return (
+                <button key={id} onClick={() => setFiltroOrigemPerdida(id)}
+                  style={{
+                    fontSize: fz(11), padding: '4px 11px', borderRadius: 14,
+                    border: `1px solid ${ativo ? palette.accent : palette.beige}`,
+                    background: ativo ? palette.accent : palette.surface,
+                    color: ativo ? '#fff' : palette.ink,
+                    cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                  }}>{label}</button>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>📅 Perdida entre:</span>
+            <input type="date" value={perdidaDe} onChange={e => setPerdidaDe(e.target.value)}
+              style={{ fontSize: fz(11), padding: '4px 8px', borderRadius: 6, border: `1px solid ${palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink }} />
+            <span style={{ fontSize: fz(11), color: palette.inkMuted }}>e</span>
+            <input type="date" value={perdidaAte} onChange={e => setPerdidaAte(e.target.value)}
+              style={{ fontSize: fz(11), padding: '4px 8px', borderRadius: 6, border: `1px solid ${palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink }} />
+            {(perdidaDe || perdidaAte || filtroOrigemPerdida !== 'todas') && (
+              <button onClick={() => { setPerdidaDe(''); setPerdidaAte(''); setFiltroOrigemPerdida('todas'); }}
+                style={{ fontSize: fz(11), padding: '4px 10px', borderRadius: 14, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+                limpar
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {(filtroEtapa === 'follow_up' || filtroEtapa === 'perdida') && (
@@ -6700,6 +6800,216 @@ function PesquisaTab({ refreshTick, onAbrirChat }) {
   );
 }
 
+// ─── Pasta "Templates" da aba Mídias (Ailson 04/07/2026) ────────────────────
+// Catálogo dos templates HSM da Sofia organizado em subpastas: Curadoria,
+// Novidades, Dicas rápidas (reativação, criativo trocável) e Ativos hoje.
+// Cada card mostra DE FORMA REAL como o cliente recebe (criativo + corpo +
+// botões), em que fluxo é usado e por que existe — controle pra não se perder
+// com vários templates. Nos 3 de conteúdo dá pra subir/trocar o criativo sem
+// mexer no corpo aprovado.
+function TemplatesCatalogo() {
+  const [aberto, setAberto] = useState(false);
+  const [pastas, setPastas] = useState(null);
+  const [subAberta, setSubAberta] = useState(null);
+  const [salvando, setSalvando] = useState(null);   // name em edicao/upload
+  const [msg, setMsg] = useState(null);
+
+  const carregar = async () => {
+    try {
+      const r = await fetch('/api/lojas-whats-templates-catalogo');
+      const j = await r.json();
+      if (j.ok) setPastas(j.pastas);
+      else setMsg({ tipo: 'erro', txt: j.erro || 'falha ao carregar' });
+    } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
+  };
+  useEffect(() => { if (aberto && !pastas) carregar(); }, [aberto]);
+  useEffect(() => {
+    if (!msg) return;
+    const t = setTimeout(() => setMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [msg]);
+
+  const salvarDoc = async (name, campo, valor) => {
+    setSalvando(name);
+    try {
+      const r = await fetch('/api/lojas-whats-templates-catalogo', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, [campo]: valor }),
+      });
+      const j = await r.json();
+      if (j.ok) { setMsg({ tipo: 'ok', txt: 'Salvo' }); await carregar(); }
+      else setMsg({ tipo: 'erro', txt: j.erro || 'falha' });
+    } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
+    setSalvando(null);
+  };
+
+  const subirCriativo = async (name, file) => {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { setMsg({ tipo: 'erro', txt: 'Criativo acima de 2MB' }); return; }
+    setSalvando(name);
+    try {
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('arquivo', file);
+      const r = await fetch('/api/lojas-whats-templates-catalogo', { method: 'POST', body: fd });
+      const j = await r.json();
+      if (j.ok) { setMsg({ tipo: 'ok', txt: 'Criativo atualizado' }); await carregar(); }
+      else setMsg({ tipo: 'erro', txt: j.erro || 'falha no upload' });
+    } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
+    setSalvando(null);
+  };
+
+  const SUBS = [
+    ['curadoria', '🎨 Curadoria', 'Cores e modelos que são tendência'],
+    ['novidades', '✨ Novidades', 'Novidades da Amícia'],
+    ['dicas_rapidas', '💡 Dicas rápidas', 'Conteúdos rápidos pro lojista'],
+    ['ativos', '📤 Ativos hoje', 'Como o cliente recebe e em que fluxo'],
+  ];
+
+  const CardTpl = ({ t, comCriativo }) => {
+    const [porqueEdit, setPorqueEdit] = useState(null);   // null = fechado
+    const [fluxoEdit, setFluxoEdit] = useState(null);
+    const ocupado = salvando === t.name;
+    return (
+      <div style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12, background: palette.surface, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <strong style={{ fontSize: fz(13), color: palette.ink }}>{t.name}</strong>
+          <span style={{
+            fontSize: fz(10), fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+            background: t.status === 'aprovado' ? '#e7f5ec' : '#f0ede8',
+            color: t.status === 'aprovado' ? '#2e7d32' : palette.inkMuted,
+          }}>{t.status === 'aprovado' ? 'aprovado na Meta' : t.status}</span>
+          {t.criativo_atualizado_em && (
+            <span style={{ fontSize: fz(10), color: palette.inkMuted }}>
+              criativo de {new Date(t.criativo_atualizado_em).toLocaleDateString('pt-BR')}
+            </span>
+          )}
+        </div>
+
+        {/* Preview real (como o cliente recebe) */}
+        <div style={{ maxWidth: 340, background: '#e7f8d4', borderRadius: 10, padding: 10, marginBottom: 10 }}>
+          {t.criativo_url && (
+            <img src={t.criativo_url} alt="criativo" style={{ width: '100%', borderRadius: 8, marginBottom: 8, display: 'block' }} />
+          )}
+          <div style={{ fontSize: fz(12), color: '#2c3e50', whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
+            {t.body_text}
+          </div>
+          {Array.isArray(t.botoes) && t.botoes.length > 0 && (
+            <div style={{ marginTop: 8, borderTop: '1px solid #cfe3b8', paddingTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {t.botoes.map((b, i) => (
+                <div key={i} style={{ textAlign: 'center', fontSize: fz(12), fontWeight: 700, color: '#1a73a8' }}>
+                  {typeof b === 'string' ? b : (b.text || b.url || '')}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Por que existe */}
+        <div style={{ fontSize: fz(11), marginBottom: 6 }}>
+          <strong style={{ color: palette.inkSoft }}>Por quê:</strong>{' '}
+          {porqueEdit === null ? (
+            <>
+              <span style={{ color: palette.ink }}>{t.porque || '(sem explicação)'}</span>
+              <button onClick={() => setPorqueEdit(t.porque || '')} style={{ marginLeft: 6, fontSize: fz(10), border: 'none', background: 'none', color: palette.accent, cursor: 'pointer', fontWeight: 700 }}>editar</button>
+            </>
+          ) : (
+            <div style={{ marginTop: 4 }}>
+              <textarea value={porqueEdit} onChange={e => setPorqueEdit(e.target.value)} rows={2}
+                style={{ width: '100%', fontSize: fz(11), fontFamily: FONT, borderRadius: 6, border: `1px solid ${palette.beige}`, padding: 6, boxSizing: 'border-box' }} />
+              <button disabled={ocupado} onClick={async () => { await salvarDoc(t.name, 'porque', porqueEdit); setPorqueEdit(null); }}
+                style={{ fontSize: fz(11), padding: '3px 10px', borderRadius: 6, border: 'none', background: palette.accent, color: '#fff', cursor: 'pointer', fontWeight: 700, marginRight: 6 }}>salvar</button>
+              <button onClick={() => setPorqueEdit(null)} style={{ fontSize: fz(11), padding: '3px 10px', borderRadius: 6, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer' }}>cancelar</button>
+            </div>
+          )}
+        </div>
+
+        {/* Fluxo de uso */}
+        <div style={{ fontSize: fz(11), marginBottom: comCriativo ? 8 : 0 }}>
+          <strong style={{ color: palette.inkSoft }}>Fluxo:</strong>{' '}
+          {fluxoEdit === null ? (
+            <>
+              <span style={{ color: palette.ink }}>{t.fluxo || '(sem fluxo definido)'}</span>
+              <button onClick={() => setFluxoEdit(t.fluxo || '')} style={{ marginLeft: 6, fontSize: fz(10), border: 'none', background: 'none', color: palette.accent, cursor: 'pointer', fontWeight: 700 }}>editar</button>
+            </>
+          ) : (
+            <div style={{ marginTop: 4 }}>
+              <textarea value={fluxoEdit} onChange={e => setFluxoEdit(e.target.value)} rows={2}
+                style={{ width: '100%', fontSize: fz(11), fontFamily: FONT, borderRadius: 6, border: `1px solid ${palette.beige}`, padding: 6, boxSizing: 'border-box' }} />
+              <button disabled={ocupado} onClick={async () => { await salvarDoc(t.name, 'fluxo', fluxoEdit); setFluxoEdit(null); }}
+                style={{ fontSize: fz(11), padding: '3px 10px', borderRadius: 6, border: 'none', background: palette.accent, color: '#fff', cursor: 'pointer', fontWeight: 700, marginRight: 6 }}>salvar</button>
+              <button onClick={() => setFluxoEdit(null)} style={{ fontSize: fz(11), padding: '3px 10px', borderRadius: 6, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer' }}>cancelar</button>
+            </div>
+          )}
+        </div>
+
+        {/* Upload/troca de criativo (só nas subpastas de conteúdo) */}
+        {comCriativo && (
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: fz(11),
+            fontWeight: 700, color: ocupado ? palette.inkMuted : palette.accent,
+            cursor: ocupado ? 'wait' : 'pointer',
+          }}>
+            <Upload size={sz(13)} />
+            {ocupado ? 'Enviando…' : (t.criativo_url ? 'Trocar criativo' : 'Subir criativo')}
+            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={ocupado}
+              onChange={e => { subirCriativo(t.name, e.target.files?.[0]); e.target.value = ''; }}
+              style={{ display: 'none' }} />
+          </label>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ marginBottom: 14, border: `1px solid ${palette.beige}`, borderRadius: 10, background: palette.bg }}>
+      <button onClick={() => setAberto(a => !a)} style={{
+        width: '100%', textAlign: 'left', padding: '10px 14px', border: 'none',
+        background: 'none', fontFamily: FONT, fontSize: fz(13), fontWeight: 700,
+        color: palette.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        📁 Templates {aberto ? '▾' : '▸'}
+        <span style={{ fontSize: fz(10), fontWeight: 600, color: palette.inkMuted }}>
+          curadoria · novidades · dicas · ativos
+        </span>
+      </button>
+      {aberto && (
+        <div style={{ padding: '0 14px 12px' }}>
+          {msg && (
+            <div style={{ padding: '6px 10px', marginBottom: 8, borderRadius: 6, fontSize: fz(12), background: msg.tipo === 'erro' ? palette.alertSoft : '#e7f5ec', color: msg.tipo === 'erro' ? palette.alert : '#2e7d32' }}>{msg.txt}</div>
+          )}
+          {!pastas ? (
+            <div style={{ padding: 12, color: palette.inkMuted, fontSize: fz(12) }}>Carregando…</div>
+          ) : SUBS.map(([id, titulo, sub]) => {
+            const lista = pastas[id] || [];
+            const abertaSub = subAberta === id;
+            return (
+              <div key={id} style={{ marginBottom: 6 }}>
+                <button onClick={() => setSubAberta(abertaSub ? null : id)} style={{
+                  width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8,
+                  border: `1px solid ${palette.beige}`, background: palette.surface,
+                  fontFamily: FONT, fontSize: fz(12), fontWeight: 700, color: palette.ink,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  {titulo} {abertaSub ? '▾' : '▸'}
+                  <span style={{ fontSize: fz(10), fontWeight: 500, color: palette.inkMuted }}>{sub} · {lista.length}</span>
+                </button>
+                {abertaSub && (
+                  <div style={{ padding: '8px 4px 0' }}>
+                    {lista.length === 0
+                      ? <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: '4px 8px' }}>Nenhum template aqui ainda.</div>
+                      : lista.map(t => <CardTpl key={t.name} t={t} comCriativo={id !== 'ativos'} />)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MidiasTab({ refreshTick }) {
   const [midias, setMidias] = useState([]);
   const [stats, setStats] = useState({ total: 0, total_bytes: 0, por_tipo: {} });
@@ -6764,6 +7074,9 @@ function MidiasTab({ refreshTick }) {
 
   return (
     <div style={{ padding: '12px 14px', fontFamily: FONT }}>
+      {/* Pasta Templates (catálogo dos HSM: curadoria/novidades/dicas/ativos) */}
+      <TemplatesCatalogo />
+
       {/* Header stats + botao upload */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
