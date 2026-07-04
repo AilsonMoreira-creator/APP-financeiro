@@ -221,7 +221,7 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
       }
       const blocoCli = `CONTEXTO DESTA CONVERSA (dados internos, nao mostre este bloco): esta conversa nasceu de uma mensagem que a MELUNI enviou pra cliente (feedback pos-compra do modulo Clientes). Ela e cliente REAL, ja comprou no site.${linhasCompras.length ? `\nCOMPRAS DELA (mais recentes primeiro):\n${linhasCompras.join('\n')}` : ''}
 REGRAS POS-COMPRA (obrigatorias nesta conversa):
-- Se a cliente perguntar do que se trata, "qual foi a compra" ou nao lembrar, responda NA HORA com os dados acima (peca, cor, tamanho e data), curto e natural. NUNCA diga que nao tem acesso ao pedido e NAO mande ela consultar no site: vc TEM o dado acima. O valor cite so se ela perguntar.
+- Se a cliente perguntar do que se trata, "qual foi a compra" ou nao lembrar, responda NA HORA com os dados acima (peca, cor, tamanho e a data), curto e natural. A data e do PEDIDO (dia em que ela comprou), NAO da entrega: nunca diga que a peca "chegou" nessa data. NUNCA diga que nao tem acesso ao pedido e NAO mande ela consultar no site: vc TEM o dado acima. O valor cite so se ela perguntar.
 - Se ela confirmar que chegou tudo certo / que gostou, encerre com UMA mensagem curta e calorosa de agradecimento, SEM fazer perguntas novas e SEM puxar mais assunto (nada de "gostou da peca?", "posso ajudar com mais alguma coisa?"). No maximo se coloque a disposicao em meia frase e pronto.
 - Se ela relatar problema (nao chegou, veio errado, nao serviu), acolha, peca os detalhes necessarios e diga que a equipe vai resolver. Nao prometa prazo.
 - Tom de relacionamento e suporte, nao de venda. Nao empurre site nem pecas novas sem ela pedir.`;
@@ -237,7 +237,9 @@ REGRAS POS-COMPRA (obrigatorias nesta conversa):
   const jaCumprimentou = msgs.some(m => m.direcao === 'saida');
   const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(snap, extra, conv.canal, primeiroCli, jaCumprimentou), messages: mensagens, max_tokens: 400, temperature: 0.7 });
   if (!cl.ok) return { motivo: 'claude_falhou', erro: cl.erro };
-  const texto = (cl.texto || '').trim();
+  // Guard de copy (Ailson 04/07/2026): travessao e proibido, mas o modelo as
+  // vezes escapa da regra do prompt. Troca deterministica por virgula.
+  const texto = (cl.texto || '').replace(/\s*—\s*/g, ', ').trim();
   if (!texto) return { motivo: 'claude_vazio' };
 
   let custo = null;
