@@ -118,6 +118,20 @@ async function mapearSkus(skus) {
     const cur = mapa.get(r.bling_sku) || {};
     mapa.set(r.bling_sku, { ref: cur.ref ?? r.ref, desc_limpa: cur.desc_limpa ?? null, bling_produto_id: r.bling_produto_id });
   }
+  // sku sem desc_limpa herda a de OUTRO sku da MESMA ref (o mapa tem buracos por sku)
+  const refsSemDesc = [...new Set([...mapa.values()].filter(v => v.ref && !v.desc_limpa).map(v => refSemZero(v.ref)))];
+  if (refsSemDesc.length) {
+    const { data: irm } = await supabase.from('ml_sku_ref_map')
+      .select('ref, desc_limpa').in('ref', refsSemDesc).not('desc_limpa', 'is', null);
+    const porRef = new Map();
+    for (const r of (irm || [])) { const k = refSemZero(r.ref); if (!porRef.has(k)) porRef.set(k, r.desc_limpa); }
+    for (const [k, v] of mapa) {
+      if (v.ref && !v.desc_limpa) {
+        const d = porRef.get(refSemZero(v.ref));
+        if (d) mapa.set(k, { ...v, desc_limpa: d });
+      }
+    }
+  }
   return mapa;
 }
 
