@@ -29,6 +29,24 @@ export default async function handler(req, res) {
 
     const out = { conta: 'lumia', token_ok: !!token, contato_id_testado: contatoId };
 
+    // ?lista=1&data=YYYY-MM-DD -> lista pedidos do dia SEM filtro de situação
+    // (a lista do bling-cron só pega Atendido=9; aqui vê tudo, inclusive
+    // Em aberto/Cancelado — pra rastrear pedido de Pix não pago). Ailson 04/07/2026.
+    if (q.lista === '1') {
+      const dia = q.data || new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+      const rl = await blingFetch(`${API}/pedidos/vendas?dataInicial=${dia}&dataFinal=${dia}&limite=100`, headers);
+      const jl = await rl.json().catch(() => null);
+      out.lista = {
+        status: rl.status, dia,
+        pedidos: (jl?.data || []).map(p => ({
+          id: p.id, numero: p.numero, data: p.data, total: p.total,
+          situacao: p.situacao || null, numeroLoja: p.numeroLoja || null,
+          contato: p.contato?.nome || null,
+        })),
+      };
+      return res.json(out);
+    }
+
     if (pedidoId) {
       const rp = await blingFetch(`${API}/pedidos/vendas/${pedidoId}`, headers);
       const jp = await rp.json().catch(() => null);
