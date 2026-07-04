@@ -98,8 +98,41 @@ export function renderEmailHtml({ campanha = {}, carrinho = {}, unsubscribeUrl =
     ? `<tr><td style="padding:0;"><img src="${esc(c.criativo_url)}" alt="" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>`
     : '';
 
-  const blocoCarrinho = (resumoItens || pecas > 0 || valor)
-    ? `<tr><td style="padding:0 32px;">
+  // Lista detalhada (até 3 itens com thumbnail): usa carrinho.itens_detalhados
+  // [{ nome, foto, qtd }] quando presente. Thumb só renderiza se a foto existe
+  // no cache (nunca aparece imagem quebrada); clique no thumb abre a foto em
+  // tamanho cheio no navegador. Sem itens_detalhados, cai no resumo antigo.
+  const itensDet = Array.isArray(carrinho?.itens_detalhados)
+    ? carrinho.itens_detalhados.filter(i => i && (i.nome || i.foto)) : [];
+  const restantes = Number(carrinho?.itens_restantes || 0);
+
+  let blocoCarrinho = '';
+  if (itensDet.length) {
+    const linhas = itensDet.map((it, i) => {
+      const nomeIt = esc(it.nome || 'Peça do seu carrinho');
+      const qtd = Number(it.qtd) || 1;
+      const qtdTxt = qtd > 1 ? ` <span style="color:${CINZA};font-size:13px;">x${qtd}</span>` : '';
+      const thumb = it.foto
+        ? `<td width="56" style="vertical-align:middle;"><a href="${esc(it.foto)}" target="_blank" style="text-decoration:none;"><img src="${esc(it.foto)}" alt="${nomeIt}" width="56" style="display:block;width:56px;height:auto;border:1px solid ${BORDA};border-radius:8px;"></a></td><td width="12" style="font-size:0;line-height:0;">&nbsp;</td>`
+        : '';
+      return `<tr><td style="padding:${i === 0 ? '12px' : '0'} 14px 12px;${i > 0 ? `border-top:1px solid ${BORDA};padding-top:12px;` : ''}">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+          ${thumb}
+          <td style="vertical-align:middle;font-size:15px;color:${ESCURO};line-height:1.4;">${nomeIt}${qtdTxt}</td>
+        </tr></table>
+      </td></tr>`;
+    }).join('');
+    const linhaRestantes = restantes > 0
+      ? `<tr><td style="padding:0 14px 10px;font-size:13px;color:${CINZA};">e mais ${restantes} peça${restantes > 1 ? 's' : ''}</td></tr>` : '';
+    const linhaTotal = valor
+      ? `<tr><td style="padding:10px 14px;border-top:1px solid ${BORDA};font-size:15px;color:${ESCURO};">Total <span style="float:right;font-weight:700;color:${ROXO};">${esc(moeda(valor))}</span></td></tr>` : '';
+    blocoCarrinho = `<tr><td style="padding:0 32px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FUNDO};border:1px solid ${BORDA};border-radius:10px;margin:4px 0 18px;">
+          ${linhas}${linhaRestantes}${linhaTotal}
+        </table>
+      </td></tr>`;
+  } else if (resumoItens || pecas > 0 || valor) {
+    blocoCarrinho = `<tr><td style="padding:0 32px;">
          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FUNDO};border:1px solid ${BORDA};border-radius:10px;margin:4px 0 18px;">
            <tr><td style="padding:14px 18px;font-size:15px;color:${ESCURO};">
              ${resumoItens
@@ -108,8 +141,8 @@ export function renderEmailHtml({ campanha = {}, carrinho = {}, unsubscribeUrl =
              ${valor ? `<span style="float:right;font-weight:700;color:${ROXO};">${esc(moeda(valor))}</span>` : ''}
            </td></tr>
          </table>
-       </td></tr>`
-    : '';
+       </td></tr>`;
+  }
 
   const descNum = String(c.desconto == null ? '' : c.desconto).replace(/[^\d]/g, '') || '10';
   const blocoCupom = c.cupom

@@ -6,6 +6,25 @@
 // Ailson 20/06/2026.
 // ============================================================================
 import { renderEmailHtml, EMAIL_DEFAULTS } from './_meluni-email-mkt-template.js';
+import { resolverItensDetalhados } from './_meluni-carrinho-resumo.js';
+import { supabase } from './_bling-helpers.js';
+
+// amostra fiel: 2 skus reais com foto cacheada; sem cache, cai na amostra fixa
+async function carrinhoAmostra() {
+  try {
+    const { data: fx } = await supabase.from('meluni_produto_fotos')
+      .select('sku').not('url_publica', 'is', null).limit(2);
+    if (fx?.length) {
+      const itens = fx.map(f => ({ sku: f.sku, qtd: 1 }));
+      const det = await resolverItensDetalhados(itens);
+      if (det.lista.length) return {
+        nome: 'Maria', valor: 289.9, resumo: det.resumo, itens,
+        itens_detalhados: det.lista, itens_restantes: det.restantes,
+      };
+    }
+  } catch { /* usa a fixa */ }
+  return CARRINHO_AMOSTRA;
+}
 
 const CARRINHO_AMOSTRA = { nome: 'Maria', valor: 289.9, resumo: 'Vestido de Linho e mais 1 peça', itens: [{ qtd: 1 }, { qtd: 1 }] };
 
@@ -29,7 +48,7 @@ export default async function handler(req, res) {
         utm: q.utm || EMAIL_DEFAULTS.utm,
         assinatura: q.assinatura || EMAIL_DEFAULTS.assinatura,
       };
-      const html = renderEmailHtml({ campanha, carrinho: CARRINHO_AMOSTRA, unsubscribeUrl: '#' });
+      const html = renderEmailHtml({ campanha, carrinho: await carrinhoAmostra(), unsubscribeUrl: '#' });
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(html);
     }
@@ -38,7 +57,7 @@ export default async function handler(req, res) {
       const { campanha = {}, carrinho } = req.body || {};
       const html = renderEmailHtml({
         campanha,
-        carrinho: carrinho || CARRINHO_AMOSTRA,
+        carrinho: carrinho || await carrinhoAmostra(),
         unsubscribeUrl: '#',
       });
       return res.json({ ok: true, html });

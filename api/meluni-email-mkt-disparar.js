@@ -9,7 +9,7 @@
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
 import { renderEmailHtml, primeiroNome, aplicarTokens, EMAIL_DEFAULTS } from './_meluni-email-mkt-template.js';
-import { resolverResumoItens } from './_meluni-carrinho-resumo.js';
+import { resolverItensDetalhados } from './_meluni-carrinho-resumo.js';
 
 const FROM = 'Meluni <marketing@news.meluniloja.com.br>';
 const REPLY = 'contato@meluniloja.com.br';
@@ -92,8 +92,11 @@ export default async function handler(req, res) {
         const { data: jaEnv } = await supabase.from('meluni_email_envios').select('id').eq('carrinho_id', c.id).limit(1);
         if (jaEnv && jaEnv.length) { resultados.push({ carrinho_id: id, ok: false, erro: 'ja enviado' }); continue; }
 
-        const { resumo } = await resolverResumoItens(c.itens);
-        const carrinho = { nome: c.nome || null, valor: c.valor, resumo, itens: c.itens };
+        const det = await resolverItensDetalhados(c.itens);
+        const carrinho = {
+          nome: c.nome || null, valor: c.valor, resumo: det.resumo, itens: c.itens,
+          itens_detalhados: det.lista, itens_restantes: det.restantes,
+        };
         const nome = primeiroNome(c.nome);
         const unsubscribeUrl = `${base}/api/meluni-email-mkt-descadastro?e=${encodeURIComponent(email)}`;
         const html = renderEmailHtml({ campanha, carrinho, unsubscribeUrl });

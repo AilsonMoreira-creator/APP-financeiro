@@ -7,6 +7,7 @@
 //   Ailson 04/07/2026.
 // ============================================================================
 import { renderEmailHtml, primeiroNome, aplicarTokens } from './_meluni-email-mkt-template.js';
+import { resolverItensDetalhados } from './_meluni-carrinho-resumo.js';
 import { supabase } from './_bling-helpers.js';
 
 const FROM = 'Meluni <marketing@news.meluniloja.com.br>';
@@ -24,7 +25,21 @@ export default async function handler(req, res) {
     const dest = String(req.query?.to || TO_PADRAO).toLowerCase().trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(dest)) return res.status(400).json({ ok: false, erro: 'E-mail invalido.' });
 
-    const cart = CARRINHO_AMOSTRA;
+    // amostra com SKUs reais que têm foto cacheada (pra o teste ficar fiel ao
+    // envio real, lista de itens + thumbnail); sem foto no cache cai na amostra fixa
+    let cart = CARRINHO_AMOSTRA;
+    const { data: fx } = await supabase.from('meluni_produto_fotos')
+      .select('sku').not('url_publica', 'is', null).limit(2);
+    if (fx?.length) {
+      const itensAmostra = fx.map(f => ({ sku: f.sku, qtd: 1 }));
+      const det = await resolverItensDetalhados(itensAmostra);
+      if (det.lista.length) {
+        cart = {
+          nome: 'Ailson', valor: 289.9, resumo: det.resumo, itens: itensAmostra,
+          itens_detalhados: det.lista, itens_restantes: det.restantes,
+        };
+      }
+    }
     const nome = primeiroNome(cart.nome);
 
     // ?real=1 -> usa a campanha do disparo automático (mesma montagem do auto-cron),

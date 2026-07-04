@@ -153,6 +153,42 @@ export async function resolverResumoItens(itens) {
   return { resumo, principalNome, nPecas };
 }
 
+// itens = [{ sku, qtd }] -> { lista: [{ sku, qtd, nome, foto }], nPecas, restantes, resumo }
+// Até `max` itens com nome (mesma cadeia do resumo) e foto cacheada em tamanho
+// cheio (meluni_produto_fotos.url_publica, alimentada pelo bling-fotos-sync).
+// Item sem foto vem com foto=null (o render decide não mostrar <img>).
+// `resumo` sai no mesmo formato do resolverResumoItens (pra manter compat).
+export async function resolverItensDetalhados(itens, max = 3) {
+  const listaRaw = Array.isArray(itens) ? itens.filter(i => i && i.sku) : [];
+  const nPecas = listaRaw.reduce((s, i) => s + (Number(i.qtd) || 1), 0);
+  if (!listaRaw.length) return { lista: [], nPecas: 0, restantes: 0, resumo: null };
+
+  const top = listaRaw.slice(0, max);
+  const skus = [...new Set(top.map(i => i.sku))];
+  const [skuMap, calc, curados, fotosResp] = await Promise.all([
+    mapearSkus(skus), prodsCalc(), nomesCurados(),
+    supabase.from('meluni_produto_fotos').select('sku, url_publica')
+      .in('sku', skus).not('url_publica', 'is', null),
+  ]);
+  const fotos = new Map((fotosResp.data || []).map(f => [f.sku, f.url_publica]));
+
+  const lista = [];
+  for (const it of top) {
+    const nome = await nomeDaPeca(skuMap.get(it.sku), calc, curados);
+    lista.push({ sku: it.sku, qtd: Number(it.qtd) || 1, nome: nome || null, foto: fotos.get(it.sku) || null });
+  }
+  const restantes = Math.max(0, nPecas - lista.reduce((s, i) => s + i.qtd, 0));
+
+  const principalNome = lista[0]?.nome || null;
+  let resumo = null;
+  if (principalNome) {
+    if (nPecas <= 1) resumo = principalNome;
+    else if (nPecas === 2) resumo = `${principalNome} e mais 1 peça`;
+    else resumo = `${principalNome} e mais ${nPecas - 1} peças`;
+  }
+  return { lista, nPecas, restantes, resumo };
+}
+
 // primeiro nome ({{1}}) — carrinho não tem; vem de meluni_clientes, senão conversa.
 export async function resolverPrimeiroNome(telefone, nomeCarrinho) {
   let bruto = (nomeCarrinho && nomeCarrinho.trim()) || null;
