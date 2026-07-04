@@ -176,6 +176,9 @@
     },
     "api/ml-reviews-orfaos-count.js": {
       "maxDuration": 120
+    },
+    "api/lojas-whats-cron-nudge-abertura.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -438,6 +441,10 @@
     {
       "path": "/api/bling-fotos-sync",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/lojas-whats-cron-nudge-abertura",
+      "schedule": "35 * * * *"
     }
   ]
 }

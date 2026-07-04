@@ -528,10 +528,32 @@ async function processarMensagemRecebida(msg, valueCtx) {
     }
     log('msg-in', `conversa ${conversa.id} retornou: ${conversa.etapa} -> conversando`);
   }
+
+  // 4b. NUDGE DE ABERTURA: se essa conversa recebeu o nudge oferecendo o
+  // catalogo (cron-nudge-abertura) e a resposta eh POSITIVA ("sim", "quero",
+  // "pode mandar"...), dispara o catalogo AQUI mesmo, deterministico, sem IA.
+  // O envio acontece DEPOIS do update(updates) abaixo, porque os updates zeram
+  // catalogo_enviado_em a cada inbound — o midia-sender recarimba por cima e
+  // o cron-catalogo assume o follow-up dali em diante. responder_em vai de
+  // null pra Sofia nao responder em dobro (o catalogo EH a resposta).
+  // Resposta que nao eh "sim" segue o fluxo normal (Sofia responde).
+  // Ailson 04/07/2026.
+  const nudgeCatalogo = conversa.etapa === 'conversando'
+    && conversa.nudge_abertura_enviado_em
+    && !conversa.catalogo_enviado_em
+    && dadosMsg.tipo === 'text'
+    && respostaPositivaNudge(dadosMsg.texto);
+  if (nudgeCatalogo) updates.responder_em = null;
+
   await supabase
     .from('lojas_whats_conversas')
     .update(updates)
     .eq('id', conversa.id);
+
+  if (nudgeCatalogo) {
+    log('nudge-abertura', `conversa ${conversa.id} respondeu positivo, enviando catalogo`);
+    await enviarCatalogoPesquisa(telefone, conversa.id, false, 'nudge_abertura');
+  }
 
   // 5. Marca como lida no WhatsApp (boa pratica — mostra checkmark azul)
   await marcarComoLida(msg.id);
@@ -620,7 +642,7 @@ async function enviarDuasPartes(telefone, conversaId, partes) {
 // querPromo=true  -> catalogo de PROMOCAO (promocao=true)
 // querPromo=false -> catalogo geral/ATUALIZADO mais recente (promocao=false)
 // Ailson 23/06/2026.
-async function enviarCatalogoPesquisa(telefone, conversaId, querPromo) {
+async function enviarCatalogoPesquisa(telefone, conversaId, querPromo, decididaPor = 'pesquisa') {
   try {
     const { data: cat } = await supabase
       .from('lojas_whats_midias')
@@ -628,11 +650,22 @@ async function enviarCatalogoPesquisa(telefone, conversaId, querPromo) {
       .eq('tipo', 'catalogo').eq('ativa', true).eq('promocao', !!querPromo)
       .order('criada_em', { ascending: false }).limit(1).maybeSingle();
     if (!cat) { log('pesquisa', `catalogo (promocao=${!!querPromo}) nao encontrado`); return; }
-    const r = await enviarMidiaSofia({ telefone, midia: cat, conversaId, mensagemId: null, decididaPor: 'pesquisa' });
+    const r = await enviarMidiaSofia({ telefone, midia: cat, conversaId, mensagemId: null, decididaPor });
     if (!r?.ok) log('pesquisa', `catalogo pesquisa erro: ${r?.erro || 'desconhecido'}`);
   } catch (e) {
     logErro('pesquisa-catalogo', e);
   }
+}
+
+// Resposta positiva ao nudge de abertura? Curta e afirmativa = manda catalogo.
+// Resposta longa (>80 chars) = cliente engajou de verdade, Sofia cuida melhor.
+// Qualquer "nao" na frase = negativo ("nao quero" contem "quero"!).
+function respostaPositivaNudge(txt) {
+  const t = (txt || '').toLowerCase().trim();
+  if (!t || t.length > 80) return false;
+  if (/\bn(ã|a)o\b|\bnn\b|\bnem\b/.test(t)) return false;
+  if (/👍|🙏|❤️|😍/.test(t)) return true;
+  return /\b(sim|quero|pode|manda|mande|mandar|envia|manda sim|claro|ok|okay|okey|bora|aceito|por favor|pfv|beleza|blz|isso|uhum|aham|pode ser|com certeza|certeza|quero ver|adoraria|gostaria)\b/.test(t);
 }
 
 function extrairConteudo(msg) {
