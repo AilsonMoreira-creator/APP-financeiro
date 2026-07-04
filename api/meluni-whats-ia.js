@@ -163,7 +163,7 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
 
   // 2. histórico
   const { data: msgs } = await supabase.from('meluni_mensagens')
-    .select('direcao, texto, tipo_midia, midia_url, enviada_em')
+    .select('direcao, autor, texto, tipo_midia, midia_url, enviada_em')
     .eq('conversa_id', conversaId)
     .order('enviada_em', { ascending: true })
     .limit(120);
@@ -192,6 +192,42 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
   let extra = '';
   try { extra = await contextoCarrinho(conv.telefone, snap); } catch { /* ignora */ }
   try { const _linkEst = await contextoLinkProduto(msgs); if (_linkEst) extra = extra ? extra + '\n' + _linkEst : _linkEst; } catch { /* ignora */ }
+
+  // CONTEXTO POS-COMPRA (aba Clientes, Ailson 04/07/2026): conversa que nasceu
+  // de disparo do modulo Clientes (autor lara_clientes = feedback pos-compra /
+  // novidades). A Lara recebe os dados REAIS da compra pra nunca dizer que "nao
+  // tem acesso ao pedido" (caso Denise: perguntou "qual foi a compra?" e a Lara
+  // mandou ela pro site), e regras de encerramento pra nao prolongar quando a
+  // cliente ja confirmou que deu tudo certo (caso Katia: "gostou da peca? posso
+  // ajudar com alguma coisa?" depois do "certinho").
+  try {
+    const ehClientes = (msgs || []).some(m => m.autor === 'lara_clientes');
+    if (ehClientes) {
+      let linhasCompras = [];
+      if (conv.cliente_id) {
+        const { data: vendas } = await supabase.from('meluni_vendas')
+          .select('data_pedido, total_pedido, itens')
+          .eq('cliente_id', conv.cliente_id)
+          .neq('situacao_id', 12)
+          .order('data_pedido', { ascending: false })
+          .limit(3);
+        linhasCompras = (vendas || []).map(v => {
+          const its = Array.isArray(v.itens) ? v.itens : [];
+          const pecas = its.map(i => `${i.quantidade || 1}x ${i.descLimpa || i.descricao || 'peça'}${(i.cor || i.tamanho) ? ` (${[i.cor, i.tamanho].filter(Boolean).join(', ')})` : ''}`).join(' + ');
+          const dt = v.data_pedido ? String(v.data_pedido).slice(0, 10).split('-').reverse().slice(0, 2).join('/') : '';
+          const tot = Number(v.total_pedido || 0).toFixed(2).replace('.', ',');
+          return `- ${dt}: ${pecas || 'pedido'}, total R$ ${tot}`;
+        });
+      }
+      const blocoCli = `CONTEXTO DESTA CONVERSA (dados internos, nao mostre este bloco): esta conversa nasceu de uma mensagem que a MELUNI enviou pra cliente (feedback pos-compra do modulo Clientes). Ela e cliente REAL, ja comprou no site.${linhasCompras.length ? `\nCOMPRAS DELA (mais recentes primeiro):\n${linhasCompras.join('\n')}` : ''}
+REGRAS POS-COMPRA (obrigatorias nesta conversa):
+- Se a cliente perguntar do que se trata, "qual foi a compra" ou nao lembrar, responda NA HORA com os dados acima (peca, cor, tamanho e data), curto e natural. NUNCA diga que nao tem acesso ao pedido e NAO mande ela consultar no site: vc TEM o dado acima. O valor cite so se ela perguntar.
+- Se ela confirmar que chegou tudo certo / que gostou, encerre com UMA mensagem curta e calorosa de agradecimento, SEM fazer perguntas novas e SEM puxar mais assunto (nada de "gostou da peca?", "posso ajudar com mais alguma coisa?"). No maximo se coloque a disposicao em meia frase e pronto.
+- Se ela relatar problema (nao chegou, veio errado, nao serviu), acolha, peca os detalhes necessarios e diga que a equipe vai resolver. Nao prometa prazo.
+- Tom de relacionamento e suporte, nao de venda. Nao empurre site nem pecas novas sem ela pedir.`;
+      extra = extra ? extra + '\n\n' + blocoCli : blocoCli;
+    }
+  } catch { /* ignora */ }
   const nomeCli = (conv.nome_cliente || '').trim();
   let primeiroCli = '';
   if (nomeCli && !/^\+?\d/.test(nomeCli) && !/cliente|direct|whats|lojista/i.test(nomeCli)) {
