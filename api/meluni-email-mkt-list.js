@@ -23,7 +23,7 @@ function rangePeriodo(periodo) {
 async function contar(tabela, campo, de, ate, extra) {
   let q = supabase.from(tabela).select('*', { count: 'exact', head: true });
   if (campo) { q = q.gte(campo, de); if (ate) q = q.lt(campo, ate); }
-  if (extra === 'aberto') q = q.not('aberto_em', 'is', null);
+  if (extra === 'clicado') q = q.not('clicado_em', 'is', null);
   const { count } = await q;
   return count || 0;
 }
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const q = req.query || {};
-  const etapa = ['processando', 'enviados', 'abertura', 'arquivadas'].includes(q.etapa) ? q.etapa : 'processando';
+  const etapa = ['processando', 'enviados', 'cliques', 'arquivadas'].includes(q.etapa) ? q.etapa : 'processando';
   const periodo = q.periodo || 'mes_atual';
   const limite = Math.min(200, parseInt(q.limite || '80', 10) || 80);
   const offset = Math.max(0, parseInt(q.offset || '0', 10) || 0);
@@ -41,13 +41,13 @@ export default async function handler(req, res) {
 
   try {
     // contagens das 3 abas (badges), todas no período escolhido
-    const [cProc, cEnv, cAb, cArq] = await Promise.all([
+    const [cProc, cEnv, cCli, cArq] = await Promise.all([
       contar('vw_meluni_email_elegiveis', 'data_carrinho', de, ate),
       contar('meluni_email_envios', 'enviado_em', de, ate),
-      contar('meluni_email_envios', 'aberto_em', de, ate, 'aberto'),
+      contar('meluni_email_envios', 'clicado_em', de, ate, 'clicado'),
       contar('meluni_carrinhos', 'email_mkt_bloqueado_em', de, ate),
     ]);
-    const counts = { processando: cProc, enviados: cEnv, abertura: cAb, arquivadas: cArq };
+    const counts = { processando: cProc, enviados: cEnv, cliques: cCli, arquivadas: cArq };
 
     let cards = [], total = 0;
 
@@ -81,12 +81,12 @@ export default async function handler(req, res) {
         valor: c.valor, itens: c.itens, data: c.email_mkt_bloqueado_em,
       }));
     } else {
-      const campo = etapa === 'abertura' ? 'aberto_em' : 'enviado_em';
+      const campo = etapa === 'cliques' ? 'clicado_em' : 'enviado_em';
       let query = supabase.from('meluni_email_envios')
         .select('id,carrinho_id,nome,email,valor,enviado_em,aberto_em,clicado_em', { count: 'exact' })
         .gte(campo, de);
       if (ate) query = query.lt(campo, ate);
-      if (etapa === 'abertura') query = query.not('aberto_em', 'is', null);
+      if (etapa === 'cliques') query = query.not('clicado_em', 'is', null);
       const { data, count, error } = await query
         .order(campo, { ascending: false, nullsFirst: false })
         .range(offset, offset + limite - 1);
@@ -94,7 +94,7 @@ export default async function handler(req, res) {
       total = count || 0;
       cards = (data || []).map(e => ({
         id: e.id, carrinho_id: e.carrinho_id, nome: e.nome, email: e.email,
-        valor: e.valor, data: campo === 'aberto_em' ? e.aberto_em : e.enviado_em,
+        valor: e.valor, data: campo === 'clicado_em' ? e.clicado_em : e.enviado_em,
         enviado_em: e.enviado_em, aberto_em: e.aberto_em, clicado_em: e.clicado_em,
       }));
     }

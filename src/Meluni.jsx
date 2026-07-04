@@ -2028,8 +2028,8 @@ const EMAIL_PERIODOS = [
 function EmailMktCard({ c, etapa, sel, onSel, onBloquear, onDesarquivar }) {
   const [bloq, setBloq] = useState(false);
   const dataFmt = fmtData(String(c.data || '').slice(0, 10));
-  const rotuloData = etapa === 'processando' ? 'carrinho' : (etapa === 'abertura' ? 'aberto' : (etapa === 'arquivadas' ? 'arquivado' : 'enviado'));
-  const abriu = etapa === 'abertura' || (etapa === 'enviados' && c.aberto_em);
+  const rotuloData = etapa === 'processando' ? 'carrinho' : (etapa === 'cliques' ? 'clicou' : (etapa === 'arquivadas' ? 'arquivado' : 'enviado'));
+  const clicou = etapa === 'cliques' || (etapa === 'enviados' && c.clicado_em);
   return (
     <div style={{
       background: palette.surface, borderRadius: 12, padding: 12,
@@ -2043,7 +2043,7 @@ function EmailMktCard({ c, etapa, sel, onSel, onBloquear, onDesarquivar }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: palette.ink }}>{c.nome || 'Cliente'}</span>
-          {abriu && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: '#e9f7ef', color: '#1e8449', fontWeight: 700 }}>abriu</span>}
+          {clicou && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: '#e9f7ef', color: '#1e8449', fontWeight: 700 }}>clicou</span>}
         </div>
         <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>📧 {c.email || '—'}</span>
@@ -2657,8 +2657,8 @@ function SecaoEmailMkt() {
       help: 'Carrinhos abandonados que têm e-mail e peças e ainda não receberam e-mail mkt.\n\nSelecione os que quiser, clique em "Criar template", monte a mensagem (a Lara ajuda) e dispare. Quem recebe passa pra Enviados.' },
     { id: 'enviados', label: 'Enviados', unread: counts.enviados,
       help: 'Leads que já receberam o e-mail mkt no período escolhido.' },
-    { id: 'abertura', label: 'Abertura', unread: counts.abertura,
-      help: 'Leads que abriram o e-mail (medido pelo Resend).\n\nA abertura é aproximada: alguns apps de e-mail inflam (Apple Mail) e outros bloqueiam o pixel de leitura.' },
+    { id: 'cliques', label: 'Cliques', unread: counts.cliques,
+      help: 'Leads que clicaram em algum link do e-mail (medido pelo Resend).\n\nÉ um sinal de engajamento real, mais confiável que abertura.' },
     { id: 'arquivadas', label: 'Arquivadas',
       help: 'Carrinhos que vc arquivou pra não receber o e-mail do app (evita duplicar com o Convertr). Não entram em nenhum disparo. Dá pra desarquivar se quiser.' },
   ];
@@ -2759,7 +2759,7 @@ function SecaoEmailMkt() {
     </button>
   ) : null;
 
-  const rotuloTotal = aba === 'processando' ? 'elegíveis' : aba === 'abertura' ? 'aberturas' : aba === 'arquivadas' ? 'arquivadas' : 'enviados';
+  const rotuloTotal = aba === 'processando' ? 'elegíveis' : aba === 'cliques' ? 'cliques' : aba === 'arquivadas' ? 'arquivadas' : 'enviados';
 
   return (
     <div>
