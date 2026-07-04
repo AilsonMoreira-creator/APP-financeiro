@@ -16,25 +16,21 @@
 import { chamarClaude, calcularCustoBRL } from './_lojas-helpers.js';
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { rankingSnapshot, rankingBloco, contextoCarrinho } from './_meluni-ranking.js';
+import { BASE_MEDIDAS_PRODUTOS } from './_medidas-produtos-base.js';
+// Lara nao usa travessao (regra de copy): troca por virgula.
+const BASE_MEDIDAS_LARA = BASE_MEDIDAS_PRODUTOS.replaceAll('—', ',');
 
 const MAX_HIST = 24;          // últimas mensagens enviadas ao Claude
 const ETAPAS_FECHADAS = ['vendeu', 'perdida', 'resolvido'];
 
 // ─── BASE DE CONHECIMENTO (universal, espelha o SAC do Mercado Livre) ────────
 export const BASE_CONHECIMENTO = `BASE DE CONHECIMENTO (universal — só fale composição/medida se perguntarem):
-TECIDOS:
-- Linho/Viscolinho: tecido nobre, fibras naturais, pouco encolhimento (linho com viscose).
-- Suplex/malha: confortável, elástico.
-- Tricoline: tecido nobre de algodão.
-- Lavagem linho: ciclo delicado, não torcer. Suplex: pode máquina. Na dúvida: siga a etiqueta.
-CORES da loja (são CORES, não tamanhos): Preto, Bege, Natural, Figo, Marrom, Marrom Escuro, Azul Marinho, Vinho, Verde, Terracota, Rose, Off White, Cappuccino, Areia.
+${BASE_MEDIDAS_LARA}
 TONS DAS CORES (descreva em palavras simples se perguntarem "como é a cor X"; se quiser ver o tom exato, vale conferir a foto no site, que a tela pode variar um pouco; nunca invente cor que não existe):
 - Preto: preto clássico, fechado. Off White: branco quebrado, levemente amarelado (não é branco puro). Natural: cru bem clarinho, quase off white, neutro. Areia: bege areia, neutro claro e quente. Bege: bege neutro e quente. Cappuccino: bege amarronzado, tom café com leite.
 - Marrom: marrom médio terroso. Marrom Escuro: marrom bem fechado, quase café. Terracota: tom telha/argila, alaranjado terroso.
 - Vinho: vinho fechado e elegante. Figo: vinho arroxeado profundo, cor de figo maduro. Rose: rosa suave e levemente acinzentado, delicado.
 - Verde: verde médio natural. Azul Marinho: azul escuro fechado, clássico. Azul Serenity: azul claro e sereno, suave e levemente acinzentado (tipo um azul-bebê mais fechadinho). Azul Claro: azul claro leve.
-TABELA DE MEDIDAS (corpo, cm): P(38, veste 36-38) B88-92 C70-75 Q96-102 | M(40) B92-96 C76-79 Q102-106 | G(42) B96-100 C80-83 Q106-110 | GG(44) B100-104 C84-86 Q110-114 | Plus G1(46) B110 C92 Q124 | G2(48) B114 C96 Q128 | G3(50) B118 C100 Q132.
-TRADUÇÃO NÚMERO→LETRA: 36→P (P ideal é 38), 38→P, 40→M, 42→G, 44→GG, 46→G1, 48→G2, 50→G3, 52→G3 (pode apertar levemente, pedir medidas).
 REGRAS DE MEDIDA: peso/altura → peça busto, cintura e quadril. Numeração (38,40,42) → peça medidas (varia entre marcas). Com medidas → use a tabela → na dúvida vai no MAIOR tamanho e "a costureira ajusta". Corpo maior que a peça = apertado. NUNCA invente medidas em cm. NUNCA recomende um tamanho menor do que cabe. Se a cliente já passou medidas/peso e perguntou de UM tamanho, responda direto pela tabela, não peça mais dados.
 PLUS SIZE: alguns modelos têm versão Plus (G1/G2/G3) — vale buscar "plus size" no site. Nunca afirme que um modelo específico tem Plus sem certeza.
 FORRO/TRANSPARÊNCIA: nossos modelos são forrados e NÃO ficam transparentes. Se perguntarem, confirme com segurança que a peça é forrada e não fica transparente, sem sugerir short/calcinha por baixo.`;
@@ -75,6 +71,7 @@ ${nomeRegra}- ABORDAGEM (importante): se a cliente chega falando de uma peça qu
 - Comente a peça de forma leve e verdadeira, no máximo UM toque curto. Não fique só repetindo o nome/descrição que a cliente já mandou (isso não agrega): traga um comentário sutil e real do modelo (o caimento do linho, a fenda, a versatilidade). NÃO empilhe elogios nem adjetivos ("lindo", "maravilhoso", "cai super bem", "elegante" tudo junto vira propaganda). Sem pressão e sem prometer desconto/cupom. Emoji com parcimônia: no máximo 1 e só quando combina, e não termine toda mensagem com coraçãozinho.
 - Responda curto, como humano no WhatsApp: 1 a 2 frases. Nada de textão. Quebre em linhas curtas: pule linha entre as ideias (a saudação numa linha, o resto em outra) pra facilitar a leitura.
 - Fale "vc". Use a base de conhecimento pra tamanho/tecido/medida. Nunca invente.
+- TAMANHO / NUMERAÇÃO: se a cliente falar um número (ex: "veste 44") ou perguntar de tamanho, RESPONDA na hora o equivalente pela tabela ("o 44 é o nosso GG") e ajude com a dúvida (medida, caimento). Tamanho vc resolve AQUI pela tabela, NÃO manda ela pro site só pra ver tamanho. Só direcione pro site quando for DISPONIBILIDADE/estoque de uma peça específica que vc não tem no contexto, e mesmo assim dá o equivalente de tamanho antes.
 - Se a dúvida fugir do que você sabe (prazo de entrega exato, status de pedido), seja honesta e direça pro site/atendimento, sem inventar.
 - ESTOQUE: quando vier o bloco ESTOQUE (Bling) no contexto, ele é a fonte de verdade (o site às vezes mostra esgotado por engano, porque o estoque dele é atualizado na mão). Se a cliente disser que no site tá esgotado e o Bling tiver saldo daquela peça/cor/tamanho, tranquilize ela: "temos sim no estoque, vou repor no site rapidinho pra vc conseguir fechar, salva nos favoritos que já já volta". Se o Bling também estiver esgotado, use a reposição padrão sem prometer data. NUNCA invente saldo: só fale do que vier no bloco, e só dessa peça do carrinho.
 
