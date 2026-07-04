@@ -2632,6 +2632,8 @@ function SecaoEmailMkt() {
   const [sel, setSel] = useState(new Set());
   const [criar, setCriar] = useState(false);
   const [arquivando, setArquivando] = useState(false);
+  const [disparando, setDisparando] = useState(false);
+  const [dispMsg, setDispMsg] = useState('');
   const LIM = 80;
 
   const carregar = useCallback(async (off = 0) => {
@@ -2707,6 +2709,40 @@ function SecaoEmailMkt() {
     setArquivando(false);
   };
 
+  const dispararPadrao = async () => {
+    if (disparando || !sel.size) return;
+    const ids = [...sel];
+    if (!window.confirm(`Disparar o e-mail padrão pra ${ids.length} carrinho(s) selecionado(s)? Quem receber passa pra Enviados.`)) return;
+    setDisparando(true); setDispMsg('');
+    let campanha_id = null, ok = 0, pulados = 0, erros = 0;
+    const CHUNK = 8;
+    try {
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        const r = await fetch('/api/meluni-email-mkt-disparar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ padrao: true, campanha_id, carrinho_ids: chunk }),
+        });
+        const j = await r.json();
+        if (j.ok) {
+          campanha_id = j.campanha_id || campanha_id;
+          for (const rr of (j.resultados || [])) {
+            if (rr.ok) ok++;
+            else if (['ja enviado', 'bloqueado', 'descadastrado'].includes(rr.erro)) pulados++;
+            else erros++;
+          }
+        } else { erros += chunk.length; }
+        setDispMsg(`enviando… ${ok + pulados + erros}/${ids.length}`);
+      }
+      setDispMsg(`✓ ${ok} enviado(s)${pulados ? ` · ${pulados} pulado(s)` : ''}${erros ? ` · ${erros} erro(s)` : ''}`);
+      setSel(new Set());
+      await carregar(0);
+    } catch {
+      setDispMsg('falha no disparo');
+    }
+    setDisparando(false);
+  };
+
   const desarquivar = async (carrinho_id) => {
     try {
       await fetch('/api/meluni-email-mkt-bloquear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ carrinho_id, bloquear: false }) });
@@ -2754,9 +2790,19 @@ function SecaoEmailMkt() {
               style={{ ...selStyle, fontWeight: 700, color: palette.alert }}>
               {arquivando ? 'arquivando…' : 'Arquivar todos'}
             </button>
+            {sel.size > 0 && (
+              <button onClick={dispararPadrao} disabled={disparando || arquivando}
+                title="Dispara o e-mail padrão pros carrinhos selecionados"
+                style={fbtn(MELUNI, '#fff')}>
+                {disparando ? (dispMsg || 'enviando…') : `📨 Disparar padrão (${sel.size})`}
+              </button>
+            )}
             <button onClick={() => setCriar(true)} style={fbtn(MELUNI, '#fff')}>
               ✉️ Criar template
             </button>
+            {!disparando && dispMsg && (
+              <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>{dispMsg}</span>
+            )}
           </div>
         )}
       </div>

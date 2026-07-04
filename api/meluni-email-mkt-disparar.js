@@ -8,7 +8,7 @@
 // Ailson 20/06/2026.
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
-import { renderEmailHtml, primeiroNome, aplicarTokens } from './_meluni-email-mkt-template.js';
+import { renderEmailHtml, primeiroNome, aplicarTokens, EMAIL_DEFAULTS } from './_meluni-email-mkt-template.js';
 import { resolverResumoItens } from './_meluni-carrinho-resumo.js';
 
 const FROM = 'Meluni <marketing@news.meluniloja.com.br>';
@@ -40,7 +40,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, erro: 'Use POST.' });
 
   try {
-    const { campanha = {}, carrinho_ids = [] } = req.body || {};
+    let { campanha = {}, carrinho_ids = [] } = req.body || {};
+    // modo padrão (disparo manual em massa): usa o template padrão EMAIL_DEFAULTS
+    if (req.body?.padrao) campanha = { ...EMAIL_DEFAULTS, nome: 'E-mail padrão (disparo manual)', ...campanha };
     let campanha_id = req.body?.campanha_id || null;
 
     if (!process.env.RESEND_API_KEY) {
