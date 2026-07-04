@@ -2657,7 +2657,7 @@ function SecaoEmailMkt() {
       help: 'Leads que já receberam o e-mail mkt no período escolhido.' },
     { id: 'abertura', label: 'Abertura', unread: counts.abertura,
       help: 'Leads que abriram o e-mail (medido pelo Resend).\n\nA abertura é aproximada: alguns apps de e-mail inflam (Apple Mail) e outros bloqueiam o pixel de leitura.' },
-    { id: 'arquivadas', label: 'Arquivadas', unread: counts.arquivadas,
+    { id: 'arquivadas', label: 'Arquivadas',
       help: 'Carrinhos que vc arquivou pra não receber o e-mail do app (evita duplicar com o Convertr). Não entram em nenhum disparo. Dá pra desarquivar se quiser.' },
   ];
 
