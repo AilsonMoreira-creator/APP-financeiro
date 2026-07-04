@@ -37,9 +37,9 @@ function parseValorBR(v) {
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
 }
-async function nomeTpl(specKey) {
+async function specTpl(specKey) {
   const spec = await cfgMeluni('lara_template_devolucao', null);
-  return spec?.templates?.[specKey]?.name || null;
+  return spec?.templates?.[specKey] || null;
 }
 async function acharOuCriarConversa(telefone, nome) {
   const { data: ex } = await supabase.from('meluni_conversas').select('id')
@@ -184,8 +184,11 @@ export default async function handler(req, res) {
       const chave = acao === 'avisar_etiqueta' ? 'etiqueta' : dev?.estorno_forma;
       const specKey = SPEC_KEY[chave];
       if (!specKey) return res.status(400).json({ ok: false, erro: 'defina a forma de estorno (pix, cartão ou crédito) antes de avisar' });
-      const tplName = await nomeTpl(specKey);
+      const tplObj = await specTpl(specKey);
+      const tplName = tplObj?.name || null;
       if (!tplName) return res.status(400).json({ ok: false, erro: `template não configurado pra ${specKey}` });
+      // texto real (idêntico ao que a cliente recebe) pro chat mostrar a bolha certa
+      const textoReal = String(tplObj?.body || '').replaceAll('{{1}}', pn).trim() || `[devolução] ${chave}`;
 
       try {
         const r = await enviarTemplateLara(tel, tplName, [pn]);
@@ -196,7 +199,7 @@ export default async function handler(req, res) {
           await supabase.from('meluni_mensagens').insert({
             conversa_id: convId, direcao: 'saida', autor: `devolucao:${operador}`,
             tipo_midia: 'template', template_usado: tplName,
-            texto: `[devolução] ${chave}`, meta_message_id: metaMsgId, enviada_em: agora,
+            texto: textoReal, meta_message_id: metaMsgId, enviada_em: agora,
           });
           await supabase.from('meluni_conversas').update({
             ultima_msg_direcao: 'saida', ultima_msg_em: agora, responder_em: null,
