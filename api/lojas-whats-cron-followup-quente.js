@@ -84,14 +84,14 @@ async function executar() {
 
   const { data: convs, error } = await supabase
     .from('lojas_whats_conversas')
-    .select('id, telefone, nome_cliente, etapa, ultima_msg_direcao, ultima_atividade_em, catalogo_followup_pausado, follow_up_origem, fup_relogio_em, fup_agendado_para, fup_disparado_em, fup_ja_rodou')
+    .select('id, telefone, nome_cliente, etapa, ultima_msg_direcao, ultima_atividade_em, iniciada_em, catalogo_followup_pausado, follow_up_origem, fup_relogio_em, fup_agendado_para, fup_disparado_em, fup_ja_rodou')
     .in('etapa', ['conversando', 'follow_up'])
     .not('ultima_atividade_em', 'is', null)
     .limit(MAX_CONVS);
   if (error) throw error;
   if (!convs?.length) return { ...r, total: 0 };
 
-  const comFoto = await idsComFotoProduto(convs.map(c => c.id));
+  const comFoto = await idsComFotoProduto(convs);
   const modelo = await getConfig('modelo_ia', MODELO_DEFAULT);
 
   for (const c of convs) {
@@ -233,17 +233,31 @@ async function executar() {
 
 // Conversas que tiveram foto de produto (image/video, em qualquer direção).
 // Catálogo é 'document' → fica de fora. Retorna Set de conversa_id.
-async function idsComFotoProduto(ids) {
+async function idsComFotoProduto(convs) {
+  // "Foto de produto" NAO inclui a midia de ABERTURA (video da Tamara /
+  // fotos ref=abertura do teste A/B), que sai automatica em ~1-2min pra todo
+  // lead de anuncio — contar ela classificava lead novo como card quente e o
+  // 12h jogava lead fresco pra follow_up (bug Ailson 04/07/2026).
+  // Regra: midia de SAIDA so conta depois de 10min de conversa; midia de
+  // ENTRADA (print/foto do cliente) conta sempre.
+  const ABERTURA_MS = 10 * 60 * 1000;
+  const ini = new Map(convs.map(c => [c.id, Date.parse(c.iniciada_em || '') || 0]));
+  const ids = convs.map(c => c.id);
   const set = new Set();
   for (let i = 0; i < ids.length; i += 300) {
     const bloco = ids.slice(i, i + 300);
     const { data, error } = await supabase
       .from('lojas_whats_mensagens')
-      .select('conversa_id')
+      .select('conversa_id, direcao, enviada_em')
       .in('conversa_id', bloco)
       .in('tipo_midia', ['image', 'video']);
     if (error) throw error;
-    for (const m of (data || [])) set.add(m.conversa_id);
+    for (const m of (data || [])) {
+      if (m.direcao === 'entrada') { set.add(m.conversa_id); continue; }
+      const t0 = ini.get(m.conversa_id) || 0;
+      const t = Date.parse(m.enviada_em || '') || 0;
+      if (!t0 || (t && t - t0 > ABERTURA_MS)) set.add(m.conversa_id);
+    }
   }
   return set;
 }
