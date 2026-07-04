@@ -31,10 +31,17 @@ export default async function handler(req, res) {
     // pra ver EXATAMENTE o que o cliente recebe. Sem real=1 fica o template padrão.
     let campanha = {};
     if (String(req.query?.real || '') === '1') {
-      const { data: tpl, error: errTpl } = await supabase.from('meluni_email_campanhas')
+      let { data: tpl, error: errTpl } = await supabase.from('meluni_email_campanhas')
         .select('*').eq('auto_disparo', true).limit(1).maybeSingle();
       if (errTpl) throw errTpl;
-      if (!tpl) return res.status(400).json({ ok: false, erro: 'Nenhuma campanha com disparo automático ativo.' });
+      if (!tpl) {
+        // fallback: sem automático ativo, usa a campanha mais recente
+        const r2 = await supabase.from('meluni_email_campanhas')
+          .select('*').order('criado_em', { ascending: false }).limit(1).maybeSingle();
+        if (r2.error) throw r2.error;
+        tpl = r2.data;
+      }
+      if (!tpl) return res.status(400).json({ ok: false, erro: 'Nenhuma campanha cadastrada.' });
       campanha = {
         assunto: tpl.assunto, titulo: tpl.titulo, corpo: tpl.corpo_html,
         criativo_url: tpl.criativo_url, cta_label: tpl.cta_label, cta_url: tpl.cta_url,
