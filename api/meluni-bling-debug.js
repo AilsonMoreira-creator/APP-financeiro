@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     if (pedidoId) {
       const rp = await blingFetch(`${API}/pedidos/vendas/${pedidoId}`, headers);
       const jp = await rp.json().catch(() => null);
-      out.pedido = { status: rp.status, situacao: jp?.data?.situacao || null, total: jp?.data?.total ?? null, data: jp?.data?.data || null, numeroLoja: jp?.data?.numeroLoja || null, contato_no_pedido: jp?.data?.contato || null, erro: jp?.error || null };
+      out.pedido = { status: rp.status, numero: jp?.data?.numero ?? null, situacao: jp?.data?.situacao || null, total: jp?.data?.total ?? null, data: jp?.data?.data || null, numeroLoja: jp?.data?.numeroLoja || null, loja: jp?.data?.loja || null, contato_no_pedido: jp?.data?.contato || null, erro: jp?.error || null };
     }
 
     if (contatoId) {
