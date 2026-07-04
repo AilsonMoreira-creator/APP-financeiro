@@ -40,7 +40,7 @@ PLUS SIZE: alguns modelos têm versão Plus (G1/G2/G3) — vale buscar "plus siz
 FORRO/TRANSPARÊNCIA: nossos modelos são forrados e NÃO ficam transparentes. Se perguntarem, confirme com segurança que a peça é forrada e não fica transparente, sem sugerir short/calcinha por baixo.`;
 
 // ─── PERSONA / REGRAS DA LARA ────────────────────────────────────────────────
-async function systemBlocksLara(snap = null, extra = '', canal = 'whatsapp', nomeCliente = '') {
+async function systemBlocksLara(snap = null, extra = '', canal = 'whatsapp', nomeCliente = '', jaCumprimentou = false) {
   const politicas = await cfgMeluni('lara_politicas_loja', '');
   const politicasBloco = politicas
     ? `\n\nPOLÍTICAS DA LOJA (fonte de consulta para PAGAMENTO, FRETE/ENTREGA, TROCA/DEVOLUÇÃO e ERRO DE SITE). Responda SÓ o que a cliente perguntou, curto e com as suas palavras, no contexto. NUNCA cole esse texto inteiro nem despeje tudo de uma vez:\n${politicas}`
@@ -55,9 +55,12 @@ async function systemBlocksLara(snap = null, extra = '', canal = 'whatsapp', nom
   const treinadoBloco = (treinadas && treinadas.length)
     ? `\n\nBASE TREINADA (perguntas e respostas que o time já te ensinou — quando a dúvida da cliente bater com uma delas, responda com base nisso, com suas palavras e curto):\n${treinadas.map(r => `P: ${r.pergunta}\nR: ${r.resposta}`).join('\n')}`
     : '';
-  const nomeRegra = nomeCliente
-    ? `- A cliente se chama ${nomeCliente}. Use o nome dela na resposta (pelo menos na saudação, tipo "Oii, ${nomeCliente}!"). Não repita o nome em toda frase.\n`
-    : '';
+  const _h = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour12: false, hour: '2-digit' }));
+  const _periodo = _h < 12 ? 'bom dia' : _h < 18 ? 'boa tarde' : 'boa noite';
+  const _nm = nomeCliente || '';
+  const nomeRegra = jaCumprimentou
+    ? `- SAUDAÇÃO: vc JÁ cumprimentou a cliente nesta conversa. NÃO repita "${_periodo}" nem "tudo bem?".${_nm ? ` Pode usar o nome dela ("Oi ${_nm}," ou só "${_nm},") quando encaixar, sem repetir em toda frase.` : ''} Vai direto ao ponto.\n`
+    : `- SAUDAÇÃO: é a PRIMEIRA resposta da Lara nesta conversa. Abra com uma saudação curta e humana${_nm ? ` com o nome ("Oii ${_nm}, ${_periodo}, tudo bem?")` : ` ("Oii, ${_periodo}, tudo bem?")`}. Use o cumprimento completo (${_periodo} + "tudo bem?") SÓ nesta primeira; nas próximas mensagens desta conversa é só o nome ou direto ao ponto, sem re-saudar.\n`;
   const persona = `Você é a Lara, consultora da Meluni — loja própria de moda feminina (linho e peças elegantes e atemporais). Você atende clientes no WhatsApp.
 
 SEU PAPEL: consultora de ATENDIMENTO e conversão. Quando a cliente chama, é porque ela precisa de ajuda com alguma coisa — então seu PRIMEIRO movimento é entender o que ela precisa (dúvida de tamanho, tecido, como fica no corpo, frete, como finalizar...) e dar esse suporte. Você fala como uma vendedora humana de verdade: simpática e direta, sem exagero e sem parecer propaganda. Depois de ajudar, conduz o fechamento da forma mais fácil pra ela (site oficial meluniloja.com.br ou, se ela preferir, pelo WhatsApp).
@@ -196,7 +199,8 @@ export async function processarConversaMeluni(conversaId, opts = {}) {
     const p = nomeCli.split(/\s+/)[0];
     primeiroCli = p.charAt(0).toUpperCase() + p.slice(1);
   }
-  const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(snap, extra, conv.canal, primeiroCli), messages: mensagens, max_tokens: 400, temperature: 0.7 });
+  const jaCumprimentou = msgs.some(m => m.direcao === 'saida');
+  const cl = await chamarClaude({ modelo, systemBlocks: await systemBlocksLara(snap, extra, conv.canal, primeiroCli, jaCumprimentou), messages: mensagens, max_tokens: 400, temperature: 0.7 });
   if (!cl.ok) return { motivo: 'claude_falhou', erro: cl.erro };
   const texto = (cl.texto || '').trim();
   if (!texto) return { motivo: 'claude_vazio' };
