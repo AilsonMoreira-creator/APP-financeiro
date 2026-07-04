@@ -27,13 +27,29 @@ export default async function handler(req, res) {
     const cart = CARRINHO_AMOSTRA;
     const nome = primeiroNome(cart.nome);
 
+    // ?real=1 -> usa a campanha do disparo automático (mesma montagem do auto-cron),
+    // pra ver EXATAMENTE o que o cliente recebe. Sem real=1 fica o template padrão.
+    let campanha = {};
+    if (String(req.query?.real || '') === '1') {
+      const { data: tpl, error: errTpl } = await supabase.from('meluni_email_campanhas')
+        .select('*').eq('auto_disparo', true).limit(1).maybeSingle();
+      if (errTpl) throw errTpl;
+      if (!tpl) return res.status(400).json({ ok: false, erro: 'Nenhuma campanha com disparo automático ativo.' });
+      campanha = {
+        assunto: tpl.assunto, titulo: tpl.titulo, corpo: tpl.corpo_html,
+        criativo_url: tpl.criativo_url, cta_label: tpl.cta_label, cta_url: tpl.cta_url,
+        utm: tpl.utm, cupom: tpl.cupom, cupom_validade: tpl.cupom_validade,
+        desconto: tpl.desconto, assinatura: tpl.assinatura,
+      };
+    }
+
     const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const base = `${proto}://${host}`;
     const unsubscribeUrl = `${base}/api/meluni-email-mkt-descadastro?e=${encodeURIComponent(dest)}`;
 
-    const html = renderEmailHtml({ campanha: {}, carrinho: cart, unsubscribeUrl });
-    const assunto = aplicarTokens('', nome) || 'Suas pecas continuam aqui';
+    const html = renderEmailHtml({ campanha, carrinho: cart, unsubscribeUrl });
+    const assunto = aplicarTokens(campanha.assunto || '', nome) || 'Suas pecas continuam aqui';
 
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
