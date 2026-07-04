@@ -1192,9 +1192,16 @@ REGRAS DE OURO MEDIDAS:
     { type: 'text', text: SYSTEM_PROMPT },
     { type: 'text', text: `CONTEXTO DA CONVERSA:\n${contextoConv}` },
     { type: 'text', text: 'REGRA ANTI-REPETICAO (IMPORTANTE): antes de perguntar qualquer coisa pra cliente (se ela ja revende, ha quanto tempo, que tipo de cliente/loja ela e, cidade, nome), releia TODO o historico da conversa acima. Se ela JA respondeu isso em qualquer momento, NUNCA pergunte de novo, use o que ela ja disse. Repetir pergunta que ela ja respondeu passa a impressao de que vc nao prestou atencao e irrita a cliente.' },
+    { type: 'text', text: `REGRA DE CONTEXTO E ENCERRAMENTO (CRITICA):
+1. Mensagens marcadas com [RESPOSTA JA DADA PELA EQUIPE HUMANA] sao respostas OFICIAIS que a assistente/vendedora ja mandou pra cliente. Trate como assunto RESPONDIDO. NUNCA re-responda, re-confirme, corrija ou "complete" o que a equipe ja respondeu — mesmo que o estoque de hoje mostre algo diferente. Se achar que a equipe errou, use [ASSISTENTE_ANEXAR:...] pra avisar, nunca contradiga na frente da cliente.
+2. Se a cliente encerrou um assunto ("ok", "obrigada", "entendi", "vou ver"), aquele assunto esta FECHADO. So volte nele se ELA voltar.
+3. Se a ultima mensagem da cliente e SO uma saudacao ou agradecimento ("bom dia", "obrigada", "ok") sem nenhuma pergunta nova, responda CURTO no mesmo tom (1 frase, no maximo 2) e se coloque a disposicao. NAO aproveite pra retomar lista de itens, reconfirmar estoque nem despejar informacao que ninguem pediu.` },
     { type: 'text', text: `CATALOGO DISPONIVEL HOJE (use APENAS produtos abaixo — nao invente):\n\n${cardapioStr}` }
   ];
   if (blocoCrossSell) systemBlocks.push({ type: 'text', text: blocoCrossSell });
+  if (conv.etapa === 'feedback' || conv.etapa === 'inativo') {
+    systemBlocks.push({ type: 'text', text: `CLIENTE REAL POS-COMPRA (modulo Clientes, etapa ${conv.etapa}): essa pessoa JA E CLIENTE da Amicia — a conversa nasceu de uma mensagem de feedback/suporte, nao de anuncio. Tom de relacionamento e suporte, nao de captacao. Prioridade e resolver a duvida dela com precisao e cuidado. Zero pressa, zero pressao, nada de empurrar catalogo ou oferta sem ela pedir. Sua resposta SEMPRE passa por aprovacao humana antes de sair, entao seja precisa e nao prometa prazos em nome da equipe.` });
+  }
   // Saudação simples e humana, com o período certo do dia. Ailson 05/06/2026.
   systemBlocks.push({ type: 'text', text: jaCumprimentouHoje
     ? `SAUDAÇÃO: vc JÁ cumprimentou esta cliente hoje. NÃO repita "${saudacaoPeriodo}" nem "tudo bem?". Nesta e nas próximas mensagens de HOJE, abra só com o primeiro nome ("Oi <nome>," ou só "<nome>,") e vai direto ao ponto. Nada de re-saudar com o período do dia. No máximo 1 emoji leve, e nem sempre.`
@@ -1411,6 +1418,15 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
   const sofiaOfereceuCatalogo = !!(ultimaSaida && /catal[oa]g/.test(_txtUltSaida)
     && /(quer|posso|te mando|te envio|\bmando\b|gostaria de ver|quer que eu)/.test(_txtUltSaida));
   const cls = classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo });
+
+  // MODULO CLIENTES (Ailson 04/07/2026): cliente REAL pos-compra (etapas
+  // feedback/inativo) NUNCA recebe resposta automatica — toda mensagem passa
+  // pela aprovacao da assistente, sem excecao.
+  if (cls.auto && (conv.etapa === 'feedback' || conv.etapa === 'inativo')) {
+    cls.auto = false;
+    cls.motivo = 'cliente_real_requer_aprovacao';
+    log('ia', `conversa=${conversaId} etapa=${conv.etapa} (cliente real) -> forcado pra aprovacao`);
+  }
 
   // Se a resposta da Sofia REVELA faixa de desconto da negociacao (10% ou 15%),
   // SEMPRE vai pra aprovacao, nunca auto-envia. O Pix padrao 5% segue normal.
@@ -1687,6 +1703,14 @@ function montarMensagensClaude(msgs, conv) {
         txt = isCliente ? `[cliente enviou ${m.tipo_midia === 'sticker' ? 'uma figurinha' : `mídia: ${m.tipo_midia}`}]` : `[Sofia enviou mídia: ${m.tipo_midia}]`;
       }
       if (!txt) continue;
+      // Mensagem de saida enviada por HUMANO da equipe (assistente/vendedora,
+      // nao a Sofia): rotula pra IA saber que aquilo eh resposta OFICIAL ja dada
+      // pela equipe. Sem o rotulo tudo virava fala "da Sofia" e o modelo
+      // re-respondia coisas que a assistente ja tinha resolvido (caso Daniela
+      // 04/07/2026: re-confirmou tamanhos que o Ailson respondera na vespera).
+      if (!isCliente && m.autor && m.autor !== 'sofia_ia') {
+        txt = `[RESPOSTA JA DADA PELA EQUIPE HUMANA] ${txt}`;
+      }
       blocks.push({ type: 'text', text: txt });
     }
 
