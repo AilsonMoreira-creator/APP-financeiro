@@ -4882,6 +4882,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const usuarioSessao=(()=>{try{return JSON.parse(localStorage.getItem('amica_session')||'{}').usuario||'';}catch{return '';}})();
   const [ajusteValor,setAjusteValor]=useState('');
   const [ajusteMotivo,setAjusteMotivo]=useState('');
+  const [zerarFilhos,setZerarFilhos]=useState(null); // null | 'rodando' | {resultados,novo_saldo_exitus,erro?}
   const [salvandoAjuste,setSalvandoAjuste]=useState(false);
   // Fila otimista de ajustes (Ailson 02/07/2026): Salvar fecha o modal na hora,
   // célula fica âmbar "enviando" e só confirma com o 200 do POST /estoques do Bling.
@@ -4942,6 +4943,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     finally{setLogsBlingLoading(false);}
   };
   useEffect(()=>{
+    setZerarFilhos(null); // limpa resultado da limpeza anterior ao abrir/fechar
     if(!blingAjuste){setAjusteLockPor(null);return;}
     const chave=`${blingAjuste.refNorm}|${blingAjuste.cor_norm}|${blingAjuste.tam}`;
     const me=usuarioSessao||'anônimo';
@@ -4965,6 +4967,24 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       if(souDono)supabase.from('bling_estoque_locks').delete().eq('chave',chave).eq('usuario',me).then(()=>{});
     };
   },[blingAjuste]);
+  // Zera o depósito Geral do Lumia e Muniam pro SKU (regra recontagem: os
+  // negativos acumulados nos Gerais dos filhos abatem do saldo dos canais).
+  const zerarFilhosBling=async()=>{
+    const ba=blingAjuste;if(!ba||zerarFilhos==='rodando')return;
+    setZerarFilhos('rodando');
+    try{
+      const r=await fetch('/api/bling-estoque-zerar-filhos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,usuario:usuarioSessao||null})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+      setZerarFilhos(j);
+      if(j.novo_saldo_exitus!=null){
+        const chave=`${ba.refNorm}|${ba.cor_norm}|${ba.tam}`;
+        setBlingEstoque(prev=>({...prev,[chave]:j.novo_saldo_exitus})); // card
+        setBlingAjuste(prev=>prev?{...prev,atual:j.novo_saldo_exitus}:prev); // modal
+        setAjusteValor(String(j.novo_saldo_exitus));
+      }
+    }catch(e){setZerarFilhos({erro:String(e?.message||e)});}
+  };
   const enviarAjusteBling=async(ba,nova,motivo)=>{
     const chave=`${ba.refNorm}|${ba.cor_norm}|${ba.tam}`;
     try{
@@ -5945,7 +5965,17 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             <div style={{padding:"16px 18px"}}>
               <div style={{fontSize:12,color:"#6b7c8a",marginBottom:2}}>REF {ba.refNorm}{ba.desc?` · ${ba.desc}`:''}</div>
               <div style={{fontSize:15,fontWeight:700,color:"#2c3e50",marginBottom:12}}>{ba.cor} · {ba.tam}</div>
-              <div style={{fontSize:12,color:"#6b7c8a",marginBottom:14}}>Estoque Bling atual: <b style={{color:"#2c3e50",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:14}}>{ba.atual}</b></div>
+              <div style={{fontSize:12,color:"#6b7c8a",marginBottom:8}}>Estoque Bling atual: <b style={{color:"#2c3e50",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:14}}>{ba.atual}</b></div>
+              <div style={{marginBottom:14}}>
+                <button onClick={zerarFilhosBling} disabled={zerarFilhos==='rodando'||!!ajusteLockPor} title="Zera o depósito Geral do Lumia e do Muniam desse SKU (limpa os negativos antes da recontagem)" style={{background:zerarFilhos==='rodando'?"#e8e2da":"#fff",color:"#8a4b4b",border:"1px solid #d8b4b4",borderRadius:6,padding:"6px 12px",fontSize:12,cursor:(zerarFilhos==='rodando'||ajusteLockPor)?"default":"pointer",fontFamily:"Georgia,serif",fontWeight:700}}>{zerarFilhos==='rodando'?"Zerando…":"Apagar Lumia/Muniam"}</button>
+                {zerarFilhos&&zerarFilhos!=='rodando'&&(
+                  zerarFilhos.erro
+                    ?<div style={{marginTop:6,fontSize:11.5,color:"#a03d3d"}}>⚠️ {zerarFilhos.erro}</div>
+                    :<div style={{marginTop:6,fontSize:11.5,color:zerarFilhos.ok?"#3d7a4a":"#a03d3d",fontFamily:"Calibri,Segoe UI,Arial,sans-serif"}}>
+                      {(zerarFilhos.resultados||[]).map(rr=>`${rr.conta==='lumia'?'Lumia':'Muniam'}: ${rr.ok?`${rr.antes??'?'} → 0`:`⚠️ ${rr.erro}`}`).join(' · ')}
+                    </div>
+                )}
+              </div>
               <div style={{marginBottom:12,opacity:ajusteLockPor?0.5:1}}>
                 <div style={{fontSize:11,color:"#2c3e50",fontWeight:700,marginBottom:3}}>Nova quantidade</div>
                 <input type="number" min="0" value={ajusteValor} onChange={e=>setAjusteValor(e.target.value)} autoFocus disabled={!!ajusteLockPor} style={{width:"100%",boxSizing:"border-box",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:15,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",outline:"none"}}/>
