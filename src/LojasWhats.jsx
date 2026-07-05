@@ -261,6 +261,12 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               fontSize: fz(9.5), fontWeight: 800, padding: '2px 7px', borderRadius: 6,
             }}>{fmtMoney(c.vendeu_valor)}</span>
           )}
+          {c.etapa === 'vendeu' && vendedoraNome && (
+            <span title={`Venda atendida por ${vendedoraNome}`} style={{
+              background: '#f3eafc', color: '#6b3aa0',
+              fontSize: fz(9.5), fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+            }}>👤 {vendedoraNome}</span>
+          )}
           {origem === 'carrinho' ? (
             <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas || 0} pç</span>
           ) : c.qtd_pecas > 0 && (
@@ -2868,6 +2874,9 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
             {c.etapa === 'vendeu' && Number(c.vendeu_valor) > 0 && (
               <span style={{ fontWeight: 700, color: palette.ok }}>· venda {fmtMoney(c.vendeu_valor)}</span>
             )}
+            {c.etapa === 'vendeu' && vendedoraNome && (
+              <span title={`Venda atendida por ${vendedoraNome}`} style={{ fontWeight: 700, color: '#6b3aa0' }}>· 👤 {vendedoraNome}</span>
+            )}
           </div>
         </div>
 
@@ -3489,7 +3498,134 @@ const TEXTO_INSTA_LINKTREE = 'Olá!! Gostaria de informações pra comprar no at
 const URL_INSTA_STORIES  = `https://wa.me/${WA_NUMERO_CENTRAL}?text=${encodeURIComponent(TEXTO_INSTA_STORIES)}`;
 const URL_INSTA_LINKTREE = `https://wa.me/${WA_NUMERO_CENTRAL}?text=${encodeURIComponent(TEXTO_INSTA_LINKTREE)}`;
 
-function OrigensInstagramCards({ origens, loading, kpis, fmtMoney }) {
+// ─── Funil de engajamento de leads (Ailson 05/07/2026) ─────────────────────
+// Faixas: sem interação / leve (1-2) / média (3+) / quente (5+ c/ foto ou
+// vendedora) / vendas. Cada lead cai numa única faixa. Fonte:
+// /api/lojas-whats-funil-leads (fn_sofia_funil_leads).
+const FaixasFunil = ({ o, loading, cor }) => {
+  if (loading && !o) return <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: '6px 8px' }}>…</div>;
+  const t = Number(o?.total || 0);
+  const pct = (n) => t > 0 ? `${Math.round((n / t) * 100)}%` : '—';
+  const linhas = [
+    { l: 'sem interação',  n: Number(o?.sem_interacao || 0), c: palette.inkMuted },
+    { l: 'leve (1-2 msgs)', n: Number(o?.leve || 0),  c: '#8a97c9' },
+    { l: 'média (3+ msgs)', n: Number(o?.media || 0), c: '#c98a3f' },
+    { l: 'quente',          n: Number(o?.quente || 0), c: '#c9483f' },
+  ];
+  const vendas = Number(o?.vendas || 0);
+  const valorV = Number(o?.valor_vendas || 0);
+  return (
+    <div style={{ padding: '7px 9px', borderRadius: 6, background: palette.bg, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 2 }}>
+        <span style={{ fontSize: fz(17), fontWeight: 800, color: cor || palette.ink }}>{t}</span>
+        <span style={{ fontSize: fz(10), color: palette.inkMuted }}>leads</span>
+      </div>
+      {linhas.map((x, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+          <span style={{ fontSize: fz(10.5), color: x.c, fontWeight: 600 }}>{x.l}</span>
+          <span style={{ fontSize: fz(10.5), color: palette.ink, whiteSpace: 'nowrap' }}>
+            <b>{x.n}</b> <span style={{ color: palette.inkMuted }}>· {pct(x.n)}</span>
+          </span>
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, borderTop: `1px dashed ${palette.beige}`, paddingTop: 3, marginTop: 1 }}>
+        <span style={{ fontSize: fz(10.5), color: palette.ok, fontWeight: 700 }}>vendas</span>
+        <span style={{ fontSize: fz(10.5), whiteSpace: 'nowrap' }}>
+          <b style={{ color: palette.ok }}>{vendas}</b> <span style={{ color: palette.inkMuted }}>· {pct(vendas)}</span>
+          {valorV > 0 && <span style={{ color: palette.ok, fontWeight: 700 }}> · R$ {Math.round(valorV).toLocaleString('pt-BR')}</span>}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const ORIGEM_BADGE = {
+  carrinho_site_amicialoja: { t: '🛒 carrinho', bg: '#f5eeda', c: '#9c7b3f' },
+  instagram_stories:        { t: '📸 stories',  bg: '#fbe9f3', c: '#a8388d' },
+  instagram_linktree:       { t: '🔗 linktree', bg: '#e6f4ec', c: '#1f7a48' },
+  anuncio_facebook:         { t: '📣 fb ads',   bg: '#e8f0f9', c: '#2c5fa8' },
+  anuncio_instagram:        { t: '📣 ig ads',   bg: '#e8f0f9', c: '#2c5fa8' },
+  sac:                      { t: 'sac',         bg: '#eeeae4', c: '#6f675c' },
+};
+
+// Bloco fixo do topo da tela Conversão: vendas dos últimos 30 dias (etapa
+// vendeu), expansível com cards no formato da lista de conversas.
+function VendasTopo30d({ dados, fmtMoney }) {
+  const [aberto, setAberto] = useState(false);
+  const qtd = dados?.qtd ?? null;
+  const fmtData = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+  return (
+    <div style={{
+      marginBottom: 14, borderRadius: 10, border: `1.5px solid #cde9d8`,
+      background: palette.surface, overflow: 'hidden',
+    }}>
+      <div onClick={() => setAberto(a => !a)} style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', cursor: 'pointer',
+      }}>
+        <span style={{ fontSize: fz(18) }}>💰</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>Vendas · últimos 30 dias</div>
+          <div style={{ fontSize: fz(10), color: palette.inkMuted }}>leads que fecharam pedido (etapa Vendeu)</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: fz(17), fontWeight: 800, color: palette.ok, lineHeight: 1 }}>
+            {qtd === null ? '…' : qtd}
+          </div>
+          <div style={{ fontSize: fz(10.5), color: palette.ok, fontWeight: 600 }}>
+            {qtd === null ? '' : fmtMoney(dados?.valor)}
+          </div>
+        </div>
+        <span style={{ fontSize: fz(12), color: palette.inkMuted }}>{aberto ? '▴' : '▾'}</span>
+      </div>
+      {aberto && (
+        <div style={{ borderTop: `1px solid ${palette.beige}` }}>
+          {!(dados?.itens || []).length && (
+            <div style={{ padding: 14, fontSize: fz(11), color: palette.inkMuted, textAlign: 'center' }}>Sem vendas nos últimos 30 dias</div>
+          )}
+          {(dados?.itens || []).map((v, i) => {
+            const ob = ORIGEM_BADGE[v.origem_lead] || null;
+            return (
+              <div key={v.id || i} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px',
+                borderTop: i > 0 ? `1px solid ${palette.beige}` : 'none',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {v.nome_cliente || v.telefone || '—'}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginTop: 3 }}>
+                    {ob && (
+                      <span style={{ background: ob.bg, color: ob.c, fontSize: fz(9), fontWeight: 700, padding: '1px 6px', borderRadius: 6 }}>{ob.t}</span>
+                    )}
+                    {v.vendedora_nome && (
+                      <span style={{ background: '#f3eafc', color: '#6b3aa0', fontSize: fz(9), fontWeight: 700, padding: '1px 6px', borderRadius: 6 }}>👤 {v.vendedora_nome}</span>
+                    )}
+                    {v.vendeu_canal && (
+                      <span style={{ fontSize: fz(9.5), color: palette.inkMuted, fontWeight: 600 }}>{v.vendeu_canal}</span>
+                    )}
+                    {v.qtd_pecas > 0 && (
+                      <span style={{ fontSize: fz(9.5), color: palette.inkMuted, fontWeight: 600 }}>· {v.qtd_pecas} pç</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: fz(12.5), fontWeight: 800, color: palette.ok }}>{fmtMoney(v.vendeu_valor)}</div>
+                  <div style={{ fontSize: fz(9.5), color: palette.inkMuted, marginTop: 1 }}>{fmtData(v.vendeu_em)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrigensInstagramCards({ funil, loadingFunil, kpis, fmtMoney }) {
   const [copiado, setCopiado] = useState(null);
   const [ajuda, setAjuda] = useState(null);        // qual card tem o "?" aberto
   const [expandido, setExpandido] = useState(false); // detalhe do card Carrinho
@@ -3506,28 +3642,8 @@ function OrigensInstagramCards({ origens, loading, kpis, fmtMoney }) {
     border: `1.5px solid ${palette.beige}`, background: palette.surface,
     display: 'flex', flexDirection: 'column', gap: 8,
   };
-  // Funil da origem no periodo do filtro: recebidas · vendas · % (Ailson 30/05/2026)
-  const Metricas = ({ o, cor }) => (
-    <div style={{
-      display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap',
-      padding: '6px 8px', borderRadius: 6, background: palette.bg,
-    }}>
-      <span style={{ fontSize: fz(15), fontWeight: 700, color: palette.ink }}>
-        {loading && !o ? '…' : (o?.recebidas ?? 0)}
-      </span>
-      <span style={{ fontSize: fz(9.5), color: palette.inkMuted }}>recebidas</span>
-      <span style={{ color: palette.beige, fontSize: fz(11) }}>·</span>
-      <span style={{ fontSize: fz(15), fontWeight: 700, color: cor }}>
-        {loading && !o ? '…' : (o?.convertidos ?? 0)}
-      </span>
-      <span style={{ fontSize: fz(9.5), color: palette.inkMuted }}>vendas</span>
-      <span style={{ color: palette.beige, fontSize: fz(11) }}>·</span>
-      <span style={{ fontSize: fz(13), fontWeight: 700, color: cor }}>
-        {o && o.recebidas > 0 ? `${o.pct}%` : '—'}
-      </span>
-      <span style={{ fontSize: fz(9.5), color: palette.inkMuted }}>conv.</span>
-    </div>
-  );
+  // Faixas do funil de engajamento por origem: FaixasFunil (definido acima).
+  // Ailson 05/07/2026 — substitui as métricas recebidas/vendas/% antigas.
   // Cabecalho com botao "?" (Ailson 30/05/2026)
   const Header = ({ icone, titulo, sub, id }) => (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -3568,8 +3684,8 @@ function OrigensInstagramCards({ origens, loading, kpis, fmtMoney }) {
               <Circle size={sz(10)} color="#a8388d" fill="#a8388d" style={{ position: 'absolute', top: 0, right: 0 }} />
             </div>
           } />
-        <Ajuda id="stories">Leads que chegam pelo link no Stories do Instagram. <b>Recebidas</b> = conversas iniciadas no período. <b>Vendas</b> = lead que comprou (casado por telefone) em até 15 dias. <b>conv.</b> = vendas ÷ recebidas.</Ajuda>
-        <Metricas o={origens?.stories} cor="#a8388d" />
+        <Ajuda id="stories">Leads que chegam pelo link no Stories do Instagram. <b>Leads</b> = conversas iniciadas no período. Faixas (cada lead numa só): <b>sem interação</b> = não respondeu além da abertura; <b>leve</b> = 1-2 msgs; <b>média</b> = 3+ msgs sem foto/vendedora; <b>quente</b> = 5+ msgs com foto OU foi pra vendedora; <b>vendas</b> = etapa Vendeu.</Ajuda>
+        <FaixasFunil o={funil?.stories} loading={loadingFunil} cor="#a8388d" />
         <div style={{
           fontSize: fz(10), color: palette.inkSoft, padding: 6, borderRadius: 4,
           background: palette.bg, fontFamily: 'monospace', wordBreak: 'break-all',
@@ -3592,8 +3708,8 @@ function OrigensInstagramCards({ origens, loading, kpis, fmtMoney }) {
               <Link2 size={sz(11)} color="#1f7a48" style={{ position: 'absolute', top: 0, right: 0, background: palette.surface, borderRadius: 2 }} />
             </div>
           } />
-        <Ajuda id="linktree">Leads que chegam pelo link do Linktree na bio do Instagram. <b>Recebidas</b> = conversas iniciadas no período. <b>Vendas</b> = lead que comprou (casado por telefone) em até 15 dias. <b>conv.</b> = vendas ÷ recebidas.</Ajuda>
-        <Metricas o={origens?.linktree} cor="#1f7a48" />
+        <Ajuda id="linktree">Leads que chegam pelo link do Linktree na bio do Instagram. <b>Leads</b> = conversas iniciadas no período. Faixas (cada lead numa só): <b>sem interação</b> = não respondeu além da abertura; <b>leve</b> = 1-2 msgs; <b>média</b> = 3+ msgs sem foto/vendedora; <b>quente</b> = 5+ msgs com foto OU foi pra vendedora; <b>vendas</b> = etapa Vendeu.</Ajuda>
+        <FaixasFunil o={funil?.linktree} loading={loadingFunil} cor="#1f7a48" />
         <div style={{
           fontSize: fz(10), color: palette.inkSoft, padding: 6, borderRadius: 4,
           background: palette.bg, fontFamily: 'monospace', wordBreak: 'break-all',
@@ -3615,8 +3731,8 @@ function OrigensInstagramCards({ origens, loading, kpis, fmtMoney }) {
               <Facebook size={sz(22)} color="#2c5fa8" strokeWidth={1.6} />
             </div>
           } />
-        <Ajuda id="meta_ads">Leads que chegam pelos anúncios (clique-pra-WhatsApp). A origem vem do próprio anúncio — não tem link pra copiar. <b>Vendas</b> = lead que comprou (casado por telefone/documento) em até 15 dias.</Ajuda>
-        <Metricas o={origens?.meta_ads} cor="#2c5fa8" />
+        <Ajuda id="meta_ads">Leads que chegam pelos anúncios (clique-pra-WhatsApp), Facebook + Instagram somados. <b>Leads</b> = conversas iniciadas no período. Faixas (cada lead numa só): <b>sem interação</b> = não respondeu além da abertura; <b>leve</b> = 1-2 msgs; <b>média</b> = 3+ msgs sem foto/vendedora; <b>quente</b> = 5+ msgs com foto OU foi pra vendedora; <b>vendas</b> = etapa Vendeu.</Ajuda>
+        <FaixasFunil o={funil?.meta_ads} loading={loadingFunil} cor="#2c5fa8" />
       </div>
       {/* CARRINHO DO SITE — consolida os 4 modos (Sofia/Vendedora × Site/Loja).
           Ailson 30/05/2026: virou card igual os outros, com detalhe expansível. */}
@@ -3625,8 +3741,8 @@ function OrigensInstagramCards({ origens, loading, kpis, fmtMoney }) {
           icone={
             <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fz(18) }}>🛒</div>
           } />
-        <Ajuda id="carrinho">Leads de carrinho abandonado no site Amícia. <b>Conversão</b> = venda atribuída ao lead: <b>site</b> em ≤5 dias, <b>loja</b> em ≤15 dias após a mensagem (Sofia ou vendedora). Abra "ver detalhe" pra separar por quem atendeu × canal.</Ajuda>
-        <Metricas o={origens?.carrinho} cor="#9c7b3f" />
+        <Ajuda id="carrinho">Leads de carrinho abandonado no site Amícia. <b>Leads</b> = conversas iniciadas no período. Faixas (cada lead numa só): <b>sem interação</b> = não respondeu além da abertura; <b>leve</b> = 1-2 msgs; <b>média</b> = 3+ msgs sem foto/vendedora; <b>quente</b> = 5+ msgs com foto OU foi pra vendedora; <b>vendas</b> = etapa Vendeu. O "ver detalhe" abaixo mostra as conversões CASADAS com venda Bling (site ≤5d, loja ≤15d) por quem atendeu × canal.</Ajuda>
+        <FaixasFunil o={funil?.carrinho} loading={loadingFunil} cor="#9c7b3f" />
         <button onClick={() => setExpandido(e => !e)} style={{
           padding: '4px 6px', borderRadius: 6, border: `1px solid ${palette.beige}`,
           background: 'transparent', cursor: 'pointer', color: palette.inkSoft,
@@ -3659,6 +3775,17 @@ function OrigensInstagramCards({ origens, loading, kpis, fmtMoney }) {
           </div>
         )}
       </div>
+      {/* OUTROS (desconhecida, sac...) — só aparece se tiver lead no período */}
+      {Number(funil?.outros?.total || 0) > 0 && (
+        <div style={{ ...cardBase, borderColor: palette.beige }}>
+          <Header id="outros" titulo="❔ Outros" sub="Origem desconhecida / demais"
+            icone={
+              <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fz(16) }}>❔</div>
+            } />
+          <Ajuda id="outros">Leads sem origem identificada (chegaram sem link rastreado) e demais origens menores, somados.</Ajuda>
+          <FaixasFunil o={funil?.outros} loading={loadingFunil} cor={palette.inkSoft} />
+        </div>
+      )}
     </div>
   );
 }
@@ -3683,6 +3810,68 @@ function ConversaoTab({ refreshTick }) {
     setDataInicio(ini.toISOString().slice(0, 10));
     setDataFim(fim.toISOString().slice(0, 10));
   };
+  // Mês atual / mês passado em data LOCAL (toISOString sobre new Date(y,m,1)
+  // voltaria 1 dia em BRT). Ailson 05/07/2026.
+  const fmtLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const setMesAtual = () => {
+    const h = new Date();
+    setDataInicio(fmtLocal(new Date(h.getFullYear(), h.getMonth(), 1)));
+    setDataFim(fmtLocal(h));
+  };
+  const setMesPassado = () => {
+    const h = new Date();
+    setDataInicio(fmtLocal(new Date(h.getFullYear(), h.getMonth() - 1, 1)));
+    setDataFim(fmtLocal(new Date(h.getFullYear(), h.getMonth(), 0)));
+  };
+
+  // ─── Funil de engajamento de leads (Ailson 05/07/2026) ──────────────────
+  const [dadosFunil, setDadosFunil] = useState(null);
+  const [loadingFunil, setLoadingFunil] = useState(true);
+  const [filtroVendedora, setFiltroVendedora] = useState('');
+  useEffect(() => {
+    let cancelado = false;
+    setLoadingFunil(true);
+    const params = new URLSearchParams({ data_inicio: dataInicio, data_fim: dataFim });
+    if (filtroVendedora) params.set('vendedora_id', filtroVendedora);
+    fetch(`/api/lojas-whats-funil-leads?${params.toString()}`)
+      .then(r => r.json())
+      .then(d => {
+        if (cancelado) return;
+        setDadosFunil(d.error ? null : d);
+        setLoadingFunil(false);
+      })
+      .catch(() => { if (!cancelado) setLoadingFunil(false); });
+    return () => { cancelado = true; };
+  }, [dataInicio, dataFim, filtroVendedora, refreshTick]);
+
+  // Mapa do funil por card (fb+ig somados; sobras viram "outros")
+  const funilCards = (() => {
+    const m = {};
+    for (const o of dadosFunil?.origens || []) m[o.origem] = o;
+    const soma = (list) => {
+      const zerado = { total: 0, sem_interacao: 0, leve: 0, media: 0, quente: 0, vendas: 0, valor_vendas: 0 };
+      const its = list.filter(Boolean);
+      if (!its.length) return null;
+      return its.reduce((a, x) => ({
+        total: a.total + Number(x.total || 0),
+        sem_interacao: a.sem_interacao + Number(x.sem_interacao || 0),
+        leve: a.leve + Number(x.leve || 0),
+        media: a.media + Number(x.media || 0),
+        quente: a.quente + Number(x.quente || 0),
+        vendas: a.vendas + Number(x.vendas || 0),
+        valor_vendas: a.valor_vendas + Number(x.valor_vendas || 0),
+      }), zerado);
+    };
+    const conhecidas = ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram', 'carrinho_site_amicialoja'];
+    const sobras = Object.keys(m).filter(k => !conhecidas.includes(k)).map(k => m[k]);
+    return {
+      stories: m.instagram_stories || null,
+      linktree: m.instagram_linktree || null,
+      meta_ads: soma([m.anuncio_facebook, m.anuncio_instagram]),
+      carrinho: m.carrinho_site_amicialoja || null,
+      outros: soma(sobras),
+    };
+  })();
 
   useEffect(() => {
     let cancelado = false;
@@ -3711,6 +3900,9 @@ function ConversaoTab({ refreshTick }) {
 
   return (
     <div style={{ padding: '12px 16px', fontFamily: FONT }}>
+      {/* Vendas dos últimos 30 dias — bloco fixo, expansível (Ailson 05/07/2026) */}
+      <VendasTopo30d dados={dadosFunil?.vendas_30d} fmtMoney={fmtMoney} />
+
       {/* Filtros de período */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
@@ -3732,15 +3924,16 @@ function ConversaoTab({ refreshTick }) {
             fontSize: fz(12), fontFamily: FONT, color: palette.ink,
           }}
         />
-        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {[
-            { dias: 7,  label: '7d'  },
-            { dias: 30, label: '30d' },
-            { dias: 90, label: '90d' },
+            { label: '7 dias',      fn: () => setPeriodo(7)  },
+            { label: '30 dias',     fn: () => setPeriodo(30) },
+            { label: 'Mês atual',   fn: setMesAtual   },
+            { label: 'Mês passado', fn: setMesPassado },
           ].map(p => (
             <button
-              key={p.dias}
-              onClick={() => setPeriodo(p.dias)}
+              key={p.label}
+              onClick={p.fn}
               style={{
                 background: 'transparent', border: `1px solid ${palette.beige}`,
                 borderRadius: 6, padding: '3px 9px',
@@ -3752,11 +3945,38 @@ function ConversaoTab({ refreshTick }) {
             </button>
           ))}
         </div>
+        <select
+          value={filtroVendedora}
+          onChange={e => setFiltroVendedora(e.target.value)}
+          style={{
+            border: `1px solid ${filtroVendedora ? palette.accent : palette.beige}`,
+            borderRadius: 6, padding: '4px 8px', fontSize: fz(11.5),
+            fontFamily: FONT, color: filtroVendedora ? palette.accent : palette.inkSoft,
+            background: palette.surface, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          <option value="">Todas vendedoras</option>
+          {(dadosFunil?.vendedoras || []).map(v => (
+            <option key={v.id} value={v.id}>{v.nome}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Resumo geral do funil de leads (todas as origens) */}
+      <div style={{
+        marginBottom: 12, padding: '10px 13px', borderRadius: 10,
+        border: `1.5px solid ${palette.beige}`, background: palette.surface,
+      }}>
+        <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink, marginBottom: 6 }}>
+          📊 Leads no período {filtroVendedora ? '(filtrado por vendedora)' : ''}
+        </div>
+        <FaixasFunil o={dadosFunil?.totais} loading={loadingFunil} cor={palette.ink} />
       </div>
 
       {/* Origens Instagram — 2 cards com os links wa.me prontos pra colar.
-          Ailson 28/05/2026: stories + linktree, rotina C da Sofia. */}
-      <OrigensInstagramCards origens={dados?.origens} loading={loading} kpis={dados?.kpis} fmtMoney={fmtMoney} />
+          Ailson 28/05/2026: stories + linktree, rotina C da Sofia.
+          05/07/2026: cards passam a mostrar o funil de engajamento. */}
+      <OrigensInstagramCards funil={funilCards} loadingFunil={loadingFunil} kpis={dados?.kpis} fmtMoney={fmtMoney} />
 
       {loading ? (
         <div style={{ padding: 20, textAlign: 'center', color: palette.inkMuted }}>
@@ -3773,6 +3993,7 @@ function ConversaoTab({ refreshTick }) {
       ) : !dados ? null : (
         <>
           {/* Header com total */}
+          <SectionTitle>Conversões casadas (venda no Bling após mensagem)</SectionTitle>
           <div style={{
             display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 14,
             flexWrap: 'wrap', rowGap: 6,
