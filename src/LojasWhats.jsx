@@ -35,7 +35,7 @@ import {
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
   User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
   Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video, Hash,
-  Instagram, Facebook, Copy, Circle
+  Instagram, Facebook, Copy, Circle, Search
 } from 'lucide-react';
 import {
   supabase,
@@ -5128,7 +5128,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
         // Caso real: Amanda Goncalves + Gleide Maria em etapa='aprovar' com
         // sugestao pendente -> tela mostrava "Sem mensagens ainda".
         supabase.from('lojas_whats_sugestoes')
-          .select('id, tipo, texto_proposto, motivo_proposta, criada_em, status')
+          .select('id, tipo, texto_proposto, motivo_proposta, criada_em, status, contexto_ia')
           .eq('conversa_id', conversaId)
           .eq('status', 'pendente')
           .order('criada_em', { ascending: true }),
@@ -5339,15 +5339,59 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   // o modal traz as próximas até acabar (Ailson 04/07/2026: tem cliente que
   // manda 10+ fotos e antes o modal só via as últimas 5).
   const abrirIndicar = () => {
+    // Leituras de print das sugestoes pendentes (vision+match do backend):
+    // candidata FORTE ja preenche a ref da linha (Tamara so confere pela
+    // miniatura); candidatas fracas viram chips clicaveis. Assim quando a
+    // Sofia acerta 3 de 5, corrige-se SO as 2 erradas em vez de redigitar
+    // tudo. Ailson 04/07/2026.
+    const porUrl = new Map();
+    for (const s of sugestoesPendentes || []) {
+      for (const le of s.contexto_ia?.print_leituras || []) {
+        if (le?.url) porUrl.set(le.url, le);
+      }
+    }
     const todas = (mensagens || [])
       .filter(m => m.direcao === 'entrada' && m.tipo_midia === 'image' && m.midia_url)
-      .map(m => ({ url: m.midia_url, ref: '' }));
+      .map(m => {
+        const le = porUrl.get(m.midia_url);
+        const cands = (le?.candidatas || []).map(c => c.ref);
+        return {
+          url: m.midia_url,
+          ref: (le?.forte && cands[0]) ? cands[0] : '',
+          candidatas: cands.slice(0, 3),
+          sugerida: !!(le?.forte && cands[0]),
+        };
+      });
     const naTela = todas.slice(0, 5);
     setIndicarLinhas(naTela.length ? naTela : [{ url: null, ref: '' }]);
     setIndicarFila(todas.slice(5));
     setIndicarAviso(null);
+    setPickerIdx(null); setPickerQ(''); setPickerRes([]);
     setIndicarAberto(true);
   };
+
+  // Picker visual: busca por nome/categoria/ref/preco com miniaturas, inline
+  // no modal — sem sair da tela nem decorar ref. Ailson 04/07/2026.
+  const [pickerIdx, setPickerIdx] = useState(null);
+  const [pickerQ, setPickerQ] = useState('');
+  const [pickerRes, setPickerRes] = useState([]);
+  const [pickerBuscando, setPickerBuscando] = useState(false);
+  useEffect(() => {
+    if (pickerIdx === null) return;
+    const q = pickerQ.trim();
+    if (q.length < 2) { setPickerRes([]); return; }
+    let vivo = true;
+    setPickerBuscando(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/lojas-whats-refs-buscar?q=${encodeURIComponent(q)}`);
+        const j = await r.json();
+        if (vivo) setPickerRes(j.itens || []);
+      } catch { if (vivo) setPickerRes([]); }
+      if (vivo) setPickerBuscando(false);
+    }, 400);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [pickerQ, pickerIdx]);
 
   const enviarIndicacao = async () => {
     const refs = indicarLinhas.map(l => (l.ref || '').trim()).filter(Boolean);
@@ -5424,29 +5468,83 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
               </div>
             )}
             {indicarLinhas.map((l, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                {l.url
-                  ? <img src={l.url} alt="" style={{ width: 54, height: 54, objectFit: 'cover', borderRadius: 8, flexShrink: 0, border: '1px solid #e8e2da' }} />
-                  : <div style={{ width: 54, height: 54, borderRadius: 8, background: palette.beige, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Image size={sz(18)} color={palette.inkMuted} /></div>}
-                <input value={l.ref}
-                  onChange={e => setIndicarLinhas(prev => prev.map((x, j) => j === i ? { ...x, ref: e.target.value } : x))}
-                  placeholder="Ref (ex: 3213)" inputMode="numeric"
-                  style={{ flex: 1, padding: '9px 11px', borderRadius: 8, border: '1px solid #e8e2da', fontSize: fz(14), fontFamily: FONT_CHAT, color: palette.ink, background: palette.bg }} />
-                {indicarLinhas.length > 1 && (
-                  <button onClick={() => {
-                    // Repõe da fila pra manter 5 na tela (foto pulada sai de vez)
-                    setIndicarLinhas(prev => {
-                      const nova = prev.filter((_, j) => j !== i);
-                      if (indicarFila.length) {
-                        nova.push(indicarFila[0]);
-                        setIndicarFila(f => f.slice(1));
-                      }
-                      return nova;
-                    });
-                  }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.alert, display: 'flex' }}>
-                    <Trash2 size={sz(16)} />
-                  </button>
+              <div key={i} style={{ marginBottom: 12, paddingBottom: 10, borderBottom: i < indicarLinhas.length - 1 ? '1px dashed #efe9e0' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                  {l.url
+                    ? <img src={l.url} alt="" style={{ width: 54, height: 54, objectFit: 'cover', borderRadius: 8, flexShrink: 0, border: '1px solid #e8e2da' }} />
+                    : <div style={{ width: 54, height: 54, borderRadius: 8, background: palette.beige, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Image size={sz(18)} color={palette.inkMuted} /></div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input value={l.ref}
+                        onChange={e => setIndicarLinhas(prev => prev.map((x, j) => j === i ? { ...x, ref: e.target.value, sugerida: false } : x))}
+                        placeholder="Ref (ex: 3213)" inputMode="numeric"
+                        style={{ flex: 1, minWidth: 0, padding: '9px 11px', borderRadius: 8, border: l.sugerida ? '1.5px solid #4caf7d' : '1px solid #e8e2da', fontSize: fz(14), fontFamily: FONT_CHAT, color: palette.ink, background: palette.bg }} />
+                      <button title="Buscar por nome, categoria ou preço"
+                        onClick={() => { setPickerIdx(pickerIdx === i ? null : i); setPickerQ(''); setPickerRes([]); }}
+                        style={{ background: pickerIdx === i ? palette.accent : '#f0ece5', border: 'none', borderRadius: 8, padding: 9, cursor: 'pointer', display: 'flex', flexShrink: 0 }}>
+                        <Search size={sz(15)} color={pickerIdx === i ? '#fff' : palette.inkMuted} />
+                      </button>
+                      {indicarLinhas.length > 1 && (
+                        <button onClick={() => {
+                          // Repõe da fila pra manter 5 na tela (foto pulada sai de vez)
+                          setPickerIdx(null);
+                          setIndicarLinhas(prev => {
+                            const nova = prev.filter((_, j) => j !== i);
+                            if (indicarFila.length) {
+                              nova.push(indicarFila[0]);
+                              setIndicarFila(f => f.slice(1));
+                            }
+                            return nova;
+                          });
+                        }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.alert, display: 'flex', flexShrink: 0, padding: 4 }}>
+                          <Trash2 size={sz(16)} />
+                        </button>
+                      )}
+                    </div>
+                    {l.sugerida && l.ref && (
+                      <div style={{ fontSize: fz(10), color: '#2e7d32', fontWeight: 600, marginTop: 3 }}>
+                        ✦ sugerida pela Sofia (leitura do print) — confira pela miniatura
+                      </div>
+                    )}
+                    <RefThumbAoVivo refDigitada={l.ref} palette={palette} fz={fz} sz={sz} />
+                    {!l.ref && (l.candidatas || []).length > 0 && (
+                      <RefsChips refs={l.candidatas} palette={palette} fz={fz} sz={sz}
+                        titulo="Pode ser uma dessas (toca pra escolher):"
+                        onPick={(ref) => setIndicarLinhas(prev => prev.map((x, j) => j === i ? { ...x, ref } : x))} />
+                    )}
+                  </div>
+                </div>
+                {pickerIdx === i && (
+                  <div style={{ marginTop: 8, marginLeft: 64, background: '#faf7f2', border: '1px solid #e8e2da', borderRadius: 10, padding: 10 }}>
+                    <input autoFocus value={pickerQ} onChange={e => setPickerQ(e.target.value)}
+                      placeholder="Nome, categoria ou preço (ex: conjunto, 169)"
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: '1px solid #e8e2da', fontSize: fz(13), fontFamily: FONT_CHAT, color: palette.ink, background: '#fff' }} />
+                    <div style={{ marginTop: 8, maxHeight: 220, overflowY: 'auto' }}>
+                      {pickerBuscando && <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: 6 }}>buscando…</div>}
+                      {!pickerBuscando && pickerQ.trim().length >= 2 && !pickerRes.length && (
+                        <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: 6 }}>nada encontrado — tenta outro nome ou o preço da etiqueta</div>
+                      )}
+                      {pickerRes.map(it => (
+                        <div key={it.ref}
+                          onClick={() => {
+                            setIndicarLinhas(prev => prev.map((x, j) => j === i ? { ...x, ref: it.ref, sugerida: false } : x));
+                            setPickerIdx(null); setPickerQ(''); setPickerRes([]);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 4px', borderRadius: 8, cursor: 'pointer' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#f0ece5'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                          {it.foto_url
+                            ? <img src={it.foto_url} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
+                            : <div style={{ width: 46, height: 46, borderRadius: 8, background: '#f0ece5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Image size={sz(16)} color="#a89f92" /></div>}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ink }}>REF {it.ref}{(it.preco_tabela || it.preco_medio) ? <span style={{ fontWeight: 500, color: palette.inkMuted }}> · R${Math.round(it.preco_tabela || it.preco_medio)}</span> : null}</div>
+                            <div style={{ fontSize: fz(10.5), color: palette.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.nome || it.categoria || '—'}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
@@ -6102,6 +6200,102 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
 // Agora: cada sugestao pendente vira um bubble especial (fundo diferente,
 // borda amarela) com 3 botoes: Aprovar / Editar / Dispensar. Usa o mesmo
 // endpoint /api/lojas-whats-aprovar usado na aba Aprovar.
+// ─── REFS COM MINIATURA (Ailson 04/07/2026) ─────────────────────────────────
+// Ninguem decora ref de cabeca: toda ref citada (na sugestao da Sofia ou no
+// modal Indicar refs) ganha a MINIATURA da foto do catalogo + nome + preco,
+// via /api/lojas-whats-refs-buscar. Cache de modulo evita re-buscar.
+const _refsInfoCache = new Map(); // refNorm -> {ref, nome, foto_url, preco_tabela, preco_medio, ...}
+const _normRefFront = (r) => String(r ?? '').trim().replace(/^0+/, '') || '';
+
+async function hidratarRefsInfo(refs) {
+  const pedidas = [...new Set(refs.map(_normRefFront).filter(Boolean))];
+  const faltam = pedidas.filter(r => !_refsInfoCache.has(r));
+  if (faltam.length) {
+    try {
+      const r = await fetch(`/api/lojas-whats-refs-buscar?refs=${faltam.join(',')}`);
+      const j = await r.json();
+      for (const it of j.itens || []) _refsInfoCache.set(it.ref, it);
+    } catch { /* silencioso — chips ficam sem thumb */ }
+  }
+  return pedidas.map(r => _refsInfoCache.get(r)).filter(Boolean);
+}
+
+// Chips "REF + foto" — usados embaixo da sugestao da Sofia. onPick opcional
+// (no modal, tocar num chip preenche a linha).
+function RefsChips({ refs, palette, fz, sz, titulo, onPick }) {
+  const [itens, setItens] = useState([]);
+  const chave = (refs || []).join(',');
+  useEffect(() => {
+    let vivo = true;
+    if (!chave) { setItens([]); return; }
+    hidratarRefsInfo(chave.split(',')).then(x => { if (vivo) setItens(x); });
+    return () => { vivo = false; };
+  }, [chave]);
+  if (!itens.length) return null;
+  return (
+    <div style={{ marginTop: 6 }}>
+      {titulo && <div style={{ fontSize: fz(10), color: '#7a5a00', fontWeight: 600, marginBottom: 4 }}>{titulo}</div>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {itens.map(it => (
+          <div key={it.ref}
+            onClick={onPick ? () => onPick(it.ref) : undefined}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, background: '#fff',
+              border: '1px solid #e8e2da', borderRadius: 8, padding: '3px 8px 3px 3px',
+              cursor: onPick ? 'pointer' : 'default',
+            }}>
+            {it.foto_url
+              ? <img src={it.foto_url} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6 }} />
+              : <div style={{ width: 34, height: 34, borderRadius: 6, background: '#f0ece5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Image size={sz(14)} color="#a89f92" /></div>}
+            <div style={{ lineHeight: 1.2 }}>
+              <div style={{ fontSize: fz(11), fontWeight: 700, color: palette.ink }}>REF {it.ref}</div>
+              <div style={{ fontSize: fz(9.5), color: palette.inkMuted, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {[it.nome, (it.preco_tabela || it.preco_medio) ? `R$${Math.round(it.preco_tabela || it.preco_medio)}` : null].filter(Boolean).join(' · ') || '—'}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Thumb ao vivo ao lado do input de ref no modal: digitou -> ve a foto e o
+// nome, confirma visualmente que e a peca certa (debounce 450ms).
+function RefThumbAoVivo({ refDigitada, palette, fz, sz }) {
+  const [info, setInfo] = useState(null);
+  const rn = _normRefFront(refDigitada);
+  useEffect(() => {
+    let vivo = true;
+    if (!rn || rn.length < 3) { setInfo(null); return; }
+    if (_refsInfoCache.has(rn)) { setInfo(_refsInfoCache.get(rn)); return; }
+    const t = setTimeout(() => {
+      hidratarRefsInfo([rn]).then(x => { if (vivo) setInfo(x[0] || null); });
+    }, 450);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [rn]);
+  if (!rn || rn.length < 3) return null;
+  if (!info || info.desconhecida) {
+    return (
+      <div style={{ fontSize: fz(10), color: '#b45309', marginTop: 3 }}>
+        ref não encontrada na base (confere o número)
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+      {info.foto_url
+        ? <img src={info.foto_url} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, border: '2px solid #4caf7d' }} />
+        : <div style={{ width: 40, height: 40, borderRadius: 6, background: '#f0ece5', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e8e2da' }}><Image size={sz(15)} color="#a89f92" /></div>}
+      <div style={{ fontSize: fz(10.5), color: palette.ink, lineHeight: 1.25 }}>
+        <span style={{ fontWeight: 700 }}>✓ {info.nome || `REF ${info.ref}`}</span>
+        {(info.preco_tabela || info.preco_medio) && <span style={{ color: palette.inkMuted }}> · R${Math.round(info.preco_tabela || info.preco_medio)}</span>}
+        {!info.foto_url && <div style={{ color: palette.inkMuted }}>sem foto no catálogo, mas a ref existe</div>}
+      </div>
+    </div>
+  );
+}
+
 function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz, sz, FONT }) {
   const [editando, setEditando] = useState(false);
   const [editText, setEditText] = useState(sug.texto_proposto || '');
@@ -6216,6 +6410,27 @@ function SugestaoPendenteBubble({ sug, onAprovou, userId, bloqueado, palette, fz
                 ⚠️ Sofia pediu pra vc anexar mídia manualmente. Edite a msg pra apagar o marcador, anexe a foto/vídeo, depois envie.
               </div>
             )}
+            {(() => {
+              // Miniaturas das refs que a Sofia esta tratando: citadas no texto
+              // ([ENVIAR_FOTO:x]) + top candidata de cada print lido (vision).
+              // A Tamara valida de olho, sem decorar ref. Ailson 04/07/2026.
+              const txt = sug.texto_proposto || '';
+              const setRefs = new Set();
+              const reTag = /\[ENVIAR_(?:FOTO|VIDEO):([^\]]+)\]/gi;
+              let mm; while ((mm = reTag.exec(txt)) !== null) setRefs.add(mm[1].trim());
+              const reTxt = /\bref\.?\s*(\d{3,4})\b/gi;
+              while ((mm = reTxt.exec(txt)) !== null) setRefs.add(mm[1]);
+              for (const le of sug.contexto_ia?.print_leituras || []) {
+                if (le?.candidatas?.[0]?.ref) setRefs.add(le.candidatas[0].ref);
+              }
+              const refs = [...setRefs].slice(0, 6);
+              return refs.length
+                ? <div style={{ marginBottom: 8 }}>
+                    <RefsChips refs={refs} palette={palette} fz={fz} sz={sz}
+                      titulo="Peças identificadas (confira pela foto):" />
+                  </div>
+                : null;
+            })()}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', opacity: bloqueado ? 0.5 : 1, pointerEvents: bloqueado ? 'none' : 'auto' }}>
               <button
                 onClick={() => acionar('aprovar')}
