@@ -651,7 +651,36 @@ async function enviarCatalogoPesquisa(telefone, conversaId, querPromo, decididaP
       .order('criada_em', { ascending: false }).limit(1).maybeSingle();
     if (!cat) { log('pesquisa', `catalogo (promocao=${!!querPromo}) nao encontrado`); return; }
     const r = await enviarMidiaSofia({ telefone, midia: cat, conversaId, mensagemId: null, decididaPor });
-    if (!r?.ok) log('pesquisa', `catalogo pesquisa erro: ${r?.erro || 'desconhecido'}`);
+    if (!r?.ok) { log('pesquisa', `catalogo pesquisa erro: ${r?.erro || 'desconhecido'}`); return; }
+    // Grava a mensagem no historico (Ailson 05/07/2026): antes o catalogo SAIA
+    // pro WhatsApp da cliente mas nao era inserido em lojas_whats_mensagens —
+    // ficava invisivel no app (parecia que a Sofia nao mandou, a equipe
+    // reenviava manual e a cliente recebia 2x) e ultima_msg_direcao ficava
+    // 'entrada'. Afetava pesquisa (preco/minimo) e nudge de abertura.
+    try {
+      let midiaUrlMsg = null;
+      if (cat.storage_path) {
+        const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(cat.storage_path);
+        midiaUrlMsg = pub?.publicUrl || null;
+      }
+      await supabase.from('lojas_whats_mensagens').insert({
+        conversa_id: conversaId,
+        direcao: 'saida',
+        autor: 'sofia_ia',
+        tipo_midia: 'document',
+        texto: null,
+        midia_url: midiaUrlMsg,
+        meta_message_id: r.message_id || null,
+        status: 'enviando',
+        enviada_em: new Date().toISOString(),
+      });
+      await supabase.from('lojas_whats_conversas').update({
+        ultima_msg_direcao: 'saida',
+        ultima_atividade_em: new Date().toISOString(),
+      }).eq('id', conversaId);
+    } catch (eIns) {
+      logErro('pesquisa-catalogo/insert-msg', eIns);
+    }
   } catch (e) {
     logErro('pesquisa-catalogo', e);
   }
