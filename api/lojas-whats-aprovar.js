@@ -206,6 +206,35 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   if (sug.tipo !== 'primeira_mensagem') {
     const parsed = parseMarcadoresMidia(textoFinalBruto);
     textoFinal = parsed.textoLimpo;
+    // POLIMENTO NO ENVIO (Ailson 05/07/2026) — determinístico, roda pra TODO
+    // envio de replica (auto, aprovação, resgate), no horário do ENVIO:
+    //   1. Saudação de período: sugestão gerada num período e enviada em outro
+    //      (dormiu na fila de aprovação) saía "Boa tarde" de manhã. Troca
+    //      bom dia/boa tarde/boa noite pelo período ATUAL (BRT) quando a
+    //      saudação está no começo da mensagem.
+    //   2. Floreio proibido: "que bom que veio/te ver por aqui", "seja
+    //      bem-vinda" — o prompt já proíbe mas a IA vaza às vezes; corta a
+    //      frase inteira (cinto de segurança, igual ao guard do travessão).
+    if (textoFinal) {
+      try {
+        const antes = textoFinal;
+        const hBRT = (new Date().getUTCHours() + 21) % 24;
+        const periodoAgora = hBRT >= 5 && hBRT < 12 ? 'bom dia' : hBRT >= 12 && hBRT < 18 ? 'boa tarde' : 'boa noite';
+        const reSaud = /\b(bom dia|boa tarde|boa noite)\b/i;
+        const m = textoFinal.match(reSaud);
+        if (m && m.index < 60 && m[1].toLowerCase() !== periodoAgora) {
+          const certo = m[1][0] === m[1][0].toUpperCase()
+            ? periodoAgora[0].toUpperCase() + periodoAgora.slice(1)
+            : periodoAgora;
+          textoFinal = textoFinal.replace(reSaud, certo);
+        }
+        textoFinal = textoFinal
+          .replace(/\s*que bom que (voc[eê] |vc )?(veio|te ver por aqui|apareceu)[^\n.!?]*[.!?]?/gi, '')
+          .replace(/\s*seja (muito )?bem[- ]vind[ao][^\n.!?]*[.!?]?/gi, '')
+          .trim();
+        if (!textoFinal) textoFinal = antes; // nunca zera a mensagem
+      } catch { /* mantem textoFinal como estava */ }
+    }
     if (parsed.marcadores.length > 0) {
       try {
         midiaParaEnviar = await resolverMidia(parsed.marcadores[0]);
