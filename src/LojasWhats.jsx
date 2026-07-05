@@ -5308,6 +5308,16 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   // empurrar nada) e a reancoragem roda em resize E scroll do visualViewport
   // (durante o foco, nao so ao fechar). Ailson 05/07/2026.
   const [vvAltura, setVvAltura] = useState(null); // altura visivel c/ teclado aberto (mobile)
+  const [vvTop, setVvTop] = useState(0); // offsetTop do visual viewport (pan residual do Safari)
+  // Trava o scroll do documento enquanto o chat fullscreen esta aberto (mobile).
+  // Sem isso o Safari tem "pra onde" empurrar a pagina ao focar o input, mesmo
+  // com o container fixed. Restaura no unmount. Ailson 05/07/2026.
+  useEffect(() => {
+    if (isDesktop) return;
+    const antes = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = antes; };
+  }, [isDesktop]);
   useEffect(() => {
     if (isDesktop) return;
     const vv = window.visualViewport;
@@ -5315,6 +5325,9 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
     const aplicar = () => {
       const tecladoAberto = vv.height < window.innerHeight - 60;
       setVvAltura(tecladoAberto ? Math.round(vv.height) : null);
+      // Se o Safari panou o visual viewport (offsetTop > 0), o container
+      // acompanha: top = offsetTop. Visualmente nada desloca.
+      setVvTop(tecladoAberto ? Math.round(vv.offsetTop) : 0);
       // reancora sempre (aberto: desfaz o empurrao do Safari; fechado: volta ao topo)
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
@@ -5685,7 +5698,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
       position: 'fixed', top: 0, right: 0, left: splitLeft,
       // Teclado aberto (mobile): altura = viewport visivel, pro composer ficar
       // colado no teclado sem o Safari deslocar a tela. Fechado: bottom 0 normal.
-      ...(!isDesktop && vvAltura ? { height: vvAltura, bottom: 'auto' } : { bottom: 0 }),
+      ...(!isDesktop && vvAltura ? { top: vvTop, height: vvAltura, bottom: 'auto' } : { bottom: 0 }),
       background: palette.beige, zIndex: 100,
       display: 'flex', flexDirection: 'column', fontFamily: FONT_CHAT,
     }}>
@@ -5894,6 +5907,9 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
               {conversa.nome_cliente || fmtPhone(conversa.telefone)}
             </span>
           </div>
+          {/* Teclado aberto (mobile): header vira 1 linha (voltar + nome) pra
+              thread respirar — sem isso sobrava ~10px de conversa. Ailson 05/07/2026. */}
+          {!(!isDesktop && vvAltura) && (
           <div style={{ fontSize: fz(11), opacity: 0.8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <span>{fmtPhone(conversa.telefone)}</span>
             {conversa.documento && (
@@ -5906,9 +5922,13 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
               <EtapaIcon nome={conversa.etapa} size={11} /> {etapaInfo?.label || conversa.etapa}
             </span>
           </div>
+          )}
         </div>
         {/* Estrela de prioridade direto no chat — sem precisar voltar pra lista.
             Escondida na etapa perdida (perdida nunca prioriza). Ailson 25/06/2026. */}
+        {/* Botoes do header somem com teclado aberto no mobile (header 1 linha).
+            Ailson 05/07/2026. */}
+        {!(!isDesktop && vvAltura) && (<>
         {conversa.etapa !== 'perdida' && (
           <button
             onClick={async () => {
@@ -5975,6 +5995,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
             {conversa.etapa === 'atendida' ? 'Vendedora atendendo' : 'Enviado pra vendedora'}
           </div>
         )}
+        </>)}
       </div>
 
       {/* Relógio de follow-up do catálogo (6h/24h). Aparece quando o catálogo
@@ -6436,6 +6457,10 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           na aba 'aprovar', anda entre conversas em 'aprovar'. Idem pra
           outras abas. Setas viram cinza nos limites. */}
       {idsNaAba && idsNaAba.length > 1 && (() => {
+        // Teclado aberto no mobile: as setas (fixed, centro vertical) caiam
+        // exatamente em cima da caixa de mensagem. Some com elas enquanto
+        // digita. Ailson 05/07/2026.
+        if (!isDesktop && vvAltura) return null;
         const idx = idsNaAba.indexOf(conversaId);
         const anteriorId = idx > 0 ? idsNaAba[idx - 1] : null;
         const proximoId  = idx >= 0 && idx < idsNaAba.length - 1 ? idsNaAba[idx + 1] : null;
