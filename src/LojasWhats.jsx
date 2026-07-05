@@ -5300,24 +5300,36 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 140) + 'px';
   };
-  // Mobile/iOS: quando o teclado fecha por QUALQUER caminho (botao do
-  // teclado, swipe, blur), o visualViewport volta ao tamanho cheio mas a
-  // janela fica deslocada (header fora da tela). Reancora no topo.
-  // Ailson 11/06/2026.
+  // Mobile/iOS: o container do chat e fixed top:0/bottom:0, mas o teclado NAO
+  // redimensiona a janela — o Safari "empurra" a pagina pra revelar o input e
+  // o layout ficava deslocado (header fora da tela) ATE o blur. Agora o
+  // container passa a ter a ALTURA do visualViewport enquanto o teclado esta
+  // aberto (o composer fica logo acima do teclado, sem o Safari precisar
+  // empurrar nada) e a reancoragem roda em resize E scroll do visualViewport
+  // (durante o foco, nao so ao fechar). Ailson 05/07/2026.
+  const [vvAltura, setVvAltura] = useState(null); // altura visivel c/ teclado aberto (mobile)
   useEffect(() => {
     if (isDesktop) return;
     const vv = window.visualViewport;
     if (!vv) return;
-    const onVvResize = () => {
-      // teclado fechou: viewport visivel ~= altura total da janela
-      if (vv.height >= window.innerHeight - 60) {
-        window.scrollTo(0, 0);
-        document.documentElement.scrollTop = 0;
-        document.body.scrollTop = 0;
-      }
+    const aplicar = () => {
+      const tecladoAberto = vv.height < window.innerHeight - 60;
+      setVvAltura(tecladoAberto ? Math.round(vv.height) : null);
+      // reancora sempre (aberto: desfaz o empurrao do Safari; fechado: volta ao topo)
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      // teclado abriu: mantem a conversa ancorada nas ultimas mensagens
+      if (tecladoAberto) setTimeout(() => {
+        fimChatRef.current?.scrollIntoView({ block: 'end' });
+      }, 60);
     };
-    vv.addEventListener('resize', onVvResize);
-    return () => vv.removeEventListener('resize', onVvResize);
+    vv.addEventListener('resize', aplicar);
+    vv.addEventListener('scroll', aplicar);
+    return () => {
+      vv.removeEventListener('resize', aplicar);
+      vv.removeEventListener('scroll', aplicar);
+    };
   }, [isDesktop]);
   const fimChatRef = useRef(null);
 
@@ -5670,7 +5682,10 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
 
   return (
     <div style={{
-      position: 'fixed', top: 0, right: 0, bottom: 0, left: splitLeft,
+      position: 'fixed', top: 0, right: 0, left: splitLeft,
+      // Teclado aberto (mobile): altura = viewport visivel, pro composer ficar
+      // colado no teclado sem o Safari deslocar a tela. Fechado: bottom 0 normal.
+      ...(!isDesktop && vvAltura ? { height: vvAltura, bottom: 'auto' } : { bottom: 0 }),
       background: palette.beige, zIndex: 100,
       display: 'flex', flexDirection: 'column', fontFamily: FONT_CHAT,
     }}>
@@ -6181,17 +6196,21 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
         </div>
       )}
 
-      {/* INPUT BAR */}
+      {/* INPUT BAR
+          Mobile: DUAS linhas ESTATICAS (icones em cima, textarea+enviar em
+          largura total embaixo) — a caixa deixou de dividir a linha com os 5
+          icones (ficava estreita, ~110px). Layout fixo, sem reorganizar no
+          foco (o reflow no foco abortava o toque no iOS — regra de 15/06).
+          Desktop: uma linha, identico ao de antes. Ailson 05/07/2026. */}
       <div ref={inputBarRef} style={{
-        padding: 10, background: palette.surface,
+        padding: isDesktop ? 10 : '8px 10px 10px', background: palette.surface,
         borderTop: `1px solid ${palette.beige}`,
-        display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0,
-        // Layout estável: a caixa cresce pelo conteúdo (auto-grow), sem
-        // reorganizar a barra ao focar (o reflow no foco abortava o toque no
-        // iOS e fazia a caixa encolher ao digitar). Ailson 15/06/2026.
-        flexWrap: 'nowrap',
+        display: 'flex', gap: isDesktop ? 8 : 6,
+        flexDirection: isDesktop ? 'row' : 'column',
+        alignItems: isDesktop ? 'flex-end' : 'stretch', flexShrink: 0,
         opacity: bloqueado ? 0.55 : 1, pointerEvents: bloqueado ? 'none' : 'auto',
       }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
         {/* Botao emoji picker — à esquerda junto dos demais (Ailson 28/05/2026) */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <button onClick={() => setEmojiPickerAberto(v => !v)}
@@ -6350,6 +6369,9 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           }}>
           <Bot size={sz(16)} strokeWidth={1.4} color={palette.accent} />
         </button>
+        </div>
+        {/* Mobile: linha propria em largura total; desktop: mesma linha dos icones */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flex: 1, width: '100%', minWidth: 0 }}>
         <textarea
           ref={textareaRef}
           value={novoTexto}
@@ -6390,6 +6412,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           }}>
           <Send size={sz(16)} />
         </button>
+        </div>
       </div>
 
       {/* Seletor de mídia da biblioteca (seleção múltipla) */}
