@@ -119,7 +119,10 @@ export default async function handler(req, res) {
 
     const itens = base
       .map(x => ({ x, s: pontuar(x) }))
-      .filter(r => r.s > 0)
+      // Item sem nome E sem foto e irreconhecivel no picker (a assistente nao
+      // tem como confirmar visualmente): so entra se a ref digitada for EXATA.
+      // Evita refs mortas 169x poluindo a busca por preco "169". Ailson 05/07/2026.
+      .filter(r => r.s > 0 && (r.x.nome || r.x.foto_url || r.x.ref === q))
       .sort((a, b) => (b.s - a.s)
         || ((b.x.foto_url ? 1 : 0) - (a.x.foto_url ? 1 : 0))
         || (b.x.qtd_estoque - a.x.qtd_estoque))
