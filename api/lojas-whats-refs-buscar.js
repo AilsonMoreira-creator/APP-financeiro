@@ -13,10 +13,8 @@
 // Refs SEM foto tambem aparecem (placeholder no front) — o universo de
 // venda e maior que o universo fotografado.
 
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './_lojas-whats-helpers.js';
 import { MODELOS_POR_REF } from './_lojas-modelos-data.js';
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 const normRef = (r) => String(r ?? '').trim().replace(/^0+/, '') || '0';
 
