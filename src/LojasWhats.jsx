@@ -86,7 +86,7 @@ const ETAPAS = [
   { id: 'vendeu',       label: 'Vendeu',       cor: palette.ok },
   { id: 'follow_up',    label: 'Follow up',    cor: '#f59e0b' },
   { id: 'perdida',      label: 'Perdida',      cor: palette.inkMuted },
-  { id: 'varejo',       label: 'Varejo',       cor: '#8b5cf6' },
+  { id: 'varejo',       label: 'Varejo',       cor: palette.inkMuted },
 ];
 
 const fz = (n) => `${n}px`;
@@ -5055,6 +5055,8 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   // Ailson 28/06/2026.
   const [indicarAberto, setIndicarAberto] = useState(false);
   const [indicarLinhas, setIndicarLinhas] = useState([]); // [{ url, ref }]
+  const [indicarFila, setIndicarFila] = useState([]);     // fotos além das 5 na tela (Ailson 04/07/2026)
+  const [indicarAviso, setIndicarAviso] = useState(null); // "enviadas, vindo as próximas"
   const [indicarEnviando, setIndicarEnviando] = useState(false);
   // Realtime atualiza a thread em background — spinner so quando troca de
   // conversa, nao a cada msg/sugestao nova. Ailson 30/05/2026.
@@ -5332,14 +5334,18 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
     } catch (e) { /* silencioso — proxima carga reflete */ }
   };
 
-  // Abre o modal pré-carregando as últimas fotos que a CLIENTE mandou (até 5),
-  // cada uma com uma caixa pra assistente digitar a ref certa.
+  // Abre o modal pré-carregando as fotos que a CLIENTE mandou, em ordem
+  // cronológica: as 5 primeiras na tela, o resto numa FILA. Ao enviar as 5,
+  // o modal traz as próximas até acabar (Ailson 04/07/2026: tem cliente que
+  // manda 10+ fotos e antes o modal só via as últimas 5).
   const abrirIndicar = () => {
-    const imgs = (mensagens || [])
+    const todas = (mensagens || [])
       .filter(m => m.direcao === 'entrada' && m.tipo_midia === 'image' && m.midia_url)
-      .slice(-5).reverse()
       .map(m => ({ url: m.midia_url, ref: '' }));
-    setIndicarLinhas(imgs.length ? imgs : [{ url: null, ref: '' }]);
+    const naTela = todas.slice(0, 5);
+    setIndicarLinhas(naTela.length ? naTela : [{ url: null, ref: '' }]);
+    setIndicarFila(todas.slice(5));
+    setIndicarAviso(null);
     setIndicarAberto(true);
   };
 
@@ -5354,9 +5360,17 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
       });
       const j = await r.json();
       if (!r.ok || j.error) { setErro(j.error || 'Erro ao indicar refs'); setIndicarEnviando(false); return; }
-      setIndicarAberto(false);
       setIndicarEnviando(false);
       setReloadTick(t => t + 1);
+      // Ainda tem foto na fila? Traz as próximas 5 e mantém o modal aberto.
+      if (indicarFila.length) {
+        const proximas = indicarFila.slice(0, 5);
+        setIndicarLinhas(proximas);
+        setIndicarFila(indicarFila.slice(5));
+        setIndicarAviso(`✓ ${refs.length} enviada(s)! Agora as próximas ${proximas.length} fotos.`);
+      } else {
+        setIndicarAberto(false);
+      }
     } catch (e) { setErro(e.message); setIndicarEnviando(false); }
   };
 
@@ -5397,8 +5411,18 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
               </button>
             </div>
             <div style={{ fontSize: fz(12), color: palette.inkMuted, marginBottom: 14, lineHeight: 1.4 }}>
-              Digite a ref de cada foto que a cliente mandou (até 5). A Sofia manda uma mensagem por ref com a foto de cores e os tamanhos disponíveis. Sem foto de cores, manda só o texto.
+              Digite a ref de cada foto que a cliente mandou. A Sofia manda uma mensagem por ref com a foto de cores e os tamanhos disponíveis. Sem foto de cores, manda só o texto.
+              {indicarFila.length > 0 && (
+                <div style={{ marginTop: 6, fontWeight: 700, color: palette.accent }}>
+                  +{indicarFila.length} foto(s) na fila: ao enviar essas, as próximas aparecem aqui.
+                </div>
+              )}
             </div>
+            {indicarAviso && (
+              <div style={{ padding: '7px 10px', marginBottom: 10, borderRadius: 6, background: '#e7f5ec', color: '#2e7d32', fontSize: fz(12), fontWeight: 600 }}>
+                {indicarAviso}
+              </div>
+            )}
             {indicarLinhas.map((l, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                 {l.url
@@ -5409,7 +5433,17 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
                   placeholder="Ref (ex: 3213)" inputMode="numeric"
                   style={{ flex: 1, padding: '9px 11px', borderRadius: 8, border: '1px solid #e8e2da', fontSize: fz(14), fontFamily: FONT_CHAT, color: palette.ink, background: palette.bg }} />
                 {indicarLinhas.length > 1 && (
-                  <button onClick={() => setIndicarLinhas(prev => prev.filter((_, j) => j !== i))}
+                  <button onClick={() => {
+                    // Repõe da fila pra manter 5 na tela (foto pulada sai de vez)
+                    setIndicarLinhas(prev => {
+                      const nova = prev.filter((_, j) => j !== i);
+                      if (indicarFila.length) {
+                        nova.push(indicarFila[0]);
+                        setIndicarFila(f => f.slice(1));
+                      }
+                      return nova;
+                    });
+                  }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.alert, display: 'flex' }}>
                     <Trash2 size={sz(16)} />
                   </button>

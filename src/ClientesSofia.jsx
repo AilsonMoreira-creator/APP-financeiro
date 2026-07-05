@@ -294,6 +294,70 @@ function TagFase({ tag }) {
 // COMPONENTE DE ABA (renderizado dentro do Sofia)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ─── Banner "pra responder" (Ailson 04/07/2026) ─────────────────────────────
+// O badge do botão Clientes conta conversas feedback/inativo com não lidas,
+// mas a aba é organizada por réguas de CLIENTES — quando uma cliente responde
+// espontaneamente (caso Silvana 04/07), a mensagem ficava sem lugar visível.
+// Este banner lista essas conversas no topo, clicável direto pro chat.
+function NaoLidasBanner({ onAbrir, abrindoId, tick }) {
+  const [lista, setLista] = useState([]);
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const { data } = await supabase
+        .from('lojas_whats_conversas')
+        .select('id, cliente_id, nome_cliente, telefone, etapa, unread_count, ultima_atividade_em')
+        .in('etapa', ['feedback', 'inativo'])
+        .gt('unread_count', 0)
+        .order('ultima_atividade_em', { ascending: false })
+        .limit(20);
+      if (vivo) setLista(data || []);
+    })();
+    return () => { vivo = false; };
+  }, [tick, abrindoId]);
+
+  if (!lista.length) return null;
+  const tempoDesde = (iso) => {
+    const min = Math.floor((Date.now() - new Date(iso)) / 60000);
+    if (min < 60) return `${min}min`;
+    if (min < 1440) return `${Math.floor(min / 60)}h`;
+    return `${Math.floor(min / 1440)}d`;
+  };
+  return (
+    <div style={{
+      margin: '0 0 12px', padding: '10px 12px', borderRadius: 10,
+      background: '#fdf6e8', border: '1px solid #f0dfc0', fontFamily: FONT,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#8a6d1f', marginBottom: 8 }}>
+        💬 {lista.length} mensagem{lista.length > 1 ? 'ns' : ''} de cliente pra responder
+      </div>
+      {lista.map(c => (
+        <button key={c.id}
+          disabled={!c.cliente_id || abrindoId === c.cliente_id}
+          onClick={() => c.cliente_id && onAbrir(c.cliente_id)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+            textAlign: 'left', padding: '7px 9px', marginBottom: 4, borderRadius: 8,
+            border: `1px solid ${palette.beige}`, background: palette.surface,
+            cursor: c.cliente_id ? 'pointer' : 'default', fontFamily: FONT,
+          }}>
+          <span style={{
+            minWidth: 18, height: 18, borderRadius: 9, background: '#e74c3c', color: '#fff',
+            fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center',
+            justifyContent: 'center', padding: '0 5px',
+          }}>{c.unread_count}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: palette.ink, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {c.nome_cliente || c.telefone}
+          </span>
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: palette.inkMuted }}>
+            {c.etapa === 'feedback' ? 'feedback' : 'inativo'} · {tempoDesde(c.ultima_atividade_em)}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos', abaInicial = null, soVendedora = false, vendedoraId = null, onVoltarHome = null, onVoltarSofia = null }) {
   const isDesktop = useIsDesktop();           // split: desktop = 2 paineis; mobile = tela cheia
   const isMobile = !isDesktop;                // labels curtos / controles compactos no celular
@@ -466,6 +530,9 @@ export default function ClientesTab({ userId, refreshTick, reguaInicial = 'novos
           <SubTab key={a.id} id={a.id} label={a.label} Icon={a.Icon} ativo={aba === a.id} onClick={setAba} />
         ))}
       </div>
+
+      {/* Mensagens não lidas de clientes (feedback/inativo) — destino do badge */}
+      <NaoLidasBanner onAbrir={abrirChat} abrindoId={abrindoId} tick={tick} />
 
       {/* filtro (vendedora não vê filtro de vendedora — já é forçado) */}
       <FiltroBar ordenar={ordenar} setOrdenar={setOrdenar} envio={envio} setEnvio={setEnvio}
