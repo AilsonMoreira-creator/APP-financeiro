@@ -52,11 +52,13 @@ export default async function handler(req, res) {
       supabase.from('lojas_vendedoras').select('id, nome').order('nome'),
       // Bloco fixo do topo: vendas dos ultimos 30 dias (etapa vendeu),
       // com dados pros cards iguais aos da lista de conversas.
+      // vendeu_em null entra tambem (cinto de seguranca: venda marcada sem
+      // data nunca some do topo; fallback de data no map). Ailson 05/07/2026.
       supabase.from('lojas_whats_conversas')
-        .select('id, nome_cliente, telefone, vendeu_valor, vendeu_em, vendeu_canal, origem_lead, qtd_pecas, vendedora_atribuida_id, carrinho_id')
+        .select('id, nome_cliente, telefone, vendeu_valor, vendeu_em, vendeu_canal, origem_lead, qtd_pecas, vendedora_atribuida_id, carrinho_id, ultima_atividade_em')
         .eq('etapa', 'vendeu')
-        .gte('vendeu_em', new Date(Date.now() - 30 * 86400000).toISOString())
-        .order('vendeu_em', { ascending: false }),
+        .or(`vendeu_em.gte.${new Date(Date.now() - 30 * 86400000).toISOString()},vendeu_em.is.null`)
+        .order('vendeu_em', { ascending: false, nullsFirst: false }),
     ]);
 
     if (funilQ.error) {
@@ -85,7 +87,7 @@ export default async function handler(req, res) {
       nome_cliente: c.nome_cliente,
       telefone: c.telefone,
       vendeu_valor: Number(c.vendeu_valor || 0),
-      vendeu_em: c.vendeu_em,
+      vendeu_em: c.vendeu_em || c.ultima_atividade_em,
       vendeu_canal: c.vendeu_canal,
       origem_lead: (c.carrinho_id && !c.origem_lead) ? 'carrinho_site_amicialoja' : c.origem_lead,
       qtd_pecas: c.qtd_pecas,

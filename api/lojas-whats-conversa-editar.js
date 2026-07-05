@@ -59,6 +59,15 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: `etapa invalida: ${v}` });
         }
         upd.etapa = v;
+        // Mover pra 'vendeu' pelo modal precisa carimbar vendeu_em (senao a
+        // venda some dos blocos que filtram por data — caso dos 5 cards sem
+        // data em 05/07/2026). So preenche se ainda estiver null, preservando
+        // data ja gravada pelo cron-capi-match. Ailson 05/07/2026.
+        if (v === 'vendeu') {
+          const { data: atual } = await supabase.from('lojas_whats_conversas')
+            .select('vendeu_em').eq('id', conversa_id).maybeSingle();
+          if (!atual?.vendeu_em) upd.vendeu_em = agora;
+        }
         // NAO seta follow_up_vence_em aqui. Padrao ao mover pra follow_up =
         // NULL (nao envia nada, fica parado aguardando decisao manual). O
         // agendamento e feito pelo card via follow_up_dias (1d/3d/Nd) ou fica
