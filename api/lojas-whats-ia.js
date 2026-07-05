@@ -22,6 +22,7 @@ import { supabase, setCors, log, logErro, getConfig, limparEstiloSofia, sanitiza
 import { chamarClaude } from './_lojas-helpers.js';
 import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa, montarListaReferenciasAtivas, montarFichasDetalhadas, montarFotosReconhecimento } from './_lojas-whats-cardapio.js';
 import { montarBlocoPadroes, decidirModo } from './_lojas-whats-padroes.js';
+import { MODELOS_POR_REF } from './_lojas-modelos-data.js';
 
 // ─── GATILHOS QUENTE (lista fechada — definida pelo Ailson) ────────────────
 
@@ -51,6 +52,129 @@ const REGEX_QUENTE = new RegExp(
 
 // "X peças" também é gatilho (qtd específica)
 const REGEX_QUENTE_PECAS = /\b\d+\s*(peca|peça|pcs|peças)\b/i;
+
+// ─── LEITURA ESTRUTURADA DO PRINT (Ailson 04/07/2026) ───────────────────────
+// A maioria dos leads abre a conversa mandando PRINTS do nosso proprio
+// catalogo/site/stories — e print carrega TEXTO: nome da peca e principalmente
+// PRECO ("Conjunto Calca e Jaqueta R$ 169,00"). Antes esse sinal era jogado
+// fora (o prompt mandava decidir "SO pela foto"). Agora: uma chamada barata de
+// vision (Haiku) extrai {tipo, preco, texto} de cada print e um match
+// DETERMINISTICO contra a ficha tecnica (preco de tabela) + lojas_produtos
+// (preco medio) gera candidatas que (a) viram dica no prompt da Sofia e
+// (b) priorizam o pool do casamento visual. Config: sofia_print_leitura_ativa.
+const STOPWORDS_PRINT = new Set(['para', 'com', 'sem', 'de', 'da', 'do', 'em', 'no', 'na', 'e', 'ou', 'the', 'plus', 'size', 'moda', 'feminina', 'atacado', 'novo', 'nova', 'lancamento', 'promocao']);
+
+function _normTxt(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+const MAPA_TIPO_CATEGORIA = {
+  conjunto: ['CONJUNTO'], vestido: ['VESTIDO'], calca: ['CALÇA'],
+  blusa: ['BLUSA', 'CROPPED'], shorts: ['SHORTS'], saia: ['SAIA'],
+  macacao: ['MACACÃO'], blazer: ['BLAZER'], casaquinho: ['CASAQUINHO', 'BLAZER'],
+  cropped: ['CROPPED', 'BLUSA'],
+};
+
+async function lerPrintsEMatch(msgs) {
+  // Mesmas imagens que entram no prompt principal: 3 mais recentes da cliente.
+  const urls = (msgs || [])
+    .filter(m => m.direcao === 'entrada' && m.tipo_midia === 'image' && typeof m.midia_url === 'string' && m.midia_url.startsWith('http'))
+    .slice(-3)
+    .map(m => m.midia_url);
+  if (!urls.length) return null;
+
+  // 1. Vision: extrai o que esta ESCRITO/visivel em cada print (JSON estrito)
+  const blocks = [];
+  urls.forEach((u, i) => {
+    blocks.push({ type: 'text', text: `IMAGEM ${i + 1}:` });
+    blocks.push({ type: 'image', source: { type: 'url', url: u } });
+  });
+  blocks.push({ type: 'text', text: 'Extraia os dados de cada imagem acima, na ordem.' });
+
+  const cl = await chamarClaude({
+    modelo: await getConfig('modelo_ia_print', 'claude-haiku-4-5-20251001'),
+    systemBlocks: [{ type: 'text', text: `Vc analisa prints/fotos de pecas de roupa feminina que clientes atacadistas mandam. Pra CADA imagem, na ordem, responda SO com um JSON array valido (sem markdown, sem texto antes/depois), um objeto por imagem:
+[{"tipo_peca":"conjunto|vestido|calca|blusa|shorts|saia|macacao|blazer|casaquinho|cropped|outro","preco":169.0,"texto":"nome/descricao escritos no print","cores":["bege"]}]
+REGRAS:
+- "preco": numero em reais que aparece ESCRITO na imagem. Se ha preco riscado + preco promocional, use o VIGENTE. Sem preco visivel: null. NUNCA invente.
+- "texto": transcreva o nome/descricao da peca se estiver escrito (etiqueta, legenda, titulo do site). Sem texto: "".
+- "tipo_peca": o que a peca APARENTA ser. Conjunto = 2 pecas combinando na mesma foto.
+- "cores": cores da peca na foto (max 3).` }],
+    messages: [{ role: 'user', content: blocks }],
+    max_tokens: 600,
+    temperature: 0,
+    timeoutMs: 25000,
+  });
+  if (!cl.ok) { logErro('ia/print-leitura', cl.erro); return null; }
+
+  let leituras;
+  try {
+    leituras = JSON.parse((cl.texto || '').replace(/```json|```/g, '').trim());
+    if (!Array.isArray(leituras)) return null;
+  } catch { logErro('ia/print-leitura-parse', cl.texto?.slice(0, 200)); return null; }
+
+  // 2. Base de match: lojas_produtos + ficha tecnica (preco de TABELA)
+  const { data: prods } = await supabase
+    .from('lojas_produtos')
+    .select('ref, descricao, categoria, preco_medio');
+  const baseRefs = new Map();
+  for (const p of prods || []) {
+    const rn = String(p.ref).replace(/^0+/, '') || '0';
+    if (!baseRefs.has(rn)) baseRefs.set(rn, {
+      ref: rn,
+      nome: (p.descricao || '').trim(),
+      categoria: (p.categoria || '').toUpperCase(),
+      preco_medio: p.preco_medio != null ? Number(p.preco_medio) : null,
+      preco_tabela: null,
+    });
+  }
+  for (const [rn, f] of Object.entries(MODELOS_POR_REF)) {
+    const e = baseRefs.get(rn) || { ref: rn, nome: '', categoria: '', preco_medio: null, preco_tabela: null };
+    if (f.nome && !e.nome) e.nome = f.nome;
+    if (f.tipo && !e.categoria) e.categoria = String(f.tipo).toUpperCase();
+    if (f.preco_atacado) e.preco_tabela = Number(f.preco_atacado);
+    baseRefs.set(rn, e);
+  }
+
+  // 3. Match deterministico por leitura
+  const resultado = [];
+  leituras.slice(0, urls.length).forEach((le, i) => {
+    const preco = Number(le?.preco) || null;
+    const cats = MAPA_TIPO_CATEGORIA[_normTxt(le?.tipo_peca)] || null;
+    const palavras = _normTxt(le?.texto).split(/[^a-z0-9]+/)
+      .filter(w => w.length >= 4 && !STOPWORDS_PRINT.has(w)).slice(0, 6);
+
+    const cands = [];
+    for (const x of baseRefs.values()) {
+      let s = 0;
+      if (preco) {
+        if (x.preco_tabela && Math.abs(x.preco_tabela - preco) <= Math.max(2, x.preco_tabela * 0.03)) s += 4;
+        else if (x.preco_medio && Math.abs(x.preco_medio - preco) <= x.preco_medio * 0.12) s += 1;
+      }
+      if (cats && cats.includes(x.categoria)) s += 2;
+      if (palavras.length && (x.nome || x.categoria)) {
+        const alvo = _normTxt(`${x.nome} ${x.categoria}`);
+        let hits = 0;
+        for (const w of palavras) if (alvo.includes(w)) hits++;
+        s += Math.min(hits, 3);
+      }
+      if (s >= 3) cands.push({ ref: x.ref, nome: x.nome || null, preco_tabela: x.preco_tabela, score: s });
+    }
+    cands.sort((a, b) => b.score - a.score);
+    const top = cands.slice(0, 3);
+    resultado.push({
+      idx: i + 1,
+      url: urls[i],
+      tipo_peca: le?.tipo_peca || null,
+      preco,
+      texto: (le?.texto || '').slice(0, 120) || null,
+      cores: Array.isArray(le?.cores) ? le.cores.slice(0, 3) : [],
+      candidatas: top,
+      forte: top.length && (top[0].score >= 6 || (top[0].score >= 4 && (top.length === 1 || top[0].score - (top[1]?.score || 0) >= 2))),
+    });
+  });
+  return resultado.some(r => r.preco || r.texto || r.candidatas.length) ? resultado : null;
+}
 
 function detectarGatilhosQuente(texto) {
   if (!texto) return [];
@@ -1240,6 +1364,40 @@ REGRAS DE OURO MEDIDAS:
       systemBlocks.push({ type: 'text', text: `A ASSISTENTE JA CONFIRMOU pra esta cliente as referencias: ${conv.refs_indicadas.join(', ')} (com cores e tamanhos, a partir das fotos que ela mandou). Essas refs estao CERTAS — NAO re-identifique, NAO sugira outro modelo e NAO contradiga. Trate como pecas confirmadas e conduza pro proximo passo (cor/tamanho que ela quer, quantidade, fechar a grade).` });
     }
   }
+  // ─── LEITURA ESTRUTURADA DO PRINT (Ailson 04/07/2026) ─────────────────────
+  // Vision (Haiku) le preco/texto dos prints da cliente e o match deterministico
+  // gera candidatas ANTES da 1a passada — o preco impresso vem do nosso proprio
+  // catalogo e e o sinal mais discriminativo que existe. As candidatas tambem
+  // priorizam o pool do casamento visual (FIX 2) e vao pro contexto_ia da
+  // sugestao (o front pre-preenche o modal Indicar refs com elas).
+  let printLeituras = null;
+  if (_temImagemRecente) {
+    try {
+      const ativa = await getConfig('sofia_print_leitura_ativa', true);
+      if (ativa) {
+        printLeituras = await lerPrintsEMatch(msgs);
+        if (printLeituras) {
+          const linhas = printLeituras.map(r => {
+            const partes = [`imagem ${r.idx}: aparenta ${r.tipo_peca || '?'}`];
+            if (r.preco) partes.push(`preco visivel R$ ${r.preco.toFixed(2).replace('.', ',')}`);
+            if (r.texto) partes.push(`texto no print: "${r.texto}"`);
+            let l = '- ' + partes.join(' | ');
+            if (r.candidatas.length) {
+              l += '\n  candidatas: ' + r.candidatas.map((c, j) =>
+                `REF ${c.ref}${c.nome ? ` (${c.nome}${c.preco_tabela ? `, tabela R$${c.preco_tabela}` : ''})` : ''}${j === 0 && r.forte ? ' [MUITO PROVAVEL]' : ''}`
+              ).join(', ');
+            } else {
+              l += '\n  candidatas: nenhuma casou pelo preco/texto';
+            }
+            return l;
+          }).join('\n');
+          systemBlocks.push({ type: 'text', text: `LEITURA AUTOMATICA DOS PRINTS (preco e texto extraidos por OCR das imagens que a cliente mandou — os prints costumam vir do NOSSO catalogo/site, entao o preco impresso e um sinal fortissimo):\n${linhas}\n\nCOMO USAR: se ha candidata [MUITO PROVAVEL] e a foto nao contradiz claramente, trate a peca como IDENTIFICADA (fale dela pelo nome/ref e ja confirme cores e tamanhos pelo ESTOQUE FINO). Se ha 2+ candidatas parecidas, a comparacao visual decide. Se nenhuma candidata casou, siga o fluxo normal (identificar pela foto ou dizer que vai confirmar com a equipe). NUNCA cite pra cliente que houve leitura automatica.` });
+          log('ia', `conversa=${conversaId} print-leitura: ${printLeituras.map(r => `img${r.idx}=${r.candidatas[0]?.ref || 'sem-match'}${r.forte ? '!' : ''}`).join(' ')}`);
+        }
+      }
+    } catch (e) { logErro('ia/print-leitura-fluxo', e); }
+  }
+
   // DDD 11 = São Paulo capital/região metropolitana → libera oferta de motoboy.
   // Sofia so oferece motoboy quando este aviso aparece. Ailson 01/06/2026.
   {
@@ -1296,7 +1454,10 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
   // Ailson 13/06/2026.
   const anexarFotosReferencia = async (categorias) => {
     const maxFotos = Number(await getConfig('sofia_match_imagem_max', 16)) || 16;
-    const cands = await montarFotosReconhecimento(maxFotos, categorias);
+    // Candidatas da leitura do print entram PRIMEIRO no pool (melhor palpite
+    // deterministico, mesmo fora da categoria inferida). Ailson 04/07/2026.
+    const refsPrint = (printLeituras || []).flatMap(r => r.candidatas.map(c => c.ref));
+    const cands = await montarFotosReconhecimento(maxFotos, categorias, refsPrint.length ? refsPrint : null);
     if (!cands || !cands.length) return 0;
     let idxUser = -1;
     for (let i = msgsClaude.length - 1; i >= 0; i--) {
@@ -1471,6 +1632,9 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
       ultima_msg_cliente: textoCliente.slice(0, 500),
       gatilhos_detectados: gatilhos,
       refs_carrinho_resolvidas: refsCarrinho,
+      // Leitura dos prints (vision+match): o front usa pra mostrar thumbnails
+      // das refs identificadas e pre-preencher o modal Indicar refs.
+      print_leituras: printLeituras || undefined,
       claude_latencia_ms: cl.latencia_ms,
       claude_custo_brl: cl.custo_brl,
       modo_aprendizado: modoAprendizado,  // 'replicar' | 'explorar' (Ailson 26/05/2026)

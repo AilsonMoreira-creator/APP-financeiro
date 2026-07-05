@@ -429,10 +429,12 @@ export async function montarListaReferenciasAtivas() {
 // completa; o filtro/cap roda na volta. URL publica do bucket sofia-midias.
 // Ailson 13/06/2026.
 const cacheFotosRec = { data: null, expiresAt: 0 };
-export async function montarFotosReconhecimento(limite = 16, categorias = null) {
+export async function montarFotosReconhecimento(limite = 16, categorias = null, refsPrimeiro = null) {
   const lim = Math.max(1, Number(limite) || 16);
   const cats = Array.isArray(categorias) && categorias.length
     ? categorias.map(c => String(c).toUpperCase()) : null;
+  const prio = Array.isArray(refsPrimeiro) && refsPrimeiro.length
+    ? new Set(refsPrimeiro.map(r => String(r).replace(/^0+/, '') || '0')) : null;
   let base = (cacheFotosRec.data && cacheFotosRec.expiresAt > Date.now()) ? cacheFotosRec.data : null;
   if (!base) {
     try {
@@ -502,6 +504,13 @@ export async function montarFotosReconhecimento(limite = 16, categorias = null) 
       const resto = base.filter(x => !cats.includes(x.categoria));
       lista = [...filt, ...resto];
     }
+  }
+  // Candidatas da LEITURA DO PRINT (preco/texto lidos por vision) vem antes de
+  // tudo: sao o melhor palpite deterministico, entram mesmo fora da categoria.
+  // Ailson 04/07/2026.
+  if (prio) {
+    const top = lista.filter(x => prio.has(x.ref));
+    if (top.length) lista = [...top, ...lista.filter(x => !prio.has(x.ref))];
   }
   return lista.slice(0, lim).map(({ ref, url }) => ({ ref, url }));
 }
