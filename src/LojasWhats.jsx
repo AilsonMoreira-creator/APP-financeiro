@@ -5376,6 +5376,22 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
   const [pickerQ, setPickerQ] = useState('');
   const [pickerRes, setPickerRes] = useState([]);
   const [pickerBuscando, setPickerBuscando] = useState(false);
+  // Galeria visual: com a busca vazia, mostra as fotos do catalogo pra achar
+  // a peca DE OLHO comparando com o print (sem digitar nada). Chips de
+  // categoria afunilam; candidatas da leitura do print vem primeiro com borda
+  // verde. Cache no estado: busca 1x por abertura do chat. Ailson 05/07/2026.
+  const [galeriaItens, setGaleriaItens] = useState(null);
+  const [galeriaCat, setGaleriaCat] = useState('');
+  useEffect(() => {
+    if (pickerIdx === null || galeriaItens !== null) return;
+    (async () => {
+      try {
+        const r = await fetch('/api/lojas-whats-refs-buscar?galeria=1');
+        const j = await r.json();
+        setGaleriaItens(Array.isArray(j.itens) ? j.itens : []);
+      } catch { setGaleriaItens([]); }
+    })();
+  }, [pickerIdx, galeriaItens]);
   useEffect(() => {
     if (pickerIdx === null) return;
     const q = pickerQ.trim();
@@ -5480,7 +5496,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
                         placeholder="Ref (ex: 3213)" inputMode="numeric"
                         style={{ flex: 1, minWidth: 0, padding: '9px 11px', borderRadius: 8, border: l.sugerida ? '1.5px solid #4caf7d' : '1px solid #e8e2da', fontSize: fz(14), fontFamily: FONT_CHAT, color: palette.ink, background: palette.bg }} />
                       <button title="Buscar por nome, categoria ou preço"
-                        onClick={() => { setPickerIdx(pickerIdx === i ? null : i); setPickerQ(''); setPickerRes([]); }}
+                        onClick={() => { setPickerIdx(pickerIdx === i ? null : i); setPickerQ(''); setPickerRes([]); setGaleriaCat(''); }}
                         style={{ background: pickerIdx === i ? palette.accent : '#f0ece5', border: 'none', borderRadius: 8, padding: 9, cursor: 'pointer', display: 'flex', flexShrink: 0 }}>
                         <Search size={sz(15)} color={pickerIdx === i ? '#fff' : palette.inkMuted} />
                       </button>
@@ -5518,9 +5534,52 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
                 {pickerIdx === i && (
                   <div style={{ marginTop: 8, marginLeft: 64, background: '#faf7f2', border: '1px solid #e8e2da', borderRadius: 10, padding: 10 }}>
                     <input autoFocus value={pickerQ} onChange={e => setPickerQ(e.target.value)}
-                      placeholder="Nome, categoria ou preço (ex: conjunto, 169)"
+                      placeholder="Busca (nome, preço) ou rola as fotos abaixo"
                       style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8, border: '1px solid #e8e2da', fontSize: fz(13), fontFamily: FONT_CHAT, color: palette.ink, background: '#fff' }} />
-                    <div style={{ marginTop: 8, maxHeight: 220, overflowY: 'auto' }}>
+                    <div style={{ marginTop: 8, maxHeight: pickerQ.trim().length < 2 ? 320 : 220, overflowY: 'auto' }}>
+                      {pickerQ.trim().length < 2 ? (
+                        // ── Modo galeria: achar a peça de olho, sem digitar ──
+                        galeriaItens === null
+                          ? <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: 6 }}>carregando catálogo…</div>
+                          : (() => {
+                              const cats = [...new Set(galeriaItens.map(g => g.categoria).filter(Boolean))].sort();
+                              const candsL = (indicarLinhas[i]?.candidatas) || [];
+                              const itensG = galeriaItens
+                                .filter(g => !galeriaCat || g.categoria === galeriaCat)
+                                .slice()
+                                .sort((a, b) => (candsL.includes(b.ref) ? 1 : 0) - (candsL.includes(a.ref) ? 1 : 0));
+                              const chipS = (on) => ({ padding: '4px 10px', borderRadius: 20, border: `1px solid ${on ? palette.accent : '#e0d9cd'}`, background: on ? palette.accent : '#fff', color: on ? '#fff' : palette.inkMuted, fontSize: fz(10.5), fontFamily: FONT_CHAT, cursor: 'pointer', fontWeight: 600 });
+                              return (
+                                <>
+                                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 9 }}>
+                                    <button onClick={() => setGaleriaCat('')} style={chipS(!galeriaCat)}>todas</button>
+                                    {cats.map(c => (
+                                      <button key={c} onClick={() => setGaleriaCat(galeriaCat === c ? '' : c)} style={chipS(galeriaCat === c)}>{c.toLowerCase()}</button>
+                                    ))}
+                                  </div>
+                                  {!itensG.length && <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: 6 }}>nenhuma foto nessa categoria</div>}
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
+                                    {itensG.map(it => (
+                                      <div key={it.ref}
+                                        onClick={() => {
+                                          setIndicarLinhas(prev => prev.map((x, j) => j === i ? { ...x, ref: it.ref, sugerida: false } : x));
+                                          setPickerIdx(null); setPickerQ(''); setPickerRes([]);
+                                        }}
+                                        style={{ cursor: 'pointer' }}>
+                                        <img src={it.foto_url} alt="" loading="lazy"
+                                          style={{ width: '100%', aspectRatio: '3/4', objectFit: 'cover', borderRadius: 8, display: 'block',
+                                            border: candsL.includes(it.ref) ? '2px solid #4caf7d' : '1px solid #e8e2da', boxSizing: 'border-box' }} />
+                                        <div style={{ fontSize: fz(10), fontWeight: 700, color: palette.ink, marginTop: 2, textAlign: 'center' }}>
+                                          {it.ref}{(it.preco_tabela || it.preco_medio) ? <span style={{ fontWeight: 500, color: palette.inkMuted }}> · R${Math.round(it.preco_tabela || it.preco_medio)}</span> : null}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              );
+                            })()
+                      ) : (
+                        <>
                       {pickerBuscando && <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: 6 }}>buscando…</div>}
                       {!pickerBuscando && pickerQ.trim().length >= 2 && !pickerRes.length && (
                         <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: 6 }}>nada encontrado — tenta outro nome ou o preço da etiqueta</div>
@@ -5543,6 +5602,8 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
                           </div>
                         </div>
                       ))}
+                        </>
+                      )}
                     </div>
                   </div>
                 )}

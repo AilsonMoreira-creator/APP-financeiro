@@ -92,6 +92,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ itens });
     }
 
+    // ── Modo galeria: ?galeria=1 — todas as refs FOTOGRAFADAS, pro picker
+    //    visual (achar a peca DE OLHO comparando com o print, sem digitar).
+    //    Ordenado por estoque; o front poe as candidatas da leitura no topo.
+    //    Ailson 05/07/2026.
+    if (req.query.galeria) {
+      const itens = base
+        .filter(x => x.foto_url)
+        .sort((a, b) => b.qtd_estoque - a.qtd_estoque)
+        .slice(0, 150);
+      return res.status(200).json({ itens });
+    }
+
     // ── Modo busca: ?q= ───────────────────────────────────────────────────
     const q = semAcento(String(req.query.q || '').trim());
     if (!q) return res.status(200).json({ itens: [] });
