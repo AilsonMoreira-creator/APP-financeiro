@@ -60,6 +60,8 @@ import {
   parseRelatorioBI,
 } from './lojas-drive-parsers.js';
 
+import { resolverVendedoraVenda } from './lojas-helpers-business.js';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
@@ -357,6 +359,38 @@ export default async function handler(req, res) {
         loja: tipoInfo.loja,
         ...r,
       });
+    }
+
+    // ── AUTO-CURA (Ailson 06/07/2026): vendas órfãs (vendedora_id null com
+    // nome_raw preenchido) são re-vinculadas contra o cadastro ATUAL de
+    // vendedoras. Cobre o caso Tamires: vendedora cadastrada DEPOIS das vendas
+    // já importadas — no próximo import, as vendas antigas dela se atribuem
+    // sozinhas e a comissão/meta passa a puxar na Folha. Janela: 120 dias.
+    try {
+      const desde = new Date(Date.now() - 120 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+      resultado.autocura_vendedora = { atualizadas: 0 };
+      for (const tabela of ['lojas_vendas', 'lojas_vendas_varejo']) {
+        const { data: orfas } = await supabase
+          .from(tabela)
+          .select('id, vendedora_nome_raw, loja')
+          .is('vendedora_id', null)
+          .not('vendedora_nome_raw', 'is', null)
+          .gte('data_venda', desde)
+          .limit(2000);
+        for (const o of (orfas || [])) {
+          const v = resolverVendedoraVenda(o.vendedora_nome_raw, o.loja, vendedoras);
+          if (v?.id) {
+            const { error: eUp } = await supabase.from(tabela)
+              .update({ vendedora_id: v.id }).eq('id', o.id);
+            if (!eUp) resultado.autocura_vendedora.atualizadas++;
+          }
+        }
+      }
+      if (resultado.autocura_vendedora.atualizadas > 0) {
+        console.log(`[drive-importar] auto-cura: ${resultado.autocura_vendedora.atualizadas} vendas órfãs re-vinculadas`);
+      }
+    } catch (eCura) {
+      console.warn('[drive-importar] auto-cura vendedoras falhou (não bloqueia import):', eCura?.message);
     }
 
     return res.status(200).json(resultado);

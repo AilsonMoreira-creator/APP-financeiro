@@ -276,6 +276,15 @@ export function detectarClienteSinalizado(razao, fantasia) {
   return { flagado: false };
 }
 
+// Compara nomes ignorando acento/caixa: "Célia" ≅ "CELIA" ≅ "celia".
+// Usado pra casar vendedora_nome_raw com lojas_vendedoras.nome — antes o
+// match era SO pelos aliases e vendedora nova cadastrada sem alias (ex:
+// Tamires 06/2026) ficava com vendas orfas (vendedora_id null, sem comissao).
+const normNomeVend = (s) => String(s || '').trim().toUpperCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const bateNomeOuAlias = (v, nome) =>
+  (v.aliases || []).includes(nome) || normNomeVend(v.nome) === normNomeVend(nome);
+
 export function resolverVendedora(nomeRaw, lojaArquivo, vendedorasCadastradas) {
   const nome = String(nomeRaw || '').trim().toUpperCase();
   const loja = lojaArquivo;
@@ -285,9 +294,9 @@ export function resolverVendedora(nomeRaw, lojaArquivo, vendedorasCadastradas) {
   if (!nome || nome === 'CONVERTR') {
     return padraoLoja();
   }
-  // 1. Match exato na loja certa
+  // 1. Match exato na loja certa (nome do cadastro OU alias)
   const match = vendedorasCadastradas.find(
-    v => v.ativa && v.loja === loja && (v.aliases || []).includes(nome)
+    v => v.ativa && v.loja === loja && bateNomeOuAlias(v, nome)
   );
   if (match) return match;
 
@@ -296,7 +305,7 @@ export function resolverVendedora(nomeRaw, lojaArquivo, vendedorasCadastradas) {
   // Ex: VANESSA aparecendo no histórico ST = Vanessa BR fez cobertura.
   // Cliente fica com Vanessa BR, não com a Cleide ST por engano.
   const matchOutraLoja = vendedorasCadastradas.find(
-    v => v.ativa && v.loja !== loja && (v.aliases || []).includes(nome)
+    v => v.ativa && v.loja !== loja && bateNomeOuAlias(v, nome)
   );
   if (matchOutraLoja) return matchOutraLoja;
 
@@ -330,16 +339,17 @@ export function resolverVendedoraVenda(nomeRaw, lojaArquivo, vendedorasCadastrad
     v => v.loja === loja && v.nome.toLowerCase().startsWith('loja ')
   );
 
-  // 1. Match exato na loja certa (vendedora cadastrada real)
+  // 1. Match exato na loja certa (nome do cadastro OU alias — Ailson 06/07/2026:
+  // antes era so alias e vendedora nova sem alias ficava sem comissao)
   if (nome && nome !== 'CONVERTR') {
     const match = vendedorasCadastradas.find(
-      v => v.ativa && v.loja === loja && (v.aliases || []).includes(nome)
+      v => v.ativa && v.loja === loja && bateNomeOuAlias(v, nome)
     );
     if (match) return match;
 
     // 2. Cross-loja (vendedora cobertura)
     const matchOutraLoja = vendedorasCadastradas.find(
-      v => v.ativa && v.loja !== loja && (v.aliases || []).includes(nome)
+      v => v.ativa && v.loja !== loja && bateNomeOuAlias(v, nome)
     );
     if (matchOutraLoja) return matchOutraLoja;
   }
