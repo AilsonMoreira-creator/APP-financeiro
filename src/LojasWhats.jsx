@@ -35,7 +35,7 @@ import {
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
   User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
   Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video, Hash,
-  Instagram, Facebook, Copy, Circle, Search
+  Instagram, Facebook, Copy, Circle, Search, RotateCcw
 } from 'lucide-react';
 import {
   supabase,
@@ -6351,6 +6351,32 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           }}>
           <Link2 size={sz(16)} color={palette.accent} />
         </button>
+        {/* Retomar pedido: dispara o HSM continuar_pedido_v1 aprovado na Meta
+            (funciona com janela de 24h fechada). Saudacao calculada no envio.
+            So na etapa conversando. Ailson 06/07/2026. */}
+        {conversa?.etapa === 'conversando' && (
+        <button onClick={async () => {
+          const nomeCli = (conversa.nome_cliente || '').split(' ')[0] || 'a cliente';
+          if (!window.confirm(`Enviar "Oi ${nomeCli}!! ${'{saudação}'}!!\nVamos continuar o pedido" pra retomar o contato?`)) return;
+          try {
+            const r = await fetch('/api/lojas-whats-template-disparo', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ conversa_id: conversaId, template: 'continuar_pedido_v1' }),
+            });
+            const j = await r.json();
+            if (!r.ok || !j.ok) { alert(`Não foi: ${j.error || r.status}${j.dica ? ` (${j.dica})` : ''}`); return; }
+            // polling de 3s da thread mostra a bolha nova sozinho
+          } catch (e) { alert(`Erro: ${e.message}`); }
+        }} title="Retomar pedido (template aprovado, funciona fora da janela de 24h)"
+          style={{
+            background: palette.bg, border: `1px solid ${palette.beige}`,
+            borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+          <RotateCcw size={sz(16)} color="#1f7a48" />
+        </button>
+        )}
         {/* Robô vazado: pede pra Sofia gerar sugestao AGORA sem esperar
             o ritmo automatico. Dentro janela 24h → msg livre. Fora →
             Sofia escolhe template e cria sugestao pendente (Tamara aprova
