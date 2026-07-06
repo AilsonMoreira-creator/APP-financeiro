@@ -5910,17 +5910,24 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           {/* Teclado aberto (mobile): header vira 1 linha (voltar + nome) pra
               thread respirar — sem isso sobrava ~10px de conversa. Ailson 05/07/2026. */}
           {!(!isDesktop && vvAltura) && (
-          <div style={{ fontSize: fz(11), opacity: 0.8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <span>{fmtPhone(conversa.telefone)}</span>
-            {conversa.documento && (
+          <div style={{ fontSize: fz(11), opacity: 0.8, display: 'flex', gap: 8,
+            // Mobile: 1 linha so (nowrap + ellipsis) — com CNPJ + carrinho o wrap
+            // quebrava em 5-6 linhas e o header engolia a tela. CNPJ vai pro fim
+            // e e o que corta. Desktop: wrap como sempre. Ailson 06/07/2026.
+            ...(isDesktop ? { flexWrap: 'wrap' } : { flexWrap: 'nowrap', overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0 }) }}>
+            <span style={{ flexShrink: 0 }}>{fmtPhone(conversa.telefone)}</span>
+            {isDesktop && conversa.documento && (
               <span>· {conversa.tipo_documento}: {fmtDocumento(conversa.documento)}</span>
             )}
-            {conversa.qtd_pecas > 0 && <span>· {conversa.qtd_pecas} pç</span>}
-            {Number(conversa.valor_carrinho) > 0 && <span>· {fmtMoney(conversa.valor_carrinho)}</span>}
-            <span>·</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+            {conversa.qtd_pecas > 0 && <span style={{ flexShrink: 0 }}>· {conversa.qtd_pecas} pç</span>}
+            {Number(conversa.valor_carrinho) > 0 && <span style={{ flexShrink: 0 }}>· {fmtMoney(conversa.valor_carrinho)}</span>}
+            <span style={{ flexShrink: 0 }}>·</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
               <EtapaIcon nome={conversa.etapa} size={11} /> {etapaInfo?.label || conversa.etapa}
             </span>
+            {!isDesktop && conversa.documento && (
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>· {conversa.tipo_documento}: {fmtDocumento(conversa.documento)}</span>
+            )}
           </div>
           )}
         </div>
