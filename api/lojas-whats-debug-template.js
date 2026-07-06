@@ -29,6 +29,29 @@ export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
 
+  // action=submit_nome&nome=X → submete UM template do banco pela name.
+  // Generalizacao do submit_3 (que era hardcoded). Idempotente: se ja tem
+  // meta_template_id, pula. Ailson 06/07/2026.
+  if (req.query?.action === 'submit_nome' && req.query?.nome) {
+    const nome = String(req.query.nome);
+    const { data: tpl, error: errSel } = await supabase
+      .from('lojas_whats_templates').select('*').eq('name', nome).maybeSingle();
+    if (errSel || !tpl) return res.status(404).json({ ok: false, erro: 'nao_encontrado_no_banco', nome });
+    if (tpl.meta_template_id) {
+      return res.status(200).json({ ok: false, pulou: true, motivo: 'ja_tem_meta_template_id', meta_template_id: tpl.meta_template_id });
+    }
+    try {
+      const resp = await submeterTemplate(tpl);
+      const novoStatus = (resp.status || 'PENDING').toLowerCase() === 'approved' ? 'aprovado' : (resp.status || 'PENDING').toLowerCase();
+      await supabase.from('lojas_whats_templates').update({
+        meta_template_id: resp.id || null, status: novoStatus, atualizado_em: new Date().toISOString(),
+      }).eq('name', nome);
+      return res.status(200).json({ ok: true, nome, meta_template_id: resp.id, status_meta: resp.status, categoria_meta: resp.category || null });
+    } catch (e) {
+      return res.status(200).json({ ok: false, nome, erro: String(e?.message || e) });
+    }
+  }
+
   // action=submit_3 → submete os 3 templates faltantes na WABA configurada
   // Le do banco lojas_whats_templates, manda pra Meta via submeterTemplate,
   // persiste meta_template_id + status retornado. Idempotente: se template
