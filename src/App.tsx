@@ -9567,8 +9567,18 @@ export default function App(){
       const mod=params.get('modulo');
       if(mod)return mod;
     }catch{}
+    // Restaura o modulo onde o usuario ESTAVA (Ailson 06/07/2026): o auto-update
+    // do SW recarrega a pagina a cada deploy e derrubava todo mundo pra home no
+    // meio do trabalho. Persistido no useEffect [active] mais abaixo.
+    try{
+      const ult=localStorage.getItem("amica_active_module");
+      const s=localStorage.getItem("amica_session");
+      if(ult&&s){const u=JSON.parse(s);if(u.admin||ult==="home"||u.modulos?.includes(ult))return ult;}
+    }catch{}
     try{const s=localStorage.getItem("amica_session");if(s){const u=JSON.parse(s);const mod=u.moduloPadrao||"home";if(u.admin||mod==="home"||u.modulos?.includes(mod))return mod;return u.modulos?.[0]||"home";}}catch{}return"lancamentos";
   });
+  // Persiste o modulo ativo pra sobreviver ao reload do auto-update
+  useEffect(()=>{try{localStorage.setItem("amica_active_module",active);}catch{}},[active]);
 
   // Listener: SW dispara 'amicia-navegar' quando user clica em push notification
   // (aba ja estava aberta). main.tsx propaga o postMessage do SW como custom event.
@@ -11139,11 +11149,16 @@ export default function App(){
         // result.vendas já vem no formato { mesKey: { diaKey: { conta: { canal: {...} } } } }
         if(result.vendas&&Object.keys(result.vendas).length>0){
           const vendasStr=JSON.stringify(result.vendas);
-          const anterior=(()=>{try{return localStorage.getItem("amica_bling_vendas")||"";}catch(e){return "";}})();
-          if(vendasStr!==anterior){
-            setBlingVendas(result.vendas);
-            try{localStorage.setItem("amica_bling_vendas",vendasStr);}catch(e){}
-          }
+          // Compara com o ESTADO atual, não com localStorage (Ailson 06/07/2026):
+          // o guard antigo comparava com localStorage e pulava o setBlingVendas
+          // quando eram iguais — mas o estado inicial é {} e ficava vazio pra
+          // sempre (tela sem valores). Agora: 1º load sempre popula; loads
+          // seguintes iguais retornam prev (mesma referência, zero re-render).
+          setBlingVendas(prev=>{
+            try{if(JSON.stringify(prev)===vendasStr)return prev;}catch(e){}
+            return result.vendas;
+          });
+          try{localStorage.setItem("amica_bling_vendas",vendasStr);}catch(e){}
 
           // Atualiza total MENSAL em Lançamentos (desconta 10% devoluções)
           const hojeMk=hoje.slice(0,7);
@@ -11501,7 +11516,7 @@ export default function App(){
             (sem virar admin global). Precedente: linha 8984 ehAdminLojas. */}
         {active==="salascorte"&&<ModuleErrorBoundary><SalasCorteContent produtos={produtos} usuario={usuarioLogado?.usuario||""} logTroca={logTroca} tecidosCAD={tecidosCAD} isAdmin={usuarioLogado?.admin===true || String(usuarioLogado?.usuario||'').toLowerCase()==='ailson'}/></ModuleErrorBoundary>}
         {active==="sac"&&<MLPerguntas supabase={supabase} currentUser={usuarioLogado?.usuario||""} resetTrigger={sacResetTrigger} />}
-        {active==="bling"&&<BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/>}
+        {active==="bling"&&<ModuleErrorBoundary><BlingContent setReceitasMes={setReceitasMes} mesAtual={MES_ATUAL} blingVendas={blingVendas} blingImportStatus={blingImportStatus} produtos={produtos}/></ModuleErrorBoundary>}
         {active==="osamicia"&&usuarioLogado?.modulos?.includes('osamicia')&&<ModuleErrorBoundary><OsAmicia supabase={supabase} usuarioLogado={String(usuarioLogado?.usuario||'').toLowerCase()==='ailson' ? {...usuarioLogado, admin:true} : usuarioLogado}/></ModuleErrorBoundary>}
         {active==="lojas"&&<ModuleErrorBoundary><LojasModule supabase={supabase} userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sofia"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('sofia'))&&<ModuleErrorBoundary><LojasWhats userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
