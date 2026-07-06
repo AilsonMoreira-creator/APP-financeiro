@@ -239,6 +239,10 @@
       "schedule": "0 8 * * 1-5"
     },
     {
+      "path": "/api/lojas-drive-cron",
+      "schedule": "0 16 * * 1-5"
+    },
+    {
       "path": "/api/lojas-estoque-grade-cron",
       "schedule": "0 10 * * *"
     },
@@ -277,6 +281,10 @@
     {
       "path": "/api/lojas-receitas-cron-diario",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/lojas-receitas-cron-diario",
+      "schedule": "30 16 * * *"
     },
     {
       "path": "/api/folha-aplicar-vales-cron",
