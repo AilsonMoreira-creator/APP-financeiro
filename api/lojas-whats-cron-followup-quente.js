@@ -84,7 +84,7 @@ async function executar() {
 
   const { data: convs, error } = await supabase
     .from('lojas_whats_conversas')
-    .select('id, telefone, nome_cliente, etapa, ultima_msg_direcao, ultima_atividade_em, iniciada_em, catalogo_followup_pausado, follow_up_origem, fup_relogio_em, fup_agendado_para, fup_disparado_em, fup_ja_rodou')
+    .select('id, telefone, nome_cliente, etapa, ultima_msg_direcao, ultima_atividade_em, iniciada_em, catalogo_followup_pausado, follow_up_origem, fup_relogio_em, fup_agendado_para, fup_disparado_em, fup_ja_rodou, pico_pedido_em')
     .in('etapa', ['conversando', 'follow_up'])
     .not('ultima_atividade_em', 'is', null)
     .limit(MAX_CONVS);
@@ -142,8 +142,12 @@ async function executar() {
           // Ailson 06/07/2026.
           if (!(await dentroDaJanela(new Date(NOW)))) continue; // respeita horario comercial
           const nomeCli = fmtPrimeiroNome(c.nome_cliente);
-          if (!nomeCli) {
-            // template exige {{1}}; sem nome mantem comportamento antigo
+          // Gate de contexto (Ailson 06/07/2026): "Vamos continuar o pedido"
+          // so faz sentido pra quem estava DE FATO montando pedido. Sinal:
+          // pico_pedido_em (cliente mandou burst de fotos de pecas ou "quero
+          // essas/me separa"). Sem pico, ou sem nome pro {{1}}, mantem o
+          // comportamento antigo (perdida).
+          if (!nomeCli || !c.pico_pedido_em) {
             const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
               etapa: 'perdida', motivo_perdida: 'fup_fora_janela', perdida_em: agora,
               fup_relogio_em: null, fup_ja_rodou: true, atualizado_em: agora,
