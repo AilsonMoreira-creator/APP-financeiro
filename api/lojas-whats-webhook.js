@@ -461,6 +461,67 @@ async function processarMensagemRecebida(msg, valueCtx) {
     }
   }
 
+  // ─── 3.5b PESQUISA · "JA COMPREI" EM TEXTO (Ailson 06/07/2026): cliente
+  // responde a pesquisa de motivo com TEXTO dizendo que ja fechou o pedido
+  // ("bom dia, ja fechei c vcs" — caso Liliane 06/07). Antes caia na IA, que
+  // pedia numero do pedido (pessimo: parece que a loja nao sabe quem comprou).
+  // Agora: resposta scriptada simpatica + pesquisa fechada com motivo
+  // ja_comprou + catalogo bloqueado (nao faz sentido mandar catalogo/followup
+  // pra quem acabou de comprar). Etapa NAO vira 'vendeu' automatico — o match
+  // de vendas confirma com a venda real (cliente pode estar enganada).
+  if (!dadosMsg.botao && dadosMsg.texto && /(j[aá]\s+(fechei|comprei|peguei|finalizei|paguei|fiz\s+o\s+pedido)|acabei\s+de\s+(comprar|fechar)|j[aá]\s+(realizei|efetuei))/i.test(dadosMsg.texto)) {
+    const { data: pq } = await supabase
+      .from('lojas_whats_conversas')
+      .select('pesquisa_enviada_em, pesquisa_respondida_em, nome_cliente')
+      .eq('id', conversa.id)
+      .maybeSingle();
+    if (pq?.pesquisa_enviada_em && !pq?.pesquisa_respondida_em) {
+      const nomeFinal = primeiroNome(pq.nome_cliente || nomeCliente);
+      const agoraIso = new Date().toISOString();
+      const hBRT = (new Date().getUTCHours() + 21) % 24;
+      const saud = hBRT >= 5 && hBRT < 12 ? 'Bom dia' : hBRT >= 12 && hBRT < 18 ? 'Boa tarde' : 'Boa noite';
+      const textoResp = `${saud}${nomeFinal ? `, ${nomeFinal}` : ''}! Que ótimo !🎉\n\nBoas Vendas !!\n\nPrecisando estou por aqui`;
+
+      await supabase.from('lojas_whats_pesquisa_respostas').insert({
+        conversa_id: conversa.id,
+        telefone,
+        nome: pq.nome_cliente || nomeCliente,
+        template: 'sofia_pesquisa_motivo_v1',
+        motivo: 'ja_comprou',
+        botao_texto: dadosMsg.texto.slice(0, 100),
+        respondido_em: agoraIso,
+        raw: msg,
+      });
+
+      await supabase.from('lojas_whats_conversas').update({
+        pesquisa_motivo: 'ja_comprou',
+        pesquisa_respondida_em: agoraIso,
+        catalogo_auto_bloqueado: true,
+        unread_count: 0,
+        ultima_atividade_em: agoraIso,
+        atualizado_em: agoraIso,
+      }).eq('id', conversa.id);
+
+      try {
+        await enviarDuasPartes(telefone, conversa.id, [textoResp]);
+      } catch (e) {
+        logErro('pesquisa-ja-comprou', e);
+      }
+
+      await marcarComoLida(msg.id);
+
+      enviarPushSofia({
+        titulo: `🎉 Já comprou · ${nomeFinal || 'Cliente'}`,
+        mensagem: 'Respondeu a pesquisa dizendo que já fechou pedido — conferir no match de vendas',
+        url: '/?modulo=sofia',
+        tag: `sofia-conv-${conversa.id}`,
+      }).catch(e => console.warn('[lojas-whats-webhook] push ja-comprou falhou:', e.message));
+
+      log('pesquisa', `conversa ${conversa.id} respondeu em texto que JA COMPROU`);
+      return; // bypassa fluxo normal (IA nao gera sugestao)
+    }
+  }
+
   // ─── 3.6 PESQUISA DE FOLLOW-UP: se a conversa recebeu a pesquisa de follow-up
   // (sofia_followup_motivo) e ainda nao respondeu, QUALQUER resposta (botao ou
   // texto) marca como respondida e corta o follow-up de catalogo
