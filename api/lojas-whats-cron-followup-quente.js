@@ -29,7 +29,7 @@
 
 import { supabase, setCors, log, logErro, getConfig, dentroDaJanela, limparEstiloSofia, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
-import { enviarTextoFracionado } from './_lojas-whats-meta-client.js';
+import { enviarTextoFracionado, enviarTemplate } from './_lojas-whats-meta-client.js';
 
 const MODELO_DEFAULT = 'claude-sonnet-4-6';
 const H = 3600 * 1000;
@@ -134,12 +134,48 @@ async function executar() {
         const ultEnt = await ultimaEntradaMs(c.id);
         const janelaFim = ultEnt ? ultEnt + 24 * H : 0;
         if (!janelaFim || NOW > janelaFim) {
+          // Janela Meta fechou antes do disparo. Caso real (Kemilly 05/07):
+          // agendado pras 19h de domingo, horario comercial segurou tick a
+          // tick ate a janela de 24h morrer, e o lead QUENTE virava perdida.
+          // Agora: reabre com o HSM aprovado continuar_pedido_v1 (passa por
+          // fora da janela; saudacao do periodo calculada no envio).
+          // Ailson 06/07/2026.
+          if (!(await dentroDaJanela(new Date(NOW)))) continue; // respeita horario comercial
+          const nomeCli = fmtPrimeiroNome(c.nome_cliente);
+          if (!nomeCli) {
+            // template exige {{1}}; sem nome mantem comportamento antigo
+            const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
+              etapa: 'perdida', motivo_perdida: 'fup_fora_janela', perdida_em: agora,
+              fup_relogio_em: null, fup_ja_rodou: true, atualizado_em: agora,
+            }).eq('id', c.id);
+            if (eUpd) throw eUpd;
+            r.perdidos_janela++;
+            continue;
+          }
+          const hBRT = (new Date(NOW).getUTCHours() + 21) % 24;
+          const saud = hBRT >= 5 && hBRT < 12 ? 'Bom dia' : hBRT >= 12 && hBRT < 18 ? 'Boa tarde' : 'Boa noite';
+          let metaMsgId = null;
+          try {
+            const rt = await enviarTemplate(c.telefone, 'continuar_pedido_v1', [nomeCli, saud]);
+            metaMsgId = rt?.messages?.[0]?.id || null;
+            if (!metaMsgId) throw new Error('meta_sem_message_id');
+          } catch (e) {
+            r.erros.push({ id: c.id, motivo: 'envio_template_janela', detalhe: e.message });
+            continue; // tenta no proximo tick; nao marca perdida por falha pontual
+          }
+          await supabase.from('lojas_whats_mensagens').insert({
+            conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+            template_name: 'continuar_pedido_v1',
+            texto: `Oi ${nomeCli}!! ${saud}!!\nVamos continuar o pedido`,
+            meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
+          });
           const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
-            etapa: 'perdida', motivo_perdida: 'fup_fora_janela', perdida_em: agora,
-            fup_relogio_em: null, fup_ja_rodou: true, atualizado_em: agora,
+            fup_disparado_em: agora, fup_ja_rodou: true,
+            ultima_atividade_em: agora, ultima_msg_direcao: 'saida', atualizado_em: agora,
           }).eq('id', c.id);
-        if (eUpd) throw eUpd;
-          r.perdidos_janela++;
+          if (eUpd) throw eUpd;
+          r.disparados_template_janela = (r.disparados_template_janela || 0) + 1;
+          log('cron-fup-quente', `conv=${c.id} janela fechada, reabriu com HSM continuar_pedido_v1`);
           continue;
         }
         if (!(await dentroDaJanela(new Date(NOW)))) continue; // fora do horário comercial: tenta no próximo tick
@@ -187,13 +223,10 @@ async function executar() {
           else if (NOW <= janelaFim) sendAt = NOW;   // 19h estoura a janela → marco de 12h
         }
         if (!sendAt) {
-          const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
-            etapa: 'perdida', motivo_perdida: 'fup_fora_janela', perdida_em: agora,
-            fup_relogio_em: null, fup_ja_rodou: true, atualizado_em: agora,
-          }).eq('id', c.id);
-        if (eUpd) throw eUpd;
-          r.perdidos_janela++;
-          continue;
+          // Janela ja estourada ao entrar no fluxo: NAO marca mais perdida.
+          // Agenda pro proximo 19h SP e o disparo (caminho D) reabre com o
+          // HSM aprovado continuar_pedido_v1. Ailson 06/07/2026.
+          sendAt = proximo19hSP(NOW);
         }
         const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({
           etapa: 'follow_up',
