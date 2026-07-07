@@ -42,8 +42,11 @@ async function saldoDeposito(headers, produtoId, depositoId) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'use POST' });
-  let body = req.body;
+  // GET ?ref=&cor_norm=&tam= = DRY-RUN de diagnóstico (Ailson 07/07/2026):
+  // roda o mesmo caminho (token, produto, depósito, saldo) sem gravar balanço.
+  const dryRun = req.method === 'GET';
+  if (req.method !== 'POST' && !dryRun) return res.status(405).json({ error: 'use POST (ou GET pra dry-run)' });
+  let body = dryRun ? (req.query || {}) : req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
   const ref = String(body.ref || '').replace(/\D/g, '').replace(/^0+/, '');
   const cor_norm = String(body.cor_norm || '');
@@ -97,6 +100,8 @@ export default async function handler(req, res) {
 
         if (antes === 0) { resultado.depois = 0; resultado.ok = true; resultados.push(resultado); continue; }
 
+        if (dryRun) { resultado.dry_run = true; resultado.ok = true; resultados.push(resultado); continue; }
+
         // balanço 0
         const rz = await fetch(`${API}/estoques`, {
           method: 'POST', headers,
@@ -148,7 +153,7 @@ export default async function handler(req, res) {
 
     // log (auditoria — 1 linha resumindo a limpeza)
     const zerados = resultados.filter(r => r.ok && r.antes !== 0);
-    if (zerados.length) {
+    if (zerados.length && !dryRun) {
       await supabase.from('bling_estoque_logs').insert({
         ref, cor_norm, tam,
         cor_label: lin?.cor_label || null,
@@ -161,7 +166,7 @@ export default async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({ ok: resultados.every(r => r.ok), resultados, novo_saldo_exitus });
+    return res.status(200).json({ ok: resultados.every(r => r.ok), dry_run: dryRun || undefined, resultados, novo_saldo_exitus });
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) });
   }
