@@ -5977,7 +5977,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                           {rr.ok?"✓":"✗"} {rr.conta==='lumia'?'Lumia':'Muniam'}: {rr.ok?(rr.antes===0?"já estava zerado":`${rr.antes} → 0`):rr.erro}
                         </div>
                       ))}
-                      <div style={{color:"#6b7c8a",fontSize:11,marginTop:4}}>O número acima (Exitus) não muda com esse botão: ele limpa os negativos que Lumia/Muniam descontam do que os canais anunciam.</div>
+                      <div style={{color:"#6b7c8a",fontSize:11,marginTop:4}}>Zerando negativo, o saldo volta pro Multiempresas e o número acima sobe junto (propagação do Bling leva alguns segundos).</div>
                     </div>
                 )}
               </div>

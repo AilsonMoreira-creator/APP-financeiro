@@ -127,7 +127,13 @@ export default async function handler(req, res) {
     }
 
     // ── relê o saldo do Geral do EXITUS e espelha (é o que o card mostra) ──
+    // Arquitetura (Ailson 07/07/2026): o Multiempresas é COMPARTILHADO entre os
+    // 3 CNPJs e o Geral da Exitus espelha ele. Zerar o negativo do filho devolve
+    // saldo ao Multiempresas -> o Geral da Exitus SOBE. A propagação entre
+    // contas leva alguns segundos, então espera antes de reler.
     let novo_saldo_exitus = null;
+    const zerouAlgum = resultados.some(r => r.ok && r.antes !== 0 && !r.dry_run);
+    if (zerouAlgum) await new Promise(r2 => setTimeout(r2, 3000));
     try {
       const tokenEx = await refreshBlingToken('exitus');
       const headersEx = { Authorization: `Bearer ${tokenEx}`, Accept: 'application/json', 'Content-Type': 'application/json' };
