@@ -108,9 +108,12 @@ export default async function handler(req, res) {
     }
 
     // ── ALERTA DE REPOSIÇÃO (Ailson 07/07/2026) ─────────────────────────────
-    // Conversas com tag 'reposicao' (REF marcada quando faltou): se a REF agora
-    // TEM estoque no snapshot novo, carimba reposicao_alerta_em (o card sobe no
-    // painel da Sofia) e manda push pra atendente avisar a cliente.
+    // Fonte correta (Ailson): vw_lojas_reposicoes_auto = corte da Amícia
+    // ENTREGUE pela oficina (janela 5-10d, 7-12d com caseado) de REF que já
+    // vendia. NÃO usar "disponivel > 0" no snapshot: no atacado a grade quase
+    // nunca zera (sempre sobram pontas de tamanho/cor), então estoque > 0 não
+    // significa que a peça foi reposta. Conversa com tag 'reposicao' cuja REF
+    // aparece na view ganha reposicao_alerta_em (card sobe) + push.
     let alertasReposicao = 0;
     try {
       const { data: comTag } = await supabase.from('lojas_whats_conversas')
@@ -119,11 +122,12 @@ export default async function handler(req, res) {
         .is('reposicao_alerta_em', null)
         .limit(500);
       if ((comTag || []).length > 0) {
-        const refsComEstoque = new Set(rows.filter(r => (r.disponivel || 0) > 0).map(r => String(r.ref)));
+        const { data: repoRaw } = await supabase.from('vw_lojas_reposicoes_auto').select('ref');
+        const refsRepostas = new Set((repoRaw || []).map(r => refSemZero(r.ref)));
         for (const c of comTag) {
           const tRep = (c.tags || []).find(t => t.id === 'reposicao' && t.ref);
           if (!tRep) continue;
-          if (!refsComEstoque.has(refSemZero(tRep.ref))) continue;
+          if (!refsRepostas.has(refSemZero(tRep.ref))) continue;
           const { error: eAl } = await supabase.from('lojas_whats_conversas')
             .update({ reposicao_alerta_em: new Date().toISOString(), atualizado_em: new Date().toISOString() })
             .eq('id', c.id);
@@ -131,7 +135,7 @@ export default async function handler(req, res) {
             alertasReposicao++;
             enviarPushSofia({
               titulo: '📦 Reposição chegou',
-              mensagem: `REF ${tRep.ref} voltou ao estoque — avisar ${c.nome_cliente || 'cliente'} (card subiu no painel)`,
+              mensagem: `REF ${tRep.ref} voltou da oficina — avisar ${c.nome_cliente || 'cliente'} (card subiu no painel)`,
               url: '/?modulo=sofia',
             }).catch(() => {});
           }
