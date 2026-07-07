@@ -4875,7 +4875,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [cortesProjPorRef,setCortesProjPorRef]=useState({}); // {refNorm:[{id,nCorte,oficina,data,qtd,descricao,cores,tamanhos}]}
   const [projModal,setProjModal]=useState(null);   // {refNorm,cor,tam} — clicou no projetado
   const [matrizCorteAberto,setMatrizCorteAberto]=useState(null); // id do corte com matriz expandida
-  const [blingEstoque,setBlingEstoque]=useState({}); // {"refNorm|cor_norm|TAM": qtd}
+  const [blingEstoque,setBlingEstoque]=useState({}); // {"refNorm|cor_norm|TAM": qtd} (fisico Geral Exitus)
+  const [blingFilhos,setBlingFilhos]=useState({}); // {"refNorm|cor_norm|TAM": {lumia,muniam}} — vendavel = qtd + lumia + muniam (Ailson 07/07/2026)
   const [blingLabel,setBlingLabel]=useState({}); // {cor_norm: cor_label} da ref aberta (p/ exibir cor que só existe no Bling)
   const [soBlingRefs,setSoBlingRefs]=useState([]); // refs na calculadora c/ Bling mas sem espelho ML (produto novo)
   const [blingAjuste,setBlingAjuste]=useState(null); // {refNorm,cor,tam,cor_norm,atual,desc} — modal de ajuste
@@ -5205,13 +5206,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   // Carrega o estoque Bling da ref aberta (coluna ajustavel). Ailson 10/06/2026.
   const recarregarBling=async(refNorm)=>{
     try{
-      const {data}=await supabase.from('bling_estoque').select('cor_norm,tam,qtd,cor_label').eq('ref',refNorm);
-      const m={};const lbl={};(data||[]).forEach(r=>{m[`${refNorm}|${r.cor_norm}|${String(r.tam).toUpperCase()}`]=r.qtd; if(r.cor_norm&&r.cor_label&&!lbl[r.cor_norm])lbl[r.cor_norm]=r.cor_label;});
-      setBlingEstoque(m);setBlingLabel(lbl);
+      const {data}=await supabase.from('bling_estoque').select('cor_norm,tam,qtd,qtd_lumia,qtd_muniam,cor_label').eq('ref',refNorm);
+      const m={};const mf={};const lbl={};(data||[]).forEach(r=>{const k=`${refNorm}|${r.cor_norm}|${String(r.tam).toUpperCase()}`;m[k]=r.qtd;if(r.qtd_lumia!=null||r.qtd_muniam!=null)mf[k]={lumia:r.qtd_lumia,muniam:r.qtd_muniam}; if(r.cor_norm&&r.cor_label&&!lbl[r.cor_norm])lbl[r.cor_norm]=r.cor_label;});
+      setBlingEstoque(m);setBlingFilhos(mf);setBlingLabel(lbl);
     }catch(e){console.error('bling estoque:',e.message);}
   };
   useEffect(()=>{
-    if(!modalRef){setBlingEstoque({});setBlingLabel({});return;}
+    if(!modalRef){setBlingEstoque({});setBlingFilhos({});setBlingLabel({});return;}
     const refNorm=String(modalRef).replace(/\D/g,'').replace(/^0+/,'');
     recarregarBling(refNorm);
   },[modalRef]);
@@ -5650,13 +5651,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                   const corNorm=normCorBling(v.cor);const tamU=String(v.tam||'').toUpperCase().trim();
                   const blingKey=`${refNorm}|${corNorm}|${tamU}`;
                   const blingQtd=blingEstoque[blingKey];const temBling=blingQtd!=null;
+                  const bf=blingFilhos[blingKey];const blingVend=temBling?((blingQtd||0)+((bf&&bf.lumia)||0)+((bf&&bf.muniam)||0)):null; // vendavel = soma dos 3 Gerais
                   return<tr key={i} style={{background:i%2===0?"#fff":"#faf8f5",borderBottom:"1px solid #e8e2da"}}>
                     <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{v.cor||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{v.tam||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Courier New,monospace",fontSize:10,color:"#8a9aa4"}}>{v.sku&&!String(v.sku).startsWith('_SINT_')?v.sku:'—'}</td>
                     {(()=>{const fk=`${refNorm}|${corNorm}|${tamU}`;const fi=ajustesFila[fk];
                       const env=fi&&fi.status==='enviando';const err=fi&&fi.status==='erro';
-                      return <td onClick={()=>{if(env)return;setBlingAjuste({refNorm,cor:v.cor||'',tam:tamU,cor_norm:corNorm,atual:temBling?blingQtd:0,desc});setAjusteValor(String(err?fi.qtdNova:(temBling?blingQtd:0)));setAjusteMotivo(usuarioSessao);}} title={env?'Enviando pro Bling…':err?('Falhou: '+(fi.erroMsg||'')+' — toque pra tentar de novo'):'Ajustar estoque Bling'} style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:env?"#8a6d1a":err?"#a03d3d":(temBling?"#2c3e50":"#b9c2c9"),cursor:env?"wait":"pointer",background:env?"#fdf3dd":err?"#fdeaea":"#f4f7fb",borderLeft:"1px solid #e3ebf2",borderRight:"1px solid #e3ebf2"}}>{env?(fi.qtdNova+' ⏳'):err?((temBling?blingQtd:'·')+' ⚠️'):(temBling?blingQtd:'·')}</td>;})()}
+                      return <td onClick={()=>{if(env)return;setBlingAjuste({refNorm,cor:v.cor||'',tam:tamU,cor_norm:corNorm,atual:temBling?blingQtd:0,lumia:bf?bf.lumia:null,muniam:bf?bf.muniam:null,desc});setAjusteValor(String(err?fi.qtdNova:(temBling?blingQtd:0)));setAjusteMotivo(usuarioSessao);}} title={env?'Enviando pro Bling…':err?('Falhou: '+(fi.erroMsg||'')+' — toque pra tentar de novo'):('Ajustar estoque Bling'+(bf?` — Exitus ${blingQtd} · Lumia ${bf.lumia??0} · Muniam ${bf.muniam??0}`:''))} style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:env?"#8a6d1a":err?"#a03d3d":(temBling?"#2c3e50":"#b9c2c9"),cursor:env?"wait":"pointer",background:env?"#fdf3dd":err?"#fdeaea":"#f4f7fb",borderLeft:"1px solid #e3ebf2",borderRight:"1px solid #e3ebf2"}}>{env?(fi.qtdNova+' ⏳'):err?((temBling?blingVend:'·')+' ⚠️'):(temBling?blingVend:'·')}</td>;})()}
                     <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:cls}}>{q}</td>
                     <td onClick={proj>0?()=>setProjModal({refNorm,cor:v.cor||'',tam:tamU}):undefined} title={proj>0?"Ver cortes que geram a reposição":undefined} style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:500,fontSize:11,color:proj>0?"#4a7fa5":"#cdd4d9",cursor:proj>0?"pointer":"default",textDecoration:proj>0?"underline":"none"}}>{proj>0?`+${proj}`:'—'}</td>
                   </tr>;
@@ -5965,7 +5967,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             <div style={{padding:"16px 18px"}}>
               <div style={{fontSize:12,color:"#6b7c8a",marginBottom:2}}>REF {ba.refNorm}{ba.desc?` · ${ba.desc}`:''}</div>
               <div style={{fontSize:15,fontWeight:700,color:"#2c3e50",marginBottom:12}}>{ba.cor} · {ba.tam}</div>
-              <div style={{fontSize:12,color:"#6b7c8a",marginBottom:8}}>Estoque Bling atual: <b style={{color:"#2c3e50",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:14}}>{ba.atual}</b></div>
+              <div style={{fontSize:12,color:"#6b7c8a",marginBottom:8}}>Físico (Geral Exitus): <b style={{color:"#2c3e50",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:14}}>{ba.atual}</b>{(ba.lumia!=null||ba.muniam!=null)&&<span> · Vendável (canais): <b style={{color:"#3d5a73",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:14}}>{(ba.atual||0)+(ba.lumia||0)+(ba.muniam||0)}</b> <span style={{fontSize:10.5,color:"#8a9aa4"}}>(Lumia {ba.lumia??0} · Muniam {ba.muniam??0})</span></span>}</div>
               <div style={{marginBottom:14}}>
                 <button onClick={zerarFilhosBling} disabled={zerarFilhos==='rodando'||!!ajusteLockPor} title="Zera o depósito Geral do Lumia e do Muniam desse SKU (limpa os negativos antes da recontagem)" style={{background:zerarFilhos==='rodando'?"#e8e2da":"#fff",color:"#8a4b4b",border:"1px solid #d8b4b4",borderRadius:6,padding:"6px 12px",fontSize:12,cursor:(zerarFilhos==='rodando'||ajusteLockPor)?"default":"pointer",fontFamily:"Georgia,serif",fontWeight:700}}>{zerarFilhos==='rodando'?"Zerando…":"Apagar Lumia/Muniam"}</button>
                 {zerarFilhos&&zerarFilhos!=='rodando'&&(
@@ -5982,7 +5984,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 )}
               </div>
               <div style={{marginBottom:12,opacity:ajusteLockPor?0.5:1}}>
-                <div style={{fontSize:11,color:"#2c3e50",fontWeight:700,marginBottom:3}}>Nova quantidade</div>
+                <div style={{fontSize:11,color:"#2c3e50",fontWeight:700,marginBottom:3}}>Nova quantidade <span style={{fontWeight:400,color:"#8a9aa4"}}>(grava no Geral Exitus)</span></div>
                 <input type="number" min="0" value={ajusteValor} onChange={e=>setAjusteValor(e.target.value)} autoFocus disabled={!!ajusteLockPor} style={{width:"100%",boxSizing:"border-box",border:"1px solid #c8d8e4",borderRadius:6,padding:"8px 10px",fontSize:15,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",outline:"none"}}/>
               </div>
               <div style={{marginBottom:16,opacity:ajusteLockPor?0.5:1}}>

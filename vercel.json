@@ -423,6 +423,14 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/bling-estoque-sync?conta=lumia",
+      "schedule": "20 9 * * *"
+    },
+    {
+      "path": "/api/bling-estoque-sync?conta=muniam",
+      "schedule": "40 9 * * *"
+    },
+    {
       "path": "/api/meluni-clientes-sync",
       "schedule": "0 */2 * * *"
     },

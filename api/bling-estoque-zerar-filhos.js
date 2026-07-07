@@ -126,11 +126,12 @@ export default async function handler(req, res) {
       );
     }
 
-    // ── relê o saldo do Geral do EXITUS e espelha (é o que o card mostra) ──
-    // Arquitetura (Ailson 07/07/2026): o Multiempresas é COMPARTILHADO entre os
-    // 3 CNPJs e o Geral da Exitus espelha ele. Zerar o negativo do filho devolve
-    // saldo ao Multiempresas -> o Geral da Exitus SOBE. A propagação entre
-    // contas leva alguns segundos, então espera antes de reler.
+    // ── relê o Geral do EXITUS e espelha em bling_estoque ──
+    // Arquitetura CORRIGIDA (Ailson 07/07/2026): Multiempresa = SOMA dos 3
+    // Gerais (Exitus + Lumia + Muniam). O Geral da Exitus (físico) NÃO muda ao
+    // zerar filhos — o consolidado sim. Aqui relemos o exitus por segurança e
+    // gravamos qtd_lumia/qtd_muniam = 0 pros filhos zerados, pra coluna
+    // vendável do app não ficar defasada até o sync das 6h.
     let novo_saldo_exitus = null;
     const zerouAlgum = resultados.some(r => r.ok && r.antes !== 0 && !r.dry_run);
     if (zerouAlgum) await new Promise(r2 => setTimeout(r2, 3000));
@@ -146,16 +147,23 @@ export default async function handler(req, res) {
       const depEx = cfg.deposito_geral || null;
       if (produtoIdEx && depEx) {
         const s = await saldoDeposito(headersEx, produtoIdEx, depEx);
-        if (s != null) {
-          novo_saldo_exitus = Math.max(0, Math.round(Number(s) || 0));
-          if (novo_saldo_exitus !== lin?.qtd) {
-            await supabase.from('bling_estoque')
-              .update({ qtd: novo_saldo_exitus, atualizado_em: new Date().toISOString(), atualizado_por: body.usuario || null })
-              .eq('ref', ref).eq('cor_norm', cor_norm).eq('tam', tam);
-          }
-        }
+        if (s != null) novo_saldo_exitus = Math.max(0, Math.round(Number(s) || 0));
       }
     } catch { /* leitura do exitus falhou: card segue com o valor do espelho */ }
+    try {
+      const patch = {};
+      if (novo_saldo_exitus != null && novo_saldo_exitus !== lin?.qtd) patch.qtd = novo_saldo_exitus;
+      for (const r of resultados) {
+        if (r.ok && !r.dry_run && r.conta === 'lumia') patch.qtd_lumia = 0;
+        if (r.ok && !r.dry_run && r.conta === 'muniam') patch.qtd_muniam = 0;
+      }
+      if (Object.keys(patch).length) {
+        patch.atualizado_em = new Date().toISOString();
+        patch.atualizado_por = body.usuario || null;
+        await supabase.from('bling_estoque').update(patch)
+          .eq('ref', ref).eq('cor_norm', cor_norm).eq('tam', tam);
+      }
+    } catch { /* espelho local falhou: sync das 6h corrige */ }
 
     // log (auditoria — 1 linha resumindo a limpeza)
     const zerados = resultados.filter(r => r.ok && r.antes !== 0);

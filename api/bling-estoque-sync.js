@@ -154,7 +154,9 @@ export default async function handler(req, res) {
         if (dep) saldo = dep.saldoFisico ?? dep.saldo ?? dep.deposito?.saldoFisico ?? null;
         if (saldo == null) saldo = s.saldoFisicoTotal ?? s.estoqueAtual ?? null;
         if (saldo == null) continue;
-        const qtd = Math.max(0, Math.round(Number(saldo) || 0));
+        // Exitus (fisico) clampa em 0; filhos (Lumia/Muniam) podem ser NEGATIVOS
+        // (vendas acumuladas no Geral deles) e o negativo abate o vendavel. Ailson 07/07/2026.
+        const qtd = conta === 'exitus' ? Math.max(0, Math.round(Number(saldo) || 0)) : Math.round(Number(saldo) || 0);
         resumo.com_saldo++;
         const cor_norm = normCor(info.cor);
         const key = `${info.ref}|${cor_norm}|${info.tam}`;
@@ -168,13 +170,23 @@ export default async function handler(req, res) {
     resumo.linhas = linhas.size;
     resumo.amostra = [...linhas.values()].slice(0, 12);
 
-    // ── 4. UPSERT ────────────────────────────────────────────────────────
+    // ── 4. GRAVAÇÃO ──────────────────────────────────────────────────────
+    // Exitus: upsert completo (catalogo mestre). Lumia/Muniam: RPC que só
+    // ATUALIZA qtd_lumia/qtd_muniam em linhas existentes — não cria linha nem
+    // toca qtd/bling_produto_id do exitus. Ailson 07/07/2026.
     if (!dryRun && linhas.size) {
-      const rows = [...linhas.values()].map(l => ({ ...l, atualizado_em: new Date().toISOString(), atualizado_por: 'bling_sync' }));
-      for (let j = 0; j < rows.length; j += 500) {
-        const { error } = await supabase.from('bling_estoque').upsert(rows.slice(j, j + 500), { onConflict: 'ref,cor_norm,tam' });
-        if (error) resumo.erros.push(`upsert ${j}: ${error.message}`);
-        else resumo.upserted += Math.min(500, rows.length - j);
+      if (conta === 'exitus') {
+        const rows = [...linhas.values()].map(l => ({ ...l, atualizado_em: new Date().toISOString(), atualizado_por: 'bling_sync' }));
+        for (let j = 0; j < rows.length; j += 500) {
+          const { error } = await supabase.from('bling_estoque').upsert(rows.slice(j, j + 500), { onConflict: 'ref,cor_norm,tam' });
+          if (error) resumo.erros.push(`upsert ${j}: ${error.message}`);
+          else resumo.upserted += Math.min(500, rows.length - j);
+        }
+      } else {
+        const rows = [...linhas.values()].map(l => ({ ref: l.ref, cor_norm: l.cor_norm, tam: l.tam, qtd: l.qtd }));
+        const { data: n, error } = await supabase.rpc('fn_bling_set_qtd_filho', { p_conta: conta, p_rows: rows });
+        if (error) resumo.erros.push(`rpc filho: ${error.message}`);
+        else resumo.upserted = n || 0;
       }
     }
 
