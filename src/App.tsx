@@ -5977,7 +5977,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                           {rr.ok?"✓":"✗"} {rr.conta==='lumia'?'Lumia':'Muniam'}: {rr.ok?(rr.antes===0?"já estava zerado":`${rr.antes} → 0`):rr.erro}
                         </div>
                       ))}
-                      <div style={{color:"#6b7c8a",fontSize:11,marginTop:4}}>Zerando negativo, o saldo volta pro Multiempresas e o número acima sobe junto (propagação do Bling leva alguns segundos).</div>
+                      {typeof zerarFilhos.consolidado_depois==="number"&&<div style={{color:"#3d5a73",fontSize:12,marginTop:4,fontWeight:700}}>Canais enxergam: {zerarFilhos.consolidado_antes} → {zerarFilhos.consolidado_depois}</div>}<div style={{color:"#6b7c8a",fontSize:11,marginTop:2}}>O físico (Exitus Geral) não muda com esse botão — o que sobe é o consolidado que os anúncios usam.</div>
                     </div>
                 )}
               </div>

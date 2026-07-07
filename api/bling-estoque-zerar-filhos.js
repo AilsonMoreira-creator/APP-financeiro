@@ -172,8 +172,21 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log('[zerar-filhos]', dryRun ? 'DRY' : 'REAL', `${ref}/${cor_norm}/${tam}`, JSON.stringify(resultados), 'exitus:', novo_saldo_exitus);
-    return res.status(200).json({ ok: resultados.every(r => r.ok), dry_run: dryRun || undefined, resultados, novo_saldo_exitus });
+    // Consolidado do produto vinculado multiempresa (Ailson 07/07/2026): o
+    // número que os canais enxergam é a SOMA dos Gerais das 3 empresas. O
+    // Geral da Exitus (físico) não muda ao zerar os filhos — o consolidado sim.
+    let consolidado_antes = null, consolidado_depois = null;
+    if (typeof novo_saldo_exitus === 'number') {
+      consolidado_antes = novo_saldo_exitus;
+      consolidado_depois = novo_saldo_exitus;
+      for (const r2 of resultados) {
+        if (typeof r2.antes === 'number') consolidado_antes += r2.antes;
+        const dep = (r2.ok && !r2.dry_run) ? 0 : (typeof r2.antes === 'number' ? r2.antes : 0);
+        consolidado_depois += dep;
+      }
+    }
+    console.log('[zerar-filhos]', dryRun ? 'DRY' : 'REAL', `${ref}/${cor_norm}/${tam}`, JSON.stringify(resultados), 'exitus:', novo_saldo_exitus, 'consolidado:', consolidado_antes, '->', consolidado_depois);
+    return res.status(200).json({ ok: resultados.every(r => r.ok), dry_run: dryRun || undefined, resultados, novo_saldo_exitus, consolidado_antes, consolidado_depois });
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) });
   }
