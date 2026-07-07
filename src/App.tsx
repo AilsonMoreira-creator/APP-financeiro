@@ -5970,9 +5970,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 <button onClick={zerarFilhosBling} disabled={zerarFilhos==='rodando'||!!ajusteLockPor} title="Zera o depósito Geral do Lumia e do Muniam desse SKU (limpa os negativos antes da recontagem)" style={{background:zerarFilhos==='rodando'?"#e8e2da":"#fff",color:"#8a4b4b",border:"1px solid #d8b4b4",borderRadius:6,padding:"6px 12px",fontSize:12,cursor:(zerarFilhos==='rodando'||ajusteLockPor)?"default":"pointer",fontFamily:"Georgia,serif",fontWeight:700}}>{zerarFilhos==='rodando'?"Zerando…":"Apagar Lumia/Muniam"}</button>
                 {zerarFilhos&&zerarFilhos!=='rodando'&&(
                   zerarFilhos.erro
-                    ?<div style={{marginTop:6,fontSize:11.5,color:"#a03d3d"}}>⚠️ {zerarFilhos.erro}</div>
-                    :<div style={{marginTop:6,fontSize:11.5,color:zerarFilhos.ok?"#3d7a4a":"#a03d3d",fontFamily:"Calibri,Segoe UI,Arial,sans-serif"}}>
-                      {(zerarFilhos.resultados||[]).map(rr=>`${rr.conta==='lumia'?'Lumia':'Muniam'}: ${rr.ok?`${rr.antes??'?'} → 0`:`⚠️ ${rr.erro}`}`).join(' · ')}
+                    ?<div style={{marginTop:6,fontSize:12,color:"#a03d3d"}}>⚠️ {zerarFilhos.erro}</div>
+                    :<div style={{marginTop:6,fontSize:12.5,fontFamily:"Calibri,Segoe UI,Arial,sans-serif",textAlign:"left"}}>
+                      {(zerarFilhos.resultados||[]).map(rr=>(
+                        <div key={rr.conta} style={{color:rr.ok?"#3d7a4a":"#a03d3d",marginBottom:2}}>
+                          {rr.ok?"✓":"✗"} {rr.conta==='lumia'?'Lumia':'Muniam'}: {rr.ok?(rr.antes===0?"já estava zerado":`${rr.antes} → 0`):rr.erro}
+                        </div>
+                      ))}
+                      <div style={{color:"#6b7c8a",fontSize:11,marginTop:4}}>O número acima (Exitus) não muda com esse botão: ele limpa os negativos que Lumia/Muniam descontam do que os canais anunciam.</div>
                     </div>
                 )}
               </div>

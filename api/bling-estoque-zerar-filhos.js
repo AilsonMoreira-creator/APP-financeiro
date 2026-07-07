@@ -85,7 +85,7 @@ export default async function handler(req, res) {
         if (!depId) {
           const rd = await blingFetch(`${API}/depositos?pagina=1&limite=100`, headers);
           const jd = await rd.json().catch(() => ({}));
-          if (!rd.ok) throw new Error(`depositos HTTP ${rd.status}`);
+          if (!rd.ok) throw new Error(rd.status === 401 || rd.status === 403 ? 'sem permissão de estoque nessa conta — reautorizar a conta no módulo Bling' : `depositos HTTP ${rd.status}`);
           const deps = jd.data || [];
           const pick = deps.find(d => /geral/i.test(d.descricao || '')) || deps.find(d => d.padrao === true);
           depId = pick ? String(pick.id) : null;
