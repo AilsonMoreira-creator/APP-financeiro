@@ -19,6 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabase, setCors, log, logErro, getConfig, limparEstiloSofia, sanitizarNome } from './_lojas-whats-helpers.js';
+import { enviarPushSofia } from './_push-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
 import { montarCardapio, formatarCardapioPraIA, getRefsCarrinhoDeConversa, montarListaReferenciasAtivas, montarFichasDetalhadas, montarFotosReconhecimento } from './_lojas-whats-cardapio.js';
 import { montarBlocoPadroes, decidirModo } from './_lojas-whats-padroes.js';
@@ -575,6 +576,31 @@ SEMPRE:
   temos (as conversas que mais avançam). Capriche: responda completo com a
   estimativa da regra de frete e feche perguntando a cidade ou o próximo passo
 - Se cliente perguntar preço/produto que vc não tem certeza → pedir um momento e dizer que vai confirmar
+
+═══════════════════════════════════════════════════════════════════
+ETIQUETAS AUTOMÁTICAS DO CARD (marcador invisível pra cliente)
+═══════════════════════════════════════════════════════════════════
+Quando UMA destas situações aparecer na conversa, adicione o marcador sozinho
+na ÚLTIMA linha da sua resposta (ele é removido antes do envio — a cliente
+NUNCA vê e vc NUNCA menciona a etiqueta pra ela):
+
+[TAG:atencao] → cliente RECLAMANDO ou com problema sério: peça com defeito,
+  pedido errado/atrasado, pediu troca ou devolução, cobrança indevida, tom
+  irritado/ameaçando. Efeito: congela TODOS os envios automáticos e uma
+  atendente humana assume. Use ao primeiro sinal claro — na dúvida entre
+  irritação real e negociação dura, NÃO use.
+
+[TAG:alto_potencial] → sinais de lojista GRANDE: tem mais de uma loja, fala em
+  comprar todo mês / pedido recorrente, pedido inicial de 30+ peças, compra de
+  outras marcas em volume, sacoleira estruturada com equipe. Use no máximo 1x
+  por conversa, quando o sinal for explícito na fala dela.
+
+[TAG:reposicao 2277] → cliente quer um modelo que está SEM ESTOQUE (vc conferiu
+  no estoque fino e não tem, ou só tem tamanho que não serve). Troque 2277 pela
+  REF real do modelo. Efeito: quando a peça voltar, o card sobe com alerta pra
+  atendente avisar a cliente. Só use com REF identificada.
+
+No máximo 1 marcador por resposta. Sem situação clara: NENHUM marcador.
 
 ═══════════════════════════════════════════════════════════════════
 CLIENTE MANDOU UM PRINT OU FOTO DE UMA PEÇA (muito comum)
@@ -1572,6 +1598,52 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
   // Estilo WhatsApp humano: sem travessão, sem ponto final (Ailson 30/05/2026)
   textoProposto = limparEstiloSofia(textoProposto);
 
+  // 6a-tags (Ailson 07/07/2026): a Sofia pode etiquetar o card sozinha via
+  // marcador [TAG:...] na resposta (instruído no prompt). Extrai, REMOVE do
+  // texto (cliente nunca vê) e aplica na conversa. 'atencao' congela os envios
+  // automáticos (gate nos crons) e avisa por push pra atendente assumir.
+  let tagAtencaoAplicada = false;
+  try {
+    const reTag = /\[TAG:\s*(atencao|alto_potencial|reposicao)(?:[\s:]+(\d{1,6}))?\s*\]/gi;
+    const marcadores = [];
+    let mTag;
+    while ((mTag = reTag.exec(textoProposto)) !== null) {
+      marcadores.push({ id: mTag[1].toLowerCase(), ref: mTag[2] ? String(mTag[2]).replace(/^0+/, '') || '0' : null });
+    }
+    if (marcadores.length > 0) {
+      textoProposto = textoProposto.replace(reTag, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+      const { data: cTags } = await supabase.from('lojas_whats_conversas')
+        .select('tags, nome_cliente').eq('id', conversaId).maybeSingle();
+      const atuais = Array.isArray(cTags?.tags) ? cTags.tags : [];
+      let novas = [...atuais];
+      let aplicou = false;
+      for (const m of marcadores.slice(0, 2)) {
+        if (m.id === 'reposicao' && !m.ref) continue; // reposição sem REF não vale
+        if (novas.some(t => t.id === m.id)) continue; // já tem, não duplica
+        novas.push(m.ref ? { id: m.id, ref: m.ref } : { id: m.id });
+        aplicou = true;
+        if (m.id === 'atencao') {
+          tagAtencaoAplicada = true;
+          enviarPushSofia({
+            titulo: '⚠️ Sofia marcou Atenção',
+            mensagem: `${cTags?.nome_cliente || 'Cliente'} — reclamação/problema. Envios automáticos congelados, assumir a conversa.`,
+            url: '/?modulo=sofia',
+          }).catch(() => {});
+        }
+      }
+      if (aplicou) {
+        await supabase.from('lojas_whats_conversas')
+          .update({ tags: novas.slice(0, 6), atualizado_em: new Date().toISOString() })
+          .eq('id', conversaId);
+        log('ia/tags', `conversa ${conversaId}: Sofia aplicou ${marcadores.map(m => m.id + (m.ref ? ':' + m.ref : '')).join(', ')}`);
+      }
+      if (!textoProposto) throw new Error('claude_retornou_so_marcador');
+    }
+  } catch (eTag) {
+    if (eTag?.message === 'claude_retornou_so_marcador') throw eTag;
+    logErro('ia/tags', eTag); // falha na tag não derruba a réplica
+  }
+
   // 6b. Classificacao auto-envio (Ailson 31/05/2026): decide se a Sofia pode
   // responder SOZINHA (gate deterministico = 100% de certeza) ou se fica
   // pendente pra Tamara. Quem dispara o envio e o cron-responder, e SO quando a
@@ -1594,6 +1666,9 @@ NUNCA peça pra cliente trocar de vendedora, nem dê a entender que comprar por 
   const sofiaOfereceuCatalogo = !!(ultimaSaida && /catal[oa]g/.test(_txtUltSaida)
     && /(quer|posso|te mando|te envio|\bmando\b|gostaria de ver|quer que eu)/.test(_txtUltSaida));
   const cls = classificarAutoEnvio({ textoCliente, textosNovos, conv, ehPrimeiraMsgCliente, sofiaOfereceuCatalogo });
+  // Sofia acabou de marcar Atenção nesta rodada: a própria sugestão fica
+  // pendente (o gate dos crons só pegaria no próximo tick). Ailson 07/07/2026.
+  if (tagAtencaoAplicada && cls.auto) { cls.auto = false; cls.motivo = 'tag_atencao_aplicada'; }
 
   // MODULO CLIENTES (Ailson 04/07/2026): cliente REAL pos-compra (etapas
   // feedback/inativo) NUNCA recebe resposta automatica — toda mensagem passa
