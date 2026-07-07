@@ -172,6 +172,7 @@ export default async function handler(req, res) {
       });
     }
 
+    console.log('[zerar-filhos]', dryRun ? 'DRY' : 'REAL', `${ref}/${cor_norm}/${tam}`, JSON.stringify(resultados), 'exitus:', novo_saldo_exitus);
     return res.status(200).json({ ok: resultados.every(r => r.ok), dry_run: dryRun || undefined, resultados, novo_saldo_exitus });
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) });
