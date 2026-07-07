@@ -20,7 +20,7 @@
 // manda QUALQUER msg — então o cron só pega conversas silentes.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, log, logErro, contarSofiaSemResposta, getConfig, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
+import { supabase, log, logErro, contarSofiaSemResposta, getConfig, tagsCongelamEnvio, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
 import { enviarTexto, enviarTemplate } from './_lojas-whats-meta-client.js';
 import { enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
 
@@ -90,7 +90,7 @@ export default async function handler(req, res) {
     } else {
       const { data: f1Data, error: errF1 } = await supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente, etapa, catalogo_formato, catalogo_enviado_em')
+        .select('id, telefone, nome_cliente, etapa, catalogo_formato, catalogo_enviado_em, tags')
         .not('catalogo_enviado_em', 'is', null)
         .is('catalogo_followup_6h_em', null)
         .eq('catalogo_followup_pausado', false)
@@ -115,6 +115,8 @@ export default async function handler(req, res) {
 
       for (const conv of f1) {
         try {
+          // Tag congelante (Ailson 07/07/2026): sem followup automático
+          if (await tagsCongelamEnvio(conv.tags)) continue;
           // Agendamento novo (Ailson 08/06/2026): em vez de 6h, manda às 19:30
           // (catálogo recebido antes das 18h) ou 9h do dia seguinte (>= 18h).
           const sched = agendadoPara(conv.catalogo_enviado_em);
@@ -237,7 +239,7 @@ export default async function handler(req, res) {
     // e depois move pra follow_up. Respeita janela 9-20h BRT igual FASE 1.
     const { data: f2, error: errF2 } = await supabase
       .from('lojas_whats_conversas')
-      .select('id, telefone, nome_cliente, etapa')
+      .select('id, telefone, nome_cliente, etapa, tags')
       .not('catalogo_enviado_em', 'is', null)
       .lt('catalogo_enviado_em', cutoff24h)
       .eq('catalogo_followup_pausado', false)
@@ -253,6 +255,8 @@ export default async function handler(req, res) {
     } else {
       for (const conv of f2 || []) {
         try {
+          // Tag congelante (Ailson 07/07/2026): sem followup automático
+          if (await tagsCongelamEnvio(conv.tags)) continue;
           // Regra Ailson 30/05/2026: catálogo + 6h + 24h = 3 toques legítimos.
           // Jamais a 4a sem resposta (>= 3 sem resposta -> nao envia mais).
           if (await contarSofiaSemResposta(conv.id) >= 3) {

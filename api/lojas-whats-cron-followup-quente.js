@@ -27,7 +27,7 @@
 // GET ?executar=1 (ou header vercel-cron) executa | GET sem param = preview.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, getConfig, dentroDaJanela, limparEstiloSofia, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, getConfig, dentroDaJanela, limparEstiloSofia, tagsCongelamEnvio, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
 import { chamarClaude } from './_lojas-helpers.js';
 import { enviarTextoFracionado, enviarTemplate } from './_lojas-whats-meta-client.js';
 
@@ -84,7 +84,7 @@ async function executar() {
 
   const { data: convs, error } = await supabase
     .from('lojas_whats_conversas')
-    .select('id, telefone, nome_cliente, etapa, ultima_msg_direcao, ultima_atividade_em, iniciada_em, catalogo_followup_pausado, follow_up_origem, fup_relogio_em, fup_agendado_para, fup_disparado_em, fup_ja_rodou, pico_pedido_em')
+    .select('id, telefone, nome_cliente, etapa, ultima_msg_direcao, ultima_atividade_em, iniciada_em, catalogo_followup_pausado, follow_up_origem, fup_relogio_em, fup_agendado_para, fup_disparado_em, fup_ja_rodou, pico_pedido_em, tags')
     .in('etapa', ['conversando', 'follow_up'])
     .not('ultima_atividade_em', 'is', null)
     .limit(MAX_CONVS);
@@ -96,6 +96,8 @@ async function executar() {
 
   for (const c of convs) {
     try {
+      // Tag congelante (Ailson 07/07/2026): sem followup automático
+      if (await tagsCongelamEnvio(c.tags)) continue;
       const pausado = c.catalogo_followup_pausado === true;
       const clienteRespondeu = c.ultima_msg_direcao === 'entrada';
       const bolaComCliente = c.ultima_msg_direcao === 'saida';

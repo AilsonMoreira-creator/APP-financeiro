@@ -24,7 +24,7 @@
 // GET ?executar=1 (ou header vercel-cron) executa | GET sem param = preview.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, getConfig, primeiroNome } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, getConfig, tagsCongelamEnvio, primeiroNome } from './_lojas-whats-helpers.js';
 import { enviarTexto } from './_lojas-whats-meta-client.js';
 
 export const config = { maxDuration: 60 };
@@ -70,7 +70,7 @@ async function rodar({ dryRun }) {
 
   const { data: convs, error } = await supabase
     .from('lojas_whats_conversas')
-    .select('id, telefone, nome_cliente, etapa, ultima_msg_direcao, apresentacao_enviada_em, nudge_abertura_enviado_em, catalogo_enviado_em, catalogo_followup_pausado')
+    .select('id, telefone, nome_cliente, etapa, ultima_msg_direcao, apresentacao_enviada_em, nudge_abertura_enviado_em, catalogo_enviado_em, catalogo_followup_pausado, tags')
     .eq('etapa', 'conversando')
     .eq('ultima_msg_direcao', 'saida')
     .not('apresentacao_enviada_em', 'is', null)
@@ -83,6 +83,8 @@ async function rodar({ dryRun }) {
   for (const c of (convs || [])) {
     try {
       if (c.catalogo_followup_pausado === true) continue;
+      // Tag congelante (Ailson 07/07/2026): sem nudge automático
+      if (await tagsCongelamEnvio(c.tags)) continue;
 
       // ── Perdida: nudge enviado + 3 dias sem resposta ──────────────────────
       if (c.nudge_abertura_enviado_em) {

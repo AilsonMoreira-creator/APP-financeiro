@@ -21,7 +21,7 @@
 // Ailson 29/05/2026.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, log, logErro, getConfig } from './_lojas-whats-helpers.js';
+import { supabase, log, logErro, getConfig, tagsCongelamEnvio } from './_lojas-whats-helpers.js';
 import { processarConversa } from './lojas-whats-ia.js';
 import { processarUma } from './lojas-whats-aprovar.js';
 import { enviarAberturaApresentacao, enviarAberturaTextoFotos } from './_lojas-whats-apresentacao.js';
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
 
   const agoraIso = new Date().toISOString();
   let gerados = 0, pulados = 0, erros = 0;
-  let autoEnviadas = 0, autoFalhas = 0;
+  let autoEnviadas = 0, autoFalhas = 0, congeladas = 0;
   const detalhe = [];
 
   // Chave liga/desliga do auto-envio da Sofia (default DESLIGADO).
@@ -56,7 +56,7 @@ export default async function handler(req, res) {
     // 1. Conversas com debounce vencido e ultima msg do cliente.
     const { data: conversas, error: errSel } = await supabase
       .from('lojas_whats_conversas')
-      .select('id, etapa, responder_em, ultima_msg_direcao, apresentacao_grupo, apresentacao_variante, apresentacao_enviada_em, telefone, nome_cliente')
+      .select('id, etapa, responder_em, ultima_msg_direcao, apresentacao_grupo, apresentacao_variante, apresentacao_enviada_em, telefone, nome_cliente, tags')
       .not('responder_em', 'is', null)
       .lte('responder_em', agoraIso)
       .eq('ultima_msg_direcao', 'entrada')
@@ -104,6 +104,12 @@ export default async function handler(req, res) {
       //   'texto_fotos' → texto curto do atacado + fotos ref='abertura'
       // Depois disso a Sofia espera a interação e segue o fluxo normal
       // (oferece o catálogo ou o cliente pede).
+      // Tag congelante (Ailson 07/07/2026): conversa marcada (ex: Atenção)
+      // não recebe NENHUM envio automático — nem abertura, nem auto-send.
+      // A sugestão também não é gerada aqui: quando a atendente resolver e
+      // remover a tag, o fluxo volta ao normal no próximo tick.
+      if (await tagsCongelamEnvio(c.tags)) { congeladas++; continue; }
+
       if (c.apresentacao_grupo && !c.apresentacao_enviada_em) {
         await zerarResponderEm(c.id);
         const variante = c.apresentacao_variante === 'texto_fotos' ? 'texto_fotos' : 'video';
@@ -207,6 +213,7 @@ export default async function handler(req, res) {
       total_pegos: conversas.length,
       gerados,
       pulados,
+      congeladas,
       erros,
       auto_ativo: autoAtivo,
       auto_enviadas: autoEnviadas,

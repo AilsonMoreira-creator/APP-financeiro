@@ -164,6 +164,27 @@ export function sanitizarNome(nome) {
     .trim();
 }
 
+// ─── Tags que congelam envios automáticos (Ailson 07/07/2026) ───────────────
+// Conversa com tag congela_auto (ex: Atenção — reclamação/troca) NÃO recebe
+// nenhum envio automático: auto-send da Sofia, followups, catálogo 6h, nudge,
+// pesquisa. Envios MANUAIS (atendente no chat) continuam normais.
+// Cache 60s: 1 query por invocação de cron, não por conversa.
+let _tagsCongelantesCache = { ids: null, em: 0 };
+export async function tagsCongelamEnvio(tags) {
+  if (!Array.isArray(tags) || tags.length === 0) return false;
+  const agora = Date.now();
+  if (!_tagsCongelantesCache.ids || agora - _tagsCongelantesCache.em > 60000) {
+    try {
+      const { data } = await supabase.from('lojas_whats_tags').select('id').eq('congela_auto', true);
+      _tagsCongelantesCache = { ids: new Set((data || []).map(t => t.id)), em: agora };
+    } catch (e) {
+      // Falha na leitura das defs: na dúvida, NÃO congela (não trava a operação)
+      return false;
+    }
+  }
+  return tags.some(t => t && _tagsCongelantesCache.ids.has(t.id));
+}
+
 export function primeiroNome(nomeCompleto) {
   const limpo = sanitizarNome(nomeCompleto).split(/[\s@.]+/)[0];
   if (!limpo || !/\p{L}/u.test(limpo)) return ''; // exige ao menos 1 letra de verdade (Ailson 02/07/2026)

@@ -19,7 +19,7 @@
 // template aprovado na Meta.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, primeiroNome } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, tagsCongelamEnvio, primeiroNome } from './_lojas-whats-helpers.js';
 import { enviarTemplate } from './_lojas-whats-meta-client.js';
 
 const LIMITE_PADRAO = 30;
@@ -45,6 +45,13 @@ export async function enviarFollowupConversa(conv) {
   const agora = new Date().toISOString();
 
   // CLAIM: so segue se followup_pesq_enviada_em ainda era null (anti duplo-envio)
+  // Tag congelante (Ailson 07/07/2026): conversa em Atenção não recebe lembrete
+  {
+    const { data: cAtual } = await supabase.from('lojas_whats_conversas')
+      .select('tags').eq('id', conv.id).maybeSingle();
+    if (await tagsCongelamEnvio(cAtual?.tags)) return { ok: false, erro: 'tag_congelante' };
+  }
+
   const { data: claim } = await supabase
     .from('lojas_whats_conversas')
     .update({ followup_pesq_enviada_em: agora, followup_pesq_template: TEMPLATE, atualizado_em: agora })

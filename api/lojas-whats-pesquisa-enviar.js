@@ -15,7 +15,7 @@
 // So dispara se o template estiver APROVADO na Meta.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors, log, logErro, primeiroNome } from './_lojas-whats-helpers.js';
+import { supabase, setCors, log, logErro, tagsCongelamEnvio, primeiroNome } from './_lojas-whats-helpers.js';
 import { enviarTemplate } from './_lojas-whats-meta-client.js';
 
 const LIMITE_PADRAO = 30;
@@ -55,6 +55,13 @@ function escolherVariante(ativas) {
 // Envia a pesquisa pra UMA conversa (ja elegivel). Claim-first.
 export async function enviarPesquisaConversa(conv, variante = 'sofia_pesquisa_motivo_v1') {
   const agora = new Date().toISOString();
+
+  // Tag congelante (Ailson 07/07/2026): conversa em Atenção não recebe pesquisa
+  {
+    const { data: cAtual } = await supabase.from('lojas_whats_conversas')
+      .select('tags').eq('id', conv.id).maybeSingle();
+    if (await tagsCongelamEnvio(cAtual?.tags)) return { ok: false, erro: 'tag_congelante' };
+  }
 
   // CLAIM: so segue se pesquisa_enviada_em ainda era null
   const { data: claim } = await supabase
