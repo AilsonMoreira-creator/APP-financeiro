@@ -35,7 +35,7 @@ import {
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
   User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
   Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video, Hash,
-  Instagram, Facebook, Copy, Circle, Search, RotateCcw
+  Instagram, Facebook, Copy, Circle, Search, RotateCcw, Tag, Plus
 } from 'lucide-react';
 import {
   supabase,
@@ -91,6 +91,46 @@ const ETAPAS = [
 
 const fz = (n) => `${n}px`;
 const sz = (n) => n;
+
+// ═══ TAGS DE CONVERSA (Ailson 07/07/2026) ═══════════════════════════════════
+// Etiquetas persistentes no card (sobrevivem à troca de etapa até alguém
+// remover). Defs em lojas_whats_tags; aplicadas em lojas_whats_conversas.tags
+// (jsonb [{id, ref?}]). 3 fixas: atencao (congela envios automáticos, Sofia
+// aplica sozinha em reclamação), alto_potencial (Sofia aplica em lojista
+// grande), reposicao (pede REF; card sobe com alerta quando o modelo volta).
+let TAGS_DEFS = [];                     // cache module-level (ConversaRow lê direto)
+let tagsDefsCarregadas = false;
+async function carregarTagsDefs(force = false) {
+  if (tagsDefsCarregadas && !force) return TAGS_DEFS;
+  const { data } = await supabase.from('lojas_whats_tags')
+    .select('*').order('ordem').order('criada_em');
+  if (data) { TAGS_DEFS = data; tagsDefsCarregadas = true; }
+  return TAGS_DEFS;
+}
+// Paleta fixa (evita 5 tons de verde indistinguíveis daqui a um mês)
+const PALETA_TAGS = ['#d4a017', '#7c3aed', '#2563eb', '#16a34a', '#dc2626',
+  '#ea580c', '#0d9488', '#db2777', '#64748b', '#78350f'];
+const tagDef = (id) => TAGS_DEFS.find(t => t.id === id);
+// Chip visual da tag (card + header do chat)
+const TagChip = ({ t, compacto = false, onRemover = null }) => {
+  const def = tagDef(t.id);
+  if (!def) return null;
+  return (
+    <span title={def.nome + (t.ref ? ` — REF ${t.ref}` : '') + (def.congela_auto ? ' (envios automáticos congelados)' : '')}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3,
+        fontSize: fz(10), padding: compacto ? '1px 5px' : '2px 7px', borderRadius: 8,
+        background: `${def.cor}1a`, color: def.cor, fontWeight: 700,
+        border: `1px solid ${def.cor}55`, whiteSpace: 'nowrap', flexShrink: 0,
+      }}>
+      {def.nome}{t.ref ? ` #${t.ref}` : ''}
+      {onRemover && (
+        <span onClick={(e) => { e.stopPropagation(); onRemover(t); }}
+          style={{ cursor: 'pointer', marginLeft: 2, fontWeight: 900 }}>×</span>
+      )}
+    </span>
+  );
+};
 
 // Hook: detecta se viewport é "desktop" (split view). Mobile mantém fullscreen.
 // Ailson 28/05/2026 — split view do chat.
@@ -1502,6 +1542,12 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
     })();
   }, []);
   const isDesktop = useIsDesktop();  // split view só em desktop; mobile = fullscreen
+  // Tags (Ailson 07/07/2026): defs no cache module-level; tick força re-render
+  // quando carregam/mudam. filtroTag só age na aba conversando (desktop).
+  const [filtroTag, setFiltroTag] = useState('todas');
+  const [tagsTick, setTagsTick] = useState(0);
+  const [modalTags, setModalTags] = useState(false);
+  useEffect(() => { carregarTagsDefs().then(() => setTagsTick(t => t + 1)); }, []);
   const [feedback, setFeedback] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
   const [expandido, setExpandido] = useState(false);
@@ -1618,7 +1664,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, ciclo24_vence_em, perdida_em,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, ciclo24_vence_em, perdida_em, tags, reposicao_alerta_em,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1633,6 +1679,10 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       }
       q = q.limit(limite);
       if (filtroEtapa !== 'todas') q = q.eq('etapa', filtroEtapa);
+      // Filtro por tag (Ailson 07/07/2026): só desktop, aba conversando
+      if (filtroEtapa === 'conversando' && filtroTag !== 'todas') {
+        q = q.contains('tags', JSON.stringify([{ id: filtroTag }]));
+      }
       // Sub-filtro da Perdida: recebeu / nao recebeu a pesquisa. Ailson 22/06/2026.
       if (filtroEtapa === 'perdida' && filtroPesquisaPerdida === 'com') q = q.not('pesquisa_enviada_em', 'is', null);
       else if (filtroEtapa === 'perdida' && filtroPesquisaPerdida === 'sem') q = q.is('pesquisa_enviada_em', null);
@@ -1668,6 +1718,9 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         lista = [...lista].sort((a, b) => {
           const pa = a.lead_prioritario ? 1 : 0, pb = b.lead_prioritario ? 1 : 0;
           if (pa !== pb) return pb - pa;
+          // Alerta de reposição (REF marcada voltou): sobe logo abaixo das ⭐
+          const rpa = a.reposicao_alerta_em ? 1 : 0, rpb = b.reposicao_alerta_em ? 1 : 0;
+          if (rpa !== rpb) return rpb - rpa;
           const ra = relogioCiclo24Ms(a, agora), rb = relogioCiclo24Ms(b, agora);
           if ((ra !== null) !== (rb !== null)) return ra !== null ? -1 : 1;
           if (ra !== null && rb !== null) return ra - rb;
@@ -1678,7 +1731,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       jaCarregouListaRef.current = true;
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, perdidaDe, perdidaAte]);
+  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, perdidaDe, perdidaAte, filtroTag]);
 
   // Catálogo dos templates de reativação (curadoria/novidades/dicas) pro
   // seletor do disparo em massa. Carrega 1x quando abre a aba Perdida.
@@ -1821,6 +1874,9 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
 
     const modais = (
       <>
+        {modalTags && (
+          <GerirTagsModal onClose={() => { setModalTags(false); setTagsTick(t => t + 1); setReloadTick(t => t + 1); }} />
+        )}
         {modalEditarLead && (
           <EditarLeadModal
             conversa={modalEditarLead.conversa}
@@ -2042,7 +2098,40 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
             badgeCor={et.id === 'follow_up' ? palette.inkMuted : undefined}
             badge={contadores[et.id]} unread={unreadPorEtapa[et.id]} />
         ))}
+        {/* Gestão de tags (Ailson 07/07/2026): criar/editar etiquetas dos cards */}
+        <button onClick={() => setModalTags(true)} title="Gerenciar tags"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '6px 12px', borderRadius: 16, fontSize: fz(12),
+            border: `1px dashed ${palette.beige}`, background: palette.surface,
+            color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, flexShrink: 0,
+          }}>
+          <Tag size={sz(13)} /> Tags
+        </button>
       </div>
+
+      {/* Filtro por tag — só desktop, aba conversando (Ailson 07/07/2026) */}
+      {isDesktop && filtroEtapa === 'conversando' && TAGS_DEFS.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: fz(11), color: palette.inkMuted }}>Filtrar tag:</span>
+          <button onClick={() => setFiltroTag('todas')}
+            style={{
+              fontSize: fz(11), padding: '3px 10px', borderRadius: 12, cursor: 'pointer',
+              border: `1px solid ${filtroTag === 'todas' ? palette.ink : palette.beige}`,
+              background: filtroTag === 'todas' ? palette.ink : palette.surface,
+              color: filtroTag === 'todas' ? '#fff' : palette.inkSoft, fontFamily: FONT,
+            }}>Todas</button>
+          {TAGS_DEFS.map(t => (
+            <button key={t.id} onClick={() => setFiltroTag(filtroTag === t.id ? 'todas' : t.id)}
+              style={{
+                fontSize: fz(11), padding: '3px 10px', borderRadius: 12, cursor: 'pointer',
+                border: `1px solid ${t.cor}${filtroTag === t.id ? '' : '55'}`,
+                background: filtroTag === t.id ? t.cor : `${t.cor}12`,
+                color: filtroTag === t.id ? '#fff' : t.cor, fontWeight: 700, fontFamily: FONT,
+              }}>{t.nome}</button>
+          ))}
+        </div>
+      )}
 
       {/* Barra de selecao multipla — abas processando e aprovar */}
       {(ehAbaProcessando || ehAbaAprovar || ehAbaPerdida) && conversas.length > 0 && (
@@ -2292,6 +2381,10 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
             </div>
           )}
         </>
+      )}
+
+      {modalTags && (
+        <GerirTagsModal onClose={() => { setModalTags(false); setTagsTick(t => t + 1); setReloadTick(t => t + 1); }} />
       )}
 
       {modalEnviar && (
@@ -2686,6 +2779,128 @@ const BotaoConfirmarPago = ({ onClick }) => {
   );
 };
 
+// ─── Modal de gestão de tags (Ailson 07/07/2026) ───────────────────────────
+// Criar etiqueta (nome + cor da paleta + opção de congelar envios automáticos)
+// e excluir as não-fixas. As 3 fixas (Atenção/Alto Potencial/Reposição) têm
+// comportamento atrelado no código e não podem ser excluídas.
+const GerirTagsModal = ({ onClose }) => {
+  const [defs, setDefs] = useState([...TAGS_DEFS]);
+  const [novoNome, setNovoNome] = useState('');
+  const [novaCor, setNovaCor] = useState(PALETA_TAGS[3]);
+  const [novoCongela, setNovoCongela] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  const criar = async () => {
+    const nome = novoNome.trim();
+    if (!nome) { setErro('Dê um nome pra tag.'); return; }
+    const id = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);
+    if (!id) { setErro('Nome inválido.'); return; }
+    if (defs.some(d => d.id === id)) { setErro('Já existe uma tag com esse nome.'); return; }
+    setSalvando(true); setErro(null);
+    try {
+      const r = await fetch('/api/lojas-whats-tags', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, nome, cor: novaCor, congela_auto: novoCongela }),
+      });
+      const j = await r.json();
+      if (!j.ok) { setSalvando(false); setErro(j.erro || 'falha ao criar'); return; }
+    } catch (e) { setSalvando(false); setErro(e.message); return; }
+    setSalvando(false);
+    await carregarTagsDefs(true);
+    setDefs([...TAGS_DEFS]);
+    setNovoNome(''); setNovoCongela(false);
+  };
+
+  const excluir = async (t) => {
+    if (t.fixa) return;
+    if (!window.confirm(`Excluir a tag "${t.nome}"? Ela some dos cards que a usam.`)) return;
+    try {
+      await fetch('/api/lojas-whats-tags', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: t.id }),
+      });
+    } catch (e) {}
+    await carregarTagsDefs(true);
+    setDefs([...TAGS_DEFS]);
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 300,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 18, width: '100%',
+        maxWidth: 440, maxHeight: '85vh', overflowY: 'auto', fontFamily: FONT,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: fz(15), color: palette.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Tag size={sz(16)} /> Tags dos cards
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.inkMuted }}>
+            <X size={sz(18)} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          {defs.map(t => (
+            <div key={t.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+              borderRadius: 8, border: `1px solid ${palette.beige}`, background: palette.surface,
+            }}>
+              <span style={{ width: 12, height: 12, borderRadius: 6, background: t.cor, flexShrink: 0 }} />
+              <span style={{ fontWeight: 700, fontSize: fz(13), color: palette.ink }}>{t.nome}</span>
+              <span style={{ fontSize: fz(10), color: palette.inkMuted, flex: 1 }}>
+                {t.congela_auto ? '❄️ congela envios automáticos' : ''}
+                {t.requer_ref ? '📦 pede REF · alerta quando voltar' : ''}
+              </span>
+              {t.fixa
+                ? <span style={{ fontSize: fz(10), color: palette.inkMuted }}>fixa</span>
+                : <button onClick={() => excluir(t)} title="Excluir tag"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.alert }}>
+                    <Trash2 size={sz(14)} />
+                  </button>}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ borderTop: `1px solid ${palette.beige}`, paddingTop: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: fz(13), color: palette.ink, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Plus size={sz(14)} /> Nova tag
+          </div>
+          <input value={novoNome} onChange={(e) => setNovoNome(e.target.value)}
+            placeholder="Nome da tag (ex: Pagamento pendente)"
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8,
+              border: `1px solid ${palette.beige}`, fontSize: fz(13), fontFamily: FONT,
+              marginBottom: 8, background: palette.surface, color: palette.ink,
+            }} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            {PALETA_TAGS.map(cor => (
+              <button key={cor} onClick={() => setNovaCor(cor)} style={{
+                width: 26, height: 26, borderRadius: 13, background: cor, cursor: 'pointer',
+                border: novaCor === cor ? `3px solid ${palette.ink}` : '3px solid transparent',
+              }} />
+            ))}
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: fz(12), color: palette.inkSoft, marginBottom: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={novoCongela} onChange={(e) => setNovoCongela(e.target.checked)} />
+            ❄️ Congelar envios automáticos (Sofia não age sozinha na conversa marcada)
+          </label>
+          {erro && <div style={{ fontSize: fz(12), color: palette.alert, marginBottom: 8 }}>{erro}</div>}
+          <button onClick={criar} disabled={salvando} style={{
+            width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+            background: palette.ink, color: '#fff', fontWeight: 700, fontSize: fz(13), fontFamily: FONT,
+            opacity: salvando ? 0.6 : 1,
+          }}>{salvando ? 'Salvando…' : 'Criar tag'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnviarVendedora, onTogglePrioridade, onToggleCatalogoFollowup, onDefinirFollowUp, onEditar, onConfirmarPago, onAbrirChat, onDecidiuQuente, selecionavel, selecionado, onToggleSelecao }) => {
   const ehPJ = c.tipo_documento === 'CNPJ';
   const ehQuente = c.etapa === 'quente';
@@ -2748,6 +2963,15 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
                 background: '#dc2626', color: '#fff', lineHeight: 1,
                 flexShrink: 0,
               }}>{c.unread_count}</span>
+            )}
+            {/* Tags da conversa (Ailson 07/07/2026) — persistem entre etapas */}
+            {(c.tags || []).map((t, i) => <TagChip key={t.id + i} t={t} compacto />)}
+            {/* Alerta: REF marcada na tag Reposição voltou ao estoque */}
+            {c.reposicao_alerta_em && (
+              <span title="O modelo que a cliente queria voltou! Avisar a cliente." style={{
+                fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
+                background: '#2563eb', color: '#fff', fontWeight: 700, flexShrink: 0,
+              }}>📦 chegou!</span>
             )}
             {ehQuente && c.score_quente && (
               <span style={{
@@ -5259,6 +5483,41 @@ function AnexarMidiaModal({ conversa, onClose, onSucesso, onErro }) {
 
 export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVendedora, idsNaAba, onNavegar, userId, splitLeft = 0 }) {
   const [conversa, setConversa] = useState(null);
+  // Tags no header (Ailson 07/07/2026): popover aplica/remove etiquetas do card
+  const [tagMenu, setTagMenu] = useState(false);
+  const [tagsTickChat, setTagsTickChat] = useState(0);
+  useEffect(() => { carregarTagsDefs().then(() => setTagsTickChat(t => t + 1)); }, []);
+  const toggleTag = async (def) => {
+    if (!conversa) return;
+    const atuais = conversa.tags || [];
+    const tem = atuais.some(t => t.id === def.id);
+    let novas; const extras = {};
+    if (tem) {
+      novas = atuais.filter(t => t.id !== def.id);
+      if (def.id === 'reposicao') extras.reposicao_alerta_em = null;
+    } else {
+      const nova = { id: def.id };
+      if (def.requer_ref) {
+        const ref = window.prompt('Referência do modelo em falta (ex: 2277):');
+        if (!ref || !String(ref).trim()) return;
+        nova.ref = String(ref).trim().replace(/^0+/, '') || '0';
+      }
+      novas = [...atuais, nova];
+    }
+    setConversa(prev => prev ? { ...prev, tags: novas, ...extras } : prev);
+    setTagMenu(false);
+    // Write via endpoint (service role): RLS de lojas_whats_conversas é read-only pro anon
+    try {
+      const r = await fetch('/api/lojas-whats-tags', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_id: conversa.id, tags: novas, ...(extras.reposicao_alerta_em === null ? { reposicao_alerta_em: null } : {}) }),
+      });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.erro || 'falha');
+    } catch (e) {
+      setConversa(prev => prev ? { ...prev, tags: atuais } : prev);
+    }
+  };
   const [mensagens, setMensagens] = useState([]);
   // Ailson 29/05/2026: mapa nome_template -> botao URL, pra renderizar no app
   // o mesmo botao que o WhatsApp mostra pra cliente (so visual, nao afeta envio).
@@ -5361,7 +5620,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
       if (convCarregadaRef.current !== conversaId) setLoading(true);  // spinner so ao trocar de conversa
       const [{ data: conv }, { data: msgs }, { data: sugs }] = await Promise.all([
         supabase.from('lojas_whats_conversas')
-          .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos')
+          .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, tags, reposicao_alerta_em')
           .eq('id', conversaId).maybeSingle(),
         supabase.from('lojas_whats_mensagens')
           .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, midia_url, meta_message_id, status, enviada_em, template_name')
@@ -5968,6 +6227,52 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           }}>
           <Hash size={sz(14)} />
         </button>
+        {/* Tags da conversa (Ailson 07/07/2026): etiqueta persistente no card */}
+        <div style={{ position: 'relative' }}>
+          <button onClick={() => setTagMenu(v => !v)} title="Tags do card"
+            style={{
+              background: (conversa.tags || []).length ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              color: palette.bg, padding: '6px 9px', borderRadius: 6, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+            <Tag size={sz(14)} />
+            {(conversa.tags || []).length > 0 && (
+              <span style={{ fontSize: fz(10), fontWeight: 700 }}>{(conversa.tags || []).length}</span>
+            )}
+          </button>
+          {tagMenu && (
+            <div style={{
+              position: 'absolute', top: '110%', right: 0, zIndex: 250,
+              background: palette.bg, border: `1px solid ${palette.beige}`,
+              borderRadius: 10, padding: 8, minWidth: 200,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            }}>
+              {TAGS_DEFS.length === 0 && (
+                <div style={{ fontSize: fz(12), color: palette.inkMuted, padding: 6 }}>Carregando…</div>
+              )}
+              {TAGS_DEFS.map(def => {
+                const aplicada = (conversa.tags || []).find(t => t.id === def.id);
+                return (
+                  <button key={def.id} onClick={() => toggleTag(def)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                      padding: '7px 8px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      background: aplicada ? `${def.cor}18` : 'transparent',
+                      color: palette.ink, fontFamily: FONT, fontSize: fz(12), textAlign: 'left',
+                    }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 5, background: def.cor, flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontWeight: aplicada ? 700 : 400 }}>
+                      {def.nome}{aplicada?.ref ? ` #${aplicada.ref}` : ''}
+                    </span>
+                    {def.congela_auto && <span title="Congela envios automáticos" style={{ fontSize: fz(11) }}>❄️</span>}
+                    {aplicada && <Check size={sz(13)} color={def.cor} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
         <button onClick={() => onEditarLead && onEditarLead(conversa)} title="Editar lead"
           style={{
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
