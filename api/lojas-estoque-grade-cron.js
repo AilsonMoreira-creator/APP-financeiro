@@ -14,6 +14,7 @@
 
 import { listarArquivosDrive, baixarArquivoDrive, parseCSV } from './_lojas-drive-helpers.js';
 import { supabase } from './_lojas-whats-helpers.js';
+import { enviarPushSofia } from './_push-helpers.js';
 
 const WHITELIST_ZERO = new Set(['0020', '0050']);
 
@@ -106,12 +107,47 @@ export default async function handler(req, res) {
       inseridas += Math.min(500, rows.length - i);
     }
 
+    // ── ALERTA DE REPOSIÇÃO (Ailson 07/07/2026) ─────────────────────────────
+    // Conversas com tag 'reposicao' (REF marcada quando faltou): se a REF agora
+    // TEM estoque no snapshot novo, carimba reposicao_alerta_em (o card sobe no
+    // painel da Sofia) e manda push pra atendente avisar a cliente.
+    let alertasReposicao = 0;
+    try {
+      const { data: comTag } = await supabase.from('lojas_whats_conversas')
+        .select('id, nome_cliente, tags')
+        .contains('tags', JSON.stringify([{ id: 'reposicao' }]))
+        .is('reposicao_alerta_em', null)
+        .limit(500);
+      if ((comTag || []).length > 0) {
+        const refsComEstoque = new Set(rows.filter(r => (r.disponivel || 0) > 0).map(r => String(r.ref)));
+        for (const c of comTag) {
+          const tRep = (c.tags || []).find(t => t.id === 'reposicao' && t.ref);
+          if (!tRep) continue;
+          if (!refsComEstoque.has(refSemZero(tRep.ref))) continue;
+          const { error: eAl } = await supabase.from('lojas_whats_conversas')
+            .update({ reposicao_alerta_em: new Date().toISOString(), atualizado_em: new Date().toISOString() })
+            .eq('id', c.id);
+          if (!eAl) {
+            alertasReposicao++;
+            enviarPushSofia({
+              titulo: '📦 Reposição chegou',
+              mensagem: `REF ${tRep.ref} voltou ao estoque — avisar ${c.nome_cliente || 'cliente'} (card subiu no painel)`,
+              url: '/?modulo=sofia',
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (eRep) {
+      console.warn('[estoque-grade-cron] alerta reposicao falhou (nao bloqueia import):', eRep?.message);
+    }
+
     return res.status(200).json({
       ok: true,
       arquivo: arq.name,
       data_arquivo: dataArqISO,
       linhas_csv: linhas.length,
       importadas: inseridas,
+      alertas_reposicao: alertasReposicao,
       refs_distintas: new Set(rows.map(r => r.ref)).size,
       ignoradas: { ref_zero: igZero, cor_ou_tam_asterisco: igAster, sem_ref: igSemRef },
       cabecalhos_usados: { ref: kRef, cor: kCor, tam: kTam, disponivel: kDisp },
