@@ -17,8 +17,12 @@
 import { supabase } from './_bling-helpers.js';
 import { obterUrlMidia, baixarMidia } from './_lojas-whats-meta-client.js';
 import { acharConversaWhats, soDigitos, chaveTel } from './_meluni-tel.js';
+import { aplicarTagTelefone } from './_meluni-tags-core.js';
 
 const DEBOUNCE_MS = 60 * 1000; // 60s — agrupa rajada antes da IA (igual Sofia)
+// sinais da tag 'potencial' (intencao de compra). Texto ja normalizado (sem acento).
+const RE_LINK_PRODUTO = /https?:\/\/\S+/i;
+const RE_INTENCAO_COMPRA = /(quero|quanto\s*(custa|fica|sai|e\b)|preco|valor|disponiv|ainda\s*tem|tem\s*(esse|essa|este|esta|ele|ela)|pronta\s*entrega|comprar|me\s*(ve|manda|vende)|qual\s*(o\s*)?valor)/;
 
 const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const WHISPER_MODEL = 'whisper-1';
@@ -196,6 +200,19 @@ export async function processarMensagemMeluni(msg, value) {
     }).eq('id', conversaId);
 
     console.log(`[meluni-inbound] msg de ${telefone} (${c.tipo}) -> conversa ${conversaId}`);
+
+    // tag 'potencial' automatica: link de produto OU foto com legenda de intencao
+    // de compra. best-effort, nunca derruba a ingestao. Ailson 07/07/2026.
+    try {
+      const txtCru = String(c.texto || '');
+      const txtNorm = txtCru.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const temLink = RE_LINK_PRODUTO.test(txtCru);
+      const temIntencao = RE_INTENCAO_COMPRA.test(txtNorm);
+      if (temLink || (c.tipo === 'image' && temIntencao)) {
+        const r = await aplicarTagTelefone(supabase, telefone, { id: 'potencial' });
+        if (r.aplicou) console.log(`[meluni-inbound] tag potencial marcada em ${telefone}`);
+      }
+    } catch (e) { console.error('[meluni-inbound] tag potencial:', e?.message || e); }
 
     // se essa cliente tem carrinho no funil (enviada/segundo_envio), a resposta dela
     // move pra 'conversando' e marca a interação (alimenta o relógio de 3 dias).

@@ -17,6 +17,7 @@ import { chamarClaude, calcularCustoBRL } from './_lojas-helpers.js';
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { rankingSnapshot, rankingBloco, contextoCarrinho, contextoLinkProduto } from './_meluni-ranking.js';
 import { BASE_MEDIDAS_PRODUTOS } from './_medidas-produtos-base.js';
+import { aplicarTagTelefone } from './_meluni-tags-core.js';
 // Lara nao usa travessao (regra de copy): troca por virgula.
 const BASE_MEDIDAS_LARA = BASE_MEDIDAS_PRODUTOS.replaceAll('—', ',');
 
@@ -91,6 +92,7 @@ Responda APENAS com o texto da mensagem que a Lara enviaria agora pra cliente (s
 - NÃO escreva assunto, cabeçalho "De:/Para:", nem assinatura/despedida com o nome da loja: o sistema adiciona o assunto e a assinatura sozinho. Escreva só o corpo da resposta.
 - Continue tratando por "vc".` });
   }
+  blocks.push({ type: 'text', text: `ETIQUETA DE ATENCAO (uso interno, a cliente NUNCA ve): quando a cliente estiver RECLAMANDO ou com problema serio (peca com defeito, pedido errado ou atrasado, pediu troca/devolucao, cobranca indevida, ou tom irritado/ameacando), adicione o marcador [TAG:atencao] sozinho na ULTIMA linha da sua resposta. O sistema remove o marcador antes de enviar (a cliente nunca ve) e uma atendente humana assume a conversa. NUNCA mencione a etiqueta pra cliente. Use ao primeiro sinal claro; na duvida entre irritacao real e duvida comum, NAO use.` });
   if (extra) blocks.push({ type: 'text', text: extra }); // contexto do carrinho (dinâmico, sem cache)
   return blocks;
 }
@@ -239,7 +241,23 @@ REGRAS POS-COMPRA (obrigatorias nesta conversa):
   if (!cl.ok) return { motivo: 'claude_falhou', erro: cl.erro };
   // Guard de copy (Ailson 04/07/2026): travessao e proibido, mas o modelo as
   // vezes escapa da regra do prompt. Troca deterministica por virgula.
-  const texto = (cl.texto || '').replace(/\s*—\s*/g, ', ').trim();
+  let texto = (cl.texto || '').replace(/\s*—\s*/g, ', ').trim();
+
+  // tag 'atencao' (Ailson 07/07/2026): a Lara pode marcar sozinha via [TAG:atencao]
+  // na resposta (instruido no prompt). Extrai, REMOVE do texto (cliente nunca ve)
+  // e aplica no telefone. atencao mantem a sugestao PENDENTE (atendente assume).
+  // best-effort: falha na tag nao derruba a replica.
+  let atencaoMarcada = false;
+  try {
+    const reTag = /\[TAG:\s*atencao\s*\]/gi;
+    if (reTag.test(texto)) {
+      texto = texto.replace(reTag, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+      atencaoMarcada = true;
+      const r = await aplicarTagTelefone(supabase, conv.telefone, { id: 'atencao' });
+      if (r.aplicou) console.log(`[meluni-ia] Lara marcou atencao em ${conv.telefone}`);
+    }
+  } catch (e) { console.error('[meluni-ia] tag atencao:', e?.message || e); }
+
   if (!texto) return { motivo: 'claude_vazio' };
 
   let custo = null;
@@ -253,5 +271,6 @@ REGRAS POS-COMPRA (obrigatorias nesta conversa):
   if (error) return { motivo: 'erro_gravar_sugestao', erro: error.message };
 
   const autoCls = classificarAutoEnvioLara(msgs, ultima);
-  return { motivo: 'sugestao_criada', sugestaoId: sug.id, texto, autoEnviar: autoCls.auto, autoCaso: autoCls.caso };
+  const autoEnviar = autoCls.auto && !atencaoMarcada; // atencao => sempre pendente, atendente assume
+  return { motivo: 'sugestao_criada', sugestaoId: sug.id, texto, autoEnviar, autoCaso: atencaoMarcada ? 'atencao_marcada' : autoCls.caso };
 }
