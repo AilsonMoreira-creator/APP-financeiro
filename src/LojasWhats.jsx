@@ -4517,7 +4517,8 @@ function ModalVendaManualMeta({ onClose, onSucesso }) {
   const [documento, setDocumento] = useState('');
   const [valor, setValor] = useState('');
   const [numeroPedido, setNumeroPedido] = useState('');
-  const [categoria, setCategoria] = useState('varejo');
+  const [categoria, setCategoria] = useState('atacado');
+  const [conta, setConta] = useState('b2b');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState(null);
   const [okMsg, setOkMsg] = useState(null);
@@ -4538,8 +4539,7 @@ function ModalVendaManualMeta({ onClose, onSucesso }) {
   const telDigits = telefone.replace(/\D/g, '');
   const valido = vendedoraNome
     && telDigits.length >= 10
-    && valorNum > 0
-    && numeroPedido.trim().length > 0;
+    && valorNum > 0;
 
   const enviar = async () => {
     if (!valido) return;
@@ -4552,13 +4552,14 @@ function ModalVendaManualMeta({ onClose, onSucesso }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           manual: true,
+          conta,
           vendedora_nome: vendedoraNome,
           dados_manual: {
             telefone: telDigits,
             nome_cliente: nomeCliente.trim() || null,
             documento: documento.replace(/\D/g, '') || null,
             valor: valorNum,
-            numero_pedido: numeroPedido.trim(),
+            numero_pedido: numeroPedido.trim() || null,
             categoria,
           },
         }),
@@ -4629,6 +4630,15 @@ function ModalVendaManualMeta({ onClose, onSucesso }) {
           </select>
         </div>
 
+        {/* Conta Meta (full width) */}
+        <div style={{ marginBottom: 10 }}>
+          <label style={labelStyle}>Conta Meta *</label>
+          <select value={conta} onChange={e => setConta(e.target.value)} style={inputStyle}>
+            <option value="b2b">Amícia B2B (WhatsApp) · pixel Vesti</option>
+            <option value="conv">Amícia conv (site/cartão) · pixel Convertr</option>
+          </select>
+        </div>
+
         {/* Telefone + Valor side-by-side */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
           <div style={{ flex: 1.4 }}>
@@ -4679,7 +4689,7 @@ function ModalVendaManualMeta({ onClose, onSucesso }) {
         {/* Pedido + Categoria side-by-side */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
           <div style={{ flex: 1.4 }}>
-            <label style={labelStyle}>Nº pedido Miré *</label>
+            <label style={labelStyle}>Nº pedido Miré</label>
             <input
               value={numeroPedido}
               onChange={e => setNumeroPedido(e.target.value)}
@@ -4702,8 +4712,8 @@ function ModalVendaManualMeta({ onClose, onSucesso }) {
           padding: '6px 8px', background: palette.surface, borderRadius: 4,
           border: `1px dashed ${palette.beige}`,
         }}>
-          Telefone + Nº pedido + Valor são obrigatórios. Nome e CPF ajudam o
-          advanced matching da Meta — preencha se tiver.
+          Telefone + Valor são obrigatórios. Nº pedido, Nome e CPF ajudam o
+          advanced matching da Meta, preencha se tiver.
         </div>
 
         {/* Mensagens */}

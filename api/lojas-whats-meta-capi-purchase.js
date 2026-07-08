@@ -38,6 +38,18 @@ const META_GRAPH_VERSION = 'v21.0';
 // por isso os 13 Purchase anteriores foram pro pixel errado. Ailson 01/07/2026.
 const PIXEL_B2B_ID = '1636287600816161';
 
+// Pixel "App Vesti e Site (Misturados)" (1376423864502942) — compartilhado entre a
+// conta Amicia B2B (338013328231048, onde rodam as campanhas CTWA da Sofia) e a conv
+// cartao (626487585630124). Ailson 08/07/2026: venda manual da conta B2B vai pra esse
+// pixel (ele ainda vai arrumar a config na Meta).
+const PIXEL_VESTI_MISTURADO = '1376423864502942';
+
+// Contas selecionaveis no modal de venda manual. conta -> pixel de destino do CAPI.
+const CONTAS_CAPI = {
+  b2b:  { pixel: PIXEL_VESTI_MISTURADO, label: 'Amicia B2B (WhatsApp)' },
+  conv: { pixel: PIXEL_B2B_ID,          label: 'Amicia conv (site/cartao)' },
+};
+
 // Pagina FB por tras dos anuncios CTWA da conta Amicia conv cartao (626487585630124).
 // Obrigatoria em user_data.page_id quando action_source=business_messaging/whatsapp
 // (Meta subcode 2804069). O WABA via env estava errado (era o da Meluni). Ailson 01/07/2026.
@@ -60,10 +72,7 @@ export default async function handler(req, res) {
       if (!dados_manual?.valor || dados_manual.valor <= 0) {
         return res.status(400).json({ error: 'dados_manual.valor obrigatorio (>0)' });
       }
-      if (!dados_manual?.numero_pedido) {
-        return res.status(400).json({ error: 'dados_manual.numero_pedido_obrigatorio (necessario pra idempotencia)' });
-      }
-      const resultado = await dispararPurchaseManual({ dados_manual, vendedora_nome });
+      const resultado = await dispararPurchaseManual({ dados_manual, vendedora_nome, conta: body.conta });
       const httpStatus = resultado.status === 'enviado' ? 200
                        : resultado.status === 'duplicado' ? 200 : 500;
       return res.status(httpStatus).json(resultado);
@@ -237,21 +246,22 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
 //
 // Sem ctwa_clid (Vanessa nunca tera). Sem ligacao com conversa Sofia.
 // Idempotencia: event_id = sha256('manual|telefone|numero_pedido|valor)
-export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
+export async function dispararPurchaseManual({ dados_manual, vendedora_nome, conta }) {
   const {
     telefone, nome_cliente, documento,
     valor, numero_pedido, categoria,
   } = dados_manual;
 
-  // 1. Variaveis Meta
-  const pixelId = PIXEL_B2B_ID;
+  // 1. Variaveis Meta — pixel escolhido pela conta (default b2b = Vesti misturado)
+  const contaCfg = CONTAS_CAPI[conta] || CONTAS_CAPI.b2b;
+  const pixelId = contaCfg.pixel;
   const token = process.env.META_ADS_TOKEN || process.env.META_WA_ACCESS_TOKEN;
-  if (!pixelId) return { status: 'falhou', erro: 'META_CAPI_PIXEL_B2B_ID nao configurado em env' };
+  if (!pixelId) return { status: 'falhou', erro: 'pixel nao resolvido pra conta informada' };
   if (!token) return { status: 'falhou', erro: 'token Meta nao configurado em env (META_ADS_TOKEN ou META_WA_ACCESS_TOKEN)' };
 
   // 2. event_id deterministico (idempotencia Meta-side + nossa)
   const eventId = crypto.createHash('sha256')
-    .update(`manual|${telefone}|${numero_pedido}|${valor}`)
+    .update(`manual|${conta || 'b2b'}|${telefone}|${numero_pedido}|${valor}`)
     .digest('hex')
     .slice(0, 32);
 
@@ -302,7 +312,7 @@ export async function dispararPurchaseManual({ dados_manual, vendedora_nome }) {
     custom_data: {
       currency: 'BRL',
       value: Number(valor),
-      order_id: numero_pedido,
+      ...(numero_pedido ? { order_id: numero_pedido } : {}),
       content_category: categoria || 'varejo',
     },
   };
