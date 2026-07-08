@@ -1160,7 +1160,7 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
   try {
     const { data: midias } = await supabase
       .from('lojas_whats_midias')
-      .select('tipo, ref, nome_arquivo, descricao, promocao')
+      .select('tipo, ref, nome_arquivo, descricao, promocao, estacao')
       .eq('ativa', true)
       .order('criada_em', { ascending: false })
       .limit(200);
@@ -1169,9 +1169,13 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
       const videos = midias.filter(m => m.tipo === 'video' && m.ref);
       const catalogos = midias.filter(m => m.tipo === 'catalogo');
       const linhas = ['MIDIAS DISPONIVEIS (pode usar via marcadores no texto):'];
+      const promoCfg = await getConfig('promocao_ativa', null);
+      const promoAtiva = !!(promoCfg && promoCfg.ativa);
+      const semExt = (n) => (n || '').replace(/\.[^.]+$/, '');
+      const rotEstacao = (m) => m.estacao === 'verao' ? `${m.ref} (verao)` : m.estacao === 'inverno' ? `${m.ref} (inverno)` : m.ref;
       if (fotos.length > 0) {
-        linhas.push(`  FOTOS por REF: ${fotos.slice(0, 30).map(f => f.ref).join(', ')}`);
-        linhas.push('    → use [ENVIAR_FOTO:REF] quando cliente perguntar/mencionar produto');
+        linhas.push(`  FOTOS por REF: ${fotos.slice(0, 30).map(rotEstacao).join(', ')}`);
+        linhas.push('    → use [ENVIAR_FOTO:REF] quando cliente perguntar/mencionar produto. Um "(verao)"/"(inverno)" ao lado da REF indica a estacao da colecao daquele modelo (ver REGRA DE ESTACAO no fim deste bloco).');
       }
       if (videos.length > 0) {
         linhas.push(`  VIDEOS por REF: ${videos.slice(0, 15).map(v => v.ref).join(', ')}`);
@@ -1183,9 +1187,6 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
         // mandou o catalogo de promocao como ABERTURA por engano). O config
         // promocao_ativa.ativa so liga/desliga a OFERTA. O catalogo de
         // abertura/geral NUNCA pode ser um de promocao. Ailson 22/06/2026.
-        const promoCfg = await getConfig('promocao_ativa', null);
-        const promoAtiva = !!(promoCfg && promoCfg.ativa);
-        const semExt = (n) => (n || '').replace(/\.[^.]+$/, '');
         const ehPromo = (m) => m.promocao === true || /promo/i.test(semExt(m.nome_arquivo || ''));
         const catalogosGerais = catalogos.filter(m => !ehPromo(m));
         const catalogoPromo = (promoAtiva ? (catalogos.find(ehPromo) || null) : null);
@@ -1196,12 +1197,29 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
           const listaGeral = catalogosGerais.slice(0, 10).map(c => semExt(c.nome_arquivo)).join(', ');
           linhas.push(`  CATALOGO GERAL (abertura/padrao): ${listaGeral}`);
           linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes. Quando o cliente responder que JA revende / tem loja / e sacoleira / esta comecando, acolhe rapido e JA manda o catalogo (sem ficar perguntando mais).');
+          if (base.estacao === 'inverno' && promoAtiva) {
+            linhas.push('    → o catalogo geral atual e da colecao de INVERNO: ao manda-lo, pode usar o gancho de que ALGUNS modelos de inverno estao com 30% off (a gente vende o inverno ate o fim de julho). Se o cliente quiser saber QUAIS, ai sim mande o catalogo de promocao. Nao prometa 30% em tudo.');
+          } else if (base.estacao === 'verao') {
+            linhas.push('    → o catalogo geral atual e da colecao de VERAO: pode comentar que sao as novidades, cartela de cores atualizada de verao.');
+          }
         }
         if (catalogoPromo) {
           linhas.push(`  CATALOGO DE PROMOCAO: ${semExt(catalogoPromo.nome_arquivo)}`);
           linhas.push(`    → REGRA DA PROMOCAO (robusta, leia com atencao): este catalogo NUNCA eh o de abertura/geral. Envie [ENVIAR_CATALOGO:${semExt(catalogoPromo.nome_arquivo)}] APENAS em dois casos: (a) o cliente PEDIU / PERGUNTOU da promocao; OU (b) VOCE ja ofereceu a condicao/desconto da promo NESTA conversa (ex: na resposta da pesquisa de PRECO, com os 30%) e o cliente ACEITOU / disse sim / pediu pra separar. FORA desses dois casos, JAMAIS envie o catalogo de promocao. No caso (b), MANDE o catalogo de promocao ANTES de pedir as pecas. Ao enviar, DEIXE CLARO no texto que e o catalogo da PROMOCAO (ex: "te mando o catalogo da promocao, com a condicao dos 30% 😊") — a cliente precisa saber que aquilo e a promocao. REGRA DURA: NUNCA peca "me manda as pecas que vc escolheu" sem ter enviado o catalogo de promocao nesta conversa quando o assunto e a promo. NUNCA ofereca foto solta de peca ([ENVIAR_FOTO:REF]) como se fosse "da promocao".`);
         }
       }
+      const linhaInverno = promoAtiva
+        ? '- Modelo/catalogo marcado "(inverno)": e da colecao de inverno. Pode usar o gancho de que ALGUNS modelos de inverno estao com 30% off (a gente vende o inverno ate o fim de julho). Se o cliente quiser saber QUAIS, ai sim mande o catalogo de promocao (ver REGRA DA PROMOCAO). Nao prometa 30% em tudo, e "alguns modelos".'
+        : '- Modelo/catalogo marcado "(inverno)": e da colecao de inverno. Fale com naturalidade, sem prometer desconto (a promocao de inverno nao esta ativa agora).';
+      linhas.push('');
+      linhas.push('REGRA DE ESTACAO / COLECAO:');
+      linhas.push('- Modelo marcado "(verao)": ja esta com a cartela de cores de verao (colecao nova). Ao falar/mandar, pode dizer com naturalidade que ja entrou com a cartela atualizada de cores de verao. Ex: "esse ja ta com a cartela nova de verao 😊".');
+      linhas.push(linhaInverno);
+      linhas.push('- Modelo SEM marcacao de estacao: descubra pela cor. Olhe as cores do modelo em REFERENCIAS ATIVAS ("cores disponiveis" ou "cores do ultimo corte") e classifique pela tabela abaixo. Vc decide a estacao.');
+      linhas.push('  Cores NEUTRAS (servem pras duas, nao definem sozinhas): bege, natural, preto, azul marinho, nude.');
+      linhas.push('  Cores de INVERNO: verde militar, vinho, figo, marrom, caramelo, terracota (entre outras).');
+      linhas.push('  Cores de VERAO: azul claro, azul serenity, azul jeans, verde menta, verde agua, verde salvia, amarelo, coral, coral queimado, rosa, rose, laranja, lilas (entre outras).');
+      linhas.push('  Se as cores forem predominantemente de verao, trate como verao (cartela nova); se de inverno, trate como inverno. So cores neutras: nao force estacao.');
       blocoMidias = linhas.join('\n');
     }
   } catch (e) {
