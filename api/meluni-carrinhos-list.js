@@ -8,6 +8,7 @@
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
 import { chaveTel } from './_meluni-tel.js';
+import { anexarTags } from './_meluni-tags-anexar.js';
 import { telefonesConvertidos, pendenciaCarrinho } from './_meluni-pendencias-core.js';
 
 export default async function handler(req, res) {
@@ -96,6 +97,8 @@ export default async function handler(req, res) {
     const { count: conv30 } = await supabase.from('meluni_carrinhos')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'conversao').gte('convertido_em', desde30);
+
+    await anexarTags(supabase, lista, c => c.cliente_whatsapp || c.telefone);
 
     return res.json({ ok: true, total: count ?? lista.length, offset, limite, unread, conv30: conv30 || 0, carrinhos: lista });
   } catch (e) {

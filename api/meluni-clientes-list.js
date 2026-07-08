@@ -9,6 +9,7 @@
 //   limite. Ailson 13/06/2026.
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
+import { anexarTags } from './_meluni-tags-anexar.js';
 
 const diaISO = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
 
@@ -108,6 +109,8 @@ export default async function handler(req, res) {
     const { count: conv30 } = await supabase.from('meluni_conversas')
       .select('id', { count: 'exact', head: true })
       .eq('origem', 'cliente').eq('etapa', 'conversao').gte('convertido_em', desde30);
+
+    await anexarTags(supabase, lista, c => c.whatsapp || c.telefone);
 
     return res.json({ ok: true, total: lista.length, etapa, unread, conv30: conv30 || 0, clientes: lista });
   } catch (e) {

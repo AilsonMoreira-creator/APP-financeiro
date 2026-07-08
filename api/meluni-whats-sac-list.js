@@ -6,6 +6,7 @@
 // Ailson 16/06/2026.
 // ============================================================================
 import { supabase } from './_meluni-whats-helpers.js';
+import { anexarTags } from './_meluni-tags-anexar.js';
 
 const DIAS_FRIO = 3;
 
@@ -67,6 +68,8 @@ export default async function handler(req, res) {
     // contadores das abas (badge) = só o que PRECISA DE AÇÃO (não-lido); exclui carrinho e cliente.
     const cont = { conversando: 0, follow_up: 0, arquivo: 0 };
     for (const c of (convs || [])) { if (c.origem === 'carrinho' || c.origem === 'cliente') continue; if (precisaAcao(c)) cont[bucketDe(c)]++; }
+
+    await anexarTags(supabase, lista);
 
     return res.json({ ok: true, conversas: lista, contadores: cont });
   } catch (e) {
