@@ -8196,6 +8196,16 @@ function MidiaCard({ m, onEditar, onExcluir }) {
             REF {m.ref}
           </div>
         )}
+        {m.estacao && (
+          <div style={{
+            position: 'absolute', top: 4, right: 4,
+            background: m.estacao === 'verao' ? '#d97706' : '#4a7fa5', color: '#fff',
+            padding: '1px 6px', borderRadius: 4,
+            fontSize: 10, fontWeight: 700, textTransform: 'capitalize',
+          }}>
+            {m.estacao === 'verao' ? 'Verão' : 'Inverno'}
+          </div>
+        )}
       </div>
       <div style={{ padding: 6, flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{
@@ -8617,6 +8627,7 @@ function UploadMidiaModal({ onClose, onSucesso, onErro }) {
 function EditarMidiaModal({ midia, onClose, onSucesso, onErro }) {
   const [ref, setRef] = useState(midia.ref || '');
   const [descricao, setDescricao] = useState(midia.descricao || '');
+  const [estacao, setEstacao] = useState(midia.estacao || '');
   const [salvando, setSalvando] = useState(false);
 
   const salvar = async () => {
@@ -8625,7 +8636,7 @@ function EditarMidiaModal({ midia, onClose, onSucesso, onErro }) {
       const r = await fetch('/api/lojas-whats-midia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: midia.id, ref, descricao }),
+        body: JSON.stringify({ id: midia.id, ref, descricao, estacao: estacao || null }),
       });
       const j = await r.json();
       if (j.error) onErro(j.error); else onSucesso();
@@ -8667,15 +8678,22 @@ function EditarMidiaModal({ midia, onClose, onSucesso, onErro }) {
             boxSizing: 'border-box', resize: 'vertical', minHeight: 70,
           }}
         />
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={onClose} disabled={salvando} style={{
-            flex: 1, padding: '9px', borderRadius: 6,
-            background: palette.surface, color: palette.ink,
-            border: `1px solid ${palette.beige}`, fontSize: fz(13), fontWeight: 600, fontFamily: FONT,
-            cursor: salvando ? 'wait' : 'pointer',
+        <label style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600 }}>Estação (coleção)</label>
+        <select value={estacao} onChange={e => setEstacao(e.target.value)}
+          style={{
+            width: '100%', padding: '7px 10px', borderRadius: 6,
+            border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: fz(12),
+            marginBottom: 4, marginTop: 4, color: palette.ink, background: palette.surface,
+            boxSizing: 'border-box',
           }}>
-            Cancelar
-          </button>
+          <option value="">Não definido (Sofia infere pelas cores)</option>
+          <option value="verao">Verão (cartela atualizada)</option>
+          <option value="inverno">Inverno</option>
+        </select>
+        <div style={{ fontSize: fz(10), color: palette.inkMuted, marginBottom: 14 }}>
+          Verão faz a Sofia dizer que a cartela de cores já está atualizada. Sem definir, ela olha as cores do último corte.
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={salvar} disabled={salvando} style={{
             flex: 1, padding: '9px', borderRadius: 6,
             background: palette.ink, color: palette.bg, border: 'none',

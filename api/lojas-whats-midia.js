@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
       let qb = supabase
         .from('lojas_whats_midias')
-        .select('id, tipo, ref, nome_arquivo, storage_path, size_bytes, mime_type, descricao, tags, categoria_inferida, enviada_count, ultima_enviada_em, criada_em')
+        .select('id, tipo, ref, nome_arquivo, storage_path, size_bytes, mime_type, descricao, tags, estacao, categoria_inferida, enviada_count, ultima_enviada_em, criada_em')
         .eq('ativa', true)
         .order('criada_em', { ascending: false })
         .limit(500);
@@ -62,9 +62,12 @@ export default async function handler(req, res) {
 
     // EDITAR
     if (req.method === 'POST') {
-      const { id, ref, descricao, tags } = req.body || {};
+      const { id, ref, descricao, tags, estacao } = req.body || {};
       if (!id) return res.status(400).json({ error: 'id obrigatorio' });
       const upd = { atualizada_em: new Date().toISOString() };
+      if (estacao !== undefined) {
+        upd.estacao = (estacao === 'inverno' || estacao === 'verao') ? estacao : null;
+      }
       if (ref !== undefined) {
         upd.ref = ref || null;
         // Re-infere categoria se ref mudou
