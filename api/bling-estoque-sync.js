@@ -67,7 +67,10 @@ export default async function handler(req, res) {
     resumo.deposito_nome = depositoNome;
 
     // Guarda o depósito geral pra escrita/webhook reusarem sem redetectar.
-    if (!dryRun) {
+    // Só o Exitus manda nesse config: o ajuste (bling-estoque-set) escreve SEMPRE
+    // no Exitus. Sem o guard, o sync das filhas (lumia/muniam) sobrescrevia o
+    // deposito_geral do Exitus e quebrava o ajuste. Ailson 08/07/2026.
+    if (!dryRun && conta === 'exitus') {
       await supabase.from('amicia_data').upsert({ user_id: 'bling-estoque-config', payload: { conta, deposito_geral: depositoId, deposito_nome: depositoNome, atualizado_em: new Date().toISOString() } }, { onConflict: 'user_id' });
     }
 
