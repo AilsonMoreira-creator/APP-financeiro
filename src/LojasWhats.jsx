@@ -1679,8 +1679,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       }
       q = q.limit(limite);
       if (filtroEtapa !== 'todas') q = q.eq('etapa', filtroEtapa);
-      // Filtro por tag (Ailson 07/07/2026): só desktop, aba conversando
-      if (filtroEtapa === 'conversando' && filtroTag !== 'todas') {
+      // Filtro por tag (Ailson 07/07/2026): só desktop, abas conversando/follow_up/perdida
+      if (['conversando', 'follow_up', 'perdida'].includes(filtroEtapa) && filtroTag !== 'todas') {
         q = q.contains('tags', JSON.stringify([{ id: filtroTag }]));
       }
       // Sub-filtro da Perdida: recebeu / nao recebeu a pesquisa. Ailson 22/06/2026.
@@ -2110,8 +2110,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         </button>
       </div>
 
-      {/* Filtro por tag — só desktop, aba conversando (Ailson 07/07/2026) */}
-      {isDesktop && filtroEtapa === 'conversando' && TAGS_DEFS.length > 0 && (
+      {/* Filtro por tag — só desktop, abas conversando/follow_up/perdida (Ailson 07/07/2026) */}
+      {isDesktop && ['conversando', 'follow_up', 'perdida'].includes(filtroEtapa) && TAGS_DEFS.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: fz(11), color: palette.inkMuted }}>Filtrar tag:</span>
           <button onClick={() => setFiltroTag('todas')}
