@@ -455,6 +455,10 @@
       "schedule": "0 13 * * 1-6"
     },
     {
+      "path": "/api/meluni-reserva-cron",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/bling-fotos-sync",
       "schedule": "*/15 * * * *"
     },

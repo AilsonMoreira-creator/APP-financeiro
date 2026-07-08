@@ -67,7 +67,16 @@ export default async function handler(req, res) {
       const limpas = tags
         .filter(t => t && typeof t.id === 'string')
         .slice(0, 6)
-        .map(t => (t.ref ? { id: t.id.slice(0, 30), ref: String(t.ref).slice(0, 12) } : { id: t.id.slice(0, 30) }));
+        .map(t => {
+          const o = { id: t.id.slice(0, 30) };
+          if (t.ref) {
+            o.ref = String(t.ref).slice(0, 12);
+            // carimbo a criacao da reserva: base do alerta de 3 dias (so conta corte
+            // entregue depois disso). Preserva em re-saves; cria no 1o save.
+            o.desde = t.desde || new Date().toISOString();
+          }
+          return o;
+        });
       // Colunas omitidas nao sao tocadas no update do upsert: so mexo em
       // reserva_alerta_em quando o front pede pra limpar (removeu a tag reserva).
       const row = { telefone: chave, tags: limpas, atualizado_em: new Date().toISOString() };

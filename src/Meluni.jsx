@@ -109,6 +109,27 @@ const TagChipMeluni = ({ t, onRemover = null }) => {
   );
 };
 
+// chips das tags do card + badge de alerta quando a reserva chegou (reserva_alerta_em).
+function TagsDoCard({ c, wrap = false }) {
+  const tags = c.tags || [];
+  const reservaChegou = c.reserva_alerta_em ? tags.find(t => t.id === 'reserva_estoque') : null;
+  if (!tags.length && !reservaChegou) return null;
+  const conteudo = (
+    <>
+      {tags.map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}
+      {reservaChegou && (
+        <span title="a peça reservada chegou, avisar a cliente" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '1px 6px',
+          borderRadius: 8, background: '#2563eb', color: '#fff', fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0,
+        }}>📦 {reservaChegou.ref ? `#${reservaChegou.ref} ` : ''}chegou</span>
+      )}
+    </>
+  );
+  return wrap
+    ? <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{conteudo}</div>
+    : conteudo;
+}
+
 // PATCH das tags de um telefone (o endpoint normaliza pra chave canonica).
 async function salvarTagsTelefone(telefone, tags, extras = {}) {
   const r = await fetch('/api/meluni-tags', {
@@ -572,7 +593,7 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nome || '—'}</div>
           <div style={{ fontSize: 11, color: palette.inkMuted }}>{fmtBRL(c.valor_lifetime)} · {c.n_compras || 0} compras</div>
-          {(c.tags || []).length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}</div>}
+          <TagsDoCard c={c} wrap />
         </div>
         {c.conversa_pendente && <DotConversa tempo={tempoSemResposta(c.pendente_em)} />}
         {!tel && <span title="sem número" style={{ fontSize: 12, flexShrink: 0 }}>📵</span>}
@@ -599,7 +620,7 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
               {!semCompra && (() => { const dd = diasDesdeCompra(c.ultima_compra); return dd != null && dd < 10 ? (
                 <span title="comprou há menos de 10 dias, a mercadoria pode não ter chegado" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: '#fff4e5', color: '#b26a00', fontWeight: 700, border: '1px solid #f0d9b5' }}>🚚 há {dd}d</span>
               ) : null; })()}
-              {(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}
+              <TagsDoCard c={c} />
             </div>
             <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
@@ -1339,7 +1360,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
             <span>{itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · {fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
             <RelogioBadge c={c} />
           </div>
-          {(c.tags || []).length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}</div>}
+          <TagsDoCard c={c} wrap />
         </div>
         {c.conversa_pendente && <DotConversa tempo={tempoSemResposta(c.pendente_em)} />}
         {c.is_cliente && <span title="já é cliente" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700, flexShrink: 0 }}>cliente</span>}
@@ -1358,7 +1379,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
             {nome && <span style={{ fontSize: 13, color: palette.inkSoft }}>{nome}</span>}
             {c.conversa_pendente && <PillConversa tempo={tempoSemResposta(c.pendente_em)} />}
             {c.is_cliente && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>já é cliente</span>}
-            {(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}
+            <TagsDoCard c={c} />
           </div>
           <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
@@ -1679,7 +1700,7 @@ function SacConversaCard({ c, compact, ativo, onAbrir, onChanged, aba }) {
           {nome}
         </div>
         <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.preview || '—'}</div>
-        {(c.tags || []).length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}</div>}
+        <TagsDoCard c={c} wrap />
       </div>
       {c.unread && <DotConversa tempo={tempoSemResposta(c.ultima_msg_em)} />}
       <select value="" disabled={busy} onClick={(e) => e.stopPropagation()}
