@@ -826,6 +826,18 @@ function LaraThread({ telefone, conversaId, nome }) {
                     <audio controls src={m.midia_url} style={{ maxWidth: 210, display: 'block' }} />
                     {m.texto && m.texto !== '[áudio]' ? <div style={{ marginTop: 4, fontStyle: 'italic', color: palette.inkSoft }}>{m.texto}</div> : null}
                   </>
+                ) : m.tipo_midia === 'video' && m.midia_url && m.midia_url.startsWith('http') ? (
+                  <>
+                    <video controls src={m.midia_url} style={{ maxWidth: 220, maxHeight: 260, borderRadius: 8, display: 'block', background: '#000' }} />
+                    {m.texto && m.texto !== '[video]' ? <div style={{ marginTop: 4 }}>{m.texto}</div> : null}
+                  </>
+                ) : m.tipo_midia === 'sticker' && m.midia_url && m.midia_url.startsWith('http') ? (
+                  <img src={m.midia_url} alt="figurinha" loading="lazy" style={{ width: 100, height: 100, objectFit: 'contain', display: 'block' }} />
+                ) : (m.tipo_midia === 'document' || m.tipo_midia === 'pdf') && m.midia_url && m.midia_url.startsWith('http') ? (
+                  <>
+                    <a href={m.midia_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: palette.blue || '#4a7fa5', textDecoration: 'none', fontWeight: 600 }}>📎 Abrir documento</a>
+                    {m.texto && m.texto !== '[document]' && m.texto !== '[pdf]' ? <div style={{ marginTop: 4 }}>{m.texto}</div> : null}
+                  </>
                 ) : (
                   m.texto || (m.tipo_midia && m.tipo_midia !== 'text' ? `[${m.tipo_midia}]` : '')
                 )}

@@ -7226,6 +7226,8 @@ function Bubble({ m, botao }) {
   const ehVideo = m.tipo_midia === 'video' && m.midia_url && m.midia_url.startsWith('http');
   const ehDocumento = m.tipo_midia === 'document' && m.midia_url && m.midia_url.startsWith('http');
   const ehAudio = m.tipo_midia === 'audio' && m.midia_url && m.midia_url.startsWith('http');
+  // Sticker (webp) e reaction — antes caiam em bolha vazia. Ailson 07/07/2026.
+  const ehSticker = m.tipo_midia === 'sticker' && m.midia_url && m.midia_url.startsWith('http');
 
   // Ailson 27/05/2026: pra catalogos (path inclui /catalogos/), tentar
   // mostrar capa.{ext} do mesmo folder como miniatura clicavel em vez de
@@ -7374,9 +7376,18 @@ function Bubble({ m, botao }) {
             <span>Cliente enviou um arquivo em formato que o WhatsApp Business API não consegue baixar (vCard, sticker animado, etc). Peça pra reenviar como foto, vídeo ou PDF.</span>
           </div>
         )}
+        {ehSticker && (
+          <img src={m.midia_url} alt="figurinha" loading="lazy"
+            style={{ width: 110, height: 110, objectFit: 'contain', marginBottom: 4, display: 'block' }} />
+        )}
+        {m.tipo_midia === 'reaction' && (
+          <div style={{ fontSize: 12, color: '#888', fontStyle: 'italic', marginBottom: 4 }}>
+            reagiu{m.texto ? `: ${m.texto}` : ' a uma mensagem'}
+          </div>
+        )}
         {/* Fallback: tem tipo de midia mas URL nao chegou (ainda baixando ou erro) */}
-        {!ehImagem && !ehVideo && !ehAudio && !ehDocumento &&
-         (m.tipo_midia === 'image' || m.tipo_midia === 'video' || m.tipo_midia === 'document' || m.tipo_midia === 'audio') && (
+        {!ehImagem && !ehVideo && !ehAudio && !ehDocumento && !ehSticker &&
+         (m.tipo_midia === 'image' || m.tipo_midia === 'video' || m.tipo_midia === 'document' || m.tipo_midia === 'audio' || m.tipo_midia === 'sticker') && (
           <div style={{
             padding: '6px 8px', background: 'rgba(0,0,0,0.04)',
             borderRadius: 6, marginBottom: 6, display: 'flex',
