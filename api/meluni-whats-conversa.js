@@ -5,6 +5,7 @@
 // ============================================================================
 import { supabase } from './_meluni-whats-helpers.js';
 import { acharConversaWhats } from './_meluni-tel.js';
+import { anexarTags } from './_meluni-tags-anexar.js';
 
 const normTel = (s) => String(s || '').replace(/\D/g, '');
 
@@ -53,6 +54,8 @@ export default async function handler(req, res) {
       .select('id, texto, status, criado_em')
       .eq('conversa_id', conversaId).eq('status', 'pendente')
       .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+
+    if (conversa) await anexarTags(supabase, [conversa]);
 
     return res.json({ ok: true, conversa, mensagens: mensagens || [], sugestao: sugestao || null });
   } catch (e) {

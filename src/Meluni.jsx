@@ -24,6 +24,7 @@ import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Mail, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
   CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send, Paperclip, Smile, GraduationCap,
+  Plus, Trash2,
 } from 'lucide-react';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
@@ -65,6 +66,288 @@ function useMeluniLock(tipo, id) {
   const bloqueado = !!lockPor && lockPor !== userId;
   return { lockPor, bloqueado };
 }
+
+// ═══ TAGS TRANSVERSAIS (Ailson 07/07/2026) ══════════════════════════════════
+// Etiquetas por telefone (meluni_tags_vinculos): marca numa aba (Clientes/
+// Carrinho/SAC) e aparece nas 3. Defs em meluni_tags, servidas por /api/meluni-tags
+// (o front da Meluni nao tem supabase client). 3 fixas: atencao (congela envios
+// automaticos da Lara), potencial (cliente com intencao de compra), reserva_estoque
+// (pede REF; alerta quando o corte Meluni entregue passa 3 dias).
+let MELUNI_TAGS_DEFS = [];
+let meluniTagsCarregadas = false;
+async function carregarMeluniTagsDefs(force = false) {
+  if (meluniTagsCarregadas && !force) return MELUNI_TAGS_DEFS;
+  try {
+    const r = await fetch('/api/meluni-tags');
+    const j = await r.json();
+    if (j.ok) { MELUNI_TAGS_DEFS = j.tags || []; meluniTagsCarregadas = true; }
+  } catch { /* ignora */ }
+  return MELUNI_TAGS_DEFS;
+}
+const PALETA_TAGS_MELUNI = ['#d4a017', '#7c3aed', '#2563eb', '#16a34a', '#dc2626',
+  '#ea580c', '#0d9488', '#db2777', '#64748b', '#78350f'];
+const meluniTagDef = (id) => MELUNI_TAGS_DEFS.find(t => t.id === id);
+
+// Chip visual da tag (card + barra do chat)
+const TagChipMeluni = ({ t, onRemover = null }) => {
+  const def = meluniTagDef(t.id);
+  if (!def) return null;
+  return (
+    <span title={def.nome + (t.ref ? ` — REF ${t.ref}` : '') + (def.congela_auto ? ' (Lara nao envia sozinha)' : '')}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3,
+        fontSize: 10, padding: '1px 6px', borderRadius: 8,
+        background: `${def.cor}1a`, color: def.cor, fontWeight: 700,
+        border: `1px solid ${def.cor}55`, whiteSpace: 'nowrap', flexShrink: 0,
+      }}>
+      {def.nome}{t.ref ? ` #${t.ref}` : ''}
+      {onRemover && (
+        <span onClick={(e) => { e.stopPropagation(); onRemover(t); }}
+          style={{ cursor: 'pointer', marginLeft: 2, fontWeight: 900 }}>×</span>
+      )}
+    </span>
+  );
+};
+
+// PATCH das tags de um telefone (o endpoint normaliza pra chave canonica).
+async function salvarTagsTelefone(telefone, tags, extras = {}) {
+  const r = await fetch('/api/meluni-tags', {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ telefone, tags, ...extras }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!j.ok) throw new Error(j.erro || 'falha ao salvar tag');
+  return j;
+}
+
+// Popover pra aplicar/remover as tags de UM telefone. onSalvo(novas) atualiza o pai.
+function TagsPopover({ telefone, tags = [], onSalvo, onFechar }) {
+  const [defs, setDefs] = useState([...MELUNI_TAGS_DEFS]);
+  const [salvando, setSalvando] = useState(false);
+  useEffect(() => { carregarMeluniTagsDefs().then(() => setDefs([...MELUNI_TAGS_DEFS])); }, []);
+  const toggle = async (def) => {
+    if (salvando || !telefone) return;
+    const atuais = tags || [];
+    const tem = atuais.some(t => t.id === def.id);
+    let novas; const extras = {};
+    if (tem) {
+      novas = atuais.filter(t => t.id !== def.id);
+      if (def.requer_ref) extras.reserva_alerta_em = null;
+    } else {
+      const nova = { id: def.id };
+      if (def.requer_ref) {
+        const ref = window.prompt('Referencia da peca (ex: 2277):');
+        if (!ref || !String(ref).trim()) return;
+        nova.ref = String(ref).trim().replace(/^0+/, '') || '0';
+      }
+      novas = [...atuais, nova];
+    }
+    setSalvando(true);
+    try { await salvarTagsTelefone(telefone, novas, extras); onSalvo?.(novas); }
+    catch { /* mantem estado atual */ } finally { setSalvando(false); }
+  };
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{
+      position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 60,
+      background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 10,
+      boxShadow: '0 6px 20px rgba(0,0,0,0.14)', padding: 6, minWidth: 190, fontFamily: FONT,
+    }}>
+      {defs.map(def => {
+        const aplicada = (tags || []).some(t => t.id === def.id);
+        return (
+          <button key={def.id} onClick={() => toggle(def)} disabled={salvando}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, width: '100%', textAlign: 'left',
+              padding: '7px 8px', borderRadius: 7, border: 'none', cursor: 'pointer',
+              background: aplicada ? `${def.cor}14` : 'transparent', fontFamily: FONT,
+            }}>
+            <span style={{ width: 11, height: 11, borderRadius: 6, background: def.cor, flexShrink: 0 }} />
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: aplicada ? def.cor : palette.ink, flex: 1 }}>{def.nome}</span>
+            {aplicada && <CheckCircle size={13} color={def.cor} />}
+          </button>
+        );
+      })}
+      {!telefone && <div style={{ fontSize: 10.5, color: palette.inkMuted, padding: '4px 8px' }}>sem telefone pra marcar</div>}
+    </div>
+  );
+}
+
+// Botao de tag + popover ancorado, usado nos cards e na barra do chat.
+function BotaoTags({ telefone, tags = [], onSalvo }) {
+  const [aberto, setAberto] = useState(false);
+  useEffect(() => {
+    if (!aberto) return;
+    const fecha = () => setAberto(false);
+    window.addEventListener('click', fecha);
+    return () => window.removeEventListener('click', fecha);
+  }, [aberto]);
+  return (
+    <span style={{ position: 'relative', flexShrink: 0 }}>
+      <button onClick={(e) => { e.stopPropagation(); setAberto(v => !v); }}
+        title="Etiquetas" style={{
+          background: 'none', border: 'none', padding: 3, cursor: 'pointer',
+          color: (tags || []).length ? MELUNI : palette.inkMuted, lineHeight: 1,
+        }}>
+        <IconTag size={14} />
+      </button>
+      {aberto && <TagsPopover telefone={telefone} tags={tags}
+        onSalvo={(novas) => { onSalvo?.(novas); }} onFechar={() => setAberto(false)} />}
+    </span>
+  );
+}
+
+// Modal de gestao das defs (criar/apagar etiquetas). Botao "Tags" no topo das secoes.
+function GerirTagsModalMeluni({ onClose }) {
+  const [defs, setDefs] = useState([...MELUNI_TAGS_DEFS]);
+  const [novoNome, setNovoNome] = useState('');
+  const [novaCor, setNovaCor] = useState(PALETA_TAGS_MELUNI[3]);
+  const [novoCongela, setNovoCongela] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState(null);
+  useEffect(() => { carregarMeluniTagsDefs().then(() => setDefs([...MELUNI_TAGS_DEFS])); }, []);
+
+  const criar = async () => {
+    const nome = novoNome.trim();
+    if (!nome) { setErro('De um nome pra tag.'); return; }
+    const id = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30);
+    if (!id) { setErro('Nome invalido.'); return; }
+    if (defs.some(d => d.id === id)) { setErro('Ja existe uma tag com esse nome.'); return; }
+    setSalvando(true); setErro(null);
+    try {
+      const r = await fetch('/api/meluni-tags', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, nome, cor: novaCor, congela_auto: novoCongela }),
+      });
+      const j = await r.json();
+      if (!j.ok) { setSalvando(false); setErro(j.erro || 'falha ao criar'); return; }
+    } catch (e) { setSalvando(false); setErro(e.message); return; }
+    setSalvando(false);
+    await carregarMeluniTagsDefs(true);
+    setDefs([...MELUNI_TAGS_DEFS]); setNovoNome(''); setNovoCongela(false);
+  };
+  const excluir = async (t) => {
+    if (t.fixa) return;
+    if (!window.confirm(`Excluir a tag "${t.nome}"? Ela some dos cards que a usam.`)) return;
+    try {
+      await fetch('/api/meluni-tags', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: t.id }),
+      });
+    } catch { /* */ }
+    await carregarMeluniTagsDefs(true);
+    setDefs([...MELUNI_TAGS_DEFS]);
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 300,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: palette.bg, borderRadius: 12, padding: 18, width: '100%',
+        maxWidth: 440, maxHeight: '85vh', overflowY: 'auto', fontFamily: FONT,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: palette.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <IconTag size={16} /> Etiquetas
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.inkMuted }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          {defs.map(t => (
+            <div key={t.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+              borderRadius: 8, border: `1px solid ${palette.beige}`, background: palette.surface,
+            }}>
+              <span style={{ width: 12, height: 12, borderRadius: 6, background: t.cor, flexShrink: 0 }} />
+              <span style={{ fontWeight: 700, fontSize: 13, color: palette.ink }}>{t.nome}</span>
+              <span style={{ fontSize: 10, color: palette.inkMuted, flex: 1 }}>
+                {t.congela_auto ? '❄️ congela envios da Lara' : ''}
+                {t.requer_ref ? '📦 pede REF · alerta quando chegar' : ''}
+              </span>
+              {t.fixa
+                ? <span style={{ fontSize: 10, color: palette.inkMuted }}>fixa</span>
+                : <button onClick={() => excluir(t)} title="Excluir tag"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: palette.alert }}>
+                    <Trash2 size={14} />
+                  </button>}
+            </div>
+          ))}
+        </div>
+        <div style={{ borderTop: `1px solid ${palette.beige}`, paddingTop: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: palette.ink, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Plus size={14} /> Nova etiqueta
+          </div>
+          <input value={novoNome} onChange={(e) => setNovoNome(e.target.value)}
+            placeholder="Nome da etiqueta"
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8,
+              border: `1px solid ${palette.beige}`, fontSize: 13, fontFamily: FONT,
+              marginBottom: 8, background: palette.surface, color: palette.ink,
+            }} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            {PALETA_TAGS_MELUNI.map(cor => (
+              <button key={cor} onClick={() => setNovaCor(cor)} style={{
+                width: 26, height: 26, borderRadius: 13, background: cor, cursor: 'pointer',
+                border: novaCor === cor ? `3px solid ${palette.ink}` : '3px solid transparent',
+              }} />
+            ))}
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: palette.inkSoft, marginBottom: 10, cursor: 'pointer' }}>
+            <input type="checkbox" checked={novoCongela} onChange={(e) => setNovoCongela(e.target.checked)} />
+            ❄️ Congelar envios automaticos (a Lara nao age sozinha na conversa marcada)
+          </label>
+          {erro && <div style={{ fontSize: 12, color: palette.alert, marginBottom: 8 }}>{erro}</div>}
+          <button onClick={criar} disabled={salvando} style={{
+            width: '100%', padding: '9px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+            background: palette.ink, color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: FONT,
+            opacity: salvando ? 0.6 : 1,
+          }}>{salvando ? 'Salvando…' : 'Criar etiqueta'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Barra de filtro por tag (so desktop) + botao de gestao. Reusada nas 3 secoes.
+function BarraFiltroTags({ isDesktop, filtroTag, setFiltroTag, tagsTick, onGerir }) {
+  const [defs, setDefs] = useState([...MELUNI_TAGS_DEFS]);
+  useEffect(() => { carregarMeluniTagsDefs().then(() => setDefs([...MELUNI_TAGS_DEFS])); }, [tagsTick]);
+  if (!isDesktop) return null;
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+      <IconTag size={13} color={palette.inkMuted} />
+      <button onClick={() => setFiltroTag('todas')} style={{
+        fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12, cursor: 'pointer', fontFamily: FONT,
+        border: `1px solid ${filtroTag === 'todas' ? palette.ink : palette.beige}`,
+        background: filtroTag === 'todas' ? palette.ink : palette.surface,
+        color: filtroTag === 'todas' ? '#fff' : palette.inkSoft,
+      }}>Todas</button>
+      {defs.map(t => (
+        <button key={t.id} onClick={() => setFiltroTag(filtroTag === t.id ? 'todas' : t.id)} style={{
+          fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12, cursor: 'pointer', fontFamily: FONT,
+          border: `1px solid ${t.cor}${filtroTag === t.id ? '' : '55'}`,
+          background: filtroTag === t.id ? t.cor : `${t.cor}12`,
+          color: filtroTag === t.id ? '#fff' : t.cor,
+        }}>{t.nome}</button>
+      ))}
+      <button onClick={onGerir} title="Gerir etiquetas" style={{
+        marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 8, cursor: 'pointer',
+        fontFamily: FONT, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkSoft,
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+      }}><Plus size={12} /> Tags</button>
+    </div>
+  );
+}
+
+// filtra client-side a lista carregada pela tag ativa (as tags ja vem no card).
+const filtrarPorTag = (lista, filtroTag) =>
+  (filtroTag && filtroTag !== 'todas')
+    ? (lista || []).filter(c => (c.tags || []).some(t => t.id === filtroTag))
+    : (lista || []);
 
 // ─── sub-abas leves (dentro de cada seção) ──────────────────────────────────
 function SubTabs({ tabs, active, onChange }) {
@@ -289,6 +572,7 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nome || '—'}</div>
           <div style={{ fontSize: 11, color: palette.inkMuted }}>{fmtBRL(c.valor_lifetime)} · {c.n_compras || 0} compras</div>
+          {(c.tags || []).length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}</div>}
         </div>
         {c.conversa_pendente && <DotConversa tempo={tempoSemResposta(c.pendente_em)} />}
         {!tel && <span title="sem número" style={{ fontSize: 12, flexShrink: 0 }}>📵</span>}
@@ -315,6 +599,7 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
               {!semCompra && (() => { const dd = diasDesdeCompra(c.ultima_compra); return dd != null && dd < 10 ? (
                 <span title="comprou há menos de 10 dias, a mercadoria pode não ter chegado" style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: '#fff4e5', color: '#b26a00', fontWeight: 700, border: '1px solid #f0d9b5' }}>🚚 há {dd}d</span>
               ) : null; })()}
+              {(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}
             </div>
             <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
@@ -398,6 +683,13 @@ function LaraThread({ telefone, conversaId, nome }) {
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [data?.mensagens?.length, data?.sugestao?.id]);
 
   const conv = data?.conversa;
+  const [tagsConv, setTagsConv] = useState([]);
+  useEffect(() => { setTagsConv(conv?.tags || []); }, [JSON.stringify(conv?.tags || [])]);
+  const removerTag = async (t) => {
+    const novas = (tagsConv || []).filter(x => x.id !== t.id);
+    const def = meluniTagDef(t.id);
+    try { await salvarTagsTelefone(conv?.telefone, novas, def?.requer_ref ? { reserva_alerta_em: null } : {}); setTagsConv(novas); } catch { /* mantem */ }
+  };
   const msgs = data?.mensagens || [];
   const sug = data?.sugestao;
   const ultEntradaMs = msgs.filter(m => m.direcao === 'entrada').reduce((a, m) => Math.max(a, +new Date(m.enviada_em) || 0), 0);
@@ -479,6 +771,14 @@ function LaraThread({ telefone, conversaId, nome }) {
           </span>
         )}
       </div>
+
+      {conv && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '0 14px 8px' }}>
+          <span style={{ fontSize: 10.5, color: palette.inkMuted, fontFamily: FONT }}>Etiquetas:</span>
+          {(tagsConv || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} onRemover={removerTag} />)}
+          <BotaoTags telefone={conv.telefone} tags={tagsConv} onSalvo={setTagsConv} />
+        </div>
+      )}
 
       {/* histórico */}
       <div style={{ padding: '4px 14px 10px', display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 430, overflowY: 'auto' }}>
@@ -744,6 +1044,10 @@ function SecaoClientes() {
   const [janela, setJanela] = useState('');
   const [msgDias, setMsgDias] = useState('');
   const [clientes, setClientes] = useState([]);
+  const [filtroTag, setFiltroTag] = useState('todas');
+  const [modalTags, setModalTags] = useState(false);
+  const [tagsTick, setTagsTick] = useState(0);
+  useEffect(() => { carregarMeluniTagsDefs().then(() => setTagsTick(t => t + 1)); }, []);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sel, setSel] = useState(new Set());
@@ -962,6 +1266,8 @@ function SecaoClientes() {
         )}
       </div>
 
+      <BarraFiltroTags isDesktop={isDesktop} filtroTag={filtroTag} setFiltroTag={setFiltroTag} tagsTick={tagsTick} onGerir={() => setModalTags(true)} />
+      {modalTags && <GerirTagsModalMeluni onClose={() => { setModalTags(false); setTagsTick(t => t + 1); }} />}
       {erro && <Placeholder><span style={{ color: palette.alert }}>{erro}</span></Placeholder>}
       {!erro && !loading && clientes.length === 0 && (
         <Placeholder>
@@ -972,7 +1278,7 @@ function SecaoClientes() {
       )}
       {(!erro && clientes.length > 0) && (
         <MeluniSplitChat
-          itens={ordPend(clientes)} getId={(c) => c.id}
+          itens={filtrarPorTag(ordPend(clientes), filtroTag)} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.nome || 'Cliente'}
           subtituloDe={(c) => fmtTel(c.whatsapp || c.telefone) || 'sem número'}
@@ -1033,6 +1339,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
             <span>{itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · {fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
             <RelogioBadge c={c} />
           </div>
+          {(c.tags || []).length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}</div>}
         </div>
         {c.conversa_pendente && <DotConversa tempo={tempoSemResposta(c.pendente_em)} />}
         {c.is_cliente && <span title="já é cliente" style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700, flexShrink: 0 }}>cliente</span>}
@@ -1051,6 +1358,7 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
             {nome && <span style={{ fontSize: 13, color: palette.inkSoft }}>{nome}</span>}
             {c.conversa_pendente && <PillConversa tempo={tempoSemResposta(c.pendente_em)} />}
             {c.is_cliente && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>já é cliente</span>}
+            {(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}
           </div>
           <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
@@ -1130,6 +1438,10 @@ function ChatCarrinhoBody({ c, onMoved }) {
 function SecaoCarrinho() {
   const [aba, setAba] = useState('processando');
   const [carrinhos, setCarrinhos] = useState([]);
+  const [filtroTag, setFiltroTag] = useState('todas');
+  const [modalTags, setModalTags] = useState(false);
+  const [tagsTick, setTagsTick] = useState(0);
+  useEffect(() => { carregarMeluniTagsDefs().then(() => setTagsTick(t => t + 1)); }, []);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [sel, setSel] = useState(new Set());
@@ -1242,10 +1554,12 @@ function SecaoCarrinho() {
         )}
         {dispMsg && <span style={{ fontSize: 11.5, fontWeight: 600, color: palette.inkSoft, fontFamily: FONT }}>{dispMsg}</span>}
       </div>
+      <BarraFiltroTags isDesktop={isDesktop} filtroTag={filtroTag} setFiltroTag={setFiltroTag} tagsTick={tagsTick} onGerir={() => setModalTags(true)} />
+      {modalTags && <GerirTagsModalMeluni onClose={() => { setModalTags(false); setTagsTick(t => t + 1); }} />}
       {!loading && carrinhos.length === 0 && <Placeholder>Nenhum carrinho nesse estágio.</Placeholder>}
       {carrinhos.length > 0 && (
         <MeluniSplitChat
-          itens={ordPend(carrinhos)} getId={(c) => c.id}
+          itens={filtrarPorTag(ordPend(carrinhos), filtroTag)} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.cliente_nome || c.nome || fmtBRL(c.valor)}
           subtituloDe={(c) => fmtTel(c.cliente_whatsapp || c.telefone) || 'sem número'}
@@ -1264,6 +1578,10 @@ function SecaoCarrinho() {
 function SecaoSac() {
   const [aba, setAba] = useState('conversando');
   const [conversas, setConversas] = useState([]);
+  const [filtroTag, setFiltroTag] = useState('todas');
+  const [modalTags, setModalTags] = useState(false);
+  const [tagsTick, setTagsTick] = useState(0);
+  useEffect(() => { carregarMeluniTagsDefs().then(() => setTagsTick(t => t + 1)); }, []);
   const [cont, setCont] = useState({});
   const [loading, setLoading] = useState(true);
   const [chatId, setChatId] = useState(null);
@@ -1306,11 +1624,13 @@ function SecaoSac() {
         <Tag cor={MELUNI} bg={MELUNI_SOFT}><Instagram size={11} /> direct insta</Tag>
         <Tag cor={MELUNI} bg={MELUNI_SOFT}><Mail size={11} /> e-mail</Tag>
       </div>
+      <BarraFiltroTags isDesktop={isDesktop} filtroTag={filtroTag} setFiltroTag={setFiltroTag} tagsTick={tagsTick} onGerir={() => setModalTags(true)} />
+      {modalTags && <GerirTagsModalMeluni onClose={() => { setModalTags(false); setTagsTick(t => t + 1); }} />}
       {loading && conversas.length === 0 && <Placeholder>carregando…</Placeholder>}
       {!loading && conversas.length === 0 && <Placeholder>Nenhuma conversa nessa aba ainda. Entra aqui quando a cliente escrever pro WhatsApp da Lara (ou pelo Direct).</Placeholder>}
       {conversas.length > 0 && (
         <MeluniSplitChat
-          itens={ordPend(conversas)} getId={(c) => c.id}
+          itens={filtrarPorTag(ordPend(conversas), filtroTag)} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.nome_cliente || fmtTel(c.telefone) || (c.canal === 'email' ? c.externo_id : '') || (c.canal === 'direct_insta' ? 'Cliente do Direct' : 'Cliente')}
           subtituloDe={(c) => (c.canal === 'email' ? (c.externo_id || 'e-mail') : c.canal === 'direct_insta' ? 'Direct Insta' : (fmtTel(c.telefone) || 'whatsapp'))}
@@ -1359,6 +1679,7 @@ function SacConversaCard({ c, compact, ativo, onAbrir, onChanged, aba }) {
           {nome}
         </div>
         <div style={{ fontSize: 11, color: palette.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.preview || '—'}</div>
+        {(c.tags || []).length > 0 && <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginTop: 3 }}>{(c.tags || []).map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}</div>}
       </div>
       {c.unread && <DotConversa tempo={tempoSemResposta(c.ultima_msg_em)} />}
       <select value="" disabled={busy} onClick={(e) => e.stopPropagation()}
