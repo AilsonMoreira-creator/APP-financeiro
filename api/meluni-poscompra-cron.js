@@ -24,6 +24,8 @@
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { refreshBlingToken, blingFetch } from './_bling-helpers.js';
+import { chaveTel } from './_meluni-tel.js';
+import { telefonesCongelados } from './_meluni-tags-core.js';
 
 const API_BLING = 'https://api.bling.com.br/Api/v3';
 
@@ -211,9 +213,11 @@ export default async function handler(req, res) {
 
     // 4) envia (A/B), cria/atualiza conversa, loga mensagem (autor lara_clientes -> dedupe futuro)
     let enviados = 0, pulados = 0, erros = 0;
+    const congelados = await telefonesCongelados(supabase); // Atencao congela
     for (const c of elegiveis) {
       try {
         const tel = canonTel(c.whatsapp || c.telefone);
+        if (congelados.has(chaveTel(c.whatsapp || c.telefone))) { pulados++; continue; }
         const nome = primeiroNome(c.nome);
         const conv = await acharOuCriarConversaCliente(tel, c.nome, c.id);
         if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) { pulados++; continue; }

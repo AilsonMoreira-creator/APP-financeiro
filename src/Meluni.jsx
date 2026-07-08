@@ -1537,7 +1537,8 @@ function SecaoCarrinho() {
       });
       const j = await r.json();
       if (j.ok) {
-        setDispMsg(`✓ ${j.enviados} enviado(s)${j.pulados ? ` · ${j.pulados} pulado(s)` : ''}${j.erros ? ` · ${j.erros} erro(s)` : ''}`);
+        const nAt = j.pulados_atencao?.length || 0;
+        setDispMsg(`✓ ${j.enviados} enviado(s)${j.pulados ? ` · ${j.pulados} pulado(s)` : ''}${nAt ? ` (${nAt} com Atenção, não disparei)` : ''}${j.erros ? ` · ${j.erros} erro(s)` : ''}`);
         setSel(new Set()); carregar(0); setRecargaHoje(x => x + 1);
       } else { setDispMsg(j.erro || 'falhou'); }
     } catch { setDispMsg('falhou'); }

@@ -14,7 +14,8 @@ import { supabase, cfgMeluni, dentroJanelaEnvio } from './_meluni-whats-helpers.
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverResumoItens, resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
 import { urlFotoCarrinho } from './_meluni-fotos.js';
-import { acharConversaWhats } from './_meluni-tel.js';
+import { acharConversaWhats, chaveTel } from './_meluni-tel.js';
+import { telefonesCongelados } from './_meluni-tags-core.js';
 
 const ETAPAS_FECHADAS = ['vendeu', 'perdida', 'resolvido'];
 
@@ -141,6 +142,8 @@ export default async function handler(req, res) {
   const tplsBase = ((await cfgMeluni('lara_templates_carrinho', {})) || {}).templates || {};
   const tplsImg = ((await cfgMeluni('lara_templates_carrinho_img', {})) || {}).templates || {};
   const tpls = { ...tplsBase, ...tplsImg };
+  // Atencao congela: pula telefones com tag congelante (manual avisa, cron cala).
+  const congelados = await telefonesCongelados(supabase);
 
   // corpo pode chegar como objeto (parse automático) ou string crua — trata os dois.
   let body = req.body;
@@ -155,16 +158,17 @@ export default async function handler(req, res) {
   const ids = idsBody || idsQs;
   if (ids) {
     if (!ids.length) return res.status(400).json({ ok: false, erro: 'ids vazio' });
-    let enviados = 0, pulados = 0, erros = 0; const detalhe = [];
+    let enviados = 0, pulados = 0, erros = 0; const detalhe = []; const pulados_atencao = [];
     const { data: carts } = await supabase.from('meluni_carrinhos').select(COLS).in('id', ids).eq('status', 'processando');
     for (const c of (carts || [])) {
+      if (c.telefone && congelados.has(chaveTel(c.telefone))) { pulados++; pulados_atencao.push(c.id); detalhe.push({ id: c.id, pulado: 'atencao' }); continue; }
       try {
         const r = await enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo);
         if (r.ok) { enviados++; detalhe.push({ id: c.id, versao: r.versao }); }
         else { pulados++; detalhe.push({ id: c.id, pulado: r.skip }); }
       } catch (e) { erros++; detalhe.push({ id: c.id, erro: String(e?.message || e) }); }
     }
-    return res.status(200).json({ ok: true, modo: 'manual', enviados, pulados, erros, detalhe });
+    return res.status(200).json({ ok: true, modo: 'manual', enviados, pulados, erros, pulados_atencao, detalhe });
   }
 
   // ── MODO CRON/GATE ──
@@ -196,6 +200,7 @@ export default async function handler(req, res) {
     if (error) throw error;
     for (const c of (carts || [])) {
       if (enviados >= limite) break;
+      if (c.telefone && congelados.has(chaveTel(c.telefone))) { pulados++; continue; }
       try {
         const r = await enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo);
         if (r.ok) { enviados++; detalhe.push({ id: c.id, versao: r.versao }); }

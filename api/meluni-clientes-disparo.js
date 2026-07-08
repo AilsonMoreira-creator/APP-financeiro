@@ -9,6 +9,8 @@
 // POST { ids: [clienteId, ...] }
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
+import { chaveTel } from './_meluni-tel.js';
+import { telefonesCongelados } from './_meluni-tags-core.js';
 
 const ETAPAS_FECHADAS = ['conversao', 'ganho', 'perdido'];
 const MAX_POR_CHAMADA = 30;
@@ -72,6 +74,7 @@ export default async function handler(req, res) {
   const mapC = new Map((clientes || []).map(c => [c.id, c]));
 
   let enviados = 0, pulados = 0, erros = 0;
+  const congelados = await telefonesCongelados(supabase); // Atencao congela
   const detalhe = [];
 
   for (const id of ids) {
@@ -81,6 +84,7 @@ export default async function handler(req, res) {
       if (c.bloqueado) { pulados++; detalhe.push({ id, status: 'bloqueado' }); continue; }
       const tel = canonTel(c.whatsapp || c.telefone);
       if (!tel || tel.length < 10) { pulados++; detalhe.push({ id, status: 'sem_telefone' }); continue; }
+      if (congelados.has(chaveTel(c.whatsapp || c.telefone))) { pulados++; detalhe.push({ id, status: 'atencao' }); continue; }
       const nome = primeiroNome(c.nome);
       if (!nome) { pulados++; detalhe.push({ id, status: 'sem_nome' }); continue; }
 

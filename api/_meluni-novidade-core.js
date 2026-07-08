@@ -4,6 +4,7 @@
 // Ailson 23/06/2026.
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
+import { chaveTel } from './_meluni-tel.js';
 
 export const ETAPAS_FECHADAS = ['conversao', 'ganho', 'perdido'];
 export const MAX_POR_CHAMADA = 30;
@@ -70,7 +71,7 @@ export async function selecionarElegiveis({ dias = 7, max = 500 } = {}) {
 
 // Dispara o template de novidade pros ids dados. Idempotente por nome de template
 // (não manda a MESMA novidade 2x pro mesmo cliente).
-export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada = MAX_POR_CHAMADA } = {}) {
+export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada = MAX_POR_CHAMADA, congelados = null } = {}) {
   let alvo = Array.isArray(ids) ? ids.filter(Boolean) : [];
   if (!alvo.length) return { ok: false, erro: 'sem ids' };
   const cortado = alvo.length > maxPorChamada;
@@ -94,6 +95,7 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
       if (c.bloqueado) { pulados++; detalhe.push({ id, status: 'bloqueado' }); continue; }
       const tel = canonTel(c.whatsapp || c.telefone);
       if (!tel || tel.length < 10) { pulados++; detalhe.push({ id, status: 'sem_telefone' }); continue; }
+      if (congelados && congelados.has(chaveTel(c.whatsapp || c.telefone))) { pulados++; detalhe.push({ id, status: 'atencao' }); continue; }
       const nome = primeiroNome(c.nome);
       if (!nome) { pulados++; detalhe.push({ id, status: 'sem_nome' }); continue; }
 

@@ -13,7 +13,8 @@
 import { supabase, cfgMeluni, dentroJanelaEnvio } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
-import { acharConversaWhats } from './_meluni-tel.js';
+import { acharConversaWhats, chaveTel } from './_meluni-tel.js';
+import { telefonesCongelados } from './_meluni-tags-core.js';
 
 function renderTpl(body, params) {
   let t = String(body || '');
@@ -73,7 +74,9 @@ export default async function handler(req, res) {
         .lt('enviado_em', corte)
         .order('enviado_em', { ascending: true }).limit(lote);
 
+      const congelados = await telefonesCongelados(supabase); // Atencao congela
       for (const c of (carts || [])) {
+        if (c.telefone && congelados.has(chaveTel(c.telefone))) { segundoPulado++; continue; }
         const nome = await resolverPrimeiroNome(c.telefone, c.nome);
         if (nome && !c.nome) { try { await supabase.from('meluni_carrinhos').update({ nome }).eq('id', c.id); } catch {} }
         // tem nome -> template com nome; sem nome -> versão sem nome (fallback, igual o 1º envio)

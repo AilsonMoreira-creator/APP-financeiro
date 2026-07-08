@@ -27,3 +27,20 @@ export async function aplicarTagTelefone(supabase, telefone, novaTag) {
   if (error) return { aplicou: false, tags, chave };
   return { aplicou: true, tags: novas, chave };
 }
+
+// Set (chaves canonicas) dos telefones com alguma tag que congela os envios
+// automaticos (def congela_auto=true; hoje so 'atencao'). Os disparos carregam
+// uma vez e pulam quem estiver no Set. Ailson 07/07/2026.
+export async function telefonesCongelados(supabase) {
+  const set = new Set();
+  try {
+    const { data: defs } = await supabase.from('meluni_tags').select('id').eq('congela_auto', true);
+    const ids = (defs || []).map(d => d.id);
+    if (!ids.length) return set;
+    const { data: vincs } = await supabase.from('meluni_tags_vinculos').select('telefone, tags');
+    for (const v of (vincs || [])) {
+      if ((v.tags || []).some(t => ids.includes(t.id))) set.add(v.telefone);
+    }
+  } catch (e) { console.error('[meluni-tags] telefonesCongelados:', e?.message || e); }
+  return set;
+}

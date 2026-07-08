@@ -3,8 +3,9 @@
 // 10:00 BRT (13:00 UTC) mas só DISPARA no dia-alvo e uma única vez (guarda em
 // meluni_config -> 'novidade_cron'). ?dry=1 mostra a prévia (qtd) sem enviar.
 // Ailson 23/06/2026.
-import { cfgMeluni, setCfgMeluni } from './_meluni-whats-helpers.js';
+import { supabase, cfgMeluni, setCfgMeluni } from './_meluni-whats-helpers.js';
 import { selecionarElegiveis, dispararNovidadeParaIds } from './_meluni-novidade-core.js';
+import { telefonesCongelados } from './_meluni-tags-core.js';
 
 function hojeBRT() { return new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10); }
 
@@ -41,7 +42,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, hoje, enviados: 0, total: 0, obs: 'nenhum elegivel' });
   }
 
-  const r = await dispararNovidadeParaIds(ids, { cfg: cfgKey, versao, maxPorChamada: ids.length });
+  const congelados = await telefonesCongelados(supabase); // Atencao congela
+  const r = await dispararNovidadeParaIds(ids, { cfg: cfgKey, versao, maxPorChamada: ids.length, congelados });
   await setCfgMeluni('novidade_cron', {
     ...conf,
     ja_disparou_em: new Date().toISOString(),

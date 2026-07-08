@@ -10,6 +10,8 @@
 import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
 import { processarConversaMeluni } from './meluni-whats-ia.js';
 import { aprovarSugestao } from './meluni-whats-aprovar.js';
+import { chaveTel } from './_meluni-tel.js';
+import { telefonesCongelados } from './_meluni-tags-core.js';
 
 const LIMITE = 12;
 const ETAPAS_FECHADAS = ['vendeu', 'perdida', 'resolvido'];
@@ -33,10 +35,12 @@ export default async function handler(req, res) {
   // Auto-envio só pros 2 casos seguros (abertura genérica / foto sem texto),
   // mesmo com o global desligado. Interruptor pra desligar sem código. Ailson 28/06/2026.
   const autoCasos = (await cfgMeluni('lara_auto_casos_simples', true)) !== false;
+  // Atencao congela o auto-envio: telefones com tag congelante ficam pendentes.
+  const congelados = await telefonesCongelados(supabase);
 
   try {
     const { data: convs, error } = await supabase.from('meluni_conversas')
-      .select('id, etapa')
+      .select('id, etapa, telefone')
       .not('responder_em', 'is', null)
       .lte('responder_em', agora)
       .eq('ultima_msg_direcao', 'entrada')
@@ -52,7 +56,8 @@ export default async function handler(req, res) {
         await zerar(c.id);
         if (r.motivo === 'sugestao_criada') {
           gerados++;
-          const deveEnviar = (autoAtivo || (autoCasos && r.autoEnviar)) && r.sugestaoId;
+          const congelado = c.telefone && congelados.has(chaveTel(c.telefone));
+          const deveEnviar = (autoAtivo || (autoCasos && r.autoEnviar)) && r.sugestaoId && !congelado;
           if (deveEnviar) {
             const operador = r.autoEnviar ? `lara_auto_${r.autoCaso}` : 'lara_auto';
             const env = await aprovarSugestao(r.sugestaoId, operador);
