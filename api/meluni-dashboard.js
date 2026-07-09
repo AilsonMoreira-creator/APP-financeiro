@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const [vd, dv, cr] = await Promise.all([
       supabase.from('meluni_vendas').select('data_pedido,total_pedido,cliente_id').gte('data_pedido', de).lte('data_pedido', ate),
       supabase.from('meluni_devolucoes').select('data_devolucao,valor,convertr_id,pedido_ref').gte('data_devolucao', de).lte('data_devolucao', ate),
-      supabase.from('meluni_carrinhos').select('data_carrinho,valor,telefone').gte('data_carrinho', de).lte('data_carrinho', ate + 'T23:59:59'),
+      supabase.from('meluni_carrinhos').select('data_carrinho,valor,telefone,enviado_em,convertido_em').gte('data_carrinho', de).lte('data_carrinho', ate + 'T23:59:59'),
     ]);
     if (vd.error) throw new Error('vendas: ' + vd.error.message);
     const vendas = vd.data || [], devol = dv.data || [], carr = cr.data || [];
@@ -41,6 +41,15 @@ export default async function handler(req, res) {
     // carrinho VÁLIDO = valor > 0 E com telefone (recuperável). Ailson 17/06/2026.
     carr.forEach(v => { if (Number(v.valor) > 0 && v.telefone) add(String(v.data_carrinho || '').slice(0, 10), 'carrinhos_qtd', 1); });
     const serie = Object.values(dias).sort((a, b) => (a.data < b.data ? -1 : 1));
+
+    // ── Conversão de carrinho (Ailson 09/07/2026) ────────────────────────────
+    // Chamado = a Lara abordou (enviado_em). Convertido = comprou (convertido_em).
+    // conversao_pct = convertidos ÷ chamados. Universo: carrinhos válidos do
+    // período (valor>0 + telefone), mesmo do card Carrinhos.
+    const carrValidos = carr.filter(c => Number(c.valor) > 0 && c.telefone);
+    const carrChamados = carrValidos.filter(c => c.enviado_em).length;
+    const carrConvertidos = carrValidos.filter(c => c.convertido_em).length;
+    const carrConvPct = carrChamados ? (carrConvertidos / carrChamados) * 100 : null;
 
     // ── Clientes NOVOS vs RECORRENTES no período (Ailson 09/07/2026) ──────────
     // Novo = primeira compra dele caiu no período. Recorrente = já tinha comprado
@@ -65,7 +74,7 @@ export default async function handler(req, res) {
       devolucoes: { qtd: devolQtd, soma: dSoma },
       valor_real: vSoma - dSoma,
       ticket: vendas.length ? vSoma / vendas.length : 0,
-      carrinhos: { qtd: carr.filter(c => Number(c.valor) > 0 && c.telefone).length },
+      carrinhos: { qtd: carrValidos.length, chamados: carrChamados, convertidos: carrConvertidos, conversao_pct: carrConvPct },
       clientes,
       serie,
     });
