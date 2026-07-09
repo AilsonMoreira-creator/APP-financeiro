@@ -1200,7 +1200,7 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
           if (base.estacao === 'verao') {
             linhas.push('    → o catalogo geral atual e da colecao de VERAO: pode comentar que sao as novidades, cartela de cores atualizada de verao.');
           } else if (promoAtiva) {
-            linhas.push('    → o catalogo geral atual e de INVERNO (promocao ativa): ao manda-lo, pode usar o gancho de que ALGUNS modelos de inverno estao com 30% off (a gente vende o inverno ate o fim de julho). Se o cliente quiser saber QUAIS, ai sim mande o catalogo de promocao. Nao prometa 30% em tudo.');
+            linhas.push('    → o catalogo geral atual e de INVERNO (promocao ativa). REGRA PRIORITARIA (nao pule): TODA vez que vc OFERECER ou MANDAR este catalogo geral, o gancho dos 30% off em ALGUNS modelos de inverno (a gente vende o inverno ate o fim de julho) PRECISA aparecer no texto. E obrigatorio, mas diga do SEU jeito, leve e natural, encaixado na conversa. NUNCA cole sempre a mesma frase nem soe como aviso automatico, varie a forma toda vez. So pra dar o TOM (nao copie literal): "ah, e uns modelos de inverno tao com 30% off ate o fim de julho, aproveita 😊", ou "vou te mandar, e olha que tem uns de inverno com 30% off ainda 😉", ou "da uma olhada com calma, alguns de inverno tao saindo com 30% off ate fim de julho". Se o cliente quiser saber QUAIS, ai sim mande o catalogo de promocao (ver REGRA DA PROMOCAO). Nunca prometa 30% em tudo, e so "alguns modelos".');
           }
         }
         if (catalogoPromo) {
