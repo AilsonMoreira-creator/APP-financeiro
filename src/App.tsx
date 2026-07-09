@@ -4989,6 +4989,17 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const enviarAjusteBling=async(ba,nova,motivo)=>{
     const chave=`${ba.refNorm}|${ba.cor_norm}|${ba.tam}`;
     try{
+      // Se os Gerais dos filhos (Lumia/Muniam) tem saldo (os negativos que abatem
+      // do vendavel), zera ANTES de gravar pra o numero digitado ser o VENDAVEL final
+      // (multiempresa = Exitus + Lumia + Muniam). Sem isso, o vendavel fica
+      // Exitus + negativos e nao bate com o que foi digitado. Ailson 09/07/2026.
+      // Best-effort: se o zerar falhar (escopo da conta etc), grava mesmo assim.
+      if((Number(ba.lumia)||0)!==0||(Number(ba.muniam)||0)!==0){
+        try{
+          const rz=await fetch('/api/bling-estoque-zerar-filhos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,usuario:usuarioSessao||null})});
+          if(rz.ok)setBlingFilhos(prev=>({...prev,[chave]:{lumia:0,muniam:0}}));
+        }catch(_){/* zerar e best-effort, nao trava o ajuste */}
+      }
       // Grava no Bling (balanço) + espelho/log server-side no mesmo request.
       // Só confirma na célula com o 200 do POST /estoques do Bling.
       const rb=await fetch('/api/bling-estoque-set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:'exitus',ref:ba.refNorm,cor_norm:ba.cor_norm,tam:ba.tam,qtd:nova,espelhar:true,usuario:usuarioSessao||null,motivo:motivo||null,cor_label:ba.cor||null})});
