@@ -32,6 +32,15 @@ const H = 3600 * 1000;
 const D3 = 3 * 86400 * 1000;
 const MAX_ENVIOS = 50;
 
+// Nudge (Ailson 09/07/2026): oferece o catálogo de atacado e planta o gancho dos
+// 30% off como oportunidade (número concreto + escassez leve, sem superlativo).
+// Array pra permitir rotação futura; hoje 1 variação. Quando a cliente pergunta
+// dos 30%, o fluxo dispara o catálogo de PROMOÇÃO; um "sim" simples dispara o de
+// atacado normal.
+const NUDGE_VARIACOES = [
+  'Oi {nome}! Tem uma parte da coleção de inverno com 30% off rolando essa semana. Quer que eu te mande o catálogo de atacado com os modelos e valores?',
+];
+
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
@@ -65,8 +74,8 @@ async function rodar({ dryRun }) {
   const nudgeH = Number(await getConfig('nudge_abertura_horas', 6)) || 6;
   const hIni = Number(await getConfig('nudge_abertura_inicio', 9)) || 9;
   const hFim = Number(await getConfig('nudge_abertura_fim', 20)) || 20;
-  const textoTpl = await getConfig('nudge_abertura_texto',
-    'Oi {nome}! Quer que eu te mande nosso catálogo de atacado com os modelos e valores?');
+  // Override opcional via config; vazio = rotaciona NUDGE_VARIACOES (default).
+  const textoCfg = await getConfig('nudge_abertura_texto', '');
 
   const { data: convs, error } = await supabase
     .from('lojas_whats_conversas')
@@ -119,7 +128,10 @@ async function rodar({ dryRun }) {
       if (r.enviados >= MAX_ENVIOS) continue;
 
       const nome = primeiroNome(c.nome_cliente);
-      const texto = textoTpl.replace('{nome}', nome || '').replace(/\s{2,}/g, ' ').replace('Oi !', 'Oi!');
+      const tpl = (textoCfg && textoCfg.trim())
+        ? textoCfg
+        : NUDGE_VARIACOES[Math.floor(Math.random() * NUDGE_VARIACOES.length)];
+      const texto = tpl.replace('{nome}', nome || '').replace(/\s{2,}/g, ' ').replace('Oi !', 'Oi!');
 
       if (!dryRun) {
         const resp = await enviarTexto(c.telefone, texto);
