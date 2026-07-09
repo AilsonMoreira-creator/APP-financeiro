@@ -22,6 +22,7 @@
  *   - corte já adicionado antes → 409 (trava reinserção / não dobra estoque).
  */
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
+import { zerarFilhosSku } from './_bling-filhos-helpers.js';
 
 export const config = { maxDuration: 60 };
 const API = 'https://api.bling.com.br/Api/v3';
@@ -68,6 +69,11 @@ export default async function handler(req, res) {
     }
     if (!depositoId) return res.status(502).json({ error: 'depósito geral não encontrado' });
 
+    // cache de depósitos dos FILHOS (pro zerarFilhosSku). Ailson 08/07/2026.
+    const { data: cfgFilhosRow } = await supabase.from('amicia_data').select('payload').eq('user_id', 'bling-estoque-config').maybeSingle();
+    const cfgFilhos = cfgFilhosRow?.payload || {};
+    let cfgFilhosMudou = false;
+
     const resultado = [];
     const cores_ignoradas = [];
 
@@ -79,7 +85,7 @@ export default async function handler(req, res) {
 
       // cor cadastrada no Bling? (qualquer tamanho dessa cor nesse ref)
       const { data: linhas } = await supabase.from('bling_estoque')
-        .select('tam,qtd,bling_produto_id,bling_sku').eq('ref', ref).eq('cor_norm', cor_norm);
+        .select('tam,qtd,qtd_lumia,qtd_muniam,bling_produto_id,bling_sku').eq('ref', ref).eq('cor_norm', cor_norm);
       if (!linhas || !linhas.length) { cores_ignoradas.push(cor_nome || cor_norm); continue; }
       const porTam = {};
       linhas.forEach(l => { porTam[String(l.tam || '').toUpperCase().trim()] = l; });
@@ -100,8 +106,23 @@ export default async function handler(req, res) {
         }
         if (!produtoId) { resultado.push({ cor_nome, cor_norm, tam, add, ok: false, motivo: 'produto não encontrado no Bling' }); continue; }
 
+        // Consolidação (Ailson 08/07/2026): o site da Meluni lê o Geral da
+        // EXITUS, então o corte grava o VENDÁVEL: zera Lumia/Muniam (se
+        // sujos) e nova = (exitus + lumia + muniam) + corte.
+        const fLumia = Number(row.qtd_lumia) || 0;
+        const fMuniam = Number(row.qtd_muniam) || 0;
+        let filhosZerados = false;
+        if ((fLumia !== 0 || fMuniam !== 0) && row.bling_sku) {
+          const z = await zerarFilhosSku(row.bling_sku, cfgFilhos);
+          if (z.cfgMudou) cfgFilhosMudou = true;
+          filhosZerados = z.resultados.every(x => x.ok);
+          if (!filhosZerados) {
+            resultado.push({ cor_nome, cor_norm, tam, add, ok: false, motivo: 'falha ao zerar Lumia/Muniam: ' + z.resultados.filter(x => !x.ok).map(x => `${x.conta} ${x.erro}`).join('; ') });
+            continue;
+          }
+        }
         const anterior = Number(row.qtd) || 0;
-        const nova = anterior + add;
+        const nova = anterior + fLumia + fMuniam + add;
 
         const r = await fetch(`${API}/estoques`, {
           method: 'POST', headers,
@@ -116,6 +137,7 @@ export default async function handler(req, res) {
         // espelha local + log
         await supabase.from('bling_estoque').upsert({
           ref, cor_norm, tam, cor_label: cor_nome || null, qtd: nova,
+          ...(filhosZerados ? { qtd_lumia: 0, qtd_muniam: 0 } : {}),
           bling_produto_id: produtoId, atualizado_em: new Date().toISOString(), atualizado_por: usuario,
         }, { onConflict: 'ref,cor_norm,tam' });
         await supabase.from('bling_estoque_logs').insert({
@@ -128,6 +150,13 @@ export default async function handler(req, res) {
     }
 
     const okCount = resultado.filter(r => r.ok).length;
+
+    if (cfgFilhosMudou) {
+      await supabase.from('amicia_data').upsert(
+        { user_id: 'bling-estoque-config', payload: cfgFilhos, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+    }
 
     // nada acrescentado → não grava registro (deixa ele corrigir cadastro e tentar de novo)
     if (okCount === 0) {

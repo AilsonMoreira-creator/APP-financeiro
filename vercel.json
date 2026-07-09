@@ -423,6 +423,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/bling-estoque-consolidar-cron",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/bling-estoque-sync?conta=lumia",
       "schedule": "20 9 * * *"
     },
