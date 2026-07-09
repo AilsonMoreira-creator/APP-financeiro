@@ -7959,6 +7959,33 @@ function MidiasTab({ refreshTick }) {
   const [uploadAberto, setUploadAberto] = useState(false);
   const [loteAberto, setLoteAberto] = useState(false);
   const [editando, setEditando] = useState(null);  // midia em edicao
+  const [faltaAberto, setFaltaAberto] = useState(false);
+  const [faltaRefs, setFaltaRefs] = useState(null);
+  const [faltaLoading, setFaltaLoading] = useState(false);
+
+  // Refs que tem foto mas ainda NAO tem cor cadastrada (mais novas primeiro).
+  const carregarFaltamCores = async () => {
+    setFaltaLoading(true);
+    try {
+      const [rf, rc] = await Promise.all([
+        fetch('/api/lojas-whats-midia?tipo=foto').then(r => r.json()),
+        fetch('/api/lojas-whats-midia?tipo=cores').then(r => r.json()),
+      ]);
+      const refsComCor = new Set((rc.midias || []).map(c => String(c.ref || '').trim()).filter(Boolean));
+      const fotos = (rf.midias || []).filter(x => x.ref)
+        .sort((a, b) => String(b.criada_em || '').localeCompare(String(a.criada_em || '')));
+      const vistas = new Set();
+      const faltando = [];
+      for (const f of fotos) {
+        const ref = String(f.ref).trim();
+        if (!ref || refsComCor.has(ref) || vistas.has(ref)) continue;
+        vistas.add(ref);
+        faltando.push({ ref, criada_em: f.criada_em });
+      }
+      setFaltaRefs(faltando);
+    } catch (e) { setErro(e.message); }
+    setFaltaLoading(false);
+  };
 
   const carregar = async () => {
     setLoading(true);
@@ -8064,6 +8091,45 @@ function MidiasTab({ refreshTick }) {
           </button>
         ))}
       </div>
+
+      {/* Referencias sem cor cadastrada (so na aba Cores) */}
+      {filtroTipo === 'cores' && (
+        <div style={{ marginBottom: 10 }}>
+          <button onClick={() => { const abrir = !faltaAberto; setFaltaAberto(abrir); if (abrir) carregarFaltamCores(); }} style={{
+            background: palette.surface, color: palette.accent,
+            border: `1px solid ${palette.accent}`, borderRadius: 6, padding: '5px 10px',
+            fontSize: fz(11), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+          }}>
+            {faltaAberto ? 'Ocultar' : 'Ver'} referências sem cor cadastrada
+          </button>
+          {faltaAberto && (
+            <div style={{
+              marginTop: 8, padding: 10, background: palette.surface,
+              border: `1px solid ${palette.beige}`, borderRadius: 6,
+            }}>
+              {faltaLoading ? (
+                <div style={{ fontSize: fz(11), color: palette.inkMuted }}>carregando...</div>
+              ) : !faltaRefs || faltaRefs.length === 0 ? (
+                <div style={{ fontSize: fz(11), color: palette.inkMuted }}>Todas as refs com foto já têm cor cadastrada 🎉</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600, marginBottom: 6 }}>
+                    {faltaRefs.length} refs com foto e sem cor (mais novas primeiro):
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {faltaRefs.map(r => (
+                      <span key={r.ref} style={{
+                        background: palette.bg, border: `1px solid ${palette.beige}`,
+                        borderRadius: 4, padding: '2px 7px', fontSize: fz(11), color: palette.ink,
+                      }}>{r.ref}</span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Busca */}
       <input type="text" placeholder="🔍 Buscar por nome, REF ou descrição..." value={busca}

@@ -219,6 +219,16 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'DB insert: ' + errIns.message });
     }
 
+    // A nova midia vira a principal: arquiva a(s) anterior(es) de mesma REF+tipo.
+    // Ailson 08/07/2026 (foto/cores/video). Depois do insert, pra so arquivar se deu certo.
+    if (ref && (tipo === 'foto' || tipo === 'cores' || tipo === 'video')) {
+      try {
+        await supabase.from('lojas_whats_midias')
+          .update({ ativa: false, atualizada_em: new Date().toISOString() })
+          .eq('tipo', tipo).eq('ref', ref).eq('ativa', true).neq('id', row.id);
+      } catch (e) { console.error('[midia-upload] arquivar anterior:', e?.message); }
+    }
+
     // URL publica
     const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(storagePath);
 
@@ -305,6 +315,15 @@ async function handleRegister(req, res) {
       // Rollback storage
       await supabase.storage.from('sofia-midias').remove([storage_path]);
       return res.status(500).json({ error: 'DB insert: ' + errIns.message });
+    }
+
+    // A nova midia vira a principal: arquiva a(s) anterior(es) de mesma REF+tipo.
+    if (ref && (tipo === 'foto' || tipo === 'cores' || tipo === 'video')) {
+      try {
+        await supabase.from('lojas_whats_midias')
+          .update({ ativa: false, atualizada_em: new Date().toISOString() })
+          .eq('tipo', tipo).eq('ref', ref).eq('ativa', true).neq('id', row.id);
+      } catch (e) { console.error('[midia-upload/register] arquivar anterior:', e?.message); }
     }
 
     const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(storage_path);

@@ -1197,10 +1197,10 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
           const listaGeral = catalogosGerais.slice(0, 10).map(c => semExt(c.nome_arquivo)).join(', ');
           linhas.push(`  CATALOGO GERAL (abertura/padrao): ${listaGeral}`);
           linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes. Quando o cliente responder que JA revende / tem loja / e sacoleira / esta comecando, acolhe rapido e JA manda o catalogo (sem ficar perguntando mais).');
-          if (base.estacao === 'inverno' && promoAtiva) {
-            linhas.push('    → o catalogo geral atual e da colecao de INVERNO: ao manda-lo, pode usar o gancho de que ALGUNS modelos de inverno estao com 30% off (a gente vende o inverno ate o fim de julho). Se o cliente quiser saber QUAIS, ai sim mande o catalogo de promocao. Nao prometa 30% em tudo.');
-          } else if (base.estacao === 'verao') {
+          if (base.estacao === 'verao') {
             linhas.push('    → o catalogo geral atual e da colecao de VERAO: pode comentar que sao as novidades, cartela de cores atualizada de verao.');
+          } else if (promoAtiva) {
+            linhas.push('    → o catalogo geral atual e de INVERNO (promocao ativa): ao manda-lo, pode usar o gancho de que ALGUNS modelos de inverno estao com 30% off (a gente vende o inverno ate o fim de julho). Se o cliente quiser saber QUAIS, ai sim mande o catalogo de promocao. Nao prometa 30% em tudo.');
           }
         }
         if (catalogoPromo) {
