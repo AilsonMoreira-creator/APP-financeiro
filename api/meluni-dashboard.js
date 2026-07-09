@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
   try {
     const [vd, dv, cr] = await Promise.all([
-      supabase.from('meluni_vendas').select('data_pedido,total_pedido').gte('data_pedido', de).lte('data_pedido', ate),
+      supabase.from('meluni_vendas').select('data_pedido,total_pedido,cliente_id').gte('data_pedido', de).lte('data_pedido', ate),
       supabase.from('meluni_devolucoes').select('data_devolucao,valor,convertr_id,pedido_ref').gte('data_devolucao', de).lte('data_devolucao', ate),
       supabase.from('meluni_carrinhos').select('data_carrinho,valor,telefone').gte('data_carrinho', de).lte('data_carrinho', ate + 'T23:59:59'),
     ]);
@@ -42,6 +42,23 @@ export default async function handler(req, res) {
     carr.forEach(v => { if (Number(v.valor) > 0 && v.telefone) add(String(v.data_carrinho || '').slice(0, 10), 'carrinhos_qtd', 1); });
     const serie = Object.values(dias).sort((a, b) => (a.data < b.data ? -1 : 1));
 
+    // ── Clientes NOVOS vs RECORRENTES no período (Ailson 09/07/2026) ──────────
+    // Novo = primeira compra dele caiu no período. Recorrente = já tinha comprado
+    // antes de `de`. Identificador: cliente_id (100% preenchido em meluni_vendas).
+    // Best-effort: se falhar, devolve zeros e não derruba o resto do dashboard.
+    let clientes = { total: 0, novos: 0, recorrentes: 0 };
+    try {
+      const idsPeriodo = [...new Set(vendas.map(v => v.cliente_id).filter(Boolean))];
+      let jaCompraram = new Set();
+      if (de > '2000-01-01') {
+        const ant = await supabase.from('meluni_vendas').select('cliente_id').lt('data_pedido', de);
+        jaCompraram = new Set((ant.data || []).map(v => v.cliente_id).filter(Boolean));
+      }
+      let novos = 0, recorrentes = 0;
+      for (const cid of idsPeriodo) { if (jaCompraram.has(cid)) recorrentes++; else novos++; }
+      clientes = { total: idsPeriodo.length, novos, recorrentes };
+    } catch { /* mantém zeros */ }
+
     return res.json({
       ok: true, periodo: { de, ate },
       vendas: { qtd: vendas.length, soma: vSoma },
@@ -49,6 +66,7 @@ export default async function handler(req, res) {
       valor_real: vSoma - dSoma,
       ticket: vendas.length ? vSoma / vendas.length : 0,
       carrinhos: { qtd: carr.filter(c => Number(c.valor) > 0 && c.telefone).length },
+      clientes,
       serie,
     });
   } catch (e) {

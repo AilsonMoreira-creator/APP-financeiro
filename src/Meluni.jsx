@@ -2363,6 +2363,10 @@ function SecaoDashboard() {
         <KpiTile label="Devoluções" valor={fmtBRL(d.devolucoes?.soma)} sub={`${d.devolucoes?.qtd || 0} devoluções`} />
         <KpiTile label="Valor real (vendas - devolução)" valor={fmtBRL(d.valor_real)} destaque />
         <KpiTile label="Ticket médio" valor={fmtBRL(d.ticket)} />
+        <KpiTile label="Clientes novos" valor={String(d.clientes?.novos ?? 0)}
+          sub={d.clientes?.total ? `${Math.round((d.clientes.novos / d.clientes.total) * 100)}% do período` : 'no período'} />
+        <KpiTile label="Clientes recorrentes" valor={String(d.clientes?.recorrentes ?? 0)}
+          sub={d.clientes?.total ? `${Math.round((d.clientes.recorrentes / d.clientes.total) * 100)}% já compraram antes` : 'já compraram antes'} destaque />
         <KpiTile label="Carrinhos" valor={String(d.carrinhos?.qtd || 0)} sub="no período" />
         <KpiTile label="Gasto Meta Ads" valor={loadingGasto ? '…' : (gasto == null ? '—' : fmtBRL(gasto))} sub="conta Meluni" />
         <KpiTile label="ROAS (venda ÷ gasto)" valor={loadingGasto ? '…' : (roas == null ? '—' : roas.toFixed(2) + 'x')} destaque />
