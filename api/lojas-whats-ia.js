@@ -955,6 +955,19 @@ export async function processarConversa(conversaId) {
     log('ia', `conversa=${conversaId} experimento_abertura sorteado=${grupo}`);
   }
 
+  // A/B FLUXO DE QUALIFICACAO POR PERFIL (Opcao 2, Ailson jul/2026): 30% das conversas
+  // usam a sequencia ancorada em valor (perfil_seq); 70% ficam no padrao. Sticky por
+  // conversa: sorteia uma vez e grava, pra comparar conversao depois.
+  if (!conv.experimento_qualif) {
+    const grupoQ = Math.random() < 0.30 ? 'perfil_seq' : 'padrao';
+    try {
+      await supabase.from('lojas_whats_conversas')
+        .update({ experimento_qualif: grupoQ }).eq('id', conversaId);
+    } catch (e) { logErro('ia/experimento-qualif', e); }
+    conv.experimento_qualif = grupoQ;
+    log('ia', `conversa=${conversaId} experimento_qualif sorteado=${grupoQ}`);
+  }
+
   // 3. Detecta gatilhos quente
   const gatilhos = detectarGatilhosQuente(textoCliente);
   log('ia', `conversa=${conversaId} gatilhos=[${gatilhos.join(',')}] primeira_msg=${ehPrimeiraMsgCliente}`);
@@ -1413,6 +1426,19 @@ REGRAS DE OURO MEDIDAS:
   // na abertura, sem qualificar e sem citar minimo, deixando a cliente perguntar.
   if (conv.experimento_abertura === 'catalogo_direto') {
     systemBlocks.push({ type: 'text', text: `ESTRATEGIA DESTA CONVERSA (importante): ${ehPrimeiraMsgCliente ? `esta e a abertura. Manda uma saudação curta com o nome da cliente e AVISA que esta enviando o catalogo — ele JA VAI ANEXADO automaticamente NESTA mensagem (inclua [ENVIAR_CATALOGO] no fim). Como o catalogo ja vai junto, AFIRME que esta mandando; NUNCA pergunte "quer que eu te mande o catalogo?", "posso te enviar?" nem "mando agora?" — seria pedir permissao pra mandar algo que ja esta indo. VARIE o texto naturalmente (NAO use sempre a mesma frase), no espirito de "Oi <nome>, ${saudacaoPeriodo}! Segue o nosso catalogo, qualquer duvida to a disposição".` : `seja simpatica e direta — manda uma saudação curta com o nome da cliente. Se for falar do catalogo e ele AINDA nao foi enviado, escolha UMA coisa: OU pergunta se pode mandar (sem anexar), OU manda com [ENVIAR_CATALOGO] afirmando — nunca pergunta e anexa na mesma mensagem.`} REGRAS DESTA CONVERSA: (1) NAO qualifique a cliente — nao pergunte se ela ja revende, se tem loja, se ta comecando etc. (2) NAO cite a quantidade minima de pecas, nem preco de atacado vs varejo, de cara. So fale do minimo SE a propria cliente perguntar. A intencao e deixar ela puxar a conversa e perguntar.` });
+  }
+  // A/B FLUXO DE QUALIFICACAO POR PERFIL (Opcao 2, Ailson jul/2026): grupo perfil_seq
+  // transforma a pergunta seca "fisica ou online" numa sequencia em que cada resposta
+  // ja gera valor (recomendacao contextual por perfil). 30% das conversas.
+  if (conv.experimento_qualif === 'perfil_seq') {
+    systemBlocks.push({ type: 'text', text: `FLUXO DE QUALIFICACAO POR PERFIL (experimento ativo nesta conversa): quando fizer sentido saber o perfil da cliente pra indicar melhor, NAO pergunte "vc tem loja fisica ou online?" solto, e NUNCA no lugar de atender o que ela pediu. So qualifique DEPOIS que a cliente ja estiver conversando (nunca de cara) e sempre JUNTO de uma entrega de valor. Faca no formato de SEQUENCIA onde cada resposta ja gera valor:
+1) Ancora a pergunta num beneficio pra ela. Ex: "posso te indicar as pecas que costumam girar mais rapido no seu tipo de loja 😊 vc vende mais em loja fisica, pela internet, ou os dois?"
+2) Quando ela responder, ENTREGA uma recomendacao do perfil dela e JA puxa a proxima pergunta (cada resposta compra a proxima):
+   - ONLINE: "perfeito! pra quem vende online, o que mais sai sao os modelos que rendem em foto e video, tipo vestido e saia de linho e as pecas mais fashion. vc divulga mais no instagram, whatsapp ou site?" Quando ela engajar, ai manda as fotos reais do CATALOGO DE HOJE que combinam com esse perfil.
+   - LOJA FISICA: "perfeito! pra loja fisica, o que tem melhor giro e reposicao sao os modelos versateis, tipo body, calca e conjunto, que a cliente leva e volta pra repor. quer que eu ja separe um mix desses que mais saem?" Quando ela topar, manda as fotos reais dos best-sellers do CATALOGO DE HOJE.
+   - OS DOIS: mistura os dois perfis e oferece montar um mix.
+3) Se ela NAO responder a pergunta de perfil e seguir em outro assunto, NAO repita a pergunta. Segue entregando valor normalmente. Qualificacao e tempero, nao portao: no maximo 1 vez, sem insistir.
+As fotos saem SEMPRE do CATALOGO DISPONIVEL HOJE, nunca de memoria. No primeiro toque a recomendacao pode ser so em palavras (contextual); a foto real entra quando a cliente demonstrar interesse.` });
   }
   // Lista ampla pra RECONHECER a peca que a cliente mandar (print/foto/modelo).
   if (listaRefsAtivas) {

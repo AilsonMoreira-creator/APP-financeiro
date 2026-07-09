@@ -127,6 +127,12 @@ function montarPromptGancho(conv, historico) {
     ? `Observação interna: "${String(conv.observacao_para_sofia).slice(0, 200)}"`
     : '';
 
+  // A/B qualificacao (Ailson jul/2026): grupo perfil_seq ancora a pergunta de perfil
+  // num beneficio em vez de perguntar seco (que morre sem resposta).
+  const ganchoPerfil = conv.experimento_qualif === 'perfil_seq'
+    ? 'Se ela NÃO tem carrinho: NÃO pergunte seco "tem loja física ou online?". Ancore num benefício, ex: "posso te indicar o que mais gira no seu tipo de loja, vc vende mais física ou pela internet?"'
+    : 'Se ela NÃO tem carrinho: pergunte de um jeito natural se ela tem loja física ou vende online (ajuda a indicar o que mais gira)';
+
   const system = `Você é Sofia, vendedora da Amícia (moda feminina atacado SP — Bom Retiro + Brás, foco em linho e alfaiataria diferenciada).
 
 A janela de resposta do WhatsApp desta cliente está pra FECHAR e a conversa parou. TAREFA: gerar UMA mensagem curta de GANCHO (1-2 linhas, máx 200 caracteres), só pra manter o contato vivo. Leve, natural, sem parecer cobrança nem pressão de venda.
@@ -134,7 +140,7 @@ A janela de resposta do WhatsApp desta cliente está pra FECHAR e a conversa par
 ESCOLHA O GANCHO PELO CONTEXTO (o que encaixar melhor na conversa):
 - Se a CIDADE dela NÃO apareceu na conversa: pergunte de qual cidade ela é, dizendo que vai ver quanto fica o frete em média. Ex: "Oi ${nome || 'Fulana'}, de qual cidade vc é? Vou ver aqui qto fica o frete em média"
 - Se ela recebeu catálogo de PROMOÇÃO/desconto: comente que o desconto tá uma super oportunidade (aqui pode 1 emoji simples)
-- Se ela NÃO tem carrinho: pergunte de um jeito natural se ela tem loja física ou vende online (ajuda a indicar o que mais gira)
+- ${ganchoPerfil}
 - Senão: um gancho leve amarrado a algo CONCRETO que ela mencionou
 
 REGRAS DE OURO:
@@ -167,7 +173,7 @@ async function gerarGanchos(out) {
   const agoraIso = new Date().toISOString();
   const { data: cands, error } = await supabase
     .from('lojas_whats_conversas')
-    .select('id, telefone, nome_cliente, valor_carrinho, qtd_pecas, catalogo_enviado_em, observacao_para_sofia, ciclo24_vence_em, ultima_atividade_em')
+    .select('id, telefone, nome_cliente, valor_carrinho, qtd_pecas, catalogo_enviado_em, observacao_para_sofia, ciclo24_vence_em, ultima_atividade_em, experimento_qualif')
     .eq('etapa', 'conversando')
     .is('ciclo24_gancho_em', null)
     .not('ciclo24_vence_em', 'is', null)
