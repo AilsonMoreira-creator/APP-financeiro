@@ -257,6 +257,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
       tipo_midia: dadosMsg.tipo,
       texto: dadosMsg.texto,
       midia_url: midiaUrlFinal,
+      meta_response: dadosMsg.flow_raw || null,
       meta_message_id: msg.id,
       status: 'entregue',
       enviada_em: new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
@@ -788,8 +789,32 @@ function extrairConteudo(msg) {
     }
     case 'interactive': {
       // Botoes/listas interativas (nao-template): button_reply.title / list_reply.title.
+      // nfm_reply = resposta de um WhatsApp Flow (o formulario da campanha de leads
+      // CTWA). O .name costuma vir generico ("flow"); as respostas que a cliente
+      // preencheu estao em .response_json (string JSON). Extraimos e formatamos pra
+      // Tamara ver o que ela respondeu, e guardamos o bruto (flow_raw -> meta_response)
+      // pra auditoria e pra classificacao. Ailson 09/07/2026.
       const ir = msg.interactive || {};
-      const t = ir.button_reply?.title || ir.list_reply?.title || ir.nfm_reply?.name || '';
+      if (ir.nfm_reply) {
+        const raw = ir.nfm_reply.response_json ?? null;
+        let obj = null;
+        try { obj = typeof raw === 'string' ? JSON.parse(raw) : (raw && typeof raw === 'object' ? raw : null); } catch { obj = null; }
+        const linhas = [];
+        if (obj && typeof obj === 'object') {
+          for (const [k, v] of Object.entries(obj)) {
+            if (/^flow_token$/i.test(k)) continue;
+            const rotulo = String(k).replace(/^screen_\d+_/i, '').replace(/_\d+$/, '').replace(/_/g, ' ').trim();
+            const val = Array.isArray(v) ? v.join(', ') : (v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
+            if (val !== '') linhas.push(`${rotulo || 'resposta'}: ${val}`);
+          }
+        }
+        const texto = linhas.length
+          ? `[Formulário do anúncio]\n${linhas.join('\n')}`
+          : (ir.nfm_reply.name || '[formulário do anúncio recebido]');
+        const flow_raw = obj || (raw != null ? { response_json_raw: raw } : null);
+        return { tipo: 'text', texto, midia_url: null, mime: null, botao: true, botao_texto: ir.nfm_reply.name || 'formulario', flow_raw };
+      }
+      const t = ir.button_reply?.title || ir.list_reply?.title || '';
       return { tipo: 'text', texto: t, midia_url: null, mime: null, botao: true, botao_texto: t };
     }
     default:
