@@ -262,8 +262,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
       status: 'entregue',
       enviada_em: new Date(parseInt(msg.timestamp, 10) * 1000).toISOString()
     })
-    .select('id')
-    .maybeSingle();
+    .select('id')    .maybeSingle();
   if (errMsg) {
     // Codigo 23505 = unique_violation. Eh retry da Meta — ignora.
     if (errMsg.code === '23505') {
@@ -271,6 +270,29 @@ async function processarMensagemRecebida(msg, valueCtx) {
       return;  // sai do handler, nao processa mais nada deste retry
     }
     logErro('msg-in-save', errMsg);
+  }
+
+  // Tag alto_potencial automatica por VOLUME DE PRINTS (Ailson 09/07/2026):
+  // mineracao vendeu/perdida mostrou que 3+ fotos de modelos na conversa =
+  // 47% das que venderam vs 0,3% das perdidas. Gatilho deterministico,
+  // best-effort, nunca derruba o webhook.
+  if (msgInserida && dadosMsg.tipo === 'image') {
+    try {
+      const { count } = await supabase.from('lojas_whats_mensagens')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversa_id', conversa.id).eq('direcao', 'entrada').eq('tipo_midia', 'image');
+      if ((count || 0) >= 3) {
+        const { data: cFresh } = await supabase.from('lojas_whats_conversas')
+          .select('tags').eq('id', conversa.id).maybeSingle();
+        const tagsAtuais = Array.isArray(cFresh?.tags) ? cFresh.tags : [];
+        if (!tagsAtuais.some(t => t && t.id === 'alto_potencial')) {
+          await supabase.from('lojas_whats_conversas')
+            .update({ tags: [...tagsAtuais, { id: 'alto_potencial' }] })
+            .eq('id', conversa.id);
+          log('tag-auto', `alto_potencial por ${count} prints em ${conversa.id}`);
+        }
+      }
+    } catch (e) { logErro('tag-prints', e); }
   }
 
   // Push pra usuarios inscritos na Sofia. Tag por conversa_id deduplica

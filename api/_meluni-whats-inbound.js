@@ -22,7 +22,9 @@ import { aplicarTagTelefone } from './_meluni-tags-core.js';
 const DEBOUNCE_MS = 60 * 1000; // 60s — agrupa rajada antes da IA (igual Sofia)
 // sinais da tag 'potencial' (intencao de compra). Texto ja normalizado (sem acento).
 const RE_LINK_PRODUTO = /https?:\/\/\S+/i;
-const RE_INTENCAO_COMPRA = /(quero|quanto\s*(custa|fica|sai|e\b)|preco|valor|disponiv|ainda\s*tem|tem\s*(esse|essa|este|esta|ele|ela)|pronta\s*entrega|comprar|me\s*(ve|manda|vende)|qual\s*(o\s*)?valor)/;
+// Ampliada 09/07/2026 com padrões reais das legendas (ex: "vi essas saias e
+// não achei no site, como chamam?", "gostaria de saber o comprimento"):
+const RE_INTENCAO_COMPRA = /(quero|quanto\s*(custa|fica|sai|e\b)|preco|valor|disponiv|ainda\s*tem|tem\s*(esse|essa|este|esta|ele|ela|no site|na loja)|pronta\s*entrega|comprar|me\s*(ve|manda|vende)|qual\s*(o\s*)?valor|como\s*(se\s*)?chama|(nao\s*)?achei\s*no\s*site|gostaria|comprimento|medid|tamanho|numeracao|modelo|tecido|essa\s*(peca|saia|calca|blusa|vestido|camisa|jaqueta)|cores?\s*dispon)/;
 
 const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions';
 const WHISPER_MODEL = 'whisper-1';
@@ -201,14 +203,34 @@ export async function processarMensagemMeluni(msg, value) {
 
     console.log(`[meluni-inbound] msg de ${telefone} (${c.tipo}) -> conversa ${conversaId}`);
 
-    // tag 'potencial' automatica: link de produto OU foto com legenda de intencao
-    // de compra. best-effort, nunca derruba a ingestao. Ailson 07/07/2026.
+    // tag 'potencial' automatica (Ailson 09/07/2026, v2): link de produto OU
+    // foto + intencao de compra. No WhatsApp a cliente costuma mandar a foto
+    // SEM legenda (texto vira '[image]') e escrever "tem esse?" em mensagem
+    // SEPARADA — por isso a janela bidirecional de 10min: foto agora + texto
+    // de intencao recente, ou texto de intencao agora + foto recente.
+    // best-effort, nunca derruba a ingestao.
     try {
       const txtCru = String(c.texto || '');
       const txtNorm = txtCru.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const legendaReal = txtNorm && txtNorm !== '[image]';
       const temLink = RE_LINK_PRODUTO.test(txtCru);
-      const temIntencao = RE_INTENCAO_COMPRA.test(txtNorm);
-      if (temLink || (c.tipo === 'image' && temIntencao)) {
+      const temIntencao = legendaReal && RE_INTENCAO_COMPRA.test(txtNorm);
+      let marca = temLink || (c.tipo === 'image' && temIntencao);
+      if (!marca && (c.tipo === 'image' || temIntencao)) {
+        // janela: procura a contraparte (foto<->texto de intencao) nos ultimos 10min
+        const desde = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+        const alvoTipo = c.tipo === 'image' ? 'text' : 'image';
+        const { data: perto } = await supabase.from('meluni_mensagens')
+          .select('texto, tipo_midia').eq('conversa_id', conversaId)
+          .eq('direcao', 'entrada').eq('tipo_midia', alvoTipo)
+          .gte('criado_em', desde).order('criado_em', { ascending: false }).limit(5);
+        if (c.tipo === 'image') {
+          marca = (perto || []).some(p => RE_INTENCAO_COMPRA.test(String(p.texto || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')));
+        } else if (temIntencao) {
+          marca = (perto || []).length > 0; // texto de intencao agora + foto recente
+        }
+      }
+      if (marca) {
         const r = await aplicarTagTelefone(supabase, telefone, { id: 'potencial' });
         if (r.aplicou) console.log(`[meluni-inbound] tag potencial marcada em ${telefone}`);
       }

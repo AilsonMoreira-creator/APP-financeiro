@@ -608,8 +608,10 @@ NUNCA vê e vc NUNCA menciona a etiqueta pra ela):
 
 [TAG:alto_potencial] → sinais de lojista GRANDE: tem mais de uma loja, fala em
   comprar todo mês / pedido recorrente, pedido inicial de 30+ peças, compra de
-  outras marcas em volume, sacoleira estruturada com equipe. Use no máximo 1x
-  por conversa, quando o sinal for explícito na fala dela.
+  outras marcas em volume, sacoleira estruturada com equipe, ou mandou VÁRIOS
+  prints/fotos de modelos diferentes (3 ou mais = quase certeza de grade — dado
+  real: 47% das que compraram fizeram isso, só 0,3% das perdidas). Use no
+  máximo 1x por conversa, quando o sinal for claro.
 
 [TAG:reposicao 2277] → cliente quer um modelo que está SEM ESTOQUE (vc conferiu
   no estoque fino e não tem, ou só tem tamanho que não serve). Troque 2277 pela
