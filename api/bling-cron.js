@@ -28,16 +28,29 @@ export default async function handler(req, res) {
   // Últimos 45 dias (cobre mês atual + mês passado)
   // Backfill progressivo: pedidos já cacheados são skipados
   // Primeiras execuções levam vários ciclos de 10min pra completar
+  // Backfill HISTORICO (Ailson 10/07/2026): ?de=YYYY-MM-DD&ate=YYYY-MM-DD
+  // troca a janela (ex: julho/2025 pra análise de cores) e ?conta=exitus
+  // limita a uma conta. Dedup por pedido_id torna re-runs seguros.
   const datas = [];
-  for (let i = 0; i < 45; i++) {
-    datas.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+  const qDe = String(req.query?.de || '');
+  const qAte = String(req.query?.ate || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(qDe) && /^\d{4}-\d{2}-\d{2}$/.test(qAte)) {
+    for (let d = new Date(qAte + 'T12:00:00Z'); d >= new Date(qDe + 'T12:00:00Z'); d = new Date(d.getTime() - 86400000)) {
+      datas.push(d.toISOString().slice(0, 10));
+    }
+  } else {
+    for (let i = 0; i < 45; i++) {
+      datas.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+    }
   }
+  const contaFiltro = req.query?.conta ? String(req.query.conta) : null;
 
   const resumo = { processados: 0, novos: 0, erros: 0, porConta: {} };
 
   try {
     // Busca mapa de lojas uma vez por conta (pra identificar canais)
     for (const conta of CONTAS) {
+      if (contaFiltro && conta !== contaFiltro) continue;
       const contaResumo = { pedidosTotal: 0, novosInseridos: 0, erros: 0, detalhe: "" };
       resumo.porConta[conta] = contaResumo;
 
