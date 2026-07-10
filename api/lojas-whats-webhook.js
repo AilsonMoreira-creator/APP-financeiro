@@ -822,11 +822,14 @@ function extrairConteudo(msg) {
         let obj = null;
         try { obj = typeof raw === 'string' ? JSON.parse(raw) : (raw && typeof raw === 'object' ? raw : null); } catch { obj = null; }
         const linhas = [];
+        // Valores das opcoes do Flow vem crus ("4_Vou_Começar", "0_Vestidos_"):
+        // tira o prefixo numerico e troca _ por espaco. Ailson 10/07/2026.
+        const limpaVal = s => String(s).replace(/^\d+_/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
         if (obj && typeof obj === 'object') {
           for (const [k, v] of Object.entries(obj)) {
             if (/^flow_token$/i.test(k)) continue;
             const rotulo = String(k).replace(/^screen_\d+_/i, '').replace(/_\d+$/, '').replace(/_/g, ' ').trim();
-            const val = Array.isArray(v) ? v.join(', ') : (v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
+            const val = Array.isArray(v) ? v.map(limpaVal).join(', ') : (v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : limpaVal(v)));
             if (val !== '') linhas.push(`${rotulo || 'resposta'}: ${val}`);
           }
         }
