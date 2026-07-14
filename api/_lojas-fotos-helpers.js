@@ -122,11 +122,17 @@ export async function resolverCatalogoPromoAtivo(supabase) {
     if (!SUPABASE_URL) return null;
     const { data: cats } = await supabase
       .from('lojas_whats_midias')
-      .select('nome_arquivo, storage_path')
+      .select('nome_arquivo, storage_path, estacao, promocao')
       .eq('tipo', 'catalogo')
       .eq('ativa', true)
       .order('criada_em', { ascending: false });
-    const hit = (cats || []).find(c => _semAcc(c.nome_arquivo).includes('promo'));
+    const lista = cats || [];
+    // O catalogo promocional agora e o de INVERNO: e nele que estao os modelos
+    // com 30% off (marcados no PDF). Antes procurava "promo" no nome do arquivo,
+    // que nao existe mais. Mantem a flag/nome como fallback. Ailson 14/07/2026.
+    const hit = lista.find(c => c.estacao === 'inverno')
+      || lista.find(c => c.promocao === true)
+      || lista.find(c => _semAcc(c.nome_arquivo).includes('promo'));
     if (!hit?.storage_path) return null;
     return {
       url: `${SUPABASE_URL}/storage/v1/object/public/sofia-midias/${hit.storage_path}`,

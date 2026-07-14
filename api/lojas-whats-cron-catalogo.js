@@ -20,7 +20,7 @@
 // manda QUALQUER msg — então o cron só pega conversas silentes.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, log, logErro, contarSofiaSemResposta, getConfig, tagsCongelamEnvio, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
+import { supabase, log, logErro, contarSofiaSemResposta, getConfig, tagsCongelamEnvio, resolverCatalogos, primeiroNome as fmtPrimeiroNome } from './_lojas-whats-helpers.js';
 import { enviarTexto, enviarTemplate } from './_lojas-whats-meta-client.js';
 import { enviarMidiaSofia } from './_lojas-whats-midia-sender.js';
 
@@ -100,17 +100,12 @@ export default async function handler(req, res) {
       f1 = f1Data || [];
 
       // Catalogo PDF ativo (fallback do follow-up vesti). Ailson 04/06/2026.
+      // Passou a resolver por PAPEL (principal = verao quando existir; senao o de
+      // inverno) em vez de "o mais recente". Ailson 14/07/2026.
       let catAtivo = null;
       try {
-        const { data: c } = await supabase
-          .from('lojas_whats_midias')
-          .select('id, tipo, nome_arquivo, storage_path, mime_type')
-          .eq('tipo', 'catalogo')
-          .eq('ativa', true)
-          .order('criada_em', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        catAtivo = c || null;
+        const { principal } = await resolverCatalogos();
+        catAtivo = principal || null;
       } catch (e) { logErro('cron-catalogo/cat-ativo', e); }
 
       for (const conv of f1) {

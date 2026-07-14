@@ -243,3 +243,40 @@ export function setCors(res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
+
+// ─── CATALOGOS POR PAPEL (Ailson 14/07/2026) ────────────────────────────────
+// Antes cada ponto do codigo pegava "o catalogo mais recente" (ou filtrava pelo
+// nome do arquivo conter "promo"), o que quebra quando existe MAIS DE UM
+// catalogo ativo. Agora o papel vem do campo `estacao`:
+//
+//   principal → o que a Sofia manda na abertura/engajamento (todo mundo recebe).
+//               E o de VERAO quando existir; senao, o mais recente.
+//   inverno   → o legado/promocional: so sai quando a cliente PEDE promocao,
+//               desconto ou inverno. E dentro dele que estao os modelos com
+//               30% off (marcados no PDF).
+//
+// Enquanto so existir o catalogo de inverno, principal === inverno (mesmo
+// comportamento de hoje). Quando o de verao subir marcado estacao='verao', ele
+// vira principal sozinho, sem mexer em codigo.
+export async function resolverCatalogos() {
+  try {
+    const { data: cats } = await supabase
+      .from('lojas_whats_midias')
+      .select('id, tipo, ref, nome_arquivo, storage_path, mime_type, size_bytes, descricao, estacao, promocao')
+      .eq('tipo', 'catalogo').eq('ativa', true)
+      .order('criada_em', { ascending: false });
+    const lista = cats || [];
+    if (!lista.length) return { principal: null, inverno: null };
+    const verao = lista.find(c => c.estacao === 'verao') || null;
+    // inverno/promocional: por estacao, ou flag promocao, ou "promo" no nome (legado).
+    const inverno = lista.find(c => c.estacao === 'inverno')
+      || lista.find(c => c.promocao === true)
+      || lista.find(c => /promo/i.test(c.nome_arquivo || ''))
+      || null;
+    const principal = verao || lista.find(c => c.id !== inverno?.id) || inverno || lista[0];
+    return { principal, inverno };
+  } catch (e) {
+    logErro('resolverCatalogos', e);
+    return { principal: null, inverno: null };
+  }
+}

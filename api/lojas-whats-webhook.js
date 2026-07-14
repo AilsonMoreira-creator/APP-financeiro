@@ -32,7 +32,8 @@ import {
   normalizarTelefone,
   chaveTel,
   primeiroNome,
-  getConfig
+  getConfig,
+  resolverCatalogos
 } from './_lojas-whats-helpers.js';
 import {
   verifyWebhookHandshake,
@@ -453,17 +454,18 @@ async function processarMensagemRecebida(msg, valueCtx) {
       await supabase.from('lojas_whats_conversas').update(updPq).eq('id', conversa.id);
 
       // Resposta scriptada por motivo, em 2 mensagens (outros = sem resposta) +
-      // catalogo amarrado ao motivo (deterministico, NAO depende da IA).
-      // CATALOGO UNICO (Ailson 14/07/2026): nao existe mais catalogo de promocao
-      // separado — os modelos com 30% off estao DENTRO do catalogo unico. Antes o
-      // motivo 'preco' pedia promocao=true e, sem esse arquivo no banco, o texto
-      // prometia o catalogo e NENHUM catalogo saia. Agora ambos mandam o unico.
+      // catalogo amarrado ao motivo (deterministico, NAO depende da IA):
+      //   preco        -> catalogo com os 30% off (o de INVERNO/promocao)
+      //   minimo_pecas -> catalogo PRINCIPAL (verao quando existir)
+      // Resolvido por PAPEL, nao pela flag promocao (que ficou false no catalogo
+      // unico e fazia o envio de 'preco' nao sair). Enquanto so houver o de
+      // inverno, os dois caem no mesmo arquivo. Ailson 14/07/2026.
       if (rp?.partes?.length) {
         try {
           await enviarDuasPartes(telefone, conversa.id, rp.partes);
           if (motivo === 'preco' || motivo === 'minimo_pecas') {
             await new Promise(r => setTimeout(r, 1800 + Math.floor(Math.random() * 1200)));
-            await enviarCatalogoPesquisa(telefone, conversa.id, false);
+            await enviarCatalogoPesquisa(telefone, conversa.id, motivo === 'preco');
           }
         } catch (e) {
           logErro('pesquisa-resposta', e);
@@ -723,17 +725,16 @@ async function enviarDuasPartes(telefone, conversaId, partes) {
 }
 
 // Catalogo amarrado ao motivo da pesquisa (deterministico, NAO depende da IA).
-// querPromo=true  -> catalogo de PROMOCAO (promocao=true)
-// querPromo=false -> catalogo geral/ATUALIZADO mais recente (promocao=false)
-// Ailson 23/06/2026.
+// querPromo=true  -> catalogo de INVERNO/PROMOCAO (o que tem os 30% off marcados)
+// querPromo=false -> catalogo PRINCIPAL (verao quando existir; senao o de inverno)
+// Passou a resolver por PAPEL (estacao) e nao pela flag promocao: com o catalogo
+// unico de inverno a flag ficou false e o envio de 'preco' silenciosamente NAO
+// saia. Se nao houver um de inverno, cai no principal. Ailson 14/07/2026.
 async function enviarCatalogoPesquisa(telefone, conversaId, querPromo, decididaPor = 'pesquisa') {
   try {
-    const { data: cat } = await supabase
-      .from('lojas_whats_midias')
-      .select('id, tipo, ref, nome_arquivo, storage_path, mime_type, size_bytes, descricao')
-      .eq('tipo', 'catalogo').eq('ativa', true).eq('promocao', !!querPromo)
-      .order('criada_em', { ascending: false }).limit(1).maybeSingle();
-    if (!cat) { log('pesquisa', `catalogo (promocao=${!!querPromo}) nao encontrado`); return; }
+    const { principal, inverno } = await resolverCatalogos();
+    const cat = querPromo ? (inverno || principal) : principal;
+    if (!cat) { log('pesquisa', `catalogo (promo=${!!querPromo}) nao encontrado`); return; }
     const r = await enviarMidiaSofia({ telefone, midia: cat, conversaId, mensagemId: null, decididaPor });
     if (!r?.ok) { log('pesquisa', `catalogo pesquisa erro: ${r?.erro || 'desconhecido'}`); return; }
     // Grava a mensagem no historico (Ailson 05/07/2026): antes o catalogo SAIA
