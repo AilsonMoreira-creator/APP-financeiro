@@ -1197,34 +1197,30 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
         linhas.push('    → use [ENVIAR_VIDEO:REF] SOMENTE em fechamento');
       }
       if (catalogos.length > 0) {
-        // PROMO eh DETERMINISTICO: flag promocao=true no banco OU nome do arquivo
-        // contem "promo". NUNCA depende de string de config (isso dava drift e ja
-        // mandou o catalogo de promocao como ABERTURA por engano). O config
-        // promocao_ativa.ativa so liga/desliga a OFERTA. O catalogo de
-        // abertura/geral NUNCA pode ser um de promocao. Ailson 22/06/2026.
+        // CATALOGO UNICO (Ailson 14/07/2026): agora existe UM SO catalogo (inverno),
+        // e dentro dele convivem modelos a preco normal e modelos com 30% off. Nao
+        // existe mais "catalogo de promocao" separado. O ehPromo continua aqui so
+        // como TRAVA: se algum dia subirem um arquivo com "promo" no nome, ele nao
+        // vira o catalogo de abertura por engano. O config promocao_ativa.ativa
+        // liga/desliga o GANCHO dos 30% (nao ha mais oferta de 2o catalogo).
         const ehPromo = (m) => m.promocao === true || /promo/i.test(semExt(m.nome_arquivo || ''));
         const catalogosGerais = catalogos.filter(m => !ehPromo(m));
-        const catalogoPromo = (promoAtiva ? (catalogos.find(ehPromo) || null) : null);
         // base (abertura/force-inject) = SEMPRE um geral; nunca cai num promo.
         const base = catalogosGerais[0] || null;
         nomeCatalogoAtual = base ? semExt(base.nome_arquivo) : null;
         if (base) {
           const listaGeral = catalogosGerais.slice(0, 10).map(c => semExt(c.nome_arquivo)).join(', ');
-          linhas.push(`  CATALOGO GERAL (abertura/padrao): ${listaGeral}`);
+          linhas.push(`  CATALOGO (unico, abertura/padrao): ${listaGeral}`);
           linhas.push('    → use [ENVIAR_CATALOGO:nome_sem_extensao] apos cliente engajar (>=3 msgs). Se o cliente JA pediu pra ver, manda DIRETO (sem perguntar); se for vc oferecendo, pergunta antes. Quando o cliente responder que JA revende / tem loja / e sacoleira / esta comecando, acolhe rapido e JA manda o catalogo (sem ficar perguntando mais).');
           if (base.estacao === 'verao') {
-            linhas.push('    → o catalogo geral atual e da colecao de VERAO: pode comentar que sao as novidades, cartela de cores atualizada de verao.');
+            linhas.push('    → o catalogo atual e da colecao de VERAO: pode comentar que sao as novidades, cartela de cores atualizada de verao.');
           } else if (promoAtiva) {
-            linhas.push('    → o catalogo geral atual e de INVERNO (promocao ativa). REGRA PRIORITARIA (nao pule): TODA vez que vc OFERECER ou MANDAR este catalogo geral, o gancho dos 30% off em ALGUNS modelos de inverno (a gente vende o inverno ate o fim de julho) PRECISA aparecer no texto. E obrigatorio, mas diga do SEU jeito, leve e natural, encaixado na conversa. NUNCA cole sempre a mesma frase nem soe como aviso automatico, varie a forma toda vez. So pra dar o TOM (nao copie literal): "ah, e uns modelos de inverno tao com 30% off ate o fim de julho, aproveita 😊", ou "vou te mandar, e olha que tem uns de inverno com 30% off ainda 😉", ou "da uma olhada com calma, alguns de inverno tao saindo com 30% off ate fim de julho". Se o cliente quiser saber QUAIS, ai sim mande o catalogo de promocao (ver REGRA DA PROMOCAO). Nunca prometa 30% em tudo, e so "alguns modelos".');
+            linhas.push('    → SO EXISTE UM CATALOGO (o de inverno) e DENTRO dele ja tem modelos a preco normal E modelos com 30% off. NAO existe catalogo de promocao separado: NUNCA diga que vai mandar "o catalogo da promocao", NUNCA prometa mandar outro catalogo depois, NUNCA mande um segundo catalogo. REGRA PRIORITARIA (nao pule): TODA vez que vc OFERECER ou MANDAR o catalogo, avise no texto que ALGUNS modelos dentro dele estao com 30% off (a gente vende o inverno ate o fim de julho). E obrigatorio, mas diga do SEU jeito, leve e natural, encaixado na conversa. NUNCA cole sempre a mesma frase nem soe como aviso automatico, varie a forma toda vez. So pra dar o TOM (nao copie literal): "vou te mandar, e olha que tem uns modelos ai dentro com 30% off ate o fim de julho 😉", ou "da uma olhada com calma, alguns modelos do catalogo tao saindo com 30% off", ou "no proprio catalogo tem uns modelos com 30% off ate fim de julho, aproveita 😊". Se a cliente perguntar QUAIS estao com 30%, NAO mande outro catalogo: os modelos estao no proprio catalogo que ela ja tem. Pergunte quais ela gostou / o que costuma vender e confirme pra ela quais dos escolhidos entram na condicao. Nunca prometa 30% em tudo, e so "alguns modelos".');
           }
-        }
-        if (catalogoPromo) {
-          linhas.push(`  CATALOGO DE PROMOCAO: ${semExt(catalogoPromo.nome_arquivo)}`);
-          linhas.push(`    → REGRA DA PROMOCAO (robusta, leia com atencao): este catalogo NUNCA eh o de abertura/geral. Envie [ENVIAR_CATALOGO:${semExt(catalogoPromo.nome_arquivo)}] APENAS em dois casos: (a) o cliente PEDIU / PERGUNTOU da promocao; OU (b) VOCE ja ofereceu a condicao/desconto da promo NESTA conversa (ex: na resposta da pesquisa de PRECO, com os 30%) e o cliente ACEITOU / disse sim / pediu pra separar. FORA desses dois casos, JAMAIS envie o catalogo de promocao. No caso (b), MANDE o catalogo de promocao ANTES de pedir as pecas. Ao enviar, DEIXE CLARO no texto que e o catalogo da PROMOCAO (ex: "te mando o catalogo da promocao, com a condicao dos 30% 😊") — a cliente precisa saber que aquilo e a promocao. REGRA DURA: NUNCA peca "me manda as pecas que vc escolheu" sem ter enviado o catalogo de promocao nesta conversa quando o assunto e a promo. NUNCA ofereca foto solta de peca ([ENVIAR_FOTO:REF]) como se fosse "da promocao".`);
         }
       }
       const linhaInverno = promoAtiva
-        ? '- Modelo/catalogo marcado "(inverno)": e da colecao de inverno. Pode usar o gancho de que ALGUNS modelos de inverno estao com 30% off (a gente vende o inverno ate o fim de julho). Se o cliente quiser saber QUAIS, ai sim mande o catalogo de promocao (ver REGRA DA PROMOCAO). Nao prometa 30% em tudo, e "alguns modelos".'
+        ? '- Modelo/catalogo marcado "(inverno)": e da colecao de inverno. Pode usar o gancho de que ALGUNS modelos do catalogo estao com 30% off (a gente vende o inverno ate o fim de julho). Esses modelos estao DENTRO do proprio catalogo (nao existe catalogo de promocao separado, nunca ofereca outro). Nao prometa 30% em tudo, e "alguns modelos".'
         : '- Modelo/catalogo marcado "(inverno)": e da colecao de inverno. Fale com naturalidade, sem prometer desconto (a promocao de inverno nao esta ativa agora).';
       linhas.push('');
       linhas.push('REGRA DE ESTACAO / COLECAO:');

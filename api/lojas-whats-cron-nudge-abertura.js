@@ -34,9 +34,10 @@ const MAX_ENVIOS = 50;
 
 // Nudge (Ailson 09/07/2026): oferece o catálogo de atacado e planta o gancho dos
 // 30% off como oportunidade (número concreto + escassez leve, sem superlativo).
-// Array pra permitir rotação futura; hoje 1 variação. Quando a cliente pergunta
-// dos 30%, o fluxo dispara o catálogo de PROMOÇÃO; um "sim" simples dispara o de
-// atacado normal.
+// Array pra permitir rotação futura; hoje 1 variação. CATÁLOGO ÚNICO (14/07/2026):
+// existe um só catálogo (inverno) com modelos a preço normal E modelos com 30% off
+// dentro dele — tanto um "sim" quanto uma pergunta sobre os 30% levam ao MESMO
+// catálogo. Não existe mais catálogo de promoção separado.
 const NUDGE_VARIACOES = [
   'Oi {nome}! Tem uma parte da coleção de inverno com 30% off rolando essa semana. Quer que eu te mande o catálogo de atacado com os modelos e valores?',
 ];

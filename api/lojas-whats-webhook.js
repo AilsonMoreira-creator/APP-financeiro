@@ -453,15 +453,15 @@ async function processarMensagemRecebida(msg, valueCtx) {
       await supabase.from('lojas_whats_conversas').update(updPq).eq('id', conversa.id);
 
       // Resposta scriptada por motivo, em 2 mensagens (outros = sem resposta) +
-      // catalogo amarrado ao motivo (deterministico, NAO depende da IA):
-      //   preco -> catalogo de PROMOCAO ; quantidade de pecas -> catalogo ATUALIZADO/normal.
+      // catalogo amarrado ao motivo (deterministico, NAO depende da IA).
+      // CATALOGO UNICO (Ailson 14/07/2026): nao existe mais catalogo de promocao
+      // separado — os modelos com 30% off estao DENTRO do catalogo unico. Antes o
+      // motivo 'preco' pedia promocao=true e, sem esse arquivo no banco, o texto
+      // prometia o catalogo e NENHUM catalogo saia. Agora ambos mandam o unico.
       if (rp?.partes?.length) {
         try {
           await enviarDuasPartes(telefone, conversa.id, rp.partes);
-          if (motivo === 'preco') {
-            await new Promise(r => setTimeout(r, 1800 + Math.floor(Math.random() * 1200)));
-            await enviarCatalogoPesquisa(telefone, conversa.id, true);
-          } else if (motivo === 'minimo_pecas') {
+          if (motivo === 'preco' || motivo === 'minimo_pecas') {
             await new Promise(r => setTimeout(r, 1800 + Math.floor(Math.random() * 1200)));
             await enviarCatalogoPesquisa(telefone, conversa.id, false);
           }
@@ -675,12 +675,12 @@ function respostaPesquisaVariante(motivo, primeiro) {
     ],
     preco: [
       ['A', [
-        `${ola}que bom que vc respondeu! Sobre o valor, tô com uma condição de 30% de desconto rodando agora.`,
-        `É uma boa pra vc conhecer os modelos da Amícia com um custo menor, ver a qualidade e como vende bem. Vou te mandar aqui o catálogo da promoção pra vc dar uma olhada.`,
+        `${ola}que bom que vc respondeu! Sobre o valor, tem uma parte dos modelos com 30% de desconto rodando agora.`,
+        `É uma boa pra vc conhecer os modelos da Amícia com um custo menor, ver a qualidade e como vende bem. Vou te mandar aqui o catálogo, os que estão na condição saem com os 30%.`,
       ]],
       ['B', [
-        `${ola}obrigada por responder! Sobre preço, a gente tá com 30% de desconto agora, então dá pra entrar com um valor bem melhor.`,
-        `Bom momento pra testar os modelos da Amícia, ver a qualidade de perto e como giram na sua loja. Te mando aqui o catálogo com a promoção.`,
+        `${ola}obrigada por responder! Sobre preço, alguns modelos estão com 30% de desconto agora, então dá pra entrar com um valor bem melhor.`,
+        `Bom momento pra testar os modelos da Amícia, ver a qualidade de perto e como giram na sua loja. Te mando aqui o catálogo, tem modelos com os 30% dentro dele.`,
       ]],
     ],
     variedade: [
