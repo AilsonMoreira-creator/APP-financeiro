@@ -1010,6 +1010,52 @@ export async function contextoProduto(ref = null, isAdmin = false) {
  *
  * Se não achou por REF, tenta buscar por descrição (match parcial).
  */
+// Monta o bloco de PRECOS DE VENDA de uma ficha (Ailson 14/07/2026).
+// Antes o contexto so mandava a ficha crua — e a ficha guarda COMPONENTES DE
+// CUSTO (tecido1/oficina/passadoria sao valores em R$). Os precos de venda ficam
+// em payload.precosSalvos com chave "REF|canal", que nunca era enviado pra IA.
+// Resultado: pergunta de "por quanto vender" era respondida com o CUSTO.
+//   marca Amícia → 3 precos: Silva Teles, Bom Retiro, Varejo (de precosSalvos)
+//   marca Meluni → preco por PLATAFORMA (vw_margem_por_produto_canal). A IA deve
+//                  perguntar a plataforma antes de cravar um valor.
+async function precosDaFicha(ficha, precosSalvos) {
+  const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) && n > 0 ? n : null; };
+  const marca = String(ficha.marca || 'Amícia').trim();
+  const ehMeluni = /meluni/i.test(marca);
+
+  if (!ehMeluni) {
+    const ref = ficha.ref;
+    return {
+      marca,
+      precos_venda: {
+        silva_teles: num(precosSalvos[`${ref}|silvaTeles`]),
+        bom_retiro: num(precosSalvos[`${ref}|bomRetiro`]),
+        varejo: num(precosSalvos[`${ref}|varejo`]),
+      },
+    };
+  }
+
+  // Meluni: preco por plataforma. ref_norm da view vem SEM zero a esquerda.
+  const refCurta = String(ficha.ref || '').replace(/^0+/, '');
+  let porPlataforma = {};
+  try {
+    const { data: rows } = await supabase
+      .from('vw_margem_por_produto_canal')
+      .select('canal_norm, preco_venda')
+      .eq('ref_norm', refCurta);
+    for (const r of (rows || [])) {
+      const p = num(r.preco_venda);
+      if (p) porPlataforma[r.canal_norm] = p;
+    }
+  } catch (e) { logErro('precosDaFicha/meluni', e); }
+
+  return {
+    marca,
+    precisa_plataforma: true,
+    precos_por_plataforma: Object.keys(porPlataforma).length ? porPlataforma : null,
+  };
+}
+
 export async function contextoFichaTecnica(refOuDesc) {
   // FIX 07/05/2026: estrutura real eh payload.produtos[], nao payload.fichas[]
   const { data } = await supabase
@@ -1019,13 +1065,16 @@ export async function contextoFichaTecnica(refOuDesc) {
     .maybeSingle();
 
   const fichas = data?.payload?.produtos || [];
+  const precosSalvos = data?.payload?.precosSalvos || {};
   if (fichas.length === 0) return { msg: 'Nenhuma ficha cadastrada' };
+
+  const comPrecos = async (f) => ({ ficha: f, ...(await precosDaFicha(f, precosSalvos)) });
 
   // Tenta como REF primeiro
   const refNorm = normalizarRef(refOuDesc);
   if (refNorm) {
     const match = fichas.find(f => normalizarRef(f.ref) === refNorm);
-    if (match) return { ficha: match };
+    if (match) return await comPrecos(match);
   }
 
   // Fallback: busca por descrição (match parcial case-insensitive)
@@ -1040,7 +1089,7 @@ export async function contextoFichaTecnica(refOuDesc) {
     return { msg: 'Nenhuma peça encontrada com essa descrição' };
   }
   if (matches.length === 1) {
-    return { ficha: matches[0] };
+    return await comPrecos(matches[0]);
   }
   // Vários matches → deixar a IA pedir escolha
   return {
@@ -1067,8 +1116,30 @@ export function montarPromptSistema({ isAdmin, categoria, glossarioCustom = null
   const filtroMonetarioMsg = isAdmin
     ? 'Você PODE mencionar valores em R$ (faturamento, lucro, margem, ticket médio) — é admin.'
     : `Você NÃO PODE mencionar valores em R$ (faturamento, lucro, margem, ticket médio, custo de produção).
-  EXCEÇÃO: na categoria "ficha", pode mostrar custo + 3 preços de venda.
+  EXCEÇÃO: na categoria "ficha", pode mostrar os preços de venda.
   Se o user pedir valor R$ fora da ficha: responda "Posso te mostrar [alternativa em volume/qtd]. Valor em R$ fica com o admin."`;
+
+  // ── PREÇO DE VENDA (Ailson 14/07/2026) ─────────────────
+  // Pergunta de "quanto vale / por quanto vender" tem que vir com PREÇO DE VENDA,
+  // nunca com custo. Os campos tecido1/tecido2/forro/botao/ziper/aviamentos/
+  // oficina/passadoria da ficha são COMPONENTES DE CUSTO em R$ — não são preço.
+  const regraPreco = `── PREÇO DE VENDA (REGRA DURA) ──
+Quando o user perguntar PREÇO / VALOR / "por quanto vender" / "quanto custa pro cliente":
+- Responda SOMENTE com PREÇO DE VENDA. NUNCA responda essa pergunta com custo.
+- Os campos da ficha (tecido1, tecido2, forro, botao, ziper, aviamentos, oficina, passadoria) são COMPONENTES DE CUSTO em R$, NÃO são preço de venda. NUNCA os apresente como preço.
+- Só fale de custo se o user pedir CUSTO explicitamente.
+
+REF da marca AMÍCIA → os 3 preços vêm em precos_venda (silva_teles, bom_retiro, varejo). Mostre os 3:
+  "Silva Teles: R$ X · Bom Retiro: R$ Y · Varejo: R$ Z"
+  Se o user pediu um canal específico (ex: "preço Silva Teles"), responda só ele.
+  Se algum preço vier null, diga que esse canal ainda não tem preço cadastrado na ficha (não invente, não calcule a partir do custo).
+
+REF da marca MELUNI → o preço MUDA POR PLATAFORMA. Se o contexto trouxer precisa_plataforma:
+  - Se o user JÁ disse a plataforma na pergunta, responda o preço dela usando precos_por_plataforma.
+  - Se o user NÃO disse, pergunte em qual plataforma (Shein, Shopee, Mercado Livre, TikTok, Meluni) — e peça pra ele repetir a REF junto, porque cada pergunta é independente (ex: "me pergunta assim: preço da REF 1108 na Shein"). NÃO cravê um valor sem saber a plataforma.
+  - Se o user quiser todas, liste as plataformas com preço.
+  - Se precos_por_plataforma vier null, diga que essa REF ainda não tem preço por plataforma cadastrado.
+NUNCA misture preço de Amícia (atacado/varejo loja física) com preço de marketplace da Meluni.`;
 
   // ── Regra de saudação ──────────────────────────────────
   let regraSaudacao;
@@ -1201,6 +1272,8 @@ cortado na sala <sala>. Daqui uns 2 dias consigo te passar as cores e as quantid
 
 FILTRO MONETÁRIO:
 ${filtroMonetarioMsg}
+
+${regraPreco}
 
 PRODUÇÃO — PRIORIDADE DE FONTES (regra Ailson 22/04, caseado 04/06, sala de corte 05/06):
 Pra "tem a REF X pra chegar?" / "tá vindo a peça Y?", procure NESTA ORDEM e pare na 1ª que achar:
