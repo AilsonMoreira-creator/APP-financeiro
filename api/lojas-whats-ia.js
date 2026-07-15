@@ -1384,6 +1384,28 @@ REGRAS DE OURO MEDIDAS:
     logErro('ia/check-catalogo-enviado', e);
   }
 
+  // Disparo de HSM com CRIATIVO (ex: preview_verao27_v1): o criativo e uma
+  // IMAGEM de campanha (arte de cores/tendencias), NAO o catalogo PDF. Sem este
+  // aviso, a IA ve a imagem no historico + a cliente pedindo catalogo e "acha"
+  // que o catalogo ja foi, respondendo como se tivesse mandado (sem [ENVIAR_CATALOGO]).
+  // Detecta pela ultima mensagem de saida com template_name e tipo_midia=image.
+  // Ailson 15/07/2026.
+  let disparoCriativoRecente = false;
+  try {
+    const { data: dsp } = await supabase
+      .from('lojas_whats_mensagens')
+      .select('id')
+      .eq('conversa_id', conversaId)
+      .eq('direcao', 'saida')
+      .not('template_name', 'is', null)
+      .in('tipo_midia', ['image', 'template'])
+      .order('enviada_em', { ascending: false })
+      .limit(1);
+    disparoCriativoRecente = (dsp?.length || 0) > 0 && !pdfCatalogoJaEnviado;
+  } catch (e) {
+    logErro('ia/check-disparo-criativo', e);
+  }
+
   const contextoConv = montarContextoConversa(conv);
   const msgsClaude = montarMensagensClaude(msgs, conv);
 
@@ -1519,6 +1541,11 @@ As fotos saem SEMPRE do CATALOGO DISPONIVEL HOJE, nunca de memoria. No primeiro 
   } else if (catalogoJaEnviado) {
     // Modo Vesti: o LINK ja foi mandado, mas o PDF ainda nao.
     systemBlocks.push({ type: 'text', text: `ATENCAO: vc JA mandou o LINK do catalogo (Vesti) pra esse cliente. NAO fique remandando o link nem dizendo "te mando o catalogo" do nada. POREM: se o cliente disser que NAO conseguiu acessar / deu erro / nao abriu / nao carregou, OU se ele PEDIR o catalogo, ai vc PODE e DEVE mandar o catalogo PDF como alternativa, com [ENVIAR_CATALOGO:nome]. Nesse caso responda acolhendo, tipo "a gente continua por aqui, vou te enviar o catalogo".` });
+  }
+
+  // Criativo de campanha ja saiu, mas o catalogo PDF nao. Ailson 15/07/2026.
+  if (disparoCriativoRecente) {
+    systemBlocks.push({ type: 'text', text: `ATENCAO (IMPORTANTE): essa cliente recebeu um DISPARO com um CRIATIVO (uma imagem de campanha/arte, tipo a cartela de cores da colecao). Esse criativo NAO e o catalogo. O catalogo PDF ainda NAO foi enviado nesta conversa. Entao: se a cliente PEDIR o catalogo, disser "quero ver", "manda o catalogo", "catalogo por favor" ou qualquer coisa assim, vc TEM que enviar o catalogo PDF DE VERDADE com [ENVIAR_CATALOGO:nome_atual] — nao basta responder com texto. NUNCA responda como se o catalogo ja tivesse sido enviado (nada de "esse e o preview", "qualquer peca que chamar atencao me manda") sem antes ter mandado o PDF com o marcador. A imagem do disparo nao conta como catalogo.` });
   }
 
   // Orientacao aprendida (cron-aprendizado semanal) — guidance SUAVE, baseada
