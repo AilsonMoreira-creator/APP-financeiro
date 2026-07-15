@@ -844,11 +844,52 @@ function _getSbUrl() {
   return '';
 }
 
+// Cache em memória do path de foto da Sofia por REF (evita refazer a query a
+// cada render/scroll). null = já buscou e não achou. Ailson 14/07/2026.
+const _sofiaFotoCache = new Map();
+
+async function _buscarFotoSofia(refNorm) {
+  if (_sofiaFotoCache.has(refNorm)) return _sofiaFotoCache.get(refNorm);
+  try {
+    const alt = refNorm.padStart(4, '0');
+    const alt5 = refNorm.padStart(5, '0');
+    const { data } = await supabase
+      .from('lojas_whats_midias')
+      .select('storage_path, ativa, criada_em')
+      .eq('tipo', 'foto')
+      .in('ref', [refNorm, alt, alt5])
+      .order('ativa', { ascending: false })
+      .order('criada_em', { ascending: false })
+      .limit(1);
+    const path = data && data[0]?.storage_path ? data[0].storage_path : null;
+    _sofiaFotoCache.set(refNorm, path);
+    return path;
+  } catch {
+    _sofiaFotoCache.set(refNorm, null);
+    return null;
+  }
+}
+
 export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, onZoom = null }) {
   const sbUrl = _getSbUrl();
   const storageBase = sbUrl ? `${sbUrl}/storage/v1/object/public/produtos/` : '';
+  const sofiaBase = sbUrl ? `${sbUrl}/storage/v1/object/public/sofia-midias/` : '';
   const orig = String(refProd || '').toUpperCase();
   const norm = orig.replace(/^0+/, '');
+
+  // Fallback pelas mídias da Sofia: quando a REF não tem arquivo no bucket
+  // 'produtos' (ex: reposição/novidade sem ficha técnica), busca a foto ativa
+  // cadastrada na Sofia. O path tem timestamp, então precisa vir do banco.
+  const [sofiaUrl, setSofiaUrl] = React.useState(() => {
+    const c = _sofiaFotoCache.get(norm);
+    return c ? sofiaBase + c : null;
+  });
+  const tentouSofiaRef = React.useRef(false);
+  const buscarSofia = React.useCallback(() => {
+    if (tentouSofiaRef.current || !norm || !sofiaBase) return;
+    tentouSofiaRef.current = true;
+    _buscarFotoSofia(norm).then(path => { if (path) setSofiaUrl(sofiaBase + path); });
+  }, [norm, sofiaBase]);
 
   // Sem URL do supabase ou sem ref: placeholder
   if (!storageBase || !orig) {
@@ -878,10 +919,23 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
 
   const onError = (e) => {
     const cur = e.target.src;
+    // Se já está exibindo a foto da Sofia e ela falhou, cai no placeholder.
+    if (sofiaUrl && cur.includes('/sofia-midias/')) {
+      e.target.style.display = 'none';
+      const ph = e.target.nextSibling;
+      if (ph) ph.style.display = 'flex';
+      return;
+    }
     const idx = urls.findIndex(u => cur.includes(u));
     if (idx >= 0 && idx < urls.length - 1) {
       e.target.src = storageBase + urls[idx + 1] + cb;
+    } else if (sofiaUrl) {
+      // Esgotou o bucket 'produtos' e já temos a foto da Sofia: usa ela.
+      e.target.src = sofiaUrl;
     } else {
+      // Esgotou 'produtos' e ainda não buscou na Sofia: busca e, se achar, o
+      // setSofiaUrl re-renderiza e a img passa a apontar pra ela.
+      buscarSofia();
       e.target.style.display = 'none';
       const ph = e.target.nextSibling;
       if (ph) ph.style.display = 'flex';
@@ -893,6 +947,9 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
     if (onZoom) onZoom(e.target.src);
   };
 
+  // Se já resolvemos a foto da Sofia, começa direto por ela (evita piscar).
+  const primeiraUrl = sofiaUrl || (storageBase + urls[0] + cb);
+
   if (aspectRatio) {
     return (
       <div style={{
@@ -900,7 +957,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
         overflow: 'hidden', borderRadius: 8,
         background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
       }}>
-        <img src={storageBase + urls[0] + cb} onError={onError} onClick={onClick}
+        <img src={primeiraUrl} onError={onError} onClick={onClick}
           style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />
         <div style={{
           display: 'none', width: '100%', height: '100%',
@@ -921,7 +978,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
       background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)',
       flexShrink: 0, position: 'relative',
     }}>
-      <img src={storageBase + urls[0] + cb} onError={onError} onClick={onClick}
+      <img src={primeiraUrl} onError={onError} onClick={onClick}
         style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: onZoom ? 'pointer' : 'default', display: 'block' }} />
       <div style={{
         display: 'none', width: '100%', height: '100%',
