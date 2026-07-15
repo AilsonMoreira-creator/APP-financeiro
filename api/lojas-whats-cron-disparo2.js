@@ -1,13 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// /api/lojas-whats-cron-disparo2 — 2º disparo automático de campanha (Sofia)
+// /api/lojas-whats-cron-disparo2 — 2º disparo automático do CARRINHO abandonado
 // ═══════════════════════════════════════════════════════════════════════════
 // Espelha o padrão do carrinho da Meluni (meluni-carrinho-funil-cron):
-// clientes que receberam o 1º disparo (aba Follow-up) e NÃO responderam em 24h
-// recebem um 2º disparo automático, com abordagem diferente (conteúdo de
-// interesse — as cores tendência do Verão 27) que termina tentando o catálogo.
+// carrinhos que receberam o 1º disparo (template do carrinho, etapa 'enviada')
+// e NÃO responderam em 24h recebem um 2º disparo automático com abordagem
+// diferente — conteúdo de interesse (as cores tendência do Verão 27) que
+// termina tentando puxar resposta pra enviar o catálogo de verão.
 //
-// Gatilho por conversa: disparo1_em < now()-24h, disparo2_em IS NULL,
-//   disparo_respondeu_em IS NULL (quem respondeu saiu do fluxo).
+// Alvo por conversa:
+//   etapa = 'enviada'  (quando a cliente responde, ela SAI de 'enviada' e vira
+//     'conversando' — então continuar em 'enviada' já significa "não respondeu")
+//   carrinho_id IS NOT NULL  (é carrinho abandonado, não outro fluxo)
+//   catalogo_enviado_em < now()-24h  (1º disparo saiu há mais de 24h)
+//   disparo2_em IS NULL  (ainda não recebeu o 2º)
 // Janela: usa dentroDaJanela() — DOMINGO já é bloqueado por padrão (dom:null),
 //   então o cron pode rodar domingo mas não envia; "pula pra segunda" sozinho.
 // Template do 2º disparo: config sofia_disparo2_template (default abaixo).
@@ -90,16 +95,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: false, motivo: 'criativo_header_nao_encontrado', ref: tpl.header?.sample_ref });
     }
 
-    // Alvos: receberam o 1º disparo há >24h, não responderam e sem 2º disparo.
+    // Alvos: CARRINHOS que receberam o 1º disparo há >24h e não responderam.
+    // "não respondeu" = continua em 'enviada' (a resposta move pra 'conversando').
     const corte = new Date(Date.now() - 24 * 3600e3).toISOString();
     const { data: alvos } = await supabase
       .from('lojas_whats_conversas')
       .select('id, telefone, nome_cliente')
-      .not('disparo1_em', 'is', null)
-      .lt('disparo1_em', corte)
+      .eq('etapa', 'enviada')
+      .not('carrinho_id', 'is', null)
+      .not('catalogo_enviado_em', 'is', null)
+      .lt('catalogo_enviado_em', corte)
       .is('disparo2_em', null)
-      .is('disparo_respondeu_em', null)
-      .order('disparo1_em', { ascending: true })
+      .order('catalogo_enviado_em', { ascending: true })
       .limit(LOTE);
 
     const saud = saudacaoBRT();
