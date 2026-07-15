@@ -72,7 +72,14 @@ async function readMultipart(req) {
           const dispMatch = headers.match(/name="([^"]+)"(?:;\s*filename="([^"]+)")?/);
           if (!dispMatch) continue;
           const name = dispMatch[1];
-          const filename = dispMatch[2];
+          // O buffer inteiro é lido como 'binary' (latin1) pra preservar os bytes
+          // do arquivo. Mas o filename dos headers vem em UTF-8, então acento
+          // (ex: "Amícia", "verão") sai corrompido ("AmÃ­cia"). Reinterpreta os
+          // bytes latin1 como UTF-8 pra recuperar o acento. Ailson 15/07/2026.
+          const filenameRaw = dispMatch[2];
+          const filename = filenameRaw
+            ? Buffer.from(filenameRaw, 'binary').toString('utf8')
+            : filenameRaw;
 
           if (filename) {
             // Arquivo binario
