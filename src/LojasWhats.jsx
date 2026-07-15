@@ -1572,6 +1572,10 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   const [perdidaAte, setPerdidaAte] = useState('');
   const [templateMassa, setTemplateMassa] = useState('pesquisa');
   const [tplsReativacao, setTplsReativacao] = useState([]);
+  // Aba Follow-up: template escolhido pro disparo manual em massa + lista de
+  // templates aprovados disponíveis pra isso. Ailson 15/07/2026.
+  const [templateFollowup, setTemplateFollowup] = useState('nenhum');
+  const [tplsFollowup, setTplsFollowup] = useState([]);
   // Contador de pesquisas enviadas HOJE (BRT) na etapa ativa (follow_up / perdida).
   const [enviadosHoje, setEnviadosHoje] = useState(0);
 
@@ -1746,6 +1750,20 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
           ...(j.pastas?.dicas_rapidas || []),
         ]);
       })
+      .catch(() => {});
+  }, [filtroEtapa]);
+
+  // Templates aprovados+ativos pro disparo manual da aba Follow-up. Carrega 1x
+  // quando abre a aba. Mostra os de MARKETING aprovados (ex: preview_verao27_v1).
+  // Ailson 15/07/2026.
+  useEffect(() => {
+    if (filtroEtapa !== 'follow_up' || tplsFollowup.length) return;
+    supabase
+      .from('lojas_whats_templates')
+      .select('name, body_text, header, pasta, status, ativo')
+      .eq('status', 'aprovado').eq('ativo', true)
+      .order('atualizado_em', { ascending: false })
+      .then(({ data }) => { if (data) setTplsFollowup(data); })
       .catch(() => {});
   }, [filtroEtapa]);
 
@@ -2013,6 +2031,35 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   const ehAbaProcessando = filtroEtapa === 'processando';
   const ehAbaAprovar = filtroEtapa === 'aprovar';
   const ehAbaPerdida = filtroEtapa === 'perdida';
+  const ehAbaFollowup = filtroEtapa === 'follow_up';
+
+  // Disparo manual de HSM em massa (aba Follow-up): manda o template escolhido
+  // pros cards selecionados. Usa o corpo real do template (fura as 24h). Ailson
+  // 15/07/2026 — lançamento Verão 27.
+  const dispararTemplateSelecionados = async () => {
+    if (selecionados.size === 0) return;
+    if (templateFollowup === 'nenhum') return;
+    if (!confirm(`Disparar o template pra ${selecionados.size} cliente(s)? Isso envia uma mensagem paga (HSM) pra cada uma.`)) return;
+    setProcessandoFila(true);
+    try {
+      const r = await fetch('/api/lojas-whats-followup-disparo-massa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_ids: Array.from(selecionados), template: templateFollowup }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error || j.ok === false) {
+        setFeedback({ tipo: 'erro', msg: j.dica || j.error || 'Falha ao disparar' });
+      } else {
+        const puladosMsg = j.pulados?.length ? `, ${j.pulados.length} pulada(s)` : '';
+        const falhasMsg = j.falhas?.length ? `, ${j.falhas.length} falha(s)` : '';
+        setFeedback({ tipo: 'ok', msg: `Disparo: ${j.enviados || 0} enviada(s)${puladosMsg}${falhasMsg}` });
+        setSelecionados(new Set());
+        setReloadTick(t => t + 1);
+      }
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+    setProcessandoFila(false);
+  };
 
   // Envia a pesquisa de motivo pros leads selecionados (so os elegiveis recebem,
   // o endpoint filtra pela view). Ailson 21/06/2026.
@@ -2133,8 +2180,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         </div>
       )}
 
-      {/* Barra de selecao multipla — abas processando e aprovar */}
-      {(ehAbaProcessando || ehAbaAprovar || ehAbaPerdida) && conversas.length > 0 && (
+      {/* Barra de selecao multipla — abas processando, aprovar, perdida, follow-up */}
+      {(ehAbaProcessando || ehAbaAprovar || ehAbaPerdida || ehAbaFollowup) && conversas.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
           padding: '8px 12px', borderRadius: 8,
@@ -2153,7 +2200,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
             />
             <span style={{ color: palette.inkSoft }}>
               {selecionados.size === 0
-                ? (ehAbaAprovar ? 'Selecionar todos' : ehAbaPerdida ? 'Selecionar leads' : `${conversas.length} na fila`)
+                ? (ehAbaAprovar ? 'Selecionar todos' : (ehAbaPerdida || ehAbaFollowup) ? 'Selecionar clientes' : `${conversas.length} na fila`)
                 : `${selecionados.size} de ${conversas.length} selecionados`}
             </span>
           </label>
@@ -2214,6 +2261,36 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                 }}>
                 {processandoFila ? 'Enviando…' : `Enviar pesquisa (${selecionados.size})`}
               </button>
+              </>
+            ) : ehAbaFollowup ? (
+              <>
+                {/* Disparo manual de HSM em massa (Ailson 15/07/2026 — Verão 27).
+                    Seleciona o template aprovado e dispara pros cards marcados. */}
+                <select value={templateFollowup} onChange={e => setTemplateFollowup(e.target.value)}
+                  style={{
+                    fontSize: fz(12), padding: '6px 8px', borderRadius: 6,
+                    border: `1px solid ${palette.beige}`, fontFamily: FONT,
+                    background: palette.surface, color: palette.ink, maxWidth: 210,
+                  }}>
+                  <option value="nenhum">Escolha o template…</option>
+                  {tplsFollowup.map(t => (
+                    <option key={t.name} value={t.name}>
+                      {t.name}{t.header?.format === 'IMAGE' ? ' 🖼' : ''}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={dispararTemplateSelecionados}
+                  disabled={processandoFila || templateFollowup === 'nenhum'}
+                  title={templateFollowup === 'nenhum' ? 'Escolha um template aprovado pra disparar' : undefined}
+                  style={{
+                    padding: '6px 14px', borderRadius: 6,
+                    background: (processandoFila || templateFollowup === 'nenhum') ? '#bdc3c7' : palette.accent,
+                    color: '#fff', border: 'none', fontFamily: FONT,
+                    fontSize: fz(13), fontWeight: 700,
+                    cursor: processandoFila ? 'wait' : 'pointer',
+                  }}>
+                  {processandoFila ? 'Disparando…' : `Disparar (${selecionados.size})`}
+                </button>
               </>
             ) : (
               <button onClick={processarSelecionados} disabled={processandoFila}
@@ -2327,7 +2404,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
               <ConversaRow key={c.id} c={c}
                 vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : null}
                 vendedorasMap={vendedorasMap}
-                selecionavel={ehAbaProcessando || ehAbaAprovar || ehAbaPerdida}
+                selecionavel={ehAbaProcessando || ehAbaAprovar || ehAbaPerdida || ehAbaFollowup}
                 selecionado={selecionados.has(c.id)}
                 onToggleSelecao={() => toggleSelecao(c.id)}
                 onContinuarSofia={() => onContinuarSofia(c)}
