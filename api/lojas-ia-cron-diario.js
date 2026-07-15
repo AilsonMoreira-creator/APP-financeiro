@@ -252,6 +252,26 @@ export default async function handler(req, res) {
     erro_msg: erros > 0 ? `${erros}/${vendedoras.length} falharam` : null,
   });
 
+  // ─── TEMA DA QUINTA via piggyback (Ailson 15/07/2026) ──────────────────
+  // O cron dedicado lojas-tema-quinta-cron parou de ser disparado pelo Vercel
+  // (excesso de crons no projeto — 73). Como ESTE cron diário roda fielmente
+  // todo dia 7h, ele passa a acionar o tema quando for QUINTA (BRT). O tema tem
+  // idempotência própria (não duplica se já existir da semana), então é seguro.
+  let temaQuinta = null;
+  try {
+    const brtDia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })).getDay();
+    if (brtDia === 4) { // 4 = quinta
+      const rt = await fetch(`${baseUrl}/api/lojas-tema-quinta-cron`, {
+        method: 'GET',
+        headers: { 'X-User': 'ailson', 'X-Internal-Cron': '1' },
+      });
+      temaQuinta = await rt.json().catch(() => ({ ok: false, erro: 'parse' }));
+    }
+  } catch (e) {
+    temaQuinta = { ok: false, erro: String(e?.message || e) };
+    console.error('[cron-diario] tema-quinta piggyback falhou:', e?.message);
+  }
+
   return res.status(200).json({
     ok: true,
     duracao_ms: Date.now() - inicio,
@@ -259,5 +279,6 @@ export default async function handler(req, res) {
     sucessos,
     erros,
     resultados,
+    tema_quinta: temaQuinta,
   });
 }
