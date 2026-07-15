@@ -130,6 +130,7 @@ export default async function handler(req, res) {
         });
         await supabase.from('lojas_whats_conversas').update({
           ultima_msg_direcao: 'saida', ultima_atividade_em: agora, responder_em: null,
+          disparo1_em: agora, disparo1_template: template, disparo_respondeu_em: null,
         }).eq('id', conv.id);
 
         enviados.push(conv.id);

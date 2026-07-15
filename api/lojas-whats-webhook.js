@@ -615,6 +615,14 @@ async function processarMensagemRecebida(msg, valueCtx) {
     log('msg-in', `conversa ${conversa.id} retornou: ${conversa.etapa} -> conversando`);
   }
 
+  // Resposta ao disparo de campanha (opção A, Ailson 15/07/2026): se recebeu o
+  // 1º disparo e ainda não tinha respondido, carimba disparo_respondeu_em pra
+  // SAIR do fluxo do 2º disparo automático (o cron não manda o 2º pra quem já
+  // respondeu). Só marca uma vez.
+  if (conversa.disparo1_em && !conversa.disparo_respondeu_em) {
+    updates.disparo_respondeu_em = new Date().toISOString();
+  }
+
   // 4b. NUDGE DE ABERTURA: se essa conversa recebeu o nudge oferecendo o
   // catalogo (cron-nudge-abertura) e a resposta eh POSITIVA ("sim", "quero",
   // "pode mandar"...), dispara o catalogo AQUI mesmo, deterministico, sem IA.

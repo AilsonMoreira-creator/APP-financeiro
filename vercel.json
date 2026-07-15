@@ -183,6 +183,10 @@
   },
   "crons": [
     {
+      "path": "/api/lojas-whats-cron-disparo2",
+      "schedule": "20 12-23 * * *"
+    },
+    {
       "path": "/api/bling-cron",
       "schedule": "*/10 * * * *"
     },
