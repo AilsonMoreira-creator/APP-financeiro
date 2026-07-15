@@ -32,14 +32,13 @@ const H = 3600 * 1000;
 const D3 = 3 * 86400 * 1000;
 const MAX_ENVIOS = 50;
 
-// Nudge (Ailson 09/07/2026): oferece o catálogo de atacado e planta o gancho dos
-// 30% off como oportunidade (número concreto + escassez leve, sem superlativo).
-// Array pra permitir rotação futura; hoje 1 variação. CATÁLOGO ÚNICO (14/07/2026):
-// existe um só catálogo (inverno) com modelos a preço normal E modelos com 30% off
-// dentro dele — tanto um "sim" quanto uma pergunta sobre os 30% levam ao MESMO
-// catálogo. Não existe mais catálogo de promoção separado.
+// Nudge (Ailson 09/07/2026, atualizado 15/07/2026 pro lançamento do VERÃO 27):
+// divulga o preview da coleção de verão e oferece o catálogo. Um "sim" dispara o
+// catálogo PRINCIPAL (hoje o de verão, via resolverCatalogos). Quem quiser
+// inverno/promoção pede, e a Sofia manda o de inverno (com os 30% off).
+// Array pra permitir rotação futura; hoje 1 variação.
 const NUDGE_VARIACOES = [
-  'Oi {nome}! Tem uma parte da coleção de inverno com 30% off rolando essa semana. Quer que eu te mande o catálogo de atacado com os modelos e valores?',
+  'Oi {nome}! Acabou de sair o preview da nossa Coleção Verão 27. Quer que eu te mande o catálogo?',
 ];
 
 export default async function handler(req, res) {
