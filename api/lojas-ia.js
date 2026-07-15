@@ -530,6 +530,25 @@ async function handleGerarSugestoes(req, res, auth) {
     });
   }
 
+  // ─── Criativo do preview Verão 27 nos cards da campanha (Ailson 15/07/2026) ─
+  // Sugestões cujo cliente é um comprador do verão do ano passado levam o
+  // criativo (ref 9027) como 1ª foto — a IA fala do preview e o card já anexa
+  // a arte. Injeta em refs_fotos pra resolverFotosSugestoes anexar via biblioteca.
+  try {
+    const idsVerao = new Set((ctx.compradoresVerao || []).map(c => c.cliente_id));
+    if (idsVerao.size) {
+      for (const l of linhas) {
+        if (l.cliente_id && idsVerao.has(l.cliente_id)) {
+          const md = l.metadados_ia || {};
+          const atuais = Array.isArray(md.refs_fotos) ? md.refs_fotos : [];
+          l.metadados_ia = { ...md, refs_fotos: ['9027', ...atuais.filter(r => String(r) !== '9027')].slice(0, 4) };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[lojas-ia] injecao criativo verao falhou:', e?.message);
+  }
+
   // ─── Fotos anexadas (Ailson 11/06/2026) ─────────────────────────────
   // Resolve fotos das REFs citadas (produto_ref + metadados.refs_fotos):
   // Sofia mídias primeiro (mais recente), ficha técnica complementa.
@@ -1640,6 +1659,37 @@ async function montarContextoSugestoes(vendedoraId) {
     }
   }
 
+  // ─── CAMPANHA: compradores do VERÃO do ano passado (Ailson 15/07/2026) ──
+  // Prioriza clientes DESTA vendedora que compraram na janela 15/07→05/08 de
+  // 2025 (público que compra verão nessa época) E que NÃO vieram por promoção
+  // (desconto <=20% na compra — a view já exclui os >20%). Alvo: 4 cards/dia.
+  // Gancho: preview Verão 27 (fala do preview, encaminha o criativo e pergunta
+  // se pode mandar as fotos). Janela da campanha configurável.
+  const CAMPANHA_VERAO_INI = '2026-07-16';
+  const CAMPANHA_VERAO_FIM = '2026-08-05';
+  let compradoresVerao = [];
+  if (hoje >= CAMPANHA_VERAO_INI && hoje <= CAMPANHA_VERAO_FIM) {
+    const { data: cv } = await supabase
+      .from('vw_lojas_compradores_verao_ly')
+      .select('cliente_id, n_compras, total_gasto, ult_compra, rank_geral')
+      .order('rank_geral', { ascending: true })
+      .limit(500);
+    const ids = (cv || []).map(x => x.cliente_id);
+    if (ids.length) {
+      const { data: meus } = await supabase
+        .from('lojas_clientes')
+        .select('id, apelido, comprador_nome, razao_social')
+        .eq('vendedora_id', vendedoraId)
+        .in('id', ids);
+      const nomeDe = {};
+      (meus || []).forEach(c => { nomeDe[c.id] = c.apelido || c.comprador_nome || (c.razao_social ? c.razao_social.split(' ').slice(0, 3).join(' ') : 'cliente'); });
+      compradoresVerao = (cv || [])
+        .filter(x => nomeDe[x.cliente_id] !== undefined)
+        .slice(0, 12)
+        .map(x => ({ cliente_id: x.cliente_id, apelido: nomeDe[x.cliente_id], compras_periodo: x.n_compras }));
+    }
+  }
+
   // ─── AVISO DEDICADO PRO DIA ───────────────────────────────────────────
   // Disparo único pra essa vendedora (ou todas) hoje. IA cria sugestão
   // dedicada no slot 1 e marca como consumido após o cron.
@@ -1818,6 +1868,7 @@ async function montarContextoSugestoes(vendedoraId) {
     promocoes: promocoes || [],
     acoesVigentes: acoesVigentes || [],
     compradoresPromo,
+    compradoresVerao,
     avisosDestaVendedora,
     coresEmAlta,
     // Link Vesti escolhido pela vendedora (pode ser null = livre)
@@ -3070,6 +3121,18 @@ function montarMessagesSugestoes(ctx) {
           alvo_por_dia: 4,
           instrucao: 'Campanha 30% off ativa. INCLUA ATÉ 4 sugestões priorizando os clientes listados em clientes_alvo — são clientes que JÁ COMPRARAM EM PROMOÇÃO antes e têm alta chance de comprar de novo. Ordem de prioridade: status ativo, depois atencao, depois semAtividade (a lista já vem nessa ordem; prefira tambem os recorrente=true). Redistribua o mix usual (pode reduzir novidade/atencao) pra abrir espaço pra esses ate 4 cards. A mensagem deve usar a Ação vigente do 30% off. Nao repita cliente que ja recebeu sugestao recente.',
           clientes_alvo: ctx.compradoresPromo,
+        }
+      : null,
+    // CAMPANHA VERÃO (Ailson 15/07/2026): priorizar compradores do verão do ano
+    // passado (preço cheio). Gancho = preview Verão 27 (fala + criativo + fotos).
+    campanha_verao: (ctx.compradoresVerao && ctx.compradoresVerao.length)
+      ? {
+          ativa: true,
+          vence_em: '2026-08-05',
+          alvo_por_dia: 4,
+          criativo_ref: '9027',
+          instrucao: 'Campanha preview Verão 27 ativa. INCLUA ATÉ 4 sugestões priorizando os clientes listados em clientes_alvo — são clientes que compraram na MESMA época (verão) no ano passado a preço cheio (nao vieram so por promocao), entao valorizam colecao nova e tem alta chance de recomprar. Redistribua o mix usual (pode reduzir novidade/atencao) pra abrir espaco pra esses ate 4 cards. GANCHO DE ABERTURA da mensagem: falar um pouco do PREVIEW da Colecao Verao 27 (acabou de sair, cartela de cores nova, as tendencias da proxima estacao) e DEPOIS perguntar se pode encaminhar as fotos das pecas dessa nova colecao. O CRIATIVO do preview (a arte das cores) JA VAI ANEXADO automaticamente no card — NAO escreva [ENVIAR_FOTO] nem cite ref de imagem no texto, so escreva a mensagem natural. Ex de tom (nao copie literal): "oi fulana! acabou de sair o preview da nossa colecao verao 27, cartela de cores nova e cheia de tendencia. posso te mandar umas fotos das pecas dessa nova colecao?". Nao repita cliente que ja recebeu sugestao recente.',
+          clientes_alvo: ctx.compradoresVerao,
         }
       : null,
     // Aviso DEDICADO pra essa vendedora hoje. Se presente, IA DEVE criar a
