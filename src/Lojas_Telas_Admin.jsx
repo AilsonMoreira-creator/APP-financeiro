@@ -2220,14 +2220,27 @@ export const CuradoriaScreen = ({ lojas, onBack }) => {
   const resultadosBuscaProduto = useMemo(() => {
     if (refBusca.trim().length < 1) return [];
     const termo = refBusca.trim().toLowerCase();
-    return (state.produtos || [])
-      .filter(p => {
-        const ref = String(p.ref || '').toLowerCase();
-        const desc = String(p.descricao || '').toLowerCase();
-        return ref.includes(termo) || desc.includes(termo);
-      })
-      .slice(0, 10);
-  }, [refBusca, state.produtos]);
+    // Busca nas DUAS fontes: oferecíveis (state.produtos, view com giro/estoque)
+    // + cadastro completo (state.produtosCadastro, ficha técnica com TODAS as REFs,
+    // inclusive novidades recém-saídas da oficina que ainda não têm venda e por
+    // isso não entram na view oferecíveis). Dedup por REF, oferecíveis primeiro
+    // (mantém qtd_estoque quando existe). Ailson 14/07/2026: sem isso, adicionar
+    // novidade manual não encontrava a REF nova.
+    const norm = (r) => String(r || '').replace(/^0+/, '').toLowerCase();
+    const vistos = new Set();
+    const out = [];
+    for (const p of [...(state.produtos || []), ...(state.produtosCadastro || [])]) {
+      const ref = String(p.ref || '').toLowerCase();
+      const desc = String(p.descricao || '').toLowerCase();
+      if (!(ref.includes(termo) || desc.includes(termo))) continue;
+      const chave = norm(p.ref);
+      if (vistos.has(chave)) continue;
+      vistos.add(chave);
+      out.push(p);
+      if (out.length >= 10) break;
+    }
+    return out;
+  }, [refBusca, state.produtos, state.produtosCadastro]);
 
   const abrirModalAdicionar = () => {
     setRefBusca('');
