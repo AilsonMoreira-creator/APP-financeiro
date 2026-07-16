@@ -9,23 +9,10 @@
 // Ailson 11/06/2026.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, chamarClaude, getLojasConfig, setCors } from './_lojas-helpers.js';
+import { supabase, setCors } from './_lojas-helpers.js';
 import { enviarPush } from './_push-helpers.js';
 
 export const config = { maxDuration: 120 };
-
-// Categorias rotacionadas semana a semana (a IA recebe a categoria do turno
-// e os últimos títulos pra nunca repetir assunto).
-const CATEGORIAS = [
-  { id: 'tendencia',       label: 'Tendência de moda feminina (atacado)' },
-  { id: 'abordagem',       label: 'Dica de abordagem de cliente no WhatsApp' },
-  { id: 'pos_venda',       label: 'Pós-venda e fidelização de lojista' },
-  { id: 'mix_vitrine',     label: 'Mix de produtos e vitrine da lojista' },
-  { id: 'negociacao',      label: 'Negociação e fechamento no atacado' },
-  { id: 'reativacao',      label: 'Como reativar cliente sumida' },
-  { id: 'fotos_conteudo',  label: 'Fotos e conteúdo que vendem no WhatsApp' },
-  { id: 'organizacao',     label: 'Organização da rotina de vendas' },
-];
 
 function segundaDaSemana(d = new Date()) {
   const brt = new Date(d.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
@@ -56,51 +43,28 @@ export default async function handler(req, res) {
     return res.json({ ok: true, ja_existia: true, titulo: existente.titulo });
   }
 
-  // Últimos 8 temas (anti-repetição) + categoria do turno (rotação)
-  const { data: anteriores } = await supabase
-    .from('lojas_temas_quinta')
-    .select('categoria, titulo')
-    .order('semana_inicio', { ascending: false })
-    .limit(8);
-  const usadas = (anteriores || []).map(t => t.categoria);
-  const categoria = CATEGORIAS.find(c => !usadas.slice(0, 4).includes(c.id)) || CATEGORIAS[0];
+  // MÉTODO NOVO (Ailson 16/07/2026): em vez de gerar com IA toda semana (que
+  // travava e repetia), consumimos a próxima leitura PRONTA da fila
+  // (lojas_temas_quinta_fila, abastecida manualmente). Puxa a de menor ordem
+  // ainda não usada, publica na semana e marca como usada. Quando a fila
+  // esvaziar, é só abastecer de novo — o cron avisa nos logs.
+  const { data: proxima } = await supabase
+    .from('lojas_temas_quinta_fila')
+    .select('id, categoria, emoji, titulo, conteudo')
+    .is('usada_em', null)
+    .order('ordem', { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
-  const modeloIA = await getLojasConfig('modelo_ia', 'claude-sonnet-4-6');
-  let titulo = null, conteudo = null, emoji = '💡';
-  try {
-    const resp = await chamarClaude({
-      model: modeloIA,
-      max_tokens: 900,
-      system: `Você escreve o "Tema da quinta" — uma mini-edição semanal pras vendedoras das lojas físicas do Grupo Amícia (moda feminina ATACADO, São Paulo — Brás e Bom Retiro). As leitoras vendem pra LOJISTAS (revendedoras), não pra consumidora final.
-
-TOM: amiga experiente do balcão. Brasileiro descontraído, "vc", frases curtas. Inclua 1-2 brincadeiras leves pra descontrair (humor de loja: cafezinho, cabide, cliente que "vai pensar"). SEM ser piegas, SEM jargão de coach.
-
-PROIBIDO: as palavras "incrível", "imperdível", "sensacional", travessão (—) e o emoji 💛.
-
-FORMATO DA RESPOSTA (JSON puro, sem markdown):
-{"emoji": "1 emoji que resume o tema", "titulo": "título curto e chamativo (máx 45 chars)", "conteudo": "texto de 150-220 palavras, parágrafos curtos separados por \\n\\n, terminando com 1 desafio prático da semana (algo que ela consegue fazer hoje mesmo)"}`,
-      messages: [{
-        role: 'user',
-        content: `Categoria desta semana: ${categoria.label}.
-
-Títulos já usados (NÃO repita o assunto): ${(anteriores || []).map(t => t.titulo).join(' · ') || 'nenhum ainda'}.
-
-Contexto da casa: peças fortes são linho, viscolinho e alfaiataria; clientes lojistas compram pelo WhatsApp, na loja física e pelo catálogo vesti; a IA do app sugere 7 clientes por dia pra cada vendedora abordar.
-
-Escreva o Tema da quinta.`,
-      }],
-    });
-    const texto = resp?.content?.find(b => b?.type === 'text')?.text?.trim() || '';
-    const parsed = JSON.parse(texto.replace(/```json|```/g, '').trim());
-    titulo = String(parsed.titulo || '').slice(0, 60);
-    conteudo = String(parsed.conteudo || '');
-    emoji = String(parsed.emoji || '💡').slice(0, 4);
-  } catch (e) {
-    console.error('[tema-quinta] erro Claude:', e?.message);
+  if (!proxima) {
+    console.warn('[tema-quinta] FILA VAZIA — abastecer lojas_temas_quinta_fila');
+    return res.status(200).json({ ok: false, motivo: 'fila_vazia', dica: 'abastecer lojas_temas_quinta_fila com novas leituras' });
   }
-  if (!titulo || !conteudo) {
-    return res.status(500).json({ error: 'IA não retornou tema válido' });
-  }
+
+  const categoria = { id: proxima.categoria };
+  const titulo = String(proxima.titulo || '').slice(0, 120);
+  const conteudo = String(proxima.conteudo || '');
+  const emoji = String(proxima.emoji || '💡').slice(0, 4);
 
   const { error: errSalvar } = await supabase
     .from('lojas_temas_quinta')
@@ -108,12 +72,20 @@ Escreva o Tema da quinta.`,
       semana_inicio: semana,
       categoria: categoria.id,
       titulo, conteudo, emoji,
-      modelo_ia: modeloIA,
+      modelo_ia: 'fila',
       gerado_em: new Date().toISOString(),
     }, { onConflict: 'semana_inicio' });
   if (errSalvar) {
     return res.status(500).json({ error: errSalvar.message });
   }
+
+  // Marca a leitura como usada (some da fila). Se falhar, o tema já foi
+  // publicado — na pior hipótese o cron re-publica a mesma na próxima, mas a
+  // idempotência por semana_inicio evita duplicar na mesma semana.
+  await supabase
+    .from('lojas_temas_quinta_fila')
+    .update({ usada_em: new Date().toISOString(), semana_usada: semana })
+    .eq('id', proxima.id);
 
   // Push avisando as vendedoras (best effort)
   let pushes = 0;
