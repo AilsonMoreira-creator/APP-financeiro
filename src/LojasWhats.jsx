@@ -207,6 +207,12 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               fontSize: fz(9), fontWeight: 700, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
             }}>Sofia</span>
           )}
+          {c.disparo2_em && (
+            <span title={`2º disparo enviado em ${new Date(c.disparo2_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`} style={{
+              background: '#eef4ff', color: '#2c3e50', border: '1px solid #4a7fa5',
+              fontSize: fz(9), fontWeight: 700, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+            }}>2º envio</span>
+          )}
           {c.fup_relogio_em && (
             <span title="Follow-up automático em andamento (cliente sem responder)" style={{
               fontSize: fz(13), flexShrink: 0, lineHeight: 1,
@@ -1668,7 +1674,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, ciclo24_vence_em, perdida_em, tags, reposicao_alerta_em,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, ciclo24_vence_em, perdida_em, tags, reposicao_alerta_em, disparo2_em,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
