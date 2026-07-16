@@ -43,13 +43,16 @@ export async function resolverFotosSugestoes(supabase, linhas) {
   const todasRefs = [...new Set(refsPorLinha.flat())];
   if (todasRefs.length === 0) return;
 
-  // 2) Fonte Sofia mídias (prioritária — fotos mais recentes)
+  // 2) Fonte Sofia mídias (ÚNICA fonte agora — Ailson 16/07/2026). Só fotos
+  //    marcadas como estacao='verao' (estamos na temporada de verão; foto sem
+  //    marcação de verão não é oferecida). A ficha técnica deixou de ser fonte.
   const sofiaPorRef = {};
   try {
     const { data } = await supabase
       .from('lojas_whats_midias')
       .select('ref, storage_path, criada_em')
       .eq('tipo', 'foto').eq('ativa', true)
+      .eq('estacao', 'verao')
       .not('ref', 'is', null);
     (data || []).forEach((m) => {
       const rn = normRef(m.ref);
@@ -68,28 +71,12 @@ export async function resolverFotosSugestoes(supabase, linhas) {
     console.warn('[lojas-fotos] sofia-midias indisponivel:', e?.message);
   }
 
-  // 3) Fonte ficha técnica (bucket 'produtos', arquivo = ref + extensão)
-  const fichaPorRef = {};
-  try {
-    const { data: objetos } = await supabase.storage.from('produtos').list('', { limit: 1000 });
-    (objetos || []).forEach((o) => {
-      const m = /^(\d+)\.(jpg|jpeg|png|webp)$/i.exec(o.name || '');
-      if (!m) return;
-      const rn = normRef(m[1]);
-      if (!rn || !todasRefs.includes(rn) || fichaPorRef[rn]) return; // 1 por ref
-      fichaPorRef[rn] = {
-        url: `${SUPABASE_URL}/storage/v1/object/public/produtos/${o.name}`,
-        ref: rn,
-        origem: 'ficha',
-      };
-    });
-  } catch (e) {
-    console.warn('[lojas-fotos] bucket produtos indisponivel:', e?.message);
-  }
+  // 3) (removido — Ailson 16/07/2026) A ficha técnica (bucket 'produtos') não é
+  //    mais fonte de fotos pras sugestões. Agora só as mídias da Sofia (verão).
 
   // 4) Composição por sugestão: 1 FOTO POR REF (refs distintas — Ailson 11/06:
   //    "mínimo 2 fotos" significa refs DIFERENTES, nunca 2 fotos da mesma ref).
-  //    Por ref: foto da Sofia mídias (mais recente) > ficha técnica. Cap 5.
+  //    Fonte única: mídias da Sofia (verão), foto mais recente por ref. Cap 5.
   //    Se a sugestão só cita 1 ref, vai 1 foto mesmo (não duplica).
   linhas.forEach((l, i) => {
     const refs = refsPorLinha[i];
@@ -97,7 +84,7 @@ export async function resolverFotosSugestoes(supabase, linhas) {
     const fotos = [];
     for (const rn of refs) {
       if (fotos.length >= 5) break;
-      const f = (sofiaPorRef[rn] || [])[0] || fichaPorRef[rn];
+      const f = (sofiaPorRef[rn] || [])[0];
       if (!f) continue;
       if (fotos.some((x) => x.url === f.url)) continue;
       fotos.push({ url: f.url, ref: f.ref, origem: f.origem });
