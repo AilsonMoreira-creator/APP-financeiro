@@ -97,16 +97,20 @@ export default async function handler(req, res) {
 
     // Alvos: CARRINHOS que receberam o 1º disparo há >24h e não responderam.
     // "não respondeu" = continua em 'enviada' (a resposta move pra 'conversando').
+    // MARCO DE TEMPO: primeira_msg_enviada_em — é o que o aprovar.js grava quando
+    // o 1º disparo do carrinho sai (o template do carrinho NÃO é catálogo, então
+    // catalogo_enviado_em fica nulo; usar aquele campo não pegava ninguém).
+    // Ailson 16/07/2026.
     const corte = new Date(Date.now() - 24 * 3600e3).toISOString();
     const { data: alvos } = await supabase
       .from('lojas_whats_conversas')
       .select('id, telefone, nome_cliente')
       .eq('etapa', 'enviada')
       .not('carrinho_id', 'is', null)
-      .not('catalogo_enviado_em', 'is', null)
-      .lt('catalogo_enviado_em', corte)
+      .not('primeira_msg_enviada_em', 'is', null)
+      .lt('primeira_msg_enviada_em', corte)
       .is('disparo2_em', null)
-      .order('catalogo_enviado_em', { ascending: true })
+      .order('primeira_msg_enviada_em', { ascending: true })
       .limit(LOTE);
 
     const saud = saudacaoBRT();
