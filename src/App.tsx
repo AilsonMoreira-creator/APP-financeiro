@@ -9610,6 +9610,32 @@ const FichaTecnicaContent=()=>{
 // Usado tanto no save quanto no handler de Realtime, pra o Realtime MESCLAR
 // (preservar edits locais ainda não gravados) em vez de SUBSTITUIR e apagar.
 const _auxStrip=(it)=>{try{const{id,_c,_m,...r}=it;return JSON.stringify(r);}catch(e){return JSON.stringify(it);}};
+
+// Funcionários tem chave natural: o NOME. Duas sessões (ou dois aparelhos) podem
+// criar o MESMO funcionário com ids diferentes, e o merge por item — que casa por
+// id e só dedupa por conteúdo idêntico — mantém os dois. Foi o que duplicou o mês
+// de julho/2026 (16 funcionários repetidos, salário total dobrado).
+// Aqui colapsamos por nome: fica a primeira linha, e campos vazios dela são
+// preenchidos pela cópia (nunca perde valor lançado). Ailson 19/07/2026.
+const _normNomeFunc=(s)=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function dedupFuncionariosPorNome(arr){
+  if(!Array.isArray(arr))return arr;
+  const pos=new Map();const out=[];
+  for(const it of arr){
+    if(!it||typeof it!=='object'||!it.nome){out.push(it);continue;}
+    const k=_normNomeFunc(it.nome);
+    if(!k){out.push(it);continue;}
+    if(!pos.has(k)){pos.set(k,out.length);out.push(it);continue;}
+    const i=pos.get(k);const base={...out[i]};
+    for(const [c,v] of Object.entries(it)){
+      if(c==='id'||c==='_c'||c==='_m'||c==='nome')continue;
+      const atual=base[c];
+      if((atual===''||atual==null)&&v!==''&&v!=null)base[c]=v;
+    }
+    out[i]=base;
+  }
+  return out;
+}
 function mergeReceitasDeep(localRec,remoteRec){
   if(!remoteRec)return localRec||{};
   localRec=localRec||{};
@@ -9668,7 +9694,7 @@ function mergeAuxDeep(localAux,remoteAux,snapTs){
         if(nasc>snapTs){out.push(r);continue;}
         // mais velho que meu snapshot e ausente local = exclusão deliberada → respeita
       }
-      mergedMes[cat]=out;
+      mergedMes[cat]=cat==='Funcionários'?dedupFuncionariosPorNome(out):out;
     }
     merged[m]=mergedMes;
   }
@@ -10757,7 +10783,7 @@ export default function App(){
               if(nasc>snapTs){out.push(r);itensPreservados++;continue;} // criado após meu snapshot: preserva
               // mais velho que meu snapshot e ausente local = exclusão deliberada → respeita
             }
-            mergedMes[cat]=out;
+            mergedMes[cat]=cat==='Funcionários'?dedupFuncionariosPorNome(out):out;
           }
           merged[m]=mergedMes;
         }
