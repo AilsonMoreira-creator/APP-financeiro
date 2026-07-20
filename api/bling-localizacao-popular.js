@@ -44,7 +44,10 @@ async function resolverPid(conta, row, headers, pace) {
   if (r.status === 429) { const e = new Error('rate'); e.rate = true; throw e; }
   const j = await r.json().catch(() => ({}));
   const arr = j.data || [];
-  const hit = arr.find(p => String(p.codigo) === String(row.sku)) || arr[0];
+  // Só aceita match EXATO de codigo. O gtin-drain caía pro arr[0] quando não
+  // achava, mas aqui isso gravaria a localização num produto errado — prefiro
+  // pular e registrar erro. Ailson 19/07/2026.
+  const hit = arr.find(p => String(p.codigo) === String(row.sku)) || null;
   const pid = hit?.id || null;
   if (pid) {
     await supabase.from('bling_localizacao_fila')
