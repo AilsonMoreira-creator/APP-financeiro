@@ -98,7 +98,10 @@ export default async function handler(req, res) {
     const vistos = new Set();
     for (let pagina = 1; pagina <= 30; pagina++) {
       await sleep(350);
-      const r = await blingFetch(`${API}/produtos?pagina=${pagina}&limite=100&dataInclusaoInicial=${dtIni}`, headers);
+      // ?criterio= passthrough (Bling v3: 1 ultimos incluidos, 2 ativos, 3 inativos, 5 todos)
+      // p/ debugar cadastro novo que fica inativo e some da listagem padrao. Ailson 21/07/2026.
+      const crit = /^\d$/.test(String(q.criterio || '')) ? `&criterio=${q.criterio}` : '';
+      const r = await blingFetch(`${API}/produtos?pagina=${pagina}&limite=100&dataInclusaoInicial=${dtIni}${crit}`, headers);
       if (!r.ok) { out.erros.push(`produtos pag ${pagina} HTTP ${r.status}`); break; }
       const j = await r.json().catch(() => ({}));
       const prods = j.data || [];
