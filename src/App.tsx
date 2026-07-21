@@ -5176,26 +5176,28 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     finally{setSyncing(false);}
   };
 
-  const sincronizarCatalogo=async()=>{
+  // Busca DIRECIONADA de produtos novos (Ailson 21/07/2026): refs da calculadora
+  // sem linha no bling_estoque -> procura no Bling Exitus por ref, grava estoque
+  // e sobe a foto do card (bucket produtos/{ref}.jpg, so se nao existir).
+  // Substitui o antigo "sync catálogo Bling" (Lumia -> ml_sku_ref_map), aposentado.
+  const buscarProdutosNovos=async()=>{
     if(syncCatalogo)return;
-    setSyncCatalogo(true);setSyncCatalogoMsg("⏳ Lendo catálogo Bling Lumia...");
+    setSyncCatalogo(true);setSyncCatalogoMsg("⏳ Buscando produtos novos no Bling (Exitus)...");
     try{
-      const r=await fetch('/api/bling-produtos-sync');
+      const r=await fetch('/api/bling-produtos-novos?run=1');
       const d=await r.json();
-      if(!d.ok){setSyncCatalogoMsg("❌ Erro: "+(d.error||"desconhecido"));return;}
-      const partes=[];
-      if(d.skus_novos)partes.push(`${d.skus_novos} SKUs novos`);
-      if(d.skus_atualizados)partes.push(`${d.skus_atualizados} atualizados`);
-      if(d.skus_inalterados)partes.push(`${d.skus_inalterados} já mapeados`);
-      const dur=Math.round((d.duracao_ms||0)/1000);
-      setSyncCatalogoMsg(`✓ ${d.refs_unicas} refs · ${partes.join(" · ")} (${dur}s). Disparando recalculo do estoque...`);
-      // Em seguida dispara o cron de estoque pra refletir os novos mapeamentos
-      await fetch('/api/ml-estoque',{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"sync_now"})});
-      setTimeout(async()=>{
-        await carregar();
-        setSyncCatalogoMsg(`✓ ${d.refs_unicas} refs no catálogo. Estoque atualizado.`);
-        setTimeout(()=>setSyncCatalogoMsg(null),8000);
-      },3000);
+      if(!d.ok){setSyncCatalogoMsg("❌ Erro: "+((d.erros&&d.erros[0])||d.erro||"desconhecido"));return;}
+      if(!d.candidatas||!d.candidatas.length){setSyncCatalogoMsg("✓ Nenhuma ref nova na calculadora — tudo já está no módulo.");}
+      else{
+        const partes=[];
+        if(d.encontradas&&d.encontradas.length)partes.push(`${d.encontradas.length} produto(s) novo(s): ${d.encontradas.join(", ")} (${d.linhas||0} variações)`);
+        if(d.fotos_subidas&&d.fotos_subidas.length)partes.push(`foto: ${d.fotos_subidas.join(", ")}`);
+        if(d.nao_encontradas&&d.nao_encontradas.length)partes.push(`sem cadastro no Bling: ${d.nao_encontradas.join(", ")}`);
+        setSyncCatalogoMsg((d.encontradas&&d.encontradas.length?"✓ ":"⚠️ ")+partes.join(" · "));
+      }
+      await carregarCalc();
+      await carregar();
+      setTimeout(()=>setSyncCatalogoMsg(null),12000);
     }catch(e){setSyncCatalogoMsg("❌ Erro: "+e.message);}
     finally{setSyncCatalogo(false);}
   };
@@ -5486,7 +5488,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         <input type="text" value={busca} onChange={e=>setBusca(e.target.value)} placeholder="Buscar por referência ou descrição..." style={{width:"100%",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 12px 7px 32px",fontSize:13,fontFamily:"Georgia,serif",color:"#2c3e50",background:"#faf8f5",outline:"none"}}/>
       </div>
       <div style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>última sync: <b style={{color:"#2c3e50"}}>{ultSync}</b></div>
-      <button onClick={sincronizarCatalogo} disabled={syncCatalogo} title="Lê o catálogo do Bling (Lumia) e popula SKU→ref pra refs novas/sem mapeamento" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ catálogo":"📚 sync catálogo Bling"}</button>
+      <button onClick={buscarProdutosNovos} disabled={syncCatalogo} title="Busca no Bling (Exitus) as refs cadastradas na calculadora que ainda não estão no módulo, grava o estoque e traz a foto do card" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ buscando":"🆕 buscar produtos novos"}</button>
       <button onClick={()=>sincronizarEstoqueBling(false)} disabled={syncBlingEst} title="Lê as QUANTIDADES de estoque do Bling (Exitus, depósito Geral) pras refs da calculadora" style={{background:"#fff",border:"1px solid #2c3e50",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncBlingEst?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#2c3e50",opacity:syncBlingEst?0.5:1,fontWeight:600}}>{syncBlingEst?"⏳ estoque":"🟦 estoque Bling"}</button>
       <button onClick={()=>abrirLogsBling()} title="Histórico de alterações de estoque (ajustes manuais, sync, webhook)" style={{background:"#fff",border:"1px solid #8a9aa4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600}}>📜 Logs</button>
       <button onClick={forcarSync} disabled={syncing} title="Força recálculo do estoque ML agora" style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#4a7fa5",opacity:syncing?0.5:1}}>{syncing?"⏳":"🔄"}</button>
