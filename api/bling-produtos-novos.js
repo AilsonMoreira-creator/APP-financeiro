@@ -85,41 +85,46 @@ export default async function handler(req, res) {
     const token = await refreshBlingToken('exitus');
     const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
 
-    // ── 2. Busca por nome (ref com zero a esquerda e sem) ────────────────
-    // Padrao do catalogo: "Vestido ... (ref 03247) (B) Cor:X;Tamanho:M".
+    // ── 2. Lista produtos INCLUIDOS recentemente e cruza com as candidatas ─
+    // O filtro ?nome= do Bling v3 e por PREFIXO (nao acha "(ref 03247)" no meio
+    // do nome), entao a busca por ref nao funciona. Em vez disso, filtramos por
+    // dataInclusaoInicial: produtos cadastrados nos ultimos N dias (default 90,
+    // ?dias= muda) — poucas paginas, rapido e semanticamente "produtos novos".
+    const dias = Math.min(parseInt(q.dias || '90', 10) || 90, 365);
+    const dtIni = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
+    out.data_inclusao_inicial = dtIni;
+    const candSet = new Set(candidatas);
     const porRef = new Map(); // refNorm -> [{sku, cor, tam, idProduto, gtin, titulo, imagemURL}]
-    for (const ref of candidatas) {
-      const termos = q.termo ? [String(q.termo)] : [...new Set([ref.padStart(5, '0'), ref.padStart(4, '0'), ref])];
-      const vistos = new Set();
-      for (const termo of termos) {
-        await sleep(350);
-        const r = await blingFetch(`${API}/produtos?pagina=1&limite=100&nome=${encodeURIComponent(termo)}`, headers);
-        if (!r.ok) { out.erros.push(`busca ${termo} HTTP ${r.status}`); continue; }
-        const j = await r.json().catch(() => ({}));
-        if (q.debug === '1') {
-          if (!out.debug_busca) out.debug_busca = [];
-          out.debug_busca.push({ termo, total: (j.data || []).length, amostra: (j.data || []).slice(0, 5).map(p => ({ id: p.id, codigo: p.codigo, nome: (p.nome || '').slice(0, 90), formato: p.formato, tipo: p.tipo })) });
-        }
-        for (const p of (j.data || [])) {
-          const sku = (p.codigo || '').trim();
-          if (!sku || vistos.has(sku)) continue;
-          const parsed = parseDescricao(p.nome || '');
-          // aceita se a ref parseada bate, ou se o nome contem a ref como token
-          const bate = normRef(parsed.ref) === ref
-            || new RegExp(`(^|\\D)0*${ref}(\\D|$)`).test(p.nome || '');
-          if (!bate) continue;
-          vistos.add(sku);
-          if (!porRef.has(ref)) porRef.set(ref, []);
-          porRef.get(ref).push({
-            sku, cor: parsed.cor || '', tam: (parsed.tamanho || '').toUpperCase(),
-            idProduto: p.id || null, gtin: (p.gtin || '').trim(), titulo: p.nome || '',
-            imagemURL: p.imagemURL || null,
-          });
-        }
-        if (vistos.size) break; // achou nesse formato, nao precisa dos outros
+    const vistos = new Set();
+    for (let pagina = 1; pagina <= 30; pagina++) {
+      await sleep(350);
+      const r = await blingFetch(`${API}/produtos?pagina=${pagina}&limite=100&dataInclusaoInicial=${dtIni}`, headers);
+      if (!r.ok) { out.erros.push(`produtos pag ${pagina} HTTP ${r.status}`); break; }
+      const j = await r.json().catch(() => ({}));
+      const prods = j.data || [];
+      out.paginas = pagina;
+      out.produtos_recentes = (out.produtos_recentes || 0) + prods.length;
+      if (q.debug === '1' && pagina === 1) {
+        out.debug_busca = prods.slice(0, 8).map(p => ({ id: p.id, codigo: p.codigo, nome: (p.nome || '').slice(0, 90) }));
       }
-      if (!porRef.has(ref)) out.nao_encontradas.push(ref);
+      if (!prods.length) break;
+      for (const p of prods) {
+        const sku = (p.codigo || '').trim();
+        if (!sku || vistos.has(sku)) continue;
+        const parsed = parseDescricao(p.nome || '');
+        const ref = normRef(parsed.ref);
+        if (!ref || !candSet.has(ref)) continue;
+        vistos.add(sku);
+        if (!porRef.has(ref)) porRef.set(ref, []);
+        porRef.get(ref).push({
+          sku, cor: parsed.cor || '', tam: (parsed.tamanho || '').toUpperCase(),
+          idProduto: p.id || null, gtin: (p.gtin || '').trim(), titulo: p.nome || '',
+          imagemURL: p.imagemURL || null,
+        });
+      }
+      if (prods.length < 100) break;
     }
+    out.nao_encontradas = candidatas.filter(r => !porRef.has(r));
     out.encontradas = [...porRef.keys()];
     if (!porRef.size) { out.ok = true; return res.status(200).json(out); }
 
