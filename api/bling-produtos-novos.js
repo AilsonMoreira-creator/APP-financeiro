@@ -62,13 +62,19 @@ export default async function handler(req, res) {
 
   try {
     // ── 1. Candidatas: refs da calculadora sem linha em bling_estoque ────
+    // calcDesc: refNorm -> descricao. Cadastro novo no Bling pode vir SEM o
+    // numero da ref no nome (so "Vestido listrado...") — nesse caso casamos o
+    // nome do produto com a descricao da calculadora. Ailson 21/07/2026.
+    const normTxt = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const calcDesc = new Map();
+    {
+      const { data: cm } = await supabase.from('amicia_data').select('payload').eq('user_id', 'calc-meluni').maybeSingle();
+      for (const p of (cm?.payload?.prods || [])) { const r = normRef(p.ref); if (r) calcDesc.set(r, p.descricao || ''); }
+    }
     let candidatas = [];
     if (q.refs) {
       candidatas = String(q.refs).split(',').map(normRef).filter(Boolean);
     } else {
-      const { data: cm } = await supabase.from('amicia_data').select('payload').eq('user_id', 'calc-meluni').maybeSingle();
-      const calcRefs = new Set();
-      for (const p of (cm?.payload?.prods || [])) { const r = normRef(p.ref); if (r) calcRefs.add(r); }
       const jaTem = new Set();
       for (let off = 0; off < 60000; off += 1000) {
         const { data: be } = await supabase.from('bling_estoque').select('ref').range(off, off + 999);
@@ -76,7 +82,7 @@ export default async function handler(req, res) {
         for (const b of be) jaTem.add(normRef(b.ref));
         if (be.length < 1000) break;
       }
-      candidatas = [...calcRefs].filter(r => !jaTem.has(r));
+      candidatas = [...calcDesc.keys()].filter(r => !jaTem.has(r));
     }
     candidatas = candidatas.slice(0, MAX_REFS);
     out.candidatas = candidatas;
@@ -129,6 +135,17 @@ export default async function handler(req, res) {
         let ref = normRef(parsed.ref);
         // Fallback: cadastros novos vem como "(02807)" sem a palavra "ref"
         if (!ref) { const m = (p.nome || '').match(/\((\d{3,5})\)/); if (m) ref = normRef(m[1]); }
+        // Fallback 2: nome SEM numero — casa com a descricao da calculadora
+        // (prefixo normalizado, >=6 chars; empate vai pra descricao mais longa)
+        if (!ref || !candSet.has(ref)) {
+          const nomeN = normTxt(p.nome);
+          let melhor = null;
+          for (const c of candSet) {
+            const d = normTxt(calcDesc.get(c));
+            if (d.length >= 6 && nomeN.startsWith(d) && (!melhor || d.length > melhor.len)) melhor = { ref: c, len: d.length };
+          }
+          if (melhor) ref = melhor.ref;
+        }
         if (!ref || !candSet.has(ref)) continue;
         vistos.add(sku);
         if (!porRef.has(ref)) porRef.set(ref, []);
