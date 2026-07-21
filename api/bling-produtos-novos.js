@@ -123,7 +123,9 @@ export default async function handler(req, res) {
         }
         if (!sku || vistos.has(sku)) continue;
         const parsed = parseDescricao(p.nome || '');
-        const ref = normRef(parsed.ref);
+        let ref = normRef(parsed.ref);
+        // Fallback: cadastros novos vem como "(02807)" sem a palavra "ref"
+        if (!ref) { const m = (p.nome || '').match(/\((\d{3,5})\)/); if (m) ref = normRef(m[1]); }
         if (!ref || !candSet.has(ref)) continue;
         vistos.add(sku);
         if (!porRef.has(ref)) porRef.set(ref, []);
