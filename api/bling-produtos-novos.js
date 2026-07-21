@@ -96,6 +96,10 @@ export default async function handler(req, res) {
         const r = await blingFetch(`${API}/produtos?pagina=1&limite=100&nome=${encodeURIComponent(termo)}`, headers);
         if (!r.ok) { out.erros.push(`busca ${termo} HTTP ${r.status}`); continue; }
         const j = await r.json().catch(() => ({}));
+        if (q.debug === '1') {
+          if (!out.debug_busca) out.debug_busca = [];
+          out.debug_busca.push({ termo, total: (j.data || []).length, amostra: (j.data || []).slice(0, 5).map(p => ({ id: p.id, codigo: p.codigo, nome: (p.nome || '').slice(0, 90), formato: p.formato, tipo: p.tipo })) });
+        }
         for (const p of (j.data || [])) {
           const sku = (p.codigo || '').trim();
           if (!sku || vistos.has(sku)) continue;
