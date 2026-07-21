@@ -117,6 +117,8 @@ export default async function handler(req, res) {
         if (!sku) { resumo.sem_sku++; continue; }
         const parsed = parseDescricao(p.nome || '');
         let ref = normRef(parsed.ref);
+        // Cadastros novos vem como "(02807)" sem a palavra "ref" (Ailson 21/07/2026)
+        if (!ref) { const m = (p.nome || '').match(/\((\d{3,5})\)/); if (m) ref = normRef(m[1]); }
         if (!ref) ref = normRef(skuRefMap.get(sku) || '');
         if (!ref) { resumo.sem_ref++; continue; }
         if (filtrarCalc && !calcRefs.has(ref)) { resumo.fora_calc = (resumo.fora_calc || 0) + 1; continue; }
