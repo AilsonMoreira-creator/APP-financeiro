@@ -110,6 +110,17 @@ export default async function handler(req, res) {
       if (!prods.length) break;
       for (const p of prods) {
         const sku = (p.codigo || '').trim();
+        if (q.debug === '1') {
+          const parsedD = parseDescricao(p.nome || '');
+          const refD = normRef(parsedD.ref);
+          if (refD) { if (!out.debug_refs_recentes) out.debug_refs_recentes = new Set(); out.debug_refs_recentes.add(refD); }
+          for (const c of candSet) {
+            if (new RegExp(`(^|\\D)0*${c}(\\D|$)`).test(p.nome || '') || new RegExp(`0*${c}`).test(sku)) {
+              if (!out.debug_matches_crus) out.debug_matches_crus = [];
+              if (out.debug_matches_crus.length < 12) out.debug_matches_crus.push({ cand: c, id: p.id, codigo: sku, nome: (p.nome || '').slice(0, 90) });
+            }
+          }
+        }
         if (!sku || vistos.has(sku)) continue;
         const parsed = parseDescricao(p.nome || '');
         const ref = normRef(parsed.ref);
@@ -126,6 +137,7 @@ export default async function handler(req, res) {
     }
     out.nao_encontradas = candidatas.filter(r => !porRef.has(r));
     out.encontradas = [...porRef.keys()];
+    if (out.debug_refs_recentes) out.debug_refs_recentes = [...out.debug_refs_recentes].map(Number).sort((a, b) => b - a).slice(0, 40);
     if (!porRef.size) { out.ok = true; return res.status(200).json(out); }
 
     // ── 3. Saldos do deposito Geral ──────────────────────────────────────
