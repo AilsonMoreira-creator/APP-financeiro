@@ -99,6 +99,10 @@ export default async function handler(req, res) {
     const dias = Math.min(parseInt(q.dias || '90', 10) || 90, 365);
     const dtIni = new Date(Date.now() - dias * 864e5).toISOString().slice(0, 10);
     out.data_inclusao_inicial = dtIni;
+    // ?modo=alterados: usa dataAlteracaoInicial — pega cadastro ANTIGO que o
+    // Ailson acabou de editar (a inclusao e antiga e escaparia do filtro). Ailson 21/07/2026.
+    const campoData = q.modo === 'alterados' ? 'dataAlteracaoInicial' : 'dataInclusaoInicial';
+    out.filtro_data = campoData;
     const candSet = new Set(candidatas);
     const porRef = new Map(); // refNorm -> [{sku, cor, tam, idProduto, gtin, titulo, imagemURL}]
     const vistos = new Set();
@@ -107,7 +111,7 @@ export default async function handler(req, res) {
       // ?criterio= passthrough (Bling v3: 1 ultimos incluidos, 2 ativos, 3 inativos, 5 todos)
       // p/ debugar cadastro novo que fica inativo e some da listagem padrao. Ailson 21/07/2026.
       const crit = /^\d$/.test(String(q.criterio || '')) ? `&criterio=${q.criterio}` : '';
-      const r = await blingFetch(`${API}/produtos?pagina=${pagina}&limite=100&dataInclusaoInicial=${dtIni}${crit}`, headers);
+      const r = await blingFetch(`${API}/produtos?pagina=${pagina}&limite=100&${campoData}=${dtIni}${crit}`, headers);
       if (!r.ok) { out.erros.push(`produtos pag ${pagina} HTTP ${r.status}`); break; }
       const j = await r.json().catch(() => ({}));
       const prods = j.data || [];
