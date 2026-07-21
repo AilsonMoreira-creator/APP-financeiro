@@ -632,11 +632,28 @@ async function processarMensagemRecebida(msg, valueCtx) {
   // null pra Sofia nao responder em dobro (o catalogo EH a resposta).
   // Resposta que nao eh "sim" segue o fluxo normal (Sofia responde).
   // Ailson 04/07/2026.
-  const nudgeCatalogo = conversa.etapa === 'conversando'
+  // FIX 21/07/2026 (Ailson): "sim" pra QUALQUER pergunta re-disparava o catalogo,
+  // porque catalogo_enviado_em eh zerado a cada inbound (eh timer de follow-up,
+  // nao prova de envio). Agora a prova eh a PROPRIA mensagem de documento na
+  // conversa (mesma checagem da IA): MAXIMO 1 catalogo automatico por conversa —
+  // mais de um, so manual pela equipe.
+  let nudgeCatalogo = conversa.etapa === 'conversando'
     && conversa.nudge_abertura_enviado_em
-    && !conversa.catalogo_enviado_em
     && dadosMsg.tipo === 'text'
     && respostaPositivaNudge(dadosMsg.texto);
+  if (nudgeCatalogo) {
+    const { count: nCatDoc } = await supabase
+      .from('lojas_whats_mensagens')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversa_id', conversa.id)
+      .eq('direcao', 'saida')
+      .eq('tipo_midia', 'document')
+      .ilike('midia_url', '%catalogos/%');
+    if ((nCatDoc || 0) > 0) {
+      nudgeCatalogo = false;
+      log('nudge-abertura', `conversa ${conversa.id} resposta positiva mas catalogo ja foi enviado — nao reenvia (so manual)`);
+    }
+  }
   if (nudgeCatalogo) updates.responder_em = null;
 
   await supabase
