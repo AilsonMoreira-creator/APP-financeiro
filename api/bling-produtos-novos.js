@@ -89,7 +89,7 @@ export default async function handler(req, res) {
     // Padrao do catalogo: "Vestido ... (ref 03247) (B) Cor:X;Tamanho:M".
     const porRef = new Map(); // refNorm -> [{sku, cor, tam, idProduto, gtin, titulo, imagemURL}]
     for (const ref of candidatas) {
-      const termos = [...new Set([ref.padStart(5, '0'), ref.padStart(4, '0'), ref])];
+      const termos = q.termo ? [String(q.termo)] : [...new Set([ref.padStart(5, '0'), ref.padStart(4, '0'), ref])];
       const vistos = new Set();
       for (const termo of termos) {
         await sleep(350);
