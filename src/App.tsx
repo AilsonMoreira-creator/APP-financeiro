@@ -5326,7 +5326,10 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     (async()=>{
       try{
         const norm=s=>String(s||'').replace(/\D/g,'').replace(/^0+/,'')||'';
-        const mlSet=new Set((dados?.refs||[]).map(r=>norm(r.ref)));
+        // FIX 21/07/2026 (Ailson): ref nova pode ja existir no ML como sem_dados
+        // (placeholder) — sem_dados NAO conta como "tem ML", senao o card some
+        // dos dois caminhos (limbo). So bloqueia candidata quem tem dados reais.
+        const mlSet=new Set((dados?.refs||[]).filter(r=>!r.sem_dados).map(r=>norm(r.ref)));
         const candidatas=Object.keys(calcDesc||{}).filter(r=>r&&!mlSet.has(r));
         if(!candidatas.length){if(vivo)setSoBlingRefs([]);return;}
         const {data}=await supabase.from('bling_estoque').select('ref,cor_norm,tam,cor_label,qtd,bling_sku').in('ref',candidatas);
@@ -5423,7 +5426,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     return Math.round(((atual-ant)/ant)*1000)/10;
   })();
 
-  const selectedRef=modalRef?[...(dados?.refs||[]),...soBlingRefs].find(r=>String(r.ref)===String(modalRef)):null;
+  const selectedRef=modalRef?[...(dados?.refs||[]).filter(r=>!r.sem_dados),...soBlingRefs].find(r=>String(r.ref)===String(modalRef)):null;
 
   if(loading){
     return <div style={{padding:40,textAlign:"center",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>Carregando estoque...</div>;
