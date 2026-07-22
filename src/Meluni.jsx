@@ -1745,11 +1745,17 @@ const DEVOL_FLUXO = {
 const AMBAR = '#e6a23c';
 
 function slaDevol(d) {
+  // Prazos aprovados (Ailson 22/07/2026), tempo corrido:
+  //   etiqueta   base APROVACAO (criado_em)      24h amarelo / 48h vermelho
+  //   recebida+conferida base etiqueta_avisado_em 8d amarelo / 11d vermelho
+  //   pagamento  base conferido_em                24h / 48h
+  //   estorno    SEM sla (so confirmacao, neutro ate ficar roxo)
+  //   avisar     base estornado_em                24h / 48h
   let base, alerta, critico, rotulo;
   switch (d.fluxo_status) {
-    case 'aprovada':            base = d.fluxo_desde;                          alerta = 1;  critico = 2;  rotulo = 'etiqueta';  break;
-    case 'aguardando_postagem': base = d.etiqueta_avisado_em || d.fluxo_desde; alerta = 7;  critico = 11; rotulo = 'a chegar'; break;
-    case 'aguardando_conferir': base = d.recebido_efetivo || d.fluxo_desde;    alerta = 1;  critico = 2;  rotulo = 'conferir';  break;
+    case 'aprovada':            base = d.criado_em || d.fluxo_desde;           alerta = 1;  critico = 2;  rotulo = 'etiqueta';  break;
+    case 'aguardando_postagem':
+    case 'aguardando_conferir': base = d.etiqueta_avisado_em || d.fluxo_desde; alerta = 8;  critico = 11; rotulo = 'conferir';  break;
     case 'aguardando_estorno':  base = d.conferido_em || d.fluxo_desde;        alerta = 1;  critico = 2;  rotulo = 'pagamento'; break;
     case 'completa':
       if (d.estornado_em && !d.cliente_avisado_em) { base = d.estornado_em; alerta = 1; critico = 2; rotulo = 'avisar'; break; }
@@ -1815,8 +1821,6 @@ function TimelineDevol({ d, size = 'full' }) {
   const full = size === 'full';
   const atual = stepDevol(d);
   const sla = slaDevol(d);
-  // etapa ativa: amarelo enquanto aguardando; vermelho quando atrasada (crítico). sem preto.
-  const corAtiva = sla && sla.nivel === 'critico' ? palette.alert : AMBAR;
 
   if (d?.fluxo_status === 'cancelada') {
     return (
@@ -1831,25 +1835,32 @@ function TimelineDevol({ d, size = 'full' }) {
 
   const concluida = atual >= DEVOL_STEPS.length;
 
-  // 6 nós conectados com rótulo; etapa ativa acende no atraso.
+  // 6 nós conectados com rótulo (Ailson 22/07/2026):
+  //   concluída = roxo cheio · etapa DA VEZ = branca, bolinha ~20% maior com
+  //   anel roxo · atraso nível 1 = amarela, nível 2 = vermelha (via slaDevol).
+  //   Estorno pago nunca é "da vez" (só confirmação): fica neutro até o roxo.
   // mini (card da lista) = mesma linha, só um pouco menor que o full (chat).
   const D = full ? 36 : 30, IS = full ? 18 : 15, FS = full ? 10.5 : 9.5;
+  const DA = Math.round(D * 1.2); // bolinha da etapa da vez
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%', maxWidth: full ? '100%' : '70%' }}>
       {DEVOL_STEPS.map((s, i) => {
         const feito = concluida || i < atual;
         const ehAtual = !concluida && i === atual;
-        const bg = feito ? MELUNI : ehAtual ? corAtiva : 'transparent';
-        const bd = feito ? MELUNI : ehAtual ? corAtiva : palette.beige;
-        const ic = (feito || ehAtual) ? '#fff' : palette.inkMuted;
+        const atrasoCor = ehAtual && sla && sla.nivel === 'critico' ? palette.alert : ehAtual && sla && sla.nivel === 'alerta' ? AMBAR : null;
+        const dm = ehAtual ? DA : D;
+        const bg = feito ? MELUNI : atrasoCor ? atrasoCor : 'transparent';
+        const bd = feito ? MELUNI : atrasoCor ? atrasoCor : ehAtual ? MELUNI : palette.beige;
+        const ic = feito || atrasoCor ? '#fff' : ehAtual ? MELUNI : palette.inkMuted;
+        const anel = ehAtual ? `0 0 0 3px ${atrasoCor ? atrasoCor + '33' : MELUNI + '26'}` : 'none';
         const corLinha = (concluida || i < atual) ? MELUNI : palette.beige;
         return (
           <React.Fragment key={s.id}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, width: D }}>
-              <span style={{ width: D, height: D, borderRadius: '50%', background: bg, border: `1.5px solid ${bd}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                <s.Icon size={IS} color={ic} strokeWidth={1.8} />
+              <span style={{ width: dm, height: dm, marginTop: ehAtual ? -(DA - D) / 2 : 0, borderRadius: '50%', background: ehAtual && !atrasoCor ? '#fff' : bg, border: `${ehAtual ? 2 : 1.5}px solid ${bd}`, boxShadow: anel, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                <s.Icon size={ehAtual ? IS + 2 : IS} color={ic} strokeWidth={ehAtual ? 2 : 1.8} />
               </span>
-              <span style={{ fontSize: FS, color: (feito || ehAtual) ? palette.ink : palette.inkMuted, textAlign: 'center', marginTop: full ? 6 : 5, lineHeight: 1.15, whiteSpace: 'pre-line', fontWeight: ehAtual ? 700 : 400 }}>{s.label}</span>
+              <span style={{ fontSize: FS, color: (feito || ehAtual) ? palette.ink : palette.inkMuted, textAlign: 'center', marginTop: (full ? 6 : 5) - (ehAtual ? (DA - D) / 2 : 0), lineHeight: 1.15, whiteSpace: 'pre-line', fontWeight: ehAtual ? 700 : 400 }}>{s.label}</span>
               {ehAtual && sla && sla.nivel !== 'ok' && (
                 <span style={{ fontSize: full ? 9.5 : 9, fontWeight: 700, color: sla.cor, marginTop: 2 }}>{sla.dias}d atraso</span>
               )}
