@@ -4919,6 +4919,17 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [blingEstoque,setBlingEstoque]=useState({}); // {"refNorm|cor_norm|TAM": qtd} (fisico Geral Exitus)
   const [blingFilhos,setBlingFilhos]=useState({}); // {"refNorm|cor_norm|TAM": {lumia,muniam}} — vendavel = qtd + lumia + muniam (Ailson 07/07/2026)
   const [blingLabel,setBlingLabel]=useState({}); // {cor_norm: cor_label} da ref aberta (p/ exibir cor que só existe no Bling)
+  // Total do header = soma da COLUNA BLING (Ailson 21/07/2026): vendavel por ref
+  // (qtd Exitus + Lumia + Muniam) via RPC fn_bling_estoque_totais. Antes somava
+  // o espelho do ML + soBling. Fallback pro calculo antigo se a RPC falhar.
+  const [blingTotais,setBlingTotais]=useState(null); // {refNorm: vendavel} | null = ainda nao carregou
+  const carregarBlingTotais=async()=>{
+    try{
+      const {data,error}=await supabase.rpc('fn_bling_estoque_totais');
+      if(!error&&Array.isArray(data)){const m={};data.forEach(r=>{m[String(r.ref)]=Number(r.vendavel)||0;});setBlingTotais(m);}
+    }catch{}
+  };
+  useEffect(()=>{carregarBlingTotais();},[]);
   const [soBlingRefs,setSoBlingRefs]=useState([]); // refs na calculadora c/ Bling mas sem espelho ML (produto novo)
   const [blingAjuste,setBlingAjuste]=useState(null); // {refNorm,cor,tam,cor_norm,atual,desc} — modal de ajuste
   const usuarioSessao=(()=>{try{return JSON.parse(localStorage.getItem('amica_session')||'{}').usuario||'';}catch{return '';}})();
@@ -5238,6 +5249,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       }
       await carregarCalc();
       await carregar();
+      carregarBlingTotais();
       setTimeout(()=>setSyncCatalogoMsg(null),12000);
     }catch(e){setSyncCatalogoMsg("❌ Erro: "+e.message);}
     finally{setSyncCatalogo(false);}
@@ -5258,6 +5270,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         setSyncCatalogoMsg(`✓ Estoque Bling lido · ${partes.join(" · ")} (${Math.round((d.ms||0)/1000)}s)`);
       }
       await carregar();
+      carregarBlingTotais();
       setTimeout(()=>setSyncCatalogoMsg(null),9000);
     }catch(e){setSyncCatalogoMsg("❌ Erro: "+e.message);}
     finally{setSyncBlingEst(false);}
@@ -5404,7 +5417,12 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const qtdRefsAtivas=refs.length;
   const qtdVariacoes=useMemo(()=>refs.reduce((a,r)=>a+(r.variations?.length||0),0),[refs]);
   const totalSoBling=useMemo(()=>soBlingRefs.filter(r=>!arquivadas.includes(String(r.ref))).reduce((a,r)=>a+(r.qtd_total||0),0),[soBlingRefs,arquivadas]);
-  const totalExibido=totalGeral+totalSoBling; // total do header inclui o estoque Bling das refs novas
+  // Padrao novo do total: soma da coluna Bling (vendavel), excluindo arquivadas.
+  const totalBling=useMemo(()=>{
+    if(!blingTotais)return null;
+    return Object.entries(blingTotais).reduce((a,[rf,v])=>arquivadas.includes(String(rf))?a:a+v,0);
+  },[blingTotais,arquivadas]);
+  const totalExibido=totalBling!==null?totalBling:(totalGeral+totalSoBling); // fallback antigo enquanto a RPC nao responde
 
   // Histórico — depende do período selecionado
   // Semana: últimos 7 dias (do diário) · Mês: dias do mês corrente (do diário) · Anual: 12 meses (do mensal)
@@ -5491,7 +5509,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     {/* TOPO: total geral + gráfico evolução */}
     <div style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:12,padding:mobile?"14px 16px":"16px 20px",marginBottom:14,display:"grid",gridTemplateColumns:"auto 1fr",gap:mobile?14:28,alignItems:"center"}}>
       <div style={{borderRight:"1px solid #e8e2da",paddingRight:mobile?14:28}}>
-        <div style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Estoque total</div>
+        <div title="Soma da coluna Bling: vendável = Exitus + Lumia + Muniam (refs arquivadas fora)" style={{fontSize:10,color:"#8a9aa4",letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>Estoque total</div>
         <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:mobile?30:38,fontWeight:700,color:"#2c3e50",lineHeight:1,margin:"4px 0 2px"}}>{totalExibido.toLocaleString('pt-BR')}</div>
         <div style={{fontSize:11,color:"#8a9aa4"}}>em <b style={{color:"#2c3e50",fontWeight:700}}>{qtdRefsAtivas} refs ativas</b> · <b style={{color:"#2c3e50",fontWeight:700}}>{qtdVariacoes} variações</b></div>
       </div>
