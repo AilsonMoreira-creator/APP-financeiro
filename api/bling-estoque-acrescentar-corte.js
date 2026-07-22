@@ -142,7 +142,9 @@ export default async function handler(req, res) {
         }, { onConflict: 'ref,cor_norm,tam' });
         await supabase.from('bling_estoque_logs').insert({
           ref, cor_norm, tam, cor_label: cor_nome || null,
-          qtd_anterior: anterior, qtd_nova: nova, delta: add,
+          // vendavel antes = exitus + filhos (capturados antes do zeramento);
+          // assim "de + delta = ficou" fecha no log. Ailson 22/07/2026.
+          qtd_anterior: anterior + fLumia + fMuniam, qtd_nova: nova, delta: add,
           motivo: `corte ${corte_n || corte_id}`, usuario, origem: 'acrescentar_corte',
         });
         resultado.push({ cor_nome, cor_norm, tam, add, anterior, nova, ok: true });

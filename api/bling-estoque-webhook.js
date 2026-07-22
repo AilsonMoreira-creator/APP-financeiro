@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     if (!produtoId && !codigo) return respond({ ok: true, ignored: 'sem produto id/codigo', produtoId, codigo });
 
     // Só age em produto que já rastreamos (refs da calculadora em bling_estoque)
-    let q = supabase.from('bling_estoque').select('ref,cor_norm,tam,cor_label,qtd,bling_sku,bling_produto_id');
+    let q = supabase.from('bling_estoque').select('ref,cor_norm,tam,cor_label,qtd,qtd_lumia,qtd_muniam,bling_sku,bling_produto_id');
     q = produtoId ? q.eq('bling_produto_id', produtoId) : q.eq('bling_sku', codigo);
     const { data: linhas } = await q;
     if (!linhas || !linhas.length) return respond({ ok: true, ignored: 'produto não rastreado', produtoId, codigo });
@@ -73,7 +73,10 @@ export default async function handler(req, res) {
       if ((ln.qtd ?? null) === qtd) continue;
       await supabase.from('bling_estoque').update({ qtd, atualizado_em: new Date().toISOString(), atualizado_por: 'bling_webhook' })
         .eq('ref', ln.ref).eq('cor_norm', ln.cor_norm).eq('tam', ln.tam);
-      await supabase.from('bling_estoque_logs').insert({ ref: ln.ref, cor_norm: ln.cor_norm, tam: ln.tam, cor_label: ln.cor_label, qtd_anterior: ln.qtd ?? null, qtd_nova: qtd, delta: (ln.qtd == null ? qtd : qtd - ln.qtd), motivo: 'webhook estoque Bling', usuario: null, origem: 'webhook' });
+      // Log em VENDAVEL (Ailson 22/07/2026): o webhook muda so o Geral Exitus;
+      // os filhos entram identicos nos dois lados pro "de/ficou" ser o vendavel.
+      const filhosLn = (Number(ln.qtd_lumia) || 0) + (Number(ln.qtd_muniam) || 0);
+      await supabase.from('bling_estoque_logs').insert({ ref: ln.ref, cor_norm: ln.cor_norm, tam: ln.tam, cor_label: ln.cor_label, qtd_anterior: ln.qtd == null ? null : ln.qtd + filhosLn, qtd_nova: qtd + filhosLn, delta: (ln.qtd == null ? qtd : qtd - ln.qtd), motivo: 'webhook estoque Bling', usuario: null, origem: 'webhook' });
       mudou++;
     }
     return respond({ ok: true, produtoId: pid, qtd, atualizadas: mudou });

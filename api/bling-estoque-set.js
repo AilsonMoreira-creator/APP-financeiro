@@ -71,9 +71,15 @@ export default async function handler(req, res) {
     // log duplicado enquanto tiver PWA velho aberto.
     let anterior = null;
     if (body.espelhar === true) {
+      // Log em VENDAVEL (Ailson 22/07/2026): "de" = Exitus+Lumia+Muniam ANTES da
+      // mudanca. O front manda anterior_vendavel (capturado antes de zerar os
+      // filhos); fallback = soma do espelho (imperfeito se os filhos ja foram
+      // zerados neste mesmo ajuste, mas melhor que so o campo Exitus).
       const { data: atualRow } = await supabase.from('bling_estoque')
-        .select('qtd').eq('ref', ref).eq('cor_norm', cor_norm).eq('tam', tam).maybeSingle();
-      anterior = atualRow ? atualRow.qtd : null;
+        .select('qtd,qtd_lumia,qtd_muniam').eq('ref', ref).eq('cor_norm', cor_norm).eq('tam', tam).maybeSingle();
+      const antEspelho = atualRow ? (Number(atualRow.qtd) || 0) + (Number(atualRow.qtd_lumia) || 0) + (Number(atualRow.qtd_muniam) || 0) : null;
+      anterior = (typeof body.anterior_vendavel === 'number' && isFinite(body.anterior_vendavel))
+        ? Math.round(body.anterior_vendavel) : antEspelho;
       const { error: e1 } = await supabase.from('bling_estoque').upsert({
         ref, cor_norm, tam,
         cor_label: body.cor_label || null,
