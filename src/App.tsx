@@ -4846,6 +4846,26 @@ const FotoProdLarge=({sbUrl,refProd,onZoom})=>{
   </div>);
 };
 
+// Foto do bucket produtos/ (puxada do Bling) como FALLBACK quando o produto
+// nao tem foto manual — usada nas listas da Calculadora/Ficha. Ailson 21/07/2026.
+const FotoBlingThumb=({refProd,w=38,h=50})=>{
+  const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
+  const orig=String(refProd||"").trim().toUpperCase();
+  const norm=orig.replace(/^0+/,'');
+  const phStyle={width:w,height:h,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da"};
+  if(!sbUrl||!norm)return <div style={phStyle}><span style={{fontSize:Math.round(w*0.37),opacity:0.3}}>📷</span></div>;
+  const urls=[norm+'.jpg',norm+'.png',norm+'.webp'];
+  if(orig!==norm)urls.push(orig+'.jpg');
+  const pad4=norm.padStart(4,'0');if(pad4!==norm&&pad4!==orig)urls.push(pad4+'.jpg');
+  const base=`${sbUrl}/storage/v1/object/public/produtos/`;
+  return(<div style={{position:"relative",width:w,height:h}}>
+    <img src={base+urls[0]}
+      onError={(e)=>{const cur=e.target.src;const idx=urls.findIndex(u=>cur.includes(u));if(idx>=0&&idx<urls.length-1){e.target.src=base+urls[idx+1];}else{e.target.style.display='none';const p=e.target.nextSibling;if(p)p.style.display='flex';}}}
+      style={{width:w,height:h,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da",display:"block"}}/>
+    <div style={{...phStyle,display:"none",position:"absolute",inset:0}}><span style={{fontSize:Math.round(w*0.37),opacity:0.3}}>📷</span></div>
+  </div>);
+};
+
 // ── Tela de Estoque (ML Lumia proxy) ─────────────────────────────────────────
 const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [vw,setVw]=useState(typeof window!=="undefined"?window.innerWidth:900);
@@ -4863,6 +4883,27 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [syncBlingEst,setSyncBlingEst]=useState(false);
   const [periodo,setPeriodo]=useState("semana"); // "semana" | "mes" | "anual"
   const [calcDesc,setCalcDesc]=useState({}); // ref → descricao da Calculadora
+  // Arquivar card (Ailson 21/07/2026): refs que ele nao vai mais trabalhar somem
+  // da lista (Bling e calculadora ficam intactos). Lista em amicia_data
+  // user_id='bling-estoque-arquivadas' {refs:[...]}; restauravel pelo botao 🗃.
+  const [arquivadas,setArquivadas]=useState([]);
+  const [mostrarArquivadas,setMostrarArquivadas]=useState(false);
+  useEffect(()=>{(async()=>{
+    try{
+      const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','bling-estoque-arquivadas').maybeSingle();
+      setArquivadas(Array.isArray(data?.payload?.refs)?data.payload.refs.map(String):[]);
+    }catch{}
+  })();},[]);
+  const salvarArquivadas=async(novas)=>{
+    setArquivadas(novas);
+    try{await supabase.from('amicia_data').upsert({user_id:'bling-estoque-arquivadas',payload:{refs:novas}},{onConflict:'user_id'});}catch{}
+  };
+  const arquivarRef=(refN)=>{
+    if(!window.confirm(`Arquivar a ref ${refN}?\n\nEla sai da lista do estoque (o cadastro no Bling e na calculadora não muda). Dá pra restaurar depois no botão "arquivadas".`))return;
+    if(!arquivadas.includes(String(refN)))salvarArquivadas([...arquivadas,String(refN)]);
+    if(modalRef===String(refN))setModalRef(null);
+  };
+  const restaurarRef=(refN)=>{salvarArquivadas(arquivadas.filter(r=>r!==String(refN)));};
   // Sprint 8 (Ailson 16/05/2026) — Card de variações enxuto:
   //   1) Esconde variações com estoque 0 (exceto cores top Bling ou com corte ativo)
   //   2) Coluna nova "Estoque Projetado" da matriz de cores do módulo Oficina
@@ -5348,7 +5389,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   },[dados,calcDesc]);
 
   const refs=useMemo(()=>{
-    const arr=[...(dados?.refs||[]).filter(r=>!r.sem_dados),...soBlingRefs];
+    const arr=[...(dados?.refs||[]).filter(r=>!r.sem_dados),...soBlingRefs]
+      .filter(r=>!arquivadas.includes(String(r.ref)));  // arquivadas fora da lista (21/07/2026)
     const q=busca.trim().toLowerCase();
     if(!q)return arr;
     return arr.filter(r=>{
@@ -5356,12 +5398,12 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       const desc=(calcDesc[r.ref]||r.descricao||'').toLowerCase();
       return rk.includes(q)||desc.includes(q);
     });
-  },[dados,busca,calcDesc,soBlingRefs]);
+  },[dados,busca,calcDesc,soBlingRefs,arquivadas]);
 
   const totalGeral=dados?.stats?.total_geral||0;
   const qtdRefsAtivas=refs.length;
   const qtdVariacoes=useMemo(()=>refs.reduce((a,r)=>a+(r.variations?.length||0),0),[refs]);
-  const totalSoBling=useMemo(()=>soBlingRefs.reduce((a,r)=>a+(r.qtd_total||0),0),[soBlingRefs]);
+  const totalSoBling=useMemo(()=>soBlingRefs.filter(r=>!arquivadas.includes(String(r.ref))).reduce((a,r)=>a+(r.qtd_total||0),0),[soBlingRefs,arquivadas]);
   const totalExibido=totalGeral+totalSoBling; // total do header inclui o estoque Bling das refs novas
 
   // Histórico — depende do período selecionado
@@ -5494,6 +5536,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       <button onClick={buscarProdutosNovos} disabled={syncCatalogo} title="Busca no Bling (Exitus) as refs cadastradas na calculadora que ainda não estão no módulo, grava o estoque e traz a foto do card" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ buscando":"🆕 buscar produtos novos"}</button>
       <button onClick={()=>sincronizarEstoqueBling(false)} disabled={syncBlingEst} title="Lê as QUANTIDADES de estoque do Bling (Exitus, depósito Geral) pras refs da calculadora" style={{background:"#fff",border:"1px solid #2c3e50",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncBlingEst?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#2c3e50",opacity:syncBlingEst?0.5:1,fontWeight:600}}>{syncBlingEst?"⏳ estoque":"🟦 estoque Bling"}</button>
       <button onClick={()=>abrirLogsBling()} title="Histórico de alterações de estoque (ajustes manuais, sync, webhook)" style={{background:"#fff",border:"1px solid #8a9aa4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600}}>📜 Logs</button>
+      {arquivadas.length>0&&<button onClick={()=>setMostrarArquivadas(v=>!v)} title="Refs arquivadas (fora da lista) — clique pra ver e restaurar" style={{background:mostrarArquivadas?"#2c3e50":"#fff",border:"1px solid #8a9aa4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:mostrarArquivadas?"#fff":"#5a6470",fontWeight:600}}>🗃 arquivadas ({arquivadas.length})</button>}
       <button onClick={forcarSync} disabled={syncing} title="Força recálculo do estoque ML agora" style={{background:"none",border:"1px solid #e8e2da",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:syncing?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#4a7fa5",opacity:syncing?0.5:1}}>{syncing?"⏳":"🔄"}</button>
       <div style={{display:"flex",background:"#faf8f5",border:"1px solid #e8e2da",borderRadius:8,padding:3,gap:2}}>
         <button onClick={()=>setView("grid")} style={{background:view==="grid"?"#2c3e50":"transparent",color:view==="grid"?"#fff":"#8a9aa4",border:"none",padding:"5px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontFamily:"Georgia,serif",fontWeight:600}}>▦ Grid</button>
@@ -5501,6 +5544,15 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       </div>
     </div>
     {syncCatalogoMsg&&<div style={{background:syncCatalogoMsg.startsWith("❌")?"#fdeaea":syncCatalogoMsg.startsWith("✓")?"#eafbf0":"#fff8e8",border:`1px solid ${syncCatalogoMsg.startsWith("❌")?"#f4b8b8":syncCatalogoMsg.startsWith("✓")?"#b8dfc8":"#f0d080"}`,borderRadius:8,padding:"7px 14px",fontSize:11,color:syncCatalogoMsg.startsWith("❌")?"#c0392b":syncCatalogoMsg.startsWith("✓")?"#27ae60":"#8a6500",marginBottom:14,fontFamily:"Georgia,serif"}}>{syncCatalogoMsg}</div>}
+
+    {mostrarArquivadas&&arquivadas.length>0&&<div style={{background:"#faf8f5",border:"1px solid #e8e2da",borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+      <span style={{fontSize:10,color:"#8a9aa4",letterSpacing:0.5,textTransform:"uppercase",fontWeight:700,marginRight:4}}>Refs arquivadas</span>
+      {arquivadas.map(rA=>(<span key={rA} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:14,padding:"4px 10px",fontSize:11,color:"#2c3e50",display:"inline-flex",alignItems:"center",gap:8,fontFamily:"Georgia,serif"}}>
+        <b style={{color:"#4a7fa5"}}>{rA}</b>
+        <span style={{color:"#8a9aa4",maxWidth:160,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{calcDesc[rA]||''}</span>
+        <button onClick={()=>restaurarRef(rA)} style={{background:"none",border:"none",color:"#27ae60",fontSize:10,fontWeight:700,cursor:"pointer",padding:0,fontFamily:"Georgia,serif"}}>restaurar</button>
+      </span>))}
+    </div>}
 
     {/* Grid / Lista */}
     {view==="grid"?(
@@ -5515,6 +5567,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";e.currentTarget.style.borderColor="#e8e2da";}}
           >
             {low&&<div style={{position:"absolute",top:6,left:6,background:"#c0392b",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:8,letterSpacing:0.2,zIndex:2}}>BAIXO</div>}
+            <button onClick={(e)=>{e.stopPropagation();arquivarRef(refN);}} title="Arquivar esta ref (sai da lista, dá pra restaurar)" style={{position:"absolute",top:6,right:6,zIndex:3,background:"rgba(255,255,255,0.92)",border:"1px solid #e8e2da",borderRadius:"50%",width:22,height:22,fontSize:13,lineHeight:"18px",color:"#8a9aa4",cursor:"pointer",padding:0,fontFamily:"Georgia,serif"}}>×</button>
             <FotoProdLarge sbUrl={sbUrl} refProd={refN}/>
             <div style={{padding:"8px 10px 10px"}}>
               <div style={{fontSize:14,fontWeight:700,color:"#4a7fa5",letterSpacing:0.3,marginBottom:2}}>{refN}</div>
@@ -5538,7 +5591,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           const desc=calcDesc[refN]||r.descricao||'';
           const qtd=r.qtd_total||0;
           const low=qtd<5;
-          return(<div key={refN} onClick={()=>setModalRef(refN)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:10,cursor:"pointer",display:"grid",gridTemplateColumns:"60px 1fr auto",gap:14,alignItems:"center",padding:"8px 14px 8px 8px",transition:"all 0.15s"}}
+          return(<div key={refN} onClick={()=>setModalRef(refN)} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:10,cursor:"pointer",display:"grid",gridTemplateColumns:"60px 1fr auto auto",gap:14,alignItems:"center",padding:"8px 14px 8px 8px",transition:"all 0.15s"}}
             onMouseEnter={e=>{e.currentTarget.style.transform="translateX(2px)";e.currentTarget.style.borderColor="#4a7fa5";}}
             onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.borderColor="#e8e2da";}}
           >
@@ -5555,6 +5608,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <div style={{fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontSize:20,fontWeight:700,color:"#2c3e50",lineHeight:1}}>{qtd.toLocaleString('pt-BR')}</div>
               <div style={{fontSize:8,color:"#8a9aa4",letterSpacing:0.3,textTransform:"uppercase",marginTop:1}}>{r._soBling?'bling':'estoque'} · {r.variations?.length||0} var</div>
             </div>
+            <button onClick={(e)=>{e.stopPropagation();arquivarRef(refN);}} title="Arquivar esta ref (sai da lista, dá pra restaurar)" style={{background:"none",border:"1px solid #e8e2da",borderRadius:"50%",width:22,height:22,fontSize:13,lineHeight:"18px",color:"#8a9aa4",cursor:"pointer",padding:0,fontFamily:"Georgia,serif"}}>×</button>
           </div>);
         })}
         {refs.length===0&&<div style={{padding:30,textAlign:"center",color:"#8a9aa4",fontFamily:"Georgia,serif"}}>Nenhuma ref encontrada.</div>}
@@ -8407,7 +8461,7 @@ const CalcLista=({prods,setProds,setProd,setRb,setTela,prod})=>{
       <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
         <div style={{display:"grid",gridTemplateColumns:"48px 80px 1fr 70px 110px 32px",background:"#4a7fa5"}}>{["","Ref","Descrição","Marca","Custo",""].map(h=><div key={h} style={{padding:"8px 12px",fontSize:10,color:"#fff",fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}</div>
         {filtrados.map(({p,i})=><div key={i} style={{display:"grid",gridTemplateColumns:"48px 80px 1fr 70px 110px 32px",borderBottom:"1px solid #f0ebe4",alignItems:"center"}}>
-          <div style={{padding:"4px 6px"}}>{p.foto?<img src={p.foto} style={{width:38,height:50,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da"}}/>:<div style={{width:38,height:50,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da"}}><span style={{fontSize:14,opacity:0.3}}>📷</span></div>}</div>
+          <div style={{padding:"4px 6px"}}>{p.foto?<img src={p.foto} style={{width:38,height:50,objectFit:"cover",borderRadius:4,border:"1px solid #e8e2da"}}/>:<FotoBlingThumb refProd={p.ref} w={38} h={50}/>}</div>
           <div onClick={()=>{setProd(p);setRb(p.ref);setTela("home");}} style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:"#4a7fa5",cursor:"pointer"}}>{p.ref}</div>
           <div onClick={()=>{setProd(p);setRb(p.ref);setTela("home");}} style={{padding:"10px 12px",fontSize:12,color:"#2c3e50",cursor:"pointer"}}>{p.descricao}</div>
           <div style={{padding:"10px 12px",fontSize:11,color:"#8a9aa4"}}>{p.marca}</div>
@@ -8954,7 +9008,7 @@ function FichaLista(props){
               style={{display:"grid",gridTemplateColumns:"44px 70px 1fr 80px 120px 90px 70px",borderBottom:"1px solid #f0ebe4",alignItems:"center",cursor:"pointer",background:i%2===0?_W:"#faf8f5"}}
               onMouseEnter={function(e){e.currentTarget.style.background="#f0f6fb";}}
               onMouseLeave={function(e){e.currentTarget.style.background=i%2===0?_W:"#faf8f5";}}>
-              <div style={{padding:"3px 4px"}}>{p.foto?<img src={p.foto} style={{width:36,height:48,objectFit:"cover",borderRadius:4,border:"1px solid "+_BD}}/>:<div style={{width:36,height:48,borderRadius:4,background:"#f0ebe3",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid "+_BD}}><span style={{fontSize:13,opacity:0.3}}>📷</span></div>}</div>
+              <div style={{padding:"3px 4px"}}>{p.foto?<img src={p.foto} style={{width:36,height:48,objectFit:"cover",borderRadius:4,border:"1px solid "+_BD}}/>:<FotoBlingThumb refProd={p.ref} w={36} h={48}/>}</div>
               <div style={{padding:"10px 12px",fontSize:12,fontWeight:700,color:_BFT}}>{p.ref}</div>
               <div style={{padding:"10px 12px",fontSize:12,color:_S}}>{p.descricao}</div>
               <div style={{padding:"10px 12px",fontSize:11,color:_TX2}}>{p.marca}</div>

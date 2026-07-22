@@ -18,7 +18,7 @@
 //
 // Ailson 21/07/2026.
 // ============================================================================
-import { refreshBlingToken, blingFetch, parseDescricao, supabase } from './_bling-helpers.js';
+import { refreshBlingToken, blingFetch, parseDescricao, supabase, canonizarCor } from './_bling-helpers.js';
 
 export const config = { maxDuration: 120 };
 
@@ -194,12 +194,13 @@ export default async function handler(req, res) {
     const linhas = new Map();
     for (const [pid, v] of idToVar.entries()) {
       const qtd = saldoPorId.get(pid) ?? 0;
-      const cor_norm = normCor(v.cor);
+      const corCanon = canonizarCor(v.cor);   // azul bebe->Azul Claro, offwhite->Branco (21/07/2026)
+      const cor_norm = normCor(corCanon);
       const key = `${v.ref}|${cor_norm}|${v.tam}`;
       const ex = linhas.get(key);
       if (ex) { ex.qtd += qtd; }
       else linhas.set(key, {
-        ref: v.ref, cor_norm, tam: v.tam, cor_label: v.cor || null, qtd,
+        ref: v.ref, cor_norm, tam: v.tam, cor_label: corCanon || null, qtd,
         bling_sku: v.sku, bling_produto_id: v.idProduto, gtin: v.gtin || null, titulo: v.titulo || null,
       });
     }

@@ -218,3 +218,15 @@ export async function refreshBlingToken(conta) {
   console.log(`[bling-cron] ✓ token ${conta} renovado`);
   return d.access_token;
 }
+
+// Normatizacao de cores (Ailson 21/07/2026): cores que na pratica sao a MESMA
+// viram uma so no estoque. Aplicar ANTES do normCor/cor_label nos syncs.
+//   azul bebe -> Azul Claro  ·  offwhite -> Branco
+// (a camisa tricoline ja e cadastrada como Branco, entao nao precisa de excecao)
+export function canonizarCor(cor) {
+  const n = String(cor || '').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+  if (n === 'azulbebe') return 'Azul Claro';
+  if (n === 'offwhite') return 'Branco';
+  return cor;
+}

@@ -16,7 +16,7 @@
  *
  * Bling v3: o saldo é por depósito; balanço (na escrita) seta o saldo absoluto.
  */
-import { refreshBlingToken, blingFetch, parseDescricao, supabase } from './_bling-helpers.js';
+import { refreshBlingToken, blingFetch, parseDescricao, supabase, canonizarCor } from './_bling-helpers.js';
 
 export const config = { maxDuration: 300 };
 
@@ -163,11 +163,12 @@ export default async function handler(req, res) {
         // (vendas acumuladas no Geral deles) e o negativo abate o vendavel. Ailson 07/07/2026.
         const qtd = conta === 'exitus' ? Math.max(0, Math.round(Number(saldo) || 0)) : Math.round(Number(saldo) || 0);
         resumo.com_saldo++;
-        const cor_norm = normCor(info.cor);
+        const corCanon = canonizarCor(info.cor);   // azul bebe->Azul Claro, offwhite->Branco (21/07/2026)
+        const cor_norm = normCor(corCanon);
         const key = `${info.ref}|${cor_norm}|${info.tam}`;
         const ex = linhas.get(key);
         if (ex) { ex.qtd += qtd; }
-        else linhas.set(key, { ref: info.ref, cor_norm, tam: info.tam, cor_label: info.cor || null, qtd, bling_sku: info.sku, bling_produto_id: info.idProduto, gtin: info.gtin || null, titulo: info.titulo || null });
+        else linhas.set(key, { ref: info.ref, cor_norm, tam: info.tam, cor_label: corCanon || null, qtd, bling_sku: info.sku, bling_produto_id: info.idProduto, gtin: info.gtin || null, titulo: info.titulo || null });
       }
       await sleep(180);
     }
