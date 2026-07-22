@@ -33,7 +33,7 @@ import {
   Bot, RefreshCw, Check, X, Edit3, Send, Filter,
   Users, MessageCircle, Settings, AlertCircle,
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
-  User as UserIcon, Save, Link2, Eye, TrendingUp, Calendar,
+  User as UserIcon, Bot as BotIcon, Save, Link2, Eye, TrendingUp, Calendar,
   Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video, Hash,
   Instagram, Facebook, Copy, Circle, Search, RotateCcw, Tag, Plus
 } from 'lucide-react';
@@ -5724,7 +5724,7 @@ export function ConversaDetail({ conversaId, onBack, onEditarLead, onEnviarVende
           .select('id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, score_quente, observacao_para_sofia, observacao_assistente, lead_prioritario, cliente_indicou_site, gatilhos_detectados, ultima_atividade_em, iniciada_em, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, tags, reposicao_alerta_em')
           .eq('id', conversaId).maybeSingle(),
         supabase.from('lojas_whats_mensagens')
-          .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, midia_url, meta_message_id, status, enviada_em, template_name')
+          .select('id, direcao, autor, tipo_midia, texto, audio_transcricao, midia_url, meta_message_id, status, enviada_em, template_name, enviada_modo, enviada_login')
           .eq('conversa_id', conversaId)
           .order('enviada_em', { ascending: true })
           .limit(200),
@@ -7307,11 +7307,22 @@ function Bubble({ m, botao }) {
     day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   }) : '';
 
-  // Label do autor — usa o icone de pessoa (mesmo dos cards) ao inves do
-  // emoji robo, pra Sofia parecer vendedora ate visualmente. Ailson 25/05/2026
+  // Label do autor (Ailson 22/07/2026):
+  //   enviada_modo 'auto'   -> robozinho VAZADO (Bot outline): Sofia mandou sozinha
+  //   'aprovada' / 'manual' -> icone de pessoa atual; hover mostra o login de
+  //                            quem aprovou/escreveu (title nativo)
+  //   sem enviada_modo (historico antigo) -> icone atual, sem hover
+  const ehAuto = m.enviada_modo === 'auto';
+  const tituloAutoria = m.enviada_modo === 'aprovada'
+    ? `aprovada por ${m.enviada_login || 'equipe'}`
+    : m.enviada_modo === 'manual'
+      ? `escrita por ${m.enviada_login || 'equipe'}`
+      : ehAuto ? 'enviada automaticamente pela Sofia' : undefined;
   const labelSofia = (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-      <UserIcon size={9} color={palette.accent} /> Sofia
+    <span title={tituloAutoria} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: tituloAutoria ? 'help' : 'default' }}>
+      {ehAuto
+        ? <BotIcon size={10} color={palette.accent} strokeWidth={1.8} fill="none" />
+        : <UserIcon size={9} color={palette.accent} />} Sofia
     </span>
   );
   const labelAutor = ehSaida

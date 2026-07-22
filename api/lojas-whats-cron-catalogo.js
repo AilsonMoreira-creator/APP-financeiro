@@ -166,7 +166,7 @@ export default async function handler(req, res) {
             await supabase.from('lojas_whats_mensagens').insert({
               conversa_id: conv.id,
               direcao: 'saida',
-              autor: 'assistente',
+              autor: 'assistente', enviada_modo: 'auto', enviada_login: null,
               tipo_midia: 'text',
               texto,
               meta_message_id: metaMsgId,
@@ -187,7 +187,7 @@ export default async function handler(req, res) {
                 await supabase.from('lojas_whats_mensagens').insert({
                   conversa_id: conv.id,
                   direcao: 'saida',
-                  autor: 'assistente',
+                  autor: 'assistente', enviada_modo: 'auto', enviada_login: null,
                   tipo_midia: 'document',
                   texto: null,
                   midia_url: pub?.data?.publicUrl || null,
@@ -210,7 +210,7 @@ export default async function handler(req, res) {
             await supabase.from('lojas_whats_mensagens').insert({
               conversa_id: conv.id,
               direcao: 'saida',
-              autor: 'assistente',
+              autor: 'assistente', enviada_modo: 'auto', enviada_login: null,
               tipo_midia: 'text',
               texto,
               meta_message_id: metaMsgId,
@@ -296,7 +296,7 @@ export default async function handler(req, res) {
           await supabase.from('lojas_whats_mensagens').insert({
             conversa_id: conv.id,
             direcao: 'saida',
-            autor: 'assistente',
+            autor: 'assistente', enviada_modo: 'auto', enviada_login: null,
             tipo_midia: 'text',
             texto: textoMsg,
             template_name: 'followup_catalogo_24h_v1',

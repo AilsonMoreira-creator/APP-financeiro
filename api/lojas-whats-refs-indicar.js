@@ -110,7 +110,7 @@ export default async function handler(req, res) {
         if (!r.ok) { falhas.push(refN); continue; }
         const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(midiaCores.storage_path);
         await supabase.from('lojas_whats_mensagens').insert({
-          conversa_id: conv.id, direcao: 'saida', autor: 'assistente',
+          conversa_id: conv.id, direcao: 'saida', autor: 'assistente', enviada_modo: 'manual', enviada_login: null,
           tipo_midia: 'image', texto: caption, midia_url: pub?.publicUrl || null,
           meta_message_id: r.message_id || null, status: 'enviando', enviada_em: new Date().toISOString(),
         });
@@ -119,7 +119,7 @@ export default async function handler(req, res) {
         semFotoCores.push(refN);
         const r = await enviarTexto(conv.telefone, caption);
         await supabase.from('lojas_whats_mensagens').insert({
-          conversa_id: conv.id, direcao: 'saida', autor: 'assistente',
+          conversa_id: conv.id, direcao: 'saida', autor: 'assistente', enviada_modo: 'manual', enviada_login: null,
           tipo_midia: 'text', texto: caption,
           meta_message_id: r?.messages?.[0]?.id || null, status: 'enviando', enviada_em: new Date().toISOString(),
         });

@@ -82,6 +82,8 @@ export default async function handler(req, res) {
         conversa_id,
         direcao: 'saida',
         autor,
+        enviada_modo: 'manual',
+        enviada_login: usuario || null,
         tipo_midia: 'image',
         texto: (texto || '').trim() || null,
         midia_url: midiaUrlMsg,

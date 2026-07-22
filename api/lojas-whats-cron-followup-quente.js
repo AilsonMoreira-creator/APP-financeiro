@@ -170,7 +170,7 @@ async function executar() {
             continue; // tenta no proximo tick; nao marca perdida por falha pontual
           }
           await supabase.from('lojas_whats_mensagens').insert({
-            conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+            conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null, tipo_midia: 'text',
             template_name: 'continuar_pedido_v1',
             texto: `Oi ${nomeCli}!! ${saud}!!\nVamos continuar o pedido`,
             meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
@@ -202,7 +202,7 @@ async function executar() {
           continue;
         }
         await supabase.from('lojas_whats_mensagens').insert({
-          conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+          conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null, tipo_midia: 'text',
           texto: textoMsg1, meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
         });
         const { error: eUpd } = await supabase.from('lojas_whats_conversas').update({

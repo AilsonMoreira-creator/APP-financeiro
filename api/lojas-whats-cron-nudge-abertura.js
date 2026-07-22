@@ -138,7 +138,7 @@ async function rodar({ dryRun }) {
         const metaMsgId = resp?.messages?.[0]?.id || null;
         const agora = new Date().toISOString();
         await supabase.from('lojas_whats_mensagens').insert({
-          conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+          conversa_id: c.id, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null, tipo_midia: 'text',
           texto, meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
         });
         await supabase.from('lojas_whats_conversas').update({

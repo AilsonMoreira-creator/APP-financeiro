@@ -48,7 +48,7 @@ export async function enviarAberturaTextoFotos(conversaId, telefone, nomeCliente
   await supabase.from('lojas_whats_mensagens').insert({
     conversa_id: conversaId,
     direcao: 'saida',
-    autor: 'sofia_ia',
+    autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null,
     tipo_midia: 'texto',
     texto,
     meta_message_id: r?.messages?.[0]?.id || null,
@@ -80,7 +80,7 @@ export async function enviarAberturaTextoFotos(conversaId, telefone, nomeCliente
       await supabase.from('lojas_whats_mensagens').insert({
         conversa_id: conversaId,
         direcao: 'saida',
-        autor: 'sofia_ia',
+        autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null,
         tipo_midia: 'image',
         texto: null,
         midia_url: midiaUrl,
@@ -137,7 +137,7 @@ export async function enviarAberturaApresentacao(conversaId, telefone, nomeClien
   await supabase.from('lojas_whats_mensagens').insert({
     conversa_id: conversaId,
     direcao: 'saida',
-    autor: 'sofia_ia',
+    autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null,
     tipo_midia: 'video',
     texto: caption,
     midia_url: midiaUrl,

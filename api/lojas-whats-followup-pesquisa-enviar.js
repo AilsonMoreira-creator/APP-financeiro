@@ -80,7 +80,7 @@ export async function enviarFollowupConversa(conv) {
   // Sem botoes: resposta vem em texto livre. Falha aqui NAO reverte o envio.
   try {
     await supabase.from('lojas_whats_mensagens').insert({
-      conversa_id: conv.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+      conversa_id: conv.id, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null, tipo_midia: 'text',
       texto: CORPO(nome), meta_message_id: metaId, status: 'enviando', enviada_em: agora,
     });
   } catch (e) {

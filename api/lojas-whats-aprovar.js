@@ -154,6 +154,12 @@ async function executarAcao(req, res) {
 // ─── Processa 1 sugestão ───────────────────────────────────────────────────
 
 export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) {
+  // Autoria real (Ailson 22/07/2026): aprovadaPor comecando com 'sofia_' ou
+  // 'ia_automatica' = envio automatico (robozinho no chat); senao = aprovacao
+  // humana (icone atual + hover com o login).
+  const ehEnvioAuto = /^(sofia_|ia_automatica)/.test(String(aprovadaPor || ''));
+  const enviadaModo = ehEnvioAuto ? 'auto' : 'aprovada';
+  const enviadaLogin = ehEnvioAuto ? null : (aprovadaPor || null);
   // 1. Busca sugestão + conversa
   const { data: sug, error: errSug } = await supabase
     .from('lojas_whats_sugestoes')
@@ -384,7 +390,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
           await supabase.from('lojas_whats_mensagens').insert({
             conversa_id: sug.conversa.id,
             direcao: 'saida',
-            autor: 'sofia_ia',
+            autor: 'sofia_ia', enviada_modo: enviadaModo, enviada_login: enviadaLogin,
             tipo_midia: 'text',
             texto: vmsg2,
             meta_message_id: respVesti?.messages?.[0]?.id || null,
@@ -473,7 +479,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
     .insert({
       conversa_id: sug.conversa.id,
       direcao: 'saida',
-      autor: 'sofia_ia',
+      autor: 'sofia_ia', enviada_modo: enviadaModo, enviada_login: enviadaLogin,
       tipo_midia: tipoMidiaMsg,
       texto: textoMsgPrincipal || textoFinal,
       midia_url: midiaUrlMsg,
@@ -502,7 +508,7 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
       return {
         conversa_id: sug.conversa.id,
         direcao: 'saida',
-        autor: 'sofia_ia',
+        autor: 'sofia_ia', enviada_modo: enviadaModo, enviada_login: enviadaLogin,
         tipo_midia: 'image',
         texto: null,
         midia_url: url,

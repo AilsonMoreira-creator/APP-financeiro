@@ -130,7 +130,7 @@ export async function processarFila(limite = 40) {
       }
       const ts = agora();
       await supabase.from('lojas_whats_mensagens').insert({
-        conversa_id: conversaId, direcao: 'saida', autor: 'sofia_ia',
+        conversa_id: conversaId, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'aprovada', enviada_login: null,
         tipo_midia: 'template', texto: textoRenderizado || null,
         template_name: tpl.name, template_vars: { '1': primeiroNome },
         meta_message_id: metaMsgId, status: 'enviando', meta_response: metaResp, enviada_em: ts,

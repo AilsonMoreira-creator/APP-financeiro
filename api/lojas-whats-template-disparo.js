@@ -61,7 +61,7 @@ export default async function handler(req, res) {
     const agora = new Date().toISOString();
     // Grava no historico exatamente como a cliente ve (corpo renderizado)
     await supabase.from('lojas_whats_mensagens').insert({
-      conversa_id: conv.id, direcao: 'saida', autor: 'assistente',
+      conversa_id: conv.id, direcao: 'saida', autor: 'assistente', enviada_modo: 'manual', enviada_login: null,
       tipo_midia: 'text', template_name: template,
       texto: tpl.render(nome, saud),
       meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,

@@ -95,7 +95,7 @@ export async function enviarPesquisaConversa(conv, variante = 'sofia_pesquisa_mo
     const corpo = (PESQUISA_VARIANTES[variante] || PESQUISA_VARIANTES.sofia_pesquisa_motivo_v1)(nome);
     const textoThread = `${corpo}\n\n${PESQUISA_BOTOES.map(b => `[ ${b} ]`).join('  ')}`;
     await supabase.from('lojas_whats_mensagens').insert({
-      conversa_id: conv.id, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+      conversa_id: conv.id, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null, tipo_midia: 'text',
       texto: textoThread, meta_message_id: metaId, status: 'enviando',
       enviada_em: agora,
     });

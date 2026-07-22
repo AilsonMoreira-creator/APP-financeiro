@@ -120,7 +120,7 @@ export default async function handler(req, res) {
 
         const agora = new Date().toISOString();
         await supabase.from('lojas_whats_mensagens').insert({
-          conversa_id: conv.id, direcao: 'saida', autor: 'assistente',
+          conversa_id: conv.id, direcao: 'saida', autor: 'assistente', enviada_modo: 'manual', enviada_login: null,
           tipo_midia: headerImage ? 'image' : 'template',
           template_name: template,
           texto: renderBody(tpl.body_text, nome, saud),

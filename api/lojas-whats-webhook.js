@@ -376,7 +376,7 @@ async function processarMensagemRecebida(msg, valueCtx) {
             : 'Boa, já confirmo essas pra vc 😊';
           const rAck = await enviarTexto(telefone, ack);
           await supabase.from('lojas_whats_mensagens').insert({
-            conversa_id: conversa.id, direcao: 'saida', autor: 'sofia_ia',
+            conversa_id: conversa.id, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null,
             tipo_midia: 'text', texto: ack,
             meta_message_id: rAck?.messages?.[0]?.id || null,
             status: 'enviando', enviada_em: new Date().toISOString(),
@@ -742,7 +742,7 @@ async function enviarDuasPartes(telefone, conversaId, partes) {
       continue;
     }
     await supabase.from('lojas_whats_mensagens').insert({
-      conversa_id: conversaId, direcao: 'saida', autor: 'sofia_ia', tipo_midia: 'text',
+      conversa_id: conversaId, direcao: 'saida', autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null, tipo_midia: 'text',
       texto: partes[i], meta_message_id: metaId, status: 'enviando',
       enviada_em: new Date().toISOString(),
     });
@@ -776,7 +776,7 @@ async function enviarCatalogoPesquisa(telefone, conversaId, querPromo, decididaP
       await supabase.from('lojas_whats_mensagens').insert({
         conversa_id: conversaId,
         direcao: 'saida',
-        autor: 'sofia_ia',
+        autor: 'sofia_ia', enviada_modo: 'auto', enviada_login: null,
         tipo_midia: 'document',
         texto: null,
         midia_url: midiaUrlMsg,
