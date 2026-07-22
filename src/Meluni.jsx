@@ -1836,8 +1836,9 @@ function TimelineDevol({ d, size = 'full' }) {
   const concluida = atual >= DEVOL_STEPS.length;
 
   // 6 nós conectados com rótulo (Ailson 22/07/2026):
-  //   concluída = roxo cheio · etapa DA VEZ = branca, bolinha ~20% maior com
-  //   anel roxo · atraso nível 1 = amarela, nível 2 = vermelha (via slaDevol).
+  //   concluída = roxo cheio · etapa DA VEZ = branca VAZADA com contorno/anel
+  //   AMARELO (roxo confundia com o concluído), bolinha ~20% maior · atraso
+  //   nível 1 = amarela CHEIA, nível 2 = vermelha cheia (via slaDevol).
   //   Estorno pago nunca é "da vez" (só confirmação): fica neutro até o roxo.
   // mini (card da lista) = mesma linha, só um pouco menor que o full (chat).
   const D = full ? 36 : 30, IS = full ? 18 : 15, FS = full ? 10.5 : 9.5;
@@ -1850,9 +1851,9 @@ function TimelineDevol({ d, size = 'full' }) {
         const atrasoCor = ehAtual && sla && sla.nivel === 'critico' ? palette.alert : ehAtual && sla && sla.nivel === 'alerta' ? AMBAR : null;
         const dm = ehAtual ? DA : D;
         const bg = feito ? MELUNI : atrasoCor ? atrasoCor : 'transparent';
-        const bd = feito ? MELUNI : atrasoCor ? atrasoCor : ehAtual ? MELUNI : palette.beige;
-        const ic = feito || atrasoCor ? '#fff' : ehAtual ? MELUNI : palette.inkMuted;
-        const anel = ehAtual ? `0 0 0 3px ${atrasoCor ? atrasoCor + '33' : MELUNI + '26'}` : 'none';
+        const bd = feito ? MELUNI : atrasoCor ? atrasoCor : ehAtual ? AMBAR : palette.beige;
+        const ic = feito || atrasoCor ? '#fff' : ehAtual ? AMBAR : palette.inkMuted;
+        const anel = ehAtual ? `0 0 0 3px ${atrasoCor ? atrasoCor + '33' : AMBAR + '33'}` : 'none';
         const corLinha = (concluida || i < atual) ? MELUNI : palette.beige;
         return (
           <React.Fragment key={s.id}>
