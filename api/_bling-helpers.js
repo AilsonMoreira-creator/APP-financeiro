@@ -15,7 +15,10 @@ export function parseDescricao(descricao) {
   if (!descricao) return r;
   const refM = descricao.match(/\(ref\.?\s*(\d{3,5})\)/i);
   if (refM) r.ref = refM[1];
-  const estM = descricao.match(/\(([A-E])\)/);
+  // Fallback (Ailson 21/07/2026): cadastro novo vem "(03150)" SEM a palavra
+  // "ref" — o vestido couro 3150 vendeu 249 pcs e sumia do ranking por isso.
+  if (!r.ref) { const m = descricao.match(/\((0*\d{3,5})\)/); if (m) r.ref = m[1]; }
+  const estM = descricao.match(/\(([A-H])\)/);
   if (estM) r.estoque = estM[1];
   const corM = descricao.match(/Cor:([^;]+)/i);
   if (corM) r.cor = corM[1].trim().split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ");
@@ -23,7 +26,8 @@ export function parseDescricao(descricao) {
   if (tamM) r.tamanho = tamM[1].toUpperCase();
   r.descLimpa = descricao
     .replace(/\(ref\.?\s*\d{3,5}\)/gi, "")
-    .replace(/\([A-E]\)/g, "")
+    .replace(/\(0*\d{3,5}\)/g, "")
+    .replace(/\([A-H]\)/g, "")
     .replace(/Cor:[^;]+/gi, "")
     .replace(/;?\s*Tamanho:[A-Z0-9]+/gi, "")
     .replace(/\s+/g, " ")
