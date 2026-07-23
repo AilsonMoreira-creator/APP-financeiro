@@ -1267,6 +1267,11 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
   // Lead de anuncio Instagram (Roteiro B) chegou do zero, trabalho total.
   // Sofia consulta as politicas + roteiro + tecidos do banco e injeta como bloco.
   let blocoRoteiro = '';
+  // 5d-bis. DISPARO DE CONTEUDO RECENTE (Ailson 23/07/2026): quando a conversa
+  // recebeu um template de reativacao (curadoria/novidades/dicas) ha pouco, a
+  // Sofia PRECISA saber o que a cliente viu. Caso Roseneyde: o criativo era de
+  // CORES tendencia e a Sofia respondeu pedindo "referencia do modelo".
+  let blocoDisparo = '';
   let blocoPoliticas = '';
   let blocoTecidos = '';
   let blocoMedidas = '';
@@ -1283,6 +1288,26 @@ PROIBIDO citar numeros, percentuais ou frases tipo "clientes que levam x tambem 
                 : null;
     if (chave && roteiros[chave] && typeof roteiros[chave] === 'object') {
       blocoRoteiro = `ROTEIRO ESTRATEGICO PRA ESTA CONVERSA (${ehReativacao ? 'REATIVACAO de cliente inativo' : 'origem=' + conv.origem_lead}):\n${JSON.stringify(roteiros[chave], null, 2)}\n\nIMPORTANTE: NUNCA pergunte diretamente o perfil do lead. Mapeia pelos sinais nas mensagens. Adapte tom e ganchos baseado em quem voce detectar.`;
+    }
+    if (conv.disparo1_template && conv.disparo1_em
+        && (Date.now() - new Date(conv.disparo1_em).getTime()) < 10 * 864e5) {
+      const { data: tplD } = await supabase.from('lojas_whats_templates')
+        .select('name, pasta, porque, body_text')
+        .eq('name', conv.disparo1_template).maybeSingle();
+      if (tplD) {
+        const descD = tplD.pasta === 'curadoria'
+          ? 'uma IMAGEM DE CONTEUDO com as CORES que sao tendencia do Verao 2027 (NAO e foto de modelo nem de peca especifica)'
+          : tplD.pasta === 'novidades' ? 'uma imagem de conteudo com novidades da Amicia'
+          : tplD.pasta === 'dicas_rapidas' ? 'uma imagem de conteudo com uma dica rapida pro lojista'
+          : 'uma imagem de conteudo';
+        blocoDisparo = `ULTIMO DISPARO FEITO PRA ESTA CLIENTE (${new Date(conv.disparo1_em).toLocaleDateString('pt-BR')}): template "${tplD.name}".\n`
+          + `O que ela recebeu no topo da mensagem: ${descD}.\n`
+          + `Texto que ela recebeu: "${String(tplD.body_text || '').replace(/\s+/g, ' ').trim()}"\n`
+          + `COMO CONDUZIR a resposta dela a esse disparo:\n`
+          + `- Se ela reagiu, curtiu ou elogiou: agradeca e OFEREÇA O CATALOGO atualizado, que foi o combinado no texto. Pergunta simples se pode enviar.\n`
+          + `- NAO trate o criativo como foto de produto: NAO peca referencia nem pergunte "qual modelo chamou atencao" por causa dessa imagem.\n`
+          + `- So fale de modelos e refs se a CLIENTE mencionar uma peca ou pedir modelos.`;
+      }
     }
     // Bloco HISTORICO — so na reativacao, OBRIGATORIO antes de sugerir (roteiro E)
     if (ehReativacao && conv.cliente_id) {
@@ -1556,6 +1581,7 @@ As fotos saem SEMPRE do CATALOGO DISPONIVEL HOJE, nunca de memoria. No primeiro 
     if (apr?.guidance) systemBlocks.push({ type: 'text', text: apr.guidance });
   } catch (e) { logErro('ia/guidance-aprendizado', e); }
   if (blocoRoteiro) systemBlocks.push({ type: 'text', text: blocoRoteiro });
+  if (blocoDisparo) systemBlocks.push({ type: 'text', text: blocoDisparo });
   if (blocoPoliticas) systemBlocks.push({ type: 'text', text: blocoPoliticas });
   if (blocoTecidos) systemBlocks.push({ type: 'text', text: blocoTecidos });
   if (blocoMedidas) systemBlocks.push({ type: 'text', text: blocoMedidas });
