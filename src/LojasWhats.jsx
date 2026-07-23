@@ -3083,13 +3083,15 @@ const ConversaRow = ({ c, vendedoraNome, vendedorasMap, onContinuarSofia, onEnvi
             <span style={{ fontSize: fz(14), fontWeight: 600, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {c.nome_cliente || '—'}
             </span>
-            {/* Selo 2º envio: recebeu o 2º disparo do carrinho (Ailson 16/07/2026) */}
-            {c.disparo2_em && (
-              <span title={`2º disparo enviado em ${new Date(c.disparo2_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`} style={{
+            {/* Selo de envios (Ailson 23/07/2026): mostra o Nº do último envio de
+                abordagem pelo contador hsm_envios (disparo em massa incrementa).
+                disparo2_em fica como fallback do fluxo antigo do carrinho. */}
+            {(Number(c.hsm_envios) >= 2 || c.disparo2_em) && (
+              <span title={Number(c.hsm_envios) >= 2 ? `Já recebeu ${c.hsm_envios} envios de abordagem` : `2º disparo enviado em ${new Date(c.disparo2_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`} style={{
                 display: 'inline-flex', alignItems: 'center', flexShrink: 0,
                 fontSize: fz(10), padding: '1px 6px', borderRadius: 8,
                 background: '#eef4ff', color: '#2c3e50', border: '1px solid #4a7fa5', fontWeight: 700,
-              }}>2º envio</span>
+              }}>{Number(c.hsm_envios) >= 2 ? `${c.hsm_envios}º envio` : '2º envio'}</span>
             )}
             {/* Trava de presença: alguém com o chat aberto (Ailson 30/05/2026) */}
             {c.editando_por && c.editando_em && (Date.now() - new Date(c.editando_em).getTime() < 45000) && (
