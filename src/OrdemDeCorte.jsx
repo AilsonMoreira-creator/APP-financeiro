@@ -520,6 +520,7 @@ function OrdemCard({ ordem, expandida, onToggleExpand, onEditar, onExcluir, onAb
           </div>
           <div style={{ fontSize: 11, color: '#8a9aa4', marginBottom: cores.length > 0 ? 8 : 0 }}>
             🧵 {ordem.tecido} · <span style={{ color: '#5a6470', fontWeight: 600, fontSize: 12 }}>Grade {ordenarTamanhos(Object.entries(ordem.grade || {})).map(([t, v]) => `${v}${t}`).join(' · ')}</span>
+            {ordem.created_at && <span> · 📅 criada {new Date(ordem.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>}
           </div>
           {cores.length > 0 && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
