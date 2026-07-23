@@ -41,6 +41,9 @@ function renderBody(bodyText, nome, saud) {
 // header.sample_ref aponta uma foto ativa na biblioteca de mídias (sofia-midias).
 async function resolverCriativoHeader(tpl) {
   if (tpl.header?.format !== 'IMAGE') return null;
+  // Criativo do catalogo (tela Midias) tem prioridade — e o que o Ailson troca
+  // a cada campanha sem reaprovar na Meta. sample_ref e so fallback. 23/07/2026.
+  if (tpl.criativo_url) return tpl.criativo_url;
   const refRaw = tpl.header?.sample_ref;
   if (!refRaw) return null;
   const refNorm = String(refRaw).replace(/^0+/, '') || '0';
@@ -74,7 +77,7 @@ export default async function handler(req, res) {
     // 1. Template precisa existir, estar aprovado e ativo.
     const { data: tpl } = await supabase
       .from('lojas_whats_templates')
-      .select('name, language, status, ativo, body_text, header')
+      .select('name, language, status, ativo, body_text, header, criativo_url')
       .eq('name', template).maybeSingle();
     if (!tpl) return res.status(404).json({ error: 'template_nao_encontrado', template });
     if (tpl.status !== 'aprovado' || !tpl.ativo) {
@@ -93,7 +96,7 @@ export default async function handler(req, res) {
       const bloco = conversa_ids.slice(i, i + 300);
       const { data } = await supabase
         .from('lojas_whats_conversas')
-        .select('id, telefone, nome_cliente')
+        .select('id, telefone, nome_cliente, hsm_envios')
         .in('id', bloco);
       if (data) conversas.push(...data);
     }
@@ -131,6 +134,7 @@ export default async function handler(req, res) {
         await supabase.from('lojas_whats_conversas').update({
           ultima_msg_direcao: 'saida', ultima_atividade_em: agora, responder_em: null,
           disparo1_em: agora, disparo1_template: template, disparo_respondeu_em: null,
+          hsm_envios: (Number(conv.hsm_envios) || 0) + 1,   // tag 1º/2º/3º envio (23/07/2026)
         }).eq('id', conv.id);
 
         enviados.push(conv.id);

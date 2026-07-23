@@ -117,9 +117,17 @@ export default async function handler(req, res) {
       const ct = req.headers['content-type'] || '';
       const bM = ct.match(/boundary=([^;]+)/);
       if (!bM) return res.status(400).json({ ok: false, erro: 'multipart/form-data esperado' });
+      const boundary = bM[1].trim().replace(/^"|"$/g, '');   // aspas quebravam o parser (23/07/2026)
       const buf = await lerBody(req);
-      const campos = parseMultipart(buf, bM[1]);
+      const campos = parseMultipart(buf, boundary);
       console.log(`[templates-catalogo] POST body=${buf.length}b campos=${Object.keys(campos).join(',')} arquivo=${campos.arquivo?.data?.length||0}b`);
+      // Diagnostico persistente (23/07/2026): upload falhava sem pista — cada
+      // tentativa fica em amicia_data user_id='debug-criativo-upload'.
+      await supabase.from('amicia_data').upsert({ user_id: 'debug-criativo-upload', payload: {
+        ts: new Date().toISOString(), ct, body_bytes: buf.length,
+        campos: Object.keys(campos), arquivo_bytes: campos.arquivo?.data?.length || 0,
+        arquivo_mime: campos.arquivo?.mime || null, name: campos.name || null,
+      } }, { onConflict: 'user_id' });
       const name = campos.name;
       const arq = campos.arquivo;
       if (!name || !arq?.data?.length) return res.status(400).json({ ok: false, erro: 'name e arquivo obrigatorios' });

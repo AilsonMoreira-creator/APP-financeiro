@@ -313,6 +313,12 @@ const CardCompacto = ({ c, ativo, onClick, vendedoraNome }) => {
               fontSize: fz(9.5), fontWeight: 700, padding: '2px 7px', borderRadius: 6,
             }}>👤 {vendedoraNome}</span>
           )}
+          {(c.etapa === 'perdida' || c.etapa === 'enviada') && Number(c.hsm_envios) >= 2 && (
+            <span title={`Já recebeu ${c.hsm_envios} envios de abordagem`} style={{
+              background: '#fdf1e3', color: '#b06a1a', border: '1px solid #f0d5ae',
+              fontSize: fz(9.5), fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+            }}>📨 {c.hsm_envios}º envio</span>
+          )}
           {origem === 'carrinho' ? (
             <span style={{ fontSize: fz(10), color: palette.inkMuted, fontWeight: 600 }}>{c.qtd_pecas || 0} pç</span>
           ) : c.qtd_pecas > 0 && (
@@ -1574,6 +1580,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   // do lead, data em que virou perdida e template do disparo (hoje só a
   // pesquisa funciona; curadoria/novidades/dicas entram quando aprovar na Meta).
   const [filtroOrigemPerdida, setFiltroOrigemPerdida] = useState('todas');
+  // Filtro por nº de HSMs de abordagem recebidos (1º/2º/3º envio). Ailson 23/07/2026.
+  const [filtroEnviosPerdida, setFiltroEnviosPerdida] = useState('todos');
   const [perdidaDe, setPerdidaDe] = useState('');
   const [perdidaAte, setPerdidaAte] = useState('');
   const [templateMassa, setTemplateMassa] = useState('pesquisa');
@@ -1674,7 +1682,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, vendeu_site, ciclo24_vence_em, perdida_em, tags, reposicao_alerta_em, disparo2_em,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, vendeu_site, hsm_envios, ciclo24_vence_em, perdida_em, tags, reposicao_alerta_em, disparo2_em,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1703,6 +1711,10 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         else if (filtroOrigemPerdida !== 'todas') q = q.eq('origem_lead', filtroOrigemPerdida);
         if (perdidaDe) q = q.gte('perdida_em', `${perdidaDe}T00:00:00-03:00`);
         if (perdidaAte) q = q.lte('perdida_em', `${perdidaAte}T23:59:59-03:00`);
+        // Filtro por nº de envios de abordagem (23/07/2026): 1 / 2 / 3+.
+        if (filtroEnviosPerdida === '1') q = q.eq('hsm_envios', 1);
+        else if (filtroEnviosPerdida === '2') q = q.eq('hsm_envios', 2);
+        else if (filtroEnviosPerdida === '3') q = q.gte('hsm_envios', 3);
       }
       const { data } = await q;
       let lista = data || [];
@@ -1741,7 +1753,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       jaCarregouListaRef.current = true;
       setLoading(false);
     })();
-  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, perdidaDe, perdidaAte, filtroTag]);
+  }, [filtroEtapa, refreshTick, reloadTick, expandido, filtroPesquisaPerdida, filtroOrigemPerdida, filtroEnviosPerdida, perdidaDe, perdidaAte, filtroTag]);
 
   // Catálogo dos templates de reativação (curadoria/novidades/dicas) pro
   // seletor do disparo em massa. Carrega 1x quando abre a aba Perdida.
@@ -2067,6 +2079,33 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
     setProcessandoFila(false);
   };
 
+  // Dispara o template de reativacao escolhido (curadoria/novidades/dicas) pros
+  // cards selecionados da Perdida — mesmo endpoint do followup, que preenche
+  // {{1}}=nome e {{2}}=saudacao e usa o criativo_url do catalogo. 23/07/2026.
+  const dispararReativacaoSelecionados = async () => {
+    if (selecionados.size === 0) return;
+    if (!confirm(`Disparar "${templateMassa}" pra ${selecionados.size} cliente(s)? Isso envia uma mensagem paga (HSM) pra cada uma, e elas ganham a tag do próximo envio.`)) return;
+    setProcessandoFila(true);
+    try {
+      const r = await fetch('/api/lojas-whats-followup-disparo-massa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversa_ids: Array.from(selecionados), template: templateMassa }),
+      });
+      const j = await r.json();
+      if (!r.ok || j.error || j.ok === false) {
+        setFeedback({ tipo: 'erro', msg: j.dica || j.error || 'Falha ao disparar' });
+      } else {
+        const puladosMsg = j.pulados?.length ? `, ${j.pulados.length} pulada(s)` : '';
+        const falhasMsg = j.falhas?.length ? `, ${j.falhas.length} falha(s)` : '';
+        setFeedback({ tipo: 'ok', msg: `Disparo: ${j.enviados || 0} enviada(s)${puladosMsg}${falhasMsg}` });
+        setSelecionados(new Set());
+        setReloadTick(t => t + 1);
+      }
+    } catch (e) { setFeedback({ tipo: 'erro', msg: e.message }); }
+    setProcessandoFila(false);
+  };
+
   // Envia a pesquisa de motivo pros leads selecionados (so os elegiveis recebem,
   // o endpoint filtra pela view). Ailson 21/06/2026.
   const enviarPesquisaSelecionados = async () => {
@@ -2255,17 +2294,16 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                     );
                   })}
                 </select>
-                <button onClick={enviarPesquisaSelecionados}
-                  disabled={processandoFila || templateMassa !== 'pesquisa'}
-                  title={templateMassa !== 'pesquisa' ? 'Disparo desse template entra quando ele for aprovado na Meta' : undefined}
+                <button onClick={templateMassa === 'pesquisa' ? enviarPesquisaSelecionados : dispararReativacaoSelecionados}
+                  disabled={processandoFila}
                   style={{
                     padding: '6px 14px', borderRadius: 6,
-                    background: (processandoFila || templateMassa !== 'pesquisa') ? '#bdc3c7' : palette.accent,
+                    background: processandoFila ? '#bdc3c7' : palette.accent,
                   color: '#fff', border: 'none', fontFamily: FONT,
                   fontSize: fz(13), fontWeight: 700,
                   cursor: processandoFila ? 'wait' : 'pointer',
                 }}>
-                {processandoFila ? 'Enviando…' : `Enviar pesquisa (${selecionados.size})`}
+                {processandoFila ? 'Enviando…' : templateMassa === 'pesquisa' ? `Enviar pesquisa (${selecionados.size})` : `Disparar (${selecionados.size})`}
               </button>
               </>
             ) : ehAbaFollowup ? (
@@ -2361,6 +2399,22 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
               );
             })}
           </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>📨 Envios:</span>
+            {[['todos', 'Todos'], ['1', '1º envio'], ['2', '2º envio'], ['3', '3º envio +']].map(([id, label]) => {
+              const ativo = filtroEnviosPerdida === id;
+              return (
+                <button key={id} onClick={() => setFiltroEnviosPerdida(id)}
+                  style={{
+                    fontSize: fz(11), padding: '4px 11px', borderRadius: 14,
+                    border: `1px solid ${ativo ? palette.accent : palette.beige}`,
+                    background: ativo ? palette.accent : palette.surface,
+                    color: ativo ? '#fff' : palette.ink,
+                    cursor: 'pointer', fontFamily: FONT, fontWeight: 600,
+                  }}>{label}</button>
+              );
+            })}
+          </div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: fz(11), color: palette.inkMuted, fontWeight: 600 }}>📅 Perdida entre:</span>
             <input type="date" value={perdidaDe} onChange={e => setPerdidaDe(e.target.value)}
@@ -2368,8 +2422,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
             <span style={{ fontSize: fz(11), color: palette.inkMuted }}>e</span>
             <input type="date" value={perdidaAte} onChange={e => setPerdidaAte(e.target.value)}
               style={{ fontSize: fz(11), padding: '4px 8px', borderRadius: 6, border: `1px solid ${palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink }} />
-            {(perdidaDe || perdidaAte || filtroOrigemPerdida !== 'todas') && (
-              <button onClick={() => { setPerdidaDe(''); setPerdidaAte(''); setFiltroOrigemPerdida('todas'); }}
+            {(perdidaDe || perdidaAte || filtroOrigemPerdida !== 'todas' || filtroEnviosPerdida !== 'todos') && (
+              <button onClick={() => { setPerdidaDe(''); setPerdidaAte(''); setFiltroOrigemPerdida('todas'); setFiltroEnviosPerdida('todos'); }}
                 style={{ fontSize: fz(11), padding: '4px 10px', borderRadius: 14, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
                 limpar
               </button>
