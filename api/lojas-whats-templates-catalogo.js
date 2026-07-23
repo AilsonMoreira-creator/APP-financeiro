@@ -30,6 +30,13 @@ const MIMES_OK = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const CAMPOS = 'name, language, category, body_text, botoes, header, status, ativo, pasta, porque, fluxo, criativo_url, criativo_atualizado_em, atualizado_em';
 
 async function lerBody(req) {
+  // Runtime do Vercel pode ja ter consumido o stream e deixado o corpo em
+  // req.body (Buffer/string) — sem isso o multipart chega VAZIO e o upload
+  // falha silencioso. Ailson 23/07/2026.
+  if (req.body != null) {
+    if (Buffer.isBuffer(req.body) && req.body.length) return req.body;
+    if (typeof req.body === 'string' && req.body.length) return Buffer.from(req.body, 'latin1');
+  }
   const chunks = [];
   for await (const c of req) chunks.push(c);
   return Buffer.concat(chunks);
@@ -112,6 +119,7 @@ export default async function handler(req, res) {
       if (!bM) return res.status(400).json({ ok: false, erro: 'multipart/form-data esperado' });
       const buf = await lerBody(req);
       const campos = parseMultipart(buf, bM[1]);
+      console.log(`[templates-catalogo] POST body=${buf.length}b campos=${Object.keys(campos).join(',')} arquivo=${campos.arquivo?.data?.length||0}b`);
       const name = campos.name;
       const arq = campos.arquivo;
       if (!name || !arq?.data?.length) return res.status(400).json({ ok: false, erro: 'name e arquivo obrigatorios' });
