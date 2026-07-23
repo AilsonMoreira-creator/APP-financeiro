@@ -1674,7 +1674,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       let q = supabase
         .from('lojas_whats_conversas')
         .select(`
-          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, ciclo24_vence_em, perdida_em, tags, reposicao_alerta_em, disparo2_em,
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, vendeu_site, ciclo24_vence_em, perdida_em, tags, reposicao_alerta_em, disparo2_em,
           handoffs:lojas_whats_handoffs(status, vendedora_id),
           sugestoes:lojas_whats_sugestoes(id, status)
         `)
@@ -1996,7 +1996,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
               <CardCompacto key={c.id} c={c}
                 ativo={c.id === conversaDetalhe}
                 onClick={() => abrirConversa(c.id, c.unread_count)}
-                vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : null}
+                vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : (c.vendeu_site ? '🌐 Site' : null)}
               />
             ))}
           </div>
@@ -2408,7 +2408,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {conversas.map(c => (
               <ConversaRow key={c.id} c={c}
-                vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : null}
+                vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : (c.vendeu_site ? '🌐 Site' : null)}
                 vendedorasMap={vendedorasMap}
                 selecionavel={ehAbaProcessando || ehAbaAprovar || ehAbaPerdida || ehAbaFollowup}
                 selecionado={selecionados.has(c.id)}
