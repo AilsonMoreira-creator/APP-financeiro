@@ -3883,8 +3883,10 @@ const FaixasFunil = ({ o, loading, cor }) => {
     { l: 'média (3+ msgs)', n: Number(o?.media || 0), c: '#c98a3f' },
     { l: 'quente',          n: Number(o?.quente || 0), c: '#c9483f' },
   ];
-  const vendas = Number(o?.vendas || 0);
-  const valorV = Number(o?.valor_vendas || 0);
+  // Vendas exibidas = TODAS as vendas do periodo pela data da venda (inclui
+  // lancadas manuais e leads de safras antigas). Ailson 23/07/2026.
+  const vendas = Number(o?.vendas_periodo ?? o?.vendas ?? 0);
+  const valorV = Number(o?.valor_vendas_periodo ?? o?.valor_vendas ?? 0);
   return (
     <div style={{ padding: '7px 9px', borderRadius: 6, background: palette.bg, display: 'flex', flexDirection: 'column', gap: 3 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 2 }}>
@@ -4220,7 +4222,7 @@ function ConversaoTab({ refreshTick }) {
     const m = {};
     for (const o of dadosFunil?.origens || []) m[o.origem] = o;
     const soma = (list) => {
-      const zerado = { total: 0, sem_interacao: 0, leve: 0, media: 0, quente: 0, vendas: 0, valor_vendas: 0 };
+      const zerado = { total: 0, sem_interacao: 0, leve: 0, media: 0, quente: 0, vendas: 0, valor_vendas: 0, vendas_periodo: 0, valor_vendas_periodo: 0 };
       const its = list.filter(Boolean);
       if (!its.length) return null;
       return its.reduce((a, x) => ({
@@ -4231,6 +4233,8 @@ function ConversaoTab({ refreshTick }) {
         quente: a.quente + Number(x.quente || 0),
         vendas: a.vendas + Number(x.vendas || 0),
         valor_vendas: a.valor_vendas + Number(x.valor_vendas || 0),
+        vendas_periodo: a.vendas_periodo + Number(x.vendas_periodo || 0),
+        valor_vendas_periodo: a.valor_vendas_periodo + Number(x.valor_vendas_periodo || 0),
       }), zerado);
     };
     const conhecidas = ['instagram_stories', 'instagram_linktree', 'anuncio_facebook', 'anuncio_instagram', 'carrinho_site_amicialoja'];

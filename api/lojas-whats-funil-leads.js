@@ -69,6 +69,10 @@ export default async function handler(req, res) {
     const origens = (funilQ.data || []).map(r => ({
       ...r,
       valor_vendas: Number(r.valor_vendas || 0),
+      // Vendas do PERIODO por data da venda (qualquer safra, inclui manuais).
+      // E o numero que a tela exibe desde 23/07/2026.
+      vendas_periodo: Number(r.vendas_periodo || 0),
+      valor_vendas_periodo: Number(r.valor_vendas_periodo || 0),
     }));
 
     const totais = origens.reduce((a, r) => ({
@@ -79,7 +83,9 @@ export default async function handler(req, res) {
       quente: a.quente + Number(r.quente),
       vendas: a.vendas + Number(r.vendas),
       valor_vendas: a.valor_vendas + Number(r.valor_vendas),
-    }), { total: 0, sem_interacao: 0, leve: 0, media: 0, quente: 0, vendas: 0, valor_vendas: 0 });
+      vendas_periodo: a.vendas_periodo + Number(r.vendas_periodo || 0),
+      valor_vendas_periodo: a.valor_vendas_periodo + Number(r.valor_vendas_periodo || 0),
+    }), { total: 0, sem_interacao: 0, leve: 0, media: 0, quente: 0, vendas: 0, valor_vendas: 0, vendas_periodo: 0, valor_vendas_periodo: 0 });
 
     const nomeV = new Map((vendsQ.data || []).map(v => [v.id, v.nome]));
     const itens30 = (vendas30Q.data || []).map(c => ({
