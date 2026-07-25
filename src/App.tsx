@@ -4990,12 +4990,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     setLogsBlingModoCard(doCard);
     const rn=doCard?String(refFiltro).replace(/\D/g,'').replace(/^0+/,''):'';
     // Botão de log dentro do card: abre já filtrado na REF, só manual e leve (30 linhas) pra carregar rápido.
-    if(doCard){setLogsBlingBusca(String(refFiltro));setLogsBlingOrigem('manual');setLogsBlingUsuario('todos');setLogsBlingPeriodo('tudo');setLogsBlingData('');}
+    // Card mostra TODOS os lancamentos humanos: ajuste manual E acrescimo de corte (Ailson 24/07/2026).
+    if(doCard){setLogsBlingBusca(String(refFiltro));setLogsBlingOrigem('humanos');setLogsBlingUsuario('todos');setLogsBlingPeriodo('tudo');setLogsBlingData('');}
     try{
       let query=supabase.from('bling_estoque_logs')
         .select('id,ref,cor_norm,tam,cor_label,qtd_anterior,qtd_nova,delta,motivo,usuario,origem,criado_em')
         .order('criado_em',{ascending:false});
-      query=doCard?query.eq('ref',rn).eq('origem','manual').limit(30):query.limit(1000);
+      query=doCard?query.eq('ref',rn).in('origem',['manual','acrescentar_corte']).limit(30):query.limit(1000);
       const {data,error}=await query;
       if(error)throw error;
       setLogsBling(data||[]);
@@ -6083,12 +6084,12 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           return true;
         };
         const lista=logsBling.filter(l=>
-          (logsBlingOrigem==='todas'||l.origem===logsBlingOrigem)
+          (logsBlingOrigem==='todas'||(logsBlingOrigem==='humanos'?(l.origem==='manual'||l.origem==='acrescentar_corte'):l.origem===logsBlingOrigem))
           &&(!q||norm(l.ref).includes(q))
           &&(logsBlingUsuario==='todos'||l.usuario===logsBlingUsuario)
           &&dentroData(l.criado_em)
         );
-        const ORIGENS=logsBlingModoCard?[['manual','✏️ Manual']]:[['todas','Todas'],['manual','✏️ Manual'],['bling_sync','🟦 Sync'],['webhook','⚡ Webhook']];
+        const ORIGENS=logsBlingModoCard?[['humanos','✏️ Lançamentos']]:[['todas','Todas'],['manual','✏️ Manual'],['acrescentar_corte','✂️ Corte'],['bling_sync','🟦 Sync'],['webhook','⚡ Webhook']];
         const fmtDt=(d)=>{try{const x=new Date(d);return x.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+x.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}catch{return '';}};
         const chipStl=(ativo)=>({background:ativo?"#2c3e50":"#faf8f5",color:ativo?"#fff":"#5a6470",border:"1px solid "+(ativo?"#2c3e50":"#e8e2da"),borderRadius:6,padding:"5px 9px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,whiteSpace:"nowrap"});
         const periodoTudo=logsBlingPeriodo==='tudo'&&!logsBlingData;
