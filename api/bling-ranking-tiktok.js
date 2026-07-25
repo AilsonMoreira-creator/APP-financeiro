@@ -116,10 +116,21 @@ export default async function handler(req, res) {
     const fotos = await Promise.all(top.map(i => buscarFoto(i.ref)));
 
     // ── 5. PDF A4, 12 itens por pagina = 2 paginas ──────────────────────────
+    const probe = q.probe === '1'; // valida a geracao sem mandar o binario
     const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: `Ranking de Vendas ${tituloPeriodo} - Amicia` } });
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="ranking-amicia-${de.slice(0, 7)}-tiktok.pdf"`);
-    doc.pipe(res);
+    let probeChunks = null;
+    if (probe) {
+      probeChunks = [];
+      doc.on('data', (c) => probeChunks.push(c));
+      doc.on('end', () => {
+        const buf = Buffer.concat(probeChunks);
+        res.status(200).json({ ok: true, pdf_bytes: buf.length, itens: top.length, fotos_ok: fotos.filter(Boolean).length });
+      });
+    } else {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="ranking-amicia-${de.slice(0, 7)}-tiktok.pdf"`);
+      doc.pipe(res);
+    }
 
     const W = 595.28, ML = 40, MR = 40;
     const INK = '#2c3e50', MUT = '#8a9aa4', ACC = '#4a7fa5', BG = '#f7f4f0', BD = '#e8e2da';
