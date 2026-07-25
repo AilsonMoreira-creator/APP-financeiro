@@ -22,6 +22,14 @@ const EXTRAS_DEFAULT = ['3223', '3220', '3209', '3186'];
 
 const normRef = (r) => String(r || '').replace(/\D/g, '').replace(/^0+/, '');
 
+// Espelho do BLING_COR_HEX do modulo (App.tsx) — manter em sincronia.
+// Salvia corrigida 25/07/2026 (mais clara que pistache, mais escura que menta).
+const COR_HEX = { 'preto':'#222222','natural':'#d4c8a8','branco':'#f5f0e8','areia':'#c8b88a','verde':'#4a8a4a','verde agua':'#5ab8a0','verde militar':'#5a6b4a','verde salvia':'#a3b899','verde pistache':'#a9c47f','verde menta':'#b8e0cc','verde escuro':'#2d5a2d','terracota':'#b85c38','rose':'#d4a0a0','caqui':'#8a7a5a','cinza':'#999999','marrom':'#6b4226','marrom escuro':'#4a2a12','azul':'#3a6aa5','azul marinho':'#1a3a6a','azul-marinho':'#1a3a6a','azul claro':'#7ab0d4','azul serenity':'#5b9bd5','amarelo':'#f0c040','amarelo manteiga':'#e8d080','bege':'#d4c0a0','bege claro':'#e8d8c0','caramelo':'#b87a3a','figo':'#6a3a5a','off white':'#f0e8d8','creme':'#e8d8c0','cappuccino':'#8a6a4a','vermelho':'#c0392b','roxo':'#6a2d8a','laranja':'#e67e22','bordo':'#6a1a2a','burgundy':'#6a1a2a','rosa':'#d48aa0','nude':'#c8a890','vinho':'#5a1a2a','preto mescla':'#3a3a3a','marrom mescla':'#7a5a42','caramelo mescla':'#c08a52','natural mescla':'#cfc4a4','azul mescla':'#5a7a9a' };
+const corKeyN = (c) => String(c || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+const corHex = (c) => COR_HEX[corKeyN(c)] || '#a89f94';
+const ORDEM_TAM = ['PP','P','M','G','GG','XG','XGG','EG','EGG','U','G1','G2','G3','G4','G5'];
+const ordTam = (t) => { const i = ORDEM_TAM.indexOf(String(t || '').toUpperCase()); return i < 0 ? 99 : i; };
+
 function tecidoDoTitulo(t) {
   const s = String(t || '').toLowerCase();
   if (s.includes('viscolinho')) return 'Viscolinho';
@@ -88,26 +96,32 @@ export default async function handler(req, res) {
 
     // ── 3. Descricao leve: tecido (do titulo) + cores disponiveis no estoque ─
     const refsAll = top.map(i => i.ref);
-    const { data: cores } = await supabase.from('bling_estoque')
-      .select('ref, cor_label, qtd').in('ref', refsAll).gt('qtd', 0);
-    const coresPorRef = new Map();
-    for (const c of (cores || [])) {
-      if (!c.cor_label) continue;
-      const m = coresPorRef.get(c.ref) || new Map();
-      m.set(c.cor_label, (m.get(c.cor_label) || 0) + Number(c.qtd || 0));
-      coresPorRef.set(c.ref, m);
+    // Cores e tamanhos ATIVOS = mesmos chips do card do modulo (vendavel > 0,
+    // Exitus + Lumia + Muniam). Ailson 25/07/2026.
+    const { data: linhasEst } = await supabase.from('bling_estoque')
+      .select('ref, cor_label, tam, qtd, qtd_lumia, qtd_muniam').in('ref', refsAll);
+    const coresPorRef = new Map(), tamPorRef = new Map();
+    for (const c of (linhasEst || [])) {
+      const vend = (Number(c.qtd) || 0) + (Number(c.qtd_lumia) || 0) + (Number(c.qtd_muniam) || 0);
+      if (vend <= 0) continue;
+      if (c.cor_label) {
+        const m = coresPorRef.get(c.ref) || new Map();
+        m.set(c.cor_label, (m.get(c.cor_label) || 0) + vend);
+        coresPorRef.set(c.ref, m);
+      }
+      if (c.tam) {
+        const t = tamPorRef.get(c.ref) || new Set();
+        t.add(String(c.tam).toUpperCase());
+        tamPorRef.set(c.ref, t);
+      }
     }
     for (const item of top) {
-      const partes = [];
       const tec = tecidoDoTitulo(item.titulo);
-      if (tec) partes.push(tec);
+      const ts = [...(tamPorRef.get(item.ref) || [])].sort((a, b) => ordTam(a) - ordTam(b));
+      item.info = [tec, ts.length ? ts.join(' ') : null].filter(Boolean).join('  ·  ');
       const cm = coresPorRef.get(item.ref);
-      if (cm && cm.size) {
-        const nomes = [...cm.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n);
-        const vis = nomes.slice(0, 4).join(', ') + (nomes.length > 4 ? ` +${nomes.length - 4}` : '');
-        partes.push(`Cores: ${vis}`);
-      }
-      item.descricao = partes.join('  ·  ');
+      item.cores = cm ? [...cm.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n) : [];
+      item.descricao = item.info + (item.cores.length ? '  ·  Cores: ' + item.cores.join(', ') : '');
     }
 
     if (q.dry === '1') return res.status(200).json({ ok: true, de, ate, itens: top });
@@ -139,11 +153,11 @@ export default async function handler(req, res) {
     const header = (pag) => {
       doc.rect(0, 0, W, pag === 1 ? 64 : 46).fill(INK);
       doc.fill('#ffffff').font('Helvetica-Bold').fontSize(pag === 1 ? 16 : 12)
-        .text(`Ranking de Vendas — ${tituloPeriodo}`, ML, pag === 1 ? 14 : 12);
+        .text('Ranking de Vendas — Amícia', ML, pag === 1 ? 14 : 12);
       doc.font('Helvetica').fontSize(pag === 1 ? 9.5 : 8.5).fillColor('#cdd8e0')
         .text(pag === 1
-          ? 'Amícia  ·  atacado moda feminina  ·  seleção pra estratégia TikTok Shop (20 mais vendidos + 4 lançamentos)'
-          : `Amícia  ·  continuação  ·  página ${pag}/2`, ML, pag === 1 ? 38 : 28);
+          ? 'Atacado moda feminina  ·  vendas da conta Exitus  ·  seleção pra estratégia TikTok Shop (20 mais vendidos + 4 lançamentos)'
+          : `Amícia  ·  vendas da conta Exitus  ·  página ${pag}/2`, ML, pag === 1 ? 38 : 28);
       return (pag === 1 ? 64 : 46) + 10;
     };
 
@@ -171,9 +185,23 @@ export default async function handler(req, res) {
       // textos
       const tx = fx + thumbW + 12, tw = W - MR - tx - 92;
       doc.fillColor(INK).font('Helvetica-Bold').fontSize(10)
-        .text(`REF ${item.ref}  ·  ${item.titulo}`, tx, y + 4, { width: tw, height: 26, ellipsis: true });
+        .text(`REF ${item.ref}  ·  ${item.titulo}`, tx, y + 3, { width: tw, height: 22, ellipsis: true, lineBreak: true });
       doc.fillColor(MUT).font('Helvetica').fontSize(8.5)
-        .text(item.descricao || ' ', tx, y + 30, { width: tw, height: 20, ellipsis: true });
+        .text(item.info || ' ', tx, y + 27, { width: tw, height: 11, ellipsis: true });
+      // bolinhas de cor (mesmo mapa do modulo) + nome, ate 5 cores
+      let cx = tx; const cy = y + 44;
+      const visiveis = (item.cores || []).slice(0, 5);
+      doc.font('Helvetica').fontSize(7.5);
+      visiveis.forEach((nome) => {
+        const nomeW = doc.widthOfString(nome);
+        if (cx + 9 + nomeW + 10 > tx + tw) return;
+        doc.circle(cx + 3.2, cy, 3.2).lineWidth(0.5).fillAndStroke(corHex(nome), '#c8bfae');
+        doc.fillColor(MUT).text(nome, cx + 9, cy - 3.5, { lineBreak: false });
+        cx += 9 + nomeW + 10;
+      });
+      if ((item.cores || []).length > visiveis.length) {
+        doc.fillColor(MUT).text(`+${item.cores.length - visiveis.length}`, cx, cy - 3.5, { lineBreak: false });
+      }
       // qtd / lancamento
       if (item.lancamento) {
         doc.roundedRect(W - MR - 84, y + rowH / 2 - 12, 82, 20, 5).fill('#fdf1e3');
@@ -189,7 +217,7 @@ export default async function handler(req, res) {
     });
 
     doc.fillColor(MUT).font('Helvetica').fontSize(7.5)
-      .text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} · vendas Bling Exitus (situação Atendido) de ${de} a ${ate} (exclusivo) · refs sem tecido pra escala não listadas`, ML, 842 - 22, { width: W - ML - MR, align: 'center' });
+      .text(`Gerado em ${new Date().toLocaleDateString('pt-BR')} · vendas da conta Exitus (pedidos atendidos) · cores e tamanhos = disponíveis em estoque`, ML, 842 - 22, { width: W - ML - MR, align: 'center' });
 
     doc.end();
   } catch (e) {
