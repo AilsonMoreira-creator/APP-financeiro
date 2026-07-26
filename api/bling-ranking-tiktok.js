@@ -18,7 +18,7 @@ export const config = { maxDuration: 60 };
 
 const SB_URL = process.env.SUPABASE_URL || 'https://bxxawglmlqoswwyhpeil.supabase.co';
 const EXCLUIR_DEFAULT = ['2798', '2927', '3150', '376', '2851', '3228', '2891'];  // 2891 retirada 26/07
-const EXTRAS_DEFAULT = ['3223', '3220', '3209', '3186', '1678'];  // 1678 adicionada 26/07
+const EXTRAS_DEFAULT = ['3223', '3220', '3209', '3186', '1628'];  // 1628 (corrigido de 1678) 26/07
 
 const normRef = (r) => String(r || '').replace(/\D/g, '').replace(/^0+/, '');
 
