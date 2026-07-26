@@ -17,8 +17,8 @@ import { supabase } from './_bling-helpers.js';
 export const config = { maxDuration: 60 };
 
 const SB_URL = process.env.SUPABASE_URL || 'https://bxxawglmlqoswwyhpeil.supabase.co';
-const EXCLUIR_DEFAULT = ['2798', '2927', '3150', '376', '2851', '3228'];
-const EXTRAS_DEFAULT = ['3223', '3220', '3209', '3186'];
+const EXCLUIR_DEFAULT = ['2798', '2927', '3150', '376', '2851', '3228', '2891'];  // 2891 retirada 26/07
+const EXTRAS_DEFAULT = ['3223', '3220', '3209', '3186', '1678'];  // 1678 adicionada 26/07
 
 const normRef = (r) => String(r || '').replace(/\D/g, '').replace(/^0+/, '');
 
@@ -150,7 +150,7 @@ export default async function handler(req, res) {
 
     // ── 5. PDF A4, 12 itens por pagina = 2 paginas ──────────────────────────
     const probe = q.probe === '1'; // valida a geracao sem mandar o binario
-    const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: `Ranking de Vendas ${tituloPeriodo} - Amicia` } });
+    const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: 'Ranking de Vendas - Grupo Meluni - Exitus' } });
     let probeChunks = null;
     if (probe) {
       probeChunks = [];
@@ -167,16 +167,16 @@ export default async function handler(req, res) {
 
     const W = 595.28, ML = 40, MR = 40;
     const INK = '#2c3e50', MUT = '#8a9aa4', ACC = '#4a7fa5', BG = '#f7f4f0', BD = '#e8e2da';
-    const PER_PAGE = 8; // cards maiores com preco -> 3 paginas (25/07/2026)
+    const PER_PAGE = Math.max(8, Math.ceil(top.length / 3)); // 3 paginas, cards grandes (26/07/2026)
 
     const header = (pag) => {
       doc.rect(0, 0, W, pag === 1 ? 64 : 46).fill(INK);
       doc.fill('#ffffff').font('Helvetica-Bold').fontSize(pag === 1 ? 16 : 12)
-        .text('Ranking de Vendas — Amícia', ML, pag === 1 ? 14 : 12);
+        .text('Ranking de Vendas — Grupo Meluni · Exitus', ML, pag === 1 ? 14 : 12);
       doc.font('Helvetica').fontSize(pag === 1 ? 9.5 : 8.5).fillColor('#cdd8e0')
         .text(pag === 1
-          ? 'Atacado moda feminina  ·  vendas da conta Exitus  ·  seleção pra estratégia TikTok Shop (20 mais vendidos + 4 lançamentos)'
-          : `Amícia  ·  vendas da conta Exitus  ·  página ${pag}/${Math.ceil(top.length / PER_PAGE)}`, ML, pag === 1 ? 38 : 28);
+          ? 'Atacado moda feminina  ·  vendas da conta Exitus  ·  seleção pra estratégia TikTok Shop'
+          : `Grupo Meluni · Exitus  ·  página ${pag}/${Math.ceil(top.length / PER_PAGE)}`, ML, pag === 1 ? 38 : 28);
       return (pag === 1 ? 64 : 46) + 10;
     };
 
