@@ -407,7 +407,8 @@ export function LoadingScreen({ phase, error, online }) {
 // Mostra "Bom dia/Boa tarde/Boa noite, [Nome]!" + frase motivacional escolhida
 // deterministicamente por (data + vendedora). Mesma frase o dia inteiro pra
 // mesma vendedora. Vendedoras diferentes veem frases diferentes. Próximo dia
-// → nova frase. Total de ~30 frases = ~1 mês sem repetir pra mesma vendedora.
+// → nova frase. Total de ~60 frases = ~2 meses sem repetir pra mesma vendedora
+// (ampliada de ~30 pra ~60 a pedido do Ailson, 28/07/2026).
 
 export const FRASES_MOTIVACIONAIS = [
   // Engraçadas / casuais
@@ -426,6 +427,16 @@ export const FRASES_MOTIVACIONAIS = [
   'Vamos estourar nas vendas hj!!! 🔥',
   'Tô sentindo q hj vamos vender muito!!! ✨',
   'É hj q vamos vender muito!!! 🔥',
+  'Sorriso no rosto e maquininha na mão 😄',
+  'O linho não se vende sozinho 😂',
+  'Café tomado, cliente avisada, bora! ☕',
+  'Provador cheio é alegria de vendedora 🛍️',
+  'Quem chama cliente não passa aperto 📱',
+  'Segura o batom e vai vender 💄',
+  'Hoje o Pix vai cantar 🎶',
+  'Cliente sumida? Chama no Whats 📲',
+  'Sacola guardada é venda esperando 👀',
+  'Vitrine linda, loja cheia, comissão alta 😎',
   // Motivacionais (energia de resultado)
   'Hoje é dia de vender MUITO 📈',
   'Bora fazer esse caixa girar 💰',
@@ -435,6 +446,14 @@ export const FRASES_MOTIVACIONAIS = [
   'Venda é atitude 😎',
   'Confia no processo e vende 🙌',
   'Hoje é dia de comissão boa 💸',
+  'Energia boa atrai venda boa ✨',
+  'Atendimento com carinho fecha venda 🤝',
+  'Sua simpatia é sua melhor ferramenta 😁',
+  'Dia novo, clientes novas, chances novas 🌱',
+  'Faz o simples bem feito que a venda vem 💪',
+  'Vendedora boa cria o próprio movimento ⚡',
+  'Um atendimento de cada vez, capricho em todos 🙌',
+  'Constância ganha de talento 🏆',
   // Foco em meta
   'Temos meta e vamos bater 💪',
   'Falta pouco, acelera! 🏃‍♀️',
@@ -446,6 +465,14 @@ export const FRASES_MOTIVACIONAIS = [
   'Foco total nas clientes 👀',
   'Hoje ninguém sai sem comprar 🛍️',
   'Vamos q temos uma meta pra bater!! 🎯',
+  'Meta é compromisso, não sugestão 🎯',
+  'Começa forte que o dia rende 🚀',
+  'Cada mensagem enviada é uma porta aberta 📲',
+  'Follow-up de hoje é venda de amanhã 📈',
+  'Bateu a meta? Agora passa ela 😏',
+  'Grandes vendas começam num oi 👋',
+  'Semana boa se constrói na segunda 💼',
+  'Fecha o mês com orgulho do número 📊',
 ];
 
 /** Retorna "Bom dia" / "Boa tarde" / "Boa noite" pela hora local. */
