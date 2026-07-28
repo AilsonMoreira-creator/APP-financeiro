@@ -1665,8 +1665,12 @@ async function montarContextoSugestoes(vendedoraId) {
   // (desconto <=20% na compra — a view já exclui os >20%). Alvo: 4 cards/dia.
   // Gancho: preview Verão 27 (fala do preview, encaminha o criativo e pergunta
   // se pode mandar as fotos). Janela da campanha configurável.
+  // Ailson 28/07/2026: campanha ENCERRADA antes do prazo — a lista priorizada
+  // causava repeticao dos mesmos clientes (reclamacao Cleide/Tamires) e a
+  // decisao foi: compradores do verao entram no RODIZIO NORMAL da carteira,
+  // sem prioridade. Janela fechada em 27/07 desliga fetch, prompt e criativo.
   const CAMPANHA_VERAO_INI = '2026-07-16';
-  const CAMPANHA_VERAO_FIM = '2026-08-05';
+  const CAMPANHA_VERAO_FIM = '2026-07-27';
   let compradoresVerao = [];
   if (hoje >= CAMPANHA_VERAO_INI && hoje <= CAMPANHA_VERAO_FIM) {
     const { data: cv } = await supabase
