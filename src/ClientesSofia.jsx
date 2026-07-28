@@ -1369,8 +1369,8 @@ function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, selecionado, on
     if (bruto == null) return;
     let dig = String(bruto).replace(/\D/g, '');
     if (!dig) return;
-    if (dig.length === 10 || dig.length === 11) dig = '55' + dig;   // sem o 55
-    if (dig.length < 12 || dig.length > 13) { alert('Número inválido — confere o DDD e tenta de novo.'); return; }
+    if ((dig.length === 12 || dig.length === 13) && dig.startsWith('55')) dig = dig.slice(2); // padrao da tabela e SEM 55
+    if (dig.length < 10 || dig.length > 11) { alert('Número inválido — confere o DDD e tenta de novo.'); return; }
     setSalvandoTel(true);
     try {
       const { error } = await supabase.from('lojas_clientes')
