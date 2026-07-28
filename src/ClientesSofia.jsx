@@ -1356,6 +1356,33 @@ function ReativadosTab({ refreshTick, ordenar, bloqueadosRef, bloqueados, onTogg
 }
 
 function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, selecionado, onToggleSel, children }) {
+  // Incluir WhatsApp NA HORA quando o cliente está sem número (Ailson 27/07/2026):
+  // grava em lojas_clientes.telefone_principal (fonte do CRM) e atualiza o card
+  // local — auto-contido, sem recarregar a lista. Número digitado pela equipe
+  // entra como válido.
+  const [telLocal, setTelLocal] = useState(null);
+  const [salvandoTel, setSalvandoTel] = useState(false);
+  const telEfetivo = telLocal ?? l.telefone;
+  const adicionarWhats = async (e) => {
+    e.stopPropagation();
+    const bruto = window.prompt('WhatsApp da cliente (com DDD):\n\nEx: 11 99888-7766');
+    if (bruto == null) return;
+    let dig = String(bruto).replace(/\D/g, '');
+    if (!dig) return;
+    if (dig.length === 10 || dig.length === 11) dig = '55' + dig;   // sem o 55
+    if (dig.length < 12 || dig.length > 13) { alert('Número inválido — confere o DDD e tenta de novo.'); return; }
+    setSalvandoTel(true);
+    try {
+      const { error } = await supabase.from('lojas_clientes')
+        .update({ telefone_principal: dig, telefone_principal_valido: true })
+        .eq('id', l.cliente_id);
+      if (error) throw error;
+      setTelLocal(dig);
+    } catch (err) {
+      alert('Não salvou: ' + (err?.message || err));
+    }
+    setSalvandoTel(false);
+  };
   return (
     <div
       onClick={() => { if (!abrindo && onAbrir) onAbrir(l.cliente_id); }}
@@ -1387,13 +1414,18 @@ function ClienteCard({ l, bloqueado, onToggle, onAbrir, abrindo, selecionado, on
             </span>
           </div>
           <div style={{ fontSize: fz(12), color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span><Phone size={sz(11)} style={{ verticalAlign: 'middle' }} /> {fmtPhone(l.telefone)}</span>
-            {(!l.telefone || String(l.telefone).trim() === '') && (
-              <span title="Sem número cadastrado — a Sofia não consegue enviar" style={{
-                fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
-                background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4', whiteSpace: 'nowrap',
-                display: 'inline-flex', alignItems: 'center', gap: 3,
-              }}>📵 sem número</span>
+            <span><Phone size={sz(11)} style={{ verticalAlign: 'middle' }} /> {fmtPhone(telEfetivo)}</span>
+            {(!telEfetivo || String(telEfetivo).trim() === '') && (
+              <span onClick={adicionarWhats}
+                title="Sem número cadastrado — clique pra incluir o WhatsApp agora"
+                style={{
+                  fontSize: fz(10.5), padding: '2px 8px', borderRadius: 5, fontWeight: 700,
+                  background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4', whiteSpace: 'nowrap',
+                  display: 'inline-flex', alignItems: 'center', gap: 5, cursor: salvandoTel ? 'wait' : 'pointer',
+                }}>📵 sem número <span style={{ background: '#b4453a', color: '#fff', borderRadius: 4, padding: '0 6px', fontWeight: 700 }}>{salvandoTel ? '…' : '+ adicionar'}</span></span>
+            )}
+            {telLocal && (
+              <span style={{ fontSize: fz(10), padding: '1px 7px', borderRadius: 4, background: '#eafbf0', color: '#27ae60', fontWeight: 700 }}>✓ salvo</span>
             )}
             {children}
           </div>
