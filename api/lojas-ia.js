@@ -1116,14 +1116,21 @@ async function montarContextoSugestoes(vendedoraId) {
   // Conta carteira ANTES dos filtros de pular_ate/kpi_inutil porque o que
   // importa eh o pool disponivel da vendedora, nao o filtrado naquele dia.
   const totalCarteira = (clientes || []).filter(c => !c.arquivado_em).length;
-  const cooldownGeralDias = totalCarteira < 100 ? 7 : 10;
+  // Ailson 28/07/2026: 10d era curto — o cliente expirava e voltava na hora,
+  // muitas vezes com a MESMA pauta (reclamacao Cleide/Tamires: repetidos a
+  // cada ~10 dias). 14d aumenta a rotacao e ajuda a varrer a carteira toda.
+  const cooldownGeralDias = totalCarteira < 100 ? 7 : 14;
   const dataCooldownGeral = new Date(Date.now() - cooldownGeralDias * 86400000).toISOString().slice(0, 10);
 
+  // FIX Ailson 28/07/2026: sugestao de SACOLA tambem conta no cooldown geral.
+  // Antes o .neq('tipo','sacola') abria um furo: cliente com sacola dia 15
+  // voltava como novidade dia 20 (caso real Tamires/Daniela, 5 dias). A
+  // decisao de 20/05 ja dizia "cliente nenhum recebe contato com menos do
+  // ciclo, mesmo que abriu sacola" — agora vale nos dois sentidos.
   const { data: sugestoesRecentes } = await supabase
     .from('lojas_sugestoes_diarias')
     .select('cliente_id, grupo_id, tipo')
     .eq('vendedora_id', vendedoraId)
-    .neq('tipo', 'sacola')
     .gte('data_geracao', dataCooldownGeral);
   // FIX Ailson 21/05/2026: separar Sets pra cliente_id E grupo_id.
   // ANTES o filter so tinha cliente_id e excluia .not('cliente_id','is',null)
