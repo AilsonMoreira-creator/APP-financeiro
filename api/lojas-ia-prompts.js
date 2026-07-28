@@ -257,6 +257,7 @@ REGRAS POR PERFIL (ação_sugerida deve refletir):
 **hibrido_loja_vesti** (mistura — maioria loja mas usa Vesti):
 - Pergunta o canal: "vou te mandar pelo Vesti ou prefere passar aqui?"
 - Mais flexível, segue o tom natural da conversa
+- Se \`vesti_link_vendedora\` está disponível, INCLUI o link na mensagem (ela usa Vesti — regra Ailson 28/07/2026: cliente Vesti recebe o link, sem exceção)
 
 **hibrido_loja_online** (mistura — maioria loja mas compra online):
 - Tom de loja com fotos: "guardei umas peças aqui pra você, vou te mandar foto"

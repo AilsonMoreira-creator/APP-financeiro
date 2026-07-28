@@ -1685,6 +1685,11 @@ async function montarContextoSugestoes(vendedoraId) {
       (meus || []).forEach(c => { nomeDe[c.id] = c.apelido || c.comprador_nome || (c.razao_social ? c.razao_social.split(' ').slice(0, 3).join(' ') : 'cliente'); });
       compradoresVerao = (cv || [])
         .filter(x => nomeDe[x.cliente_id] !== undefined)
+        // FIX Ailson 28/07/2026: a campanha pegava o TOP do rank todo dia sem
+        // olhar o cooldown — mesmos clientes re-sugeridos dia após dia (caso
+        // real: Fran/Inês Rô recebeu preview 21, 22 E 24/07). Cliente já
+        // sugerido nos últimos 7-10d fica fora; o rank rotaciona sozinho.
+        .filter(x => !clientesEmCooldownGeral.has(x.cliente_id) && !clientesEmCooldownSacola.has(x.cliente_id))
         .slice(0, 12)
         .map(x => ({ cliente_id: x.cliente_id, apelido: nomeDe[x.cliente_id], compras_periodo: x.n_compras }));
     }
