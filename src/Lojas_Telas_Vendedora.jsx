@@ -2444,6 +2444,26 @@ export const CardDiaScreen = ({
     }
   }, [sugestaoPendentePosModal, onSelectSugestao]);
 
+  // ALERTAS DE RAJADA no admin (Ailson 28/07/2026): ao abrir a tela da
+  // vendedora, o admin ve quantas telas de atencao ela recebeu em 30 dias
+  // (lojas_acoes tipo_acao='alerta_rajada_exibido').
+  const [alertasRajada30d, setAlertasRajada30d] = useState(null);
+  useEffect(() => {
+    if (!state.isAdmin || !vendedora?.id) { setAlertasRajada30d(null); return; }
+    (async () => {
+      try {
+        const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+        const { count } = await supabase
+          .from('lojas_acoes')
+          .select('id', { count: 'exact', head: true })
+          .eq('vendedora_id', vendedora.id)
+          .eq('tipo_acao', 'alerta_rajada_exibido')
+          .gte('created_at', desde);
+        setAlertasRajada30d(count ?? 0);
+      } catch (e) { /* silent */ }
+    })();
+  }, [state.isAdmin, vendedora?.id]);
+
   // Carrega status de feedback das 7 sugestões pra admin ver badges
   useEffect(() => {
     if (!state.isAdmin || !oficiais.length) {
@@ -2612,6 +2632,18 @@ export const CardDiaScreen = ({
         }
       />
       <div style={{ padding: 16 }}>
+        {state.isAdmin && alertasRajada30d !== null && alertasRajada30d > 0 && (
+          <div style={{
+            background: '#fdecea', border: '1px solid #f1c9c4', borderRadius: 12,
+            padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 20 }}>✋</span>
+            <div style={{ fontSize: fz(13.5), color: '#8a3a30', fontWeight: 600, lineHeight: 1.4 }}>
+              {alertasRajada30d} alerta{alertasRajada30d > 1 ? 's' : ''} de atenção nos últimos 30 dias
+              <span style={{ fontWeight: 400 }}> (sugestões marcadas como enviadas rápido demais)</span>
+            </div>
+          </div>
+        )}
         {/* Card especial de TERCA-FEIRA (Ailson 06/05/2026):
             Resumo motivacional da semana anterior + CTA pra abrir Destaques.
             Aparece SO no dia 2 (terca) e SO se a vendedora tem sugestoes hoje

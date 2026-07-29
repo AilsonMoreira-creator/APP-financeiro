@@ -1787,7 +1787,7 @@ function useLojasModule() {
     let gapsCurtos = 0;
     for (let i = 1; i < janela.length; i++) if (janela[i] - janela[i - 1] < 20000) gapsCurtos++;
     if (janela.length && agora - janela[janela.length - 1] < 20000) gapsCurtos++;
-    if (gapsCurtos >= 3) {
+    if (gapsCurtos >= 2) {  // 3 execucoes coladas => o 4o clique abre (Ailson 28/07)
       setAlertaRajada({ sugestaoId, mensagem });
       if (state.vendedoraAtiva) {
         registrarAcao(
