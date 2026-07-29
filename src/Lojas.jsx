@@ -1791,10 +1791,9 @@ function useLojasModule() {
     leituraCurtaRef.current = 0;
     if (pendente) {
       await executarSugestaoDeFato(pendente.sugestaoId, pendente.mensagem);
-      // fecha o ModalMensagem que ficou aberto atras (fluxo normal de enviada)
-      setShowModal(false);
-      setScreen('cardDia');
     }
+    // showModal/screen vivem no COMPONENTE — o wrapper de la fecha o modal
+    // apos confirmar (fix 29/07: ReferenceError "Can't find variable").
   }, [alertaRajada, executarSugestaoDeFato]);
 
   const handleDispensarSugestao = useCallback(async (sugestaoId, motivo) => {
@@ -1899,6 +1898,10 @@ function useLojasModule() {
     // computed
     clientesEnriquecidos,
     carteiraAtual,
+
+    // freio de rajada / leitura (estado vive no hook; render no componente)
+    alertaRajada,
+    confirmarAlertaRajada,
     
     // actions
     trocarVendedoraAtiva,
@@ -2115,8 +2118,17 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
       maxWidth: mobile ? 460 : 900, margin: '0 auto', minHeight: '100vh',
       background: palette.bg, boxShadow: '0 0 40px rgba(0,0,0,0.06)', position: 'relative',
     }}>
-      {alertaRajada && (
-        <AlertaRajadaModal nome={state.vendedoraAtiva?.nome} variant={alertaRajada.variant || 'rajada'} onConfirmar={confirmarAlertaRajada} />
+      {lojas.alertaRajada && (
+        <AlertaRajadaModal
+          nome={state.vendedoraAtiva?.nome}
+          variant={lojas.alertaRajada.variant || 'rajada'}
+          onConfirmar={async () => {
+            await lojas.confirmarAlertaRajada();
+            // fecha o ModalMensagem (se aberto) e volta pro dia — fluxo de enviada
+            setShowModal(false);
+            setScreen('cardDia');
+          }}
+        />
       )}
       {/* ─── Telas vendedora (Parte 2a) ──────────────────────────────────── */}
       
