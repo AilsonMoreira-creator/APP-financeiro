@@ -413,8 +413,10 @@ export function LoadingScreen({ phase, error, online }) {
 // Tela de atencao do freio de rajada (Ailson 28/07/2026). Nome da vendedora
 // no titulo, botao libera apos 6 segundos — freio de leitura proposital.
 export function AlertaRajadaModal({ nome, onConfirmar, variant = 'rajada' }) {
-  const [resta, setResta] = useState(6);
-  useEffect(() => {
+  // FIX 29/07/2026: este arquivo importa React como namespace (import * as
+  // React) — useState/useEffect soltos quebravam o modulo inteiro em runtime.
+  const [resta, setResta] = React.useState(6);
+  React.useEffect(() => {
     const t = setInterval(() => setResta(r => (r > 0 ? r - 1 : 0)), 1000);
     return () => clearInterval(t);
   }, []);
@@ -430,6 +432,15 @@ export function AlertaRajadaModal({ nome, onConfirmar, variant = 'rajada' }) {
           <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
             Ontem ficaram <b>sugestões sem fazer</b>. Cada cliente que fica pra trás é uma venda que não aconteceu.
           </div>
+        ) : variant === 'leitura' ? (
+          <>
+            <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
+              Suas últimas mensagens foram enviadas com <b>menos de 7 segundos</b> depois de ficarem prontas.
+            </div>
+            <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
+              Você não está lendo as sugestões geradas, só clicando em enviar. A mensagem certa pra cliente certa é o que faz a venda acontecer.
+            </div>
+          </>
         ) : (
           <>
             <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>

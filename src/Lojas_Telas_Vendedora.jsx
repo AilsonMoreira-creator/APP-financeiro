@@ -3554,6 +3554,16 @@ export const SugestaoScreen = ({
         display: 'flex', flexDirection: 'column', gap: 8,
         boxShadow: '0 -2px 8px rgba(0,0,0,0.04)',
       }}>
+        {(!temTelCliente || !temMsgGerada) && (
+          <div style={{
+            background: '#fff7ec', border: '1px solid #f0d9b8', borderRadius: 10,
+            padding: '9px 12px', fontSize: fz(13.5), color: '#8a6420', lineHeight: 1.5,
+          }}>
+            <b>⚠️ Falta pra concluir:</b>
+            {!temTelCliente && <div>📵 Colocar o WhatsApp da cliente (botão WhatsApp ou lápis no card)</div>}
+            {!temMsgGerada && <div>💡 Gerar a mensagem em "Pedir sugestão de mensagem"</div>}
+          </div>
+        )}
         <button onClick={onPedirMensagem} style={{
           background: `linear-gradient(135deg, ${palette.accent} 0%, #3d6b8c 100%)`,
           color: palette.bg, border: 'none', borderRadius: 10,
@@ -3679,6 +3689,11 @@ export const SugestaoScreen = ({
                   borderRadius: 10, padding: 10, marginBottom: 12, resize: 'vertical', color: palette.ink,
                 }}
               />
+              {motivoDispensa.trim().length < 5 && (
+                <div style={{ fontSize: fz(13), color: '#b4453a', fontWeight: 600, marginTop: -6, marginBottom: 12 }}>
+                  ✍️ Colocar o motivo (mínimo 5 letras) pra liberar as opções abaixo
+                </div>
+              )}
             {[
               { motivo: 'pular_hoje', icon: Pause, color: palette.inkSoft, label: 'Pular hoje', sub: 'Volta em 7 dias' },
               { motivo: 'pular_30d', icon: Calendar, color: palette.warn, label: 'Pular 30 dias', sub: 'Cliente sazonal' },
@@ -6853,6 +6868,9 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
   // app pra inserir. Lista personaliza pelo uso: top emojis dela vem primeiro
   // (lojas_estilo_vendedora.emojis), completa com padrao curado.
   const textareaEditRef = useRef(null);
+  // Camada C (29/07/2026): marca quando a mensagem gerada ficou PRONTA na tela;
+  // no envio, leituraMs = agora - pronta => 3 seguidas <7s abre alerta 'leitura'.
+  const msgProntaEmRef = useRef(0);
   const [emojisVendedora, setEmojisVendedora] = useState({});
   useEffect(() => {
     if (!sugestao?.vendedora_id) return;
@@ -6926,7 +6944,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       if (r.ok) {
         fotosProntasModalRef.current = null;
         if (r.via !== 'cancelado') {
-          if (sugestao) { try { handleMarcarSugestaoExecutada(sugestao.id, mensagem).catch(() => {}); } catch { /* bg */ } }
+          if (sugestao) { try { handleMarcarSugestaoExecutada(sugestao.id, mensagem, msgProntaEmRef.current ? Date.now() - msgProntaEmRef.current : null).catch(() => {}); } catch { /* bg */ } }
           onEnviada && onEnviada();
         }
       }
@@ -6953,7 +6971,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       }
       if (!r.ok) { alert('Não consegui compartilhar: ' + (r.erro || 'erro')); return; }
       if (r.via !== 'cancelado') {
-        if (sugestao) { try { handleMarcarSugestaoExecutada(sugestao.id, mensagem).catch(() => {}); } catch { /* bg */ } }
+        if (sugestao) { try { handleMarcarSugestaoExecutada(sugestao.id, mensagem, msgProntaEmRef.current ? Date.now() - msgProntaEmRef.current : null).catch(() => {}); } catch { /* bg */ } }
         onEnviada && onEnviada();
       }
     } finally {
@@ -7032,6 +7050,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               }
               setMensagem(msg);
               setMensagemOriginal(msg);
+              msgProntaEmRef.current = Date.now();
               setStep('pronta');
             } catch (e2) {
               setErro(e2.message || 'Erro ao gerar mensagem');
@@ -7051,6 +7070,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       }
       setMensagem(msg);
       setMensagemOriginal(msg);
+              msgProntaEmRef.current = Date.now();
       setStep('pronta');
     } catch (e) {
       // Rate limit (429): UI amigavel com countdown + auto-retry
@@ -7113,9 +7133,11 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       return;
     }
     if (!confirmarSemEdicao()) return;
+    const leituraMs = msgProntaEmRef.current ? Date.now() - msgProntaEmRef.current : null;
     setMarcandoEnviada(true);
     try {
-      await handleMarcarSugestaoExecutada(sugestao.id, mensagem);
+      const r = await handleMarcarSugestaoExecutada(sugestao.id, mensagem, leituraMs);
+      if (r === null) { setMarcandoEnviada(false); return; }  // alerta aberto — envia so apos o Entendi
       onEnviada && onEnviada();
     } catch (e) {
       alert('Erro ao marcar como enviada: ' + e.message);
@@ -7175,7 +7197,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       // FIX 11/06/2026 (Ailson): redireciona PRIMEIRO (gesto preservado),
       // marca enviada em background — antes o await podia travar o redirect.
       if (sugestao) {
-        try { handleMarcarSugestaoExecutada(sugestao.id, mensagem).catch(() => {}); } catch { /* bg */ }
+        try { handleMarcarSugestaoExecutada(sugestao.id, mensagem, msgProntaEmRef.current ? Date.now() - msgProntaEmRef.current : null).catch(() => {}); } catch { /* bg */ }
       }
       const numeroLimpo = tel.replace(/\D/g, '');
       const numero = numeroLimpo.length === 11 || numeroLimpo.length === 10
@@ -7208,7 +7230,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       }
       setShowCadTel(false);
       if (sugestao) {
-        try { handleMarcarSugestaoExecutada(sugestao.id, mensagem).catch(() => {}); } catch { /* bg */ }
+        try { handleMarcarSugestaoExecutada(sugestao.id, mensagem, msgProntaEmRef.current ? Date.now() - msgProntaEmRef.current : null).catch(() => {}); } catch { /* bg */ }
       }
       const numero = tel.length === 11 || tel.length === 10 ? '55' + tel : tel;
       const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;
@@ -7404,6 +7426,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
                   }
                   setMensagem(msg);
                   setMensagemOriginal(msg);
+              msgProntaEmRef.current = Date.now();
                   setStep('pronta');
                 } catch (err) {
                   setErro(err.message || 'Erro ao gerar mensagem');
@@ -7746,6 +7769,11 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
                   borderRadius: 10, padding: 10, marginBottom: 12, resize: 'vertical', color: palette.ink,
                 }}
               />
+              {motivoDispensa.trim().length < 5 && (
+                <div style={{ fontSize: fz(13), color: '#b4453a', fontWeight: 600, marginTop: -6, marginBottom: 12 }}>
+                  ✍️ Colocar o motivo (mínimo 5 letras) pra liberar as opções abaixo
+                </div>
+              )}
               {[
                 { motivo: 'pular_hoje', icon: Pause, color: palette.inkSoft, label: 'Pular hoje', sub: 'Volta em 7 dias' },
                 { motivo: 'pular_30d', icon: Calendar, color: palette.warn, label: 'Pular 30 dias', sub: 'Cliente sazonal' },

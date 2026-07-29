@@ -1715,7 +1715,13 @@ function useLojasModule() {
   // Confirmou => executa normalmente e o contador zera (voltou a metralhar,
   // a tela volta). Cada exibicao fica registrada em lojas_acoes pro admin.
   const cliquesEnvioRef = useRef([]);
-  const [alertaRajada, setAlertaRajada] = useState(null); // {sugestaoId, mensagem}
+  // Camada C (Ailson 29/07/2026): tempo de LEITURA dentro da sugestao — o
+  // ModalMensagem mede de "mensagem pronta" ate o clique de enviar e passa
+  // leituraMs. 3 envios seguidos com <7s cada => alerta variant 'leitura'
+  // ("nao esta lendo as sugestoes geradas"). Camada independente do freio de
+  // 20s entre sugestoes; todas registram atencao pro admin.
+  const leituraCurtaRef = useRef(0);
+  const [alertaRajada, setAlertaRajada] = useState(null); // {sugestaoId, mensagem, variant}
 
   const executarSugestaoDeFato = useCallback(async (sugestaoId, mensagem) => {
     const sugestao = await marcarSugestaoExecutada(sugestaoId, mensagem);
@@ -1741,14 +1747,30 @@ function useLojasModule() {
     }
   }, [state.userId, state.vendedoraAtiva]);
 
-  const handleMarcarSugestaoExecutada = useCallback(async (sugestaoId, mensagem) => {
+  const handleMarcarSugestaoExecutada = useCallback(async (sugestaoId, mensagem, leituraMs = null) => {
     const agora = Date.now();
+    // Camada C: leitura da mensagem gerada em menos de 7s, 3 seguidas => alerta
+    if (leituraMs != null) {
+      leituraCurtaRef.current = leituraMs < 7000 ? leituraCurtaRef.current + 1 : 0;
+      if (leituraCurtaRef.current >= 3) {
+        setAlertaRajada({ sugestaoId, mensagem, variant: 'leitura' });
+        if (state.vendedoraAtiva) {
+          registrarAcao(
+            { sugestao_id: sugestaoId, tipo_acao: 'alerta_leitura_exibido', resultado: 'exibido' },
+            state.userId,
+            state.vendedoraAtiva.id,
+          );
+        }
+        return null;
+      }
+    }
+    // Camada rajada: 3 execucoes coladas (<20s) => o 4o clique abre
     const janela = cliquesEnvioRef.current.filter(t => agora - t < 30 * 60 * 1000);
     let gapsCurtos = 0;
     for (let i = 1; i < janela.length; i++) if (janela[i] - janela[i - 1] < 20000) gapsCurtos++;
     if (janela.length && agora - janela[janela.length - 1] < 20000) gapsCurtos++;
     if (gapsCurtos >= 2) {  // 3 execucoes coladas => o 4o clique abre (Ailson 28/07)
-      setAlertaRajada({ sugestaoId, mensagem });
+      setAlertaRajada({ sugestaoId, mensagem, variant: 'rajada' });
       if (state.vendedoraAtiva) {
         registrarAcao(
           { sugestao_id: sugestaoId, tipo_acao: 'alerta_rajada_exibido', resultado: 'exibido' },
@@ -1766,7 +1788,13 @@ function useLojasModule() {
     const pendente = alertaRajada;
     setAlertaRajada(null);
     cliquesEnvioRef.current = []; // recomeça a medicao; se metralhar de novo, a tela volta
-    if (pendente) await executarSugestaoDeFato(pendente.sugestaoId, pendente.mensagem);
+    leituraCurtaRef.current = 0;
+    if (pendente) {
+      await executarSugestaoDeFato(pendente.sugestaoId, pendente.mensagem);
+      // fecha o ModalMensagem que ficou aberto atras (fluxo normal de enviada)
+      setShowModal(false);
+      setScreen('cardDia');
+    }
   }, [alertaRajada, executarSugestaoDeFato]);
 
   const handleDispensarSugestao = useCallback(async (sugestaoId, motivo) => {
@@ -2088,7 +2116,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
       background: palette.bg, boxShadow: '0 0 40px rgba(0,0,0,0.06)', position: 'relative',
     }}>
       {alertaRajada && (
-        <AlertaRajadaModal nome={state.vendedoraAtiva?.nome} onConfirmar={confirmarAlertaRajada} />
+        <AlertaRajadaModal nome={state.vendedoraAtiva?.nome} variant={alertaRajada.variant || 'rajada'} onConfirmar={confirmarAlertaRajada} />
       )}
       {/* ─── Telas vendedora (Parte 2a) ──────────────────────────────────── */}
       
