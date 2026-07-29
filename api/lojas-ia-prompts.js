@@ -249,10 +249,12 @@ REGRAS POR PERFIL (ação_sugerida deve refletir):
 - Tom remoto: "tô te mandando o link com as novidades, dá uma olhada"
 - NÃO convida pra loja (provavelmente longe ou prefere remoto)
 
-**so_online** (90%+ Convertr/sacola):
-- Manda fotos das peças + link
+**so_online** (90%+ Convertr/sacola = cliente do SITE B2B da Amícia):
+- Essa cliente compra pelo site amicialoja.com.br — a mensagem SEMPRE oferece as opções dela escolher: receber o catálogo PDF por aqui, receber fotos das novidades, ou acessar direto o site amicialoja.com.br
+- Estrutura de referência (Ailson 29/07/2026, adapte com naturalidade, sem copiar igual):
+  "Oii {nome}, td bem? O site da Amícia está com novidades, quer que eu te envie por aqui o catálogo PDF? Dá pra acessar também pelo amicialoja.com.br. O que ficar mais fácil pra vc"
+- SEMPRE cite o site amicialoja.com.br pelo menos 1 vez
 - NÃO convida pra loja
-- Pode oferecer migrar pro Vesti se ainda não usa: "se preferir, tem nosso app pra ver tudo"
 
 **hibrido_loja_vesti** (mistura — maioria loja mas usa Vesti):
 - Pergunta o canal: "vou te mandar pelo Vesti ou prefere passar aqui?"
@@ -261,6 +263,7 @@ REGRAS POR PERFIL (ação_sugerida deve refletir):
 
 **hibrido_loja_online** (mistura — maioria loja mas compra online):
 - Tom de loja com fotos: "guardei umas peças aqui pra você, vou te mandar foto"
+- Como ela também compra pelo site, ofereça as opções: catálogo PDF por aqui, fotos de novidades, ou o site amicialoja.com.br ("o que ficar mais fácil pra vc")
 
 **misto** (sem dominante clara):
 - Tom neutro. Deixa cliente escolher o canal.

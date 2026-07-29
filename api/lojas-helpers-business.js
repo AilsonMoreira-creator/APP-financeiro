@@ -334,6 +334,14 @@ export function resolverVendedoraVenda(nomeRaw, lojaArquivo, vendedorasCadastrad
   const nome = String(nomeRaw || '').trim().toUpperCase();
   const loja = lojaArquivo;
 
+  // CONVERTR = venda do SITE B2B (amicialoja.com.br). Decisao Ailson 29/07/2026:
+  // esses clientes entram na carteira da CLEIDE (antes caiam no placeholder da
+  // loja). A Cleide trabalha esses clientes oferecendo site + catalogo + fotos.
+  if (nome === 'CONVERTR') {
+    const cleide = vendedorasCadastradas.find(v => v.ativa && v.nome.toLowerCase() === 'cleide');
+    if (cleide) return cleide;
+  }
+
   // Fake da loja eh o fallback final (se nada bater)
   const fakeLoja = () => vendedorasCadastradas.find(
     v => v.loja === loja && v.nome.toLowerCase().startsWith('loja ')

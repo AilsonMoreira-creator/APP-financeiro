@@ -2239,7 +2239,9 @@ async function montarContextoMensagem(sug, contextoExtra) {
       const con = kpi.qtd_compras_convertr || 0;
       const total = fis + ves + con;
       if (total === 0) {
-        perfilCanal = cliente.canal_cadastro === 'vesti' ? 'so_cadastro_vesti' : 'sem_dados';
+        perfilCanal = cliente.canal_cadastro === 'vesti' ? 'so_cadastro_vesti'
+          : cliente.canal_cadastro === 'convertr' ? 'so_online'  // cadastro do site B2B (Ailson 29/07)
+          : 'sem_dados';
       } else {
         const pctF = fis / total, pctV = ves / total, pctC = con / total;
         if (pctF >= 0.9) perfilCanal = 'so_presencial';
@@ -2935,7 +2937,9 @@ function montarMessagesSugestoes(ctx) {
       const totalCompras = fis + ves + con;
       let perfilCanal;
       if (totalCompras === 0) {
-        perfilCanal = c.canal_cadastro === 'vesti' ? 'so_cadastro_vesti' : 'sem_dados';
+        perfilCanal = c.canal_cadastro === 'vesti' ? 'so_cadastro_vesti'
+          : c.canal_cadastro === 'convertr' ? 'so_online'  // cadastro do site B2B (Ailson 29/07)
+          : 'sem_dados';
       } else {
         const pctFis = fis / totalCompras;
         const pctVes = ves / totalCompras;
