@@ -212,6 +212,17 @@ export async function processarUma(sugestaoId, acao, textoEditado, aprovadaPor) 
   if (sug.tipo !== 'primeira_mensagem') {
     const parsed = parseMarcadoresMidia(textoFinalBruto);
     textoFinal = parsed.textoLimpo;
+    // GUARD ASSISTENTE_ANEXAR (Ailson 29/07/2026, caso Maria Aparecida):
+    // o marcador e um PEDIDO da Sofia pra assistente anexar/confirmar algo
+    // antes de enviar — vazou pra cliente quando o card foi aprovado sem
+    // edicao. Igual ao guard do envio manual: bloqueia e pede edicao.
+    if (textoFinal && /\[ASSISTENTE_ANEXAR/i.test(textoFinal)) {
+      return res.status(422).json({
+        ok: false,
+        erro: 'marcador_assistente_anexar',
+        detalhe: 'A Sofia pediu pra anexar/confirmar algo antes de enviar. Edite a mensagem, remova o marcador [ASSISTENTE_ANEXAR:...] e anexe/confirme o que ela pediu.',
+      });
+    }
     // POLIMENTO NO ENVIO (Ailson 05/07/2026) — determinístico, roda pra TODO
     // envio de replica (auto, aprovação, resgate), no horário do ENVIO:
     //   1. Saudação de período: sugestão gerada num período e enviada em outro
