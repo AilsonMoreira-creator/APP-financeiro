@@ -7379,7 +7379,14 @@ function Bubble({ m, botao }) {
       ? `escrita por ${m.enviada_login || 'equipe'}`
       : ehAuto ? 'enviada automaticamente pela Sofia' : undefined;
   const labelSofia = (
-    <span title={tituloAutoria} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: tituloAutoria ? 'help' : 'default' }}>
+    <span
+      title={tituloAutoria}
+      onClick={(e) => {
+        if (!tituloAutoria) return;
+        e.stopPropagation();
+        alert(`Mensagem ${tituloAutoria}`);
+      }}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: tituloAutoria ? 'pointer' : 'default' }}>
       {ehAuto
         ? <BotIcon size={10} color={palette.accent} strokeWidth={1.8} fill="none" />
         : <UserIcon size={9} color={palette.accent} />} Sofia
