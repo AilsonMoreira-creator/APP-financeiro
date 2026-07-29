@@ -410,6 +410,55 @@ export function LoadingScreen({ phase, error, online }) {
 // → nova frase. Total de ~60 frases = ~2 meses sem repetir pra mesma vendedora
 // (ampliada de ~30 pra ~60 a pedido do Ailson, 28/07/2026).
 
+// Tela de atencao do freio de rajada (Ailson 28/07/2026). Nome da vendedora
+// no titulo, botao libera apos 6 segundos — freio de leitura proposital.
+export function AlertaRajadaModal({ nome, onConfirmar, variant = 'rajada' }) {
+  const [resta, setResta] = useState(6);
+  useEffect(() => {
+    const t = setInterval(() => setResta(r => (r > 0 ? r - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const primeiro = String(nome || '').trim().split(' ')[0];
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(30,40,50,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, maxWidth: 420, width: '100%', padding: '26px 22px', fontFamily: FONT, boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }}>
+        <div style={{ fontSize: 34, textAlign: 'center', marginBottom: 8 }}>✋</div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: palette.ink, textAlign: 'center', marginBottom: 12 }}>
+          Um minuto, {primeiro}!
+        </div>
+        {variant === 'pendentes' ? (
+          <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
+            Ontem ficaram <b>sugestões sem fazer</b>. Cada cliente que fica pra trás é uma venda que não aconteceu.
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
+              Suas últimas sugestões foram marcadas como enviadas com <b>menos de 20 segundos</b> entre uma e outra.
+            </div>
+            <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
+              Em 20 segundos não dá pra ler a sugestão, gerar a mensagem, editar e enviar de verdade.
+            </div>
+          </>
+        )}
+        <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 18 }}>
+          O app existe pra te ajudar a <b>vender mais</b>. Cada sugestão bem trabalhada é <b>comissão no seu bolso</b> e venda pra loja. Leva a sério que o resultado aparece. 💪
+        </div>
+        <button
+          onClick={onConfirmar}
+          disabled={resta > 0}
+          style={{
+            width: '100%', padding: '13px 0', borderRadius: 10, border: 'none',
+            fontFamily: FONT, fontSize: 14.5, fontWeight: 700,
+            background: resta > 0 ? '#c8c2b8' : palette.accent, color: '#fff',
+            cursor: resta > 0 ? 'not-allowed' : 'pointer', transition: 'background 0.3s',
+          }}>
+          {resta > 0 ? `Aguarde ${resta}s…` : 'Entendi, vou fazer com atenção'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export const FRASES_MOTIVACIONAIS = [
   // Engraçadas / casuais
   'Reage mulher, boleto não espera 😂',

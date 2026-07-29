@@ -51,6 +51,7 @@ import {
   Header, StatusDot, TabBar, SectionTitle, LampIcon, LojaIcon,
   fz, sz, TelefoneCopiavel, FotoProdutoLojas, saudacaoHora, emojiHora, fraseDoDia,
   adminComSaudacao, supabase, spinKeyframes, refDisplay, formatarTelefone,
+  AlertaRajadaModal,
 } from './Lojas_Shared.jsx';
 
 // Aba 'Produtos' (admin only) — raio-x de produtos. Isolado em arquivo
@@ -2419,6 +2420,20 @@ export const CardDiaScreen = ({
   };
 
   const handleSelectSugestao = useCallback((s) => {
+    // ALERTA DE PENDENTES (28/07/2026): ontem ficaram 2+ sem fazer => a
+    // PRIMEIRA sugestao clicada hoje abre a tela de atencao. 1x por sessao,
+    // registrada em lojas_acoes pro admin.
+    if (pendentesOntem >= 2 && !alertaPendentesJaMostrouRef.current) {
+      alertaPendentesJaMostrouRef.current = true;
+      setSugestaoPosPendentes(s);
+      setAlertaPendentesAberto(true);
+      try {
+        supabase.from('lojas_acoes').insert({
+          vendedora_id: vendedora?.id, tipo_acao: 'alerta_pendentes_exibido', resultado: 'exibido',
+        }).then(() => {});
+      } catch (e) { /* silent */ }
+      return;
+    }
     // Se for a última sugestão E modal nunca foi tentado nessa sessão E
     // tem 7 sugestões (carteira completa) → tenta abrir modal antes
     if (
@@ -2433,7 +2448,16 @@ export const CardDiaScreen = ({
       return;
     }
     onSelectSugestao(s);
-  }, [feedbackJaTentou, oficiais.length, prioridadeMaxOficial, onSelectSugestao]);
+  }, [feedbackJaTentou, oficiais.length, prioridadeMaxOficial, onSelectSugestao, pendentesOntem, vendedora?.id]);
+
+  const confirmarAlertaPendentes = useCallback(() => {
+    setAlertaPendentesAberto(false);
+    if (sugestaoPosPendentes) {
+      const s = sugestaoPosPendentes;
+      setSugestaoPosPendentes(null);
+      onSelectSugestao(s);
+    }
+  }, [sugestaoPosPendentes, onSelectSugestao]);
 
   const handleFecharModalFeedback = useCallback(() => {
     setFeedbackModalAberto(false);
@@ -2443,6 +2467,68 @@ export const CardDiaScreen = ({
       onSelectSugestao(s);
     }
   }, [sugestaoPendentePosModal, onSelectSugestao]);
+
+  // PARABENS DE SEGUNDA (Ailson 28/07/2026, ideia 3): reforco positivo pra quem
+  // trabalhou com capricho na semana anterior (>=10 execucoes e ritmo medio
+  // >=2min entre uma e outra). Aparece toda SEGUNDA + janela de estreia
+  // 29-31/07/2026 (pra Celia ver ja amanha).
+  const [parabensSemana, setParabensSemana] = useState(null); // {n}
+  useEffect(() => {
+    if (!vendedora?.id) { setParabensSemana(null); return; }
+    const hojeStr = new Date().toISOString().slice(0, 10);
+    const estreia = hojeStr >= '2026-07-29' && hojeStr <= '2026-07-31';
+    if (new Date().getDay() !== 1 && !estreia) { setParabensSemana(null); return; }
+    (async () => {
+      try {
+        const desde = new Date(Date.now() - 7 * 86400000).toISOString();
+        const { data } = await supabase
+          .from('lojas_sugestoes_diarias')
+          .select('executada_em')
+          .eq('vendedora_id', vendedora.id)
+          .not('executada_em', 'is', null)
+          .gte('executada_em', desde)
+          .order('executada_em');
+        const ts = (data || []).map(r => new Date(r.executada_em).getTime());
+        if (ts.length < 10) { setParabensSemana(null); return; }
+        const gaps = [];
+        for (let i = 1; i < ts.length; i++) { const g = ts[i] - ts[i - 1]; if (g < 3600000) gaps.push(g); }
+        const medio = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
+        setParabensSemana(medio >= 120000 ? { n: ts.length } : null);
+      } catch (e) { /* silent */ }
+    })();
+  }, [vendedora?.id]);
+
+  // ALERTA DE PENDENTES (Ailson 28/07/2026): ficaram 2+ sugestoes sem fazer no
+  // ultimo dia com sugestoes => ao clicar na PRIMEIRA de hoje, abre a tela de
+  // atencao (variante "deixar sugestoes sem fazer") e registra pro admin.
+  const [pendentesOntem, setPendentesOntem] = useState(0);
+  const [alertaPendentesAberto, setAlertaPendentesAberto] = useState(false);
+  const [sugestaoPosPendentes, setSugestaoPosPendentes] = useState(null);
+  const alertaPendentesJaMostrouRef = useRef(false);
+  useEffect(() => {
+    if (!vendedora?.id) { setPendentesOntem(0); return; }
+    (async () => {
+      try {
+        const hojeStr = new Date().toISOString().slice(0, 10);
+        const { data: ult } = await supabase
+          .from('lojas_sugestoes_diarias')
+          .select('data_geracao')
+          .eq('vendedora_id', vendedora.id)
+          .lt('data_geracao', hojeStr)
+          .order('data_geracao', { ascending: false })
+          .limit(1);
+        const diaAnterior = ult?.[0]?.data_geracao;
+        if (!diaAnterior) return;
+        const { count } = await supabase
+          .from('lojas_sugestoes_diarias')
+          .select('id', { count: 'exact', head: true })
+          .eq('vendedora_id', vendedora.id)
+          .eq('data_geracao', diaAnterior)
+          .or('status.is.null,status.eq.pendente');
+        setPendentesOntem(count ?? 0);
+      } catch (e) { /* silent */ }
+    })();
+  }, [vendedora?.id]);
 
   // ALERTAS DE RAJADA no admin (Ailson 28/07/2026): ao abrir a tela da
   // vendedora, o admin ve quantas telas de atencao ela recebeu em 30 dias
@@ -2631,7 +2717,22 @@ export const CardDiaScreen = ({
           </button>
         }
       />
+      {alertaPendentesAberto && (
+        <AlertaRajadaModal nome={vendedora?.nome} variant="pendentes" onConfirmar={confirmarAlertaPendentes} />
+      )}
       <div style={{ padding: 16 }}>
+        {parabensSemana && (
+          <div style={{
+            background: 'linear-gradient(135deg, #eafbf0 0%, #f7f4f0 100%)',
+            border: '1px solid #b8dfc8', borderRadius: 12,
+            padding: '12px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 24 }}>🏆</span>
+            <div style={{ fontSize: fz(13.5), color: '#1e6e42', lineHeight: 1.45 }}>
+              <b>Parabéns, {String(vendedora?.nome || '').split(' ')[0]}!</b> Na última semana vc trabalhou {parabensSemana.n} sugestões com capricho, uma por uma. Esse cuidado vira venda e comissão. Continua assim! 👏
+            </div>
+          </div>
+        )}
         {state.isAdmin && alertasRajada30d !== null && alertasRajada30d > 0 && (
           <div style={{
             background: '#fdecea', border: '1px solid #f1c9c4', borderRadius: 12,
@@ -2978,6 +3079,7 @@ export const SugestaoScreen = ({
 }) => {
   const { state, handleEditarApelido, handleMarcarSugestaoExecutada, handleDispensarSugestao, handleEditarTelefone } = lojas;
   const [showRecusa, setShowRecusa] = useState(false);
+  const [motivoDispensa, setMotivoDispensa] = useState('');  // dispensa exige motivo escrito (28/07/2026)
   const [apelidoEdit, setApelidoEdit] = useState(false);
   const [salvandoApelido, setSalvandoApelido] = useState(false);
   const [enviandoWhats, setEnviandoWhats] = useState(false);
@@ -3033,7 +3135,16 @@ export const SugestaoScreen = ({
     }
   };
 
+  // GATES (Ailson 28/07/2026, "quero dificultar mesmo"):
+  //   - sem WhatsApp cadastrado => enviar E dispensar travados (cadastra primeiro)
+  //   - sem mensagem gerada => "Já enviei" travado e o WhatsApp leva pro fluxo
+  //     de gerar mensagem (o envio de verdade acontece no ModalMensagem)
+  const temTelCliente = !!((cliente?.telefone_principal) || '').trim();
+  const temMsgGerada = !!(sugestao?.mensagem_gerada);
+
   const marcarEnviada = async () => {
+    if (!temTelCliente) { alert('Cadastra o WhatsApp da cliente primeiro (botão WhatsApp ou lápis no card).'); return; }
+    if (!temMsgGerada) { alert('Gera a mensagem primeiro em "Pedir sugestão de mensagem".'); return; }
     try {
       await handleMarcarSugestaoExecutada(sugestao.id, null);
       onMarcarEnviada && onMarcarEnviada();
@@ -3054,6 +3165,9 @@ export const SugestaoScreen = ({
       setShowCadTelefone(true);
       return;
     }
+    // Sem mensagem gerada, o WhatsApp direto virava atalho pra marcar enviada
+    // sem trabalhar a sugestao — agora leva pro fluxo de mensagem (28/07/2026).
+    if (!temMsgGerada) { onPedirMensagem && onPedirMensagem(); return; }
     // FIX 11/06/2026 (Ailson): o await da API rodava ANTES do redirect — se a
     // chamada demorasse/falhasse, o WhatsApp nunca abria ("clico e não vai").
     // Agora: redireciona NA HORA (gesto do toque preservado) e marca executada
@@ -3464,18 +3578,25 @@ export const SugestaoScreen = ({
           }}>
             <MessageCircle size={sz(20)} /> {enviandoWhats ? 'Abrindo…' : 'WhatsApp'}
           </button>
-          <button onClick={marcarEnviada} style={{
-            flex: 1, background: palette.surface, color: palette.accent,
-            border: `1.5px solid ${palette.accent}`, borderRadius: 10, padding: '11px',
-            fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+          <button onClick={marcarEnviada} disabled={!temTelCliente || !temMsgGerada}
+            title={!temTelCliente ? 'Cadastra o WhatsApp da cliente primeiro' : !temMsgGerada ? 'Gera a mensagem primeiro' : undefined}
+            style={{
+            flex: 1, background: palette.surface, color: (!temTelCliente || !temMsgGerada) ? palette.inkMuted : palette.accent,
+            border: `1.5px solid ${(!temTelCliente || !temMsgGerada) ? palette.beige : palette.accent}`, borderRadius: 10, padding: '11px',
+            fontSize: fz(15), fontWeight: 600, cursor: (!temTelCliente || !temMsgGerada) ? 'not-allowed' : 'pointer', fontFamily: FONT,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            opacity: (!temTelCliente || !temMsgGerada) ? 0.55 : 1,
           }}><Check size={sz(17)} /> Já enviei</button>
-          <button onClick={() => setShowRecusa(true)} style={{
+          <button onClick={() => { if (!temTelCliente) { alert('Cadastra o WhatsApp da cliente primeiro. Sem número, nem dispensar dá.'); return; } setShowRecusa(true); }}
+            disabled={!temTelCliente}
+            title={!temTelCliente ? 'Cadastra o WhatsApp da cliente primeiro' : undefined}
+            style={{
             flex: 1, background: palette.surface, color: palette.inkSoft,
             border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
-            fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
+            fontSize: fz(15), fontWeight: 600, cursor: !temTelCliente ? 'not-allowed' : 'pointer', fontFamily: FONT,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          }}><X size={sz(17)} /> Não faz sentido</button>
+            opacity: !temTelCliente ? 0.55 : 1,
+          }}><X size={sz(17)} /> Dispensar</button>
         </div>
       </div>
 
@@ -3545,8 +3666,19 @@ export const SugestaoScreen = ({
             background: palette.surface, borderRadius: '16px 16px 0 0',
             padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
           }}>
-            <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>Por que não faz sentido?</div>
-            <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16 }}>Escolha pra IA aprender o que melhor se encaixa</div>
+            <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>Dispensar sugestão</div>
+            <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 10 }}>Escreve o motivo (mínimo 5 letras) e escolhe o que fazer — a IA aprende com isso</div>
+              <textarea
+                value={motivoDispensa}
+                onChange={e => setMotivoDispensa(e.target.value)}
+                placeholder="Ex: cliente avisou que só compra em setembro"
+                rows={2}
+                style={{
+                  width: '100%', boxSizing: 'border-box', fontFamily: FONT, fontSize: fz(15),
+                  border: `1.5px solid ${motivoDispensa.trim().length >= 5 ? palette.beige : '#f1c9c4'}`,
+                  borderRadius: 10, padding: 10, marginBottom: 12, resize: 'vertical', color: palette.ink,
+                }}
+              />
             {[
               { motivo: 'pular_hoje', icon: Pause, color: palette.inkSoft, label: 'Pular hoje', sub: 'Volta em 7 dias' },
               { motivo: 'pular_30d', icon: Calendar, color: palette.warn, label: 'Pular 30 dias', sub: 'Cliente sazonal' },
@@ -3554,7 +3686,10 @@ export const SugestaoScreen = ({
             ].map((op, i) => {
               const OpIcon = op.icon;
               return (
-                <button key={i} onClick={() => dispensar(op.motivo)} style={{
+                <button key={i} onClick={() => {
+                  if (motivoDispensa.trim().length < 5) { alert('Escreve o motivo primeiro (mínimo 5 letras).'); return; }
+                  dispensar(`${op.motivo}: ${motivoDispensa.trim()}`);
+                }} style={{
                   width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
                   borderRadius: 10, padding: 14, marginBottom: 8, cursor: 'pointer', fontFamily: FONT,
                   display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
@@ -6828,6 +6963,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
 
   // Modal de recusa "Nao faz sentido"
   const [showRecusa, setShowRecusa] = useState(false);
+  const [motivoDispensa, setMotivoDispensa] = useState('');  // dispensa exige motivo escrito (28/07/2026)
 
   // Modal de Contexto pré-mensagem — Sprint B (Ailson 13/05/2026)
   // Backend dispara quando precisa de info extra (ex: trilha winback S2/S3).
@@ -6964,11 +7100,19 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
     setTimeout(() => setCopiado(false), 2000);
   };
 
+  // Envio sem NENHUMA alteracao pede confirmacao explicita (Ailson 28/07/2026):
+  // editar qualquer ponto libera direto; sem editar, confirma que vai como esta.
+  const confirmarSemEdicao = () => {
+    if (!mensagemOriginal || mensagem !== mensagemOriginal) return true;
+    return window.confirm('Você não alterou nada na mensagem.\n\nEnviar exatamente como a IA gerou?');
+  };
+
   const marcarEnviada = async () => {
     if (!sugestao) {
       onClose && onClose();
       return;
     }
+    if (!confirmarSemEdicao()) return;
     setMarcandoEnviada(true);
     try {
       await handleMarcarSugestaoExecutada(sugestao.id, mensagem);
@@ -7025,6 +7169,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       setShowCadTel(true);
       return;
     }
+    if (!confirmarSemEdicao()) return;
     setEnviandoWhats(true);
     try {
       // FIX 11/06/2026 (Ailson): redireciona PRIMEIRO (gesto preservado),
@@ -7588,8 +7733,19 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               background: palette.surface, borderRadius: '16px 16px 0 0',
               padding: 20, width: '100%', maxWidth: 500, fontFamily: FONT,
             }}>
-              <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>Por que não faz sentido?</div>
-              <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 16 }}>Escolha pra IA aprender o que melhor se encaixa</div>
+              <div style={{ fontSize: fz(18), fontWeight: 600, color: palette.ink, marginBottom: 4 }}>Dispensar sugestão</div>
+              <div style={{ fontSize: fz(14), color: palette.inkSoft, marginBottom: 10 }}>Escreve o motivo (mínimo 5 letras) e escolhe o que fazer — a IA aprende com isso</div>
+              <textarea
+                value={motivoDispensa}
+                onChange={e => setMotivoDispensa(e.target.value)}
+                placeholder="Ex: cliente avisou que só compra em setembro"
+                rows={2}
+                style={{
+                  width: '100%', boxSizing: 'border-box', fontFamily: FONT, fontSize: fz(15),
+                  border: `1.5px solid ${motivoDispensa.trim().length >= 5 ? palette.beige : '#f1c9c4'}`,
+                  borderRadius: 10, padding: 10, marginBottom: 12, resize: 'vertical', color: palette.ink,
+                }}
+              />
               {[
                 { motivo: 'pular_hoje', icon: Pause, color: palette.inkSoft, label: 'Pular hoje', sub: 'Volta em 7 dias' },
                 { motivo: 'pular_30d', icon: Calendar, color: palette.warn, label: 'Pular 30 dias', sub: 'Cliente sazonal' },
@@ -7597,7 +7753,10 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
               ].map((op, i) => {
                 const OpIcon = op.icon;
                 return (
-                  <button key={i} onClick={() => dispensar(op.motivo)} style={{
+                  <button key={i} onClick={() => {
+                  if (motivoDispensa.trim().length < 5) { alert('Escreve o motivo primeiro (mínimo 5 letras).'); return; }
+                  dispensar(`${op.motivo}: ${motivoDispensa.trim()}`);
+                }} style={{
                     width: '100%', background: palette.surface, border: `1px solid ${palette.beige}`,
                     borderRadius: 10, padding: 14, marginBottom: 8, cursor: 'pointer', fontFamily: FONT,
                     display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
