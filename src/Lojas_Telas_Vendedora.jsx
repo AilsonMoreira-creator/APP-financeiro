@@ -6916,6 +6916,20 @@ function renderMensagemComLinks(texto) {
 }
 
 
+// Variantes do aviso de envio SEM EDICAO (Ailson 29/07/2026): modal proprio no
+// lugar do window.confirm (que mostrava "app-financeiro...vercel.app diz").
+// Sorteia uma a cada exibicao; todas reforcam atendimento humano = mais venda.
+const VARIANTES_SEM_EDICAO = [
+  { pergunta: 'Você não alterou nada na mensagem. Vai enviar exatamente como a IA gerou?',
+    lembrete: 'Quanto mais humano o atendimento, mais venda é gerada.' },
+  { pergunta: 'A mensagem vai do jeitinho que a IA escreveu, sem nenhum toque seu. Envia assim mesmo?',
+    lembrete: 'Um detalhe pessoal seu deixa a conversa mais humana. E atendimento humano vende mais.' },
+  { pergunta: 'Enviar sem mudar nadinha? A sugestão é só um rascunho.',
+    lembrete: 'Seu jeito de falar com a cliente é o que transforma mensagem em venda.' },
+  { pergunta: 'Nenhuma alteração na mensagem. Tem certeza que vai assim?',
+    lembrete: 'Uma palavrinha sua faz a cliente sentir que é você do outro lado. Isso gera mais venda.' },
+];
+
 export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) => {
   const { state, handleGerarMensagem, handleEditarApelido, handleEditarTelefone, handleMarcarSugestaoExecutada, handleDispensarSugestao, handleSalvarEdicaoMensagem } = lojas;
 
@@ -7202,17 +7216,22 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
 
   // Envio sem NENHUMA alteracao pede confirmacao explicita (Ailson 28/07/2026):
   // editar qualquer ponto libera direto; sem editar, confirma que vai como esta.
-  const confirmarSemEdicao = () => {
+  const [confirmaSemEd, setConfirmaSemEd] = useState(null); // {variante, prosseguir}
+  const confirmarSemEdicao = (prosseguir) => {
     if (!mensagemOriginal || mensagem !== mensagemOriginal) return true;
-    return window.confirm('Você não alterou nada na mensagem.\n\nEnviar exatamente como a IA gerou?');
+    setConfirmaSemEd({
+      variante: VARIANTES_SEM_EDICAO[Math.floor(Math.random() * VARIANTES_SEM_EDICAO.length)],
+      prosseguir,
+    });
+    return false;
   };
 
-  const marcarEnviada = async () => {
+  const marcarEnviada = async (forcadoSemEdicao = false) => {
     if (!sugestao) {
       onClose && onClose();
       return;
     }
-    if (!confirmarSemEdicao()) return;
+    if (!forcadoSemEdicao && !confirmarSemEdicao(() => marcarEnviada(true))) return;
     const leituraMs = msgProntaEmRef.current ? Date.now() - msgProntaEmRef.current : null;
     setMarcandoEnviada(true);
     try {
@@ -7271,7 +7290,7 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       setShowCadTel(true);
       return;
     }
-    if (!confirmarSemEdicao()) return;
+    if (!opts.forcadoSemEdicao && !confirmarSemEdicao(() => abrirWhatsAppComMsg({ ...opts, forcadoSemEdicao: true }))) return;
     setEnviandoWhats(true);
     try {
       // FIX 11/06/2026 (Ailson): redireciona PRIMEIRO (gesto preservado),
@@ -7351,6 +7370,34 @@ export const ModalMensagem = ({ lojas, sugestao, cliente, onClose, onEnviada }) 
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
       padding: 16, fontFamily: FONT,
     }} onClick={onClose}>
+      {confirmaSemEd && (
+        <div onClick={e => e.stopPropagation()} style={{
+          position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(30,40,50,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{ background: '#fff', borderRadius: 16, maxWidth: 400, width: '100%', padding: '24px 20px', fontFamily: FONT, boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize: fz(16.5), fontWeight: 800, color: palette.ink, marginBottom: 10 }}>
+              {String(state.vendedoraAtiva?.nome || '').split(' ')[0]}
+            </div>
+            <div style={{ fontSize: fz(14.5), color: palette.ink, lineHeight: 1.55, marginBottom: 12 }}>
+              {confirmaSemEd.variante.pergunta}
+            </div>
+            <div style={{ fontSize: fz(13), color: '#1e6e42', background: '#eafbf0', borderRadius: 8, padding: '9px 11px', marginBottom: 18, lineHeight: 1.5 }}>
+              💚 {confirmaSemEd.variante.lembrete}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setConfirmaSemEd(null)} style={{
+                flex: 1.2, padding: '12px 0', borderRadius: 10, border: 'none', fontFamily: FONT,
+                fontSize: fz(14), fontWeight: 700, background: palette.accent, color: '#fff', cursor: 'pointer',
+              }}>Vou personalizar</button>
+              <button onClick={() => { const p = confirmaSemEd.prosseguir; setConfirmaSemEd(null); if (p) p(); }} style={{
+                flex: 1, padding: '12px 0', borderRadius: 10, border: `1.5px solid ${palette.beige}`, fontFamily: FONT,
+                fontSize: fz(13.5), fontWeight: 600, background: palette.surface, color: palette.inkSoft, cursor: 'pointer',
+              }}>Enviar assim mesmo</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div onClick={e => e.stopPropagation()} style={{
         background: palette.surface, borderRadius: 16, padding: 20,
         width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto',
