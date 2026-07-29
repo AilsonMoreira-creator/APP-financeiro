@@ -2468,6 +2468,68 @@ export const CardDiaScreen = ({
     }
   }, [sugestaoPendentePosModal, onSelectSugestao]);
 
+  // AVISOS DE RESPONSAVEL (Ailson 29/07/2026): a Celia e responsavel pela loja
+  // do Bom Retiro. Todo alerta de atencao que Vanessa ou Fran levarem vira um
+  // aviso pra Celia assim que ela abre o modulo: pendencias de ontem (contagem
+  // real) + alertas de leitura/rajada das ultimas 48h. Tom de gestao: "vamos
+  // ver com ela", "precisamos resolver".
+  const [avisosResponsavel, setAvisosResponsavel] = useState([]);
+  useEffect(() => {
+    if (!vendedora?.nome || vendedora.nome !== 'Célia') { setAvisosResponsavel([]); return; }
+    (async () => {
+      try {
+        const { data: monitoradas } = await supabase
+          .from('lojas_vendedoras')
+          .select('id, nome')
+          .in('nome', ['Vanessa', 'Fran'])
+          .eq('ativa', true);
+        if (!monitoradas?.length) return;
+        const avisos = [];
+        const hojeStr = new Date().toISOString().slice(0, 10);
+        const desde48h = new Date(Date.now() - 48 * 3600000).toISOString();
+        for (const m of monitoradas) {
+          const primeiro = m.nome.split(' ')[0];
+          // pendencias reais do ultimo dia de sugestoes
+          const { data: ult } = await supabase
+            .from('lojas_sugestoes_diarias')
+            .select('data_geracao')
+            .eq('vendedora_id', m.id)
+            .lt('data_geracao', hojeStr)
+            .order('data_geracao', { ascending: false })
+            .limit(1);
+          const diaAnterior = ult?.[0]?.data_geracao;
+          if (diaAnterior) {
+            const { count: pend } = await supabase
+              .from('lojas_sugestoes_diarias')
+              .select('id', { count: 'exact', head: true })
+              .eq('vendedora_id', m.id)
+              .eq('data_geracao', diaAnterior)
+              .or('status.is.null,status.eq.pendente');
+            if ((pend ?? 0) >= 2) {
+              avisos.push(`Célia, a ${primeiro} deixou de enviar ${pend} sugestões ontem. Se ela tem dúvida ou algum outro motivo, vamos ver com ela. Mas precisamos resolver: todas as sugestões têm que ser feitas.`);
+            }
+          }
+          // alertas de leitura e rajada nas ultimas 48h
+          const { data: acoes } = await supabase
+            .from('lojas_acoes')
+            .select('tipo_acao')
+            .eq('vendedora_id', m.id)
+            .in('tipo_acao', ['alerta_leitura_exibido', 'alerta_rajada_exibido'])
+            .gte('created_at', desde48h);
+          const nLeitura = (acoes || []).filter(x => x.tipo_acao === 'alerta_leitura_exibido').length;
+          const nRajada = (acoes || []).filter(x => x.tipo_acao === 'alerta_rajada_exibido').length;
+          if (nLeitura > 0) {
+            avisos.push(`Célia, a ${primeiro} não está lendo as sugestões geradas, só clicando em enviar. Vamos mostrar pra ela a importância de uma comunicação humanizada. Isso gera muito mais venda.`);
+          }
+          if (nRajada > 0) {
+            avisos.push(`Célia, a ${primeiro} marcou várias sugestões como enviadas em sequência muito rápida. Vale conferir com ela se as mensagens estão indo de verdade pras clientes.`);
+          }
+        }
+        setAvisosResponsavel(avisos);
+      } catch (e) { /* silent */ }
+    })();
+  }, [vendedora?.id, vendedora?.nome]);
+
   // PARABENS DE SEGUNDA (Ailson 28/07/2026, ideia 3): reforco positivo pra quem
   // trabalhou com capricho na semana anterior (>=10 execucoes e ritmo medio
   // >=2min entre uma e outra). Aparece toda SEGUNDA + janela de estreia
@@ -2721,6 +2783,23 @@ export const CardDiaScreen = ({
         <AlertaRajadaModal nome={vendedora?.nome} variant="pendentes" onConfirmar={confirmarAlertaPendentes} />
       )}
       <div style={{ padding: 16 }}>
+        {avisosResponsavel.length > 0 && (
+          <div style={{
+            background: '#f3eefb', border: '1px solid #cdbcec', borderRadius: 12,
+            padding: '12px 14px', marginBottom: 12,
+          }}>
+            <div style={{ fontSize: fz(13), fontWeight: 800, color: '#5b3d99', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              👩‍💼 Avisos da loja (responsável)
+            </div>
+            {avisosResponsavel.map((txt, i) => (
+              <div key={i} style={{
+                fontSize: fz(13.5), color: '#4a3670', lineHeight: 1.5,
+                paddingTop: i > 0 ? 8 : 0, marginTop: i > 0 ? 8 : 0,
+                borderTop: i > 0 ? '1px solid #ddd2f0' : 'none',
+              }}>{txt}</div>
+            ))}
+          </div>
+        )}
         {parabensSemana && (
           <div style={{
             background: 'linear-gradient(135deg, #eafbf0 0%, #f7f4f0 100%)',

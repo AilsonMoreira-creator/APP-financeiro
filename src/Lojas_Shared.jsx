@@ -435,10 +435,10 @@ export function AlertaRajadaModal({ nome, onConfirmar, variant = 'rajada' }) {
         ) : variant === 'leitura' ? (
           <>
             <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
-              Suas últimas mensagens foram enviadas com <b>menos de 7 segundos</b> depois de ficarem prontas.
+              Você <b>não está lendo as sugestões geradas</b>, só clicando em enviar.
             </div>
             <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
-              Você não está lendo as sugestões geradas, só clicando em enviar. A mensagem certa pra cliente certa é o que faz a venda acontecer.
+              Cada sugestão é pensada pra cliente certa. Ler e ajustar a mensagem é o que faz a venda acontecer.
             </div>
           </>
         ) : (
