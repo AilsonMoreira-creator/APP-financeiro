@@ -2419,55 +2419,6 @@ export const CardDiaScreen = ({
     }
   };
 
-  const handleSelectSugestao = useCallback((s) => {
-    // ALERTA DE PENDENTES (28/07/2026): ontem ficaram 2+ sem fazer => a
-    // PRIMEIRA sugestao clicada hoje abre a tela de atencao. 1x por sessao,
-    // registrada em lojas_acoes pro admin.
-    if (pendentesOntem >= 2 && !alertaPendentesJaMostrouRef.current) {
-      alertaPendentesJaMostrouRef.current = true;
-      setSugestaoPosPendentes(s);
-      setAlertaPendentesAberto(true);
-      try {
-        supabase.from('lojas_acoes').insert({
-          vendedora_id: vendedora?.id, tipo_acao: 'alerta_pendentes_exibido', resultado: 'exibido',
-        }).then(() => {});
-      } catch (e) { /* silent */ }
-      return;
-    }
-    // Se for a última sugestão E modal nunca foi tentado nessa sessão E
-    // tem 7 sugestões (carteira completa) → tenta abrir modal antes
-    if (
-      !feedbackJaTentou
-      && oficiais.length >= 5  // tolerante a carteiras < 7 (cascata)
-      && s.prioridade === prioridadeMaxOficial
-      && !ehAvulsa(s)
-    ) {
-      setFeedbackJaTentou(true);
-      setSugestaoPendentePosModal(s);
-      setFeedbackModalAberto(true);
-      return;
-    }
-    onSelectSugestao(s);
-  }, [feedbackJaTentou, oficiais.length, prioridadeMaxOficial, onSelectSugestao, pendentesOntem, vendedora?.id]);
-
-  const confirmarAlertaPendentes = useCallback(() => {
-    setAlertaPendentesAberto(false);
-    if (sugestaoPosPendentes) {
-      const s = sugestaoPosPendentes;
-      setSugestaoPosPendentes(null);
-      onSelectSugestao(s);
-    }
-  }, [sugestaoPosPendentes, onSelectSugestao]);
-
-  const handleFecharModalFeedback = useCallback(() => {
-    setFeedbackModalAberto(false);
-    if (sugestaoPendentePosModal) {
-      const s = sugestaoPendentePosModal;
-      setSugestaoPendentePosModal(null);
-      onSelectSugestao(s);
-    }
-  }, [sugestaoPendentePosModal, onSelectSugestao]);
-
   // AVISOS DE RESPONSAVEL (Ailson 29/07/2026): a Celia e responsavel pela loja
   // do Bom Retiro. Todo alerta de atencao que Vanessa ou Fran levarem vira um
   // aviso pra Celia assim que ela abre o modulo: pendencias de ontem (contagem
@@ -2611,6 +2562,56 @@ export const CardDiaScreen = ({
       } catch (e) { /* silent */ }
     })();
   }, [state.isAdmin, vendedora?.id]);
+
+
+  const handleSelectSugestao = useCallback((s) => {
+    // ALERTA DE PENDENTES (28/07/2026): ontem ficaram 2+ sem fazer => a
+    // PRIMEIRA sugestao clicada hoje abre a tela de atencao. 1x por sessao,
+    // registrada em lojas_acoes pro admin.
+    if (pendentesOntem >= 2 && !alertaPendentesJaMostrouRef.current) {
+      alertaPendentesJaMostrouRef.current = true;
+      setSugestaoPosPendentes(s);
+      setAlertaPendentesAberto(true);
+      try {
+        supabase.from('lojas_acoes').insert({
+          vendedora_id: vendedora?.id, tipo_acao: 'alerta_pendentes_exibido', resultado: 'exibido',
+        }).then(() => {});
+      } catch (e) { /* silent */ }
+      return;
+    }
+    // Se for a última sugestão E modal nunca foi tentado nessa sessão E
+    // tem 7 sugestões (carteira completa) → tenta abrir modal antes
+    if (
+      !feedbackJaTentou
+      && oficiais.length >= 5  // tolerante a carteiras < 7 (cascata)
+      && s.prioridade === prioridadeMaxOficial
+      && !ehAvulsa(s)
+    ) {
+      setFeedbackJaTentou(true);
+      setSugestaoPendentePosModal(s);
+      setFeedbackModalAberto(true);
+      return;
+    }
+    onSelectSugestao(s);
+  }, [feedbackJaTentou, oficiais.length, prioridadeMaxOficial, onSelectSugestao, pendentesOntem, vendedora?.id]);
+
+  const confirmarAlertaPendentes = useCallback(() => {
+    setAlertaPendentesAberto(false);
+    if (sugestaoPosPendentes) {
+      const s = sugestaoPosPendentes;
+      setSugestaoPosPendentes(null);
+      onSelectSugestao(s);
+    }
+  }, [sugestaoPosPendentes, onSelectSugestao]);
+
+  const handleFecharModalFeedback = useCallback(() => {
+    setFeedbackModalAberto(false);
+    if (sugestaoPendentePosModal) {
+      const s = sugestaoPendentePosModal;
+      setSugestaoPendentePosModal(null);
+      onSelectSugestao(s);
+    }
+  }, [sugestaoPendentePosModal, onSelectSugestao]);
 
   // Carrega status de feedback das 7 sugestões pra admin ver badges
   useEffect(() => {
