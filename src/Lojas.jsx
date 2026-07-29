@@ -1009,6 +1009,47 @@ async function marcarSugestaoExecutada(sugestaoId, mensagem) {
   return data;
 }
 
+// Tela de atencao do freio de rajada (Ailson 28/07/2026). Nome da vendedora
+// no titulo, botao libera apos 6 segundos — freio de leitura proposital.
+function AlertaRajadaModal({ nome, onConfirmar }) {
+  const [resta, setResta] = useState(6);
+  useEffect(() => {
+    const t = setInterval(() => setResta(r => (r > 0 ? r - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const primeiro = String(nome || '').trim().split(' ')[0];
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(30,40,50,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, maxWidth: 420, width: '100%', padding: '26px 22px', fontFamily: FONT, boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }}>
+        <div style={{ fontSize: 34, textAlign: 'center', marginBottom: 8 }}>✋</div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: palette.ink, textAlign: 'center', marginBottom: 12 }}>
+          Um minuto, {primeiro}!
+        </div>
+        <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
+          Suas últimas sugestões foram marcadas como enviadas com <b>menos de 20 segundos</b> entre uma e outra.
+        </div>
+        <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 10 }}>
+          Em 20 segundos não dá pra ler a sugestão, gerar a mensagem, editar e enviar de verdade.
+        </div>
+        <div style={{ fontSize: 13.5, color: palette.ink, lineHeight: 1.55, marginBottom: 18 }}>
+          O app existe pra te ajudar a <b>vender mais</b>. Cada sugestão bem trabalhada é <b>comissão no seu bolso</b> e venda pra loja. Leva a sério que o resultado aparece. 💪
+        </div>
+        <button
+          onClick={onConfirmar}
+          disabled={resta > 0}
+          style={{
+            width: '100%', padding: '13px 0', borderRadius: 10, border: 'none',
+            fontFamily: FONT, fontSize: 14.5, fontWeight: 700,
+            background: resta > 0 ? '#c8c2b8' : palette.accent, color: '#fff',
+            cursor: resta > 0 ? 'not-allowed' : 'pointer', transition: 'background 0.3s',
+          }}>
+          {resta > 0 ? `Aguarde ${resta}s…` : 'Entendi, vou fazer com atenção'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 async function dispensarSugestao(sugestaoId, motivo) {
   const { data, error } = await supabase
     .from('lojas_sugestoes_diarias')
@@ -1706,7 +1747,17 @@ function useLojasModule() {
     dispatch({ type: 'SET_VENDEDORAS', vendedoras });
   }, []);
   
-  const handleMarcarSugestaoExecutada = useCallback(async (sugestaoId, mensagem) => {
+  // ─── Freio de rajada (Ailson 28/07/2026) ─────────────────────────────────
+  // Vendedoras estavam marcando 6-7 sugestoes como "enviadas" em segundos
+  // (caso real: 6 em 11s). Regra: 4 execucoes em cadeia com menos de 20s
+  // entre elas (3 gaps curtos, janela de 30min) => a PROXIMA abre uma tela
+  // de atencao com o nome dela, e o botao so libera depois de 6 segundos.
+  // Confirmou => executa normalmente e o contador zera (voltou a metralhar,
+  // a tela volta). Cada exibicao fica registrada em lojas_acoes pro admin.
+  const cliquesEnvioRef = useRef([]);
+  const [alertaRajada, setAlertaRajada] = useState(null); // {sugestaoId, mensagem}
+
+  const executarSugestaoDeFato = useCallback(async (sugestaoId, mensagem) => {
     const sugestao = await marcarSugestaoExecutada(sugestaoId, mensagem);
     dispatch({ type: 'UPDATE_SUGESTAO', sugestao });
     if (state.vendedoraAtiva) {
@@ -1729,7 +1780,35 @@ function useLojasModule() {
       );
     }
   }, [state.userId, state.vendedoraAtiva]);
-  
+
+  const handleMarcarSugestaoExecutada = useCallback(async (sugestaoId, mensagem) => {
+    const agora = Date.now();
+    const janela = cliquesEnvioRef.current.filter(t => agora - t < 30 * 60 * 1000);
+    let gapsCurtos = 0;
+    for (let i = 1; i < janela.length; i++) if (janela[i] - janela[i - 1] < 20000) gapsCurtos++;
+    if (janela.length && agora - janela[janela.length - 1] < 20000) gapsCurtos++;
+    if (gapsCurtos >= 3) {
+      setAlertaRajada({ sugestaoId, mensagem });
+      if (state.vendedoraAtiva) {
+        registrarAcao(
+          { sugestao_id: sugestaoId, tipo_acao: 'alerta_rajada_exibido', resultado: 'exibido' },
+          state.userId,
+          state.vendedoraAtiva.id,
+        );
+      }
+      return null; // executa so depois do "Entendi" na tela de atencao
+    }
+    cliquesEnvioRef.current = [...janela, agora];
+    return executarSugestaoDeFato(sugestaoId, mensagem);
+  }, [executarSugestaoDeFato, state.userId, state.vendedoraAtiva]);
+
+  const confirmarAlertaRajada = useCallback(async () => {
+    const pendente = alertaRajada;
+    setAlertaRajada(null);
+    cliquesEnvioRef.current = []; // recomeça a medicao; se metralhar de novo, a tela volta
+    if (pendente) await executarSugestaoDeFato(pendente.sugestaoId, pendente.mensagem);
+  }, [alertaRajada, executarSugestaoDeFato]);
+
   const handleDispensarSugestao = useCallback(async (sugestaoId, motivo) => {
     const sugestao = await dispensarSugestao(sugestaoId, motivo);
     dispatch({ type: 'UPDATE_SUGESTAO', sugestao });
@@ -2048,6 +2127,9 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
       maxWidth: mobile ? 460 : 900, margin: '0 auto', minHeight: '100vh',
       background: palette.bg, boxShadow: '0 0 40px rgba(0,0,0,0.06)', position: 'relative',
     }}>
+      {alertaRajada && (
+        <AlertaRajadaModal nome={state.vendedoraAtiva?.nome} onConfirmar={confirmarAlertaRajada} />
+      )}
       {/* ─── Telas vendedora (Parte 2a) ──────────────────────────────────── */}
       
       {screen === 'home' && (
