@@ -61,7 +61,10 @@ export const REGRAS_FILTRO_VAREJO = {
   nomes_ignorar: ['CONSUMIDOR', 'CLIENTE PADRAO', 'CLIENTE PADRÃO', 'VAREJO', ''],
   documentos_ignorar_exatos: ['1', '13', '00000000000', '11111111111'],
   documento_min_chars: 11,
-  vendedores_ignorar: ['CONVERTR'],
+  // Ailson 30/07/2026: CONVERTR REMOVIDO da lista — vendas do site B2B agora
+  // ENTRAM no modulo e vao pra carteira da Cleide (resolverVendedoraVenda ja
+  // mapeia CONVERTR -> Cleide). A lista fica vazia mas mantida pra futuros.
+  vendedores_ignorar: [],
 };
 
 export const VENDEDORAS_INICIAIS = [
@@ -213,8 +216,9 @@ export function ehVendaVarejo(cliente, documento, vendedor) {
   const doc = String(documento || '').replace(/\D/g, '');
   const vend = String(vendedor || '').trim().toUpperCase();
 
-  // 1) Vendas via Convertr (canal site) sempre ignoradas — não atendem
-  // pelo módulo Lojas físico
+  // 1) Vendedores da lista de ignorar (vazia desde 30/07/2026 — CONVERTR
+  // era ignorado quando o site nao fazia parte do modulo; hoje a venda do
+  // site entra e cai na carteira da Cleide)
   if (REGRAS_FILTRO_VAREJO.vendedores_ignorar.includes(vend)) {
     return { ignorar: true, motivo: 'teste_convertr' };
   }
