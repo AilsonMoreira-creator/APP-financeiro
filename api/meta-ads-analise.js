@@ -287,7 +287,7 @@ export default async function handler(req, res) {
         const tThumb = Date.now();
         const thumbUrl =
           `https://graph.facebook.com/${META_API_VERSION}/?ids=${adIds.join(',')}` +
-          `&fields=${encodeURIComponent('creative{thumbnail_url}')}` +
+          `&fields=${encodeURIComponent('creative{thumbnail_url},effective_status')}` +
           `&access_token=${META_ADS_TOKEN}`;
         try {
           const thumbResp = await fetch(thumbUrl);
@@ -297,13 +297,16 @@ export default async function handler(req, res) {
             avisoThumb = `Falha thumbnail: ${thumbData.error.message}`;
           } else {
             const thumbMap = {};
+            const statusMap = {}; // effective_status do AD (Ailson 30/07/2026)
             Object.entries(thumbData).forEach(([id, obj]) => {
               const t = obj && obj.creative && obj.creative.thumbnail_url;
               if (t) thumbMap[id] = t;
+              if (obj && obj.effective_status) statusMap[id] = obj.effective_status;
             });
             dataEnriquecida = dataEnriquecida.map(r => ({
               ...r,
               creative_thumb: thumbMap[r.ad_id] || null,
+              ad_effective_status: statusMap[r.ad_id] || null,
             }));
           }
         } catch (errThumb) {

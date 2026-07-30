@@ -113,7 +113,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
       id:c.ad_id||c.campaign_id,
       campanhaId:c.campaign_id,
       nome:c.ad_name||c.campaign_name,
-      status:c.effective_status||c.status,
+      status:c.ad_effective_status||c.effective_status||c.status,
       gasto,
       acessos:lpv,
       cpc:lpv>0?gasto/lpv:0,
@@ -172,7 +172,20 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
   const adsPorCampanha={};
   criativos.forEach(a=>{(adsPorCampanha[a.campanhaId]=adsPorCampanha[a.campanhaId]||[]).push(a);});
   Object.values(adsPorCampanha).forEach(arr=>arr.sort((x,y)=>y.gasto-x.gasto));
-  const criativosOrdenados=[...criativos].sort((a,b)=>ordemCriativos==='roas'?b.roas-a.roas:b.vendas-a.vendas);
+  // Ativos primeiro (Ailson 30/07/2026), depois o criterio escolhido
+  const criativosOrdenados=[...criativos].sort((a,b)=>{
+    const pa=a.status==='ACTIVE'?0:1, pb=b.status==='ACTIVE'?0:1;
+    if(pa!==pb)return pa-pb;
+    return ordemCriativos==='roas'?b.roas-a.roas:b.vendas-a.vendas;
+  });
+  // Tag ativo/inativo do criativo (sem status = sem tag, nao chuta)
+  const tagAtivo=(s)=>{
+    if(!s)return null;
+    const on=s==='ACTIVE';
+    return<span style={{fontSize:9,fontWeight:700,padding:'1px 7px',borderRadius:8,flexShrink:0,
+      background:on?'#e3f6ea':'#fdeaea',color:on?'#1f8a4c':'#c0392b',
+      border:`1px solid ${on?'#bce5cc':'#f3c1c1'}`}}>{on?'ativo':'inativo'}</span>;
+  };
   const toggleExpand=(id)=>setExpandidas(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
 
   const haMin=ultimaAtt?Math.floor((tickAgora-ultimaAtt.getTime())/60000):0;
@@ -382,6 +395,7 @@ const CalcMetaAdsMeluni=({onVoltar,mobile})=>{
                               ?<><FotoProd sbUrl={sbUrl} refProd={ref} onZoom={null}/><div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'none',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div></>
                               :<div style={{width:34,height:44,borderRadius:4,background:'#f0ebe3',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #e8e2da',flexShrink:0}}><span style={{fontSize:11,opacity:0.35}}>🎬</span></div>}
                           <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.nome}</span>
+                          {tagAtivo(a.status)}
                         </div>
                       </td>
                       {vis('gasto')&&<td style={tdNum}>R$ {fmtR(a.gasto)}</td>}
