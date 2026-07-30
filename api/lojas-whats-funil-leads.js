@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     const fimExcl = new Date(new Date(dataFim + 'T00:00:00Z').getTime() + 86400000)
       .toISOString();
 
-    const [funilQ, vendsQ, vendas30Q] = await Promise.all([
+    const [funilQ, vendsQ, vendas30Q, siteQ] = await Promise.all([
       supabase.rpc('fn_sofia_funil_leads', {
         p_ini: dataInicio + 'T00:00:00Z',
         p_fim: fimExcl,
@@ -55,10 +55,17 @@ export default async function handler(req, res) {
       // vendeu_em null entra tambem (cinto de seguranca: venda marcada sem
       // data nunca some do topo; fallback de data no map). Ailson 05/07/2026.
       supabase.from('lojas_whats_conversas')
-        .select('id, nome_cliente, telefone, vendeu_valor, vendeu_em, vendeu_canal, origem_lead, qtd_pecas, vendedora_atribuida_id, carrinho_id, ultima_atividade_em')
+        .select('id, nome_cliente, telefone, documento, vendeu_valor, vendeu_em, vendeu_canal, origem_lead, qtd_pecas, vendedora_atribuida_id, carrinho_id, ultima_atividade_em')
         .eq('etapa', 'vendeu')
         .or(`vendeu_em.gte.${new Date(Date.now() - 30 * 86400000).toISOString()},vendeu_em.is.null`)
         .order('vendeu_em', { ascending: false, nullsFirst: false }),
+      // Vendas do SITE (vendedor CONVERTR) dos ultimos 30d — card "compra
+      // direta" da Conversao (Ailson 30/07/2026)
+      supabase.from('lojas_vendas')
+        .select('numero_pedido, data_venda, valor_liquido, cliente_razao_raw, documento_cliente_raw, cliente_whatsapp_raw')
+        .eq('vendedora_nome_raw', 'CONVERTR')
+        .gte('data_venda', d30)
+        .order('data_venda', { ascending: false }),
     ]);
 
     if (funilQ.error) {
@@ -110,6 +117,28 @@ export default async function handler(req, res) {
         valor: itens30.reduce((a, x) => a + x.vendeu_valor, 0),
         itens: itens30,
       },
+      // COMPRA DIRETA no site (Ailson 30/07/2026): pedidos CONVERTR SEM
+      // carrinho/conversa antes. Quem teve carrinho e finalizou no site ja
+      // aparece na aba Vendeu — dedup por documento OU telefone da conversa.
+      site_direto_30d: (() => {
+        const soDig = (x) => String(x || '').replace(/\D/g, '');
+        const semDdi = (t) => { const d = soDig(t); return d.startsWith('55') && d.length >= 12 ? d.slice(2) : d; };
+        const docsVendeu = new Set((vendas30Q.data || []).map(c => soDig(c.documento)).filter(Boolean));
+        const telsVendeu = new Set((vendas30Q.data || []).map(c => semDdi(c.telefone)).filter(Boolean));
+        const itens = (siteQ.data || []).filter(v => {
+          const doc = soDig(v.documento_cliente_raw);
+          const tel = semDdi(v.cliente_whatsapp_raw);
+          if (doc && docsVendeu.has(doc)) return false;
+          if (tel && telsVendeu.has(tel)) return false;
+          return true;
+        }).map(v => ({
+          numero_pedido: v.numero_pedido,
+          nome_cliente: v.cliente_razao_raw,
+          valor: Number(v.valor_liquido || 0),
+          data: v.data_venda,
+        }));
+        return { qtd: itens.length, valor: itens.reduce((a, x) => a + x.valor, 0), itens };
+      })(),
     });
   } catch (e) {
     console.error('[funil-leads]', e);

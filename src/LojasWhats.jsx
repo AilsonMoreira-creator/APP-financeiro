@@ -3921,6 +3921,68 @@ const ORIGEM_BADGE = {
   sac:                      { t: 'sac',         bg: '#eeeae4', c: '#6f675c' },
 };
 
+// Card "Site Convertr · compra direta" (Ailson 30/07/2026): pedidos do site
+// SEM carrinho/conversa antes. Quem teve carrinho e finalizou no site ja esta
+// na aba Vendeu (dedup no endpoint) — aqui so a compra direta.
+function SiteDireto30d({ dados, fmtMoney }) {
+  const [aberto, setAberto] = useState(false);
+  const qtd = dados?.qtd ?? null;
+  const fmtData = (iso) => {
+    if (!iso) return '';
+    const [y, m, d] = String(iso).slice(0, 10).split('-');
+    return `${d}/${m}`;
+  };
+  return (
+    <div style={{
+      marginBottom: 14, borderRadius: 10, border: `1.5px solid #c5d9ec`,
+      background: palette.surface, overflow: 'hidden',
+    }}>
+      <div onClick={() => setAberto(a => !a)} style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', cursor: 'pointer',
+      }}>
+        <span style={{ fontSize: fz(18) }}>🌐</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: fz(12.5), fontWeight: 700, color: palette.ink }}>Site Convertr · compra direta · 30 dias</div>
+          <div style={{ fontSize: fz(10), color: palette.inkMuted }}>pedidos direto no site, sem carrinho antes (com carrinho já conta em Vendeu)</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: fz(17), fontWeight: 800, color: '#2d6da3', lineHeight: 1 }}>
+            {qtd === null ? '…' : qtd}
+          </div>
+          <div style={{ fontSize: fz(10.5), color: '#2d6da3', fontWeight: 600 }}>
+            {qtd === null ? '' : fmtMoney(dados?.valor)}
+          </div>
+        </div>
+        <span style={{ fontSize: fz(12), color: palette.inkMuted }}>{aberto ? '▴' : '▾'}</span>
+      </div>
+      {aberto && (
+        <div style={{ borderTop: `1px solid ${palette.beige}` }}>
+          {!(dados?.itens || []).length && (
+            <div style={{ padding: 14, fontSize: fz(11), color: palette.inkMuted, textAlign: 'center' }}>Sem compra direta nos últimos 30 dias</div>
+          )}
+          {(dados?.itens || []).map((v, i) => (
+            <div key={v.numero_pedido || i} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px',
+              borderTop: i > 0 ? `1px solid ${palette.beige}` : 'none',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {v.nome_cliente || '—'}
+                </div>
+                <div style={{ fontSize: fz(9.5), color: palette.inkMuted, marginTop: 2 }}>pedido {v.numero_pedido} · amicialoja.com.br</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: fz(12.5), fontWeight: 800, color: '#2d6da3' }}>{fmtMoney(v.valor)}</div>
+                <div style={{ fontSize: fz(9.5), color: palette.inkMuted, marginTop: 1 }}>{fmtData(v.data)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Bloco fixo do topo da tela Conversão: vendas dos últimos 30 dias (etapa
 // vendeu), expansível com cards no formato da lista de conversas.
 function VendasTopo30d({ dados, fmtMoney }) {
@@ -4277,6 +4339,7 @@ function ConversaoTab({ refreshTick }) {
     <div style={{ padding: '12px 16px', fontFamily: FONT }}>
       {/* Vendas dos últimos 30 dias — bloco fixo, expansível (Ailson 05/07/2026) */}
       <VendasTopo30d dados={dadosFunil?.vendas_30d} fmtMoney={fmtMoney} />
+      <SiteDireto30d dados={dadosFunil?.site_direto_30d} fmtMoney={fmtMoney} />
 
       {/* Filtros de período */}
       <div style={{
