@@ -1139,6 +1139,57 @@ const CardConversoes = ({ lojas }) => {
   );
 };
 
+// ─── CardSiteAuditoria — admin Dashboard (Ailson 29/07/2026) ───────────────
+// Gemeo do CardVestiAuditoria pro SITE B2B (amicialoja.com.br / Convertr):
+// clientes do site, quantos na carteira da Cleide, vendas CONVERTR importadas
+// (0 = export do Mire nao inclui o site ainda) e sugestoes citando o site.
+const CardSiteAuditoria = ({ userId }) => {
+  const [data, setData] = useState(null);
+  const [expandido, setExpandido] = useState(false);
+  useEffect(() => {
+    let cancelado = false;
+    fetch('/api/lojas-site-auditoria', { headers: { 'X-User': userId || 'ailson' } })
+      .then(r => r.json())
+      .then(d => { if (!cancelado) setData(d); })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, [userId]);
+  if (!data || data.error) return null;
+  const Item = ({ label, valor, destaque }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${palette.beige}55`, fontSize: fz(13) }}>
+      <span style={{ color: palette.inkSoft }}>{label}</span>
+      <strong style={{ color: destaque || palette.ink }}>{valor}</strong>
+    </div>
+  );
+  return (
+    <div style={{ background: palette.surface, borderRadius: 14, padding: 14, marginBottom: 12, border: `1px solid ${palette.beige}` }}>
+      <div onClick={() => setExpandido(e => !e)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+        <div style={{ fontWeight: 700, fontSize: fz(14.5), color: palette.ink }}>🌐 Site Amícia (amicialoja.com.br)</div>
+        <div style={{ fontSize: fz(12.5), color: palette.inkSoft }}>
+          {data.clientes_site_total} cliente{data.clientes_site_total === 1 ? '' : 's'} {expandido ? '▲' : '▼'}
+        </div>
+      </div>
+      {expandido && (
+        <div style={{ marginTop: 10 }}>
+          <Item label="Clientes do site (cadastro ou compra)" valor={data.clientes_site_total} />
+          <Item label="Na carteira da Cleide" valor={data.na_carteira_cleide} />
+          {data.sem_vendedora > 0 && <Item label="Sem vendedora" valor={data.sem_vendedora} destaque="#b4453a" />}
+          <Item label="Vendas CONVERTR importadas (total)" valor={data.vendas_convertr_importadas}
+            destaque={data.vendas_convertr_importadas === 0 ? '#b4453a' : undefined} />
+          <Item label="Vendas CONVERTR nos últimos 30d" valor={data.vendas_convertr_30d} />
+          <Item label="Sugestões IA 30d pra clientes do site" valor={data.sugestoes_30d} />
+          <Item label="Sugestões citando o site" valor={data.sugestoes_citando_site} />
+          {data.vendas_convertr_importadas === 0 && (
+            <div style={{ fontSize: fz(12), color: '#8a6420', background: '#fff7ec', borderRadius: 8, padding: '8px 10px', marginTop: 10, lineHeight: 1.45 }}>
+              ⚠️ Nenhuma venda do site chegou nos arquivos do Mire ainda. Quando o export incluir o vendedor CONVERTR, os clientes entram na carteira da Cleide automaticamente.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── CardVestiAuditoria — admin Dashboard ──────────────────────────────────
 //
 // Sprint Ailson 05/05/2026: 'fico no escuro... qtos clientes ela encontrou,
@@ -1468,6 +1519,7 @@ const DashboardTab = ({ lojas, onAbrirHistorico }) => {
       {/* Card Auditoria Vesti (admin) — quantos clientes Vesti tem,
           se IA está usando link/catalogo, mensagens enviadas */}
       {state.isAdmin && <CardVestiAuditoria userId={state.userId} />}
+      {state.isAdmin && <CardSiteAuditoria userId={state.userId} />}
 
       {/* Card Abertura do app (admin) — quem abriu hoje, quem precisa lembrete */}
       {state.isAdmin && <CardAberturaApp lojas={lojas} />}
