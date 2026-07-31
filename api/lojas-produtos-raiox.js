@@ -62,9 +62,16 @@ export default async function handler(req, res) {
 
   const lojaFiltro = ['todas', 'BR', 'ST'].includes(req.query.loja) ? req.query.loja : 'todas';
 
+  // ?dias=30 (Ailson 31/07/2026, troca de colecao): usa as views _30d em todas
+  // as secoes. Default mantem o comportamento atual (60d vendas / 90d recompra
+  // e matches).
+  const dias30 = req.query.dias === '30';
+  const sufV = dias30 ? '30d' : '60d'; // top vendidas / compras / clientes novos
+  const sufR = dias30 ? '30d' : '90d'; // recompra / matches
+
   try {
     // ─── 1. TOP VENDIDAS (60d) ─────────────────────────────────────────
-    let qVend = supabase.from('vw_lojas_top_vendidas_60d')
+    let qVend = supabase.from(`vw_lojas_top_vendidas_${sufV}`)
       .select('ref, loja, pecas, clientes_distintos, pedidos_distintos');
     qVend = aplicarFiltroLoja(qVend, lojaFiltro);
     const { data: vendRows, error: errVend } = await qVend;
@@ -77,7 +84,7 @@ export default async function handler(req, res) {
 
     // ─── 2. COMPRAS DO PERIODO (60d) — antiga 'primeira compra' ────────
     // Pra cada cliente, primeira venda DENTRO da janela. Cliente pode ser antigo.
-    let qComp = supabase.from('vw_lojas_compras_periodo_60d')
+    let qComp = supabase.from(`vw_lojas_compras_periodo_${sufV}`)
       .select('ref, canal_origem, loja, clientes, pecas');
     qComp = aplicarFiltroLoja(qComp, lojaFiltro);
     const { data: compRows, error: errComp } = await qComp;
@@ -96,7 +103,7 @@ export default async function handler(req, res) {
 
     // ─── 3. PRIMEIRA COMPRA REAL (60d) — clientes verdadeiramente novos ─
     // Sem nenhuma venda anterior a 60d (lookback ate 01/01/2025)
-    let qNovo = supabase.from('vw_lojas_clientes_novos_60d')
+    let qNovo = supabase.from(`vw_lojas_clientes_novos_${sufV}`)
       .select('ref, canal_origem, loja, clientes, pecas');
     qNovo = aplicarFiltroLoja(qNovo, lojaFiltro);
     const { data: novoRows, error: errNovo } = await qNovo;
@@ -114,7 +121,7 @@ export default async function handler(req, res) {
       .slice(0, 15);
 
     // ─── 4. RECOMPRA (90d) ─────────────────────────────────────────────
-    let qRec = supabase.from('vw_lojas_recompra_90d')
+    let qRec = supabase.from(`vw_lojas_recompra_${sufR}`)
       .select('ref, loja, ocorrencias, clientes_distintos');
     qRec = aplicarFiltroLoja(qRec, lojaFiltro);
     const { data: recRows, error: errRec } = await qRec;
@@ -126,7 +133,7 @@ export default async function handler(req, res) {
 
     // ─── 5. MATCHES (90d, sempre agregado) ─────────────────────────────
     const { data: matchRows, error: errM } = await supabase
-      .from('mv_lojas_matches_90d')
+      .from(`mv_lojas_matches_${sufR}`)
       .select('ref_top, ref_match, coocorrencias, total_compras, pct')
       .order('ref_top')
       .order('pct', { ascending: false });

@@ -28,6 +28,11 @@ const ProdutosTab = ({ userId }) => {
   const [data, setData] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
+  // Filtro 30 dias POR ABA (Ailson 31/07/2026, troca de colecao). Padrao segue
+  // 60d/90d; ligar 30d numa aba busca (lazy, 1x por loja) o payload ?dias=30.
+  const [dias30PorAba, setDias30PorAba] = useState({});
+  const [data30, setData30] = useState(null);
+  const [carregando30, setCarregando30] = useState(false);
   const [ajudaAberta, setAjudaAberta] = useState(null); // null | 'vendidas' | 'compras' | 'primeira' | 'recompra' | 'matches'
 
   useEffect(() => {
@@ -56,6 +61,43 @@ const ProdutosTab = ({ userId }) => {
     return () => { cancelado = true; };
   }, [loja, userId]);
 
+  useEffect(() => { setData30(null); }, [loja]);
+  const algumaAba30 = Object.values(dias30PorAba).some(Boolean);
+  useEffect(() => {
+    if (!algumaAba30 || data30 || carregando30) return;
+    let cancelado = false;
+    setCarregando30(true);
+    fetch(`/api/lojas-produtos-raiox?loja=${loja}&dias=30`, {
+      headers: { 'X-User': userId || 'ailson' },
+    })
+      .then(r => r.json().then(dd => ({ ok: r.ok, dd })))
+      .then(({ ok, dd }) => {
+        if (cancelado) return;
+        if (ok) setData30(dd);
+        setCarregando30(false);
+      })
+      .catch(() => { if (!cancelado) setCarregando30(false); });
+    return () => { cancelado = true; };
+  }, [algumaAba30, data30, carregando30, loja, userId]);
+
+  // Dados exibidos na aba atual: 30d quando o toggle da aba esta ligado
+  const em30 = (id) => !!dias30PorAba[id];
+  const dadosAba = (id) => (em30(id) ? (data30 || null) : data);
+  const toggle30 = (id, on) => setDias30PorAba(p => ({ ...p, [id]: on }));
+  const Toggle30 = ({ id, padrao }) => (
+    <div style={{ display: 'inline-flex', gap: 4, marginLeft: 8, verticalAlign: 'middle' }}>
+      {[[false, padrao], [true, '30 dias']].map(([v, label]) => (
+        <button key={label} onClick={() => toggle30(id, v)} style={{
+          background: em30(id) === v ? palette.accent : palette.surface,
+          color: em30(id) === v ? '#fff' : palette.inkSoft,
+          border: `1px solid ${em30(id) === v ? palette.accent : palette.beige}`,
+          borderRadius: 7, padding: '3px 9px', fontSize: 11, fontWeight: 700,
+          fontFamily: FONT, cursor: 'pointer',
+        }}>{label}</button>
+      ))}
+    </div>
+  );
+
   if (carregando) return <Loader />;
   if (erro) return <ErroBox msg={erro} />;
   if (!data) return null;
@@ -68,72 +110,87 @@ const ProdutosTab = ({ userId }) => {
         {aba === 'vendidas' && (
           <>
             <SubtitleJanela
-              texto="📅 Últimos 60 dias · top 30 refs · peças vendidas"
+              texto={`📅 Últimos ${em30('vendidas') ? 30 : 60} dias · top 30 refs · peças vendidas`}
               onAjuda={() => setAjudaAberta('vendidas')}
+              extra={<Toggle30 id="vendidas" padrao="60 dias" />}
             />
-            <ListaProdutos
-              itens={data.top_vendidas}
+            {(em30('vendidas') && !data30) ? (
+              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+            ) : <ListaProdutos
+              itens={(dadosAba('vendidas') || data).top_vendidas}
               metricaLabel="peças vendidas"
               metricaCampo="pecas"
               mostrarPosicao
-            />
+            />}
           </>
         )}
         {aba === 'compras' && (
           <>
             <SubtitleJanela
-              texto={`📅 Últimos 60 dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'} · primeira compra do período (cliente pode ser antigo)`}
+              texto={`📅 Últimos ${em30('compras') ? 30 : 60} dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'} · primeira compra do período (cliente pode ser antigo)`}
               onAjuda={() => setAjudaAberta('compras')}
+              extra={<Toggle30 id="compras" padrao="60 dias" />}
             />
             <ToggleGeralVesti tipo={primeiraTipo} setTipo={setPrimeiraTipo} />
-            <ListaProdutos
-              itens={data.compras_periodo[primeiraTipo]}
+            {(em30('compras') && !data30) ? (
+              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+            ) : <ListaProdutos
+              itens={(dadosAba('compras') || data).compras_periodo[primeiraTipo]}
               metricaLabel="clientes"
               metricaCampo="clientes"
               mostrarPosicao
-            />
+            />}
           </>
         )}
         {aba === 'primeira' && (
           <>
             <SubtitleJanela
-              texto={`📅 Últimos 60 dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'} · clientes que NUNCA compraram antes (lookback até jan/2025)`}
+              texto={`📅 Últimos ${em30('primeira') ? 30 : 60} dias · top 15 refs ${primeiraTipo === 'vesti' ? '(canal Vesti)' : '(todos canais)'} · clientes que NUNCA compraram antes (lookback até jan/2025)`}
               onAjuda={() => setAjudaAberta('primeira')}
+              extra={<Toggle30 id="primeira" padrao="60 dias" />}
             />
             <ToggleGeralVesti tipo={primeiraTipo} setTipo={setPrimeiraTipo} />
-            <ListaProdutos
-              itens={data.primeira_compra[primeiraTipo]}
+            {(em30('primeira') && !data30) ? (
+              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+            ) : <ListaProdutos
+              itens={(dadosAba('primeira') || data).primeira_compra[primeiraTipo]}
               metricaLabel="clientes novos"
               metricaCampo="clientes"
               mostrarPosicao
-            />
+            />}
           </>
         )}
         {aba === 'recompra' && (
           <>
             <SubtitleJanela
-              texto="📅 Últimos 90 dias · top 15 refs · refs em múltiplas compras"
+              texto={`📅 Últimos ${em30('recompra') ? 30 : 90} dias · top 15 refs · refs em múltiplas compras`}
               onAjuda={() => setAjudaAberta('recompra')}
+              extra={<Toggle30 id="recompra" padrao="90 dias" />}
             />
-            <ListaProdutos
-              itens={data.recompra}
+            {(em30('recompra') && !data30) ? (
+              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+            ) : <ListaProdutos
+              itens={(dadosAba('recompra') || data).recompra}
               metricaLabel="ocorrências"
               metricaCampo="ocorrencias"
               mostrarPosicao
-            />
+            />}
           </>
         )}
         {aba === 'matches' && (
           <>
             <SubtitleJanela
-              texto="📅 Últimos 90 dias · top 30 refs · mín. 5 co-ocorrências"
+              texto={`📅 Últimos ${em30('matches') ? 30 : 90} dias · top 30 refs · ${em30('matches') ? 'mín. 3' : 'mín. 5'} co-ocorrências`}
               onAjuda={() => setAjudaAberta('matches')}
+              extra={<Toggle30 id="matches" padrao="90 dias" />}
             />
-            <PainelMatches
-              data={data}
+            {(em30('matches') && !data30) ? (
+              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+            ) : <PainelMatches
+              data={dadosAba('matches') || data}
               refSel={refSelMatch}
               setRefSel={setRefSelMatch}
-            />
+            />}
           </>
         )}
       </div>
@@ -144,7 +201,7 @@ const ProdutosTab = ({ userId }) => {
 };
 
 // ─── Subtitle com janela aplicada + botão de ajuda (Ailson 05/05/2026) ────
-const SubtitleJanela = ({ texto, onAjuda }) => (
+const SubtitleJanela = ({ texto, onAjuda, extra = null }) => (
   <div style={{
     display: 'flex', alignItems: 'center', gap: 6,
     marginBottom: 10, flexWrap: 'wrap',
@@ -156,6 +213,7 @@ const SubtitleJanela = ({ texto, onAjuda }) => (
     }}>
       {texto}
     </div>
+    {extra}
     {onAjuda && (
       <button
         onClick={onAjuda}

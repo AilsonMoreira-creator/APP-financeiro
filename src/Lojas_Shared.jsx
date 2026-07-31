@@ -964,9 +964,10 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
   const orig = String(refProd || '').toUpperCase();
   const norm = orig.replace(/^0+/, '');
 
-  // Fallback pelas mídias da Sofia: quando a REF não tem arquivo no bucket
-  // 'produtos' (ex: reposição/novidade sem ficha técnica), busca a foto ativa
-  // cadastrada na Sofia. O path tem timestamp, então precisa vir do banco.
+  // FONTE PRINCIPAL: mídias da Sofia (Ailson 31/07/2026 — antes era fallback).
+  // Busca a foto ativa cadastrada na aba Mídias da Sofia já no mount; enquanto
+  // não resolve, mostra o bucket 'produtos' (sem piscar). Quando resolve, a
+  // img troca pra Sofia. Bucket 'produtos' segue como fallback.
   const [sofiaUrl, setSofiaUrl] = React.useState(() => {
     const c = _sofiaFotoCache.get(norm);
     return c ? sofiaBase + c : null;
@@ -977,6 +978,7 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
     tentouSofiaRef.current = true;
     _buscarFotoSofia(norm).then(path => { if (path) setSofiaUrl(sofiaBase + path); });
   }, [norm, sofiaBase]);
+  React.useEffect(() => { buscarSofia(); }, [buscarSofia]);
 
   // Sem URL do supabase ou sem ref: placeholder
   if (!storageBase || !orig) {
@@ -1006,11 +1008,9 @@ export function FotoProdutoLojas({ refProd, size = null, aspectRatio = false, on
 
   const onError = (e) => {
     const cur = e.target.src;
-    // Se já está exibindo a foto da Sofia e ela falhou, cai no placeholder.
-    if (sofiaUrl && cur.includes('/sofia-midias/')) {
-      e.target.style.display = 'none';
-      const ph = e.target.nextSibling;
-      if (ph) ph.style.display = 'flex';
+    // Foto da Sofia falhou -> fallback no bucket 'produtos' (Ailson 31/07/2026)
+    if (cur.includes('/sofia-midias/')) {
+      e.target.src = storageBase + urls[0] + cb;
       return;
     }
     const idx = urls.findIndex(u => cur.includes(u));
