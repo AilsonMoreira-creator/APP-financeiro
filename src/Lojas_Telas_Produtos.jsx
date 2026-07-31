@@ -33,6 +33,7 @@ const ProdutosTab = ({ userId }) => {
   const [dias30PorAba, setDias30PorAba] = useState({});
   const [data30, setData30] = useState(null);
   const [carregando30, setCarregando30] = useState(false);
+  const [erro30, setErro30] = useState(null);
   const [ajudaAberta, setAjudaAberta] = useState(null); // null | 'vendidas' | 'compras' | 'primeira' | 'recompra' | 'matches'
 
   useEffect(() => {
@@ -61,10 +62,12 @@ const ProdutosTab = ({ userId }) => {
     return () => { cancelado = true; };
   }, [loja, userId]);
 
-  useEffect(() => { setData30(null); }, [loja]);
+  useEffect(() => { setData30(null); setErro30(null); }, [loja]);
   const algumaAba30 = Object.values(dias30PorAba).some(Boolean);
   useEffect(() => {
-    if (!algumaAba30 || data30 || carregando30) return;
+    // erro30 preso: nao re-tenta sozinho (evita loop de fetch falhando);
+    // o botao "tentar de novo" limpa o erro e este efeito re-dispara.
+    if (!algumaAba30 || data30 || carregando30 || erro30) return;
     let cancelado = false;
     setCarregando30(true);
     fetch(`/api/lojas-produtos-raiox?loja=${loja}&dias=30`, {
@@ -74,11 +77,12 @@ const ProdutosTab = ({ userId }) => {
       .then(({ ok, dd }) => {
         if (cancelado) return;
         if (ok) setData30(dd);
+        else setErro30(dd?.error || 'Erro ao carregar 30 dias');
         setCarregando30(false);
       })
-      .catch(() => { if (!cancelado) setCarregando30(false); });
+      .catch(e => { if (!cancelado) { setErro30(e.message || 'Erro de rede'); setCarregando30(false); } });
     return () => { cancelado = true; };
-  }, [algumaAba30, data30, carregando30, loja, userId]);
+  }, [algumaAba30, data30, carregando30, erro30, loja, userId]);
 
   // Dados exibidos na aba atual: 30d quando o toggle da aba esta ligado
   const em30 = (id) => !!dias30PorAba[id];
@@ -115,7 +119,14 @@ const ProdutosTab = ({ userId }) => {
               extra={<Toggle30 id="vendidas" padrao="60 dias" />}
             />
             {(em30('vendidas') && !data30) ? (
-              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              erro30 ? (
+                <div style={{ padding: 20, textAlign: 'center', fontFamily: FONT }}>
+                  <div style={{ color: '#b4453a', fontSize: 12, marginBottom: 8 }}>Erro ao carregar 30 dias: {erro30}</div>
+                  <button onClick={() => setErro30(null)} style={{ background: palette.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Tentar de novo</button>
+                </div>
+              ) : (
+                <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              )
             ) : <ListaProdutos
               itens={(dadosAba('vendidas') || data).top_vendidas}
               metricaLabel="peças vendidas"
@@ -133,7 +144,14 @@ const ProdutosTab = ({ userId }) => {
             />
             <ToggleGeralVesti tipo={primeiraTipo} setTipo={setPrimeiraTipo} />
             {(em30('compras') && !data30) ? (
-              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              erro30 ? (
+                <div style={{ padding: 20, textAlign: 'center', fontFamily: FONT }}>
+                  <div style={{ color: '#b4453a', fontSize: 12, marginBottom: 8 }}>Erro ao carregar 30 dias: {erro30}</div>
+                  <button onClick={() => setErro30(null)} style={{ background: palette.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Tentar de novo</button>
+                </div>
+              ) : (
+                <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              )
             ) : <ListaProdutos
               itens={(dadosAba('compras') || data).compras_periodo[primeiraTipo]}
               metricaLabel="clientes"
@@ -151,7 +169,14 @@ const ProdutosTab = ({ userId }) => {
             />
             <ToggleGeralVesti tipo={primeiraTipo} setTipo={setPrimeiraTipo} />
             {(em30('primeira') && !data30) ? (
-              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              erro30 ? (
+                <div style={{ padding: 20, textAlign: 'center', fontFamily: FONT }}>
+                  <div style={{ color: '#b4453a', fontSize: 12, marginBottom: 8 }}>Erro ao carregar 30 dias: {erro30}</div>
+                  <button onClick={() => setErro30(null)} style={{ background: palette.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Tentar de novo</button>
+                </div>
+              ) : (
+                <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              )
             ) : <ListaProdutos
               itens={(dadosAba('primeira') || data).primeira_compra[primeiraTipo]}
               metricaLabel="clientes novos"
@@ -168,7 +193,14 @@ const ProdutosTab = ({ userId }) => {
               extra={<Toggle30 id="recompra" padrao="90 dias" />}
             />
             {(em30('recompra') && !data30) ? (
-              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              erro30 ? (
+                <div style={{ padding: 20, textAlign: 'center', fontFamily: FONT }}>
+                  <div style={{ color: '#b4453a', fontSize: 12, marginBottom: 8 }}>Erro ao carregar 30 dias: {erro30}</div>
+                  <button onClick={() => setErro30(null)} style={{ background: palette.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Tentar de novo</button>
+                </div>
+              ) : (
+                <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              )
             ) : <ListaProdutos
               itens={(dadosAba('recompra') || data).recompra}
               metricaLabel="ocorrências"
@@ -185,7 +217,14 @@ const ProdutosTab = ({ userId }) => {
               extra={<Toggle30 id="matches" padrao="90 dias" />}
             />
             {(em30('matches') && !data30) ? (
-              <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              erro30 ? (
+                <div style={{ padding: 20, textAlign: 'center', fontFamily: FONT }}>
+                  <div style={{ color: '#b4453a', fontSize: 12, marginBottom: 8 }}>Erro ao carregar 30 dias: {erro30}</div>
+                  <button onClick={() => setErro30(null)} style={{ background: palette.accent, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Tentar de novo</button>
+                </div>
+              ) : (
+                <div style={{ padding: 24, textAlign: 'center', color: palette.inkMuted, fontSize: 12, fontFamily: FONT }}>Carregando 30 dias…</div>
+              )
             ) : <PainelMatches
               data={dadosAba('matches') || data}
               refSel={refSelMatch}
