@@ -23,9 +23,11 @@ import React, { useState, useEffect, useCallback, useRef, useContext } from 'rea
 import {
   Users, ShoppingCart, MessageCircle, RotateCcw, TrendingUp, BarChart3,
   Instagram, Mail, Globe, Lock, Filter, Ban, Bot, User, Phone, ChevronLeft, ChevronRight,
-  CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send, Paperclip, Smile, GraduationCap,
+  CheckCircle, X, ThumbsUp, Tag as IconTag, PackageCheck, Clock, DollarSign, Send, Paperclip, Smile, GraduationCap, Package,
   Plus, Trash2,
 } from 'lucide-react';
+// Raio-X de Produtos do modulo Lojas — acessivel tambem pela Meluni (Ailson 01/08/2026)
+import RaioXProdutosLojas from './Lojas_Telas_Produtos.jsx';
 import { palette, FONT, Header, TabBar, SectionTitle } from './Lojas_Shared.jsx';
 import CalcMetaAdsMeluni from './CalcMetaAdsMeluni.jsx';
 import MeluniAnalise from './CalcAnaliseMeluni';
@@ -3523,6 +3525,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
     { id: 'emailmkt', label: 'E-mail Mkt', icon: Mail },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'treinar', label: 'Treinar Lara', icon: GraduationCap },
+    { id: 'produtos', label: 'Produtos', icon: Package },
   ];
 
   const sincronizar = useCallback(async () => {
@@ -3584,6 +3587,7 @@ export default function Meluni({ userId = '', isAdmin = false, onBack }) {
         {secao === 'emailmkt' && <SecaoEmailMkt />}
         {secao === 'dashboard' && <SecaoDashboard />}
         {secao === 'treinar' && <SecaoTreinar />}
+        {secao === 'produtos' && <RaioXProdutosLojas userId={userId} />}
       </div>
     </div>
     </MeluniUserCtx.Provider>
