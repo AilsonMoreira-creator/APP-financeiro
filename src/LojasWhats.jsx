@@ -35,8 +35,11 @@ import {
   Loader2, ChevronRight, Phone, ShoppingCart, Building2,
   User as UserIcon, Bot as BotIcon, Save, Link2, Eye, TrendingUp, Calendar,
   Brain, Paperclip, Trash2, Upload, Star, FileText, Image, Video, Hash,
-  Instagram, Facebook, Copy, Circle, Search, RotateCcw, Tag, Plus
+  Instagram, Facebook, Copy, Circle, Search, RotateCcw, Tag, Plus,
+  Package,
 } from 'lucide-react';
+// Raio-X de Produtos do modulo Lojas — acessivel tambem pela Sofia (Ailson 01/08/2026)
+import RaioXProdutosLojas from './Lojas_Telas_Produtos.jsx';
 import {
   supabase,
   palette, FONT,
@@ -529,6 +532,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'pesquisa',    label: 'Pesquisa',    icon: FileText },
     { id: 'config',      label: 'Config',      icon: Settings },
     { id: 'clientes',    label: 'Clientes',    icon: Users, badge: clientesAbertos },
+    { id: 'produtos',    label: 'Produtos',    icon: Package },
   ];
 
   return (
@@ -582,6 +586,7 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
       {activeTab === 'pesquisa' && <PesquisaTab refreshTick={refreshTick} onAbrirChat={(id) => { setConversaParaAbrir(id); setActiveTab('conversas'); }} />}
       {activeTab === 'config' && <ConfigTab userId={userId} refreshTick={refreshTick} />}
       {activeTab === 'clientes' && <ClientesTab userId={userId} refreshTick={refreshTick} />}
+      {activeTab === 'produtos' && <RaioXProdutosLojas userId={userId} />}
     </div>
   );
 }
