@@ -1819,6 +1819,10 @@ function parseCorTam(s) {
 // timeline horizontal conectada. size: 'mini' (card, compacta) | 'full' (chat)
 function TimelineDevol({ d, size = 'full' }) {
   const full = size === 'full';
+  // Mobile (Ailson 01/08/2026): no iPhone as 6 colunas de ~30px nao comportam
+  // os rotulos (sobrepoe tudo). Abaixo de 760px: nos conectados SEM rotulo e
+  // so a etapa ATUAL escrita embaixo. Desktop segue identico.
+  const desktop = useIsDesktop(760);
   const atual = stepDevol(d);
   const sla = slaDevol(d);
 
@@ -1834,6 +1838,49 @@ function TimelineDevol({ d, size = 'full' }) {
   }
 
   const concluida = atual >= DEVOL_STEPS.length;
+
+  if (!desktop) {
+    const D = full ? 27 : 23, IS = full ? 14 : 12;
+    const DA = Math.round(D * 1.2);
+    const etAtual = concluida ? null : DEVOL_STEPS[atual];
+    const atrasoCor = sla && sla.nivel === 'critico' ? palette.alert : sla && sla.nivel === 'alerta' ? AMBAR : null;
+    return (
+      <div style={{ width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+          {DEVOL_STEPS.map((s2, i) => {
+            const feito = concluida || i < atual;
+            const ehAtual = !concluida && i === atual;
+            const dm = ehAtual ? DA : D;
+            const bg = feito ? MELUNI : ehAtual && atrasoCor ? atrasoCor : 'transparent';
+            const bd = feito ? MELUNI : ehAtual ? (atrasoCor || AMBAR) : palette.beige;
+            const ic = feito || (ehAtual && atrasoCor) ? '#fff' : ehAtual ? AMBAR : palette.inkMuted;
+            const anel = ehAtual ? `0 0 0 3px ${(atrasoCor || AMBAR) + '33'}` : 'none';
+            const corLinha = (concluida || i < atual) ? MELUNI : palette.beige;
+            return (
+              <React.Fragment key={s2.id}>
+                <span style={{ width: dm, height: dm, borderRadius: '50%', flexShrink: 0, background: ehAtual && !atrasoCor ? '#fff' : bg, border: `${ehAtual ? 2 : 1.5}px solid ${bd}`, boxShadow: anel, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <s2.Icon size={ehAtual ? IS + 2 : IS} color={ic} strokeWidth={ehAtual ? 2 : 1.8} />
+                </span>
+                {i < DEVOL_STEPS.length - 1 && (
+                  <div style={{ flex: 1, height: 1.5, background: corLinha, minWidth: 4 }} />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 6, fontSize: full ? 12 : 11, fontWeight: 700, color: concluida ? MELUNI : (atrasoCor || palette.ink) }}>
+          {concluida
+            ? 'Concluída ✓'
+            : (
+              <>
+                {etAtual.label.replace(/\n/g, ' ')}
+                {sla && sla.nivel !== 'ok' && <span style={{ color: sla.cor }}> · {sla.dias}d atraso</span>}
+              </>
+            )}
+        </div>
+      </div>
+    );
+  }
 
   // 6 nós conectados com rótulo (Ailson 22/07/2026):
   //   concluída = roxo cheio · etapa DA VEZ = branca VAZADA com contorno/anel
