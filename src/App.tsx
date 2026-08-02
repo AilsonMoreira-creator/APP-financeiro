@@ -6216,6 +6216,10 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   const [filtroMarca,setFiltroMarca]=useState("todas");
   const [filtroCanal,setFiltroCanal]=useState("todos");
   const [prodFiltroData,setProdFiltroData]=useState("7dias");
+  // Modal de cores por produto do Top 30 (Ailson 02/08/2026)
+  const [corModal,setCorModal]=useState(null); // {ref,desc,qtdF,cores:[[nome,qtd]]}
+  // Periodo proprio do card Vendas por Cor: 'tela' segue o filtro da pagina
+  const [corRankPeriodo,setCorRankPeriodo]=useState("tela"); // 'tela'|'7d'|'30d'
   // Sprint 7 — detector mobile. Desktop intocado.
   const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
@@ -6308,10 +6312,10 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
               if(!r.porProduto[ref])r.porProduto[ref]={ref,desc:prod.desc,marca:mn,marcas:{},qtd:0,valor:0,tam:{},cor:{},porCanal:{},marcaCanal:{}};
               const rp=r.porProduto[ref];rp.qtd+=prod.qtd||0;rp.valor+=prod.valor||0;
               rp.marcas[mn]=(rp.marcas[mn]||0)+(prod.qtd||0);
-              if(!rp.porCanal[cn])rp.porCanal[cn]={qtd:0,valor:0};rp.porCanal[cn].qtd+=prod.qtd||0;rp.porCanal[cn].valor+=prod.valor||0;
-              if(!rp.marcaCanal[mn])rp.marcaCanal[mn]={};if(!rp.marcaCanal[mn][cn])rp.marcaCanal[mn][cn]={qtd:0,valor:0};rp.marcaCanal[mn][cn].qtd+=prod.qtd||0;rp.marcaCanal[mn][cn].valor+=prod.valor||0;
+              if(!rp.porCanal[cn])rp.porCanal[cn]={qtd:0,valor:0,cor:{}};rp.porCanal[cn].qtd+=prod.qtd||0;rp.porCanal[cn].valor+=prod.valor||0;
+              if(!rp.marcaCanal[mn])rp.marcaCanal[mn]={};if(!rp.marcaCanal[mn][cn])rp.marcaCanal[mn][cn]={qtd:0,valor:0,cor:{}};rp.marcaCanal[mn][cn].qtd+=prod.qtd||0;rp.marcaCanal[mn][cn].valor+=prod.valor||0;
               for(const t in(prod.tam||{})){rp.tam[t]=(rp.tam[t]||0)+prod.tam[t];r.tamGeral[t]=(r.tamGeral[t]||0)+prod.tam[t];}
-              for(const c in(prod.cor||{})){rp.cor[c]=(rp.cor[c]||0)+prod.cor[c];r.corGeral[c]=(r.corGeral[c]||0)+prod.cor[c];}
+              for(const c in(prod.cor||{})){rp.cor[c]=(rp.cor[c]||0)+prod.cor[c];r.corGeral[c]=(r.corGeral[c]||0)+prod.cor[c];if(!rp.porCanal[cn].cor)rp.porCanal[cn].cor={};rp.porCanal[cn].cor[c]=(rp.porCanal[cn].cor[c]||0)+prod.cor[c];if(!rp.marcaCanal[mn][cn].cor)rp.marcaCanal[mn][cn].cor={};rp.marcaCanal[mn][cn].cor[c]=(rp.marcaCanal[mn][cn].cor[c]||0)+prod.cor[c];}
             }
           }
         }
@@ -6337,6 +6341,31 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
     if(vendasFiltro==="mes"){return agregarPeriodo(mesAtualInicio,hojeDate);}
     if(vendasFiltro==="mespassado"){const mp=mesAnterior();return agregarPeriodo(mp.inicio,mp.fim);}
     return agregarPeriodo(hojeDate,hojeDate);
+  };
+  // Sinonimos de cor SOMADOS na exibicao (Ailson 02/08/2026): Branco+Off White,
+  // Azul Claro+Azul Bebe, Rosa+Rosa Claro. Dados crus continuam separados.
+  const GRUPOS_COR_SINONIMOS=[
+    {principal:"Branco",membros:["branco","off white","offwhite","off-white"]},
+    {principal:"Azul Claro",membros:["azul claro","azul bebe"]},
+    {principal:"Rosa",membros:["rosa","rosa claro"]},
+  ];
+  const normCorKey=(n)=>String(n||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+  const mesclarCoresSinonimos=(mapa)=>{
+    const acc={};
+    for(const nome in(mapa||{})){
+      const nk=normCorKey(nome);
+      const grupo=GRUPOS_COR_SINONIMOS.find(g=>g.membros.includes(nk));
+      const chave=grupo?grupo.principal:nome;
+      acc[chave]=(acc[chave]||0)+(mapa[nome]||0);
+    }
+    return Object.entries(acc).sort((a,b)=>b[1]-a[1]);
+  };
+  // Mapa de cores do produto RESPEITANDO os filtros marca/canal ativos
+  const corMapaDoFiltro=(p)=>{
+    if(filtroMarca!=="todas"&&filtroCanal!=="todos")return p.marcaCanal?.[filtroMarca]?.[filtroCanal]?.cor||{};
+    if(filtroMarca!=="todas"){const acc={};const mc=p.marcaCanal?.[filtroMarca]||{};for(const cn in mc){for(const c in(mc[cn].cor||{}))acc[c]=(acc[c]||0)+mc[cn].cor[c];}return acc;}
+    if(filtroCanal!=="todos")return p.porCanal?.[filtroCanal]?.cor||{};
+    return p.cor||{};
   };
   const getProdRange=()=>{
     if(prodFiltroData==="7dias")return agregarPeriodo(seteDiasAtras,hojeDate);
@@ -7022,7 +7051,12 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
           }).filter(p=>p.qtdF>0).sort((a,b)=>b.qtdF-a.qtdF).slice(0,30);
           const maxQ=prods.length>0?prods[0].qtdF:1;
           const tamS=Object.entries(pd.tamGeral).sort((a,b)=>b[1]-a[1]);const tamT=tamS.reduce((s,t)=>s+t[1],0)||1;const maxTam=tamS.length>0?tamS[0][1]:1;
-          const corS=Object.entries(pd.corGeral).sort((a,b)=>b[1]-a[1]);const corT=corS.reduce((s,c)=>s+c[1],0)||1;const maxCor=corS.length>0?corS[0][1]:1;
+          // Card Vendas por Cor com periodo proprio (Ailson 02/08/2026):
+          // 'tela' segue o filtro da pagina; '7d'/'30d' agregam janelas fixas.
+          const trintaDiasAtras=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+          const corBasePd=corRankPeriodo==="7d"?agregarPeriodo(seteDiasAtras,hojeDate):corRankPeriodo==="30d"?agregarPeriodo(trintaDiasAtras,hojeDate):pd;
+          const corSraw=mesclarCoresSinonimos(corBasePd.corGeral);
+          const corS=corSraw;const corT=corS.reduce((s,c)=>s+c[1],0)||1;const maxCor=corS.length>0?corS[0][1]:1;
           return(
             <div>
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
@@ -7068,6 +7102,45 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                 <button onClick={()=>setFiltroCanal("todos")} style={{background:filtroCanal==="todos"?"#2c3e50":"#fff",color:filtroCanal==="todos"?"#fff":"#2c3e50",border:filtroCanal==="todos"?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 7px",fontSize:9,cursor:"pointer"}}>Todos</button>
                 {canaisReais.map(c=>(<button key={c} onClick={()=>setFiltroCanal(c)} style={{background:filtroCanal===c?"#2c3e50":"#fff",color:filtroCanal===c?"#fff":"#2c3e50",border:filtroCanal===c?"none":"1px solid #e8e2da",borderRadius:6,padding:"4px 7px",fontSize:9,cursor:"pointer"}}>{c} ({pd.porCanal[c]?.itens||0})</button>))}
               </div>
+              {corModal&&(()=>{
+                const totalCores=corModal.cores.reduce((s2,c)=>s2+c[1],0)||1;
+                const maxCorM=corModal.cores.length?corModal.cores[0][1]:1;
+                const filtroDesc=[
+                  prodFiltroData==="7dias"?"últimos 7 dias":prodFiltroData==="mes"?"mês atual":prodFiltroData==="mespassado"?"mês passado":"",
+                  filtroMarca!=="todas"?filtroMarca:null,
+                  filtroCanal!=="todos"?filtroCanal:null,
+                ].filter(Boolean).join(" · ");
+                return(
+                  <div onClick={()=>setCorModal(null)} style={{position:"fixed",inset:0,zIndex:9000,background:"rgba(44,62,80,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+                    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,maxWidth:420,width:"100%",maxHeight:"80vh",overflowY:"auto",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
+                      <div style={{padding:"14px 18px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",alignItems:"center",gap:8,position:"sticky",top:0}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:14,fontWeight:800,color:"#2c3e50"}}>🎨 REF {corModal.ref} · cores</div>
+                          <div style={{fontSize:10,color:"#8a9aa4",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{corModal.desc}</div>
+                          <div style={{fontSize:10,color:"#4a7fa5",marginTop:2}}>{filtroDesc} · {fmtV(corModal.qtdF)} un no recorte</div>
+                        </div>
+                        <button onClick={()=>setCorModal(null)} style={{background:"none",border:"none",fontSize:20,color:"#8a9aa4",cursor:"pointer",padding:4,lineHeight:1}}>×</button>
+                      </div>
+                      <div style={{padding:"12px 18px"}}>
+                        {corModal.cores.length===0?(
+                          <div style={{fontSize:12,color:"#a89f94",textAlign:"center",padding:20}}>Sem detalhe de cor neste recorte</div>
+                        ):corModal.cores.map(([cor,qtd])=>{
+                          const pct=qtd/totalCores;const bar=qtd/maxCorM;const dc=dotColor(cor);
+                          return(
+                            <div key={cor} style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
+                              <div style={{width:14,height:14,borderRadius:"50%",background:dc,border:["Branco","Off White"].includes(cor)?"1px solid #d0c8c0":"none",flexShrink:0}}/>
+                              <span style={{fontSize:12,color:"#2c3e50",width:96,flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cor}</span>
+                              <div style={{flex:1,height:7,background:"#f0ebe4",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",borderRadius:4,background:dc==="#f0ebe4"?"#d0c8c0":dc,width:`${bar*100}%`,opacity:0.75}}/></div>
+                              <span style={{fontSize:13,fontWeight:800,color:"#2c3e50",fontFamily:"Calibri,Arial",width:44,textAlign:"right",flexShrink:0}}>{fmtV(qtd)}</span>
+                              <span style={{fontSize:10,color:"#4a7fa5",fontFamily:"Calibri,Arial",width:32,textAlign:"right",flexShrink:0}}>{Math.round(pct*100)}%</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {prods.length===0?(
                 <div style={{background:"#fff",borderRadius:12,border:"1px dashed #d0c8c0",padding:40,textAlign:"center"}}><div style={{fontSize:14,color:"#a89f94"}}>Sem dados de produto neste período</div></div>
               ):(
@@ -7077,9 +7150,9 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                     <div style={{padding:"7px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",justifyContent:"space-between"}}><span style={{fontSize:13,fontWeight:700,color:"#2c3e50"}}>🏆 Top 30</span><span style={{fontSize:10,color:"#a89f94"}}>{prods.length} produtos</span></div>
                     <div style={{maxHeight:900,overflowY:"auto"}}>
                       {prods.map((p,i)=>{const pct=maxQ>0?p.qtdF/maxQ:0;return(
-                        <div key={p.ref} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 14px",borderBottom:"1px solid #f0ebe4"}}>
+                        <div key={p.ref} onClick={()=>setCorModal({ref:p.ref,desc:p.desc,qtdF:p.qtdF,cores:mesclarCoresSinonimos(corMapaDoFiltro(p))})} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 14px",borderBottom:"1px solid #f0ebe4",cursor:"pointer"}} title="Toque pra ver as cores">
                           <div style={{width:20,height:20,borderRadius:"50%",background:"#e8e2da",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#6b5f54",flexShrink:0}}>{i+1}</div>
-                          <FotoProd sbUrl={sbUrl} refProd={p.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
+                          <span onClick={e=>e.stopPropagation()}><FotoProd sbUrl={sbUrl} refProd={p.ref} onZoom={handleZoom}/></span><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,fontWeight:700,color:"#2c3e50"}}>REF {p.ref}</span><span style={{fontSize:10,color:"#6b7c8a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.desc}</span><span style={{display:"flex",gap:2,flexShrink:0,marginLeft:"auto"}}>{Object.entries(p.marcas||{}).map(([m,q])=>(<span key={m} style={{fontSize:8,color:"#4a3a2a",background:CORES_MARCA2[m]||"#888",borderRadius:3,padding:"1px 4px"}} title={`${m}: ${q} un`}>{m}</span>))}</span></div>
                             <div style={{marginTop:2,height:3,background:"#f0ebe4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",borderRadius:2,background:"linear-gradient(90deg,#4a7fa5,#2c3e50)",width:`${pct*100}%`}}/></div>
@@ -7106,7 +7179,14 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
                       </div>
                     </div>
                     <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"hidden"}}>
-                      <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",fontSize:12,fontWeight:700,color:"#2c3e50"}}>🎨 Vendas por Cor</div>
+                      <div style={{padding:"10px 16px",background:"#f7f4f0",borderBottom:"1px solid #e8e2da",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"#2c3e50"}}>🎨 Vendas por Cor</span>
+                        <span style={{display:"flex",gap:4,marginLeft:"auto"}}>
+                          {[["tela","Filtro da página"],["7d","7 dias"],["30d","30 dias"]].map(([k,l])=>(
+                            <button key={k} onClick={()=>setCorRankPeriodo(k)} style={{background:corRankPeriodo===k?"#2c3e50":"#fff",color:corRankPeriodo===k?"#fff":"#2c3e50",border:corRankPeriodo===k?"none":"1px solid #e8e2da",borderRadius:6,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"Georgia,serif"}}>{l}</button>
+                          ))}
+                        </span>
+                      </div>
                       <div style={{padding:"12px 16px"}}>
                         {corS.length===0?<div style={{fontSize:11,color:"#a89f94"}}>Sem dados de cor</div>:corS.slice(0,16).map(([cor,qtd])=>{const pct=qtd/corT;const bar=qtd/maxCor;const dc=dotColor(cor);return(
                           <div key={cor} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
