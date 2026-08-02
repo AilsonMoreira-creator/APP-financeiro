@@ -6219,7 +6219,7 @@ const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=nu
   // Modal de cores por produto do Top 30 (Ailson 02/08/2026)
   const [corModal,setCorModal]=useState(null); // {ref,desc,qtdF,cores:[[nome,qtd]]}
   // Periodo proprio do card Vendas por Cor: 'tela' segue o filtro da pagina
-  const [corRankPeriodo,setCorRankPeriodo]=useState("tela"); // 'tela'|'7d'|'30d'
+  const [corRankPeriodo,setCorRankPeriodo]=useState("30d"); // 'tela'|'7d'|'30d' — 30d padrao (Ailson 02/08)
   // Sprint 7 — detector mobile. Desktop intocado.
   const [w,setW]=useState(typeof window!=="undefined"?window.innerWidth:900);
   useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
