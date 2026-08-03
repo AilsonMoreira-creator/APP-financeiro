@@ -1266,6 +1266,19 @@ function SecaoClientes() {
     } catch { alert('falhou'); setModalTemplates(m => m ? { ...m, trocando: null } : m); }
   };
 
+  // Muda o status de um template: ativo | inativo | arquivado (Ailson 03/08/2026)
+  const mudarStatusTpl = async (versao, status) => {
+    try {
+      const r = await fetch('/api/meluni-templates-novidade', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versao, status }),
+      });
+      const j = await r.json();
+      if (j.ok) setModalTemplates(m => m ? { ...m, tpls: m.tpls.map(t => t.versao === versao ? { ...t, status } : t) } : m);
+      else alert(j.erro || 'falhou');
+    } catch { alert('falhou'); }
+  };
+
   const abrirModalTemplates = () => {
     setModalTemplates({ tpls: [], trocando: null, carregando: true });
     fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
@@ -1342,9 +1355,9 @@ function SecaoClientes() {
             <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>Escolhe o template que vai sair:</div>
             {modalNovidade.carregando ? (
               <div style={{ padding: 18, textAlign: 'center', color: palette.inkMuted, fontSize: 12 }}>carregando templates…</div>
-            ) : modalNovidade.tpls.length === 0 ? (
-              <div style={{ padding: 14, fontSize: 12, color: '#b4453a' }}>Nenhum template configurado ainda (lara_templates_novidade).</div>
-            ) : modalNovidade.tpls.map(t => (
+            ) : modalNovidade.tpls.filter(t => (t.status || 'ativo') === 'ativo').length === 0 ? (
+              <div style={{ padding: 14, fontSize: 12, color: '#b4453a' }}>Nenhum template ATIVO (configura ou ativa um no botão 🖼 Templates).</div>
+            ) : modalNovidade.tpls.filter(t => (t.status || 'ativo') === 'ativo').map(t => (
               <label key={t.versao} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 10, border: `2px solid ${modalNovidade.versao === t.versao ? MELUNI : palette.beige}`, marginBottom: 8, cursor: 'pointer', background: modalNovidade.versao === t.versao ? MELUNI_SOFT : '#fff' }}>
                 <input type="radio" name="tplNovidade" checked={modalNovidade.versao === t.versao} onChange={() => setModalNovidade(m => ({ ...m, versao: t.versao }))} style={{ width: 16, height: 16 }} />
                 {t.sample_url ? <img src={t.sample_url} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} /> : <span style={{ fontSize: 20 }}>📄</span>}
@@ -1378,21 +1391,49 @@ function SecaoClientes() {
               <div style={{ padding: 18, textAlign: 'center', color: palette.inkMuted, fontSize: 12 }}>carregando…</div>
             ) : modalTemplates.tpls.length === 0 ? (
               <div style={{ padding: 14, fontSize: 12, color: '#b4453a' }}>Nenhum template configurado ainda.</div>
-            ) : modalTemplates.tpls.map(t => (
-              <div key={t.versao} style={{ display: 'flex', gap: 12, padding: 12, borderRadius: 10, border: `1px solid ${palette.beige}`, marginBottom: 10, alignItems: 'flex-start' }}>
-                {t.sample_url ? <img src={t.sample_url} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} /> : <div style={{ width: 84, height: 84, borderRadius: 10, background: palette.beigeSoft || '#f0ebe4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>📄</div>}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, textTransform: 'capitalize' }}>{t.versao}</div>
-                  <div style={{ fontSize: 10.5, color: palette.inkMuted, marginBottom: 6 }}>template Meta: {t.name || '—'}</div>
-                  {t.body && <div style={{ fontSize: 11, color: palette.inkSoft, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.body}</div>}
-                  <label style={{ ...selStyle, fontWeight: 700, cursor: 'pointer', display: 'inline-block' }}>
-                    {modalTemplates.trocando === t.versao ? 'enviando…' : '📷 Trocar criativo'}
-                    <input type="file" accept="image/*" style={{ display: 'none' }} disabled={!!modalTemplates.trocando}
-                      onChange={e => { const fl = e.target.files?.[0]; e.target.value = ''; trocarCriativo(t.versao, fl); }} />
-                  </label>
-                </div>
-              </div>
-            ))}
+            ) : (
+              <>
+                {modalTemplates.tpls.filter(t => (t.status || 'ativo') !== 'arquivado').map(t => {
+                  const st = t.status || 'ativo';
+                  return (
+                    <div key={t.versao} style={{ display: 'flex', gap: 12, padding: 12, borderRadius: 10, border: `1px solid ${st === 'ativo' ? '#bfe3cd' : palette.beige}`, marginBottom: 10, alignItems: 'flex-start', opacity: st === 'inativo' ? 0.75 : 1 }}>
+                      {t.sample_url ? <img src={t.sample_url} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} /> : <div style={{ width: 84, height: 84, borderRadius: 10, background: '#f0ebe4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>📄</div>}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: palette.ink, textTransform: 'capitalize' }}>{t.versao}</span>
+                          <span style={{ fontSize: 9.5, padding: '2px 7px', borderRadius: 5, fontWeight: 800, background: st === 'ativo' ? '#e6f7ee' : '#f0ebe4', color: st === 'ativo' ? '#1f7a48' : palette.inkMuted }}>{st === 'ativo' ? '● ATIVO' : 'INATIVO'}</span>
+                          <span style={{ fontSize: 9.5, padding: '2px 7px', borderRadius: 5, fontWeight: 700, background: t.uso_30d > 0 ? MELUNI_SOFT : '#f6f3ee', color: t.uso_30d > 0 ? MELUNI : palette.inkMuted }}>{t.uso_30d > 0 ? `${t.uso_30d} envio(s) · 30d` : 'sem uso · 30d'}</span>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: palette.inkMuted, margin: '3px 0 6px' }}>template Meta: {t.name || '—'}</div>
+                        {t.body && <div style={{ fontSize: 11, color: palette.inkSoft, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.body}</div>}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <label style={{ ...selStyle, fontWeight: 700, cursor: 'pointer', display: 'inline-block' }}>
+                            {modalTemplates.trocando === t.versao ? 'enviando…' : '📷 Trocar criativo'}
+                            <input type="file" accept="image/*" style={{ display: 'none' }} disabled={!!modalTemplates.trocando}
+                              onChange={e => { const fl = e.target.files?.[0]; e.target.value = ''; trocarCriativo(t.versao, fl); }} />
+                          </label>
+                          {st === 'ativo'
+                            ? <button onClick={() => mudarStatusTpl(t.versao, 'inativo')} style={{ ...selStyle }}>Desativar</button>
+                            : <button onClick={() => mudarStatusTpl(t.versao, 'ativo')} style={{ ...selStyle, fontWeight: 700, color: '#1f7a48', borderColor: '#bfe3cd' }}>Ativar</button>}
+                          <button onClick={() => window.confirm(`Arquivar "${t.versao}"? Ele some do disparo e desta lista (fica em Arquivados).`) && mudarStatusTpl(t.versao, 'arquivado')} style={{ ...selStyle, color: '#b4453a' }}>Arquivar</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {modalTemplates.tpls.some(t => (t.status || 'ativo') === 'arquivado') && (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, color: palette.inkMuted, marginBottom: 6 }}>🗄 Arquivados</div>
+                    {modalTemplates.tpls.filter(t => (t.status || 'ativo') === 'arquivado').map(t => (
+                      <div key={t.versao} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 11px', borderRadius: 9, border: `1px dashed ${palette.beige}`, marginBottom: 6, opacity: 0.7 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: palette.inkMuted, textTransform: 'capitalize', flex: 1 }}>{t.versao} <span style={{ fontWeight: 400 }}>· {t.name || '—'}</span></span>
+                        <button onClick={() => mudarStatusTpl(t.versao, 'inativo')} style={{ ...selStyle, fontSize: 11 }}>Restaurar</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

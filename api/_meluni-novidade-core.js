@@ -45,9 +45,11 @@ async function acharOuCriarConversaCliente(tel, nome, clienteId) {
 export async function carregarTplNovidade(cfgKey, versao) {
   const spec = await cfgMeluni(cfgKey || 'lara_templates_novidade', null);
   const tpls = spec?.templates || {};
-  const v = versao || Object.keys(tpls)[0];
+  // default: primeira versao ATIVA; arquivada nunca dispara (Ailson 03/08/2026)
+  const v = versao || Object.keys(tpls).find(k => (tpls[k]?.status || 'ativo') === 'ativo');
   const tpl = v ? tpls[v] : null;
   if (!tpl?.name || !tpl?.body) return null;
+  if ((tpl.status || 'ativo') === 'arquivado') return null;
   return {
     tpl,
     lang: spec.idioma || tpl.language || 'pt_BR',

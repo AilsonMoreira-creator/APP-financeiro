@@ -26,12 +26,23 @@ export default async function handler(req, res) {
     const tpls = spec.templates || {};
 
     if (req.method === 'GET') {
+      // uso real nos ultimos 30 dias (meluni_mensagens por nome de template)
+      const nomes = Object.values(tpls).map(t => t?.name).filter(Boolean);
+      const uso = {};
+      if (nomes.length) {
+        const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+        const { data: msgs } = await supabase.from('meluni_mensagens')
+          .select('template_usado').in('template_usado', nomes).gte('enviada_em', desde).limit(10000);
+        (msgs || []).forEach(m => { uso[m.template_usado] = (uso[m.template_usado] || 0) + 1; });
+      }
       const lista = Object.entries(tpls).map(([versao, t]) => ({
         versao,
         name: t?.name || null,
         body: t?.body || null,
         sample_url: t?.header?.format === 'IMAGE' ? (t?.header?.sample_url || null) : null,
         tem_imagem: t?.header?.format === 'IMAGE',
+        status: t?.status || 'ativo', // ativo | inativo | arquivado (Ailson 03/08/2026)
+        uso_30d: uso[t?.name] || 0,
       }));
       return res.status(200).json({ ok: true, idioma: spec.idioma || 'pt_BR', templates: lista });
     }
@@ -41,6 +52,15 @@ export default async function handler(req, res) {
       if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
       const versao = String(body?.versao || '').trim();
       if (!versao || !tpls[versao]) return res.status(400).json({ ok: false, erro: 'versao invalida' });
+
+      // troca de STATUS (ativo | inativo | arquivado) — Ailson 03/08/2026
+      if (body?.status) {
+        const st = String(body.status);
+        if (!['ativo', 'inativo', 'arquivado'].includes(st)) return res.status(400).json({ ok: false, erro: 'status invalido' });
+        const novoSpec = { ...spec, templates: { ...tpls, [versao]: { ...tpls[versao], status: st } } };
+        await setCfgMeluni(CFG_KEY, novoSpec);
+        return res.status(200).json({ ok: true, versao, status: st });
+      }
 
       let novaUrl = String(body?.sample_url || '').trim() || null;
 
