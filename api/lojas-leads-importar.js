@@ -306,6 +306,10 @@ export default async function handler(req, res) {
       carrinhos_skipped_vazios: 0,
       carrinhos_skipped_sem_customer_id: 0,
       carrinhos_skipped_lead_nao_encontrado: 0,
+      leads_resolvidos_do_banco: 0,
+      carrinhos_orfaos_guardados: 0,
+      orfaos_rematch_casados: 0,
+      orfaos_pendentes: 0,
       carrinhos_inseridos: 0,
       metricas_atualizadas: 0,
       leads_matched_por_documento: 0,
@@ -494,6 +498,31 @@ export default async function handler(req, res) {
 
       const errosCarrinhos = [];
 
+      // RESOLUCAO PELO BANCO (Ailson 03/08/2026): o leadIdMap so tinha os
+      // clientes DA PLANILHA DO DIA — carrinho de cliente ja cadastrado em
+      // planilhas anteriores era descartado como "lead nao encontrado".
+      // Agora, todo customer_id de carrinho que nao esta no map e buscado
+      // direto em lojas_leads_carrinho. O recorte da planilha deixa de importar.
+      const custIdsFaltantes = new Set();
+      for (let i = 1; i < carrinhosLines.length; i++) {
+        const cid = parseInt(col(carrinhosLines[i], carrinhosHM, 'customer_id') || '0');
+        if (cid && !leadIdMap.has(cid)) custIdsFaltantes.add(cid);
+      }
+      const faltArr = Array.from(custIdsFaltantes);
+      for (let i = 0; i < faltArr.length; i += BATCH) {
+        const chunk = faltArr.slice(i, i + BATCH);
+        const { data: achados } = await supabase
+          .from('lojas_leads_carrinho')
+          .select('id, convertr_customer_id')
+          .in('convertr_customer_id', chunk);
+        (achados || []).forEach(r => {
+          leadIdMap.set(Number(r.convertr_customer_id), r.id);
+          stats.leads_resolvidos_do_banco++;
+        });
+      }
+
+      const orfaosParaGuardar = [];
+
       for (let i = 1; i < carrinhosLines.length; i++) {
         const row = carrinhosLines[i];
         try {
@@ -523,13 +552,6 @@ export default async function handler(req, res) {
 
           stats.carrinhos_com_valor++;
 
-          // Lead precisa existir (vai estar no leadIdMap)
-          const leadId = leadIdMap.get(cCustId);
-          if (!leadId) {
-            stats.carrinhos_skipped_lead_nao_encontrado++;
-            continue;
-          }
-
           // Convertr renomeou a coluna: era `items` (HTML), virou `produtos`
           // (texto "Nx SKU"). Aceita as duas. Ailson 02/07/2026.
           const itemsHtml = col(row, carrinhosHM, 'items') || col(row, carrinhosHM, 'produtos') || '';
@@ -538,10 +560,9 @@ export default async function handler(req, res) {
 
           const parseTs = parseTsFlex;
 
-          eventosParaUpsert.push({
+          const eventoBase = {
             convertr_uuid: cUuid,
             convertr_id: cId,
-            lead_id: leadId,
             created_at_convertr: parseTs(col(row, carrinhosHM, 'created_at')),
             updated_at_convertr: parseTs(col(row, carrinhosHM, 'updated_at')),
             items_count: itemsCount,
@@ -551,7 +572,25 @@ export default async function handler(req, res) {
             items_html_raw: itemsHtml.length > 5000 ? itemsHtml.substring(0, 5000) : itemsHtml,
             items_parsed: itemsParsed,
             planilha_origem: origem,
-          });
+          };
+
+          // Lead precisa existir (planilha do dia OU banco)
+          const leadId = leadIdMap.get(cCustId);
+          if (!leadId) {
+            stats.carrinhos_skipped_lead_nao_encontrado++;
+            // FILA DE ORFAOS (Ailson 03/08/2026): guarda o carrinho pronto;
+            // re-match automatico quando o cliente chegar num import futuro
+            orfaosParaGuardar.push({
+              id: cId,
+              convertr_uuid: cUuid,
+              convertr_customer_id: cCustId,
+              payload_evento: eventoBase,
+              ultima_tentativa: new Date().toISOString(),
+            });
+            continue;
+          }
+
+          eventosParaUpsert.push({ ...eventoBase, lead_id: leadId });
         } catch (e) {
           errosCarrinhos.push({ linha: i + 1, erro: e.message });
         }
@@ -570,6 +609,63 @@ export default async function handler(req, res) {
           break;
         }
         stats.carrinhos_inseridos += batch.length;
+      }
+
+      // Guarda os orfaos novos (upsert: carrinho pode reaparecer atualizado)
+      if (orfaosParaGuardar.length) {
+        const { error: eOrf } = await supabase
+          .from('site_amicia_carrinhos_orfaos')
+          .upsert(orfaosParaGuardar, { onConflict: 'id', ignoreDuplicates: false });
+        if (!eOrf) stats.carrinhos_orfaos_guardados = orfaosParaGuardar.length;
+        else console.error('[lojas-leads-importar] upsert orfaos', eOrf);
+      }
+
+      // RE-MATCH DA FILA (Ailson 03/08/2026): tenta casar orfaos pendentes
+      // (deste e de imports anteriores) contra o banco de leads atual
+      try {
+        const { data: orfaos } = await supabase
+          .from('site_amicia_carrinhos_orfaos')
+          .select('id, convertr_uuid, convertr_customer_id, payload_evento, tentativas')
+          .eq('status', 'pendente')
+          .limit(500);
+        if (orfaos && orfaos.length) {
+          const idsOrf = Array.from(new Set(orfaos.map(o => Number(o.convertr_customer_id))));
+          const leadPorCust = new Map();
+          for (let i = 0; i < idsOrf.length; i += BATCH) {
+            const chunk = idsOrf.slice(i, i + BATCH);
+            const { data: achou } = await supabase
+              .from('lojas_leads_carrinho')
+              .select('id, convertr_customer_id')
+              .in('convertr_customer_id', chunk);
+            (achou || []).forEach(r => leadPorCust.set(Number(r.convertr_customer_id), r.id));
+          }
+          const eventosOrf = [];
+          const casados = [];
+          for (const o of orfaos) {
+            const lid = leadPorCust.get(Number(o.convertr_customer_id));
+            if (!lid) continue;
+            eventosOrf.push({ ...o.payload_evento, lead_id: lid });
+            casados.push({ id: o.id, lead_id: lid });
+          }
+          if (eventosOrf.length) {
+            const { error: eEv } = await supabase
+              .from('lojas_lead_carrinho_eventos')
+              .upsert(eventosOrf, { onConflict: 'convertr_uuid', ignoreDuplicates: false });
+            if (!eEv) {
+              for (const c of casados) {
+                await supabase
+                  .from('site_amicia_carrinhos_orfaos')
+                  .update({ status: 'casado', lead_id: c.lead_id, casado_em: new Date().toISOString() })
+                  .eq('id', c.id);
+              }
+              stats.orfaos_rematch_casados = casados.length;
+              stats.carrinhos_inseridos += eventosOrf.length;
+            }
+          }
+          stats.orfaos_pendentes = orfaos.length - casados.length;
+        }
+      } catch (eRematch) {
+        console.error('[lojas-leads-importar] re-match orfaos', eRematch);
       }
     }
 
