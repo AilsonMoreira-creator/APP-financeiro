@@ -29,7 +29,7 @@ async function cfgTemplateNewsletter() {
   if (!v) return null;
   try {
     const obj = typeof v === 'string' ? JSON.parse(v) : v;
-    if (obj && obj.template) return { template: String(obj.template), com_nome: obj.com_nome !== false };
+    if (obj && obj.template) return { template: String(obj.template), com_nome: obj.com_nome !== false, sample_url: obj.sample_url || null };
   } catch {
     // aceita tambem string simples com o nome do template
     if (typeof v === 'string' && v.trim()) return { template: v.trim(), com_nome: true };
@@ -93,7 +93,9 @@ export default async function handler(req, res) {
           bodyParams = [nome || 'cliente'];
         }
 
-        const r = await enviarTemplateLara(c.telefone, cfg.template, bodyParams);
+        // criativo fixo da newsletter (configurável no botão Templates da aba)
+        const opts = cfg.sample_url ? { headerImage: cfg.sample_url + (cfg.sample_url.includes('?') ? '&' : '?') + 'v=' + Date.now() } : undefined;
+        const r = await enviarTemplateLara(c.telefone, cfg.template, bodyParams, opts);
         const metaId = r?.messages?.[0]?.id || null;
         if (!metaId) { erros++; continue; }
 

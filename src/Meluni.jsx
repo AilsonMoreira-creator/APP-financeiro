@@ -1598,6 +1598,29 @@ function SecaoCarrinho() {
   // Filtro Carrinhos | Newsletter (Ailson 03/08/2026): inscritas da newsletter
   // entram no mesmo funil com origem='newsletter' e disparo/template proprios
   const [origem, setOrigem] = useState('carrinho');
+  // Botao Templates da aba Carrinho (Ailson 03/08/2026): carrinho abandonado
+  // (informativo — a foto e a do produto) + newsletter (criativo fixo trocavel)
+  const [modalTplCarr, setModalTplCarr] = useState(null); // {carrinho:[], newsletter, carregando, trocando}
+  const abrirTplCarr = () => {
+    setModalTplCarr({ carrinho: [], newsletter: null, carregando: true, trocando: false });
+    fetch('/api/meluni-templates-carrinho').then(r => r.json()).then(j => {
+      setModalTplCarr(m => m ? { ...m, carrinho: j.carrinho || [], newsletter: j.newsletter || null, carregando: false } : m);
+    }).catch(() => setModalTplCarr(m => m ? { ...m, carregando: false } : m));
+  };
+  const trocarCriativoNews = async (file) => {
+    if (!file) return;
+    const b64 = await new Promise((ok, err) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = err; fr.readAsDataURL(file); });
+    setModalTplCarr(m => m ? { ...m, trocando: true } : m);
+    try {
+      const r = await fetch('/api/meluni-templates-carrinho', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagem_base64: b64, content_type: file.type || 'image/jpeg' }),
+      });
+      const j = await r.json();
+      if (j.ok) setModalTplCarr(m => m ? { ...m, trocando: false, newsletter: { ...(m.newsletter || {}), sample_url: j.sample_url } } : m);
+      else { alert(j.erro || 'falhou'); setModalTplCarr(m => m ? { ...m, trocando: false } : m); }
+    } catch { alert('falhou'); setModalTplCarr(m => m ? { ...m, trocando: false } : m); }
+  };
   const carregar = useCallback(async (off = 0) => {
     setLoading(true);
     try {
@@ -1718,6 +1741,7 @@ function SecaoCarrinho() {
             }}>{l}</button>
           ))}
         </span>
+        <button onClick={abrirTplCarr} style={{ background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }} title="Templates usados na aba (carrinho abandonado e newsletter)">🖼 Templates</button>
         <button onClick={() => setDias(d => d > 0 ? 0 : 30)} title="alterna entre últimos 30 dias e todos os períodos"
           style={{ ...selStyle, fontWeight: 700, color: dias > 0 ? MELUNI : palette.inkMuted, borderColor: dias > 0 ? MELUNI : palette.beige }}>
           {dias > 0 ? '🕒 últimos 30 dias' : 'todos os períodos'}
@@ -1734,6 +1758,56 @@ function SecaoCarrinho() {
         )}
         {dispMsg && <span style={{ fontSize: 11.5, fontWeight: 600, color: palette.inkSoft, fontFamily: FONT }}>{dispMsg}</span>}
       </div>
+
+      {/* MODAL: templates da aba Carrinho (Ailson 03/08/2026) */}
+      {modalTplCarr && (
+        <div onClick={() => setModalTplCarr(null)} style={{ position: 'fixed', inset: 0, zIndex: 9200, background: 'rgba(44,62,80,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, maxWidth: 540, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 18, fontFamily: FONT }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink, flex: 1 }}>🖼 Templates da aba Carrinho</div>
+              <button onClick={() => setModalTplCarr(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: palette.inkMuted, cursor: 'pointer' }}>×</button>
+            </div>
+            {modalTplCarr.carregando ? (
+              <div style={{ padding: 18, textAlign: 'center', color: palette.inkMuted, fontSize: 12 }}>carregando…</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: palette.ink, margin: '4px 0 6px' }}>🛒 Carrinho abandonado</div>
+                <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 8 }}>Nesses templates a foto que sai no topo é <b>a do produto do carrinho</b> — montada automaticamente a cada envio, não tem criativo fixo pra trocar.</div>
+                {modalTplCarr.carrinho.length === 0 ? (
+                  <div style={{ padding: 10, fontSize: 12, color: '#b4453a' }}>Nenhum template de carrinho configurado.</div>
+                ) : modalTplCarr.carrinho.map(t => (
+                  <div key={t.versao} style={{ padding: '9px 11px', borderRadius: 9, border: `1px solid ${palette.beige}`, marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: palette.ink, textTransform: 'capitalize' }}>{t.versao.replace(/_/g, ' ')}</span>
+                      {t.com_foto && <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 800 }}>📷 foto do produto</span>}
+                      <span style={{ fontSize: 10, color: palette.inkMuted, marginLeft: 'auto' }}>{t.name || '—'}</span>
+                    </div>
+                    {t.body && <div style={{ fontSize: 10.5, color: palette.inkSoft, marginTop: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.body}</div>}
+                  </div>
+                ))}
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: palette.ink, margin: '14px 0 6px' }}>📰 Newsletter</div>
+                {!modalTplCarr.newsletter ? (
+                  <div style={{ padding: 10, fontSize: 12, color: '#b4453a' }}>Template da newsletter ainda não configurado — cria na Meta e me manda o nome que eu cadastro. O criativo já pode ficar salvo aqui.</div>
+                ) : null}
+                <div style={{ display: 'flex', gap: 12, padding: 12, borderRadius: 10, border: `1px solid ${palette.beige}`, alignItems: 'flex-start' }}>
+                  {modalTplCarr.newsletter?.sample_url
+                    ? <img src={modalTplCarr.newsletter.sample_url} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} />
+                    : <div style={{ width: 84, height: 84, borderRadius: 10, background: '#f0ebe4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>📰</div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink }}>Criativo da newsletter</div>
+                    <div style={{ fontSize: 10.5, color: palette.inkMuted, marginBottom: 8 }}>template Meta: {modalTplCarr.newsletter?.template || 'aguardando cadastro'} · sai como foto no topo do disparo</div>
+                    <label style={{ background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-block' }}>
+                      {modalTplCarr.trocando ? 'enviando…' : '📷 Trocar criativo'}
+                      <input type="file" accept="image/*" style={{ display: 'none' }} disabled={modalTplCarr.trocando}
+                        onChange={e => { const fl = e.target.files?.[0]; e.target.value = ''; trocarCriativoNews(fl); }} />
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       <BarraFiltroTags isDesktop={isDesktop} filtroTag={filtroTag} setFiltroTag={setFiltroTag} tagsTick={tagsTick} onGerir={() => setModalTags(true)} />
       {modalTags && <GerirTagsModalMeluni onClose={() => { setModalTags(false); setTagsTick(t => t + 1); }} />}
       {!loading && carrinhos.length === 0 && <Placeholder>Nenhum carrinho nesse estágio.</Placeholder>}
