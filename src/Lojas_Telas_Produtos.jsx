@@ -64,25 +64,30 @@ const ProdutosTab = ({ userId }) => {
 
   useEffect(() => { setData30(null); setErro30(null); }, [loja]);
   const algumaAba30 = Object.values(dias30PorAba).some(Boolean);
+  // Fix 03/08/2026 (carregando infinito): a versao anterior tinha carregando30
+  // nas deps + cleanup cancelador — o proprio setCarregando30(true) re-rodava o
+  // efeito e CANCELAVA o fetch em voo; a resposta chegava (200 no servidor) e
+  // era descartada, travando o "Carregando 30 dias…" pra sempre. Agora o
+  // controle e por requestId (ref): resposta so aplica se ainda for a atual.
+  const req30Ref = React.useRef(0);
   useEffect(() => {
     // erro30 preso: nao re-tenta sozinho (evita loop de fetch falhando);
     // o botao "tentar de novo" limpa o erro e este efeito re-dispara.
-    if (!algumaAba30 || data30 || carregando30 || erro30) return;
-    let cancelado = false;
+    if (!algumaAba30 || data30 || erro30) return;
+    const rid = ++req30Ref.current;
     setCarregando30(true);
     fetch(`/api/lojas-produtos-raiox?loja=${loja}&dias=30`, {
       headers: { 'X-User': userId || 'ailson' },
     })
       .then(r => r.json().then(dd => ({ ok: r.ok, dd })))
       .then(({ ok, dd }) => {
-        if (cancelado) return;
+        if (rid !== req30Ref.current) return; // resposta antiga (trocou loja no meio)
         if (ok) setData30(dd);
         else setErro30(dd?.error || 'Erro ao carregar 30 dias');
         setCarregando30(false);
       })
-      .catch(e => { if (!cancelado) { setErro30(e.message || 'Erro de rede'); setCarregando30(false); } });
-    return () => { cancelado = true; };
-  }, [algumaAba30, data30, carregando30, erro30, loja, userId]);
+      .catch(e => { if (rid === req30Ref.current) { setErro30(e.message || 'Erro de rede'); setCarregando30(false); } });
+  }, [algumaAba30, data30, erro30, loja, userId]);
 
   // Dados exibidos na aba atual: 30d quando o toggle da aba esta ligado
   const em30 = (id) => !!dias30PorAba[id];
