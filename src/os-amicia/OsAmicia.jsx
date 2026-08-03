@@ -1108,10 +1108,14 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
           >
             <KpiMini label="Unidades" valor={dados.totais.unidades.toLocaleString('pt-BR')} fam={CALIBRI} />
             <KpiMini label="Receita bruta" valor={`R$ ${fmt(dados.totais.receita_bruta)}`} fam={CALIBRI} />
-            <KpiMini label="Lucro bruto" valor={`R$ ${fmt(dados.totais.lucro_bruto)}`} fam={CALIBRI} />
             <KpiMini
-              label={`Lucro líquido (-${dados.devolucao_aplicada_pct || 10}%)`}
+              label={`Lucro estimado (-${dados.devolucao_aplicada_pct || 10}%)`}
               valor={`R$ ${fmt(dados.totais.lucro_liquido)}`}
+              fam={CALIBRI}
+            />
+            <KpiMini
+              label={`Lucro real (-${dados.devolucao_aplicada_pct || 10}%)`}
+              valor={`R$ ${fmt(dados.totais.lucro_real_liquido ?? dados.totais.lucro_liquido)}`}
               fam={CALIBRI}
               destaque
             />
@@ -1141,7 +1145,10 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
                       {canalLabel[c.canal] || c.canal}
                     </div>
                     <div style={{ fontSize: 18, fontWeight: 800, marginTop: 3 }}>
-                      R$ {fmt(c.lucro_liquido)}
+                      R$ {fmt(c.lucro_real_liquido ?? c.lucro_liquido)}
+                    </div>
+                    <div style={{ fontSize: 10, opacity: 0.85, marginTop: 2 }}>
+                      estimado: R$ {fmt(c.lucro_liquido)}
                     </div>
                     <div style={{ fontSize: 11, opacity: 0.85, marginTop: 3 }}>
                       {c.unidades.toLocaleString('pt-BR')} un · R$ {fmt(c.receita_bruta)}

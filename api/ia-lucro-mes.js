@@ -53,9 +53,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    // v2 (Ailson 02/08/2026): lucro ESTIMADO (tabela da calculadora, igual antes)
+    // + lucro REALIZADO (preco praticado no pedido x taxas ao vivo do Definir
+    // taxas, sem a linha de desconto previsto — o desconto real ja esta no preco)
     const { data, error } = await supabase
-      .from('vw_lucro_marketplace_mes')
-      .select('canal_norm, unidades_canal, receita_bruta_canal, lucro_bruto_canal, lucro_liquido_canal');
+      .from('vw_lucro_marketplace_mes_v2')
+      .select('canal_norm, unidades_canal, receita_bruta_canal, lucro_estimado_canal, lucro_estimado_liquido, lucro_realizado_canal, lucro_realizado_liquido');
 
     if (error) {
       return res.status(500).json({ error: `Consulta falhou: ${error.message}` });
@@ -65,8 +68,11 @@ export default async function handler(req, res) {
       canal: r.canal_norm,
       unidades: r.unidades_canal ?? 0,
       receita_bruta: Number(r.receita_bruta_canal ?? 0),
-      lucro_bruto: Number(r.lucro_bruto_canal ?? 0),
-      lucro_liquido: Number(r.lucro_liquido_canal ?? 0),
+      // compat: lucro_bruto/lucro_liquido continuam sendo o ESTIMADO
+      lucro_bruto: Number(r.lucro_estimado_canal ?? 0),
+      lucro_liquido: Number(r.lucro_estimado_liquido ?? 0),
+      lucro_real_bruto: Number(r.lucro_realizado_canal ?? 0),
+      lucro_real_liquido: Number(r.lucro_realizado_liquido ?? 0),
     }));
 
     const totais = canais.reduce(
@@ -75,14 +81,18 @@ export default async function handler(req, res) {
         receita_bruta: acc.receita_bruta + c.receita_bruta,
         lucro_bruto: acc.lucro_bruto + c.lucro_bruto,
         lucro_liquido: acc.lucro_liquido + c.lucro_liquido,
+        lucro_real_bruto: acc.lucro_real_bruto + c.lucro_real_bruto,
+        lucro_real_liquido: acc.lucro_real_liquido + c.lucro_real_liquido,
       }),
-      { unidades: 0, receita_bruta: 0, lucro_bruto: 0, lucro_liquido: 0 }
+      { unidades: 0, receita_bruta: 0, lucro_bruto: 0, lucro_liquido: 0, lucro_real_bruto: 0, lucro_real_liquido: 0 }
     );
 
     // Arredondamento final pra 2 casas
     totais.receita_bruta = Math.round(totais.receita_bruta * 100) / 100;
     totais.lucro_bruto = Math.round(totais.lucro_bruto * 100) / 100;
     totais.lucro_liquido = Math.round(totais.lucro_liquido * 100) / 100;
+    totais.lucro_real_bruto = Math.round(totais.lucro_real_bruto * 100) / 100;
+    totais.lucro_real_liquido = Math.round(totais.lucro_real_liquido * 100) / 100;
 
     const hoje = new Date();
     const mesRef = `${hoje.getUTCFullYear()}-${String(hoje.getUTCMonth() + 1).padStart(2, '0')}`;
