@@ -29,7 +29,7 @@ async function cfgTemplateNewsletter() {
   if (!v) return null;
   try {
     const obj = typeof v === 'string' ? JSON.parse(v) : v;
-    if (obj && obj.template) return { template: String(obj.template), com_nome: obj.com_nome !== false, sample_url: obj.sample_url || null };
+    if (obj && obj.template) return { template: String(obj.template), com_nome: obj.com_nome !== false, sample_url: obj.sample_url || null, body: obj.body || '' };
   } catch {
     // aceita tambem string simples com o nome do template
     if (typeof v === 'string' && v.trim()) return { template: v.trim(), com_nome: true };
@@ -99,9 +99,23 @@ export default async function handler(req, res) {
         const metaId = r?.messages?.[0]?.id || null;
         if (!metaId) { erros++; continue; }
 
+        const agora = nowIso();
+        if (conv?.id) {
+          let textoReal = String(cfg.body || '');
+          if (bodyParams.length) textoReal = textoReal.split('{{1}}').join(bodyParams[0]);
+          await supabase.from('meluni_mensagens').insert({
+            conversa_id: conv.id, direcao: 'saida', autor: 'lara_newsletter',
+            tipo_midia: 'template', template_usado: cfg.template,
+            texto: textoReal || '[newsletter]', midia_url: cfg.sample_url || null,
+            meta_message_id: metaId, enviada_em: agora,
+          });
+          await supabase.from('meluni_conversas').update({
+            etapa: 'enviados', ultima_msg_direcao: 'saida', ultima_msg_em: agora, responder_em: null,
+          }).eq('id', conv.id);
+        }
         await supabase.from('meluni_carrinhos').update({
-          status: 'enviada', enviado_em: nowIso(), enviado_template: cfg.template,
-          dados_extra: { ...(c.dados_extra || {}), lara_template_enviado_em: nowIso(), lara_template_name: cfg.template, fonte: 'newsletter' },
+          status: 'enviada', enviado_em: agora, enviado_template: cfg.template,
+          dados_extra: { ...(c.dados_extra || {}), lara_template_enviado_em: agora, lara_template_name: cfg.template, fonte: 'newsletter' },
         }).eq('id', c.id);
         enviados++;
       } catch (e) {
