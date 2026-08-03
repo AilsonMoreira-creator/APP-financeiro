@@ -1089,6 +1089,9 @@ function SecaoClientes() {
   const [conv30, setConv30] = useState(0);
   const [disparando, setDisparando] = useState(false);
   const [campanha, setCampanha] = useState('poscompra');
+  // Disparo de novidade com ESCOLHA de template (Ailson 03/08/2026) + gestao de criativos
+  const [modalNovidade, setModalNovidade] = useState(null); // {ids, aviso, tpls:[], versao, carregando}
+  const [modalTemplates, setModalTemplates] = useState(null); // {tpls:[], trocando:versao|null}
   const [recargaHoje, setRecargaHoje] = useState(0);
   const disparosHoje = useDisparosHoje(recargaHoje);
   const isDesktop = useIsDesktop();
@@ -1121,7 +1124,7 @@ function SecaoClientes() {
       if (periodo) p.set('periodo_dias', periodo);
       // Na Carteira a janela é travada pela campanha (pós-compra = 10-15 dias;
       // novidade = +7 dias). Nas outras abas vale o filtro manual de janela.
-      const janelaEff = etapa === 'carteira' ? (campanha === 'novidade' ? '7-' : '10-15') : janela;
+      const janelaEff = etapa === 'carteira' ? (campanha === 'todos' ? '' : campanha === 'novidade' ? '7-' : '10-15') : janela;
       if (janelaEff) { const [a, b] = janelaEff.split('-'); p.set('janela_min', a); p.set('janela_max', b); }
       if (msgDias) p.set('msg_dias', msgDias);
       const r = await fetch('/api/meluni-clientes-list?' + p.toString());
@@ -1168,8 +1171,8 @@ function SecaoClientes() {
   const dispararSel = async () => {
     let ids = Array.from(sel);
     if (!ids.length || disparando) return;
-    const ehNovidade = campanha === 'novidade';
-    const nomeCampanha = ehNovidade ? 'a novidade (moletinho)' : 'a mensagem pós-compra da Lara';
+    const ehNovidade = campanha === 'novidade' || campanha === 'todos';
+    const nomeCampanha = ehNovidade ? 'a novidade' : 'a mensagem pós-compra da Lara';
 
     // trava pos-compra: nao dispara antes de 10 dias da compra (mercadoria pode nao ter chegado).
     // O backend tambem barra; aqui so tira da selecao e avisa pra o numero bater.
@@ -1187,13 +1190,22 @@ function SecaoClientes() {
       }
     }
 
+    // Novidade/Todos: abre o modal de ESCOLHA DE TEMPLATE (Ailson 03/08/2026)
+    if (ehNovidade) {
+      const avisoQtd = ids.length > 30 ? `${avisoRecentes}Você selecionou ${ids.length}. Vão sair os primeiros 30 agora (repita pra continuar).` : avisoRecentes;
+      setModalNovidade({ ids, aviso: avisoQtd, tpls: [], versao: null, carregando: true });
+      fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
+        setModalNovidade(m => m ? { ...m, tpls: j.templates || [], versao: (j.templates || [])[0]?.versao || null, carregando: false } : m);
+      }).catch(() => setModalNovidade(m => m ? { ...m, carregando: false } : m));
+      return;
+    }
     const aviso = ids.length > 30
       ? `${avisoRecentes}Você selecionou ${ids.length}. Vão sair os primeiros 30 agora (repita pra continuar). Disparar ${nomeCampanha}?`
       : `${avisoRecentes}Disparar ${nomeCampanha} pra ${ids.length} cliente(s)? Envia agora no WhatsApp.`;
     if (!window.confirm(aviso)) return;
     setDisparando(true);
     try {
-      const url = ehNovidade ? '/api/meluni-clientes-novidade-disparo' : '/api/meluni-clientes-disparo';
+      const url = '/api/meluni-clientes-disparo';
       const r = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),
@@ -1261,6 +1273,7 @@ function SecaoClientes() {
           <select style={selStyle} value={campanha} onChange={e => setCampanha(e.target.value)} title="Campanha do disparo (define a janela)">
             <option value="poscompra">Pós-compra · 10 a 15 dias</option>
             <option value="novidade">Novidade · +7 dias</option>
+            <option value="todos">Todos · sem janela</option>
           </select>
         ) : (
           <select style={selStyle} value={janela} onChange={e => setJanela(e.target.value)}>
@@ -1271,9 +1284,74 @@ function SecaoClientes() {
           <option value="valor">Ordenar: maior valor</option><option value="compras">Nº de compras</option><option value="recente">Mais recente</option>
         </select>
         <select style={selStyle} value={msgDias} onChange={e => setMsgDias(e.target.value)}>
-          <option value="">Recebeu msg: ignorar</option><option value="30">Últimos 30 dias</option><option value="90">Até 90 dias</option>
+          <option value="">Recebeu msg: ignorar</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="90">Até 90 dias</option>
         </select>
+        <button onClick={abrirModalTemplates} style={{ ...selStyle, fontWeight: 700 }} title="Ver os templates de campanha e trocar criativos">🖼 Templates</button>
       </div>
+
+      {/* MODAL: escolha do template no disparo de novidade (Ailson 03/08/2026) */}
+      {modalNovidade && (
+        <div onClick={() => !disparando && setModalNovidade(null)} style={{ position: 'fixed', inset: 0, zIndex: 9200, background: 'rgba(44,62,80,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, maxWidth: 460, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 18, fontFamily: FONT }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>Disparar pra {modalNovidade.ids.length} cliente(s)</div>
+            {modalNovidade.aviso && <div style={{ fontSize: 11.5, color: '#8a6d1a', background: '#fdf6e3', border: '1px solid #f0e3b8', borderRadius: 8, padding: '7px 10px', marginBottom: 10, whiteSpace: 'pre-line' }}>{modalNovidade.aviso}</div>}
+            <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>Escolhe o template que vai sair:</div>
+            {modalNovidade.carregando ? (
+              <div style={{ padding: 18, textAlign: 'center', color: palette.inkMuted, fontSize: 12 }}>carregando templates…</div>
+            ) : modalNovidade.tpls.length === 0 ? (
+              <div style={{ padding: 14, fontSize: 12, color: '#b4453a' }}>Nenhum template configurado ainda (lara_templates_novidade).</div>
+            ) : modalNovidade.tpls.map(t => (
+              <label key={t.versao} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 10, border: `2px solid ${modalNovidade.versao === t.versao ? MELUNI : palette.beige}`, marginBottom: 8, cursor: 'pointer', background: modalNovidade.versao === t.versao ? MELUNI_SOFT : '#fff' }}>
+                <input type="radio" name="tplNovidade" checked={modalNovidade.versao === t.versao} onChange={() => setModalNovidade(m => ({ ...m, versao: t.versao }))} style={{ width: 16, height: 16 }} />
+                {t.sample_url ? <img src={t.sample_url} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} /> : <span style={{ fontSize: 20 }}>📄</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: palette.ink, textTransform: 'capitalize' }}>{t.versao}</div>
+                  <div style={{ fontSize: 10.5, color: palette.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.body || t.name}</div>
+                </div>
+              </label>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModalNovidade(null)} disabled={disparando} style={{ ...selStyle }}>Cancelar</button>
+              <button onClick={dispararNovidadeVersao} disabled={disparando || !modalNovidade.versao}
+                style={{ ...selStyle, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', opacity: (disparando || !modalNovidade.versao) ? 0.6 : 1 }}>
+                {disparando ? 'enviando…' : 'Disparar agora'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: gestão dos templates de campanha (ver e trocar criativos) */}
+      {modalTemplates && (
+        <div onClick={() => setModalTemplates(null)} style={{ position: 'fixed', inset: 0, zIndex: 9200, background: 'rgba(44,62,80,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, maxWidth: 520, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 18, fontFamily: FONT }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink, flex: 1 }}>🖼 Templates de campanha</div>
+              <button onClick={() => setModalTemplates(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: palette.inkMuted, cursor: 'pointer' }}>×</button>
+            </div>
+            <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 12 }}>O criativo é a foto que sai no topo do template. Trocar aqui vale pro PRÓXIMO disparo — o texto aprovado na Meta não muda.</div>
+            {modalTemplates.carregando ? (
+              <div style={{ padding: 18, textAlign: 'center', color: palette.inkMuted, fontSize: 12 }}>carregando…</div>
+            ) : modalTemplates.tpls.length === 0 ? (
+              <div style={{ padding: 14, fontSize: 12, color: '#b4453a' }}>Nenhum template configurado ainda.</div>
+            ) : modalTemplates.tpls.map(t => (
+              <div key={t.versao} style={{ display: 'flex', gap: 12, padding: 12, borderRadius: 10, border: `1px solid ${palette.beige}`, marginBottom: 10, alignItems: 'flex-start' }}>
+                {t.sample_url ? <img src={t.sample_url} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} /> : <div style={{ width: 84, height: 84, borderRadius: 10, background: palette.beigeSoft || '#f0ebe4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>📄</div>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, textTransform: 'capitalize' }}>{t.versao}</div>
+                  <div style={{ fontSize: 10.5, color: palette.inkMuted, marginBottom: 6 }}>template Meta: {t.name || '—'}</div>
+                  {t.body && <div style={{ fontSize: 11, color: palette.inkSoft, marginBottom: 8, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.body}</div>}
+                  <label style={{ ...selStyle, fontWeight: 700, cursor: 'pointer', display: 'inline-block' }}>
+                    {modalTemplates.trocando === t.versao ? 'enviando…' : '📷 Trocar criativo'}
+                    <input type="file" accept="image/*" style={{ display: 'none' }} disabled={!!modalTemplates.trocando}
+                      onChange={e => { const fl = e.target.files?.[0]; e.target.value = ''; trocarCriativo(t.versao, fl); }} />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* barra de seleção em massa */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -1572,6 +1650,50 @@ function SecaoCarrinho() {
     } catch { setDispMsg('falhou'); }
     setDisparando(false);
     setTimeout(() => setDispMsg(''), 8000);
+  };
+
+  // Executa o disparo de novidade com o template escolhido no modal (versao)
+  const dispararNovidadeVersao = async () => {
+    const m = modalNovidade;
+    if (!m || !m.versao || disparando) return;
+    setDisparando(true); setDispMsg('');
+    try {
+      const r = await fetch('/api/meluni-clientes-novidade-disparo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: m.ids, versao: m.versao }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        setDispMsg(`✓ ${j.enviados ?? 0} enviado(s)${j.pulados ? ` · ${j.pulados} pulado(s)` : ''}${j.erros ? ` · ${j.erros} erro(s)` : ''}`);
+        setSel(new Set()); carregar();
+      } else { setDispMsg(j.erro || 'falhou'); }
+    } catch { setDispMsg('falhou'); }
+    setDisparando(false); setModalNovidade(null);
+    setTimeout(() => setDispMsg(''), 8000);
+  };
+
+  // Troca o criativo (imagem do header) de um template — modal Templates
+  const trocarCriativo = async (versao, file) => {
+    if (!file) return;
+    const b64 = await new Promise((ok, err) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = err; fr.readAsDataURL(file); });
+    setModalTemplates(m => m ? { ...m, trocando: versao } : m);
+    try {
+      const r = await fetch('/api/meluni-templates-novidade', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versao, imagem_base64: b64, content_type: file.type || 'image/jpeg' }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        setModalTemplates(m => m ? { ...m, trocando: null, tpls: m.tpls.map(t => t.versao === versao ? { ...t, sample_url: j.sample_url } : t) } : m);
+      } else { alert(j.erro || 'falhou'); setModalTemplates(m => m ? { ...m, trocando: null } : m); }
+    } catch { alert('falhou'); setModalTemplates(m => m ? { ...m, trocando: null } : m); }
+  };
+
+  const abrirModalTemplates = () => {
+    setModalTemplates({ tpls: [], trocando: null, carregando: true });
+    fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
+      setModalTemplates(m => m ? { ...m, tpls: j.templates || [], carregando: false } : m);
+    }).catch(() => setModalTemplates(m => m ? { ...m, carregando: false } : m));
   };
 
   const carregarMais = carrinhos.length < total ? (
