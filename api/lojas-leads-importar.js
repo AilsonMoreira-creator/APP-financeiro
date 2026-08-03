@@ -236,6 +236,21 @@ function inferirUf(telefoneNorm) {
   return DDD_TO_UF[ddd] || null;
 }
 
+// Timestamp tolerante (Ailson 03/08/2026): a planilha nova do Convertr trocou
+// o formato de data de ISO (2026-07-31 2:43:23) pra BR (31/07/2026 23:23) —
+// dia >12 estourava no Postgres e derrubava o lote inteiro ("Erro ao gravar
+// leads"). Converte dd/mm/yyyy [hh:mm[:ss]] pra ISO; ISO passa direto.
+function parseTsFlex(v) {
+  if (!v || v === '0') return null;
+  v = String(v).trim();
+  const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (m) {
+    const hh = (m[4] || '0').padStart(2, '0');
+    return `${m[3]}-${m[2]}-${m[1]} ${hh}:${m[5] || '00'}:${m[6] || '00'}`;
+  }
+  return v.length >= 10 ? v : null;
+}
+
 // ─── Helper: pega valor de coluna por nome do header ─────────────────────
 function col(row, headerMap, name) {
   const idx = headerMap[name];
@@ -368,7 +383,7 @@ export default async function handler(req, res) {
           : 'aguardando_atribuicao';
 
         // Datas — sanitizar timestamps vazios
-        const parseTs = v => (v && v !== '0' && v.length >= 10) ? v : null;
+        const parseTs = parseTsFlex;
 
         leadsParaUpsert.push({
           convertr_customer_id: convertr_id,
@@ -521,7 +536,7 @@ export default async function handler(req, res) {
           let itemsParsed = parseItemsHtml(itemsHtml);
           if (!itemsParsed.length) itemsParsed = parseProdutosTexto(itemsHtml);
 
-          const parseTs = v => (v && v.length >= 10) ? v : null;
+          const parseTs = parseTsFlex;
 
           eventosParaUpsert.push({
             convertr_uuid: cUuid,
