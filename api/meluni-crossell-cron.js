@@ -7,8 +7,8 @@
 //
 // MOTOR DE DECISÃO (regras do Ailson):
 //   Cores-alvo (democráticas): AZUL CLARO e VERDE SÁLVIA.
-//   1. Comprou REF 3150 ou 2927 (couro) -> oferecer vestido midi BEGE (neutro)
-//      ou o conjunto de moletinho 3228 -> template OUTRO_MODELO.
+//   1. Comprou REF 3150, 2927 (couro) OU 3228 (moletinho) -> oferecer um
+//      vestido midi BEGE (neutro, ex 2790) -> template OUTRO_MODELO.
 //   2. Caso geral, item mais recente primeiro: se a MESMA REF tem cor-alvo em
 //      estoque que a cliente ainda nao comprou -> oferece a de MAIOR estoque
 //      -> template MESMO_MODELO. (Cobre tudo: comprou inverno/bege/preto ->
@@ -39,8 +39,9 @@ const LOTE = 60;
 const MIN_ESTOQUE = 10;
 const CORES_ALVO = ['azulclaro', 'verdesalvia'];
 const LABEL_COR = { azulclaro: 'Azul Claro', verdesalvia: 'Verde Sálvia', bege: 'Bege' };
-const REFS_COURO = new Set(['3150', '2927']);
-const REF_MOLETINHO = '3228';
+// Gatilho do grupo neutro (Ailson 03/08 corrigido): couro 3150/2927 E o
+// moletinho 3228 recebem a MESMA oferta — vestido midi em cor neutra (bege).
+const REFS_GATILHO_NEUTRO = new Set(['3150', '2927', '3228']);
 const ETAPAS_FECHADAS = ['conversao', 'ganho', 'perdido'];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const soDigitos = (s) => String(s || '').replace(/\D/g, '');
@@ -172,6 +173,10 @@ export default async function handler(req, res) {
     const { data: prods } = await supabase.from('lojas_produtos').select('ref, categoria, nome');
     const catPorRef = {}, nomePorRef = {};
     (prods || []).forEach(p => { const ref = l0(p.ref); if (p.categoria) catPorRef[ref] = p.categoria; if (p.nome) nomePorRef[ref] = p.nome; });
+    // categoria derivada do TITULO do estoque quando lojas_produtos nao cobre
+    Object.keys(tituloPorRef).forEach(ref => {
+      if (!catPorRef[ref]) { const c = categoriaDaDesc(tituloPorRef[ref]); if (c) catPorRef[ref] = c; }
+    });
     // refs por categoria COM cor alvo em estoque (pro fallback de modelo)
     const refsPorCategoria = {};
     Object.keys(estoquePorRefCor).forEach(ref => {
@@ -221,18 +226,15 @@ export default async function handler(req, res) {
       const refsCompradas = new Set(compras.map(i => i.ref));
       const coresPorRef = {};
       compras.forEach(i => { if (!coresPorRef[i.ref]) coresPorRef[i.ref] = new Set(); coresPorRef[i.ref].add(i.cor); });
-      // 1. couro -> vestido midi bege ou moletinho 3228
-      if (compras.some(i => REFS_COURO.has(i.ref))) {
-        const vestidos = (refsPorCategoria['VESTIDO'] || [])
-          .concat(Object.keys(estoquePorRefCor).filter(r => (catPorRef[r] === 'VESTIDO')))
-          .filter((r, idx, arr) => arr.indexOf(r) === idx)
+      // 1. couro/moletinho -> vestido midi bege (neutro), midi primeiro, maior estoque
+      if (compras.some(i => REFS_GATILHO_NEUTRO.has(i.ref))) {
+        const vestidos = Object.keys(estoquePorRefCor)
+          .filter(r => catPorRef[r] === 'VESTIDO')
           .filter(r => !refsCompradas.has(r) && (estoquePorRefCor[r]?.bege || 0) >= MIN_ESTOQUE)
           .map(r => ({ ref: r, pcs: estoquePorRefCor[r].bege, midi: /midi/i.test(tituloDe(r)) }))
           .sort((a, b) => (b.midi - a.midi) || (b.pcs - a.pcs));
-        if (vestidos.length) return { tipo: 'outro_modelo', ref: vestidos[0].ref, cor: 'bege', pcs: vestidos[0].pcs, motivo: 'comprou couro → vestido bege' };
-        const molet = estoquePorRefCor[REF_MOLETINHO];
-        const corM = molet ? Object.entries(molet).sort((a, b) => b[1] - a[1])[0] : null;
-        if (corM && corM[1] >= MIN_ESTOQUE) return { tipo: 'outro_modelo', ref: REF_MOLETINHO, cor: corM[0], pcs: corM[1], motivo: 'comprou couro → moletinho 3228' };
+        if (vestidos.length) return { tipo: 'outro_modelo', ref: vestidos[0].ref, cor: 'bege', pcs: vestidos[0].pcs, motivo: 'comprou couro/moletinho → vestido midi bege' };
+        // sem vestido bege disponivel: segue pro fluxo geral (cores de verao)
       }
       // 2. mesma ref em cor alvo que ainda nao comprou
       for (const item of compras) {
