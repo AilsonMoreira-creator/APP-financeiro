@@ -1363,13 +1363,22 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
       }}>
         <input type="checkbox" checked={sel} onClick={(e) => e.stopPropagation()} onChange={onSel}
           style={{ width: 16, height: 16, cursor: 'pointer', flexShrink: 0 }} />
-        <ShoppingCart size={13} color={MELUNI} style={{ flexShrink: 0 }} />
+        {c.origem === 'newsletter'
+          ? <span style={{ fontSize: 12, flexShrink: 0 }}>📰</span>
+          : <ShoppingCart size={13} color={MELUNI} style={{ flexShrink: 0 }} />}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {fmtBRL(c.valor)}{nome ? ` · ${nome}` : ''}
+          <div style={{ fontSize: 13, fontWeight: ativo ? 700 : 600, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {c.origem === 'newsletter'
+              ? (<>
+                  <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 800, letterSpacing: 0.3, flexShrink: 0 }}>NEWSLETTER</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{nome || fmtTel(tel) || 'sem nome'}</span>
+                </>)
+              : <span>{fmtBRL(c.valor)}{nome ? ` · ${nome}` : ''}</span>}
           </div>
           <div style={{ fontSize: 11, color: palette.inkMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>{itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · {fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
+            <span>{c.origem === 'newsletter'
+              ? `inscrita em ${fmtData(String(c.data_carrinho || '').slice(0, 10))}`
+              : `${itens.reduce((a, i) => a + (i.qtd || 1), 0)} itens · ${fmtData(String(c.data_carrinho || '').slice(0, 10))}`}</span>
             <RelogioBadge c={c} />
           </div>
           <TagsDoCard c={c} wrap />
@@ -1384,10 +1393,14 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
     <div onClick={onAbrir} title={onAbrir ? 'Abrir conversa' : undefined} style={{ background: palette.surface, borderRadius: 12, padding: 12, border: `1px solid ${palette.beige}`, cursor: onAbrir ? 'pointer' : 'default' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <input type="checkbox" checked={sel} onClick={(e) => e.stopPropagation()} onChange={onSel} style={{ width: 18, height: 18, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
-        <ShoppingCart size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />
+        {c.origem === 'newsletter'
+          ? <span style={{ fontSize: 14, marginTop: 1, flexShrink: 0 }}>📰</span>
+          : <ShoppingCart size={15} color={MELUNI} style={{ marginTop: 3, flexShrink: 0 }} />}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: palette.ink }}>{fmtBRL(c.valor)}</span>
+            {c.origem === 'newsletter'
+              ? <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, background: MELUNI_SOFT, color: MELUNI, fontWeight: 800, letterSpacing: 0.4 }}>NEWSLETTER</span>
+              : <span style={{ fontSize: 15, fontWeight: 700, color: palette.ink }}>{fmtBRL(c.valor)}</span>}
             {nome && <span style={{ fontSize: 13, color: palette.inkSoft }}>{nome}</span>}
             {c.conversa_pendente && <PillConversa tempo={tempoSemResposta(c.pendente_em)} />}
             {c.is_cliente && <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 700 }}>já é cliente</span>}
@@ -1396,8 +1409,8 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
           <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
             <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
             {!tel && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4' }}>📵 sem número</span>}
-            <CampoKPI label="itens" valor={String(itens.reduce((a, i) => a + (i.qtd || 1), 0))} />
-            <span>{fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
+            {c.origem !== 'newsletter' && <CampoKPI label="itens" valor={String(itens.reduce((a, i) => a + (i.qtd || 1), 0))} />}
+            <span>{c.origem === 'newsletter' ? 'inscrita em ' : ''}{fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
             <RelogioBadge c={c} />
           </div>
           {itens.length > 0 && (
@@ -1504,15 +1517,18 @@ function SecaoCarrinho() {
     { id: 'perdida', label: 'Perdidos', unread: unread.perdida,
       help: 'São os carrinhos que passaram do prazo sem a cliente responder nem comprar.\n\nMas não é o fim: se a cliente voltar a mandar mensagem, o carrinho reabre sozinho e volta pra Conversando. E vocês também podem reabrir na mão, movendo ele de volta, se quiserem retomar.' },
   ];
+  // Filtro Carrinhos | Newsletter (Ailson 03/08/2026): inscritas da newsletter
+  // entram no mesmo funil com origem='newsletter' e disparo/template proprios
+  const [origem, setOrigem] = useState('carrinho');
   const carregar = useCallback(async (off = 0) => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/meluni-carrinhos-list?status=${aba}&limite=${LIM}&offset=${off}&dias=${dias}`);
+      const r = await fetch(`/api/meluni-carrinhos-list?status=${aba}&limite=${LIM}&offset=${off}&dias=${dias}&origem=${origem}`);
       const j = await r.json();
       if (j.ok) { setTotal(j.total || 0); setUnread(j.unread || {}); setConv30(j.conv30 || 0); setCarrinhos(prev => off ? [...prev, ...j.carrinhos] : j.carrinhos); }
     } catch (e) { /* ignora */ }
     setLoading(false);
-  }, [aba, dias]);
+  }, [aba, dias, origem]);
   useEffect(() => { setSel(new Set()); setChatId(null); carregar(0); }, [carregar]);
 
   // ao ABRIR o chat, zera o badge daquela conversa na hora (o backend grava visto_em
@@ -1543,7 +1559,7 @@ function SecaoCarrinho() {
     if (disparando || !sel.size) return;
     setDisparando(true); setDispMsg('');
     try {
-      const r = await fetch('/api/meluni-whats-carrinho-disparo', {
+      const r = await fetch(origem === 'newsletter' ? '/api/meluni-newsletter-disparo' : '/api/meluni-whats-carrinho-disparo', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: [...sel] }),
       });
@@ -1572,6 +1588,14 @@ function SecaoCarrinho() {
         <button onClick={selTodos} style={{ ...selStyle, fontWeight: 700 }}>
           {sel.size === carrinhos.length && carrinhos.length ? 'Limpar' : 'Selecionar todos'}
         </button>
+        <span style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: `1px solid ${palette.beige}` }}>
+          {[['carrinho', '🛒 Carrinhos'], ['newsletter', '📰 Newsletter']].map(([k, l]) => (
+            <button key={k} onClick={() => setOrigem(k)} style={{
+              background: origem === k ? MELUNI : palette.surface, color: origem === k ? '#fff' : palette.ink,
+              border: 'none', padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+            }}>{l}</button>
+          ))}
+        </span>
         <button onClick={() => setDias(d => d > 0 ? 0 : 30)} title="alterna entre últimos 30 dias e todos os períodos"
           style={{ ...selStyle, fontWeight: 700, color: dias > 0 ? MELUNI : palette.inkMuted, borderColor: dias > 0 ? MELUNI : palette.beige }}>
           {dias > 0 ? '🕒 últimos 30 dias' : 'todos os períodos'}

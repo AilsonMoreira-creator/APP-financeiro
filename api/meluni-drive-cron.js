@@ -52,6 +52,7 @@ const tipoDoNome = (nome) => {
   if (n.startsWith('carrinho')) return 'carrinhos';   // carrinho(s)
   if (n.startsWith('cliente')) return 'clientes';     // cliente(s)
   if (n.startsWith('devolu')) return 'devolucoes';    // devolução / devolucoes / devolucao
+  if (n.startsWith('newsletter')) return 'newsletter'; // newsletter_DD.MM.AAAA (Ailson 03/08/2026)
   return null;
 };
 const dataDoNome = (nome) => { const m = String(nome).match(/(\d{2})[._\-/](\d{2})[._\-/](\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
@@ -76,6 +77,25 @@ function mapCarrinho(r) {
     dados_extra: { convertr_id: r.id, customer_id: r.customer_id || null, link: r.link, items_count: r.items_count },
   };
 }
+// Newsletter do Convertr (Ailson 03/08/2026): entra na MESMA meluni_carrinhos
+// com origem='newsletter' e segue o funil do carrinho. Regras dele:
+// - so importa quem tem WhatsApp (coluna whatsapp, fallback phone)
+// - quem ja tem carrinho (qualquer situacao) e ignorado no importarTabela
+// - quem ja comprou e ignorado no importarTabela
+function mapNewsletter(r) {
+  const tel = dig(r.whatsapp) || dig(r.phone);
+  return {
+    planilha_ref: tel ? 'news_' + tel : null,
+    nome: (r.name || '').trim() || null,
+    telefone: tel || null,
+    email: (r.email || '').trim().toLowerCase() || null,
+    valor: 0, itens: [],
+    data_carrinho: (r.created_at || '').trim() || null,
+    status: 'processando', origem: 'newsletter',
+    dados_extra: { referrer: r.referrer || null, fonte: 'newsletter' },
+  };
+}
+
 function mapDevolucao(r) {
   const m = String(r.created_at || '').match(/(\d{2})\/(\d{2})\/(\d{4})/);
   const nome = [r.customer_first_name, r.customer_last_name].map(x => (x || '').trim()).filter(Boolean).join(' ') || null;
@@ -99,6 +119,43 @@ async function importarTabela(tipo, linhas) {
   } else if (tipo === 'carrinhos') {
     const { error } = await supabase.from('meluni_carrinhos').upsert(linhas.map(mapCarrinho), { onConflict: 'planilha_ref', ignoreDuplicates: true });
     if (error) throw new Error('carrinhos: ' + error.message);
+  } else if (tipo === 'newsletter') {
+    // Regras Ailson 03/08/2026: so com WhatsApp; ignora quem ja tem carrinho
+    // (qualquer status/origem) e quem ja comprou (telefone right-10 ou email).
+    let novas = linhas.map(mapNewsletter).filter(l => l.telefone && l.planilha_ref);
+    if (!novas.length) return 0;
+
+    // telefones ja presentes em meluni_carrinhos (qualquer origem)
+    const tels = [...new Set(novas.map(l => l.telefone))];
+    const jaTem = new Set();
+    for (let i = 0; i < tels.length; i += 200) {
+      const chunk = tels.slice(i, i + 200);
+      const { data } = await supabase.from('meluni_carrinhos').select('telefone').in('telefone', chunk);
+      (data || []).forEach(r => jaTem.add(r.telefone));
+    }
+
+    // compradores (n_compras>0): match por right-10 do telefone OU email
+    const telsR10 = new Set(), emailsCompra = new Set();
+    {
+      const { data } = await supabase.from('meluni_clientes').select('whatsapp,email').gt('n_compras', 0).limit(20000);
+      (data || []).forEach(r => {
+        const d = String(r.whatsapp || '').replace(/\D/g, '');
+        if (d.length >= 10) telsR10.add(d.slice(-10));
+        const e = String(r.email || '').trim().toLowerCase();
+        if (e) emailsCompra.add(e);
+      });
+    }
+
+    novas = novas.filter(l =>
+      !jaTem.has(l.telefone) &&
+      !telsR10.has(l.telefone.slice(-10)) &&
+      !(l.email && emailsCompra.has(l.email))
+    );
+    if (!novas.length) return 0;
+
+    const { error } = await supabase.from('meluni_carrinhos').upsert(novas, { onConflict: 'planilha_ref', ignoreDuplicates: true });
+    if (error) throw new Error('newsletter: ' + error.message);
+    return novas.length;
   } else if (tipo === 'devolucoes') {
     // update-on-conflict (NAO ignoreDuplicates): o planilha e fonte da verdade do
     // STATUS (Aprovado/Produto recebido/Completo) + historico. mapDevolucao so grava

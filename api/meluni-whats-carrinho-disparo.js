@@ -159,7 +159,7 @@ export default async function handler(req, res) {
   if (ids) {
     if (!ids.length) return res.status(400).json({ ok: false, erro: 'ids vazio' });
     let enviados = 0, pulados = 0, erros = 0; const detalhe = []; const pulados_atencao = [];
-    const { data: carts } = await supabase.from('meluni_carrinhos').select(COLS).in('id', ids).eq('status', 'processando');
+    const { data: carts } = await supabase.from('meluni_carrinhos').select(COLS).in('id', ids).eq('status', 'processando').eq('origem', 'carrinho');
     for (const c of (carts || [])) {
       if (c.telefone && congelados.has(chaveTel(c.telefone))) { pulados++; pulados_atencao.push(c.id); detalhe.push({ id: c.id, pulado: 'atencao' }); continue; }
       try {
@@ -194,7 +194,7 @@ export default async function handler(req, res) {
   let enviados = 0, pulados = 0, erros = 0; const detalhe = [];
   try {
     const { data: carts, error } = await supabase.from('meluni_carrinhos').select(COLS)
-      .eq('status', 'processando').not('telefone', 'is', null)
+      .eq('status', 'processando').eq('origem', 'carrinho').not('telefone', 'is', null)
       .lte('data_carrinho', teto).gte('data_carrinho', piso)
       .order('data_carrinho', { ascending: false }).limit(limite * 3);
     if (error) throw error;
