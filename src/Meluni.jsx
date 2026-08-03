@@ -1229,6 +1229,50 @@ function SecaoClientes() {
     { id: 'conversao', label: 'Conversão', unread: unread.conversao, badgeAzul: conv30 },
   ];
 
+  // Executa o disparo de novidade com o template escolhido no modal (versao)
+  const dispararNovidadeVersao = async () => {
+    const m = modalNovidade;
+    if (!m || !m.versao || disparando) return;
+    setDisparando(true); setDispMsg('');
+    try {
+      const r = await fetch('/api/meluni-clientes-novidade-disparo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: m.ids, versao: m.versao }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        setDispMsg(`✓ ${j.enviados ?? 0} enviado(s)${j.pulados ? ` · ${j.pulados} pulado(s)` : ''}${j.erros ? ` · ${j.erros} erro(s)` : ''}`);
+        setSel(new Set()); carregar();
+      } else { setDispMsg(j.erro || 'falhou'); }
+    } catch { setDispMsg('falhou'); }
+    setDisparando(false); setModalNovidade(null);
+    setTimeout(() => setDispMsg(''), 8000);
+  };
+
+  // Troca o criativo (imagem do header) de um template — modal Templates
+  const trocarCriativo = async (versao, file) => {
+    if (!file) return;
+    const b64 = await new Promise((ok, err) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = err; fr.readAsDataURL(file); });
+    setModalTemplates(m => m ? { ...m, trocando: versao } : m);
+    try {
+      const r = await fetch('/api/meluni-templates-novidade', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versao, imagem_base64: b64, content_type: file.type || 'image/jpeg' }),
+      });
+      const j = await r.json();
+      if (j.ok) {
+        setModalTemplates(m => m ? { ...m, trocando: null, tpls: m.tpls.map(t => t.versao === versao ? { ...t, sample_url: j.sample_url } : t) } : m);
+      } else { alert(j.erro || 'falhou'); setModalTemplates(m => m ? { ...m, trocando: null } : m); }
+    } catch { alert('falhou'); setModalTemplates(m => m ? { ...m, trocando: null } : m); }
+  };
+
+  const abrirModalTemplates = () => {
+    setModalTemplates({ tpls: [], trocando: null, carregando: true });
+    fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
+      setModalTemplates(m => m ? { ...m, tpls: j.templates || [], carregando: false } : m);
+    }).catch(() => setModalTemplates(m => m ? { ...m, carregando: false } : m));
+  };
+
   return (
     <div>
       <SubTabs tabs={tabs} active={etapa} onChange={setEtapa} />
@@ -1675,49 +1719,7 @@ function SecaoCarrinho() {
     setTimeout(() => setDispMsg(''), 8000);
   };
 
-  // Executa o disparo de novidade com o template escolhido no modal (versao)
-  const dispararNovidadeVersao = async () => {
-    const m = modalNovidade;
-    if (!m || !m.versao || disparando) return;
-    setDisparando(true); setDispMsg('');
-    try {
-      const r = await fetch('/api/meluni-clientes-novidade-disparo', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: m.ids, versao: m.versao }),
-      });
-      const j = await r.json();
-      if (j.ok) {
-        setDispMsg(`✓ ${j.enviados ?? 0} enviado(s)${j.pulados ? ` · ${j.pulados} pulado(s)` : ''}${j.erros ? ` · ${j.erros} erro(s)` : ''}`);
-        setSel(new Set()); carregar();
-      } else { setDispMsg(j.erro || 'falhou'); }
-    } catch { setDispMsg('falhou'); }
-    setDisparando(false); setModalNovidade(null);
-    setTimeout(() => setDispMsg(''), 8000);
-  };
 
-  // Troca o criativo (imagem do header) de um template — modal Templates
-  const trocarCriativo = async (versao, file) => {
-    if (!file) return;
-    const b64 = await new Promise((ok, err) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = err; fr.readAsDataURL(file); });
-    setModalTemplates(m => m ? { ...m, trocando: versao } : m);
-    try {
-      const r = await fetch('/api/meluni-templates-novidade', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ versao, imagem_base64: b64, content_type: file.type || 'image/jpeg' }),
-      });
-      const j = await r.json();
-      if (j.ok) {
-        setModalTemplates(m => m ? { ...m, trocando: null, tpls: m.tpls.map(t => t.versao === versao ? { ...t, sample_url: j.sample_url } : t) } : m);
-      } else { alert(j.erro || 'falhou'); setModalTemplates(m => m ? { ...m, trocando: null } : m); }
-    } catch { alert('falhou'); setModalTemplates(m => m ? { ...m, trocando: null } : m); }
-  };
-
-  const abrirModalTemplates = () => {
-    setModalTemplates({ tpls: [], trocando: null, carregando: true });
-    fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
-      setModalTemplates(m => m ? { ...m, tpls: j.templates || [], carregando: false } : m);
-    }).catch(() => setModalTemplates(m => m ? { ...m, carregando: false } : m));
-  };
 
   const carregarMais = carrinhos.length < total ? (
     <button onClick={() => carregar(carrinhos.length)} disabled={loading}
