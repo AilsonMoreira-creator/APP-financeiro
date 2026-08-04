@@ -82,7 +82,7 @@ export default async function handler(req, res) {
     // Regra do funil re-validada NA HORA do disparo (Ailson 04/08/2026): a base
     // anda depois do import — quem virou compradora ou teve carrinho trabalhado
     // desde então é pulada e marcada 'ignorada' (some da fila).
-    const telsAlvo = fila.map(c => c.telefone).filter(Boolean);
+    const telsAlvo = (cards || []).map(c => c.telefone).filter(Boolean);
     const barrados = new Set();
     try {
       const { data: cli } = await supabase.from('meluni_clientes')
@@ -94,7 +94,7 @@ export default async function handler(req, res) {
         const e = String(c.email || '').trim().toLowerCase();
         if (e) ems.add(e);
       });
-      for (const c of fila) {
+      for (const c of (cards || [])) {
         const d = String(c.telefone || '').replace(/\D/g, '');
         const e = String(c.email || '').trim().toLowerCase();
         if ((d.length >= 10 && t10.has(d.slice(-10))) || (e && ems.has(e))) barrados.add(c.telefone);
