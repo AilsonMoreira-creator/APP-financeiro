@@ -113,6 +113,7 @@ async function enviarCarrinho(c, pctLeve, exigirNome, tpls, imgAtivo) {
       tipo_midia: 'template', template_usado: nameTpl,
       texto: textoReal,
       midia_url: headerImage || null, // foto do header HSM: chat mostra o real que o cliente recebeu (Ailson 03/07/2026)
+      botao: tpls?.[versao]?.botao?.url ? { text: tpls[versao].botao.text || 'Abrir', url: tpls[versao].botao.url } : null,
       meta_message_id: metaMsgId, enviada_em: nowIso,
     });
     await supabase.from('meluni_conversas').update({

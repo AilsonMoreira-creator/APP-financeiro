@@ -1707,6 +1707,11 @@ function CarrinhoCard({ c, sel, onSel, compact, ativo, onAbrir }) {
             {!tel && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4' }}>📵 sem número</span>}
             {c.origem !== 'newsletter' && <CampoKPI label="itens" valor={String(itens.reduce((a, i) => a + (i.qtd || 1), 0))} />}
             <span>{c.origem === 'newsletter' ? 'inscrita em ' : ''}{fmtData(String(c.data_carrinho || '').slice(0, 10))}</span>
+            {c.segundo_envio_em && (
+              <span title={'2º envio em ' + fmtData(String(c.segundo_envio_em).slice(0, 10))} style={{
+                fontSize: 10, padding: '1px 7px', borderRadius: 4, background: '#f1ebfa', color: '#5b3fa0', fontWeight: 800, whiteSpace: 'nowrap',
+              }}>📨 2º envio</span>
+            )}
             <RelogioBadge c={c} />
           </div>
           {itens.length > 0 && (

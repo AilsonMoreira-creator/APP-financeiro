@@ -81,6 +81,8 @@ export default async function handler(req, res) {
         if (nome && !c.nome) { try { await supabase.from('meluni_carrinhos').update({ nome }).eq('id', c.id); } catch {} }
         // tem nome -> template com nome; sem nome -> versão sem nome (fallback, igual o 1º envio)
         const tplDesc = nome ? 'meluni_carrinho_desconto' : 'meluni_carrinho_desconto_sem_nome';
+        const vDesc = nome ? 'desconto' : 'desconto_sem_nome';
+        const tplBotao = tplsCfg?.[vDesc]?.botao?.url ? { text: tplsCfg[vDesc].botao.text || 'Abrir', url: tplsCfg[vDesc].botao.url } : null;
         const bodyParams = nome ? [nome] : [];
         const textoMsg = (nome ? renderTpl(descontoBody, [nome]) : descontoSemNomeBody) || (nome || 'desconto carrinho');
         try {
@@ -92,7 +94,9 @@ export default async function handler(req, res) {
             await supabase.from('meluni_mensagens').insert({
               conversa_id: convId, direcao: 'saida', autor: 'lara_carrinho_2',
               tipo_midia: 'template', template_usado: tplDesc,
-              texto: textoMsg, meta_message_id: metaMsgId, enviada_em: nowIso,
+              texto: textoMsg,
+              botao: tplBotao || null, // botao do template de desconto (Ailson 04/08)
+              meta_message_id: metaMsgId, enviada_em: nowIso,
             });
             await supabase.from('meluni_conversas').update({ ultima_msg_direcao: 'saida', ultima_msg_em: nowIso, responder_em: null }).eq('id', convId);
           }
