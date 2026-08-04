@@ -124,6 +124,7 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
           conversa_id: conv.id, direcao: 'saida', autor: 'lara_clientes',
           tipo_midia: 'template', template_usado: tpl.name,
           texto: renderTpl(tpl.body, [nome]), midia_url: headerImage || null,
+          botao: tpl.botao?.url ? { text: tpl.botao.text || 'Ver no site', url: tpl.botao.url } : null,
           meta_message_id: metaMsgId, enviada_em: nowIso,
         });
         await supabase.from('meluni_conversas').update({

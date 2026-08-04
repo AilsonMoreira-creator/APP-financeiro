@@ -353,6 +353,8 @@ export default async function handler(req, res) {
             conversa_id: conv.id, direcao: 'saida', autor: 'lara_crossell',
             tipo_midia: 'template', template_usado: tpl.name,
             texto: renderTpl(tpl.body, params),
+            midia_url: headerImage, // chat mostra a foto real que a cliente recebeu
+            botao: { text: 'Acessar o site', url: 'https://meluniloja.com.br' },
             meta_message_id: metaMsgId, enviada_em: nowIso,
           });
           await supabase.from('meluni_conversas').update({

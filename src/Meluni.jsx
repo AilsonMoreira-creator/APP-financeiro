@@ -858,6 +858,14 @@ function LaraThread({ telefone, conversaId, nome }) {
                 ) : (
                   m.texto || (m.tipo_midia && m.tipo_midia !== 'text' ? `[${m.tipo_midia}]` : '')
                 )}
+              {/* botão do template — o chat mostra igual a cliente vê (Ailson 04/08/2026) */}
+              {m.botao?.url && (
+                <a href={m.botao.url} target="_blank" rel="noopener noreferrer" style={{
+                  display: 'block', textAlign: 'center', marginTop: 3, padding: '7px 10px',
+                  borderRadius: 8, border: '1px solid #cfe0ef', background: '#f4f9ff',
+                  color: '#2a6fb0', fontWeight: 700, fontSize: 12.5, textDecoration: 'none',
+                }}>🔗 {m.botao.text || 'Abrir'}</a>
+              )}
               </div>
               <div style={{ fontSize: 9.5, color: palette.inkMuted, textAlign: entrada ? 'left' : 'right', marginTop: 1 }}>{fmtDH(m.enviada_em)}{!entrada && m.autor && m.autor !== 'lara_auto' ? ` · ${m.autor}` : ''}</div>
             </div>

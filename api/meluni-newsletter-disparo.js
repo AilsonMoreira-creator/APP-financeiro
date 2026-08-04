@@ -112,6 +112,7 @@ export default async function handler(req, res) {
             conversa_id: conv.id, direcao: 'saida', autor: 'lara_newsletter',
             tipo_midia: 'template', template_usado: cfg.template,
             texto: textoReal || '[newsletter]', midia_url: cfg.sample_url || null,
+            botao: { text: 'Acessar o site', url: 'https://meluniloja.com.br' },
             meta_message_id: metaId, enviada_em: agora,
           });
           await supabase.from('meluni_conversas').update({
