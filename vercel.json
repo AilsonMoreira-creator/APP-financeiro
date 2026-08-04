@@ -463,6 +463,10 @@
       "schedule": "0 13 * * 1-6"
     },
     {
+      "path": "/api/meluni-crossell-cron",
+      "schedule": "30 13 * * 1-6"
+    },
+    {
       "path": "/api/meluni-reserva-cron",
       "schedule": "0 12 * * *"
     },

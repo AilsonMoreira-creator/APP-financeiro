@@ -112,6 +112,31 @@ export default async function handler(req, res) {
 
     await anexarTags(supabase, lista, c => c.whatsapp || c.telefone);
 
+    // tag CROSS-SELL (Ailson 03/08/2026): marca quem ja recebeu o cross-sell
+    // automatico (mensagens dos templates crossell_*), pro card mostrar a tag
+    try {
+      const { data: msgsCross } = await supabase.from('meluni_mensagens')
+        .select('conversa_id, enviada_em')
+        .in('template_usado', ['crossell_mesmo_modelo', 'crossell_outro_modelo'])
+        .limit(5000);
+      const convCross = [...new Set((msgsCross || []).map(m => m.conversa_id).filter(Boolean))];
+      if (convCross.length) {
+        const emPorConv = {};
+        (msgsCross || []).forEach(m => { if (m.conversa_id) emPorConv[m.conversa_id] = m.enviada_em; });
+        const { data: convsC } = await supabase.from('meluni_conversas')
+          .select('id, telefone, cliente_id').in('id', convCross);
+        const porCli = new Map(), porTel = new Map();
+        (convsC || []).forEach(cv => {
+          if (cv.cliente_id) porCli.set(cv.cliente_id, emPorConv[cv.id]);
+          if (cv.telefone) porTel.set(cv.telefone, emPorConv[cv.id]);
+        });
+        lista.forEach(c => {
+          const em = porCli.get(c.id) || porTel.get(c.whatsapp || c.telefone) || null;
+          if (em) c.crossell_em = em;
+        });
+      }
+    } catch (eCx) { console.error('[clientes-list] tag crossell', eCx?.message); }
+
     return res.json({ ok: true, total: lista.length, etapa, unread, conv30: conv30 || 0, clientes: lista });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });

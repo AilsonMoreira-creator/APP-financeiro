@@ -304,6 +304,23 @@ export default async function handler(req, res) {
     }
 
     // ── ENVIO REAL ──────────────────────────────────────────────────────────
+    // Guarda: os 2 templates precisam estar APROVADOS na Meta (evita rajada de
+    // erros enquanto a analise nao termina; elegiveis seguem pro proximo dia)
+    try {
+      const WABA = process.env.META_WA_WABA_ID_LARA || '912339361863904';
+      const tk = process.env.META_WA_ACCESS_TOKEN;
+      const nomesQ = [tplMesmo.name, tplOutro.name].join(',');
+      const rT = await fetch(`https://graph.facebook.com/v21.0/${WABA}/message_templates?name=${encodeURIComponent(tplMesmo.name)}&fields=name,status&limit=50&access_token=${tk}`);
+      const jT = await rT.json().catch(() => ({}));
+      const rT2 = await fetch(`https://graph.facebook.com/v21.0/${WABA}/message_templates?name=${encodeURIComponent(tplOutro.name)}&fields=name,status&limit=50&access_token=${tk}`);
+      const jT2 = await rT2.json().catch(() => ({}));
+      const stMesmo = (jT?.data || []).find(t => t.name === tplMesmo.name)?.status;
+      const stOutro = (jT2?.data || []).find(t => t.name === tplOutro.name)?.status;
+      if (stMesmo !== 'APPROVED' || stOutro !== 'APPROVED') {
+        return res.status(200).json({ ok: true, pulado: 'templates_nao_aprovados', status: { [tplMesmo.name]: stMesmo || 'nao_encontrado', [tplOutro.name]: stOutro || 'nao_encontrado' }, com_oferta: planos.length, enviados: 0 });
+      }
+    } catch (eG) { console.error('[crossell] guarda de aprovacao falhou, seguindo:', eG?.message); }
+
     let enviados = 0, pulados = 0, erros = 0;
     const congelados = await telefonesCongelados(supabase);
     for (const p of planos) {

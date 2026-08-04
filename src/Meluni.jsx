@@ -113,10 +113,16 @@ const TagChipMeluni = ({ t, onRemover = null }) => {
 function TagsDoCard({ c, wrap = false }) {
   const tags = c.tags || [];
   const reservaChegou = c.reserva_alerta_em ? tags.find(t => t.id === 'reserva_estoque') : null;
-  if (!tags.length && !reservaChegou) return null;
+  if (!tags.length && !reservaChegou && !c.crossell_em) return null;
   const conteudo = (
     <>
       {tags.map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}
+      {c.crossell_em && (
+        <span title={'recebeu cross-sell em ' + String(c.crossell_em).slice(0, 10).split('-').reverse().join('/')} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '1px 6px',
+          borderRadius: 8, background: '#f1ebfa', color: '#5b3fa0', fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0,
+        }}>🔁 cross-sell</span>
+      )}
       {reservaChegou && (
         <span title="a peça reservada chegou, avisar a cliente" style={{
           display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '1px 6px',
@@ -1116,6 +1122,27 @@ function SecaoClientes() {
     setAutoBusy(false);
   };
 
+  // Liga/desliga do AUTO CROSS-SELL (cron seg-sáb 10h30, 7 dias após o pós-compra).
+  // Ailson 03/08/2026.
+  const [crossOn, setCrossOn] = useState(null);
+  const [crossBusy, setCrossBusy] = useState(false);
+  useEffect(() => {
+    fetch('/api/meluni-crossell-auto').then(r => r.json()).then(j => { if (j?.ok) setCrossOn(!!j.ativo); }).catch(() => {});
+  }, []);
+  const toggleCross = async () => {
+    if (crossBusy || crossOn === null) return;
+    const novo = !crossOn;
+    if (novo && !window.confirm('Ligar o AUTO CROSS-SELL? 7 dias depois de receber o pós-compra, a cliente recebe a oferta de cor/modelo de verão com foto (seg a sáb, 10h30, 1 envio por cliente pra sempre). Só sai depois que a Meta aprovar os 2 templates.')) return;
+    if (!novo && !window.confirm('Desligar o auto cross-sell?')) return;
+    setCrossBusy(true); setCrossOn(novo);
+    try {
+      const r = await fetch('/api/meluni-crossell-auto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: novo }) });
+      const j = await r.json();
+      if (!j?.ok) { setCrossOn(!novo); alert('Falhou ao salvar.'); }
+    } catch (e) { setCrossOn(!novo); alert('Erro: ' + (e?.message || e)); }
+    setCrossBusy(false);
+  };
+
   const carregar = useCallback(async () => {
     setLoading(true); setErro('');
     try {
@@ -1311,6 +1338,27 @@ function SecaoClientes() {
           seg–sáb 10h · 10 a 14 dias · 1 envio por cliente · pula quem tem devolução
         </span>
         <span style={{ marginLeft: 'auto' }}><PillHoje n={disparosHoje.clientes} /></span>
+      </div>
+
+      {/* Auto CROSS-SELL (Ailson 03/08/2026): 7 dias após o pós-compra, oferta de cor/modelo de verão */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button onClick={toggleCross} disabled={crossBusy || crossOn === null}
+          title="Liga/desliga o cross-sell automático (cor/modelo de verão, 7 dias após o pós-compra)."
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            cursor: (crossBusy || crossOn === null) ? 'default' : 'pointer',
+            border: `1px solid ${crossOn ? '#7c5cb8' : palette.beige}`,
+            background: crossOn ? '#f1ebfa' : palette.surface,
+            color: crossOn ? '#5b3fa0' : palette.inkMuted,
+            borderRadius: 999, padding: '6px 12px', fontFamily: FONT, fontSize: 12.5, fontWeight: 700,
+            opacity: crossBusy ? 0.6 : 1,
+          }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: crossOn ? '#5b3fa0' : palette.inkMuted, display: 'inline-block' }} />
+          {crossOn === null ? 'Auto cross-sell…' : (crossOn ? 'Auto cross-sell: LIGADO' : 'Auto cross-sell: desligado')}
+        </button>
+        <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>
+          seg–sáb 10h30 · 7 dias após o pós-compra · cor/modelo de verão com foto · 1 envio por cliente
+        </span>
       </div>
 
       {/* barra de filtros */}
