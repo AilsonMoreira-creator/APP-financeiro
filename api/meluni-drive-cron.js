@@ -122,8 +122,12 @@ async function importarTabela(tipo, linhas) {
   } else if (tipo === 'newsletter') {
     // Regras Ailson 03/08/2026: so com WhatsApp; ignora quem ja tem carrinho
     // (qualquer status/origem) e quem ja comprou (telefone right-10 ou email).
-    let novas = linhas.map(mapNewsletter).filter(l => l.telefone && l.planilha_ref);
-    if (!novas.length) return 0;
+    // 04/08: retorno detalhado — mostra onde cada contato caiu.
+    const det = { total_planilha: linhas.length, sem_whatsapp: 0, ja_tem_carrinho: 0, ja_comprou: 0, inseridas: 0 };
+    const mapeadas = linhas.map(mapNewsletter);
+    det.sem_whatsapp = mapeadas.filter(l => !l.telefone || !l.planilha_ref).length;
+    let novas = mapeadas.filter(l => l.telefone && l.planilha_ref);
+    if (!novas.length) return det;
 
     // telefones ja presentes em meluni_carrinhos (qualquer origem)
     const tels = [...new Set(novas.map(l => l.telefone))];
@@ -146,16 +150,19 @@ async function importarTabela(tipo, linhas) {
       });
     }
 
-    novas = novas.filter(l =>
-      !jaTem.has(l.telefone) &&
+    const aposCarrinho = novas.filter(l => !jaTem.has(l.telefone));
+    det.ja_tem_carrinho = novas.length - aposCarrinho.length;
+    novas = aposCarrinho.filter(l =>
       !telsR10.has(l.telefone.slice(-10)) &&
       !(l.email && emailsCompra.has(l.email))
     );
-    if (!novas.length) return 0;
+    det.ja_comprou = aposCarrinho.length - novas.length;
+    if (!novas.length) return det;
 
     const { error } = await supabase.from('meluni_carrinhos').upsert(novas, { onConflict: 'planilha_ref', ignoreDuplicates: true });
     if (error) throw new Error('newsletter: ' + error.message);
-    return novas.length;
+    det.inseridas = novas.length;
+    return det;
   } else if (tipo === 'devolucoes') {
     // update-on-conflict (NAO ignoreDuplicates): o planilha e fonte da verdade do
     // STATUS (Aprovado/Produto recebido/Completo) + historico. mapDevolucao so grava
