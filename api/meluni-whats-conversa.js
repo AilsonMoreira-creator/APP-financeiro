@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     }
 
     const { data: mensagens } = await supabase.from('meluni_mensagens')
-      .select('id, direcao, autor, tipo_midia, texto, midia_url, enviada_em')
+      .select('id, direcao, autor, tipo_midia, texto, midia_url, botao, enviada_em')
       .eq('conversa_id', conversaId)
       .order('enviada_em', { ascending: true })
       .limit(200);
