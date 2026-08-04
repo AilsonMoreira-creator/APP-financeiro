@@ -159,16 +159,19 @@ export default async function handler(req, res) {
 
     // ── bases do motor: estoque (cores alvo + bege), categorias, fotos ──────
     const { data: est } = await supabase.from('bling_estoque')
-      .select('ref, cor_norm, qtd, qtd_lumia, qtd_muniam, titulo')
+      .select('ref, cor_norm, qtd, qtd_lumia, qtd_muniam, titulo, bling_sku')
       .in('cor_norm', ['azulclaro', 'verdesalvia', 'bege']);
-    // estoquePorRefCor[ref][cor] = pcs; tituloPorRef[ref]
-    const estoquePorRefCor = {}, tituloPorRef = {};
+    // estoquePorRefCor[ref][cor] = pcs; tituloPorRef[ref]; skus por ref|cor
+    const estoquePorRefCor = {}, tituloPorRef = {}, skusPorRefCor = {};
     (est || []).forEach(r => {
       const ref = l0(r.ref); const cor = normCor(r.cor_norm);
       const v = (r.qtd || 0) + (r.qtd_lumia || 0) + (r.qtd_muniam || 0);
       if (!estoquePorRefCor[ref]) estoquePorRefCor[ref] = {};
       estoquePorRefCor[ref][cor] = (estoquePorRefCor[ref][cor] || 0) + v;
       if (!tituloPorRef[ref] && r.titulo) tituloPorRef[ref] = String(r.titulo).split('(')[0].trim();
+      const k = ref + '|' + cor;
+      if (!skusPorRefCor[k]) skusPorRefCor[k] = [];
+      if (r.bling_sku) skusPorRefCor[k].push(r.bling_sku);
     });
     const { data: prods } = await supabase.from('lojas_produtos').select('ref, categoria, nome');
     const catPorRef = {}, nomePorRef = {};
@@ -186,22 +189,39 @@ export default async function handler(req, res) {
       if (!refsPorCategoria[cat]) refsPorCategoria[cat] = [];
       refsPorCategoria[cat].push(ref);
     });
-    // fotos: por ref (prefere a da cor alvo)
-    const { data: fotos } = await supabase.from('meluni_produto_fotos')
-      .select('ref, cor, url_publica, sem_foto').eq('sem_foto', false).not('url_publica', 'is', null);
-    const fotoPorRefCor = {}, fotoPorRef = {};
-    (fotos || []).forEach(f => {
-      const ref = l0(f.ref); const cor = normCor(f.cor);
-      if (cor && !fotoPorRefCor[ref + '|' + cor]) fotoPorRefCor[ref + '|' + cor] = f.url_publica;
-      if (!fotoPorRef[ref]) fotoPorRef[ref] = f.url_publica;
+    // FOTOS POR SKU (padrao do carrinho abandonado, Ailson 03/08): a foto que
+    // sai e a do SKU da COR EXATA ofertada (meluni_produto_fotos e indexada por
+    // sku do Bling). Sem foto da cor = a cor nem e escolhida pelo motor.
+    const todosSkus = Object.values(skusPorRefCor).flat();
+    const fotoPorSku = new Map();
+    for (let i = 0; i < todosSkus.length; i += 300) {
+      const chunk = todosSkus.slice(i, i + 300);
+      const { data: fts } = await supabase.from('meluni_produto_fotos')
+        .select('sku, url_publica').in('sku', chunk).not('url_publica', 'is', null);
+      (fts || []).forEach(ft => fotoPorSku.set(ft.sku, ft.url_publica));
+    }
+    const fotoRefCor = {};
+    Object.entries(skusPorRefCor).forEach(([k, skus]) => {
+      for (const sk of skus) { if (fotoPorSku.has(sk)) { fotoRefCor[k] = fotoPorSku.get(sk); break; } }
     });
-    const fotoDe = (ref, cor) => fotoPorRefCor[ref + '|' + cor] || fotoPorRef[ref] || null;
-    const tituloDe = (ref) => nomePorRef[ref] || tituloPorRef[ref] || ('ref ' + ref);
+    const fotoDe = (ref, cor) => fotoRefCor[ref + '|' + cor] || null;
+
+    // NOMES CURTOS (mesma cadeia do carrinho): curadoria lara_carrinho_nomes_curto
+    // -> desc_limpa do ml_sku_ref_map -> lojas_produtos.nome -> titulo do estoque
+    const nomesCurtos = (await cfgMeluni('lara_carrinho_nomes_curto', {})) || {};
+    const descLimpaPorRef = {};
+    for (let i = 0; i < todosSkus.length; i += 300) {
+      const chunk = todosSkus.slice(i, i + 300);
+      const { data: mm } = await supabase.from('ml_sku_ref_map')
+        .select('ref, desc_limpa').in('sku', chunk).not('desc_limpa', 'is', null);
+      (mm || []).forEach(m => { const r = l0(m.ref); if (!descLimpaPorRef[r]) descLimpaPorRef[r] = m.desc_limpa; });
+    }
+    const tituloDe = (ref) => nomesCurtos[ref] || nomesCurtos['0' + ref] || descLimpaPorRef[ref] || nomePorRef[ref] || tituloPorRef[ref] || ('ref ' + ref);
     const melhorAlvo = (ref, coresJaCompradas) => {
       const ops = CORES_ALVO
         .filter(c => !coresJaCompradas.has(c))
         .map(c => ({ cor: c, pcs: (estoquePorRefCor[ref]?.[c] || 0) }))
-        .filter(o => o.pcs >= MIN_ESTOQUE)
+        .filter(o => o.pcs >= MIN_ESTOQUE && !!fotoDe(ref, o.cor)) // regra: sempre com a foto DA COR
         .sort((a, b) => b.pcs - a.pcs);
       return ops[0] || null;
     };
@@ -230,7 +250,7 @@ export default async function handler(req, res) {
       if (compras.some(i => REFS_GATILHO_NEUTRO.has(i.ref))) {
         const vestidos = Object.keys(estoquePorRefCor)
           .filter(r => catPorRef[r] === 'VESTIDO')
-          .filter(r => !refsCompradas.has(r) && (estoquePorRefCor[r]?.bege || 0) >= MIN_ESTOQUE)
+          .filter(r => !refsCompradas.has(r) && (estoquePorRefCor[r]?.bege || 0) >= MIN_ESTOQUE && !!fotoDe(r, 'bege'))
           .map(r => ({ ref: r, pcs: estoquePorRefCor[r].bege, midi: /midi/i.test(tituloDe(r)) }))
           .sort((a, b) => (b.midi - a.midi) || (b.pcs - a.pcs));
         if (vestidos.length) return { tipo: 'outro_modelo', ref: vestidos[0].ref, cor: 'bege', pcs: vestidos[0].pcs, motivo: 'comprou couro/moletinho → vestido midi bege' };
