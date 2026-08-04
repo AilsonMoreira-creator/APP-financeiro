@@ -129,12 +129,19 @@ async function importarTabela(tipo, linhas) {
     let novas = mapeadas.filter(l => l.telefone && l.planilha_ref);
     if (!novas.length) return det;
 
-    // telefones ja presentes em meluni_carrinhos (qualquer origem)
+    // Regra refinada (Ailson 04/08/2026): barra so quem teve carrinho COM VALOR
+    // e que RECEBEU DISPARO (enviado_em preenchido = trabalhado pela Lara:
+    // enviada/2o envio/conversando/perdida). Carrinho vazio, carrinho nunca
+    // disparado e carrinho velho NAO barram mais.
     const tels = [...new Set(novas.map(l => l.telefone))];
     const jaTem = new Set();
     for (let i = 0; i < tels.length; i += 200) {
       const chunk = tels.slice(i, i + 200);
-      const { data } = await supabase.from('meluni_carrinhos').select('telefone').in('telefone', chunk);
+      const { data } = await supabase.from('meluni_carrinhos').select('telefone')
+        .in('telefone', chunk)
+        .eq('origem', 'carrinho')
+        .gt('valor', 0)
+        .not('enviado_em', 'is', null);
       (data || []).forEach(r => jaTem.add(r.telefone));
     }
 
@@ -151,7 +158,7 @@ async function importarTabela(tipo, linhas) {
     }
 
     const aposCarrinho = novas.filter(l => !jaTem.has(l.telefone));
-    det.ja_tem_carrinho = novas.length - aposCarrinho.length;
+    det.carrinho_trabalhado = novas.length - aposCarrinho.length;
     novas = aposCarrinho.filter(l =>
       !telsR10.has(l.telefone.slice(-10)) &&
       !(l.email && emailsCompra.has(l.email))
@@ -203,6 +210,7 @@ export default async function handler(req, res) {
         const linhas = toObjects(texto);
         const n = await importarTabela(tipo, linhas);
         resumo[arq.name] = { tipo, linhas: n };
+        if (q.headers === '1' && linhas?.[0]) resumo[arq.name].headers = Object.keys(linhas[0]);
       } catch (e) {
         erros.push({ arquivo: arq.name, erro: e?.message || String(e) });
       }
