@@ -30,7 +30,7 @@
 // Seguranca: cron (user-agent vercel-cron) OU ?force=1 OU ?dry=1.
 //   ?dry=1 -> SIMULA: mostra quem receberia o que, nao envia nada.
 // ============================================================================
-import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
+import { supabase, cfgMeluni, telefonesComCampanhaRecente } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { chaveTel } from './_meluni-tel.js';
 import { telefonesCongelados } from './_meluni-tags-core.js';
@@ -321,13 +321,17 @@ export default async function handler(req, res) {
       }
     } catch (eG) { console.error('[crossell] guarda de aprovacao falhou, seguindo:', eG?.message); }
 
-    let enviados = 0, pulados = 0, erros = 0;
+    let enviados = 0, pulados = 0, erros = 0, adiados48h = 0;
     const congelados = await telefonesCongelados(supabase);
+    // anti-colisão (Ailson 04/08): recebeu OUTRA campanha ha <48h -> ADIA
+    // (nao marca nada; a cliente reentra sozinha nos proximos dias da janela)
+    const campanhaRecente = await telefonesComCampanhaRecente(48).catch(() => new Set());
     for (const p of planos) {
       try {
         const c = p.cliente;
         const tel = canonTel(c.whatsapp || c.telefone);
         if (congelados.has(chaveTel(c.whatsapp || c.telefone))) { pulados++; continue; }
+        if (campanhaRecente.has(tel) || campanhaRecente.has('55' + tel)) { adiados48h++; continue; }
         const foto = fotoDe(p.oferta.ref, p.oferta.cor);
         if (!foto) { pulados++; continue; } // regra do Ailson: sempre com foto
         const conv = await acharOuCriarConversaCliente(tel, c.nome, c.id);
@@ -357,7 +361,7 @@ export default async function handler(req, res) {
         await sleep(300);
       } catch (e) { erros++; }
     }
-    return res.status(200).json({ ok: true, ativo, enviados, pulados, erros, com_oferta: planos.length, lote: LOTE });
+    return res.status(200).json({ ok: true, ativo, enviados, pulados, erros, adiados_48h: adiados48h, com_oferta: planos.length, lote: LOTE });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: String(e?.message || e) });
   }

@@ -2,7 +2,7 @@
 // pelo disparo manual (/api/meluni-clientes-novidade-disparo) quanto pelo cron
 // agendado (/api/meluni-novidade-cron). Fonte única da lógica de envio.
 // Ailson 23/06/2026.
-import { supabase, cfgMeluni } from './_meluni-whats-helpers.js';
+import { supabase, cfgMeluni, telefonesComCampanhaRecente } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { chaveTel } from './_meluni-tel.js';
 
@@ -80,6 +80,8 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
   if (cortado) alvo = alvo.slice(0, maxPorChamada);
 
   const conf = await carregarTplNovidade(cfg, versao);
+  // anti-colisão 48h (Ailson 04/08): nenhuma cliente recebe 2 campanhas em <48h
+  const campanhaRecente = await telefonesComCampanhaRecente(48).catch(() => new Set());
   if (!conf) return { ok: false, erro: `template ${cfg || 'lara_templates_novidade'}/${versao || '?'} nao configurado` };
   const { tpl, lang, headerImage } = conf;
 
@@ -98,6 +100,7 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
       const tel = canonTel(c.whatsapp || c.telefone);
       if (!tel || tel.length < 10) { pulados++; detalhe.push({ id, status: 'sem_telefone' }); continue; }
       if (congelados && congelados.has(chaveTel(c.whatsapp || c.telefone))) { pulados++; detalhe.push({ id, status: 'atencao' }); continue; }
+      if (campanhaRecente.has(tel) || campanhaRecente.has('55' + tel)) { pulados++; detalhe.push({ id, status: 'campanha_48h' }); continue; }
       const nome = primeiroNome(c.nome);
       if (!nome) { pulados++; detalhe.push({ id, status: 'sem_nome' }); continue; }
 

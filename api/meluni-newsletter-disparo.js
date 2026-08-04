@@ -14,7 +14,7 @@
 // Protecoes: telefones congelados (tags Atencao), conversa fechada, limite 30
 // por chamada, ja_enviado.
 // ============================================================================
-import { supabase } from './_meluni-whats-helpers.js';
+import { supabase, telefonesComCampanhaRecente } from './_meluni-whats-helpers.js';
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { resolverPrimeiroNome } from './_meluni-carrinho-resumo.js';
 import { acharConversaWhats } from './_meluni-tel.js';
@@ -74,6 +74,7 @@ export default async function handler(req, res) {
     if (error) throw new Error(error.message);
 
     const congelados = await telefonesCongelados(supabase).catch(() => new Set());
+    const campanhaRecente = await telefonesComCampanhaRecente(48).catch(() => new Set());
 
     let enviados = 0, pulados = 0, erros = 0;
     const puladosAtencao = [];
@@ -83,6 +84,7 @@ export default async function handler(req, res) {
       try {
         if (c.enviado_em) { pulados++; continue; }
         if (congelados && congelados.has && congelados.has(c.telefone)) { pulados++; puladosAtencao.push(c.telefone); continue; }
+        if (campanhaRecente.has(c.telefone) || campanhaRecente.has(String(c.telefone).replace(/^55/, ''))) { pulados++; continue; }
 
         const conv = await acharOuCriarConversa(c.telefone, c.nome);
         if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) { pulados++; continue; }
