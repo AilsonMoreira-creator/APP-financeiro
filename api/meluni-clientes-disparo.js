@@ -12,7 +12,9 @@ import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { chaveTel } from './_meluni-tel.js';
 import { telefonesCongelados } from './_meluni-tags-core.js';
 
-const ETAPAS_FECHADAS = ['conversao', 'ganho', 'perdido'];
+// conversao saiu daqui 04/08/2026: agora e so REGISTRO (meluni_conversoes)
+// e a cliente segue livre pra novos ciclos de disparo
+const ETAPAS_FECHADAS = ['ganho', 'perdido'];
 const MAX_POR_CHAMADA = 30;
 const MIN_DIAS_POS_COMPRA = 10; // trava: nao dispara pos-compra manual antes de 10 dias da compra (mercadoria pode nao ter chegado)
 

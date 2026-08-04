@@ -66,7 +66,9 @@ async function acharOuCriarConversaCliente(tel, nome, clienteId) {
   return nova || null;
 }
 
-const ETAPAS_FECHADAS = ['conversao', 'ganho', 'perdido'];
+// conversao saiu daqui 04/08/2026: agora e so REGISTRO (meluni_conversoes)
+// e a cliente segue livre pra novos ciclos de disparo
+const ETAPAS_FECHADAS = ['ganho', 'perdido'];
 
 export default async function handler(req, res) {
   const ua = String(req.headers['user-agent'] || '');

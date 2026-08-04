@@ -42,7 +42,9 @@ const LABEL_COR = { azulclaro: 'Azul Claro', verdesalvia: 'Verde Sálvia', bege:
 // Gatilho do grupo neutro (Ailson 03/08 corrigido): couro 3150/2927 E o
 // moletinho 3228 recebem a MESMA oferta — vestido midi em cor neutra (bege).
 const REFS_GATILHO_NEUTRO = new Set(['3150', '2927', '3228']);
-const ETAPAS_FECHADAS = ['conversao', 'ganho', 'perdido'];
+// conversao saiu daqui 04/08/2026: agora e so REGISTRO (meluni_conversoes)
+// e a cliente segue livre pra novos ciclos de disparo
+const ETAPAS_FECHADAS = ['ganho', 'perdido'];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const soDigitos = (s) => String(s || '').replace(/\D/g, '');
 function canonTel(s) { let d = soDigitos(s); if (d.length >= 12 && d.startsWith('55')) d = d.slice(2); return d; }

@@ -38,8 +38,26 @@ export default async function handler(req, res) {
       qy = qy.or('n_compras.gt.0,valor_lifetime.gt.0');
     }
 
+    // CONVERSAO (Ailson 04/08/2026): agora e REGISTRO — le do log meluni_conversoes
+    // (nome, valor, data, template de origem); a cliente nao fica presa em etapa.
+    let extrasConv = null;
+    if (etapa === 'conversao') {
+      const { data: convsLog } = await supabase
+        .from('meluni_conversoes')
+        .select('cliente_id, pedido_id, valor, template_origem, convertido_em')
+        .order('convertido_em', { ascending: false })
+        .limit(500);
+      const idsSeq = [];
+      extrasConv = new Map();
+      (convsLog || []).forEach(cv => {
+        if (!cv.cliente_id) return;
+        if (!extrasConv.has(cv.cliente_id)) { extrasConv.set(cv.cliente_id, cv); idsSeq.push(cv.cliente_id); }
+      });
+      if (!idsSeq.length) return res.json({ ok: true, total: 0, etapa, clientes: [] });
+      qy = qy.in('id', idsSeq);
+    }
     // etapas enviados/conversando/follow_up vem do funil de conversas (origem cliente)
-    if (etapa && etapa !== 'carteira') {
+    if (etapa && etapa !== 'carteira' && etapa !== 'conversao') {
       const { data: convs } = await supabase
         .from('meluni_conversas')
         .select('cliente_id')
@@ -62,6 +80,13 @@ export default async function handler(req, res) {
     const { data, error } = await qy;
     if (error) throw new Error(error.message);
     let lista = data || [];
+    if (extrasConv) {
+      lista.forEach(c => {
+        const cv = extrasConv.get(c.id);
+        if (cv) { c.conv_valor = cv.valor; c.conv_em = cv.convertido_em; c.conv_origem = cv.template_origem; c.conv_pedido = cv.pedido_id; }
+      });
+      lista.sort((a, b) => new Date(b.conv_em || 0) - new Date(a.conv_em || 0));
+    }
 
     // filtro "recebeu mensagem nos ult. N dias" (cruza conversas por telefone)
     if (msgDias && lista.length) {
@@ -106,9 +131,9 @@ export default async function handler(req, res) {
 
     // conversões dos últimos 30 dias -> badge azul na aba Conversão (espelha o carrinho)
     const desde30 = new Date(Date.now() - 30 * 86400000).toISOString();
-    const { count: conv30 } = await supabase.from('meluni_conversas')
+    const { count: conv30 } = await supabase.from('meluni_conversoes')
       .select('id', { count: 'exact', head: true })
-      .eq('origem', 'cliente').eq('etapa', 'conversao').gte('convertido_em', desde30);
+      .gte('convertido_em', desde30);
 
     await anexarTags(supabase, lista, c => c.whatsapp || c.telefone);
 

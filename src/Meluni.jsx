@@ -113,10 +113,16 @@ const TagChipMeluni = ({ t, onRemover = null }) => {
 function TagsDoCard({ c, wrap = false }) {
   const tags = c.tags || [];
   const reservaChegou = c.reserva_alerta_em ? tags.find(t => t.id === 'reserva_estoque') : null;
-  if (!tags.length && !reservaChegou && !c.crossell_em) return null;
+  if (!tags.length && !reservaChegou && !c.crossell_em && (c.n_compras || 0) < 2) return null;
   const conteudo = (
     <>
       {tags.map((t, i) => <TagChipMeluni key={t.id + i} t={t} />)}
+      {(c.n_compras || 0) >= 2 && (
+        <span title={`cliente recorrente: ${c.n_compras} compras`} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '1px 6px',
+          borderRadius: 8, background: '#fdf3d8', color: '#8a6d1a', fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0,
+        }}>⭐ {c.n_compras}ª compra</span>
+      )}
       {c.crossell_em && (
         <span title={'recebeu cross-sell em ' + String(c.crossell_em).slice(0, 10).split('-').reverse().join('/')} style={{
           display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, padding: '1px 6px',
@@ -631,6 +637,11 @@ function MeluniClienteCard({ c, sel, onSel, onAbrir, onToggle, compact, ativo })
             <div style={{ fontSize: 12, color: palette.inkMuted, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
               <span><Phone size={11} style={{ verticalAlign: 'middle' }} /> {fmtTel(tel)}</span>
               {!tel && <span style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 5, fontWeight: 700, background: '#fdecea', color: '#b4453a', border: '1px solid #f1c9c4' }}>📵 sem número</span>}
+              {c.conv_em && (
+                <span title={'conversão via ' + (c.conv_origem || 'campanha')} style={{ fontSize: 11, fontWeight: 800, color: '#1f7a48', background: '#e6f7ee', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+                  💰 {fmtBRL(c.conv_valor)} · {String(c.conv_em).slice(0, 10).split('-').reverse().join('/')}
+                </span>
+              )}
               <CampoKPI Icon={ShoppingCart} label="lifetime" valor={fmtBRL(c.valor_lifetime)} destaque />
               <CampoKPI label="compras" valor={String(c.n_compras || 0)} />
               <CampoKPI label="ticket" valor={fmtBRL(c.ticket_medio)} />

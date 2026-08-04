@@ -6,7 +6,9 @@ import { supabase, cfgMeluni, telefonesComCampanhaRecente } from './_meluni-what
 import { enviarTemplateLara } from './_meluni-whats-meta.js';
 import { chaveTel } from './_meluni-tel.js';
 
-export const ETAPAS_FECHADAS = ['conversao', 'ganho', 'perdido'];
+export // conversao saiu daqui 04/08/2026: agora e so REGISTRO (meluni_conversoes)
+// e a cliente segue livre pra novos ciclos de disparo
+const ETAPAS_FECHADAS = ['ganho', 'perdido'];
 export const MAX_POR_CHAMADA = 30;
 
 const soDigitos = (s) => String(s || '').replace(/\D/g, '');
