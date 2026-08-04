@@ -246,8 +246,14 @@ export default async function handler(req, res) {
       const refsCompradas = new Set(compras.map(i => i.ref));
       const coresPorRef = {};
       compras.forEach(i => { if (!coresPorRef[i.ref]) coresPorRef[i.ref] = new Set(); coresPorRef[i.ref].add(i.cor); });
-      // 1. couro/moletinho -> vestido midi bege (neutro), midi primeiro, maior estoque
+      // 1. couro/moletinho -> REF 2790 BEGE (escolha fixa do Ailson 03/08);
+      //    se a 2790 nao der (sem estoque/foto ou ja comprada), cai nos outros
+      //    vestidos bege (midi primeiro, maior estoque); sem nenhum, fluxo geral.
       if (compras.some(i => REFS_GATILHO_NEUTRO.has(i.ref))) {
+        const ALVO_FIXO = '2790';
+        if (!refsCompradas.has(ALVO_FIXO) && (estoquePorRefCor[ALVO_FIXO]?.bege || 0) >= MIN_ESTOQUE && fotoDe(ALVO_FIXO, 'bege')) {
+          return { tipo: 'outro_modelo', ref: ALVO_FIXO, cor: 'bege', pcs: estoquePorRefCor[ALVO_FIXO].bege, motivo: 'comprou couro/moletinho → 2790 bege' };
+        }
         const vestidos = Object.keys(estoquePorRefCor)
           .filter(r => catPorRef[r] === 'VESTIDO')
           .filter(r => !refsCompradas.has(r) && (estoquePorRefCor[r]?.bege || 0) >= MIN_ESTOQUE && !!fotoDe(r, 'bege'))
@@ -312,11 +318,8 @@ export default async function handler(req, res) {
         const tpl = p.oferta.tipo === 'mesmo_modelo' ? tplMesmo : tplOutro;
         const nome = primeiroNome(c.nome);
         const produto = tituloDe(p.oferta.ref);
-        // mesmo_modelo: {{1}} nome, {{2}} produto, {{3}} cor (template do Ailson)
-        // outro_modelo: {{1}} nome, {{2}} produto (ate o texto dele chegar)
-        const params = p.oferta.tipo === 'mesmo_modelo'
-          ? [nome, produto, LABEL_COR[p.oferta.cor] || p.oferta.cor]
-          : [nome, produto];
+        // ambos os templates: {{1}} nome, {{2}} produto (nome curto), {{3}} cor
+        const params = [nome, produto, LABEL_COR[p.oferta.cor] || p.oferta.cor];
         const headerImage = foto + (foto.includes('?') ? '&' : '?') + 'v=' + Date.now();
         const r = await enviarTemplateLara('55' + tel, tpl.name, params, { language: lang, headerImage });
         const metaMsgId = r?.messages?.[0]?.id || null;
