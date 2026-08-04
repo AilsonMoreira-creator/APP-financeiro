@@ -292,7 +292,11 @@ export default async function handler(req, res) {
         const tpl = p.oferta.tipo === 'mesmo_modelo' ? tplMesmo : tplOutro;
         const nome = primeiroNome(c.nome);
         const produto = tituloDe(p.oferta.ref);
-        const params = [nome, produto];
+        // mesmo_modelo: {{1}} nome, {{2}} produto, {{3}} cor (template do Ailson)
+        // outro_modelo: {{1}} nome, {{2}} produto (ate o texto dele chegar)
+        const params = p.oferta.tipo === 'mesmo_modelo'
+          ? [nome, produto, LABEL_COR[p.oferta.cor] || p.oferta.cor]
+          : [nome, produto];
         const headerImage = foto + (foto.includes('?') ? '&' : '?') + 'v=' + Date.now();
         const r = await enviarTemplateLara('55' + tel, tpl.name, params, { language: lang, headerImage });
         const metaMsgId = r?.messages?.[0]?.id || null;
