@@ -79,6 +79,38 @@ export default async function handler(req, res) {
     const congelados = await telefonesCongelados(supabase).catch(() => new Set());
     const campanhaRecente = await telefonesComCampanhaRecente(48).catch(() => new Set());
 
+    // Regra do funil re-validada NA HORA do disparo (Ailson 04/08/2026): a base
+    // anda depois do import — quem virou compradora ou teve carrinho trabalhado
+    // desde então é pulada e marcada 'ignorada' (some da fila).
+    const telsAlvo = fila.map(c => c.telefone).filter(Boolean);
+    const barrados = new Set();
+    try {
+      const { data: cli } = await supabase.from('meluni_clientes')
+        .select('whatsapp, email').gt('n_compras', 0).limit(20000);
+      const t10 = new Set(), ems = new Set();
+      (cli || []).forEach(c => {
+        const d = String(c.whatsapp || '').replace(/\D/g, '');
+        if (d.length >= 10) t10.add(d.slice(-10));
+        const e = String(c.email || '').trim().toLowerCase();
+        if (e) ems.add(e);
+      });
+      for (const c of fila) {
+        const d = String(c.telefone || '').replace(/\D/g, '');
+        const e = String(c.email || '').trim().toLowerCase();
+        if ((d.length >= 10 && t10.has(d.slice(-10))) || (e && ems.has(e))) barrados.add(c.telefone);
+      }
+      for (let i = 0; i < telsAlvo.length; i += 200) {
+        const chunk = telsAlvo.slice(i, i + 200);
+        const { data: trab } = await supabase.from('meluni_carrinhos').select('telefone')
+          .in('telefone', chunk).eq('origem', 'carrinho').gt('valor', 0).not('enviado_em', 'is', null);
+        (trab || []).forEach(r => barrados.add(r.telefone));
+      }
+      if (barrados.size) {
+        await supabase.from('meluni_carrinhos').update({ status: 'ignorada' })
+          .eq('origem', 'newsletter').eq('status', 'processando').in('telefone', [...barrados]);
+      }
+    } catch (eB) { console.error('[newsletter] guarda do funil', eB?.message); }
+
     let enviados = 0, pulados = 0, erros = 0;
     const puladosAtencao = [];
     const nowIso = () => new Date().toISOString();
@@ -88,6 +120,7 @@ export default async function handler(req, res) {
         if (c.enviado_em) { pulados++; continue; }
         if (congelados && congelados.has && congelados.has(c.telefone)) { pulados++; puladosAtencao.push(c.telefone); continue; }
         if (campanhaRecente.has(c.telefone) || campanhaRecente.has(String(c.telefone).replace(/^55/, ''))) { pulados++; continue; }
+        if (barrados.has(c.telefone)) { pulados++; continue; }
 
         const conv = await acharOuCriarConversa(c.telefone, c.nome);
         if (conv && ETAPAS_FECHADAS.includes(conv.etapa)) { pulados++; continue; }
