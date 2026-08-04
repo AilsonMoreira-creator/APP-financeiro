@@ -29,7 +29,7 @@ async function cfgTemplateNewsletter() {
   if (!v) return null;
   try {
     const obj = typeof v === 'string' ? JSON.parse(v) : v;
-    if (obj && obj.template) return { template: String(obj.template), com_nome: obj.com_nome !== false, sample_url: obj.sample_url || null, body: obj.body || '' };
+    if (obj && obj.template) return { template: String(obj.template), com_nome: obj.com_nome !== false, sample_url: obj.sample_url || null, body: obj.body || '', ativo: obj.ativo !== false };
   } catch {
     // aceita tambem string simples com o nome do template
     if (typeof v === 'string' && v.trim()) return { template: v.trim(), com_nome: true };
@@ -62,6 +62,9 @@ export default async function handler(req, res) {
     const cfg = await cfgTemplateNewsletter();
     if (!cfg) {
       return res.status(422).json({ ok: false, erro: 'Template da newsletter ainda não configurado (meluni_config: lara_template_newsletter)' });
+    }
+    if (cfg.ativo === false) {
+      return res.status(422).json({ ok: false, erro: 'Template da newsletter está DESATIVADO (reativa no botão Templates da aba)' });
     }
 
     const { data: cards, error } = await supabase

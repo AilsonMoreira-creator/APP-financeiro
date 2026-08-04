@@ -1109,6 +1109,9 @@ function SecaoClientes() {
   // Disparo de novidade com ESCOLHA de template (Ailson 03/08/2026) + gestao de criativos
   const [modalNovidade, setModalNovidade] = useState(null); // {ids, aviso, tpls:[], versao, carregando}
   const [modalTemplates, setModalTemplates] = useState(null); // {tpls:[], trocando:versao|null}
+  // Pills de disparos do dia + filtro (Ailson 04/08/2026): clicar filtra quem recebeu hoje
+  const [dispHoje, setDispHoje] = useState({ poscompra: 0, crossell: 0, campanha: 0 });
+  const [filtroDisparo, setFiltroDisparo] = useState(null); // 'poscompra'|'crossell'|'campanha'|null
   const [recargaHoje, setRecargaHoje] = useState(0);
   const disparosHoje = useDisparosHoje(recargaHoje);
   const isDesktop = useIsDesktop();
@@ -1167,7 +1170,7 @@ function SecaoClientes() {
       if (msgDias) p.set('msg_dias', msgDias);
       const r = await fetch('/api/meluni-clientes-list?' + p.toString());
       const j = await r.json();
-      if (j.ok) { setClientes(j.clientes || []); setUnread(j.unread || {}); setConv30(j.conv30 || 0); } else setErro(j.erro || 'erro ao carregar');
+      if (j.ok) { setClientes(j.clientes || []); setUnread(j.unread || {}); setConv30(j.conv30 || 0); setDispHoje(j.disparos_hoje || { poscompra: 0, crossell: 0, campanha: 0 }); } else setErro(j.erro || 'erro ao carregar');
     } catch (e) { setErro(String(e?.message || e)); }
     setLoading(false);
   }, [etapa, ordenar, nome, periodo, janela, msgDias, campanha]);
@@ -1345,6 +1348,7 @@ function SecaoClientes() {
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: autoOn ? '#1f7a48' : palette.inkMuted, display: 'inline-block' }} />
           {autoOn === null ? 'Auto pós-compra…' : (autoOn ? 'Auto pós-compra: LIGADO' : 'Auto pós-compra: desligado')}
         </button>
+        <PillDisparoHoje n={dispHoje.poscompra} ativo={filtroDisparo === 'poscompra'} onClick={() => setFiltroDisparo(f => f === 'poscompra' ? null : 'poscompra')} />
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>
           seg–sáb 10h · 10 a 14 dias · 1 envio por cliente · pula quem tem devolução
         </span>
@@ -1367,9 +1371,12 @@ function SecaoClientes() {
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: crossOn ? '#5b3fa0' : palette.inkMuted, display: 'inline-block' }} />
           {crossOn === null ? 'Auto cross-sell…' : (crossOn ? 'Auto cross-sell: LIGADO' : 'Auto cross-sell: desligado')}
         </button>
+        <PillDisparoHoje n={dispHoje.crossell} ativo={filtroDisparo === 'crossell'} onClick={() => setFiltroDisparo(f => f === 'crossell' ? null : 'crossell')} />
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>
           seg–sáb 10h30 · 7 dias após o pós-compra · cor/modelo de verão com foto · 1 envio por cliente
         </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, borderRadius: 999, padding: '6px 12px', fontFamily: FONT, fontSize: 12.5, fontWeight: 700 }}>📣 Campanha manual</span>
+        <PillDisparoHoje n={dispHoje.campanha} ativo={filtroDisparo === 'campanha'} onClick={() => setFiltroDisparo(f => f === 'campanha' ? null : 'campanha')} />
       </div>
 
       {/* barra de filtros */}
@@ -1515,7 +1522,7 @@ function SecaoClientes() {
             )}
             <button onClick={dispararSel} disabled={disparando}
               style={{ ...selStyle, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', cursor: disparando ? 'default' : 'pointer', opacity: disparando ? 0.6 : 1 }}>
-              {disparando ? 'enviando…' : (campanha === 'novidade' ? `Disparar novidade (${sel.size})` : `Gerar e disparar (${sel.size})`)}
+              {disparando ? 'enviando…' : ((campanha === 'novidade' || campanha === 'todos') ? `📣 Campanha manual (${sel.size})` : `Gerar e disparar (${sel.size})`)}
             </button>
           </>
         )}
@@ -1533,7 +1540,7 @@ function SecaoClientes() {
       )}
       {(!erro && clientes.length > 0) && (
         <MeluniSplitChat
-          itens={filtrarPorTag(ordPend(clientes), filtroTag)} getId={(c) => c.id}
+          itens={filtrarPorTag(ordPend(clientes), filtroTag).filter(c => !filtroDisparo || (filtroDisparo === 'poscompra' ? c.poscompra_hoje : filtroDisparo === 'crossell' ? c.crossell_hoje : c.campanha_hoje))} getId={(c) => c.id}
           abertoId={chatId} setAbertoId={abrirChat} isDesktop={isDesktop}
           tituloDe={(c) => c.nome || 'Cliente'}
           subtituloDe={(c) => fmtTel(c.whatsapp || c.telefone) || 'sem número'}
@@ -1550,7 +1557,23 @@ function SecaoClientes() {
 
 // ─── SEÇÃO: CARRINHO ABANDONADO ─────────────────────────────────────────────
 // relógio do funil: tempo restante até a próxima transição automática (Sprint 2).
+// Pill "N hoje" clicável (Ailson 04/08/2026): disparos do dia do grupo;
+// clicar filtra os cards de quem recebeu hoje (toggle).
+function PillDisparoHoje({ n, ativo, onClick }) {
+  return (
+    <button onClick={onClick} title="clique pra filtrar quem recebeu hoje" style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer',
+      border: `1px solid ${ativo ? MELUNI : palette.beige}`,
+      background: ativo ? MELUNI : (n > 0 ? MELUNI_SOFT : palette.surface),
+      color: ativo ? '#fff' : (n > 0 ? MELUNI : palette.inkMuted),
+      borderRadius: 999, padding: '4px 10px', fontFamily: FONT, fontSize: 11.5, fontWeight: 800,
+    }}>📨 {n} hoje</button>
+  );
+}
+
 function relogioCarrinho(c) {
+  // newsletter nao tem 2º envio (Ailson 04/08): sem relogio no card
+  if (c?.origem === 'newsletter') return null;
   const map = { enviada: ['enviado_em', 24, '2º envio'], segundo_envio: ['segundo_envio_em', 48, 'perdidos'], conversando: ['ultima_interacao_em', 72, 'perdidos'] };
   const cfg = map[c?.status]; if (!cfg) return null;
   // o cronômetro que aponta pra "perdidos" é controle interno — não mostra na UI.
@@ -1748,8 +1771,18 @@ function SecaoCarrinho() {
   const abrirTplCarr = () => {
     setModalTplCarr({ carrinho: [], newsletter: null, carregando: true, trocando: false });
     fetch('/api/meluni-templates-carrinho').then(r => r.json()).then(j => {
-      setModalTplCarr(m => m ? { ...m, carrinho: j.carrinho || [], newsletter: j.newsletter || null, carregando: false } : m);
+      setModalTplCarr(m => m ? { ...m, carrinho: j.carrinho || [], newsletter: j.newsletter || null, gates: j.gates || {}, carregando: false } : m);
     }).catch(() => setModalTplCarr(m => m ? { ...m, carregando: false } : m));
+  };
+  const acaoTplCarr = async (payload, aplicar) => {
+    try {
+      const r = await fetch('/api/meluni-templates-carrinho', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (j.ok) setModalTplCarr(m => m ? aplicar(m, j) : m);
+      else alert(j.erro || 'falhou');
+    } catch { alert('falhou'); }
   };
   const trocarCriativoNews = async (file) => {
     if (!file) return;
@@ -1874,7 +1907,17 @@ function SecaoCarrinho() {
             ) : (
               <>
                 <div style={{ fontSize: 12.5, fontWeight: 800, color: palette.ink, margin: '4px 0 6px' }}>🛒 Carrinho abandonado</div>
-                <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 8 }}>Nesses templates a foto que sai no topo é <b>a do produto do carrinho</b> — montada automaticamente a cada envio, não tem criativo fixo pra trocar.</div>
+                <div style={{ fontSize: 11, color: palette.inkMuted, marginBottom: 8 }}>Nesses templates a foto que sai no topo é <b>a do produto do carrinho</b> — montada automaticamente a cada envio, não tem criativo fixo pra trocar. Eles trabalham em pares (com/sem nome, com/sem foto), então quem liga e desliga são os controles do fluxo:</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <button onClick={() => acaoTplCarr({ acao: 'gate', gate: 'disparo', valor: !modalTplCarr.gates?.disparo_ativo }, (m, j) => ({ ...m, gates: { ...m.gates, disparo_ativo: j.valor } }))}
+                    style={{ border: `1px solid ${modalTplCarr.gates?.disparo_ativo ? '#bfe3cd' : palette.beige}`, background: modalTplCarr.gates?.disparo_ativo ? '#e6f7ee' : palette.surface, color: modalTplCarr.gates?.disparo_ativo ? '#1f7a48' : palette.inkMuted, borderRadius: 999, padding: '5px 11px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                    {modalTplCarr.gates?.disparo_ativo ? '● Disparo automático: LIGADO' : 'Disparo automático: desligado'}
+                  </button>
+                  <button onClick={() => acaoTplCarr({ acao: 'gate', gate: 'img', valor: !modalTplCarr.gates?.img_ativo }, (m, j) => ({ ...m, gates: { ...m.gates, img_ativo: j.valor } }))}
+                    style={{ border: `1px solid ${modalTplCarr.gates?.img_ativo ? '#bfe3cd' : palette.beige}`, background: modalTplCarr.gates?.img_ativo ? '#e6f7ee' : palette.surface, color: modalTplCarr.gates?.img_ativo ? '#1f7a48' : palette.inkMuted, borderRadius: 999, padding: '5px 11px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                    {modalTplCarr.gates?.img_ativo ? '● Fotos nos templates: LIGADAS' : 'Fotos nos templates: desligadas'}
+                  </button>
+                </div>
                 {modalTplCarr.carrinho.length === 0 ? (
                   <div style={{ padding: 10, fontSize: 12, color: '#b4453a' }}>Nenhum template de carrinho configurado.</div>
                 ) : modalTplCarr.carrinho.map(t => (
@@ -1882,6 +1925,7 @@ function SecaoCarrinho() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 12.5, fontWeight: 700, color: palette.ink, textTransform: 'capitalize' }}>{t.versao.replace(/_/g, ' ')}</span>
                       {t.com_foto && <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: MELUNI_SOFT, color: MELUNI, fontWeight: 800 }}>📷 foto do produto</span>}
+                      <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: t.uso_30d > 0 ? MELUNI_SOFT : '#f6f3ee', color: t.uso_30d > 0 ? MELUNI : palette.inkMuted, fontWeight: 700 }}>{t.uso_30d > 0 ? `${t.uso_30d} envio(s) · 30d` : 'sem uso · 30d'}</span>
                       <span style={{ fontSize: 10, color: palette.inkMuted, marginLeft: 'auto' }}>{t.name || '—'}</span>
                     </div>
                     {t.body && <div style={{ fontSize: 10.5, color: palette.inkSoft, marginTop: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.body}</div>}
@@ -1896,13 +1940,22 @@ function SecaoCarrinho() {
                     ? <img src={modalTplCarr.newsletter.sample_url} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} />
                     : <div style={{ width: 84, height: 84, borderRadius: 10, background: '#f0ebe4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>📰</div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink }}>Criativo da newsletter</div>
-                    <div style={{ fontSize: 10.5, color: palette.inkMuted, marginBottom: 8 }}>template Meta: {modalTplCarr.newsletter?.template || 'aguardando cadastro'} · sai como foto no topo do disparo</div>
-                    <label style={{ background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-block' }}>
-                      {modalTplCarr.trocando ? 'enviando…' : '📷 Trocar criativo'}
-                      <input type="file" accept="image/*" style={{ display: 'none' }} disabled={modalTplCarr.trocando}
-                        onChange={e => { const fl = e.target.files?.[0]; e.target.value = ''; trocarCriativoNews(fl); }} />
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: palette.ink }}>Newsletter</span>
+                      <span style={{ fontSize: 9.5, padding: '2px 7px', borderRadius: 5, fontWeight: 800, background: modalTplCarr.newsletter?.ativo !== false ? '#e6f7ee' : '#f0ebe4', color: modalTplCarr.newsletter?.ativo !== false ? '#1f7a48' : palette.inkMuted }}>{modalTplCarr.newsletter?.ativo !== false ? '● ATIVO' : 'INATIVO'}</span>
+                      <span style={{ fontSize: 9.5, padding: '2px 7px', borderRadius: 5, fontWeight: 700, background: (modalTplCarr.newsletter?.uso_30d || 0) > 0 ? MELUNI_SOFT : '#f6f3ee', color: (modalTplCarr.newsletter?.uso_30d || 0) > 0 ? MELUNI : palette.inkMuted }}>{(modalTplCarr.newsletter?.uso_30d || 0) > 0 ? `${modalTplCarr.newsletter.uso_30d} envio(s) · 30d` : 'sem uso · 30d'}</span>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: palette.inkMuted, margin: '3px 0 8px' }}>template Meta: {modalTplCarr.newsletter?.template || 'aguardando cadastro'} · sai como foto no topo do disparo</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <label style={{ background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'inline-block' }}>
+                        {modalTplCarr.trocando ? 'enviando…' : '📷 Trocar criativo'}
+                        <input type="file" accept="image/*" style={{ display: 'none' }} disabled={modalTplCarr.trocando}
+                          onChange={e => { const fl = e.target.files?.[0]; e.target.value = ''; trocarCriativoNews(fl); }} />
+                      </label>
+                      {modalTplCarr.newsletter?.ativo !== false
+                        ? <button onClick={() => acaoTplCarr({ acao: 'status_newsletter', ativo: false }, (m, j) => ({ ...m, newsletter: { ...m.newsletter, ativo: j.ativo } }))} style={{ background: palette.surface, color: palette.inkMuted, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Desativar</button>
+                        : <button onClick={() => acaoTplCarr({ acao: 'status_newsletter', ativo: true }, (m, j) => ({ ...m, newsletter: { ...m.newsletter, ativo: j.ativo } }))} style={{ background: '#e6f7ee', color: '#1f7a48', border: '1px solid #bfe3cd', borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>Ativar</button>}
+                    </div>
                   </div>
                 </div>
               </>

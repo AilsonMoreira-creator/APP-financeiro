@@ -137,6 +137,57 @@ export default async function handler(req, res) {
 
     await anexarTags(supabase, lista, c => c.whatsapp || c.telefone);
 
+    // DISPAROS DE HOJE (Ailson 04/08/2026): contadores por grupo (pos-compra,
+    // cross-sell, campanha manual) + marcador por cliente pros filtros dos pills
+    const disparosHoje = { poscompra: 0, crossell: 0, campanha: 0 };
+    try {
+      const { data: cfgPosRow } = await supabase.from('meluni_config').select('valor').eq('chave', 'lara_templates_clientes').maybeSingle();
+      const { data: cfgNovRow } = await supabase.from('meluni_config').select('valor').eq('chave', 'lara_templates_novidade').maybeSingle();
+      const vPos = typeof cfgPosRow?.valor === 'string' ? JSON.parse(cfgPosRow.valor) : (cfgPosRow?.valor || {});
+      const vNov = typeof cfgNovRow?.valor === 'string' ? JSON.parse(cfgNovRow.valor) : (cfgNovRow?.valor || {});
+      const grupoPorNome = {};
+      [vPos?.templates?.curta?.name, vPos?.templates?.pessoal?.name].filter(Boolean).forEach(n => { grupoPorNome[n] = 'poscompra'; });
+      ['crossell_mesmo_modelo', 'crossell_outro_modelo'].forEach(n => { grupoPorNome[n] = 'crossell'; });
+      Object.values(vNov?.templates || {}).forEach(t => { if (t?.name) grupoPorNome[t.name] = 'campanha'; });
+      const nomes = Object.keys(grupoPorNome);
+      if (nomes.length) {
+        const hoje0 = new Date(); // 00h de hoje em BRT
+        const brtNow = new Date(hoje0.getTime() - 3 * 3600e3);
+        const dia0 = new Date(Date.UTC(brtNow.getUTCFullYear(), brtNow.getUTCMonth(), brtNow.getUTCDate(), 3, 0, 0)).toISOString();
+        const { data: msgsHoje } = await supabase.from('meluni_mensagens')
+          .select('conversa_id, template_usado')
+          .in('template_usado', nomes).gte('enviada_em', dia0).limit(3000);
+        const grupoPorConv = new Map();
+        (msgsHoje || []).forEach(m => {
+          const g = grupoPorNome[m.template_usado];
+          if (!g) return;
+          disparosHoje[g]++;
+          if (m.conversa_id && !grupoPorConv.has(m.conversa_id)) grupoPorConv.set(m.conversa_id, new Set());
+          if (m.conversa_id) grupoPorConv.get(m.conversa_id).add(g);
+        });
+        const convIdsH = [...grupoPorConv.keys()];
+        if (convIdsH.length) {
+          const porCliH = new Map(), porTelH = new Map();
+          for (let i = 0; i < convIdsH.length; i += 300) {
+            const chunk = convIdsH.slice(i, i + 300);
+            const { data: convsH } = await supabase.from('meluni_conversas').select('id, telefone, cliente_id').in('id', chunk);
+            (convsH || []).forEach(cv => {
+              const gs = grupoPorConv.get(cv.id) || new Set();
+              if (cv.cliente_id) porCliH.set(cv.cliente_id, new Set([...(porCliH.get(cv.cliente_id) || []), ...gs]));
+              if (cv.telefone) porTelH.set(cv.telefone, new Set([...(porTelH.get(cv.telefone) || []), ...gs]));
+            });
+          }
+          lista.forEach(c => {
+            const gs = porCliH.get(c.id) || porTelH.get(c.whatsapp || c.telefone);
+            if (!gs) return;
+            if (gs.has('poscompra')) c.poscompra_hoje = true;
+            if (gs.has('crossell')) c.crossell_hoje = true;
+            if (gs.has('campanha')) c.campanha_hoje = true;
+          });
+        }
+      }
+    } catch (eDh) { console.error('[clientes-list] disparos hoje', eDh?.message); }
+
     // tag CROSS-SELL (Ailson 03/08/2026): marca quem ja recebeu o cross-sell
     // automatico (mensagens dos templates crossell_*), pro card mostrar a tag
     try {
@@ -162,7 +213,7 @@ export default async function handler(req, res) {
       }
     } catch (eCx) { console.error('[clientes-list] tag crossell', eCx?.message); }
 
-    return res.json({ ok: true, total: lista.length, etapa, unread, conv30: conv30 || 0, clientes: lista });
+    return res.json({ ok: true, total: lista.length, etapa, unread, conv30: conv30 || 0, disparos_hoje: disparosHoje, clientes: lista });
   } catch (e) {
     return res.status(500).json({ ok: false, erro: e?.message || String(e) });
   }

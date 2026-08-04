@@ -44,10 +44,25 @@ export default async function handler(req, res) {
         ...Object.entries(tplsImg).map(([versao, t]) => ({ versao, name: t?.name || null, body: t?.body || null, com_foto: true })),
       ];
       const news = await lerNews();
+      // uso real 30d por template (mesma régua do modal de Clientes) — 04/08/2026
+      const nomes = [...carrinho.map(t => t.name), news?.template].filter(Boolean);
+      const uso = {};
+      if (nomes.length) {
+        const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+        const { data: msgs } = await supabase.from('meluni_mensagens')
+          .select('template_usado').in('template_usado', nomes).gte('enviada_em', desde).limit(10000);
+        (msgs || []).forEach(m => { uso[m.template_usado] = (uso[m.template_usado] || 0) + 1; });
+      }
+      carrinho.forEach(t => { t.uso_30d = uso[t.name] || 0; });
+      // gates reais que governam a vida dos templates de carrinho
+      const gates = {
+        disparo_ativo: (await cfgMeluni('lara_carrinho_disparo_ativo', false)) === true,
+        img_ativo: (await cfgMeluni('lara_carrinho_img_ativo', false)) === true,
+      };
       return res.status(200).json({
         ok: true,
-        carrinho,
-        newsletter: news ? { template: news.template || null, com_nome: news.com_nome !== false, sample_url: news.sample_url || null } : null,
+        carrinho, gates,
+        newsletter: news ? { template: news.template || null, com_nome: news.com_nome !== false, sample_url: news.sample_url || null, ativo: news.ativo !== false, uso_30d: uso[news.template] || 0 } : null,
       });
     }
 
@@ -55,6 +70,21 @@ export default async function handler(req, res) {
       let body = req.body;
       if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
       const news = (await lerNews()) || {};
+
+      // status da newsletter (ativo/inativo) — 04/08/2026
+      if (body?.acao === 'status_newsletter') {
+        const ativo = body?.ativo === true;
+        await setCfgMeluni(CFG_NEWS, { ...news, ativo });
+        return res.status(200).json({ ok: true, ativo });
+      }
+      // gates dos templates de carrinho (disparo automatico / fotos) — 04/08/2026
+      if (body?.acao === 'gate') {
+        const gate = body?.gate === 'img' ? 'lara_carrinho_img_ativo' : 'lara_carrinho_disparo_ativo';
+        const valor = body?.valor === true;
+        await setCfgMeluni(gate, valor);
+        return res.status(200).json({ ok: true, gate, valor });
+      }
+
       let novaUrl = String(body?.sample_url || '').trim() || null;
 
       if (!novaUrl && body?.imagem_base64) {

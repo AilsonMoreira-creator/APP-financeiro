@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       const corte = new Date(Date.now() - 24 * 3600e3).toISOString();
       const { data: carts } = await supabase.from('meluni_carrinhos')
         .select('id, nome, telefone, enviado_em, dados_extra')
-        .eq('status', 'enviada').is('convertido_em', null)
+        .eq('status', 'enviada').eq('origem', 'carrinho').is('convertido_em', null)
         .lt('enviado_em', corte)
         .order('enviado_em', { ascending: true }).limit(lote);
 
