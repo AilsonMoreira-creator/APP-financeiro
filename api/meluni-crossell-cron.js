@@ -109,21 +109,35 @@ export default async function handler(req, res) {
     if (!temTemplates && !dry) return res.status(400).json({ ok: false, erro: 'lara_templates_crossell nao configurado (mesmo_modelo/outro_modelo)' });
     const lang = cfgT.idioma || 'pt_BR';
 
-    // ── ancora: quem RECEBEU o pos-compra ha 7–14 dias ──────────────────────
-    const cfgPos = (await cfgMeluni('lara_templates_clientes', {})) || {};
-    const nomesPos = [cfgPos.templates?.curta?.name, cfgPos.templates?.pessoal?.name].filter(Boolean);
-    if (!nomesPos.length) return res.status(400).json({ ok: false, erro: 'templates pos-compra nao configurados (ancora dos 7 dias)' });
-    const de = diaISO(14) + 'T00:00:00', ate = diaISO(7) + 'T23:59:59';
-    const { data: msgsPos } = await supabase.from('meluni_mensagens')
-      .select('conversa_id, enviada_em')
-      .in('template_usado', nomesPos)
-      .gte('enviada_em', de).lte('enviada_em', ate)
-      .limit(800);
-    const convIds = [...new Set((msgsPos || []).map(m => m.conversa_id).filter(Boolean))];
-    if (!convIds.length) return res.status(200).json({ ok: true, dry, elegiveis: 0, motivo: 'ninguem recebeu pos-compra ha 7-14 dias' });
-    const { data: convs } = await supabase.from('meluni_conversas')
-      .select('id, telefone, cliente_id').in('id', convIds);
-    const cliIds = [...new Set((convs || []).map(c => c.cliente_id).filter(Boolean))];
+    // ── ancora normal: quem RECEBEU o pos-compra ha 7–14 dias ───────────────
+    // MODO CATCH-UP (Ailson 04/08/2026): ?catchup=DIAS troca a ancora por
+    // "COMPROU nos ultimos N dias" — pega clientes de antes do sistema existir.
+    // Dedupe, devolucao, bloqueio, 48h e o motor de ofertas seguem identicos.
+    const catchupDias = Math.min(90, parseInt(req.query?.catchup || '0', 10) || 0);
+    let cliIds = [];
+    if (catchupDias > 0) {
+      const { data: vendasRec } = await supabase.from('meluni_vendas')
+        .select('cliente_id')
+        .gte('data_pedido', diaISO(catchupDias))
+        .not('cliente_id', 'is', null).limit(5000);
+      cliIds = [...new Set((vendasRec || []).map(v => v.cliente_id))];
+      if (!cliIds.length) return res.status(200).json({ ok: true, dry, catchup: catchupDias, elegiveis: 0, motivo: 'ninguem comprou na janela' });
+    } else {
+      const cfgPos = (await cfgMeluni('lara_templates_clientes', {})) || {};
+      const nomesPos = [cfgPos.templates?.curta?.name, cfgPos.templates?.pessoal?.name].filter(Boolean);
+      if (!nomesPos.length) return res.status(400).json({ ok: false, erro: 'templates pos-compra nao configurados (ancora dos 7 dias)' });
+      const de = diaISO(14) + 'T00:00:00', ate = diaISO(7) + 'T23:59:59';
+      const { data: msgsPos } = await supabase.from('meluni_mensagens')
+        .select('conversa_id, enviada_em')
+        .in('template_usado', nomesPos)
+        .gte('enviada_em', de).lte('enviada_em', ate)
+        .limit(800);
+      const convIds = [...new Set((msgsPos || []).map(m => m.conversa_id).filter(Boolean))];
+      if (!convIds.length) return res.status(200).json({ ok: true, dry, elegiveis: 0, motivo: 'ninguem recebeu pos-compra ha 7-14 dias' });
+      const { data: convs } = await supabase.from('meluni_conversas')
+        .select('id, telefone, cliente_id').in('id', convIds);
+      cliIds = [...new Set((convs || []).map(c => c.cliente_id).filter(Boolean))];
+    }
 
     // ── clientes + guardas (bloqueio, devolucao) ────────────────────────────
     const { data: clientes0 } = await supabase.from('meluni_clientes')
