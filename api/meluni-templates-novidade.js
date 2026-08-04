@@ -44,7 +44,7 @@ export default async function handler(req, res) {
         status: t?.status || 'ativo', // ativo | inativo | arquivado (Ailson 03/08/2026)
         uso_30d: uso[t?.name] || 0,
       }));
-      return res.status(200).json({ ok: true, idioma: spec.idioma || 'pt_BR', templates: lista });
+      return res.status(200).json({ ok: true, idioma: spec.idioma || 'pt_BR', padrao: spec.padrao || null, templates: lista });
     }
 
     if (req.method === 'POST') {
@@ -52,6 +52,13 @@ export default async function handler(req, res) {
       if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
       const versao = String(body?.versao || '').trim();
       if (!versao || !tpls[versao]) return res.status(400).json({ ok: false, erro: 'versao invalida' });
+
+      // define o template PADRAO da campanha manual (Ailson 04/08/2026)
+      if (body?.acao === 'padrao') {
+        if (!tpls[versao]) return res.status(400).json({ ok: false, erro: 'versao invalida' });
+        await setCfgMeluni(CFG_KEY, { ...spec, padrao: versao });
+        return res.status(200).json({ ok: true, padrao: versao });
+      }
 
       // troca de STATUS (ativo | inativo | arquivado) — Ailson 03/08/2026
       if (body?.status) {

@@ -1119,6 +1119,10 @@ function SecaoClientes() {
   const [modalTemplates, setModalTemplates] = useState(null); // {tpls:[], trocando:versao|null}
   // Pills de disparos do dia + filtro (Ailson 04/08/2026): clicar filtra quem recebeu hoje
   const [dispHoje, setDispHoje] = useState({ poscompra: 0, crossell: 0, campanha: 0 });
+  const [campanhaPadrao, setCampanhaPadrao] = useState(null); // versao padrao do disparo manual
+  useEffect(() => {
+    fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => { if (j?.ok) setCampanhaPadrao(j.padrao || null); }).catch(() => {});
+  }, []);
   const [filtroDisparo, setFiltroDisparo] = useState(null); // 'poscompra'|'crossell'|'campanha'|null
   const [recargaHoje, setRecargaHoje] = useState(0);
   const disparosHoje = useDisparosHoje(recargaHoje);
@@ -1244,7 +1248,8 @@ function SecaoClientes() {
       const avisoQtd = ids.length > 30 ? `${avisoRecentes}Você selecionou ${ids.length}. Vão sair os primeiros 30 agora (repita pra continuar).` : avisoRecentes;
       setModalNovidade({ ids, aviso: avisoQtd, tpls: [], versao: null, carregando: true });
       fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
-        setModalNovidade(m => m ? { ...m, tpls: j.templates || [], versao: (j.templates || [])[0]?.versao || null, carregando: false } : m);
+        const ativos = (j.templates || []).filter(t => (t.status || 'ativo') === 'ativo');
+        setModalNovidade(m => m ? { ...m, tpls: j.templates || [], versao: j.padrao || ativos[0]?.versao || null, carregando: false } : m);
       }).catch(() => setModalNovidade(m => m ? { ...m, carregando: false } : m));
       return;
     }
@@ -1328,6 +1333,29 @@ function SecaoClientes() {
     } catch { alert('falhou'); }
   };
 
+  // Abre o modal de escolha em modo DEFINIR o template padrão (sem disparar)
+  const abrirDefinirCampanha = () => {
+    setModalNovidade({ ids: null, aviso: '', tpls: [], versao: null, carregando: true });
+    fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
+      const ativos = (j.templates || []).filter(t => (t.status || 'ativo') === 'ativo');
+      setModalNovidade(m => m ? { ...m, tpls: j.templates || [], versao: j.padrao || ativos[0]?.versao || null, carregando: false } : m);
+    }).catch(() => setModalNovidade(m => m ? { ...m, carregando: false } : m));
+  };
+  const salvarCampanhaPadrao = async () => {
+    const m = modalNovidade;
+    if (!m?.versao) return;
+    try {
+      const r = await fetch('/api/meluni-templates-novidade', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'padrao', versao: m.versao }),
+      });
+      const j = await r.json();
+      if (j.ok) setCampanhaPadrao(j.padrao);
+      else alert(j.erro || 'falhou');
+    } catch { alert('falhou'); }
+    setModalNovidade(null);
+  };
+
   const abrirModalTemplates = () => {
     setModalTemplates({ tpls: [], trocando: null, carregando: true });
     fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
@@ -1383,8 +1411,23 @@ function SecaoClientes() {
         <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>
           seg–sáb 10h30 · 7 dias após o pós-compra · cor/modelo de verão com foto · 1 envio por cliente
         </span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, borderRadius: 999, padding: '6px 12px', fontFamily: FONT, fontSize: 12.5, fontWeight: 700 }}>📣 Campanha manual</span>
+      </div>
+
+      {/* Campanha manual (Ailson 04/08/2026): terceira linha; clicar define o template padrão do disparo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        <button onClick={abrirDefinirCampanha} title="clique pra escolher o template que sai no disparo manual" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer',
+          border: `1px solid ${campanhaPadrao ? '#c9b8e8' : palette.beige}`,
+          background: campanhaPadrao ? '#f6f1fd' : palette.surface,
+          color: campanhaPadrao ? '#5b3fa0' : palette.inkMuted,
+          borderRadius: 999, padding: '6px 12px', fontFamily: FONT, fontSize: 12.5, fontWeight: 700,
+        }}>
+          📣 Campanha manual{campanhaPadrao ? `: ${String(campanhaPadrao).replace(/_/g, ' ')}` : ': escolher template'} ▾
+        </button>
         <PillDisparoHoje n={dispHoje.campanha} ativo={filtroDisparo === 'campanha'} onClick={() => setFiltroDisparo(f => f === 'campanha' ? null : 'campanha')} />
+        <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>
+          seleciona os clientes e clica em 📣 Campanha manual pra disparar com esse template
+        </span>
       </div>
 
       {/* barra de filtros */}
@@ -1424,9 +1467,9 @@ function SecaoClientes() {
       {modalNovidade && (
         <div onClick={() => !disparando && setModalNovidade(null)} style={{ position: 'fixed', inset: 0, zIndex: 9200, background: 'rgba(44,62,80,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, maxWidth: 460, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 18, fontFamily: FONT }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>Disparar pra {modalNovidade.ids.length} cliente(s)</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>{modalNovidade.ids ? `Disparar pra ${modalNovidade.ids.length} cliente(s)` : '📣 Template da campanha manual'}</div>
             {modalNovidade.aviso && <div style={{ fontSize: 11.5, color: '#8a6d1a', background: '#fdf6e3', border: '1px solid #f0e3b8', borderRadius: 8, padding: '7px 10px', marginBottom: 10, whiteSpace: 'pre-line' }}>{modalNovidade.aviso}</div>}
-            <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>Escolhe o template que vai sair:</div>
+            <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>{modalNovidade.ids ? 'Escolhe o template que vai sair:' : 'Esse template fica como o padrão do botão de disparo:'}</div>
             {modalNovidade.carregando ? (
               <div style={{ padding: 18, textAlign: 'center', color: palette.inkMuted, fontSize: 12 }}>carregando templates…</div>
             ) : modalNovidade.tpls.filter(t => (t.status || 'ativo') === 'ativo').length === 0 ? (
@@ -1443,9 +1486,9 @@ function SecaoClientes() {
             ))}
             <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
               <button onClick={() => setModalNovidade(null)} disabled={disparando} style={{ ...selStyle }}>Cancelar</button>
-              <button onClick={dispararNovidadeVersao} disabled={disparando || !modalNovidade.versao}
+              <button onClick={modalNovidade.ids ? dispararNovidadeVersao : salvarCampanhaPadrao} disabled={disparando || !modalNovidade.versao}
                 style={{ ...selStyle, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', opacity: (disparando || !modalNovidade.versao) ? 0.6 : 1 }}>
-                {disparando ? 'enviando…' : 'Disparar agora'}
+                {disparando ? 'enviando…' : (modalNovidade.ids ? 'Disparar agora' : 'Salvar como padrão')}
               </button>
             </div>
           </div>
