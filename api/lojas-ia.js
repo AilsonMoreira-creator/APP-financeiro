@@ -1150,7 +1150,7 @@ async function montarContextoSugestoes(vendedoraId) {
   // (a Fran dispensou com "Ela comprou semana passada!!" e a pauta voltaria).
   // Mesmo espirito da regra dos grupos (caso Grupo Sandra 15/05). Reaproveita o
   // Set geral: todos os pontos de selecao ja o consultam. Limiar calibravel.
-  const DIAS_COMPRA_RECENTE = 7;
+  const DIAS_COMPRA_RECENTE = 10; // Ailson 05/08/2026: subiu de 7 pra 10
   try {
     const idsCarteira = (clientes || []).map(c => c.id).filter(Boolean);
     for (let i = 0; i < idsCarteira.length; i += 300) {
