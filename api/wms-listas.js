@@ -134,7 +134,10 @@ export default async function handler(req, res) {
           variacao = +(((hoje.pedidos_por_hora - referencia) / referencia) * 100).toFixed(1);
         }
         // persiste o fechamento uma vez por dia, após o corte
-        if (hoje && agora >= corteEm) {
+        // só grava dia com medição real (evita poluir a média de referência com
+        // dia de teste/implantação, onde o cronômetro nem rodou direito)
+        const diaValido = hoje && hoje.pedidos_finalizados > 0 && hoje.segundos_liquidos > 600;
+        if (diaValido && agora >= corteEm) {
           const { data: ja } = await supabase.from('wms_produtividade').select('id').eq('data', hojeBrt).maybeSingle();
           if (!ja) {
             await supabase.from('wms_produtividade').insert({
