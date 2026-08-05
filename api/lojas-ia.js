@@ -816,7 +816,22 @@ async function handleGerarMensagem(req, res, auth) {
   // Texto puro (sem cercas markdown) + sanitiza travessões (em-dash —,
   // en-dash –) que IA gera por habito mesmo proibido no prompt.
   // Ailson 18/05/2026 — defesa em profundidade.
-  const mensagem = textoBruto
+  // ANTI-VAZAMENTO DE ANALISE (Ailson 05/08/2026, caso real Monica/Praia Grande):
+  // o modelo incluiu o raciocinio interno NO CORPO da mensagem ("...e
+  // `ja_perguntei_vir_sp_90d` e false, canal e presencial ✅"). Alem da regra no
+  // prompt, cortamos defensivamente qualquer paragrafo com cara de analise:
+  // backticks, nomes de campos snake_case, checkmarks ou meta-fala.
+  const pareceAnalise = (p) =>
+    /`/.test(p) ||
+    /\b[a-z0-9]+_[a-z0-9]+_[a-z0-9_]+\b/.test(p) ||
+    /[✅☑✔]/.test(p) ||
+    /\b(payload|kpi|flag|campo|canal (é|eh) presencial|vale o gancho)\b/i.test(p);
+  const textoSemAnalise = String(textoBruto || '')
+    .split(/\n\n+/)
+    .filter(p => !pareceAnalise(p))
+    .join('\n\n');
+
+  const mensagem = textoSemAnalise
     .replace(/^```(?:[a-z]+)?\s*|\s*```$/g, '')
     .replace(/\s*—\s*/g, ', ')
     .replace(/\s*–\s*/g, ', ')
