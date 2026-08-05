@@ -230,6 +230,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [detPedidos, setDetPedidos] = useState([]);
   const [detCarregando, setDetCarregando] = useState(false);
   const [detBusca, setDetBusca] = useState('');
+  const [porContaAberto, setPorContaAberto] = useState(false);
   const [dash, setDash] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -245,13 +246,20 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [imprimindo, setImprimindo] = useState(false);
   const [config, setConfig] = useState(null);
   const [salvandoCfg, setSalvandoCfg] = useState(false);
-  // chaves fora da impressão: 'ref|<conta>|<ref>' (mono) ou 'ped|<id>' (multi)
-  const [foraImpressao, setForaImpressao] = useState(() => new Set());
-  const toggleImpressao = (chave) => setForaImpressao(prev => {
-    const n = new Set(prev);
-    if (n.has(chave)) n.delete(chave); else n.add(chave);
+  // modo por card: ausente='imprimir' (default) | 'ja' (já impresso) | 'nao'
+  // (nenhuma caixinha marcada). Caixinhas mutuamente exclusivas (Ailson 05/08).
+  const [modoImpressao, setModoImpressao] = useState(() => new Map());
+  const modoDe = (chave) => modoImpressao.get(chave) || 'imprimir';
+  const setModo = (chave, modo) => setModoImpressao(prev => {
+    const n = new Map(prev);
+    if (modo === 'imprimir') n.delete(chave); else n.set(chave, modo);
     return n;
   });
+  const toggleCaixa = (chave, caixa) => {
+    const atual = modoDe(chave);
+    if (caixa === 'imprimir') setModo(chave, atual === 'imprimir' ? 'nao' : 'imprimir');
+    else setModo(chave, atual === 'ja' ? 'nao' : 'ja');
+  };
 
   const carregarDash = useCallback(async () => {
     try {
@@ -329,41 +337,43 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
 
   const usaMatriz = (g) => visual === 'matriz' || (visual === 'auto' && g.nCores > 1 && g.tamanhos.length > 2);
 
-  const marcarJaImpresso = async (ids) => {
-    if (!ids.length) return;
-    try {
-      const r = await fetch(`${API}/wms-listas`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'marcar_impresso', pedido_ids: ids }),
-      });
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error || 'falhou');
-      await carregarPedidos(); await carregarDash();
-    } catch (e) { setErro('Já impresso: ' + e.message); }
-  };
-
   const chaveDoPedido = (p) => {
     if (p.multi_sku) return 'ped|' + p.id;
     const ref = (p.itens?.[0]?.ref) || '(sem ref)';
     return 'ref|' + p.conta + '|' + ref;
   };
-  const pedidosIncluidos = useMemo(() => pedidosFiltrados.filter(p => !foraImpressao.has(chaveDoPedido(p))), [pedidosFiltrados, foraImpressao]);
+  const pedidosIncluidos = useMemo(() => pedidosFiltrados.filter(p => modoDe(chaveDoPedido(p)) === 'imprimir'), [pedidosFiltrados, modoImpressao]);
+  const pedidosJaImpressos = useMemo(() => pedidosFiltrados.filter(p => modoDe(chaveDoPedido(p)) === 'ja'), [pedidosFiltrados, modoImpressao]);
 
   const imprimirLista = async () => {
     const ids = pedidosIncluidos.map(p => p.id);
-    if (!ids.length) return;
-    if (!window.confirm(`Imprimir a lista e iniciar a separação de ${ids.length} pedidos?\n\nEles saem de "Abertos" e entram em "Em separação".${foraImpressao.size ? '\n(Os cards desmarcados ficam de fora e continuam abertos.)' : ''}`)) return;
+    const idsJa = pedidosJaImpressos.map(p => p.id);
+    if (!ids.length && !idsJa.length) return;
+    const partes = [];
+    if (ids.length) partes.push(`${ids.length} pedidos no papel`);
+    if (idsJa.length) partes.push(`${idsJa.length} marcados como já impressos (sem papel)`);
+    if (!window.confirm(`Iniciar a separação?\n\n${partes.join(' + ')} vão pra "Em separação".${modoImpressao.size && [...modoImpressao.values()].includes('nao') ? '\n(Cards sem caixinha marcada ficam de fora e continuam abertos.)' : ''}`)) return;
     setImprimindo(true);
     try {
-      const r = await fetch(`${API}/wms-listas`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acao: 'imprimir', pedido_ids: ids, criado_por: userId, filtros: { conta: fConta, loja: fLoja, ordem } }),
-      });
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error || 'falhou');
-      setTimeout(() => window.print(), 300);
+      if (idsJa.length) {
+        const rj = await fetch(`${API}/wms-listas`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ acao: 'marcar_impresso', pedido_ids: idsJa }),
+        });
+        const dj = await rj.json();
+        if (!dj.ok) throw new Error(dj.error || 'já impressos falhou');
+      }
+      if (ids.length) {
+        const r = await fetch(`${API}/wms-listas`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ acao: 'imprimir', pedido_ids: ids, criado_por: userId, filtros: { conta: fConta, loja: fLoja, ordem } }),
+        });
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error || 'falhou');
+        setTimeout(() => window.print(), 300);
+      }
       await carregarDash();
-      setForaImpressao(new Set());
+      setModoImpressao(new Map());
       setFStatus('em_separacao');
     } catch (e) { setErro('Imprimir: ' + e.message); }
     setImprimindo(false);
@@ -488,11 +498,6 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
 
       {tela === 'dashboard' && (
         <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
-          {avisosPrazo.map((a, i) => (
-            <div key={i} style={{ marginBottom: 10, padding: '11px 15px', borderRadius: 11, background: a.cor === '#c0392b' ? '#fdeaea' : '#fff6e5', border: `1.5px solid ${a.cor}44`, color: a.cor, fontSize: 14, fontWeight: 700 }}>
-              {a.txt}
-            </div>
-          ))}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {[
               { k: 'abertos', titulo: 'Pedidos Abertos', sub: 'lista ainda não impressa', Icon: Package, cor: palette.accent, extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '' },
@@ -510,24 +515,36 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
             ))}
           </div>
 
-          {/* por conta */}
-          {dash?.por_conta && Object.keys(dash.por_conta).length > 0 && (
-            <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 16 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: palette.inkSoft, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
-                <Boxes size={17} strokeWidth={1.8} /> Por conta
+          {/* avisos abaixo dos cards (Ailson 05/08: foco total nos 3 cards) */}
+          <div style={{ marginTop: 14 }}>
+            {avisosPrazo.map((a, i) => (
+              <div key={i} style={{ marginBottom: 8, padding: '10px 14px', borderRadius: 11, background: a.cor === '#c0392b' ? '#fdeaea' : '#fff6e5', border: `1.5px solid ${a.cor}44`, color: a.cor, fontSize: 13.5, fontWeight: 700 }}>
+                {a.txt}
               </div>
-              {CONTAS.filter(c => dash.por_conta[c]).map(c => {
-                const d = dash.por_conta[c];
-                return (
-                  <div key={c} style={{ display: 'flex', gap: 14, padding: '7px 0', borderBottom: '1px solid #f4f0ea', fontSize: 13.5, alignItems: 'center' }}>
-                    <span style={{ fontWeight: 800, minWidth: 74 }}>{NOME_CONTA[c]}</span>
-                    <span style={{ color: palette.accent, fontWeight: 700 }}>{d.abertos} abertos</span>
-                    <span style={{ color: '#9a6b00' }}>{d.em_separacao} em separação</span>
-                    <span style={{ color: '#1e8e4e' }}>{d.finalizados_hoje} finalizados hoje</span>
-                  </div>
-                );
-              })}
-              {dash.ultimo_sync && <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 9, display: 'flex', alignItems: 'center', gap: 5 }}><Clock size={13} /> Último sync: {new Date(dash.ultimo_sync).toLocaleString('pt-BR')}</div>}
+            ))}
+          </div>
+
+          {/* por conta — retraído, clica pra expandir */}
+          {dash?.por_conta && Object.keys(dash.por_conta).length > 0 && (
+            <div style={{ marginTop: 6, background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: '12px 16px' }}>
+              <button onClick={() => setPorContaAberto(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 800, color: palette.inkSoft, padding: 0 }}>
+                <Boxes size={17} strokeWidth={1.8} /> Por conta
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: palette.inkMuted }}>{porContaAberto ? '▲ recolher' : '▼ expandir'}</span>
+              </button>
+              {porContaAberto && (<div style={{ marginTop: 8 }}>
+                {CONTAS.filter(c => dash.por_conta[c]).map(c => {
+                  const d = dash.por_conta[c];
+                  return (
+                    <div key={c} style={{ display: 'flex', gap: 14, padding: '7px 0', borderBottom: '1px solid #f4f0ea', fontSize: 13.5, alignItems: 'center' }}>
+                      <span style={{ fontWeight: 800, minWidth: 74 }}>{NOME_CONTA[c]}</span>
+                      <span style={{ color: palette.accent, fontWeight: 700 }}>{d.abertos} abertos</span>
+                      <span style={{ color: '#9a6b00' }}>{d.em_separacao} em separação</span>
+                      <span style={{ color: '#1e8e4e' }}>{d.finalizados_hoje} finalizados hoje</span>
+                    </div>
+                  );
+                })}
+              </div>)}
+              {dash.ultimo_sync && <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 8, display: 'flex', alignItems: 'center', gap: 5 }}><Clock size={13} /> Último sync: {new Date(dash.ultimo_sync).toLocaleString('pt-BR')}</div>}
             </div>
           )}
 
@@ -647,8 +664,8 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
           {/* ações */}
           <div className="wms-no-print" style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
             {fStatus === 'aberto' && (
-              <button onClick={imprimirLista} disabled={imprimindo || !pedidosFiltrados.length} style={{ flex: 1, minWidth: 220, padding: '13px', borderRadius: 12, border: 'none', background: pedidosFiltrados.length ? palette.accent : '#c8c0b6', color: '#fff', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <Printer size={18} /> Imprimir e iniciar separação ({pedidosIncluidos.length} pedidos{foraImpressao.size ? ` · ${pedidosFiltrados.length - pedidosIncluidos.length} de fora` : ''})
+              <button onClick={imprimirLista} disabled={imprimindo || (!pedidosIncluidos.length && !pedidosJaImpressos.length)} style={{ flex: 1, minWidth: 220, padding: '13px', borderRadius: 12, border: 'none', background: (pedidosIncluidos.length || pedidosJaImpressos.length) ? palette.accent : '#c8c0b6', color: '#fff', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Printer size={18} /> Imprimir e iniciar separação ({pedidosIncluidos.length} no papel{pedidosJaImpressos.length ? ` · ${pedidosJaImpressos.length} já impressos` : ''}{pedidosFiltrados.length - pedidosIncluidos.length - pedidosJaImpressos.length > 0 ? ` · ${pedidosFiltrados.length - pedidosIncluidos.length - pedidosJaImpressos.length} de fora` : ''})
               </button>
             )}
             {fStatus === 'em_separacao' && (<>
@@ -688,23 +705,25 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                 {/* mono-SKU agregado por ref */}
                 {b.mono.map(g => {
                   const chave = 'ref|' + b.conta + '|' + g.ref;
-                  const fora = foraImpressao.has(chave);
+                  const modo = modoDe(chave);
+                  const fora = modo !== 'imprimir';
                   return (
-                  <div key={g.ref} className={fora ? 'wms-skip-print' : undefined} style={{ background: '#fff', border: `1px solid ${fora ? '#e8b4b4' : palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, display: 'flex', gap: 13, alignItems: 'flex-start', pageBreakInside: 'avoid', opacity: fora ? 0.55 : 1 }}>
+                  <div key={g.ref} className={fora ? 'wms-skip-print' : undefined} style={{ background: '#fff', border: `1px solid ${modo === 'nao' ? '#e8b4b4' : modo === 'ja' ? '#d9c88f' : palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, display: 'flex', gap: 13, alignItems: 'flex-start', pageBreakInside: 'avoid', opacity: modo === 'nao' ? 0.55 : 1 }}>
                     <FotoRef refProd={g.ref} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap', marginBottom: 7 }}>
-                        {fStatus === 'aberto' && (<>
-                          <label className="wms-no-print" title={fora ? 'Fora da lista: não imprime e continua em Abertos' : 'Entra na lista de impressão'} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: fora ? '#c0392b' : '#1e8e4e', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={!fora} onChange={() => toggleImpressao(chave)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-                            {fora ? 'não imprimir' : 'imprimir'}
-                          </label>
-                          <button className="wms-no-print" onClick={() => marcarJaImpresso([...(g.pedidosSet || [])])}
-                            title="Já vi na tela e já busquei no estoque: vai direto pra Em Separação, sem entrar na lista de impressão"
-                            style={{ padding: '3px 10px', borderRadius: 8, border: '1px solid #d9c88f', background: '#fdf6e3', color: '#9a6b00', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                            ✓ já impresso
-                          </button>
-                        </>)}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, flexWrap: 'wrap', marginBottom: 7 }}>
+                        {fStatus === 'aberto' && (
+                          <div className="wms-no-print" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <label title="Entra na lista de impressão e vai pra Em Separação" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: modo === 'imprimir' ? '#1e8e4e' : palette.inkMuted, cursor: 'pointer' }}>
+                              <input type="checkbox" checked={modo === 'imprimir'} onChange={() => toggleCaixa(chave, 'imprimir')} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                              imprimir
+                            </label>
+                            <label title="Já vi na tela e já busquei no estoque: vai pra Em Separação sem sair no papel" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: modo === 'ja' ? '#9a6b00' : palette.inkMuted, cursor: 'pointer' }}>
+                              <input type="checkbox" checked={modo === 'ja'} onChange={() => toggleCaixa(chave, 'ja')} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                              já impresso
+                            </label>
+                          </div>
+                        )}
                         <span style={{ fontSize: 16.5, fontWeight: 800 }}>REF {g.ref}</span>
                         {g.loc && <span style={{ fontSize: 12.5, fontWeight: 800, color: '#7a5c99', background: '#f3eefb', border: '1px solid #ddd0f0', borderRadius: 7, padding: '2px 9px' }}>📍 {g.loc}</span>}
                         <span style={{ fontSize: 12, color: palette.inkMuted }}>{g.pedidos} pedidos · {g.pecas} pçs</span>
@@ -723,21 +742,23 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                     </div>
                     {b.multi.map(p => {
                       const chave = 'ped|' + p.id;
-                      const fora = foraImpressao.has(chave);
+                      const modo = modoDe(chave);
+                      const fora = modo !== 'imprimir';
                       return (
-                      <div key={p.id} className={fora ? 'wms-skip-print' : undefined} style={{ background: '#fff', border: `1px solid ${fora ? '#e8b4b4' : palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, pageBreakInside: 'avoid', opacity: fora ? 0.55 : 1 }}>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 8, fontSize: 13 }}>
-                          {fStatus === 'aberto' && (<>
-                            <label className="wms-no-print" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: fora ? '#c0392b' : '#1e8e4e', cursor: 'pointer' }}>
-                              <input type="checkbox" checked={!fora} onChange={() => toggleImpressao(chave)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
-                              {fora ? 'não imprimir' : 'imprimir'}
-                            </label>
-                            <button className="wms-no-print" onClick={() => marcarJaImpresso([p.id])}
-                              title="Já vi na tela e já busquei no estoque: vai direto pra Em Separação, sem entrar na lista de impressão"
-                              style={{ padding: '3px 10px', borderRadius: 8, border: '1px solid #d9c88f', background: '#fdf6e3', color: '#9a6b00', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
-                              ✓ já impresso
-                            </button>
-                          </>)}
+                      <div key={p.id} className={fora ? 'wms-skip-print' : undefined} style={{ background: '#fff', border: `1px solid ${modo === 'nao' ? '#e8b4b4' : modo === 'ja' ? '#d9c88f' : palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, pageBreakInside: 'avoid', opacity: modo === 'nao' ? 0.55 : 1 }}>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 8, fontSize: 13 }}>
+                          {fStatus === 'aberto' && (
+                            <div className="wms-no-print" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: modo === 'imprimir' ? '#1e8e4e' : palette.inkMuted, cursor: 'pointer' }}>
+                                <input type="checkbox" checked={modo === 'imprimir'} onChange={() => toggleCaixa(chave, 'imprimir')} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                                imprimir
+                              </label>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: modo === 'ja' ? '#9a6b00' : palette.inkMuted, cursor: 'pointer' }}>
+                                <input type="checkbox" checked={modo === 'ja'} onChange={() => toggleCaixa(chave, 'ja')} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                                já impresso
+                              </label>
+                            </div>
+                          )}
                           <span style={{ fontWeight: 800, fontSize: 14.5 }}>Pedido {p.numero}</span>
                           <span style={{ color: palette.inkMuted }}>{p.canal_geral || p.loja_nome}</span>
                           {p.cliente_nome && <span style={{ color: palette.inkMuted }}>· {p.cliente_nome}</span>}
