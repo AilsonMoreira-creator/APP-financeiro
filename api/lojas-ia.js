@@ -1144,6 +1144,26 @@ async function montarContextoSugestoes(vendedoraId) {
     if (s.grupo_id) gruposEmCooldownGeral.add(s.grupo_id);
   });
 
+  // GUARDA DE COMPRA RECENTE (Ailson 05/08/2026, caso Fran/Nivia): cliente que
+  // COMPROU nos ultimos 7 dias nao recebe sugestao proativa de nenhum tipo —
+  // a venda acabou de acontecer, empurrar "novidade" em cima soa como insistencia
+  // (a Fran dispensou com "Ela comprou semana passada!!" e a pauta voltaria).
+  // Mesmo espirito da regra dos grupos (caso Grupo Sandra 15/05). Reaproveita o
+  // Set geral: todos os pontos de selecao ja o consultam. Limiar calibravel.
+  const DIAS_COMPRA_RECENTE = 7;
+  try {
+    const idsCarteira = (clientes || []).map(c => c.id).filter(Boolean);
+    for (let i = 0; i < idsCarteira.length; i += 300) {
+      const chunk = idsCarteira.slice(i, i + 300);
+      const { data: kpisRec } = await supabase.from('lojas_clientes_kpis')
+        .select('cliente_id, dias_sem_comprar')
+        .in('cliente_id', chunk)
+        .not('dias_sem_comprar', 'is', null)
+        .lte('dias_sem_comprar', DIAS_COMPRA_RECENTE);
+      (kpisRec || []).forEach(k => clientesEmCooldownGeral.add(k.cliente_id));
+    }
+  } catch (eCR) { console.warn('[lojas-ia] guarda compra recente falhou (segue):', eCR?.message); }
+
   // FILTRA TRILHAS WINBACK pelo cooldown geral (Ailson 20/05/2026):
   // Mesma regra: cliente contactada nos ultimos 7-10d (qualquer tipo, exceto
   // sacola) nao recebe trilha hoje. data_proxima_msg da trilha NAO eh
