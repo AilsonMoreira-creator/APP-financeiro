@@ -65,6 +65,89 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, config });
       }
 
+      if (acao === 'produtividade') {
+        // Métrica de separação (Ailson 05/08/2026):
+        // cronômetro = 1ª impressão do dia + 10 min de margem → corte 12:00.
+        // Desconta 25s por pedido que estava "em separação" no corte (mercadoria
+        // já separada, faltando só bipar). Média por pedido e pedidos/hora.
+        const MARGEM_MIN = 10, DESC_SEG_POR_PEDIDO = 25, HORA_CORTE = 12;
+        const brt = (d) => new Date(d.getTime() - 3 * 3600000); // UTC → BRT
+        const agora = new Date();
+        const hojeBrt = brt(agora).toISOString().slice(0, 10);
+        const corteEm = new Date(`${hojeBrt}T${String(HORA_CORTE).padStart(2, '0')}:00:00-03:00`);
+
+        const calcularDia = async (dia) => {
+          const corte = new Date(`${dia}T${String(HORA_CORTE).padStart(2, '0')}:00:00-03:00`);
+          const { data: listas } = await supabase.from('wms_listas')
+            .select('criado_em').gte('criado_em', `${dia}T00:00:00-03:00`).lt('criado_em', corte.toISOString())
+            .order('criado_em', { ascending: true }).limit(1);
+          let inicioBase = listas?.[0]?.criado_em || null;
+          if (!inicioBase) {
+            const { data: imp } = await supabase.from('wms_pedidos')
+              .select('impresso_em').not('impresso_em', 'is', null)
+              .gte('impresso_em', `${dia}T00:00:00-03:00`).lt('impresso_em', corte.toISOString())
+              .order('impresso_em', { ascending: true }).limit(1);
+            inicioBase = imp?.[0]?.impresso_em || null;
+          }
+          if (!inicioBase) return null;
+          const inicio = new Date(new Date(inicioBase).getTime() + MARGEM_MIN * 60000);
+          if (inicio >= corte) return null;
+
+          const { data: fins } = await supabase.from('wms_pedidos')
+            .select('id').not('finalizado_em', 'is', null)
+            .gte('finalizado_em', inicio.toISOString()).lt('finalizado_em', corte.toISOString());
+          const finalizados = (fins || []).length;
+
+          // pedidos que estavam em separação no corte: impressos antes do corte
+          // e não finalizados até lá
+          const { data: emSep } = await supabase.from('wms_pedidos')
+            .select('id, finalizado_em').not('impresso_em', 'is', null)
+            .gte('impresso_em', `${dia}T00:00:00-03:00`).lt('impresso_em', corte.toISOString())
+            .neq('status_wms', 'cancelado');
+          const pendentesNoCorte = (emSep || []).filter(p => !p.finalizado_em || new Date(p.finalizado_em) >= corte).length;
+
+          const brutos = Math.round((corte - inicio) / 1000);
+          const desconto = pendentesNoCorte * DESC_SEG_POR_PEDIDO;
+          const liquidos = Math.max(60, brutos - desconto);
+          return {
+            data: dia, inicio_em: inicio.toISOString(), corte_em: corte.toISOString(),
+            segundos_brutos: brutos, pedidos_em_separacao: pendentesNoCorte,
+            segundos_descontados: desconto, segundos_liquidos: liquidos,
+            pedidos_finalizados: finalizados,
+            media_seg_por_pedido: finalizados ? +(liquidos / finalizados).toFixed(2) : null,
+            pedidos_por_hora: finalizados ? +(finalizados / (liquidos / 3600)).toFixed(2) : null,
+          };
+        };
+
+        // histórico (dias já fechados)
+        const { data: hist } = await supabase.from('wms_produtividade')
+          .select('*').lt('data', hojeBrt).order('data', { ascending: false }).limit(30);
+        const historico = (hist || []).reverse();
+        const refBase = historico.filter(h => h.pedidos_por_hora > 0).slice(-14);
+        const referencia = refBase.length
+          ? +(refBase.reduce((s, h) => s + Number(h.pedidos_por_hora), 0) / refBase.length).toFixed(2) : null;
+
+        // dia de hoje (ao vivo antes do corte, fechado depois)
+        const hoje = await calcularDia(hojeBrt);
+        let variacao = null;
+        if (hoje?.pedidos_por_hora && referencia) {
+          variacao = +(((hoje.pedidos_por_hora - referencia) / referencia) * 100).toFixed(1);
+        }
+        // persiste o fechamento uma vez por dia, após o corte
+        if (hoje && agora >= corteEm) {
+          const { data: ja } = await supabase.from('wms_produtividade').select('id').eq('data', hojeBrt).maybeSingle();
+          if (!ja) {
+            await supabase.from('wms_produtividade').insert({
+              ...hoje, referencia_pedidos_hora: referencia, variacao_pct: variacao,
+            });
+          }
+        }
+        return res.status(200).json({
+          ok: true, hoje: hoje ? { ...hoje, referencia_pedidos_hora: referencia, variacao_pct: variacao } : null,
+          fechado: agora >= corteEm, referencia, historico, agora_iso: agora.toISOString(),
+        });
+      }
+
       if (acao === 'pedidos') {
         const status = String(req.query?.status || 'aberto');
         let q = supabase.from('wms_pedidos')

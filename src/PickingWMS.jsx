@@ -224,6 +224,53 @@ function ConfigScreen({ config, salvando, onSalvar }) {
   );
 }
 
+// ── Produtividade: formatação e avaliação da variação ──
+function fmtDur(seg) {
+  if (seg == null) return '—';
+  const s = Math.round(seg), m = Math.floor(s / 60), r = s % 60;
+  if (m === 0) return `${r} segundos`;
+  return `${m} minuto${m > 1 ? 's' : ''}${r ? ` e ${r} segundo${r > 1 ? 's' : ''}` : ''}`;
+}
+// Janela neutra: -10% a +5% (Ailson 05/08). Abaixo de -10% = queda com
+// incentivo; acima de +10% = parabéns.
+function avaliarVariacao(v) {
+  if (v == null) return { tipo: 'neutro', cor: palette.inkSoft, seta: '', msg: 'Primeiro dia com medição — a partir de amanhã dá pra comparar.' };
+  if (v < -10) return { tipo: 'baixa', cor: '#c0392b', seta: '▼', msg: `Tivemos uma queda de ${Math.abs(v).toFixed(0)}%. Bora time, dá pra recuperar esse tempo! 💪` };
+  if (v > 10) return { tipo: 'alta', cor: '#1e8e4e', seta: '▲', msg: `Parabéns time! Tivemos um aumento de ${v.toFixed(0)}% na produtividade! 👏` };
+  return { tipo: 'neutro', cor: palette.inkSoft, seta: v > 0 ? '▲' : v < 0 ? '▼' : '', msg: `Ritmo dentro do esperado (${v > 0 ? '+' : ''}${v.toFixed(0)}% em relação à média).` };
+}
+
+// ── Gráfico de barras simples (pedidos/hora por dia) ──
+function GraficoBarras({ dados, referencia }) {
+  if (!dados.length) return <div style={{ color: palette.inkMuted, fontSize: 13, padding: 18, textAlign: 'center' }}>Sem histórico ainda. Cada dia fechado às 12:00 vira uma barra aqui.</div>;
+  const max = Math.max(...dados.map(d => Number(d.pedidos_por_hora) || 0), referencia || 0) * 1.15 || 1;
+  const H = 150, W = Math.max(280, dados.length * 46);
+  const yRef = referencia ? H - (referencia / max) * H : null;
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <svg width={W} height={H + 30} style={{ display: 'block' }}>
+        {yRef != null && (<>
+          <line x1="0" y1={yRef} x2={W} y2={yRef} stroke="#c8c0b6" strokeDasharray="4 4" />
+          <text x="2" y={yRef - 4} fontSize="9.5" fill="#8a99a8" fontFamily="Georgia, serif">média {referencia.toFixed(0)}/h</text>
+        </>)}
+        {dados.map((d, i) => {
+          const v = Number(d.pedidos_por_hora) || 0;
+          const h = (v / max) * H;
+          const x = i * 46 + 8, cor = referencia && v < referencia * 0.9 ? '#c0392b' : referencia && v > referencia * 1.1 ? '#1e8e4e' : '#4a7fa5';
+          return (
+            <g key={d.data}>
+              <rect x={x} y={H - h} width="30" height={h} rx="4" fill={cor} opacity="0.85" />
+              <text x={x + 15} y={H - h - 4} fontSize="10" fill="#5a6b7d" textAnchor="middle" fontFamily="Georgia, serif">{v.toFixed(0)}</text>
+              <text x={x + 15} y={H + 14} fontSize="9.5" fill="#8a99a8" textAnchor="middle" fontFamily="Georgia, serif">{d.data.slice(8, 10)}/{d.data.slice(5, 7)}</text>
+              <text x={x + 15} y={H + 25} fontSize="8.5" fill="#b0a89e" textAnchor="middle" fontFamily="Georgia, serif">{d.pedidos_finalizados}p</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [tela, setTela] = useState('dashboard'); // dashboard | separacao | config | detalhes
   const [detStatus, setDetStatus] = useState('aberto');
@@ -231,6 +278,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [detCarregando, setDetCarregando] = useState(false);
   const [detBusca, setDetBusca] = useState('');
   const [porContaAberto, setPorContaAberto] = useState(false);
+  const [prod, setProd] = useState(null);
   const [dash, setDash] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -269,6 +317,15 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     } catch (e) { setErro(e.message); }
   }, []);
   useEffect(() => { carregarDash(); }, [carregarDash]);
+
+  const carregarProd = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/wms-listas?acao=produtividade`);
+      const d = await r.json();
+      if (d.ok) setProd(d);
+    } catch { /* silencioso: métrica não bloqueia a operação */ }
+  }, []);
+  useEffect(() => { carregarProd(); }, [carregarProd]);
 
   const sincronizar = async () => {
     setSincronizando(true); setErro('');
@@ -482,7 +539,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         </button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17.5, fontWeight: 800 }}>📦 Picking WMS</div>
-          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : tela === 'detalhes' ? 'Detalhar pedidos' : 'Lista de separação'}</div>
+          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : tela === 'detalhes' ? 'Detalhar pedidos' : tela === 'produtividade' ? 'Produtividade da separação' : 'Lista de separação'}</div>
         </div>
         <button onClick={() => setTela('config')} title="Configurações" style={{ background: tela === 'config' ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 9, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' }}>
           <Settings size={18} />
@@ -514,6 +571,34 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
               </div>
             ))}
           </div>
+
+          {/* Notificação de produtividade: aparece 12:30, dura 40 min (Ailson 05/08) */}
+          {(() => {
+            if (!prod?.hoje?.pedidos_por_hora) return null;
+            const agora = new Date();
+            const minAgora = agora.getHours() * 60 + agora.getMinutes();
+            if (minAgora < 750 || minAgora > 790) return null; // 12:30 → 13:10
+            const av = avaliarVariacao(prod.hoje.variacao_pct);
+            return (
+              <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 13, background: av.tipo === 'alta' ? '#e8f6ee' : av.tipo === 'baixa' ? '#fdeaea' : '#f4f0ea', border: `1.5px solid ${av.cor}55` }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: palette.inkSoft, marginBottom: 7 }}>⏱ Produtividade da separação de hoje</div>
+                <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 11.5, color: palette.inkMuted }}>Média por pedido</div>
+                    <div style={{ fontSize: 19, fontWeight: 800, color: palette.ink }}>{fmtDur(prod.hoje.media_seg_por_pedido)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11.5, color: palette.inkMuted }}>Pedidos por hora</div>
+                    <div style={{ fontSize: 19, fontWeight: 800, color: av.cor }}>
+                      {av.seta} {Number(prod.hoje.pedidos_por_hora).toFixed(0)}
+                      {prod.hoje.variacao_pct != null && <span style={{ fontSize: 13, marginLeft: 6 }}>({prod.hoje.variacao_pct > 0 ? '+' : ''}{prod.hoje.variacao_pct}%)</span>}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: av.cor }}>{av.msg}</div>
+              </div>
+            );
+          })()}
 
           {/* avisos abaixo dos cards (Ailson 05/08: foco total nos 3 cards) */}
           <div style={{ marginTop: 14 }}>
@@ -554,6 +639,9 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
           <button onClick={() => setTela('detalhes')} style={{ marginTop: 10, width: '100%', padding: '13px', borderRadius: 13, border: `1.5px solid ${palette.accent}`, background: '#fff', color: palette.accent, fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <Boxes size={18} /> Detalhar Pedidos
           </button>
+          <button onClick={() => setTela('produtividade')} style={{ marginTop: 10, width: '100%', padding: '13px', borderRadius: 13, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Clock size={18} /> Produtividade
+          </button>
         </div>
       )}
 
@@ -575,6 +663,63 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         }} />
       )}
       {tela === 'config' && !config && <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>Carregando configurações…</div>}
+
+      {tela === 'produtividade' && (
+        <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
+          {!prod && <div style={{ textAlign: 'center', padding: 30, color: palette.inkMuted }}>Carregando…</div>}
+          {prod && !prod.hoje && (
+            <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 18, marginBottom: 14, fontSize: 13.5, color: palette.inkMuted }}>
+              O cronômetro de hoje ainda não começou. Ele dispara na primeira impressão da lista (com 10 minutos de margem) e o corte é às 12:00.
+            </div>
+          )}
+          {prod?.hoje && (() => {
+            const h = prod.hoje, av = avaliarVariacao(h.variacao_pct);
+            const hhmm = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            return (
+              <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 17, marginBottom: 14 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 800, color: palette.ink, marginBottom: 3 }}>Hoje {prod.fechado ? '(fechado às 12:00)' : '(parcial, fecha às 12:00)'}</div>
+                <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 13 }}>
+                  Cronômetro de {hhmm(h.inicio_em)} até {hhmm(h.corte_em)} · {h.pedidos_em_separacao} pedidos em separação no corte descontaram {Math.round(h.segundos_descontados / 60)} min
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                  {[
+                    { l: 'Finalizados', v: h.pedidos_finalizados, c: palette.ink },
+                    { l: 'Média por pedido', v: fmtDur(h.media_seg_por_pedido), c: palette.ink },
+                    { l: 'Pedidos por hora', v: `${av.seta} ${h.pedidos_por_hora ? Number(h.pedidos_por_hora).toFixed(0) : '—'}`, c: av.cor },
+                  ].map(k => (
+                    <div key={k.l} style={{ background: palette.bg, borderRadius: 11, padding: 12 }}>
+                      <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 3 }}>{k.l}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: k.c }}>{k.v}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 12, fontSize: 13.5, fontWeight: 700, color: av.cor }}>{av.msg}</div>
+                {prod.referencia && <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 5 }}>Média de referência (últimos dias): {Number(prod.referencia).toFixed(0)} pedidos/hora</div>}
+              </div>
+            );
+          })()}
+
+          <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 17 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 11 }}>📈 Histórico diário (pedidos por hora)</div>
+            <GraficoBarras dados={prod?.historico || []} referencia={prod?.referencia} />
+            {(prod?.historico || []).length > 0 && (
+              <div style={{ marginTop: 14, fontSize: 12.5 }}>
+                {[...prod.historico].reverse().slice(0, 10).map(d => {
+                  const av = avaliarVariacao(d.variacao_pct != null ? Number(d.variacao_pct) : null);
+                  return (
+                    <div key={d.data} style={{ display: 'flex', gap: 12, padding: '6px 0', borderBottom: '1px solid #f4f0ea', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 800, minWidth: 52 }}>{d.data.slice(8, 10)}/{d.data.slice(5, 7)}</span>
+                      <span style={{ color: palette.inkSoft }}>{d.pedidos_finalizados} pedidos</span>
+                      <span style={{ color: palette.inkSoft }}>{fmtDur(d.media_seg_por_pedido)}/pedido</span>
+                      <span style={{ fontWeight: 800, color: av.cor, marginLeft: 'auto' }}>{av.seta} {Number(d.pedidos_por_hora || 0).toFixed(0)}/h</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {tela === 'detalhes' && (
         <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
