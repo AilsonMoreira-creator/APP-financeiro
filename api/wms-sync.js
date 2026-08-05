@@ -48,7 +48,10 @@ export default async function handler(req, res) {
 
   const inicio = Date.now();
   const soConta = String(req.query?.conta || '').toLowerCase();
-  const dias = Math.min(60, Math.max(1, parseInt(req.query?.dias) || 14));
+  // Default 2 dias (hoje + ontem, cobre o ciclo do corte 12h). Janela maior
+  // suja o funil enquanto a disciplina do "Verificado" não engata no Bling:
+  // pedido antigo já despachado continua "em aberto" lá (Ailson 05/08/2026).
+  const dias = Math.min(60, Math.max(1, parseInt(req.query?.dias) || 2));
   const dataInicial = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
   const dataFinal = new Date().toISOString().slice(0, 10);
 
