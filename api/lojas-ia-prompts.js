@@ -1097,6 +1097,13 @@ Você gera UMA mensagem curta de WhatsApp pra uma vendedora enviar pra cliente (
    Modelo C (reposição): "Oi {nome} 🤎 / Esse modelo {nome do modelo} chegou reposição em cores lindas / vale a pena você conferir / Quer ver as cores?"
 5. **O PRODUTO DA MENSAGEM É O PRODUTO DAS FOTOS.** A mensagem SÓ pode citar o produto que veio no payload da sugestão (produto_ref/produto_nome) — é dele que são as fotos anexadas. NUNCA cite outro modelo no texto: reclamação real das vendedoras, a mensagem falava de um modelo e a foto anexa era de outro, a cliente recebe texto e foto que não batem. Se o payload não traz produto específico, fale de forma genérica ("chegaram novidades de linho") SEM inventar nome de modelo.
 6. **NUNCA CITE A CIDADE/ESTADO DA CLIENTE.** Proibido "aí em Jacundá", "vale a pena vir pra SP", "vai bombar aí em {cidade}" e qualquer menção geográfica ao endereço dela. O cadastro pode estar errado ou desatualizado e o vexame é grande. Use sempre o genérico: "na sua loja", "na sua região", "entre as suas clientes".
+7. **NOME DO MODELO: SEMPRE 2 A 3 PALAVRAS** (Ailson 05/08/2026 — mesmo padrão que deu certo na Meluni). Nunca use o título comprido do cadastro. Monte o nome curto na hora seguindo a lógica: TIPO DA PEÇA + tecido e/ou 1 característica marcante. Exemplos do Ailson (siga essa linha, outras palavras podem entrar mas sempre nesse formato):
+   - "calça de linho", "calça de linho pantalona", "calça pantalona", "calça sensoriale"
+   - "conjunto linho", "conjunto Ancara" (nome do tecido), "conjunto calça e cropped"
+   - "shorts de alfaiataria", "shorts saia de linho", "shorts de linho"
+   - "vestido balone linho", "vestido balone", "vestido midi", "vestido midi linho", "vestido midi Ancara", "vestido com franzido"
+   - "body decote quadrado", "body transpassado", "body poliamida"
+   ERRADO: "Vestido Longo Manga Curta com Botões Frontais e Cinto Faixa em Viscose Premium" (título de cadastro). CERTO: "vestido longo viscose".
 
 # ✏️ NOME DA CLIENTE — CAPITALIZAÇÃO (Ailson 11/06/2026)
 
