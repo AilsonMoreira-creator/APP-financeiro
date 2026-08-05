@@ -479,19 +479,11 @@
       "schedule": "35 * * * *"
     },
     {
-      "schedule": "30,45 10 * * 1-6",
+      "schedule": "*/15 10-14 * * 1-6",
       "path": "/api/wms-sync"
     },
     {
-      "schedule": "*/15 11-14 * * 1-6",
-      "path": "/api/wms-sync"
-    },
-    {
-      "schedule": "0,30 15-19 * * 1-6",
-      "path": "/api/wms-sync"
-    },
-    {
-      "schedule": "0 20 * * 1-6",
+      "schedule": "0,30 15-20 * * 1-6",
       "path": "/api/wms-sync"
     }
   ]
