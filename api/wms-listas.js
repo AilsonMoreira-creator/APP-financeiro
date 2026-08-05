@@ -68,7 +68,7 @@ export default async function handler(req, res) {
       if (acao === 'pedidos') {
         const status = String(req.query?.status || 'aberto');
         let q = supabase.from('wms_pedidos')
-          .select('id, conta, pedido_id, numero, numero_loja, data_pedido, situacao_nome, loja_nome, canal_geral, canal_detalhe, cliente_nome, itens, qtd_skus, qtd_pecas, multi_sku, lista_id, impresso_em')
+          .select('id, conta, pedido_id, numero, numero_loja, data_pedido, situacao_nome, loja_nome, canal_geral, canal_detalhe, cliente_nome, itens, qtd_skus, qtd_pecas, multi_sku, lista_id, impresso_em, finalizado_em')
           .eq('status_wms', status)
           .order('data_pedido', { ascending: true }).limit(2000);
         const conta = String(req.query?.conta || '');

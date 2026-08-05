@@ -225,7 +225,11 @@ function ConfigScreen({ config, salvando, onSalvar }) {
 }
 
 export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
-  const [tela, setTela] = useState('dashboard'); // dashboard | separacao
+  const [tela, setTela] = useState('dashboard'); // dashboard | separacao | config | detalhes
+  const [detStatus, setDetStatus] = useState('aberto');
+  const [detPedidos, setDetPedidos] = useState([]);
+  const [detCarregando, setDetCarregando] = useState(false);
+  const [detBusca, setDetBusca] = useState('');
   const [dash, setDash] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -269,6 +273,18 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     } catch (e) { setErro('Sync: ' + e.message); }
     setSincronizando(false);
   };
+
+  const carregarDetalhes = useCallback(async (status) => {
+    setDetCarregando(true); setErro('');
+    try {
+      const r = await fetch(`${API}/wms-listas?acao=pedidos&status=${status}`);
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'falhou');
+      setDetPedidos(d.pedidos || []);
+    } catch (e) { setErro(e.message); }
+    setDetCarregando(false);
+  }, []);
+  useEffect(() => { if (tela === 'detalhes') carregarDetalhes(detStatus); }, [tela, detStatus, carregarDetalhes]);
 
   const carregarPedidos = useCallback(async () => {
     setCarregando(true); setErro('');
@@ -456,7 +472,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         </button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17.5, fontWeight: 800 }}>📦 Picking WMS</div>
-          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : 'Lista de separação'}</div>
+          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : tela === 'detalhes' ? 'Detalhar pedidos' : 'Lista de separação'}</div>
         </div>
         <button onClick={() => setTela('config')} title="Configurações" style={{ background: tela === 'config' ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 9, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' }}>
           <Settings size={18} />
@@ -518,6 +534,9 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
           <button onClick={() => setTela('separacao')} style={{ marginTop: 18, width: '100%', padding: '15px', borderRadius: 13, border: 'none', background: palette.accent, color: '#fff', fontSize: 15.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
             <ClipboardList size={19} /> Abrir Lista de Separação
           </button>
+          <button onClick={() => setTela('detalhes')} style={{ marginTop: 10, width: '100%', padding: '13px', borderRadius: 13, border: `1.5px solid ${palette.accent}`, background: '#fff', color: palette.accent, fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Boxes size={18} /> Detalhar Pedidos
+          </button>
         </div>
       )}
 
@@ -539,6 +558,62 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         }} />
       )}
       {tela === 'config' && !config && <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>Carregando configurações…</div>}
+
+      {tela === 'detalhes' && (
+        <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
+          <div style={{ display: 'flex', gap: 7, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            {[['aberto', 'Abertos'], ['em_separacao', 'Em Separação'], ['finalizado', 'Finalizados']].map(([v, l]) => (
+              <button key={v} onClick={() => setDetStatus(v)} style={{
+                padding: '8px 15px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, fontWeight: 800,
+                border: detStatus === v ? `1.5px solid ${palette.accent}` : `1px solid ${palette.beige}`,
+                background: detStatus === v ? palette.accentSoft : '#fff', color: detStatus === v ? palette.accent : palette.inkSoft,
+              }}>{l}</button>
+            ))}
+            <input value={detBusca} onChange={e => setDetBusca(e.target.value)} placeholder="🔍 nº pedido, cliente ou ref"
+              style={{ flex: 1, minWidth: 180, padding: '8px 12px', borderRadius: 10, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13.5 }} />
+          </div>
+
+          {detCarregando && <div style={{ textAlign: 'center', padding: 30, color: palette.inkMuted }}>Carregando…</div>}
+          {!detCarregando && (() => {
+            const b = detBusca.trim().toLowerCase();
+            const lista = detPedidos.filter(p => !b ||
+              String(p.numero || '').toLowerCase().includes(b) ||
+              String(p.numero_loja || '').toLowerCase().includes(b) ||
+              String(p.cliente_nome || '').toLowerCase().includes(b) ||
+              (p.itens || []).some(it => String(it.ref || '').includes(b)));
+            if (!lista.length) return <div style={{ textAlign: 'center', padding: 36, color: palette.inkMuted, fontSize: 14 }}>Nenhum pedido {b ? 'na busca' : 'nesse status'}.</div>;
+            return (<>
+              <div style={{ fontSize: 12.5, color: palette.inkMuted, marginBottom: 9 }}>{lista.length} pedidos · {lista.reduce((sm, p) => sm + (p.qtd_pecas || 0), 0)} peças</div>
+              {lista.map(p => (
+                <div key={p.id} style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 12, padding: '11px 14px', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 5, fontSize: 13 }}>
+                    <span style={{ fontWeight: 800, fontSize: 14.5 }}>#{p.numero}</span>
+                    {p.numero_loja && <span style={{ color: palette.inkMuted, fontSize: 11.5 }}>({p.numero_loja})</span>}
+                    <span style={{ fontWeight: 800, color: palette.accent, fontSize: 12, background: palette.accentSoft, borderRadius: 6, padding: '1px 8px' }}>{NOME_CONTA[p.conta] || p.conta}</span>
+                    <span style={{ color: palette.inkSoft, fontWeight: 700 }}>{p.canal_geral || p.loja_nome || '—'}</span>
+                    <span style={{ color: palette.inkMuted }}>{p.data_pedido ? p.data_pedido.split('-').reverse().join('/') : ''}</span>
+                    {p.multi_sku && <span style={{ color: '#9a6b00', fontWeight: 800, fontSize: 11.5 }}>🧺 multi</span>}
+                  </div>
+                  {p.cliente_nome && <div style={{ fontSize: 13, color: palette.ink, fontWeight: 700, marginBottom: 5 }}>👤 {p.cliente_nome}</div>}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {(p.itens || []).map((it, i) => (
+                      <div key={i} style={{ fontSize: 13, color: palette.inkSoft }}>
+                        <b>{it.quantidade}x</b> REF <b>{it.ref || '?'}</b> {it.cor} <b>{String(it.tamanho || '').toUpperCase()}</b>{it.estoque ? <span style={{ color: '#7a5c99', fontWeight: 700 }}> · 📍{it.estoque}</span> : ''}
+                      </div>
+                    ))}
+                  </div>
+                  {(p.impresso_em || p.finalizado_em) && (
+                    <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 6 }}>
+                      {p.impresso_em ? `🖨 impresso ${new Date(p.impresso_em).toLocaleString('pt-BR')}` : ''}
+                      {p.finalizado_em ? `  ·  ✅ finalizado ${new Date(p.finalizado_em).toLocaleString('pt-BR')}` : ''}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>);
+          })()}
+        </div>
+      )}
 
       {tela === 'separacao' && (
         <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
