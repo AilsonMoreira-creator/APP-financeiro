@@ -11786,6 +11786,8 @@ export default function App(){
               detail:homeReativarPending>0?"Clientes conversando com a Sofia":"Clientes 6+ meses · Sofia reativa"},
             {id:"meluni",gate:"meluni",label:"Meluni",Icon:SvgMeluni,color:"#9b59b6",bg:"#f6f0f9",border:"#e3d2ec",
               kpiValue:"—",kpiLabel:"B2C · Lara",detail:"WhatsApp B2C · IA atendente"},
+            {id:"wms",gate:"wms",label:"Picking WMS",Icon:SvgWms,color:"#4a7fa5",bg:"#eef4f9",border:"#cfdfeb",
+              kpiValue:"—",kpiLabel:"Separação",detail:"Pedidos dos marketplaces · 3 contas"},
           ].filter(m=>usuarioLogado.modulos.includes(m.gate||m.id));
 
           return(
