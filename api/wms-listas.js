@@ -123,6 +123,17 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, lista_id: lista.id, marcados: ids.length });
       }
 
+      if (acao === 'marcar_impresso') {
+        // "Já vi na tela e já busquei no estoque" (Ailson 05/08): muda
+        // aberto → em_separacao na hora, sem lista/PDF
+        const agora = new Date().toISOString();
+        const { error } = await supabase.from('wms_pedidos')
+          .update({ status_wms: 'em_separacao', impresso_em: agora, atualizado_em: agora })
+          .in('id', ids).eq('status_wms', 'aberto');
+        if (error) throw error;
+        return res.status(200).json({ ok: true });
+      }
+
       if (acao === 'voltar') {
         const { error } = await supabase.from('wms_pedidos')
           .update({ status_wms: 'aberto', lista_id: null, impresso_em: null, atualizado_em: new Date().toISOString() })

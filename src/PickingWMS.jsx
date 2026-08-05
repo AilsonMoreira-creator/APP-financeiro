@@ -313,6 +313,19 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
 
   const usaMatriz = (g) => visual === 'matriz' || (visual === 'auto' && g.nCores > 1 && g.tamanhos.length > 2);
 
+  const marcarJaImpresso = async (ids) => {
+    if (!ids.length) return;
+    try {
+      const r = await fetch(`${API}/wms-listas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'marcar_impresso', pedido_ids: ids }),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'falhou');
+      await carregarPedidos(); await carregarDash();
+    } catch (e) { setErro('Já impresso: ' + e.message); }
+  };
+
   const chaveDoPedido = (p) => {
     if (p.multi_sku) return 'ped|' + p.id;
     const ref = (p.itens?.[0]?.ref) || '(sem ref)';
@@ -606,12 +619,17 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                     <FotoRef refProd={g.ref} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap', marginBottom: 7 }}>
-                        {fStatus === 'aberto' && (
+                        {fStatus === 'aberto' && (<>
                           <label className="wms-no-print" title={fora ? 'Fora da lista: não imprime e continua em Abertos' : 'Entra na lista de impressão'} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: fora ? '#c0392b' : '#1e8e4e', cursor: 'pointer' }}>
                             <input type="checkbox" checked={!fora} onChange={() => toggleImpressao(chave)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
                             {fora ? 'não imprimir' : 'imprimir'}
                           </label>
-                        )}
+                          <button className="wms-no-print" onClick={() => marcarJaImpresso([...(g.pedidosSet || [])])}
+                            title="Já vi na tela e já busquei no estoque: vai direto pra Em Separação, sem entrar na lista de impressão"
+                            style={{ padding: '3px 10px', borderRadius: 8, border: '1px solid #d9c88f', background: '#fdf6e3', color: '#9a6b00', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                            ✓ já impresso
+                          </button>
+                        </>)}
                         <span style={{ fontSize: 16.5, fontWeight: 800 }}>REF {g.ref}</span>
                         {g.loc && <span style={{ fontSize: 12.5, fontWeight: 800, color: '#7a5c99', background: '#f3eefb', border: '1px solid #ddd0f0', borderRadius: 7, padding: '2px 9px' }}>📍 {g.loc}</span>}
                         <span style={{ fontSize: 12, color: palette.inkMuted }}>{g.pedidos} pedidos · {g.pecas} pçs</span>
@@ -634,12 +652,17 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                       return (
                       <div key={p.id} className={fora ? 'wms-skip-print' : undefined} style={{ background: '#fff', border: `1px solid ${fora ? '#e8b4b4' : palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, pageBreakInside: 'avoid', opacity: fora ? 0.55 : 1 }}>
                         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 8, fontSize: 13 }}>
-                          {fStatus === 'aberto' && (
+                          {fStatus === 'aberto' && (<>
                             <label className="wms-no-print" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: fora ? '#c0392b' : '#1e8e4e', cursor: 'pointer' }}>
                               <input type="checkbox" checked={!fora} onChange={() => toggleImpressao(chave)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
                               {fora ? 'não imprimir' : 'imprimir'}
                             </label>
-                          )}
+                            <button className="wms-no-print" onClick={() => marcarJaImpresso([p.id])}
+                              title="Já vi na tela e já busquei no estoque: vai direto pra Em Separação, sem entrar na lista de impressão"
+                              style={{ padding: '3px 10px', borderRadius: 8, border: '1px solid #d9c88f', background: '#fdf6e3', color: '#9a6b00', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                              ✓ já impresso
+                            </button>
+                          </>)}
                           <span style={{ fontWeight: 800, fontSize: 14.5 }}>Pedido {p.numero}</span>
                           <span style={{ color: palette.inkMuted }}>{p.canal_geral || p.loja_nome}</span>
                           {p.cliente_nome && <span style={{ color: palette.inkMuted }}>· {p.cliente_nome}</span>}
