@@ -3415,11 +3415,25 @@ export const SugestaoScreen = ({
               {/* ─── WhatsApp visível + dados expansíveis (Ailson 11/06/2026) ── */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 {(cliente.telefone_principal || '').trim() ? (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    fontSize: fz(13.5), fontWeight: 700, padding: '3px 9px', borderRadius: 6,
-                    background: '#eafbf0', color: '#1e8e4e', border: '1px solid #b8dfc8',
-                  }}>📱 {formatarTelefone(cliente.telefone_principal)}</span>
+                  (() => {
+                    // Validação visível do número (Ailson 04/08/2026): celular BR = 11 dígitos.
+                    // Número torto era mostrado verde e o WhatsApp da vendedora "voltava" (caso Diandra/Tamires).
+                    const digs = String(cliente.telefone_principal).replace(/\D/g, '');
+                    const celularOk = digs.length === 11 && digs[2] === '9';
+                    return celularOk ? (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        fontSize: fz(13.5), fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+                        background: '#eafbf0', color: '#1e8e4e', border: '1px solid #b8dfc8',
+                      }}>📱 {formatarTelefone(cliente.telefone_principal)}</span>
+                    ) : (
+                      <span title="número fora do padrão de celular (11 dígitos) — confirma com a cliente e corrige no ✏️ editar" style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        fontSize: fz(13.5), fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+                        background: '#fff6e5', color: '#9a6b00', border: '1px solid #f0d9a6',
+                      }}>⚠️ {formatarTelefone(cliente.telefone_principal)} · conferir número</span>
+                    );
+                  })()
                 ) : (
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
