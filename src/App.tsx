@@ -14,6 +14,7 @@ import IAPergunta, { IABotaoCabecalho } from './IAPergunta';
 import LojasModule from './Lojas';
 import LojasWhats from './LojasWhats.jsx';
 import Meluni from './Meluni.jsx';
+import PickingWMS from './PickingWMS.jsx';
 import { EtiquetaGerar } from './EtiquetaTemplate.jsx';
 import { ClientesReativarModule } from './ClientesSofia.jsx';
 import FolhaPagamento from './FolhaPagamento.jsx';
@@ -224,6 +225,15 @@ const SvgSAC = ({ size = 32 }) => (
     <rect x="46" y="30" width="10" height="18" rx="4" fill={_B} stroke={_S} strokeWidth="2"/>
     <path d="M46 44 Q46 54 36 54 L32 54" stroke={_S} strokeWidth="2.5" fill="none" strokeLinecap="round"/>
     <rect x="26" y="51" width="8" height="6" rx="3" fill={_B} stroke={_S} strokeWidth="1.5"/>
+  </svg>
+);
+
+const SvgWms = ({ size = 32 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" stroke="#4a7fa5" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22 L32 12 L52 22 L52 44 L32 54 L12 44 Z" />
+    <path d="M12 22 L32 32 L52 22" />
+    <path d="M32 32 L32 54" />
+    <path d="M22 17 L42 27" />
   </svg>
 );
 
@@ -574,6 +584,8 @@ const modules = [
   // Meluni - B2C WhatsApp/Direct (Lara). Acessado pelo card da home, nao pelo
   // menu do topo. hideFromMenu: so card na home + checkbox no editor de Usuarios.
   { id:"meluni", Icon:SvgMeluni, label:"Meluni", hideFromMenu: true },
+  // Picking WMS - separacao de pedidos dos marketplaces (Ailson 05/08/2026).
+  { id:"wms", Icon:SvgWms, label:"Picking WMS", hideFromMenu: true },
   { id:"usuarios",      Icon:SvgUsuarios,      label:"Usuários"    },
   { id:"configuracoes", Icon:SvgConfiguracoes, label:"Config."     },
 ];
@@ -4609,7 +4621,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
   );
 };
 
-const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia","lojas","sofia","reativar","meluni"];
+const TODOS_MODULOS=["dashboard","lancamentos","boletos","agenda","historico","relatorio","oficinas","configuracoes","calculadora","fichatecnica","salascorte","bling","sac","osamicia","lojas","sofia","reativar","meluni","wms"];
 const USUARIOS_INICIAL=[
   {id:1,usuario:"admin",senha:"1234",modulos:[...TODOS_MODULOS,"usuarios"],admin:true,moduloPadrao:"home"},
   {id:2,usuario:"corte",senha:"1234",modulos:["oficinas","salascorte"],admin:false,moduloPadrao:"oficinas"},
@@ -11831,6 +11843,7 @@ export default function App(){
         {active==="lojas"&&<ModuleErrorBoundary><LojasModule supabase={supabase} userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true}/></ModuleErrorBoundary>}
         {active==="sofia"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('sofia'))&&<ModuleErrorBoundary><LojasWhats userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="meluni"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('meluni'))&&<ModuleErrorBoundary><Meluni userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
+        {active==="wms"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('wms'))&&<ModuleErrorBoundary><PickingWMS userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="reativar"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('reativar'))&&<ModuleErrorBoundary><ClientesReativarModule userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
