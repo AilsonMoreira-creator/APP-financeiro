@@ -1521,13 +1521,17 @@ function useLojasModule() {
   
   // ─── Trocar vendedora ativa (só admin) ──────────────────────────────────
   const trocarVendedoraAtiva = useCallback(async (vendedora) => {
-    if (!state.isAdmin) return;
+    // Célia opera também a carteira da Vendedora_4 (Ailson 05/08/2026)
+    const logada = state.vendedoraLogada;
+    const trocaCelia = logada?.nome === 'Célia' && vendedora &&
+      (vendedora.nome === 'Vendedora_4' || vendedora.id === logada.id);
+    if (!state.isAdmin && !trocaCelia) return;
     dispatch({ type: 'SET_VENDEDORA_ATIVA', vendedora });
     if (vendedora) {
       const sugestoes = await loadSugestoesHoje(vendedora.id);
       dispatch({ type: 'SET_SUGESTOES', sugestoes });
     }
-  }, [state.isAdmin]);
+  }, [state.isAdmin, state.vendedoraLogada]);
   
   // ─── Recarregar tudo (refresh manual) ──────────────────────────────────
   const refresh = useCallback(async () => {
@@ -2154,6 +2158,7 @@ export default function LojasModule({ userId: userIdProp = null, isAdmin: isAdmi
           onSelectSugestao={handleSelectSugestao}
           onAbrirCarteira={() => setScreen('carteira')}
           onAbrirDestaques={() => setScreen('destaques')}
+          onTrocarCarteira={handleSelectVendedora}
         />
       )}
       

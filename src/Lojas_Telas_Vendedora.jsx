@@ -2331,7 +2331,7 @@ const PinCelebracaoVendaSite = ({ aviso, onConsumir }) => {
 };
 
 export const CardDiaScreen = ({
-  lojas, vendedora, onBack, onSelectSugestao, onAbrirCarteira, onAbrirDestaques,
+  lojas, vendedora, onBack, onSelectSugestao, onAbrirCarteira, onAbrirDestaques, onTrocarCarteira,
 }) => {
   const { state, handleRegerarSugestoes } = lojas;
   const [regenerando, setRegenerando] = useState(false);
@@ -2836,6 +2836,26 @@ export const CardDiaScreen = ({
         <AlertaRajadaModal nome={vendedora?.nome} variant="pendentes" onConfirmar={confirmarAlertaPendentes} />
       )}
       <div style={{ padding: 16 }}>
+        {/* Carteira extra da Célia (Ailson 05/08/2026): a Vendedora_4 (Bom Retiro,
+            60 clientes) fica disponível pra Célia operar — alterna e volta */}
+        {(() => {
+          const logada = state.vendedoraLogada;
+          if (logada?.nome !== 'Célia' || !onTrocarCarteira) return null;
+          const v4 = (state.vendedoras || []).find(v => v.nome === 'Vendedora_4');
+          if (!v4) return null;
+          const naV4 = vendedora?.id === v4.id;
+          return (
+            <button onClick={() => onTrocarCarteira(naV4 ? logada : v4)} style={{
+              width: '100%', marginBottom: 12, padding: '11px 14px', borderRadius: 12,
+              border: naV4 ? '1px solid #cdbcec' : '1px dashed #cdbcec',
+              background: naV4 ? '#f3eefb' : palette.surface, color: '#5b3d99',
+              fontSize: fz(13.5), fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}>
+              {naV4 ? '← Voltar pra minha carteira (Célia)' : '👜 Abrir a carteira da Vendedora_4'}
+            </button>
+          );
+        })()}
         {avisosResponsavel.length > 0 && (
           <div style={{
             background: '#f3eefb', border: '1px solid #cdbcec', borderRadius: 12,
