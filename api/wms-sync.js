@@ -52,7 +52,16 @@ export default async function handler(req, res) {
   // suja o funil enquanto a disciplina do "Verificado" não engata no Bling:
   // pedido antigo já despachado continua "em aberto" lá (Ailson 05/08/2026).
   const dias = Math.min(60, Math.max(1, parseInt(req.query?.dias) || 2));
-  const dataInicial = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
+  // Piso: a operação do WMS começou em 05/08/2026. Pedidos anteriores já foram
+  // despachados fisicamente mas seguem "em aberto" no Bling (situação nunca foi
+  // movida antes do Verificado existir) — sem o piso eles re-entrariam a cada
+  // sync como backlog fantasma. Remover quando a disciplina do Verificado
+  // cobrir o histórico. Override consciente: ?desde=YYYY-MM-DD.
+  const DATA_INICIO_OPERACAO = '2026-08-05';
+  let dataInicial = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
+  const qDesde = String(req.query?.desde || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(qDesde)) dataInicial = qDesde;
+  else if (dataInicial < DATA_INICIO_OPERACAO) dataInicial = DATA_INICIO_OPERACAO;
   const dataFinal = new Date().toISOString().slice(0, 10);
 
   const resumo = {};
