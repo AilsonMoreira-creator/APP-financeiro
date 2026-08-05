@@ -12,16 +12,27 @@
  * Query: ?conta=exitus limita | ?dias=14 janela (default 14)
  */
 import { supabase, parseDescricao, parseCanal, blingFetch, refreshBlingToken } from './_bling-helpers.js';
+import { lerWmsConfig } from './wms-listas.js';
+
+// Normalização de situação (Ailson 05/08): minúsculo, sem acento, e matching
+// flexível — "em andamento" tem que casar com "andamento" (contains 2 lados).
+export function normSit(x) {
+  return String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+export function sitCasa(a, b) {
+  const na = normSit(a), nb = normSit(b);
+  if (!na || !nb) return false;
+  return na === nb || na.includes(nb) || nb.includes(na);
+}
 
 export const config = { maxDuration: 300 };
 
 const CONTAS = ['exitus', 'lumia', 'muniam'];
 const DELAY_MS = 350;
-const SITUACOES_ALVO = ['em aberto', 'atendido', 'em andamento'];
 const IDS_PADRAO = { 'em aberto': 6, 'atendido': 9, 'em andamento': 15, 'cancelado': 12 };
 
 async function resolverSituacoes(headers) {
-  // devolve { 'em aberto': id, 'atendido': id, ... } resolvido por nome
+  // devolve { 'em aberto': id, ... } resolvido por nome (lower, do Bling da conta)
   const mapa = { ...IDS_PADRAO };
   try {
     const mr = await blingFetch('https://api.bling.com.br/Api/v3/situacoes/modulos', headers);
@@ -64,6 +75,10 @@ export default async function handler(req, res) {
   else if (dataInicial < DATA_INICIO_OPERACAO) dataInicial = DATA_INICIO_OPERACAO;
   const dataFinal = new Date().toISOString().slice(0, 10);
 
+  const cfg = await lerWmsConfig();
+  const alvosAbertos = cfg.situacoes_aberto;
+  const alvosFinalizados = cfg.situacoes_finalizado;
+
   const resumo = {};
   const contas = soConta && CONTAS.includes(soConta) ? [soConta] : CONTAS;
 
@@ -82,6 +97,17 @@ export default async function handler(req, res) {
     const nomePorId = {};
     for (const [nome, id] of Object.entries(situacoes)) nomePorId[id] = nome;
 
+    // casa as situações configuradas com as da conta (matching flexível):
+    // buscar = abertos + finalizados; categoria decide o status_wms
+    const buscar = []; // [{id, nome, categoria}]
+    const jaIds = new Set();
+    for (const [nome, id] of Object.entries(situacoes)) {
+      if (nome === 'cancelado' || jaIds.has(id)) continue;
+      if (alvosAbertos.some(alvo => sitCasa(nome, alvo))) { buscar.push({ id, nome, categoria: 'aberto' }); jaIds.add(id); }
+      else if (alvosFinalizados.some(alvo => sitCasa(nome, alvo))) { buscar.push({ id, nome, categoria: 'finalizado' }); jaIds.add(id); }
+    }
+    r.situacoes_buscadas = buscar.map(b => `${b.nome}(${b.categoria})`);
+
     // mapa de lojas (nome dos canais)
     let lojaMap = {};
     try {
@@ -91,13 +117,11 @@ export default async function handler(req, res) {
 
     // 1. lista pedidos das situações alvo
     const pedidosLista = [];
-    for (const nomeSit of SITUACOES_ALVO) {
-      const sid = situacoes[nomeSit];
-      if (!sid) continue;
+    for (const alvo of buscar) {
       let pagina = 1;
       while (true) {
         if (Date.now() - inicio > 260000) break;
-        const url = `https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=${sid}&dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=${pagina}&limite=100`;
+        const url = `https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=${alvo.id}&dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=${pagina}&limite=100`;
         const resp = await blingFetch(url, headers);
         if (!resp.ok) { r.erros++; break; }
         const d = await resp.json();
@@ -106,7 +130,7 @@ export default async function handler(req, res) {
           const lojaObj = p.loja || {};
           let lojaNome = lojaObj.descricao || lojaObj.nome || '';
           if (!lojaNome && lojaObj.id && lojaMap[lojaObj.id]) lojaNome = lojaMap[lojaObj.id];
-          pedidosLista.push({ id: p.id, numero: p.numero, situacaoId: sid, situacaoNome: nomeSit, lojaNome, data: (p.data || '').slice(0, 10) });
+          pedidosLista.push({ id: p.id, numero: p.numero, situacaoId: alvo.id, situacaoNome: alvo.nome, categoria: alvo.categoria, lojaNome, data: (p.data || '').slice(0, 10) });
         }
         if (d.data.length < 100) break;
         pagina++;
@@ -128,14 +152,22 @@ export default async function handler(req, res) {
     // 3. atualiza situação dos cacheados que mudaram (sem re-detalhar)
     for (const p of pedidosLista) {
       const c = cache.get(p.id);
-      if (c && c.situacao_bling !== p.situacaoId) {
+      if (!c) continue;
+      const agora = new Date().toISOString();
+      const deveFinalizar = p.categoria === 'finalizado' && (c.status_wms === 'aberto' || c.status_wms === 'em_separacao');
+      if (deveFinalizar) {
         await supabase.from('wms_pedidos')
-          .update({ situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: new Date().toISOString(), atualizado_em: new Date().toISOString() })
+          .update({ status_wms: 'finalizado', finalizado_em: agora, situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora })
+          .eq('conta', conta).eq('pedido_id', p.id);
+        r.finalizados = (r.finalizados || 0) + 1;
+      } else if (c.situacao_bling !== p.situacaoId) {
+        await supabase.from('wms_pedidos')
+          .update({ situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora })
           .eq('conta', conta).eq('pedido_id', p.id);
         r.atualizados++;
-      } else if (c) {
+      } else {
         await supabase.from('wms_pedidos')
-          .update({ visto_em: new Date().toISOString() })
+          .update({ visto_em: agora })
           .eq('conta', conta).eq('pedido_id', p.id);
       }
     }
@@ -171,7 +203,10 @@ export default async function handler(req, res) {
           });
         }
         const skusDistintos = new Set(itens.map(i => i.codigo || (i.ref + '|' + i.cor + '|' + i.tamanho))).size;
+        const statusInicial = pedido.categoria === 'finalizado' ? 'finalizado' : 'aberto';
         await supabase.from('wms_pedidos').upsert({
+          status_wms: statusInicial,
+          finalizado_em: statusInicial === 'finalizado' ? new Date().toISOString() : null,
           conta, pedido_id: pedido.id, numero: String(ped.numero || pedido.numero || ''),
           numero_loja: ped.numeroPedidoLoja || null,
           data_pedido: pedido.data || (ped.data || '').slice(0, 10) || null,

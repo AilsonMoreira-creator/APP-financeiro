@@ -10,6 +10,24 @@
  */
 import { supabase } from './_bling-helpers.js';
 
+// Config do módulo (amicia_data user_id='wms-config')
+export const WMS_CONFIG_DEFAULT = {
+  situacoes_aberto: ['em aberto', 'em andamento'],
+  situacoes_finalizado: ['atendido', 'verificado'],
+  canais: [], // [{canal:'Mercado Livre', corte:'12:00', envio:'14:00', alerta_min:30}]
+};
+export async function lerWmsConfig() {
+  try {
+    const { data } = await supabase.from('amicia_data').select('payload').eq('user_id', 'wms-config').maybeSingle();
+    const p = data?.payload || {};
+    return {
+      situacoes_aberto: Array.isArray(p.situacoes_aberto) && p.situacoes_aberto.length ? p.situacoes_aberto : WMS_CONFIG_DEFAULT.situacoes_aberto,
+      situacoes_finalizado: Array.isArray(p.situacoes_finalizado) && p.situacoes_finalizado.length ? p.situacoes_finalizado : WMS_CONFIG_DEFAULT.situacoes_finalizado,
+      canais: Array.isArray(p.canais) ? p.canais : [],
+    };
+  } catch { return { ...WMS_CONFIG_DEFAULT }; }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -22,21 +40,29 @@ export default async function handler(req, res) {
 
       if (acao === 'dashboard') {
         const { data: rows, error } = await supabase.from('wms_pedidos')
-          .select('conta, status_wms, qtd_pecas, data_pedido, impresso_em, finalizado_em')
+          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em')
           .neq('status_wms', 'cancelado');
         if (error) throw error;
         const hoje = new Date().toISOString().slice(0, 10);
         const porConta = {};
+        const porCanal = {};
         const tot = { abertos: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0 };
         for (const r of (rows || [])) {
           const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0 });
-          if (r.status_wms === 'aberto') { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; }
-          else if (r.status_wms === 'em_separacao') { c.em_separacao++; tot.em_separacao++; }
-          else if (r.status_wms === 'finalizado' && String(r.finalizado_em || '').slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; }
+          const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
+          if (r.status_wms === 'aberto') { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; k.pendentes++; }
+          else if (r.status_wms === 'em_separacao') { c.em_separacao++; tot.em_separacao++; k.pendentes++; }
+          else if (r.status_wms === 'finalizado' && String(r.finalizado_em || '').slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
         }
         const { data: ultSync } = await supabase.from('wms_pedidos')
           .select('visto_em').order('visto_em', { ascending: false }).limit(1);
-        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, ultimo_sync: ultSync?.[0]?.visto_em || null });
+        const config = await lerWmsConfig();
+        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, config, ultimo_sync: ultSync?.[0]?.visto_em || null });
+      }
+
+      if (acao === 'config') {
+        const config = await lerWmsConfig();
+        return res.status(200).json({ ok: true, config });
       }
 
       if (acao === 'pedidos') {
@@ -60,6 +86,25 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
       const acao = String(body.acao || '');
+
+      if (acao === 'config') {
+        const c = body.config || {};
+        const payload = {
+          situacoes_aberto: (Array.isArray(c.situacoes_aberto) ? c.situacoes_aberto : []).map(x => String(x).trim()).filter(Boolean),
+          situacoes_finalizado: (Array.isArray(c.situacoes_finalizado) ? c.situacoes_finalizado : []).map(x => String(x).trim()).filter(Boolean),
+          canais: (Array.isArray(c.canais) ? c.canais : []).map(x => ({
+            canal: String(x.canal || '').trim(),
+            corte: String(x.corte || ''), envio: String(x.envio || ''),
+            alerta_min: parseInt(x.alerta_min) || 0,
+          })).filter(x => x.canal),
+          _updated: new Date().toISOString(),
+        };
+        const { error } = await supabase.from('amicia_data')
+          .upsert({ user_id: 'wms-config', payload }, { onConflict: 'user_id' });
+        if (error) throw error;
+        return res.status(200).json({ ok: true, config: payload });
+      }
+
       const ids = Array.isArray(body.pedido_ids) ? body.pedido_ids.filter(Number.isFinite) : [];
       if (!ids.length) return res.status(400).json({ error: 'pedido_ids vazio' });
 

@@ -9,7 +9,7 @@
  * mono-SKU agregado por ref + multi-SKU por pedido, impressão).
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Package, ClipboardList, RefreshCw, Printer, ArrowLeft, CheckCircle2, Clock, Boxes, Undo2 } from 'lucide-react';
+import { Package, ClipboardList, RefreshCw, Printer, ArrowLeft, CheckCircle2, Clock, Boxes, Undo2, Settings } from 'lucide-react';
 import { palette, FONT } from './Lojas_Shared.jsx';
 
 const API = '/api';
@@ -127,6 +127,103 @@ function ListaRef({ g }) {
   );
 }
 
+const CANAIS_CONFIG = ['Mercado Livre', 'Shopee', 'Shein', 'TikTok', 'Magalu', 'Outros'];
+const SITUACOES_CONHECIDAS = ['em aberto', 'em andamento', 'atendido', 'verificado'];
+
+function ConfigScreen({ config, salvando, onSalvar }) {
+  const [abertas, setAbertas] = useState(config.situacoes_aberto || []);
+  const [finalizadas, setFinalizadas] = useState(config.situacoes_finalizado || []);
+  const [novaSit, setNovaSit] = useState('');
+  const [novaSitDestino, setNovaSitDestino] = useState('aberto');
+  const [canais, setCanais] = useState(() => CANAIS_CONFIG.map(nome => {
+    const ex = (config.canais || []).find(c => String(c.canal).toLowerCase() === nome.toLowerCase());
+    return ex ? { ...ex, canal: nome } : { canal: nome, corte: '', envio: '', alerta_min: 30 };
+  }));
+
+  const todasConhecidas = useMemo(() => {
+    const set = new Set([...SITUACOES_CONHECIDAS, ...abertas, ...finalizadas]);
+    return [...set];
+  }, [abertas, finalizadas]);
+
+  const toggle = (lista, setLista, sit) => setLista(lista.includes(sit) ? lista.filter(x => x !== sit) : [...lista, sit]);
+
+  const chip = (ativo, cor) => ({
+    padding: '7px 13px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 700,
+    border: ativo ? `1.5px solid ${cor}` : `1px solid ${palette.beige}`,
+    background: ativo ? cor + '18' : '#fff', color: ativo ? cor : palette.inkMuted,
+  });
+
+  const setCanal = (i, campo, valor) => setCanais(cs => cs.map((c, j) => j === i ? { ...c, [campo]: valor } : c));
+
+  return (
+    <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
+      {/* situações do funil */}
+      <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>Situações que alimentam os cards</div>
+        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 13 }}>O nome precisa bater com a situação do Bling — mas relaxa: maiúsculas, acentos e variações são considerados ("Em andamento" casa com "andamento"). Pode marcar mais de uma.</div>
+
+        <div style={{ fontSize: 13, fontWeight: 800, color: palette.accent, marginBottom: 8 }}>📦 Pedidos Abertos (entram no funil de separação)</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 16 }}>
+          {todasConhecidas.map(sit => (
+            <button key={'a' + sit} onClick={() => toggle(abertas, setAbertas, sit)} style={chip(abertas.includes(sit), '#4a7fa5')}>{sit}</button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 13, fontWeight: 800, color: '#1e8e4e', marginBottom: 8 }}>✅ Finalizados (saem do funil automaticamente)</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 16 }}>
+          {todasConhecidas.map(sit => (
+            <button key={'f' + sit} onClick={() => toggle(finalizadas, setFinalizadas, sit)} style={chip(finalizadas.includes(sit), '#1e8e4e')}>{sit}</button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input value={novaSit} onChange={e => setNovaSit(e.target.value)} placeholder="Nova situação (ex: Separado)"
+            style={{ flex: 1, minWidth: 170, padding: '9px 12px', borderRadius: 9, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13.5 }} />
+          <select value={novaSitDestino} onChange={e => setNovaSitDestino(e.target.value)} style={{ padding: '9px 10px', borderRadius: 9, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }}>
+            <option value="aberto">→ Pedidos Abertos</option>
+            <option value="finalizado">→ Finalizados</option>
+          </select>
+          <button onClick={() => {
+            const sit = novaSit.trim().toLowerCase();
+            if (!sit) return;
+            if (novaSitDestino === 'aberto') { if (!abertas.includes(sit)) setAbertas([...abertas, sit]); }
+            else { if (!finalizadas.includes(sit)) setFinalizadas([...finalizadas, sit]); }
+            setNovaSit('');
+          }} style={{ padding: '9px 15px', borderRadius: 9, border: 'none', background: palette.accent, color: '#fff', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>+ Adicionar</button>
+        </div>
+      </div>
+
+      {/* horarios por canal */}
+      <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>Horários de corte e envio por canal</div>
+        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 13 }}>O alerta dispara quando faltam N minutos pro envio e ainda tem pedidos do canal pendentes (gerados antes do corte). Meluni e canais sem match entram em "Outros". Deixa em branco pra não monitorar o canal.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px 10px', alignItems: 'center', fontSize: 13 }}>
+          <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>CANAL</div>
+          <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>CORTE</div>
+          <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>ENVIO</div>
+          <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>ALERTA (min antes)</div>
+          {canais.map((c, i) => (
+            <React.Fragment key={c.canal}>
+              <div style={{ fontWeight: 700 }}>{c.canal}{c.canal === 'Outros' ? ' (Meluni etc.)' : ''}</div>
+              <input type="time" value={c.corte} onChange={e => setCanal(i, 'corte', e.target.value)} style={{ padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+              <input type="time" value={c.envio} onChange={e => setCanal(i, 'envio', e.target.value)} style={{ padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+              <input type="number" min="0" max="240" value={c.alerta_min} onChange={e => setCanal(i, 'alerta_min', e.target.value)} style={{ width: 70, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      <button onClick={() => onSalvar({
+        situacoes_aberto: abertas, situacoes_finalizado: finalizadas,
+        canais: canais.filter(c => c.corte || c.envio),
+      })} disabled={salvando} style={{ width: '100%', padding: '14px', borderRadius: 13, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: salvando ? 0.6 : 1 }}>
+        {salvando ? 'Salvando…' : '💾 Salvar configurações'}
+      </button>
+      <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 9, textAlign: 'center' }}>As situações valem a partir do próximo "Sincronizar Bling". Pedido que entrar numa situação de Finalizado sai do funil sozinho.</div>
+    </div>
+  );
+}
+
 export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [tela, setTela] = useState('dashboard'); // dashboard | separacao
   const [dash, setDash] = useState(null);
@@ -142,12 +239,21 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [visual, setVisual] = useState('auto');     // auto | matriz | lista
   const [pedidos, setPedidos] = useState([]);
   const [imprimindo, setImprimindo] = useState(false);
+  const [config, setConfig] = useState(null);
+  const [salvandoCfg, setSalvandoCfg] = useState(false);
+  // chaves fora da impressão: 'ref|<conta>|<ref>' (mono) ou 'ped|<id>' (multi)
+  const [foraImpressao, setForaImpressao] = useState(() => new Set());
+  const toggleImpressao = (chave) => setForaImpressao(prev => {
+    const n = new Set(prev);
+    if (n.has(chave)) n.delete(chave); else n.add(chave);
+    return n;
+  });
 
   const carregarDash = useCallback(async () => {
     try {
       const r = await fetch(`${API}/wms-listas?acao=dashboard`);
       const d = await r.json();
-      if (d.ok) setDash(d);
+      if (d.ok) { setDash(d); if (d.config) setConfig(d.config); }
     } catch (e) { setErro(e.message); }
   }, []);
   useEffect(() => { carregarDash(); }, [carregarDash]);
@@ -207,10 +313,17 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
 
   const usaMatriz = (g) => visual === 'matriz' || (visual === 'auto' && g.nCores > 1 && g.tamanhos.length > 2);
 
+  const chaveDoPedido = (p) => {
+    if (p.multi_sku) return 'ped|' + p.id;
+    const ref = (p.itens?.[0]?.ref) || '(sem ref)';
+    return 'ref|' + p.conta + '|' + ref;
+  };
+  const pedidosIncluidos = useMemo(() => pedidosFiltrados.filter(p => !foraImpressao.has(chaveDoPedido(p))), [pedidosFiltrados, foraImpressao]);
+
   const imprimirLista = async () => {
-    const ids = pedidosFiltrados.map(p => p.id);
+    const ids = pedidosIncluidos.map(p => p.id);
     if (!ids.length) return;
-    if (!window.confirm(`Imprimir a lista e iniciar a separação de ${ids.length} pedidos?\n\nEles saem de "Abertos" e entram em "Em separação".`)) return;
+    if (!window.confirm(`Imprimir a lista e iniciar a separação de ${ids.length} pedidos?\n\nEles saem de "Abertos" e entram em "Em separação".${foraImpressao.size ? '\n(Os cards desmarcados ficam de fora e continuam abertos.)' : ''}`)) return;
     setImprimindo(true);
     try {
       const r = await fetch(`${API}/wms-listas`, {
@@ -221,6 +334,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
       if (!d.ok) throw new Error(d.error || 'falhou');
       setTimeout(() => window.print(), 300);
       await carregarDash();
+      setForaImpressao(new Set());
       setFStatus('em_separacao');
     } catch (e) { setErro('Imprimir: ' + e.message); }
     setImprimindo(false);
@@ -256,17 +370,53 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     } catch (e) { setErro(e.message); }
   };
 
-  // aviso de prazo: corte 12:00, despacho 14:00 (regras exatas o Ailson define depois)
-  const avisoPrazo = useMemo(() => {
-    if (!dash?.total) return null;
+  // avisos de prazo POR CANAL (config: corte/envio/alerta_min por canal;
+  //  Meluni e canais não mapeados entram como "Outros")
+  const canalConfigDe = useCallback((canalGeral) => {
+    const cg = String(canalGeral || '').toLowerCase();
+    const canais = config?.canais || [];
+    const acha = (nome) => canais.find(c => String(c.canal).toLowerCase() === nome);
+    if (cg.includes('mercado')) return acha('mercado livre');
+    if (cg.includes('shopee')) return acha('shopee');
+    if (cg.includes('shein')) return acha('shein');
+    if (cg.includes('tiktok')) return acha('tiktok');
+    if (cg.includes('magalu') || cg.includes('magazine')) return acha('magalu');
+    return acha('outros');
+  }, [config]);
+
+  const avisosPrazo = useMemo(() => {
+    if (!dash?.por_canal) return [];
     const agora = new Date();
-    const h = agora.getHours() + agora.getMinutes() / 60;
-    const pend = (dash.total.abertos || 0) + (dash.total.em_separacao || 0);
-    if (!pend) return null;
-    if (h >= 12 && h < 14) return { cor: '#c0392b', txt: `⏰ ${pend} pedidos pendentes e o despacho é até 14:00 — prioridade total na separação!` };
-    if (h >= 10.5 && h < 12) return { cor: '#9a6b00', txt: `⏳ Corte às 12:00 — ${pend} pedidos pendentes. Bom momento pra imprimir a lista.` };
-    return null;
-  }, [dash]);
+    const hAgora = agora.getHours() * 60 + agora.getMinutes();
+    const min = (hhmm) => { const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+    const out = [];
+    const canais = config?.canais || [];
+    if (!canais.length) {
+      // sem config: aviso genérico 12:00/14:00
+      const pend = (dash.total?.abertos || 0) + (dash.total?.em_separacao || 0);
+      if (pend && hAgora >= 720 && hAgora < 840) out.push({ cor: '#c0392b', txt: `⏰ ${pend} pedidos pendentes e o despacho é até 14:00 — prioridade na separação! (configura os horários por canal no ⚙)` });
+      else if (pend && hAgora >= 630 && hAgora < 720) out.push({ cor: '#9a6b00', txt: `⏳ Corte às 12:00 — ${pend} pedidos pendentes. Bom momento pra imprimir a lista. (configura os horários por canal no ⚙)` });
+      return out;
+    }
+    // agrega pendentes por canal de config
+    const pendPorCfg = {};
+    for (const [cg, v] of Object.entries(dash.por_canal)) {
+      const cfgC = canalConfigDe(cg);
+      if (!cfgC) continue;
+      pendPorCfg[cfgC.canal] = (pendPorCfg[cfgC.canal] || 0) + (v.pendentes || 0);
+    }
+    for (const c of canais) {
+      const pend = pendPorCfg[c.canal] || 0;
+      if (!pend) continue;
+      const mEnvio = min(c.envio), mCorte = min(c.corte);
+      if (mEnvio != null && c.alerta_min > 0 && hAgora >= mEnvio - c.alerta_min && hAgora < mEnvio) {
+        out.push({ cor: '#c0392b', txt: `🚨 ${c.canal}: ${pend} pedidos pendentes e o envio é às ${c.envio} (faltam ${mEnvio - hAgora} min)!` });
+      } else if (mCorte != null && hAgora >= mCorte && (mEnvio == null || hAgora < mEnvio)) {
+        out.push({ cor: '#9a6b00', txt: `⏳ ${c.canal}: corte das ${c.corte} já passou — ${pend} pedidos pendentes pro envio${c.envio ? ` das ${c.envio}` : ''}.` });
+      }
+    }
+    return out;
+  }, [dash, config, canalConfigDe]);
 
   const btn = (ativo) => ({
     padding: '7px 13px', borderRadius: 9, cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 700,
@@ -277,21 +427,27 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   return (
     <div style={{ fontFamily: FONT, background: palette.bg, minHeight: '100vh', paddingBottom: 40 }}>
       {/* print CSS: imprime só a área da lista */}
-      <style>{`@media print {
-        .wms-no-print { display: none !important; }
+      <style>{`
+      @page { size: A4; margin: 11mm; }
+      @media print {
+        .wms-no-print, .wms-skip-print { display: none !important; }
         .wms-print-area { box-shadow: none !important; }
+        .wms-print-header { display: block !important; }
         body { background: #fff !important; }
       }`}</style>
 
       {/* Header */}
-      <div className="wms-no-print" style={{ background: palette.header, color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={tela === 'dashboard' ? onBack : () => setTela('dashboard')} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 9, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' }}>
+      <div className="wms-no-print" style={{ background: palette.ink, color: '#fff', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button onClick={tela === 'dashboard' ? onBack : () => setTela('dashboard')} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 9, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' }}>
           <ArrowLeft size={19} />
         </button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17.5, fontWeight: 800 }}>📦 Picking WMS</div>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : 'Lista de separação'}</div>
+          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : 'Lista de separação'}</div>
         </div>
+        <button onClick={() => setTela('config')} title="Configurações" style={{ background: tela === 'config' ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 9, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' }}>
+          <Settings size={18} />
+        </button>
         <button onClick={sincronizar} disabled={sincronizando} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 9, padding: '8px 13px', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, fontFamily: FONT, opacity: sincronizando ? 0.6 : 1 }}>
           <RefreshCw size={16} style={sincronizando ? { animation: 'spin 1s linear infinite' } : undefined} />
           {sincronizando ? 'Sincronizando…' : 'Sincronizar Bling'}
@@ -303,11 +459,11 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
 
       {tela === 'dashboard' && (
         <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
-          {avisoPrazo && (
-            <div style={{ marginBottom: 14, padding: '11px 15px', borderRadius: 11, background: '#fff6e5', border: `1.5px solid ${avisoPrazo.cor}44`, color: avisoPrazo.cor, fontSize: 14, fontWeight: 700 }}>
-              {avisoPrazo.txt}
+          {avisosPrazo.map((a, i) => (
+            <div key={i} style={{ marginBottom: 10, padding: '11px 15px', borderRadius: 11, background: a.cor === '#c0392b' ? '#fdeaea' : '#fff6e5', border: `1.5px solid ${a.cor}44`, color: a.cor, fontSize: 14, fontWeight: 700 }}>
+              {a.txt}
             </div>
-          )}
+          ))}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {[
               { k: 'abertos', titulo: 'Pedidos Abertos', sub: 'lista ainda não impressa', Icon: Package, cor: palette.accent, extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '' },
@@ -352,6 +508,25 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         </div>
       )}
 
+      {tela === 'config' && config && (
+        <ConfigScreen config={config} salvando={salvandoCfg} onSalvar={async (nova) => {
+          setSalvandoCfg(true); setErro('');
+          try {
+            const r = await fetch(`${API}/wms-listas`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ acao: 'config', config: nova }),
+            });
+            const d = await r.json();
+            if (!d.ok) throw new Error(d.error || 'falhou');
+            setConfig(d.config);
+            setTela('dashboard');
+            await carregarDash();
+          } catch (e) { setErro('Config: ' + e.message); }
+          setSalvandoCfg(false);
+        }} />
+      )}
+      {tela === 'config' && !config && <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>Carregando configurações…</div>}
+
       {tela === 'separacao' && (
         <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
           {/* filtros */}
@@ -385,7 +560,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
           <div className="wms-no-print" style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
             {fStatus === 'aberto' && (
               <button onClick={imprimirLista} disabled={imprimindo || !pedidosFiltrados.length} style={{ flex: 1, minWidth: 220, padding: '13px', borderRadius: 12, border: 'none', background: pedidosFiltrados.length ? palette.accent : '#c8c0b6', color: '#fff', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <Printer size={18} /> Imprimir e iniciar separação ({pedidosFiltrados.length} pedidos)
+                <Printer size={18} /> Imprimir e iniciar separação ({pedidosIncluidos.length} pedidos{foraImpressao.size ? ` · ${pedidosFiltrados.length - pedidosIncluidos.length} de fora` : ''})
               </button>
             )}
             {fStatus === 'em_separacao' && (<>
@@ -411,6 +586,10 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
 
           {/* área de impressão */}
           <div className="wms-print-area">
+            <div className="wms-print-header" style={{ display: 'none', marginBottom: 14, borderBottom: '2px solid #2c3e50', paddingBottom: 8 }}>
+              <div style={{ fontSize: 19, fontWeight: 800 }}>📦 Lista de Separação — Picking WMS</div>
+              <div style={{ fontSize: 12, color: '#5a6b7d' }}>{new Date().toLocaleString('pt-BR')} · {fConta === 'todas' ? 'Todas as contas' : NOME_CONTA[fConta]}{fLoja !== 'todas' ? ` · ${fLoja}` : ''} · ordem: {ordem === 'qtd' ? 'maior quantidade' : 'localização'}</div>
+            </div>
             {blocos.map(b => (
               <div key={b.conta} style={{ marginBottom: 26, pageBreakInside: 'avoid' }}>
                 <div style={{ fontSize: 17, fontWeight: 800, color: palette.ink, padding: '9px 13px', background: '#f4f0ea', borderRadius: 11, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -419,11 +598,20 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                 </div>
 
                 {/* mono-SKU agregado por ref */}
-                {b.mono.map(g => (
-                  <div key={g.ref} style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, display: 'flex', gap: 13, alignItems: 'flex-start', pageBreakInside: 'avoid' }}>
+                {b.mono.map(g => {
+                  const chave = 'ref|' + b.conta + '|' + g.ref;
+                  const fora = foraImpressao.has(chave);
+                  return (
+                  <div key={g.ref} className={fora ? 'wms-skip-print' : undefined} style={{ background: '#fff', border: `1px solid ${fora ? '#e8b4b4' : palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, display: 'flex', gap: 13, alignItems: 'flex-start', pageBreakInside: 'avoid', opacity: fora ? 0.55 : 1 }}>
                     <FotoRef refProd={g.ref} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap', marginBottom: 7 }}>
+                        {fStatus === 'aberto' && (
+                          <label className="wms-no-print" title={fora ? 'Fora da lista: não imprime e continua em Abertos' : 'Entra na lista de impressão'} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: fora ? '#c0392b' : '#1e8e4e', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={!fora} onChange={() => toggleImpressao(chave)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                            {fora ? 'não imprimir' : 'imprimir'}
+                          </label>
+                        )}
                         <span style={{ fontSize: 16.5, fontWeight: 800 }}>REF {g.ref}</span>
                         {g.loc && <span style={{ fontSize: 12.5, fontWeight: 800, color: '#7a5c99', background: '#f3eefb', border: '1px solid #ddd0f0', borderRadius: 7, padding: '2px 9px' }}>📍 {g.loc}</span>}
                         <span style={{ fontSize: 12, color: palette.inkMuted }}>{g.pedidos} pedidos · {g.pecas} pçs</span>
@@ -432,7 +620,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                       {usaMatriz(g) ? <MatrizRef g={g} /> : <ListaRef g={g} />}
                     </div>
                   </div>
-                ))}
+                );})}
 
                 {/* multi-SKU: um bloco por pedido */}
                 {b.multi.length > 0 && (
@@ -440,9 +628,18 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                     <div style={{ fontSize: 14, fontWeight: 800, color: '#9a6b00', padding: '7px 13px', background: '#fff6e5', borderRadius: 10, margin: '14px 0 10px' }}>
                       🧺 Pedidos com múltiplos SKUs — {NOME_CONTA[b.conta]} ({b.multi.length})
                     </div>
-                    {b.multi.map(p => (
-                      <div key={p.id} style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, pageBreakInside: 'avoid' }}>
+                    {b.multi.map(p => {
+                      const chave = 'ped|' + p.id;
+                      const fora = foraImpressao.has(chave);
+                      return (
+                      <div key={p.id} className={fora ? 'wms-skip-print' : undefined} style={{ background: '#fff', border: `1px solid ${fora ? '#e8b4b4' : palette.beige}`, borderRadius: 12, padding: 13, marginBottom: 10, pageBreakInside: 'avoid', opacity: fora ? 0.55 : 1 }}>
                         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 8, fontSize: 13 }}>
+                          {fStatus === 'aberto' && (
+                            <label className="wms-no-print" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: fora ? '#c0392b' : '#1e8e4e', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={!fora} onChange={() => toggleImpressao(chave)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+                              {fora ? 'não imprimir' : 'imprimir'}
+                            </label>
+                          )}
                           <span style={{ fontWeight: 800, fontSize: 14.5 }}>Pedido {p.numero}</span>
                           <span style={{ color: palette.inkMuted }}>{p.canal_geral || p.loja_nome}</span>
                           {p.cliente_nome && <span style={{ color: palette.inkMuted }}>· {p.cliente_nome}</span>}
@@ -458,7 +655,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                           ))}
                         </div>
                       </div>
-                    ))}
+                    );})}
                   </div>
                 )}
               </div>
