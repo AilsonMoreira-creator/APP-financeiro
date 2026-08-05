@@ -3325,6 +3325,15 @@ export const SugestaoScreen = ({
       alert('Digite um número válido (10 ou 11 dígitos)');
       return;
     }
+    // Anti numero-inventado (Ailson 04/08/2026): DDD real, celular com 9,
+    // e sem sequencias obvias (11111111111, 12345678901...)
+    if (tel) {
+      const ddd = parseInt(tel.slice(0, 2), 10);
+      if (ddd < 11 || ddd > 99) { alert('DDD inválido. Confere o número com a cliente.'); return; }
+      if (tel.length === 11 && tel[2] !== '9') { alert('Celular tem 9 depois do DDD (ex: 11 9XXXX-XXXX). Confere o número.'); return; }
+      if (/^(\d)\1+$/.test(tel.slice(2))) { alert('Esse número não parece real. Confere com a cliente.'); return; }
+      if ('01234567890123456789'.includes(tel.slice(2)) || '98765432109876543210'.includes(tel.slice(2))) { alert('Esse número não parece real. Confere com a cliente.'); return; }
+    }
     if (!tel && origemModalTel === 'whats') {
       alert('Digite o WhatsApp pra abrir a conversa');
       return;
@@ -3706,7 +3715,7 @@ export const SugestaoScreen = ({
             padding: '9px 12px', fontSize: fz(13.5), color: '#8a6420', lineHeight: 1.5,
           }}>
             <b>⚠️ Falta pra concluir:</b>
-            {!temTelCliente && <div>📵 Colocar o WhatsApp da cliente (botão WhatsApp ou lápis no card)</div>}
+            {!temTelCliente && <div>📵 Colocar o WhatsApp da cliente (botão WhatsApp ou lápis no card) — ou, se não tiver o contato, toca em "Não tenho o contato" que a sugestão sai por 30 dias</div>}
             {!temMsgGerada && <div>💡 Gerar a mensagem em "Pedir sugestão de mensagem"</div>}
           </div>
         )}
@@ -3743,16 +3752,26 @@ export const SugestaoScreen = ({
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             opacity: (!temTelCliente || !temMsgGerada) ? 0.55 : 1,
           }}><Check size={sz(17)} /> Já enviei</button>
-          <button onClick={() => { if (!temTelCliente) { alert('Cadastra o WhatsApp da cliente primeiro. Sem número, nem dispensar dá.'); return; } setShowRecusa(true); }}
-            disabled={!temTelCliente}
-            title={!temTelCliente ? 'Cadastra o WhatsApp da cliente primeiro' : undefined}
+          <button onClick={async () => {
+            if (!temTelCliente) {
+              // Sem contato: dispensa honesta em 1 toque (Ailson 04/08/2026) —
+              // motivo automatico, pula 30 dias; nada de numero inventado pra destravar
+              if (!window.confirm('Você não tem o contato dessa cliente?\n\nA sugestão sai da sua lista por 30 dias. Se conseguir o WhatsApp dela nesse meio tempo, cadastra no ✏️ do card que ela volta pro rodízio.')) return;
+              try {
+                await handleDispensarSugestao(sugestao.id, '30d: sem contato da cliente (vendedora não tem o WhatsApp)');
+                onBack && onBack();
+              } catch (e) { alert('Erro: ' + (e?.message || e)); }
+              return;
+            }
+            setShowRecusa(true);
+          }}
+            title={!temTelCliente ? 'Sem o contato da cliente? Dispensa por 30 dias em 1 toque' : undefined}
             style={{
             flex: 1, background: palette.surface, color: palette.inkSoft,
             border: `1.5px solid ${palette.beige}`, borderRadius: 10, padding: '11px',
-            fontSize: fz(15), fontWeight: 600, cursor: !temTelCliente ? 'not-allowed' : 'pointer', fontFamily: FONT,
+            fontSize: fz(15), fontWeight: 600, cursor: 'pointer', fontFamily: FONT,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            opacity: !temTelCliente ? 0.55 : 1,
-          }}><X size={sz(17)} /> Dispensar</button>
+          }}><X size={sz(17)} /> {temTelCliente ? 'Dispensar' : '📵 Não tenho o contato'}</button>
         </div>
       </div>
 
