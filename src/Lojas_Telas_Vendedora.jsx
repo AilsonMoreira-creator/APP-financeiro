@@ -330,8 +330,12 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, userI
 
   const VendedoraCard = ({ v }) => {
     const isCurrent = !isAdmin && v.id === vendedoraLogadaId;
-    const isClickable = isAdmin || isCurrent;
-    const isPlaceholder = (v.nome || '').toLowerCase().startsWith('vendedora_');
+    // Célia opera a carteira da Vendedora_4 (Ailson 05/08/2026): pra ela o card
+    // aparece como carteira normal e CLICÁVEL, não como slot tracejado
+    const logadaEhCelia = (vendedoras || []).find(x => x.id === vendedoraLogadaId)?.nome === 'Célia';
+    const ehV4DaCelia = logadaEhCelia && v.nome === 'Vendedora_4';
+    const isClickable = isAdmin || isCurrent || ehV4DaCelia;
+    const isPlaceholder = (v.nome || '').toLowerCase().startsWith('vendedora_') && !ehV4DaCelia;
     const status = v.ativa ? 'ok' : 'alert';
 
     if (isPlaceholder) {
@@ -357,7 +361,7 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, userI
           border: isCurrent ? `2px solid ${palette.accent}` : `1px solid ${palette.beige}`,
           borderRadius: 12, padding: 14, width: '100%', textAlign: 'left',
           cursor: isClickable ? 'pointer' : 'default', fontFamily: FONT,
-          opacity: !isAdmin && !isCurrent ? 0.45 : 1,
+          opacity: isClickable ? 1 : 0.45,
           boxShadow: isCurrent ? '0 2px 8px rgba(74,127,165,0.15)' : '0 1px 3px rgba(44,62,80,0.04)',
           display: 'flex', alignItems: 'center', gap: 12,
         }}>
