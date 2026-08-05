@@ -702,6 +702,21 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
           <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 17 }}>
             <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 11 }}>📈 Histórico diário (pedidos por hora)</div>
             <GraficoBarras dados={prod?.historico || []} referencia={prod?.referencia} />
+            <button onClick={async () => {
+              if (!window.confirm('Limpar TODO o histórico de produtividade?\n\nOs dias já registrados somem e a média de referência recomeça do zero. (Use enquanto o módulo está em testes.)')) return;
+              try {
+                const r = await fetch(`${API}/wms-listas`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ acao: 'limpar_produtividade' }),
+                });
+                const d = await r.json();
+                if (!d.ok) throw new Error(d.error || 'falhou');
+                await carregarProd();
+              } catch (e) { setErro('Limpar histórico: ' + e.message); }
+            }} style={{ marginTop: 12, padding: '8px 14px', borderRadius: 9, border: `1px solid ${palette.beige}`, background: '#fff', color: palette.inkMuted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+              🗑 Limpar histórico (fase de testes)
+            </button>
+
             {(prod?.historico || []).length > 0 && (
               <div style={{ marginTop: 14, fontSize: 12.5 }}>
                 {[...prod.historico].reverse().slice(0, 10).map(d => {

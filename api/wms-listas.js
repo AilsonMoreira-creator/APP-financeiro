@@ -191,6 +191,14 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, config: payload });
       }
 
+      if (acao === 'limpar_produtividade') {
+        // Fase de testes (Ailson 05/08): zera o histórico pra média de
+        // referência nascer limpa quando a operação engatar de verdade.
+        const { error } = await supabase.from('wms_produtividade').delete().gte('data', '2000-01-01');
+        if (error) throw error;
+        return res.status(200).json({ ok: true });
+      }
+
       const ids = Array.isArray(body.pedido_ids) ? body.pedido_ids.filter(Number.isFinite) : [];
       if (!ids.length) return res.status(400).json({ error: 'pedido_ids vazio' });
 
