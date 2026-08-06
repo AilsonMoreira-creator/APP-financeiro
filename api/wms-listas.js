@@ -46,11 +46,12 @@ export default async function handler(req, res) {
         const hoje = new Date().toISOString().slice(0, 10);
         const porConta = {};
         const porCanal = {};
-        const tot = { abertos: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0 };
+        const tot = { abertos: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
         for (const r of (rows || [])) {
-          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0 });
+          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
-          if (r.status_wms === 'aberto') { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; k.pendentes++; }
+          if (r.status_wms === 'pendente') { c.aguardando++; tot.aguardando++; k.pendentes++; }
+          else if (r.status_wms === 'aberto') { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; k.pendentes++; }
           else if (r.status_wms === 'em_separacao') { c.em_separacao++; tot.em_separacao++; k.pendentes++; }
           else if (r.status_wms === 'finalizado' && String(r.finalizado_em || '').slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
         }
@@ -154,7 +155,7 @@ export default async function handler(req, res) {
       if (acao === 'pedidos') {
         const status = String(req.query?.status || 'aberto');
         let q = supabase.from('wms_pedidos')
-          .select('id, conta, pedido_id, numero, numero_loja, data_pedido, situacao_nome, loja_nome, canal_geral, canal_detalhe, cliente_nome, itens, qtd_skus, qtd_pecas, multi_sku, lista_id, impresso_em, finalizado_em')
+          .select('id, conta, pedido_id, numero, numero_loja, data_pedido, situacao_nome, loja_nome, canal_geral, canal_detalhe, cliente_nome, itens, qtd_skus, qtd_pecas, multi_sku, lista_id, impresso_em, finalizado_em, pendente_em, tentativas')
           .eq('status_wms', status)
           .order('data_pedido', { ascending: true }).limit(2000);
         const conta = String(req.query?.conta || '');
@@ -226,6 +227,32 @@ export default async function handler(req, res) {
           .in('id', ids).eq('status_wms', 'aberto');
         if (error) throw error;
         return res.status(200).json({ ok: true });
+      }
+
+      if (acao === 'marcar_pendente') {
+        // Repasse das faltas (Ailson 05/08): o auxiliar circula no papel, a
+        // responsável toca na tela. Sai de em_separacao pra 'pendente' — não
+        // conta no desconto de 25s da produtividade (falta de estoque não é
+        // lentidão da equipe).
+        const agora = new Date().toISOString();
+        const { error } = await supabase.from('wms_pedidos')
+          .update({ status_wms: 'pendente', pendente_em: agora, atualizado_em: agora })
+          .in('id', ids).in('status_wms', ['aberto', 'em_separacao']);
+        if (error) throw error;
+        return res.status(200).json({ ok: true });
+      }
+
+      if (acao === 'pendente_chegou') {
+        // Mercadoria chegou: volta pro funil de abertos com tentativas+1
+        // (a lista da próxima onda destaca como 2ª tentativa e ordena no topo).
+        const { data: atuais } = await supabase.from('wms_pedidos').select('id, tentativas').in('id', ids);
+        for (const p of (atuais || [])) {
+          await supabase.from('wms_pedidos').update({
+            status_wms: 'aberto', pendente_em: null, lista_id: null, impresso_em: null,
+            tentativas: (p.tentativas || 1) + 1, atualizado_em: new Date().toISOString(),
+          }).eq('id', p.id);
+        }
+        return res.status(200).json({ ok: true, voltaram: (atuais || []).length });
       }
 
       if (acao === 'voltar') {

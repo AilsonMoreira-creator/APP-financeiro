@@ -53,13 +53,16 @@ function agregarMonoSku(pedidos) {
     if (p.multi_sku) continue;
     for (const it of (p.itens || [])) {
       const ref = it.ref || '(sem ref)';
-      const g = porRef.get(ref) || { ref, loc: '', cores: {}, pedidosSet: new Set(), pecas: 0, descLimpa: it.descLimpa || '' };
+      const g = porRef.get(ref) || { ref, loc: '', cores: {}, pedidosSet: new Set(), porSku: {}, pecas: 0, descLimpa: it.descLimpa || '', tentativas: 1 };
       if (it.estoque && !g.loc) g.loc = it.estoque;
       if (!g.descLimpa && it.descLimpa) g.descLimpa = it.descLimpa;
       const cor = it.cor || '—';
       const tam = String(it.tamanho || '—').toUpperCase();
       g.cores[cor] = g.cores[cor] || {};
       g.cores[cor][tam] = (g.cores[cor][tam] || 0) + (it.quantidade || 1);
+      const kSku = cor + '|' + tam;
+      (g.porSku[kSku] = g.porSku[kSku] || []).push(p.id);
+      if ((p.tentativas || 1) > (g.tentativas || 1)) g.tentativas = p.tentativas;
       g.pedidosSet.add(p.id);
       g.pecas += it.quantidade || 1;
       porRef.set(ref, g);
@@ -74,7 +77,7 @@ function agregarMonoSku(pedidos) {
 }
 
 // ── Matriz cores × tamanhos (padrão módulo oficina) ──
-function MatrizRef({ g }) {
+function MatrizRef({ g, modoFalta, faltaDe, onTapSku }) {
   return (
     <table style={{ borderCollapse: 'collapse', fontSize: 12.5, fontFamily: FONT }}>
       <thead><tr>
@@ -88,11 +91,21 @@ function MatrizRef({ g }) {
           return (
             <tr key={cor}>
               <td style={{ ...thTd(), fontWeight: 700, textAlign: 'left' }}>{cor}</td>
-              {g.tamanhos.map(t => (
-                <td key={t} style={{ ...thTd(), fontWeight: g.cores[cor][t] ? 800 : 400, color: g.cores[cor][t] ? palette.ink : '#c8c0b6' }}>
-                  {g.cores[cor][t] || '·'}
-                </td>
-              ))}
+              {g.tamanhos.map(t => {
+                const q = g.cores[cor][t];
+                const f = modoFalta && q ? (faltaDe(cor, t) || 0) : 0;
+                return (
+                  <td key={t}
+                    onClick={modoFalta && q ? () => onTapSku(cor, t, q) : undefined}
+                    title={modoFalta && q ? 'Toque pra marcar falta (toca de novo pra somar; passa do total volta a zero)' : undefined}
+                    style={{ ...thTd(), fontWeight: q ? 800 : 400, color: q ? palette.ink : '#c8c0b6',
+                      cursor: modoFalta && q ? 'pointer' : 'default',
+                      background: f ? '#fdf0d5' : '#fff',
+                      boxShadow: f ? 'inset 0 0 0 2px #d9a441' : undefined }}>
+                    {q ? (f ? `${q - f}+⏳${f}` : q) : '·'}
+                  </td>
+                );
+              })}
               <td style={{ ...thTd(), fontWeight: 800, background: '#faf6ef' }}>{soma}</td>
             </tr>
           );
@@ -108,7 +121,7 @@ const thTd = (head) => ({
 });
 
 // ── Lista cor+tamanho (PP→G3) ──
-function ListaRef({ g }) {
+function ListaRef({ g, modoFalta, faltaDe, onTapSku }) {
   const linhas = [];
   for (const cor of Object.keys(g.cores).sort()) {
     for (const t of Object.keys(g.cores[cor]).sort((a, b) => idxTam(a) - idxTam(b))) {
@@ -117,12 +130,20 @@ function ListaRef({ g }) {
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 13.5 }}>
-      {linhas.map((l, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8 }}>
-          <span style={{ fontWeight: 800, minWidth: 26, textAlign: 'right' }}>{l.q}</span>
-          <span>{l.cor} <b>{l.t}</b></span>
-        </div>
-      ))}
+      {linhas.map((l, i) => {
+        const f = modoFalta ? (faltaDe(l.cor, l.t) || 0) : 0;
+        return (
+          <div key={i}
+            onClick={modoFalta ? () => onTapSku(l.cor, l.t, l.q) : undefined}
+            style={{ display: 'flex', gap: 8, cursor: modoFalta ? 'pointer' : 'default',
+              background: f ? '#fdf0d5' : 'transparent', borderRadius: 6, padding: modoFalta ? '2px 6px' : 0,
+              border: f ? '1px solid #d9a441' : '1px solid transparent' }}>
+            <span style={{ fontWeight: 800, minWidth: 26, textAlign: 'right' }}>{l.q}</span>
+            <span>{l.cor} <b>{l.t}</b></span>
+            {f > 0 && <span style={{ color: '#9a6b00', fontWeight: 800 }}>⏳ faltou {f}</span>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -271,6 +292,92 @@ function GraficoBarras({ dados, referencia }) {
   );
 }
 
+// ── Tela "Aguardando mercadoria": agrupa os pendentes por ref; 1 toque devolve
+//    pro funil (volta no topo da próxima lista como 2ª tentativa) ──
+function TelaAguardando({ API, onVoltar, onErro }) {
+  const [pedidos, setPedidos] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+
+  const carregar = useCallback(async () => {
+    setCarregando(true);
+    try {
+      const r = await fetch(`${API}/wms-listas?acao=pedidos&status=pendente`);
+      const d = await r.json();
+      if (d.ok) setPedidos(d.pedidos || []);
+    } catch (e) { onErro && onErro(e.message); }
+    setCarregando(false);
+  }, [API, onErro]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const grupos = useMemo(() => {
+    const m = new Map();
+    for (const p of pedidos) {
+      for (const it of (p.itens || [])) {
+        const k = p.conta + '|' + (it.ref || '?');
+        const g = m.get(k) || { conta: p.conta, ref: it.ref || '?', loc: it.estoque || '', linhas: [], ids: new Set(), desc: it.descLimpa || '' };
+        g.linhas.push({ cor: it.cor, tam: String(it.tamanho || '').toUpperCase(), q: it.quantidade || 1, pedido: p.numero });
+        g.ids.add(p.id);
+        m.set(k, g);
+      }
+    }
+    return [...m.values()];
+  }, [pedidos]);
+
+  const chegou = async (ids) => {
+    if (!window.confirm('Mercadoria chegou?\n\nEsses pedidos voltam pro funil de abertos e aparecem no topo da próxima lista como 2ª tentativa.')) return;
+    setSalvando(true);
+    try {
+      const r = await fetch(`${API}/wms-listas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'pendente_chegou', pedido_ids: [...ids] }),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'falhou');
+      await carregar();
+    } catch (e) { onErro && onErro('Chegou: ' + e.message); }
+    setSalvando(false);
+  };
+
+  return (
+    <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
+      {carregando && <div style={{ textAlign: 'center', padding: 30, color: palette.inkMuted }}>Carregando…</div>}
+      {!carregando && !grupos.length && (
+        <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted, fontSize: 14.5 }}>
+          Nada aguardando mercadoria 🎉<br />
+          <span style={{ fontSize: 12.5 }}>As faltas repassadas na separação aparecem aqui.</span>
+        </div>
+      )}
+      {grupos.map(g => (
+        <div key={g.conta + g.ref} style={{ background: '#fff', border: '1px solid #e0c98a', borderRadius: 12, padding: 13, marginBottom: 10, display: 'flex', gap: 13, alignItems: 'flex-start' }}>
+          <FotoRef refProd={g.ref} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap', marginBottom: 6 }}>
+              <span style={{ fontSize: 16, fontWeight: 800 }}>REF {g.ref}</span>
+              {g.loc && <span style={{ fontSize: 12, fontWeight: 800, color: '#7a5c99' }}>📍 {g.loc}</span>}
+              <span style={{ fontSize: 11.5, color: palette.inkMuted }}>{NOME_CONTA[g.conta] || g.conta} · {g.ids.size} pedidos</span>
+            </div>
+            {g.desc && <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 6 }}>{g.desc}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 9 }}>
+              {g.linhas.map((l, i) => (
+                <div key={i} style={{ fontSize: 13.5 }}><b>{l.q}</b> {l.cor} <b>{l.tam}</b> <span style={{ color: palette.inkMuted, fontSize: 11.5 }}>#{l.pedido}</span></div>
+              ))}
+            </div>
+            <button onClick={() => chegou(g.ids)} disabled={salvando} style={{ padding: '8px 15px', borderRadius: 10, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+              ✓ Chegou, voltar pro funil
+            </button>
+          </div>
+        </div>
+      ))}
+      {grupos.length > 0 && (
+        <button onClick={() => chegou(new Set(pedidos.map(p => p.id)))} disabled={salvando} style={{ width: '100%', marginTop: 8, padding: '12px', borderRadius: 12, border: `1.5px solid #1e8e4e`, background: '#fff', color: '#1e8e4e', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+          ✓ Chegou tudo ({pedidos.length} pedidos)
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [tela, setTela] = useState('dashboard'); // dashboard | separacao | config | detalhes
   const [detStatus, setDetStatus] = useState('aberto');
@@ -279,6 +386,11 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [detBusca, setDetBusca] = useState('');
   const [porContaAberto, setPorContaAberto] = useState(false);
   const [prod, setProd] = useState(null);
+  // Repasse de faltas (Ailson 05/08): auxiliar circula no papel, responsável
+  // toca na tela. Map 'conta|ref|cor|tam' → quantidade que faltou.
+  const [modoFalta, setModoFalta] = useState(false);
+  const [faltas, setFaltas] = useState(() => new Map());
+  const [salvandoFaltas, setSalvandoFaltas] = useState(false);
   const [dash, setDash] = useState(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -384,15 +496,61 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     return contas.map(conta => {
       const doConta = pedidosFiltrados.filter(p => p.conta === conta);
       const mono = agregarMonoSku(doConta);
-      mono.sort((a, b) => ordem === 'loc'
-        ? (a.loc || 'Z').localeCompare(b.loc || 'Z') || b.pecas - a.pecas
-        : b.pecas - a.pecas);
+      // 2ª tentativa (voltou do Aguardando) sempre no topo, depois a ordem escolhida
+      mono.sort((a, b) => ((b.tentativas || 1) > 1) - ((a.tentativas || 1) > 1)
+        || (ordem === 'loc'
+          ? (a.loc || 'Z').localeCompare(b.loc || 'Z') || b.pecas - a.pecas
+          : b.pecas - a.pecas));
       const multi = doConta.filter(p => p.multi_sku);
       return { conta, mono, multi, nPedidos: doConta.length, nPecas: doConta.reduce((s, p) => s + (p.qtd_pecas || 0), 0) };
     }).filter(b => b.nPedidos > 0);
   }, [pedidosFiltrados, fConta, ordem]);
 
   const usaMatriz = (g) => visual === 'matriz' || (visual === 'auto' && g.nCores > 1 && g.tamanhos.length > 2);
+
+  const tapSku = (conta, ref, cor, tam, qtdTotal) => {
+    const k = `${conta}|${ref}|${cor}|${tam}`;
+    setFaltas(prev => {
+      const n = new Map(prev);
+      const atual = n.get(k) || 0;
+      const proximo = atual + 1 > qtdTotal ? 0 : atual + 1; // passou do total, zera
+      if (proximo === 0) n.delete(k); else n.set(k, proximo);
+      return n;
+    });
+  };
+
+  const confirmarFaltas = async (blocosAtuais) => {
+    // resolve as faltas (cor|tam) em pedido_ids concretos
+    const ids = [];
+    for (const b of blocosAtuais) {
+      for (const g of b.mono) {
+        for (const [k, qtd] of faltas.entries()) {
+          const [cta, rf, cor, tam] = k.split('|');
+          if (cta !== b.conta || rf !== g.ref) continue;
+          const lista = (g.porSku?.[cor + '|' + tam] || []).slice(0, qtd);
+          ids.push(...lista);
+        }
+      }
+      for (const p of b.multi) {
+        if (faltas.has('ped|' + p.id)) ids.push(p.id);
+      }
+    }
+    const unicos = [...new Set(ids)];
+    if (!unicos.length) { setModoFalta(false); return; }
+    if (!window.confirm(`Marcar ${unicos.length} pedidos como aguardando mercadoria?\n\nEles saem da separação e voltam no topo da próxima lista, marcados como 2ª tentativa.`)) return;
+    setSalvandoFaltas(true);
+    try {
+      const r = await fetch(`${API}/wms-listas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acao: 'marcar_pendente', pedido_ids: unicos }),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'falhou');
+      setFaltas(new Map()); setModoFalta(false);
+      await carregarPedidos(); await carregarDash();
+    } catch (e) { setErro('Faltas: ' + e.message); }
+    setSalvandoFaltas(false);
+  };
 
   const chaveDoPedido = (p) => {
     if (p.multi_sku) return 'ped|' + p.id;
@@ -539,7 +697,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         </button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17.5, fontWeight: 800 }}>📦 Picking WMS</div>
-          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : tela === 'detalhes' ? 'Detalhar pedidos' : tela === 'produtividade' ? 'Produtividade da separação' : 'Lista de separação'}</div>
+          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : tela === 'detalhes' ? 'Detalhar pedidos' : tela === 'produtividade' ? 'Produtividade da separação' : tela === 'aguardando' ? 'Aguardando mercadoria' : 'Lista de separação'}</div>
         </div>
         <button onClick={() => setTela('config')} title="Configurações" style={{ background: tela === 'config' ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 9, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' }}>
           <Settings size={18} />
@@ -560,8 +718,10 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
               { k: 'abertos', titulo: 'Pedidos Abertos', sub: 'lista ainda não impressa', Icon: Package, cor: palette.accent, extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '' },
               { k: 'em_separacao', titulo: 'Em Separação', sub: 'lista impressa, separando', Icon: ClipboardList, cor: '#9a6b00' },
               { k: 'finalizados_hoje', titulo: 'Finalizados Hoje', sub: 'bipados + etiqueta (Verificado)', Icon: CheckCircle2, cor: '#1e8e4e' },
+              { k: 'aguardando', titulo: 'Aguardando', sub: 'faltou mercadoria · volta na próxima onda', Icon: Clock, cor: '#9a6b00' },
             ].map(c => (
-              <div key={c.k} style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(44,62,80,0.05)' }}>
+              <div key={c.k} onClick={c.k === 'aguardando' ? () => setTela('aguardando') : undefined}
+                style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(44,62,80,0.05)', cursor: c.k === 'aguardando' ? 'pointer' : 'default' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <c.Icon size={22} color={c.cor} strokeWidth={1.8} />
                   <span style={{ fontSize: 13.5, fontWeight: 800, color: palette.inkSoft }}>{c.titulo}</span>
@@ -663,6 +823,10 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         }} />
       )}
       {tela === 'config' && !config && <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>Carregando configurações…</div>}
+
+      {tela === 'aguardando' && (
+        <TelaAguardando API={API} onVoltar={async () => { await carregarDash(); setTela('dashboard'); }} onErro={setErro} />
+      )}
 
       {tela === 'produtividade' && (
         <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
@@ -828,7 +992,23 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                 <Printer size={18} /> Imprimir e iniciar separação ({pedidosIncluidos.length} no papel{pedidosJaImpressos.length ? ` · ${pedidosJaImpressos.length} já impressos` : ''}{pedidosFiltrados.length - pedidosIncluidos.length - pedidosJaImpressos.length > 0 ? ` · ${pedidosFiltrados.length - pedidosIncluidos.length - pedidosJaImpressos.length} de fora` : ''})
               </button>
             )}
-            {fStatus === 'em_separacao' && (<>
+            {fStatus === 'em_separacao' && !modoFalta && (
+              <button onClick={() => setModoFalta(true)} style={{ flex: 1, minWidth: 190, padding: '12px', borderRadius: 12, border: '1.5px solid #d9a441', background: '#fdf6e3', color: '#9a6b00', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                ⏳ Repassar faltas
+              </button>
+            )}
+            {fStatus === 'em_separacao' && modoFalta && (<>
+              <div style={{ flexBasis: '100%', fontSize: 13, color: '#9a6b00', fontWeight: 700, background: '#fdf6e3', border: '1px solid #e0c98a', borderRadius: 10, padding: '9px 13px' }}>
+                Toque nas peças que o auxiliar circulou no papel. Cada toque soma 1; passando do total, zera. {faltas.size > 0 ? `${[...faltas.values()].reduce((a, x) => a + x, 0)} peças marcadas.` : ''}
+              </div>
+              <button onClick={() => confirmarFaltas(blocos)} disabled={salvandoFaltas || !faltas.size} style={{ flex: 1, minWidth: 190, padding: '12px', borderRadius: 12, border: 'none', background: faltas.size ? '#9a6b00' : '#c8c0b6', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+                {salvandoFaltas ? 'Salvando…' : '⏳ Confirmar faltas'}
+              </button>
+              <button onClick={() => { setFaltas(new Map()); setModoFalta(false); }} style={{ padding: '12px 15px', borderRadius: 12, border: `1px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                Cancelar
+              </button>
+            </>)}
+            {fStatus === 'em_separacao' && !modoFalta && (<>
               <button onClick={reimprimir} disabled={!pedidosFiltrados.length} style={{ flex: 1, minWidth: 150, padding: '12px', borderRadius: 12, border: `1.5px solid ${palette.accent}`, background: '#fff', color: palette.accent, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
                 <Printer size={17} /> Reimprimir
               </button>
@@ -886,10 +1066,13 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                         )}
                         <span style={{ fontSize: 16.5, fontWeight: 800 }}>REF {g.ref}</span>
                         {g.loc && <span style={{ fontSize: 12.5, fontWeight: 800, color: '#7a5c99', background: '#f3eefb', border: '1px solid #ddd0f0', borderRadius: 7, padding: '2px 9px' }}>📍 {g.loc}</span>}
+                        {(g.tentativas || 1) > 1 && <span style={{ fontSize: 11.5, fontWeight: 800, color: '#9a6b00', background: '#fdf0d5', border: '1px solid #e0c98a', borderRadius: 7, padding: '2px 8px' }}>⏳ {g.tentativas}ª tentativa</span>}
                         <span style={{ fontSize: 12, color: palette.inkMuted }}>{g.pedidos} pedidos · {g.pecas} pçs</span>
                       </div>
                       {g.descLimpa && <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 8 }}>{g.descLimpa}</div>}
-                      {usaMatriz(g) ? <MatrizRef g={g} /> : <ListaRef g={g} />}
+                      {usaMatriz(g)
+                        ? <MatrizRef g={g} modoFalta={modoFalta && fStatus === 'em_separacao'} faltaDe={(c, t) => faltas.get(`${b.conta}|${g.ref}|${c}|${t}`)} onTapSku={(c, t, q) => tapSku(b.conta, g.ref, c, t, q)} />
+                        : <ListaRef g={g} modoFalta={modoFalta && fStatus === 'em_separacao'} faltaDe={(c, t) => faltas.get(`${b.conta}|${g.ref}|${c}|${t}`)} onTapSku={(c, t, q) => tapSku(b.conta, g.ref, c, t, q)} />}
                     </div>
                   </div>
                 );})}
