@@ -9,7 +9,7 @@
 // ============================================================================
 import { supabase } from './_bling-helpers.js';
 
-const CAMPOS = ['assunto', 'titulo', 'criativo_url', 'cta_label', 'cta_url', 'cupom', 'cupom_validade', 'desconto', 'utm', 'assinatura'];
+const CAMPOS = ['nome', 'assunto', 'titulo', 'criativo_url', 'cta_label', 'cta_url', 'cupom', 'cupom_validade', 'desconto', 'utm', 'assinatura'];
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
       // cada disparo cria uma linha status='disparo' (antes 'ativa') que
       // poluia a lista com 8 registros vazios.
       const { data, error } = await supabase.from('meluni_email_campanhas')
-        .select('id,assunto,titulo,status,criado_em')
+        .select('id,nome,assunto,titulo,status,criado_em')
         .in('status', ['rascunho', 'salvo'])
         .order('criado_em', { ascending: false }).limit(50);
       if (error) throw error;

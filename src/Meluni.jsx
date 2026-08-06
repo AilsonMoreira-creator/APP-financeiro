@@ -2960,6 +2960,9 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
   const [loadGal, setLoadGal] = useState(false);
   const [galeriaTpl, setGaleriaTpl] = useState(false);
   const [tpls, setTpls] = useState([]);
+  // nome do template (Ailson 06/08/2026): "rascunho" gerava duvida — cada
+  // template agora tem nome proprio, pedido ao salvar e editavel na galeria
+  const [nomeTpl, setNomeTpl] = useState('');
   const [loadTpl, setLoadTpl] = useState(false);
   const [cupom, setCupom] = useState('VOLTE10');
   const [cupomValidade, setCupomValidade] = useState('24 horas');
@@ -2992,7 +2995,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
   const wide = w >= 900;
 
   const campanha = {
-    assunto, titulo, corpo, criativo_url: criativoUrl,
+    nome: nomeTpl, assunto, titulo, corpo, criativo_url: criativoUrl,
     cta_label: ctaLabel, cta_url: ctaUrl, cupom, cupom_validade: cupomValidade, desconto, utm, assinatura,
   };
   const campKey = JSON.stringify(campanha);
@@ -3088,6 +3091,7 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
       const j = await r.json();
       const c = j?.campanha;
       if (!j.ok || !c) { alert('Não consegui abrir esse template.'); return; }
+      setNomeTpl(c.nome || '');
       setAssunto(c.assunto || '');
       setTitulo(c.titulo || '');
       setCorpo(c.corpo_html || '');
@@ -3129,16 +3133,22 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
 
   const salvar = async () => {
     if (!assunto.trim() || !corpo.trim()) { alert('Preencha pelo menos assunto e corpo.'); return; }
+    let nome = nomeTpl.trim();
+    if (!nome) {
+      nome = (window.prompt('Dá um nome pra esse template (pra achar depois na lista):', assunto.slice(0, 40)) || '').trim();
+      if (!nome) return; // cancelou
+      setNomeTpl(nome);
+    }
     setSalvando(true);
     try {
       const r = await fetch('/api/meluni-email-mkt-campanha', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         // 'salvo' (Ailson 06/08/2026): clicar em Salvar deixa o template SALVO,
         // nao como rascunho.
-        body: JSON.stringify({ id: campanhaId, ...campanha, status: 'salvo' }),
+        body: JSON.stringify({ id: campanhaId, ...campanha, nome, status: 'salvo' }),
       });
       const j = await r.json();
-      if (j.ok) { setCampanhaId(j.id); alert('Template salvo ✓'); } else alert(j.erro || 'Falha ao salvar.');
+      if (j.ok) { setCampanhaId(j.id); alert(`Template "${nome}" salvo ✓`); } else alert(j.erro || 'Falha ao salvar.');
     } catch { alert('Falha ao salvar.'); }
     setSalvando(false);
   };
@@ -3459,8 +3469,12 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
                 {tpls.map(t => (
                   <div key={t.id} style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, padding: '10px 12px', background: palette.beigeSoft, display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.assunto || t.titulo || 'Sem assunto'}</div>
-                      <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 2 }}>{t.status || 'rascunho'}{t.criado_em ? ` · ${new Date(t.criado_em).toLocaleDateString('pt-BR')}` : ''}</div>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: palette.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {t.nome || t.assunto || t.titulo || 'Sem nome'}
+                      </div>
+                      <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {t.nome && t.assunto ? `${t.assunto} · ` : ''}{t.criado_em ? new Date(t.criado_em).toLocaleDateString('pt-BR') : ''}
+                      </div>
                     </div>
                     <button onClick={() => usarTpl(t.id)} style={{ ...selStyle, padding: '6px 12px', fontSize: 12, fontWeight: 700, background: MELUNI, color: '#fff', borderColor: MELUNI }}>Abrir</button>
                     <button
