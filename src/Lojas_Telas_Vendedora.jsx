@@ -52,6 +52,7 @@ import {
   fz, sz, TelefoneCopiavel, FotoProdutoLojas, saudacaoHora, emojiHora, fraseDoDia,
   adminComSaudacao, supabase, spinKeyframes, refDisplay, formatarTelefone,
   AlertaRajadaModal,
+  podeOperarCarteira, carteirasExtrasDe,
 } from './Lojas_Shared.jsx';
 
 // Aba 'Produtos' (admin only) — raio-x de produtos. Isolado em arquivo
@@ -332,10 +333,10 @@ const VendedorasTab = ({ isAdmin, vendedoras, clientes, vendedoraLogadaId, userI
     const isCurrent = !isAdmin && v.id === vendedoraLogadaId;
     // Célia opera a carteira da Vendedora_4 (Ailson 05/08/2026): pra ela o card
     // aparece como carteira normal e CLICÁVEL, não como slot tracejado
-    const logadaEhCelia = (vendedoras || []).find(x => x.id === vendedoraLogadaId)?.nome === 'Célia';
-    const ehV4DaCelia = logadaEhCelia && v.nome === 'Vendedora_4';
-    const isClickable = isAdmin || isCurrent || ehV4DaCelia;
-    const isPlaceholder = (v.nome || '').toLowerCase().startsWith('vendedora_') && !ehV4DaCelia;
+    const nomeLogada = (vendedoras || []).find(x => x.id === vendedoraLogadaId)?.nome;
+    const ehCarteiraExtra = podeOperarCarteira(nomeLogada, v.nome) && v.id !== vendedoraLogadaId;
+    const isClickable = isAdmin || isCurrent || ehCarteiraExtra;
+    const isPlaceholder = (v.nome || '').toLowerCase().startsWith('vendedora_') && !ehCarteiraExtra;
     const status = v.ativa ? 'ok' : 'alert';
 
     if (isPlaceholder) {
@@ -2851,20 +2852,39 @@ export const CardDiaScreen = ({
             60 clientes) fica disponível pra Célia operar — alterna e volta */}
         {(() => {
           const logada = state.vendedoraLogada;
-          if (logada?.nome !== 'Célia' || !onTrocarCarteira) return null;
-          const v4 = (state.vendedoras || []).find(v => v.nome === 'Vendedora_4');
-          if (!v4) return null;
-          const naV4 = vendedora?.id === v4.id;
+          if (!onTrocarCarteira) return null;
+          const extras = carteirasExtrasDe(logada?.nome);
+          if (!extras.length) return null;
+          const foraDaPropria = vendedora && vendedora.id !== logada?.id;
+          if (foraDaPropria) {
+            return (
+              <button onClick={() => onTrocarCarteira(logada)} style={{
+                width: '100%', marginBottom: 12, padding: '11px 14px', borderRadius: 12,
+                border: '1px solid #cdbcec', background: '#f3eefb', color: '#5b3d99',
+                fontSize: fz(13.5), fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}>
+                {`← Voltar pra minha carteira (${String(logada?.nome || '').split(' ')[0]})`}
+              </button>
+            );
+          }
           return (
-            <button onClick={() => onTrocarCarteira(naV4 ? logada : v4)} style={{
-              width: '100%', marginBottom: 12, padding: '11px 14px', borderRadius: 12,
-              border: naV4 ? '1px solid #cdbcec' : '1px dashed #cdbcec',
-              background: naV4 ? '#f3eefb' : palette.surface, color: '#5b3d99',
-              fontSize: fz(13.5), fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}>
-              {naV4 ? '← Voltar pra minha carteira (Célia)' : '👜 Abrir a carteira da Vendedora_4'}
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              {extras.map(nomeExtra => {
+                const alvo = (state.vendedoras || []).find(v => v.nome === nomeExtra);
+                if (!alvo) return null;
+                return (
+                  <button key={alvo.id} onClick={() => onTrocarCarteira(alvo)} style={{
+                    width: '100%', padding: '11px 14px', borderRadius: 12,
+                    border: '1px dashed #cdbcec', background: palette.surface, color: '#5b3d99',
+                    fontSize: fz(13.5), fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}>
+                    {`👜 Abrir a carteira da ${String(nomeExtra).split(' ')[0]}`}
+                  </button>
+                );
+              })}
+            </div>
           );
         })()}
         {avisosResponsavel.length > 0 && (

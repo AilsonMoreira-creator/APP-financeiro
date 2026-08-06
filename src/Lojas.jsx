@@ -60,6 +60,7 @@ import {
   Header, StatusDot, TabBar, SectionTitle, LoadingScreen,
   useLojasW,
  AlertaRajadaModal,
+  podeOperarCarteira,
 } from './Lojas_Shared.jsx';
 
 // Push notifications (tracking de acesso pra cron lembrete)
@@ -1515,9 +1516,10 @@ function useLojasModule() {
   const trocarVendedoraAtiva = useCallback(async (vendedora) => {
     // Célia opera também a carteira da Vendedora_4 (Ailson 05/08/2026)
     const logada = state.vendedoraLogada;
-    const trocaCelia = logada?.nome === 'Célia' && vendedora &&
-      (vendedora.nome === 'Vendedora_4' || vendedora.id === logada.id);
-    if (!state.isAdmin && !trocaCelia) return;
+    const trocaPermitida = !!vendedora && (
+      vendedora.id === logada?.id || podeOperarCarteira(logada?.nome, vendedora.nome)
+    );
+    if (!state.isAdmin && !trocaPermitida) return;
     dispatch({ type: 'SET_VENDEDORA_ATIVA', vendedora });
     if (vendedora) {
       const sugestoes = await loadSugestoesHoje(vendedora.id);

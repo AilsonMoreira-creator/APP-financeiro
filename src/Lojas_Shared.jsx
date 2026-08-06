@@ -67,6 +67,24 @@ export const palette = {
 };
 export const FONT = "Georgia, 'Times New Roman', serif";
 
+// CARTEIRAS EXTRAS (Ailson 05-06/08/2026): vendedora que também opera a carteira
+// de outra. Chave = quem loga; valores = carteiras que ela pode abrir e
+// trabalhar normalmente (sugestões, mensagens, marcar enviada). Os números de
+// cada carteira continuam registrados na dona da carteira.
+// Pra liberar mais uma, basta acrescentar aqui.
+export const CARTEIRAS_EXTRAS = {
+  'Célia': ['Vendedora_4'],
+  'Tamires': ['Joelma'],
+};
+export function carteirasExtrasDe(nome) {
+  return CARTEIRAS_EXTRAS[String(nome || '').trim()] || [];
+}
+export function podeOperarCarteira(nomeLogada, nomeAlvo) {
+  if (!nomeLogada || !nomeAlvo) return false;
+  if (nomeLogada === nomeAlvo) return true;
+  return carteirasExtrasDe(nomeLogada).includes(String(nomeAlvo).trim());
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // RESPONSIVO (mesmo padrão de SalasCorteContent no App.tsx)
 // ═══════════════════════════════════════════════════════════════════════════
