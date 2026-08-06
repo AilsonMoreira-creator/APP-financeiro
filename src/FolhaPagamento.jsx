@@ -2001,23 +2001,50 @@ function ModalPdf({ itens, competencia, onClose }) {
     if (!el) return window.print();
     const w = window.open('', '_blank', 'width=900,height=1000');
     if (!w) { alert('O navegador bloqueou a janela de impressão. Libere popups pra este site e tente de novo.'); return; }
+    // No iPhone/iPad a janela abre como ABA NOVA e o usuario ficava preso nela
+    // (sem voltar, sem fechar) — por isso a barra fixa com Imprimir/Fechar, e o
+    // dialogo automatico so no desktop. (Ailson 06/08/2026)
+    const ehTouch = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     w.document.write(`<!doctype html><html><head><meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>Recibos ${competencia || ''}</title>
       <style>
         @page { size: A4 portrait; margin: 14mm; }
         html, body { margin: 0; padding: 0; background: #fff; }
         body { font-family: ${FONT}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .barra {
+          position: sticky; top: 0; z-index: 10; display: flex; gap: 10; justify-content: center;
+          padding: 12px; background: #2c3e50; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+        }
+        .barra button {
+          font-family: ${FONT}; font-size: 15px; font-weight: 700; padding: 10px 20px;
+          border-radius: 8px; border: none; cursor: pointer;
+        }
+        .btn-imp { background: #4a7fa5; color: #fff; }
+        .btn-fec { background: #fff; color: #2c3e50; }
+        .conteudo { padding: 16px; }
         .recibo {
-          box-shadow: none !important; margin: 0 !important; padding: 0 !important;
+          box-shadow: none !important; margin: 0 auto 28px !important; padding: 0 !important;
           max-width: 100% !important; width: 100% !important; border-radius: 0 !important;
           break-inside: avoid; page-break-inside: avoid;
         }
         .recibo:not(:last-child) { break-after: page; page-break-after: always; }
-      </style></head><body>${el.innerHTML}</body></html>`);
+        @media print {
+          .barra { display: none !important; }
+          .conteudo { padding: 0 !important; }
+          .recibo { margin: 0 !important; }
+        }
+      </style></head><body>
+        <div class="barra">
+          <button class="btn-imp" onclick="window.print()">🖨 Imprimir / Salvar PDF</button>
+          <button class="btn-fec" onclick="window.close(); setTimeout(function(){ history.back(); }, 200);">✕ Fechar</button>
+        </div>
+        <div class="conteudo">${el.innerHTML}</div>
+      </body></html>`);
     w.document.close();
     w.focus();
-    // espera o layout/fontes antes de abrir o dialogo
-    setTimeout(() => { try { w.print(); } catch { /* usuario imprime manual */ } }, 400);
+    // desktop abre o dialogo sozinho; no celular o usuario usa a barra
+    if (!ehTouch) setTimeout(() => { try { w.print(); } catch { /* usuario imprime pela barra */ } }, 400);
   }
   const lista = itens || [];
   return (
