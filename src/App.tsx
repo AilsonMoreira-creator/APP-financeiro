@@ -2375,11 +2375,15 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                 </div>
                 <button
                   onClick={()=>{
-                    if(!setAuxDataPorMes)return;
+                    // FIX 06/08/2026: usava setAuxDataPorMes, que NAO e prop deste
+                    // componente (ReferenceError no clique -> botao nao fazia nada).
+                    // O setter certo e o setAuxData do proprio mes aberto, que ja
+                    // resolve a chave correta em auxDataPorMes.
+                    if(!setAuxData)return;
                     if(!confirm(`Criar ${faltantes.length} lançamentos faltantes? Total: R$ ${totalFaltante.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}`))return;
-                    setAuxDataPorMes(m=>{
-                      const aux=m[mes]||{};
-                      const ofs=[...(aux["Oficinas Costura"]||[])];
+                    setAuxData(aux=>{
+                      const base=aux||{};
+                      const ofs=[...(base["Oficinas Costura"]||[])];
                       for(const c of faltantes){
                         const dp=c.dataPagamento||"";
                         const [d,mm]=dp.split("/");
@@ -2387,7 +2391,7 @@ const LancamentosContent=({mes=3,mktMensal=null,receitas:recProp,setReceitas:set
                         const vl=String(Math.round((c.qtdEntregue||c.qtd)*(c.valorUnit||0)*100)/100);
                         ofs.push({corte_id:c.id,data:dd,prestador:c.oficina,valor:vl,descricao:`REF ${c.ref} - ${c.descricao}`});
                       }
-                      return{...m,[mes]:{...aux,"Oficinas Costura":ofs}};
+                      return{...base,"Oficinas Costura":ofs};
                     });
                   }}
                   style={{padding:"6px 14px",background:"#b7791f",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}
