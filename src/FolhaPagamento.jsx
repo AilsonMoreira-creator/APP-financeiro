@@ -26,6 +26,7 @@
  *   - vale_pago               { valor }                 [não aparece no card]
  *   - comissao_propria        { percentual, base }
  *   - comissao_loja           { loja, percentual }
+ *   - comissao_crm_sofia      { percentual }  (1% das vendas convertidas no CRM Sofia)
  *   - bonus_meta_individual   { base, faixas }
  *   - comissao_marketplace    { percentual, fonte }
  *   - valor_fixo              { descricao, valor }      [adhoc no fechamento]
@@ -52,6 +53,7 @@ const TIPO_INFO = {
   vale_pago:              { label: 'Vale (dia 20)',          icon: Receipt,   cor: palette.archive },
   comissao_propria:       { label: 'Comissão própria',       icon: TrendingUp, cor: palette.accent },
   comissao_loja:          { label: 'Comissão sobre loja',    icon: Users,     cor: palette.accent },
+  comissao_crm_sofia:     { label: 'Comissão CRM Sofia',     icon: Users,     cor: palette.accent },
   bonus_meta_individual:  { label: 'Bônus por meta',         icon: Tag,       cor: palette.ok },
   comissao_marketplace:   { label: 'Comissão marketplace',   icon: TrendingUp, cor: palette.accent },
   acrescimo:              { label: 'Acréscimo (alimentação, etc)', icon: Coffee, cor: palette.ok },
@@ -291,6 +293,19 @@ function calcularUmaRegra(regra, funcionario, ctx, valeValor) {
       };
     }
 
+    case 'comissao_crm_sofia': {
+      // Ailson 06/08/2026: 1% de TODAS as vendas convertidas no CRM da Sofia
+      // no mes (mesmo numero da aba Conversao do modulo Sofia:
+      // fn_sofia_funil_leads -> valor_vendas_periodo somado).
+      const v = ctx.vendas_crm_sofia || 0;
+      const valor = v * (Number(cfg.percentual) / 100);
+      return {
+        id: regra.id, tipo: regra.tipo, titulo: 'Comissão CRM Sofia',
+        descricao_calculo: `${cfg.percentual}% × ${fmtBRL(v)} (vendas convertidas no CRM Sofia em ${nomeMesCurto(ctx.competencia)}/${ctx.competencia.slice(2,4)})`,
+        valor, mes_destino: 'competencia',
+      };
+    }
+
     case 'bonus_meta_individual': {
       const base = cfg.base || 'total';
       const v = ctx.vendas_propria?.[base] || 0;
@@ -467,9 +482,24 @@ async function carregarContexto(competencia, vendedoras) {
     mktplcLiquido = blingBruto * 0.9;
   }
 
+  // 3. Vendas convertidas no CRM da Sofia no mes (aba Conversao do modulo
+  //    Sofia). Mesma RPC que alimenta aquela tela, somando valor_vendas_periodo.
+  let vendasCrmSofia = 0;
+  try {
+    const fimExcl = new Date(new Date(fim + 'T00:00:00Z').getTime() + 86400000).toISOString();
+    const { data, error } = await supabase.rpc('fn_sofia_funil_leads', {
+      p_ini: inicio + 'T00:00:00Z', p_fim: fimExcl, p_vendedora: null,
+    });
+    if (error) throw error;
+    vendasCrmSofia = (data || []).reduce((s, r) => s + Number(r.valor_vendas_periodo || 0), 0);
+  } catch (e) {
+    console.warn('[folha] erro ao buscar vendas CRM Sofia:', e?.message);
+  }
+
   return {
     competencia,
     vendas_por_vendedora: porVend,
+    vendas_crm_sofia: vendasCrmSofia,
     vendas_loja_BR: lojaBR,
     vendas_loja_ST: lojaST,
     mktplc_bruto: mktplcBruto,
@@ -493,6 +523,7 @@ function contextoPorFuncionario(funcionario, ctxGeral, vendedoras) {
   return {
     competencia: ctxGeral.competencia,
     vendas_propria,
+    vendas_crm_sofia: ctxGeral.vendas_crm_sofia,
     vendas_loja_BR: ctxGeral.vendas_loja_BR,
     vendas_loja_ST: ctxGeral.vendas_loja_ST,
     mktplc_bruto: ctxGeral.mktplc_bruto,
@@ -798,7 +829,7 @@ export default function FolhaPagamento({ onVoltar, onAuxDataChange }) {
       // Empréstimos e descontos: NÃO entram em coluna nenhuma (regra Ailson 15/05/2026).
       if (l.tipo === 'desconto' || l.tipo === 'emprestimo') continue;
       const v = Number(l.valor || 0);
-      if (['comissao_propria', 'comissao_loja', 'comissao_marketplace', 'bonus_meta_individual'].includes(l.tipo)) {
+      if (['comissao_propria', 'comissao_loja', 'comissao_crm_sofia', 'comissao_marketplace', 'bonus_meta_individual'].includes(l.tipo)) {
         comissaoTotal += v;
       } else if (l.tipo === 'salario_fixo') {
         salarioTotal += v;
@@ -1693,6 +1724,7 @@ function configPadrao(tipo) {
     case 'vale_pago': return { valor: 0 };
     case 'comissao_propria': return { percentual: 1, base: 'total' };
     case 'comissao_loja': return { loja: 'Bom Retiro', percentual: 0.5 };
+    case 'comissao_crm_sofia': return { percentual: 1 };
     case 'bonus_meta_individual': return { base: 'total', faixas: [...FAIXAS_META_PADRAO] };
     case 'comissao_marketplace': return { percentual: 0.1, fonte: 'mktplc_liquido' };
     case 'acrescimo': return { descricao: 'Alimentação', valor: 0, coluna_planilha: 'alimentacao', mes_destino: 'seguinte' };
@@ -1752,6 +1784,16 @@ function RegraEditor({ regra, onChange, onRemover }) {
             <Input type="number" step="0.01" value={cfg.percentual} onChange={e => onChange({ config: { percentual: parseFloat(e.target.value) || 0 } })} num />
           </Field>
         </div>
+      )}
+
+      {regra.tipo === 'comissao_crm_sofia' && (
+        <Field label="Percentual (%)">
+          <Input type="number" step="0.01" value={cfg.percentual}
+            onChange={e => onChange({ config: { percentual: parseFloat(e.target.value) || 0 } })} num />
+          <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 4 }}>
+            Sobre o total de vendas convertidas no CRM da Sofia no mês (mesmo número da aba Conversão)
+          </div>
+        </Field>
       )}
 
       {regra.tipo === 'bonus_meta_individual' && (
