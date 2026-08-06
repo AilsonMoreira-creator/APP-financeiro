@@ -1952,18 +1952,36 @@ function ModalPdf({ itens, competencia, onClose }) {
   function imprimir() { window.print(); }
   const lista = itens || [];
   return (
-    <div style={modalOverlayStyle()} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="pdf-overlay" style={modalOverlayStyle()} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <style>{`
+        /* PDF da folha (Ailson 06/08/2026): A4 retrato, 1 recibo por pagina.
+           O modal e um overlay fixo com scroll interno — no print isso CLIPAVA
+           o conteudo (so a parte visivel saia). Por isso overlay e scroller
+           viram blocos normais e o recibo ocupa a pagina inteira. */
+        @page { size: A4 portrait; margin: 14mm; }
         @media print {
+          html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
           body * { visibility: hidden; }
           #pdf-print, #pdf-print * { visibility: visible; }
-          #pdf-print { position: absolute; left: 0; top: 0; width: 100%; }
-          #pdf-print .recibo { box-shadow: none !important; margin: 0 !important; max-width: 100% !important; border-radius: 0 !important; padding: 30px 50px !important; }
+          .pdf-overlay {
+            position: static !important; inset: auto !important; background: none !important;
+            display: block !important; padding: 0 !important; z-index: auto !important;
+          }
+          .pdf-scroll {
+            max-width: none !important; max-height: none !important; width: 100% !important;
+            overflow: visible !important;
+          }
+          #pdf-print { position: static !important; width: 100% !important; }
+          #pdf-print .recibo {
+            box-shadow: none !important; margin: 0 !important; max-width: 100% !important;
+            width: 100% !important; border-radius: 0 !important; padding: 0 !important;
+            break-inside: avoid; page-break-inside: avoid;
+          }
           #pdf-print .recibo:not(:last-child) { break-after: page; page-break-after: always; }
           .no-print { display: none !important; }
         }
       `}</style>
-      <div style={{ maxWidth: 600, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: 'transparent' }}>
+      <div className="pdf-scroll" style={{ maxWidth: 600, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: 'transparent' }}>
         <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>
             {lista.length > 1 ? `${lista.length} recibos` : ''}
