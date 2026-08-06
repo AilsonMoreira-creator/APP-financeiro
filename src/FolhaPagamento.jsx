@@ -1991,37 +1991,42 @@ function Recibo({ funcionario: f, linhas, competencia, fechamento }) {
 }
 
 function ModalPdf({ itens, competencia, onClose }) {
-  function imprimir() { window.print(); }
+  // Impressao em JANELA DEDICADA (Ailson 06/08/2026): o modal e um overlay
+  // fixo com scroll dentro do layout do app — qualquer tentativa de imprimir
+  // "de dentro" ou clipava o conteudo ou saia em branco. Aqui os recibos (que
+  // usam estilos inline) sao copiados pra uma janela limpa com @page A4 e 1
+  // recibo por pagina. Fallback: window.print() se o popup for bloqueado.
+  function imprimir() {
+    const el = document.getElementById('pdf-print');
+    if (!el) return window.print();
+    const w = window.open('', '_blank', 'width=900,height=1000');
+    if (!w) { alert('O navegador bloqueou a janela de impressão. Libere popups pra este site e tente de novo.'); return; }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8">
+      <title>Recibos ${competencia || ''}</title>
+      <style>
+        @page { size: A4 portrait; margin: 14mm; }
+        html, body { margin: 0; padding: 0; background: #fff; }
+        body { font-family: ${FONT}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .recibo {
+          box-shadow: none !important; margin: 0 !important; padding: 0 !important;
+          max-width: 100% !important; width: 100% !important; border-radius: 0 !important;
+          break-inside: avoid; page-break-inside: avoid;
+        }
+        .recibo:not(:last-child) { break-after: page; page-break-after: always; }
+      </style></head><body>${el.innerHTML}</body></html>`);
+    w.document.close();
+    w.focus();
+    // espera o layout/fontes antes de abrir o dialogo
+    setTimeout(() => { try { w.print(); } catch { /* usuario imprime manual */ } }, 400);
+  }
   const lista = itens || [];
   return (
     <div className="pdf-overlay" style={modalOverlayStyle()} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <style>{`
-        /* PDF da folha (Ailson 06/08/2026): A4 retrato, 1 recibo por pagina.
-           O modal e um overlay fixo com scroll interno — no print isso CLIPAVA
-           o conteudo (so a parte visivel saia). Por isso overlay e scroller
-           viram blocos normais e o recibo ocupa a pagina inteira. */
-        @page { size: A4 portrait; margin: 14mm; }
-        @media print {
-          html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
-          body * { visibility: hidden; }
-          #pdf-print, #pdf-print * { visibility: visible; }
-          .pdf-overlay {
-            position: static !important; inset: auto !important; background: none !important;
-            display: block !important; padding: 0 !important; z-index: auto !important;
-          }
-          .pdf-scroll {
-            max-width: none !important; max-height: none !important; width: 100% !important;
-            overflow: visible !important;
-          }
-          #pdf-print { position: static !important; width: 100% !important; }
-          #pdf-print .recibo {
-            box-shadow: none !important; margin: 0 !important; max-width: 100% !important;
-            width: 100% !important; border-radius: 0 !important; padding: 0 !important;
-            break-inside: avoid; page-break-inside: avoid;
-          }
-          #pdf-print .recibo:not(:last-child) { break-after: page; page-break-after: always; }
-          .no-print { display: none !important; }
-        }
+        /* Em tela o modal e um overlay com scroll. A impressao acontece numa
+           janela dedicada (ver imprimir()), entao aqui so escondemos o que nao
+           deve sair caso alguem use Ctrl+P direto na pagina. */
+        @media print { .no-print { display: none !important; } }
       `}</style>
       <div className="pdf-scroll" style={{ maxWidth: 600, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: 'transparent' }}>
         <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
