@@ -1287,20 +1287,12 @@ function subscribeRealtime({ vendedoraId, isAdmin, dispatch }) {
     channels.push(chImports);
   }
   
-  // ─── 4. KPIs (atualização de status quando importação roda) ─────────────
-  const chKpis = supabase
-    .channel(REALTIME_CHANNELS.KPIS)
-    .on('postgres_changes', {
-      event: 'UPDATE',
-      schema: 'public',
-      table: 'lojas_clientes_kpis',
-    }, (payload) => {
-      dispatch({ type: 'UPDATE_KPI', cliente_id: payload.new.cliente_id, kpi: payload.new });
-    })
-    .subscribe((status) => {
-      dispatch({ type: 'SET_REALTIME_STATUS', canal: 'kpis', status });
-    });
-  channels.push(chKpis);
+  // ─── 4. KPIs: SEM REALTIME (Ailson 06/08/2026, incidente de egress) ─────
+  // O cron de KPIs reescreve ~8.400 linhas por rodada; com a tabela publicada,
+  // o Supabase empurrava CADA linha pra TODAS as sessões abertas nas lojas —
+  // 96% dos 409 GB de egress do ciclo vieram de Realtime. lojas_clientes_kpis
+  // foi removida da publicação supabase_realtime; a tela busca os KPIs ao
+  // abrir e ao recarregar, que é o que a operação precisa.
   
   return () => {
     channels.forEach(ch => supabase.removeChannel(ch));
