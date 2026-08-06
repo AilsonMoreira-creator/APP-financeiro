@@ -2408,11 +2408,18 @@ export const CardDiaScreen = ({
     let vivo = true;
     (async () => {
       try {
+        // SÓ o tema da SEMANA ATUAL (Ailson 06/08/2026): antes pegava o mais
+        // recente e, quando o cron de quinta falhava, repetia a leitura da
+        // semana passada como se fosse nova. Sem tema da semana = sem card.
+        const hoje = new Date();
+        const diaSem = hoje.getDay(); // 0=dom
+        const segunda = new Date(hoje);
+        segunda.setDate(hoje.getDate() - ((diaSem + 6) % 7));
+        const semanaIso = segunda.toISOString().slice(0, 10);
         const { data } = await supabase
           .from('lojas_temas_quinta')
           .select('titulo, conteudo, emoji, semana_inicio')
-          .order('semana_inicio', { ascending: false })
-          .limit(1)
+          .eq('semana_inicio', semanaIso)
           .maybeSingle();
         if (vivo && data) setTemaQuinta(data);
       } catch { /* sem tema, sem card */ }
@@ -2896,7 +2903,7 @@ export const CardDiaScreen = ({
           }}>
             <span style={{ fontSize: 20 }}>✋</span>
             <div style={{ fontSize: fz(13.5), color: '#8a3a30', fontWeight: 600, lineHeight: 1.4 }}>
-              {alertasRajada30d} alerta{alertasRajada30d > 1 ? 's' : ''} de atenção nos últimos 30 dias
+              {String(vendedora?.nome || '').split(' ')[0]} recebeu {alertasRajada30d} alerta{alertasRajada30d > 1 ? 's' : ''} de atenção nos últimos 30 dias
               <span style={{ fontWeight: 400 }}> (sugestões marcadas como enviadas rápido demais)</span>
             </div>
           </div>
