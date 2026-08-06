@@ -23,11 +23,23 @@ export default async function handler(req, res) {
         if (error) throw error;
         return res.json({ ok: true, campanha: data || null });
       }
+      // Galeria "Templates salvos" mostra SO templates (Ailson 06/08/2026):
+      // cada disparo cria uma linha status='disparo' (antes 'ativa') que
+      // poluia a lista com 8 registros vazios.
       const { data, error } = await supabase.from('meluni_email_campanhas')
         .select('id,assunto,titulo,status,criado_em')
+        .in('status', ['rascunho', 'salvo'])
         .order('criado_em', { ascending: false }).limit(50);
       if (error) throw error;
       return res.json({ ok: true, campanhas: data || [] });
+    }
+
+    if (req.method === 'DELETE') {
+      const id = req.query?.id;
+      if (!id) return res.status(400).json({ ok: false, erro: 'id obrigatorio' });
+      const { error } = await supabase.from('meluni_email_campanhas').delete().eq('id', id);
+      if (error) throw error;
+      return res.json({ ok: true });
     }
 
     if (req.method === 'POST') {

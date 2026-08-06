@@ -3133,10 +3133,12 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
     try {
       const r = await fetch('/api/meluni-email-mkt-campanha', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: campanhaId, ...campanha, status: 'rascunho' }),
+        // 'salvo' (Ailson 06/08/2026): clicar em Salvar deixa o template SALVO,
+        // nao como rascunho.
+        body: JSON.stringify({ id: campanhaId, ...campanha, status: 'salvo' }),
       });
       const j = await r.json();
-      if (j.ok) { setCampanhaId(j.id); alert('Campanha salva ✓'); } else alert(j.erro || 'Falha ao salvar.');
+      if (j.ok) { setCampanhaId(j.id); alert('Template salvo ✓'); } else alert(j.erro || 'Falha ao salvar.');
     } catch { alert('Falha ao salvar.'); }
     setSalvando(false);
   };
@@ -3461,6 +3463,18 @@ function ComposerEmail({ selCount = 0, selIds = [], onClose, onDone }) {
                       <div style={{ fontSize: 11, color: palette.inkMuted, marginTop: 2 }}>{t.status || 'rascunho'}{t.criado_em ? ` · ${new Date(t.criado_em).toLocaleDateString('pt-BR')}` : ''}</div>
                     </div>
                     <button onClick={() => usarTpl(t.id)} style={{ ...selStyle, padding: '6px 12px', fontSize: 12, fontWeight: 700, background: MELUNI, color: '#fff', borderColor: MELUNI }}>Abrir</button>
+                    <button
+                      title="Excluir este template"
+                      onClick={async () => {
+                        if (!window.confirm(`Excluir o template "${t.assunto || 'sem assunto'}"?\n\nEssa ação não pode ser desfeita.`)) return;
+                        try {
+                          const r = await fetch('/api/meluni-email-mkt-campanha?id=' + encodeURIComponent(t.id), { method: 'DELETE' });
+                          const j = await r.json();
+                          if (!j.ok) throw new Error(j.erro || 'falhou');
+                          setTpls(prev => prev.filter(x => x.id !== t.id));
+                        } catch (e) { alert('Falha ao excluir: ' + (e?.message || e)); }
+                      }}
+                      style={{ ...selStyle, padding: '6px 10px', fontSize: 12, fontWeight: 700, background: '#fff', color: '#c0392b', borderColor: '#e8b4b4', marginLeft: 6 }}>✕</button>
                   </div>
                 ))}
               </div>
