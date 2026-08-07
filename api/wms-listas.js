@@ -15,6 +15,15 @@ export const WMS_CONFIG_DEFAULT = {
   situacoes_aberto: ['em aberto', 'em andamento'],
   situacoes_finalizado: ['atendido', 'verificado'],
   canais: [], // [{canal:'Mercado Livre', corte:'12:00', envio:'14:00', alerta_min:30}]
+  // Avisos (Ailson 06/08/2026)
+  avisos_fluxo_ativo: true,       // mensagens de fluxo 10:30 / 11:30 / 13:00
+  aviso_prod_ativo: true,         // notificacao de produtividade das 13:30
+  fluxo_ref_manual: {},           // { '10:30': n, '11:30': n, '13:00': n } sobrepoe a media
+  prod_ref_manual: null,          // pedidos/hora de referencia (sobrepoe a media)
+  duracoes: {                     // minutos de exibicao
+    m1030: 10, m1130_normal: 10, m1130_atencao: 30,
+    m1300_normal: 10, m1300_atencao: 15, m1300_vermelho_ate: '14:30', prod: 40,
+  },
 };
 export async function lerWmsConfig() {
   try {
@@ -24,6 +33,11 @@ export async function lerWmsConfig() {
       situacoes_aberto: Array.isArray(p.situacoes_aberto) && p.situacoes_aberto.length ? p.situacoes_aberto : WMS_CONFIG_DEFAULT.situacoes_aberto,
       situacoes_finalizado: Array.isArray(p.situacoes_finalizado) && p.situacoes_finalizado.length ? p.situacoes_finalizado : WMS_CONFIG_DEFAULT.situacoes_finalizado,
       canais: Array.isArray(p.canais) ? p.canais : [],
+      avisos_fluxo_ativo: p.avisos_fluxo_ativo !== false,
+      aviso_prod_ativo: p.aviso_prod_ativo !== false,
+      fluxo_ref_manual: (p.fluxo_ref_manual && typeof p.fluxo_ref_manual === 'object') ? p.fluxo_ref_manual : {},
+      prod_ref_manual: p.prod_ref_manual != null && p.prod_ref_manual !== '' ? Number(p.prod_ref_manual) : null,
+      duracoes: { ...WMS_CONFIG_DEFAULT.duracoes, ...(p.duracoes || {}) },
     };
   } catch { return { ...WMS_CONFIG_DEFAULT }; }
 }
@@ -66,15 +80,50 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, config });
       }
 
+      if (acao === 'medias') {
+        // Dados que temos hoje pra formar as médias (tela de config).
+        const brt = new Date(Date.now() - 3 * 3600000);
+        const hojeD = brt.toISOString().slice(0, 10);
+        const MARCOS = { '10:30': 630, '11:30': 690, '13:00': 780 };
+        const hhmm2 = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+        const dias = [];
+        for (let k = 7; k <= 70 && dias.length < 2; k += 7) {
+          const d = new Date(brt.getTime() - k * 86400000).toISOString().slice(0, 10);
+          const { count } = await supabase.from('wms_pedidos').select('id', { count: 'exact', head: true })
+            .gte('criado_em', `${d}T00:00:00-03:00`).lt('criado_em', `${d}T23:59:59-03:00`);
+          if ((count || 0) > 0) dias.push(d);
+        }
+        const marcos = {};
+        for (const [nome, min] of Object.entries(MARCOS)) {
+          const vals = [];
+          for (const d of dias) {
+            const { count } = await supabase.from('wms_pedidos').select('id', { count: 'exact', head: true })
+              .not('finalizado_em', 'is', null)
+              .gte('finalizado_em', `${d}T00:00:00-03:00`)
+              .lt('finalizado_em', new Date(`${d}T${hhmm2(min)}:00-03:00`).toISOString());
+            vals.push(count || 0);
+          }
+          marcos[nome] = { dias_usados: dias, valores: vals, media: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null };
+        }
+        const { data: hist } = await supabase.from('wms_produtividade')
+          .select('data, pedidos_por_hora').lt('data', hojeD).order('data', { ascending: false }).limit(14);
+        const validos = (hist || []).filter(h => h.pedidos_por_hora > 0);
+        const prodMedia = validos.length
+          ? +(validos.reduce((s, h) => s + Number(h.pedidos_por_hora), 0) / validos.length).toFixed(1) : null;
+        return res.status(200).json({ ok: true, dia_semana: brt.getUTCDay(), marcos, produtividade: { media: prodMedia, dias: validos.length } });
+      }
+
       if (acao === 'andamento') {
         // AVISOS PARCIAIS (Ailson 06/08/2026). Marcos 10:30, 11:30 e 13:00.
-        // Corte 12:00, limite de despacho 14:00.
+        // Corte 12:00, limite de envio 14:00.
         //  10:30 -> so volume vs media das 2 ultimas ocorrencias do MESMO dia
         //           da semana no mesmo horario (sabado so compara com sabado).
         //  11:30/13:00 -> projecao: ritmo de hoje x (abertos + em separacao +
         //           previsao de entrada ate as 12:00).
         // Janelas de exibicao: 10:30 = 10min | 11:30 = 10min normal / 30min
         // atencao | 13:00 = 10min normal / 15min atencao / ate 14:30 vermelho.
+        const cfgA = await lerWmsConfig();
+        if (!cfgA.avisos_fluxo_ativo) return res.status(200).json({ ok: true, aviso: null, desativado: true });
         const MARCOS = { '10:30': 630, '11:30': 690, '13:00': 780 };
         const brtAgora = new Date(Date.now() - 3 * 3600000);
         const hoje = brtAgora.toISOString().slice(0, 10);
@@ -136,6 +185,9 @@ export default async function handler(req, res) {
           for (const d of refs) vals.push(await finalizadosAte(d, marcoAtivo.min));
           mediaRef = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
         }
+        // ajuste manual sobrepoe a media calculada
+        const manual = cfgA.fluxo_ref_manual?.[marcoAtivo.nome];
+        if (manual != null && !Number.isNaN(Number(manual))) mediaRef = Number(manual);
 
         let situacao = 'normal', titulo = '', texto = '', projecaoFim = null, ritmo = null;
 
@@ -177,10 +229,10 @@ export default async function handler(req, res) {
             } else if (minFim <= 900) {
               situacao = 'risco';
               titulo = 'Ritmo bom, volume acima do normal';
-              texto = `${restam} pedidos na fila e ritmo de ${ritmo}/h: no ritmo atual a separação fecha por volta das ${projecaoFim}, depois do despacho das 14:00.`;
+              texto = `${restam} pedidos na fila e ritmo de ${ritmo}/h: no ritmo atual a separação fecha por volta das ${projecaoFim}, depois do envio das 14:00.`;
             } else {
               situacao = 'vermelho';
-              titulo = '🚨 Risco de estourar o despacho';
+              titulo = '🚨 Risco de estourar o envio';
               texto = `${restam} pedidos na fila e ritmo de ${ritmo}/h: a previsão é só fechar por volta das ${projecaoFim}. Precisa de mais gente na separação pra dar tempo.`;
             }
           } else {
@@ -191,9 +243,12 @@ export default async function handler(req, res) {
         }
 
         // janela de exibicao conforme a situacao
-        const jan = marcoAtivo.nome === '10:30' ? 10
-          : marcoAtivo.nome === '11:30' ? (situacao === 'normal' || situacao === 'sem_base' ? 10 : 30)
-          : (situacao === 'vermelho' ? (870 - marcoAtivo.min) : situacao === 'normal' || situacao === 'sem_base' ? 10 : 15);
+        const D = cfgA.duracoes || {};
+        const minDoHhmm = (t, fb) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})$/); return m ? (+m[1]) * 60 + (+m[2]) : fb; };
+        const jan = marcoAtivo.nome === '10:30' ? (D.m1030 ?? 10)
+          : marcoAtivo.nome === '11:30' ? (situacao === 'normal' || situacao === 'sem_base' ? (D.m1130_normal ?? 10) : (D.m1130_atencao ?? 30))
+          : (situacao === 'vermelho' ? (minDoHhmm(D.m1300_vermelho_ate, 870) - marcoAtivo.min)
+            : (situacao === 'normal' || situacao === 'sem_base' ? (D.m1300_normal ?? 10) : (D.m1300_atencao ?? 15)));
         const visivel = minAgora <= marcoAtivo.min + jan;
 
         // snapshot do marco (uma vez por dia)
@@ -333,6 +388,13 @@ export default async function handler(req, res) {
             corte: String(x.corte || ''), envio: String(x.envio || ''),
             alerta_min: parseInt(x.alerta_min) || 0,
           })).filter(x => x.canal),
+          avisos_fluxo_ativo: c.avisos_fluxo_ativo !== false,
+          aviso_prod_ativo: c.aviso_prod_ativo !== false,
+          fluxo_ref_manual: Object.fromEntries(Object.entries(c.fluxo_ref_manual || {})
+            .filter(([, v]) => v !== '' && v != null && !Number.isNaN(Number(v)))
+            .map(([k, v]) => [k, Number(v)])),
+          prod_ref_manual: (c.prod_ref_manual === '' || c.prod_ref_manual == null) ? null : Number(c.prod_ref_manual),
+          duracoes: { ...WMS_CONFIG_DEFAULT.duracoes, ...(c.duracoes || {}) },
           _updated: new Date().toISOString(),
         };
         const { error } = await supabase.from('amicia_data')

@@ -151,10 +151,26 @@ function ListaRef({ g, modoFalta, faltaDe, onTapSku }) {
 const CANAIS_CONFIG = ['Mercado Livre', 'Shopee', 'Shein', 'TikTok', 'Magalu', 'Outros'];
 const SITUACOES_CONHECIDAS = ['em aberto', 'em andamento', 'atendido', 'verificado'];
 
-function ConfigScreen({ config, salvando, onSalvar }) {
+function ConfigScreen({ config, salvando, onSalvar, API }) {
   const [abertas, setAbertas] = useState(config.situacoes_aberto || []);
   const [finalizadas, setFinalizadas] = useState(config.situacoes_finalizado || []);
   const [novaSit, setNovaSit] = useState('');
+  // Avisos (Ailson 06/08/2026)
+  const [avisosFluxo, setAvisosFluxo] = useState(config.avisos_fluxo_ativo !== false);
+  const [avisoProd, setAvisoProd] = useState(config.aviso_prod_ativo !== false);
+  const [refManual, setRefManual] = useState(config.fluxo_ref_manual || {});
+  const [prodManual, setProdManual] = useState(config.prod_ref_manual ?? '');
+  const [dur, setDur] = useState(config.duracoes || {});
+  const [medias, setMedias] = useState(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`${API}/wms-listas?acao=medias`);
+        const d = await r.json();
+        if (d.ok) setMedias(d);
+      } catch { /* silencioso */ }
+    })();
+  }, [API]);
   const [novaSitDestino, setNovaSitDestino] = useState('aberto');
   const [canais, setCanais] = useState(() => CANAIS_CONFIG.map(nome => {
     const ex = (config.canais || []).find(c => String(c.canal).toLowerCase() === nome.toLowerCase());
@@ -234,9 +250,99 @@ function ConfigScreen({ config, salvando, onSalvar }) {
         </div>
       </div>
 
+      {/* AVISOS DE FLUXO */}
+      <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', marginBottom: 4 }}>
+          <input type="checkbox" checked={avisosFluxo} onChange={e => setAvisosFluxo(e.target.checked)} style={{ width: 17, height: 17 }} />
+          <span style={{ fontSize: 14.5, fontWeight: 800, color: palette.ink }}>Mensagens de fluxo (10:30 · 11:30 · 13:00)</span>
+        </label>
+        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12 }}>
+          Comparam o dia com a média das 2 últimas ocorrências do mesmo dia da semana e projetam a hora de término.
+        </div>
+        {avisosFluxo && (<>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px 10px', alignItems: 'center', fontSize: 13, marginBottom: 12 }}>
+            <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>MARCO</div>
+            <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>MÉDIA QUE TEMOS</div>
+            <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>AJUSTE MANUAL</div>
+            {['10:30', '11:30', '13:00'].map(m => {
+              const info = medias?.marcos?.[m];
+              return (
+                <React.Fragment key={m}>
+                  <div style={{ fontWeight: 700 }}>{m}</div>
+                  <div style={{ color: palette.inkMuted, fontSize: 12.5 }}>
+                    {info == null ? '…' : info.media == null ? 'sem histórico ainda'
+                      : `${info.media} finalizados (${info.valores.join(' e ')} nos ${info.dias_usados.length} dia(s) usados)`}
+                  </div>
+                  <input type="number" min="0" placeholder="—" value={refManual[m] ?? ''}
+                    onChange={e => setRefManual(r => ({ ...r, [m]: e.target.value }))}
+                    style={{ width: 78, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+                </React.Fragment>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: palette.inkSoft, marginBottom: 7 }}>Tempo que cada aviso fica na tela (minutos)</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {[
+              ['m1030', '10:30'], ['m1130_normal', '11:30 normal'], ['m1130_atencao', '11:30 atenção'],
+              ['m1300_normal', '13:00 normal'], ['m1300_atencao', '13:00 atenção'],
+            ].map(([k, l]) => (
+              <label key={k} style={{ fontSize: 12, color: palette.inkSoft }}>
+                {l}<br />
+                <input type="number" min="1" max="180" value={dur[k] ?? ''}
+                  onChange={e => setDur(d => ({ ...d, [k]: parseInt(e.target.value) || 0 }))}
+                  style={{ width: 70, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginTop: 3 }} />
+              </label>
+            ))}
+            <label style={{ fontSize: 12, color: palette.inkSoft }}>
+              13:00 vermelho até<br />
+              <input type="time" value={dur.m1300_vermelho_ate || '14:30'}
+                onChange={e => setDur(d => ({ ...d, m1300_vermelho_ate: e.target.value }))}
+                style={{ padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginTop: 3 }} />
+            </label>
+          </div>
+        </>)}
+      </div>
+
+      {/* AVISO DE PRODUTIVIDADE */}
+      <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', marginBottom: 4 }}>
+          <input type="checkbox" checked={avisoProd} onChange={e => setAvisoProd(e.target.checked)} style={{ width: 17, height: 17 }} />
+          <span style={{ fontSize: 14.5, fontWeight: 800, color: palette.ink }}>Aviso de produtividade das 13:30</span>
+        </label>
+        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12 }}>
+          Média por pedido e pedidos/hora do dia (janela até 12:45), comparados com a referência. Não aparece quando há risco de estourar o envio.
+        </div>
+        {avisoProd && (
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ fontSize: 12.5, color: palette.inkMuted }}>
+              Média que temos:<br />
+              <b style={{ fontSize: 15, color: palette.ink }}>
+                {medias?.produtividade?.media != null ? `${medias.produtividade.media} pedidos/h` : 'sem histórico ainda'}
+              </b>
+              {medias?.produtividade?.dias ? <span> · {medias.produtividade.dias} dia(s)</span> : null}
+            </div>
+            <label style={{ fontSize: 12, color: palette.inkSoft }}>
+              Ajuste manual (pedidos/h)<br />
+              <input type="number" min="0" step="0.1" placeholder="—" value={prodManual}
+                onChange={e => setProdManual(e.target.value)}
+                style={{ width: 100, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginTop: 3 }} />
+            </label>
+            <label style={{ fontSize: 12, color: palette.inkSoft }}>
+              Fica na tela (min)<br />
+              <input type="number" min="1" max="180" value={dur.prod ?? 40}
+                onChange={e => setDur(d => ({ ...d, prod: parseInt(e.target.value) || 0 }))}
+                style={{ width: 80, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginTop: 3 }} />
+            </label>
+          </div>
+        )}
+      </div>
+
       <button onClick={() => onSalvar({
         situacoes_aberto: abertas, situacoes_finalizado: finalizadas,
         canais: canais.filter(c => c.corte || c.envio),
+        avisos_fluxo_ativo: avisosFluxo, aviso_prod_ativo: avisoProd,
+        fluxo_ref_manual: refManual, prod_ref_manual: prodManual,
+        duracoes: dur,
       })} disabled={salvando} style={{ width: '100%', padding: '14px', borderRadius: 13, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: salvando ? 0.6 : 1 }}>
         {salvando ? 'Salvando…' : '💾 Salvar configurações'}
       </button>
@@ -663,7 +769,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     if (!canais.length) {
       // sem config: aviso genérico 12:00/14:00
       const pend = (dash.total?.abertos || 0) + (dash.total?.em_separacao || 0);
-      if (pend && hAgora >= 720 && hAgora < 840) out.push({ cor: '#c0392b', txt: `⏰ ${pend} pedidos pendentes e o despacho é até 14:00 — prioridade na separação! (configura os horários por canal no ⚙)` });
+      if (pend && hAgora >= 720 && hAgora < 840) out.push({ cor: '#c0392b', txt: `⏰ ${pend} pedidos pendentes e o envio é até 14:00 — prioridade na separação! (configura os horários por canal no ⚙)` });
       else if (pend && hAgora >= 630 && hAgora < 720) out.push({ cor: '#9a6b00', txt: `⏳ Corte às 12:00 — ${pend} pedidos pendentes. Bom momento pra imprimir a lista. (configura os horários por canal no ⚙)` });
       return out;
     }
@@ -752,10 +858,17 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
             if (!prod?.hoje?.pedidos_por_hora) return null;
             const agora = new Date();
             const minAgora = agora.getHours() * 60 + agora.getMinutes();
-            if (minAgora < 810 || minAgora > 850) return null; // 13:30 → 14:10
-            // com risco de estourar o despacho, nada de parabéns (Ailson 06/08)
+            if (config && config.aviso_prod_ativo === false) return null;
+            const durProd = Number(config?.duracoes?.prod ?? 40);
+            if (minAgora < 810 || minAgora > 810 + durProd) return null; // 13:30 + duração
+            // com risco de estourar o envio, nada de parabéns (Ailson 06/08)
             if (andamento?.risco_estouro) return null;
-            const av = avaliarVariacao(prod.hoje.variacao_pct);
+            const refManualProd = config?.prod_ref_manual;
+            let varPct = prod.hoje.variacao_pct;
+            if (refManualProd != null && refManualProd > 0 && prod.hoje.pedidos_por_hora) {
+              varPct = +(((Number(prod.hoje.pedidos_por_hora) - refManualProd) / refManualProd) * 100).toFixed(1);
+            }
+            const av = avaliarVariacao(varPct);
             return (
               <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 13, background: av.tipo === 'alta' ? '#e8f6ee' : av.tipo === 'baixa' ? '#fdeaea' : '#f4f0ea', border: `1.5px solid ${av.cor}55` }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: palette.inkSoft, marginBottom: 7 }}>⏱ Produtividade da separação de hoje</div>
@@ -768,7 +881,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                     <div style={{ fontSize: 11.5, color: palette.inkMuted }}>Pedidos por hora</div>
                     <div style={{ fontSize: 19, fontWeight: 800, color: av.cor }}>
                       {av.seta} {Number(prod.hoje.pedidos_por_hora).toFixed(0)}
-                      {prod.hoje.variacao_pct != null && <span style={{ fontSize: 13, marginLeft: 6 }}>({prod.hoje.variacao_pct > 0 ? '+' : ''}{prod.hoje.variacao_pct}%)</span>}
+                      {varPct != null && <span style={{ fontSize: 13, marginLeft: 6 }}>({varPct > 0 ? '+' : ''}{varPct}%)</span>}
                     </div>
                   </div>
                 </div>
@@ -839,7 +952,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
       )}
 
       {tela === 'config' && config && (
-        <ConfigScreen config={config} salvando={salvandoCfg} onSalvar={async (nova) => {
+        <ConfigScreen config={config} API={API} salvando={salvandoCfg} onSalvar={async (nova) => {
           setSalvandoCfg(true); setErro('');
           try {
             const r = await fetch(`${API}/wms-listas`, {
