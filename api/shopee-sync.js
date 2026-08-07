@@ -83,6 +83,20 @@ export default async function handler(req, res) {
   const sns = (lista.response?.order_list || []).map(o => o.order_sn).slice(0, limite);
   if (!sns.length) return res.status(200).json({ ok: true, pedidos: 0, aviso: 'nenhum pedido na janela' });
 
+  // 2b. modo cru: devolve o detalhe completo de 1 pedido pra inspecionar campos
+  if (req.query?.raw === '1') {
+    const d = await chamar('/api/v2/order/get_order_detail', {
+      order_sn_list: sns.slice(0, 2).join(','),
+      response_optional_fields: [
+        'item_list','total_amount','create_time','order_status','payment_method',
+        'shipping_carrier','buyer_user_id','actual_shipping_fee','goods_to_declare',
+        'note','estimated_shipping_fee','pay_time','dropshipper','credit_card_number',
+        'invoice_data','checkout_shipping_carrier','reverse_shipping_fee',
+      ].join(','),
+    }, auth, ctx);
+    return res.status(200).json({ ok: true, detalhe: d.response?.order_list || d });
+  }
+
   // 2. detalhe (lotes de 50)
   const detalhes = [];
   for (let i = 0; i < sns.length; i += 50) {
