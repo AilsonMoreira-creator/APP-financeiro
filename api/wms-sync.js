@@ -124,7 +124,9 @@ export default async function handler(req, res) {
       let pagina = 1;
       while (true) {
         if (Date.now() - inicio > 260000) break;
-        const url = `https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=${alvo.id}&dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=${pagina}&limite=100`;
+        // Bling v3 filtra por idsSituacoes[] — o `situacaoId` (estilo v2) e
+        // IGNORADO e devolve TODOS os pedidos da janela (Ailson 07/08/2026).
+        const url = `https://api.bling.com.br/Api/v3/pedidos/vendas?idsSituacoes%5B%5D=${alvo.id}&dataInicial=${dataInicial}&dataFinal=${dataFinal}&pagina=${pagina}&limite=100`;
         const resp = await blingFetch(url, headers);
         if (!resp.ok) { r.erros++; break; }
         const d = await resp.json();
