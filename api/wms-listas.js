@@ -27,6 +27,18 @@ export const WMS_CONFIG_DEFAULT = {
     m1300_normal: 10, m1300_atencao: 15, m1300_vermelho_ate: '14:30', prod: 40,
   },
 };
+// Corte UNICO pra dividir a fila entre "ate o corte" e "depois do corte"
+// (Ailson 07/08/2026). A config tem corte POR CANAL, mas ele so serve pros
+// avisos de prazo; pra separacao vale um horario so.
+export const CORTE_LISTA = '12:00';
+// Instante do corte de HOJE em BRT (ISO). Pedido com criado_em >= isso e
+// pos-corte. criado_em = quando o sync viu o pedido pela 1a vez (precisao de
+// 15 min de manha / 30 min de tarde, que e o intervalo do cron).
+export function corteDeHoje() {
+  const hojeBrt = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  return new Date(`${hojeBrt}T${CORTE_LISTA}:00-03:00`).toISOString();
+}
+
 export async function lerWmsConfig() {
   try {
     const { data } = await supabase.from('amicia_data').select('payload').eq('user_id', 'wms-config').maybeSingle();
@@ -58,25 +70,29 @@ export default async function handler(req, res) {
 
       if (acao === 'dashboard') {
         const { data: rows, error } = await supabase.from('wms_pedidos')
-          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em')
+          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em')
           .neq('status_wms', 'cancelado');
         if (error) throw error;
         const hoje = new Date().toISOString().slice(0, 10);
+        const corteMs = new Date(corteDeHoje()).getTime();
         const porConta = {};
         const porCanal = {};
-        const tot = { abertos: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
+        const tot = { abertos: 0, abertos_pos_corte: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
         for (const r of (rows || [])) {
-          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
+          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, abertos_pos_corte: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
           if (r.status_wms === 'pendente') { c.aguardando++; tot.aguardando++; k.pendentes++; }
-          else if (r.status_wms === 'aberto') { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; k.pendentes++; }
+          else if (r.status_wms === 'aberto') {
+            c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; k.pendentes++;
+            if (r.criado_em && new Date(r.criado_em).getTime() >= corteMs) { c.abertos_pos_corte++; tot.abertos_pos_corte++; }
+          }
           else if (r.status_wms === 'em_separacao') { c.em_separacao++; tot.em_separacao++; k.pendentes++; }
           else if (r.status_wms === 'finalizado' && String(r.finalizado_em || '').slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
         }
         const { data: ultSync } = await supabase.from('wms_pedidos')
           .select('visto_em').order('visto_em', { ascending: false }).limit(1);
         const config = await lerWmsConfig();
-        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, config, ultimo_sync: ultSync?.[0]?.visto_em || null });
+        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, config, corte_lista: CORTE_LISTA, corte_em: corteDeHoje(), ultimo_sync: ultSync?.[0]?.visto_em || null });
       }
 
       if (acao === 'config') {
@@ -376,7 +392,7 @@ export default async function handler(req, res) {
       if (acao === 'pedidos') {
         const status = String(req.query?.status || 'aberto');
         let q = supabase.from('wms_pedidos')
-          .select('id, conta, pedido_id, numero, numero_loja, data_pedido, situacao_nome, loja_nome, canal_geral, canal_detalhe, cliente_nome, itens, qtd_skus, qtd_pecas, multi_sku, lista_id, impresso_em, finalizado_em, pendente_em, tentativas')
+          .select('id, conta, pedido_id, numero, numero_loja, data_pedido, situacao_nome, loja_nome, canal_geral, canal_detalhe, cliente_nome, itens, qtd_skus, qtd_pecas, multi_sku, lista_id, impresso_em, finalizado_em, pendente_em, tentativas, criado_em')
           .eq('status_wms', status)
           .order('data_pedido', { ascending: true }).limit(2000);
         const conta = String(req.query?.conta || '');
@@ -385,7 +401,7 @@ export default async function handler(req, res) {
         if (loja) q = q.eq('canal_geral', loja);
         const { data, error } = await q;
         if (error) throw error;
-        return res.status(200).json({ ok: true, pedidos: data || [] });
+        return res.status(200).json({ ok: true, pedidos: data || [], corte_em: corteDeHoje(), corte_lista: CORTE_LISTA });
       }
 
       return res.status(400).json({ error: 'acao inválida' });

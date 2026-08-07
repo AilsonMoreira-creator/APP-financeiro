@@ -536,6 +536,8 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [fConta, setFConta] = useState('todas');
   const [fLoja, setFLoja] = useState('todas');
   const [fStatus, setFStatus] = useState('aberto'); // aberto | em_separacao
+  const [fJanela, setFJanela] = useState('todos');  // todos | ate_corte (Ailson 07/08)
+  const [corteEm, setCorteEm] = useState(null);     // instante do corte de hoje (ISO)
   const [ordem, setOrdem] = useState('qtd');        // qtd | loc
   const [visual, setVisual] = useState('auto');     // auto | matriz | lista
   const [pedidos, setPedidos] = useState([]);
@@ -620,6 +622,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
       const d = await r.json();
       if (!d.ok) throw new Error(d.error || 'falhou');
       setPedidos(d.pedidos || []);
+      if (d.corte_em) setCorteEm(d.corte_em);
     } catch (e) { setErro(e.message); }
     setCarregando(false);
   }, [fStatus]);
@@ -635,10 +638,22 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     return [...s].sort();
   }, [pedidos, fConta]);
 
+  // corte de hoje em ms (fallback: 12:00 local, se o endpoint ainda nao voltou)
+  const corteMs = useMemo(() => {
+    if (corteEm) return new Date(corteEm).getTime();
+    const d = new Date(); d.setHours(12, 0, 0, 0); return d.getTime();
+  }, [corteEm]);
+  const ehPosCorte = useCallback((p) => !!p.criado_em && new Date(p.criado_em).getTime() >= corteMs, [corteMs]);
+
   const pedidosFiltrados = useMemo(() => pedidos.filter(p =>
     (fConta === 'todas' || p.conta === fConta) &&
-    (fLoja === 'todas' || p.canal_geral === fLoja)
-  ), [pedidos, fConta, fLoja]);
+    (fLoja === 'todas' || p.canal_geral === fLoja) &&
+    (fJanela === 'todos' || !ehPosCorte(p))
+  ), [pedidos, fConta, fLoja, fJanela, ehPosCorte]);
+  const qtdPosCorte = useMemo(() => pedidos.filter(p =>
+    (fConta === 'todas' || p.conta === fConta) &&
+    (fLoja === 'todas' || p.canal_geral === fLoja) && ehPosCorte(p)
+  ).length, [pedidos, fConta, fLoja, ehPosCorte]);
 
   // blocos por conta (padrão: as 3 separadas)
   const blocos = useMemo(() => {
@@ -865,7 +880,14 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {[
-              { k: 'abertos', titulo: 'Pedidos Abertos', sub: 'lista ainda não impressa', Icon: Package, cor: palette.accent, extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '' },
+              // sub quebra a fila em antes/depois do corte das 12:00 (Ailson 07/08)
+              {
+                k: 'abertos', titulo: 'Pedidos Abertos', Icon: Package, cor: palette.accent,
+                sub: dash?.total && dash.total.abertos_pos_corte > 0
+                  ? `${dash.total.abertos - dash.total.abertos_pos_corte} até o corte · ${dash.total.abertos_pos_corte} depois do corte`
+                  : 'lista ainda não impressa',
+                extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '',
+              },
               { k: 'em_separacao', titulo: 'Em Separação', sub: 'lista impressa, separando', Icon: ClipboardList, cor: '#9a6b00' },
               { k: 'finalizados_hoje', titulo: 'Finalizados Hoje', sub: 'bipados + etiqueta (Verificado)', Icon: CheckCircle2, cor: '#1e8e4e' },
               { k: 'aguardando', titulo: 'Aguardando', sub: 'faltou mercadoria · volta na próxima onda', Icon: Clock, cor: '#9a6b00' },
@@ -1158,6 +1180,17 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
               <button onClick={() => setFStatus('aberto')} style={btn(fStatus === 'aberto')}>Abertos</button>
               <button onClick={() => setFStatus('em_separacao')} style={btn(fStatus === 'em_separacao')}>Em separação</button>
             </div>
+            <span style={{ width: 1, height: 22, background: palette.beige }} />
+            {/* janela do corte (Ailson 07/08): "Todos" inclui o que entrou depois das 12:00 */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => setFJanela('todos')} style={btn(fJanela === 'todos')}>Todos os pedidos</button>
+              <button onClick={() => setFJanela('ate_corte')} style={btn(fJanela === 'ate_corte')}>Até o corte (12:00)</button>
+            </div>
+            {fJanela === 'todos' && qtdPosCorte > 0 && (
+              <span style={{ fontSize: 11.5, color: palette.inkMuted, flexBasis: '100%' }}>
+                {qtdPosCorte} {qtdPosCorte === 1 ? 'pedido entrou' : 'pedidos entraram'} depois do corte das 12:00.
+              </span>
+            )}
           </div>
 
           {/* ações */}
