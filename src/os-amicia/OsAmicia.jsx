@@ -849,143 +849,13 @@ function TabMarketplaces({ usuario, isAdmin, C, SERIF, CALIBRI }) {
           23/04/2026: Ailson ja tem esses cruzamentos na Calculadora.
           OS Amicia foca em sugestoes acionaveis, nao em relatorios. */}
       <Card3CanaisComp      C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
-      <Card4ContasBling     C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+      {/* Card 4 (Contas Bling) removido a pedido do Ailson 07/08/2026 */}
       <Card5TopMovers       C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
       <Card2Vendas24m       C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
 
-      {/* Barra de ação */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 16,
-          flexWrap: 'wrap',
-        }}
-      >
-        <button
-          onClick={dispararAgora}
-          disabled={disparando}
-          style={{
-            background: C.iaDarker,
-            color: '#fff',
-            border: 'none',
-            borderRadius: 8,
-            padding: '10px 18px',
-            fontSize: 13,
-            fontWeight: 700,
-            fontFamily: SERIF,
-            cursor: disparando ? 'wait' : 'pointer',
-            opacity: disparando ? 0.6 : 1,
-          }}
-        >
-          {disparando ? '⏳ Analisando…' : '⚡ Disparar agora'}
-        </button>
-        <button
-          onClick={carregar}
-          disabled={loading}
-          style={{
-            background: 'transparent',
-            color: C.iaDarker,
-            border: `1px solid ${C.iaDark}`,
-            borderRadius: 8,
-            padding: '10px 14px',
-            fontSize: 12,
-            fontFamily: SERIF,
-            cursor: loading ? 'wait' : 'pointer',
-            opacity: loading ? 0.6 : 1,
-          }}
-        >
-          {loading ? 'Carregando…' : '🔄 Atualizar feed'}
-        </button>
-        <div style={{ marginLeft: 'auto', fontSize: 11, color: C.muted }}>
-          {insights.length} insight{insights.length === 1 ? '' : 's'} ativo{insights.length === 1 ? '' : 's'}
-        </div>
-      </div>
-
-      {/* Resultado do último disparo */}
-      {ultimoDisparo && (
-        <div
-          style={{
-            background: ultimoDisparo.modo?.startsWith('fallback') ? '#fff8e1' : '#e8f5e9',
-            border: `1px solid ${ultimoDisparo.modo?.startsWith('fallback') ? C.warning : C.success}`,
-            borderRadius: 8,
-            padding: 12,
-            marginBottom: 16,
-            fontSize: 12,
-            color: C.iaDarker,
-            fontFamily: CALIBRI,
-          }}
-        >
-          <b>Disparo concluído:</b> modo <code>{ultimoDisparo.modo}</code>,{' '}
-          {ultimoDisparo.total} insight{ultimoDisparo.total === 1 ? '' : 's'} gerado
-          {ultimoDisparo.total === 1 ? '' : 's'}, custo R$ {(ultimoDisparo.custo_brl || 0).toFixed(4)},{' '}
-          {ultimoDisparo.duracao_ms}ms
-          {ultimoDisparo.erro_claude && (
-            <div style={{ marginTop: 6, color: C.critical, fontSize: 11 }}>
-              ⚠ Claude: {ultimoDisparo.erro_claude}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Erro */}
-      {erro && (
-        <div
-          style={{
-            background: '#fce4e4',
-            border: `1px solid ${C.critical}`,
-            borderRadius: 8,
-            padding: 12,
-            marginBottom: 16,
-            fontSize: 12,
-            color: C.critical,
-          }}
-        >
-          ❌ {erro}
-        </div>
-      )}
-
-      {/* Lista de insights */}
-      {loading && insights.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: C.muted, fontSize: 12 }}>
-          Carregando insights…
-        </div>
-      ) : insights.length === 0 ? (
-        <div
-          style={{
-            background: '#fff',
-            border: `1px dashed ${C.cream}`,
-            borderRadius: 12,
-            padding: 40,
-            textAlign: 'center',
-            color: C.muted,
-          }}
-        >
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🛒</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: C.blueDark }}>
-            Nenhum insight de marketplaces ainda
-          </div>
-          <div style={{ fontSize: 12, marginTop: 6 }}>
-            Clique em <b>⚡ Disparar agora</b> pra gerar a primeira análise.
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {insights.map(i => (
-            <CardInsight
-              key={i.id}
-              insight={i}
-              onFeedback={enviarFeedback}
-              enviando={feedbackEnviando[i.id]}
-              jaRespondido={feedbackDado[i.id]}
-              C={C}
-              SERIF={SERIF}
-              CALIBRI={CALIBRI}
-            />
-          ))}
-        </div>
-      )}
+      {/* Barra de ação e feed de insights removidos a pedido do Ailson 07/08/2026
+          ("não estou acompanhando"). O cron de insights segue rodando; se um dia
+          quiser de volta, é só restaurar este bloco. */}
     </div>
   );
 }
@@ -1027,6 +897,7 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
     shein: 'Shein',
     tiktok: 'TikTok Shop',
     meluni: 'Meluni',
+    magalu: 'Magalu',
     outros: 'Outros',
   };
 
@@ -1036,6 +907,7 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
     shein: '#000',
     tiktok: '#010101',
     meluni: '#8B7355',
+    magalu: '#0086FF',
     outros: C.muted,
   };
 
@@ -1045,6 +917,7 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
     shein: '#fff',
     tiktok: '#fff',
     meluni: '#fff',
+    magalu: '#fff',
     outros: '#fff',
   };
 
