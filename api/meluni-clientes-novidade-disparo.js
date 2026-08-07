@@ -6,6 +6,10 @@
 // POST { ids: [clienteId, ...], cfg?: 'lara_templates_novidade', versao?: 'moletinho' }
 import { dispararNovidadeParaIds, MAX_POR_CHAMADA } from './_meluni-novidade-core.js';
 
+// Sem isso a Vercel cortava a função no tempo padrão e o front ficava
+// pendurado esperando resposta (Ailson 07/08/2026: "ficou enviando até travar").
+export const config = { maxDuration: 300 };
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
