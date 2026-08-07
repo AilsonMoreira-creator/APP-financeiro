@@ -3933,7 +3933,7 @@ const DetalhamentoModal=({corte,onClose,onSave,onDelete})=>{
   );
 };
 
-const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD,isAdmin=true,pendingSnapshotIds,abaPedida,onAbaConsumida})=>{
+const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,oficinasCAD,setOficinasCAD,logTroca,setLogTroca,setAuxDataPorMes,tecidosCAD=[],setTecidosCAD,isAdmin=true,pendingSnapshotIds,abaPedida,onAbaConsumida})=>{
   const [aba,setAba]=useState("cortes");
   // Abre numa sub-aba específica quando vem da home (ex.: card Caseado → aba caseado)
   useEffect(()=>{if(abaPedida){setAba(abaPedida);onAbaConsumida&&onAbaConsumida();}},[abaPedida]);
@@ -4562,7 +4562,12 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,oficinasCAD,setOfi
               </div>
               <div style={{background:"#fff",borderRadius:12,border:"1px solid #e8e2da",overflow:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:500}}><thead><tr style={{background:"#4a7fa5"}}>{["Ref","Descrição","Marca","Tecido","Vl. Unit.",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",color:"#fff",fontSize:10,fontWeight:600}}>{h}</th>)}</tr></thead>
-                  <tbody>{prodsFilt.length===0&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{buscaProd?`Nenhum produto com "${buscaProd}"`:"Nenhum produto cadastrado"}</td></tr>}{prodsFilt.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span>{isAdmin&&<span onClick={()=>setProdutos(prev=>prev.filter(x=>x.ref!==p.ref))} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span>}</td></tr>))}</tbody>
+                  <tbody>{prodsFilt.length===0&&<tr><td colSpan={6} style={{padding:24,textAlign:"center",color:"#c0b8b0",fontSize:13}}>{buscaProd?`Nenhum produto com "${buscaProd}"`:"Nenhum produto cadastrado"}</td></tr>}{prodsFilt.map(p=>(<tr key={p.ref} style={{borderBottom:"1px solid #f0ebe4"}}><td style={{padding:"8px 12px",fontWeight:700,color:"#2c3e50"}}>{p.ref}</td><td style={{padding:"8px 12px",color:"#2c3e50"}}>{p.descricao}</td><td style={{padding:"8px 12px"}}><span style={{fontSize:10,color:"#fff",background:p.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 6px"}}>{p.marca}</span></td><td style={{padding:"8px 12px",color:p.tecido?"#2c3e50":"#c0b8b0",fontSize:12}}>{p.tecido||"—"}</td><td style={{padding:"8px 12px",textAlign:"right",color:"#2c3e50",fontWeight:700,fontFamily:_FN}}>{fmt(p.valorUnit)}</td><td style={{padding:"8px 8px",textAlign:"center"}}><span onClick={()=>{const vStr=Number(p.valorUnit).toFixed(2).replace(".",",");setFormProd({ref:p.ref,descricao:p.descricao,marca:p.marca,valorUnit:vStr,tecido:p.tecido||""});setEditProdRef(p.ref);}} style={{cursor:"pointer",color:"#4a7fa5",fontSize:13,marginRight:8}}>✏</span>{isAdmin&&<span onClick={()=>{
+                    // Exclusão passa pelo App (registra a lápide) — sem isso o
+                    // merge com o payload de cortes re-adiciona o produto.
+                    if(onExcluirProduto)onExcluirProduto(p.ref);
+                    else setProdutos(prev=>prev.filter(x=>x.ref!==p.ref));
+                  }} style={{cursor:"pointer",color:"#d0c8c0",fontSize:13}}>×</span>}</td></tr>))}</tbody>
                 </table>
               </div></>);})()}
             </div>
@@ -9934,6 +9939,14 @@ export default function App(){
   // Abas de despesa que SEMPRE recriam as linhas do mes anterior (zeradas). Default = as 4 fixas.
   const [abasRecorrentes,setAbasRecorrentes]=useState([...CATS_FIXAS]);
   const [cortes,setCortes]=useState([]);
+  // LÁPIDES DE EXCLUSÃO (Ailson 07/08/2026): o catálogo vive em DOIS payloads
+  // (amicia-admin e ailson_cortes) e os merges de load/realtime re-adicionam
+  // qualquer ref que exista no outro lado — por isso produto excluído voltava.
+  // Aqui guardamos { ref: timestamp } e os merges ignoram refs excluídas depois
+  // da última alteração do produto do outro lado.
+  const [produtosExcluidos,setProdutosExcluidos]=useState({});
+  const produtosExcluidosRef=useRef({});
+  useEffect(()=>{produtosExcluidosRef.current=produtosExcluidos||{};},[produtosExcluidos]);
   const [produtos,setProdutos]=useState([
     {ref:"2700",descricao:"VESTIDO LINHO SEM ELASTANO",marca:"Meluni",valorUnit:1,tecido:"Linho s/ elastano"},
     {ref:"1060",descricao:"CALÇA PANTALONA VISCOLINHO",marca:"Amícia",valorUnit:1,tecido:"Viscolinho"},
@@ -10341,6 +10354,7 @@ export default function App(){
         if(d.cortes){setCortes(d.cortes);lastCorteLoadTs.current=Date.now();try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
         if(d.oficinasCAD&&d.oficinasCAD.length>0)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
+        if(d.produtosExcluidos){setProdutosExcluidos(prev=>({...prev,...d.produtosExcluidos}));produtosExcluidosRef.current={...produtosExcluidosRef.current,...d.produtosExcluidos};}
         // Merge produtos do cortes payload com os já carregados do payload principal
         if(d.produtos&&d.produtos.length>0){
           setProdutos(prev=>{
@@ -10352,8 +10366,11 @@ export default function App(){
               if(cp&&(cp._mod||0)>(mp._mod||0)){mudou=true;return cp;}
               return mp;
             });
-            // Produtos novos que só existem no cortes (não-admin adicionou)
+            // Produtos novos que só existem no cortes (não-admin adicionou),
+            // exceto os que foram excluídos aqui depois da última edição deles
             for(const [ref,cp] of cortesMap){
+              const exc=(d.produtosExcluidos||{})[ref]||produtosExcluidosRef.current[ref];
+              if(exc&&exc>=(cp._mod||0))continue;
               if(!mainMap.has(ref)){merged.push(cp);mudou=true;}
             }
             if(mudou)console.log("LOAD: merge produtos — cortes tinha",d.produtos.length,", resultado:",merged.length);
@@ -10533,6 +10550,8 @@ export default function App(){
               return lp;
             });
             for(const [ref,rp] of remoteMap){
+              const exc=produtosExcluidosRef.current[ref];
+              if(exc&&exc>=(rp._mod||0))continue;
               if(!localMap.has(ref)){merged.push(rp);mudou=true;}
             }
             if(mudou)console.log("REALTIME OFICINAS: merge produtos aplicado");
@@ -11049,7 +11068,7 @@ export default function App(){
   useEffect(()=>{
     if(!dbCarregado)return;
     // SEMPRE atualiza dadosRef — flush/retry precisam do snapshot mais recente
-    const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,produtos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
+    const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,produtos,produtosExcluidos,oficinasCAD,logTroca,tecidosCAD,fixosConfig,fixosNomesFunc};
     dadosRef.current=dados;
     if(!usuarioLogado?.admin){return;}
     // Guard: não salva antes do Supabase load ter completado
@@ -11669,7 +11688,7 @@ export default function App(){
                 // Flush: salva local + Supabase imediatamente ao trocar de módulo (SOMENTE ADMIN)
                 if(usuarioLogado?.admin){
                   if(debounceRef.current)clearTimeout(debounceRef.current);
-                  const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,oficinasCAD,logTroca,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
+                  const dados={receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,produtos,produtosExcluidos,oficinasCAD,logTroca,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc};
                   salvarLocal(dados);
                   salvarNoSupabase(dados);
                 }
@@ -11851,7 +11870,7 @@ export default function App(){
         {active==="meluni"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('meluni'))&&<ModuleErrorBoundary><Meluni userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="wms"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('wms'))&&<ModuleErrorBoundary><PickingWMS userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="reativar"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('reativar'))&&<ModuleErrorBoundary><ClientesReativarModule userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
-        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
+        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} onExcluirProduto={(ref)=>{const ts=Date.now();setProdutosExcluidos(prev=>{const n={...prev,[ref]:ts};produtosExcluidosRef.current=n;return n;});setProdutos(prev=>prev.filter(x=>x.ref!==ref));}} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
