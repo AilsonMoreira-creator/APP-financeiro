@@ -159,7 +159,9 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
   const [avisosFluxo, setAvisosFluxo] = useState(config.avisos_fluxo_ativo !== false);
   const [avisoProd, setAvisoProd] = useState(config.aviso_prod_ativo !== false);
   const [refManual, setRefManual] = useState(config.fluxo_ref_manual || {});
+  const [refModo, setRefModo] = useState(config.fluxo_ref_modo || {});
   const [prodManual, setProdManual] = useState(config.prod_ref_manual ?? '');
+  const [prodModo, setProdModo] = useState(config.prod_ref_modo === 'manual' ? 'manual' : 'auto');
   const [dur, setDur] = useState(config.duracoes || {});
   const [medias, setMedias] = useState(null);
   useEffect(() => {
@@ -262,8 +264,8 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
         {avisosFluxo && (<>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px 10px', alignItems: 'center', fontSize: 13, marginBottom: 12 }}>
             <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>MARCO</div>
-            <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>MÉDIA QUE TEMOS</div>
-            <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>AJUSTE MANUAL</div>
+            <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>MÉDIA AUTOMÁTICA</div>
+            <div style={{ fontWeight: 800, color: palette.inkSoft, fontSize: 11.5 }}>MANUAL · USAR QUAL</div>
             {['10:30', '11:30', '13:00'].map(m => {
               const info = medias?.marcos?.[m];
               return (
@@ -273,9 +275,23 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
                     {info == null ? '…' : info.media == null ? 'sem histórico ainda'
                       : `${info.media} finalizados (${info.valores.join(' e ')} nos ${info.dias_usados.length} dia(s) usados)`}
                   </div>
-                  <input type="number" min="0" placeholder="—" value={refManual[m] ?? ''}
-                    onChange={e => setRefManual(r => ({ ...r, [m]: e.target.value }))}
-                    style={{ width: 78, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <input type="number" min="0" placeholder="—" value={refManual[m] ?? ''}
+                      onChange={e => setRefManual(r => ({ ...r, [m]: e.target.value }))}
+                      style={{ width: 72, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13 }} />
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[['auto', 'auto'], ['manual', 'manual']].map(([v, l]) => {
+                        const on = (refModo[m] === 'manual' ? 'manual' : 'auto') === v;
+                        return (
+                          <button key={v} onClick={() => setRefModo(r => ({ ...r, [m]: v }))} style={{
+                            padding: '4px 9px', borderRadius: 7, fontSize: 11, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+                            border: on ? `1.5px solid ${palette.accent}` : `1px solid ${palette.beige}`,
+                            background: on ? palette.accentSoft : '#fff', color: on ? palette.accent : palette.inkMuted,
+                          }}>{l}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </React.Fragment>
               );
             })}
@@ -322,11 +338,23 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
               {medias?.produtividade?.dias ? <span> · {medias.produtividade.dias} dia(s)</span> : null}
             </div>
             <label style={{ fontSize: 12, color: palette.inkSoft }}>
-              Ajuste manual (pedidos/h)<br />
+              Manual (pedidos/h)<br />
               <input type="number" min="0" step="0.1" placeholder="—" value={prodManual}
                 onChange={e => setProdManual(e.target.value)}
                 style={{ width: 100, padding: '6px 8px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13, marginTop: 3 }} />
             </label>
+            <div style={{ fontSize: 12, color: palette.inkSoft }}>
+              Usar qual<br />
+              <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
+                {[['auto', 'automática'], ['manual', 'manual']].map(([v, l]) => (
+                  <button key={v} onClick={() => setProdModo(v)} style={{
+                    padding: '5px 11px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT,
+                    border: prodModo === v ? `1.5px solid ${palette.accent}` : `1px solid ${palette.beige}`,
+                    background: prodModo === v ? palette.accentSoft : '#fff', color: prodModo === v ? palette.accent : palette.inkMuted,
+                  }}>{l}</button>
+                ))}
+              </div>
+            </div>
             <label style={{ fontSize: 12, color: palette.inkSoft }}>
               Fica na tela (min)<br />
               <input type="number" min="1" max="180" value={dur.prod ?? 40}
@@ -341,7 +369,8 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
         situacoes_aberto: abertas, situacoes_finalizado: finalizadas,
         canais: canais.filter(c => c.corte || c.envio),
         avisos_fluxo_ativo: avisosFluxo, aviso_prod_ativo: avisoProd,
-        fluxo_ref_manual: refManual, prod_ref_manual: prodManual,
+        fluxo_ref_manual: refManual, fluxo_ref_modo: refModo,
+        prod_ref_manual: prodManual, prod_ref_modo: prodModo,
         duracoes: dur,
       })} disabled={salvando} style={{ width: '100%', padding: '14px', borderRadius: 13, border: 'none', background: '#1e8e4e', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, opacity: salvando ? 0.6 : 1 }}>
         {salvando ? 'Salvando…' : '💾 Salvar configurações'}
@@ -863,7 +892,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
             if (minAgora < 810 || minAgora > 810 + durProd) return null; // 13:30 + duração
             // com risco de estourar o envio, nada de parabéns (Ailson 06/08)
             if (andamento?.risco_estouro) return null;
-            const refManualProd = config?.prod_ref_manual;
+            const refManualProd = config?.prod_ref_modo === 'manual' ? config?.prod_ref_manual : null;
             let varPct = prod.hoje.variacao_pct;
             if (refManualProd != null && refManualProd > 0 && prod.hoje.pedidos_por_hora) {
               varPct = +(((Number(prod.hoje.pedidos_por_hora) - refManualProd) / refManualProd) * 100).toFixed(1);

@@ -18,8 +18,10 @@ export const WMS_CONFIG_DEFAULT = {
   // Avisos (Ailson 06/08/2026)
   avisos_fluxo_ativo: true,       // mensagens de fluxo 10:30 / 11:30 / 13:00
   aviso_prod_ativo: true,         // notificacao de produtividade das 13:30
-  fluxo_ref_manual: {},           // { '10:30': n, '11:30': n, '13:00': n } sobrepoe a media
-  prod_ref_manual: null,          // pedidos/hora de referencia (sobrepoe a media)
+  fluxo_ref_manual: {},           // { '10:30': n, ... } valor manual (guardado sempre)
+  fluxo_ref_modo: {},             // { '10:30': 'auto'|'manual' } qual usar
+  prod_ref_manual: null,          // pedidos/hora manual (guardado sempre)
+  prod_ref_modo: 'auto',          // 'auto' | 'manual'
   duracoes: {                     // minutos de exibicao
     m1030: 10, m1130_normal: 10, m1130_atencao: 30,
     m1300_normal: 10, m1300_atencao: 15, m1300_vermelho_ate: '14:30', prod: 40,
@@ -36,7 +38,9 @@ export async function lerWmsConfig() {
       avisos_fluxo_ativo: p.avisos_fluxo_ativo !== false,
       aviso_prod_ativo: p.aviso_prod_ativo !== false,
       fluxo_ref_manual: (p.fluxo_ref_manual && typeof p.fluxo_ref_manual === 'object') ? p.fluxo_ref_manual : {},
+      fluxo_ref_modo: (p.fluxo_ref_modo && typeof p.fluxo_ref_modo === 'object') ? p.fluxo_ref_modo : {},
       prod_ref_manual: p.prod_ref_manual != null && p.prod_ref_manual !== '' ? Number(p.prod_ref_manual) : null,
+      prod_ref_modo: p.prod_ref_modo === 'manual' ? 'manual' : 'auto',
       duracoes: { ...WMS_CONFIG_DEFAULT.duracoes, ...(p.duracoes || {}) },
     };
   } catch { return { ...WMS_CONFIG_DEFAULT }; }
@@ -185,9 +189,11 @@ export default async function handler(req, res) {
           for (const d of refs) vals.push(await finalizadosAte(d, marcoAtivo.min));
           mediaRef = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
         }
-        // ajuste manual sobrepoe a media calculada
+        // manual so entra quando o Ailson escolheu "manual" pra esse marco
+        // (o valor fica guardado sem atrapalhar a media automatica)
         const manual = cfgA.fluxo_ref_manual?.[marcoAtivo.nome];
-        if (manual != null && !Number.isNaN(Number(manual))) mediaRef = Number(manual);
+        const modoRef = cfgA.fluxo_ref_modo?.[marcoAtivo.nome] === 'manual' ? 'manual' : 'auto';
+        if (modoRef === 'manual' && manual != null && !Number.isNaN(Number(manual))) mediaRef = Number(manual);
 
         let situacao = 'normal', titulo = '', texto = '', projecaoFim = null, ritmo = null;
 
@@ -212,11 +218,22 @@ export default async function handler(req, res) {
           const horasCorridas = Math.max(0.5, (minAgora - inicioMin) / 60);
           ritmo = +(finalHoje / horasCorridas).toFixed(1);
           // previsao de entrada ate o corte (12:00), pela media do mesmo dia da semana
+          // Previsao de entrada ate o corte das 12:00 (Ailson 06/08): media dos
+          // ULTIMOS 5 DIAS com movimento, no mesmo intervalo (marco → 12:00).
           let entradaPrevista = 0;
-          if (minAgora < 720 && refs.length) {
-            const vals = [];
-            for (const d of refs) vals.push(await entradosEntre(d, marcoAtivo.min, 720));
-            entradaPrevista = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+          if (minAgora < 720) {
+            const recentes = [];
+            for (let k = 1; k <= 20 && recentes.length < 5; k++) {
+              const d = new Date(brtAgora.getTime() - k * 86400000).toISOString().slice(0, 10);
+              const { count } = await supabase.from('wms_pedidos').select('id', { count: 'exact', head: true })
+                .gte('criado_em', `${d}T00:00:00-03:00`).lt('criado_em', `${d}T23:59:59-03:00`);
+              if ((count || 0) > 0) recentes.push(d);
+            }
+            if (recentes.length) {
+              const vals = [];
+              for (const d of recentes) vals.push(await entradosEntre(d, marcoAtivo.min, 720));
+              entradaPrevista = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+            }
           }
           const restam = abertos + emSep + entradaPrevista;
           if (ritmo > 0) {
@@ -393,7 +410,9 @@ export default async function handler(req, res) {
           fluxo_ref_manual: Object.fromEntries(Object.entries(c.fluxo_ref_manual || {})
             .filter(([, v]) => v !== '' && v != null && !Number.isNaN(Number(v)))
             .map(([k, v]) => [k, Number(v)])),
+          fluxo_ref_modo: Object.fromEntries(Object.entries(c.fluxo_ref_modo || {}).map(([k, v]) => [k, v === 'manual' ? 'manual' : 'auto'])),
           prod_ref_manual: (c.prod_ref_manual === '' || c.prod_ref_manual == null) ? null : Number(c.prod_ref_manual),
+          prod_ref_modo: c.prod_ref_modo === 'manual' ? 'manual' : 'auto',
           duracoes: { ...WMS_CONFIG_DEFAULT.duracoes, ...(c.duracoes || {}) },
           _updated: new Date().toISOString(),
         };
