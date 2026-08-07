@@ -1288,17 +1288,31 @@ function SecaoClientes() {
     const m = modalNovidade;
     if (!m || !m.versao || disparando) return;
     setDisparando(true); setDispMsg('');
-    try {
-      const r = await fetch('/api/meluni-clientes-novidade-disparo', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: m.ids, versao: m.versao }),
-      });
-      const j = await r.json();
-      if (j.ok) {
-        setDispMsg(`✓ ${j.enviados ?? 0} enviado(s)${j.pulados ? ` · ${j.pulados} pulado(s)` : ''}${j.erros ? ` · ${j.erros} erro(s)` : ''}`);
-        setSel(new Set()); carregar();
-      } else { setDispMsg(j.erro || 'falhou'); }
-    } catch { setDispMsg('falhou'); }
+    // Envia em LOTES de 30 (limite do backend por chamada), com progresso na
+    // tela e timeout por lote — antes mandava a lista inteira de uma vez e a
+    // tela travava esperando a resposta (Ailson 07/08/2026).
+    const LOTE = 30;
+    const lotes = [];
+    for (let i = 0; i < m.ids.length; i += LOTE) lotes.push(m.ids.slice(i, i + LOTE));
+    let enviados = 0, pulados = 0, erros = 0, falhou = false;
+    for (let i = 0; i < lotes.length; i++) {
+      setDispMsg(`Enviando… lote ${i + 1} de ${lotes.length} (${enviados} enviados)`);
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 290000);
+        const r = await fetch('/api/meluni-clientes-novidade-disparo', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: lotes[i], versao: m.versao }),
+          signal: ctrl.signal,
+        });
+        clearTimeout(t);
+        const j = await r.json();
+        if (j.ok) { enviados += j.enviados || 0; pulados += j.pulados || 0; erros += j.erros || 0; }
+        else { falhou = true; setDispMsg(j.erro || 'falhou'); break; }
+      } catch { falhou = true; setDispMsg(`Interrompido no lote ${i + 1} · ${enviados} enviados até aqui`); break; }
+    }
+    if (!falhou) setDispMsg(`✅ ${enviados} enviado(s)${pulados ? ` · ${pulados} pulado(s)` : ''}${erros ? ` · ${erros} erro(s)` : ''}`);
+    setSel(new Set()); carregar();
     setDisparando(false); setModalNovidade(null);
     setTimeout(() => setDispMsg(''), 8000);
   };
