@@ -69,10 +69,13 @@ export default async function handler(req, res) {
   // sync como backlog fantasma. Remover quando a disciplina do Verificado
   // cobrir o histórico. Override consciente: ?desde=YYYY-MM-DD.
   const DATA_INICIO_OPERACAO = '2026-08-05';
+  // ?diag=1 -> so LISTA o que o Bling devolve (nao grava nada) e ignora o piso,
+  // pra comparar com o que aparece no modulo (Ailson 07/08/2026)
+  const diag = req.query?.diag === '1';
   let dataInicial = new Date(Date.now() - dias * 86400000).toISOString().slice(0, 10);
   const qDesde = String(req.query?.desde || '');
   if (/^\d{4}-\d{2}-\d{2}$/.test(qDesde)) dataInicial = qDesde;
-  else if (dataInicial < DATA_INICIO_OPERACAO) dataInicial = DATA_INICIO_OPERACAO;
+  else if (!diag && dataInicial < DATA_INICIO_OPERACAO) dataInicial = DATA_INICIO_OPERACAO;
   const dataFinal = new Date().toISOString().slice(0, 10);
 
   const cfg = await lerWmsConfig();
@@ -138,6 +141,24 @@ export default async function handler(req, res) {
       }
     }
     r.listados = pedidosLista.length;
+
+    if (diag) {
+      // so contabiliza: por situacao, por data e o que ja esta no banco
+      const porSit = {}, porData = {};
+      for (const p of pedidosLista) {
+        porSit[p.situacaoNome] = (porSit[p.situacaoNome] || 0) + 1;
+        porData[p.data || 'sem data'] = (porData[p.data || 'sem data'] || 0) + 1;
+      }
+      const idsD = pedidosLista.map(p => p.id);
+      let noBanco = 0;
+      for (let i = 0; i < idsD.length; i += 400) {
+        const { data: ex } = await supabase.from('wms_pedidos')
+          .select('pedido_id').eq('conta', conta).in('pedido_id', idsD.slice(i, i + 400));
+        noBanco += (ex || []).length;
+      }
+      r.diag = { janela: `${dataInicial} a ${dataFinal}`, por_situacao: porSit, por_data: porData, ja_no_banco: noBanco, fora_do_banco: pedidosLista.length - noBanco };
+      continue;
+    }
 
     // 2. separa novos vs cacheados
     const ids = pedidosLista.map(p => p.id);
