@@ -102,7 +102,7 @@ export default async function handler(req, res) {
   for (let i = 0; i < sns.length; i += 50) {
     const d = await chamar('/api/v2/order/get_order_detail', {
       order_sn_list: sns.slice(i, i + 50).join(','),
-      response_optional_fields: 'item_list,total_amount,create_time,order_status',
+      response_optional_fields: 'item_list,total_amount,create_time,order_status,payment_method,invoice_data,actual_shipping_fee',
     }, auth, ctx);
     if (d.error) return res.status(400).json({ etapa: 'get_order_detail', erro: d.error, mensagem: d.message });
     detalhes.push(...(d.response?.order_list || []));
