@@ -108,38 +108,39 @@ export default async function handler(req, res) {
     detalhes.push(...(d.response?.order_list || []));
   }
 
-  // 3. escrow (1 a 1) — o rateio real
-  const linhas = [];
-  for (const sn of sns) {
-    const e = await chamar('/api/v2/payment/get_escrow_detail', { order_sn: sn }, auth, ctx);
-    if (e.error) {
-      if (dry) return res.status(400).json({ etapa: 'get_escrow_detail', erro: e.error, mensagem: e.message, dica: 'se for permissão, habilite a API payment no console' });
-      continue;
-    }
-    const oi = e.response?.order_income || {};
-    const det = detalhes.find(d => d.order_sn === sn) || {};
-    linhas.push({
-      shop_id: auth.shop_id, conta: auth.conta, order_sn: sn,
+  // 3. monta as linhas a partir do DETALHE (o escrow exige permissão que o app
+  //    ainda não tem). Aqui já dá pra separar o que interessa (Ailson 07/08):
+  //      - desconto PRÓPRIO  = model_original_price → model_discounted_price
+  //      - desconto da SHOPEE = valor dos produtos → total pago pelo comprador
+  //        (é onde entra o Pix 5% subsidiado e os vouchers da plataforma)
+  const linhas = detalhes.map(det => {
+    const itens = det.item_list || [];
+    const somaOriginal = itens.reduce((a, it) => a + (Number(it.model_original_price) || 0) * (Number(it.model_quantity_purchased) || 1), 0);
+    const somaComDesc = itens.reduce((a, it) => a + (Number(it.model_discounted_price) || 0) * (Number(it.model_quantity_purchased) || 1), 0);
+    const totalPago = Number(det.total_amount) || 0;
+    const produtosValor = Number(det.invoice_data?.products_total_value) || somaComDesc;
+    return {
+      shop_id: auth.shop_id, conta: auth.conta, order_sn: det.order_sn,
       criado_em_shopee: det.create_time ? new Date(det.create_time * 1000).toISOString() : null,
-      valor_bruto: oi.original_price ?? null,
-      valor_recebido: oi.escrow_amount ?? null,
-      desconto_vendedor: oi.seller_discount ?? null,
-      desconto_shopee: oi.shopee_discount ?? null,
-      voucher_vendedor: oi.voucher_from_seller ?? null,
-      voucher_shopee: oi.voucher_from_shopee ?? null,
-      comissao: oi.commission_fee ?? null,
-      taxa_servico: oi.service_fee ?? null,
-      taxa_transacao: oi.transaction_fee ?? null,
-      frete_vendedor: oi.actual_shipping_fee ?? null,
-      itens: det.item_list || [],
-      bruto: dry ? oi : undefined,
-    });
-    await new Promise(r => setTimeout(r, 120));
-  }
+      payment_method: det.payment_method || null,
+      valor_bruto: somaOriginal || null,
+      total_pago: totalPago || null,
+      produtos_valor: produtosValor || null,
+      nf_numero: det.invoice_data?.number || null,
+      frete_real: Number(det.actual_shipping_fee) || null,
+      desconto_proprio: Math.max(0, +(somaOriginal - somaComDesc).toFixed(2)),
+      desconto_plataforma: Math.max(0, +(somaComDesc - totalPago).toFixed(2)),
+      itens: itens.map(it => ({
+        item_sku: it.item_sku, model_sku: it.model_sku, nome: it.item_name,
+        variacao: it.model_name, qtd: it.model_quantity_purchased,
+        preco_original: it.model_original_price, preco_com_desconto: it.model_discounted_price,
+      })),
+      atualizado_em: new Date().toISOString(),
+    };
+  });
 
   if (dry) return res.status(200).json({ ok: true, total: linhas.length, amostra: linhas.slice(0, 3) });
 
-  for (const l of linhas) { delete l.bruto; }
   const { error } = await supabase.from('shopee_pedidos').upsert(linhas, { onConflict: 'order_sn' });
   if (error) return res.status(500).json({ error: error.message });
   return res.status(200).json({ ok: true, gravados: linhas.length });
