@@ -880,17 +880,12 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         <div style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {[
-              // sub quebra a fila em antes/depois do corte das 12:00 (Ailson 07/08)
-              {
-                k: 'abertos', titulo: 'Pedidos Abertos', Icon: Package, cor: palette.accent,
-                sub: dash?.total && dash.total.abertos_pos_corte > 0
-                  ? `${dash.total.abertos - dash.total.abertos_pos_corte} até o corte · ${dash.total.abertos_pos_corte} depois do corte`
-                  : 'lista ainda não impressa',
-                extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '',
-              },
+              { k: 'abertos', titulo: 'Pedidos Abertos', sub: 'lista ainda não impressa', Icon: Package, cor: palette.accent, extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '' },
               { k: 'em_separacao', titulo: 'Em Separação', sub: 'lista impressa, separando', Icon: ClipboardList, cor: '#9a6b00' },
               { k: 'finalizados_hoje', titulo: 'Finalizados Hoje', sub: 'bipados + etiqueta (Verificado)', Icon: CheckCircle2, cor: '#1e8e4e' },
               { k: 'aguardando', titulo: 'Aguardando', sub: 'faltou mercadoria · volta na próxima onda', Icon: Clock, cor: '#9a6b00' },
+              // fila de amanhã: entrou depois do corte, vira "aberto" na virada do dia (Ailson 07/08)
+              { k: 'pra_amanha', titulo: 'Pedidos pra Amanhã', sub: 'entraram depois do corte das 12:00', Icon: Clock, cor: palette.inkSoft },
             ].map(c => (
               <div key={c.k} onClick={c.k === 'aguardando' ? () => setTela('aguardando') : undefined}
                 style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 18, boxShadow: '0 1px 4px rgba(44,62,80,0.05)', cursor: c.k === 'aguardando' ? 'pointer' : 'default' }}>

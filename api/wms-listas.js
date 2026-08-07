@@ -77,14 +77,17 @@ export default async function handler(req, res) {
         const corteMs = new Date(corteDeHoje()).getTime();
         const porConta = {};
         const porCanal = {};
-        const tot = { abertos: 0, abertos_pos_corte: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
+        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
         for (const r of (rows || [])) {
-          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, abertos_pos_corte: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
+          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, pra_amanha: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
           if (r.status_wms === 'pendente') { c.aguardando++; tot.aguardando++; k.pendentes++; }
           else if (r.status_wms === 'aberto') {
-            c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; k.pendentes++;
-            if (r.criado_em && new Date(r.criado_em).getTime() >= corteMs) { c.abertos_pos_corte++; tot.abertos_pos_corte++; }
+            k.pendentes++;
+            // entrou depois do corte -> fila de AMANHA (vira aberto sozinho na
+            // virada do dia, quando o corte de "hoje" passa a ser o de amanha)
+            if (r.criado_em && new Date(r.criado_em).getTime() >= corteMs) { c.pra_amanha++; tot.pra_amanha++; }
+            else { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; }
           }
           else if (r.status_wms === 'em_separacao') { c.em_separacao++; tot.em_separacao++; k.pendentes++; }
           else if (r.status_wms === 'finalizado' && String(r.finalizado_em || '').slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
