@@ -386,6 +386,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [detBusca, setDetBusca] = useState('');
   const [porContaAberto, setPorContaAberto] = useState(false);
   const [prod, setProd] = useState(null);
+  const [andamento, setAndamento] = useState(null);
   // Repasse de faltas (Ailson 05/08): auxiliar circula no papel, responsável
   // toca na tela. Map 'conta|ref|cor|tam' → quantidade que faltou.
   const [modoFalta, setModoFalta] = useState(false);
@@ -438,6 +439,20 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     } catch { /* silencioso: métrica não bloqueia a operação */ }
   }, []);
   useEffect(() => { carregarProd(); }, [carregarProd]);
+
+  // avisos parciais de andamento (10:30, 11:30, 13:00) — reconsulta a cada 2min
+  const carregarAndamento = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/wms-listas?acao=andamento`);
+      const d = await r.json();
+      if (d.ok) setAndamento(d);
+    } catch { /* silencioso */ }
+  }, []);
+  useEffect(() => {
+    carregarAndamento();
+    const t = setInterval(carregarAndamento, 120000);
+    return () => clearInterval(t);
+  }, [carregarAndamento]);
 
   const sincronizar = async () => {
     setSincronizando(true); setErro('');
@@ -737,7 +752,9 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
             if (!prod?.hoje?.pedidos_por_hora) return null;
             const agora = new Date();
             const minAgora = agora.getHours() * 60 + agora.getMinutes();
-            if (minAgora < 750 || minAgora > 790) return null; // 12:30 → 13:10
+            if (minAgora < 810 || minAgora > 850) return null; // 13:30 → 14:10
+            // com risco de estourar o despacho, nada de parabéns (Ailson 06/08)
+            if (andamento?.risco_estouro) return null;
             const av = avaliarVariacao(prod.hoje.variacao_pct);
             return (
               <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 13, background: av.tipo === 'alta' ? '#e8f6ee' : av.tipo === 'baixa' ? '#fdeaea' : '#f4f0ea', border: `1.5px solid ${av.cor}55` }}>
@@ -756,6 +773,22 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                   </div>
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: av.cor }}>{av.msg}</div>
+              </div>
+            );
+          })()}
+
+          {/* aviso parcial de andamento (Ailson 06/08) — abaixo dos cards */}
+          {andamento?.aviso && (() => {
+            const a = andamento.aviso;
+            const cor = a.situacao === 'vermelho' ? '#c0392b'
+              : a.situacao === 'risco' || a.situacao === 'atencao' ? '#9a6b00' : '#1e8e4e';
+            const fundo = a.situacao === 'vermelho' ? '#fdeaea'
+              : a.situacao === 'risco' || a.situacao === 'atencao' ? '#fff6e5' : '#e8f6ee';
+            return (
+              <div style={{ marginTop: 14, padding: '13px 16px', borderRadius: 13, background: fundo, border: `1.5px solid ${cor}55` }}>
+                <div style={{ fontSize: 11.5, color: palette.inkMuted, marginBottom: 3 }}>Andamento · {a.marco}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: cor, marginBottom: 4 }}>{a.titulo}</div>
+                <div style={{ fontSize: 13.5, color: palette.inkSoft }}>{a.texto}</div>
               </div>
             );
           })()}

@@ -66,19 +66,168 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, config });
       }
 
+      if (acao === 'andamento') {
+        // AVISOS PARCIAIS (Ailson 06/08/2026). Marcos 10:30, 11:30 e 13:00.
+        // Corte 12:00, limite de despacho 14:00.
+        //  10:30 -> so volume vs media das 2 ultimas ocorrencias do MESMO dia
+        //           da semana no mesmo horario (sabado so compara com sabado).
+        //  11:30/13:00 -> projecao: ritmo de hoje x (abertos + em separacao +
+        //           previsao de entrada ate as 12:00).
+        // Janelas de exibicao: 10:30 = 10min | 11:30 = 10min normal / 30min
+        // atencao | 13:00 = 10min normal / 15min atencao / ate 14:30 vermelho.
+        const MARCOS = { '10:30': 630, '11:30': 690, '13:00': 780 };
+        const brtAgora = new Date(Date.now() - 3 * 3600000);
+        const hoje = brtAgora.toISOString().slice(0, 10);
+        const minAgora = brtAgora.getUTCHours() * 60 + brtAgora.getUTCMinutes();
+        const diaSemana = brtAgora.getUTCDay();
+        const hhmm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(Math.round(min % 60)).padStart(2, '0')}`;
+
+        // finalizados de um dia ate um minuto do dia
+        const finalizadosAte = async (dia, min) => {
+          const lim = new Date(`${dia}T${hhmm(min)}:00-03:00`).toISOString();
+          const { count } = await supabase.from('wms_pedidos')
+            .select('id', { count: 'exact', head: true })
+            .not('finalizado_em', 'is', null)
+            .gte('finalizado_em', `${dia}T00:00:00-03:00`).lt('finalizado_em', lim);
+          return count || 0;
+        };
+        // pedidos que ENTRARAM (apareceram no sync) entre dois minutos do dia
+        const entradosEntre = async (dia, minA, minB) => {
+          const { count } = await supabase.from('wms_pedidos')
+            .select('id', { count: 'exact', head: true })
+            .gte('criado_em', new Date(`${dia}T${hhmm(minA)}:00-03:00`).toISOString())
+            .lt('criado_em', new Date(`${dia}T${hhmm(minB)}:00-03:00`).toISOString());
+          return count || 0;
+        };
+        // ultimas N ocorrencias do mesmo dia da semana (antes de hoje)
+        const diasMesmoDiaSemana = async (n) => {
+          const out = [];
+          for (let k = 7; k <= 70 && out.length < n; k += 7) {
+            const d = new Date(brtAgora.getTime() - k * 86400000).toISOString().slice(0, 10);
+            const { count } = await supabase.from('wms_pedidos')
+              .select('id', { count: 'exact', head: true })
+              .gte('criado_em', `${d}T00:00:00-03:00`).lt('criado_em', `${d}T23:59:59-03:00`);
+            if ((count || 0) > 0) out.push(d);
+          }
+          return out;
+        };
+
+        // marco ativo + janela de exibicao (a janela depende da situacao,
+        // entao calculamos a situacao primeiro pro marco mais recente passado)
+        let marcoAtivo = null;
+        for (const [nome, min] of Object.entries(MARCOS)) {
+          if (minAgora >= min && minAgora <= min + 90) marcoAtivo = { nome, min };
+        }
+        if (!marcoAtivo) return res.status(200).json({ ok: true, aviso: null });
+
+        const { data: rows } = await supabase.from('wms_pedidos')
+          .select('status_wms, finalizado_em, criado_em')
+          .neq('status_wms', 'cancelado')
+          .gte('criado_em', `${hoje}T00:00:00-03:00`);
+        const lista = rows || [];
+        const abertos = lista.filter(r => r.status_wms === 'aberto').length;
+        const emSep = lista.filter(r => r.status_wms === 'em_separacao').length;
+        const finalHoje = await finalizadosAte(hoje, minAgora);
+
+        const refs = await diasMesmoDiaSemana(2);
+        let mediaRef = null;
+        if (refs.length) {
+          const vals = [];
+          for (const d of refs) vals.push(await finalizadosAte(d, marcoAtivo.min));
+          mediaRef = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+        }
+
+        let situacao = 'normal', titulo = '', texto = '', projecaoFim = null, ritmo = null;
+
+        if (marcoAtivo.nome === '10:30') {
+          if (mediaRef == null) {
+            situacao = 'sem_base';
+            titulo = `${finalHoje} pedidos finalizados até agora`;
+            texto = `Ainda estou formando o histórico deste dia da semana — a comparação começa quando houver ${2 - refs.length} dia(s) a mais.`;
+          } else if (finalHoje >= mediaRef * 0.9) {
+            situacao = 'normal';
+            titulo = 'Fluxo normal';
+            texto = `${finalHoje} finalizados até agora (média das últimas ${refs.length === 1 ? 'vez' : '2 vezes'} nesse dia e horário: ${mediaRef}).`;
+          } else {
+            situacao = 'atencao';
+            const pct = Math.round((1 - finalHoje / (mediaRef || 1)) * 100);
+            titulo = 'Atenção no ritmo';
+            texto = `${finalHoje} finalizados até agora, ${pct}% abaixo da média desse dia e horário (${mediaRef}).`;
+          }
+        } else {
+          // projecao (11:30 e 13:00)
+          const inicioMin = 8 * 60 + 40; // referencia: separacao comeca ~8h40
+          const horasCorridas = Math.max(0.5, (minAgora - inicioMin) / 60);
+          ritmo = +(finalHoje / horasCorridas).toFixed(1);
+          // previsao de entrada ate o corte (12:00), pela media do mesmo dia da semana
+          let entradaPrevista = 0;
+          if (minAgora < 720 && refs.length) {
+            const vals = [];
+            for (const d of refs) vals.push(await entradosEntre(d, marcoAtivo.min, 720));
+            entradaPrevista = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+          }
+          const restam = abertos + emSep + entradaPrevista;
+          if (ritmo > 0) {
+            const minFim = minAgora + (restam / ritmo) * 60;
+            projecaoFim = hhmm(minFim);
+            if (minFim <= 840) {
+              situacao = 'normal';
+              titulo = 'Fluxo normal';
+              texto = `${restam} pedidos na fila e ritmo de ${ritmo}/h: a previsão é fechar por volta das ${projecaoFim}.`;
+            } else if (minFim <= 900) {
+              situacao = 'risco';
+              titulo = 'Ritmo bom, volume acima do normal';
+              texto = `${restam} pedidos na fila e ritmo de ${ritmo}/h: no ritmo atual a separação fecha por volta das ${projecaoFim}, depois do despacho das 14:00.`;
+            } else {
+              situacao = 'vermelho';
+              titulo = '🚨 Risco de estourar o despacho';
+              texto = `${restam} pedidos na fila e ritmo de ${ritmo}/h: a previsão é só fechar por volta das ${projecaoFim}. Precisa de mais gente na separação pra dar tempo.`;
+            }
+          } else {
+            situacao = 'sem_base';
+            titulo = `${restam} pedidos na fila`;
+            texto = 'Ainda sem finalizados suficientes pra calcular o ritmo de hoje.';
+          }
+        }
+
+        // janela de exibicao conforme a situacao
+        const jan = marcoAtivo.nome === '10:30' ? 10
+          : marcoAtivo.nome === '11:30' ? (situacao === 'normal' || situacao === 'sem_base' ? 10 : 30)
+          : (situacao === 'vermelho' ? (870 - marcoAtivo.min) : situacao === 'normal' || situacao === 'sem_base' ? 10 : 15);
+        const visivel = minAgora <= marcoAtivo.min + jan;
+
+        // snapshot do marco (uma vez por dia)
+        try {
+          await supabase.from('wms_snapshots').insert({
+            data: hoje, dia_semana: diaSemana, marco: marcoAtivo.nome,
+            finalizados: finalHoje, abertos, em_separacao: emSep,
+            entrados_dia: lista.length, ritmo_hora: ritmo, projecao_fim: projecaoFim, situacao,
+          });
+        } catch { /* ja existe */ }
+
+        return res.status(200).json({
+          ok: true,
+          aviso: visivel ? { marco: marcoAtivo.nome, situacao, titulo, texto } : null,
+          risco_estouro: situacao === 'risco' || situacao === 'vermelho',
+          detalhe: { finalizados: finalHoje, abertos, em_separacao: emSep, media_ref: mediaRef, ritmo, projecao_fim: projecaoFim },
+        });
+      }
+
       if (acao === 'produtividade') {
         // Métrica de separação (Ailson 05/08/2026):
         // cronômetro = 1ª impressão do dia + 10 min de margem → corte 12:00.
         // Desconta 25s por pedido que estava "em separação" no corte (mercadoria
         // já separada, faltando só bipar). Média por pedido e pedidos/hora.
-        const MARGEM_MIN = 10, DESC_SEG_POR_PEDIDO = 25, HORA_CORTE = 12;
+        // Janela de calculo ate 12:45 (Ailson 06/08/2026; era 12:00) — a
+        // notificacao passou pras 13:30.
+        const MARGEM_MIN = 10, DESC_SEG_POR_PEDIDO = 25, HORA_CORTE = 12, MIN_CORTE = 45;
         const brt = (d) => new Date(d.getTime() - 3 * 3600000); // UTC → BRT
         const agora = new Date();
         const hojeBrt = brt(agora).toISOString().slice(0, 10);
-        const corteEm = new Date(`${hojeBrt}T${String(HORA_CORTE).padStart(2, '0')}:00:00-03:00`);
+        const corteEm = new Date(`${hojeBrt}T${String(HORA_CORTE).padStart(2, '0')}:${String(MIN_CORTE).padStart(2, '0')}:00-03:00`);
 
         const calcularDia = async (dia) => {
-          const corte = new Date(`${dia}T${String(HORA_CORTE).padStart(2, '0')}:00:00-03:00`);
+          const corte = new Date(`${dia}T${String(HORA_CORTE).padStart(2, '0')}:${String(MIN_CORTE).padStart(2, '0')}:00-03:00`);
           const { data: listas } = await supabase.from('wms_listas')
             .select('criado_em').gte('criado_em', `${dia}T00:00:00-03:00`).lt('criado_em', corte.toISOString())
             .order('criado_em', { ascending: true }).limit(1);
