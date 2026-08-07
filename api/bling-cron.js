@@ -221,7 +221,10 @@ export default async function handler(req, res) {
               loja_nome: lojaNome || '',
               loja_id: ped.loja?.id || null,
               intermediador: ped.intermediador || null,
-              numero_pedido_loja: ped.numeroPedidoLoja || null,
+              // Bling v3 devolve 'numeroLoja' (o 'numeroPedidoLoja' vinha sempre
+              // nulo). É o order_sn da Shopee / número do pedido no marketplace —
+              // chave exata pra cruzar com a API deles (Ailson 07/08/2026).
+              numero_pedido_loja: ped.numeroLoja || ped.numeroPedidoLoja || null,
             }, { onConflict: 'conta,pedido_id' });
 
             if (error) {
