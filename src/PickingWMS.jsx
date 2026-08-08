@@ -83,11 +83,11 @@ function MatrizRef({ g, modoFalta, faltaDe, onTapSku }) {
       <thead><tr>
         <th style={thTd(true)}></th>
         {g.tamanhos.map(t => <th key={t} style={thTd(true)}>{t}</th>)}
-        <th style={thTd(true)}>Σ</th>
       </tr></thead>
       <tbody>
+        {/* coluna Σ removida a pedido do Ailson (08/08/2026): o total por cor
+            não ajuda na separação e roubava largura no celular */}
         {Object.keys(g.cores).sort().map(cor => {
-          const soma = Object.values(g.cores[cor]).reduce((s, v) => s + v, 0);
           return (
             <tr key={cor}>
               <td style={{ ...thTd(), fontWeight: 700, textAlign: 'left' }}>{cor}</td>
@@ -106,7 +106,6 @@ function MatrizRef({ g, modoFalta, faltaDe, onTapSku }) {
                   </td>
                 );
               })}
-              <td style={{ ...thTd(), fontWeight: 800, background: '#faf6ef' }}>{soma}</td>
             </tr>
           );
         })}
