@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     ];
     const tentativas = [];
     for (const path of rotas) {
-      const r = await chamarTts(path, { page_size: '20', ...(path.endsWith('transactions') && !path.includes(id) ? { sort_field: 'order_create_time' } : {}) }, auth, ctx);
+      const r = await chamarTts(path, { page_size: '20', sort_field: 'order_create_time' }, auth, ctx);
       tentativas.push({ path, code: r?.code, message: String(r?.message || '').slice(0, 70) });
       if (r?.code === 0) return res.status(200).json({ usado: path, resposta: r });
     }
