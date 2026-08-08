@@ -25,17 +25,30 @@ export default async function handler(req, res) {
   const fim = Math.floor(Date.now() / 1000);
   const ini = fim - dias * 86400;
 
-  const d = await chamarTts('/finance/202309/orders/settlements', {
-    page_size: String(limite),
-    sort_field: 'order_create_time',
-    'create_time_ge': String(ini),
-    'create_time_lt': String(fim),
-  }, auth, ctx);
+  // A rota do settlement mudou de nome entre versões da API; testa as
+  // conhecidas e fica com a primeira que responder. Ailson 08/08/2026.
+  const candidatos = [
+    ['/finance/202309/order/settlements', { sort_field: 'order_create_time' }],
+    ['/finance/202501/orders/settlements', { sort_field: 'order_create_time' }],
+    ['/finance/202309/statements', { sort_field: 'statement_time' }],
+    ['/finance/202309/transactions', { sort_field: 'order_create_time' }],
+    ['/finance/202409/orders/settlements', { sort_field: 'order_create_time' }],
+  ];
+  let d = null, usado = null, tentativas = [];
+  for (const [path, extra] of candidatos) {
+    const r = await chamarTts(path, {
+      page_size: String(limite), ...extra,
+      create_time_ge: String(ini), create_time_lt: String(fim),
+    }, auth, ctx);
+    tentativas.push({ path, code: r?.code, message: String(r?.message || '').slice(0, 70) });
+    if (r?.code === 0) { d = r; usado = path; break; }
+  }
+  if (!d) return res.status(400).json({ erro: 'nenhuma rota de repasse respondeu', tentativas });
+  if (req.query?.cru === '1') return res.status(200).json({ usado, resposta: d });
 
-  if (req.query?.cru === '1') return res.status(200).json({ resposta: d });
   if (d?.code !== 0) return res.status(400).json({ resposta: d });
 
-  const linhas = (d.data?.settlements || []).map(s => ({
+  const linhas = (d.data?.settlements || d.data?.statements || d.data?.transactions || []).map(s => ({
     pedido: s.order_id,
     receita_bruta: s.revenue_amount,
     taxas: s.fee_amount,
@@ -45,7 +58,7 @@ export default async function handler(req, res) {
   }));
   const soma = (k) => linhas.reduce((t, x) => t + (Number(x[k]) || 0), 0);
   return res.status(200).json({
-    ok: true, janela_dias: dias, pedidos: linhas.length,
+    ok: true, rota: usado, janela_dias: dias, pedidos: linhas.length,
     total_bruto: Math.round(soma('receita_bruta') * 100) / 100,
     total_taxas: Math.round(soma('taxas') * 100) / 100,
     total_liquido: Math.round(soma('liquido_a_receber') * 100) / 100,
