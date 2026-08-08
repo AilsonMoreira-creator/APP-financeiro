@@ -537,6 +537,8 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [fLoja, setFLoja] = useState('todas');
   const [fStatus, setFStatus] = useState('aberto'); // aberto | em_separacao
   const [fJanela, setFJanela] = useState('todos');  // todos | ate_corte (Ailson 07/08)
+  const [fEnvio, setFEnvio] = useState('todos');    // todos | flex (Ailson 07/08)
+  const [vendasAberto, setVendasAberto] = useState(false); // card vendas do dia (oculto por padrão)
   const [corteEm, setCorteEm] = useState(null);     // instante do corte de hoje (ISO)
   const [ordem, setOrdem] = useState('qtd');        // qtd | loc
   const [visual, setVisual] = useState('auto');     // auto | matriz | lista
@@ -644,12 +646,19 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     const d = new Date(); d.setHours(12, 0, 0, 0); return d.getTime();
   }, [corteEm]);
   const ehPosCorte = useCallback((p) => !!p.criado_em && new Date(p.criado_em).getTime() >= corteMs, [corteMs]);
+  // Flex = self_service no Mercado Livre (coleta cedo, costuma ter prioridade)
+  const ehFlexPed = useCallback((p) => p.ml_logistic_type === 'self_service', []);
 
   const pedidosFiltrados = useMemo(() => pedidos.filter(p =>
     (fConta === 'todas' || p.conta === fConta) &&
     (fLoja === 'todas' || p.canal_geral === fLoja) &&
-    (fJanela === 'todos' || !ehPosCorte(p))
-  ), [pedidos, fConta, fLoja, fJanela, ehPosCorte]);
+    (fJanela === 'todos' || !ehPosCorte(p)) &&
+    (fEnvio === 'todos' || ehFlexPed(p))
+  ), [pedidos, fConta, fLoja, fJanela, fEnvio, ehPosCorte, ehFlexPed]);
+  const qtdFlex = useMemo(() => pedidos.filter(p =>
+    (fConta === 'todas' || p.conta === fConta) &&
+    (fLoja === 'todas' || p.canal_geral === fLoja) && ehFlexPed(p)
+  ).length, [pedidos, fConta, fLoja, ehFlexPed]);
   const qtdPosCorte = useMemo(() => pedidos.filter(p =>
     (fConta === 'todas' || p.conta === fConta) &&
     (fLoja === 'todas' || p.canal_geral === fLoja) && ehPosCorte(p)
@@ -842,6 +851,11 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
     border: ativo ? `1.5px solid ${palette.accent}` : `1px solid ${palette.beige}`,
     background: ativo ? palette.accentSoft : '#fff', color: ativo ? palette.accent : palette.inkSoft,
   });
+  // rótulo dos blocos da barra de filtros (Ailson 07/08: barra ficou confusa)
+  const rotuloFiltro = {
+    fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase',
+    color: palette.inkMuted, minWidth: 92,
+  };
 
   return (
     <div style={{ fontFamily: FONT, background: palette.bg, minHeight: '100vh', paddingBottom: 40 }}>
@@ -908,6 +922,37 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                 <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 6 }}>{c.sub}{c.extra ? ` · ${c.extra}` : ''}</div>
               </div>
             ))}
+          </div>
+
+          {/* Vendas do dia — oculto por padrão pra não competir com o funil.
+              Full não passa pela separação, por isso fica à parte (Ailson 07/08) */}
+          <div className="wms-no-print" style={{ marginTop: 12 }}>
+            {!vendasAberto && (
+              <button onClick={() => setVendasAberto(true)} style={{ background: 'none', border: 'none', color: palette.inkMuted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, padding: '4px 2px' }}>
+                ▸ Ver vendas do dia
+              </button>
+            )}
+            {vendasAberto && (
+              <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 14, padding: 16, boxShadow: '0 1px 4px rgba(44,62,80,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 800, color: palette.inkSoft }}>Vendas do dia</span>
+                  <button onClick={() => setVendasAberto(false)} style={{ background: 'none', border: 'none', color: palette.inkMuted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>ocultar</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
+                  {[
+                    { l: 'Total pedidos', v: dash?.vendas_dia?.total ?? '—', d: 'loja + Full' },
+                    { l: 'Pedidos loja', v: `${dash?.vendas_dia?.loja_finalizados ?? 0} de ${dash?.vendas_dia?.loja ?? 0}`, d: 'finalizados até o momento' },
+                    { l: 'Pedidos Full', v: dash?.vendas_dia?.full ?? '—', d: 'saem do galpão do ML' },
+                  ].map(x => (
+                    <div key={x.l}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: palette.ink, lineHeight: 1.1 }}>{x.v}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: palette.inkSoft, marginTop: 3 }}>{x.l}</div>
+                      <div style={{ fontSize: 11, color: palette.inkMuted }}>{x.d}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Notificação de produtividade: aparece 12:30, dura 40 min (Ailson 05/08) */}
@@ -1162,38 +1207,44 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
       {tela === 'separacao' && (
         <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
           {/* filtros */}
-          <div className="wms-no-print" style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 13, padding: 13, marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 6 }}>
+          <div className="wms-no-print" style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 13, padding: 13, marginBottom: 14, display: 'grid', gap: 10 }}>
+            {/* 3 blocos rotulados em vez de tudo numa linha só (Ailson 07/08) */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <span style={rotuloFiltro}>O que separar</span>
+              <button onClick={() => setFStatus('aberto')} style={btn(fStatus === 'aberto')}>Abertos</button>
+              <button onClick={() => setFStatus('em_separacao')} style={btn(fStatus === 'em_separacao')}>Em separação</button>
+              <span style={{ width: 1, height: 20, background: palette.beige }} />
+              <button onClick={() => setFJanela('todos')} style={btn(fJanela === 'todos')}>Todos os pedidos</button>
+              <button onClick={() => setFJanela('ate_corte')} style={btn(fJanela === 'ate_corte')}>Até o corte (12:00)</button>
+              <span style={{ width: 1, height: 20, background: palette.beige }} />
+              <button onClick={() => setFEnvio(fEnvio === 'flex' ? 'todos' : 'flex')} style={btn(fEnvio === 'flex')}>
+                ⚡ Só Flex{qtdFlex ? ` (${qtdFlex})` : ''}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <span style={rotuloFiltro}>De onde</span>
               {['todas', ...CONTAS].map(c => (
                 <button key={c} onClick={() => { setFConta(c); setFLoja('todas'); }} style={btn(fConta === c)}>{c === 'todas' ? 'Todas' : NOME_CONTA[c]}</button>
               ))}
+              <select value={fLoja} onChange={e => setFLoja(e.target.value)} style={{ ...btn(fLoja !== 'todas'), appearance: 'auto' }}>
+                <option value="todas">Todas as lojas</option>
+                {lojasDisponiveis.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
             </div>
-            <select value={fLoja} onChange={e => setFLoja(e.target.value)} style={{ ...btn(fLoja !== 'todas'), appearance: 'auto' }}>
-              <option value="todas">Todas as lojas</option>
-              {lojasDisponiveis.map(l => <option key={l} value={l}>{l}</option>)}
-            </select>
-            <span style={{ width: 1, height: 22, background: palette.beige }} />
-            <button onClick={() => setOrdem(ordem === 'qtd' ? 'loc' : 'qtd')} style={btn(true)}>
-              {ordem === 'qtd' ? '↓ Maior quantidade' : '📍 Por localização'}
-            </button>
-            <div style={{ display: 'flex', gap: 6 }}>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <span style={rotuloFiltro}>Como mostrar</span>
+              <button onClick={() => setOrdem(ordem === 'qtd' ? 'loc' : 'qtd')} style={btn(true)}>
+                {ordem === 'qtd' ? '↓ Maior quantidade' : '📍 Por localização'}
+              </button>
               {[['auto', 'Auto'], ['matriz', 'Matriz'], ['lista', 'Lista']].map(([v, l]) => (
                 <button key={v} onClick={() => setVisual(v)} style={btn(visual === v)}>{l}</button>
               ))}
             </div>
-            <span style={{ width: 1, height: 22, background: palette.beige }} />
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => setFStatus('aberto')} style={btn(fStatus === 'aberto')}>Abertos</button>
-              <button onClick={() => setFStatus('em_separacao')} style={btn(fStatus === 'em_separacao')}>Em separação</button>
-            </div>
-            <span style={{ width: 1, height: 22, background: palette.beige }} />
-            {/* janela do corte (Ailson 07/08): "Todos" inclui o que entrou depois das 12:00 */}
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => setFJanela('todos')} style={btn(fJanela === 'todos')}>Todos os pedidos</button>
-              <button onClick={() => setFJanela('ate_corte')} style={btn(fJanela === 'ate_corte')}>Até o corte (12:00)</button>
-            </div>
-            {fJanela === 'todos' && qtdPosCorte > 0 && (
-              <span style={{ fontSize: 11.5, color: palette.inkMuted, flexBasis: '100%' }}>
+
+            {fEnvio === 'todos' && fJanela === 'todos' && qtdPosCorte > 0 && (
+              <span style={{ fontSize: 11.5, color: palette.inkMuted }}>
                 {qtdPosCorte} {qtdPosCorte === 1 ? 'pedido entrou' : 'pedidos entraram'} depois do corte das 12:00.
               </span>
             )}

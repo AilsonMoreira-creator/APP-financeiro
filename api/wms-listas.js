@@ -73,7 +73,7 @@ export default async function handler(req, res) {
 
       if (acao === 'dashboard') {
         const { data: rows, error } = await supabase.from('wms_pedidos')
-          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em, situacao_nome, servico_frete, ml_logistic_type')
+          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em, situacao_nome, servico_frete, ml_logistic_type, canal_detalhe')
           .neq('status_wms', 'cancelado');
         if (error) throw error;
         // data de HOJE em BRT — com toISOString() puro o "Finalizados Hoje"
@@ -93,7 +93,20 @@ export default async function handler(req, res) {
         //    servico_frete fica de reserva caso o Bling passe a trazer.
         const ehMeluni = (r2) => r2.conta === 'lumia' && normSitLocal(r2.canal_geral) === 'outros';
         const ehFlex = (r2) => r2.ml_logistic_type === 'self_service' || normSitLocal(r2.servico_frete).includes('flex');
+        // Full: sai do galpao do ML, a equipe nao encosta. Entra no Bling ja
+        // como atendido, entao nunca aparece no funil — mas conta venda.
+        const ehFull = (r2) => r2.ml_logistic_type === 'fulfillment' || normSitLocal(r2.canal_detalhe) === 'ml full';
+        const vendasDia = { total: 0, loja: 0, loja_finalizados: 0, full: 0 };
         for (const r of (rows || [])) {
+          // vendas do dia (card oculto por padrao): total x loja x Full
+          if (r.data_pedido === hoje) {
+            vendasDia.total++;
+            if (ehFull(r)) vendasDia.full++;
+            else {
+              vendasDia.loja++;
+              if (r.status_wms === 'finalizado') vendasDia.loja_finalizados++;
+            }
+          }
           const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
           if (r.status_wms === 'pendente') { c.aguardando++; tot.aguardando++; k.pendentes++; }
@@ -119,7 +132,7 @@ export default async function handler(req, res) {
         const { data: ultSync } = await supabase.from('wms_pedidos')
           .select('visto_em').order('visto_em', { ascending: false }).limit(1);
         const config = await lerWmsConfig();
-        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, config, corte_lista: CORTE_LISTA, corte_em: corteDeHoje(), ultimo_sync: ultSync?.[0]?.visto_em || null });
+        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: CORTE_LISTA, corte_em: corteDeHoje(), ultimo_sync: ultSync?.[0]?.visto_em || null });
       }
 
       if (acao === 'config') {
@@ -419,7 +432,7 @@ export default async function handler(req, res) {
       if (acao === 'pedidos') {
         const status = String(req.query?.status || 'aberto');
         let q = supabase.from('wms_pedidos')
-          .select('id, conta, pedido_id, numero, numero_loja, data_pedido, situacao_nome, loja_nome, canal_geral, canal_detalhe, cliente_nome, itens, qtd_skus, qtd_pecas, multi_sku, lista_id, impresso_em, finalizado_em, pendente_em, tentativas, criado_em')
+          .select('id, conta, pedido_id, numero, numero_loja, data_pedido, situacao_nome, loja_nome, canal_geral, canal_detalhe, cliente_nome, itens, qtd_skus, qtd_pecas, multi_sku, lista_id, impresso_em, finalizado_em, pendente_em, tentativas, criado_em, ml_logistic_type')
           .eq('status_wms', status)
           .order('data_pedido', { ascending: true }).limit(2000);
         const conta = String(req.query?.conta || '');
