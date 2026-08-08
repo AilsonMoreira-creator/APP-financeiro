@@ -132,6 +132,7 @@ export default async function handler(req, res) {
         const d = await resp.json();
         if (!d.data || d.data.length === 0) break;
         for (const p of d.data) {
+          if (diag && !r.amostra_crua) r.amostra_crua = p;
           const lojaObj = p.loja || {};
           let lojaNome = lojaObj.descricao || lojaObj.nome || '';
           if (!lojaNome && lojaObj.id && lojaMap[lojaObj.id]) lojaNome = lojaMap[lojaObj.id];
