@@ -136,7 +136,7 @@ export default async function handler(req, res) {
           const lojaObj = p.loja || {};
           let lojaNome = lojaObj.descricao || lojaObj.nome || '';
           if (!lojaNome && lojaObj.id && lojaMap[lojaObj.id]) lojaNome = lojaMap[lojaObj.id];
-          pedidosLista.push({ id: p.id, numero: p.numero, situacaoId: alvo.id, situacaoNome: alvo.nome, categoria: alvo.categoria, lojaNome, data: (p.data || '').slice(0, 10) });
+          pedidosLista.push({ id: p.id, numero: p.numero, numeroLoja: p.numeroLoja || null, situacaoId: alvo.id, situacaoNome: alvo.nome, categoria: alvo.categoria, lojaNome, data: (p.data || '').slice(0, 10) });
         }
         if (d.data.length < 100) break;
         pagina++;
@@ -185,7 +185,7 @@ export default async function handler(req, res) {
     const cache = new Map();
     for (let i = 0; i < ids.length; i += 400) {
       const { data: exist } = await supabase.from('wms_pedidos')
-        .select('pedido_id, situacao_bling, status_wms, impresso_em')
+        .select('pedido_id, situacao_bling, status_wms, impresso_em, numero_loja')
         .eq('conta', conta).in('pedido_id', ids.slice(i, i + 400));
       for (const e of (exist || [])) cache.set(e.pedido_id, e);
     }
@@ -195,6 +195,9 @@ export default async function handler(req, res) {
       const c = cache.get(p.id);
       if (!c) continue;
       const agora = new Date().toISOString();
+      // backfill do numero do pedido no marketplace: a LISTAGEM ja traz
+      // numeroLoja, entao nao precisa re-detalhar (Ailson 07/08/2026)
+      const faltaNumeroLoja = !c.numero_loja && p.numeroLoja;
       // NF gerada NAO tira o pedido da separacao (Ailson 07/08/2026): a Sthefany
       // gera as notas enquanto os ajudantes fazem o picking, e a bipagem do
       // checkout so comeca com a nota pronta. Entao o pedido fica no card "Em
@@ -209,17 +212,17 @@ export default async function handler(req, res) {
       const deveReabrir = p.categoria === 'aberto' && c.status_wms === 'finalizado' && !c.impresso_em;
       if (deveReabrir) {
         await supabase.from('wms_pedidos')
-          .update({ status_wms: 'aberto', finalizado_em: null, situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora })
+          .update({ status_wms: 'aberto', finalizado_em: null, situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora, ...(faltaNumeroLoja ? { numero_loja: p.numeroLoja } : {}) })
           .eq('conta', conta).eq('pedido_id', p.id);
         r.reabertos = (r.reabertos || 0) + 1;
       } else if (deveFinalizar) {
         await supabase.from('wms_pedidos')
-          .update({ status_wms: 'finalizado', finalizado_em: agora, situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora })
+          .update({ status_wms: 'finalizado', finalizado_em: agora, situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora, ...(faltaNumeroLoja ? { numero_loja: p.numeroLoja } : {}) })
           .eq('conta', conta).eq('pedido_id', p.id);
         r.finalizados = (r.finalizados || 0) + 1;
-      } else if (c.situacao_bling !== p.situacaoId) {
+      } else if (c.situacao_bling !== p.situacaoId || faltaNumeroLoja) {
         await supabase.from('wms_pedidos')
-          .update({ situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora })
+          .update({ situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora, ...(faltaNumeroLoja ? { numero_loja: p.numeroLoja } : {}) })
           .eq('conta', conta).eq('pedido_id', p.id);
         r.atualizados++;
       } else {
