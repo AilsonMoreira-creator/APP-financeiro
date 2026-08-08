@@ -25,6 +25,67 @@ export default async function handler(req, res) {
   const fim = Math.floor(Date.now() / 1000);
   const ini = fim - dias * 86400;
 
+  // ?resumo=1 -> percorre TODAS as páginas da janela e devolve a distribuição
+  // do desconto DO VENDEDOR e do desconto DA PLATAFORMA por item, em % do preço
+  // original. Serve pra conferir se o desconto dele é só 5/10/15% e se todo o
+  // resto sai do bolso do TikTok. Amostra grátis (preço 0) fica de fora — o
+  // Ailson definiu que brinde não abate lucro. Ailson 08/08/2026.
+  if (req.query?.resumo === '1') {
+    let token = null, ids = [], paginas = 0;
+    while (paginas < 20) {
+      const pg = await chamarTts('/order/202309/orders/search',
+        { page_size: '50', ...(token ? { page_token: token } : {}) }, auth, ctx,
+        { method: 'POST', body: { create_time_ge: ini, create_time_lt: fim } });
+      if (pg?.code !== 0) return res.status(400).json({ etapa: 'search', resposta: pg });
+      (pg.data?.orders || []).forEach(o => ids.push(o.id));
+      token = pg.data?.next_page_token;
+      paginas++;
+      if (!token) break;
+    }
+
+    const porFaixaVend = {}, porFaixaPlat = {};
+    let itens = 0, amostras = 0, cancelados = 0;
+    let somaOriginal = 0, somaVendido = 0, somaDescVend = 0, somaDescPlat = 0;
+    const foraDoPadrao = [];
+    const PADRAO = [0, 5, 10, 15];
+
+    for (let i = 0; i < ids.length; i += 50) {
+      const det = await chamarTts('/order/202309/orders', { ids: ids.slice(i, i + 50).join(',') }, auth, ctx);
+      if (det?.code !== 0) continue;
+      for (const o of (det.data?.orders || [])) {
+        if (String(o.status || '').toUpperCase() === 'CANCELLED') { cancelados++; continue; }
+        for (const it of (o.line_items || [])) {
+          const orig = Number(it.original_price) || 0;
+          if (orig <= 0) { amostras++; continue; }
+          const dv = Number(it.seller_discount) || 0;
+          const dp = Number(it.platform_discount) || 0;
+          itens++; somaOriginal += orig; somaVendido += Number(it.sale_price) || 0;
+          somaDescVend += dv; somaDescPlat += dp;
+          const pv = Math.round((dv / orig) * 100), pp = Math.round((dp / orig) * 100);
+          porFaixaVend[pv] = (porFaixaVend[pv] || 0) + 1;
+          porFaixaPlat[pp] = (porFaixaPlat[pp] || 0) + 1;
+          if (!PADRAO.includes(pv) && dv > 0.5 && foraDoPadrao.length < 25) {
+            foraDoPadrao.push({ pedido: o.id, sku: it.seller_sku, produto: String(it.product_name || '').slice(0, 45),
+              original: orig, vendido: it.sale_price, desc_vendedor: dv, pct: pv });
+          }
+        }
+      }
+    }
+    return res.status(200).json({
+      ok: true, janela_dias: dias, pedidos: ids.length, itens_pagos: itens,
+      amostras_gratis_ignoradas: amostras, cancelados,
+      total_preco_original: Math.round(somaOriginal * 100) / 100,
+      total_vendido: Math.round(somaVendido * 100) / 100,
+      desconto_do_vendedor: Math.round(somaDescVend * 100) / 100,
+      desconto_da_plataforma: Math.round(somaDescPlat * 100) / 100,
+      pct_vendedor: Math.round((somaDescVend / somaOriginal) * 1000) / 10,
+      pct_plataforma: Math.round((somaDescPlat / somaOriginal) * 1000) / 10,
+      faixas_desconto_vendedor: porFaixaVend,
+      faixas_desconto_plataforma: porFaixaPlat,
+      fora_do_padrao_5_10_15: foraDoPadrao,
+    });
+  }
+
   const lista = await chamarTts('/order/202309/orders/search',
     { page_size: String(limite) }, auth, ctx,
     { method: 'POST', body: { create_time_ge: ini, create_time_lt: fim } });
