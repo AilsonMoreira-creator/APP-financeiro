@@ -1922,6 +1922,51 @@ function SecaoCarrinho() {
   const toggleSel = (id) => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selTodos = () => setSel(sel.size === carrinhos.length ? new Set() : new Set(carrinhos.map(c => c.id)));
 
+  // ── CAMPANHA NOS PERDIDOS (Ailson 07/08/2026) ────────────────────────────
+  // Carrinho que levou 1º e 2º envio e não interagiu vira Perdido. Daqui ele
+  // pode receber os MESMOS templates de campanha da aba Clientes. Bloqueio de
+  // 48h e dedupe por template ficam no backend.
+  const [campanhaPerdidos, setCampanhaPerdidos] = useState(null);
+  const [modalCampPerd, setModalCampPerd] = useState(null); // {tpls, versao, carregando}
+  const abrirModalCampanhaPerdidos = () => {
+    setModalCampPerd({ tpls: [], versao: campanhaPerdidos, carregando: true });
+    fetch('/api/meluni-templates-novidade').then(r => r.json()).then(j => {
+      const ativos = (j.templates || []).filter(t => (t.status || 'ativo') === 'ativo');
+      setModalCampPerd(m => m ? { ...m, tpls: ativos, versao: m.versao || j.padrao || ativos[0]?.versao || null, carregando: false } : m);
+    }).catch(() => setModalCampPerd(m => m ? { ...m, carregando: false } : m));
+  };
+
+  const dispararPerdidos = async () => {
+    if (disparando || !sel.size) return;
+    if (!campanhaPerdidos) { abrirModalCampanhaPerdidos(); return; }
+    if (!window.confirm(`Disparar "${String(campanhaPerdidos).replace(/_/g, ' ')}" pra ${sel.size} carrinho(s) perdido(s)?\n\nQuem recebeu qualquer campanha nas últimas 48h é pulado.`)) return;
+    setDisparando(true); setDispMsg('');
+    try {
+      const LOTE = 30;
+      const ids = [...sel];
+      const lotes = [];
+      for (let i = 0; i < ids.length; i += LOTE) lotes.push(ids.slice(i, i + LOTE));
+      let env = 0, pul = 0, err = 0;
+      for (let i = 0; i < lotes.length; i++) {
+        setDispMsg(`Enviando… lote ${i + 1} de ${lotes.length} (${env} enviados)`);
+        const r = await fetch('/api/meluni-perdidos-disparo', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: lotes[i], versao: campanhaPerdidos }),
+        });
+        const j = await r.json();
+        if (!j.ok) { setDispMsg(j.erro || 'falhou'); break; }
+        env += j.enviados || 0; pul += j.pulados || 0; err += j.erros || 0;
+        setDispMsg(`✓ ${env} enviado(s)${pul ? ` · ${pul} pulado(s)` : ''}${err ? ` · ${err} erro(s)` : ''}`);
+      }
+      setSel(new Set()); carregar(0); setRecargaHoje(x => x + 1);
+    } catch (e) {
+      setDispMsg('Erro: ' + (e?.message || e));
+    } finally {
+      setDisparando(false);
+      setTimeout(() => setDispMsg(''), 12000);
+    }
+  };
+
   const dispararSel = async () => {
     if (disparando || !sel.size) return;
     setDisparando(true); setDispMsg('');
@@ -1966,14 +2011,30 @@ function SecaoCarrinho() {
           ))}
         </span>
         <button onClick={abrirTplCarr} style={{ background: palette.surface, color: palette.ink, border: `1px solid ${palette.beige}`, borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }} title="Templates usados na aba (carrinho abandonado e newsletter)">🖼 Templates</button>
-        <button onClick={() => setDias(d => d > 0 ? 0 : 30)} title="alterna entre últimos 30 dias e todos os períodos"
-          style={{ ...selStyle, fontWeight: 700, color: dias > 0 ? MELUNI : palette.inkMuted, borderColor: dias > 0 ? MELUNI : palette.beige }}>
-          {dias > 0 ? '🕒 últimos 30 dias' : 'todos os períodos'}
-        </button>
+        {/* período: 30/60/90 dias ou tudo (Ailson 07/08/2026 — campanha nos perdidos) */}
+        <span style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: `1px solid ${palette.beige}` }}>
+          {[[30, '30d'], [60, '60d'], [90, '90d'], [0, 'tudo']].map(([v, l]) => (
+            <button key={v} onClick={() => setDias(v)} style={{
+              background: dias === v ? MELUNI : palette.surface, color: dias === v ? '#fff' : palette.ink,
+              border: 'none', padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+            }}>{l}</button>
+          ))}
+        </span>
         <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
           {loading ? 'carregando…' : `${total} no funil`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
         </span>
         <span style={{ marginLeft: 'auto' }}><PillHoje n={disparosHoje.carrinho} /></span>
+        {aba === 'perdida' && (
+          <button onClick={abrirModalCampanhaPerdidos} style={{ ...selStyle, fontWeight: 700 }} title="Escolhe qual template de campanha vai sair pros perdidos">
+            🖼 Template{campanhaPerdidos ? `: ${String(campanhaPerdidos).replace(/_/g, ' ')}` : ''}
+          </button>
+        )}
+        {aba === 'perdida' && sel.size > 0 && (
+          <button onClick={dispararPerdidos} disabled={disparando}
+            style={{ ...fbtn(VERDE_ENVIAR, '#fff'), opacity: disparando ? 0.7 : 1 }}>
+            {disparando ? 'disparando…' : `📣 Disparar em massa (${sel.size})`}
+          </button>
+        )}
         {aba === 'processando' && sel.size > 0 && (
           <button onClick={dispararSel} disabled={disparando}
             style={{ ...fbtn(VERDE_ENVIAR, '#fff'), opacity: disparando ? 0.7 : 1 }}>
@@ -1982,6 +2043,37 @@ function SecaoCarrinho() {
         )}
         {dispMsg && <span style={{ fontSize: 11.5, fontWeight: 600, color: palette.inkSoft, fontFamily: FONT }}>{dispMsg}</span>}
       </div>
+
+      {/* MODAL: escolher o template da campanha dos PERDIDOS (Ailson 07/08/2026) */}
+      {modalCampPerd && (
+        <div onClick={() => setModalCampPerd(null)} style={{ position: 'fixed', inset: 0, zIndex: 9200, background: 'rgba(44,62,80,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, maxWidth: 460, width: '100%', maxHeight: '85vh', overflowY: 'auto', padding: 18, fontFamily: FONT }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: palette.ink, marginBottom: 4 }}>Campanha pros carrinhos perdidos</div>
+            <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>São os mesmos templates da aba Clientes. Quem já recebeu esse template não recebe de novo, e quem levou qualquer campanha nas últimas 48h é pulado.</div>
+            {modalCampPerd.carregando ? (
+              <div style={{ padding: 18, textAlign: 'center', color: palette.inkMuted, fontSize: 12 }}>carregando…</div>
+            ) : modalCampPerd.tpls.length === 0 ? (
+              <div style={{ padding: 10, fontSize: 12, color: '#b4453a' }}>Nenhum template ativo. Ative um no 🖼 Templates da aba Clientes.</div>
+            ) : modalCampPerd.tpls.map(t => (
+              <label key={t.versao} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 10, border: `2px solid ${modalCampPerd.versao === t.versao ? MELUNI : palette.beige}`, marginBottom: 8, cursor: 'pointer', background: modalCampPerd.versao === t.versao ? MELUNI_SOFT : '#fff' }}>
+                <input type="radio" name="tplPerdidos" checked={modalCampPerd.versao === t.versao} onChange={() => setModalCampPerd(m => ({ ...m, versao: t.versao }))} style={{ width: 16, height: 16 }} />
+                {t.sample_url && <img src={t.sample_url} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8 }} />}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 800, color: palette.ink, textTransform: 'capitalize' }}>{t.versao.replace(/_/g, ' ')}</span>
+                  <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: 10.5, color: palette.inkSoft }}>{t.body}</span>
+                </span>
+              </label>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <button onClick={() => setModalCampPerd(null)} style={{ ...selStyle, flex: 1 }}>Cancelar</button>
+              <button onClick={() => { setCampanhaPerdidos(modalCampPerd.versao); setModalCampPerd(null); }} disabled={!modalCampPerd.versao}
+                style={{ ...selStyle, flex: 1, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', opacity: modalCampPerd.versao ? 1 : 0.6 }}>
+                Usar esse template
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: templates da aba Carrinho (Ailson 03/08/2026) */}
       {modalTplCarr && (
