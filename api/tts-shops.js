@@ -45,7 +45,12 @@ export default async function handler(req, res) {
   // O endpoint certo é /seller/202309/shops — o /authorization/202309/shops
   // exige um escopo que este app não tem (sondagem de 08/08 devolveu 105005 nele
   // e Success neste). Aqui NÃO se manda shop_cipher: é ele que devolve o cipher.
-  const d = await chamarTts('/seller/202309/shops', {}, { access_token: auth.access_token }, ctx);
+  // /authorization/202309/shops é o único que devolve o CIPHER; ele exige o
+  // escopo Shop Authorized Information, que só entrou em vigor em 08/08 depois
+  // de o Ailson ativar os pacotes e reautorizar. Se ele falhar, cai no
+  // /seller/202309/shops, que funciona sem escopo mas não traz o cipher.
+  let d = await chamarTts('/authorization/202309/shops', {}, { access_token: auth.access_token }, ctx);
+  if (d?.code !== 0) d = await chamarTts('/seller/202309/shops', {}, { access_token: auth.access_token }, ctx);
   if (req.query?.cru === '1') return res.status(200).json({ resposta: d });
 
   const shops = d?.data?.shops || [];
