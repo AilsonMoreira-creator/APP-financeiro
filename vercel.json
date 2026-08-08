@@ -481,6 +481,10 @@
     {
       "schedule": "20 11,17,23 * * *",
       "path": "/api/ml-taxas-sync"
+    },
+    {
+      "schedule": "35 12,20 * * *",
+      "path": "/api/tts-repasse-sync?dias=45"
     }
   ]
 }
