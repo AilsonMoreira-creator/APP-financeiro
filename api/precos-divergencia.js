@@ -119,7 +119,7 @@ async function anunciosML(brand = 'Exitus') {
 }
 
 // ── Shopee ─────────────────────────────────────────────────────────────────
-async function anunciosShopee(conta = 'exitus') {
+async function anunciosShopee(conta = 'exitus', raw = false) {
   const a = await authShopee(conta);
   if (a.erro) return { erro: a.erro, detalhe: a.detalhe };
   const { auth, ctx } = a;
@@ -141,22 +141,45 @@ async function anunciosShopee(conta = 'exitus') {
 
   // 2. base info em lote de 50 (traz price_info e item_sku)
   const itens = [];
+  const semPreco = [];
+  const amostra = [];
   for (let i = 0; i < ids.length; i += 50) {
     const d = await chamarShopee('/api/v2/product/get_item_base_info', {
       item_id_list: ids.slice(i, i + 50).join(','),
     }, auth, ctx);
-    if (d.error) continue;
+    if (d.error) { if (raw && amostra.length < 2) amostra.push({ etapa: 'base_info', erro: d.error, msg: d.message }); continue; }
     for (const it of (d.response?.item_list || [])) {
+      if (raw && amostra.length < 2) amostra.push(it);
       const pi = (it.price_info || [])[0] || {};
-      // preço NORMAL: original_price ignora a campanha/promo vigente
       const preco = num(pi.original_price) || num(pi.current_price);
-      if (!preco) continue;
+      const skus = [it.item_sku, ...((it.model_list || []).map(m => m.model_sku))].filter(Boolean);
+      if (!preco) { semPreco.push({ id: String(it.item_id), titulo: it.item_name, skus }); continue; }
       itens.push({
         id: String(it.item_id), titulo: it.item_name, preco,
         promo: num(pi.current_price) && num(pi.original_price) ? Number(pi.current_price) < Number(pi.original_price) : false,
-        skus: [it.item_sku, ...((it.model_list || []).map(m => m.model_sku))].filter(Boolean),
+        skus,
       });
     }
+  }
+
+  // Item com VARIAÇÃO (cor/tamanho) não traz price_info no base_info — o preço
+  // mora em cada model. Busca modelo por modelo e usa o MENOR preço normal.
+  for (const it of semPreco) {
+    const d = await chamarShopee('/api/v2/product/get_model_list', { item_id: it.id }, auth, ctx);
+    if (raw && amostra.length < 4) amostra.push({ etapa: 'model_list', item: it.id, resp: d.response || d });
+    if (d.error) continue;
+    const models = d.response?.model || [];
+    let melhor = null, emPromo = false;
+    const skus = [...it.skus];
+    for (const m of models) {
+      const pi = (m.price_info || [])[0] || {};
+      const p = num(pi.original_price) || num(pi.current_price);
+      if (!p) continue;
+      if (num(pi.current_price) && num(pi.original_price) && Number(pi.current_price) < Number(pi.original_price)) emPromo = true;
+      if (melhor === null || p < melhor) melhor = p;
+      if (m.model_sku) skus.push(m.model_sku);
+    }
+    if (melhor) itens.push({ id: it.id, titulo: it.titulo, preco: melhor, promo: emPromo, skus });
   }
 
   const porRef = {};
@@ -171,7 +194,7 @@ async function anunciosShopee(conta = 'exitus') {
     if (!ref) { semRef.push({ id: it.id, titulo: it.titulo, preco: it.preco, skus: it.skus }); continue; }
     (porRef[ref] || (porRef[ref] = [])).push(it);
   }
-  return { porRef, semRef, anuncios: itens.length };
+  return { porRef, semRef, anuncios: itens.length, ...(raw ? { amostra } : {}) };
 }
 
 // ── Comparação ─────────────────────────────────────────────────────────────
@@ -225,7 +248,7 @@ export default async function handler(req, res) {
     }
 
     if (canal === 'shopee' || canal === 'todos') {
-      const sh = await anunciosShopee('exitus');
+      const sh = await anunciosShopee('exitus', req.query?.raw === '1');
       if (sh.erro) out.shopee = { erro: sh.erro, mensagem: sh.mensagem, detalhe: sh.detalhe };
       else {
         const linhas = comparar(sh.porRef, precos.shopee, desc, tol);
@@ -236,6 +259,7 @@ export default async function handler(req, res) {
           sem_preco_calc: linhas.filter(l => !l.calculadora).map(l => l.ref),
           ok: linhas.filter(l => l.situacao === 'ok').length,
           ...(cru ? { todas: linhas, sem_ref: sh.semRef } : {}),
+          ...(sh.amostra ? { amostra: sh.amostra } : {}),
         };
       }
     }
