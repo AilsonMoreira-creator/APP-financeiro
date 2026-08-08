@@ -178,7 +178,13 @@ export default async function handler(req, res) {
       const c = cache.get(p.id);
       if (!c) continue;
       const agora = new Date().toISOString();
-      const deveFinalizar = p.categoria === 'finalizado' && (c.status_wms === 'aberto' || c.status_wms === 'em_separacao');
+      // NF gerada NAO tira o pedido da separacao (Ailson 07/08/2026): a Sthefany
+      // gera as notas enquanto os ajudantes fazem o picking, e a bipagem do
+      // checkout so comeca com a nota pronta. Entao o pedido fica no card "Em
+      // Separacao" com a marca de NF e sai de la pela bipagem/Verificado ou pelo
+      // botao Finalizar. Auto-finalizar so vale pra quem ainda esta 'aberto'.
+      const deveFinalizar = p.categoria === 'finalizado'
+        && (c.status_wms === 'aberto' || (c.status_wms === 'em_separacao' && sitCasa(p.situacaoNome, 'verificado')));
       // O BLING E A FONTE DE VERDADE (Ailson 07/08/2026): se la o pedido segue
       // "em aberto", ele volta pro funil. Guarda: so reabre o que NUNCA foi
       // impresso — lista impressa/finalizada pela equipe fica como esta, senao

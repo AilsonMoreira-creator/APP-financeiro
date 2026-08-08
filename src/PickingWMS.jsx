@@ -881,7 +881,13 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
             {[
               { k: 'abertos', titulo: 'Pedidos Abertos', sub: 'lista ainda não impressa', Icon: Package, cor: palette.accent, extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '' },
-              { k: 'em_separacao', titulo: 'Em Separação', sub: 'lista impressa, separando', Icon: ClipboardList, cor: '#9a6b00' },
+              {
+                k: 'em_separacao', titulo: 'Em Separação', Icon: ClipboardList, cor: '#9a6b00',
+                // NF geradas: atualiza a cada sync (Ailson 07/08)
+                sub: dash?.total?.em_separacao
+                  ? `NF geradas ${dash.total.em_separacao_nf || 0} de ${dash.total.em_separacao}`
+                  : 'lista impressa, separando',
+              },
               { k: 'finalizados_hoje', titulo: 'Finalizados Hoje', sub: 'bipados + etiqueta (Verificado)', Icon: CheckCircle2, cor: '#1e8e4e' },
               { k: 'aguardando', titulo: 'Aguardando', sub: 'faltou mercadoria · volta na próxima onda', Icon: Clock, cor: '#9a6b00' },
               // fila de amanhã: entrou depois do corte, vira "aberto" na virada do dia (Ailson 07/08)

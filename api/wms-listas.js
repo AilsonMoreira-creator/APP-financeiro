@@ -31,6 +31,9 @@ export const WMS_CONFIG_DEFAULT = {
 // (Ailson 07/08/2026). A config tem corte POR CANAL, mas ele so serve pros
 // avisos de prazo; pra separacao vale um horario so.
 export const CORTE_LISTA = '12:00';
+// normalizacao local (o wms-sync ja importa daqui; nao da pra importar de la
+// sem criar ciclo)
+const normSitLocal = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 // Instante do corte de HOJE em BRT (ISO). Pedido com criado_em >= isso e
 // pos-corte. criado_em = quando o sync viu o pedido pela 1a vez (precisao de
 // 15 min de manha / 30 min de tarde, que e o intervalo do cron).
@@ -70,7 +73,7 @@ export default async function handler(req, res) {
 
       if (acao === 'dashboard') {
         const { data: rows, error } = await supabase.from('wms_pedidos')
-          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em')
+          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em, situacao_nome')
           .neq('status_wms', 'cancelado');
         if (error) throw error;
         // data de HOJE em BRT — com toISOString() puro o "Finalizados Hoje"
@@ -79,9 +82,12 @@ export default async function handler(req, res) {
         const corteMs = new Date(corteDeHoje()).getTime();
         const porConta = {};
         const porCanal = {};
-        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
+        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
+        // NF gerada = a situacao no Bling ja saiu de "em aberto" (hoje vira
+        // atendido; no fluxo definitivo vira em andamento). Ailson 07/08/2026.
+        const temNf = (nome) => { const n = normSitLocal(nome); return !!n && !n.includes('em aberto') && !n.includes('aberto'); };
         for (const r of (rows || [])) {
-          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, pra_amanha: 0, em_separacao: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
+          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
           if (r.status_wms === 'pendente') { c.aguardando++; tot.aguardando++; k.pendentes++; }
           else if (r.status_wms === 'aberto') {
@@ -91,7 +97,10 @@ export default async function handler(req, res) {
             if (r.criado_em && new Date(r.criado_em).getTime() >= corteMs) { c.pra_amanha++; tot.pra_amanha++; }
             else { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; }
           }
-          else if (r.status_wms === 'em_separacao') { c.em_separacao++; tot.em_separacao++; k.pendentes++; }
+          else if (r.status_wms === 'em_separacao') {
+            c.em_separacao++; tot.em_separacao++; k.pendentes++;
+            if (temNf(r.situacao_nome)) { c.em_separacao_nf++; tot.em_separacao_nf++; }
+          }
           else if (r.status_wms === 'finalizado' && r.finalizado_em && new Date(new Date(r.finalizado_em).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
         }
         const { data: ultSync } = await supabase.from('wms_pedidos')
