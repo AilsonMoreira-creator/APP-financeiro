@@ -11118,6 +11118,11 @@ export default function App(){
   // Auto-save: localStorage IMEDIATO + Supabase com debounce 1.5s (SOMENTE ADMIN)
   // NOTA: produtos/oficinasCAD/logTroca são REMOVIDOS dos deps — são salvos pelo SAVE CORTES.
   // Incluí-los aqui causava save do payload inteiro quando cortes mudavam via Realtime.
+  // EXCEÇÃO produtosExcluidos (Ailson 08/08/2026): as lápides SÓ mudam por clique do
+  // usuário no × (nunca por Realtime), e sem elas nos deps o efeito não rodava ao
+  // excluir — nem o save nem o `dadosRef` eram atualizados, então a exclusão morria
+  // em memória e a ref voltava no próximo load. Era o furo que sobrou depois dos
+  // dois fixes anteriores (lápides e lastUserEditTs).
   useEffect(()=>{
     if(!dbCarregado)return;
     // SEMPRE atualiza dadosRef — flush/retry precisam do snapshot mais recente
@@ -11171,7 +11176,7 @@ export default function App(){
       salvarNoSupabase(dados);
     },1500);
     return()=>clearTimeout(debounceRef.current);
-  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc,dbCarregado]);
+  },[receitasPorMes,auxDataPorMes,categoriasPorMes,boletosShared,prestadores,tecidosCAD,fixosConfig,fixosNomesFunc,produtosExcluidos,dbCarregado]);
 
   // ── SAVE CORTES com merge (múltiplos usuários) ────────────────────────────
   useEffect(()=>{
