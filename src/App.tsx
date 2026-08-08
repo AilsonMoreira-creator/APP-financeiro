@@ -11869,7 +11869,11 @@ export default function App(){
               kpiValue:"—",kpiLabel:"B2C · Lara",detail:"WhatsApp B2C · IA atendente"},
             {id:"wms",gate:"wms",label:"Picking WMS",Icon:SvgWms,color:"#4a7fa5",bg:"#eef4f9",border:"#cfdfeb",
               kpiValue:"—",kpiLabel:"Separação",detail:"Pedidos dos marketplaces · 3 contas"},
-          ].filter(m=>usuarioLogado.modulos.includes(m.gate||m.id));
+          // ADMIN vê todos os cards (Ailson 08/08/2026): o WMS existia mas não
+          // aparecia pra ele porque 'wms' não estava na lista de módulos do
+          // usuário. O gate de RENDER do módulo já liberava admin — só o card
+          // da home não; ficavam fora de sintonia a cada módulo novo.
+          ].filter(m=>usuarioLogado.admin===true||(usuarioLogado.modulos||[]).includes(m.gate||m.id));
 
           return(
             <div style={{maxWidth:820,margin:"0 auto",padding:"36px 20px"}}>
