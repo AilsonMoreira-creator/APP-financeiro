@@ -54,7 +54,11 @@ export default async function handler(req, res) {
     // 2. shop_cipher: sem ele a maioria das chamadas da API não funciona
     let shop = {};
     try {
-      const lojas = await chamarTts('/seller/202309/shops', {}, authParcial, ctx);
+      // authorization/shops é o ÚNICO que devolve o cipher; o seller/shops não
+      // traz. Reautorizar chamando só o seller/shops APAGAVA o cipher já
+      // gravado (aconteceu em 08/08). Tenta o certo e só cai no outro se falhar.
+      let lojas = await chamarTts('/authorization/202309/shops', {}, authParcial, ctx);
+      if (lojas?.code !== 0) lojas = await chamarTts('/seller/202309/shops', {}, authParcial, ctx);
       shop = lojas?.data?.shops?.[0] || {};
     } catch { /* segue sem cipher; dá pra buscar depois */ }
 
@@ -63,7 +67,7 @@ export default async function handler(req, res) {
       seller_name: t.seller_name || null,
       shop_id: shop.id ? String(shop.id) : (t.seller_base_region || 'sem-shop-id'),
       shop_name: shop.name || null,
-      shop_cipher: shop.cipher || null,
+      ...(shop.cipher ? { shop_cipher: shop.cipher } : {}),
       access_token: t.access_token,
       refresh_token: t.refresh_token || null,
       expira_em: t.access_token_expire_in ? new Date(t.access_token_expire_in * 1000).toISOString() : null,
