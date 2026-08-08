@@ -37,16 +37,26 @@ async function ml(path, token) {
 async function pedidoDoML(numeroLoja, token) {
   const id = String(numeroLoja || '').trim();
   if (!/^\d+$/.test(id)) return { erro: 'numero nao numerico' };
-  let p = await ml(`/orders/${id}`, token);
-  if (p.erro) {
-    // pode ser um PACK (vários pedidos no mesmo envio)
+
+  // Um PACK junta VÁRIOS pedidos no mesmo envio e o Bling grava tudo num
+  // pedido só. Pegar apenas o primeiro subestimava o preço real (era o que
+  // fazia o Bling parecer "inflado" em R$86 num pack de 2). Ailson 08/08/2026.
+  let ordens = [];
+  const direto = await ml(`/orders/${id}`, token);
+  if (!direto.erro) ordens = [direto];
+  else {
     const pack = await ml(`/packs/${id}`, token);
-    if (pack.erro) return { erro: `orders/packs ${p.erro}/${pack.erro}` };
-    const primeiro = pack.orders?.[0]?.id;
-    if (!primeiro) return { erro: 'pack sem pedidos' };
-    p = await ml(`/orders/${primeiro}`, token);
-    if (p.erro) return { erro: `orders do pack ${p.erro}` };
+    if (pack.erro) return { erro: `orders/packs ${direto.erro}/${pack.erro}` };
+    for (const o of (pack.orders || [])) {
+      const det = await ml(`/orders/${o.id}`, token);
+      if (!det.erro) ordens.push(det);
+    }
+    if (!ordens.length) return { erro: 'pack sem pedidos legíveis' };
   }
+  const p = { ...ordens[0] };
+  p.order_items = ordens.flatMap(o => o.order_items || []);
+  p.payments = ordens.flatMap(o => o.payments || []);
+
   const itens = (p.order_items || []).map(it => ({
     sku: it.item?.seller_sku || it.item?.seller_custom_field || null,
     titulo: it.item?.title || null,
@@ -64,7 +74,15 @@ async function pedidoDoML(numeroLoja, token) {
     full_price: itens.reduce((s, i) => s + i.full_unit_price * i.qtd, 0),
     sale_fee: itens.reduce((s, i) => s + i.sale_fee * i.qtd, 0),
     coupon_amount: pag.reduce((s, x) => s + n(x.coupon_amount), 0),
-    shipping_cost: pag.reduce((s, x) => s + n(x.shipping_cost), 0),
+    // O frete pago pelo comprador NEM SEMPRE vem em shipping_cost: no ML ele
+    // costuma aparecer como a diferença entre o que foi pago e o preço do
+    // produto (ex: produto 78,93, pago 89,29 -> 10,36 de frete).
+    shipping_cost: Math.max(
+      pag.reduce((s, x) => s + n(x.shipping_cost), 0),
+      Math.round((pag.reduce((s, x) => s + n(x.total_paid_amount), 0)
+        - itens.reduce((s, i) => s + i.unit_price * i.qtd, 0)
+        + pag.reduce((s, x) => s + n(x.coupon_amount), 0)) * 100) / 100
+    ),
     total_paid: pag.reduce((s, x) => s + n(x.total_paid_amount), 0),
     listing_type: itens[0]?.listing_type || null,
     itens,
