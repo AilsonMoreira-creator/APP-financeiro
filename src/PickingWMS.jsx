@@ -883,9 +883,14 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
               { k: 'abertos', titulo: 'Pedidos Abertos', sub: 'lista ainda não impressa', Icon: Package, cor: palette.accent, extra: dash?.total ? `${dash.total.pecas_abertas} peças` : '' },
               {
                 k: 'em_separacao', titulo: 'Em Separação', Icon: ClipboardList, cor: '#9a6b00',
-                // NF geradas: atualiza a cada sync (Ailson 07/08)
+                // NF geradas sobre os que REALMENTE geram nota; Flex e Meluni
+                // ficam de fora da conta e aparecem à parte (Ailson 07/08)
                 sub: dash?.total?.em_separacao
-                  ? `NF geradas ${dash.total.em_separacao_nf || 0} de ${dash.total.em_separacao}`
+                  ? [
+                    `NF geradas ${dash.total.em_separacao_nf || 0} de ${dash.total.em_separacao_com_nf_prevista || 0}`,
+                    dash.total.em_separacao_flex ? `${dash.total.em_separacao_flex} pedidos Flex` : '',
+                    dash.total.em_separacao_meluni ? `${dash.total.em_separacao_meluni} pedidos Meluni` : '',
+                  ].filter(Boolean).join(' · ')
                   : 'lista impressa, separando',
               },
               { k: 'finalizados_hoje', titulo: 'Finalizados Hoje', sub: 'bipados + etiqueta (Verificado)', Icon: CheckCircle2, cor: '#1e8e4e' },

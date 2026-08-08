@@ -265,7 +265,10 @@ export default async function handler(req, res) {
           status_wms: statusInicial,
           finalizado_em: statusInicial === 'finalizado' ? new Date().toISOString() : null,
           conta, pedido_id: pedido.id, numero: String(ped.numero || pedido.numero || ''),
-          numero_loja: ped.numeroPedidoLoja || null,
+          numero_loja: ped.numeroLoja || ped.numeroPedidoLoja || null,
+          // servico do frete (transporte.volumes[0].servico) — e por aqui que da
+          // pra separar o Mercado Livre Flex (Ailson 07/08/2026)
+          servico_frete: ped.transporte?.volumes?.[0]?.servico || null,
           data_pedido: pedido.data || (ped.data || '').slice(0, 10) || null,
           situacao_bling: pedido.situacaoId, situacao_nome: pedido.situacaoNome,
           loja_nome: lojaNome || '', loja_id: ped.loja?.id || null,

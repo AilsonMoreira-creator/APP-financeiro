@@ -73,7 +73,7 @@ export default async function handler(req, res) {
 
       if (acao === 'dashboard') {
         const { data: rows, error } = await supabase.from('wms_pedidos')
-          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em, situacao_nome')
+          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em, situacao_nome, servico_frete')
           .neq('status_wms', 'cancelado');
         if (error) throw error;
         // data de HOJE em BRT — com toISOString() puro o "Finalizados Hoje"
@@ -82,12 +82,17 @@ export default async function handler(req, res) {
         const corteMs = new Date(corteDeHoje()).getTime();
         const porConta = {};
         const porCanal = {};
-        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
+        const tot = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 };
         // NF gerada = a situacao no Bling ja saiu de "em aberto" (hoje vira
         // atendido; no fluxo definitivo vira em andamento). Ailson 07/08/2026.
         const temNf = (nome) => { const n = normSitLocal(nome); return !!n && !n.includes('em aberto') && !n.includes('aberto'); };
+        // Pedidos que NAO geram NF (Ailson 07/08/2026):
+        //  - Meluni: entra no Bling Lumia com canal "Outros"
+        //  - Mercado Livre Flex: identificado pelo servico do frete
+        const ehMeluni = (r2) => r2.conta === 'lumia' && normSitLocal(r2.canal_geral) === 'outros';
+        const ehFlex = (r2) => normSitLocal(r2.servico_frete).includes('flex');
         for (const r of (rows || [])) {
-          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
+          const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
           if (r.status_wms === 'pendente') { c.aguardando++; tot.aguardando++; k.pendentes++; }
           else if (r.status_wms === 'aberto') {
@@ -99,7 +104,13 @@ export default async function handler(req, res) {
           }
           else if (r.status_wms === 'em_separacao') {
             c.em_separacao++; tot.em_separacao++; k.pendentes++;
-            if (temNf(r.situacao_nome)) { c.em_separacao_nf++; tot.em_separacao_nf++; }
+            const flex = ehFlex(r), meluni = ehMeluni(r);
+            if (flex) { c.em_separacao_flex++; tot.em_separacao_flex++; }
+            if (meluni) { c.em_separacao_meluni++; tot.em_separacao_meluni++; }
+            if (!flex && !meluni) {
+              c.em_separacao_com_nf_prevista++; tot.em_separacao_com_nf_prevista++;
+              if (temNf(r.situacao_nome)) { c.em_separacao_nf++; tot.em_separacao_nf++; }
+            }
           }
           else if (r.status_wms === 'finalizado' && r.finalizado_em && new Date(new Date(r.finalizado_em).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
         }
