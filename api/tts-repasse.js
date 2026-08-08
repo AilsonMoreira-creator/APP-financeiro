@@ -25,6 +25,24 @@ export default async function handler(req, res) {
   const fim = Math.floor(Date.now() / 1000);
   const ini = fim - dias * 86400;
 
+  // ?pedido=<order_id> -> settlement de UM pedido, mesmo ANTES do repasse
+  // liquidar (rota "Get Transactions by Order"). Se funcionar, o lucro real de
+  // agosto não precisa esperar as 3 semanas. Ailson 08/08/2026.
+  if (req.query?.pedido) {
+    const id = String(req.query.pedido);
+    const rotas = [
+      `/finance/202309/orders/${id}/statement_transactions`,
+      `/finance/202501/orders/${id}/statement_transactions`,
+    ];
+    const tentativas = [];
+    for (const path of rotas) {
+      const r = await chamarTts(path, {}, auth, ctx);
+      tentativas.push({ path, code: r?.code, message: String(r?.message || '').slice(0, 70) });
+      if (r?.code === 0) return res.status(200).json({ usado: path, resposta: r });
+    }
+    return res.status(400).json({ erro: 'nenhuma rota por pedido respondeu', tentativas });
+  }
+
   // ?detalhe=<statement_id> -> abre as LINHAS de taxa daquele repasse. É o que
   // decide se dá pra montar a tela de despesas discriminadas (Ailson 08/08).
   if (req.query?.detalhe) {
