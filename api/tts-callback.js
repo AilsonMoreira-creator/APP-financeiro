@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     // 2. shop_cipher: sem ele a maioria das chamadas da API não funciona
     let shop = {};
     try {
-      const lojas = await chamarTts('/authorization/202309/shops', {}, authParcial, ctx);
+      const lojas = await chamarTts('/seller/202309/shops', {}, authParcial, ctx);
       shop = lojas?.data?.shops?.[0] || {};
     } catch { /* segue sem cipher; dá pra buscar depois */ }
 

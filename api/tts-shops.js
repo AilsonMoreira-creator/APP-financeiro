@@ -36,8 +36,10 @@ export default async function handler(req, res) {
     return res.status(200).json({ conta, sondagem: out });
   }
 
-  // nesta chamada NÃO se manda shop_cipher (é ela que devolve o cipher)
-  const d = await chamarTts('/authorization/202309/shops', {}, { access_token: auth.access_token }, ctx);
+  // O endpoint certo é /seller/202309/shops — o /authorization/202309/shops
+  // exige um escopo que este app não tem (sondagem de 08/08 devolveu 105005 nele
+  // e Success neste). Aqui NÃO se manda shop_cipher: é ele que devolve o cipher.
+  const d = await chamarTts('/seller/202309/shops', {}, { access_token: auth.access_token }, ctx);
   if (req.query?.cru === '1') return res.status(200).json({ resposta: d });
 
   const shops = d?.data?.shops || [];
