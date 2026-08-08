@@ -182,16 +182,23 @@ async function anunciosShopee(conta = 'exitus', raw = false) {
     if (melhor) itens.push({ id: it.id, titulo: it.titulo, preco: melhor, promo: emPromo, skus });
   }
 
+  // O item_sku da Shopee é o código SCF (ex "z23062710148"), o MESMO que o
+  // ml_scf_ref_map já traduz pra REF. Ailson 08/08/2026.
+  const { data: scfMap } = await supabase.from('ml_scf_ref_map').select('scf, ref');
+  const porScf = new Map((scfMap || []).map(m => [String(m.scf).trim().toLowerCase(), nRef(m.ref)]));
+  const { data: skuMap } = await supabase.from('ml_sku_ref_map').select('sku, ref');
+  const porSku = new Map((skuMap || []).map(m => [String(m.sku).trim().toLowerCase(), nRef(m.ref)]));
+
   const porRef = {};
   const semRef = [];
   for (const it of itens) {
-    // a REF é o começo do SKU da Shopee (ex "2671-MARROM-GG")
     let ref = null;
-    for (const s of it.skus) {
-      const m = String(s).match(/\d{3,5}/);
-      if (m) { ref = nRef(m[0]); break; }
+    for (const sk of it.skus) {
+      const k = String(sk).trim().toLowerCase();
+      ref = porScf.get(k) || porSku.get(k) || null;
+      if (ref) break;
     }
-    if (!ref) { semRef.push({ id: it.id, titulo: it.titulo, preco: it.preco, skus: it.skus }); continue; }
+    if (!ref) { semRef.push({ id: it.id, titulo: it.titulo, preco: it.preco, skus: it.skus.slice(0, 3) }); continue; }
     (porRef[ref] || (porRef[ref] = [])).push(it);
   }
   return { porRef, semRef, anuncios: itens.length, ...(raw ? { amostra } : {}) };
