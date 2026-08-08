@@ -14,6 +14,12 @@ export default async function handler(req, res) {
   if (a.erro) return res.status(400).json(a);
   const { auth, ctx } = a;
 
+  // ?perm=1 -> lista CRUA das permissões que o TikTok concedeu ao app
+  if (req.query?.perm === '1') {
+    const r = await chamarTts('/seller/202309/permissions', {}, { access_token: auth.access_token }, ctx);
+    return res.status(200).json(r);
+  }
+
   // ?sondar=1 -> testa vários endpoints pra descobrir QUAIS escopos passaram
   // (o TikTok não tem introspecção de token; a única forma é bater e ver o erro)
   if (req.query?.sondar === '1') {
