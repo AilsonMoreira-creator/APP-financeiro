@@ -25,6 +25,24 @@ export default async function handler(req, res) {
   const fim = Math.floor(Date.now() / 1000);
   const ini = fim - dias * 86400;
 
+  // ?detalhe=<statement_id> -> abre as LINHAS de taxa daquele repasse. É o que
+  // decide se dá pra montar a tela de despesas discriminadas (Ailson 08/08).
+  if (req.query?.detalhe) {
+    const id = String(req.query.detalhe);
+    const rotas = [
+      `/finance/202309/statements/${id}/statement_transactions`,
+      `/finance/202501/statements/${id}/statement_transactions`,
+      `/finance/202309/transactions`,
+    ];
+    const tentativas = [];
+    for (const path of rotas) {
+      const r = await chamarTts(path, { page_size: '20', ...(path.endsWith('transactions') && !path.includes(id) ? { sort_field: 'order_create_time' } : {}) }, auth, ctx);
+      tentativas.push({ path, code: r?.code, message: String(r?.message || '').slice(0, 70) });
+      if (r?.code === 0) return res.status(200).json({ usado: path, resposta: r });
+    }
+    return res.status(400).json({ erro: 'nenhuma rota de detalhe respondeu', tentativas });
+  }
+
   // A rota do settlement mudou de nome entre versões da API; testa as
   // conhecidas e fica com a primeira que responder. Ailson 08/08/2026.
   const candidatos = [
