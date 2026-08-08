@@ -13,6 +13,7 @@
  */
 import { supabase, parseDescricao, parseCanal, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 import { lerWmsConfig } from './wms-listas.js';
+import { classificarFlex } from './wms-ml-flex.js';
 
 // Normalização de situação (Ailson 05/08): minúsculo, sem acento, e matching
 // flexível — "em andamento" tem que casar com "andamento" (contains 2 lados).
@@ -316,5 +317,17 @@ export default async function handler(req, res) {
     } catch { /* segue */ }
   }
 
-  return res.status(200).json({ ok: true, dias, resumo });
+  // 6. Flex: classifica os pedidos do ML na MESMA rodada (Ailson 07/08/2026 —
+  //    "tem que rodar junto os pedidos e a informação flex"), assim o pedido
+  //    novo nunca aparece na tela sem saber se é Flex. Usa o tempo que sobrou.
+  let flex = null;
+  const sobra = 285000 - (Date.now() - inicio);
+  if (sobra > 15000) {
+    try { flex = await classificarFlex({ limite: 120, deadline: Date.now() + sobra }); }
+    catch (e) { flex = { erro: e.message }; }
+  } else {
+    flex = { pulado: 'sem tempo na rodada' };
+  }
+
+  return res.status(200).json({ ok: true, dias, resumo, flex });
 }

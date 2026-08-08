@@ -59,13 +59,15 @@ async function logisticTypeDe(numeroLoja, token) {
   };
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  const limite = Math.min(300, Math.max(1, parseInt(req.query?.limite) || 60));
-  const teste = req.query?.teste === '1';
-  const tudo = req.query?.tudo === '1';
-  const inicio = Date.now();
-
+/**
+ * classificarFlex — usada pelo handler e TAMBEM pelo wms-sync (Ailson 07/08):
+ * ele pediu pra rodar junto com os pedidos, nao num cron separado, pra nao ter
+ * janela em que o pedido novo aparece sem a marca de Flex.
+ *   limite   quantos pedidos checar
+ *   deadline timestamp (ms) pra parar antes do timeout de quem chamou
+ *   tudo     recheca tambem os que ja tem ml_checado_em
+ */
+export async function classificarFlex({ limite = 60, deadline = null, tudo = false, teste = false } = {}) {
   let q = supabase.from('wms_pedidos')
     .select('id, conta, numero_loja, canal_detalhe, status_wms')
     .eq('canal_geral', 'Mercado Livre')
@@ -75,15 +77,15 @@ export default async function handler(req, res) {
   if (!tudo) q = q.is('ml_checado_em', null);
 
   const { data: pedidos, error } = await q;
-  if (error) return res.status(500).json({ error: error.message });
-  if (!pedidos?.length) return res.status(200).json({ ok: true, checados: 0, aviso: 'nada pendente' });
+  if (error) return { erro: error.message };
+  if (!pedidos?.length) return { checados: 0, aviso: 'nada pendente' };
 
   const tokens = {};
   const resumo = { checados: 0, flex: 0, full: 0, outros: 0, erros: 0 };
   const amostra = [];
 
   for (const p of pedidos) {
-    if (Date.now() - inicio > 270000) { resumo.detalhe = 'timeout: continua na proxima rodada'; break; }
+    if (deadline && Date.now() > deadline) { resumo.detalhe = 'parou no tempo: continua na proxima rodada'; break; }
     const brand = BRAND[p.conta];
     if (!brand) { resumo.erros++; continue; }
     if (!tokens[brand]) {
@@ -94,19 +96,29 @@ export default async function handler(req, res) {
     const r = await logisticTypeDe(p.numero_loja, tokens[brand]);
     if (teste) { amostra.push({ conta: p.conta, numero_loja: p.numero_loja, canal_detalhe: p.canal_detalhe, ...r }); continue; }
 
-    if (r.erro) { resumo.erros++; }
-    else {
-      if (r.logistic_type === 'self_service') resumo.flex++;
-      else if (r.logistic_type === 'fulfillment') resumo.full++;
-      else resumo.outros++;
-    }
+    if (r.erro) resumo.erros++;
+    else if (r.logistic_type === 'self_service') resumo.flex++;
+    else if (r.logistic_type === 'fulfillment') resumo.full++;
+    else resumo.outros++;
+
     // grava sempre a data da checagem (mesmo com erro nao fica em loop eterno)
     await supabase.from('wms_pedidos')
       .update({ ml_logistic_type: r.logistic_type || null, ml_checado_em: new Date().toISOString() })
       .eq('id', p.id);
     resumo.checados++;
   }
+  return teste ? { teste: true, amostra } : resumo;
+}
 
-  if (teste) return res.status(200).json({ ok: true, teste: true, amostra });
-  return res.status(200).json({ ok: true, ...resumo });
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  const limite = Math.min(300, Math.max(1, parseInt(req.query?.limite) || 60));
+  const r = await classificarFlex({
+    limite,
+    teste: req.query?.teste === '1',
+    tudo: req.query?.tudo === '1',
+    deadline: Date.now() + 270000,
+  });
+  if (r.erro) return res.status(500).json({ error: r.erro });
+  return res.status(200).json({ ok: true, ...r });
 }
