@@ -112,6 +112,41 @@ export async function classificarFlex({ limite = 60, deadline = null, tudo = fal
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+
+  // ?pedido=<numero_loja>&conta=exitus -> devolve o CRU do pedido no ML, só o
+  // que interessa pra entender o preço: unit_price x full_unit_price, o que o
+  // ML subsidiou e o frete. Diagnóstico do gap de lucro (Ailson 08/08/2026).
+  if (req.query?.pedido) {
+    const brand = BRAND[String(req.query?.conta || 'exitus').toLowerCase()] || 'Exitus';
+    try {
+      const token = await getValidToken(brand);
+      const id = String(req.query.pedido).trim();
+      let pedido = await ml(`/orders/${id}`, token);
+      if (pedido.erro) {
+        const pack = await ml(`/packs/${id}`, token);
+        const primeiro = pack?.orders?.[0]?.id;
+        if (primeiro) pedido = await ml(`/orders/${primeiro}`, token);
+      }
+      if (pedido.erro) return res.status(400).json({ erro: pedido.erro });
+      return res.status(200).json({
+        id: pedido.id, status: pedido.status, date_created: pedido.date_created,
+        total_amount: pedido.total_amount, paid_amount: pedido.paid_amount,
+        coupon: pedido.coupon, taxes: pedido.taxes,
+        itens: (pedido.order_items || []).map(it => ({
+          titulo: it.item?.title, sku: it.item?.seller_sku || it.item?.seller_custom_field,
+          variacao: it.item?.variation_attributes?.map(a => `${a.name}:${a.value_name}`).join(' '),
+          quantidade: it.quantity, unit_price: it.unit_price, full_unit_price: it.full_unit_price,
+          sale_fee: it.sale_fee, listing_type: it.listing_type_id,
+        })),
+        pagamentos: (pedido.payments || []).map(p => ({
+          transaction_amount: p.transaction_amount, shipping_cost: p.shipping_cost,
+          total_paid_amount: p.total_paid_amount, coupon_amount: p.coupon_amount,
+          marketplace_fee: p.marketplace_fee, status: p.status,
+        })),
+      });
+    } catch (e) { return res.status(500).json({ erro: e.message }); }
+  }
+
   const limite = Math.min(300, Math.max(1, parseInt(req.query?.limite) || 60));
   const r = await classificarFlex({
     limite,
