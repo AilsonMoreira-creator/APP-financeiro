@@ -1313,20 +1313,36 @@ function SecaoClientes() {
     let enviados = 0, pulados = 0, erros = 0, falhou = false;
     for (let i = 0; i < lotes.length; i++) {
       setDispMsg(`Enviando… lote ${i + 1} de ${lotes.length} (${enviados} enviados)`);
-      // BEACON de diagnóstico (Ailson 08/08/2026): marca no log da Vercel que o
-      // código CHEGOU aqui. Se o beacon aparece e o POST do disparo não, o
-      // problema é o POST; se nem o beacon aparece, o código para antes.
-      try { await fetch(`/api/version?marca=disparo-lote&n=${lotes[i].length}`); } catch { /* diagnóstico, ignora */ }
       try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 290000);
-        const r = await fetch('/api/meluni-clientes-novidade-disparo', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: lotes[i], versao: m.versao }),
-          signal: ctrl.signal,
-        });
-        clearTimeout(t);
-        const j = await r.json();
+        // O POST deste endpoint NUNCA chega no servidor no aparelho do Ailson
+        // (log da Vercel: zero hits, três dias seguidos) e a requisição fica
+        // pendurada sem erro. Então: tenta POST com timeout CURTO de 25s e, se
+        // não voltar, repete a MESMA leva por GET (?executar=1&confirmo=1), que
+        // está provado funcionando. O backend tem dedupe por template, então
+        // nem em caso de duplicidade a cliente recebe duas vezes.
+        // Ailson 08/08/2026.
+        let j = null;
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 25000);
+          const r = await fetch('/api/meluni-clientes-novidade-disparo', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: lotes[i], versao: m.versao }),
+            signal: ctrl.signal,
+          });
+          clearTimeout(t);
+          j = await r.json();
+        } catch (ePost) {
+          setDispMsg(`Lote ${i + 1}: refazendo por outro caminho…`);
+          const qs = new URLSearchParams({
+            executar: '1', confirmo: '1', versao: m.versao, ids: lotes[i].join(','),
+          });
+          const ctrl2 = new AbortController();
+          const t2 = setTimeout(() => ctrl2.abort(), 280000);
+          const r2 = await fetch(`/api/meluni-clientes-novidade-disparo?${qs}`, { signal: ctrl2.signal });
+          clearTimeout(t2);
+          j = await r2.json();
+        }
         if (j.ok) { enviados += j.enviados || 0; pulados += j.pulados || 0; erros += j.erros || 0; }
         else { falhou = true; setDispMsg(j.erro || 'falhou'); break; }
       } catch (e) {
