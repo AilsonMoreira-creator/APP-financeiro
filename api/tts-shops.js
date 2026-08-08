@@ -14,6 +14,28 @@ export default async function handler(req, res) {
   if (a.erro) return res.status(400).json(a);
   const { auth, ctx } = a;
 
+  // ?sondar=1 -> testa vários endpoints pra descobrir QUAIS escopos passaram
+  // (o TikTok não tem introspecção de token; a única forma é bater e ver o erro)
+  if (req.query?.sondar === '1') {
+    const alvos = [
+      ['authorization', '/authorization/202309/shops', {}],
+      ['seller/shops', '/seller/202309/shops', {}],
+      ['seller/permissions', '/seller/202309/permissions', {}],
+      ['order/search', '/order/202309/orders/search', { page_size: '1' }],
+      ['product/list', '/product/202309/products/search', { page_size: '1' }],
+      ['finance/statements', '/finance/202309/statements', { page_size: '1' }],
+      ['customer_service', '/customer_service/202309/conversations', { page_size: '1' }],
+    ];
+    const out = {};
+    for (const [nome, path, params] of alvos) {
+      try {
+        const r = await chamarTts(path, params, { access_token: auth.access_token }, ctx);
+        out[nome] = { code: r?.code, message: String(r?.message || '').slice(0, 90) };
+      } catch (e) { out[nome] = { erro: String(e.message).slice(0, 90) }; }
+    }
+    return res.status(200).json({ conta, sondagem: out });
+  }
+
   // nesta chamada NÃO se manda shop_cipher (é ela que devolve o cipher)
   const d = await chamarTts('/authorization/202309/shops', {}, { access_token: auth.access_token }, ctx);
   if (req.query?.cru === '1') return res.status(200).json({ resposta: d });
