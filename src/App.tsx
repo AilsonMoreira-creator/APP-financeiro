@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Component } from "react";
 import { supabase, USER_ID } from "./supabase.js";
 import CalcMetaAdsMeluni from "./CalcMetaAdsMeluni.jsx";
+import CalcDivergencia from "./CalcDivergencia.jsx";
 import { CalcAnaliseMeluni } from "./CalcAnaliseMeluni";
 import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte from './OrdemDeCorte';
@@ -8486,6 +8487,7 @@ const CalculadoraContent=()=>{
   if(tela==="dash")return<CalcDash prods={prods} prs={prs} roasMeluniGlobal={roasMeluniGlobal} roasMeluniManual={roasMeluniManual} onVoltar={()=>setTela("home")}/>;
   if(tela==="analise")return<CalcAnaliseMeluni prods={prods} prs={prs} roasMeluniGlobal={roasMeluniGlobal} setRoasMeluniGlobal={setRoasMeluniGlobal} freteSubsidiado={meluniFreteSubsidiado} setFreteSubsidiado={setMeluniFreteSubsidiado} state={analiseMeluniState} setState={setAnaliseMeluniState} onVoltar={()=>setTela("home")} mobile={mobile}/>;
   if(tela==="meta-ads")return<CalcMetaAdsMeluni onVoltar={()=>setTela("home")} mobile={mobile}/>;
+  if(tela==="divergencia")return<CalcDivergencia onVoltar={()=>setTela("home")} mobile={mobile}/>;
   if(tela==="det"&&prod&&platSel)return<CalcDetalhe id={platSel} prod={prod} prs={prs} cfgVer={cfgVer} onSalvarTaxas={salvarTaxas} onSalvar={(id,p)=>atualizarPrs(ps=>({...ps,[`${prod.ref}|${id}`]:p}))} onVoltar={()=>setTela("home")}/>;
   const c=prod?calcCusto(prod):0;
   return(
@@ -8502,6 +8504,7 @@ const CalculadoraContent=()=>{
             <button onClick={()=>setTela("dash")} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📊 Dashboard</button>
             <button onClick={()=>setTela("analise")} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>🎯 Análise Meluni</button>
             <button onClick={()=>setTela("meta-ads")} style={{background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>📈 Meta Ads Meluni</button>
+            <button onClick={()=>setTela("divergencia")} title="Compara o preco dos anuncios do ML e da Shopee com o preco definido aqui" style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>⚖️ Divergência de preços</button>
           </div>
         </div>
         <div style={{background:"#fff",borderRadius:12,padding:16,border:"1px solid #e8e2da",marginBottom:16}}>
