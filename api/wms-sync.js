@@ -168,7 +168,7 @@ export default async function handler(req, res) {
     const cache = new Map();
     for (let i = 0; i < ids.length; i += 400) {
       const { data: exist } = await supabase.from('wms_pedidos')
-        .select('pedido_id, situacao_bling, status_wms')
+        .select('pedido_id, situacao_bling, status_wms, impresso_em')
         .eq('conta', conta).in('pedido_id', ids.slice(i, i + 400));
       for (const e of (exist || [])) cache.set(e.pedido_id, e);
     }
@@ -179,7 +179,17 @@ export default async function handler(req, res) {
       if (!c) continue;
       const agora = new Date().toISOString();
       const deveFinalizar = p.categoria === 'finalizado' && (c.status_wms === 'aberto' || c.status_wms === 'em_separacao');
-      if (deveFinalizar) {
+      // O BLING E A FONTE DE VERDADE (Ailson 07/08/2026): se la o pedido segue
+      // "em aberto", ele volta pro funil. Guarda: so reabre o que NUNCA foi
+      // impresso — lista impressa/finalizada pela equipe fica como esta, senao
+      // o sync desfaria o trabalho do dia toda vez que rodasse.
+      const deveReabrir = p.categoria === 'aberto' && c.status_wms === 'finalizado' && !c.impresso_em;
+      if (deveReabrir) {
+        await supabase.from('wms_pedidos')
+          .update({ status_wms: 'aberto', finalizado_em: null, situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora })
+          .eq('conta', conta).eq('pedido_id', p.id);
+        r.reabertos = (r.reabertos || 0) + 1;
+      } else if (deveFinalizar) {
         await supabase.from('wms_pedidos')
           .update({ status_wms: 'finalizado', finalizado_em: agora, situacao_bling: p.situacaoId, situacao_nome: p.situacaoNome, visto_em: agora, atualizado_em: agora })
           .eq('conta', conta).eq('pedido_id', p.id);
