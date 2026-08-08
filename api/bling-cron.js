@@ -15,6 +15,9 @@
  */
 import { supabase, parseDescricao, parseCanal, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 
+// Situacao "Cancelado" no Bling (id padrao do modulo de vendas)
+const ID_CANCELADO = 12;
+
 const CONTAS = ['exitus', 'lumia', 'muniam'];
 const DELAY_MS = 350; // 350ms entre requests = ~2.8 req/s (dentro do limite de 3/s)
 
@@ -93,7 +96,12 @@ export default async function handler(req, res) {
         let pedidosLista = [];
         let pagina = 1;
         while (true) {
-          const url = `https://api.bling.com.br/Api/v3/pedidos/vendas?situacaoId=9&dataInicial=${data}&dataFinal=${data}&pagina=${pagina}&limite=100`;
+          // O Bling v3 IGNORA `situacaoId` (parametro do v2) — a listagem vinha
+          // com TODAS as situacoes mesmo pedindo 9/Atendido. Decisao do Ailson
+          // (07/08/2026): manter todos os pedidos e excluir SO os cancelados
+          // (pedido em aberto ja esta pago e vira atendido de qualquer jeito).
+          // A propria listagem devolve situacao:{id,valor}, entao o corte e aqui.
+          const url = `https://api.bling.com.br/Api/v3/pedidos/vendas?dataInicial=${data}&dataFinal=${data}&pagina=${pagina}&limite=100`;
           const resp = await blingFetch(url, headers);
           if (!resp.ok) {
             console.log(`[bling-cron] ${conta}/${data}: lista pedidos HTTP ${resp.status}`);
@@ -106,6 +114,8 @@ export default async function handler(req, res) {
           for (const p of d.data) {
             // Filtra pela data exata (API pode retornar pedidos adjacentes)
             if (p.data && !p.data.startsWith(data)) continue;
+            // cancelado (id 12 padrao do Bling) fica de fora da receita
+            if (Number(p.situacao?.id) === ID_CANCELADO) { contaResumo.cancelados = (contaResumo.cancelados || 0) + 1; continue; }
             const lojaObj = p.loja || {};
             let lojaNome = lojaObj.descricao || lojaObj.nome || "";
             if (!lojaNome && lojaObj.id && lojaMap[lojaObj.id]) lojaNome = lojaMap[lojaObj.id];
