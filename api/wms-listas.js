@@ -73,7 +73,9 @@ export default async function handler(req, res) {
           .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em')
           .neq('status_wms', 'cancelado');
         if (error) throw error;
-        const hoje = new Date().toISOString().slice(0, 10);
+        // data de HOJE em BRT — com toISOString() puro o "Finalizados Hoje"
+        // zerava as 21h (virada do dia em UTC). Ailson 07/08/2026.
+        const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
         const corteMs = new Date(corteDeHoje()).getTime();
         const porConta = {};
         const porCanal = {};
@@ -90,7 +92,7 @@ export default async function handler(req, res) {
             else { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; }
           }
           else if (r.status_wms === 'em_separacao') { c.em_separacao++; tot.em_separacao++; k.pendentes++; }
-          else if (r.status_wms === 'finalizado' && String(r.finalizado_em || '').slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
+          else if (r.status_wms === 'finalizado' && r.finalizado_em && new Date(new Date(r.finalizado_em).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
         }
         const { data: ultSync } = await supabase.from('wms_pedidos')
           .select('visto_em').order('visto_em', { ascending: false }).limit(1);
