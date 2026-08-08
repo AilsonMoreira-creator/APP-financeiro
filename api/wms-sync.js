@@ -160,6 +160,23 @@ export default async function handler(req, res) {
         noBanco += (ex || []).length;
       }
       r.diag = { janela: `${dataInicial} a ${dataFinal}`, por_situacao: porSit, por_data: porData, ja_no_banco: noBanco, fora_do_banco: pedidosLista.length - noBanco };
+
+      // ?detalhes=N -> baixa o detalhe dos N primeiros e devolve so o que
+      // interessa pra identificar Mercado Livre Flex (Ailson 07/08/2026)
+      const nDet = Math.min(12, parseInt(req.query?.detalhes) || 0);
+      if (nDet) {
+        r.detalhes = [];
+        for (const p of pedidosLista.slice(0, nDet)) {
+          const dr = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.id}`, headers, { maxRetries: 1 });
+          if (!dr.ok) continue;
+          const dd = (await dr.json()).data || {};
+          r.detalhes.push({
+            id: p.id, numeroLoja: dd.numeroLoja, loja: dd.loja,
+            situacao: dd.situacao, transporte: dd.transporte, intermediador: dd.intermediador,
+          });
+          await new Promise(x => setTimeout(x, DELAY_MS));
+        }
+      }
       continue;
     }
 
