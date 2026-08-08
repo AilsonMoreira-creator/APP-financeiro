@@ -53,11 +53,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    // v2 (Ailson 02/08/2026): lucro ESTIMADO (tabela da calculadora, igual antes)
-    // + lucro REALIZADO (preco praticado no pedido x taxas ao vivo do Definir
-    // taxas, sem a linha de desconto previsto — o desconto real ja esta no preco)
+    // v3 (Ailson 08/08/2026): o MERCADO LIVRE passou a usar os numeros REAIS da
+    // API (tabela ml_pedido_taxas) — preco = unit_price do anuncio menos SO o
+    // desconto do vendedor, comissao = sale_fee cobrado de verdade, e cupom do
+    // ML e frete do comprador ficam FORA da conta. Antes o calculo adivinhava o
+    // desconto pela razao total_pedido/total_produtos, que na verdade misturava
+    // subsidio da plataforma com frete. Os outros canais seguem a regua da v2.
     const { data, error } = await supabase
-      .from('vw_lucro_marketplace_mes_v2')
+      .from('vw_lucro_marketplace_mes_v3')
       .select('canal_norm, unidades_canal, receita_bruta_canal, lucro_estimado_canal, lucro_estimado_liquido, lucro_realizado_canal, lucro_realizado_liquido');
 
     if (error) {

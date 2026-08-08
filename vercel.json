@@ -477,6 +477,10 @@
     {
       "schedule": "0,30 15-20 * * 1-6",
       "path": "/api/wms-sync"
+    },
+    {
+      "schedule": "20 11,17,23 * * *",
+      "path": "/api/ml-taxas-sync"
     }
   ]
 }
