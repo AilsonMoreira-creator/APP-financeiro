@@ -18,13 +18,21 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // ── GET: só modo seco, pra testar o caminho sem mandar mensagem ──
+  // ── GET: modo seco (?dry=1) e ESCAPE HATCH de envio real ──
+  // O envio real por GET (?executar=1&confirmo=1) existe porque o POST do front
+  // dele nunca chega no servidor (bug em investigação desde 07/08) e a campanha
+  // não podia ficar parada. Exige as DUAS flags de propósito, pra ninguém
+  // disparar sem querer abrindo um link. Ailson 08/08/2026.
   if (req.method === 'GET') {
-    if (req.query?.dry !== '1') return res.status(405).json({ ok: false, erro: 'GET só com ?dry=1' });
+    const dry = req.query?.dry === '1';
+    const executar = req.query?.executar === '1' && req.query?.confirmo === '1';
+    if (!dry && !executar) {
+      return res.status(405).json({ ok: false, erro: 'GET só com ?dry=1 (teste) ou ?executar=1&confirmo=1 (envia de verdade)' });
+    }
     const ids = String(req.query?.ids || '').split(',').map(s => s.trim()).filter(Boolean);
     if (!ids.length) return res.status(400).json({ ok: false, erro: 'passe ?ids=id1,id2' });
     const r = await dispararNovidadeParaIds(ids, {
-      cfg: req.query?.cfg, versao: req.query?.versao, maxPorChamada: MAX_POR_CHAMADA, dry: true,
+      cfg: req.query?.cfg, versao: req.query?.versao, maxPorChamada: MAX_POR_CHAMADA, dry,
     });
     return res.status(r.ok ? 200 : 400).json(r);
   }

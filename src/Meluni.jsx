@@ -1294,7 +1294,9 @@ function SecaoClientes() {
     try {
       await enviarLotesNovidade(m);
     } catch (e) {
-      setDispMsg('Erro antes de enviar: ' + (e?.message || e));
+      const msg = 'Erro antes de enviar: ' + (e?.message || e);
+      setDispMsg(msg);
+      try { alert(msg); } catch { /* ignora */ }
     } finally {
       setDisparando(false);
     }
@@ -1311,6 +1313,10 @@ function SecaoClientes() {
     let enviados = 0, pulados = 0, erros = 0, falhou = false;
     for (let i = 0; i < lotes.length; i++) {
       setDispMsg(`Enviando… lote ${i + 1} de ${lotes.length} (${enviados} enviados)`);
+      // BEACON de diagnóstico (Ailson 08/08/2026): marca no log da Vercel que o
+      // código CHEGOU aqui. Se o beacon aparece e o POST do disparo não, o
+      // problema é o POST; se nem o beacon aparece, o código para antes.
+      try { await fetch(`/api/version?marca=disparo-lote&n=${lotes[i].length}`); } catch { /* diagnóstico, ignora */ }
       try {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 290000);
