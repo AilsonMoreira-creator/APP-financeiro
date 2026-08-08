@@ -8276,6 +8276,16 @@ const CalculadoraContent=()=>{
   const[syncStatus,setSyncStatus]=useState(null); // null | 'saving' | 'saved' | 'error'
   const prodsRef=useRef([]);
   const prsRef=useRef({});
+  // BASE = foto do que veio do Supabase na ultima leitura/gravacao bem-sucedida.
+  // Serve pra saber o que MUDOU aqui nesta aba. Sem isso o salvar mandava a
+  // tabela inteira de memoria e uma aba antiga desfazia preco alterado em
+  // outro lugar -- era o motivo dos precos "voltarem pro valor antigo".
+  // Ailson 08/08/2026.
+  const baseRef=useRef(null);
+  const fotoCalc=(prods,prs)=>({
+    prods:Object.fromEntries((prods||[]).map(x=>[String(x.ref),JSON.stringify(x)])),
+    prs:Object.fromEntries(Object.entries(prs||{}).map(([k,v])=>[k,JSON.stringify(v)])),
+  });
   const taxasConfigRef=useRef(null);
   const [cfgVer,setCfgVer]=useState(0);
   // === Análise Meluni v2: ROAS global + manuais por produto + estado da tela
@@ -8343,6 +8353,7 @@ const CalculadoraContent=()=>{
             taxasConfigRef.current=data.payload.taxasConfig;
             setCfgVer(v=>v+1);
           }
+          baseRef.current=fotoCalc(data.payload.prods||[],data.payload.prs||{});
           try{localStorage.setItem("amica_calc",JSON.stringify({prods:data.payload.prods||[],prs:data.payload.prs||{}}));}catch(e){console.error(e)}
         }
         setSyncStatus('saved');
@@ -8359,11 +8370,29 @@ const CalculadoraContent=()=>{
       // Fetch estado atual para merge
       const {data}=await supabase.from('amicia_data').select('payload').eq('user_id','calc-meluni').single();
       const remoto=data?.payload||{};
-      // Merge prods: local + remotos que não existem localmente
-      const localRefs=new Set(novosProds.map(p=>p.ref));
-      const prodsMerged=[...novosProds,...(remoto.prods||[]).filter(p=>!localRefs.has(p.ref))];
-      // Merge prs: local tem prioridade (usuário acabou de alterar), remoto preenche o resto
-      const prsMerged={...(remoto.prs||{}),...novosPrs};
+      // MERGE POR DIFERENCA (Ailson 08/08/2026): manda pro banco APENAS o que
+      // mudou nesta aba desde a ultima leitura. O resto vem do remoto, que pode
+      // ter preco novo salvo no celular ou em outra aba. Antes o local ganhava
+      // sempre e uma aba velha desfazia alteracao de preco recente.
+      const base=baseRef.current;
+      const remotoProds=Array.isArray(remoto.prods)?remoto.prods:[];
+      const remotoPorRef=new Map(remotoProds.map(p=>[String(p.ref),p]));
+      const vistosAqui=new Set((novosProds||[]).map(p=>String(p.ref)));
+      const mudouProd=(p)=>{const k=String(p.ref);return !base||base.prods[k]!==JSON.stringify(p);};
+      const prodsMerged=[
+        // ordem da tela: o que esta aqui, preferindo o remoto quando NAO mudei
+        ...(novosProds||[]).map(p=>mudouProd(p)?p:(remotoPorRef.get(String(p.ref))||p)),
+        // refs que existem so no remoto entram; se eu APAGUEI de proposito
+        // (estava na base e nao esta mais aqui), fica apagado
+        ...remotoProds.filter(p=>{const k=String(p.ref);return !vistosAqui.has(k)&&!(base&&base.prods[k]!==undefined);}),
+      ];
+      const prsMerged={...(remoto.prs||{})};
+      for(const [k,v] of Object.entries(novosPrs||{})){
+        if(!base||base.prs[k]!==JSON.stringify(v))prsMerged[k]=v;   // mudei aqui -> vale o meu
+      }
+      if(base)for(const k of Object.keys(base.prs)){
+        if(!(k in (novosPrs||{})))delete prsMerged[k];              // apaguei aqui de proposito
+      }
       // Análise Meluni v2: persistir ROAS global, manuais e estado da análise
       const novoPayload={
         prods:prodsMerged,
@@ -8374,7 +8403,10 @@ const CalculadoraContent=()=>{
         meluniFreteSubsidiado:meluniFreteSubsidiadoRef.current,
         ...((taxasConfigRef.current||remoto.taxasConfig)?{taxasConfig:taxasConfigRef.current||remoto.taxasConfig}:{})
       };
-      await supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:novoPayload},{onConflict:'user_id'});
+      // updated_at explicito: a tabela nao tem trigger, e sem isso nao dava pra
+      // saber QUANDO a calculadora foi gravada (ficou parada em marco/2026)
+      await supabase.from('amicia_data').upsert({user_id:'calc-meluni',payload:novoPayload,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+      baseRef.current=fotoCalc(prodsMerged,prsMerged);
       setSyncStatus('saved');setTimeout(()=>setSyncStatus(null),2000);
     }catch(e){setSyncStatus('error');}
   };
