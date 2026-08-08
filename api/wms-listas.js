@@ -73,7 +73,7 @@ export default async function handler(req, res) {
 
       if (acao === 'dashboard') {
         const { data: rows, error } = await supabase.from('wms_pedidos')
-          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em, situacao_nome, servico_frete')
+          .select('conta, status_wms, qtd_pecas, data_pedido, canal_geral, impresso_em, finalizado_em, criado_em, situacao_nome, servico_frete, ml_logistic_type')
           .neq('status_wms', 'cancelado');
         if (error) throw error;
         // data de HOJE em BRT — com toISOString() puro o "Finalizados Hoje"
@@ -88,9 +88,11 @@ export default async function handler(req, res) {
         const temNf = (nome) => { const n = normSitLocal(nome); return !!n && !n.includes('em aberto') && !n.includes('aberto'); };
         // Pedidos que NAO geram NF (Ailson 07/08/2026):
         //  - Meluni: entra no Bling Lumia com canal "Outros"
-        //  - Mercado Livre Flex: identificado pelo servico do frete
+        //  - Mercado Livre Flex: logistic_type = self_service, vindo da API do
+        //    ML (api/wms-ml-flex.js) — o Bling nao marca Flex em lugar nenhum.
+        //    servico_frete fica de reserva caso o Bling passe a trazer.
         const ehMeluni = (r2) => r2.conta === 'lumia' && normSitLocal(r2.canal_geral) === 'outros';
-        const ehFlex = (r2) => normSitLocal(r2.servico_frete).includes('flex');
+        const ehFlex = (r2) => r2.ml_logistic_type === 'self_service' || normSitLocal(r2.servico_frete).includes('flex');
         for (const r of (rows || [])) {
           const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
