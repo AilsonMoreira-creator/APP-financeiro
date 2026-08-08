@@ -1287,7 +1287,21 @@ function SecaoClientes() {
   const dispararNovidadeVersao = async () => {
     const m = modalNovidade;
     if (!m || !m.versao || disparando) return;
+    // try/finally: se qualquer coisa estourar ANTES do fetch, o botao nao pode
+    // ficar preso em "enviando..." pra sempre (Ailson 07/08/2026 — foi o que
+    // aconteceu com o preview_verao: girava e nenhuma requisicao saia)
     setDisparando(true); setDispMsg('');
+    try {
+      await enviarLotesNovidade(m);
+    } catch (e) {
+      setDispMsg('Erro antes de enviar: ' + (e?.message || e));
+    } finally {
+      setDisparando(false);
+    }
+  };
+
+  const enviarLotesNovidade = async (m) => {
+    if (!Array.isArray(m.ids) || !m.ids.length) { setDispMsg('Nenhum cliente selecionado.'); return; }
     // Envia em LOTES de 30 (limite do backend por chamada), com progresso na
     // tela e timeout por lote — antes mandava a lista inteira de uma vez e a
     // tela travava esperando a resposta (Ailson 07/08/2026).
@@ -1309,12 +1323,17 @@ function SecaoClientes() {
         const j = await r.json();
         if (j.ok) { enviados += j.enviados || 0; pulados += j.pulados || 0; erros += j.erros || 0; }
         else { falhou = true; setDispMsg(j.erro || 'falhou'); break; }
-      } catch { falhou = true; setDispMsg(`Interrompido no lote ${i + 1} · ${enviados} enviados até aqui`); break; }
+      } catch (e) {
+        falhou = true;
+        const causa = e?.name === 'AbortError' ? 'demorou demais (5 min)' : (e?.message || 'falha de rede');
+        setDispMsg(`Parou no lote ${i + 1} · ${enviados} enviados até aqui · ${causa}`);
+        break;
+      }
     }
     if (!falhou) setDispMsg(`✅ ${enviados} enviado(s)${pulados ? ` · ${pulados} pulado(s)` : ''}${erros ? ` · ${erros} erro(s)` : ''}`);
     setSel(new Set()); carregar();
-    setDisparando(false); setModalNovidade(null);
-    setTimeout(() => setDispMsg(''), 8000);
+    setModalNovidade(null);
+    setTimeout(() => setDispMsg(''), 12000);
   };
 
   // Troca o criativo (imagem do header) de um template — modal Templates

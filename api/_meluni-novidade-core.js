@@ -75,7 +75,7 @@ export async function selecionarElegiveis({ dias = 7, max = 500 } = {}) {
 
 // Dispara o template de novidade pros ids dados. Idempotente por nome de template
 // (não manda a MESMA novidade 2x pro mesmo cliente).
-export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada = MAX_POR_CHAMADA, congelados = null } = {}) {
+export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada = MAX_POR_CHAMADA, congelados = null, dry = false } = {}) {
   let alvo = Array.isArray(ids) ? ids.filter(Boolean) : [];
   if (!alvo.length) return { ok: false, erro: 'sem ids' };
   const cortado = alvo.length > maxPorChamada;
@@ -115,6 +115,9 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
         if (jaMsg) { pulados++; detalhe.push({ id, status: 'ja_recebeu_novidade' }); continue; }
       }
 
+      // dry: passa por TODAS as guardas e para antes da Meta (Ailson 07/08/2026,
+      // pra dar pra testar o caminho sem mandar mensagem pra cliente de verdade)
+      if (dry) { enviados++; detalhe.push({ id, status: 'enviaria', tel, nome }); continue; }
       const r = await enviarTemplateLara('55' + tel, tpl.name, [nome], { language: lang, headerImage });
       const metaMsgId = r?.messages?.[0]?.id || null;
       const nowIso = new Date().toISOString();
@@ -137,5 +140,5 @@ export async function dispararNovidadeParaIds(ids, { cfg, versao, maxPorChamada 
     }
   }
 
-  return { ok: true, enviados, pulados, erros, total: alvo.length, cortado, max: maxPorChamada, template: tpl.name, detalhe };
+  return { ok: true, dry, enviados, pulados, erros, total: alvo.length, cortado, max: maxPorChamada, template: tpl.name, detalhe };
 }
