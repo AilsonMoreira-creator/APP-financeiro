@@ -128,7 +128,10 @@ export default async function handler(req, res) {
         if (primeiro) pedido = await ml(`/orders/${primeiro}`, token);
       }
       if (pedido.erro) return res.status(400).json({ erro: pedido.erro });
+      // /discounts diz QUEM pagou cada desconto de campanha (vendedor x ML)
+      const desc = await ml(`/orders/${pedido.id}/discounts`, token);
       return res.status(200).json({
+        descontos: desc?.erro ? { erro: desc.erro } : desc,
         id: pedido.id, status: pedido.status, date_created: pedido.date_created,
         total_amount: pedido.total_amount, paid_amount: pedido.paid_amount,
         coupon: pedido.coupon, taxes: pedido.taxes,
