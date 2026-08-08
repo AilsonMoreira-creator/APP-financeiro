@@ -25,6 +25,47 @@ export default async function handler(req, res) {
   const fim = Math.floor(Date.now() / 1000);
   const ini = fim - dias * 86400;
 
+  // ?combo=1 -> itens em que os DOIS descontos incidem juntos, pra descobrir se
+  // o TikTok separa direito e se a conta é soma simples ou desconto sobre
+  // desconto (a suspeita do Ailson: o desconto da plataforma vem POR CIMA do
+  // dele). Ailson 08/08/2026.
+  if (req.query?.combo === '1') {
+    let token = null, ids = [], p = 0;
+    while (p < 20) {
+      const pg = await chamarTts('/order/202309/orders/search',
+        { page_size: '50', ...(token ? { page_token: token } : {}) }, auth, ctx,
+        { method: 'POST', body: { create_time_ge: ini, create_time_lt: fim } });
+      if (pg?.code !== 0) return res.status(400).json({ etapa: 'search', resposta: pg });
+      (pg.data?.orders || []).forEach(o => ids.push(o.id));
+      token = pg.data?.next_page_token; p++;
+      if (!token) break;
+    }
+    const linhas = [];
+    let soma_bate = 0, soma_nao_bate = 0;
+    for (let i = 0; i < ids.length; i += 50) {
+      const det = await chamarTts('/order/202309/orders', { ids: ids.slice(i, i + 50).join(',') }, auth, ctx);
+      if (det?.code !== 0) continue;
+      for (const o of (det.data?.orders || [])) {
+        if (String(o.status || '').toUpperCase() === 'CANCELLED') continue;
+        for (const it of (o.line_items || [])) {
+          const orig = Number(it.original_price) || 0;
+          const dv = Number(it.seller_discount) || 0;
+          const dp = Number(it.platform_discount) || 0;
+          const venda = Number(it.sale_price) || 0;
+          if (orig <= 0 || (dv <= 0 && dp <= 0)) continue;
+          const bate = Math.abs((orig - dv - dp) - venda) < 0.02;
+          bate ? soma_bate++ : soma_nao_bate++;
+          if (linhas.length < 30) linhas.push({
+            produto: String(it.product_name || '').slice(0, 38), sku: it.seller_sku,
+            original: orig, desc_meu: dv, desc_tiktok: dp, vendido: venda,
+            conta_bate: bate, pct_meu: Math.round(dv / orig * 100), pct_tiktok: Math.round(dp / orig * 100),
+          });
+        }
+      }
+    }
+    return res.status(200).json({ ok: true, formula_soma_simples_bate_em: soma_bate, nao_bate: soma_nao_bate, linhas });
+  }
+
   // ?resumo=1 -> percorre TODAS as páginas da janela e devolve a distribuição
   // do desconto DO VENDEDOR e do desconto DA PLATAFORMA por item, em % do preço
   // original. Serve pra conferir se o desconto dele é só 5/10/15% e se todo o
