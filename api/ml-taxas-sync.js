@@ -66,8 +66,27 @@ async function pedidoDoML(numeroLoja, token) {
     sale_fee: n(it.sale_fee),
     listing_type: it.listing_type_id || null,
   }));
+  // /orders/{id}/discounts é o ÚNICO lugar que separa quem pagou o desconto de
+  // campanha: amounts.total = desconto cheio, amounts.seller = a parte que sai
+  // do bolso do vendedor (o resto é subsídio do ML). Ailson 08/08/2026.
+  let dTotal = 0, dSeller = 0;
+  for (const o of ordens) {
+    const dd = await ml(`/orders/${o.id}/discounts`, token);
+    if (dd?.erro) continue;
+    for (const det of (dd.details || [])) {
+      for (const it of (det.items || [])) {
+        dTotal += n(it.amounts?.total);
+        dSeller += n(it.amounts?.seller);
+      }
+    }
+  }
+
   const pag = p.payments || [];
   return {
+    status_ml: p.status || null,
+    desconto_total: Math.round(dTotal * 100) / 100,
+    desconto_vendedor: Math.round(dSeller * 100) / 100,
+    desconto_plataforma: Math.round((dTotal - dSeller) * 100) / 100,
     ml_order_id: String(p.id),
     data: (p.date_created || '').slice(0, 10) || null,
     preco_produtos: itens.reduce((s, i) => s + i.unit_price * i.qtd, 0),
@@ -139,6 +158,8 @@ export default async function handler(req, res) {
       preco_produtos: d.preco_produtos, full_price: d.full_price, sale_fee: d.sale_fee,
       coupon_amount: d.coupon_amount, shipping_cost: d.shipping_cost, total_paid: d.total_paid,
       listing_type: d.listing_type, itens: d.itens, checado_em: new Date().toISOString(),
+      status_ml: d.status_ml, desconto_total: d.desconto_total,
+      desconto_vendedor: d.desconto_vendedor, desconto_plataforma: d.desconto_plataforma,
     }, { onConflict: 'conta,numero_loja' });
     if (eUp) { r.erros++; continue; }
     r.gravados++;
