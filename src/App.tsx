@@ -9979,6 +9979,21 @@ export default function App(){
   const [produtosExcluidos,setProdutosExcluidos]=useState({});
   const produtosExcluidosRef=useRef({});
   useEffect(()=>{produtosExcluidosRef.current=produtosExcluidos||{};},[produtosExcluidos]);
+  // Aplica as LÁPIDES de exclusão em QUALQUER lista de produtos que venha de um
+  // payload. Antes só os dois merges do cortes respeitavam as lápides — os loads
+  // que faziam setProdutos(d.produtos) direto traziam a ref excluída de volta.
+  // Ailson 08/08/2026.
+  const absorverLapides=(novas)=>{
+    if(!novas)return produtosExcluidosRef.current;
+    const juntas={...produtosExcluidosRef.current,...novas};
+    produtosExcluidosRef.current=juntas;
+    setProdutosExcluidos(juntas);
+    return juntas;
+  };
+  const semExcluidos=(lista,lapides)=>{
+    const L=lapides||produtosExcluidosRef.current||{};
+    return (lista||[]).filter(p=>{const e=L[p.ref];return !(e&&e>=(p._mod||0));});
+  };
   const [produtos,setProdutos]=useState([
     {ref:"2700",descricao:"VESTIDO LINHO SEM ELASTANO",marca:"Meluni",valorUnit:1,tecido:"Linho s/ elastano"},
     {ref:"1060",descricao:"CALÇA PANTALONA VISCOLINHO",marca:"Amícia",valorUnit:1,tecido:"Viscolinho"},
@@ -10236,7 +10251,7 @@ export default function App(){
         if(d.categoriasPorMes)setCategoriasPorMes(d.categoriasPorMes);
         if(d.boletosShared&&d.boletosShared.length>0)setBoletosShared(deduplicarBoletos(d.boletosShared));
         if(d.prestadores)setPrestadores(d.prestadores);
-        if(d.produtos)setProdutos(d.produtos);
+        if(d.produtos)setProdutos(semExcluidos(d.produtos,absorverLapides(d.produtosExcluidos)));
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
         if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
@@ -10320,7 +10335,7 @@ export default function App(){
           // Outros campos: local já tem prioridade (setado no passo 1)
           // Mas se local não tem, usa remoto
           if(!localParsed.prestadores&&d.prestadores)setPrestadores(d.prestadores);
-          if(!localParsed.produtos&&d.produtos)setProdutos(d.produtos);
+          if(!localParsed.produtos&&d.produtos)setProdutos(semExcluidos(d.produtos,absorverLapides(d.produtosExcluidos)));
           if(!localParsed.oficinasCAD&&d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
           if(!localParsed.logTroca&&d.logTroca)setLogTroca(d.logTroca);
           if(!localParsed.tecidosCAD&&d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
@@ -10361,7 +10376,9 @@ export default function App(){
           }
           if(d.prestadores)setPrestadores(d.prestadores);
           if(d.cortes&&(!dc?.payload?.cortes)){setCortes(d.cortes);try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e);}}
-          if(d.produtos)setProdutos(d.produtos);
+          // as lápides ficam gravadas NESTE payload (dados={...produtosExcluidos})
+          // mas antes só eram lidas do payload de cortes — por isso sumiam
+          if(d.produtos)setProdutos(semExcluidos(d.produtos,absorverLapides(d.produtosExcluidos)));
           if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
           if(d.logTroca)setLogTroca(d.logTroca);
           if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
@@ -10526,7 +10543,8 @@ export default function App(){
           return mudou?deduplicarBoletos(merged):prev;
         });
         if(d.prestadores)setPrestadores(d.prestadores);
-        if(d.produtos)setProdutos(d.produtos);
+        // realtime do payload principal: respeita as lápides tambem
+        if(d.produtos)setProdutos(semExcluidos(d.produtos,absorverLapides(d.produtosExcluidos)));
         if(d.oficinasCAD)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
         if(d.tecidosCAD)setTecidosCAD(d.tecidosCAD);
@@ -11902,7 +11920,13 @@ export default function App(){
         {active==="meluni"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('meluni'))&&<ModuleErrorBoundary><Meluni userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="wms"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('wms'))&&<ModuleErrorBoundary><PickingWMS userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
         {active==="reativar"&&(usuarioLogado?.admin===true||(usuarioLogado?.modulos||[]).includes('reativar'))&&<ModuleErrorBoundary><ClientesReativarModule userId={usuarioLogado?.usuario||""} isAdmin={usuarioLogado?.admin===true} onBack={()=>setActive("home")}/></ModuleErrorBoundary>}
-        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos} setProdutos={setProdutos} onExcluirProduto={(ref)=>{const ts=Date.now();setProdutosExcluidos(prev=>{const n={...prev,[ref]:ts};produtosExcluidosRef.current=n;return n;});setProdutos(prev=>prev.filter(x=>x.ref!==ref));}} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
+        {active==="oficinas"&&<OficinasContent cortes={cortes} setCortes={setCortes} produtos={produtos}
+          /* mexer em produto TAMBEM conta como edicao do usuario. Sem isso o
+             auto-save batia no guard "sem edit do usuario desde o load" e a
+             alteracao (inclusive a EXCLUSAO) morria em memoria: no proximo load
+             o payload antigo trazia a ref de volta. Ailson 08/08/2026. */
+          setProdutos={(v)=>{lastUserEditTs.current=Date.now();setProdutos(v);}}
+          onExcluirProduto={(ref)=>{const ts=Date.now();lastUserEditTs.current=ts;setProdutosExcluidos(prev=>{const n={...prev,[ref]:ts};produtosExcluidosRef.current=n;return n;});setProdutos(prev=>prev.filter(x=>x.ref!==ref));}} oficinasCAD={oficinasCAD} setOficinasCAD={setOficinasCAD} logTroca={logTroca} setLogTroca={setLogTroca} setAuxDataPorMes={setAuxDataPorMes} tecidosCAD={tecidosCAD} setTecidosCAD={setTecidosCAD} isAdmin={usuarioLogado?.admin===true} pendingSnapshotIds={pendingSnapshotIds} abaPedida={oficinasAbaPedida} onAbaConsumida={()=>setOficinasAbaPedida(null)}/>}
         {active==="usuarios"&&<UsuariosContent usuarios={usuarios} setUsuarios={setUsuarios} onDeletarUsuario={deletarUsuario} saveStatus={usuariosSaveStatus}/>}
         {active==="configuracoes"&&<ConfiguracoesContent
           codigoFonte={document.currentScript?.ownerDocument?.body?.innerText||""}
