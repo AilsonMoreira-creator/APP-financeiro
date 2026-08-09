@@ -80,7 +80,9 @@ export default async function handler(req, res) {
           bruto: t,
           atualizado_em: new Date().toISOString(),
         };
-        const { error } = await supabase.from('tts_repasse').upsert(linha, { onConflict: 'conta,order_id' });
+        // uma linha por statement: a venda e a devolução do mesmo pedido
+        // convivem (a unique antiga fazia a devolução engolir a venda)
+        const { error } = await supabase.from('tts_repasse').upsert(linha, { onConflict: 'conta,order_id,statement_id' });
         if (error) resumo.erros++; else resumo.gravados++;
       }
       tk = r.data?.next_page_token;
