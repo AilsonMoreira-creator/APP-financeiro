@@ -39,8 +39,15 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
     </div>
   );
 
-  const Kpi = ({ label, valor, sub, destaque }) => (
-    <div style={{ background: destaque ? '#010101' : '#f7f4f0', color: destaque ? '#fff' : C.iaDarker, borderRadius: 8, padding: 12 }}>
+  const KPI_CORES = {
+    preto: { bg: '#010101', fg: '#fff' },
+    azul: { bg: '#dbe9f6', fg: '#1f4e79' },       // pedidos (Ailson 09/08)
+    verde: { bg: '#1f7a48', fg: '#fff' },          // vendas pagas
+    amarelo: { bg: '#f7ecd0', fg: '#8a6a1a' },     // liquidação em atraso
+    neutro: { bg: '#f7f4f0', fg: C.iaDarker },
+  };
+  const Kpi = ({ label, valor, sub, destaque, cor }) => (
+    <div style={{ background: KPI_CORES[cor || (destaque ? 'preto' : 'neutro')].bg, color: KPI_CORES[cor || (destaque ? 'preto' : 'neutro')].fg, borderRadius: 8, padding: 12, border: cor === 'amarelo' ? '1px solid #c8a040' : 'none' }}>
       <div style={{ fontSize: 9, opacity: 0.7, letterSpacing: 1, textTransform: 'uppercase', fontFamily: SERIF }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2, fontFamily: CALIBRI }}>{valor}</div>
       {sub && <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2 }}>{sub}</div>}
@@ -89,39 +96,44 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
           <>
             <Secao titulo={`Vendas · ${d.de} → ${d.ate}`}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
-                <Kpi label="Pedidos" valor={d.resumo.pagaveis} sub={`${d.resumo.unidades} un`} destaque />
+                <Kpi label="Pedidos" valor={d.resumo.pagaveis} sub={`${d.resumo.unidades} un`} cor="azul" />
                 <Kpi label="Vendas" valor={`R$ ${fmt(d.resumo.vendas)}`} sub={`ticket R$ ${fmt(d.resumo.ticket_medio)}`} />
-                <Kpi label="Cancelados" valor={d.resumo.cancelados} sub={pct(d.resumo.cancelados, d.resumo.pedidos_total) + ' dos criados'} />
                 <Kpi label="Amostras grátis" valor={d.resumo.amostras} sub="fora do lucro" />
               </div>
             </Secao>
 
             <Secao titulo="Repasses · liquidação">
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
-                <Kpi label="Vendas pagas" valor={d.liquidacao.liquidados} sub={`R$ ${fmt(d.liquidacao.recebido)} recebidos`} destaque />
+                <Kpi label="Vendas pagas" valor={d.liquidacao.liquidados} sub={`R$ ${fmt(d.liquidacao.recebido)} recebidos`} cor="verde" />
                 <Kpi label="Em aberto" valor={d.liquidacao.em_aberto} sub={`~R$ ${fmt(d.liquidacao.em_aberto_previsto)} previstos (${fmt(d.liquidacao.ratio_pago_pct)}% de R$ ${fmt(d.liquidacao.em_aberto_vendas)})`} />
+                {d.liquidacao.em_atraso > 0 && (
+                  <Kpi label="Liquidação em atraso" cor="amarelo" valor={d.liquidacao.em_atraso}
+                    sub={`R$ ${fmt(d.liquidacao.em_atraso_vendas)} · em aberto há mais de ${d.liquidacao.atraso_limite_dias} dias (30% acima da média de ${d.liquidacao.prazo_medio_dias})`} />
+                )}
                 <Kpi label="Depositado últimos 30d" valor={`R$ ${fmt(d.liquidacao.depositado_30d)}`} sub={`${d.liquidacao.depositado_30d_pedidos} vendas`} />
                 <Kpi label="Prazo médio" valor={d.liquidacao.prazo_medio_dias != null ? `${d.liquidacao.prazo_medio_dias} dias` : '—'} sub="pedido → depósito" />
               </div>
             </Secao>
 
             {fin && (
-              <Secao titulo="Detalhamento de valores · vendas liquidadas" nota="Frete líquido já inclui a taxa fixa por item (R$ 4 até jul, R$ 6 em ago). Outros/ajustes é o que o TikTok debitou ou creditou fora destas linhas.">
+              <Secao titulo="Detalhamento de valores · vendas liquidadas" nota="Frete debitado já vem líquido do subsídio do TikTok e inclui a taxa fixa por item (R$ 4 até jul, R$ 6 em ago). Outros/ajustes é o que o TikTok debitou ou creditou fora destas linhas.">
                 <Linha label="Valor de venda" valor={fin.venda} positivo forte />
-                {fin.desconto_plataforma > 0 && <Linha label="Desconto da plataforma" valor={fin.desconto_plataforma} base={fin.venda} />}
-                {fin.desconto_vendedor > 0 && <Linha label="Desconto do vendedor" valor={fin.desconto_vendedor} base={fin.venda} />}
+                {fin.desconto_vendedor > 0 && <Linha label="Desconto do vendedor (sai do seu repasse)" valor={fin.desconto_vendedor} base={fin.venda} />}
                 <Linha label="Comissão TikTok" valor={fin.comissao} base={fin.venda} />
                 {fin.afiliado_creator > 0 && <Linha label="Comissão de afiliado (creator)" valor={fin.afiliado_creator} base={fin.venda} />}
                 {fin.afiliado_ads > 0 && <Linha label="Comissão de afiliado (ads/parceiro)" valor={fin.afiliado_ads} base={fin.venda} />}
                 {fin.taxa_transacao > 0 && <Linha label="Taxa de transação" valor={fin.taxa_transacao} base={fin.venda} />}
-                <Linha label="Frete real" valor={fin.frete_real} base={fin.venda} />
-                <Linha label="Frete pago pelo cliente" valor={fin.frete_cliente} base={fin.venda} positivo />
-                <Linha label="Subsídio de frete do TikTok" valor={fin.subsidio_frete} base={fin.venda} positivo />
+                <Linha label="Frete debitado pelo TikTok" valor={fin.frete_debitado} base={fin.venda} />
                 <div style={{ fontSize: 11, color: C.muted, padding: '4px 0', fontFamily: CALIBRI }}>
-                  → frete líquido no seu bolso: R$ {fmt(freteLiquido)} ({pct(freteLiquido, fin.venda)})
+                  → frete real R$ {fmt(fin.frete_real)} · cliente pagou R$ {fmt(fin.frete_cliente)} · TikTok subsidiou R$ {fmt(fin.subsidio_frete)}
                 </div>
                 {Math.abs(fin.outros_ajustes) >= 0.01 && <Linha label="Outros / ajustes" valor={fin.outros_ajustes} base={fin.venda} positivo={fin.outros_ajustes > 0} />}
                 <Linha label="Recebido (settlement)" valor={fin.recebido} positivo forte />
+                {fin.desconto_plataforma > 0 && (
+                  <div style={{ fontSize: 11, color: '#1f7a48', marginTop: 8, fontFamily: CALIBRI }}>
+                    ℹ Desconto da plataforma: R$ {fmt(fin.desconto_plataforma)} dados ao cliente — bancados pelo TikTok, não saem do seu repasse.
+                  </div>
+                )}
               </Secao>
             )}
 

@@ -110,12 +110,16 @@ export default async function handler(req, res) {
       frete_real: soma(vendasLiq, l => n(l.frete_real)),
       frete_cliente: soma(vendasLiq, l => n(l.frete_cobrado_cliente)),
       subsidio_frete: soma(vendasLiq, l => n(l.subsidio_frete)),
+      // o que o TikTok DEBITA de frete (shipping_fee_amount) já vem líquido do
+      // subsídio dele e inclui a taxa fixa por item
+      frete_debitado: soma(vendasLiq, l => Math.abs(n(l.bruto?.shipping_fee_amount))),
       recebido: soma(vendasLiq, l => n(l.settlement)),
     };
-    // "outra despesa se aparecer": o que o settlement não explica pelas linhas
-    fin.outros_ajustes = r2(fin.recebido - (fin.venda - fin.desconto_plataforma - fin.comissao
-      - fin.afiliado_creator - fin.afiliado_ads - fin.taxa_transacao
-      - fin.frete_real + fin.frete_cliente + fin.subsidio_frete));
+    // Aritmética PROVADA nos statements (09/08): settlement = (venda − desconto
+    // do vendedor) − taxas. O desconto DA PLATAFORMA fica FORA — o TikTok banca.
+    // O resíduo abaixo é o que as linhas conhecidas não explicam.
+    fin.outros_ajustes = r2(fin.recebido - (fin.venda - fin.desconto_vendedor - fin.comissao
+      - fin.afiliado_creator - fin.afiliado_ads - fin.taxa_transacao - fin.frete_debitado));
 
     const dev = {
       qtd: devolucoes.length,
@@ -154,12 +158,32 @@ export default async function handler(req, res) {
         if (sv > 0) ratio = ss / sv;
       }
     }
-    const prazos = vendasLiq
+    // prazo médio SEMPRE dos últimos 90 dias (estável mesmo com a janela "mês",
+    // que no começo do mês não tem nada liquidado)
+    const { data: pz } = await supabase.from('tts_repasse')
+      .select('data_pedido, data_repasse').gt('venda', 0)
+      .gte('data_pedido', new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10));
+    const prazos = (pz || [])
       .filter(l => l.data_pedido && l.data_repasse)
       .map(l => (new Date(l.data_repasse) - new Date(l.data_pedido)) / 86400000);
     const { data: dep30 } = await supabase.from('tts_repasse')
       .select('settlement, order_id, venda').gt('venda', 0)
       .gte('data_repasse', new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
+
+    // liquidação em atraso: pedido em aberto há mais de 30% além do prazo médio
+    const prazoMedio = prazos.length ? prazos.reduce((a, b) => a + b, 0) / prazos.length : null;
+    const limiteAtraso = prazoMedio ? prazoMedio * 1.3 : null;
+    let atrasoQtd = 0, atrasoVendas = 0;
+    if (limiteAtraso) {
+      for (const o of pedidos) {
+        if (!emAbertoIds.includes(String(o.id))) continue;
+        const idadeDias = (Date.now() / 1000 - n(o.create_time)) / 86400;
+        if (idadeDias > limiteAtraso) {
+          atrasoQtd++;
+          for (const it of (o.line_items || [])) atrasoVendas += n(it.sale_price);
+        }
+      }
+    }
 
     const liquidacao = {
       liquidados: idsLiquidados.size,
@@ -168,7 +192,10 @@ export default async function handler(req, res) {
       em_aberto_vendas: r2(vendasEmAberto),
       em_aberto_previsto: r2(vendasEmAberto * ratio),
       ratio_pago_pct: r2(ratio * 100),
-      prazo_medio_dias: prazos.length ? Math.round(prazos.reduce((a, b) => a + b, 0) / prazos.length) : null,
+      prazo_medio_dias: prazoMedio != null ? Math.round(prazoMedio) : null,
+      atraso_limite_dias: limiteAtraso != null ? Math.round(limiteAtraso) : null,
+      em_atraso: atrasoQtd,
+      em_atraso_vendas: r2(atrasoVendas),
       depositado_30d: r2((dep30 || []).reduce((t, x) => t + n(x.settlement), 0)),
       depositado_30d_pedidos: (dep30 || []).length,
     };
