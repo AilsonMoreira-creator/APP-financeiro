@@ -55,11 +55,11 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
   );
 
   const Linha = ({ label, valor, base, positivo, forte }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: `1px dashed ${C.cream}`, fontFamily: CALIBRI, fontSize: 13 }}>
-      <span style={{ color: forte ? C.iaDarker : '#555', fontWeight: forte ? 700 : 400 }}>{label}</span>
-      <span style={{ fontWeight: forte ? 800 : 600, color: forte ? C.iaDarker : (positivo ? '#1f7a48' : '#a04040') }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, padding: '5px 0', borderBottom: `1px dashed ${C.cream}`, fontFamily: CALIBRI, fontSize: 12.5 }}>
+      <span style={{ color: forte ? C.iaDarker : '#555', fontWeight: forte ? 700 : 400, flex: 1, minWidth: 0 }}>{label}</span>
+      <span style={{ fontWeight: forte ? 800 : 600, whiteSpace: 'nowrap', color: forte ? C.iaDarker : (positivo ? '#1f7a48' : '#a04040') }}>
         {positivo ? '+' : '−'} R$ {fmt(Math.abs(valor))}
-        <span style={{ color: C.muted, fontWeight: 400, fontSize: 11, marginLeft: 6 }}>{base ? pct(Math.abs(valor), base) : ''}</span>
+        {base ? <span style={{ color: C.muted, fontWeight: 400, fontSize: 10.5, marginLeft: 5 }}>{pct(Math.abs(valor), base)}</span> : null}
       </span>
     </div>
   );
@@ -128,7 +128,17 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
                   → frete real R$ {fmt(fin.frete_real)} · cliente pagou R$ {fmt(fin.frete_cliente)} · TikTok subsidiou R$ {fmt(fin.subsidio_frete)}
                 </div>
                 {Math.abs(fin.outros_ajustes) >= 0.01 && <Linha label="Outros / ajustes" valor={fin.outros_ajustes} base={fin.venda} positivo={fin.outros_ajustes > 0} />}
-                <Linha label="Recebido (settlement)" valor={fin.recebido} positivo forte />
+                <Linha label="Recebido após todos os descontos" valor={fin.recebido} base={fin.venda} positivo forte />
+                <Linha label="Imposto (11% da venda)" valor={fin.imposto} base={fin.venda} />
+                <Linha label="Agência (5% da venda)" valor={fin.agencia} base={fin.venda} />
+                <Linha label="Total após imposto e agência" valor={fin.liquido_pos_imposto} base={fin.venda} positivo forte />
+                <Linha label="CMV · custo da mercadoria" valor={fin.cmv?.total || 0} base={fin.venda} />
+                {fin.cmv?.estimado > 0 && (
+                  <div style={{ fontSize: 10.5, color: C.muted, padding: '2px 0', fontFamily: CALIBRI }}>
+                    → R$ {fmt(fin.cmv.exato)} exato ({fin.cmv.un_com_custo} un) + R$ {fmt(fin.cmv.estimado)} estimado ({fin.cmv.vendas_sem_vinculo} vendas sem vínculo no Bling)
+                  </div>
+                )}
+                <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte />
                 {fin.desconto_plataforma > 0 && (
                   <div style={{ fontSize: 11, color: '#1f7a48', marginTop: 8, fontFamily: CALIBRI }}>
                     ℹ Desconto da plataforma: R$ {fmt(fin.desconto_plataforma)} dados ao cliente — bancados pelo TikTok, não saem do seu repasse.
@@ -155,25 +165,6 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
               </div>
             </Secao>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Secao titulo="Vendas por estado">
-                {(d.estados || []).map(e => (
-                  <div key={e.uf} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontFamily: CALIBRI, padding: '3px 0' }}>
-                    <span>{e.uf}</span><b>{e.pedidos}</b>
-                  </div>
-                ))}
-                {!d.estados?.length && <div style={{ fontSize: 11, color: C.muted }}>—</div>}
-              </Secao>
-              <Secao titulo="Top produtos">
-                {(d.top_produtos || []).map(p => (
-                  <div key={p.nome} style={{ fontSize: 11, fontFamily: CALIBRI, padding: '3px 0', borderBottom: `1px dashed ${C.cream}` }}>
-                    <div style={{ color: C.iaDarker }}>{p.nome}</div>
-                    <div style={{ color: C.muted }}>{p.un} un · R$ {fmt(p.vendas)}</div>
-                  </div>
-                ))}
-                {!d.top_produtos?.length && <div style={{ fontSize: 11, color: C.muted }}>—</div>}
-              </Secao>
-            </div>
           </>
         )}
       </div>

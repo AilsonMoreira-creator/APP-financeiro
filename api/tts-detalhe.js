@@ -200,6 +200,51 @@ export default async function handler(req, res) {
       depositado_30d_pedidos: (dep30 || []).length,
     };
 
+    // ── CMV das vendas liquidadas (custo via Bling numero_pedido_loja → ref) ─
+    const cmv = { exato: 0, un_com_custo: 0, estimado: 0, vendas_sem_vinculo: 0 };
+    if (idsLiquidados.size) {
+      const { data: blg } = await supabase.from('bling_vendas_detalhe')
+        .select('numero_pedido_loja, itens')
+        .in('numero_pedido_loja', [...idsLiquidados].slice(0, 300));
+      const refs = new Set(); const linhasB = []; const matcheados = new Set();
+      for (const b of (blg || [])) {
+        matcheados.add(String(b.numero_pedido_loja));
+        for (const it of (b.itens || [])) {
+          const ref = String(it.ref || '').replace(/^0+/, '');
+          const un = Number(it.quantidade) || 0;
+          if (ref && un > 0) { refs.add(ref); linhasB.push({ ref, un }); }
+        }
+      }
+      const custos = {};
+      if (refs.size) {
+        const { data: cs } = await supabase.from('vw_calc_custos')
+          .select('ref_norm, custo_producao').in('ref_norm', [...refs]);
+        (cs || []).forEach(c => { custos[c.ref_norm] = Number(c.custo_producao) || 0; });
+      }
+      for (const l of linhasB) {
+        if (custos[l.ref] > 0) { cmv.exato += custos[l.ref] * l.un; cmv.un_com_custo += l.un; }
+      }
+      // liquidadas sem vínculo no Bling (meses sem backfill): estima pela
+      // proporção custo/venda das que têm custo — e diz isso na tela
+      let vendaMatch = 0, vendaSem = 0;
+      for (const l of vendasLiq) {
+        if (matcheados.has(String(l.order_id))) vendaMatch += n(l.venda);
+        else { vendaSem += n(l.venda); cmv.vendas_sem_vinculo++; }
+      }
+      if (vendaSem > 0 && vendaMatch > 0 && cmv.exato > 0) {
+        cmv.estimado = r2(cmv.exato / vendaMatch * vendaSem);
+      }
+      cmv.exato = r2(cmv.exato);
+    }
+    cmv.total = r2(cmv.exato + cmv.estimado);
+
+    // régua do Ailson: imposto 11% + agência 5%, sobre o preço de venda
+    fin.imposto = r2(fin.venda * 0.11);
+    fin.agencia = r2(fin.venda * 0.05);
+    fin.liquido_pos_imposto = r2(fin.recebido - fin.imposto - fin.agencia);
+    fin.cmv = cmv;
+    fin.resultado_final = r2(fin.liquido_pos_imposto - cmv.total);
+
     return res.status(200).json({
       ok: true, janela, de: iniIso, ate: new Date().toISOString().slice(0, 10),
       resumo, liquidacao, detalhamento: fin, devolucoes: dev, canais,

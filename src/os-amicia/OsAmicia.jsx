@@ -977,7 +977,7 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
               padding: 18,
               marginBottom: 14,
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
               gap: 12,
             }}
           >
