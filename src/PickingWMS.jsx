@@ -939,9 +939,9 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                   {[
-                    { l: 'Total pedidos', v: dash?.vendas_dia?.total ?? '—', d: 'loja + Full' },
-                    { l: 'Pedidos loja', v: `${dash?.vendas_dia?.loja_finalizados ?? 0} de ${dash?.vendas_dia?.loja ?? 0}`, d: 'finalizados até o momento' },
-                    { l: 'Pedidos Full', v: dash?.vendas_dia?.full ?? '—', d: 'saem do galpão do ML' },
+                    { l: 'Total do dia', v: dash?.vendas_dia?.total ?? '—', d: 'finalizados loja + Full de hoje' },
+                    { l: 'Pedidos loja', v: dash?.vendas_dia?.loja_finalizados ?? '—', d: 'finalizados hoje (de qualquer dia)' },
+                    { l: 'Pedidos Full', v: dash?.vendas_dia?.full ?? '—', d: 'que entraram hoje (00h→24h)' },
                   ].map(x => (
                     <div key={x.l}>
                       <div style={{ fontSize: 22, fontWeight: 800, color: palette.ink, lineHeight: 1.1 }}>{x.v}</div>

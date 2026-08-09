@@ -96,26 +96,28 @@ export default async function handler(req, res) {
         // Full: sai do galpao do ML, a equipe nao encosta. Entra no Bling ja
         // como atendido, entao nunca aparece no funil — mas conta venda.
         const ehFull = (r2) => r2.ml_logistic_type === 'fulfillment' || normSitLocal(r2.canal_detalhe) === 'ml full';
-        const vendasDia = { total: 0, loja: 0, loja_finalizados: 0, full: 0 };
+        // Vendas do dia (regra do Ailson 09/08): pedido de LOJA conta no dia em
+        // que foi FINALIZADO (feito seg 15:00, finalizado ter 11:30 = terca);
+        // pedido FULL conta no dia em que ENTROU (00:01 -> 23:59), porque a
+        // equipe nao encosta nele. total = loja finalizados hoje + full de hoje.
+        const vendasDia = { total: 0, loja_finalizados: 0, full: 0 };
         for (const r of (rows || [])) {
-          // vendas do dia (card oculto por padrao): total x loja x Full
-          if (r.data_pedido === hoje) {
-            vendasDia.total++;
-            if (ehFull(r)) vendasDia.full++;
-            else {
-              vendasDia.loja++;
-              if (r.status_wms === 'finalizado') vendasDia.loja_finalizados++;
-            }
+          if (ehFull(r)) {
+            if (r.data_pedido === hoje) { vendasDia.full++; vendasDia.total++; }
+          } else if (r.status_wms === 'finalizado' && r.finalizado_em
+              && new Date(new Date(r.finalizado_em).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) {
+            vendasDia.loja_finalizados++; vendasDia.total++;
           }
           const c = porConta[r.conta] || (porConta[r.conta] = { abertos: 0, pra_amanha: 0, em_separacao: 0, em_separacao_nf: 0, em_separacao_flex: 0, em_separacao_meluni: 0, em_separacao_com_nf_prevista: 0, finalizados_hoje: 0, pecas_abertas: 0, aguardando: 0 });
           const k = porCanal[r.canal_geral || 'Outros'] || (porCanal[r.canal_geral || 'Outros'] = { pendentes: 0, finalizados_hoje: 0 });
           if (r.status_wms === 'pendente') { c.aguardando++; tot.aguardando++; k.pendentes++; }
           else if (r.status_wms === 'aberto') {
-            k.pendentes++;
             // entrou depois do corte -> fila de AMANHA (vira aberto sozinho na
-            // virada do dia, quando o corte de "hoje" passa a ser o de amanha)
+            // virada do dia, quando o corte de "hoje" passa a ser o de amanha).
+            // Ailson 09/08: pos-corte NAO entra nos avisos amarelos de prazo
+            // (k.pendentes) — o aviso e sobre a onda de hoje, ate o corte.
             if (r.criado_em && new Date(r.criado_em).getTime() >= corteMs) { c.pra_amanha++; tot.pra_amanha++; }
-            else { c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; }
+            else { k.pendentes++; c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; }
           }
           else if (r.status_wms === 'em_separacao') {
             c.em_separacao++; tot.em_separacao++; k.pendentes++;
