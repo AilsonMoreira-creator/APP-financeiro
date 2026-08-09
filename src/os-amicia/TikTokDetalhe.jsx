@@ -54,13 +54,22 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
     </div>
   );
 
-  const Linha = ({ label, valor, base, positivo, forte }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, padding: '5px 0', borderBottom: `1px dashed ${C.cream}`, fontFamily: CALIBRI, fontSize: 12.5 }}>
-      <span style={{ color: forte ? C.iaDarker : '#555', fontWeight: forte ? 700 : 400, flex: 1, minWidth: 0 }}>{label}</span>
-      <span style={{ fontWeight: forte ? 800 : 600, whiteSpace: 'nowrap', color: forte ? C.iaDarker : (positivo ? '#1f7a48' : '#a04040') }}>
-        {positivo ? '+' : '−'} R$ {fmt(Math.abs(valor))}
-        {base ? <span style={{ color: C.muted, fontWeight: 400, fontSize: 10.5, marginLeft: 5 }}>{pct(Math.abs(valor), base)}</span> : null}
-      </span>
+  const [expAberta, setExpAberta] = useState(null);
+  const Linha = ({ label, valor, base, positivo, forte, exp }) => (
+    <div onClick={() => exp && setExpAberta(expAberta === label ? null : label)}
+      style={{ padding: '5px 0', borderBottom: `1px dashed ${C.cream}`, fontFamily: CALIBRI, fontSize: 12.5, cursor: exp ? 'pointer' : 'default' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <span style={{ color: forte ? C.iaDarker : '#555', fontWeight: forte ? 700 : 400, flex: 1, minWidth: 0 }}>
+          {label}{exp ? <span style={{ color: C.muted, fontSize: 10, marginLeft: 4 }}>ⓘ</span> : null}
+        </span>
+        <span style={{ fontWeight: forte ? 800 : 600, whiteSpace: 'nowrap', color: forte ? C.iaDarker : (positivo ? '#1f7a48' : '#a04040') }}>
+          {positivo ? '+' : '−'} R$ {fmt(Math.abs(valor))}
+          {base ? <span style={{ color: C.muted, fontWeight: 400, fontSize: 10.5, marginLeft: 5 }}>{pct(Math.abs(valor), base)}</span> : null}
+        </span>
+      </div>
+      {exp && expAberta === label && (
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.45, fontStyle: 'italic' }}>{exp}</div>
+      )}
     </div>
   );
 
@@ -99,6 +108,7 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
                 <Kpi label="Pedidos" valor={d.resumo.pagaveis} sub={`${d.resumo.unidades} un`} cor="azul" />
                 <Kpi label="Vendas" valor={`R$ ${fmt(d.resumo.vendas)}`} sub={`ticket R$ ${fmt(d.resumo.ticket_medio)}`} />
                 <Kpi label="Amostras grátis" valor={d.resumo.amostras} sub="fora do lucro" />
+                <Kpi label="Devoluções no período" valor={`R$ ${fmt(d.devolucoes?.valor_devolvido || 0)}`} sub={`${d.devolucoes?.qtd || 0} devoluções · já fora da venda`} />
               </div>
             </Secao>
 
@@ -116,29 +126,44 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
             </Secao>
 
             {fin && (
-              <Secao titulo="Detalhamento de valores · vendas liquidadas" nota="Frete debitado já vem líquido do subsídio do TikTok e inclui a taxa fixa por item (R$ 4 até jul, R$ 6 em ago). Outros/ajustes é o que o TikTok debitou ou creditou fora destas linhas.">
-                <Linha label="Valor de venda" valor={fin.venda} positivo forte />
-                {fin.desconto_vendedor > 0 && <Linha label="Desconto do vendedor (sai do seu repasse)" valor={fin.desconto_vendedor} base={fin.venda} />}
-                <Linha label="Comissão TikTok" valor={fin.comissao} base={fin.venda} />
-                {fin.afiliado_creator > 0 && <Linha label="Comissão de afiliado (creator)" valor={fin.afiliado_creator} base={fin.venda} />}
-                {fin.afiliado_ads > 0 && <Linha label="Comissão de afiliado (ads/parceiro)" valor={fin.afiliado_ads} base={fin.venda} />}
-                {fin.taxa_transacao > 0 && <Linha label="Taxa de transação" valor={fin.taxa_transacao} base={fin.venda} />}
-                <Linha label="Frete debitado pelo TikTok" valor={fin.frete_debitado} base={fin.venda} />
+              <Secao titulo="Detalhamento de valores · vendas liquidadas" nota="Toque em uma linha ⓘ pra ver a explicação. Frete debitado já vem líquido do subsídio do TikTok e inclui a taxa fixa por item (R$ 4 até jul, R$ 6 em ago).">
+                <Linha label="Valor de venda (líquido de devoluções)" valor={fin.venda} positivo forte
+                  exp="Soma das vendas liquidadas no período, já sem as devolvidas. As devoluções aparecem no card do topo e na linha própria abaixo." />
+                {fin.desconto_vendedor > 0 && <Linha label="Desconto do vendedor" valor={fin.desconto_vendedor} base={fin.venda}
+                  exp="Desconto das SUAS campanhas (5%, 10% ou 15%). Sai do seu repasse. O desconto que o TikTok dá ao cliente não entra aqui — é bancado por eles." />}
+                <Linha label="Comissão TikTok" valor={fin.comissao} base={fin.venda}
+                  exp="Comissão da plataforma, ~6% sobre o preço cheio do produto." />
+                {fin.afiliado_creator > 0 && <Linha label="Comissão de afiliado (creator)" valor={fin.afiliado_creator} base={fin.venda}
+                  exp="Comissão do creator que vendeu por vídeo ou live. Você define o percentual — hoje ~10% nos produtos com afiliado." />}
+                {fin.afiliado_ads > 0 && <Linha label="Comissão de afiliado (ads/parceiro)" valor={fin.afiliado_ads} base={fin.venda}
+                  exp="Comissão de campanhas de afiliado via anúncios ou agência parceira." />}
+                {fin.taxa_transacao > 0 && <Linha label="Taxa de transação" valor={fin.taxa_transacao} base={fin.venda}
+                  exp="Tarifa de processamento do pagamento." />}
+                <Linha label="Frete debitado pelo TikTok" valor={fin.frete_debitado} base={fin.venda}
+                  exp="Frete real menos o subsídio do TikTok. A taxa fixa por item (R$ 4 até jul, R$ 6 em ago) está embutida aqui." />
                 <div style={{ fontSize: 11, color: C.muted, padding: '4px 0', fontFamily: CALIBRI }}>
                   → frete real R$ {fmt(fin.frete_real)} · cliente pagou R$ {fmt(fin.frete_cliente)} · TikTok subsidiou R$ {fmt(fin.subsidio_frete)}
                 </div>
-                {Math.abs(fin.outros_ajustes) >= 0.01 && <Linha label="Outros / ajustes" valor={fin.outros_ajustes} base={fin.venda} positivo={fin.outros_ajustes > 0} />}
-                <Linha label="Recebido após todos os descontos" valor={fin.recebido} base={fin.venda} positivo forte />
-                <Linha label="Imposto (11% da venda)" valor={fin.imposto} base={fin.venda} />
-                <Linha label="Agência (5% da venda)" valor={fin.agencia} base={fin.venda} />
+                {Math.abs(fin.frete_cliente_e_ajustes || 0) >= 0.01 && <Linha label="Frete do cliente e ajustes" valor={fin.frete_cliente_e_ajustes} base={fin.venda} positivo={fin.frete_cliente_e_ajustes > 0}
+                  exp="Créditos e débitos que o TikTok não abre em campo próprio — principalmente o frete pago pelo cliente, que é repassado a você, e tarifas ou subsídios menores." />}
+                <Linha label="Recebido após todos os descontos" valor={fin.recebido} base={fin.venda} positivo forte
+                  exp="O que o TikTok deposita pelas vendas pagas do período." />
+                {fin.devolucoes_debito > 0 && <Linha label="Devoluções · estornos e logística reversa" valor={fin.devolucoes_debito} base={fin.venda}
+                  exp="O que sai do seu bolso com as devoluções: frete reverso e débitos de estorno lançados pelo TikTok." />}
+                <Linha label="Imposto (11% da venda)" valor={fin.imposto} base={fin.venda}
+                  exp="Sua régua: 11% sobre a venda líquida de devoluções." />
+                <Linha label="Agência (5% da venda)" valor={fin.agencia} base={fin.venda}
+                  exp="Sua régua: 5% sobre a venda líquida, do contrato com a agência de TikTok." />
                 <Linha label="Total após imposto e agência" valor={fin.liquido_pos_imposto} base={fin.venda} positivo forte />
-                <Linha label="CMV · custo da mercadoria" valor={fin.cmv?.total || 0} base={fin.venda} />
+                <Linha label="CMV · custo da mercadoria" valor={fin.cmv?.total || 0} base={fin.venda}
+                  exp="Custo de produção (da calculadora) das peças vendidas e pagas. Mercadoria devolvida volta pro estoque e não entra." />
                 {fin.cmv?.estimado > 0 && (
                   <div style={{ fontSize: 10.5, color: C.muted, padding: '2px 0', fontFamily: CALIBRI }}>
                     → R$ {fmt(fin.cmv.exato)} exato ({fin.cmv.un_com_custo} un) + R$ {fmt(fin.cmv.estimado)} estimado ({fin.cmv.vendas_sem_vinculo} vendas sem vínculo no Bling)
                   </div>
                 )}
-                <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte />
+                <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
+                  exp="O que sobra no bolso depois de tudo: repasse − devoluções − imposto − agência − custo da mercadoria." />
                 {fin.desconto_plataforma > 0 && (
                   <div style={{ fontSize: 11, color: '#1f7a48', marginTop: 8, fontFamily: CALIBRI }}>
                     ℹ Desconto da plataforma: R$ {fmt(fin.desconto_plataforma)} dados ao cliente — bancados pelo TikTok, não saem do seu repasse.

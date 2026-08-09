@@ -95,12 +95,18 @@ export default async function handler(req, res) {
       .select('*').eq('conta', conta).gte('data_pedido', iniIso);
     if (error) throw new Error(error.message);
 
-    const vendasLiq = (linhas || []).filter(l => n(l.venda) > 0);
+    // Uma venda devolvida ANTES de liquidar vem numa linha só: venda cheia +
+    // gross_sales_refund igual e settlement 0. Isso NÃO é venda paga — é
+    // devolução (descoberto em 09/08: era a maior parte do "outros").
+    const vendaLiqDe = (l) => n(l.venda) + n(l.bruto?.gross_sales_refund_amount);
+    const vendasLiq = (linhas || []).filter(l => n(l.venda) > 0 && vendaLiqDe(l) > 0.01);
+    const devolvidasNaLinha = (linhas || []).filter(l => n(l.venda) > 0 && vendaLiqDe(l) <= 0.01);
     const devolucoes = (linhas || []).filter(l => n(l.venda) <= 0);
 
     const soma = (arr, f) => r2(arr.reduce((t, l) => t + f(l), 0));
     const fin = {
-      venda: soma(vendasLiq, l => n(l.venda)),
+      // venda JA LIQUIDA de devolucoes (refund parcial abatido linha a linha)
+      venda: soma(vendasLiq, l => vendaLiqDe(l)),
       desconto_vendedor: soma(vendasLiq, l => n(l.desconto_vendedor)),
       desconto_plataforma: soma(vendasLiq, l => n(l.desconto_plataforma)),
       comissao: soma(vendasLiq, l => n(l.comissao_plataforma)),
@@ -117,22 +123,30 @@ export default async function handler(req, res) {
     };
     // Aritmética PROVADA nos statements (09/08): settlement = (venda − desconto
     // do vendedor) − taxas. O desconto DA PLATAFORMA fica FORA — o TikTok banca.
-    // O resíduo abaixo é o que as linhas conhecidas não explicam.
-    fin.outros_ajustes = r2(fin.recebido - (fin.venda - fin.desconto_vendedor - fin.comissao
+    // O resíduo abaixo é o que os campos nomeados não explicam; medido em 09/08,
+    // é POSITIVO e bate com o FRETE PAGO PELO CLIENTE (que o TikTok repassa)
+    // mais tarifas/subsídios miúdos — por isso a linha se chama assim na tela.
+    fin.frete_cliente_e_ajustes = r2(fin.recebido - (fin.venda - fin.desconto_vendedor - fin.comissao
       - fin.afiliado_creator - fin.afiliado_ads - fin.taxa_transacao - fin.frete_debitado));
 
+    const todasDev = [...devolucoes, ...devolvidasNaLinha];
+    const refundParcial = soma(vendasLiq, l => Math.abs(n(l.bruto?.gross_sales_refund_amount)));
     const dev = {
-      qtd: devolucoes.length,
-      estorno_cliente: soma(devolucoes, l => n(l.reembolsos)),
-      frete_reverso: soma(devolucoes, l => n(l.frete_real)),
-      total_debitado: soma(devolucoes, l => n(l.settlement)),
+      qtd: todasDev.length,
+      valor_devolvido: r2(soma(devolvidasNaLinha, l => n(l.venda)) + refundParcial),
+      estorno_cliente: soma(todasDev, l => n(l.reembolsos)),
+      frete_reverso: soma(todasDev, l => n(l.frete_real)),
+      // o que sai do bolso de verdade com devolucao (settlement negativo)
+      total_debitado: soma(todasDev, l => n(l.settlement)),
     };
+    fin.devolucoes_debito = r2(Math.abs(Math.min(dev.total_debitado, 0)));
 
     // canais (identificáveis só após liquidar)
     const canais = { organico: { pedidos: 0, vendas: 0, comissao: 0 },
       afiliado: { pedidos: 0, vendas: 0, comissao: 0 },
       afiliado_ads: { pedidos: 0, vendas: 0, comissao: 0 } };
     for (const l of vendasLiq) {
+      // (devolvidas na propria linha ficam fora dos canais e das vendas pagas)
       const ads = Math.abs(n(l.bruto?.affiliate_ads_commission_amount)) + Math.abs(n(l.bruto?.affiliate_partner_commission_amount));
       const cre = Math.abs(n(l.bruto?.affiliate_commission_amount));
       const c = ads > 0 ? canais.afiliado_ads : (cre > 0 ? canais.afiliado : canais.organico);
@@ -238,10 +252,11 @@ export default async function handler(req, res) {
     }
     cmv.total = r2(cmv.exato + cmv.estimado);
 
-    // régua do Ailson: imposto 11% + agência 5%, sobre o preço de venda
+    // régua do Ailson: imposto 11% + agência 5% sobre a venda — agora sobre a
+    // venda LIQUIDA de devoluções (venda devolvida não gera imposto)
     fin.imposto = r2(fin.venda * 0.11);
     fin.agencia = r2(fin.venda * 0.05);
-    fin.liquido_pos_imposto = r2(fin.recebido - fin.imposto - fin.agencia);
+    fin.liquido_pos_imposto = r2(fin.recebido - fin.devolucoes_debito - fin.imposto - fin.agencia);
     fin.cmv = cmv;
     fin.resultado_final = r2(fin.liquido_pos_imposto - cmv.total);
 
