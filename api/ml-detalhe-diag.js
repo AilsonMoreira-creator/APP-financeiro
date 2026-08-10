@@ -171,6 +171,12 @@ export default async function handler(req, res) {
     // (e não 1000), o document_id filtra mesmo com o total mentindo
     const d4 = await mlH('/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL&limit=1000&offset=0&document_id=5036396171', token);
     saida.filtro_doc_pequeno = d4._erro ? `${d4._erro} ${d4._msg || ''}` : { total: d4.total, rows: (d4.results || []).length, docs_das_rows: [...new Set((d4.results || []).map(r => r.document_info?.document_id))].slice(0, 4), primeira: d4.results?.[0]?.charge_info?.creation_date_time };
+    await new Promise(r => setTimeout(r, 1800));
+    const d5 = await mlH('/billing/integration/documents/5036429333/details?limit=5&offset=0', token);
+    saida.rota_doc_details = d5._erro ? `${d5._erro} ${d5._msg || ''}` : { total: d5.total, rows: (d5.results || []).length, primeira: d5.results?.[0]?.charge_info?.creation_date_time };
+    await new Promise(r => setTimeout(r, 1800));
+    const d6 = await mlH('/billing/integration/periods/key/2026-08-01/documents/5036429333/group/ML/details?document_type=BILL&limit=5&offset=0', token);
+    saida.rota_period_doc = d6._erro ? `${d6._erro} ${d6._msg || ''}` : { total: d6.total, rows: (d6.results || []).length, primeira: d6.results?.[0]?.charge_info?.creation_date_time };
     return res.status(200).json(saida);
   }
 
