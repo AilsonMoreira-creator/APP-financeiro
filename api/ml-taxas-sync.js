@@ -89,6 +89,7 @@ async function pedidoDoML(numeroLoja, token) {
   // net_received_amount já vem DEFINIDO na aprovação — é ele que o DRE usa;
   // money_release_date/status servem pra confirmar o repasse depois.
   let netRecebido = 0, releaseDate = null, releaseStatus = null, pagoEm = null;
+  let chFrete = 0, chTarifas = 0, chDebitos = 0;
   for (const pg of pag.slice(0, 4)) {
     if (!pg?.id || String(pg.status) !== 'approved') continue;
     const mp = await ml(`/v1/payments/${pg.id}`, token);
@@ -97,6 +98,14 @@ async function pedidoDoML(numeroLoja, token) {
     if (!releaseDate && mp.money_release_date) releaseDate = mp.money_release_date.slice(0, 10);
     if (mp.money_release_status) releaseStatus = mp.money_release_status;
     if (!pagoEm && mp.date_approved) pagoEm = mp.date_approved;
+    // charges_details decompõe o débito: shipping / tarifas / o resto é débito
+    // avulso (fee_spl = debt-engine, crédito/dívida — não é custo da venda)
+    for (const ch of (mp.charges_details || [])) {
+      const v = n(ch.amounts?.original) - n(ch.amounts?.refunded);
+      if (ch.type === 'shipping') chFrete += v;
+      else if (['ml_sale_fee', 'mp_processing_fee'].includes(ch.name)) chTarifas += v;
+      else chDebitos += v;
+    }
   }
 
   // ── frete real: quanto o VENDEDOR paga e quanto o comprador pagou ─────────
@@ -115,6 +124,9 @@ async function pedidoDoML(numeroLoja, token) {
   }
 
   return {
+    charge_frete: Math.round(chFrete * 100) / 100,
+    charge_tarifas: Math.round(chTarifas * 100) / 100,
+    charge_debitos: Math.round(chDebitos * 100) / 100,
     net_recebido: Math.round(netRecebido * 100) / 100,
     release_date: releaseDate, release_status: releaseStatus, pago_em: pagoEm,
     frete_vendedor: Math.round(freteVendedor * 100) / 100,
@@ -191,11 +203,11 @@ export default async function handler(req, res) {
 
   // ?completar=1 — reprocessa os JÁ GRAVADOS que ainda não têm o líquido do
   // MP (net_recebido null) — é o backfill dos campos novos de 10/08
-  const completar = req.query?.completar === '1';
+  const completar = req.query?.completar === '1' || req.query?.charges === '1';
   if (completar) {
     let qc = supabase.from('ml_pedido_taxas')
       .select('conta, pedido_id, numero_loja, data_pedido')
-      .is('net_recebido', null)
+      .is(req.query?.charges === '1' ? 'charge_frete' : 'net_recebido', null)
       .gte('data_pedido', desde).lte('data_pedido', ate)
       .order('data_pedido', { ascending: false }).limit(limite);
     if (contaFiltro) qc = qc.eq('conta', contaFiltro);
@@ -251,6 +263,7 @@ async function processar(alvo, res, inicio, desde, ate) {
       listing_type: d.listing_type, itens: d.itens, checado_em: new Date().toISOString(),
       status_ml: d.status_ml, desconto_total: d.desconto_total,
       desconto_vendedor: d.desconto_vendedor, desconto_plataforma: d.desconto_plataforma,
+      charge_frete: d.charge_frete, charge_tarifas: d.charge_tarifas, charge_debitos: d.charge_debitos,
       net_recebido: d.net_recebido, release_date: d.release_date,
       release_status: d.release_status, pago_em: d.pago_em,
       frete_vendedor: d.frete_vendedor, frete_comprador: d.frete_comprador,
