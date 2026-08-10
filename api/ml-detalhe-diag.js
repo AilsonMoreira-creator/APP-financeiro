@@ -72,7 +72,16 @@ export default async function handler(req, res) {
       tent.campaigns_v2 = await mlH(`/advertising/product_ads/campaigns?limit=3&date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2', 'advertiser-id': String(advId) });
     }
     tent.pads_user = await mlH(`/advertising/${uid}/product_ads/metrics?date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2' });
-    return res.status(200).json({ conta, uid, advertiser: advId || null, tentativas: tent });
+
+    // caminho alternativo: BILLING (extrato de faturamento) — publicidade
+    // aparece como cobrança; costuma vir com o escopo read normal
+    tent.billing_periods = await mlH('/billing/integration/monthly/periods', token);
+    const chave = tent.billing_periods?.results?.[0]?.key || tent.billing_periods?.periods?.[0]?.key;
+    if (chave) {
+      tent.billing_summary = await mlH(`/billing/integration/periods/key/${chave}/summary`, token);
+      tent.billing_details_ml = await mlH(`/billing/integration/periods/key/${chave}/group/ML/details?limit=5&offset=0`, token);
+    }
+    return res.status(200).json({ conta, uid, advertiser: advId || null, chave_periodo: chave || null, tentativas: tent });
   }
 
   const id = String(req.query?.pedido || '').trim();
