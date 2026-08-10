@@ -148,6 +148,23 @@ export default async function handler(req, res) {
     return res.status(200).json(saida);
   }
 
+  // ?cap_test=1 — mapear os tetos reais de limit/offset do details
+  if (req.query?.cap_test === '1') {
+    const token = await getValidToken(BRAND[conta] || 'Exitus');
+    const base = '/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL';
+    const saida = {};
+    for (const [nome, q] of [
+      ['limit1200_off9999', 'limit=1200&offset=9999'],
+      ['limit1000_off10000', 'limit=1000&offset=10000'],
+      ['limit100_off11100', 'limit=100&offset=11100'],
+    ]) {
+      const d = await mlH(`${base}&${q}`, token);
+      saida[nome] = d._erro ? `${d._erro} ${d._msg || ''}` : { rows: (d.results || []).length, primeira: d.results?.[0]?.charge_info?.creation_date_time, ultima: d.results?.[(d.results || []).length - 1]?.charge_info?.creation_date_time };
+      await new Promise(r => setTimeout(r, 1800));
+    }
+    return res.status(200).json(saida);
+  }
+
   const id = String(req.query?.pedido || '').trim();
   if (!/^\d+$/.test(id)) return res.status(400).json({ erro: 'use ?pedido=<ml_order_id>&conta=exitus' });
 
