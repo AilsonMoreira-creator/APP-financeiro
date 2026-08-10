@@ -58,7 +58,10 @@ export default async function handler(req, res) {
     // e de cobrança) ficam FORA — já entram pelo payment (charge_tarifas), e
     // somar de novo seria dupla contagem.
     const grupo = (st) => {
-      const base = st.replace(/^B/, '');
+      // cancelamento troca o C inicial por B (BFFE cancela CFFE) — normaliza
+      // de volta pro C pra classificar no MESMO grupo (o sinal já subtrai)
+      const base = st.startsWith('B') ? st.replace(/^B/, 'C') : st;
+      if (base === 'CPADS') return 'ads';
       if (base === 'PADS') return 'ads';
       if (['CFFE', 'CXDE', 'CXDI', 'CFFI'].includes(base) || base.startsWith('CXD') || base.startsWith('CFF')) return base.includes('D') && base !== 'CXDI' && base !== 'CXDE' ? 'devolucao' : 'envio_fatura';
       if (base === 'CFONPN' || base === 'CVVFN') return 'parcelamento';
