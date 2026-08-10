@@ -493,6 +493,10 @@
     {
       "schedule": "20 9 * * *",
       "path": "/api/ml-taxas-sync?releases=1"
+    },
+    {
+      "schedule": "50 */2 * * *",
+      "path": "/api/ml-taxas-sync?completar=1&limite=400"
     }
   ]
 }

@@ -24,6 +24,7 @@ import {
   // reativar - basta re-importar e adicionar de volta em TabMarketplaces.
 } from './MarketplacesCards.jsx';
 import TikTokDetalhe from './TikTokDetalhe.jsx';
+import MLDetalhe from './MLDetalhe.jsx';
 import { TabEstoque } from './EstoqueCards.jsx';
 import { TabProducao } from './ProducaoCards.jsx';
 
@@ -865,6 +866,7 @@ function TabMarketplaces({ usuario, isAdmin, C, SERIF, CALIBRI }) {
 function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
   const [dados, setDados] = useState(null);
   const [detalheTikTok, setDetalheTikTok] = useState(false);
+  const [detalheML, setDetalheML] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState(null);
 
@@ -1028,6 +1030,18 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
                     <div style={{ fontSize: 11, opacity: 0.85, marginTop: 3 }}>
                       {c.unidades.toLocaleString('pt-BR')} un · R$ {fmt(c.receita_bruta)}
                     </div>
+                    {c.canal === 'mercadolivre' && (
+                      <button
+                        onClick={() => setDetalheML(true)}
+                        style={{
+                          marginTop: 8, width: '100%', padding: '5px 0', borderRadius: 6,
+                          border: '1px solid rgba(45,50,119,0.35)', background: 'rgba(255,255,255,0.45)',
+                          color: '#2d3277', fontSize: 11, cursor: 'pointer', fontFamily: SERIF,
+                        }}
+                      >
+                        Detalhar →
+                      </button>
+                    )}
                     {c.canal === 'tiktok' && (
                       <button
                         onClick={() => setDetalheTikTok(true)}
@@ -1048,6 +1062,9 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
       )}
       {detalheTikTok && (
         <TikTokDetalhe usuario={usuario} onFechar={() => setDetalheTikTok(false)} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
+      )}
+      {detalheML && (
+        <MLDetalhe usuario={usuario} onFechar={() => setDetalheML(false)} C={C} SERIF={SERIF} CALIBRI={CALIBRI} />
       )}
     </div>
   );
