@@ -496,7 +496,7 @@
     },
     {
       "schedule": "50 */2 * * *",
-      "path": "/api/ml-taxas-sync?completar=1&limite=400"
+      "path": "/api/ml-taxas-sync?charges=1&limite=400"
     }
   ]
 }
