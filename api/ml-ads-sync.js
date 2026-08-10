@@ -79,7 +79,8 @@ export default async function handler(req, res) {
           somas[g] = (somas[g] || 0) + (st.startsWith('B') ? -v : v);
         }
         paginas++;
-        const novoLast = d.last_id || (rows.length ? rows[rows.length - 1]?.charge_info?.detail_id : null);
+        const novoLast = (rows.length ? rows[rows.length - 1]?.charge_info?.detail_id : null) || d.last_id;
+        errosApi.push(`pg${paginas}: ${rows.length} rows, last=${novoLast}`);
         if (rows.length < 1000 || !novoLast || novoLast === lastId) break;
         lastId = novoLast;
       }
