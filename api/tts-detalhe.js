@@ -258,7 +258,11 @@ export default async function handler(req, res) {
     fin.agencia = r2(fin.venda * 0.05);
     fin.liquido_pos_imposto = r2(fin.recebido - fin.devolucoes_debito - fin.imposto - fin.agencia);
     fin.cmv = cmv;
-    fin.resultado_final = r2(fin.liquido_pos_imposto - cmv.total);
+    // custo de operação: R$ 5 fixos por UNIDADE vendida (Ailson 10/08) —
+    // unidades exatas do vínculo Bling + 1/venda pros sem vínculo
+    fin.custo_operacao_un = cmv.un_com_custo + cmv.vendas_sem_vinculo;
+    fin.custo_operacao = r2(5 * fin.custo_operacao_un);
+    fin.resultado_final = r2(fin.liquido_pos_imposto - cmv.total - fin.custo_operacao);
 
     return res.status(200).json({
       ok: true, janela, de: iniIso, ate: new Date().toISOString().slice(0, 10),

@@ -135,7 +135,34 @@ export default async function handler(req, res) {
     }
     cmv.total = r2(cmv.exato + cmv.estimado);
     fin.cmv = cmv;
-    fin.resultado_final = r2(fin.total_pos_imposto - cmv.total);
+
+    // custo de operação: R$ 5 fixos por UNIDADE (Ailson 10/08)
+    let unMp = 0;
+    for (const r of comMp) unMp += (r.itens || []).reduce((t, i) => t + n(i.qtd), 0) || 1;
+    fin.custo_operacao_un = unMp;
+    fin.custo_operacao = r2(5 * unMp);
+
+    // publicidade (Mercado Ads): manual por mês até o app ganhar o escopo de
+    // Advertising (10/08: /advertising e /billing devolvem 403). Rateio da
+    // janela por dias corridos de cada mês coberto.
+    fin.publicidade = 0;
+    {
+      const meses = {};
+      const d0 = new Date(`${ini}T12:00:00Z`);
+      const d1 = new Date(`${hoje}T12:00:00Z`);
+      for (let d = new Date(d0); d <= d1; d.setUTCDate(d.getUTCDate() + 1)) {
+        const m = d.toISOString().slice(0, 7);
+        meses[m] = (meses[m] || 0) + 1;
+      }
+      const { data: adsRows } = await supabase.from('ml_ads_manual').select('mes, valor').in('mes', Object.keys(meses));
+      for (const a of (adsRows || [])) {
+        const diasNoMes = new Date(Date.UTC(+a.mes.slice(0, 4), +a.mes.slice(5, 7), 0)).getUTCDate();
+        fin.publicidade += n(a.valor) * Math.min(1, meses[a.mes] / diasNoMes);
+      }
+      fin.publicidade = r2(fin.publicidade);
+    }
+
+    fin.resultado_final = r2(fin.total_pos_imposto - cmv.total - fin.custo_operacao - fin.publicidade);
 
     return res.status(200).json({
       ok: true, janela, de: ini, ate: hoje,
