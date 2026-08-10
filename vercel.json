@@ -475,7 +475,7 @@
       "path": "/api/wms-sync"
     },
     {
-      "schedule": "0,30 15-20 * * *",
+      "schedule": "0,30 15-23 * * *",
       "path": "/api/wms-sync"
     },
     {
