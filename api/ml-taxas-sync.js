@@ -223,7 +223,9 @@ export default async function handler(req, res) {
     .ilike('canal_geral', '%mercado%livre%')
     .not('numero_pedido_loja', 'is', null)
     .gte('data_pedido', desde).lte('data_pedido', ate)
-    .order('data_pedido', { ascending: false })
+    // backfill (?desde explícito): mais ANTIGOS primeiro, senão os 1200 mais
+    // recentes (agosto) lotam a janela e julho nunca entra
+    .order('data_pedido', { ascending: !!req.query?.desde })
     .limit(limite * 3);
   if (contaFiltro) q = q.eq('conta', contaFiltro);
   const { data: pedidos, error } = await q;
