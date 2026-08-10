@@ -61,16 +61,16 @@ export default async function handler(req, res) {
     // o extrato é cronológico (começa em nov/2025) e o mês corrente vive nas
     // ÚLTIMAS páginas — varre DE TRÁS PRA FRENTE e para quando a página já não
     // tem nenhum lançamento do mês pedido
-    const somas = {}; let charges = 0, paginas = 0;
+    const somas = {}; let charges = 0, paginas = 0; const errosApi = [];
     for (const key of chaves) {
       // probe com limit cheio (o endpoint não aceita limit=1)
       const probe = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=0`, token);
-      if (probe._erro) { somas._erro_probe = `${probe._erro} ${probe._msg || ''}`; continue; }
+      if (probe._erro) { errosApi.push(`probe ${key}: ${probe._erro} ${probe._msg || ''}`); continue; }
       const total = probe.total || 0;
       let offset = Math.max(0, Math.floor((total - 1) / 1000) * 1000);
       while (offset >= 0 && Date.now() - t0 < 260000) {
         const d = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=${offset}`, token);
-        if (d._erro) break;
+        if (d._erro) { errosApi.push(`pg ${offset}: ${d._erro} ${d._msg || ''}`); break; }
         let doMesNaPagina = 0;
         for (const row of (d.results || [])) {
           const ci = row.charge_info || {};
@@ -98,7 +98,7 @@ export default async function handler(req, res) {
       await supabase.from('ml_ads_manual').upsert(
         { mes, valor: somas.ads, atualizado_em: new Date().toISOString() }, { onConflict: 'mes' });
     }
-    return res.status(200).json({ ok: true, mes, periodos: chaves, paginas, charges_no_mes: charges, somas });
+    return res.status(200).json({ ok: true, mes, periodos: chaves, paginas, charges_no_mes: charges, somas, erros_api: errosApi });
   } catch (e) {
     return res.status(500).json({ erro: e.message });
   }
