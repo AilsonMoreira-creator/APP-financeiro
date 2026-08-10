@@ -167,8 +167,10 @@ export default async function handler(req, res) {
     const d2 = await mlH('/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL&limit=5&offset=0&document_id=4340792294', token);
     saida.details_por_document = d2._erro ? `${d2._erro} ${d2._msg || ''}` : { total: d2.total, rows: (d2.results || []).length };
     await new Promise(r => setTimeout(r, 1800));
-    const d3 = await mlH('/billing/integration/documents?group=ML&document_type=BILL&limit=5&offset=0', token);
-    saida.documents_geral = d3._erro ? `${d3._erro} ${d3._msg || ''}` : d3;
+    // filtro de verdade? doc 5036396171 tem 21 details: se voltar ~21 rows
+    // (e não 1000), o document_id filtra mesmo com o total mentindo
+    const d4 = await mlH('/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL&limit=1000&offset=0&document_id=5036396171', token);
+    saida.filtro_doc_pequeno = d4._erro ? `${d4._erro} ${d4._msg || ''}` : { total: d4.total, rows: (d4.results || []).length, docs_das_rows: [...new Set((d4.results || []).map(r => r.document_info?.document_id))].slice(0, 4), primeira: d4.results?.[0]?.charge_info?.creation_date_time };
     return res.status(200).json(saida);
   }
 
