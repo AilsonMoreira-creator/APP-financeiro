@@ -72,6 +72,13 @@ export default async function handler(req, res) {
       tent.campaigns_v2 = await mlH(`/advertising/product_ads/campaigns?limit=3&date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2', 'advertiser-id': String(advId) });
     }
     tent.pads_user = await mlH(`/advertising/${uid}/product_ads/metrics?date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2' });
+    if (advId) {
+      tent.m1 = await mlH(`/advertising/${advId}/product_ads/metrics?date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2' });
+      tent.m2 = await mlH(`/advertising/advertisers/${advId}/product_ads/metrics?date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2' });
+      tent.m3 = await mlH(`/advertising/${advId}/product_ads/metrics/summary?date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2' });
+      tent.m4 = await mlH(`/advertising/${advId}/campaigns?date_from=${ini}&date_to=${fim}&limit=2`, token, { 'Api-Version': '2' });
+    }
+    tent.billing2 = await mlH('/billing/integration/monthly/periods?group=ML&document_type=BILL&offset=0&limit=2', token);
 
     // caminho alternativo: BILLING (extrato de faturamento) — publicidade
     // aparece como cobrança; costuma vir com o escopo read normal
