@@ -129,7 +129,10 @@ export default async function handler(req, res) {
               if (temNf(r.situacao_nome)) { c.em_separacao_nf++; tot.em_separacao_nf++; }
             }
           }
-          else if (r.status_wms === 'finalizado' && r.finalizado_em && new Date(new Date(r.finalizado_em).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
+          // Full NAO conta no funil de "Finalizados Hoje" — a equipe nao encosta
+          // nele (Ailson 09/08: "domingo nao existe pedido finalizado na loja").
+          // O card mede trabalho da equipe: bipado + etiqueta.
+          else if (r.status_wms === 'finalizado' && !ehFull(r) && r.finalizado_em && new Date(new Date(r.finalizado_em).getTime() - 3 * 3600000).toISOString().slice(0, 10) === hoje) { c.finalizados_hoje++; tot.finalizados_hoje++; k.finalizados_hoje++; }
         }
         const { data: ultSync } = await supabase.from('wms_pedidos')
           .select('visto_em').order('visto_em', { ascending: false }).limit(1);
