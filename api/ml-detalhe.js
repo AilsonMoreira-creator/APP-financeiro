@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const rows = [];
     for (let off = 0; off < 5000; off += 1000) {
       const { data, error } = await supabase.from('ml_pedido_taxas')
-        .select('conta, pedido_id, data_pedido, preco_produtos, full_price, sale_fee, desconto_vendedor, desconto_plataforma, status_ml, itens, net_recebido, release_date, release_status, pago_em, frete_vendedor, frete_comprador, logistic_type')
+        .select('conta, pedido_id, data_pedido, preco_produtos, full_price, sale_fee, desconto_vendedor, desconto_plataforma, status_ml, itens, net_recebido, release_date, release_status, pago_em, frete_vendedor, frete_comprador, logistic_type, charge_frete, charge_tarifas, charge_debitos')
         .gte('data_pedido', ini).range(off, off + 999);
       if (error) throw new Error(error.message);
       rows.push(...(data || []));
@@ -91,14 +91,23 @@ export default async function handler(req, res) {
       desconto_plataforma: soma(comMp, r => n(r.desconto_plataforma)),
       liquido_mp: soma(comMp, r => n(r.net_recebido)),
     };
-    // Funil pelo FLUXO DO PAGAMENTO (10/08): o frete do comprador ENTRA no
-    // pagamento e o MP debita o frete CHEIO do envio + taxas de parcelamento —
-    // bem mais que o "custo do vendedor" da API de costs. A linha de frete do
-    // DRE é o débito implícito (fecha 100% com o líquido); o custo de envio
-    // "oficial" da API fica como informativo.
-    fin.frete_e_taxas = r2(fin.venda + fin.frete_comprador - fin.sale_fee - fin.desconto_vendedor - fin.liquido_mp);
+    // Decomposição REAL dos charges do MP (10/08, provada centavo a centavo):
+    // frete = charge shipping (inclui a parte do comprador, que transita);
+    // tarifas = ml_sale_fee + mp_processing_fee; DÉBITOS AVULSOS = fee_spl e
+    // afins (debt-engine: crédito/dívida abatida do repasse — NÃO é custo da
+    // venda; o resultado das vendas os EXCLUI e eles aparecem à parte).
+    fin.charge_frete = soma(comMp, r => n(r.charge_frete));
+    fin.charge_tarifas = soma(comMp, r => n(r.charge_tarifas));
+    fin.debitos_avulsos = soma(comMp, r => n(r.charge_debitos));
+    // frete líquido SEU: o charge de frete menos o que o comprador pagou
+    fin.frete_liquido_vendedor = r2(fin.charge_frete - fin.frete_comprador);
+    // resultado das vendas antes dos débitos avulsos (net + débitos)
+    fin.liquido_vendas = r2(fin.liquido_mp + fin.debitos_avulsos);
+    // resíduo do que os charges não cobrem (pedidos ainda sem charges no banco)
+    fin.ajustes = r2(fin.liquido_vendas - (fin.venda + fin.frete_comprador - fin.charge_frete - fin.charge_tarifas - fin.desconto_vendedor));
     fin.imposto = r2(fin.venda * 0.11);
-    fin.total_pos_imposto = r2(fin.liquido_mp - fin.imposto);
+    // o total usa o resultado DAS VENDAS (débitos avulsos não são custo)
+    fin.total_pos_imposto = r2(fin.liquido_vendas - fin.imposto);
 
     // ── CMV via Bling (pedido_id → itens.ref → custos) ───────────────────────
     const cmv = { exato: 0, un_com_custo: 0, estimado: 0, sem_vinculo: 0 };

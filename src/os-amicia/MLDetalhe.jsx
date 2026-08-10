@@ -128,18 +128,20 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
               <Secao titulo="Detalhamento de valores · DRE" nota="Toque numa linha ⓘ pra ver a explicação. Sem linha de agência — os 5% são só do TikTok.">
                 <Linha label="Valor de venda" valor={fin.venda} positivo forte
                   exp="Soma dos produtos vendidos (preço real do anúncio, cancelados fora) nos pedidos com dado do Mercado Pago." />
-                {fin.frete_comprador > 0 && <Linha label="Frete pago pelo comprador" valor={fin.frete_comprador} base={fin.venda} positivo
-                  exp="Entra junto no pagamento (produtos abaixo de R$ 79). Transita: volta a sair na linha de frete abaixo." />}
-                <Linha label="Tarifa de venda (comissão + fixo)" valor={fin.sale_fee} base={fin.venda}
-                  exp="A sale_fee exata que o ML cobrou em cada item: comissão do Clássico/Premium mais o custo fixo de itens abaixo de R$ 79." />
+                <Linha label="Tarifa de venda (comissão + fixo)" valor={fin.charge_tarifas || fin.sale_fee} base={fin.venda}
+                  exp="A tarifa exata debitada no pagamento: comissão do ML mais a taxa de processamento do MP." />
                 {fin.desconto_vendedor > 0 && <Linha label="Promoções bancadas por você" valor={fin.desconto_vendedor} base={fin.venda}
                   exp="A parte dos descontos de campanha com funding do VENDEDOR — é o que você está desligando nos anúncios. O que o ML banca não entra aqui." />}
-                <Linha label="Frete e taxas debitados no pagamento" valor={fin.frete_e_taxas} base={fin.venda}
-                  exp={`O que o Mercado Pago debita de envio e taxas até sobrar o líquido: o frete cheio do envio (inclusive a parte que o comprador pagou, que só transita) e tarifas de parcelamento. Seu custo de envio pela régua oficial do ML: R$ ${fmt(fin.frete_vendedor)}.`} />
-                <Linha label="Líquido Mercado Pago" valor={fin.liquido_mp} base={fin.venda} positivo forte
-                  exp="O net_received_amount somado — o valor exato que cai na conta, já definido na aprovação do pagamento." />
+                <Linha label="Frete pago por você" valor={fin.frete_liquido_vendedor} base={fin.venda}
+                  exp={`O charge de frete do pagamento menos a parte que o comprador pagou (R$ ${fmt(fin.frete_comprador)}, que só transita). É o seu custo real de envio — a média de ~R$ 16 nos produtos acima de R$ 79.`} />
+                {Math.abs(fin.ajustes || 0) >= 1 && <Linha label="Ajustes" valor={fin.ajustes} base={fin.venda} positivo={fin.ajustes > 0}
+                  exp="Diferenças de pedidos que ainda não têm a decomposição completa dos charges (o backfill preenche sozinho)." />}
+                <Linha label="Resultado das vendas no Mercado Pago" valor={fin.liquido_vendas} base={fin.venda} positivo forte
+                  exp="O que as vendas rendem de verdade: pago − frete − tarifas − promoções. Os débitos avulsos abaixo saem DEPOIS, e não são custo da venda." />
+                {fin.debitos_avulsos > 0.5 && <Linha label="Débitos avulsos descontados (crédito/dívidas)" valor={fin.debitos_avulsos} base={fin.venda}
+                  exp="Valores que o Mercado Pago abate dos repasses pra quitar outras obrigações (Mercado Crédito, antecipações, dívidas de tarifas). Reduzem o caixa, mas NÃO são custo da venda — por isso ficam fora do resultado final." />}
                 <Linha label="Imposto (11% da venda)" valor={fin.imposto} base={fin.venda}
-                  exp="Sua régua: 11% sobre a venda." />
+                  exp="Sua régua: 11% sobre a venda. Aplicado sobre o resultado das vendas (antes dos débitos avulsos)." />
                 <Linha label="Total após imposto" valor={fin.total_pos_imposto} base={fin.venda} positivo forte />
                 <Linha label="CMV · custo da mercadoria" valor={fin.cmv?.total || 0} base={fin.venda}
                   exp="Custo de produção (calculadora) das peças, pelo vínculo com o Bling." />
