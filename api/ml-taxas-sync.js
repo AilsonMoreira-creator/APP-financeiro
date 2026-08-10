@@ -189,6 +189,22 @@ export default async function handler(req, res) {
   const contaFiltro = req.query?.conta || null;
   const tudo = req.query?.tudo === '1';
 
+  // ?completar=1 — reprocessa os JÁ GRAVADOS que ainda não têm o líquido do
+  // MP (net_recebido null) — é o backfill dos campos novos de 10/08
+  const completar = req.query?.completar === '1';
+  if (completar) {
+    let qc = supabase.from('ml_pedido_taxas')
+      .select('conta, pedido_id, numero_loja, data_pedido')
+      .is('net_recebido', null)
+      .gte('data_pedido', desde).lte('data_pedido', ate)
+      .order('data_pedido', { ascending: false }).limit(limite);
+    if (contaFiltro) qc = qc.eq('conta', contaFiltro);
+    const { data: falta, error: eF } = await qc;
+    if (eF) return res.status(500).json({ erro: eF.message });
+    const alvoC = (falta || []).map(f => ({ conta: f.conta, pedido_id: f.pedido_id, numero_pedido_loja: f.numero_loja, data_pedido: f.data_pedido }));
+    return await processar(alvoC, res, inicio, desde, ate);
+  }
+
   // pedidos do ML com número da loja preenchido
   let q = supabase.from('bling_vendas_detalhe')
     .select('conta, pedido_id, numero_pedido_loja, data_pedido')
@@ -209,6 +225,10 @@ export default async function handler(req, res) {
   }
 
   const alvo = (pedidos || []).filter(p => tudo || !jaFeitos.has(`${p.conta}|${p.numero_pedido_loja}`)).slice(0, limite);
+  return await processar(alvo, res, inicio, desde, ate);
+}
+
+async function processar(alvo, res, inicio, desde, ate) {
   const tokens = {};
   const r = { janela: `${desde} a ${ate}`, candidatos: alvo.length, gravados: 0, erros: 0, pulados: 0 };
 
@@ -231,6 +251,10 @@ export default async function handler(req, res) {
       listing_type: d.listing_type, itens: d.itens, checado_em: new Date().toISOString(),
       status_ml: d.status_ml, desconto_total: d.desconto_total,
       desconto_vendedor: d.desconto_vendedor, desconto_plataforma: d.desconto_plataforma,
+      net_recebido: d.net_recebido, release_date: d.release_date,
+      release_status: d.release_status, pago_em: d.pago_em,
+      frete_vendedor: d.frete_vendedor, frete_comprador: d.frete_comprador,
+      logistic_type: d.logistic_type,
     }, { onConflict: 'conta,numero_loja' });
     if (eUp) { r.erros++; continue; }
     r.gravados++;
