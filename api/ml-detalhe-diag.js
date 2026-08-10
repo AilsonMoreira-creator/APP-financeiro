@@ -47,9 +47,34 @@ function enxuga(obj, profundidade = 0) {
   return undefined;
 }
 
+async function mlH(path, token, headers = {}) {
+  const host = path.startsWith('/v1/payments') ? 'https://api.mercadopago.com' : API;
+  const r = await fetch(`${host}${path}`, { headers: { Authorization: `Bearer ${token}`, ...headers } });
+  const body = await r.json().catch(() => ({}));
+  return r.ok ? body : { _erro: r.status, _msg: (body?.message || '').slice(0, 80) };
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const conta = String(req.query?.conta || 'exitus').toLowerCase();
+
+  // ?ads=1 — descobrir a rota certa do investimento em publicidade (Product Ads)
+  if (req.query?.ads === '1') {
+    const token = await getValidToken(BRAND[conta] || 'Exitus');
+    const me = await mlH('/users/me', token);
+    const uid = me?.id;
+    const ini = '2026-08-01', fim = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+    const tent = {};
+    tent.advertisers_v1 = await mlH('/advertising/advertisers?product_id=PADS', token, { 'Api-Version': '1' });
+    const advId = tent.advertisers_v1?.advertisers?.[0]?.advertiser_id;
+    if (advId) {
+      tent.metrics_v2 = await mlH(`/advertising/product_ads/metrics?date_from=${ini}&date_to=${fim}&metrics=cost,acos&aggregation=sum`, token, { 'Api-Version': '2', 'advertiser-id': String(advId) });
+      tent.campaigns_v2 = await mlH(`/advertising/product_ads/campaigns?limit=3&date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2', 'advertiser-id': String(advId) });
+    }
+    tent.pads_user = await mlH(`/advertising/${uid}/product_ads/metrics?date_from=${ini}&date_to=${fim}&metrics=cost`, token, { 'Api-Version': '2' });
+    return res.status(200).json({ conta, uid, advertiser: advId || null, tentativas: tent });
+  }
+
   const id = String(req.query?.pedido || '').trim();
   if (!/^\d+$/.test(id)) return res.status(400).json({ erro: 'use ?pedido=<ml_order_id>&conta=exitus' });
 
