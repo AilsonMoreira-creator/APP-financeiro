@@ -90,6 +90,7 @@ export default async function handler(req, res) {
         const novoLast = (rows.length ? rows[rows.length - 1]?.charge_info?.detail_id : null) || d.last_id;
         // a paginação é elástica (páginas podem vir com <1000 rows tendo mais
         // adiante) — o fim é página vazia ou cursor repetido
+        errosApi.push(`pg${paginas}: ${rows.length} rows, last=${novoLast}, cursor_usado=${lastId || 'offset0'}`);
         if (!rows.length || !novoLast || novoLast === lastId) break;
         lastId = novoLast;
         await dorme(1800);   // ritmo pra não estourar o rate limit
