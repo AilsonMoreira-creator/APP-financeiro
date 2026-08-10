@@ -166,7 +166,25 @@ export default async function handler(req, res) {
       fin.publicidade = r2(fin.publicidade);
     }
 
-    fin.resultado_final = r2(fin.total_pos_imposto - cmv.total - fin.custo_operacao - fin.publicidade);
+    // tarifas de FATURAMENTO fora do pagamento (envio flex/intermunicipal,
+    // parcelamento, serviços Full, devoluções faturadas) — a peça que faltava
+    // na reconciliação com o painel de custos do ML (10/08)
+    fin.tarifas_faturamento = 0;
+    fin.tarifas_faturamento_det = {};
+    {
+      const meses = new Set();
+      const d0 = new Date(`${ini}T12:00:00Z`);
+      const d1 = new Date(`${hoje}T12:00:00Z`);
+      for (let d = new Date(d0); d <= d1; d.setUTCDate(d.getUTCDate() + 1)) meses.add(d.toISOString().slice(0, 7));
+      const { data: bl } = await supabase.from('ml_billing_mensal')
+        .select('tipo, valor').in('mes', [...meses]).neq('tipo', 'ads');
+      for (const b of (bl || [])) {
+        fin.tarifas_faturamento += n(b.valor);
+        fin.tarifas_faturamento_det[b.tipo] = r2((fin.tarifas_faturamento_det[b.tipo] || 0) + n(b.valor));
+      }
+      fin.tarifas_faturamento = r2(fin.tarifas_faturamento);
+    }
+    fin.resultado_final = r2(fin.total_pos_imposto - cmv.total - fin.custo_operacao - fin.publicidade - fin.tarifas_faturamento);
 
     return res.status(200).json({
       ok: true, janela, de: ini, ate: hoje,

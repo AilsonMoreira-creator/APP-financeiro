@@ -46,7 +46,19 @@ export default async function handler(req, res) {
       .map(p => p.key);
     if (!chaves.length && per.results?.[0]) chaves.push(per.results[0].key);
 
-    let bruto = 0, cancelado = 0, charges = 0, paginas = 0;
+    // classifica TODOS os charges do mês por grupo. CVV*/BVV* (tarifa de venda
+    // e de cobrança) ficam FORA — já entram pelo payment (charge_tarifas), e
+    // somar de novo seria dupla contagem.
+    const grupo = (st) => {
+      const base = st.replace(/^B/, '');
+      if (base === 'PADS') return 'ads';
+      if (['CFFE', 'CXDE', 'CXDI', 'CFFI'].includes(base) || base.startsWith('CXD') || base.startsWith('CFF')) return base.includes('D') && base !== 'CXDI' && base !== 'CXDE' ? 'devolucao' : 'envio_fatura';
+      if (base === 'CFONPN' || base === 'CVVFN') return 'parcelamento';
+      if (['CFWA', 'CFCBI'].includes(base)) return 'full_servicos';
+      if (base.startsWith('CVV') || base.startsWith('CVM')) return null; // já no payment
+      return 'outros';
+    };
+    const somas = {}; let charges = 0, paginas = 0;
     for (const key of chaves) {
       let offset = 0, total = null;
       while ((total === null || offset < total) && Date.now() - t0 < 260000) {
@@ -55,23 +67,28 @@ export default async function handler(req, res) {
         total = d.total ?? total;
         for (const row of (d.results || [])) {
           const ci = row.charge_info || {};
-          const st = String(ci.detail_sub_type || '');
-          if (!st.includes('PADS')) continue;
           if (!String(ci.creation_date_time || '').startsWith(mes)) continue;
+          const st = String(ci.detail_sub_type || '');
+          const g = grupo(st);
+          if (!g) continue;
           const v = Number(ci.detail_amount) || 0;
           charges++;
-          if (st.startsWith('B')) cancelado += v; else bruto += v;
+          somas[g] = (somas[g] || 0) + (st.startsWith('B') ? -v : v);
         }
         offset += 1000; paginas++;
       }
     }
-
-    const valor = Math.round((bruto - cancelado) * 100) / 100;
-    if (charges > 0) {
-      await supabase.from('ml_ads_manual').upsert(
-        { mes, valor, atualizado_em: new Date().toISOString() }, { onConflict: 'mes' });
+    for (const g of Object.keys(somas)) {
+      somas[g] = Math.round(somas[g] * 100) / 100;
+      await supabase.from('ml_billing_mensal').upsert(
+        { mes, conta: 'exitus', tipo: g, valor: somas[g], atualizado_em: new Date().toISOString() },
+        { onConflict: 'mes,conta,tipo' });
     }
-    return res.status(200).json({ ok: true, mes, periodos: chaves, paginas, charges_pads_no_mes: charges, bruto, cancelado, valor_gravado: charges > 0 ? valor : null });
+    if (somas.ads > 0) {
+      await supabase.from('ml_ads_manual').upsert(
+        { mes, valor: somas.ads, atualizado_em: new Date().toISOString() }, { onConflict: 'mes' });
+    }
+    return res.status(200).json({ ok: true, mes, periodos: chaves, paginas, charges_no_mes: charges, somas });
   } catch (e) {
     return res.status(500).json({ erro: e.message });
   }

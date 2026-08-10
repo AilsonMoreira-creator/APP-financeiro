@@ -152,6 +152,8 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                 )}
                 <Linha label="Custo de operação (R$ 5/un)" valor={fin.custo_operacao || 0} base={fin.venda}
                   exp={`R$ 5 fixos por unidade vendida (${fin.custo_operacao_un || 0} un): embalagem, etiqueta, mão de obra da expedição.`} />
+                <Linha label="Tarifas de faturamento (fora do pagamento)" valor={fin.tarifas_faturamento || 0} base={fin.venda}
+                  exp={`Custos que o ML cobra na fatura, não no pagamento: envio Flex/intermunicipal R$ ${fmt(fin.tarifas_faturamento_det?.envio_fatura || 0)}, parcelamento R$ ${fmt(fin.tarifas_faturamento_det?.parcelamento || 0)}, serviços Full R$ ${fmt(fin.tarifas_faturamento_det?.full_servicos || 0)}, devoluções R$ ${fmt(fin.tarifas_faturamento_det?.devolucao || 0)}, outros R$ ${fmt(fin.tarifas_faturamento_det?.outros || 0)}. Cancelamentos já abatidos.`} />
                 <Linha label="Publicidade (Product Ads)" valor={fin.publicidade || 0} base={fin.venda}
                   exp="Gasto real com campanhas de Product Ads (só a Exitus anuncia), somado charge a charge do faturamento do ML e atualizado todo dia às 6h40. Cresce conforme as campanhas rodam." />
                 <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
