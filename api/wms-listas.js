@@ -145,6 +145,36 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, config });
       }
 
+      if (acao === 'historico') {
+        // Calendario do mes (Ailson 10/08/2026): por dia, total finalizado =
+        // EXPEDICAO (pedido de loja, por finalizado_em BRT — mesma regra do
+        // "Vendas do dia") + FULL (pelo dia em que o pedido ENTROU).
+        const mes = String(req.query?.mes || '').match(/^\d{4}-\d{2}$/)
+          ? String(req.query.mes)
+          : new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 7);
+        const ini = `${mes}-01`;
+        const fimMes = new Date(Date.UTC(+mes.slice(0, 4), +mes.slice(5, 7), 1)).toISOString().slice(0, 10);
+        const { data: rows, error } = await supabase.from('wms_pedidos')
+          .select('status_wms, data_pedido, finalizado_em, ml_logistic_type, canal_detalhe, servico_frete, canal_geral, conta')
+          .neq('status_wms', 'cancelado')
+          .or(`and(data_pedido.gte.${ini},data_pedido.lt.${fimMes}),and(finalizado_em.gte.${ini}T00:00:00-03:00,finalizado_em.lt.${fimMes}T00:00:00-03:00)`);
+        if (error) throw error;
+        const full = (r2) => r2.ml_logistic_type === 'fulfillment' || normSitLocal(r2.canal_detalhe) === 'ml full';
+        const dias = {};
+        const cel = (d) => dias[d] || (dias[d] = { expedicao: 0, full: 0, total: 0 });
+        for (const r of (rows || [])) {
+          if (full(r)) {
+            if (r.data_pedido && r.data_pedido >= ini && r.data_pedido < fimMes) {
+              const c = cel(r.data_pedido); c.full++; c.total++;
+            }
+          } else if (r.status_wms === 'finalizado' && r.finalizado_em) {
+            const d = new Date(new Date(r.finalizado_em).getTime() - 3 * 3600000).toISOString().slice(0, 10);
+            if (d >= ini && d < fimMes) { const c = cel(d); c.expedicao++; c.total++; }
+          }
+        }
+        return res.status(200).json({ ok: true, mes, dias });
+      }
+
       if (acao === 'medias') {
         // Dados que temos hoje pra formar as médias (tela de config).
         const brt = new Date(Date.now() - 3 * 3600000);

@@ -268,15 +268,22 @@ export default async function handler(req, res) {
         }
         const skusDistintos = new Set(itens.map(i => i.codigo || (i.ref + '|' + i.cor + '|' + i.tamanho))).size;
         const statusInicial = pedido.categoria === 'finalizado' ? 'finalizado' : 'aberto';
+        // Pedido que JA CHEGA atendido (backfill/full): finalizado_em = dia do
+        // PEDIDO (15:00 BRT), nao "agora" — senao um backfill de agosto marca
+        // o mes inteiro como finalizado hoje e o calendario do historico mente.
+        // Pedido do proprio dia continua com o horario real do sync. 10/08/2026.
+        const dataPedStr = pedido.data || (ped.data || '').slice(0, 10) || null;
+        const hojeBrt = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+        const fimHistorico = dataPedStr && dataPedStr < hojeBrt ? `${dataPedStr}T18:00:00.000Z` : new Date().toISOString();
         await supabase.from('wms_pedidos').upsert({
           status_wms: statusInicial,
-          finalizado_em: statusInicial === 'finalizado' ? new Date().toISOString() : null,
+          finalizado_em: statusInicial === 'finalizado' ? fimHistorico : null,
           conta, pedido_id: pedido.id, numero: String(ped.numero || pedido.numero || ''),
           numero_loja: ped.numeroLoja || ped.numeroPedidoLoja || null,
           // servico do frete (transporte.volumes[0].servico) — e por aqui que da
           // pra separar o Mercado Livre Flex (Ailson 07/08/2026)
           servico_frete: ped.transporte?.volumes?.[0]?.servico || null,
-          data_pedido: pedido.data || (ped.data || '').slice(0, 10) || null,
+          data_pedido: dataPedStr,
           situacao_bling: pedido.situacaoId, situacao_nome: pedido.situacaoNome,
           loja_nome: lojaNome || '', loja_id: ped.loja?.id || null,
           canal_geral: canal.geral, canal_detalhe: canal.detalhe,

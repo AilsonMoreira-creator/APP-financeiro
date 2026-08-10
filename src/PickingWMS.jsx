@@ -379,6 +379,88 @@ function ConfigScreen({ config, salvando, onSalvar, API }) {
   );
 }
 
+// ── Histórico: calendário mensal de finalizados (Ailson 10/08/2026) ──
+function TelaHistorico({ API, onErro }) {
+  const agora = new Date(Date.now() - 3 * 3600000);
+  const [mes, setMes] = useState(agora.toISOString().slice(0, 7));
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+
+  const carregar = useCallback(async (m) => {
+    setCarregando(true);
+    try {
+      const r = await fetch(`${API}?acao=historico&mes=${m}`);
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      setDados(d);
+    } catch (e) { onErro?.(e.message); }
+    finally { setCarregando(false); }
+  }, [API, onErro]);
+  useEffect(() => { carregar(mes); }, [carregar, mes]);
+
+  const mudaMes = (delta) => {
+    const [a, m] = mes.split('-').map(Number);
+    const d = new Date(Date.UTC(a, m - 1 + delta, 1));
+    setMes(d.toISOString().slice(0, 7));
+  };
+  const nomeMes = new Date(`${mes}-15T12:00:00Z`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  // grade dom→sáb
+  const [ano, mnum] = mes.split('-').map(Number);
+  const primeiro = new Date(Date.UTC(ano, mnum - 1, 1));
+  const diasNoMes = new Date(Date.UTC(ano, mnum, 0)).getUTCDate();
+  const celulas = [];
+  for (let i = 0; i < primeiro.getUTCDay(); i++) celulas.push(null);
+  for (let d = 1; d <= diasNoMes; d++) celulas.push(d);
+  const hojeStr = agora.toISOString().slice(0, 10);
+
+  return (
+    <div style={{ padding: 12, maxWidth: 760, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <button onClick={() => mudaMes(-1)} style={{ border: `1.5px solid ${palette.beige}`, background: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 16, cursor: 'pointer', color: palette.inkSoft }}>‹</button>
+        <div style={{ fontSize: 16, fontWeight: 800, color: palette.inkSoft, textTransform: 'capitalize' }}>{nomeMes}{carregando ? ' …' : ''}</div>
+        <button onClick={() => mudaMes(1)} style={{ border: `1.5px solid ${palette.beige}`, background: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 16, cursor: 'pointer', color: palette.inkSoft }}>›</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, marginBottom: 4 }}>
+        {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+          <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 800, color: '#fff', background: palette.inkMuted, borderRadius: 6, padding: '5px 0' }}>{d}</div>
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+        {celulas.map((d, i) => {
+          if (d === null) return <div key={`v${i}`} />;
+          const chave = `${mes}-${String(d).padStart(2, '0')}`;
+          const c = dados?.dias?.[chave];
+          const ehHoje = chave === hojeStr;
+          const futuro = chave > hojeStr;
+          return (
+            <div key={chave} style={{
+              background: ehHoje ? '#eef4fb' : '#fff', border: `1.5px solid ${ehHoje ? '#7da7d9' : palette.beige}`,
+              borderRadius: 8, padding: '4px 3px', minHeight: 62, opacity: futuro ? 0.45 : 1,
+            }}>
+              <div style={{ fontSize: 9.5, color: palette.inkMuted, fontWeight: 700 }}>{d}</div>
+              {c ? (
+                <>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: palette.inkSoft, textAlign: 'center', lineHeight: 1.1 }}>{c.total}</div>
+                  <div style={{ fontSize: 8.5, color: palette.inkMuted, textAlign: 'center', marginTop: 1 }}>
+                    Full {c.full}<br />Exp. {c.expedicao}
+                  </div>
+                </>
+              ) : (
+                !futuro && <div style={{ fontSize: 12, color: '#d5cfc5', textAlign: 'center', marginTop: 10 }}>—</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 10.5, color: palette.inkMuted, marginTop: 10, lineHeight: 1.5 }}>
+        <b>Total</b> = finalizados no dia. <b>Exp.</b> = pedidos da expedição (bipado + etiqueta, contam no dia em que foram finalizados). <b>Full</b> = saem do galpão do ML, contam no dia em que entraram.
+      </div>
+    </div>
+  );
+}
+
 // ── Produtividade: formatação e avaliação da variação ──
 function fmtDur(seg) {
   if (seg == null) return '—';
@@ -875,7 +957,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
         </button>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17.5, fontWeight: 800 }}>📦 Picking WMS</div>
-          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : tela === 'detalhes' ? 'Detalhar pedidos' : tela === 'produtividade' ? 'Produtividade da separação' : tela === 'aguardando' ? 'Aguardando mercadoria' : 'Lista de separação'}</div>
+          <div style={{ fontSize: 12, opacity: 0.92 }}>{tela === 'dashboard' ? 'Separação de pedidos dos marketplaces' : tela === 'config' ? 'Configurações' : tela === 'detalhes' ? 'Detalhar pedidos' : tela === 'produtividade' ? 'Produtividade da separação' : tela === 'historico' ? 'Histórico de finalizados' : tela === 'aguardando' ? 'Aguardando mercadoria' : 'Lista de separação'}</div>
         </div>
         <button onClick={() => setTela('config')} title="Configurações" style={{ background: tela === 'config' ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 9, padding: 8, cursor: 'pointer', color: '#fff', display: 'flex' }}>
           <Settings size={18} />
@@ -1049,6 +1131,9 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
           <button onClick={() => setTela('produtividade')} style={{ marginTop: 10, width: '100%', padding: '13px', borderRadius: 13, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <Clock size={18} /> Produtividade
           </button>
+          <button onClick={() => setTela('historico')} style={{ marginTop: 10, width: '100%', padding: '13px', borderRadius: 13, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            📅 Histórico
+          </button>
         </div>
       )}
 
@@ -1073,6 +1158,10 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
 
       {tela === 'aguardando' && (
         <TelaAguardando API={API} onVoltar={async () => { await carregarDash(); setTela('dashboard'); }} onErro={setErro} />
+      )}
+
+      {tela === 'historico' && (
+        <TelaHistorico API={API} onErro={setErro} />
       )}
 
       {tela === 'produtividade' && (
