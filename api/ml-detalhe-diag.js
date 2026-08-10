@@ -134,6 +134,20 @@ export default async function handler(req, res) {
     return res.status(200).json({ key, total, paginas, tipos });
   }
 
+  // ?sort_test=1 — o details ignora last_id e o offset tem teto; testar se
+  // aceita ordenacao invertida (1a row recente = resolve o mes corrente)
+  if (req.query?.sort_test === '1') {
+    const token = await getValidToken(BRAND[conta] || 'Exitus');
+    const base = '/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL&limit=2&offset=0';
+    const saida = {};
+    for (const v of ['sort=date_desc', 'sort=desc', 'order=desc', 'sort=-creation_date', 'desc=true']) {
+      const d = await mlH(`${base}&${v}`, token);
+      saida[v] = d._erro ? `${d._erro} ${d._msg || ''}` : (d.results || []).map(r => r.charge_info?.creation_date_time);
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    return res.status(200).json(saida);
+  }
+
   const id = String(req.query?.pedido || '').trim();
   if (!/^\d+$/.test(id)) return res.status(400).json({ erro: 'use ?pedido=<ml_order_id>&conta=exitus' });
 
