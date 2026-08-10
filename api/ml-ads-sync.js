@@ -66,16 +66,21 @@ export default async function handler(req, res) {
       if (base.startsWith('CVV') || base.startsWith('CVM')) return null; // já no payment
       return 'outros';
     };
-    // o extrato tem teto de offset (~10k dá 422) — paginação por CURSOR
-    // (last_id) do início ao fim; filtra o mês em todas as páginas
+    // LIMITAÇÃO MAPEADA (10/08): o details do período aberto pagina por offset
+    // com teto offset+limit ≤ 10.000 — sem sort, sem cursor (last_id é só
+    // informativo), sem filtro por documento. Varremos as 10k rows alcançáveis
+    // (cronológicas): cobre o mês corrente até a fatura quinzenal encher; no
+    // fechamento (dia ~18) o dataset esvazia e o alcance volta. A resposta
+    // expõe a cobertura. Plano definitivo: API de reports do billing.
     const somas = {}; let charges = 0, paginas = 0; const errosApi = [];
+    let cobertura = null;
     for (const key of chaves) {
-      let lastId = null;
-      while (Date.now() - t0 < 260000) {
-        const cursor = lastId ? `&last_id=${lastId}` : '&offset=0';
-        const d = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000${cursor}`, token);
-        if (d._erro) { errosApi.push(`pg ${paginas} (${lastId || 0}): ${d._erro} ${d._msg || ''}`); break; }
+      for (let offset = 0; offset <= 9000; offset += 1000) {
+        if (Date.now() - t0 > 260000) break;
+        const d = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=${offset}`, token);
+        if (d._erro) { errosApi.push(`off ${offset}: ${d._erro} ${d._msg || ''}`); break; }
         const rows = d.results || [];
+        cobertura = { alcancadas: offset + rows.length, total: d.total || null };
         for (const row of rows) {
           const ci = row.charge_info || {};
           if (!String(ci.creation_date_time || '').startsWith(mes)) continue;
@@ -87,13 +92,8 @@ export default async function handler(req, res) {
           somas[g] = (somas[g] || 0) + (st.startsWith('B') ? -v : v);
         }
         paginas++;
-        const novoLast = (rows.length ? rows[rows.length - 1]?.charge_info?.detail_id : null) || d.last_id;
-        // a paginação é elástica (páginas podem vir com <1000 rows tendo mais
-        // adiante) — o fim é página vazia ou cursor repetido
-        errosApi.push(`pg${paginas}: ${rows.length} rows, last=${novoLast}, cursor_usado=${lastId || 'offset0'}`);
-        if (!rows.length || !novoLast || novoLast === lastId) break;
-        lastId = novoLast;
-        await dorme(1800);   // ritmo pra não estourar o rate limit
+        if (rows.length === 0) break;
+        await dorme(1800);
       }
     }
 
@@ -107,7 +107,7 @@ export default async function handler(req, res) {
       await supabase.from('ml_ads_manual').upsert(
         { mes, valor: somas.ads, atualizado_em: new Date().toISOString() }, { onConflict: 'mes' });
     }
-    return res.status(200).json({ ok: true, mes, periodos: chaves, paginas, charges_no_mes: charges, somas, erros_api: errosApi });
+    return res.status(200).json({ ok: true, mes, periodos: chaves, paginas, charges_no_mes: charges, somas, cobertura, erros_api: errosApi });
   } catch (e) {
     return res.status(500).json({ erro: e.message });
   }
