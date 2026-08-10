@@ -80,8 +80,9 @@ export default async function handler(req, res) {
         }
         paginas++;
         const novoLast = (rows.length ? rows[rows.length - 1]?.charge_info?.detail_id : null) || d.last_id;
-        errosApi.push(`pg${paginas}: ${rows.length} rows, last=${novoLast}`);
-        if (rows.length < 1000 || !novoLast || novoLast === lastId) break;
+        // a paginação é elástica (páginas podem vir com <1000 rows tendo mais
+        // adiante) — o fim é página vazia ou cursor repetido
+        if (!rows.length || !novoLast || novoLast === lastId) break;
         lastId = novoLast;
       }
     }
