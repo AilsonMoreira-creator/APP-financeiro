@@ -58,16 +58,23 @@ export default async function handler(req, res) {
       if (base.startsWith('CVV') || base.startsWith('CVM')) return null; // já no payment
       return 'outros';
     };
+    // o extrato é cronológico (começa em nov/2025) e o mês corrente vive nas
+    // ÚLTIMAS páginas — varre DE TRÁS PRA FRENTE e para quando a página já não
+    // tem nenhum lançamento do mês pedido
     const somas = {}; let charges = 0, paginas = 0;
     for (const key of chaves) {
-      let offset = 0, total = null;
-      while ((total === null || offset < total) && Date.now() - t0 < 260000) {
+      const probe = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1&offset=0`, token);
+      if (probe._erro) continue;
+      const total = probe.total || 0;
+      let offset = Math.max(0, Math.floor((total - 1) / 1000) * 1000);
+      while (offset >= 0 && Date.now() - t0 < 260000) {
         const d = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=${offset}`, token);
         if (d._erro) break;
-        total = d.total ?? total;
+        let doMesNaPagina = 0;
         for (const row of (d.results || [])) {
           const ci = row.charge_info || {};
           if (!String(ci.creation_date_time || '').startsWith(mes)) continue;
+          doMesNaPagina++;
           const st = String(ci.detail_sub_type || '');
           const g = grupo(st);
           if (!g) continue;
@@ -75,7 +82,9 @@ export default async function handler(req, res) {
           charges++;
           somas[g] = (somas[g] || 0) + (st.startsWith('B') ? -v : v);
         }
-        offset += 1000; paginas++;
+        paginas++;
+        if (doMesNaPagina === 0 && paginas > 1) break;   // já passou do mês
+        offset -= 1000;
       }
     }
     for (const g of Object.keys(somas)) {
