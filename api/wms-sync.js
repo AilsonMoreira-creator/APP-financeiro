@@ -80,7 +80,11 @@ export default async function handler(req, res) {
   const qDesde = String(req.query?.desde || '');
   if (/^\d{4}-\d{2}-\d{2}$/.test(qDesde)) dataInicial = qDesde;
   else if (!diag && dataInicial < DATA_INICIO_OPERACAO) dataInicial = DATA_INICIO_OPERACAO;
-  const dataFinal = new Date().toISOString().slice(0, 10);
+  // ?ate=YYYY-MM-DD fecha a janela por cima — essencial pra backfill de dias
+  // especificos sem varrer o mes inteiro (o Bling lista do mais recente pro
+  // mais antigo e a funcao estoura os 300s antes de chegar la). 10/08/2026.
+  const qAte = String(req.query?.ate || '');
+  const dataFinal = /^\d{4}-\d{2}-\d{2}$/.test(qAte) ? qAte : new Date().toISOString().slice(0, 10);
 
   const cfg = await lerWmsConfig();
   const alvosAbertos = cfg.situacoes_aberto;
