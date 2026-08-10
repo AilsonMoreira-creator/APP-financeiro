@@ -148,6 +148,15 @@ export default async function handler(req, res) {
     return res.status(200).json(saida);
   }
 
+  // ?periods_test=1 — periods SEM o /monthly: existem períodos curtos
+  // (quinzenais/semanais) que escapam do teto de 10k do details?
+  if (req.query?.periods_test === '1') {
+    const token = await getValidToken(BRAND[conta] || 'Exitus');
+    const d = await mlH('/billing/integration/periods?group=ML&document_type=BILL&offset=0&limit=6', token);
+    if (d._erro) return res.status(200).json({ erro: `${d._erro} ${d._msg || ''}` });
+    return res.status(200).json({ total: d.total, periodos: (d.results || []).map(p => ({ key: p.key, de: p.period?.date_from, ate: p.period?.date_to, status: p.period_status, amount: p.amount })) });
+  }
+
   // ?cap_test=1 — mapear os tetos reais de limit/offset do details
   if (req.query?.cap_test === '1') {
     const token = await getValidToken(BRAND[conta] || 'Exitus');
