@@ -79,8 +79,9 @@ export default async function handler(req, res) {
       tent.m4 = await mlH(`/advertising/${advId}/campaigns?date_from=${ini}&date_to=${fim}&limit=2`, token, { 'Api-Version': '2' });
     }
     tent.billing2 = await mlH('/billing/integration/monthly/periods?group=ML&document_type=BILL&offset=0&limit=2', token);
-    tent.b_summary = await mlH('/billing/integration/periods/key/2026-08-01/group/ML/summary', token);
-    tent.b_details = await mlH('/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL&limit=2&offset=0', token);
+    tent.pads_periods = await mlH('/billing/integration/monthly/periods?group=PADS&document_type=BILL&offset=0&limit=3', token);
+    const kAds = tent.pads_periods?.results?.[0]?.key;
+    if (kAds) tent.pads_details = await mlH(`/billing/integration/periods/key/${kAds}/group/PADS/details?document_type=BILL&limit=2&offset=0`, token);
 
     // caminho alternativo: BILLING (extrato de faturamento) — publicidade
     // aparece como cobrança; costuma vir com o escopo read normal
