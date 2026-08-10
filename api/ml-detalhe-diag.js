@@ -84,6 +84,21 @@ export default async function handler(req, res) {
     return res.status(200).json({ conta, uid, advertiser: advId || null, chave_periodo: chave || null, tentativas: tent });
   }
 
+  // ?mp_cru=1&pedido=<order_id> — payment do MP INTEIRO (sem enxugar), pra
+  // achar financing/charges e entender o debito de frete
+  if (req.query?.mp_cru === '1') {
+    const token = await getValidToken(BRAND[conta] || 'Exitus');
+    const oid = String(req.query?.pedido || '').trim();
+    const o = await mlH(`/orders/${oid}`, token);
+    if (o._erro) return res.status(400).json(o);
+    const pid = o.payments?.[0]?.id;
+    const mp = await mlH(`/v1/payments/${pid}`, token);
+    // devolve só chaves de 1o nivel + objetos financeiros completos
+    const foco = {};
+    for (const k of ['transaction_amount', 'transaction_details', 'fee_details', 'charges_details', 'taxes_amount', 'shipping_amount', 'money_release_date', 'money_release_status', 'installments', 'payment_type_id', 'coupon_amount']) foco[k] = mp[k];
+    return res.status(200).json({ pedido: oid, payment: String(pid), foco });
+  }
+
   const id = String(req.query?.pedido || '').trim();
   if (!/^\d+$/.test(id)) return res.status(400).json({ erro: 'use ?pedido=<ml_order_id>&conta=exitus' });
 
