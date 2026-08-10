@@ -15,7 +15,9 @@ const API = 'https://api.mercadolibre.com';
 const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 
 async function ml(path, token) {
-  const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  // pagamentos moram no host do Mercado Pago; o resto no do Mercado Livre
+  const host = path.startsWith('/v1/payments') ? 'https://api.mercadopago.com' : API;
+  const r = await fetch(`${host}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   const body = await r.json().catch(() => ({}));
   return r.ok ? body : { _erro: r.status, _msg: body?.message };
 }
