@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     const token = await getValidToken(BRAND[conta] || 'Exitus');
     const key = String(req.query?.key || '2026-08-01');
     const tipos = {};
-    let offset = 0, total = null, paginas = 0;
+    let offset = parseInt(req.query?.offset0) || 0, total = null, paginas = 0;
     const t0 = Date.now();
     while ((total === null || offset < total) && paginas < 30 && Date.now() - t0 < 100000) {
       const d = await mlH(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=${offset}`, token);
