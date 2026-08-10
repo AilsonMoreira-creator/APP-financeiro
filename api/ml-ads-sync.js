@@ -58,24 +58,19 @@ export default async function handler(req, res) {
       if (base.startsWith('CVV') || base.startsWith('CVM')) return null; // já no payment
       return 'outros';
     };
-    // o extrato é cronológico (começa em nov/2025) e o mês corrente vive nas
-    // ÚLTIMAS páginas — varre DE TRÁS PRA FRENTE e para quando a página já não
-    // tem nenhum lançamento do mês pedido
+    // o extrato tem teto de offset (~10k dá 422) — paginação por CURSOR
+    // (last_id) do início ao fim; filtra o mês em todas as páginas
     const somas = {}; let charges = 0, paginas = 0; const errosApi = [];
     for (const key of chaves) {
-      // probe com limit cheio (o endpoint não aceita limit=1)
-      const probe = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=0`, token);
-      if (probe._erro) { errosApi.push(`probe ${key}: ${probe._erro} ${probe._msg || ''}`); continue; }
-      const total = probe.total || 0;
-      let offset = Math.max(0, Math.floor((total - 1) / 1000) * 1000);
-      while (offset >= 0 && Date.now() - t0 < 260000) {
-        const d = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=${offset}`, token);
-        if (d._erro) { errosApi.push(`pg ${offset}: ${d._erro} ${d._msg || ''}`); break; }
-        let doMesNaPagina = 0;
-        for (const row of (d.results || [])) {
+      let lastId = null;
+      while (Date.now() - t0 < 260000) {
+        const cursor = lastId ? `&last_id=${lastId}` : '&offset=0';
+        const d = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000${cursor}`, token);
+        if (d._erro) { errosApi.push(`pg ${paginas} (${lastId || 0}): ${d._erro} ${d._msg || ''}`); break; }
+        const rows = d.results || [];
+        for (const row of rows) {
           const ci = row.charge_info || {};
           if (!String(ci.creation_date_time || '').startsWith(mes)) continue;
-          doMesNaPagina++;
           const st = String(ci.detail_sub_type || '');
           const g = grupo(st);
           if (!g) continue;
@@ -84,10 +79,12 @@ export default async function handler(req, res) {
           somas[g] = (somas[g] || 0) + (st.startsWith('B') ? -v : v);
         }
         paginas++;
-        if (doMesNaPagina === 0 && paginas > 1) break;   // já passou do mês
-        offset -= 1000;
+        const novoLast = d.last_id || (rows.length ? rows[rows.length - 1]?.charge_info?.detail_id : null);
+        if (rows.length < 1000 || !novoLast || novoLast === lastId) break;
+        lastId = novoLast;
       }
     }
+
     for (const g of Object.keys(somas)) {
       somas[g] = Math.round(somas[g] * 100) / 100;
       await supabase.from('ml_billing_mensal').upsert(
