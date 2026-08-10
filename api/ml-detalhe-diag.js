@@ -83,8 +83,14 @@ export default async function handler(req, res) {
     // ── Mercado Pago: o pagamento de verdade (taxas, líquido, liberação) ─────
     saida.mercado_pago = [];
     for (const p of (order.payments || []).slice(0, 3)) {
-      const mp = await ml(`/v1/payments/${p.id}`, token);
-      if (mp._erro) { saida.mercado_pago.push({ id: String(p.id), erro: mp._erro }); continue; }
+      let mp = await ml(`/v1/payments/${p.id}`, token);
+      if (mp._erro) {
+        // fallback: busca por referencia externa (order_id) — alguns payments
+        // de marketplace nao respondem no GET direto
+        const busca = await ml(`/v1/payments/search?external_reference=${id}`, token);
+        mp = (busca?.results || []).find(x => String(x.id) === String(p.id)) || (busca?.results || [])[0] || busca;
+      }
+      if (!mp || mp._erro) { saida.mercado_pago.push({ id: String(p.id), erro: mp?._erro || 'nao encontrado' }); continue; }
       saida.mercado_pago.push({
         id: String(p.id), status: mp.status, status_detail: mp.status_detail,
         transaction_amount: mp.transaction_amount,
