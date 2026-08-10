@@ -20,10 +20,18 @@ import { getValidToken } from './_ml-helpers.js';
 export const config = { maxDuration: 300 };
 const API = 'https://api.mercadolibre.com';
 
+const dorme = (ms) => new Promise(r => setTimeout(r, ms));
+
 async function ml(path, token) {
-  const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-  const b = await r.json().catch(() => ({}));
-  return r.ok ? b : { _erro: r.status, _msg: b?.message };
+  // o billing tem rate limit apertado (429 local_rate_limited): até 4
+  // tentativas com espera crescente
+  for (let t = 0; t < 4; t++) {
+    const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (r.status === 429) { await dorme(3000 + t * 4000); continue; }
+    const b = await r.json().catch(() => ({}));
+    return r.ok ? b : { _erro: r.status, _msg: b?.message };
+  }
+  return { _erro: 429, _msg: 'rate limit apos 4 tentativas' };
 }
 
 export default async function handler(req, res) {
@@ -84,6 +92,7 @@ export default async function handler(req, res) {
         // adiante) — o fim é página vazia ou cursor repetido
         if (!rows.length || !novoLast || novoLast === lastId) break;
         lastId = novoLast;
+        await dorme(1800);   // ritmo pra não estourar o rate limit
       }
     }
 
