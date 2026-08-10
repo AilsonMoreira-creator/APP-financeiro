@@ -389,7 +389,7 @@ function TelaHistorico({ API, onErro }) {
   const carregar = useCallback(async (m) => {
     setCarregando(true);
     try {
-      const r = await fetch(`${API}?acao=historico&mes=${m}`);
+      const r = await fetch(`${API}/wms-listas?acao=historico&mes=${m}`);
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
       setDados(d);
