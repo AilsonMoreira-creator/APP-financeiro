@@ -91,9 +91,12 @@ export default async function handler(req, res) {
       desconto_plataforma: soma(comMp, r => n(r.desconto_plataforma)),
       liquido_mp: soma(comMp, r => n(r.net_recebido)),
     };
-    // resíduo: o que o líquido do MP não explica pelas linhas conhecidas
-    // (frete do comprador que transita, parcelamento, arredondamento)
-    fin.ajustes = r2(fin.liquido_mp - (fin.venda - fin.sale_fee - fin.frete_vendedor - fin.desconto_vendedor));
+    // Funil pelo FLUXO DO PAGAMENTO (10/08): o frete do comprador ENTRA no
+    // pagamento e o MP debita o frete CHEIO do envio + taxas de parcelamento —
+    // bem mais que o "custo do vendedor" da API de costs. A linha de frete do
+    // DRE é o débito implícito (fecha 100% com o líquido); o custo de envio
+    // "oficial" da API fica como informativo.
+    fin.frete_e_taxas = r2(fin.venda + fin.frete_comprador - fin.sale_fee - fin.desconto_vendedor - fin.liquido_mp);
     fin.imposto = r2(fin.venda * 0.11);
     fin.total_pos_imposto = r2(fin.liquido_mp - fin.imposto);
 

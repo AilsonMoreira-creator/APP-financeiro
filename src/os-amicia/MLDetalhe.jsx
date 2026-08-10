@@ -128,14 +128,14 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
               <Secao titulo="Detalhamento de valores · DRE" nota="Toque numa linha ⓘ pra ver a explicação. Sem linha de agência — os 5% são só do TikTok.">
                 <Linha label="Valor de venda" valor={fin.venda} positivo forte
                   exp="Soma dos produtos vendidos (preço real do anúncio, cancelados fora) nos pedidos com dado do Mercado Pago." />
+                {fin.frete_comprador > 0 && <Linha label="Frete pago pelo comprador" valor={fin.frete_comprador} base={fin.venda} positivo
+                  exp="Entra junto no pagamento (produtos abaixo de R$ 79). Transita: volta a sair na linha de frete abaixo." />}
                 <Linha label="Tarifa de venda (comissão + fixo)" valor={fin.sale_fee} base={fin.venda}
                   exp="A sale_fee exata que o ML cobrou em cada item: comissão do Clássico/Premium mais o custo fixo de itens abaixo de R$ 79." />
-                <Linha label="Frete pago por você" valor={fin.frete_vendedor} base={fin.venda}
-                  exp="Custo real de envio do vendedor, já com os descontos por reputação. Em produto abaixo de R$ 79 o comprador paga uma parte e você ainda paga o resto." />
                 {fin.desconto_vendedor > 0 && <Linha label="Promoções bancadas por você" valor={fin.desconto_vendedor} base={fin.venda}
                   exp="A parte dos descontos de campanha com funding do VENDEDOR — é o que você está desligando nos anúncios. O que o ML banca não entra aqui." />}
-                {Math.abs(fin.ajustes) >= 0.01 && <Linha label="Frete do comprador e ajustes" valor={fin.ajustes} base={fin.venda} positivo={fin.ajustes > 0}
-                  exp="Créditos e débitos que transitam no pagamento: o frete pago pelo comprador, tarifas de parcelamento e arredondamentos." />}
+                <Linha label="Frete e taxas debitados no pagamento" valor={fin.frete_e_taxas} base={fin.venda}
+                  exp={`O que o Mercado Pago debita de envio e taxas até sobrar o líquido: o frete cheio do envio (inclusive a parte que o comprador pagou, que só transita) e tarifas de parcelamento. Seu custo de envio pela régua oficial do ML: R$ ${fmt(fin.frete_vendedor)}.`} />
                 <Linha label="Líquido Mercado Pago" valor={fin.liquido_mp} base={fin.venda} positivo forte
                   exp="O net_received_amount somado — o valor exato que cai na conta, já definido na aprovação do pagamento." />
                 <Linha label="Imposto (11% da venda)" valor={fin.imposto} base={fin.venda}
