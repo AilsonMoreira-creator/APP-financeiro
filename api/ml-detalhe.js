@@ -151,23 +151,18 @@ export default async function handler(req, res) {
     fin.custo_operacao_un = unMp;
     fin.custo_operacao = r2(5 * unMp);
 
-    // publicidade (Mercado Ads): manual por mês até o app ganhar o escopo de
-    // Advertising (10/08: /advertising e /billing devolvem 403). Rateio da
-    // janela por dias corridos de cada mês coberto.
+    // publicidade (Product Ads): AUTOMÁTICA desde 10/08 — o ml-ads-sync varre
+    // os charges PADS do billing (só a Exitus tem Ads) e grava o acumulado
+    // REAL do mês em ml_ads_manual. Aqui é só somar os meses que a janela
+    // toca (o valor do mês corrente já é o gasto até o momento).
     fin.publicidade = 0;
     {
-      const meses = {};
+      const meses = new Set();
       const d0 = new Date(`${ini}T12:00:00Z`);
       const d1 = new Date(`${hoje}T12:00:00Z`);
-      for (let d = new Date(d0); d <= d1; d.setUTCDate(d.getUTCDate() + 1)) {
-        const m = d.toISOString().slice(0, 7);
-        meses[m] = (meses[m] || 0) + 1;
-      }
-      const { data: adsRows } = await supabase.from('ml_ads_manual').select('mes, valor').in('mes', Object.keys(meses));
-      for (const a of (adsRows || [])) {
-        const diasNoMes = new Date(Date.UTC(+a.mes.slice(0, 4), +a.mes.slice(5, 7), 0)).getUTCDate();
-        fin.publicidade += n(a.valor) * Math.min(1, meses[a.mes] / diasNoMes);
-      }
+      for (let d = new Date(d0); d <= d1; d.setUTCDate(d.getUTCDate() + 1)) meses.add(d.toISOString().slice(0, 7));
+      const { data: adsRows } = await supabase.from('ml_ads_manual').select('mes, valor').in('mes', [...meses]);
+      for (const a of (adsRows || [])) fin.publicidade += n(a.valor);
       fin.publicidade = r2(fin.publicidade);
     }
 

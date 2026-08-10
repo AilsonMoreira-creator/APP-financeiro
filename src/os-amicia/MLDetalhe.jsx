@@ -152,8 +152,8 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                 )}
                 <Linha label="Custo de operação (R$ 5/un)" valor={fin.custo_operacao || 0} base={fin.venda}
                   exp={`R$ 5 fixos por unidade vendida (${fin.custo_operacao_un || 0} un): embalagem, etiqueta, mão de obra da expedição.`} />
-                <Linha label="Publicidade (Mercado Ads)" valor={fin.publicidade || 0} base={fin.venda}
-                  exp="Investimento em anúncios do período (lançado por mês, rateado por dia na janela). Quando o app ganhar o escopo de Advertising no ML, esse valor passa a vir automático da API." />
+                <Linha label="Publicidade (Product Ads)" valor={fin.publicidade || 0} base={fin.venda}
+                  exp="Gasto real com campanhas de Product Ads (só a Exitus anuncia), somado charge a charge do faturamento do ML e atualizado todo dia às 6h40. Cresce conforme as campanhas rodam." />
                 <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
                   exp="O que sobra: líquido do Mercado Pago − imposto − custo da mercadoria − custo de operação − publicidade." />
                 {fin.desconto_plataforma > 0 && (
