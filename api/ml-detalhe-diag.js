@@ -157,6 +157,21 @@ export default async function handler(req, res) {
     return res.status(200).json({ total: d.total, periodos: (d.results || []).map(p => ({ key: p.key, de: p.period?.date_from, ate: p.period?.date_to, status: p.period_status, amount: p.amount })) });
   }
 
+  // ?doc_test=1 — listar documents do período e filtrar details por documento
+  if (req.query?.doc_test === '1') {
+    const token = await getValidToken(BRAND[conta] || 'Exitus');
+    const saida = {};
+    const d1 = await mlH('/billing/integration/periods/key/2026-08-01/documents?group=ML&document_type=BILL&limit=5&offset=0', token);
+    saida.documents_do_periodo = d1._erro ? `${d1._erro} ${d1._msg || ''}` : d1;
+    await new Promise(r => setTimeout(r, 1800));
+    const d2 = await mlH('/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL&limit=5&offset=0&document_id=4340792294', token);
+    saida.details_por_document = d2._erro ? `${d2._erro} ${d2._msg || ''}` : { total: d2.total, rows: (d2.results || []).length };
+    await new Promise(r => setTimeout(r, 1800));
+    const d3 = await mlH('/billing/integration/documents?group=ML&document_type=BILL&limit=5&offset=0', token);
+    saida.documents_geral = d3._erro ? `${d3._erro} ${d3._msg || ''}` : d3;
+    return res.status(200).json(saida);
+  }
+
   // ?cap_test=1 — mapear os tetos reais de limit/offset do details
   if (req.query?.cap_test === '1') {
     const token = await getValidToken(BRAND[conta] || 'Exitus');
