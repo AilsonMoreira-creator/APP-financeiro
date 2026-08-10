@@ -109,6 +109,31 @@ export default async function handler(req, res) {
     return res.status(200).json({ pedido: oid, payment: String(pid), foco });
   }
 
+  // ?ads_scan=1 — varre os details do billing e agrega por sub_type, pra
+  // achar o rótulo dos charges de PUBLICIDADE (e validar a soma do mês)
+  if (req.query?.ads_scan === '1') {
+    const token = await getValidToken(BRAND[conta] || 'Exitus');
+    const key = String(req.query?.key || '2026-08-01');
+    const tipos = {};
+    let offset = 0, total = null, paginas = 0;
+    const t0 = Date.now();
+    while ((total === null || offset < total) && paginas < 30 && Date.now() - t0 < 100000) {
+      const d = await mlH(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=${offset}`, token);
+      if (d._erro) return res.status(400).json({ offset, erro: d._erro, msg: d._msg, tipos });
+      total = d.total ?? total;
+      for (const row of (d.results || [])) {
+        const ci = row.charge_info || {};
+        const chave = `${ci.detail_sub_type || '?'} · ${(ci.transaction_detail || '?').slice(0, 50)}`;
+        const t = tipos[chave] || (tipos[chave] = { qtd: 0, soma: 0, ago: 0 });
+        t.qtd++; t.soma += Number(ci.detail_amount) || 0;
+        if (String(ci.creation_date_time || '').startsWith('2026-08')) t.ago += Number(ci.detail_amount) || 0;
+      }
+      offset += 1000; paginas++;
+    }
+    for (const t of Object.values(tipos)) { t.soma = Math.round(t.soma * 100) / 100; t.ago = Math.round(t.ago * 100) / 100; }
+    return res.status(200).json({ key, total, paginas, tipos });
+  }
+
   const id = String(req.query?.pedido || '').trim();
   if (!/^\d+$/.test(id)) return res.status(400).json({ erro: 'use ?pedido=<ml_order_id>&conta=exitus' });
 
