@@ -63,7 +63,10 @@ export default async function handler(req, res) {
   // Default 2 dias (hoje + ontem, cobre o ciclo do corte 12h). Janela maior
   // suja o funil enquanto a disciplina do "Verificado" não engata no Bling:
   // pedido antigo já despachado continua "em aberto" lá (Ailson 05/08/2026).
-  const dias = Math.min(60, Math.max(1, parseInt(req.query?.dias) || 2));
+  // Default 5 dias (Ailson 09/08): com 2, pedido que ficava em aberto por mais
+  // de 2 dias sumia do radar do sync e o card de abertos ficava MENOR que o
+  // real (68 no app contra 286 no Bling numa noite de domingo).
+  const dias = Math.min(60, Math.max(1, parseInt(req.query?.dias) || 5));
   // Piso: a operação do WMS começou em 05/08/2026. Pedidos anteriores já foram
   // despachados fisicamente mas seguem "em aberto" no Bling (situação nunca foi
   // movida antes do Verificado existir) — sem o piso eles re-entrariam a cada
