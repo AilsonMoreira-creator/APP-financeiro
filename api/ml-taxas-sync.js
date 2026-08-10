@@ -29,7 +29,9 @@ const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const n = (x) => { const v = Number(x); return Number.isFinite(v) ? v : 0; };
 
 async function ml(path, token) {
-  const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  // pagamentos moram no host do Mercado Pago (no do ML dão 404)
+  const host = path.startsWith('/v1/payments') ? 'https://api.mercadopago.com' : API;
+  const r = await fetch(`${host}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) return { erro: r.status };
   return r.json();
 }
@@ -82,7 +84,42 @@ async function pedidoDoML(numeroLoja, token) {
   }
 
   const pag = p.payments || [];
+
+  // ── Mercado Pago: o líquido REAL e a data de liberação (Ailson 10/08) ─────
+  // net_received_amount já vem DEFINIDO na aprovação — é ele que o DRE usa;
+  // money_release_date/status servem pra confirmar o repasse depois.
+  let netRecebido = 0, releaseDate = null, releaseStatus = null, pagoEm = null;
+  for (const pg of pag.slice(0, 4)) {
+    if (!pg?.id || String(pg.status) !== 'approved') continue;
+    const mp = await ml(`/v1/payments/${pg.id}`, token);
+    if (mp?.erro) continue;
+    netRecebido += n(mp.transaction_details?.net_received_amount);
+    if (!releaseDate && mp.money_release_date) releaseDate = mp.money_release_date.slice(0, 10);
+    if (mp.money_release_status) releaseStatus = mp.money_release_status;
+    if (!pagoEm && mp.date_approved) pagoEm = mp.date_approved;
+  }
+
+  // ── frete real: quanto o VENDEDOR paga e quanto o comprador pagou ─────────
+  let freteVendedor = 0, freteComprador = 0, logisticType = null;
+  const shipId = p.shipping?.id;
+  if (shipId) {
+    const [ship, custos] = await Promise.all([
+      ml(`/shipments/${shipId}`, token),
+      ml(`/shipments/${shipId}/costs`, token),
+    ]);
+    if (!ship?.erro) logisticType = ship.logistic_type || null;
+    if (!custos?.erro) {
+      freteVendedor = (custos.senders || []).reduce((t, x) => t + n(x.cost), 0);
+      freteComprador = n(custos.receiver?.cost);
+    }
+  }
+
   return {
+    net_recebido: Math.round(netRecebido * 100) / 100,
+    release_date: releaseDate, release_status: releaseStatus, pago_em: pagoEm,
+    frete_vendedor: Math.round(freteVendedor * 100) / 100,
+    frete_comprador: Math.round(freteComprador * 100) / 100,
+    logistic_type: logisticType,
     status_ml: p.status || null,
     desconto_total: Math.round(dTotal * 100) / 100,
     desconto_vendedor: Math.round(dSeller * 100) / 100,
@@ -111,6 +148,40 @@ async function pedidoDoML(numeroLoja, token) {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const inicio = Date.now();
+
+  // ?releases=1 — só reconfere a LIBERAÇÃO dos que estão pending (a data já
+  // passou ou está perto). Não rebusca pedido inteiro: 1 chamada por pagamento.
+  if (req.query?.releases === '1') {
+    const { data: pend } = await supabase.from('ml_pedido_taxas')
+      .select('id, conta, ml_order_id')
+      .eq('release_status', 'pending')
+      .lte('release_date', new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10))
+      .limit(200);
+    const toks = {}; let atualizados = 0;
+    for (const row of (pend || [])) {
+      if (Date.now() - inicio > 270000) break;
+      const brand = BRAND[row.conta]; if (!brand) continue;
+      if (!toks[brand]) { try { toks[brand] = await getValidToken(brand); } catch { toks[brand] = null; } }
+      if (!toks[brand]) continue;
+      const o = await ml(`/orders/${row.ml_order_id}`, toks[brand]);
+      if (o?.erro) continue;
+      let st = null, dt = null;
+      for (const pg of (o.payments || []).slice(0, 4)) {
+        if (String(pg.status) !== 'approved') continue;
+        const mp = await ml(`/v1/payments/${pg.id}`, toks[brand]);
+        if (mp?.erro) continue;
+        if (mp.money_release_status) st = mp.money_release_status;
+        if (mp.money_release_date) dt = mp.money_release_date.slice(0, 10);
+      }
+      if (st && st !== 'pending') {
+        await supabase.from('ml_pedido_taxas')
+          .update({ release_status: st, ...(dt ? { release_date: dt } : {}) })
+          .eq('id', row.id);
+        atualizados++;
+      }
+    }
+    return res.status(200).json({ ok: true, modo: 'releases', pendentes_checados: (pend || []).length, liberados_agora: atualizados });
+  }
   const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   const desde = /^\d{4}-\d{2}-\d{2}$/.test(req.query?.desde || '') ? req.query.desde : hoje.slice(0, 8) + '01';
   const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query?.ate || '') ? req.query.ate : hoje;
