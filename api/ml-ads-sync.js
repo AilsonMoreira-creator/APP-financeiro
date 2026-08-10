@@ -63,8 +63,9 @@ export default async function handler(req, res) {
     // tem nenhum lançamento do mês pedido
     const somas = {}; let charges = 0, paginas = 0;
     for (const key of chaves) {
-      const probe = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1&offset=0`, token);
-      if (probe._erro) continue;
+      // probe com limit cheio (o endpoint não aceita limit=1)
+      const probe = await ml(`/billing/integration/periods/key/${key}/group/ML/details?document_type=BILL&limit=1000&offset=0`, token);
+      if (probe._erro) { somas._erro_probe = `${probe._erro} ${probe._msg || ''}`; continue; }
       const total = probe.total || 0;
       let offset = Math.max(0, Math.floor((total - 1) / 1000) * 1000);
       while (offset >= 0 && Date.now() - t0 < 260000) {
