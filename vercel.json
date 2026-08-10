@@ -497,6 +497,10 @@
     {
       "schedule": "50 */2 * * *",
       "path": "/api/ml-taxas-sync?charges=1&limite=400"
+    },
+    {
+      "schedule": "40 9 * * *",
+      "path": "/api/ml-ads-sync"
     }
   ]
 }
