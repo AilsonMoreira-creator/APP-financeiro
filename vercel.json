@@ -471,11 +471,11 @@
       "schedule": "35 * * * *"
     },
     {
-      "schedule": "*/15 10-14 * * 1-6",
+      "schedule": "*/15 10-14 * * *",
       "path": "/api/wms-sync"
     },
     {
-      "schedule": "0,30 15-20 * * 1-6",
+      "schedule": "0,30 15-20 * * *",
       "path": "/api/wms-sync"
     },
     {
@@ -485,6 +485,10 @@
     {
       "schedule": "35 12,20 * * *",
       "path": "/api/tts-repasse-sync?dias=45"
+    },
+    {
+      "schedule": "0 1 * * *",
+      "path": "/api/wms-sync"
     }
   ]
 }
