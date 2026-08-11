@@ -6,7 +6,7 @@
  *
  * GET ?pedido=<order_id>&conta=exitus
  */
-import { chamarTts, authTts, ctxTts } from './_tts-api.js';
+import { chamarTts, authTts } from './_tts-api.js';
 
 export const config = { maxDuration: 120 };
 
@@ -17,8 +17,9 @@ export default async function handler(req, res) {
   if (!pedido) return res.status(400).json({ erro: 'use ?pedido=<order_id>' });
 
   try {
-    const auth = await authTts(conta);
-    const ctx = ctxTts();
+    const a = await authTts(conta);
+    if (a.erro) return res.status(400).json(a);
+    const { auth, ctx } = a;
     const t = {};
 
     // 1. transações do pedido na Finance (existe por ORDER, não só por statement?)
