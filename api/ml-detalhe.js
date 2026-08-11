@@ -103,8 +103,11 @@ export default async function handler(req, res) {
     fin.frete_liquido_vendedor = r2(fin.charge_frete - fin.frete_comprador);
     // resultado das vendas antes dos débitos avulsos (net + débitos)
     fin.liquido_vendas = r2(fin.liquido_mp + fin.debitos_avulsos);
-    // resíduo do que os charges não cobrem (pedidos ainda sem charges no banco)
-    fin.ajustes = r2(fin.liquido_vendas - (fin.venda + fin.frete_comprador - fin.charge_frete - fin.charge_tarifas - fin.desconto_vendedor));
+    // PROVADO 10/08 (pedido 2000017864671144): preco_produtos JÁ É o preço
+    // promocional pago — a promoção do vendedor NÃO subtrai de novo (dupla
+    // contagem); ela fica informativa. O resíduo que sobra são reposições de
+    // descontos bancados pelo ML, bônus de frete Flex e parcelamentos.
+    fin.ajustes = r2(fin.liquido_vendas - (fin.venda + fin.frete_comprador - fin.charge_frete - fin.charge_tarifas));
     fin.imposto = r2(fin.venda * 0.11);
     // o total usa o resultado DAS VENDAS (débitos avulsos não são custo)
     fin.total_pos_imposto = r2(fin.liquido_vendas - fin.imposto);

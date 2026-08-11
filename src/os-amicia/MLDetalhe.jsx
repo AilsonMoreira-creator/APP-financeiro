@@ -130,12 +130,10 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                   exp="Soma dos produtos vendidos (preço real do anúncio, cancelados fora) nos pedidos com dado do Mercado Pago." />
                 <Linha label="Tarifa de venda (comissão + fixo)" valor={fin.charge_tarifas || fin.sale_fee} base={fin.venda}
                   exp="A tarifa exata debitada no pagamento: comissão do ML mais a taxa de processamento do MP." />
-                {fin.desconto_vendedor > 0 && <Linha label="Promoções bancadas por você" valor={fin.desconto_vendedor} base={fin.venda}
-                  exp="A parte dos descontos de campanha com funding do VENDEDOR — é o que você está desligando nos anúncios. O que o ML banca não entra aqui." />}
                 <Linha label="Frete pago por você" valor={fin.frete_liquido_vendedor} base={fin.venda}
                   exp="Só o SEU custo de envio nos pagamentos — a parte que o comprador paga fica fora da conta (nem soma nem subtrai). Média de ~R$ 12-16 por pedido. O frete dos pedidos Flex não aparece aqui: é cobrado na fatura, na linha de tarifas de faturamento." />
-                {Math.abs(fin.ajustes || 0) >= 1 && <Linha label="Ajustes" valor={fin.ajustes} base={fin.venda} positivo={fin.ajustes > 0}
-                  exp="Diferenças de pedidos que ainda não têm a decomposição completa dos charges (o backfill preenche sozinho)." />}
+                {Math.abs(fin.ajustes || 0) >= 1 && <Linha label="Créditos e ajustes do pagamento" valor={fin.ajustes} base={fin.venda} positivo={fin.ajustes > 0}
+                  exp="Valores que entram no pagamento além do preço: descontos bancados pelo ML repostos a você, bônus de frete dos pedidos Flex e diferenças de parcelamento." />}
                 <Linha label="Resultado das vendas no Mercado Pago" valor={fin.liquido_vendas} base={fin.venda} positivo forte
                   exp="O que as vendas rendem de verdade: pago − frete − tarifas − promoções. Os débitos avulsos abaixo saem DEPOIS, e não são custo da venda." />
                 {fin.debitos_avulsos > 0.5 && <Linha label="Débitos avulsos descontados (crédito/dívidas)" valor={fin.debitos_avulsos} base={fin.venda}
@@ -158,9 +156,9 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                   exp="Gasto real com campanhas de Product Ads (só a Exitus anuncia), somado charge a charge do faturamento do ML e atualizado todo dia às 6h40. Cresce conforme as campanhas rodam." />
                 <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
                   exp="O que sobra: líquido do Mercado Pago − imposto − custo da mercadoria − custo de operação − publicidade." />
-                {fin.desconto_plataforma > 0 && (
-                  <div style={{ fontSize: 11, color: '#1f7a48', marginTop: 8, fontFamily: CALIBRI }}>
-                    ℹ Descontos bancados pelo ML: R$ {fmt(fin.desconto_plataforma)} dados ao cliente — não saem do seu repasse.
+                {(fin.desconto_vendedor > 0 || fin.desconto_plataforma > 0) && (
+                  <div style={{ fontSize: 11, color: '#1f7a48', marginTop: 8, fontFamily: CALIBRI, lineHeight: 1.5 }}>
+                    ℹ Promoções: R$ {fmt(fin.desconto_vendedor)} suas (já refletidas no preço de venda acima — não descontam duas vezes) e R$ {fmt(fin.desconto_plataforma)} bancadas pelo ML e repostas a você.
                   </div>
                 )}
               </Secao>
