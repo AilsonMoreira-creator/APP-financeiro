@@ -115,7 +115,7 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
             <Secao titulo="Repasses · liquidação">
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
                 <Kpi label="Vendas pagas" valor={d.liquidacao.liquidados} sub={`R$ ${fmt(d.liquidacao.recebido)} recebidos`} cor="verde" />
-                <Kpi label="Em aberto" valor={d.liquidacao.em_aberto} sub={`~R$ ${fmt(d.liquidacao.em_aberto_previsto)} previstos (${fmt(d.liquidacao.ratio_pago_pct)}% de R$ ${fmt(d.liquidacao.em_aberto_vendas)})`} />
+                <Kpi label="Em aberto" valor={d.liquidacao.em_aberto} sub={`~R$ ${fmt(d.liquidacao.em_aberto_previsto)} previstos a receber`} cor="aguarda" />
                 {d.liquidacao.em_atraso > 0 && (
                   <Kpi label="Liquidação em atraso" cor="amarelo" valor={d.liquidacao.em_atraso}
                     sub={`R$ ${fmt(d.liquidacao.em_atraso_vendas)} · em aberto há mais de ${d.liquidacao.atraso_limite_dias} dias (30% acima da média de ${d.liquidacao.prazo_medio_dias})`} />
@@ -144,6 +144,17 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
                 <div style={{ fontSize: 11, color: C.muted, padding: '4px 0', fontFamily: CALIBRI }}>
                   → frete real R$ {fmt(fin.frete_real)} · cliente pagou R$ {fmt(fin.frete_cliente)} · TikTok subsidiou R$ {fmt(fin.subsidio_frete)}
                 </div>
+              {d.liquidacao.previsto_detalhe && (
+                <div style={{ marginTop: 10, padding: '8px 10px', background: '#fbf9f5', borderRadius: 8, fontFamily: CALIBRI, fontSize: 11.5, lineHeight: 1.7, color: '#555' }}>
+                  <b style={{ color: C.iaDarker }}>O que você ainda vai receber, na régua validada:</b><br />
+                  Vendas em aberto ({d.liquidacao.previsto_detalhe.pedidos} pedidos): <b>R$ {fmt(d.liquidacao.previsto_detalhe.base)}</b><br />
+                  − Comissão TikTok ({fmt(d.liquidacao.previsto_detalhe.comissao_pct)}% medido): R$ {fmt(d.liquidacao.previsto_detalhe.comissao)}<br />
+                  − Frete (6% + R$ 6/pedido − R$ {fmt(d.liquidacao.previsto_detalhe.frete_cliente)} pagos pelo cliente): R$ {fmt(d.liquidacao.previsto_detalhe.frete)}<br />
+                  − Afiliados ({fmt(d.liquidacao.previsto_detalhe.afiliado_pct)}% média real): R$ {fmt(d.liquidacao.previsto_detalhe.afiliado)}<br />
+                  <b style={{ color: '#1f7a48' }}>= A receber previsto: R$ {fmt(d.liquidacao.previsto_detalhe.liquido)}</b>
+                  <span style={{ color: C.muted }}> · o repasse confirma em ~{d.liquidacao.prazo_medio_dias || 7} dias</span>
+                </div>
+              )}
                 {Math.abs(fin.frete_cliente_e_ajustes || 0) >= 0.01 && <Linha label="Frete do cliente e ajustes" valor={fin.frete_cliente_e_ajustes} base={fin.venda} positivo={fin.frete_cliente_e_ajustes > 0}
                   exp="Créditos e débitos que o TikTok não abre em campo próprio — principalmente o frete pago pelo cliente, que é repassado a você, e tarifas ou subsídios menores." />}
                 <Linha label="Recebido após todos os descontos" valor={fin.recebido} base={fin.venda} positivo forte

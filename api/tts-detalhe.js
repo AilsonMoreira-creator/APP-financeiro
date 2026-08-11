@@ -199,12 +199,50 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── previsto DETALHADO pela régua validada (Ailson 11/08: comissão 6% ·
+    // frete 6% + R$6/pedido − o que o cliente pagou · afiliado pela média
+    // real). O TikTok não expõe as deduções antes do repasse (rotas testadas:
+    // respondem vazias até liquidar) — então prevemos linha a linha e o
+    // statement confirma. Régua conferida nos liquidados: 6,02% exato.
+    const prev = { base: 0, frete_cliente: 0, pedidos: 0 };
+    for (let i = 0; i < emAbertoIds.length; i += 50) {
+      const det = await chamarTts('/order/202309/orders', { ids: emAbertoIds.slice(i, i + 50).join(',') }, auth, ctx);
+      for (const o of (det?.data?.orders || [])) {
+        if (String(o.status || '').toUpperCase() === 'CANCELLED') continue;
+        prev.pedidos++;
+        prev.base += n(o.payment?.original_total_product_price) - n(o.payment?.seller_discount);
+        prev.frete_cliente += n(o.payment?.shipping_fee);
+      }
+    }
+    let comissaoPct = 0.0602, afiliadoPct = 0.03;
+    {
+      const { data: rg } = await supabase.from('tts_repasse')
+        .select('venda, comissao_plataforma, comissao_afiliado').gt('venda', 0)
+        .gte('data_pedido', new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10));
+      const sv = (rg || []).reduce((t, x) => t + n(x.venda), 0);
+      if (sv > 0) {
+        comissaoPct = (rg || []).reduce((t, x) => t + Math.abs(n(x.comissao_plataforma)), 0) / sv;
+        afiliadoPct = (rg || []).reduce((t, x) => t + Math.abs(n(x.comissao_afiliado)), 0) / sv;
+      }
+    }
+    const prevComissao = r2(prev.base * comissaoPct);
+    const prevFrete = r2(Math.max(0, prev.base * 0.06 + 6 * prev.pedidos - prev.frete_cliente));
+    const prevAfiliado = r2(prev.base * afiliadoPct);
+    const prevLiquido = r2(prev.base - prevComissao - prevFrete - prevAfiliado);
+
     const liquidacao = {
       liquidados: idsLiquidados.size,
       recebido: fin.recebido,
       em_aberto: emAbertoIds.length,
       em_aberto_vendas: r2(vendasEmAberto),
-      em_aberto_previsto: r2(vendasEmAberto * ratio),
+      em_aberto_previsto: prev.pedidos > 0 ? prevLiquido : r2(vendasEmAberto * ratio),
+      previsto_detalhe: prev.pedidos > 0 ? {
+        base: r2(prev.base), pedidos: prev.pedidos,
+        comissao: prevComissao, comissao_pct: r2(comissaoPct * 100),
+        frete: prevFrete, frete_cliente: r2(prev.frete_cliente),
+        afiliado: prevAfiliado, afiliado_pct: r2(afiliadoPct * 100),
+        liquido: prevLiquido,
+      } : null,
       ratio_pago_pct: r2(ratio * 100),
       prazo_medio_dias: prazoMedio != null ? Math.round(prazoMedio) : null,
       atraso_limite_dias: limiteAtraso != null ? Math.round(limiteAtraso) : null,
