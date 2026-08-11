@@ -215,6 +215,33 @@ export default async function handler(req, res) {
     return res.status(200).json({ sub_type: alvo, mes: mesQ, qtd, soma: Math.round(soma * 100) / 100, media: qtd ? Math.round(soma / qtd * 100) / 100 : 0, erros, por_dia: porDia, exemplos });
   }
 
+  // ?ship=<shipping_id> — do envio ao pedido ao PAYMENT: o frete deste envio
+  // foi debitado no pagamento? (veredito da dupla contagem payment × fatura)
+  if (req.query?.ship) {
+    const token = await getValidToken(BRAND[conta] || 'Exitus');
+    const sid = String(req.query.ship).trim();
+    const sh = await mlH(`/shipments/${sid}`, token);
+    if (sh._erro) return res.status(400).json({ etapa: 'shipment', ...sh });
+    const oid = sh.order_id || (sh.orders || [])[0]?.id;
+    const saida = { shipping_id: sid, logistic_type: sh.logistic_type, status: sh.status, order_id: String(oid || '') };
+    if (oid) {
+      const o = await mlH(`/orders/${oid}`, token);
+      if (!o._erro) {
+        saida.pedido = { total: o.total_amount, paid: o.paid_amount, date: (o.date_created || '').slice(0, 10) };
+        const pid = o.payments?.[0]?.id;
+        if (pid) {
+          const mp = await mlH(`/v1/payments/${pid}`, token);
+          if (!mp._erro) saida.payment = {
+            transaction: mp.transaction_amount, total_paid: mp.transaction_details?.total_paid_amount,
+            net: mp.transaction_details?.net_received_amount,
+            charges: (mp.charges_details || []).map(c => ({ name: c.name, type: c.type, valor: c.amounts?.original, refund: c.amounts?.refunded })),
+          };
+        }
+      }
+    }
+    return res.status(200).json(saida);
+  }
+
   // ?cap_test=1 — mapear os tetos reais de limit/offset do details
   if (req.query?.cap_test === '1') {
     const token = await getValidToken(BRAND[conta] || 'Exitus');
