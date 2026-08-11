@@ -101,8 +101,17 @@ export default async function handler(req, res) {
     // parcelamento LÍQUIDO por pedido: financing debitado − acréscimo que o
     // CLIENTE pagou ao parcelar (95% dos anúncios são Clássicos — o cliente
     // banca os juros; sobra custo só no 1x/Premium). Converge com o cron.
-    fin.parcelamento = soma(comMp, r => Math.max(0, n(r.charge_financing) - n(r.acrescimo_cliente)));
+    // ponte enquanto o reprocesso converge: onde charge_financing ainda é
+    // null, o fee e o transfer estão dentro de charge_debitos — aproxima
+    // financing≈transfer≈acréscimo (exato nos Clássicos) e desconta dos
+    // débitos pra não devolver ao resultado o que não é empréstimo
+    const financDe = (r) => r.charge_financing !== null ? n(r.charge_financing) : n(r.acrescimo_cliente);
+    const splDe = (r) => r.charge_financing !== null
+      ? n(r.charge_debitos)
+      : Math.max(0, n(r.charge_debitos) - 2 * n(r.acrescimo_cliente));
+    fin.parcelamento = soma(comMp, r => Math.max(0, financDe(r) - n(r.acrescimo_cliente)));
     fin.acrescimo_cliente = soma(comMp, r => n(r.acrescimo_cliente));
+    fin.debitos_avulsos = soma(comMp, r => splDe(r));
     fin.debitos_avulsos = soma(comMp, r => n(r.charge_debitos));
     // frete líquido SEU: o charge de frete menos o que o comprador pagou
     fin.frete_liquido_vendedor = r2(fin.charge_frete - fin.frete_comprador);
@@ -113,7 +122,7 @@ export default async function handler(req, res) {
     // promocional pago — a promoção do vendedor NÃO subtrai de novo (dupla
     // contagem); ela fica informativa. O resíduo que sobra são reposições de
     // descontos bancados pelo ML, bônus de frete Flex e parcelamentos.
-    fin.ajustes = r2(fin.liquido_vendas + soma(comMp, r => n(r.charge_financing)) - fin.acrescimo_cliente - (fin.venda + fin.frete_comprador - fin.charge_frete - fin.charge_tarifas));
+    fin.ajustes = r2(fin.liquido_vendas + soma(comMp, r => financDe(r)) - (fin.venda + fin.frete_comprador - fin.charge_frete - fin.charge_tarifas));
     fin.liquido_vendas = r2(fin.liquido_vendas);
     fin.imposto = r2(fin.venda * 0.11);
     // o total usa o resultado DAS VENDAS (débitos avulsos não são custo)

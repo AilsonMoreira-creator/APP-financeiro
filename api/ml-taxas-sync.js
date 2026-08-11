@@ -106,7 +106,11 @@ async function pedidoDoML(numeroLoja, token) {
       const v = n(ch.amounts?.original) - n(ch.amounts?.refunded);
       if (ch.type === 'shipping') chFrete += v;
       else if (['ml_sale_fee', 'mp_processing_fee'].includes(ch.name)) chTarifas += v;
-      else if (String(ch.name || '').startsWith('mp_financing')) chFinancing += v; // parcelamento: custo da venda
+      // names REAIS (provados 11/08 no payment cru): financing_fee é o custo
+      // do parcelamento; financing_transfer é o acréscimo do CLIENTE em
+      // trânsito (nem custo nem crédito — já capturado em acrescimo_cliente)
+      else if (String(ch.name || '').includes('financing_transfer')) { /* trânsito do acréscimo */ }
+      else if (String(ch.name || '').includes('financing')) chFinancing += v;
       else chDebitos += v; // fee_spl e afins: empréstimo/dívida, fora do resultado
     }
   }
