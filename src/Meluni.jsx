@@ -1116,6 +1116,11 @@ function SecaoClientes() {
   const [campanha, setCampanha] = useState('poscompra');
   // Disparo de novidade com ESCOLHA de template (Ailson 03/08/2026) + gestao de criativos
   const [modalNovidade, setModalNovidade] = useState(null); // {ids, aviso, tpls:[], versao, carregando}
+  // CAUSA-RAIZ do disparo que nunca saía (11/08): as funções de disparo usam
+  // setDispMsg mas o estado só existia nos componentes do Carrinho e dos
+  // Perdidos — aqui explodia em ReferenceError ANTES do fetch (zero hits no
+  // servidor em qualquer aparelho). O estado precisa viver NESTE componente.
+  const [dispMsg, setDispMsg] = useState('');
   const [modalTemplates, setModalTemplates] = useState(null); // {tpls:[], trocando:versao|null}
   // Pills de disparos do dia + filtro (Ailson 04/08/2026): clicar filtra quem recebeu hoje
   const [dispHoje, setDispHoje] = useState({ poscompra: 0, crossell: 0, campanha: 0 });
