@@ -1328,7 +1328,7 @@ function SecaoClientes() {
         try {
           const ctrl = new AbortController();
           const t = setTimeout(() => ctrl.abort(), 12000);
-          const r = await fetch('/api/meluni-clientes-novidade-disparo', {
+          const r = await fetch('/api/meluni-clientes-envio', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids: lotes[i], versao: m.versao }),
             signal: ctrl.signal,
@@ -1342,7 +1342,7 @@ function SecaoClientes() {
           });
           const ctrl2 = new AbortController();
           const t2 = setTimeout(() => ctrl2.abort(), 90000);
-          const r2 = await fetch(`/api/meluni-clientes-novidade-disparo?${qs}`, { signal: ctrl2.signal });
+          const r2 = await fetch(`/api/meluni-clientes-envio?${qs}`, { signal: ctrl2.signal });
           clearTimeout(t2);
           j = await r2.json();
         }
