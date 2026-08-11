@@ -7853,6 +7853,9 @@ function ChipOrigemLead({ origem_lead, carrinho_id }) {
 
 function PesquisaTab({ refreshTick, onAbrirChat }) {
   const [respostas, setRespostas] = useState([]);
+  // Uma ABA por resposta da pesquisa, com contador (Ailson 11/08/2026) — as
+  // seções empilhadas escondiam Preço/Variedade/Outros atrás de 80+ cards
+  const [motivoAtivo, setMotivoAtivo] = useState('minimo_pecas');
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -7925,13 +7928,24 @@ function PesquisaTab({ refreshTick, onAbrirChat }) {
       <div style={{ fontSize: sz(12), color: palette.inkMuted, marginBottom: sz(12) }}>
         Leads que responderam a pesquisa (já receberam a resposta automática da Sofia). Aqui vc dá sequência e decide pra qual aba mandar.
       </div>
-      {ORDEM.map(m => {
+      <div style={{ display: 'flex', gap: sz(6), flexWrap: 'wrap', marginBottom: sz(14) }}>
+        {ORDEM.map(m => {
+          const ativo = motivoAtivo === m;
+          return (
+            <button key={m} onClick={() => setMotivoAtivo(m)}
+              style={{ fontSize: sz(12), fontWeight: ativo ? 700 : 500, padding: `${sz(6)}px ${sz(12)}px`,
+                borderRadius: sz(999), border: `1px solid ${ativo ? palette.accent : palette.beige}`,
+                background: ativo ? palette.accent : palette.surface, color: ativo ? '#fff' : palette.ink,
+                cursor: 'pointer', fontFamily: FONT }}>
+              {LABELS[m]} ({(grupos[m] || []).length})
+            </button>
+          );
+        })}
+      </div>
+      {[motivoAtivo].map(m => {
         const lista = grupos[m] || [];
         return (
           <div key={m} style={{ marginBottom: sz(18) }}>
-            <div style={{ fontWeight: 700, fontSize: sz(14), marginBottom: sz(6), color: palette.ink }}>
-              {LABELS[m]} <span style={{ color: palette.inkMuted, fontWeight: 400 }}>({lista.length})</span>
-            </div>
             {lista.length === 0 && <div style={{ fontSize: sz(12), color: palette.inkMuted }}>Nenhum ainda.</div>}
             {lista.map(r => {
               const tel = (r.telefone || '').replace(/\D/g, '');
@@ -7946,6 +7960,11 @@ function PesquisaTab({ refreshTick, onAbrirChat }) {
                       <div style={{ fontSize: sz(11), color: palette.inkMuted, marginTop: sz(2) }}>
                         {r.telefone || '—'} · variante {r.variante || '-'}{r.etapaAtual ? ` · agora: ${r.etapaAtual}` : ''}
                       </div>
+                      {r.respondido_em && (
+                        <div style={{ fontSize: sz(11), color: palette.inkSoft || palette.inkMuted, marginTop: sz(2), fontWeight: 600 }}>
+                          📅 respondeu {new Date(r.respondido_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      )}
                     </div>
                     {tel && (
                       <a href={`https://wa.me/${tel}`} target="_blank" rel="noreferrer"
