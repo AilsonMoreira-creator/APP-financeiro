@@ -89,12 +89,14 @@ async function pedidoDoML(numeroLoja, token) {
   // net_received_amount já vem DEFINIDO na aprovação — é ele que o DRE usa;
   // money_release_date/status servem pra confirmar o repasse depois.
   let netRecebido = 0, releaseDate = null, releaseStatus = null, pagoEm = null;
-  let chFrete = 0, chTarifas = 0, chDebitos = 0, chFinancing = 0;
+  let chFrete = 0, chTarifas = 0, chDebitos = 0, chFinancing = 0, acrescimo = 0;
   for (const pg of pag.slice(0, 4)) {
     if (!pg?.id || String(pg.status) !== 'approved') continue;
     const mp = await ml(`/v1/payments/${pg.id}`, token);
     if (mp?.erro) continue;
     netRecebido += n(mp.transaction_details?.net_received_amount);
+    // acréscimo pago pelo CLIENTE ao parcelar (Clássico): compensa o financing
+    acrescimo += Math.max(0, n(mp.transaction_details?.total_paid_amount) - n(mp.transaction_amount));
     if (!releaseDate && mp.money_release_date) releaseDate = mp.money_release_date.slice(0, 10);
     if (mp.money_release_status) releaseStatus = mp.money_release_status;
     if (!pagoEm && mp.date_approved) pagoEm = mp.date_approved;
@@ -126,6 +128,7 @@ async function pedidoDoML(numeroLoja, token) {
 
   return {
     charge_financing: Math.round(chFinancing * 100) / 100,
+    acrescimo_cliente: Math.round(acrescimo * 100) / 100,
     charge_frete: Math.round(chFrete * 100) / 100,
     charge_tarifas: Math.round(chTarifas * 100) / 100,
     charge_debitos: Math.round(chDebitos * 100) / 100,
@@ -209,7 +212,7 @@ export default async function handler(req, res) {
   if (completar) {
     let qc = supabase.from('ml_pedido_taxas')
       .select('conta, pedido_id, numero_loja, data_pedido')
-      .is(req.query?.charges === '1' ? 'charge_financing' : 'net_recebido', null)
+      .is(req.query?.charges === '1' ? 'acrescimo_cliente' : 'net_recebido', null)
       .gte('data_pedido', desde).lte('data_pedido', ate)
       .order('data_pedido', { ascending: false }).limit(limite);
     if (contaFiltro) qc = qc.eq('conta', contaFiltro);
@@ -268,7 +271,7 @@ async function processar(alvo, res, inicio, desde, ate) {
       status_ml: d.status_ml, desconto_total: d.desconto_total,
       desconto_vendedor: d.desconto_vendedor, desconto_plataforma: d.desconto_plataforma,
       charge_frete: d.charge_frete, charge_tarifas: d.charge_tarifas, charge_debitos: d.charge_debitos,
-      charge_financing: d.charge_financing,
+      charge_financing: d.charge_financing, acrescimo_cliente: d.acrescimo_cliente,
       net_recebido: d.net_recebido, release_date: d.release_date,
       release_status: d.release_status, pago_em: d.pago_em,
       frete_vendedor: d.frete_vendedor, frete_comprador: d.frete_comprador,

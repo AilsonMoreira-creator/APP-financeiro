@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const rows = [];
     for (let off = 0; off < 5000; off += 1000) {
       const { data, error } = await supabase.from('ml_pedido_taxas')
-        .select('conta, pedido_id, data_pedido, preco_produtos, full_price, sale_fee, desconto_vendedor, desconto_plataforma, status_ml, itens, net_recebido, release_date, release_status, pago_em, frete_vendedor, frete_comprador, logistic_type, charge_frete, charge_tarifas, charge_debitos, charge_financing')
+        .select('conta, pedido_id, data_pedido, preco_produtos, full_price, sale_fee, desconto_vendedor, desconto_plataforma, status_ml, itens, net_recebido, release_date, release_status, pago_em, frete_vendedor, frete_comprador, logistic_type, charge_frete, charge_tarifas, charge_debitos, charge_financing, acrescimo_cliente')
         .gte('data_pedido', ini).range(off, off + 999);
       if (error) throw new Error(error.message);
       rows.push(...(data || []));
@@ -98,9 +98,11 @@ export default async function handler(req, res) {
     // venda; o resultado das vendas os EXCLUI e eles aparecem à parte).
     fin.charge_frete = soma(comMp, r => n(r.charge_frete));
     fin.charge_tarifas = soma(comMp, r => n(r.charge_tarifas));
-    // parcelamento (mp_financing) é CUSTO DA VENDA; nos pedidos ainda não
-    // reprocessados ele está dentro de charge_debitos (converge com o cron)
-    fin.parcelamento = soma(comMp, r => n(r.charge_financing));
+    // parcelamento LÍQUIDO por pedido: financing debitado − acréscimo que o
+    // CLIENTE pagou ao parcelar (95% dos anúncios são Clássicos — o cliente
+    // banca os juros; sobra custo só no 1x/Premium). Converge com o cron.
+    fin.parcelamento = soma(comMp, r => Math.max(0, n(r.charge_financing) - n(r.acrescimo_cliente)));
+    fin.acrescimo_cliente = soma(comMp, r => n(r.acrescimo_cliente));
     fin.debitos_avulsos = soma(comMp, r => n(r.charge_debitos));
     // frete líquido SEU: o charge de frete menos o que o comprador pagou
     fin.frete_liquido_vendedor = r2(fin.charge_frete - fin.frete_comprador);
@@ -111,7 +113,7 @@ export default async function handler(req, res) {
     // promocional pago — a promoção do vendedor NÃO subtrai de novo (dupla
     // contagem); ela fica informativa. O resíduo que sobra são reposições de
     // descontos bancados pelo ML, bônus de frete Flex e parcelamentos.
-    fin.ajustes = r2(fin.liquido_vendas + fin.parcelamento - (fin.venda + fin.frete_comprador - fin.charge_frete - fin.charge_tarifas));
+    fin.ajustes = r2(fin.liquido_vendas + soma(comMp, r => n(r.charge_financing)) - fin.acrescimo_cliente - (fin.venda + fin.frete_comprador - fin.charge_frete - fin.charge_tarifas));
     fin.liquido_vendas = r2(fin.liquido_vendas);
     fin.imposto = r2(fin.venda * 0.11);
     // o total usa o resultado DAS VENDAS (débitos avulsos não são custo)

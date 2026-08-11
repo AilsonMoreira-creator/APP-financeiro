@@ -130,8 +130,8 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                   exp="Soma dos produtos vendidos (preço real do anúncio, cancelados fora) nos pedidos com dado do Mercado Pago." />
                 <Linha label="Tarifa de venda (comissão + fixo)" valor={fin.charge_tarifas || fin.sale_fee} base={fin.venda}
                   exp="A tarifa exata debitada no pagamento: comissão do ML mais a taxa de processamento do MP." />
-                {fin.parcelamento > 0 && <Linha label="Taxa de parcelamento" valor={fin.parcelamento} base={fin.venda}
-                  exp="A taxa do parcelamento sem juros, debitada no pagamento (mp_financing). É custo da venda — antes estava misturada nos débitos avulsos." />}
+                {fin.parcelamento > 0.5 && <Linha label="Parcelamento (só o que sobra pra você)" valor={fin.parcelamento} base={fin.venda}
+                  exp="No Clássico o CLIENTE paga o acréscimo do parcelamento — esse custo se anula e não entra. Aqui só fica o que realmente sai de você: taxa mínima de recebimento e parcelas sem juros dos anúncios Premium." />}
                 <Linha label="Frete pago por você" valor={fin.frete_liquido_vendedor} base={fin.venda}
                   exp="Só o SEU custo de envio nos pagamentos — a parte que o comprador paga fica fora da conta (nem soma nem subtrai). Média de ~R$ 12-16 por pedido. O frete dos pedidos Flex não aparece aqui: é cobrado na fatura, na linha de tarifas de faturamento." />
                 {Math.abs(fin.ajustes || 0) >= 1 && <Linha label="Créditos e ajustes do pagamento" valor={fin.ajustes} base={fin.venda} positivo={fin.ajustes > 0}
