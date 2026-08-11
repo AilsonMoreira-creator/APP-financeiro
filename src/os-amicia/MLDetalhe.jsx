@@ -130,6 +130,8 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                   exp="Soma dos produtos vendidos (preço real do anúncio, cancelados fora) nos pedidos com dado do Mercado Pago." />
                 <Linha label="Tarifa de venda (comissão + fixo)" valor={fin.charge_tarifas || fin.sale_fee} base={fin.venda}
                   exp="A tarifa exata debitada no pagamento: comissão do ML mais a taxa de processamento do MP." />
+                {fin.parcelamento > 0 && <Linha label="Taxa de parcelamento" valor={fin.parcelamento} base={fin.venda}
+                  exp="A taxa do parcelamento sem juros, debitada no pagamento (mp_financing). É custo da venda — antes estava misturada nos débitos avulsos." />}
                 <Linha label="Frete pago por você" valor={fin.frete_liquido_vendedor} base={fin.venda}
                   exp="Só o SEU custo de envio nos pagamentos — a parte que o comprador paga fica fora da conta (nem soma nem subtrai). Média de ~R$ 12-16 por pedido. O frete dos pedidos Flex não aparece aqui: é cobrado na fatura, na linha de tarifas de faturamento." />
                 {Math.abs(fin.ajustes || 0) >= 1 && <Linha label="Créditos e ajustes do pagamento" valor={fin.ajustes} base={fin.venda} positivo={fin.ajustes > 0}
@@ -150,8 +152,8 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                 )}
                 <Linha label="Custo de operação (R$ 5/un)" valor={fin.custo_operacao || 0} base={fin.venda}
                   exp={`R$ 5 fixos por unidade vendida (${fin.custo_operacao_un || 0} un): embalagem, etiqueta, mão de obra da expedição.`} />
-                <Linha label="Tarifas de faturamento (fora do pagamento)" valor={fin.tarifas_faturamento || 0} base={fin.venda}
-                  exp={`Custos que o ML cobra na fatura, não no pagamento: envio Flex/intermunicipal R$ ${fmt(fin.tarifas_faturamento_det?.envio_fatura || 0)}, parcelamento R$ ${fmt(fin.tarifas_faturamento_det?.parcelamento || 0)}, serviços Full R$ ${fmt(fin.tarifas_faturamento_det?.full_servicos || 0)}, devoluções R$ ${fmt(fin.tarifas_faturamento_det?.devolucao || 0)}, outros R$ ${fmt(fin.tarifas_faturamento_det?.outros || 0)}. Cancelamentos já abatidos.`} />
+                {fin.tarifas_faturamento > 0.5 && <Linha label="Serviços faturados (Full e outros)" valor={fin.tarifas_faturamento} base={fin.venda}
+                  exp={`Só o que NÃO passa pelo pagamento: armazenagem e coleta Full R$ ${fmt(fin.tarifas_faturamento_det?.full_servicos || 0)}, devoluções R$ ${fmt(fin.tarifas_faturamento_det?.devolucao || 0)}, outros R$ ${fmt(fin.tarifas_faturamento_det?.outros || 0)}. O resto da fatura (envio, parcelamento, comissões) é espelho das tarifas já retidas no pagamento — somar seria contar duas vezes.`} />}
                 <Linha label="Publicidade (Product Ads)" valor={fin.publicidade || 0} base={fin.venda}
                   exp="Gasto real com campanhas de Product Ads (só a Exitus anuncia), somado charge a charge do faturamento do ML e atualizado todo dia às 6h40. Cresce conforme as campanhas rodam." />
                 <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
