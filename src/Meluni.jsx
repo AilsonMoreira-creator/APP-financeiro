@@ -1307,7 +1307,10 @@ function SecaoClientes() {
     // Envia em LOTES de 30 (limite do backend por chamada), com progresso na
     // tela e timeout por lote — antes mandava a lista inteira de uma vez e a
     // tela travava esperando a resposta (Ailson 07/08/2026).
-    const LOTE = 30;
+    // Lotes de 10: a URL do fallback GET fica curta (~400 chars) — com 30
+    // ids dava ~1.100 chars e a rede do Ailson derruba URL longa igual
+    // derruba POST (11/08/2026)
+    const LOTE = 10;
     const lotes = [];
     for (let i = 0; i < m.ids.length; i += LOTE) lotes.push(m.ids.slice(i, i + LOTE));
     let enviados = 0, pulados = 0, erros = 0, falhou = false;
@@ -1324,7 +1327,7 @@ function SecaoClientes() {
         let j = null;
         try {
           const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 25000);
+          const t = setTimeout(() => ctrl.abort(), 12000);
           const r = await fetch('/api/meluni-clientes-novidade-disparo', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids: lotes[i], versao: m.versao }),
@@ -1333,12 +1336,12 @@ function SecaoClientes() {
           clearTimeout(t);
           j = await r.json();
         } catch (ePost) {
-          setDispMsg(`Lote ${i + 1}: refazendo por outro caminho…`);
+          setDispMsg(`Lote ${i + 1} de ${lotes.length}: refazendo por outro caminho…`);
           const qs = new URLSearchParams({
             executar: '1', confirmo: '1', versao: m.versao, ids: lotes[i].join(','),
           });
           const ctrl2 = new AbortController();
-          const t2 = setTimeout(() => ctrl2.abort(), 280000);
+          const t2 = setTimeout(() => ctrl2.abort(), 90000);
           const r2 = await fetch(`/api/meluni-clientes-novidade-disparo?${qs}`, { signal: ctrl2.signal });
           clearTimeout(t2);
           j = await r2.json();
@@ -1347,15 +1350,15 @@ function SecaoClientes() {
         else { falhou = true; setDispMsg(j.erro || 'falhou'); break; }
       } catch (e) {
         falhou = true;
-        const causa = e?.name === 'AbortError' ? 'demorou demais (5 min)' : (e?.message || 'falha de rede');
+        const causa = e?.name === 'AbortError' ? 'a rede não respondeu (tenta de novo — quem já recebeu não recebe duas vezes)' : (e?.message || 'falha de rede');
         setDispMsg(`Parou no lote ${i + 1} · ${enviados} enviados até aqui · ${causa}`);
         break;
       }
     }
     if (!falhou) setDispMsg(`✅ ${enviados} enviado(s)${pulados ? ` · ${pulados} pulado(s)` : ''}${erros ? ` · ${erros} erro(s)` : ''}`);
     setSel(new Set()); carregar();
-    setModalNovidade(null);
-    setTimeout(() => setDispMsg(''), 12000);
+    if (!falhou) setModalNovidade(null);
+    setTimeout(() => setDispMsg(''), 15000);
   };
 
   // Troca o criativo (imagem do header) de um template — modal Templates
@@ -1541,6 +1544,9 @@ function SecaoClientes() {
             ))}
             <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
               <button onClick={() => setModalNovidade(null)} disabled={disparando} style={{ ...selStyle }}>Cancelar</button>
+              {dispMsg && modalNovidade.ids ? (
+                <div style={{ width: '100%', fontSize: 12.5, color: dispMsg.startsWith('✅') ? '#1f7a48' : palette.inkSoft, background: '#faf7f1', borderRadius: 8, padding: '8px 10px', marginBottom: 8, fontWeight: 600 }}>{dispMsg}</div>
+              ) : null}
               <button onClick={modalNovidade.ids ? dispararNovidadeVersao : salvarCampanhaPadrao} disabled={disparando || !modalNovidade.versao}
                 style={{ ...selStyle, fontWeight: 700, background: MELUNI, color: '#fff', border: 'none', opacity: (disparando || !modalNovidade.versao) ? 0.6 : 1 }}>
                 {disparando ? 'enviando…' : (modalNovidade.ids ? 'Disparar agora' : 'Salvar como padrão')}
