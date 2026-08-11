@@ -158,6 +158,11 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                   exp="Gasto real com campanhas de Product Ads (só a Exitus anuncia), somado charge a charge do faturamento do ML e atualizado todo dia às 6h40. Cresce conforme as campanhas rodam." />
                 <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
                   exp="O que sobra: líquido do Mercado Pago − imposto − custo da mercadoria − custo de operação − publicidade." />
+                {fin.bonus_flex > 0.5 && (
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontFamily: CALIBRI }}>
+                    ℹ Bônus Flex: R$ {fmt(fin.bonus_flex)} repostos pelo ML — neutros (repõem a entrega que você já pagou), fora do resultado.
+                  </div>
+                )}
                 {(fin.desconto_vendedor > 0 || fin.desconto_plataforma > 0) && (
                   <div style={{ fontSize: 11, color: '#1f7a48', marginTop: 8, fontFamily: CALIBRI, lineHeight: 1.5 }}>
                     ℹ Promoções: R$ {fmt(fin.desconto_vendedor)} suas (já refletidas no preço de venda acima — não descontam duas vezes) e R$ {fmt(fin.desconto_plataforma)} bancadas pelo ML e repostas a você.

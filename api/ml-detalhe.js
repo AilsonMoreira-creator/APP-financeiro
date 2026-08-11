@@ -122,9 +122,23 @@ export default async function handler(req, res) {
     // promocional pago — a promoção do vendedor NÃO subtrai de novo (dupla
     // contagem); ela fica informativa. O resíduo que sobra são reposições de
     // descontos bancados pelo ML, bônus de frete Flex e parcelamentos.
-    fin.ajustes = r2(fin.liquido_vendas + soma(comMp, r => financDe(r)) - (fin.venda + fin.frete_comprador - fin.charge_frete - fin.charge_tarifas));
+    // BÔNUS FLEX É NEUTRO (ordem dele 11/08: "já gastei o valor e o ML está
+    // repondo") — o crédito repõe um custo de entrega que saiu do bolso dele
+    // fora do ML; não pode melhorar o resultado. Neutraliza por pedido.
+    fin.bonus_flex = 0;
+    let ajustesTotal = 0;
+    for (const r of comMp) {
+      const aj = (n(r.net_recebido) + splDe(r) + financDe(r))
+        - (n(r.preco_produtos) + n(r.frete_comprador) - n(r.charge_frete) - n(r.charge_tarifas));
+      if (r.logistic_type === 'self_service' && aj > 0) { fin.bonus_flex += aj; continue; }
+      ajustesTotal += aj;
+    }
+    fin.bonus_flex = r2(fin.bonus_flex);
+    fin.liquido_vendas = r2(fin.liquido_vendas - fin.bonus_flex);
+    fin.ajustes = r2(ajustesTotal);
     fin.liquido_vendas = r2(fin.liquido_vendas);
     fin.imposto = r2(fin.venda * 0.11);
+    fin.total_pos_imposto = 0; // recalculado abaixo com o liquido_vendas já neutro
     // o total usa o resultado DAS VENDAS (débitos avulsos não são custo)
     fin.total_pos_imposto = r2(fin.liquido_vendas - fin.imposto);
 
