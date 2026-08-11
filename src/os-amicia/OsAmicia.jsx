@@ -880,6 +880,25 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
       setDados(d);
+
+      // REAL do Mercado Livre = Resultado final do Detalhar (auditado por ele
+      // em 10 pedidos, 11/08) — card e tela bebem da MESMA fonte; o estimado
+      // continua o da view. Chega depois (o cálculo é pesado) e troca suave.
+      fetch('/api/ml-detalhe?janela=mes', { headers: { 'X-User': usuario } })
+        .then(r2 => r2.json())
+        .then(md => {
+          const rf = md?.detalhamento?.resultado_final;
+          if (rf === undefined || rf === null) return;
+          setDados(prev => {
+            if (!prev?.canais) return prev;
+            const canais = prev.canais.map(c => c.canal === 'mercadolivre'
+              ? { ...c, lucro_real_liquido: rf, real_fonte_dre: true }
+              : c);
+            const totalReal = canais.reduce((t, c) => t + (Number(c.lucro_real_liquido ?? c.lucro_liquido) || 0), 0);
+            return { ...prev, canais, totais: { ...prev.totais, lucro_real_liquido: Math.round(totalReal * 100) / 100 } };
+          });
+        })
+        .catch(() => {});
     } catch (e) {
       setErro(e.message);
     } finally {
