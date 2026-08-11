@@ -44,6 +44,7 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
     azul: { bg: '#dbe9f6', fg: '#1f4e79' },       // pedidos (Ailson 09/08)
     verde: { bg: '#1f7a48', fg: '#fff' },          // vendas pagas
     amarelo: { bg: '#f7ecd0', fg: '#8a6a1a' },     // liquidação em atraso
+    aguarda: { bg: '#f7ecd0', fg: '#8a6a1a' },     // a receber previsto (faltava — derrubava o módulo, 11/08)
     neutro: { bg: '#f7f4f0', fg: C.iaDarker },
   };
   const Kpi = ({ label, valor, sub, destaque, cor }) => (
