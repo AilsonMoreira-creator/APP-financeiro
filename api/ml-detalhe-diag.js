@@ -186,14 +186,19 @@ export default async function handler(req, res) {
     const token = await getValidToken(BRAND[conta] || 'Exitus');
     const alvo = String(req.query.charges_tipo).toUpperCase();
     const mesQ = String(req.query?.mes || '2026-08');
-    const exemplos = []; let qtd = 0, soma = 0; const porDia = {};
-    let offset = 0;
+    const exemplos = []; let qtd = 0, soma = 0; const porDia = {}; const erros = [];
+    let offset = parseInt(req.query?.offset0) || 0;
     for (let pg = 0; pg < 10 && offset <= 9000; pg++) {
-      const d = await mlH(`/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL&limit=1000&offset=${offset}`, token);
-      if (d._erro) break;
+      let d = null;
+      for (let t = 0; t < 4; t++) {
+        d = await mlH(`/billing/integration/periods/key/2026-08-01/group/ML/details?document_type=BILL&limit=1000&offset=${offset}`, token);
+        if (d._erro === 429) { await new Promise(r => setTimeout(r, 3500 + t * 3000)); continue; }
+        break;
+      }
+      if (d._erro) { erros.push(`off ${offset}: ${d._erro}`); break; }
       for (const row of (d.results || [])) {
         const ci = row.charge_info || {};
-        if (String(ci.detail_sub_type || '') !== alvo) continue;
+        if (String(ci.detail_sub_type || '').trim() !== alvo) continue;
         if (!String(ci.creation_date_time || '').startsWith(mesQ)) continue;
         qtd++; soma += Number(ci.detail_amount) || 0;
         const dia = String(ci.creation_date_time || '').slice(0, 10);
@@ -201,15 +206,13 @@ export default async function handler(req, res) {
         if (exemplos.length < 8) exemplos.push({
           valor: ci.detail_amount, criado: ci.creation_date_time,
           detalhe: ci.transaction_detail, tipo: ci.detail_type,
-          shipping: ci.shipping_id || row.shipping_info?.shipping_id || null,
-          pedido: ci.order_id || row.order_info?.order_id || null,
-          extra: row.marketplace_info || row.sales_info || null,
+          refs: { ci_ship: ci.shipping_id, ci_order: ci.order_id, row: Object.keys(row).filter(k => k !== 'charge_info'), ship_info: row.shipping_info, ord_info: row.order_info, mkt: row.marketplace_info, doc: row.document_info?.document_id },
         });
       }
       offset += 1000;
       await new Promise(r => setTimeout(r, 1600));
     }
-    return res.status(200).json({ sub_type: alvo, mes: mesQ, qtd, soma: Math.round(soma * 100) / 100, media: qtd ? Math.round(soma / qtd * 100) / 100 : 0, por_dia: porDia, exemplos });
+    return res.status(200).json({ sub_type: alvo, mes: mesQ, qtd, soma: Math.round(soma * 100) / 100, media: qtd ? Math.round(soma / qtd * 100) / 100 : 0, erros, por_dia: porDia, exemplos });
   }
 
   // ?cap_test=1 — mapear os tetos reais de limit/offset do details
