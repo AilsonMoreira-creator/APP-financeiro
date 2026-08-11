@@ -134,8 +134,12 @@ export default async function handler(req, res) {
       ajustesTotal += aj;
     }
     fin.bonus_flex = r2(fin.bonus_flex);
-    fin.liquido_vendas = r2(fin.liquido_vendas - fin.bonus_flex);
-    fin.ajustes = r2(ajustesTotal);
+    // 11/08 (ordem dele): créditos e ajustes SAEM do resultado — créditos
+    // positivos (reposições etc.) não melhoram o número; ajustes negativos
+    // continuam abatendo (conservador)
+    fin.creditos_pagamento = r2(Math.max(0, ajustesTotal));
+    fin.ajustes = r2(Math.min(0, ajustesTotal));
+    fin.liquido_vendas = r2(fin.liquido_vendas - fin.bonus_flex - fin.creditos_pagamento);
     fin.liquido_vendas = r2(fin.liquido_vendas);
     fin.imposto = r2(fin.venda * 0.11);
     fin.total_pos_imposto = 0; // recalculado abaixo com o liquido_vendas já neutro
@@ -188,15 +192,26 @@ export default async function handler(req, res) {
     // os charges PADS do billing (só a Exitus tem Ads) e grava o acumulado
     // REAL do mês em ml_ads_manual. Aqui é só somar os meses que a janela
     // toca (o valor do mês corrente já é o gasto até o momento).
+    // publicidade por período (11/08, ordem dele): mês COM dado real do
+    // extrato usa o real; mês sem dado (ex: julho, fora do alcance do
+    // billing) usa 6% da venda daquele mês
     fin.publicidade = 0;
+    fin.publicidade_estimada = 0;
     {
-      const meses = new Set();
-      const d0 = new Date(`${ini}T12:00:00Z`);
-      const d1 = new Date(`${hoje}T12:00:00Z`);
-      for (let d = new Date(d0); d <= d1; d.setUTCDate(d.getUTCDate() + 1)) meses.add(d.toISOString().slice(0, 7));
-      const { data: adsRows } = await supabase.from('ml_ads_manual').select('mes, valor').in('mes', [...meses]);
-      for (const a of (adsRows || [])) fin.publicidade += n(a.valor);
+      const vendaPorMes = {};
+      for (const r of comMp) {
+        const m = String(r.data_pedido).slice(0, 7);
+        vendaPorMes[m] = (vendaPorMes[m] || 0) + n(r.preco_produtos);
+      }
+      const { data: adsRows } = await supabase.from('ml_ads_manual').select('mes, valor').in('mes', Object.keys(vendaPorMes));
+      const reais = {};
+      for (const a of (adsRows || [])) reais[a.mes] = n(a.valor);
+      for (const [m, v] of Object.entries(vendaPorMes)) {
+        if (reais[m] !== undefined) fin.publicidade += reais[m];
+        else { fin.publicidade += v * 0.06; fin.publicidade_estimada += v * 0.06; }
+      }
       fin.publicidade = r2(fin.publicidade);
+      fin.publicidade_estimada = r2(fin.publicidade_estimada);
     }
 
     // tarifas de FATURAMENTO fora do pagamento (envio flex/intermunicipal,
@@ -216,11 +231,14 @@ export default async function handler(req, res) {
       const { data: bl } = await supabase.from('ml_billing_mensal')
         .select('tipo, valor').in('mes', [...meses])
         .in('tipo', ['full_servicos', 'devolucao', 'outros']);
+      let observado = 0;
       for (const b of (bl || [])) {
-        fin.tarifas_faturamento += n(b.valor);
+        observado += n(b.valor);
         fin.tarifas_faturamento_det[b.tipo] = r2((fin.tarifas_faturamento_det[b.tipo] || 0) + n(b.valor));
       }
-      fin.tarifas_faturamento = r2(fin.tarifas_faturamento);
+      // 11/08 (ordem dele): 2% FIXO da venda; o observado no extrato fica de referência
+      fin.tarifas_faturamento = r2(fin.venda * 0.02);
+      fin.tarifas_faturamento_det.observado_extrato = r2(observado);
     }
     fin.resultado_final = r2(fin.total_pos_imposto - cmv.total - fin.custo_operacao - fin.publicidade - fin.tarifas_faturamento);
 

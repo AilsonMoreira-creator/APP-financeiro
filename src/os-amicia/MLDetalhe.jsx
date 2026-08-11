@@ -134,8 +134,8 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                   exp="No Clássico o CLIENTE paga o acréscimo do parcelamento — esse custo se anula e não entra. Aqui só fica o que realmente sai de você: taxa mínima de recebimento e parcelas sem juros dos anúncios Premium." />}
                 <Linha label="Frete pago por você" valor={fin.frete_liquido_vendedor} base={fin.venda}
                   exp="Só o SEU custo de envio nos pagamentos — a parte que o comprador paga fica fora da conta (nem soma nem subtrai). Média de ~R$ 12-16 por pedido. O frete dos pedidos Flex não aparece aqui: é cobrado na fatura, na linha de tarifas de faturamento." />
-                {Math.abs(fin.ajustes || 0) >= 1 && <Linha label="Créditos e ajustes do pagamento" valor={fin.ajustes} base={fin.venda} positivo={fin.ajustes > 0}
-                  exp="Valores que entram no pagamento além do preço: descontos bancados pelo ML repostos a você, bônus de frete dos pedidos Flex e diferenças de parcelamento." />}
+                {(fin.ajustes || 0) <= -1 && <Linha label="Ajustes do pagamento" valor={fin.ajustes} base={fin.venda}
+                  exp="Débitos residuais do pagamento ainda não classificados." />}
                 <Linha label="Resultado das vendas no Mercado Pago" valor={fin.liquido_vendas} base={fin.venda} positivo forte
                   exp="O que as vendas rendem de verdade: pago − frete − tarifas − promoções. Os débitos avulsos abaixo saem DEPOIS, e não são custo da venda." />
                 {fin.debitos_avulsos > 0.5 && <Linha label="Débitos avulsos descontados (crédito/dívidas)" valor={fin.debitos_avulsos} base={fin.venda}
@@ -152,12 +152,17 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                 )}
                 <Linha label="Custo de operação (R$ 5/un)" valor={fin.custo_operacao || 0} base={fin.venda}
                   exp={`R$ 5 fixos por unidade vendida (${fin.custo_operacao_un || 0} un): embalagem, etiqueta, mão de obra da expedição.`} />
-                {fin.tarifas_faturamento > 0.5 && <Linha label="Serviços faturados (Full e outros)" valor={fin.tarifas_faturamento} base={fin.venda}
-                  exp={`Só o que NÃO passa pelo pagamento: armazenagem e coleta Full R$ ${fmt(fin.tarifas_faturamento_det?.full_servicos || 0)}, devoluções R$ ${fmt(fin.tarifas_faturamento_det?.devolucao || 0)}, outros R$ ${fmt(fin.tarifas_faturamento_det?.outros || 0)}. O resto da fatura (envio, parcelamento, comissões) é espelho das tarifas já retidas no pagamento — somar seria contar duas vezes.`} />}
+                {fin.tarifas_faturamento > 0.5 && <Linha label="Serviços faturados (Full e outros) · 2%" valor={fin.tarifas_faturamento} base={fin.venda}
+                  exp={`Régua fixa de 2% da venda (armazenagem/coleta Full, devoluções e outras tarifas fora do pagamento). Observado no extrato até agora: R$ ${fmt(fin.tarifas_faturamento_det?.observado_extrato || 0)}.`} />}
                 <Linha label="Publicidade (Product Ads)" valor={fin.publicidade || 0} base={fin.venda}
-                  exp="Gasto real com campanhas de Product Ads (só a Exitus anuncia), somado charge a charge do faturamento do ML e atualizado todo dia às 6h40. Cresce conforme as campanhas rodam." />
+                  exp={`Meses com dado real do extrato usam o gasto exato (atualizado todo dia às 6h40); meses fora do alcance do extrato entram com 6% da venda${fin.publicidade_estimada > 0.5 ? ` (R$ ${fmt(fin.publicidade_estimada)} estimados assim nesta janela)` : ''}.`} />
                 <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
                   exp="O que sobra: líquido do Mercado Pago − imposto − custo da mercadoria − custo de operação − publicidade." />
+                {fin.creditos_pagamento > 0.5 && (
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontFamily: CALIBRI }}>
+                    ℹ Créditos do pagamento (reposições e afins): R$ {fmt(fin.creditos_pagamento)} — fora do resultado.
+                  </div>
+                )}
                 {fin.bonus_flex > 0.5 && (
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 6, fontFamily: CALIBRI }}>
                     ℹ Bônus Flex: R$ {fmt(fin.bonus_flex)} repostos pelo ML — neutros (repõem a entrega que você já pagou), fora do resultado.
