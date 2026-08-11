@@ -133,7 +133,7 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                 {fin.desconto_vendedor > 0 && <Linha label="Promoções bancadas por você" valor={fin.desconto_vendedor} base={fin.venda}
                   exp="A parte dos descontos de campanha com funding do VENDEDOR — é o que você está desligando nos anúncios. O que o ML banca não entra aqui." />}
                 <Linha label="Frete pago por você" valor={fin.frete_liquido_vendedor} base={fin.venda}
-                  exp={`O charge de frete do pagamento menos a parte que o comprador pagou (R$ ${fmt(fin.frete_comprador)}, que só transita). É o seu custo real de envio — a média de ~R$ 16 nos produtos acima de R$ 79.`} />
+                  exp="Só o SEU custo de envio nos pagamentos — a parte que o comprador paga fica fora da conta (nem soma nem subtrai). Média de ~R$ 12-16 por pedido. O frete dos pedidos Flex não aparece aqui: é cobrado na fatura, na linha de tarifas de faturamento." />
                 {Math.abs(fin.ajustes || 0) >= 1 && <Linha label="Ajustes" valor={fin.ajustes} base={fin.venda} positivo={fin.ajustes > 0}
                   exp="Diferenças de pedidos que ainda não têm a decomposição completa dos charges (o backfill preenche sozinho)." />}
                 <Linha label="Resultado das vendas no Mercado Pago" valor={fin.liquido_vendas} base={fin.venda} positivo forte
