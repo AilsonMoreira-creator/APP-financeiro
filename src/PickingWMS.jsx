@@ -622,6 +622,9 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
   const [vendasAberto, setVendasAberto] = useState(false); // card vendas do dia (oculto por padrão)
   const [corteEm, setCorteEm] = useState(null);     // instante do corte de hoje (ISO)
   const [ordem, setOrdem] = useState('qtd');        // qtd | loc
+  const [modalEtiquetas, setModalEtiquetas] = useState(false);
+  const [etqTipo, setEtqTipo] = useState('nf_transporte');
+  const [etqRef, setEtqRef] = useState('');
   const [visual, setVisual] = useState('auto');     // auto | matriz | lista
   const [pedidos, setPedidos] = useState([]);
   const [imprimindo, setImprimindo] = useState(false);
@@ -1341,9 +1344,47 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
           {/* ações */}
           <div className="wms-no-print" style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
             {fStatus === 'aberto' && (
-              <button onClick={imprimirLista} disabled={imprimindo || (!pedidosIncluidos.length && !pedidosJaImpressos.length)} style={{ flex: 1, minWidth: 220, padding: '13px', borderRadius: 12, border: 'none', background: (pedidosIncluidos.length || pedidosJaImpressos.length) ? palette.accent : '#c8c0b6', color: '#fff', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ flex: 1 }}><button onClick={imprimirLista} disabled={imprimindo || (!pedidosIncluidos.length && !pedidosJaImpressos.length)} style={{ flex: 1, minWidth: 220, padding: '13px', borderRadius: 12, border: 'none', background: (pedidosIncluidos.length || pedidosJaImpressos.length) ? palette.accent : '#c8c0b6', color: '#fff', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <Printer size={18} /> Imprimir e iniciar separação ({pedidosIncluidos.length} no papel{pedidosJaImpressos.length ? ` · ${pedidosJaImpressos.length} já impressos` : ''}{pedidosFiltrados.length - pedidosIncluidos.length - pedidosJaImpressos.length > 0 ? ` · ${pedidosFiltrados.length - pedidosIncluidos.length - pedidosJaImpressos.length} de fora` : ''})
+              </button></div>
+              <button onClick={() => setModalEtiquetas(true)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 10px', borderRadius: 14, border: 'none', cursor: 'pointer', background: '#7a5c2e', color: '#fff', fontWeight: 700, fontSize: 15, fontFamily: FONT }}>
+                🏷 Imprimir etiquetas
               </button>
+            </div>
+
+            {modalEtiquetas && (
+              <div onClick={() => setModalEtiquetas(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(20,25,35,.55)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                <div onClick={e => e.stopPropagation()} style={{ background: '#fdfbf7', borderRadius: 16, padding: 18, width: '100%', maxWidth: 430, fontFamily: FONT }}>
+                  <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>🏷 Maço de etiquetas · NF + transporte</div>
+                  <div style={{ fontSize: 12, color: '#7a6a55', marginBottom: 12 }}>
+                    Agrupadas por localização e referência — o casamento peça↔etiqueta acontece na arara. Usa os filtros de conta/loja já escolhidos acima. DANFE simplificada + etiqueta 10x15.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                    {[['nf_transporte', 'NF + transporte'], ['flex', '⚡ Só Flex'], ['meluni', 'Meluni']].map(([v, l]) => (
+                      <button key={v} onClick={() => setEtqTipo(v)} style={{ padding: '8px 14px', borderRadius: 999, border: etqTipo === v ? '2px solid #7a5c2e' : '1px solid #d8ccb8', background: etqTipo === v ? '#f3ead9' : '#fff', fontWeight: etqTipo === v ? 700 : 500, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>{l}</button>
+                    ))}
+                  </div>
+                  <input value={etqRef} onChange={e => setEtqRef(e.target.value)} placeholder="Só uma REF? Digita aqui (ex: 2277) — vazio = todas"
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid #d8ccb8', fontFamily: FONT, fontSize: 14, marginBottom: 14 }} />
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button onClick={() => setModalEtiquetas(false)} style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #d8ccb8', background: '#fff', cursor: 'pointer', fontFamily: FONT }}>Cancelar</button>
+                    <button onClick={() => {
+                      const qs = new URLSearchParams({ pdf: '1', contas: fConta, loja: fLoja === 'todas' ? 'todas' : fLoja, tipo: etqTipo });
+                      if (etqRef.trim()) qs.set('ref', etqRef.trim());
+                      window.open(`/api/wms-etiquetas?${qs}`, '_blank');
+                      setModalEtiquetas(false);
+                    }} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: '#7a5c2e', color: '#fff', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                      🖨 Gerar PDF
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9a8a70', marginTop: 10 }}>
+                    Hoje: DANFE sai pra contas com o escopo NF-e liberado (Muniam ✓) e etiqueta de transporte pros pedidos do Mercado Livre. Shopee/Shein/TikTok entram na sequência. A última página lista pendências (sem NF / sem etiqueta).
+                  </div>
+                </div>
+              </div>
+            )}
             )}
             {fStatus === 'em_separacao' && !modoFalta && (
               <button onClick={() => setModoFalta(true)} style={{ flex: 1, minWidth: 190, padding: '12px', borderRadius: 12, border: '1.5px solid #d9a441', background: '#fdf6e3', color: '#9a6b00', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
