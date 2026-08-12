@@ -126,74 +126,11 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
               </div>
             </Secao>
 
-            {fin && (
-              <Secao titulo="Detalhamento de valores · vendas liquidadas" nota="Toque em uma linha ⓘ pra ver a explicação. Frete debitado já vem líquido do subsídio do TikTok e inclui a taxa fixa por item (R$ 4 até jul, R$ 6 em ago).">
-                <Linha label="Valor de venda (líquido de devoluções)" valor={fin.venda} positivo forte
-                  exp="Soma das vendas liquidadas no período, já sem as devolvidas. As devoluções aparecem no card do topo e na linha própria abaixo." />
-                {fin.desconto_vendedor > 0 && <Linha label="Desconto do vendedor" valor={fin.desconto_vendedor} base={fin.venda}
-                  exp="Desconto das SUAS campanhas (5%, 10% ou 15%). Sai do seu repasse. O desconto que o TikTok dá ao cliente não entra aqui — é bancado por eles." />}
-                <Linha label="Comissão TikTok" valor={fin.comissao} base={fin.venda}
-                  exp="Comissão da plataforma, ~6% sobre o preço cheio do produto." />
-                {fin.afiliado_creator > 0 && <Linha label="Comissão de afiliado (creator)" valor={fin.afiliado_creator} base={fin.venda}
-                  exp="Comissão do creator que vendeu por vídeo ou live. Você define o percentual — hoje ~10% nos produtos com afiliado." />}
-                {fin.afiliado_ads > 0 && <Linha label="Comissão de afiliado (ads/parceiro)" valor={fin.afiliado_ads} base={fin.venda}
-                  exp="Comissão de campanhas de afiliado via anúncios ou agência parceira." />}
-                {fin.taxa_transacao > 0 && <Linha label="Taxa de transação" valor={fin.taxa_transacao} base={fin.venda}
-                  exp="Tarifa de processamento do pagamento." />}
-                <Linha label="Frete debitado pelo TikTok" valor={fin.frete_debitado} base={fin.venda}
-                  exp="Frete real menos o subsídio do TikTok. A taxa fixa por item (R$ 4 até jul, R$ 6 em ago) está embutida aqui." />
-                <div style={{ fontSize: 11, color: C.muted, padding: '4px 0', fontFamily: CALIBRI }}>
-                  → frete real R$ {fmt(fin.frete_real)} · cliente pagou R$ {fmt(fin.frete_cliente)} · TikTok subsidiou R$ {fmt(fin.subsidio_frete)}
-                </div>
-              {d.liquidacao.previsto_detalhe && (
-                <div style={{ marginTop: 10, padding: '8px 10px', background: '#fbf9f5', borderRadius: 8, fontFamily: CALIBRI, fontSize: 11.5, lineHeight: 1.7, color: '#555' }}>
-                  <b style={{ color: C.iaDarker }}>O que você ainda vai receber:</b>
-                  {d.liquidacao.previsto_detalhe.oficial_pedidos > 0 && (
-                    <span style={{ color: '#1f7a48', fontWeight: 700 }}> ✓ {d.liquidacao.previsto_detalhe.oficial_pedidos} pedidos com valor OFICIAL do TikTok (R$ {fmt(d.liquidacao.previsto_detalhe.oficial_liquido)}){d.liquidacao.previsto_detalhe.regua_pedidos > 0 ? ` · ${d.liquidacao.previsto_detalhe.regua_pedidos} pela régua` : ''}</span>
-                  )}<br />
-                  Vendas em aberto ({d.liquidacao.previsto_detalhe.pedidos} pedidos): <b>R$ {fmt(d.liquidacao.previsto_detalhe.base)}</b><br />
-                  − Comissão + taxa fixa: R$ {fmt(d.liquidacao.previsto_detalhe.comissao)}<br />
-                  − Frete seu: R$ {fmt(d.liquidacao.previsto_detalhe.frete)}<br />
-                  − Afiliados: R$ {fmt(d.liquidacao.previsto_detalhe.afiliado)}<br />
-                  <b style={{ color: '#1f7a48' }}>= A receber previsto: R$ {fmt(d.liquidacao.previsto_detalhe.liquido)}</b>
-                  <span style={{ color: C.muted }}> · o repasse confirma em ~{d.liquidacao.prazo_medio_dias || 7} dias</span>
-                </div>
-              )}
-                {Math.abs(fin.frete_cliente_e_ajustes || 0) >= 0.01 && <Linha label="Frete do cliente e ajustes" valor={fin.frete_cliente_e_ajustes} base={fin.venda} positivo={fin.frete_cliente_e_ajustes > 0}
-                  exp="Créditos e débitos que o TikTok não abre em campo próprio — principalmente o frete pago pelo cliente, que é repassado a você, e tarifas ou subsídios menores." />}
-                <Linha label="Recebido após todos os descontos" valor={fin.recebido} base={fin.venda} positivo forte
-                  exp="O que o TikTok deposita pelas vendas pagas do período." />
-                {fin.devolucoes_debito > 0 && <Linha label="Devoluções · estornos e logística reversa" valor={fin.devolucoes_debito} base={fin.venda}
-                  exp="O que sai do seu bolso com as devoluções: frete reverso e débitos de estorno lançados pelo TikTok." />}
-                <Linha label="Imposto (11% da venda)" valor={fin.imposto} base={fin.venda}
-                  exp="Sua régua: 11% sobre a venda líquida de devoluções." />
-                <Linha label="Agência (5% da venda)" valor={fin.agencia} base={fin.venda}
-                  exp="Sua régua: 5% sobre a venda líquida, do contrato com a agência de TikTok." />
-                <Linha label="Total após imposto e agência" valor={fin.liquido_pos_imposto} base={fin.venda} positivo forte />
-                <Linha label="CMV · custo da mercadoria" valor={fin.cmv?.total || 0} base={fin.venda}
-                  exp="Custo de produção (da calculadora) das peças vendidas e pagas. Mercadoria devolvida volta pro estoque e não entra." />
-                {fin.cmv?.estimado > 0 && (
-                  <div style={{ fontSize: 10.5, color: C.muted, padding: '2px 0', fontFamily: CALIBRI }}>
-                    → R$ {fmt(fin.cmv.exato)} exato ({fin.cmv.un_com_custo} un) + R$ {fmt(fin.cmv.estimado)} estimado ({fin.cmv.vendas_sem_vinculo} vendas sem vínculo no Bling)
-                  </div>
-                )}
-                <Linha label="Custo de operação (R$ 5/un)" valor={fin.custo_operacao || 0} base={fin.venda}
-                  exp={`R$ 5 fixos por unidade vendida (${fin.custo_operacao_un || 0} un): embalagem, etiqueta, mão de obra da expedição.`} />
-                <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
-                  exp="O que sobra no bolso depois de tudo: repasse − devoluções − imposto − agência − custo da mercadoria − custo de operação." />
-                {fin.desconto_plataforma > 0 && (
-                  <div style={{ fontSize: 11, color: '#1f7a48', marginTop: 8, fontFamily: CALIBRI }}>
-                    ℹ Desconto da plataforma: R$ {fmt(fin.desconto_plataforma)} dados ao cliente — bancados pelo TikTok, não saem do seu repasse.
-                  </div>
-                )}
-              </Secao>
-            )}
-
             {fin?.mes_completo && (
-              <Secao titulo="DRE do mês completo · liquidado + a liquidar"
-                nota={`${fmt(fin.mes_completo.pct_real)}% da venda já confirmada em repasse; o restante é previsto pela régua validada e o repasse confirma em ~7 dias. Quando o TikTok liquidar tudo, este quadro e o de cima convergem.`}>
-                <Linha label="Venda do mês (liquidada + em aberto)" valor={fin.mes_completo.venda_total} base={fin.mes_completo.venda_total} positivo forte
-                  exp={`R$ ${fmt(fin.venda)} já liquidados + R$ ${fmt(fin.mes_completo.previsto.venda)} em aberto (${fin.mes_completo.previsto.pedidos} pedidos).`} />
+              <Secao titulo="Detalhamento de valores · DRE do mês"
+                nota={`${fmt(fin.mes_completo.pct_real)}% da venda já confirmada em repasse; o restante usa o valor oficial previsto pelo TikTok (unsettled) e o repasse confirma em ~7 dias.`}>
+                <Linha label="Venda do mês (líquida dos seus descontos)" valor={fin.mes_completo.venda_total} base={fin.mes_completo.venda_total} positivo forte
+                  exp={`Liquidado + em aberto (${fin.mes_completo.previsto.pedidos} pedidos abertos), JÁ descontados os R$ ${fmt(fin.mes_completo.descontos_abatidos)} de promoções suas — comissão, frete e as demais taxas aplicam sobre esta base.`} />
                 <Linha label="Comissão TikTok (real + prevista)" valor={-fin.mes_completo.comissao} base={fin.mes_completo.venda_total} />
                 <Linha label="Afiliados (real + previsto)" valor={-fin.mes_completo.afiliados} base={fin.mes_completo.venda_total} />
                 <Linha label="Frete seu (real + previsto)" valor={-fin.mes_completo.frete} base={fin.mes_completo.venda_total} />
@@ -201,10 +138,14 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
                   exp={`R$ ${fmt(fin.recebido)} já no bolso + R$ ${fmt(fin.mes_completo.previsto.liquido)} previstos.`} />
                 <Linha label="Imposto (11%)" valor={-fin.mes_completo.imposto} base={fin.mes_completo.venda_total} />
                 <Linha label="Agência (5%)" valor={-fin.mes_completo.agencia} base={fin.mes_completo.venda_total} />
-                <Linha label="CMV · custo da mercadoria" valor={-fin.mes_completo.cmv_total} base={fin.mes_completo.venda_total} />
+                <Linha label="CMV · custo da mercadoria" valor={-fin.mes_completo.cmv_total} base={fin.mes_completo.venda_total}
+                  exp={`Custo real das REFs via Bling (liquidadas + abertas).${fin.mes_completo.cmv_estimado_abertos > 0.5 ? ` R$ ${fmt(fin.mes_completo.cmv_estimado_abertos)} estimados pela proporção das liquidadas (pedidos ainda sem vínculo).` : ''}`} />
                 <Linha label="Custo de operação (R$ 5/un)" valor={-fin.mes_completo.custo_operacao} base={fin.mes_completo.venda_total} />
                 <Linha label="Resultado do mês (projetado)" valor={fin.mes_completo.resultado_final} base={fin.mes_completo.venda_total} positivo={fin.mes_completo.resultado_final >= 0} forte
-                  exp="Mês inteiro: o que já liquidou (números reais) somado ao que ainda vai liquidar (régua validada). Margem sobre a venda total." />
+                  exp="Mês inteiro: o que já liquidou (números reais) somado ao que ainda vai liquidar (oficial do TikTok + régua de reserva). Margem sobre a venda líquida." />
+                <div style={{ fontSize: 11, color: '#1f7a48', marginTop: 8, fontFamily: CALIBRI, lineHeight: 1.5 }}>
+                  ℹ Promoções: R$ {fmt(fin.mes_completo.descontos_abatidos)} suas (já abatidas da venda acima — não descontam duas vezes){fin.mes_completo.desconto_plataforma > 0.5 ? ` e R$ ${fmt(fin.mes_completo.desconto_plataforma)} bancadas pelo TikTok, fora do seu repasse` : ''}.
+                </div>
               </Secao>
             )}
 

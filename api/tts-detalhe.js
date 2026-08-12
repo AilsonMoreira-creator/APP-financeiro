@@ -220,9 +220,15 @@ export default async function handler(req, res) {
         for (const t of (u.data?.transactions || [])) {
           if (t.type !== 'ORDER' || !t.order_id) continue;
           const fee = t.fee_tax_breakdown?.fee || {};
+          const rb = t.revenue_breakdown || {};
+          const sub = Math.abs(n(rb.subtotal_before_discount_amount));
+          const descS = Math.abs(n(rb.seller_discount_amount));
           estOficial[t.order_id] = {
             liquido: n(t.est_settlement_amount),
-            receita: n(t.est_revenue_amount),
+            // receita LÍQUIDA do desconto do vendedor (definicional, não
+            // depende da semântica do est_revenue): subtotal − desconto
+            receita: sub > 0 ? r2(sub - descS) : n(t.est_revenue_amount),
+            desconto: descS,
             comissao: Math.abs(n(fee.platform_commission_amount)) + Math.abs(n(fee.sfp_service_fee_amount)) + Math.abs(n(fee.transaction_fee_amount)),
             afiliado: Math.abs(n(fee.affiliate_commission_amount)) + Math.abs(n(fee.affiliate_ads_commission_amount)) + Math.abs(n(fee.affiliate_partner_commission_amount)),
             frete: Math.abs(n(t.est_shipping_cost_amount)),
@@ -234,21 +240,28 @@ export default async function handler(req, res) {
       }
     }
 
-    const prev = { base: 0, frete_cliente: 0, pedidos: 0 };
-    const ofc = { pedidos: 0, liquido: 0, receita: 0, comissao: 0, afiliado: 0, frete: 0 };
+    const prev = { base: 0, frete_cliente: 0, pedidos: 0, desconto: 0 };
+    const ofc = { pedidos: 0, liquido: 0, receita: 0, comissao: 0, afiliado: 0, frete: 0, desconto: 0 };
+    const vendaAbPorId = {}; // venda líquida por pedido aberto (pro CMV proporcional)
     for (let i = 0; i < emAbertoIds.length; i += 50) {
       const det = await chamarTts('/order/202309/orders', { ids: emAbertoIds.slice(i, i + 50).join(',') }, auth, ctx);
       for (const o of (det?.data?.orders || [])) {
         if (String(o.status || '').toUpperCase() === 'CANCELLED') continue;
-        const of2 = estOficial[String(o.id)];
+        const oid = String(o.id);
+        const of2 = estOficial[oid];
         if (of2) {
           ofc.pedidos++; ofc.liquido += of2.liquido; ofc.receita += of2.receita;
           ofc.comissao += of2.comissao; ofc.afiliado += of2.afiliado; ofc.frete += of2.frete;
+          ofc.desconto += of2.desconto;
+          vendaAbPorId[oid] = of2.receita;
           continue;
         }
         prev.pedidos++;
-        prev.base += n(o.payment?.original_total_product_price) - n(o.payment?.seller_discount);
+        const baseLiq = n(o.payment?.original_total_product_price) - n(o.payment?.seller_discount);
+        prev.base += baseLiq;
+        prev.desconto += n(o.payment?.seller_discount);
         prev.frete_cliente += n(o.payment?.shipping_fee);
+        vendaAbPorId[oid] = baseLiq;
       }
     }
     let comissaoPct = 0.0602, afiliadoPct = 0.03;
@@ -350,8 +363,13 @@ export default async function handler(req, res) {
     // rota Unsettled Transactions do TikTok abrir, ela assume o lugar
     if (prev.pedidos > 0) {
       const mc = { previsto: {} };
-      mc.venda_total = r2(fin.venda + prev.base);
-      mc.pct_real = r2(100 * fin.venda / (mc.venda_total || 1));
+      // VENDA LÍQUIDA DOS DESCONTOS DELE nas duas pontas (12/08, pergunta
+      // dele confirmada): liquidado entra venda − desconto_vendedor; abertos
+      // já vêm líquidos (subtotal − desconto no oficial; payment na régua)
+      const vendaLiqReal = r2(fin.venda - Math.abs(fin.desconto_vendedor || 0));
+      mc.venda_total = r2(vendaLiqReal + prev.base);
+      mc.descontos_abatidos = r2(Math.abs(fin.desconto_vendedor || 0) + ofc.desconto + prev.desconto);
+      mc.pct_real = r2(100 * vendaLiqReal / (mc.venda_total || 1));
       // CMV e unidades dos pedidos em aberto via Bling (mesmo caminho do real)
       let cmvAb = 0, unAb = 0, semVinc = 0;
       {
@@ -374,6 +392,16 @@ export default async function handler(req, res) {
         }
         for (const l of linhas2) { if (custos2[l.ref] > 0) { cmvAb += custos2[l.ref] * l.un; unAb += l.un; } }
         semVinc = Math.max(0, prev.pedidos - match2.size);
+        // pedidos abertos SEM vínculo no Bling entravam com CMV ZERO e
+        // diluíam o % do mês (o 37% que ele pegou) — agora estimam pela
+        // proporção custo/venda das liquidadas
+        let vendaSemVinc = 0;
+        for (const [oid, v] of Object.entries(vendaAbPorId)) {
+          if (!match2.has(oid)) vendaSemVinc += n(v);
+        }
+        const pctLiq = fin.venda > 0 && cmv.total > 0 ? cmv.total / fin.venda : 0.42;
+        mc.cmv_estimado_abertos = r2(vendaSemVinc * pctLiq);
+        cmvAb += vendaSemVinc * pctLiq;
       }
       mc.cmv_total = r2(cmv.total + cmvAb);
       const unTotal = fin.custo_operacao_un + unAb + semVinc;
@@ -383,6 +411,7 @@ export default async function handler(req, res) {
       mc.frete = r2(Math.abs(fin.frete_debitado || 0) + prevFrete);
       mc.desconto_vendedor = r2(Math.abs(fin.desconto_vendedor || 0));
       mc.recebido = r2(fin.recebido + prevLiquido);
+      mc.desconto_plataforma = r2(Math.abs(fin.desconto_plataforma || 0));
       mc.imposto = r2(mc.venda_total * 0.11);
       mc.agencia = r2(mc.venda_total * 0.05);
       mc.resultado_final = r2(mc.recebido - (fin.devolucoes_debito || 0) - mc.imposto - mc.agencia - mc.cmv_total - mc.custo_operacao);
