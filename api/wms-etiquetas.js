@@ -44,7 +44,7 @@ async function pedidosFiltrados(q) {
     ? ['aberto', 'em_separacao', 'finalizado']
     : ['aberto', 'em_separacao'];
   let sel = supabase.from('wms_pedidos')
-    .select('conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em')
+    .select('conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id')
     .in('status_wms', statusAlvo)
     .order('data_pedido', { ascending: true }).limit(400);
   if (contas !== 'todas') sel = sel.in('conta', contas.split(','));
@@ -76,12 +76,12 @@ async function pedidosFiltrados(q) {
 // (situação 6 = já impressa) — vale inclusive quando a Sthefany imprime
 // pelo painel. A listagem de NFs traz numeroPedidoLoja, que casa com o
 // numero_loja do wms_pedidos sem precisar abrir pedido por pedido.
-async function situacaoNfPorPedidoLoja(contas, tokenPorConta, desde) {
+async function situacaoPorNfId(contas, tokenPorConta, desde) {
   const mapa = {};
   for (const conta of contas) {
     if (!tokenPorConta[conta]) continue;
     const hb = { Authorization: 'Bearer ' + tokenPorConta[conta], Accept: 'application/json' };
-    for (let pagina = 1; pagina <= 6; pagina++) {
+    for (let pagina = 1; pagina <= 8; pagina++) {
       const url = `https://api.bling.com.br/Api/v3/nfe?tipo=1&dataEmissaoInicial=${desde}&limite=100&pagina=${pagina}`;
       let j = {};
       try {
@@ -89,15 +89,32 @@ async function situacaoNfPorPedidoLoja(contas, tokenPorConta, desde) {
         j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
       } catch { break; }
       const lista = j?.data || [];
-      for (const nf of lista) {
-        const chave = String(nf.numeroPedidoLoja || '').trim();
-        if (chave) mapa[`${conta}|${chave}`] = { situacao: nf.situacao, numero: nf.numero, id: nf.id };
-      }
+      for (const nf of lista) if (nf?.id) mapa[String(nf.id)] = nf.situacao;
       if (lista.length < 100) break;
-      await new Promise(r2 => setTimeout(r2, 400));
+      await new Promise(r2 => setTimeout(r2, 350));
     }
   }
   return mapa;
+}
+
+// preenche wms_pedidos.nf_id dos que ainda não têm (única fonte é o detalhe
+// do pedido); limitado por chamada pra respeitar o rate limit do Bling
+async function preencherNfIds(peds, tokenPorConta, maximo = 40) {
+  const alvo = peds.filter(p => !p.nf_id).slice(0, maximo);
+  for (const p of alvo) {
+    if (!tokenPorConta[p.conta]) continue;
+    try {
+      const hb = { Authorization: 'Bearer ' + tokenPorConta[p.conta], Accept: 'application/json' };
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}`, hb);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      const nfId = j?.data?.notaFiscal?.id;
+      if (nfId) {
+        p.nf_id = nfId;
+        await supabase.from('wms_pedidos').update({ nf_id: nfId, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
+      }
+    } catch { /* segue */ }
+    await new Promise(r2 => setTimeout(r2, 350));
+  }
 }
 
 // links de etiqueta do Bling (só existem depois de gerada/casada no Bling)
@@ -133,7 +150,8 @@ export default async function handler(req, res) {
       for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
       const links = await linksEtiqueta(peds.slice(0, 200), tk);
       const desdeNf = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      const nfDe = await situacaoNfPorPedidoLoja([...contasSet], tk, desdeNf);
+      await preencherNfIds(peds.filter(p => links[String(p.pedido_id)]), tk, 40);
+      const sitDe = await situacaoPorNfId([...contasSet], tk, desdeNf);
       const grupos = {};
       let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
       for (const p of peds) {
@@ -144,8 +162,7 @@ export default async function handler(req, res) {
         grupos[k].canais.add(p.canal_geral);
         const temEtq = !!links[String(p.pedido_id)];
         // DANFE já impressa? situação 6 do Bling OU carimbo nosso
-        const nf = nfDe[`${p.conta}|${String(p.numero_loja || '').trim()}`];
-        const danfeImpressa = nf?.situacao === 6;
+        const danfeImpressa = p.nf_id ? sitDe[String(p.nf_id)] === 6 : false;
         if (danfeImpressa || p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
         else if (temEtq) { grupos[k].prontas++; prontas++; }
         else semEtiqueta++;
@@ -220,8 +237,9 @@ export default async function handler(req, res) {
     // TRAVA (12/08, pedido dele): pedido com etiqueta JÁ IMPRESSA fica de fora
     // por padrão — só entra com ?reimprimir=1 (escolha consciente na tela)
     const desdeNf2 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-    const nfDe2 = await situacaoNfPorPedidoLoja([...new Set(lote.map(p => p.conta))], tokenBling, desdeNf2);
-    const danfeJaImpressa = (p) => nfDe2[`${p.conta}|${String(p.numero_loja || '').trim()}`]?.situacao === 6;
+    await preencherNfIds(lote, tokenBling, 60);
+    const sitDe2 = await situacaoPorNfId([...new Set(lote.map(p => p.conta))], tokenBling, desdeNf2);
+    const danfeJaImpressa = (p) => p.nf_id ? sitDe2[String(p.nf_id)] === 6 : false;
     const podeImprimir = (p) => q.reimprimir === '1' || (!p.etiqueta_impressa_em && !danfeJaImpressa(p));
     const prontos = lote.filter(p => podeImprimir(p)
       && (linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta])));
