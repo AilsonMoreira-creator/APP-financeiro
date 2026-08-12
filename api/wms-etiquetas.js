@@ -79,7 +79,7 @@ export default async function handler(req, res) {
       });
     }
 
-    if (q.pdf !== '1') return res.status(400).json({ erro: 'use ?previa=1 ou ?pdf=1' });
+    if (q.pdf !== '1' && q.debug !== '1') return res.status(400).json({ erro: 'use ?previa=1 ou ?pdf=1' });
     if (!peds.length) return res.status(404).json({ erro: 'nenhum pedido nos filtros' });
     const lote = peds.slice(0, 80);
 
@@ -98,9 +98,11 @@ export default async function handler(req, res) {
         const r = await fetch(`https://api.mercadolibre.com/orders/${p.numero_loja}`, { headers: { Authorization: `Bearer ${tokenMl[p.conta]}` } });
         const j = await r.json();
         if (j?.shipping?.id) shipDe[p.pedido_id] = { sid: String(j.shipping.id), conta: p.conta };
-      } catch { /* segue sem etiqueta */ }
+      } catch (e) { if (q.debug === '1') console.log('ship err', e.message); }
       await new Promise(r2 => setTimeout(r2, 120));
     }
+    const dbg = { pedidos: lote.length, por_logistica: {}, shipments: Object.keys(shipDe).length, etiquetas_baixadas: 0, erros_etiqueta: [] };
+    for (const p of lote) dbg.por_logistica[p.ml_logistic_type || p.canal_geral] = (dbg.por_logistica[p.ml_logistic_type || p.canal_geral] || 0) + 1;
     // etiquetas ML em lote por conta (PDF multi-página, uma por shipment, na ordem pedida)
     const etiquetaPdfPorSid = {};
     for (const conta of Object.keys(tokenMl)) {
@@ -113,10 +115,16 @@ export default async function handler(req, res) {
             const bytes = new Uint8Array(await r.arrayBuffer());
             const doc = await PDFDocument.load(bytes);
             fatia.forEach((sid, idx) => { if (idx < doc.getPageCount()) etiquetaPdfPorSid[sid] = { doc, pagina: idx }; });
+            dbg.etiquetas_baixadas += Math.min(fatia.length, doc.getPageCount());
+          } else {
+            const txt = await r.text().catch(() => '');
+            dbg.erros_etiqueta.push(`${conta} http ${r.status}: ${txt.slice(0, 220)}`);
           }
-        } catch { /* sem etiquetas desta fatia */ }
+        } catch (e) { dbg.erros_etiqueta.push(`${conta}: ${e.message}`); }
       }
     }
+
+    if (q.debug === '1') return res.status(200).json(dbg);
 
     // monta o PDF final: separadores 10x15 + DANFE + etiqueta na ordem
     const saida = await PDFDocument.create();
