@@ -22,6 +22,21 @@ export default async function handler(req, res) {
     const { auth, ctx } = a;
     const t = {};
 
+    // 0. ?unsettled=1 — caça à rota "Get Unsettled Transactions" (doc 202501)
+    if (req.query?.unsettled) {
+      const t2 = {};
+      for (const [nome, path, params] of [
+        ['a_202501_unsettled', '/finance/202501/unsettled_transactions', { page_size: 10 }],
+        ['b_202501_unsettled_search', '/finance/202501/unsettled_transactions/search', { page_size: 10 }],
+        ['c_202309_unsettled', '/finance/202309/unsettled_transactions', { page_size: 10 }],
+        ['d_202501_transactions', '/finance/202501/transactions', { page_size: 10 }],
+      ]) {
+        t2[nome] = await chamarTts(path, params, auth, ctx).catch(e => ({ erro: String(e.message).slice(0, 200) }));
+        await new Promise(r => setTimeout(r, 300));
+      }
+      return res.status(200).json({ conta, tentativas: t2 });
+    }
+
     // 1. transações do pedido na Finance (existe por ORDER, não só por statement?)
     t.txn_por_pedido = await chamarTts(`/finance/202309/orders/${pedido}/statement_transactions`, {}, auth, ctx)
       .catch(e => ({ erro: e.message }));
