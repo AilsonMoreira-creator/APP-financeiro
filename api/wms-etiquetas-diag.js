@@ -47,7 +47,13 @@ export default async function handler(req, res) {
       const pid = String(req.query.pedido_id);
       const saida = { conta, pedido_id: pid, passos: [] };
       const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
-      const det = detR.ok ? await detR.json() : {};
+      const det = detR.ok && typeof detR.json === 'function' ? await detR.json() : {};
+      // SEGURANÇA (12/08): se o detalhe não vier (429/erro), ABORTA — presumir
+      // "sem NF" aqui geraria nota duplicada. Falha fechada, nunca aberta.
+      if (!det?.data || !Object.keys(det.data).length) {
+        saida.passos.push({ passo: 'checagem', resultado: `ABORTADO — não consegui ler o pedido (http ${detR.status}). Nada gerado.` });
+        return res.status(200).json(saida);
+      }
       const jaTem = det?.data?.notaFiscal?.id;
       saida.numero_pedido = det?.data?.numero;
       if (jaTem) {
@@ -92,11 +98,10 @@ export default async function handler(req, res) {
     // ?dump_pedido=1&pedido_id=X — estrutura crua do pedido (pra montar a NF)
     if (req.query?.dump_pedido === '1' && req.query?.pedido_id) {
       const r = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${req.query.pedido_id}`, headers);
-      const bruto = await r.text().catch(() => '');
-      let j = {}; try { j = JSON.parse(bruto); } catch { /* não-json */ }
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
       const d = j?.data || {};
       if (!Object.keys(d).length) {
-        return res.status(200).json({ http: r.status, ok: r.ok, bruto: bruto.slice(0, 400), aviso: 'detalhe do pedido veio vazio — checagem de NF não é confiável assim' });
+        return res.status(200).json({ http: r.status, ok: r.ok, corpo: JSON.stringify(j).slice(0, 300), aviso: 'detalhe vazio (429/rate limit?) — checagem de NF NÃO é confiável assim' });
       }
       const it0 = (d.itens || [])[0] || {};
       // naturezas de operação disponíveis (a NF precisa apontar uma)
