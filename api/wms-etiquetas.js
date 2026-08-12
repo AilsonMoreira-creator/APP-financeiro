@@ -71,6 +71,35 @@ async function pedidosFiltrados(q) {
   return out;
 }
 
+// SITUAÇÃO DA NF POR PEDIDO (12/08, achado do Ailson): o Bling diferencia
+// "Autorizada" (situação 5 = SEM DANFE impressa) de "Emitida DANFE"
+// (situação 6 = já impressa) — vale inclusive quando a Sthefany imprime
+// pelo painel. A listagem de NFs traz numeroPedidoLoja, que casa com o
+// numero_loja do wms_pedidos sem precisar abrir pedido por pedido.
+async function situacaoNfPorPedidoLoja(contas, tokenPorConta, desde) {
+  const mapa = {};
+  for (const conta of contas) {
+    if (!tokenPorConta[conta]) continue;
+    const hb = { Authorization: 'Bearer ' + tokenPorConta[conta], Accept: 'application/json' };
+    for (let pagina = 1; pagina <= 6; pagina++) {
+      const url = `https://api.bling.com.br/Api/v3/nfe?tipo=1&dataEmissaoInicial=${desde}&limite=100&pagina=${pagina}`;
+      let j = {};
+      try {
+        const r = await blingFetch(url, hb);
+        j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      } catch { break; }
+      const lista = j?.data || [];
+      for (const nf of lista) {
+        const chave = String(nf.numeroPedidoLoja || '').trim();
+        if (chave) mapa[`${conta}|${chave}`] = { situacao: nf.situacao, numero: nf.numero, id: nf.id };
+      }
+      if (lista.length < 100) break;
+      await new Promise(r2 => setTimeout(r2, 400));
+    }
+  }
+  return mapa;
+}
+
 // links de etiqueta do Bling (só existem depois de gerada/casada no Bling)
 async function linksEtiqueta(peds, tokenPorConta) {
   const mapa = {};
@@ -100,8 +129,11 @@ export default async function handler(req, res) {
 
     if (q.previa === '1') {
       const tk = {};
-      for (const c of new Set(peds.map(p => p.conta))) tk[c] = await refreshBlingToken(c).catch(() => null);
+      const contasSet = new Set(peds.map(p => p.conta));
+      for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
       const links = await linksEtiqueta(peds.slice(0, 200), tk);
+      const desdeNf = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const nfDe = await situacaoNfPorPedidoLoja([...contasSet], tk, desdeNf);
       const grupos = {};
       let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
       for (const p of peds) {
@@ -111,7 +143,10 @@ export default async function handler(req, res) {
         grupos[k].contas.add(p.conta);
         grupos[k].canais.add(p.canal_geral);
         const temEtq = !!links[String(p.pedido_id)];
-        if (p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
+        // DANFE já impressa? situação 6 do Bling OU carimbo nosso
+        const nf = nfDe[`${p.conta}|${String(p.numero_loja || '').trim()}`];
+        const danfeImpressa = nf?.situacao === 6;
+        if (danfeImpressa || p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
         else if (temEtq) { grupos[k].prontas++; prontas++; }
         else semEtiqueta++;
       }
@@ -184,7 +219,10 @@ export default async function handler(req, res) {
     // (evita separador órfão); o que falta aparece na TELA.
     // TRAVA (12/08, pedido dele): pedido com etiqueta JÁ IMPRESSA fica de fora
     // por padrão — só entra com ?reimprimir=1 (escolha consciente na tela)
-    const podeImprimir = (p) => q.reimprimir === '1' || !p.etiqueta_impressa_em;
+    const desdeNf2 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const nfDe2 = await situacaoNfPorPedidoLoja([...new Set(lote.map(p => p.conta))], tokenBling, desdeNf2);
+    const danfeJaImpressa = (p) => nfDe2[`${p.conta}|${String(p.numero_loja || '').trim()}`]?.situacao === 6;
+    const podeImprimir = (p) => q.reimprimir === '1' || (!p.etiqueta_impressa_em && !danfeJaImpressa(p));
     const prontos = lote.filter(p => podeImprimir(p)
       && (linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta])));
     if (!prontos.length) {
