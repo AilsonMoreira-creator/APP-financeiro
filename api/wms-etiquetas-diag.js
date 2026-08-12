@@ -62,36 +62,44 @@ export default async function handler(req, res) {
       }
       saida.passos.push({ passo: 'checagem', resultado: 'sem NF — ok pra gerar' });
 
-      // grade de candidatos — PARA no primeiro que não for 404 de rota
-      // (evita gerar NF duplicada). O /gerar-nfe do v3 respondeu 404 em 12/08.
-      const candidatos = [
-        ['a', 'POST', `https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}/gerar-nfe`, '{}'],
-        ['b', 'POST', `https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}/gerar-nota-fiscal`, '{}'],
-        ['c', 'POST', `https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}/notas-fiscais`, '{}'],
-        ['d', 'POST', 'https://api.bling.com.br/Api/v3/nfe', JSON.stringify({ idPedidoVenda: Number(pid), tipo: 1, finalidade: 1 })],
-        ['e', 'POST', `https://api.bling.com.br/Api/v3/nfe/pedidos-vendas/${pid}`, '{}'],
-      ];
-      let ger = {}; let nfId = null;
-      for (const [tag, metodo, url, body] of candidatos) {
-        const r = await fetch(url, { method: metodo, headers: { ...headers, 'Content-Type': 'application/json' }, body });
-        const j = await r.json().catch(() => ({}));
-        const rota404 = r.status === 404 && String(j?.error?.message || '').includes('Não encontrado');
-        saida.passos.push({ passo: `gerar[${tag}]`, http: r.status, resposta: JSON.stringify(j).slice(0, 260) });
-        if (!rota404) { ger = j; nfId = j?.data?.id || j?.data?.idNotaFiscal || null; break; }
-        await new Promise(r2 => setTimeout(r2, 350));
-      }
+      // FLUXO OFICIAL (guia dele 12/08): gerar-nfe A PARTIR DO PEDIDO — o
+      // Bling monta a nota com as regras fiscais dele; o app NÃO reconstrói
+      // nada. Envio à SEFAZ só com ?sefaz=1 (default: gera e para, pra ele
+      // conferir no painel).
+      const gerR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}/gerar-nfe`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const ger = await gerR.json().catch(() => ({}));
+      saida.passos.push({ passo: 'gerar-nfe', http: gerR.status, resposta: JSON.stringify(ger).slice(0, 400) });
+      const nfId = ger?.data?.id || ger?.data?.idNotaFiscal || null;
       if (!nfId) return res.status(200).json(saida);
+      saida.nf_id = nfId;
 
-      const envR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}/enviar`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}' });
+      // situação da nota gerada (nunca assumir autorizada por HTTP 200)
+      const nf1R = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const nf1 = typeof nf1R.json === 'function' ? await nf1R.json().catch(() => ({})) : {};
+      saida.passos.push({ passo: 'situacao-apos-gerar', situacao: nf1?.data?.situacao, numero: nf1?.data?.numero, serie: nf1?.data?.serie });
+
+      if (req.query?.sefaz !== '1') {
+        saida.passos.push({ passo: 'sefaz', resultado: 'NÃO enviada (rode com &sefaz=1 depois de conferir no painel)' });
+        return res.status(200).json(saida);
+      }
+
+      const envR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}/enviar?enviarEmail=false`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}',
+      });
       const env = await envR.json().catch(() => ({}));
-      saida.passos.push({ passo: 'enviar-sefaz', http: envR.status, resposta: JSON.stringify(env).slice(0, 400) });
+      saida.passos.push({ passo: 'enviar-sefaz', http: envR.status, resposta: JSON.stringify(env).slice(0, 300) });
 
       await new Promise(r => setTimeout(r, 4000));
       const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
       const nf = nfR.ok ? await nfR.json() : {};
       const n = nf?.data || {};
       saida.passos.push({ passo: 'situacao-final', situacao: n.situacao, numero: n.numero, serie: n.serie, chave: (n.chaveAcesso || '').slice(0, 12) + '…', linkDanfe: n.linkDanfe ? 'TEM' : null });
-      saida.nf_id = nfId;
+      // a etiqueta já nasceu junto?
+      const etqR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${pid}`, headers);
+      const etq = typeof etqR.json === 'function' ? await etqR.json().catch(() => ({})) : {};
+      saida.passos.push({ passo: 'etiqueta', http: etqR.status, tem_link: !!etq?.data?.[0]?.link });
       return res.status(200).json(saida);
     }
 
