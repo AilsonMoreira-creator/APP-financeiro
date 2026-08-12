@@ -7,7 +7,28 @@
  * wms_pedidos, abre o detalhe no Bling e caça: notaFiscal (id → /nfe/{id},
  * procurando link do DANFE) e transporte/etiqueta. Só leitura.
  */
+import https from 'node:https';
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
+
+// GET com BODY JSON (schema histórico do /logisticas/etiquetas — o guia dele
+// 12/08 confirma; fetch/undici recusam body em GET, o https nativo envia)
+function getComBody(url, headers, bodyObj) {
+  return new Promise((resolve) => {
+    const u = new URL(url);
+    const body = JSON.stringify(bodyObj);
+    const req = https.request({
+      hostname: u.hostname, path: u.pathname + u.search, method: 'GET',
+      headers: { ...headers, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, (r) => {
+      const chunks = [];
+      r.on('data', c => chunks.push(c));
+      r.on('end', () => resolve({ status: r.statusCode, contentType: r.headers['content-type'], corpo: Buffer.concat(chunks) }));
+    });
+    req.on('error', (e) => resolve({ status: 0, erro: e.message }));
+    req.write(body);
+    req.end();
+  });
+}
 
 export const config = { maxDuration: 120 };
 
@@ -60,10 +81,7 @@ export default async function handler(req, res) {
       const t = {};
       for (const [nome, url] of [
         ['logisticas', 'https://api.bling.com.br/Api/v3/logisticas?limite=3'],
-        ['etq_pdf', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=PDF`],
-        ['etq_pdf_min', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=pdf`],
-        ['etq_zpl', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=ZPL`],
-        ['etq_1', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=1`],
+        ['etq_query', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=PDF`],
       ]) {
         try {
           const r = await blingFetch(url, headers);
@@ -71,6 +89,16 @@ export default async function handler(req, res) {
           t[nome] = { http: r.status, corpo: JSON.stringify(j).slice(0, 350) };
         } catch (e) { t[nome] = { erro: e.message }; }
         await new Promise(r2 => setTimeout(r2, 350));
+      }
+      // schema histórico: GET com body {idsVendas:[...]} — nas duas variações de formato
+      for (const fmt of ['PDF', 'ZPL']) {
+        const r = await getComBody(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=${fmt}`, headers, { idsVendas: [Number(pid)] });
+        const ct = String(r.contentType || '');
+        t[`etq_body_${fmt}`] = {
+          http: r.status, contentType: ct,
+          corpo: ct.includes('pdf') ? `BINÁRIO PDF ${r.corpo?.length} bytes 🎯` : String(r.corpo || r.erro || '').slice(0, 350),
+        };
+        await new Promise(r2 => setTimeout(r2, 400));
       }
       return res.status(200).json({ conta, pedido_id: pid, tentativas: t });
     }
