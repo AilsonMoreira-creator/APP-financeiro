@@ -501,6 +501,10 @@
     {
       "schedule": "40 9 * * *",
       "path": "/api/ml-ads-sync"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=40",
+      "schedule": "0,20,40 10 * * 1-6"
     }
   ]
 }

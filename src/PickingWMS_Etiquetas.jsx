@@ -23,6 +23,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const [fJanela, setFJanela] = useState('todos');   // todos | ate_corte
   const [fTipo, setFTipo] = useState('nf_transporte'); // nf_transporte | flex | meluni
   const [fRef, setFRef] = useState('');
+  const [porEmpresa, setPorEmpresa] = useState(false);    // Exitus inteira → Lumia → Muniam
   const [reimprimir, setReimprimir] = useState(false);   // trava: só com escolha consciente
   const [verFinalizados, setVerFinalizados] = useState(false);
   const [dados, setDados] = useState(null);
@@ -32,10 +33,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     const q = new URLSearchParams({ contas: fConta, loja: fLoja, tipo: fTipo, ...extra });
     if (fJanela === 'ate_corte') q.set('corte', corteHora);
     if (fRef.trim()) q.set('ref', fRef.trim());
+    if (porEmpresa) q.set('por_empresa', '1');
     if (reimprimir) q.set('reimprimir', '1');
     if (verFinalizados) q.set('incluir_finalizados', '1');
     return q.toString();
-  }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora, reimprimir, verFinalizados]);
+  }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora, reimprimir, verFinalizados, porEmpresa]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -119,7 +121,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 13, padding: 14 }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 3 }}>Ordem de impressão</div>
         <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>
-          Por referência e depois localização — cada grupo sai com uma folha separadora antes das etiquetas (NF + transporte).
+          Por localização e, dentro dela, as referências de maior quantidade primeiro — cada grupo sai com uma folha separadora antes das etiquetas (NF + transporte).
         </div>
         {!!totalPedidos && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -140,6 +142,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         )}
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
           <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
+            <input type="checkbox" checked={porEmpresa} onChange={e => setPorEmpresa(e.target.checked)} />
+            Separar por empresa (Exitus → Lumia → Muniam)
+          </label>
+          <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
             <input type="checkbox" checked={reimprimir} onChange={e => setReimprimir(e.target.checked)} />
             Incluir as já impressas (reimprimir)
           </label>
@@ -159,7 +165,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             <div style={{ width: 26, height: 26, borderRadius: 8, background: palette.accentSoft, color: palette.accent, fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>{i + 1}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14.5, fontWeight: 800, color: palette.ink }}>
-                REF {g.ref} <span style={{ fontWeight: 600, color: palette.inkSoft, fontSize: 13 }}>· 📍 {g.loc}</span>
+                📍 {g.loc} <span style={{ fontWeight: 600, color: palette.inkSoft, fontSize: 13 }}>· REF {g.ref}</span>
+                {g.empresa && <span style={{ fontWeight: 700, color: palette.accent, fontSize: 12 }}> · {NOME_CONTA[g.empresa] || g.empresa}</span>}
               </div>
               <div style={{ fontSize: 11.5, color: palette.inkMuted }}>{(g.canais || []).join(', ')}{g.contas?.length ? ` · ${g.contas.map(c => NOME_CONTA[c] || c).join(', ')}` : ''}</div>
             </div>

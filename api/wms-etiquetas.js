@@ -66,8 +66,25 @@ async function pedidosFiltrados(q) {
     if (ref && r !== ref) continue;
     out.push({ ...p, ref: r, loc: String(it0.estoque || '—').toUpperCase() });
   }
-  // ordem de impressão: REF → localização → data (ordem dele 12/08)
-  out.sort((a, b) => a.ref.localeCompare(b.ref) || a.loc.localeCompare(b.loc) || String(a.data_pedido).localeCompare(String(b.data_pedido)));
+  // ORDEM DE IMPRESSÃO (regra dele 13/08): localização A → todas as refs
+  // daquela localização ordenadas por MAIOR QUANTIDADE → localização B → …
+  // Com ?por_empresa=1 as empresas saem inteiras, uma depois da outra
+  // (Exitus → Lumia → Muniam), cada uma com esse mesmo critério interno.
+  const ORDEM_CONTA = { exitus: 0, lumia: 1, muniam: 2 };
+  const qtdPorGrupo = {};
+  for (const p of out) {
+    const k = `${q.por_empresa === '1' ? p.conta : ''}|${p.loc}|${p.ref}`;
+    qtdPorGrupo[k] = (qtdPorGrupo[k] || 0) + 1;
+  }
+  const chaveDe = (p) => `${q.por_empresa === '1' ? p.conta : ''}|${p.loc}|${p.ref}`;
+  const locOrdem = (l) => (l === '—' ? 'zzz' : l); // sem localização por último
+  out.sort((a, b) =>
+    (q.por_empresa === '1' ? (ORDEM_CONTA[a.conta] ?? 9) - (ORDEM_CONTA[b.conta] ?? 9) : 0)
+    || locOrdem(a.loc).localeCompare(locOrdem(b.loc))
+    || (qtdPorGrupo[chaveDe(b)] - qtdPorGrupo[chaveDe(a)])
+    || a.ref.localeCompare(b.ref)
+    || String(a.data_pedido).localeCompare(String(b.data_pedido))
+  );
   return out;
 }
 
@@ -155,8 +172,8 @@ export default async function handler(req, res) {
       const grupos = {};
       let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
       for (const p of peds) {
-        const k = `${p.ref}·${p.loc}`;
-        grupos[k] = grupos[k] || { loc: p.loc, ref: p.ref, pedidos: 0, prontas: 0, impressas: 0, contas: new Set(), canais: new Set() };
+        const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
+        grupos[k] = grupos[k] || { loc: p.loc, ref: p.ref, empresa: q.por_empresa === '1' ? p.conta : null, pedidos: 0, prontas: 0, impressas: 0, contas: new Set(), canais: new Set() };
         grupos[k].pedidos++;
         grupos[k].contas.add(p.conta);
         grupos[k].canais.add(p.canal_geral);
@@ -259,13 +276,16 @@ export default async function handler(req, res) {
     let grupoAtual = '';
 
     for (const p of prontos) {
-      const k = `${p.ref}·${p.loc}`;
+      const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
       if (k !== grupoAtual) {
         grupoAtual = k;
         const pg = saida.addPage(P10x15);
-        const qtdG = prontos.filter(x => `${x.ref}·${x.loc}` === k).length;
-        pg.drawText(`REF ${p.ref}`, { x: 24, y: 320, size: 54, font: fonte, color: rgb(0.17, 0.24, 0.31) });
-        pg.drawText(`LOC ${p.loc}`, { x: 24, y: 262, size: 42, font: fonte, color: rgb(0.29, 0.50, 0.65) });
+        const qtdG = prontos.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k).length;
+        if (q.por_empresa === '1') {
+          pg.drawText(String(p.conta).toUpperCase(), { x: 24, y: 378, size: 26, font: fonte, color: rgb(0.45, 0.42, 0.36) });
+        }
+        pg.drawText(`LOC ${p.loc}`, { x: 24, y: 320, size: 48, font: fonte, color: rgb(0.17, 0.24, 0.31) });
+        pg.drawText(`REF ${p.ref}`, { x: 24, y: 262, size: 48, font: fonte, color: rgb(0.29, 0.50, 0.65) });
         pg.drawText(`${qtdG} pedido(s)`, { x: 24, y: 220, size: 24, font: fonteN });
         pg.drawText(String((p.itens?.[0]?.descLimpa || '')).slice(0, 34), { x: 24, y: 185, size: 13, font: fonteN, color: rgb(0.35, 0.35, 0.35) });
       }
