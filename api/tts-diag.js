@@ -24,17 +24,22 @@ export default async function handler(req, res) {
 
     // 0. ?unsettled=1 — caça à rota "Get Unsettled Transactions" (doc 202501)
     if (req.query?.unsettled) {
-      const t2 = {};
-      for (const [nome, path, params] of [
-        ['a_202501_unsettled', '/finance/202501/unsettled_transactions', { page_size: 10 }],
-        ['b_202501_unsettled_search', '/finance/202501/unsettled_transactions/search', { page_size: 10 }],
-        ['c_202309_unsettled', '/finance/202309/unsettled_transactions', { page_size: 10 }],
-        ['d_202501_transactions', '/finance/202501/transactions', { page_size: 10 }],
-      ]) {
-        t2[nome] = await chamarTts(path, params, auth, ctx).catch(e => ({ erro: String(e.message).slice(0, 200) }));
-        await new Promise(r => setTimeout(r, 300));
+      // grade nomes x versões: quando o path EXISTE o erro muda de
+      // "Invalid path" pra outra coisa (param faltando / 200)
+      const nomes = ['unsettled_transactions', 'transactions/unsettled', 'unsettled_statement_transactions', 'statements/unsettled_transactions', 'orders/unsettled_transactions'];
+      const versoes = ['202501', '202502', '202505', '202506', '202507', '202509', '202512', '202601', '202606'];
+      const acertos = {}; let testados = 0;
+      for (const v of versoes) {
+        for (const nm of nomes) {
+          const path = `/finance/${v}/${nm}`;
+          const r = await chamarTts(path, { page_size: 10 }, auth, ctx).catch(e => ({ message: String(e.message) }));
+          testados++;
+          const msg = String(r?.message || '');
+          if (!msg.startsWith('Invalid path')) acertos[path] = { code: r?.code, message: msg.slice(0, 160), data: r?.data ? JSON.stringify(r.data).slice(0, 300) : null };
+          await new Promise(rr => setTimeout(rr, 150));
+        }
       }
-      return res.status(200).json({ conta, tentativas: t2 });
+      return res.status(200).json({ conta, testados, acertos });
     }
 
     // 1. transações do pedido na Finance (existe por ORDER, não só por statement?)
