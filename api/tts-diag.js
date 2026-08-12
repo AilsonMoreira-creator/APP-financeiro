@@ -25,7 +25,9 @@ export default async function handler(req, res) {
     // 0. ?unsettled=1 — caça à rota "Get Unsettled Transactions" (doc 202501)
     if (req.query?.unsettled) {
       // path oficial trazido por ele 12/08: GET /finance/202507/orders/unsettled
-      const r1 = await chamarTts('/finance/202507/orders/unsettled', { page_size: 20 }, auth, ctx)
+      const params = { page_size: 20, sort_field: String(req.query?.sf || 'order_create_time') };
+      if (req.query?.so) params.sort_order = String(req.query.so);
+      const r1 = await chamarTts('/finance/202507/orders/unsettled', params, auth, ctx)
         .catch(e => ({ erro: String(e.message).slice(0, 300) }));
       const resumo = { code: r1?.code, message: String(r1?.message || '').slice(0, 200) };
       const d = r1?.data || {};
