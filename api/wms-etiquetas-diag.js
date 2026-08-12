@@ -137,6 +137,27 @@ export default async function handler(req, res) {
       return res.status(200).json(saida);
     }
 
+    // ?nf_lista=1 — formato real da listagem de NFs (situação 5 x 6, chaves)
+    if (req.query?.nf_lista === '1') {
+      const out = {};
+      for (const [tag, url] of [
+        ['com_filtros', `https://api.bling.com.br/Api/v3/nfe?tipo=1&dataEmissaoInicial=${new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10)}&limite=5`],
+        ['so_limite', 'https://api.bling.com.br/Api/v3/nfe?limite=5'],
+      ]) {
+        const r = await blingFetch(url, headers);
+        const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+        const lista = j?.data || [];
+        out[tag] = {
+          http: r.status, qtd: lista.length,
+          chaves: lista[0] ? Object.keys(lista[0]) : null,
+          amostra: lista.slice(0, 3).map(n => ({ numero: n.numero, situacao: n.situacao, numeroPedidoLoja: n.numeroPedidoLoja, dataEmissao: n.dataEmissao })),
+          erro: lista.length ? null : JSON.stringify(j).slice(0, 250),
+        };
+        await new Promise(r2 => setTimeout(r2, 400));
+      }
+      return res.status(200).json({ conta, ...out });
+    }
+
     // ?dump_pedido=1&pedido_id=X — estrutura crua do pedido (pra montar a NF)
     if (req.query?.dump_pedido === '1' && req.query?.pedido_id) {
       const r = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${req.query.pedido_id}`, headers);
