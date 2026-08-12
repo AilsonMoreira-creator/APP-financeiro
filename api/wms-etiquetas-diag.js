@@ -60,10 +60,10 @@ export default async function handler(req, res) {
       const t = {};
       for (const [nome, url] of [
         ['logisticas', 'https://api.bling.com.br/Api/v3/logisticas?limite=3'],
-        ['etiquetas_por_venda', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}`],
-        ['etiquetas_por_pedido', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsPedidosVendas[]=${pid}`],
-        ['objetos_por_venda', `https://api.bling.com.br/Api/v3/logisticas/objetos?idsPedidosVendas[]=${pid}`],
-        ['remessas', 'https://api.bling.com.br/Api/v3/logisticas/remessas?limite=3'],
+        ['etq_pdf', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=PDF`],
+        ['etq_pdf_min', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=pdf`],
+        ['etq_zpl', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=ZPL`],
+        ['etq_1', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=1`],
       ]) {
         try {
           const r = await blingFetch(url, headers);
