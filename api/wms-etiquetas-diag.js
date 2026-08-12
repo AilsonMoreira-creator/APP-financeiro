@@ -89,6 +89,27 @@ export default async function handler(req, res) {
       return res.status(200).json(saida);
     }
 
+    // ?dump_pedido=1&pedido_id=X — estrutura crua do pedido (pra montar a NF)
+    if (req.query?.dump_pedido === '1' && req.query?.pedido_id) {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${req.query.pedido_id}`, headers);
+      const j = await r.json().catch(() => ({}));
+      const d = j?.data || {};
+      const it0 = (d.itens || [])[0] || {};
+      // naturezas de operação disponíveis (a NF precisa apontar uma)
+      const natR = await blingFetch('https://api.bling.com.br/Api/v3/naturezas-operacoes?limite=10', headers);
+      const nat = await natR.json().catch(() => ({}));
+      return res.status(200).json({
+        pedido_chaves: Object.keys(d),
+        numero: d.numero, data: d.data, totalProdutos: d.totalProdutos, total: d.total,
+        contato: d.contato,
+        loja: d.loja, numeroLoja: d.numeroLoja,
+        item_exemplo: it0,
+        itens_qtd: (d.itens || []).length,
+        transporte: d.transporte,
+        naturezas: (nat?.data || []).map(x => ({ id: x.id, descricao: x.descricao, padrao: x.padrao })),
+      });
+    }
+
     // ?logistica_teste=1&pedido_id=X — rotas candidatas de etiqueta no Bling
     if (req.query?.logistica_teste === '1') {
       const pid = String(req.query?.pedido_id || '');
