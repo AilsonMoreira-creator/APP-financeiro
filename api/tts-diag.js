@@ -24,22 +24,18 @@ export default async function handler(req, res) {
 
     // 0. ?unsettled=1 — caça à rota "Get Unsettled Transactions" (doc 202501)
     if (req.query?.unsettled) {
-      // grade nomes x versões: quando o path EXISTE o erro muda de
-      // "Invalid path" pra outra coisa (param faltando / 200)
-      const nomes = ['unsettled_transactions', 'transactions/unsettled', 'unsettled_statement_transactions', 'statements/unsettled_transactions', 'orders/unsettled_transactions'];
-      const versoes = ['202501', '202502', '202505', '202506', '202507', '202509', '202512', '202601', '202606'];
-      const acertos = {}; let testados = 0;
-      for (const v of versoes) {
-        for (const nm of nomes) {
-          const path = `/finance/${v}/${nm}`;
-          const r = await chamarTts(path, { page_size: 10 }, auth, ctx).catch(e => ({ message: String(e.message) }));
-          testados++;
-          const msg = String(r?.message || '');
-          if (!msg.startsWith('Invalid path')) acertos[path] = { code: r?.code, message: msg.slice(0, 160), data: r?.data ? JSON.stringify(r.data).slice(0, 300) : null };
-          await new Promise(rr => setTimeout(rr, 150));
-        }
-      }
-      return res.status(200).json({ conta, testados, acertos });
+      // path oficial trazido por ele 12/08: GET /finance/202507/orders/unsettled
+      const r1 = await chamarTts('/finance/202507/orders/unsettled', { page_size: 20 }, auth, ctx)
+        .catch(e => ({ erro: String(e.message).slice(0, 300) }));
+      const resumo = { code: r1?.code, message: String(r1?.message || '').slice(0, 200) };
+      const d = r1?.data || {};
+      resumo.chaves_data = Object.keys(d);
+      const lista = d.unsettled_transactions || d.transactions || d.orders || d.list || null;
+      resumo.qtd = Array.isArray(lista) ? lista.length : null;
+      resumo.total = d.total_count ?? d.total ?? null;
+      resumo.next = d.next_page_token ? 'tem' : null;
+      resumo.exemplos = Array.isArray(lista) ? lista.slice(0, 3) : d;
+      return res.status(200).json({ conta, rota: '/finance/202507/orders/unsettled', resumo });
     }
 
     // 1. transações do pedido na Finance (existe por ORDER, não só por statement?)
