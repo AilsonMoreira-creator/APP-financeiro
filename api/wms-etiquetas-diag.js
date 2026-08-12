@@ -40,6 +40,40 @@ export default async function handler(req, res) {
     const token = await refreshBlingToken(conta);
     const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
 
+    // ?transmitir=1&nf_id=X[&pedido_id=Y] — envia à SEFAZ uma NF JÁ GERADA
+    // (idempotente: consulta a situação antes; não reenvia autorizada)
+    if (req.query?.transmitir === '1' && req.query?.nf_id) {
+      const nfId = String(req.query.nf_id);
+      const out = { conta, nf_id: nfId, passos: [] };
+      const aR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const a = typeof aR.json === 'function' ? await aR.json().catch(() => ({})) : {};
+      const sit = a?.data?.situacao;
+      out.passos.push({ passo: 'situacao-antes', situacao: sit, numero: a?.data?.numero, serie: a?.data?.serie });
+      if (sit === undefined) { out.passos.push({ passo: 'abortado', motivo: `não consegui ler a NF (http ${aR.status})` }); return res.status(200).json(out); }
+      if (sit === 5) { out.passos.push({ passo: 'abortado', motivo: 'já AUTORIZADA — nada a fazer' }); return res.status(200).json(out); }
+      if (sit === 8) { out.passos.push({ passo: 'abortado', motivo: 'aguardando protocolo — não reenviar' }); return res.status(200).json(out); }
+
+      const eR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}/enviar?enviarEmail=false`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}',
+      });
+      const e = await eR.json().catch(() => ({}));
+      out.passos.push({ passo: 'enviar-sefaz', http: eR.status, resposta: JSON.stringify(e).slice(0, 300) });
+
+      await new Promise(r => setTimeout(r, 6000));
+      const bR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const b = typeof bR.json === 'function' ? await bR.json().catch(() => ({})) : {};
+      const d2 = b?.data || {};
+      const NOME_SIT = { 1: 'pendente', 4: 'REJEITADA', 5: 'AUTORIZADA', 8: 'aguardando protocolo', 9: 'denegada', 11: 'bloqueada' };
+      out.passos.push({ passo: 'situacao-final', situacao: d2.situacao, nome: NOME_SIT[d2.situacao] || '?', numero: d2.numero, serie: d2.serie, chave: String(d2.chaveAcesso || '').slice(0, 20) + '…', linkDanfe: d2.linkDanfe ? 'TEM' : null });
+
+      if (req.query?.pedido_id) {
+        const etqR = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${req.query.pedido_id}`, headers);
+        const etq = typeof etqR.json === 'function' ? await etqR.json().catch(() => ({})) : {};
+        out.passos.push({ passo: 'etiqueta', http: etqR.status, tem_link: !!etq?.data?.[0]?.link });
+      }
+      return res.status(200).json(out);
+    }
+
     // ?emitir=1&pedido_id=X — TESTE DE EMISSÃO (12/08, rollout Muniam):
     // replica o clique manual dele: gerar NF do pedido → enviar pra SEFAZ.
     // Anti-duplicidade: aborta se o pedido já aponta uma NF.
