@@ -302,6 +302,53 @@ export default async function handler(req, res) {
     fin.custo_operacao = r2(5 * fin.custo_operacao_un);
     fin.resultado_final = r2(fin.liquido_pos_imposto - cmv.total - fin.custo_operacao);
 
+    // ── DRE DO MÊS COMPLETO = liquidado (real) + em aberto (régua validada) ──
+    // (Ailson 12/08: "preciso dos dados gerais do mês, não recorte esperando o
+    // futuro"). A parte prevista usa a régua conferida nos repasses; quando a
+    // rota Unsettled Transactions do TikTok abrir, ela assume o lugar
+    if (prev.pedidos > 0) {
+      const mc = { previsto: {} };
+      mc.venda_total = r2(fin.venda + prev.base);
+      mc.pct_real = r2(100 * fin.venda / (mc.venda_total || 1));
+      // CMV e unidades dos pedidos em aberto via Bling (mesmo caminho do real)
+      let cmvAb = 0, unAb = 0, semVinc = 0;
+      {
+        const { data: blg2 } = await supabase.from('bling_vendas_detalhe')
+          .select('numero_pedido_loja, itens').in('numero_pedido_loja', emAbertoIds.slice(0, 300));
+        const refs2 = new Set(); const linhas2 = []; const match2 = new Set();
+        for (const b of (blg2 || [])) {
+          match2.add(String(b.numero_pedido_loja));
+          for (const it of (b.itens || [])) {
+            const ref = String(it.ref || '').replace(/^0+/, '');
+            const un = Number(it.quantidade) || 0;
+            if (ref && un > 0) { refs2.add(ref); linhas2.push({ ref, un }); }
+          }
+        }
+        const custos2 = {};
+        if (refs2.size) {
+          const { data: cs2 } = await supabase.from('vw_calc_custos')
+            .select('ref_norm, custo_producao').in('ref_norm', [...refs2]);
+          (cs2 || []).forEach(c => { custos2[c.ref_norm] = Number(c.custo_producao) || 0; });
+        }
+        for (const l of linhas2) { if (custos2[l.ref] > 0) { cmvAb += custos2[l.ref] * l.un; unAb += l.un; } }
+        semVinc = Math.max(0, prev.pedidos - match2.size);
+      }
+      mc.cmv_total = r2(cmv.total + cmvAb);
+      const unTotal = fin.custo_operacao_un + unAb + semVinc;
+      mc.custo_operacao = r2(5 * unTotal);
+      mc.comissao = r2(Math.abs(fin.comissao || 0) + prevComissao);
+      mc.afiliados = r2(Math.abs(fin.afiliado_creator || 0) + Math.abs(fin.afiliado_ads || 0) + prevAfiliado);
+      mc.frete = r2(Math.abs(fin.frete_debitado || 0) + prevFrete);
+      mc.desconto_vendedor = r2(Math.abs(fin.desconto_vendedor || 0));
+      mc.recebido = r2(fin.recebido + prevLiquido);
+      mc.imposto = r2(mc.venda_total * 0.11);
+      mc.agencia = r2(mc.venda_total * 0.05);
+      mc.resultado_final = r2(mc.recebido - (fin.devolucoes_debito || 0) - mc.imposto - mc.agencia - mc.cmv_total - mc.custo_operacao);
+      mc.margem_pct = r2(100 * mc.resultado_final / (mc.venda_total || 1));
+      mc.previsto = { venda: r2(prev.base), liquido: prevLiquido, pedidos: prev.pedidos };
+      fin.mes_completo = mc;
+    }
+
     return res.status(200).json({
       ok: true, janela, de: iniIso, ate: new Date().toISOString().slice(0, 10),
       resumo, liquidacao, detalhamento: fin, devolucoes: dev, canais,

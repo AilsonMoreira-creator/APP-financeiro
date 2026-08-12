@@ -186,6 +186,25 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
               </Secao>
             )}
 
+            {fin?.mes_completo && (
+              <Secao titulo="DRE do mês completo · liquidado + a liquidar"
+                nota={`${fmt(fin.mes_completo.pct_real)}% da venda já confirmada em repasse; o restante é previsto pela régua validada e o repasse confirma em ~7 dias. Quando o TikTok liquidar tudo, este quadro e o de cima convergem.`}>
+                <Linha label="Venda do mês (liquidada + em aberto)" valor={fin.mes_completo.venda_total} base={fin.mes_completo.venda_total} positivo forte
+                  exp={`R$ ${fmt(fin.venda)} já liquidados + R$ ${fmt(fin.mes_completo.previsto.venda)} em aberto (${fin.mes_completo.previsto.pedidos} pedidos).`} />
+                <Linha label="Comissão TikTok (real + prevista)" valor={-fin.mes_completo.comissao} base={fin.mes_completo.venda_total} />
+                <Linha label="Afiliados (real + previsto)" valor={-fin.mes_completo.afiliados} base={fin.mes_completo.venda_total} />
+                <Linha label="Frete seu (real + previsto)" valor={-fin.mes_completo.frete} base={fin.mes_completo.venda_total} />
+                <Linha label="Recebido + a receber" valor={fin.mes_completo.recebido} base={fin.mes_completo.venda_total} positivo forte
+                  exp={`R$ ${fmt(fin.recebido)} já no bolso + R$ ${fmt(fin.mes_completo.previsto.liquido)} previstos.`} />
+                <Linha label="Imposto (11%)" valor={-fin.mes_completo.imposto} base={fin.mes_completo.venda_total} />
+                <Linha label="Agência (5%)" valor={-fin.mes_completo.agencia} base={fin.mes_completo.venda_total} />
+                <Linha label="CMV · custo da mercadoria" valor={-fin.mes_completo.cmv_total} base={fin.mes_completo.venda_total} />
+                <Linha label="Custo de operação (R$ 5/un)" valor={-fin.mes_completo.custo_operacao} base={fin.mes_completo.venda_total} />
+                <Linha label="Resultado do mês (projetado)" valor={fin.mes_completo.resultado_final} base={fin.mes_completo.venda_total} positivo={fin.mes_completo.resultado_final >= 0} forte
+                  exp="Mês inteiro: o que já liquidou (números reais) somado ao que ainda vai liquidar (régua validada). Margem sobre a venda total." />
+              </Secao>
+            )}
+
             <Secao titulo="Devoluções · campo separado">
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
                 <Kpi label="Devoluções" valor={d.devolucoes.qtd} sub={pct(d.devolucoes.qtd, d.liquidacao.liquidados + d.devolucoes.qtd) + ' das liquidadas'} />
