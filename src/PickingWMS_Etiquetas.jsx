@@ -23,6 +23,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const [fJanela, setFJanela] = useState('todos');   // todos | ate_corte
   const [fTipo, setFTipo] = useState('nf_transporte'); // nf_transporte | flex | meluni
   const [fRef, setFRef] = useState('');
+  const [reimprimir, setReimprimir] = useState(false);   // trava: só com escolha consciente
+  const [verFinalizados, setVerFinalizados] = useState(false);
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(false);
 
@@ -30,8 +32,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     const q = new URLSearchParams({ contas: fConta, loja: fLoja, tipo: fTipo, ...extra });
     if (fJanela === 'ate_corte') q.set('corte', corteHora);
     if (fRef.trim()) q.set('ref', fRef.trim());
+    if (reimprimir) q.set('reimprimir', '1');
+    if (verFinalizados) q.set('incluir_finalizados', '1');
     return q.toString();
-  }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora]);
+  }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora, reimprimir, verFinalizados]);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -59,6 +63,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const totalPedidos = dados?.total_pedidos || 0;
   const prontas = dados?.prontas || 0;
   const aguardando = dados?.aguardando || 0;
+  const jaImpressas = dados?.ja_impressas || 0;
+  const vaiSair = reimprimir ? prontas + jaImpressas : prontas;
 
   return (
     <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
@@ -98,11 +104,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       {/* ação */}
       <div style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
         <button onClick={() => window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank')}
-          disabled={!prontas}
+          disabled={!vaiSair}
           style={{ flex: 1, minWidth: 240, padding: '14px', borderRadius: 12, border: 'none',
-            background: prontas ? palette.ink : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
-            cursor: prontas ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Printer size={18} /> Gerar etiquetas ({prontas} {prontas === 1 ? 'pronta' : 'prontas'})
+            background: vaiSair ? palette.ink : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
+            cursor: vaiSair ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Printer size={18} /> Gerar etiquetas ({vaiSair} {vaiSair === 1 ? 'etiqueta' : 'etiquetas'})
         </button>
         <button onClick={carregar} style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
           <RefreshCw size={16} /> Atualizar
@@ -120,6 +126,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             <span style={{ fontSize: 12, fontWeight: 700, color: palette.ok, background: palette.okSoft, padding: '6px 11px', borderRadius: 999 }}>
               {prontas} pronta{prontas === 1 ? '' : 's'} pra imprimir
             </span>
+            {jaImpressas > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, background: palette.beigeSoft, padding: '6px 11px', borderRadius: 999 }}>
+                {jaImpressas} já impressa{jaImpressas === 1 ? '' : 's'}
+              </span>
+            )}
             {aguardando > 0 && (
               <span style={{ fontSize: 12, fontWeight: 700, color: palette.warn, background: palette.warnSoft, padding: '6px 11px', borderRadius: 999 }}>
                 {aguardando} aguardando etiqueta no Bling
@@ -127,6 +138,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             )}
           </div>
         )}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
+          <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
+            <input type="checkbox" checked={reimprimir} onChange={e => setReimprimir(e.target.checked)} />
+            Incluir as já impressas (reimprimir)
+          </label>
+          <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
+            <input type="checkbox" checked={verFinalizados} onChange={e => setVerFinalizados(e.target.checked)} />
+            Mostrar pedidos já finalizados
+          </label>
+        </div>
 
         {carregando && <div style={{ color: palette.inkMuted, fontSize: 13, padding: 10 }}>Carregando…</div>}
         {!carregando && !grupos.length && (
@@ -144,7 +165,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: g.prontas ? palette.ok : palette.inkMuted }}>{g.prontas || 0}/{g.pedidos}</div>
-              <div style={{ fontSize: 10.5, color: palette.inkMuted }}>prontas</div>
+              <div style={{ fontSize: 10.5, color: palette.inkMuted }}>
+                {g.impressas ? `${g.impressas} impressa${g.impressas === 1 ? '' : 's'}` : 'prontas'}
+              </div>
             </div>
           </div>
         ))}
@@ -153,7 +176,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       </div>
 
       <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 12, lineHeight: 1.6 }}>
-        Formato 10x15 · DANFE simplificada. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
+        Formato 10x15 · DANFE simplificada. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. Cada etiqueta gerada fica registrada como impressa e não sai de novo sem você marcar "reimprimir". A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
       </div>
     </div>
   );

@@ -40,9 +40,12 @@ async function pedidosFiltrados(q) {
     limiteCorte = new Date(`${hojeBRT}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00-03:00`).getTime();
   }
 
+  const statusAlvo = q.incluir_finalizados === '1'
+    ? ['aberto', 'em_separacao', 'finalizado']
+    : ['aberto', 'em_separacao'];
   let sel = supabase.from('wms_pedidos')
-    .select('conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido')
-    .in('status_wms', ['aberto', 'em_separacao'])
+    .select('conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em')
+    .in('status_wms', statusAlvo)
     .order('data_pedido', { ascending: true }).limit(400);
   if (contas !== 'todas') sel = sel.in('conta', contas.split(','));
   const { data: peds } = await sel;
@@ -100,19 +103,23 @@ export default async function handler(req, res) {
       for (const c of new Set(peds.map(p => p.conta))) tk[c] = await refreshBlingToken(c).catch(() => null);
       const links = await linksEtiqueta(peds.slice(0, 200), tk);
       const grupos = {};
-      let prontas = 0;
+      let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
       for (const p of peds) {
         const k = `${p.ref}·${p.loc}`;
-        grupos[k] = grupos[k] || { loc: p.loc, ref: p.ref, pedidos: 0, prontas: 0, contas: new Set(), canais: new Set() };
+        grupos[k] = grupos[k] || { loc: p.loc, ref: p.ref, pedidos: 0, prontas: 0, impressas: 0, contas: new Set(), canais: new Set() };
         grupos[k].pedidos++;
         grupos[k].contas.add(p.conta);
         grupos[k].canais.add(p.canal_geral);
-        if (links[String(p.pedido_id)]) { grupos[k].prontas++; prontas++; }
+        const temEtq = !!links[String(p.pedido_id)];
+        if (p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
+        else if (temEtq) { grupos[k].prontas++; prontas++; }
+        else semEtiqueta++;
       }
       return res.status(200).json({
         total_pedidos: peds.length,
         prontas,
-        aguardando: peds.length - prontas,
+        ja_impressas: jaImpressas,
+        aguardando: semEtiqueta,
         grupos: Object.values(grupos).map(g => ({ ...g, contas: [...g.contas], canais: [...g.canais] })),
         nota: peds.length > 60 ? 'Acima de 60 pedidos a geração demora alguns minutos — considere gerar por REF.' : null,
       });
@@ -175,7 +182,11 @@ export default async function handler(req, res) {
     // 12/08 (ordem dele): a folha de impressão é SÓ etiqueta — nada de
     // pendências ou avisos no papel. Pedido sem etiqueta pronta não entra
     // (evita separador órfão); o que falta aparece na TELA.
-    const prontos = lote.filter(p => linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta]));
+    // TRAVA (12/08, pedido dele): pedido com etiqueta JÁ IMPRESSA fica de fora
+    // por padrão — só entra com ?reimprimir=1 (escolha consciente na tela)
+    const podeImprimir = (p) => q.reimprimir === '1' || !p.etiqueta_impressa_em;
+    const prontos = lote.filter(p => podeImprimir(p)
+      && (linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta])));
     if (!prontos.length) {
       return res.status(404).json({
         erro: 'Nenhuma etiqueta pronta nesses filtros.',
@@ -255,6 +266,19 @@ export default async function handler(req, res) {
       } else {
         semEtiqueta.push(p.numero);
       }
+    }
+
+    // REGISTRO: o que entrou neste PDF fica marcado como impresso (com lote),
+    // pra ninguém imprimir duas vezes nem esquecer nenhum
+    const lotePdf = `L${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
+    const idsImpressos = [];
+    for (const p of prontos) {
+      if (linkBlingDe[String(p.pedido_id)] || shipDe[p.pedido_id]) idsImpressos.push(p.pedido_id);
+    }
+    if (idsImpressos.length) {
+      await supabase.from('wms_pedidos')
+        .update({ etiqueta_impressa_em: new Date().toISOString(), etiqueta_lote: lotePdf })
+        .in('pedido_id', idsImpressos);
     }
 
     const bytes = await saida.save();
