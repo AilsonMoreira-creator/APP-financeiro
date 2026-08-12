@@ -54,6 +54,27 @@ export default async function handler(req, res) {
       return res.status(200).json(saida);
     }
 
+    // ?logistica_teste=1&pedido_id=X — rotas candidatas de etiqueta no Bling
+    if (req.query?.logistica_teste === '1') {
+      const pid = String(req.query?.pedido_id || '');
+      const t = {};
+      for (const [nome, url] of [
+        ['logisticas', 'https://api.bling.com.br/Api/v3/logisticas?limite=3'],
+        ['etiquetas_por_venda', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}`],
+        ['etiquetas_por_pedido', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsPedidosVendas[]=${pid}`],
+        ['objetos_por_venda', `https://api.bling.com.br/Api/v3/logisticas/objetos?idsPedidosVendas[]=${pid}`],
+        ['remessas', 'https://api.bling.com.br/Api/v3/logisticas/remessas?limite=3'],
+      ]) {
+        try {
+          const r = await blingFetch(url, headers);
+          const j = await r.json().catch(() => ({}));
+          t[nome] = { http: r.status, corpo: JSON.stringify(j).slice(0, 350) };
+        } catch (e) { t[nome] = { erro: e.message }; }
+        await new Promise(r2 => setTimeout(r2, 350));
+      }
+      return res.status(200).json({ conta, pedido_id: pid, tentativas: t });
+    }
+
     // pedidos recentes finalizados (têm NF) e um flex se houver
     const { data: peds } = await supabase.from('wms_pedidos')
       .select('pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, status_wms')
