@@ -1353,6 +1353,7 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                 🏷 Imprimir etiquetas
               </button>
             </div>
+            )}
 
             {modalEtiquetas && (
               <div onClick={() => setModalEtiquetas(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(20,25,35,.55)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -1384,7 +1385,6 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
                   </div>
                 </div>
               </div>
-            )}
             )}
             {fStatus === 'em_separacao' && !modoFalta && (
               <button onClick={() => setModoFalta(true)} style={{ flex: 1, minWidth: 190, padding: '12px', borderRadius: 12, border: '1.5px solid #d9a441', background: '#fdf6e3', color: '#9a6b00', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
