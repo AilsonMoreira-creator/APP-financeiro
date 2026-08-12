@@ -81,7 +81,11 @@ export default async function handler(req, res) {
       const t = {};
       for (const [nome, url] of [
         ['logisticas', 'https://api.bling.com.br/Api/v3/logisticas?limite=3'],
-        ['etq_query', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=PDF`],
+        ['etq_idsVendas_colchete', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}&formato=PDF`],
+        ['etq_idsVendas_simples', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas=${pid}&formato=PDF`],
+        ['etq_idsObjetos', `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsObjetos[]=${pid}&formato=PDF`],
+        ['objetos_lista', 'https://api.bling.com.br/Api/v3/logisticas/objetos?limite=3'],
+        ['remessas_lista', 'https://api.bling.com.br/Api/v3/logisticas/remessas?limite=3'],
       ]) {
         try {
           const r = await blingFetch(url, headers);

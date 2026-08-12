@@ -29,6 +29,16 @@ async function pedidosFiltrados(q) {
   const loja = String(q.loja || 'todas');
   const tipo = String(q.tipo || 'nf_transporte');
   const ref = String(q.ref || '').replace(/^0+/, '');
+  // corte=HH:MM (Ailson 12/08): só pedidos que entraram até o horário de corte
+  // de HOJE — mesma lógica da lista de separação
+  const corte = String(q.corte || '');
+  let limiteCorte = null;
+  if (/^\d{1,2}:\d{2}$/.test(corte)) {
+    const [hh, mm] = corte.split(':').map(Number);
+    const agora = new Date();
+    const hojeBRT = new Date(agora.getTime() - 3 * 3600000).toISOString().slice(0, 10);
+    limiteCorte = new Date(`${hojeBRT}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00-03:00`).getTime();
+  }
 
   let sel = supabase.from('wms_pedidos')
     .select('conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido')
@@ -47,13 +57,14 @@ async function pedidosFiltrados(q) {
     if (tipo === 'meluni' && canal !== 'Meluni') continue;
     if (tipo === 'nf_transporte' && (flex || canal === 'Meluni')) continue;
     if (loja !== 'todas' && canal !== loja) continue;
+    if (limiteCorte && new Date(p.data_pedido).getTime() > limiteCorte) continue;
     const it0 = (p.itens || [])[0] || {};
     const r = String(it0.ref || '?').replace(/^0+/, '');
     if (ref && r !== ref) continue;
     out.push({ ...p, ref: r, loc: String(it0.estoque || '—').toUpperCase() });
   }
-  // ordem de impressão: localização → ref → data
-  out.sort((a, b) => a.loc.localeCompare(b.loc) || a.ref.localeCompare(b.ref) || String(a.data_pedido).localeCompare(String(b.data_pedido)));
+  // ordem de impressão: REF → localização → data (ordem dele 12/08)
+  out.sort((a, b) => a.ref.localeCompare(b.ref) || a.loc.localeCompare(b.loc) || String(a.data_pedido).localeCompare(String(b.data_pedido)));
   return out;
 }
 
@@ -66,7 +77,7 @@ export default async function handler(req, res) {
     if (q.previa === '1') {
       const grupos = {};
       for (const p of peds) {
-        const k = `${p.loc}·${p.ref}`;
+        const k = `${p.ref}·${p.loc}`;
         grupos[k] = grupos[k] || { loc: p.loc, ref: p.ref, pedidos: 0, contas: new Set(), canais: new Set() };
         grupos[k].pedidos++;
         grupos[k].contas.add(p.conta);
@@ -135,13 +146,13 @@ export default async function handler(req, res) {
     let grupoAtual = '';
 
     for (const p of lote) {
-      const k = `${p.loc}·${p.ref}`;
+      const k = `${p.ref}·${p.loc}`;
       if (k !== grupoAtual) {
         grupoAtual = k;
         const pg = saida.addPage(P10x15);
-        const qtdG = lote.filter(x => `${x.loc}·${x.ref}` === k).length;
-        pg.drawText(`LOC ${p.loc}`, { x: 24, y: 330, size: 42, font: fonte, color: rgb(0.1, 0.15, 0.25) });
-        pg.drawText(`REF ${p.ref}`, { x: 24, y: 270, size: 54, font: fonte, color: rgb(0.55, 0.1, 0.1) });
+        const qtdG = lote.filter(x => `${x.ref}·${x.loc}` === k).length;
+        pg.drawText(`REF ${p.ref}`, { x: 24, y: 320, size: 54, font: fonte, color: rgb(0.17, 0.24, 0.31) });
+        pg.drawText(`LOC ${p.loc}`, { x: 24, y: 262, size: 42, font: fonte, color: rgb(0.29, 0.50, 0.65) });
         pg.drawText(`${qtdG} pedido(s)`, { x: 24, y: 220, size: 24, font: fonteN });
         pg.drawText(String((p.itens?.[0]?.descLimpa || '')).slice(0, 34), { x: 24, y: 185, size: 13, font: fonteN, color: rgb(0.35, 0.35, 0.35) });
       }
