@@ -101,9 +101,31 @@ export default async function handler(req, res) {
       tokenMl[c] = await getValidToken(BRAND[c]).catch(() => null);
     }
 
-    // shipment_ids do ML por pedido (pra buscar etiquetas em LOTE depois)
+    // ── ETIQUETA PELO BLING (12/08: PROVADO na Lumia, pedido Shein 70898)
+    // GET /logisticas/etiquetas?idsVendas[]=..&formato=PDF → [{id, link}].
+    // Serve TODOS os marketplaces (ML/Shein/Shopee/TikTok) desde que o pedido
+    // já tenha a etiqueta gerada no Bling ("casada"). Em lotes de 20.
+    const linkBlingDe = {};
+    for (const conta of new Set(lote.map(p => p.conta))) {
+      if (!tokenBling[conta]) continue;
+      const hb = { Authorization: 'Bearer ' + tokenBling[conta], Accept: 'application/json' };
+      const ids = lote.filter(p => p.conta === conta).map(p => p.pedido_id);
+      for (let i = 0; i < ids.length; i += 20) {
+        const fatia = ids.slice(i, i + 20);
+        const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&${fatia.map(id => `idsVendas[]=${id}`).join('&')}`;
+        try {
+          const r = await blingFetch(url, hb);
+          const j = await r.json().catch(() => ({}));
+          for (const e of (j?.data || [])) { if (e?.id && e?.link) linkBlingDe[String(e.id)] = e.link; }
+        } catch { /* segue pro fallback */ }
+        await new Promise(r2 => setTimeout(r2, 400));
+      }
+    }
+
+    // shipment_ids do ML por pedido (RESERVA — só pros que o Bling não deu)
     const shipDe = {};
     for (const p of lote) {
+      if (linkBlingDe[String(p.pedido_id)]) continue; // já tem etiqueta do Bling
       if (p.canal_geral !== 'Mercado Livre' || !tokenMl[p.conta] || !p.numero_loja) continue;
       try {
         const r = await fetch(`https://api.mercadolibre.com/orders/${p.numero_loja}`, { headers: { Authorization: `Bearer ${tokenMl[p.conta]}` } });
@@ -135,6 +157,7 @@ export default async function handler(req, res) {
       }
     }
 
+    dbg.etiquetas_bling = Object.keys(linkBlingDe).length;
     if (q.debug === '1') return res.status(200).json(dbg);
 
     // monta o PDF final: separadores 10x15 + DANFE + etiqueta na ordem
@@ -186,13 +209,27 @@ export default async function handler(req, res) {
       }
       if (!danfeOk) semNf.push(p.numero);
 
-      // etiqueta ML
+      // etiqueta: Bling primeiro (qualquer marketplace), ML como reserva
+      let etqOk = false;
+      const linkB = linkBlingDe[String(p.pedido_id)];
+      if (linkB) {
+        try {
+          const eR = await fetch(linkB);
+          if (eR.ok) {
+            const eDoc = await PDFDocument.load(new Uint8Array(await eR.arrayBuffer()));
+            const pgs = await saida.copyPages(eDoc, eDoc.getPageIndices());
+            pgs.forEach(pg => saida.addPage(pg));
+            etqOk = true;
+          }
+        } catch { /* cai no fallback */ }
+      }
       const sh = shipDe[p.pedido_id];
-      if (sh && etiquetaPdfPorSid[sh.sid]) {
+      if (etqOk) { /* pronto */ }
+      else if (sh && etiquetaPdfPorSid[sh.sid]) {
         const { doc, pagina } = etiquetaPdfPorSid[sh.sid];
         const [pg] = await saida.copyPages(doc, [pagina]);
         saida.addPage(pg);
-      } else if (p.canal_geral === 'Mercado Livre') {
+      } else {
         semEtiqueta.push(p.numero);
       }
     }
