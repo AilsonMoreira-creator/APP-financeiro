@@ -29,7 +29,8 @@ export default async function handler(req, res) {
     for (const p of (peds || [])) {
       const item = { pedido: p.numero, numero_loja: p.numero_loja, canal: p.canal_geral, logistica: p.ml_logistic_type };
       // 1. detalhe do pedido: referências de NF e transporte
-      const det = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}`, headers);
+      const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}`, headers);
+      const det = detR.ok ? await detR.json() : {};
       const d = det?.data || {};
       item.notaFiscal_ref = d.notaFiscal || null;
       item.transporte_chaves = d.transporte ? Object.keys(d.transporte) : null;
@@ -39,7 +40,8 @@ export default async function handler(req, res) {
       // 2. a NF em si (link do DANFE?)
       const nfId = d.notaFiscal?.id;
       if (nfId) {
-        const nf = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+        const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+        const nf = nfR.ok ? await nfR.json() : {};
         const n = nf?.data || {};
         item.nfe = { chaves: Object.keys(n), situacao: n.situacao, numero: n.numero,
           linkDanfe: n.linkDanfe || n.linkPDF || n.linkPdf || n.link || null,
@@ -54,9 +56,10 @@ export default async function handler(req, res) {
           `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsObjetos[]=${idObj}`,
         ]) {
           try {
-            const r = await blingFetch(rota, headers);
+            const rR = await blingFetch(rota, headers);
+            const r = await rR.json().catch(() => ({}));
             item[rota.includes('etiquetas') ? 'rota_etiquetas' : 'rota_objeto'] =
-              r?.data ? JSON.stringify(r.data).slice(0, 400) : (r?.error?.type || 'vazio');
+              r?.data ? JSON.stringify(r.data).slice(0, 400) : JSON.stringify(r).slice(0, 250);
           } catch (e) { item[rota.includes('etiquetas') ? 'rota_etiquetas' : 'rota_objeto'] = `erro: ${String(e.message).slice(0, 120)}`; }
         }
       }
