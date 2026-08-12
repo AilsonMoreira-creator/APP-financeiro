@@ -92,8 +92,12 @@ export default async function handler(req, res) {
     // ?dump_pedido=1&pedido_id=X — estrutura crua do pedido (pra montar a NF)
     if (req.query?.dump_pedido === '1' && req.query?.pedido_id) {
       const r = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${req.query.pedido_id}`, headers);
-      const j = await r.json().catch(() => ({}));
+      const bruto = await r.text().catch(() => '');
+      let j = {}; try { j = JSON.parse(bruto); } catch { /* não-json */ }
       const d = j?.data || {};
+      if (!Object.keys(d).length) {
+        return res.status(200).json({ http: r.status, ok: r.ok, bruto: bruto.slice(0, 400), aviso: 'detalhe do pedido veio vazio — checagem de NF não é confiável assim' });
+      }
       const it0 = (d.itens || [])[0] || {};
       // naturezas de operação disponíveis (a NF precisa apontar uma)
       const natR = await blingFetch('https://api.bling.com.br/Api/v3/naturezas-operacoes?limite=10', headers);
