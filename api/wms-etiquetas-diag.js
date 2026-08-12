@@ -19,6 +19,41 @@ export default async function handler(req, res) {
     const token = await refreshBlingToken(conta);
     const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
 
+    // ?emitir=1&pedido_id=X — TESTE DE EMISSÃO (12/08, rollout Muniam):
+    // replica o clique manual dele: gerar NF do pedido → enviar pra SEFAZ.
+    // Anti-duplicidade: aborta se o pedido já aponta uma NF.
+    if (req.query?.emitir === '1' && req.query?.pedido_id) {
+      const pid = String(req.query.pedido_id);
+      const saida = { conta, pedido_id: pid, passos: [] };
+      const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}`, headers);
+      const det = detR.ok ? await detR.json() : {};
+      const jaTem = det?.data?.notaFiscal?.id;
+      saida.numero_pedido = det?.data?.numero;
+      if (jaTem) {
+        saida.passos.push({ passo: 'checagem', resultado: `JÁ TEM NF (id ${jaTem}) — nada gerado` });
+        return res.status(200).json(saida);
+      }
+      saida.passos.push({ passo: 'checagem', resultado: 'sem NF — ok pra gerar' });
+
+      const gerR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${pid}/gerar-nfe`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}' });
+      const ger = await gerR.json().catch(() => ({}));
+      saida.passos.push({ passo: 'gerar-nfe', http: gerR.status, resposta: JSON.stringify(ger).slice(0, 300) });
+      const nfId = ger?.data?.id || ger?.data?.idNotaFiscal;
+      if (!nfId) return res.status(200).json(saida);
+
+      const envR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}/enviar`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}' });
+      const env = await envR.json().catch(() => ({}));
+      saida.passos.push({ passo: 'enviar-sefaz', http: envR.status, resposta: JSON.stringify(env).slice(0, 400) });
+
+      await new Promise(r => setTimeout(r, 4000));
+      const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
+      const nf = nfR.ok ? await nfR.json() : {};
+      const n = nf?.data || {};
+      saida.passos.push({ passo: 'situacao-final', situacao: n.situacao, numero: n.numero, serie: n.serie, chave: (n.chaveAcesso || '').slice(0, 12) + '…', linkDanfe: n.linkDanfe ? 'TEM' : null });
+      saida.nf_id = nfId;
+      return res.status(200).json(saida);
+    }
+
     // pedidos recentes finalizados (têm NF) e um flex se houver
     const { data: peds } = await supabase.from('wms_pedidos')
       .select('pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, status_wms')
