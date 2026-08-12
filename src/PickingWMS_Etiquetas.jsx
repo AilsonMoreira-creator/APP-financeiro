@@ -57,6 +57,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
 
   const grupos = dados?.grupos || [];
   const totalPedidos = dados?.total_pedidos || 0;
+  const prontas = dados?.prontas || 0;
+  const aguardando = dados?.aguardando || 0;
 
   return (
     <div style={{ padding: 16, maxWidth: 860, margin: '0 auto' }}>
@@ -96,11 +98,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       {/* ação */}
       <div style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
         <button onClick={() => window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank')}
-          disabled={!totalPedidos}
+          disabled={!prontas}
           style={{ flex: 1, minWidth: 240, padding: '14px', borderRadius: 12, border: 'none',
-            background: totalPedidos ? palette.ink : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
-            cursor: totalPedidos ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Printer size={18} /> Gerar etiquetas ({totalPedidos} {totalPedidos === 1 ? 'pedido' : 'pedidos'})
+            background: prontas ? palette.ink : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
+            cursor: prontas ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Printer size={18} /> Gerar etiquetas ({prontas} {prontas === 1 ? 'pronta' : 'prontas'})
         </button>
         <button onClick={carregar} style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
           <RefreshCw size={16} /> Atualizar
@@ -110,9 +112,21 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       {/* grupos na ordem de impressão */}
       <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 13, padding: 14 }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 3 }}>Ordem de impressão</div>
-        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>
           Por referência e depois localização — cada grupo sai com uma folha separadora antes das etiquetas (NF + transporte).
         </div>
+        {!!totalPedidos && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: palette.ok, background: palette.okSoft, padding: '6px 11px', borderRadius: 999 }}>
+              {prontas} pronta{prontas === 1 ? '' : 's'} pra imprimir
+            </span>
+            {aguardando > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 700, color: palette.warn, background: palette.warnSoft, padding: '6px 11px', borderRadius: 999 }}>
+                {aguardando} aguardando etiqueta no Bling
+              </span>
+            )}
+          </div>
+        )}
 
         {carregando && <div style={{ color: palette.inkMuted, fontSize: 13, padding: 10 }}>Carregando…</div>}
         {!carregando && !grupos.length && (
@@ -128,7 +142,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
               </div>
               <div style={{ fontSize: 11.5, color: palette.inkMuted }}>{(g.canais || []).join(', ')}{g.contas?.length ? ` · ${g.contas.map(c => NOME_CONTA[c] || c).join(', ')}` : ''}</div>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: palette.accent }}>{g.pedidos} {g.pedidos === 1 ? 'etiqueta' : 'etiquetas'}</div>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: g.prontas ? palette.ok : palette.inkMuted }}>{g.prontas || 0}/{g.pedidos}</div>
+              <div style={{ fontSize: 10.5, color: palette.inkMuted }}>prontas</div>
+            </div>
           </div>
         ))}
 
@@ -136,7 +153,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       </div>
 
       <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 12, lineHeight: 1.6 }}>
-        Formato 10x15 · DANFE simplificada. Sai NF das contas com escopo liberado no Bling e etiqueta de transporte dos canais já integrados; o que faltar aparece na última página como pendência, sem travar o resto.
+        Formato 10x15 · DANFE simplificada. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
       </div>
     </div>
   );

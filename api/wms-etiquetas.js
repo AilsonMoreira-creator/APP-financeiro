@@ -68,6 +68,27 @@ async function pedidosFiltrados(q) {
   return out;
 }
 
+// links de etiqueta do Bling (só existem depois de gerada/casada no Bling)
+async function linksEtiqueta(peds, tokenPorConta) {
+  const mapa = {};
+  for (const conta of new Set(peds.map(p => p.conta))) {
+    if (!tokenPorConta[conta]) continue;
+    const hb = { Authorization: 'Bearer ' + tokenPorConta[conta], Accept: 'application/json' };
+    const ids = peds.filter(p => p.conta === conta).map(p => p.pedido_id);
+    for (let i = 0; i < ids.length; i += 20) {
+      const fatia = ids.slice(i, i + 20);
+      const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&${fatia.map(id => `idsVendas[]=${id}`).join('&')}`;
+      try {
+        const r = await blingFetch(url, hb);
+        const j = await r.json().catch(() => ({}));
+        for (const e of (j?.data || [])) { if (e?.id && e?.link) mapa[String(e.id)] = e.link; }
+      } catch { /* sem etiqueta nesta fatia */ }
+      await new Promise(r2 => setTimeout(r2, 400));
+    }
+  }
+  return mapa;
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const q = req.query || {};
@@ -75,16 +96,23 @@ export default async function handler(req, res) {
     const peds = await pedidosFiltrados(q);
 
     if (q.previa === '1') {
+      const tk = {};
+      for (const c of new Set(peds.map(p => p.conta))) tk[c] = await refreshBlingToken(c).catch(() => null);
+      const links = await linksEtiqueta(peds.slice(0, 200), tk);
       const grupos = {};
+      let prontas = 0;
       for (const p of peds) {
         const k = `${p.ref}·${p.loc}`;
-        grupos[k] = grupos[k] || { loc: p.loc, ref: p.ref, pedidos: 0, contas: new Set(), canais: new Set() };
+        grupos[k] = grupos[k] || { loc: p.loc, ref: p.ref, pedidos: 0, prontas: 0, contas: new Set(), canais: new Set() };
         grupos[k].pedidos++;
         grupos[k].contas.add(p.conta);
         grupos[k].canais.add(p.canal_geral);
+        if (links[String(p.pedido_id)]) { grupos[k].prontas++; prontas++; }
       }
       return res.status(200).json({
         total_pedidos: peds.length,
+        prontas,
+        aguardando: peds.length - prontas,
         grupos: Object.values(grupos).map(g => ({ ...g, contas: [...g.contas], canais: [...g.canais] })),
         nota: peds.length > 60 ? 'Acima de 60 pedidos a geração demora alguns minutos — considere gerar por REF.' : null,
       });
@@ -101,26 +129,9 @@ export default async function handler(req, res) {
       tokenMl[c] = await getValidToken(BRAND[c]).catch(() => null);
     }
 
-    // ── ETIQUETA PELO BLING (12/08: PROVADO na Lumia, pedido Shein 70898)
-    // GET /logisticas/etiquetas?idsVendas[]=..&formato=PDF → [{id, link}].
-    // Serve TODOS os marketplaces (ML/Shein/Shopee/TikTok) desde que o pedido
-    // já tenha a etiqueta gerada no Bling ("casada"). Em lotes de 20.
-    const linkBlingDe = {};
-    for (const conta of new Set(lote.map(p => p.conta))) {
-      if (!tokenBling[conta]) continue;
-      const hb = { Authorization: 'Bearer ' + tokenBling[conta], Accept: 'application/json' };
-      const ids = lote.filter(p => p.conta === conta).map(p => p.pedido_id);
-      for (let i = 0; i < ids.length; i += 20) {
-        const fatia = ids.slice(i, i + 20);
-        const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&${fatia.map(id => `idsVendas[]=${id}`).join('&')}`;
-        try {
-          const r = await blingFetch(url, hb);
-          const j = await r.json().catch(() => ({}));
-          for (const e of (j?.data || [])) { if (e?.id && e?.link) linkBlingDe[String(e.id)] = e.link; }
-        } catch { /* segue pro fallback */ }
-        await new Promise(r2 => setTimeout(r2, 400));
-      }
-    }
+    // ETIQUETA PELO BLING (12/08: PROVADO na Lumia, pedido Shein 70898) —
+    // serve TODOS os marketplaces desde que a etiqueta já exista no Bling
+    const linkBlingDe = await linksEtiqueta(lote, tokenBling);
 
     // shipment_ids do ML por pedido (RESERVA — só pros que o Bling não deu)
     const shipDe = {};
@@ -161,6 +172,18 @@ export default async function handler(req, res) {
     if (q.debug === '1') return res.status(200).json(dbg);
 
     // monta o PDF final: separadores 10x15 + DANFE + etiqueta na ordem
+    // 12/08 (ordem dele): a folha de impressão é SÓ etiqueta — nada de
+    // pendências ou avisos no papel. Pedido sem etiqueta pronta não entra
+    // (evita separador órfão); o que falta aparece na TELA.
+    const prontos = lote.filter(p => linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta]));
+    if (!prontos.length) {
+      return res.status(404).json({
+        erro: 'Nenhuma etiqueta pronta nesses filtros.',
+        detalhe: 'A etiqueta só existe depois de gerada no Bling (nasce junto com a NF). Pedidos ainda abertos não têm etiqueta.',
+        pedidos_no_filtro: lote.length,
+      });
+    }
+
     const saida = await PDFDocument.create();
     const fonte = await saida.embedFont(StandardFonts.HelveticaBold);
     const fonteN = await saida.embedFont(StandardFonts.Helvetica);
@@ -168,12 +191,12 @@ export default async function handler(req, res) {
     const semNf = []; const semEtiqueta = [];
     let grupoAtual = '';
 
-    for (const p of lote) {
+    for (const p of prontos) {
       const k = `${p.ref}·${p.loc}`;
       if (k !== grupoAtual) {
         grupoAtual = k;
         const pg = saida.addPage(P10x15);
-        const qtdG = lote.filter(x => `${x.ref}·${x.loc}` === k).length;
+        const qtdG = prontos.filter(x => `${x.ref}·${x.loc}` === k).length;
         pg.drawText(`REF ${p.ref}`, { x: 24, y: 320, size: 54, font: fonte, color: rgb(0.17, 0.24, 0.31) });
         pg.drawText(`LOC ${p.loc}`, { x: 24, y: 262, size: 42, font: fonte, color: rgb(0.29, 0.50, 0.65) });
         pg.drawText(`${qtdG} pedido(s)`, { x: 24, y: 220, size: 24, font: fonteN });
@@ -232,15 +255,6 @@ export default async function handler(req, res) {
       } else {
         semEtiqueta.push(p.numero);
       }
-    }
-
-    // página final de pendências (se houver)
-    if (semNf.length || semEtiqueta.length) {
-      const pg = saida.addPage(P10x15);
-      pg.drawText('PENDENCIAS', { x: 24, y: 380, size: 22, font: fonte, color: rgb(0.6, 0.1, 0.1) });
-      let y = 350;
-      if (semNf.length) { pg.drawText(`Sem NF (${semNf.length}):`, { x: 24, y, size: 12, font: fonte }); y -= 16; pg.drawText(semNf.slice(0, 30).join(', ').slice(0, 400), { x: 24, y, size: 9, font: fonteN, maxWidth: 240, lineHeight: 11 }); y -= 100; }
-      if (semEtiqueta.length) { pg.drawText(`Sem etiqueta (${semEtiqueta.length}):`, { x: 24, y, size: 12, font: fonte }); y -= 16; pg.drawText(semEtiqueta.slice(0, 30).join(', ').slice(0, 400), { x: 24, y, size: 9, font: fonteN, maxWidth: 240, lineHeight: 11 }); }
     }
 
     const bytes = await saida.save();
