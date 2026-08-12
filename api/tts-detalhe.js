@@ -204,11 +204,48 @@ export default async function handler(req, res) {
     // real). O TikTok não expõe as deduções antes do repasse (rotas testadas:
     // respondem vazias até liquidar) — então prevemos linha a linha e o
     // statement confirma. Régua conferida nos liquidados: 6,02% exato.
+    // ── PREVISTO OFICIAL DO TIKTOK (12/08, path trazido pelo Ailson): GET
+    // /finance/202507/orders/unsettled devolve por pedido o est_settlement_
+    // amount, breakdown de comissão (platform + sfp = a taxa fixa de R$ 6 da
+    // régua dele, nomeada!), afiliados, frete e o motivo de não ter liquidado.
+    // A régua interna vira RESERVA só pros pedidos que ainda não apareceram lá
+    const estOficial = {};
+    {
+      let pt = null;
+      for (let pg = 0; pg < 8; pg++) {
+        const q = { page_size: 50, sort_field: 'order_create_time' };
+        if (pt) q.page_token = pt;
+        const u = await chamarTts('/finance/202507/orders/unsettled', q, auth, ctx).catch(() => null);
+        if (!u || u.code !== 0) break;
+        for (const t of (u.data?.transactions || [])) {
+          if (t.type !== 'ORDER' || !t.order_id) continue;
+          const fee = t.fee_tax_breakdown?.fee || {};
+          estOficial[t.order_id] = {
+            liquido: n(t.est_settlement_amount),
+            receita: n(t.est_revenue_amount),
+            comissao: Math.abs(n(fee.platform_commission_amount)) + Math.abs(n(fee.sfp_service_fee_amount)) + Math.abs(n(fee.transaction_fee_amount)),
+            afiliado: Math.abs(n(fee.affiliate_commission_amount)) + Math.abs(n(fee.affiliate_ads_commission_amount)) + Math.abs(n(fee.affiliate_partner_commission_amount)),
+            frete: Math.abs(n(t.est_shipping_cost_amount)),
+            quando: t.estimated_settlement || null,
+          };
+        }
+        pt = u.data?.next_page_token;
+        if (!pt) break;
+      }
+    }
+
     const prev = { base: 0, frete_cliente: 0, pedidos: 0 };
+    const ofc = { pedidos: 0, liquido: 0, receita: 0, comissao: 0, afiliado: 0, frete: 0 };
     for (let i = 0; i < emAbertoIds.length; i += 50) {
       const det = await chamarTts('/order/202309/orders', { ids: emAbertoIds.slice(i, i + 50).join(',') }, auth, ctx);
       for (const o of (det?.data?.orders || [])) {
         if (String(o.status || '').toUpperCase() === 'CANCELLED') continue;
+        const of2 = estOficial[String(o.id)];
+        if (of2) {
+          ofc.pedidos++; ofc.liquido += of2.liquido; ofc.receita += of2.receita;
+          ofc.comissao += of2.comissao; ofc.afiliado += of2.afiliado; ofc.frete += of2.frete;
+          continue;
+        }
         prev.pedidos++;
         prev.base += n(o.payment?.original_total_product_price) - n(o.payment?.seller_discount);
         prev.frete_cliente += n(o.payment?.shipping_fee);
@@ -222,13 +259,16 @@ export default async function handler(req, res) {
       const sv = (rg || []).reduce((t, x) => t + n(x.venda), 0);
       if (sv > 0) {
         comissaoPct = (rg || []).reduce((t, x) => t + Math.abs(n(x.comissao_plataforma)), 0) / sv;
-        afiliadoPct = (rg || []).reduce((t, x) => t + Math.abs(n(x.comissao_afiliado)), 0) / sv;
+        afiliadoPct = (rg || []).reduce((t, x) => t + Math.abs(n(x.afiliado ?? x.comissao_afiliado)), 0) / sv;
       }
     }
-    const prevComissao = r2(prev.base * comissaoPct);
-    const prevFrete = r2(Math.max(0, prev.base * 0.06 + 6 * prev.pedidos - prev.frete_cliente));
-    const prevAfiliado = r2(prev.base * afiliadoPct);
-    const prevLiquido = r2(prev.base - prevComissao - prevFrete - prevAfiliado);
+    // régua SÓ pros pedidos sem dado oficial; oficial entra por cima
+    const prevComissao = r2(prev.base * comissaoPct + ofc.comissao);
+    const prevFrete = r2(Math.max(0, prev.base * 0.06 + 6 * prev.pedidos - prev.frete_cliente) + ofc.frete);
+    const prevAfiliado = r2(prev.base * afiliadoPct + ofc.afiliado);
+    const prevLiquido = r2((prev.base - prev.base * comissaoPct - Math.max(0, prev.base * 0.06 + 6 * prev.pedidos - prev.frete_cliente) - prev.base * afiliadoPct) + ofc.liquido);
+    prev.base = r2(prev.base + ofc.receita);
+    prev.pedidos = prev.pedidos + ofc.pedidos;
 
     const liquidacao = {
       liquidados: idsLiquidados.size,
@@ -242,6 +282,8 @@ export default async function handler(req, res) {
         frete: prevFrete, frete_cliente: r2(prev.frete_cliente),
         afiliado: prevAfiliado, afiliado_pct: r2(afiliadoPct * 100),
         liquido: prevLiquido,
+        oficial_pedidos: ofc.pedidos, oficial_liquido: r2(ofc.liquido),
+        regua_pedidos: prev.pedidos - ofc.pedidos,
       } : null,
       ratio_pago_pct: r2(ratio * 100),
       prazo_medio_dias: prazoMedio != null ? Math.round(prazoMedio) : null,

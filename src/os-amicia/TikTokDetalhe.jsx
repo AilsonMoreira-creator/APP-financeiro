@@ -147,11 +147,14 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
                 </div>
               {d.liquidacao.previsto_detalhe && (
                 <div style={{ marginTop: 10, padding: '8px 10px', background: '#fbf9f5', borderRadius: 8, fontFamily: CALIBRI, fontSize: 11.5, lineHeight: 1.7, color: '#555' }}>
-                  <b style={{ color: C.iaDarker }}>O que você ainda vai receber, na régua validada:</b><br />
+                  <b style={{ color: C.iaDarker }}>O que você ainda vai receber:</b>
+                  {d.liquidacao.previsto_detalhe.oficial_pedidos > 0 && (
+                    <span style={{ color: '#1f7a48', fontWeight: 700 }}> ✓ {d.liquidacao.previsto_detalhe.oficial_pedidos} pedidos com valor OFICIAL do TikTok (R$ {fmt(d.liquidacao.previsto_detalhe.oficial_liquido)}){d.liquidacao.previsto_detalhe.regua_pedidos > 0 ? ` · ${d.liquidacao.previsto_detalhe.regua_pedidos} pela régua` : ''}</span>
+                  )}<br />
                   Vendas em aberto ({d.liquidacao.previsto_detalhe.pedidos} pedidos): <b>R$ {fmt(d.liquidacao.previsto_detalhe.base)}</b><br />
-                  − Comissão TikTok ({fmt(d.liquidacao.previsto_detalhe.comissao_pct)}% medido): R$ {fmt(d.liquidacao.previsto_detalhe.comissao)}<br />
-                  − Frete (6% + R$ 6/pedido − R$ {fmt(d.liquidacao.previsto_detalhe.frete_cliente)} pagos pelo cliente): R$ {fmt(d.liquidacao.previsto_detalhe.frete)}<br />
-                  − Afiliados ({fmt(d.liquidacao.previsto_detalhe.afiliado_pct)}% média real): R$ {fmt(d.liquidacao.previsto_detalhe.afiliado)}<br />
+                  − Comissão + taxa fixa: R$ {fmt(d.liquidacao.previsto_detalhe.comissao)}<br />
+                  − Frete seu: R$ {fmt(d.liquidacao.previsto_detalhe.frete)}<br />
+                  − Afiliados: R$ {fmt(d.liquidacao.previsto_detalhe.afiliado)}<br />
                   <b style={{ color: '#1f7a48' }}>= A receber previsto: R$ {fmt(d.liquidacao.previsto_detalhe.liquido)}</b>
                   <span style={{ color: C.muted }}> · o repasse confirma em ~{d.liquidacao.prazo_medio_dias || 7} dias</span>
                 </div>
