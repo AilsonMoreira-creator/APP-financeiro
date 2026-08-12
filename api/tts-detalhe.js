@@ -223,15 +223,30 @@ export default async function handler(req, res) {
           const rb = t.revenue_breakdown || {};
           const sub = Math.abs(n(rb.subtotal_before_discount_amount));
           const descS = Math.abs(n(rb.seller_discount_amount));
+          const receita = sub > 0 ? r2(sub - descS) : n(t.est_revenue_amount);
+          // 12/08 (ele pegou): (1) o TOTAL oficial de taxas traz componentes
+          // além dos campos nomeados — usar est_fee_tax_amount inteiro, não a
+          // soma de campos escolhidos ("comissão está ficando menor");
+          // (2) est_shipping_cost vem 0 até o TikTok apurar (perto da
+          // entrega) — o líquido oficial vem INFLADO nesses; entra o piso da
+          // régua (6% − pago pelo cliente) e o líquido corrige junto
+          const afil = Math.abs(n(fee.affiliate_commission_amount)) + Math.abs(n(fee.affiliate_ads_commission_amount)) + Math.abs(n(fee.affiliate_partner_commission_amount));
+          const feeTotal = Math.abs(n(t.est_fee_tax_amount));
+          let frete = Math.abs(n(t.est_shipping_cost_amount));
+          let liq = n(t.est_settlement_amount);
+          if (frete < 0.01) {
+            const freteCli = Math.abs(n(t.shipping_cost_breakdown?.customer_paid_shipping_fee_amount));
+            const freteRegua = r2(Math.max(0, 0.06 * receita - freteCli));
+            frete = freteRegua;
+            liq = r2(liq - freteRegua);
+          }
           estOficial[t.order_id] = {
-            liquido: n(t.est_settlement_amount),
-            // receita LÍQUIDA do desconto do vendedor (definicional, não
-            // depende da semântica do est_revenue): subtotal − desconto
-            receita: sub > 0 ? r2(sub - descS) : n(t.est_revenue_amount),
+            liquido: liq,
+            receita,
             desconto: descS,
-            comissao: Math.abs(n(fee.platform_commission_amount)) + Math.abs(n(fee.sfp_service_fee_amount)) + Math.abs(n(fee.transaction_fee_amount)),
-            afiliado: Math.abs(n(fee.affiliate_commission_amount)) + Math.abs(n(fee.affiliate_ads_commission_amount)) + Math.abs(n(fee.affiliate_partner_commission_amount)),
-            frete: Math.abs(n(t.est_shipping_cost_amount)),
+            comissao: r2(Math.max(0, feeTotal - afil)),
+            afiliado: afil,
+            frete,
             quando: t.estimated_settlement || null,
           };
         }

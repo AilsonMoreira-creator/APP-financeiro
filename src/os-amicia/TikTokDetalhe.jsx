@@ -131,9 +131,11 @@ export default function TikTokDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) 
                 nota={`${fmt(fin.mes_completo.pct_real)}% da venda já confirmada em repasse; o restante usa o valor oficial previsto pelo TikTok (unsettled) e o repasse confirma em ~7 dias.`}>
                 <Linha label="Venda do mês (líquida dos seus descontos)" valor={fin.mes_completo.venda_total} base={fin.mes_completo.venda_total} positivo forte
                   exp={`Liquidado + em aberto (${fin.mes_completo.previsto.pedidos} pedidos abertos), JÁ descontados os R$ ${fmt(fin.mes_completo.descontos_abatidos)} de promoções suas — comissão, frete e as demais taxas aplicam sobre esta base.`} />
-                <Linha label="Comissão TikTok (real + prevista)" valor={-fin.mes_completo.comissao} base={fin.mes_completo.venda_total} />
+                <Linha label="Comissão + taxa fixa (real + prevista)" valor={-fin.mes_completo.comissao} base={fin.mes_completo.venda_total}
+                  exp="Nos em aberto usa o TOTAL oficial de taxas do TikTok (comissão 6% + R$ 6 fixa + tarifas menores), sem afiliados, que têm linha própria." />
                 <Linha label="Afiliados (real + previsto)" valor={-fin.mes_completo.afiliados} base={fin.mes_completo.venda_total} />
-                <Linha label="Frete seu (real + previsto)" valor={-fin.mes_completo.frete} base={fin.mes_completo.venda_total} />
+                <Linha label="Frete seu (real + previsto)" valor={-fin.mes_completo.frete} base={fin.mes_completo.venda_total}
+                  exp="Frete real dos liquidados + oficial dos em aberto. Pedidos que o TikTok ainda não apurou (frete vem zerado até perto da entrega) entram pelo piso da régua: 6% − o que o cliente pagou." />
                 <Linha label="Recebido + a receber" valor={fin.mes_completo.recebido} base={fin.mes_completo.venda_total} positivo forte
                   exp={`R$ ${fmt(fin.recebido)} já no bolso + R$ ${fmt(fin.mes_completo.previsto.liquido)} previstos.`} />
                 <Linha label="Imposto (11%)" valor={-fin.mes_completo.imposto} base={fin.mes_completo.venda_total} />
