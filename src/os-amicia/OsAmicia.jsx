@@ -884,14 +884,19 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
       // REAL do Mercado Livre = Resultado final do Detalhar (auditado por ele
       // em 10 pedidos, 11/08) — card e tela bebem da MESMA fonte; o estimado
       // continua o da view. Chega depois (o cálculo é pesado) e troca suave.
-      fetch('/api/ml-detalhe?janela=mes', { headers: { 'X-User': usuario } })
+      const plugarRealDoDre = (canal, promessa) => promessa
         .then(r2 => r2.json())
         .then(md => {
-          const rf = md?.detalhamento?.resultado_final;
+          // TikTok: o real do card é o RESULTADO DO MÊS COMPLETO (liquidado
+          // real + em aberto pelo oficial do unsettled) — ordem dele 12/08;
+          // sem pedidos em aberto, cai no resultado das liquidadas
+          const rf = canal === 'tiktok'
+            ? (md?.detalhamento?.mes_completo?.resultado_final ?? md?.detalhamento?.resultado_final)
+            : md?.detalhamento?.resultado_final;
           if (rf === undefined || rf === null) return;
           setDados(prev => {
             if (!prev?.canais) return prev;
-            const canais = prev.canais.map(c => c.canal === 'mercadolivre'
+            const canais = prev.canais.map(c => c.canal === canal
               ? { ...c, lucro_real_liquido: rf, real_fonte_dre: true }
               : c);
             const totalReal = canais.reduce((t, c) => t + (Number(c.lucro_real_liquido ?? c.lucro_liquido) || 0), 0);
@@ -899,6 +904,8 @@ function Card1LucroMes({ usuario, C, SERIF, CALIBRI }) {
           });
         })
         .catch(() => {});
+      plugarRealDoDre('mercadolivre', fetch('/api/ml-detalhe?janela=mes', { headers: { 'X-User': usuario } }));
+      plugarRealDoDre('tiktok', fetch('/api/tts-detalhe?janela=mes', { headers: { 'X-User': usuario } }));
     } catch (e) {
       setErro(e.message);
     } finally {
