@@ -137,6 +137,33 @@ export default async function handler(req, res) {
       return res.status(200).json(saida);
     }
 
+    // ?etq_formatos=1&pedido_id=X — o que cada formato devolve
+    if (req.query?.etq_formatos === '1' && req.query?.pedido_id) {
+      const { unzipSync } = await import('fflate');
+      const pid = String(req.query.pedido_id);
+      const out = {};
+      for (const q2 of ['formato=PDF', 'formato=ZPL', 'formato=PDF&imprimirDanfe=true', '']) {
+        const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?idsVendas[]=${pid}${q2 ? '&' + q2 : ''}`;
+        const r = await blingFetch(url, headers);
+        const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+        const link = j?.data?.[0]?.link;
+        const item = { http: r.status, tem_link: !!link };
+        if (link) {
+          try {
+            const dR = await fetch(link);
+            const b = new Uint8Array(await dR.arrayBuffer());
+            item.tipo = String(dR.headers.get('content-type'));
+            item.bytes = b.length;
+            if (b[0] === 0x50 && b[1] === 0x4b) item.arquivos = Object.keys(unzipSync(b));
+            else item.arquivos = [b[0] === 0x25 ? 'PDF direto' : 'formato desconhecido'];
+          } catch (e) { item.erro = String(e.message).slice(0, 80); }
+        } else { item.corpo = JSON.stringify(j).slice(0, 160); }
+        out[q2 || '(sem formato)'] = item;
+        await new Promise(r2 => setTimeout(r2, 500));
+      }
+      return res.status(200).json({ pedido_id: pid, conta, formatos: out });
+    }
+
     // ?etq_inspect=1&pedido_id=X — abre o PDF da etiqueta e diz o que tem
     // dentro (é casada NF+transporte? quantas páginas? que tamanho?)
     if (req.query?.etq_inspect === '1' && req.query?.pedido_id) {
