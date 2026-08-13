@@ -165,6 +165,11 @@ export default function MapeamentoSkus({ refProduto: refProd, desc, cores, onClo
                     );
                   })()}
 
+                  {(emp.canais_ocultos || []).length > 0 && (
+                    <div style={{ marginTop: 8, fontSize: 11.5, color: C.suave }}>
+                      Fora da matriz (sem nenhum vínculo nesta REF): {emp.canais_ocultos.join(' · ')}
+                    </div>
+                  )}
                   {(emp.avisos || []).length > 0 && (
                     <div style={{ marginTop: 8, fontSize: 11.5, color: C.alerta }}>
                       {emp.avisos.slice(0, 5).map((a, i) => <div key={i}>⚠ {a}</div>)}

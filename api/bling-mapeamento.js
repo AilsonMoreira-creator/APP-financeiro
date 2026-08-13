@@ -108,6 +108,25 @@ async function auditarConta(conta, ref, coresFiltro) {
     if (!vincs.length) saida.avisos.push(`${v.cor} ${v.tam} (${v.sku}) não tem vínculo em canal nenhum`);
     await espera(PAUSA);
   }
+
+  // 13/08 (ordem dele): canal SEM NENHUM vínculo na referência inteira sai da
+  // matriz — é integração fantasma (o Ideris2 dele é o caso clássico) e só
+  // encheria a tela de ✕. Vira nota discreta em canais_ocultos.
+  const totalPorCanal = {};
+  for (const cor of Object.values(saida.cores)) {
+    for (const [idCanal, p] of Object.entries(cor.por_canal)) {
+      totalPorCanal[idCanal] = (totalPorCanal[idCanal] || 0) + p.vinculados;
+    }
+  }
+  const ocultos = Object.values(canais).filter(c => !totalPorCanal[c.id]);
+  if (ocultos.length) {
+    saida.canais_ocultos = ocultos.map(c => c.nome);
+    const manter = new Set(Object.values(canais).filter(c => totalPorCanal[c.id]).map(c => String(c.id)));
+    saida.canais = saida.canais.filter(c => manter.has(String(c.id)));
+    for (const cor of Object.values(saida.cores)) {
+      for (const id of Object.keys(cor.por_canal)) if (!manter.has(id)) delete cor.por_canal[id];
+    }
+  }
   return saida;
 }
 
