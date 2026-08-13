@@ -40,30 +40,30 @@ async function pedidosFiltrados(q) {
     limiteCorte = new Date(`${hojeBRT}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00-03:00`).getTime();
   }
 
-  // 13/08: com a NF automática das 6:30, o pedido vira "atendido" no Bling e o
-  // sync o marca FINALIZADO **antes de a equipe separar** — por isso a tela
-  // mostrava 0 etiquetas. Enquanto a classificação não muda, os finalizados
-  // DE HOJE entram por padrão (é justamente quem tem etiqueta fresca).
-  // 13/08: com a NF automática das 6:30 o pedido vira "atendido" no Bling e o
-  // sync o marca FINALIZADO **antes de a equipe separar** — por isso a tela
-  // mostrava 0. Busca em DUAS consultas pra não perder os de hoje no limite:
-  // (1) tudo que está no funil, (2) finalizados recentes (etiqueta fresca).
+  // 13/08 (chave dada por ele): a FILA DE IMPRESSÃO é a SITUAÇÃO DA NF, não o
+  // status do funil — "Autorizada sem DANFE" (situação 5) = precisa imprimir;
+  // "Emitida DANFE" (6) = já saiu, inclusive se a Sthefany imprimiu no painel.
+  // Por isso buscamos: (1) quem já tem NF (últimos 7 dias, qualquer status) e
+  // (2) quem ainda está no funil sem NF (aparece como "aguardando").
   const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
   const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id';
 
   let q1 = supabase.from('wms_pedidos').select(COLS)
-    .in('status_wms', ['aberto', 'em_separacao'])
-    .order('data_pedido', { ascending: true }).limit(400);
+    .not('nf_id', 'is', null)
+    .neq('status_wms', 'cancelado')
+    .gte('data_pedido', desde7)
+    .order('data_pedido', { ascending: false }).limit(500);
   if (contas !== 'todas') q1 = q1.in('conta', contas.split(','));
 
   let q2 = supabase.from('wms_pedidos').select(COLS)
-    .eq('status_wms', 'finalizado')
-    .order('finalizado_em', { ascending: false }).limit(400);
+    .is('nf_id', null)
+    .in('status_wms', ['aberto', 'em_separacao'])
+    .order('data_pedido', { ascending: true }).limit(300);
   if (contas !== 'todas') q2 = q2.in('conta', contas.split(','));
-  if (q.incluir_finalizados !== '1') q2 = q2.gte('finalizado_em', `${hojeBRT}T00:00:00-03:00`);
 
-  const [{ data: pedsFunil }, { data: pedsFin }] = await Promise.all([q1, q2]);
-  const peds = [...(pedsFunil || []), ...(pedsFin || [])];
+  const [{ data: comNf }, { data: semNf }] = await Promise.all([q1, q2]);
+  const peds = [...(comNf || []), ...(semNf || [])];
 
   const out = [];
   for (const p of (peds || [])) {
@@ -208,11 +208,13 @@ export default async function handler(req, res) {
         grupos[k].pedidos++;
         grupos[k].contas.add(p.conta);
         grupos[k].canais.add(p.canal_geral);
+        // REGRA (13/08): situação 6 = DANFE já emitida → já impressa;
+        // situação 5 = autorizada sem DANFE → PRECISA IMPRIMIR (se a etiqueta
+        // já existe no Bling); sem NF ainda → aguardando
+        const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         const temEtq = !!links[String(p.pedido_id)];
-        // DANFE já impressa? situação 6 do Bling OU carimbo nosso
-        const danfeImpressa = p.nf_id ? sitDe[String(p.nf_id)] === 6 : false;
-        if (danfeImpressa || p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
-        else if (temEtq) { grupos[k].prontas++; prontas++; }
+        if (sit === 6 || p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
+        else if (sit === 5 && temEtq) { grupos[k].prontas++; prontas++; }
         else semEtiqueta++;
       }
       return res.status(200).json({
@@ -238,7 +240,8 @@ export default async function handler(req, res) {
       const sitDe = await situacaoPorNfId([...contasSet], tk, new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
 
       const alvo = peds.filter(p => links[String(p.pedido_id)]
-        && (q.reimprimir === '1' || (!p.etiqueta_impressa_em && sitDe[String(p.nf_id)] !== 6)));
+        && (q.reimprimir === '1'
+          || (!p.etiqueta_impressa_em && sitDe[String(p.nf_id)] === 5)));
 
       const blocos = []; const idsOk = []; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
@@ -349,8 +352,9 @@ export default async function handler(req, res) {
     const desdeNf2 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
     await preencherNfIds(lote, tokenBling, 60);
     const sitDe2 = await situacaoPorNfId([...new Set(lote.map(p => p.conta))], tokenBling, desdeNf2);
-    const danfeJaImpressa = (p) => p.nf_id ? sitDe2[String(p.nf_id)] === 6 : false;
-    const podeImprimir = (p) => q.reimprimir === '1' || (!p.etiqueta_impressa_em && !danfeJaImpressa(p));
+    // situação 5 = autorizada sem DANFE (imprime) · 6 = já emitida (não)
+    const podeImprimir = (p) => q.reimprimir === '1'
+      || (!p.etiqueta_impressa_em && sitDe2[String(p.nf_id)] === 5);
     const prontos = lote.filter(p => podeImprimir(p)
       && (linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta])));
     if (!prontos.length) {
