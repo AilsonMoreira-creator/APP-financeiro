@@ -45,6 +45,9 @@ async function auditarConta(conta, ref, coresFiltro) {
   for (const c of (cJ?.data || [])) {
     if (c.situacao !== 1) continue;
     if (/full/i.test(c.descricao || '')) continue;
+    // 13/08 (ordem dele): Nuvemshop (site da Meluni) fora da auditoria de
+    // marketplaces — assim como o Full, é outra frente
+    if (c.tipo === 'Nuvemshop' || /nuvemshop/i.test(c.descricao || '')) continue;
     canais[c.id] = { id: c.id, nome: c.descricao, tipo: c.tipo };
   }
   saida.canais = Object.values(canais);
