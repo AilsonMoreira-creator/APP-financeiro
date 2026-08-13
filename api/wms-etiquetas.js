@@ -44,23 +44,29 @@ async function pedidosFiltrados(q) {
   // sync o marca FINALIZADO **antes de a equipe separar** — por isso a tela
   // mostrava 0 etiquetas. Enquanto a classificação não muda, os finalizados
   // DE HOJE entram por padrão (é justamente quem tem etiqueta fresca).
-  const statusAlvo = ['aberto', 'em_separacao', 'finalizado'];
-  const soHoje = q.incluir_finalizados !== '1';
-  let sel = supabase.from('wms_pedidos')
-    .select('conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id')
-    .in('status_wms', statusAlvo)
-    .order('data_pedido', { ascending: true }).limit(400);
-  if (contas !== 'todas') sel = sel.in('conta', contas.split(','));
-  const { data: peds } = await sel;
-
+  // 13/08: com a NF automática das 6:30 o pedido vira "atendido" no Bling e o
+  // sync o marca FINALIZADO **antes de a equipe separar** — por isso a tela
+  // mostrava 0. Busca em DUAS consultas pra não perder os de hoje no limite:
+  // (1) tudo que está no funil, (2) finalizados recentes (etiqueta fresca).
   const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id';
+
+  let q1 = supabase.from('wms_pedidos').select(COLS)
+    .in('status_wms', ['aberto', 'em_separacao'])
+    .order('data_pedido', { ascending: true }).limit(400);
+  if (contas !== 'todas') q1 = q1.in('conta', contas.split(','));
+
+  let q2 = supabase.from('wms_pedidos').select(COLS)
+    .eq('status_wms', 'finalizado')
+    .order('finalizado_em', { ascending: false }).limit(400);
+  if (contas !== 'todas') q2 = q2.in('conta', contas.split(','));
+  if (q.incluir_finalizados !== '1') q2 = q2.gte('finalizado_em', `${hojeBRT}T00:00:00-03:00`);
+
+  const [{ data: pedsFunil }, { data: pedsFin }] = await Promise.all([q1, q2]);
+  const peds = [...(pedsFunil || []), ...(pedsFin || [])];
+
   const out = [];
   for (const p of (peds || [])) {
-    // finalizado antigo só entra com "mostrar já finalizados"
-    if (soHoje && p.status_wms === 'finalizado') {
-      const quando = String(p.finalizado_em || p.data_pedido || '');
-      if (!quando.startsWith(hojeBRT)) continue;
-    }
     const canal = String(p.canal_geral || '');
     const flex = p.ml_logistic_type === 'self_service';
     const full = p.ml_logistic_type === 'fulfillment';
