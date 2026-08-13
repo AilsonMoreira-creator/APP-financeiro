@@ -47,6 +47,10 @@ export default async function handler(req, res) {
       // grade de rotas candidatas de métricas (a documentação do PADS mudou
       // várias vezes; testo as formas conhecidas e vejo qual traz "cost")
       const cands = [
+        ['g_camp_metrics', `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/product_ads/campaigns?limit=5&offset=0&metrics_summary=true&date_from=${de}&date_to=${ate}&channel=marketplace`],
+        ['h_camp_search_num', `https://api.mercadolibre.com/advertising/product_ads/campaigns/search?limit=5&offset=0`],
+        ['i_camp_search_adv', `https://api.mercadolibre.com/advertising/product_ads/campaigns/search?advertiser_id=${advertiserId}&limit=5&offset=0&date_from=${de}&date_to=${ate}&metrics=cost,clicks,prints`],
+        ['j_lower_header', `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/product_ads/campaigns?limit=5&offset=0&metrics_summary=true&date_from=${de}&date_to=${ate}`],
         ['a_ads_search', `https://api.mercadolibre.com/advertising/product_ads/ads/search?advertiser_id=${advertiserId}&date_from=${de}&date_to=${ate}&limit=3`],
         ['b_campaigns_adv', `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/campaigns?date_from=${de}&date_to=${ate}&limit=3`],
         ['c_pads_campaigns', `https://api.mercadolibre.com/advertising/product_ads/campaigns?advertiser_id=${advertiserId}&date_from=${de}&date_to=${ate}&limit=3`],
@@ -55,7 +59,7 @@ export default async function handler(req, res) {
         ['f_billing_ads', `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/product_ads/metrics?date_from=${de}&date_to=${ate}`],
       ];
       for (const [tag, url] of cands) {
-        await ler(tag, url);
+        await ler(tag, url, tag.startsWith('j_') ? { 'api-version': '2', 'Api-Version': undefined } : {});
         await new Promise(r => setTimeout(r, 350));
       }
     }
