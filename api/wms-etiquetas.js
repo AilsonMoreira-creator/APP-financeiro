@@ -196,10 +196,13 @@ export default async function handler(req, res) {
       const tk = {};
       const contasSet = new Set(peds.map(p => p.conta));
       for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
-      const links = await linksEtiqueta(peds.slice(0, 200), tk);
+      // PRÉVIA LEVE (13/08): classifica SÓ pela situação da NF — consultar a
+      // etiqueta de cada pedido derrubava a tela por tempo. A etiqueta é
+      // buscada de verdade só na hora de gerar (PDF/ZPL).
       const desdeNf = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      await preencherNfIds(peds.filter(p => links[String(p.pedido_id)]), tk, 40);
+      await preencherNfIds(peds.filter(p => !p.nf_id && p.status_wms !== 'aberto'), tk, 20);
       const sitDe = await situacaoPorNfId([...contasSet], tk, desdeNf);
+      const links = {};
       const grupos = {};
       let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
       for (const p of peds) {
@@ -212,9 +215,8 @@ export default async function handler(req, res) {
         // situação 5 = autorizada sem DANFE → PRECISA IMPRIMIR (se a etiqueta
         // já existe no Bling); sem NF ainda → aguardando
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
-        const temEtq = !!links[String(p.pedido_id)];
         if (sit === 6 || p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
-        else if (sit === 5 && temEtq) { grupos[k].prontas++; prontas++; }
+        else if (sit === 5) { grupos[k].prontas++; prontas++; }
         else semEtiqueta++;
       }
       return res.status(200).json({
