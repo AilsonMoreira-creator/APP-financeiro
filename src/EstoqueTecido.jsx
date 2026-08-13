@@ -194,7 +194,10 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
                           {Number(c.reservado) > 0 ? ` · ${c.reservado} reservado(s)` : ''}
                         </div>
                       </div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: Number(c.rolos) > 0 ? C.ink : C.inkMuted, minWidth: 34, textAlign: 'right' }}>{Number(c.rolos)}</div>
+                      <button onClick={() => setModal({ tipo: 'entrada', tecido: t, cor: c, rolos: '', digitando: true })}
+                        title="Tocar pra digitar a quantidade"
+                        style={{ fontSize: 22, fontWeight: 800, color: Number(c.rolos) > 0 ? C.ink : C.inkMuted, minWidth: 46, textAlign: 'right',
+                          background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: '4px 2px' }}>{Number(c.rolos)}</button>
                       <button onClick={() => setModal({ tipo: 'entrada', tecido: t, cor: c, rolos: 1 })}
                         style={{ ...btn(C.ok), padding: '10px 14px', fontSize: 18, lineHeight: 1 }}>+</button>
                       {isAdmin && (
@@ -283,17 +286,23 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
                   {modal.tecido.nome} · <b>{modal.cor.nome}</b> — tem {Number(modal.cor.rolos)} rolo(s)
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', marginBottom: 8 }}>
-                  <button onClick={() => setModal({ ...modal, rolos: Math.max(1, Number(modal.rolos) - 1) })} style={{ ...btn(C.azul), fontSize: 26, padding: '10px 20px' }}>−</button>
-                  <input type="number" inputMode="numeric" value={modal.rolos} onChange={e => setModal({ ...modal, rolos: e.target.value })}
-                    style={{ width: 96, textAlign: 'center', padding: 12, fontSize: 30, fontWeight: 800, borderRadius: 12, border: `1px solid ${C.bege}`, fontFamily: FONT, color: C.ink }} />
-                  <button onClick={() => setModal({ ...modal, rolos: Number(modal.rolos) + 1 })} style={{ ...btn(C.azul), fontSize: 26, padding: '10px 20px' }}>+</button>
+                  <button onClick={() => setModal({ ...modal, rolos: Math.max(1, (Number(modal.rolos) || 0) - 1) })} style={{ ...btn(C.azul), fontSize: 26, padding: '10px 20px' }}>−</button>
+                  <input type="number" inputMode="numeric" min="1" autoFocus={modal.digitando}
+                    value={modal.rolos} placeholder="0"
+                    onFocus={e => e.target.select()}
+                    onChange={e => setModal({ ...modal, rolos: e.target.value })}
+                    onKeyDown={e => { if (e.key === 'Enter' && Number(modal.rolos) > 0 && !salvando) acao({ acao: 'entrada', cor_id: modal.cor.id, rolos: modal.rolos }); }}
+                    style={{ width: 116, textAlign: 'center', padding: 12, fontSize: 32, fontWeight: 800, borderRadius: 12,
+                      border: `2px solid ${C.azul}`, background: C.azulSoft, fontFamily: FONT, color: C.ink }} />
+                  <button onClick={() => setModal({ ...modal, rolos: (Number(modal.rolos) || 0) + 1 })} style={{ ...btn(C.azul), fontSize: 26, padding: '10px 20px' }}>+</button>
                 </div>
+                <div style={{ textAlign: 'center', fontSize: 13, color: C.inkMuted, marginBottom: 6 }}>toque no número pra digitar</div>
                 <div style={{ textAlign: 'center', fontSize: 14, color: C.inkSoft, marginBottom: 16 }}>
-                  = {(Number(modal.rolos || 0) * Number(modal.tecido.metragem_rolo || 50)).toLocaleString('pt-BR')} m · fica com <b>{Number(modal.cor.rolos) + Number(modal.rolos || 0)}</b> rolo(s)
+                  = {((Number(modal.rolos) || 0) * Number(modal.tecido.metragem_rolo || 50)).toLocaleString('pt-BR')} m · fica com <b>{Number(modal.cor.rolos) + (Number(modal.rolos) || 0)}</b> rolo(s)
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => setModal(null)} style={btnLeve}>Cancelar</button>
-                  <button disabled={salvando} onClick={() => acao({ acao: 'entrada', cor_id: modal.cor.id, rolos: modal.rolos })} style={btn(C.ok)}>
+                  <button disabled={salvando || !(Number(modal.rolos) > 0)} onClick={() => acao({ acao: 'entrada', cor_id: modal.cor.id, rolos: modal.rolos })} style={btn(Number(modal.rolos) > 0 ? C.ok : '#c8c0b6')}>
                     {salvando ? 'Salvando…' : 'Acrescentar'}
                   </button>
                 </div>
