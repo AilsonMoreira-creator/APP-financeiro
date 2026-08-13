@@ -42,6 +42,23 @@ export default async function handler(req, res) {
       }
     };
 
+    // ?detalhe=1&id= — o detalhe do produto traz os vínculos de loja junto?
+    if (req.query?.detalhe === '1' && req.query?.id) {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/${req.query.id}`, headers);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      const d = j?.data || {};
+      return res.status(200).json({
+        http: r.status,
+        chaves: Object.keys(d),
+        codigo: d.codigo, nome: d.nome,
+        // procurando qualquer coisa que cheire a vínculo com canal
+        variacoes_qtd: (d.variacoes || []).length,
+        variacao_exemplo: (d.variacoes || [])[0] ? Object.keys((d.variacoes || [])[0]) : null,
+        campos_suspeitos: Object.fromEntries(Object.entries(d).filter(([k]) =>
+          /loja|canal|marketplace|integra|anuncio|externo|codigos/i.test(k))),
+      });
+    }
+
     // 1. produtos (base) — pegar um id real pra testar o vínculo
     const prods = await ler('produtos', 'https://api.bling.com.br/Api/v3/produtos?limite=3&criterio=2');
     await new Promise(r => setTimeout(r, 400));
