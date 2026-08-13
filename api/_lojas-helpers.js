@@ -217,6 +217,28 @@ export async function temOrcamento() {
  *
  * Retorna { ok, msEspera? }
  */
+// CARTEIRAS EXTRAS no BACKEND (13/08): o mapa vivia só no front
+// (Lojas_Shared.jsx), então a Célia abria a carteira da Vendedora_4 na tela
+// mas levava 403 ao pedir a sugestão/mensagem. Mesma fonte de verdade aqui.
+export const CARTEIRAS_EXTRAS_API = {
+  'Célia': ['Vendedora_4'],
+  'Tamires': ['Joelma'],
+};
+
+/** A vendedora logada pode operar clientes desta outra vendedora? */
+export async function podeOperarVendedora(auth, vendedoraIdAlvo) {
+  if (auth?.isAdmin) return true;
+  if (!vendedoraIdAlvo) return false;
+  if (auth?.vendedoraId === vendedoraIdAlvo) return true;
+  const extras = CARTEIRAS_EXTRAS_API[String(auth?.vendedoraNome || '').trim()] || [];
+  if (!extras.length) return false;
+  const { data } = await supabase
+    .from('lojas_vendedoras')
+    .select('id')
+    .in('nome', extras);
+  return (data || []).some(v => v.id === vendedoraIdAlvo);
+}
+
 export async function checarRateLimit(vendedoraId) {
   if (!vendedoraId) return { ok: true };
   const limitMs = Number(await getLojasConfig('rate_limit_ms', 3000));

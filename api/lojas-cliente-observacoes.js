@@ -20,7 +20,8 @@
  *
  * Sessao Ailson 07/05/2026 (etapa B), expandido 10/05/2026 (perfil_compra).
  */
-import { supabase, validarUsuario, setCors } from './_lojas-helpers.js';
+import { supabase, validarUsuario, setCors, podeOperarVendedora
+} from './_lojas-helpers.js';
 
 const VALORES_PERSONALIDADE = [
   'doce', 'briguenta', 'direta', 'indecisa', 'divertida',
@@ -100,7 +101,7 @@ async function handleGet(req, res, auth) {
   if (!cli) return res.status(404).json({ error: 'Cliente nao encontrado' });
 
   // Auth: admin OU vendedora dona
-  if (!auth.isAdmin && cli.vendedora_id !== auth.vendedoraId) {
+  if (!(await podeOperarVendedora(auth, cli.vendedora_id))) {
     return res.status(403).json({ error: 'Sem permissao pra esse cliente' });
   }
 
@@ -122,7 +123,7 @@ async function handlePost(req, res, auth) {
     .maybeSingle();
   if (cliErr) return res.status(500).json({ error: cliErr.message });
   if (!cli) return res.status(404).json({ error: 'Cliente nao encontrado' });
-  if (!auth.isAdmin && cli.vendedora_id !== auth.vendedoraId) {
+  if (!(await podeOperarVendedora(auth, cli.vendedora_id))) {
     return res.status(403).json({ error: 'Sem permissao pra esse cliente' });
   }
 

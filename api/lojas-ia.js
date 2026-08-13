@@ -37,6 +37,7 @@ import {
   logarChamadaIA,
   refSemZero,
   diasDesde,
+  podeOperarVendedora,
 } from './_lojas-helpers.js';
 
 import {
@@ -121,7 +122,7 @@ async function handleGerarSugestoes(req, res, auth) {
   }
 
   // Permissão: vendedora só pode regenerar PRÓPRIAS sugestões. Admin pode regenerar de qualquer.
-  if (!auth.isAdmin && auth.vendedoraId !== vendedoraIdAlvo) {
+  if (!(await podeOperarVendedora(auth, vendedoraIdAlvo))) {
     return res.status(403).json({ error: 'Sem permissão pra regenerar sugestões de outra vendedora' });
   }
 
@@ -664,7 +665,7 @@ async function handleGerarMensagem(req, res, auth) {
   if (!sug) return res.status(404).json({ error: 'Sugestão não encontrada' });
 
   // Permissão
-  if (!auth.isAdmin && auth.vendedoraId !== sug.vendedora_id) {
+  if (!(await podeOperarVendedora(auth, sug.vendedora_id))) {
     return res.status(403).json({ error: 'Sem permissão' });
   }
 
@@ -3593,8 +3594,8 @@ async function handleGerarMensagemAvulsa(req, res, auth) {
   if (errCli) return res.status(500).json({ error: errCli.message });
   if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado' });
 
-  // Permissão: vendedora dona OU admin
-  if (!auth.isAdmin && cliente.vendedora_id !== auth.vendedoraId) {
+  // Permissão: vendedora dona, quem opera a carteira dela (CARTEIRAS_EXTRAS) ou admin
+  if (!(await podeOperarVendedora(auth, cliente.vendedora_id))) {
     return res.status(403).json({ error: 'Sem permissão pra esse cliente' });
   }
 
@@ -3900,7 +3901,7 @@ async function handleGerarResumoSemanal(req, res, auth) {
   const modoTodas = !vendedoraIdAlvo;
 
   // Permissão: admin pode rodar pra qualquer uma. Vendedora só pra si mesma.
-  if (!modoTodas && !auth.isAdmin && auth.vendedoraId !== vendedoraIdAlvo) {
+  if (!modoTodas && !(await podeOperarVendedora(auth, vendedoraIdAlvo))) {
     return res.status(403).json({ error: 'Sem permissão' });
   }
   if (modoTodas && !auth.isAdmin) {
@@ -4609,7 +4610,7 @@ async function handleEnriquecerObservacao(req, res, auth) {
     .maybeSingle();
   if (errCli) return res.status(500).json({ error: errCli.message });
   if (!cliente) return res.status(404).json({ error: 'Cliente nao encontrado' });
-  if (!auth.isAdmin && cliente.vendedora_id !== auth.vendedoraId) {
+  if (!(await podeOperarVendedora(auth, cliente.vendedora_id))) {
     return res.status(403).json({ error: 'Sem permissao pra esse cliente' });
   }
 
