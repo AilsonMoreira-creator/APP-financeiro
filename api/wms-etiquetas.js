@@ -141,15 +141,31 @@ async function linksEtiqueta(peds, tokenPorConta) {
     if (!tokenPorConta[conta]) continue;
     const hb = { Authorization: 'Bearer ' + tokenPorConta[conta], Accept: 'application/json' };
     const ids = peds.filter(p => p.conta === conta).map(p => p.pedido_id);
+    // ATENÇÃO (13/08): se UM id do lote não tiver logística cadastrada, o
+    // Bling rejeita o LOTE INTEIRO. Então: tenta em lote (rápido quando todos
+    // têm) e, se falhar, cai pra individual — assim um pedido sem etiqueta
+    // não esconde os que estão prontos.
     for (let i = 0; i < ids.length; i += 20) {
       const fatia = ids.slice(i, i + 20);
-      const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&${fatia.map(id => `idsVendas[]=${id}`).join('&')}`;
+      let achouNoLote = false;
       try {
+        const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&${fatia.map(id => `idsVendas[]=${id}`).join('&')}`;
         const r = await blingFetch(url, hb);
-        const j = await r.json().catch(() => ({}));
-        for (const e of (j?.data || [])) { if (e?.id && e?.link) mapa[String(e.id)] = e.link; }
-      } catch { /* sem etiqueta nesta fatia */ }
-      await new Promise(r2 => setTimeout(r2, 400));
+        const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+        for (const e of (j?.data || [])) { if (e?.id && e?.link) { mapa[String(e.id)] = e.link; achouNoLote = true; } }
+      } catch { /* cai no individual */ }
+      await new Promise(r2 => setTimeout(r2, 350));
+      if (!achouNoLote) {
+        for (const id of fatia) {
+          try {
+            const r = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${id}`, hb);
+            const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+            const link = j?.data?.[0]?.link;
+            if (link) mapa[String(id)] = link;
+          } catch { /* segue */ }
+          await new Promise(r2 => setTimeout(r2, 340));
+        }
+      }
     }
   }
   return mapa;
