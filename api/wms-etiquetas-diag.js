@@ -137,6 +137,43 @@ export default async function handler(req, res) {
       return res.status(200).json(saida);
     }
 
+    // ?danfe_test=1&nf_id=X — baixar o DANFE marca a nota como "Emitida DANFE"
+    // (situação 5 → 6) no Bling? E existe rota explícita pra isso?
+    if (req.query?.danfe_test === '1' && req.query?.nf_id) {
+      const id = String(req.query.nf_id);
+      const out = { nf_id: id, passos: [] };
+      const ler = async (tag) => {
+        const r = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${id}`, headers);
+        const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+        out.passos.push({ passo: tag, situacao: j?.data?.situacao, numero: j?.data?.numero, temLink: !!j?.data?.linkDanfe });
+        return j?.data;
+      };
+      const antes = await ler('situacao_antes');
+      if (antes?.linkDanfe) {
+        const d = await fetch(antes.linkDanfe);
+        out.passos.push({ passo: 'baixou_danfe', http: d.status, tipo: String(d.headers.get('content-type')) });
+        await new Promise(r => setTimeout(r, 3000));
+        await ler('situacao_apos_baixar');
+      }
+      // rotas candidatas pra marcar impressão
+      for (const [tag, metodo, url] of [
+        ['post_danfe', 'POST', `https://api.bling.com.br/Api/v3/nfe/${id}/danfe`],
+        ['post_imprimir', 'POST', `https://api.bling.com.br/Api/v3/nfe/${id}/imprimir`],
+        ['get_danfe', 'GET', `https://api.bling.com.br/Api/v3/nfe/${id}/danfe`],
+      ]) {
+        try {
+          const r = metodo === 'GET'
+            ? await blingFetch(url, headers)
+            : await fetch(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: '{}' });
+          const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+          out.passos.push({ passo: tag, http: r.status, corpo: JSON.stringify(j).slice(0, 200) });
+        } catch (e) { out.passos.push({ passo: tag, erro: String(e.message).slice(0, 100) }); }
+        await new Promise(r => setTimeout(r, 400));
+      }
+      await ler('situacao_final');
+      return res.status(200).json(out);
+    }
+
     // ?etq_formatos=1&pedido_id=X — o que cada formato devolve
     if (req.query?.etq_formatos === '1' && req.query?.pedido_id) {
       const { unzipSync } = await import('fflate');
