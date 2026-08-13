@@ -27,6 +27,7 @@ import {
   validateCores, calcTotalRolos,
   criarCorteEmSalasCorte, insertHistorico
 } from './_ordens-corte-helpers.js';
+import { baixarTecidoDaOrdem, estornarTecidoDaOrdem } from './_tecidos-estoque.js';
 
 // Mapa de transições válidas: from → [permitidos]
 const TRANSICOES = {
@@ -115,6 +116,15 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: errUpd.message });
     }
 
+    // ── ESTOQUE DE TECIDO (13/08): baixa ao ir pra sala, estorno ao voltar ──
+    let tecidoAvisos = [];
+    if (body.novoStatus === 'na_sala') {
+      const r = await baixarTecidoDaOrdem(updated, body.usuario || req.headers['x-user']);
+      tecidoAvisos = r.avisos || [];
+    } else if (['aguardando', 'separado', 'cancelado'].includes(body.novoStatus) && atual.status === 'na_sala') {
+      await estornarTecidoDaOrdem(updated, body.usuario || req.headers['x-user'], 'ordem saiu da sala');
+    }
+
     // ── SIDE EFFECT CRÍTICO: criar corte no salas-corte quando vai pra na_sala ──
     let corteResult = null;
     if (body.novoStatus === 'na_sala') {
@@ -163,6 +173,8 @@ export default async function handler(req, res) {
     });
 
     return res.status(200).json({
+      tecido_avisos: tecidoAvisos,
+
       ordem: updated,
       corte_id: corteResult?.corte_id || null,
     });

@@ -15,6 +15,7 @@
 import {
   supabase, setCors, getUserFromReq, parseBody, insertHistorico
 } from './_ordens-corte-helpers.js';
+import { estornarTecidoDaOrdem } from './_tecidos-estoque.js';
 
 const STATUS_BLOQUEADOS = ['cancelado']; // concluido e na_sala agora podem ser excluidos
 
@@ -64,6 +65,13 @@ export default async function handler(req, res) {
       .eq('id', body.id)
       .select()
       .single();
+
+    // ESTOQUE DE TECIDO (13/08): ordem cancelada devolve os rolos que baixou
+    if (!errUpd && updated?.tecido_baixado_em) {
+      try {
+        await estornarTecidoDaOrdem(updated, body.usuario || req.headers['x-user'], `ordem excluída: ${String(body.motivo_exclusao || '').slice(0, 60)}`);
+      } catch (e) { console.error('estorno de tecido falhou (não-fatal):', e?.message); }
+    }
 
     if (errUpd) {
       console.error('excluir erro:', errUpd);
