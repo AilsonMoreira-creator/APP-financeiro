@@ -23,7 +23,7 @@ import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 export const config = { maxDuration: 300 };
 
 const CONTAS_PADRAO = ['lumia', 'muniam'];
-const PAUSA = 380; // rate limit do Bling: 3 req/s
+const PAUSA = 500; // rate limit do Bling: 3 req/s — 380ms ainda batia no teto (3 quedas em 13/08)
 const espera = (ms) => new Promise(r => setTimeout(r, ms));
 const NOME_SIT = { 1: 'pendente', 4: 'rejeitada', 5: 'autorizada', 6: 'danfe emitida', 8: 'aguardando protocolo', 9: 'denegada', 11: 'bloqueada' };
 
@@ -84,8 +84,14 @@ export default async function handler(req, res) {
         if (dry) { resumo.detalhe.push({ conta, pedido: p.numero, acao: 'geraria' }); resumo.gerados++; continue; }
 
         // 2. gerar a NF a partir do pedido (o Bling monta)
-        const gerR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}/gerar-nfe`, { method: 'POST', headers: headersPost, body: '{}' });
-        const ger = await gerR.json().catch(() => ({}));
+        let gerR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}/gerar-nfe`, { method: 'POST', headers: headersPost, body: '{}' });
+        let ger = await gerR.json().catch(() => ({}));
+        // 429 = só velocidade, não é erro do pedido: espera e tenta de novo
+        for (let tent = 0; tent < 2 && gerR.status === 429; tent++) {
+          await espera(2500);
+          gerR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}/gerar-nfe`, { method: 'POST', headers: headersPost, body: '{}' });
+          ger = await gerR.json().catch(() => ({}));
+        }
         await espera(PAUSA);
         const nfId = ger?.data?.idNotaFiscal || ger?.data?.id || null;
         if (!nfId) {

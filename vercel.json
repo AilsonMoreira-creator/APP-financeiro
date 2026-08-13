@@ -471,7 +471,7 @@
       "schedule": "35 * * * *"
     },
     {
-      "schedule": "*/15 10-14 * * *",
+      "schedule": "*/15 9-14 * * *",
       "path": "/api/wms-sync"
     },
     {
@@ -504,7 +504,15 @@
     },
     {
       "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=40",
-      "schedule": "0,20,40 10 * * 1-6"
+      "schedule": "30,50 9 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=60",
+      "schedule": "10,30 10 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=60",
+      "schedule": "30 11 * * 1-6"
     }
   ]
 }
