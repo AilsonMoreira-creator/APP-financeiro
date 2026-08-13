@@ -137,6 +137,36 @@ export default async function handler(req, res) {
       return res.status(200).json(saida);
     }
 
+    // ?etq_inspect=1&pedido_id=X — abre o PDF da etiqueta e diz o que tem
+    // dentro (é casada NF+transporte? quantas páginas? que tamanho?)
+    if (req.query?.etq_inspect === '1' && req.query?.pedido_id) {
+      const { PDFDocument } = await import('pdf-lib');
+      const pid = String(req.query.pedido_id);
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${pid}`, headers);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      const link = j?.data?.[0]?.link;
+      if (!link) return res.status(200).json({ http: r.status, corpo: JSON.stringify(j).slice(0, 300), aviso: 'sem link de etiqueta' });
+      const dR = await fetch(link);
+      const bytes = new Uint8Array(await dR.arrayBuffer());
+      const saida = { pedido_id: pid, link, bytes: bytes.length, tipo: String(dR.headers.get('content-type')) };
+      try {
+        const doc = await PDFDocument.load(bytes);
+        saida.paginas = doc.getPageCount();
+        saida.tamanhos = doc.getPages().map(pg => {
+          const { width, height } = pg.getSize();
+          return `${Math.round(width / 2.8346)}x${Math.round(height / 2.8346)}mm`;
+        });
+      } catch (e) { saida.erro_pdf = e.message; }
+      // texto cru (heurística): procura marcas de DANFE e de transporte
+      const txt = Buffer.from(bytes).toString('latin1');
+      saida.marcas = {
+        danfe: /DANFE|DOCUMENTO AUXILIAR|CHAVE DE ACESSO|NF-?e/i.test(txt),
+        transporte: /DESTINAT|REMETENTE|CEP|RASTREI|ETIQUETA/i.test(txt),
+        comprimido: /FlateDecode/.test(txt),
+      };
+      return res.status(200).json(saida);
+    }
+
     // ?nf_lista=1 — formato real da listagem de NFs (situação 5 x 6, chaves)
     if (req.query?.nf_lista === '1') {
       const out = {};
