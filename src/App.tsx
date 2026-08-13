@@ -8,6 +8,7 @@ import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import EstoqueTecido from './EstoqueTecido';
+import MapeamentoSkus from './MapeamentoSkus';
 import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
@@ -4972,6 +4973,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [etqOpen,setEtqOpen]=useState(false);
   const [etqSample,setEtqSample]=useState(null);
   const [gtinOpen,setGtinOpen]=useState(null);   // {ref,refNorm,desc} | null
+  const [mapOpen,setMapOpen]=useState<any>(null); // Verificar mapeamento SKU x canal (13/08)
   const [gtinBusy,setGtinBusy]=useState(false);
   const [gtinProg,setGtinProg]=useState(null);   // null=ainda não rodou; {fase,reservados,total,contas:{},erro}
   // Localização de estoque da ref (mesmo caminho do GTIN: prepara + grava nas 3
@@ -5804,6 +5806,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <button onClick={()=>{setEtqSample({desc,ref:modalRef,cor:vars[0]?.cor||'',tam:vars[0]?.tam||'',visiveis:[...new Set((vars||[]).map(v=>normCorBling(v.cor)))]});setEtqOpen(true);}} style={{flex:1,minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>▢</span> criar etiqueta
               </button>
+              <button onClick={()=>setMapOpen({ref:modalRef,refNorm,desc,cores:[...new Set((vars||[]).map(v=>v.cor).filter(Boolean))]})} title={`Conferir se os SKUs da REF ${modalRef} estão vinculados nos canais das 3 empresas`} style={{flex:1,minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>⇄</span> mapeamento
+              </button>
               <button onClick={()=>abrirLocalizacao(modalRef,refNorm,desc)} title={`Definir a localização de estoque da REF ${modalRef} nas 3 contas Bling`} style={{flex:1,minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>◎</span> localização
               </button>
@@ -5903,6 +5908,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         </div>;
       })()}
       {etqOpen && <EtiquetaGerar sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
+      {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
       {gtinOpen && (
         <div onClick={()=>{ if(!gtinBusy)setGtinOpen(null); }} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px",zIndex:205,backdropFilter:"blur(3px)"}}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:440,boxShadow:"0 20px 50px rgba(0,0,0,0.25)",overflow:"hidden",fontFamily:"Georgia,serif"}}>
