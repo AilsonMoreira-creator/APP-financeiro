@@ -154,8 +154,8 @@ export default function MLDetalhe({ usuario, onFechar, C, SERIF, CALIBRI }) {
                   exp={`R$ 5 fixos por unidade vendida (${fin.custo_operacao_un || 0} un): embalagem, etiqueta, mão de obra da expedição.`} />
                 {fin.tarifas_faturamento > 0.5 && <Linha label="Serviços faturados (Full e outros) · 2%" valor={fin.tarifas_faturamento} base={fin.venda}
                   exp={`Régua fixa de 2% da venda (armazenagem/coleta Full, devoluções e outras tarifas fora do pagamento). Observado no extrato até agora: R$ ${fmt(fin.tarifas_faturamento_det?.observado_extrato || 0)}.`} />}
-                <Linha label="Publicidade (Product Ads)" valor={fin.publicidade || 0} base={fin.venda}
-                  exp={`Meses com dado real do extrato usam o gasto exato (atualizado todo dia às 6h40); meses fora do alcance do extrato entram com 6% da venda${fin.publicidade_estimada > 0.5 ? ` (R$ ${fmt(fin.publicidade_estimada)} estimados assim nesta janela)` : ''}.`} />
+                <Linha label="Publicidade (Product Ads) · 6%" valor={fin.publicidade || 0} base={fin.venda}
+                  exp={`Régua fixa de 6% da venda. O extrato de faturamento do ML só fecha os gastos recentes por volta do dia 18, então o valor "real" ficava parado por dias.${fin.publicidade_observada > 0.5 ? ` Observado no extrato até agora: R$ ${fmt(fin.publicidade_observada)}.` : ''}`} />
                 <Linha label="Resultado final" valor={fin.resultado_final} base={fin.venda} positivo={fin.resultado_final >= 0} forte
                   exp="O que sobra: líquido do Mercado Pago − imposto − custo da mercadoria − custo de operação − publicidade." />
                 {fin.creditos_pagamento > 0.5 && (

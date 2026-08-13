@@ -196,7 +196,7 @@ export default async function handler(req, res) {
     // extrato usa o real; mês sem dado (ex: julho, fora do alcance do
     // billing) usa 6% da venda daquele mês
     fin.publicidade = 0;
-    fin.publicidade_estimada = 0;
+    fin.publicidade_observada = 0;   // o que o extrato já registrou (referência)
     {
       const vendaPorMes = {};
       for (const r of comMp) {
@@ -206,12 +206,16 @@ export default async function handler(req, res) {
       const { data: adsRows } = await supabase.from('ml_ads_manual').select('mes, valor').in('mes', Object.keys(vendaPorMes));
       const reais = {};
       for (const a of (adsRows || [])) reais[a.mes] = n(a.valor);
+      // 13/08 (ordem dele): **6% FIXO da venda**. O extrato de faturamento não
+      // alcança os gastos recentes (teto de 10k registros; só fecha ~dia 18),
+      // então o valor "real" ficava travado no mesmo número por dias. O que o
+      // extrato mostrar fica de REFERÊNCIA pra ele comparar.
       for (const [m, v] of Object.entries(vendaPorMes)) {
-        if (reais[m] !== undefined) fin.publicidade += reais[m];
-        else { fin.publicidade += v * 0.06; fin.publicidade_estimada += v * 0.06; }
+        fin.publicidade += v * 0.06;
+        fin.publicidade_observada += (reais[m] || 0);
       }
       fin.publicidade = r2(fin.publicidade);
-      fin.publicidade_estimada = r2(fin.publicidade_estimada);
+      fin.publicidade_observada = r2(fin.publicidade_observada);
     }
 
     // tarifas de FATURAMENTO fora do pagamento (envio flex/intermunicipal,
