@@ -1127,6 +1127,11 @@ export default function PickingWMS({ userId = '', isAdmin = false, onBack }) {
             <button onClick={() => setTela('separacao')} style={{ flex: '1 1 210px', padding: '15px', borderRadius: 13, border: 'none', background: palette.accent, color: '#fff', fontSize: 15.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
               <ClipboardList size={19} /> Lista de Separação
             </button>
+            <button onClick={() => window.open('/api/wms-tv?token=amicia', '_blank')}
+              title="Abre o painel da TV — é essa URL que você deixa aberta na Smart TV"
+              style={{ flex: '1 1 210px', padding: '15px', borderRadius: 13, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, fontSize: 15.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
+              📺 Painel da TV
+            </button>
             <button onClick={() => setTela('etiquetas')} style={{ flex: '1 1 210px', padding: '15px', borderRadius: 13, border: 'none', background: palette.ink, color: '#fff', fontSize: 15.5, fontWeight: 800, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
               <Printer size={19} /> Imprimir Etiquetas
             </button>
