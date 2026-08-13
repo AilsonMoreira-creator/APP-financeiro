@@ -16,7 +16,23 @@ const C = {
 };
 const NOME = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 
+function hexDasCores() {
+  // mesma fonte do ranking de cores do módulo Bling
+  try {
+    const raw = localStorage.getItem('amica_bling_cores_top');
+    const lista = raw ? (JSON.parse(raw)?.cores || []) : [];
+    const m = {};
+    for (const c of lista) if (c?.nome) m[String(c.nome).trim().toLowerCase()] = c.hex || '#ccc';
+    return m;
+  } catch { return {}; }
+}
+
 export default function MapeamentoSkus({ refProduto: refProd, desc, cores, onClose }) {
+  const HEX = hexDasCores();
+  const bolinha = (nome) => (
+    <span style={{ display: 'inline-block', width: 13, height: 13, borderRadius: '50%', marginRight: 7, verticalAlign: -1,
+      background: HEX[String(nome).trim().toLowerCase()] || '#d9d3ca', border: '1px solid rgba(0,0,0,.18)' }} />
+  );
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
@@ -121,7 +137,7 @@ export default function MapeamentoSkus({ refProduto: refProd, desc, cores, onClo
                       {Object.values(emp.cores || {}).map((cor, i) => (
                         <tr key={cor.cor} style={{ background: i % 2 ? '#faf8f5' : '#fff' }}>
                           <td style={{ padding: '8px', fontWeight: 700, color: C.navy, whiteSpace: 'nowrap' }}>
-                            {cor.cor} <span style={{ fontWeight: 400, color: C.suave, fontSize: 11 }}>{cor.tamanhos.length} tam</span>
+                            {bolinha(cor.cor)}{cor.cor} <span style={{ fontWeight: 400, color: C.suave, fontSize: 11 }}>{cor.tamanhos.length} tam</span>
                           </td>
                           {emp.canais.map(c => {
                             const p = cor.por_canal?.[c.id];
@@ -165,6 +181,11 @@ export default function MapeamentoSkus({ refProduto: refProd, desc, cores, onClo
                     );
                   })()}
 
+                  {(emp.cores_ausentes || []).length > 0 && (
+                    <div style={{ marginTop: 8, fontSize: 11.5, color: C.erro }}>
+                      ✕ Sem essas cores no Bling desta conta: {emp.cores_ausentes.join(' · ')}
+                    </div>
+                  )}
                   {(emp.canais_ocultos || []).length > 0 && (
                     <div style={{ marginTop: 8, fontSize: 11.5, color: C.suave }}>
                       Fora da matriz (sem nenhum vínculo nesta REF): {emp.canais_ocultos.join(' · ')}

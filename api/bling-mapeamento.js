@@ -48,6 +48,7 @@ async function auditarConta(conta, ref, coresFiltro) {
     // 13/08 (ordem dele): Nuvemshop (site da Meluni) fora da auditoria de
     // marketplaces — assim como o Full, é outra frente
     if (c.tipo === 'Nuvemshop' || /nuvemshop/i.test(c.descricao || '')) continue;
+    // Meluni (site Convertr) FICA na matriz — ordem dele 13/08
     canais[c.id] = { id: c.id, nome: c.descricao, tipo: c.tipo };
   }
   saida.canais = Object.values(canais);
@@ -79,6 +80,10 @@ async function auditarConta(conta, ref, coresFiltro) {
   const variacoes = filtro.length ? todas.filter(v => filtro.includes(norm(v.cor))) : todas;
   saida.total_variacoes = todas.length;
   saida.auditadas = variacoes.length;
+  if (filtro.length) {
+    const achadas = new Set(variacoes.map(v => norm(v.cor)));
+    saida.cores_ausentes = (coresFiltro || []).filter(c => !achadas.has(norm(c)));
+  }
   await espera(PAUSA);
 
   // vínculos por variação
@@ -121,10 +126,13 @@ async function auditarConta(conta, ref, coresFiltro) {
       totalPorCanal[idCanal] = (totalPorCanal[idCanal] || 0) + p.vinculados;
     }
   }
-  const ocultos = Object.values(canais).filter(c => !totalPorCanal[c.id]);
+  // o site da Meluni (Convertr) nunca é ocultado: ele QUER ver o ✕ quando
+  // a referência não estiver cadastrada lá
+  const nuncaOcultar = (c) => /convertr|meluni/i.test(`${c.nome} ${c.tipo}`);
+  const ocultos = Object.values(canais).filter(c => !totalPorCanal[c.id] && !nuncaOcultar(c));
   if (ocultos.length) {
     saida.canais_ocultos = ocultos.map(c => c.nome);
-    const manter = new Set(Object.values(canais).filter(c => totalPorCanal[c.id]).map(c => String(c.id)));
+    const manter = new Set(Object.values(canais).filter(c => totalPorCanal[c.id] || nuncaOcultar(c)).map(c => String(c.id)));
     saida.canais = saida.canais.filter(c => manter.has(String(c.id)));
     for (const cor of Object.values(saida.cores)) {
       for (const id of Object.keys(cor.por_canal)) if (!manter.has(id)) delete cor.por_canal[id];
