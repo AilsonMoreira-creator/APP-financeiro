@@ -194,7 +194,69 @@ export default async function handler(req, res) {
       });
     }
 
-    if (q.pdf !== '1' && q.debug !== '1') return res.status(400).json({ erro: 'use ?previa=1 ou ?pdf=1' });
+    // ── MODO ZPL (13/08): a etiqueta do Bling vem em ZPL dentro de um ZIP —
+    // é o formato NATIVO da térmica. Com o QZ Tray na máquina da expedição,
+    // mandamos o ZPL direto: mais rápido e mais nítido que PDF.
+    if (q.zpl === '1') {
+      const { unzipSync } = await import('fflate');
+      const tk = {};
+      const contasSet = new Set(peds.map(p => p.conta));
+      for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
+      const links = await linksEtiqueta(peds.slice(0, 120), tk);
+      await preencherNfIds(peds.filter(p => links[String(p.pedido_id)]), tk, 60);
+      const sitDe = await situacaoPorNfId([...contasSet], tk, new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+
+      const alvo = peds.filter(p => links[String(p.pedido_id)]
+        && (q.reimprimir === '1' || (!p.etiqueta_impressa_em && sitDe[String(p.nf_id)] !== 6)));
+
+      const blocos = []; const idsOk = []; let grupoAtual = '';
+      for (const p of alvo.slice(0, 120)) {
+        const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
+        if (k !== grupoAtual) {
+          grupoAtual = k;
+          const qtd = alvo.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k).length;
+          // etiqueta separadora 10x15 em ZPL (203dpi: 812x1218 pontos)
+          blocos.push({ tipo: 'separador', ref: p.ref, loc: p.loc, empresa: p.conta, pedidos: qtd, zpl:
+            `^XA^CI28^PW812^LL1218^LH0,0
+^FO40,120^A0N,110,110^FD${q.por_empresa === '1' ? String(p.conta).toUpperCase() : ''}^FS
+^FO40,260^A0N,170,170^FDLOC ${p.loc}^FS
+^FO40,460^A0N,170,170^FDREF ${p.ref}^FS
+^FO40,680^A0N,80,80^FD${qtd} etiqueta(s)^FS
+^FO40,800^A0N,50,50^FD${String(p.itens?.[0]?.descLimpa || '').slice(0, 30).replace(/[\^~]/g, '')}^FS
+^FO40,900^GB730,6,6^FS
+^XZ` });
+        }
+        try {
+          const r = await fetch(links[String(p.pedido_id)]);
+          const bytes = new Uint8Array(await r.arrayBuffer());
+          let zpl = null;
+          if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
+            const z = unzipSync(bytes);
+            const nomeZpl = Object.keys(z).find(n => /\.txt$|zpl/i.test(n));
+            if (nomeZpl) zpl = Buffer.from(z[nomeZpl]).toString('utf8');
+          } else if (String.fromCharCode(bytes[0], bytes[1]) === '^X') {
+            zpl = Buffer.from(bytes).toString('utf8');
+          }
+          if (zpl) { blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl }); idsOk.push(p.pedido_id); }
+        } catch { /* pula essa etiqueta */ }
+        await new Promise(r2 => setTimeout(r2, 120));
+      }
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk });
+    }
+
+    // ── marcar como impressas depois que a térmica confirmou
+    if (q.marcar === '1' && q.ids) {
+      const ids = String(q.ids).split(',').map(x => parseInt(x)).filter(Boolean);
+      const lote = `T${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
+      if (ids.length) {
+        await supabase.from('wms_pedidos')
+          .update({ etiqueta_impressa_em: new Date().toISOString(), etiqueta_lote: lote })
+          .in('pedido_id', ids);
+      }
+      return res.status(200).json({ marcados: ids.length, lote });
+    }
+
+    if (q.pdf !== '1' && q.debug !== '1') return res.status(400).json({ erro: 'use ?previa=1, ?zpl=1 ou ?pdf=1' });
     if (!peds.length) return res.status(404).json({ erro: 'nenhum pedido nos filtros' });
     const lote = peds.slice(0, 80);
 

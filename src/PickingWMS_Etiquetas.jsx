@@ -39,6 +39,50 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     return q.toString();
   }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora, reimprimir, verFinalizados, porEmpresa]);
 
+  const [imprimindo, setImprimindo] = useState('');
+
+  // QZ Tray (já instalado na máquina da expedição): carrega a lib sob demanda
+  const carregarQz = () => new Promise((ok, falha) => {
+    if (window.qz) return ok(window.qz);
+    const el = document.createElement('script');
+    el.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
+    el.onload = () => ok(window.qz);
+    el.onerror = () => falha(new Error('não consegui carregar a biblioteca do QZ Tray'));
+    document.head.appendChild(el);
+  });
+
+  const imprimirTermica = async () => {
+    try {
+      setImprimindo('Preparando as etiquetas…');
+      const r = await fetch(`${API}/wms-etiquetas?${qs({ zpl: '1' })}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.erro || `HTTP ${r.status}`);
+      if (!j.total) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
+
+      setImprimindo('Conectando na impressora…');
+      const qz = await carregarQz();
+      if (!qz.websocket.isActive()) await qz.websocket.connect();
+      const impressora = await qz.printers.getDefault();
+      const config = qz.configs.create(impressora);
+
+      setImprimindo(`Imprimindo ${j.total} etiqueta(s) em ${impressora}…`);
+      const dados = j.blocos.map(b => ({ type: 'raw', format: 'plain', data: b.zpl }));
+      await qz.print(config, dados);
+
+      // só marca como impressa depois que a térmica aceitou o trabalho
+      for (let i = 0; i < j.ids.length; i += 30) {
+        await fetch(`${API}/wms-etiquetas?marcar=1&ids=${j.ids.slice(i, i + 30).join(',')}`);
+      }
+      setImprimindo(`✅ ${j.total} etiqueta(s) enviadas para ${impressora}`);
+      carregar();
+      setTimeout(() => setImprimindo(''), 8000);
+    } catch (e) {
+      setImprimindo(`⚠ ${e.message}`);
+      onErro?.(e.message);
+      setTimeout(() => setImprimindo(''), 12000);
+    }
+  };
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
@@ -117,6 +161,13 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         </button>
       </div>
 
+      <button onClick={imprimirTermica} disabled={!vaiSair || !!imprimindo}
+        style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', marginBottom: 14,
+          background: vaiSair && !imprimindo ? palette.accent : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
+          cursor: vaiSair && !imprimindo ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <Printer size={18} /> {imprimindo || `Imprimir na térmica · ZPL direto (${vaiSair})`}
+      </button>
+
       {/* grupos na ordem de impressão */}
       <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 13, padding: 14 }}>
         <div style={{ fontSize: 14, fontWeight: 800, color: palette.ink, marginBottom: 3 }}>Ordem de impressão</div>
@@ -183,7 +234,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       </div>
 
       <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 12, lineHeight: 1.6 }}>
-        Formato 10x15 · DANFE simplificada. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. Cada etiqueta gerada fica registrada como impressa e não sai de novo sem você marcar "reimprimir". A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
+        Formato 10x15. Na térmica o ZPL vai direto pela QZ Tray (mais rápido e mais nítido, é o formato nativo que o Bling entrega); o PDF fica como alternativa pra impressora comum. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. Cada etiqueta gerada fica registrada como impressa e não sai de novo sem você marcar "reimprimir". A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
       </div>
     </div>
   );
