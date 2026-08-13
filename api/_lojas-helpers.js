@@ -223,6 +223,7 @@ export async function temOrcamento() {
 export const CARTEIRAS_EXTRAS_API = {
   'Célia': ['Vendedora_4'],
   'Tamires': ['Joelma'],
+  'Joelma': ['Tamires'],   // 13/08: recíproco — as duas do Brás operam a carteira uma da outra
 };
 
 /** A vendedora logada pode operar clientes desta outra vendedora? */

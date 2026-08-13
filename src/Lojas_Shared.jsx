@@ -75,6 +75,7 @@ export const FONT = "Georgia, 'Times New Roman', serif";
 export const CARTEIRAS_EXTRAS = {
   'Célia': ['Vendedora_4'],
   'Tamires': ['Joelma'],
+  'Joelma': ['Tamires'],   // 13/08: acesso recíproco no Brás, com todos os poderes
 };
 export function carteirasExtrasDe(nome) {
   return CARTEIRAS_EXTRAS[String(nome || '').trim()] || [];
