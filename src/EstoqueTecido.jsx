@@ -48,6 +48,7 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
   const [tela, setTela] = useState('cards');         // cards | log
   const [logs, setLogs] = useState([]);
   const [coresPre, setCoresPre] = useState(CORES_FALLBACK);
+  const [tecidosPre, setTecidosPre] = useState([]);
   const [salvando, setSalvando] = useState(false);
 
   const api = useCallback(async (metodo, corpo, query = '') => {
@@ -80,6 +81,12 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
       setCoresPre([...mapa.values()]);
     })();
   }, []);
+
+  const abrirNovoTecido = async () => {
+    setModal({ tipo: 'novo_tecido', nome: '', metragem: 50 });
+    try { const j = await api('GET', null, '?acao=sugestoes'); setTecidosPre(j.sugestoes || []); }
+    catch { setTecidosPre([]); }
+  };
 
   const abrirLog = async (tecidoId = null) => {
     setTela('log');
@@ -145,7 +152,7 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
         {onVoltar && <button onClick={onVoltar} style={btnLeve}>←</button>}
         <h2 style={{ margin: 0, fontSize: 20, color: C.ink, flex: 1 }}>🧵 Estoque de tecido</h2>
         <button onClick={() => abrirLog()} style={btnLeve}>📜 Log</button>
-        {isAdmin && <button onClick={() => setModal({ tipo: 'novo_tecido', nome: '', metragem: 50 })} style={btn()}>+ Tecido</button>}
+        {isAdmin && <button onClick={abrirNovoTecido} style={btn()}>+ Tecido</button>}
       </div>
       <div style={{ fontSize: 12.5, color: C.inkMuted, marginBottom: 14 }}>
         A baixa acontece quando a ordem vai pra sala — e volta pro estoque se a ordem sair de lá.
@@ -195,7 +202,7 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
                         </div>
                       </div>
                       <button onClick={() => setModal({ tipo: 'entrada', tecido: t, cor: c, rolos: '', digitando: true })}
-                        title="Tocar pra digitar a quantidade"
+                        title="Tocar pra lançar quantos rolos chegaram"
                         style={{ fontSize: 22, fontWeight: 800, color: Number(c.rolos) > 0 ? C.ink : C.inkMuted, minWidth: 46, textAlign: 'right',
                           background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: '4px 2px' }}>{Number(c.rolos)}</button>
                       <button onClick={() => setModal({ tipo: 'entrada', tecido: t, cor: c, rolos: 1 })}
@@ -237,6 +244,23 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
             {modal.tipo === 'novo_tecido' && (
               <>
                 <h3 style={{ margin: '0 0 12px', fontSize: 18, color: C.ink }}>Novo tecido</h3>
+                {tecidosPre.filter(t => !t.ja_cadastrado).length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12.5, color: C.inkMuted, marginBottom: 7 }}>Os tecidos que vocês usam nas ordens de corte — toque pra usar o nome:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 12 }}>
+                      {tecidosPre.filter(t => !t.ja_cadastrado).map(t => (
+                        <button key={t.nome} onClick={() => setModal({ ...modal, nome: t.nome })}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 13px', borderRadius: 999, fontFamily: FONT, fontSize: 14, cursor: 'pointer',
+                            border: modal.nome === t.nome ? `2px solid ${C.azul}` : `1px solid ${C.bege}`,
+                            background: modal.nome === t.nome ? C.azulSoft : '#fff', color: C.ink, fontWeight: modal.nome === t.nome ? 700 : 500 }}>
+                          🧵 {t.nome}
+                          <span style={{ fontSize: 11, color: C.inkMuted }}>{t.usos}×</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+                <label style={{ fontSize: 13, color: C.inkSoft }}>Nome do tecido</label>
                 <input autoFocus value={modal.nome} onChange={e => setModal({ ...modal, nome: e.target.value })}
                   placeholder="Ex: Linho s/ elastano"
                   style={{ width: '100%', boxSizing: 'border-box', padding: 13, fontSize: 16, borderRadius: 11, border: `1px solid ${C.bege}`, fontFamily: FONT, marginBottom: 10 }} />
@@ -281,10 +305,14 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
 
             {modal.tipo === 'entrada' && (
               <>
-                <h3 style={{ margin: '0 0 4px', fontSize: 18, color: C.ink }}>Acrescentar rolos</h3>
-                <div style={{ fontSize: 14, color: C.inkSoft, marginBottom: 14 }}>
-                  {modal.tecido.nome} · <b>{modal.cor.nome}</b> — tem {Number(modal.cor.rolos)} rolo(s)
+                <h3 style={{ margin: '0 0 4px', fontSize: 18, color: C.ink }}>Quantos rolos chegaram?</h3>
+                <div style={{ fontSize: 14, color: C.inkSoft, marginBottom: 4 }}>
+                  {modal.tecido.nome} · <b>{modal.cor.nome}</b>
                 </div>
+                <div style={{ fontSize: 13, color: C.inkMuted, marginBottom: 14 }}>
+                  Digite só o que <b>chegou agora</b> — o app soma ao que já tem.
+                </div>
+                <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: C.azul, marginBottom: 6 }}>rolos que chegaram</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', marginBottom: 8 }}>
                   <button onClick={() => setModal({ ...modal, rolos: Math.max(1, (Number(modal.rolos) || 0) - 1) })} style={{ ...btn(C.azul), fontSize: 26, padding: '10px 20px' }}>−</button>
                   <input type="number" inputMode="numeric" min="1" autoFocus={modal.digitando}
@@ -296,14 +324,21 @@ export default function EstoqueTecido({ usuarioLogado, onVoltar }) {
                       border: `2px solid ${C.azul}`, background: C.azulSoft, fontFamily: FONT, color: C.ink }} />
                   <button onClick={() => setModal({ ...modal, rolos: (Number(modal.rolos) || 0) + 1 })} style={{ ...btn(C.azul), fontSize: 26, padding: '10px 20px' }}>+</button>
                 </div>
-                <div style={{ textAlign: 'center', fontSize: 13, color: C.inkMuted, marginBottom: 6 }}>toque no número pra digitar</div>
-                <div style={{ textAlign: 'center', fontSize: 14, color: C.inkSoft, marginBottom: 16 }}>
-                  = {((Number(modal.rolos) || 0) * Number(modal.tecido.metragem_rolo || 50)).toLocaleString('pt-BR')} m · fica com <b>{Number(modal.cor.rolos) + (Number(modal.rolos) || 0)}</b> rolo(s)
+                <div style={{ textAlign: 'center', fontSize: 15, color: C.inkSoft, margin: '10px 0 4px' }}>
+                  <span style={{ color: C.inkMuted }}>tem {Number(modal.cor.rolos)}</span>
+                  <span style={{ margin: '0 6px' }}>+</span>
+                  <b style={{ color: C.azul }}>{Number(modal.rolos) || 0} novo(s)</b>
+                  <span style={{ margin: '0 6px' }}>=</span>
+                  <b style={{ fontSize: 22, color: C.ok }}>{Number(modal.cor.rolos) + (Number(modal.rolos) || 0)}</b>
+                  <span style={{ color: C.inkMuted }}> rolo(s)</span>
+                </div>
+                <div style={{ textAlign: 'center', fontSize: 13, color: C.inkMuted, marginBottom: 16 }}>
+                  entrada de {((Number(modal.rolos) || 0) * Number(modal.tecido.metragem_rolo || 50)).toLocaleString('pt-BR')} m
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button onClick={() => setModal(null)} style={btnLeve}>Cancelar</button>
                   <button disabled={salvando || !(Number(modal.rolos) > 0)} onClick={() => acao({ acao: 'entrada', cor_id: modal.cor.id, rolos: modal.rolos })} style={btn(Number(modal.rolos) > 0 ? C.ok : '#c8c0b6')}>
-                    {salvando ? 'Salvando…' : 'Acrescentar'}
+                    {salvando ? 'Salvando…' : `Acrescentar ${Number(modal.rolos) || 0}`}
                   </button>
                 </div>
               </>

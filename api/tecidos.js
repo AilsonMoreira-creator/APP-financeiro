@@ -59,6 +59,25 @@ export default async function handler(req, res) {
         return res.status(200).json({ movimentos: data || [] });
       }
 
+      // sugestões de nome de tecido: os que a operação REALMENTE usa nas ordens
+      // de corte / cadastro de produto (Ailson 13/08)
+      if (acao === 'sugestoes') {
+        const { data: ord } = await supabase.from('ordens_corte')
+          .select('tecido').not('tecido', 'is', null)
+          .order('created_at', { ascending: false }).limit(600);
+        const cont = {};
+        for (const o of (ord || [])) {
+          const t = String(o.tecido || '').trim();
+          if (t) cont[t] = (cont[t] || 0) + 1;
+        }
+        const { data: jaTem } = await supabase.from('tecidos').select('nome');
+        const usados = new Set((jaTem || []).map(t => String(t.nome).trim().toLowerCase()));
+        const lista = Object.entries(cont)
+          .sort((a, b) => b[1] - a[1])
+          .map(([nome, usos]) => ({ nome, usos, ja_cadastrado: usados.has(nome.toLowerCase()) }));
+        return res.status(200).json({ sugestoes: lista });
+      }
+
       // listar: tecidos + cores + reservado (ordens criadas ainda não baixadas)
       const { data: tecidos } = await supabase.from('tecidos').select('*')
         .eq('arquivado', req.query?.incluir_arquivados === '1' ? undefined : false)
