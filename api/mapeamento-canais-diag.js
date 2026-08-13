@@ -26,6 +26,33 @@ export default async function handler(req, res) {
 
   const out = { sku, conta, mercado_livre: {}, tiktok: {} };
 
+  // ?full=1 — caminho do MERCADO LIVRE FULL: o estoque não vem do Bling, mora
+  // no armazém do ML. Pergunta certa: "tem saldo lá dentro?" (via inventory_id)
+  if (req.query?.full === '1') {
+    try {
+      const token = await getValidToken(BRAND[conta]);
+      const h = { Authorization: `Bearer ${token}` };
+      const me = await (await fetch('https://api.mercadolibre.com/users/me', { headers: h })).json();
+      const busca = await (await fetch(
+        `https://api.mercadolibre.com/users/${me.id}/items/search?logistic_type=fulfillment&limit=1`, { headers: h })).json();
+      const itemId = (busca?.results || [])[0];
+      const r = { seller_id: me.id, total_full: busca?.paging?.total, item: itemId };
+      if (itemId) {
+        const it = await (await fetch(`https://api.mercadolibre.com/items/${itemId}`, { headers: h })).json();
+        r.titulo = String(it.title || '').slice(0, 50);
+        const v = (it.variations || [])[0];
+        r.variacao = v ? { id: v.id, inventory_id: v.inventory_id, seller_sku: v.seller_custom_field, estoque_anuncio: v.available_quantity } : null;
+        r.inventory_id_item = it.inventory_id || null;
+        const invId = v?.inventory_id || it.inventory_id;
+        if (invId) {
+          const est = await (await fetch(`https://api.mercadolibre.com/inventories/${invId}/stock/fulfillment`, { headers: h })).json();
+          r.estoque_full = est;
+        }
+      }
+      return res.status(200).json(r);
+    } catch (e) { return res.status(200).json({ erro: String(e.message).slice(0, 200) }); }
+  }
+
   // ── MERCADO LIVRE ──
   try {
     const token = await getValidToken(BRAND[conta]);
