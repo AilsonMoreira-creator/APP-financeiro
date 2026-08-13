@@ -53,6 +53,9 @@ async function auditarConta(conta, ref, coresFiltro) {
     // 13/08 (ordem dele): Nuvemshop (site da Meluni) fora da auditoria de
     // marketplaces — assim como o Full, é outra frente
     if (c.tipo === 'Nuvemshop' || /nuvemshop/i.test(c.descricao || '')) continue;
+    // 13/08 (ele lembrou): a integração de estoque do site Meluni (Convertr)
+    // é com o Bling EXITUS — na Lumia/Muniam esse canal não tem função
+    if (ehMeluni(c) && conta !== 'exitus') continue;
     canais[c.id] = { id: c.id, nome: ehMeluni(c) ? 'Meluni (site)' : c.descricao, tipo: c.tipo, inativo: c.situacao !== 1 };
   }
   saida.canais = Object.values(canais);
