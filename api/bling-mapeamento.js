@@ -42,14 +42,17 @@ async function auditarConta(conta, ref, coresFiltro) {
   const cJ = typeof cR.json === 'function' ? await cR.json().catch(() => ({})) : {};
   if (cR.status === 403) return { ...saida, status: 'sem_permissao' };
   const canais = {};
-  const ehMeluni = (c) => /convertr|meluni/i.test(`${c.descricao || ''} ${c.tipo || ''}`);
+  // Meluni = o site ATUAL (Convertr). A integração antiga Nuvemshop segue
+  // oculta (ordem dele mais cedo hoje) pra não duplicar a coluna.
+  const ehMeluni = (c) => c.tipo !== 'Nuvemshop'
+    && /convertr|meluni/i.test(`${c.descricao || ''} ${c.tipo || ''}`);
   for (const c of (cJ?.data || [])) {
     // o site da Meluni (Convertr) entra mesmo inativo — ordem dele 13/08
     if (c.situacao !== 1 && !ehMeluni(c)) continue;
     if (/full/i.test(c.descricao || '')) continue;
     // 13/08 (ordem dele): Nuvemshop (site da Meluni) fora da auditoria de
     // marketplaces — assim como o Full, é outra frente
-    if (!ehMeluni(c) && (c.tipo === 'Nuvemshop' || /nuvemshop/i.test(c.descricao || ''))) continue;
+    if (c.tipo === 'Nuvemshop' || /nuvemshop/i.test(c.descricao || '')) continue;
     canais[c.id] = { id: c.id, nome: ehMeluni(c) ? 'Meluni (site)' : c.descricao, tipo: c.tipo, inativo: c.situacao !== 1 };
   }
   saida.canais = Object.values(canais);
