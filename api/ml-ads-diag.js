@@ -44,6 +44,22 @@ export default async function handler(req, res) {
     await new Promise(r => setTimeout(r, 300));
 
     if (advertiserId) {
+      // grade de rotas candidatas de métricas (a documentação do PADS mudou
+      // várias vezes; testo as formas conhecidas e vejo qual traz "cost")
+      const cands = [
+        ['a_ads_search', `https://api.mercadolibre.com/advertising/product_ads/ads/search?advertiser_id=${advertiserId}&date_from=${de}&date_to=${ate}&limit=3`],
+        ['b_campaigns_adv', `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/campaigns?date_from=${de}&date_to=${ate}&limit=3`],
+        ['c_pads_campaigns', `https://api.mercadolibre.com/advertising/product_ads/campaigns?advertiser_id=${advertiserId}&date_from=${de}&date_to=${ate}&limit=3`],
+        ['d_seller_metrics', `https://api.mercadolibre.com/advertising/product_ads/seller/${out.seller_id}/metrics?date_from=${de}&date_to=${ate}`],
+        ['e_users_ads', `https://api.mercadolibre.com/users/${out.seller_id}/product_ads/ads/search?date_from=${de}&date_to=${ate}&limit=3`],
+        ['f_billing_ads', `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/product_ads/metrics?date_from=${de}&date_to=${ate}`],
+      ];
+      for (const [tag, url] of cands) {
+        await ler(tag, url);
+        await new Promise(r => setTimeout(r, 350));
+      }
+    }
+    if (false) {
       // 2. métricas do advertiser no período (é aqui que mora o custo)
       await ler('advertiser_metrics',
         `https://api.mercadolibre.com/advertising/advertisers/${advertiserId}/product_ads/campaigns?date_from=${de}&date_to=${ate}&limit=5`);
