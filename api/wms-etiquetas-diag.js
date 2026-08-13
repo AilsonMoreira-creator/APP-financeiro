@@ -155,6 +155,21 @@ export default async function handler(req, res) {
         await new Promise(r => setTimeout(r, 3000));
         await ler('situacao_apos_baixar');
       }
+      // rotas candidatas pra ESCREVER a situação (teste feito numa nota que já
+      // está em 6 — risco zero: se aceitar, é 6 pra 6)
+      for (const [tag, metodo, url, body] of [
+        ['put_situacao', 'PUT', `https://api.bling.com.br/Api/v3/nfe/${id}`, JSON.stringify({ situacao: 6 })],
+        ['patch_situacao', 'PATCH', `https://api.bling.com.br/Api/v3/nfe/${id}/situacoes`, JSON.stringify({ situacao: 6 })],
+        ['post_situacao', 'POST', `https://api.bling.com.br/Api/v3/nfe/${id}/situacoes/6`, '{}'],
+      ]) {
+        try {
+          const r = await fetch(url, { method: metodo, headers: { ...headers, 'Content-Type': 'application/json' }, body });
+          const j = await r.json().catch(() => ({}));
+          out.passos.push({ passo: tag, http: r.status, corpo: JSON.stringify(j).slice(0, 200) });
+        } catch (e) { out.passos.push({ passo: tag, erro: String(e.message).slice(0, 90) }); }
+        await new Promise(r => setTimeout(r, 450));
+      }
+
       // rotas candidatas pra marcar impressão
       for (const [tag, metodo, url] of [
         ['post_danfe', 'POST', `https://api.bling.com.br/Api/v3/nfe/${id}/danfe`],
