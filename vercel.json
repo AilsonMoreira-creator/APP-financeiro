@@ -512,7 +512,7 @@
     },
     {
       "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=60",
-      "schedule": "30 11 * * 1-6"
+      "schedule": "45 10 * * 1-6"
     }
   ]
 }
