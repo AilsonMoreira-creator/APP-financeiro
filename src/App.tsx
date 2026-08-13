@@ -7,6 +7,7 @@ import { CalcAnaliseMeluni } from "./CalcAnaliseMeluni";
 import MLPerguntas from './MLPerguntas';
 import OrdemDeCorte from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
+import EstoqueTecido from './EstoqueTecido';
 import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
@@ -7701,6 +7702,7 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
           <button onClick={()=>setTela("lancamento")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="lancamento"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="lancamento"?"#2c3e50":"#fff",color:tela==="lancamento"?"#fff":"#2c3e50"}}>✏️ Lançar</button>
           {isAdmin&&<button onClick={()=>setTela("analise")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="analise"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="analise"?"#2c3e50":"#fff",color:tela==="analise"?"#fff":"#2c3e50"}}>📊 Análise</button>}
           {podeOrdem&&<button onClick={()=>setTela("ordem")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="ordem"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="ordem"?"#2c3e50":"#fff",color:tela==="ordem"?"#fff":"#2c3e50"}}>📋 Ordem</button>}
+          {podeOrdem&&<button onClick={()=>setTela("tecido")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="tecido"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="tecido"?"#2c3e50":"#fff",color:tela==="tecido"?"#fff":"#2c3e50"}}>🧵 Estoque tecido</button>}
           <button onClick={()=>setTela("fila")} style={{padding:mobile?"10px 14px":"8px 16px",border:tela==="fila"?"none":"1px solid #e8e2da",borderRadius:8,fontSize:mobile?14:13,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600,background:tela==="fila"?"#2c3e50":"#fff",color:tela==="fila"?"#fff":"#2c3e50"}}>✂️ Fila</button>
         </div>
       </div>
@@ -7958,6 +7960,9 @@ const SalasCorteContent=({produtos=[],usuario="",logTroca=[],tecidosCAD=[],isAdm
 
         {/* ═══ ORDEM DE CORTE (admin + pedro + corte) ═══ */}
         {tela==="ordem"&&podeOrdem&&(<OrdemDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}} mediaRef={mediaRef}/>)}
+
+        {/* ═══ ESTOQUE DE TECIDO (13/08) ═══ */}
+        {tela==="tecido"&&(<EstoqueTecido usuarioLogado={{usuario,admin:isAdmin}} onVoltar={()=>setTela("ordem")}/>)}
 
         {/* ═══ FILA DE CORTE (admin + funcionário) ═══ */}
         {tela==="fila"&&(<FilaDeCorte supabase={supabase} usuarioLogado={{usuario,admin:isAdmin}}/>)}
