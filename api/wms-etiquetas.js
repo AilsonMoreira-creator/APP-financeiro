@@ -40,9 +40,12 @@ async function pedidosFiltrados(q) {
     limiteCorte = new Date(`${hojeBRT}T${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00-03:00`).getTime();
   }
 
-  const statusAlvo = q.incluir_finalizados === '1'
-    ? ['aberto', 'em_separacao', 'finalizado']
-    : ['aberto', 'em_separacao'];
+  // 13/08: com a NF automática das 6:30, o pedido vira "atendido" no Bling e o
+  // sync o marca FINALIZADO **antes de a equipe separar** — por isso a tela
+  // mostrava 0 etiquetas. Enquanto a classificação não muda, os finalizados
+  // DE HOJE entram por padrão (é justamente quem tem etiqueta fresca).
+  const statusAlvo = ['aberto', 'em_separacao', 'finalizado'];
+  const soHoje = q.incluir_finalizados !== '1';
   let sel = supabase.from('wms_pedidos')
     .select('conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id')
     .in('status_wms', statusAlvo)
@@ -50,8 +53,14 @@ async function pedidosFiltrados(q) {
   if (contas !== 'todas') sel = sel.in('conta', contas.split(','));
   const { data: peds } = await sel;
 
+  const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   const out = [];
   for (const p of (peds || [])) {
+    // finalizado antigo só entra com "mostrar já finalizados"
+    if (soHoje && p.status_wms === 'finalizado') {
+      const quando = String(p.finalizado_em || p.data_pedido || '');
+      if (!quando.startsWith(hojeBRT)) continue;
+    }
     const canal = String(p.canal_geral || '');
     const flex = p.ml_logistic_type === 'self_service';
     const full = p.ml_logistic_type === 'fulfillment';
