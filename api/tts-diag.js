@@ -40,6 +40,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ conta, rota: '/finance/202507/orders/unsettled', resumo });
     }
 
+    // ?cs=1 — o escopo de Customer Service (responder mensagens do cliente)
+    // já saiu da análise? O erro diferencia: "no permission/scope" = ainda
+    // não liberado; 200/erro de parâmetro = liberado.
+    if (req.query?.cs === '1') {
+      const t3 = {};
+      for (const [nome, path, params] of [
+        ['conversas_202309', '/customer_service/202309/conversations', { page_size: 5 }],
+        ['conversas_202407', '/customer_service/202407/conversations', { page_size: 5 }],
+        ['seller_perf', '/customer_service/202309/agents/performance', {}],
+      ]) {
+        const r = await chamarTts(path, params, auth, ctx).catch(e => ({ message: String(e.message).slice(0, 200) }));
+        t3[nome] = { code: r?.code, message: String(r?.message || '').slice(0, 200), tem_dados: !!r?.data };
+        await new Promise(x => setTimeout(x, 300));
+      }
+      return res.status(200).json({ conta, customer_service: t3 });
+    }
+
     // 1. transações do pedido na Finance (existe por ORDER, não só por statement?)
     t.txn_por_pedido = await chamarTts(`/finance/202309/orders/${pedido}/statement_transactions`, {}, auth, ctx)
       .catch(e => ({ erro: e.message }));
