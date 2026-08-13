@@ -148,22 +148,36 @@ export default async function handler(req, res) {
       if (!link) return res.status(200).json({ http: r.status, corpo: JSON.stringify(j).slice(0, 300), aviso: 'sem link de etiqueta' });
       const dR = await fetch(link);
       const bytes = new Uint8Array(await dR.arrayBuffer());
-      const saida = { pedido_id: pid, link, bytes: bytes.length, tipo: String(dR.headers.get('content-type')) };
-      try {
-        const doc = await PDFDocument.load(bytes);
-        saida.paginas = doc.getPageCount();
-        saida.tamanhos = doc.getPages().map(pg => {
-          const { width, height } = pg.getSize();
-          return `${Math.round(width / 2.8346)}x${Math.round(height / 2.8346)}mm`;
-        });
-      } catch (e) { saida.erro_pdf = e.message; }
-      // texto cru (heurística): procura marcas de DANFE e de transporte
-      const txt = Buffer.from(bytes).toString('latin1');
-      saida.marcas = {
-        danfe: /DANFE|DOCUMENTO AUXILIAR|CHAVE DE ACESSO|NF-?e/i.test(txt),
-        transporte: /DESTINAT|REMETENTE|CEP|RASTREI|ETIQUETA/i.test(txt),
-        comprimido: /FlateDecode/.test(txt),
-      };
+      const saida = { pedido_id: pid, bytes: bytes.length, tipo: String(dR.headers.get('content-type')), link_expira_em: '1h' };
+
+      // o Bling entrega ZIP (achado 13/08) — abrir e inspecionar cada arquivo
+      const ehZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+      saida.formato = ehZip ? 'ZIP' : 'PDF direto';
+      const arquivos = {};
+      if (ehZip) {
+        const { unzipSync } = await import('fflate');
+        const z = unzipSync(bytes);
+        for (const nome of Object.keys(z)) arquivos[nome] = z[nome];
+      } else { arquivos['(direto)'] = bytes; }
+
+      saida.conteudo = [];
+      for (const [nome, buf] of Object.entries(arquivos)) {
+        const item = { arquivo: nome, bytes: buf.length };
+        try {
+          const doc = await PDFDocument.load(buf);
+          item.paginas = doc.getPageCount();
+          item.tamanhos = doc.getPages().map(pg => {
+            const { width, height } = pg.getSize();
+            return `${Math.round(width / 2.8346)}x${Math.round(height / 2.8346)}mm`;
+          });
+        } catch (e) { item.nao_e_pdf = String(e.message).slice(0, 60); }
+        const txt = Buffer.from(buf).toString('latin1');
+        item.marcas = {
+          danfe: /DANFE|DOCUMENTO AUXILIAR|CHAVE DE ACESSO/i.test(txt),
+          transporte: /DESTINAT|REMETENTE|Destinat|CEP/i.test(txt),
+        };
+        saida.conteudo.push(item);
+      }
       return res.status(200).json(saida);
     }
 
