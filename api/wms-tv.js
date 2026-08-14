@@ -92,7 +92,6 @@ export default async function handler(req, res) {
       <div id="contas"></div>
     </div>
     <div class="painel">
-      <div class="rotulo" style="margin-bottom:1vh">Atenção</div>
       <div id="pendencias"></div>
     </div>
   </div>
@@ -123,7 +122,7 @@ export default async function handler(req, res) {
   function pintar(d){
     var t = d.total || {};
     document.getElementById('abertos').textContent = n(t.abertos);
-    document.getElementById('pecas').textContent = n(t.pecas_abertas) + ' peças' + (n(t.pra_amanha) ? ' · ' + n(t.pra_amanha) + ' pra amanhã' : '');
+    document.getElementById('pecas').textContent = n(t.pra_amanha) ? (n(t.pra_amanha) + ' pra amanhã') : '\u00a0';
     document.getElementById('sep').textContent = n(t.em_separacao);
     var prev = n(t.em_separacao_com_nf_prevista), comNf = n(t.em_separacao_nf);
     document.getElementById('nf').textContent = prev ? ('NF ' + comNf + ' de ' + prev) : '\\u00a0';
