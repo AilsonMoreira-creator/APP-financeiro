@@ -39,7 +39,7 @@ export default async function handler(req, res) {
   h1 { font-size: 3.4vh; font-weight: 800; letter-spacing: .5px; }
   .relogio { font-size: 3.4vh; font-weight: 800; margin-left: auto; }
   .sync { font-size: 1.7vh; opacity: .55; }
-  .grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.4vw; margin-bottom: 1.6vh; }
+  .grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4vw; margin-bottom: 1.6vh; }
   .card {
     background: ${claro ? '#fff' : '#1e2733'};
     border: 1px solid ${claro ? '#e8dfd0' : '#2b3746'};
@@ -79,15 +79,14 @@ export default async function handler(req, res) {
   </header>
 
   <div class="grade">
-    <div class="card"><div class="rotulo">Pra separar</div><div class="numero azul" id="abertos">–</div><div class="sub" id="pecas">&nbsp;</div></div>
+    <div class="card"><div class="rotulo">Pedidos abertos</div><div class="numero azul" id="abertos">–</div><div class="sub" id="pecas">&nbsp;</div></div>
     <div class="card"><div class="rotulo">Em separação</div><div class="numero ambar" id="sep">–</div><div class="sub" id="nf">&nbsp;</div></div>
     <div class="card"><div class="rotulo">Prontos hoje</div><div class="numero verde" id="fin">–</div><div class="sub" id="ritmo">&nbsp;</div></div>
-    <div class="card"><div class="rotulo">Falta pro corte</div><div class="numero" id="corte">–</div><div class="sub" id="corteh">&nbsp;</div></div>
   </div>
 
   <div id="alertas" style="display:grid;gap:1.2vh;margin-bottom:1.6vh"></div>
 
-  <div class="faixa">
+  <div class="faixa" style="margin-bottom:1.2vh">
     <div class="painel">
       <div class="rotulo" style="margin-bottom:1vh">Por empresa</div>
       <div id="contas"></div>
@@ -95,6 +94,14 @@ export default async function handler(req, res) {
     <div class="painel">
       <div class="rotulo" style="margin-bottom:1vh">Atenção</div>
       <div id="pendencias"></div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end">
+    <div class="card" style="padding:1.2vh 1.4vw;display:flex;align-items:baseline;gap:1vw">
+      <span class="rotulo" style="font-size:1.6vh">Falta pro corte</span>
+      <span id="corte" style="font-size:3.4vh;font-weight:800">–</span>
+      <span class="sub" id="corteh" style="font-size:1.6vh"></span>
     </div>
   </div>
 
@@ -129,12 +136,11 @@ export default async function handler(req, res) {
       var min = Math.round((corteEm.getTime() - Date.now())/60000);
       if (min > 0) {
         elC.textContent = min >= 60 ? (Math.floor(min/60) + 'h' + String(min%60).padStart(2,'0')) : (min + 'min');
-        elC.className = 'numero ' + (min <= 30 ? 'vermelho' : min <= 60 ? 'ambar' : 'verde');
+        elC.className = (min <= 30 ? 'vermelho' : min <= 60 ? 'ambar' : 'verde');
         document.getElementById('corteh').textContent = 'corte às ' + fmtHora(corteEm);
       } else {
-        elC.textContent = 'PASSOU';
-        elC.className = 'numero vermelho';
-        elC.style.fontSize = '7vh';
+        elC.textContent = 'ENCERRADO';
+        elC.className = 'vermelho';
         document.getElementById('corteh').textContent = 'corte era ' + fmtHora(corteEm);
       }
     }
@@ -179,7 +185,7 @@ export default async function handler(req, res) {
       if (min2 > 0 && min2 <= 45 && restante > 0)
         alerta('vermelho', '⏰ FALTAM ' + min2 + ' MIN PRO CORTE — ainda tem ' + restante + ' pedido(s) na fila');
       else if (min2 <= 0 && restante > 0)
-        alerta('ambar', '⏰ CORTE PASSOU — ' + restante + ' pedido(s) ainda na fila');
+        alerta('ambar', '⏰ CORTE ENCERRADO — ' + restante + ' pedido(s) ainda na fila');
       else if (restante === 0 && n(t.finalizados_hoje) > 0)
         alerta('verde', '✅ FILA ZERADA — ' + n(t.finalizados_hoje) + ' pedidos prontos hoje. Mandou bem, time!');
     }
