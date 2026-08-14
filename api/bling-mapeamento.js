@@ -56,6 +56,10 @@ async function auditarConta(conta, ref, coresFiltro) {
     // 13/08 (ele lembrou): a integração de estoque do site Meluni (Convertr)
     // é com o Bling EXITUS — na Lumia/Muniam esse canal não tem função
     if (ehMeluni(c) && conta !== 'exitus') continue;
+    // 13/08 (ordem dele): por enquanto FORA da matriz os canais tipo "Api"
+    // (Meluni/Convertr e Ideris) — só uma REF tem vínculo lá, então a coluna
+    // só polui. Volta quando o envio pro Multilojas estiver em dia
+    if (c.tipo === 'Api') continue;
     canais[c.id] = { id: c.id, nome: ehMeluni(c) ? 'Meluni (site)' : c.descricao, tipo: c.tipo, inativo: c.situacao !== 1 };
   }
   // Canais tipo "Api" (Convertr/Meluni, Ideris): alguns REGISTRAM produto-loja
