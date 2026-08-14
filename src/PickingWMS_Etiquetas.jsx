@@ -59,14 +59,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       const r = await fetch(`${API}/wms-etiquetas?${qs({ zpl: '1' })}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro || `HTTP ${r.status}`);
-      if (!j.total) {
-        throw new Error((j.em_pdf || []).length
-          ? `Essas ${j.em_pdf.length} etiqueta(s) vêm em PDF (Shein/canais que não usam térmica). Use o botão "Gerar etiquetas" (PDF) pra imprimir.`
-          : 'Nenhuma etiqueta pronta nesses filtros.');
-      }
-      if ((j.em_pdf || []).length) {
-        alert(`${j.em_pdf.length} etiqueta(s) vêm em PDF e não vão pra térmica — imprima essas pelo botão "Gerar etiquetas" (PDF). As outras ${j.total} seguem pra impressora agora.`);
-      }
+      if (!j.total) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
 
       setImprimindo('Conectando na impressora…');
       const qz = await carregarQz();
@@ -75,8 +68,17 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       const config = qz.configs.create(impressora);
 
       setImprimindo(`Imprimindo ${j.total} etiqueta(s) em ${impressora}…`);
-      const dados = j.blocos.map(b => ({ type: 'raw', format: 'plain', data: b.zpl }));
-      await qz.print(config, dados);
+      // ZPL vai como raw (nativo da térmica); PDF (Shein) o próprio QZ Tray
+      // imprime como imagem — não precisa converter nada
+      const zpl = j.blocos.filter(b => b.tipo !== 'etiqueta_pdf' && b.zpl);
+      const pdfs = j.blocos.filter(b => b.tipo === 'etiqueta_pdf' && b.pdf);
+      if (zpl.length) {
+        await qz.print(config, zpl.map(b => ({ type: 'raw', format: 'plain', data: b.zpl })));
+      }
+      if (pdfs.length) {
+        const cfgPdf = qz.configs.create(impressora, { size: { width: 4, height: 6 }, units: 'in', scaleContent: true });
+        await qz.print(cfgPdf, pdfs.map(b => ({ type: 'pixel', format: 'pdf', flavor: 'base64', data: b.pdf })));
+      }
 
       // só marca como impressa depois que a térmica aceitou o trabalho
       for (let i = 0; i < j.ids.length; i += 30) {

@@ -283,7 +283,7 @@ export default async function handler(req, res) {
       const blocos = []; const idsOk = []; const emPdf = []; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
-        let zplDoPedido = null, ehPdf = false;
+        let zplDoPedido = null, ehPdf = false, pdf64 = null;
         try {
           const r0 = await fetch(links[String(p.pedido_id)]);
           const b0 = new Uint8Array(await r0.arrayBuffer());
@@ -292,12 +292,11 @@ export default async function handler(req, res) {
             const nomeZ = Object.keys(z0).find(n => /\.txt$|zpl/i.test(n));
             const nomeP = Object.keys(z0).find(n => /\.pdf$/i.test(n));
             if (nomeZ) zplDoPedido = Buffer.from(z0[nomeZ]).toString('utf8');
-            else if (nomeP) ehPdf = true;
-          } else if (b0[0] === 0x25) ehPdf = true;                    // %PDF
+            else if (nomeP) { ehPdf = true; pdf64 = Buffer.from(z0[nomeP]).toString('base64'); }
+          } else if (b0[0] === 0x25) { ehPdf = true; pdf64 = Buffer.from(b0).toString('base64'); }
           else if (String.fromCharCode(b0[0], b0[1]) === '^X') zplDoPedido = Buffer.from(b0).toString('utf8');
         } catch { /* sem etiqueta */ }
-        if (ehPdf) { emPdf.push(p.numero); continue; }
-        if (!zplDoPedido) continue;
+        if (!zplDoPedido && !ehPdf) continue;
 
         const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
         if (k !== grupoAtual) {
@@ -314,7 +313,13 @@ export default async function handler(req, res) {
 ^FO40,900^GB730,6,6^FS
 ^XZ` });
         }
-        blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplDoPedido });
+        if (ehPdf) {
+          // o QZ Tray imprime PDF direto na térmica (type pixel) — sem conversão
+          blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: pdf64 });
+          emPdf.push(p.numero);
+        } else {
+          blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplDoPedido });
+        }
         idsOk.push(p.pedido_id);
         await new Promise(r2 => setTimeout(r2, 120));
       }
