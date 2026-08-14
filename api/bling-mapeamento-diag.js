@@ -59,6 +59,40 @@ export default async function handler(req, res) {
       });
     }
 
+    // ?loja=206144802 — vínculos DAQUELA loja (o Convertr registra ou não?)
+    if (req.query?.loja) {
+      const idLoja = String(req.query.loja);
+      const out = { conta, loja: idLoja, filtros: {}, varredura: null };
+      for (const [tag, url] of [
+        ['idLoja', `https://api.bling.com.br/Api/v3/produtos/lojas?idLoja=${idLoja}&limite=5`],
+        ['idsLojas', `https://api.bling.com.br/Api/v3/produtos/lojas?idsLojas[]=${idLoja}&limite=5`],
+        ['loja', `https://api.bling.com.br/Api/v3/produtos/lojas?loja=${idLoja}&limite=5`],
+      ]) {
+        const r = await blingFetch(url, headers);
+        const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+        const lista = j?.data || [];
+        out.filtros[tag] = {
+          http: r.status, qtd: lista.length,
+          so_dessa_loja: lista.length ? lista.every(v => String(v.loja?.id) === idLoja) : null,
+          amostra: lista.slice(0, 3).map(v => ({ idProdutoLoja: v.id, codigo: v.codigo, produto: v.produto?.id, loja: v.loja?.id })),
+        };
+        await new Promise(r2 => setTimeout(r2, 350));
+      }
+      // varredura profunda (até 20 páginas) contando essa loja
+      let achados = [], paginas = 0;
+      for (let pg = 1; pg <= 20; pg++) {
+        const r = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/lojas?limite=100&pagina=${pg}`, headers);
+        const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+        const lista = j?.data || [];
+        paginas = pg;
+        for (const v of lista) if (String(v.loja?.id) === idLoja) achados.push({ produto: v.produto?.id, codigo: v.codigo, idProdutoLoja: v.id });
+        if (lista.length < 100) break;
+        await new Promise(r2 => setTimeout(r2, 330));
+      }
+      out.varredura = { paginas, achados_nessa_loja: achados.length, amostra: achados.slice(0, 8) };
+      return res.status(200).json(out);
+    }
+
     // ?lojas_usadas=1 — quais lojas APARECEM nos vínculos do catálogo inteiro?
     // (pra saber se o canal Convertr/Api registra produto-loja ou não)
     if (req.query?.lojas_usadas === '1') {
