@@ -52,6 +52,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   });
 
   const imprimirTermica = async () => {
+    // a etiqueta muda o status no marketplace — confirma antes (13/08)
+    if (!window.confirm(`Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`)) return;
     try {
       setImprimindo('Preparando as etiquetas…');
       const r = await fetch(`${API}/wms-etiquetas?${qs({ zpl: '1' })}`);
@@ -234,7 +236,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       </div>
 
       <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 12, lineHeight: 1.6 }}>
-        Formato 10x15. Na térmica o ZPL vai direto pela QZ Tray (mais rápido e mais nítido, é o formato nativo que o Bling entrega); o PDF fica como alternativa pra impressora comum. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. Cada etiqueta gerada fica registrada como impressa e não sai de novo sem você marcar "reimprimir". A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
+        A etiqueta só é puxada do Bling no momento em que você manda imprimir — antes disso o pedido continua pendente no marketplace (na Shein, baixar a etiqueta já muda o status pra "aguardando coleta"). Formato 10x15. Na térmica o ZPL vai direto pela QZ Tray (mais rápido e mais nítido, é o formato nativo que o Bling entrega); o PDF fica como alternativa pra impressora comum. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. Cada etiqueta gerada fica registrada como impressa e não sai de novo sem você marcar "reimprimir". A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
       </div>
     </div>
   );

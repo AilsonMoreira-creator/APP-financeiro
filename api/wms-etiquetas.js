@@ -150,7 +150,18 @@ async function preencherNfIds(peds, tokenPorConta, maximo = 40) {
 }
 
 // links de etiqueta do Bling (só existem depois de gerada/casada no Bling)
-async function linksEtiqueta(peds, tokenPorConta) {
+/**
+ * ATENÇÃO (13/08, regra do Ailson): puxar a etiqueta MUDA O ESTADO NO
+ * MARKETPLACE — na Shein o pedido vira "aguardando coleta" só de baixar o
+ * arquivo, mesmo sem imprimir, e isso confunde a equipe. Por isso esta função
+ * só pode ser chamada no MOMENTO REAL da impressão (?zpl=1 / ?pdf=1), nunca
+ * na prévia, no debug ou em cron. O parâmetro `motivo` documenta a origem.
+ */
+async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
+  if (motivo !== 'impressao') {
+    console.warn('[etiquetas] chamada bloqueada fora da impressão:', motivo);
+    return {};
+  }
   const mapa = {};
   for (const conta of new Set(peds.map(p => p.conta))) {
     if (!tokenPorConta[conta]) continue;
@@ -237,7 +248,7 @@ export default async function handler(req, res) {
       const tk = {};
       const contasSet = new Set(peds.map(p => p.conta));
       for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
-      const links = await linksEtiqueta(peds.slice(0, 120), tk);
+      const links = await linksEtiqueta(peds.slice(0, 120), tk, 'impressao');
       await preencherNfIds(peds.filter(p => links[String(p.pedido_id)]), tk, 60);
       const sitDe = await situacaoPorNfId([...contasSet], tk, new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
 
@@ -303,13 +314,13 @@ export default async function handler(req, res) {
       tokenMl[c] = await getValidToken(BRAND[c]).catch(() => null);
     }
 
-    // ETIQUETA PELO BLING (12/08: PROVADO na Lumia, pedido Shein 70898) —
-    // serve TODOS os marketplaces desde que a etiqueta já exista no Bling
-    const linkBlingDe = await linksEtiqueta(lote, tokenBling);
+    // ETIQUETA PELO BLING — só quando é impressão de verdade (o debug não
+    // pode disparar isso: mexeria no status da Shein sem imprimir nada)
+    const linkBlingDe = q.debug === '1' ? {} : await linksEtiqueta(lote, tokenBling, 'impressao');
 
     // shipment_ids do ML por pedido (RESERVA — só pros que o Bling não deu)
     const shipDe = {};
-    for (const p of lote) {
+    for (const p of (q.debug === '1' ? [] : lote)) {
       if (linkBlingDe[String(p.pedido_id)]) continue; // já tem etiqueta do Bling
       if (p.canal_geral !== 'Mercado Livre' || !tokenMl[p.conta] || !p.numero_loja) continue;
       try {
