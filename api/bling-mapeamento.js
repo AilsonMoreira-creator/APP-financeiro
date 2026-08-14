@@ -58,6 +58,19 @@ async function auditarConta(conta, ref, coresFiltro) {
     if (ehMeluni(c) && conta !== 'exitus') continue;
     canais[c.id] = { id: c.id, nome: ehMeluni(c) ? 'Meluni (site)' : c.descricao, tipo: c.tipo, inativo: c.situacao !== 1 };
   }
+  // Canais tipo "Api" (Convertr/Meluni, Ideris): alguns REGISTRAM produto-loja
+  // e outros não. Em vez de supor, pergunta ao Bling: existe algum vínculo
+  // nessa loja? (o filtro ?idLoja= funciona e é barato). Se não registra
+  // nenhum, a coluna vira "n/d" em vez de um ✕ mentiroso.
+  for (const c of Object.values(canais)) {
+    if (c.tipo !== 'Api') { c.registra = true; continue; }
+    try {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/lojas?idLoja=${c.id}&limite=1`, headers);
+      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+      c.registra = (j?.data || []).length > 0;
+    } catch { c.registra = false; }
+    await espera(PAUSA);
+  }
   saida.canais = Object.values(canais);
   await espera(PAUSA);
 
@@ -113,7 +126,8 @@ async function auditarConta(conta, ref, coresFiltro) {
       // NÃO registram produto-loja no Bling (provado 13/08: nem no pai nem nas
       // variações; 1 vínculo em 600 do catálogo). Marcar ✕ seria mentira —
       // vira "n/d: integração por SKU", cinza.
-      p.por_sku = canal.tipo === 'Api';
+      // só é "n/d" quando o canal realmente não registra vínculo nenhum
+      p.por_sku = canal.registra === false;
       const comId = doCanal.filter(x => String(x.codigo || '').trim());
       if (doCanal.length) p.vinculados++;
       if (doCanal.length && !comId.length) p.sem_id++;
@@ -140,7 +154,7 @@ async function auditarConta(conta, ref, coresFiltro) {
   }
   // o site da Meluni (Convertr) nunca é ocultado: ele QUER ver o ✕ quando
   // a referência não estiver cadastrada lá
-  const nuncaOcultar = (c) => /convertr|meluni/i.test(`${c.nome} ${c.tipo}`);
+  const nuncaOcultar = (c) => /convertr|meluni/i.test(`${c.nome} ${c.tipo}`) || c.registra === false;
   const ocultos = Object.values(canais).filter(c => !totalPorCanal[c.id] && !nuncaOcultar(c));
   if (ocultos.length) {
     saida.canais_ocultos = ocultos.map(c => c.nome);
