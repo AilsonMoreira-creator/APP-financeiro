@@ -191,19 +191,28 @@ async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
         const url = `https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&${fatia.map(id => `idsVendas[]=${id}`).join('&')}`;
         const r = await blingFetch(url, hb);
         const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
-        for (const e of (j?.data || [])) { if (e?.id && e?.link) { mapa[String(e.id)] = e.link; achouNoLote = true; } }
+        for (const e of (j?.data || [])) {
+          if (!e?.id || !e?.link) continue;
+          mapa[String(e.id)] = e.link;   // pode vir com id do pedido OU da NF
+          const doPedido = peds.find(p => String(p.nf_id) === String(e.id));
+          if (doPedido) mapa[String(doPedido.pedido_id)] = e.link;
+          achouNoLote = true;
+        }
       } catch { /* cai no individual */ }
       await new Promise(r2 => setTimeout(r2, 350));
-      if (!achouNoLote) {
-        for (const id of fatia) {
-          try {
-            const r = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${id}`, hb);
-            const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
-            const link = j?.data?.[0]?.link;
-            if (link) mapa[String(id)] = link;
-          } catch { /* segue */ }
-          await new Promise(r2 => setTimeout(r2, 340));
-        }
+      // 14/08 (bug do pedido da Fernanda): a resposta identifica a etiqueta
+      // pelo id da NOTA FISCAL quando o pedido já tem NF — não pelo id do
+      // pedido. Casar por e.id perdia a etiqueta. Aqui perguntamos UM A UM
+      // pros que faltaram e guardamos com o id do pedido que pedimos.
+      for (const id of fatia) {
+        if (mapa[String(id)]) continue;
+        try {
+          const r = await blingFetch(`https://api.bling.com.br/Api/v3/logisticas/etiquetas?formato=PDF&idsVendas[]=${id}`, hb);
+          const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+          const link = j?.data?.[0]?.link;
+          if (link) mapa[String(id)] = link;
+        } catch { /* segue */ }
+        await new Promise(r2 => setTimeout(r2, 340));
       }
     }
   }
