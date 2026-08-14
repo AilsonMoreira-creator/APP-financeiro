@@ -227,10 +227,40 @@ export async function refreshBlingToken(conta) {
 // viram uma so no estoque. Aplicar ANTES do normCor/cor_label nos syncs.
 //   azul bebe -> Azul Claro  ·  offwhite -> Branco
 // (a camisa tricoline ja e cadastrada como Branco, entao nao precisa de excecao)
-export function canonizarCor(cor) {
+// Sinônimos ditados pelo Ailson (14/08): a mesma cor é escrita de jeitos
+// diferentes entre as 3 contas do Bling e entre os canais. O que vale é o
+// SKU, então a comparação tem que ignorar hífen/acento/caixa e tratar essas
+// grafias como a MESMA cor. ATENÇÃO: "Marrom Mescla" é cor própria e NÃO
+// entra no grupo do Marrom.
+const SINONIMOS_COR = {
+  offwhite: 'branco',
+  branco: 'branco',
+  azulbebe: 'azulclaro',
+  azulclaro: 'azulclaro',
+  azulmarinho: 'azulmarinho',
+  rosabebe: 'rosaclaro',
+  rosaclaro: 'rosaclaro',
+  marromescuro: 'marrom',
+  marrom: 'marrom',
+};
+
+const ROTULO_COR = {
+  branco: 'Branco',
+  azulclaro: 'Azul Claro',
+  azulmarinho: 'Azul Marinho',
+  rosaclaro: 'Rosa Claro',
+  marrom: 'Marrom',
+};
+
+/** Chave de COMPARAÇÃO de cor: sem acento, sem hífen/espaço, com sinônimos. */
+export function chaveCor(cor) {
   const n = String(cor || '').toLowerCase().normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
-  if (n === 'azulbebe') return 'Azul Claro';
-  if (n === 'offwhite') return 'Branco';
-  return cor;
+  return SINONIMOS_COR[n] || n;
+}
+
+/** Nome de EXIBIÇÃO da cor (uma grafia só por grupo). */
+export function canonizarCor(cor) {
+  const k = chaveCor(cor);
+  return ROTULO_COR[k] || cor;
 }

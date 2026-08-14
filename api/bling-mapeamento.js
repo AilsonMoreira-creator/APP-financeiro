@@ -17,7 +17,7 @@
  *  - conta sem o escopo liberado devolve status 'sem_permissao' e a tela
  *    mostra o aviso, sem quebrar as outras
  */
-import { blingFetch, refreshBlingToken } from './_bling-helpers.js';
+import { blingFetch, refreshBlingToken, chaveCor, canonizarCor } from './_bling-helpers.js';
 
 export const config = { maxDuration: 120 };
 const PAUSA = 340; // 3 req/s do Bling
@@ -29,6 +29,10 @@ const parseVariacao = (nome) => {
   return { cor: cor.trim(), tam: tam.trim().toUpperCase() };
 };
 const norm = (s) => String(s || '').trim().toLowerCase();
+// 14/08: a mesma cor tem grafias diferentes entre contas e canais
+// (Azul claro / Azul-claro / Azul bebê). Comparar SEMPRE pela chave canônica
+// — senão a cor some da auditoria como se não existisse no Bling.
+const kc = (s) => chaveCor(s);
 
 async function auditarConta(conta, ref, coresFiltro) {
   const saida = { conta, status: 'ok', canais: [], cores: {}, avisos: [] };
@@ -100,13 +104,13 @@ async function auditarConta(conta, ref, coresFiltro) {
     const { cor, tam } = parseVariacao(v.variacao?.nome || v.nome || '');
     return { id: v.id, sku: v.codigo, cor, tam, situacao: v.situacao, estoque: v.estoque?.saldoVirtualTotal ?? null };
   }).filter(v => v.cor);
-  const filtro = (coresFiltro || []).map(norm);
-  const variacoes = filtro.length ? todas.filter(v => filtro.includes(norm(v.cor))) : todas;
+  const filtro = (coresFiltro || []).map(kc);
+  const variacoes = filtro.length ? todas.filter(v => filtro.includes(kc(v.cor))) : todas;
   saida.total_variacoes = todas.length;
   saida.auditadas = variacoes.length;
   if (filtro.length) {
-    const achadas = new Set(variacoes.map(v => norm(v.cor)));
-    saida.cores_ausentes = (coresFiltro || []).filter(c => !achadas.has(norm(c)));
+    const achadas = new Set(variacoes.map(v => kc(v.cor)));
+    saida.cores_ausentes = (coresFiltro || []).filter(c => !achadas.has(kc(c)));
   }
   await espera(PAUSA);
 
@@ -116,8 +120,9 @@ async function auditarConta(conta, ref, coresFiltro) {
     const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
     const vincs = (j?.data || []).filter(x => canais[x.loja?.id]);
 
-    saida.cores[v.cor] = saida.cores[v.cor] || { cor: v.cor, tamanhos: [], por_canal: {} };
-    const bloco = saida.cores[v.cor];
+    const kCor = kc(v.cor);
+    saida.cores[kCor] = saida.cores[kCor] || { cor: canonizarCor(v.cor), tamanhos: [], por_canal: {} };
+    const bloco = saida.cores[kCor];
     bloco.tamanhos.push(v.tam);
 
     for (const canal of Object.values(canais)) {

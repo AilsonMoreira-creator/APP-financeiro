@@ -6234,8 +6234,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
 // estoque usa "azul-marinho"; tambem "rose"/"rosê", "off white"/"offwhite". Tira
 // acento e tudo que nao for alfanumerico, evitando que o zerado de cor top suma
 // no card de variacoes do Bling. Ailson 09/06/2026.
+// Sinônimos de cor (Ailson 14/08): a mesma cor aparece escrita de jeitos
+// diferentes entre as 3 contas do Bling. O que vale é o SKU, então na lista
+// de cores existe UMA entrada por grupo e ela vale pelas duas grafias.
+// "Marrom Mescla" é cor própria e NÃO entra no grupo do Marrom.
+const SINONIMOS_COR_BLING={offwhite:"branco",azulbebe:"azulclaro",rosabebe:"rosaclaro",marromescuro:"marrom"};
 function normCorBling(s){
-  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const n=String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  return SINONIMOS_COR_BLING[n]||n;
 }
 
 const BlingContent=({setReceitasMes,mesAtual,blingVendas={},blingImportStatus=null,produtos=[]})=>{
