@@ -296,6 +296,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         pedido_chaves: Object.keys(d),
         numero: d.numero, data: d.data, totalProdutos: d.totalProdutos, total: d.total,
+        notaFiscal: d.notaFiscal || null, situacao: d.situacao,
         contato: d.contato,
         loja: d.loja, numeroLoja: d.numeroLoja,
         item_exemplo: it0,
