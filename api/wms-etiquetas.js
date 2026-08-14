@@ -62,8 +62,19 @@ async function pedidosFiltrados(q) {
     .order('data_pedido', { ascending: true }).limit(300);
   if (contas !== 'todas') q2 = q2.in('conta', contas.split(','));
 
-  const [{ data: comNf }, { data: semNf }] = await Promise.all([q1, q2]);
-  const peds = [...(comNf || []), ...(semNf || [])];
+  // (3) FINALIZADOS RECENTES SEM nf_id no nosso banco — é o caso da NF feita
+  // À MÃO no Bling (14/08, pedido 70997 Christine/Shopee Lumia): o pedido já
+  // tinha nota, mas como o nf_id não estava gravado ele não caía em (1) nem
+  // em (2) e sumia da tela. O preencherNfIds abaixo descobre o nf_id deles.
+  let q3 = supabase.from('wms_pedidos').select(COLS)
+    .is('nf_id', null)
+    .eq('status_wms', 'finalizado')
+    .gte('finalizado_em', new Date(Date.now() - 2 * 86400000).toISOString())
+    .order('finalizado_em', { ascending: false }).limit(120);
+  if (contas !== 'todas') q3 = q3.in('conta', contas.split(','));
+
+  const [{ data: comNf }, { data: semNf }, { data: finSemNf }] = await Promise.all([q1, q2, q3]);
+  const peds = [...(comNf || []), ...(semNf || []), ...(finSemNf || [])];
 
   const out = [];
   for (const p of (peds || [])) {
@@ -211,7 +222,9 @@ export default async function handler(req, res) {
       // etiqueta de cada pedido derrubava a tela por tempo. A etiqueta é
       // buscada de verdade só na hora de gerar (PDF/ZPL).
       const desdeNf = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      await preencherNfIds(peds.filter(p => !p.nf_id && p.status_wms !== 'aberto'), tk, 20);
+      // descobre o nf_id de quem ainda não tem (inclusive abertos: a NF pode
+      // ter sido feita à mão no Bling antes da separação)
+      await preencherNfIds(peds.filter(p => !p.nf_id), tk, 30);
       const sitDe = await situacaoPorNfId([...contasSet], tk, desdeNf);
       const links = {};
       const grupos = {};
