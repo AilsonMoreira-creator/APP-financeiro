@@ -240,6 +240,9 @@ const SINONIMOS_COR = {
   azulmarinho: 'azulmarinho',
   rosabebe: 'rosaclaro',
   rosaclaro: 'rosaclaro',
+  // "Rosa" só existe na paleta da ordem de corte; no Bling é sempre
+  // "Rosa Claro" (conferido 14/08: nenhum SKU com Rosa puro)
+  rosa: 'rosaclaro',
   marromescuro: 'marrom',
   marrom: 'marrom',
 };

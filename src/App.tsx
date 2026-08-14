@@ -6238,7 +6238,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
 // diferentes entre as 3 contas do Bling. O que vale é o SKU, então na lista
 // de cores existe UMA entrada por grupo e ela vale pelas duas grafias.
 // "Marrom Mescla" é cor própria e NÃO entra no grupo do Marrom.
-const SINONIMOS_COR_BLING={offwhite:"branco",azulbebe:"azulclaro",rosabebe:"rosaclaro",marromescuro:"marrom"};
+const SINONIMOS_COR_BLING={offwhite:"branco",azulbebe:"azulclaro",rosabebe:"rosaclaro",rosa:"rosaclaro",marromescuro:"marrom"};
 function normCorBling(s){
   const n=String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
   return SINONIMOS_COR_BLING[n]||n;
