@@ -109,6 +109,11 @@ async function auditarConta(conta, ref, coresFiltro) {
         canal: canal.nome, tipo: canal.tipo, esperados: 0, vinculados: 0, sem_id: 0, duplicados: 0, itens: [],
       };
       p.esperados++;
+      // canais tipo "Api" (Convertr/Meluni, Ideris) consomem estoque POR SKU e
+      // NÃO registram produto-loja no Bling (provado 13/08: nem no pai nem nas
+      // variações; 1 vínculo em 600 do catálogo). Marcar ✕ seria mentira —
+      // vira "n/d: integração por SKU", cinza.
+      p.por_sku = canal.tipo === 'Api';
       const comId = doCanal.filter(x => String(x.codigo || '').trim());
       if (doCanal.length) p.vinculados++;
       if (doCanal.length && !comId.length) p.sem_id++;

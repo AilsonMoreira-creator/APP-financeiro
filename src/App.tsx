@@ -5806,7 +5806,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <button onClick={()=>{setEtqSample({desc,ref:modalRef,cor:vars[0]?.cor||'',tam:vars[0]?.tam||'',visiveis:[...new Set((vars||[]).map(v=>normCorBling(v.cor)))]});setEtqOpen(true);}} style={{flex:1,minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>▢</span> criar etiqueta
               </button>
-              <button onClick={()=>setMapOpen({ref:modalRef,refNorm,desc,cores:[...new Set((vars||[]).map(v=>v.cor).filter(Boolean))]})} title={`Conferir se os SKUs da REF ${modalRef} estão vinculados nos canais das 3 empresas`} style={{flex:1,minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              <button onClick={()=>setMapOpen({ref:modalRef,refNorm,desc,cores:[...new Set((vars||[]).map(v=>v.cor).filter(Boolean))]})} title={`Conferir se os SKUs da REF ${modalRef} estão vinculados nos canais das 3 empresas`} style={{flex:mobile?"1 1 46%":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>⇄</span> mapeamento
               </button>
               <button onClick={()=>abrirLocalizacao(modalRef,refNorm,desc)} title={`Definir a localização de estoque da REF ${modalRef} nas 3 contas Bling`} style={{flex:1,minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 8px",fontSize:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
@@ -5815,13 +5815,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             </div>
             <div style={{fontSize:10,color:"#8a9aa4",fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:10}}>Variações · Estoque atual</div>
             <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",margin:mobile?"0 -16px":"0",padding:mobile?"0 16px":"0"}}>
-            <table style={{width:mobile?"100%":"auto",margin:"0 auto",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth:mobile?440:"auto"}}>
+            <table style={{width:mobile?"100%":"auto",margin:"0 auto",borderCollapse:"separate",borderSpacing:0,fontSize:12,minWidth:mobile?0:"auto"}}>
               <thead><tr>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Cor</th>
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>Tamanho</th>
-                <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>SKU</th>
+                {!mobile&&<th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"left"}}>SKU</th>}
                 <th style={{background:"#2c3e50",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right"}}>Bling</th>
-                <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right"}}>Estoque</th>
+                {!mobile&&<th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right"}}>Estoque</th>}
                 <th style={{background:"#4a7fa5",color:"#fff",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,padding:"8px 12px",textAlign:"right",opacity:0.85}}>Estoque proj.</th>
               </tr></thead>
               <tbody>
@@ -5833,13 +5833,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                   const blingQtd=blingEstoque[blingKey];const temBling=blingQtd!=null;
                   const bf=blingFilhos[blingKey];const blingVend=temBling?((blingQtd||0)+((bf&&bf.lumia)||0)+((bf&&bf.muniam)||0)):null; // vendavel = soma dos 3 Gerais
                   return<tr key={i} style={{background:i%2===0?"#fff":"#faf8f5",borderBottom:"1px solid #e8e2da"}}>
-                    <td style={{padding:"8px 12px",color:"#2c3e50",fontWeight:600}}>{v.cor||'—'}</td>
+                    <td style={{padding:mobile?"8px 8px":"8px 12px",color:"#2c3e50",fontWeight:600,maxWidth:mobile?128:"none",lineHeight:1.2,wordBreak:"break-word",hyphens:"auto"}}>{v.cor||'—'}</td>
                     <td style={{padding:"8px 12px",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,color:"#4a7fa5"}}>{v.tam||'—'}</td>
-                    <td style={{padding:"8px 12px",fontFamily:"Courier New,monospace",fontSize:10,color:"#8a9aa4"}}>{v.sku&&!String(v.sku).startsWith('_SINT_')?v.sku:'—'}</td>
+                    {!mobile&&<td style={{padding:"8px 12px",fontFamily:"Courier New,monospace",fontSize:10,color:"#8a9aa4"}}>{v.sku&&!String(v.sku).startsWith('_SINT_')?v.sku:'—'}</td>}
                     {(()=>{const fk=`${refNorm}|${corNorm}|${tamU}`;const fi=ajustesFila[fk];
                       const env=fi&&fi.status==='enviando';const err=fi&&fi.status==='erro';
                       return <td onClick={()=>{if(env)return;setBlingAjuste({refNorm,cor:v.cor||'',tam:tamU,cor_norm:corNorm,atual:temBling?blingQtd:0,lumia:bf?bf.lumia:null,muniam:bf?bf.muniam:null,desc});setAjusteValor(String(err?fi.qtdNova:(temBling?blingQtd:0)));setAjusteMotivo(usuarioSessao);}} title={env?'Enviando pro Bling…':err?('Falhou: '+(fi.erroMsg||'')+' — toque pra tentar de novo'):('Ajustar estoque Bling'+(bf?` — Exitus ${blingQtd} · Lumia ${bf.lumia??0} · Muniam ${bf.muniam??0}`:''))} style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:env?"#8a6d1a":err?"#a03d3d":(temBling?"#2c3e50":"#b9c2c9"),cursor:env?"wait":"pointer",background:env?"#fdf3dd":err?"#fdeaea":"#f4f7fb",borderLeft:"1px solid #e3ebf2",borderRight:"1px solid #e3ebf2"}}>{env?(fi.qtdNova+' ⏳'):err?((temBling?blingVend:'·')+' ⚠️'):(temBling?blingVend:'·')}</td>;})()}
-                    <td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:cls}}>{q}</td>
+                    {!mobile&&<td style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:700,fontSize:13,color:cls}}>{q}</td>}
                     <td onClick={proj>0?()=>setProjModal({refNorm,cor:v.cor||'',tam:tamU}):undefined} title={proj>0?"Ver cortes que geram a reposição":undefined} style={{padding:"8px 12px",textAlign:"right",fontFamily:"Calibri,Segoe UI,Arial,sans-serif",fontWeight:500,fontSize:11,color:proj>0?"#4a7fa5":"#cdd4d9",cursor:proj>0?"pointer":"default",textDecoration:proj>0?"underline":"none"}}>{proj>0?`+${proj}`:'—'}</td>
                   </tr>;
                 })}

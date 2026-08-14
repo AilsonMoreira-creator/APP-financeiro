@@ -58,6 +58,8 @@ export default function MapeamentoSkus({ refProduto: refProd, desc, cores, onClo
 
   const cel = (p) => {
     if (!p) return { txt: '—', fg: C.cinza, bg: C.cinzaBg };
+    // integração por SKU (Convertr/Meluni): o Bling não guarda vínculo
+    if (p.por_sku) return { txt: 'n/d', fg: C.cinza, bg: C.cinzaBg };
     if (p.vinculados === 0) return { txt: '✕', fg: C.erro, bg: C.erroBg };
     if (p.sem_id > 0) return { txt: `${p.vinculados}/${p.esperados} ⚠`, fg: C.alerta, bg: C.alertaBg };
     if (p.vinculados < p.esperados) return { txt: `${p.vinculados}/${p.esperados}`, fg: C.alerta, bg: C.alertaBg };
@@ -167,6 +169,11 @@ export default function MapeamentoSkus({ refProduto: refProd, desc, cores, onClo
                         <div style={{ fontSize: 12.5, fontWeight: 700, color: C.navy, marginBottom: 8 }}>
                           {detalhe.cor} · {p.canal}
                         </div>
+                        {p.por_sku && (
+                          <div style={{ fontSize: 11.5, color: C.suave, marginBottom: 8 }}>
+                            Esse canal puxa estoque direto pelo SKU e não cria registro de vínculo no Bling — por isso não dá pra confirmar por aqui. A confirmação viria pela API do próprio Convertr.
+                          </div>
+                        )}
                         {p.itens.map(it => (
                           <div key={it.tam} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '5px 0', fontSize: 12, borderTop: `1px solid ${C.borda}` }}>
                             <b style={{ width: 34, color: C.navy }}>{it.tam}</b>
@@ -208,7 +215,7 @@ export default function MapeamentoSkus({ refProduto: refProd, desc, cores, onClo
                 Ver todas as cores (demora mais)
               </label>
               <div style={{ flex: 1 }} />
-              <div style={{ fontSize: 11, color: C.suave }}>✓ tudo vinculado · n/n parcial · ⚠ sem ID de anúncio · ✕ sem vínculo</div>
+              <div style={{ fontSize: 11, color: C.suave }}>✓ tudo vinculado · n/n parcial · ⚠ sem ID de anúncio · ✕ sem vínculo · n/d integração por SKU (o Bling não registra vínculo)</div>
               <button onClick={onClose} style={{ background: C.navy, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontFamily: F, fontWeight: 700, cursor: 'pointer' }}>Fechar</button>
             </div>
           )}
