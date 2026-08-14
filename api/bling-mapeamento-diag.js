@@ -59,6 +59,30 @@ export default async function handler(req, res) {
       });
     }
 
+    // ?lojas_usadas=1 — quais lojas APARECEM nos vínculos do catálogo inteiro?
+    // (pra saber se o canal Convertr/Api registra produto-loja ou não)
+    if (req.query?.lojas_usadas === '1') {
+      const canaisR = await blingFetch('https://api.bling.com.br/Api/v3/canais-venda', headers);
+      const canaisJ = typeof canaisR.json === 'function' ? await canaisR.json().catch(() => ({})) : {};
+      const nomes = {};
+      for (const c of (canaisJ?.data || [])) nomes[c.id] = `${c.descricao} [${c.tipo}]${c.situacao === 1 ? '' : ' (inativo)'}`;
+      await new Promise(r => setTimeout(r, 350));
+      const cont = {};
+      for (let pg = 1; pg <= 6; pg++) {
+        const r = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/lojas?limite=100&pagina=${pg}`, headers);
+        const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+        const lista = j?.data || [];
+        for (const v of lista) {
+          const id = v.loja?.id;
+          cont[id] = cont[id] || { loja: nomes[id] || `loja ${id}`, vinculos: 0, exemplo_codigo: v.codigo || '(vazio)' };
+          cont[id].vinculos++;
+        }
+        if (lista.length < 100) break;
+        await new Promise(r2 => setTimeout(r2, 350));
+      }
+      return res.status(200).json({ conta, amostra: 'até 600 vínculos do catálogo', por_loja: Object.values(cont) });
+    }
+
     // ?ref=02671 — PROTÓTIPO DA AUDITORIA: acha os produtos da referência,
     // pega as variações e cruza com os vínculos de loja (só leitura)
     if (req.query?.ref) {
