@@ -5315,7 +5315,22 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const recarregarBling=async(refNorm)=>{
     try{
       const {data}=await supabase.from('bling_estoque').select('cor_norm,tam,qtd,qtd_lumia,qtd_muniam,cor_label').eq('ref',refNorm);
-      const m={};const mf={};const lbl={};(data||[]).forEach(r=>{const k=`${refNorm}|${r.cor_norm}|${String(r.tam).toUpperCase()}`;m[k]=r.qtd;if(r.qtd_lumia!=null||r.qtd_muniam!=null)mf[k]={lumia:r.qtd_lumia,muniam:r.qtd_muniam}; if(r.cor_norm&&r.cor_label&&!lbl[r.cor_norm])lbl[r.cor_norm]=r.cor_label;});
+      // 15/08: a chave usa a cor UNIFICADA (normCorBling com sinônimos). Quando
+      // duas grafias caem na mesma cor (Marrom + Marrom Escuro), o saldo é
+      // SOMADO — antes o lookup dava miss e a coluna Bling ficava vazia.
+      const m={};const mf={};const lbl={};const melhor={};
+      (data||[]).forEach(r=>{
+        const cn=normCorBling(r.cor_norm||'');
+        const k=`${refNorm}|${cn}|${String(r.tam).toUpperCase()}`;
+        m[k]=(m[k]||0)+(Number(r.qtd)||0);
+        if(r.qtd_lumia!=null||r.qtd_muniam!=null){
+          const at=mf[k]||{lumia:0,muniam:0};
+          mf[k]={lumia:(at.lumia||0)+(Number(r.qtd_lumia)||0),muniam:(at.muniam||0)+(Number(r.qtd_muniam)||0)};
+        }
+        // rótulo: fica com o da grafia que tem mais saldo (a "oficial" da REF)
+        const q=Math.abs(Number(r.qtd)||0);
+        if(cn&&r.cor_label&&(melhor[cn]===undefined||q>melhor[cn])){lbl[cn]=r.cor_label;melhor[cn]=q;}
+      });
       setBlingEstoque(m);setBlingFilhos(mf);setBlingLabel(lbl);
     }catch(e){console.error('bling estoque:',e.message);}
   };
@@ -5750,6 +5765,8 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         return [...s].sort((a,b)=>(ordemTamG[a.toLowerCase()]||99)-(ordemTamG[b.toLowerCase()]||99));
       })();
       const corDisplay={};
+      // rótulo canônico primeiro (senão a lista fica com a grafia longa)
+      Object.entries(ROTULO_COR_BLING).forEach(([k,nome])=>{corDisplay[k]=nome;});
       varsTodas.forEach(v=>{const k=normCorBling(v.cor);if(k&&!corDisplay[k])corDisplay[k]=v.cor;});
       Object.entries(nomesProj).forEach(([k,nome])=>{if(k&&!corDisplay[k])corDisplay[k]=nome;});
       Object.entries(blingLabel).forEach(([k,nome])=>{if(k&&nome&&!corDisplay[k])corDisplay[k]=nome;});
@@ -5764,7 +5781,22 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           sinteticas.push({cor:corDisplay[ck]||ck,tam:t,qtd:0,sku:null});
         }
       });
-      const varsGrade=[...varsTodas,...sinteticas].sort((a,b)=>{
+      // 15/08 (ordem dele): a lista mostra UMA linha por cor unificada — some
+      // "Azul bebê" quando existe "Azul Claro", "Marrom Escuro" quando existe
+      // "Marrom" etc. As quantidades das duas grafias são somadas.
+      const unificadas=(()=>{
+        const mapa=new Map();
+        for(const v of [...varsTodas,...sinteticas]){
+          const ck=normCorBling(v.cor);
+          const chave=`${ck}|${String(v.tam||'').toUpperCase()}`;
+          const at=mapa.get(chave);
+          if(!at){mapa.set(chave,{...v,cor:corDisplay[ck]||blingLabel[ck]||v.cor,qtd:Number(v.qtd)||0});continue;}
+          at.qtd=(Number(at.qtd)||0)+(Number(v.qtd)||0);
+          if(!at.sku&&v.sku)at.sku=v.sku;
+        }
+        return [...mapa.values()];
+      })();
+      const varsGrade=unificadas.sort((a,b)=>{
         const corA=a.cor||'';const corB=b.cor||'';
         if(corA!==corB)return corA.localeCompare(corB);
         const tamOrder={P:1,M:2,G:3,GG:4,G1:5,G2:6,G3:7};
@@ -6239,6 +6271,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
 // de cores existe UMA entrada por grupo e ela vale pelas duas grafias.
 // "Marrom Mescla" é cor própria e NÃO entra no grupo do Marrom.
 const SINONIMOS_COR_BLING={offwhite:"branco",azulbebe:"azulclaro",rosabebe:"rosaclaro",rosa:"rosaclaro",marromescuro:"marrom"};
+// Nome que a lista mostra pro grupo (ordem dele 15/08: fica "Marrom" e
+// "Azul Claro", somem "Marrom Escuro" e "Azul bebê").
+const ROTULO_COR_BLING={branco:"Branco",azulclaro:"Azul Claro",azulmarinho:"Azul Marinho",rosaclaro:"Rosa Claro",marrom:"Marrom"};
 function normCorBling(s){
   const n=String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
   return SINONIMOS_COR_BLING[n]||n;
