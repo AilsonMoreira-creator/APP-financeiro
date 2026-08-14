@@ -5322,10 +5322,16 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       (data||[]).forEach(r=>{
         const cn=normCorBling(r.cor_norm||'');
         const k=`${refNorm}|${cn}|${String(r.tam).toUpperCase()}`;
-        m[k]=(m[k]||0)+(Number(r.qtd)||0);
+        // 15/08 (regra dele): Branco P 70 + Off-white P 70 é O MESMO produto
+        // com nome diferente por canal — NÃO soma (não vira 140). Fica o
+        // maior saldo do grupo; grafias diferentes só ocorrem em tamanhos
+        // diferentes, então na prática cada tamanho tem um valor só.
+        const qr=Number(r.qtd)||0;
+        if(m[k]==null||Math.abs(qr)>Math.abs(m[k]))m[k]=qr;
         if(r.qtd_lumia!=null||r.qtd_muniam!=null){
           const at=mf[k]||{lumia:0,muniam:0};
-          mf[k]={lumia:(at.lumia||0)+(Number(r.qtd_lumia)||0),muniam:(at.muniam||0)+(Number(r.qtd_muniam)||0)};
+          mf[k]={lumia:Math.abs(Number(r.qtd_lumia)||0)>Math.abs(at.lumia||0)?(Number(r.qtd_lumia)||0):at.lumia,
+                 muniam:Math.abs(Number(r.qtd_muniam)||0)>Math.abs(at.muniam||0)?(Number(r.qtd_muniam)||0):at.muniam};
         }
         // rótulo: fica com o da grafia que tem mais saldo (a "oficial" da REF)
         const q=Math.abs(Number(r.qtd)||0);
@@ -5791,7 +5797,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
           const chave=`${ck}|${String(v.tam||'').toUpperCase()}`;
           const at=mapa.get(chave);
           if(!at){mapa.set(chave,{...v,cor:corDisplay[ck]||blingLabel[ck]||v.cor,qtd:Number(v.qtd)||0});continue;}
-          at.qtd=(Number(at.qtd)||0)+(Number(v.qtd)||0);
+          // mesmo produto com nome diferente: fica o maior saldo, nunca a soma
+          const qv=Number(v.qtd)||0;
+          if(Math.abs(qv)>Math.abs(Number(at.qtd)||0))at.qtd=qv;
           if(!at.sku&&v.sku)at.sku=v.sku;
         }
         return [...mapa.values()];
