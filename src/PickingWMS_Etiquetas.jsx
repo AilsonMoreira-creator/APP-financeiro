@@ -59,7 +59,14 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       const r = await fetch(`${API}/wms-etiquetas?${qs({ zpl: '1' })}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro || `HTTP ${r.status}`);
-      if (!j.total) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
+      if (!j.total) {
+        throw new Error((j.em_pdf || []).length
+          ? `Essas ${j.em_pdf.length} etiqueta(s) vêm em PDF (Shein/canais que não usam térmica). Use o botão "Gerar etiquetas" (PDF) pra imprimir.`
+          : 'Nenhuma etiqueta pronta nesses filtros.');
+      }
+      if ((j.em_pdf || []).length) {
+        alert(`${j.em_pdf.length} etiqueta(s) vêm em PDF e não vão pra térmica — imprima essas pelo botão "Gerar etiquetas" (PDF). As outras ${j.total} seguem pra impressora agora.`);
+      }
 
       setImprimindo('Conectando na impressora…');
       const qz = await carregarQz();

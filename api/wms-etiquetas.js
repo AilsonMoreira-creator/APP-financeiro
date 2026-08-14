@@ -280,8 +280,25 @@ export default async function handler(req, res) {
         && (q.reimprimir === '1'
           || (!p.etiqueta_impressa_em && sitDe[String(p.nf_id)] === 5)));
 
-      const blocos = []; const idsOk = []; let grupoAtual = '';
+      const blocos = []; const idsOk = []; const emPdf = []; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
+        // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
+        let zplDoPedido = null, ehPdf = false;
+        try {
+          const r0 = await fetch(links[String(p.pedido_id)]);
+          const b0 = new Uint8Array(await r0.arrayBuffer());
+          if (b0[0] === 0x50 && b0[1] === 0x4b) {
+            const z0 = unzipSync(b0);
+            const nomeZ = Object.keys(z0).find(n => /\.txt$|zpl/i.test(n));
+            const nomeP = Object.keys(z0).find(n => /\.pdf$/i.test(n));
+            if (nomeZ) zplDoPedido = Buffer.from(z0[nomeZ]).toString('utf8');
+            else if (nomeP) ehPdf = true;
+          } else if (b0[0] === 0x25) ehPdf = true;                    // %PDF
+          else if (String.fromCharCode(b0[0], b0[1]) === '^X') zplDoPedido = Buffer.from(b0).toString('utf8');
+        } catch { /* sem etiqueta */ }
+        if (ehPdf) { emPdf.push(p.numero); continue; }
+        if (!zplDoPedido) continue;
+
         const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
         if (k !== grupoAtual) {
           grupoAtual = k;
@@ -297,22 +314,13 @@ export default async function handler(req, res) {
 ^FO40,900^GB730,6,6^FS
 ^XZ` });
         }
-        try {
-          const r = await fetch(links[String(p.pedido_id)]);
-          const bytes = new Uint8Array(await r.arrayBuffer());
-          let zpl = null;
-          if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
-            const z = unzipSync(bytes);
-            const nomeZpl = Object.keys(z).find(n => /\.txt$|zpl/i.test(n));
-            if (nomeZpl) zpl = Buffer.from(z[nomeZpl]).toString('utf8');
-          } else if (String.fromCharCode(bytes[0], bytes[1]) === '^X') {
-            zpl = Buffer.from(bytes).toString('utf8');
-          }
-          if (zpl) { blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl }); idsOk.push(p.pedido_id); }
-        } catch { /* pula essa etiqueta */ }
+        blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplDoPedido });
+        idsOk.push(p.pedido_id);
         await new Promise(r2 => setTimeout(r2, 120));
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk });
+      // etiquetas que o canal entrega em PDF (Shein) não vão pra térmica em
+      // ZPL — a tela orienta a usar o PDF nesses casos
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf });
     }
 
     // ── marcar como impressas depois que a térmica confirmou
