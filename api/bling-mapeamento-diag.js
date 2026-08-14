@@ -59,6 +59,31 @@ export default async function handler(req, res) {
       });
     }
 
+    // ?movimentos=1&produto=16680501330 — histórico de estoque no Bling
+    // (quem lançou, quando, tipo de operação)
+    if (req.query?.movimentos === '1' && req.query?.produto) {
+      const id = String(req.query.produto);
+      const out = { conta, produto: id, rotas: {} };
+      for (const [tag, url] of [
+        ['saldos', `https://api.bling.com.br/Api/v3/estoques/saldos?idsProdutos[]=${id}`],
+        ['estoques_prod', `https://api.bling.com.br/Api/v3/estoques?idProduto=${id}&limite=20`],
+        ['estoques_ids', `https://api.bling.com.br/Api/v3/estoques?idsProdutos[]=${id}&limite=20`],
+        ['produto_estoque', `https://api.bling.com.br/Api/v3/produtos/${id}`],
+      ]) {
+        const r = await blingFetch(url, headers);
+        const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+        const d = j?.data;
+        out.rotas[tag] = {
+          http: r.status,
+          resumo: tag === 'produto_estoque'
+            ? { nome: d?.nome, estoque: d?.estoque }
+            : JSON.stringify(d ?? j).slice(0, 700),
+        };
+        await new Promise(r2 => setTimeout(r2, 350));
+      }
+      return res.status(200).json(out);
+    }
+
     // ?loja=206144802 — vínculos DAQUELA loja (o Convertr registra ou não?)
     if (req.query?.loja) {
       const idLoja = String(req.query.loja);
