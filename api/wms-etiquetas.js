@@ -69,8 +69,10 @@ async function pedidosFiltrados(q) {
   let q3 = supabase.from('wms_pedidos').select(COLS)
     .is('nf_id', null)
     .eq('status_wms', 'finalizado')
-    .gte('finalizado_em', new Date(Date.now() - 2 * 86400000).toISOString())
-    .order('finalizado_em', { ascending: false }).limit(120);
+    // usa criado_em: quando o SYNC finaliza o pedido (situação atendido no
+    // Bling) o finalizado_em fica vazio, e o filtro por ele escondia o pedido
+    .gte('criado_em', new Date(Date.now() - 2 * 86400000).toISOString())
+    .order('criado_em', { ascending: false }).limit(120);
   if (contas !== 'todas') q3 = q3.in('conta', contas.split(','));
 
   const [{ data: comNf }, { data: semNf }, { data: finSemNf }] = await Promise.all([q1, q2, q3]);
