@@ -156,6 +156,35 @@ export default async function handler(req, res) {
       const devolvidos = new Set((tx || []).map(t => String(t.pedido_id)));
       for (const l of vendas30) if (devolvidos.has(String(l.pedido_id))) devLinhas.push(l);
     }
+    // ── TikTok: reembolso no repasse (API do canal) ──
+    const idsTts = [...new Set(vendas30.filter(l => /tiktok/i.test(l.canal)).map(l => l.pedido_id))];
+    if (idsTts.length) {
+      const { data: bl } = await supabase.from('bling_vendas_detalhe')
+        .select('pedido_id, numero_pedido_loja').in('pedido_id', idsTts);
+      const porLoja = {};
+      (bl || []).forEach(x => { if (x.numero_pedido_loja) porLoja[String(x.numero_pedido_loja)] = String(x.pedido_id); });
+      const ordens = Object.keys(porLoja);
+      for (let i = 0; i < ordens.length; i += 300) {
+        const { data: rp } = await supabase.from('tts_repasse')
+          .select('order_id, reembolsos').in('order_id', ordens.slice(i, i + 300)).neq('reembolsos', 0);
+        const devolvidosTts = new Set((rp || []).map(x => porLoja[String(x.order_id)]));
+        for (const l of vendas30) if (devolvidosTts.has(String(l.pedido_id))) devLinhas.push(l);
+      }
+    }
+
+    // ── demais canais (Shein, Shopee, Magalu): NOTA DE DEVOLUÇÃO do Bling ──
+    // (ML e TikTok não entram aqui — já vieram da API do canal, sem dobrar)
+    const { data: devBling } = await supabase.from('bling_devolucoes')
+      .select('ref, cor, tam, qtd, canal, data_nota')
+      .eq('ref', refNorm(ref)).gte('data_nota', desde(30));
+    for (const d of (devBling || [])) {
+      devLinhas.push({
+        conta: '-', canal: d.canal || 'Bling', detalhe: d.canal || 'Bling',
+        data: d.data_nota, pedido_id: `nf-${d.canal}-${d.data_nota}`,
+        cor: d.cor || '—', tam: String(d.tam || '—').toUpperCase(), qtd: n(d.qtd) || 1,
+      });
+    }
+
     const vendidas30 = somaQtd(vendas30);
     const devolvidas = somaQtd(devLinhas);
 
@@ -187,7 +216,13 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ref: refNorm(ref), vendas, cores, canais, full,
       devolucoes: {
-        janela: '30 dias', fonte: 'Mercado Livre (pedidos cancelados/estornados)',
+        janela: '30 dias',
+        fonte: 'Mercado Livre e TikTok pela API do canal · demais canais pelas notas de devolução do Bling',
+        por_canal: (() => {
+          const m = {};
+          for (const l of devLinhas) { const k = l.detalhe || l.canal; m[k] = (m[k] || 0) + l.qtd; }
+          return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([canal, qtd]) => ({ canal, qtd }));
+        })(),
         vendidas30, devolvidas,
         pct: Math.round((devolvidas / Math.max(1, vendidas30)) * 1000) / 10,
         tamanhos, cores: coresDev,

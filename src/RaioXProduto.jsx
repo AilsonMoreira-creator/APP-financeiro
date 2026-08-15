@@ -188,6 +188,12 @@ export default function RaioXProduto({ refProduto, desc, foto, onClose }) {
                     ))}
                   </div>
                 </div>
+                {(d.devolucoes.por_canal || []).length > 0 && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: C.suave }}>
+                    <b style={{ color: C.navy }}>Por canal:</b>{' '}
+                    {d.devolucoes.por_canal.map(c => `${c.canal} ${c.qtd}`).join(' · ')}
+                  </div>
+                )}
                 <div style={{ fontSize: 11, color: C.suave, marginTop: 10 }}>
                   O % é sobre o que aquele tamanho/cor vendeu — assim a cor mais vendida não parece a pior só por aparecer mais nas devoluções.
                 </div>
