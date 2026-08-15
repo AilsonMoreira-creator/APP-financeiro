@@ -9,6 +9,7 @@ import OrdemDeCorte from './OrdemDeCorte';
 import FilaDeCorte from './FilaDeCorte';
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
+import RaioXProduto from './RaioXProduto';
 import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
@@ -4974,6 +4975,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [etqSample,setEtqSample]=useState(null);
   const [gtinOpen,setGtinOpen]=useState(null);   // {ref,refNorm,desc} | null
   const [mapOpen,setMapOpen]=useState<any>(null); // Verificar mapeamento SKU x canal (13/08)
+  const [raioxOpen,setRaioxOpen]=useState<any>(null); // Raio-X do produto (15/08)
   const [gtinBusy,setGtinBusy]=useState(false);
   const [gtinProg,setGtinProg]=useState(null);   // null=ainda não rodou; {fase,reservados,total,contas:{},erro}
   // Localização de estoque da ref (mesmo caminho do GTIN: prepara + grava nas 3
@@ -5837,9 +5839,14 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
             <button onClick={()=>setModalRef(null)} style={{background:"none",border:"none",fontSize:22,color:"#8a9aa4",cursor:"pointer",padding:"0 4px",lineHeight:1}}>×</button>
           </div>
           <div style={{padding:"16px 20px"}}>
-            <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{width:"100%",marginBottom:14,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 14px",fontSize:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
-              <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte ao estoque
-            </button>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{flex:"1 1 60%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 10px",fontSize:mobile?12:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
+                <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte
+              </button>
+              <button onClick={()=>setRaioxOpen({ref:modalRef,desc,foto:null})} title="Vendas, cores, canais, Full e devoluções desta referência" style={{flex:"1 1 38%",minWidth:0,background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"9px 10px",fontSize:mobile?12:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
+                🔎 raio-x
+              </button>
+            </div>
             <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:mobile?"wrap":"nowrap"}}>
               <button onClick={()=>{setGtinProg(null);setGtinOpen({ref:modalRef,refNorm,desc});}} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:12,lineHeight:1,color:"#4a7fa5",letterSpacing:-1,fontFamily:"monospace"}}>▌║▌</span> código de barras
@@ -5949,6 +5956,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         </div>;
       })()}
       {etqOpen && <EtiquetaGerar sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
+      {raioxOpen && <RaioXProduto refProduto={raioxOpen.ref} desc={raioxOpen.desc} foto={raioxOpen.foto} onClose={()=>setRaioxOpen(null)}/>}
       {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
       {gtinOpen && (
         <div onClick={()=>{ if(!gtinBusy)setGtinOpen(null); }} style={{position:"fixed",inset:0,background:"rgba(44,62,80,0.55)",display:"flex",alignItems:"center",justifyContent:"center",padding:"24px",zIndex:205,backdropFilter:"blur(3px)"}}>
