@@ -5701,16 +5701,17 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       // Em qualquer outra REF, mantém idêntico.
       const aliasCor=(cor)=>{
         const c=String(cor||'').toLowerCase().trim();
-        if(refNorm==='2601'&&(c==='marrom-escuro'||c==='marrom escuro'))
-          return{destino:'Marrom',ocultar:true,somar:true};
+        // 15/08: as exceções manuais de COR viraram regra geral (normCorBling
+        // com sinônimos + uma linha por cor unificada, sem somar). Removidas:
+        //   2601 "marrom-escuro" → Marrom  · 395 "branco" → ocultar
+        // A do "Azul sintético" da 2601 FICA: ali o ML criou uma variação
+        // fantasma (SKU _SINT_) e o problema não é grafia de cor.
         // 2601: a variação REAL tem SKU sob o rótulo "Azul" (I82gqdf457u527-530); o
         // ML sintetizou um "Azul royal" duplicado (SKU _SINT_, mesma qtd). Renomeia
         // Azul→Azul royal (mantém o SKU real) e oculta o sintético. Ailson 22/06/2026.
         if(refNorm==='2601'&&c==='azul')
           return{destino:'Azul royal',ocultar:true,somar:true};
         if(refNorm==='2601'&&c==='azul royal')
-          return{destino:null,ocultar:true,somar:false};
-        if(refNorm==='395'&&c==='branco')
           return{destino:null,ocultar:true,somar:false};
         return{destino:null,ocultar:false,somar:false};
       };
