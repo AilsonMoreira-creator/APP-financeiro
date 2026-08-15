@@ -513,6 +513,10 @@
     {
       "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=60",
       "schedule": "45 10 * * 1-6"
+    },
+    {
+      "path": "/api/bling-devolucoes-sync?dias=35",
+      "schedule": "25 8 * * *"
     }
   ]
 }
