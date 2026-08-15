@@ -57,6 +57,28 @@ function rankear(arr, chave, rotulo) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+
+  // ?diag_nf=1&conta=exitus — as notas de ENTRADA (devolução) estão acessíveis?
+  if (req.query?.diag_nf === '1') {
+    const { blingFetch, refreshBlingToken } = await import('./_bling-helpers.js');
+    const conta = String(req.query?.conta || 'exitus');
+    const desde = dia(new Date(Date.now() - 30 * 86400000));
+    const token = await refreshBlingToken(conta);
+    const h = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
+    const r = await blingFetch(`https://api.bling.com.br/Api/v3/nfe?tipo=0&dataEmissaoInicial=${desde}&limite=20`, h);
+    const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
+    const lista = j?.data || [];
+    const out = { conta, http: r.status, qtd: lista.length, amostra: lista.slice(0, 5) };
+    if (lista[0]?.id) {
+      await new Promise(x => setTimeout(x, 400));
+      const rd = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${lista[0].id}`, h);
+      const jd = typeof rd.json === 'function' ? await rd.json().catch(() => ({})) : {};
+      const d = jd?.data || {};
+      out.detalhe = { chaves: Object.keys(d), natureza: d.naturezaOperacao, itens: (d.itens || []).slice(0, 3) };
+    }
+    return res.status(200).json(out);
+  }
+
   const ref = String(req.query?.ref || '').trim();
   if (!ref) return res.status(400).json({ erro: 'use ?ref=' });
   const periodo = String(req.query?.periodo || '7d');
