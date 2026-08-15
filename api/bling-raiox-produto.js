@@ -45,6 +45,19 @@ async function linhas(ref, de, ate) {
 
 const somaQtd = (arr) => arr.reduce((t, x) => t + x.qtd, 0);
 
+// Rótulo do canal do jeito que ele lê a operação (15/08): "ML Exitus",
+// "ML Full Exitus", "Shein Lumia" — o "ML Clássico" do Bling é só o Mercado
+// Livre normal daquela conta (o Full tem canal próprio).
+const CONTA_NOME = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
+function rotuloCanal(l) {
+  const base = String(l.detalhe || l.canal || '')
+    .replace(/ML Clássico/i, 'ML')
+    .replace(/Mercado Livre/i, 'ML')
+    .trim();
+  const conta = CONTA_NOME[l.conta] || l.conta || '';
+  return conta ? `${base} ${conta}` : base;
+}
+
 function rankear(arr, chave, rotulo) {
   const m = {};
   for (const l of arr) {
@@ -116,9 +129,9 @@ export default async function handler(req, res) {
     const ult15 = todas.filter(l => l.data >= desde(15));
     const ant15 = todas.filter(l => l.data >= desde(30) && l.data < desde(15));
     const q15 = {}, qA = {};
-    for (const l of ult15) { const k = `${l.detalhe} · ${l.conta}`; q15[k] = (q15[k] || 0) + l.qtd; }
-    for (const l of ant15) { const k = `${l.detalhe} · ${l.conta}`; qA[k] = (qA[k] || 0) + l.qtd; }
-    const canais = rankear(noPeriodo, l => `${l.detalhe} · ${l.conta}`, l => `${l.detalhe} · ${l.conta}`)
+    for (const l of ult15) { const k = rotuloCanal(l); q15[k] = (q15[k] || 0) + l.qtd; }
+    for (const l of ant15) { const k = rotuloCanal(l); qA[k] = (qA[k] || 0) + l.qtd; }
+    const canais = rankear(noPeriodo, rotuloCanal, rotuloCanal)
       .slice(0, 5)
       .map(c => {
         const a = q15[c.chave] || 0, b = qA[c.chave] || 0;
@@ -220,7 +233,7 @@ export default async function handler(req, res) {
         fonte: 'Mercado Livre e TikTok pela API do canal · demais canais pelas notas de devolução do Bling',
         por_canal: (() => {
           const m = {};
-          for (const l of devLinhas) { const k = l.detalhe || l.canal; m[k] = (m[k] || 0) + l.qtd; }
+          for (const l of devLinhas) { const k = l.conta === '-' ? (l.canal || 'Bling') : rotuloCanal(l); m[k] = (m[k] || 0) + l.qtd; }
           return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([canal, qtd]) => ({ canal, qtd }));
         })(),
         vendidas30, devolvidas,
