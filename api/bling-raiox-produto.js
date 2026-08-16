@@ -188,8 +188,19 @@ export default async function handler(req, res) {
     // ── demais canais (Shein, Shopee, Magalu): NOTA DE DEVOLUÇÃO do Bling ──
     // (ML e TikTok não entram aqui — já vieram da API do canal, sem dobrar)
     const { data: devBling } = await supabase.from('bling_devolucoes')
-      .select('ref, cor, tam, qtd, canal, data_nota')
+      .select('ref, cor, tam, qtd, canal, data_nota, numero_pedido_loja')
       .eq('ref', refNorm(ref)).gte('data_nota', desde(30));
+    // dedupe: se o pedido já tem NOTA de devolução, a versão da API sai
+    const comNota = new Set((devBling || []).map(d => String(d.numero_pedido_loja || '')).filter(Boolean));
+    if (comNota.size) {
+      const { data: blp } = await supabase.from('bling_vendas_detalhe')
+        .select('pedido_id, numero_pedido_loja')
+        .in('numero_pedido_loja', [...comNota].slice(0, 300));
+      const pedidosComNota = new Set((blp || []).map(x => String(x.pedido_id)));
+      for (let i = devLinhas.length - 1; i >= 0; i--) {
+        if (pedidosComNota.has(String(devLinhas[i].pedido_id))) devLinhas.splice(i, 1);
+      }
+    }
     for (const d of (devBling || [])) {
       devLinhas.push({
         conta: '-', canal: d.canal || 'Bling', detalhe: d.canal || 'Bling',

@@ -87,7 +87,10 @@ export default async function handler(req, res) {
       for (const nf of notas) {
         if (Date.now() - inicio > 260000) { r.aviso = 'tempo esgotado — continua na próxima rodada'; break; }
         if (jaTem.has(String(nf.id))) continue;
-        if (vemDaApi(nf.loja?.id)) { r.canais_ignorados++; continue; }  // ML/TikTok: API do canal
+        // 16/08: ML e TikTok TAMBÉM entram. Motivo: a API do canal só enxerga
+        // pedido CANCELADO, e devolução de produto entregue não cancela nada —
+        // na Exitus havia 569 notas de ML/TikTok sendo ignoradas. A dedupe é
+        // feita depois pelo numero_pedido_loja.
 
         const dr = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nf.id}`, h);
         const dj = typeof dr.json === 'function' ? await dr.json().catch(() => ({})) : {};
@@ -102,6 +105,7 @@ export default async function handler(req, res) {
           if (!p.ref) continue;
           linhas.push({
             conta, nf_id: nf.id, nf_numero: nf.numero,
+            numero_pedido_loja: d.numeroPedidoLoja || nf.numeroPedidoLoja || null,
             data_nota: String(nf.dataEmissao || '').slice(0, 10),
             loja_id: nf.loja?.id || null,
             canal: canal[nf.loja?.id]?.nome || null,
