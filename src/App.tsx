@@ -5843,7 +5843,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <button onClick={()=>{setAcrescModal(refNorm);setAcrescCorteSel(null);setMatrizEdit(null);setAcrescResultado(null);}} style={{flex:"1 1 60%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 10px",fontSize:mobile?12:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
                 <span style={{fontSize:16,lineHeight:1,color:"#4a7fa5"}}>+</span> acrescentar corte
               </button>
-              <button onClick={()=>setRaioxOpen({ref:modalRef,desc,foto:null})} title="Vendas, cores, canais, Full e devoluções desta referência" style={{flex:"1 1 38%",minWidth:0,background:"#2c3e50",color:"#fff",border:"none",borderRadius:8,padding:"9px 10px",fontSize:mobile?12:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
+              <button onClick={()=>setRaioxOpen({ref:modalRef,desc,foto:null})} title="Vendas, cores, canais, Full e devoluções desta referência" style={{flex:"1 1 38%",minWidth:0,background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:"9px 10px",fontSize:mobile?12:13,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,whiteSpace:"nowrap"}}>
                 🔎 raio-x
               </button>
             </div>
