@@ -392,7 +392,7 @@
     },
     {
       "path": "/api/meluni-whats-carrinho-disparo",
-      "schedule": "0 12,17,21 * * *"
+      "schedule": "0 15,20 * * *"
     },
     {
       "path": "/api/meluni-carrinho-funil-cron",
@@ -436,7 +436,7 @@
     },
     {
       "path": "/api/meluni-drive-cron",
-      "schedule": "0 11 * * *"
+      "schedule": "0 14 * * *"
     },
     {
       "path": "/api/meluni-email-cron",
@@ -448,7 +448,7 @@
     },
     {
       "path": "/api/meluni-email-mkt-auto-cron",
-      "schedule": "0 14 * * *"
+      "schedule": "0 16 * * *"
     },
     {
       "path": "/api/meluni-poscompra-cron",
