@@ -1132,6 +1132,32 @@ function SecaoClientes() {
   const [recargaHoje, setRecargaHoje] = useState(0);
   const disparosHoje = useDisparosHoje(recargaHoje);
   const isDesktop = useIsDesktop();
+  // AUTOMÁTICO do carrinho (Ailson 16/08): a importação já é automática (cron
+  // do Drive às 8h); aqui liga/desliga o DISPARO das 12h e 17h. A fila do
+  // automático é a MESMA da tela (status processando + origem carrinho), só
+  // com a janela de idade (2h a 30 dias) e telefone válido.
+  const [autoCarrinho, setAutoCarrinho] = useState(null);
+  const [autoCarrinhoBusy, setAutoCarrinhoBusy] = useState(false);
+  useEffect(() => {
+    fetch('/api/meluni-templates-carrinho').then(r => r.json())
+      .then(j => { if (j?.ok !== false) setAutoCarrinho(!!j?.disparo_ativo); })
+      .catch(() => {});
+  }, []);
+  const alternarAutoCarrinho = async () => {
+    if (autoCarrinhoBusy || autoCarrinho === null) return;
+    const novo = !autoCarrinho;
+    if (novo && !window.confirm('Ligar o disparo automático do carrinho?\n\nA Lara vai enviar sozinha às 12h e 17h (seg–sáb) pros carrinhos que estão em Processando, com telefone e abandonados há mais de 2 horas.')) return;
+    setAutoCarrinhoBusy(true);
+    try {
+      const r = await fetch('/api/meluni-templates-carrinho', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gate: 'disparo', ativo: novo }),
+      });
+      const j = await r.json();
+      if (j?.ok !== false) setAutoCarrinho(novo);
+    } catch { /* mantém o estado */ }
+    finally { setAutoCarrinhoBusy(false); }
+  };
   // Liga/desliga do disparo pós-compra AUTOMÁTICO (cron seg-sáb 10h). Desligar
   // serve pra bloquear o auto no dia de disparo de novidade/promoção. Ailson 26/06.
   const [autoOn, setAutoOn] = useState(null);
@@ -2056,6 +2082,21 @@ function SecaoCarrinho() {
         <span style={{ fontSize: 12, color: palette.inkMuted, fontFamily: FONT }}>
           {loading ? 'carregando…' : `${total} no funil`}{sel.size > 0 ? ` · ${sel.size} selecionados` : ''}
         </span>
+        <button onClick={alternarAutoCarrinho} disabled={autoCarrinhoBusy || autoCarrinho === null}
+          title="Liga o envio automático das 12h e 17h (seg–sáb). A importação dos carrinhos já é automática, todo dia às 8h."
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            cursor: (autoCarrinhoBusy || autoCarrinho === null) ? 'default' : 'pointer',
+            border: `1px solid ${autoCarrinho ? '#1f7a48' : palette.beige}`,
+            background: autoCarrinho ? '#e6f7ee' : palette.surface,
+            color: autoCarrinho ? '#1f7a48' : palette.inkMuted,
+            borderRadius: 999, padding: '6px 12px', fontFamily: FONT, fontSize: 12.5, fontWeight: 700,
+            opacity: autoCarrinhoBusy ? 0.6 : 1,
+          }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: autoCarrinho ? '#1f7a48' : palette.inkMuted, display: 'inline-block' }} />
+          {autoCarrinho === null ? 'Auto carrinho…' : (autoCarrinho ? 'Auto carrinho: LIGADO' : 'Auto carrinho: desligado')}
+        </button>
+        <span style={{ fontSize: 11, color: palette.inkMuted, fontFamily: FONT }}>12h e 17h · seg–sáb · abandonado há +2h</span>
         <span style={{ marginLeft: 'auto' }}><PillHoje n={disparosHoje.carrinho} /></span>
         {aba === 'perdida' && (
           <button onClick={abrirModalCampanhaPerdidos} style={{ ...selStyle, fontWeight: 700 }} title="Escolhe qual template de campanha vai sair pros perdidos">
