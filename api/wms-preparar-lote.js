@@ -15,11 +15,53 @@
  * GET ?limite=120[&contas=exitus,lumia,muniam][&incluir_shein=1]
  */
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
+import { getValidToken } from './_ml-helpers.js';
 import crypto from 'crypto';
 
 export const config = { maxDuration: 300 };
 const espera = (ms) => new Promise(r => setTimeout(r, ms));
 const hash = (b) => crypto.createHash('sha256').update(b).digest('hex').slice(0, 32);
+const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
+
+/**
+ * Etiqueta de FLEX vem do MERCADO LIVRE, não do Bling (17/08). Pedimos em
+ * ZPL, que é o formato nativo da térmica, em lotes de 40 shipments.
+ * Devolve { pedido_id: {formato:'ZPL', conteudo} }.
+ */
+async function etiquetasDoMl(lista, conta) {
+  const out = {};
+  const token = await getValidToken(BRAND[conta]).catch(() => null);
+  if (!token) return out;
+  const h = { Authorization: `Bearer ${token}` };
+
+  // pedido → shipment
+  const shipDe = {};
+  for (const p of lista) {
+    if (!p.numero_loja) continue;
+    try {
+      const r = await fetch(`https://api.mercadolibre.com/orders/${p.numero_loja}`, { headers: h });
+      const j = await r.json();
+      if (j?.shipping?.id) shipDe[String(j.shipping.id)] = p.pedido_id;
+    } catch { /* segue */ }
+    await espera(120);
+  }
+  const sids = Object.keys(shipDe);
+  for (let i = 0; i < sids.length; i += 40) {
+    const fatia = sids.slice(i, i + 40);
+    try {
+      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=zpl2`, { headers: h });
+      if (!r.ok) continue;
+      const txt = await r.text();
+      // o ML devolve as etiquetas concatenadas: cada uma começa em ^XA
+      const partes = txt.split(/(?=\^XA)/).filter(x => x.trim().startsWith('^XA'));
+      fatia.forEach((sid, idx) => {
+        if (partes[idx]) out[String(shipDe[sid])] = { formato: 'ZPL', conteudo: partes[idx], bytes: partes[idx].length };
+      });
+    } catch { /* segue */ }
+    await espera(200);
+  }
+  return out;
+}
 
 /** baixa o arquivo da etiqueta e devolve {formato, conteudo, bytes} */
 async function baixarDocumento(link) {
@@ -50,7 +92,7 @@ export default async function handler(req, res) {
   try {
     // quem precisa de etiqueta e está PRONTO
     let sel = supabase.from('wms_pedidos')
-      .select('pedido_id, conta, numero, canal_geral, print_estado, print_etiqueta')
+      .select('pedido_id, conta, numero, numero_loja, canal_geral, ml_logistic_type, print_estado, print_etiqueta')
       .eq('print_estado', 'PRONTO').eq('print_etiqueta', true)
       .in('conta', contas)
       .is('etiqueta_impressa_em', null)
@@ -78,13 +120,31 @@ export default async function handler(req, res) {
     const porConta = {};
     for (const p of fila) (porConta[p.conta] = porConta[p.conta] || []).push(p);
 
-    await Promise.all(Object.entries(porConta).map(async ([conta, lista]) => {
-      const c = r.por_conta[conta] = { fila: lista.length, ok: 0, sem_etiqueta: 0, erro: 0 };
+    await Promise.all(Object.entries(porConta).map(async ([conta, listaInicial]) => {
+      let lista = listaInicial;
+      const c = r.por_conta[conta] = { fila: lista.length, flex: 0, ok: 0, sem_etiqueta: 0, erro: 0 };
       let token;
       try { token = await refreshBlingToken(conta); } catch { c.erro = lista.length; return; }
       const h = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
 
-      // tenta em lote de 20 (rápido); se o Bling recusar, cai pra individual
+      // FLEX: a etiqueta é do ML, o Bling não tem. Resolve antes, em lote.
+      const flex = lista.filter(p => p.ml_logistic_type === 'self_service');
+      if (flex.length) {
+        const doMl = await etiquetasDoMl(flex, conta);
+        for (const p of flex) {
+          const d = doMl[String(p.pedido_id)];
+          if (!d) continue;
+          await supabase.from('wms_documentos').upsert({
+            pedido_id: p.pedido_id, conta, tipo: 'ETIQUETA', formato: d.formato,
+            conteudo: d.conteudo, bytes: d.bytes, hash: hash(d.conteudo), origem: 'ml', erro: null,
+          }, { onConflict: 'pedido_id,tipo' });
+          c.ok++; r.preparados++;
+        }
+        const resolvidos = new Set(Object.keys(doMl));
+        lista = lista.filter(p => !resolvidos.has(String(p.pedido_id)));
+      }
+
+      // demais: Bling em lote de 20 (rápido); se recusar, cai pra individual
       for (let i = 0; i < lista.length; i += 20) {
         if (Date.now() - inicio > 250000) { c.aviso = 'tempo esgotado — rode de novo pra continuar'; break; }
         const fatia = lista.slice(i, i + 20);
