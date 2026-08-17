@@ -51,6 +51,20 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     document.head.appendChild(el);
   });
 
+  // Conecta no QZ Tray com paciência: a lib às vezes precisa de 2 tentativas
+  // (o app local demora a subir o websocket). Se não conectar, quem chama cai
+  // pro PDF — o botão nunca deixa a equipe na mão.
+  const conectarQz = async () => {
+    const qz = await carregarQz();
+    if (qz.websocket.isActive()) return qz;
+    try {
+      await qz.websocket.connect({ retries: 2, delay: 1 });
+      return qz;
+    } catch {
+      try { await qz.websocket.connect(); return qz; } catch { return null; }
+    }
+  };
+
   const imprimirTermica = async () => {
     // a etiqueta muda o status no marketplace — confirma antes (13/08)
     if (!window.confirm(`Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`)) return;
@@ -62,8 +76,14 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       if (!j.total) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
 
       setImprimindo('Conectando na impressora…');
-      const qz = await carregarQz();
-      if (!qz.websocket.isActive()) await qz.websocket.connect();
+      const qz = await conectarQz();
+      if (!qz) {
+        // sem QZ (não instalado, fechado ou bloqueado) → PDF, sem travar
+        setImprimindo('Impressora térmica indisponível — abrindo o PDF…');
+        window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank');
+        setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
+        return;
+      }
       const impressora = await qz.printers.getDefault();
       const config = qz.configs.create(impressora);
 
@@ -88,6 +108,13 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       carregar();
       setTimeout(() => setImprimindo(''), 8000);
     } catch (e) {
+      const problemaQz = /qz|websocket|connection/i.test(String(e?.message || ''));
+      if (problemaQz) {
+        setImprimindo('Impressora térmica indisponível — abrindo o PDF…');
+        window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank');
+        setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
+        return;
+      }
       setImprimindo(`⚠ ${e.message}`);
       onErro?.(e.message);
       setTimeout(() => setImprimindo(''), 12000);
@@ -158,26 +185,19 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         </div>
       </div>
 
-      {/* ação */}
+      {/* ação — UM botão só (15/08 → 17/08, ordem dele): tenta a térmica e,
+          se o QZ Tray não estiver disponível, cai sozinho pro PDF */}
       <div style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button onClick={() => window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank')}
-          disabled={!vaiSair}
+        <button onClick={imprimirTermica} disabled={!vaiSair || !!imprimindo}
           style={{ flex: 1, minWidth: 240, padding: '14px', borderRadius: 12, border: 'none',
-            background: vaiSair ? palette.ink : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
-            cursor: vaiSair ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Printer size={18} /> Gerar etiquetas ({vaiSair} {vaiSair === 1 ? 'etiqueta' : 'etiquetas'})
+            background: (vaiSair && !imprimindo) ? palette.ink : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
+            cursor: (vaiSair && !imprimindo) ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Printer size={18} /> {imprimindo || `Imprimir etiquetas (${vaiSair})`}
         </button>
         <button onClick={carregar} style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
           <RefreshCw size={16} /> Atualizar
         </button>
       </div>
-
-      <button onClick={imprimirTermica} disabled={!vaiSair || !!imprimindo}
-        style={{ width: '100%', padding: '14px', borderRadius: 12, border: 'none', marginBottom: 14,
-          background: vaiSair && !imprimindo ? palette.accent : '#c8c0b6', color: '#fff', fontSize: 15, fontWeight: 800,
-          cursor: vaiSair && !imprimindo ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        <Printer size={18} /> {imprimindo || `Imprimir na térmica · ZPL direto (${vaiSair})`}
-      </button>
 
       {/* grupos na ordem de impressão */}
       <div style={{ background: '#fff', border: `1px solid ${palette.beige}`, borderRadius: 13, padding: 14 }}>
@@ -245,7 +265,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       </div>
 
       <div style={{ fontSize: 11.5, color: palette.inkMuted, marginTop: 12, lineHeight: 1.6 }}>
-        A etiqueta só é puxada do Bling no momento em que você manda imprimir — antes disso o pedido continua pendente no marketplace (na Shein, baixar a etiqueta já muda o status pra "aguardando coleta"). Formato 10x15. Na térmica o ZPL vai direto pela QZ Tray (mais rápido e mais nítido, é o formato nativo que o Bling entrega); o PDF fica como alternativa pra impressora comum. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. Cada etiqueta gerada fica registrada como impressa e não sai de novo sem você marcar "reimprimir". A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
+        O botão tenta a impressora térmica (QZ Tray) e, se ela não estiver disponível nessa máquina, abre o PDF sozinho — a impressão nunca trava. A etiqueta só é puxada do Bling no momento em que você manda imprimir — antes disso o pedido continua pendente no marketplace (na Shein, baixar a etiqueta já muda o status pra "aguardando coleta"). Formato 10x15. Na térmica o ZPL vai direto pela QZ Tray (mais rápido e mais nítido, é o formato nativo que o Bling entrega); o PDF fica como alternativa pra impressora comum. O PDF sai limpo, só com separadores e etiquetas — nenhum aviso no papel. Cada etiqueta gerada fica registrada como impressa e não sai de novo sem você marcar "reimprimir". A etiqueta só existe depois de gerada no Bling (nasce junto com a NF); quem ainda não tem fica como "aguardando" aqui na tela e entra na próxima geração.
       </div>
     </div>
   );
