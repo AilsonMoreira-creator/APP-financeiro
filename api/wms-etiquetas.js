@@ -393,7 +393,7 @@ export default async function handler(req, res) {
           // etiqueta separadora 10x15 em ZPL (203dpi: 812x1218 pontos)
           blocos.push({ tipo: 'separador', ref: p.ref, loc: p.loc, empresa: p.conta, pedidos: qtd, zpl:
             `^XA^CI28^PW812^LL1218^LH0,0
-^FO40,120^A0N,110,110^FD${q.por_empresa === '1' ? String(p.conta).toUpperCase() : ''}^FS
+${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase()}^FS` : ''}
 ^FO40,260^A0N,170,170^FDLOC ${p.loc}^FS
 ^FO40,460^A0N,170,170^FDREF ${p.ref}^FS
 ^FO40,680^A0N,80,80^FD${qtd} etiqueta(s)^FS
@@ -469,7 +469,7 @@ export default async function handler(req, res) {
       for (let i = 0; i < sids.length; i += 40) {
         const fatia = sids.slice(i, i + 40);
         try {
-          const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=pdf`, { headers: { Authorization: `Bearer ${tokenMl[conta]}` } });
+          const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=pdf&label_type=label`, { headers: { Authorization: `Bearer ${tokenMl[conta]}` } });
           if (r.ok && String(r.headers.get('content-type')).includes('pdf')) {
             const bytes = new Uint8Array(await r.arrayBuffer());
             const doc = await PDFDocument.load(bytes);
@@ -525,7 +525,9 @@ export default async function handler(req, res) {
         grupoAtual = k;
         const pg = saida.addPage(P10x15);
         const qtdG = prontos.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k).length;
-        if (q.por_empresa === '1') {
+        // a linha da empresa só existe quando o lote é separado por empresa —
+        // antes ela saía em branco e empurrava o LOC/REF pra baixo (17/08)
+        if (q.por_empresa === '1' && p.conta) {
           pg.drawText(String(p.conta).toUpperCase(), { x: 24, y: 378, size: 26, font: fonte, color: rgb(0.45, 0.42, 0.36) });
         }
         pg.drawText(`LOC ${p.loc}`, { x: 24, y: 320, size: 48, font: fonte, color: rgb(0.17, 0.24, 0.31) });

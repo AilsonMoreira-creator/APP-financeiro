@@ -53,7 +53,7 @@ async function etiquetasDoMl(lista, conta) {
   const pdfEmLote = async (fatia) => {
     try {
       const { PDFDocument } = await import('pdf-lib');
-      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=pdf`, { headers: h });
+      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=pdf&label_type=label`, { headers: h });
       if (!r.ok) return;
       const bytes = new Uint8Array(await r.arrayBuffer());
       const doc = await PDFDocument.load(bytes);
@@ -71,7 +71,7 @@ async function etiquetasDoMl(lista, conta) {
   for (let i = 0; i < sids.length; i += 40) {
     const fatia = sids.slice(i, i + 40);
     try {
-      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=zpl2`, { headers: h });
+      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=zpl2&label_type=label`, { headers: h });
       if (!r.ok) continue;
       // 17/08: o ML entrega o ZPL DENTRO DE UM ZIP (um arquivo por etiqueta),
       // não como texto corrido. Abre o zip e casa cada arquivo com o shipment.
