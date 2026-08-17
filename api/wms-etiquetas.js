@@ -548,8 +548,6 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
         pg.drawText(String((p.itens?.[0]?.descLimpa || '')).slice(0, 34), { x: 24, y: 185, size: 13, font: fonteN, color: rgb(0.35, 0.35, 0.35) });
       }
 
-      const soDanfe = q.tipo === 'nf_agendada';       // NF antes, etiqueta depois
-      const soEtiqueta = q.tipo === 'etiqueta_liberada'; // no dia do envio
 
       // DANFE do pedido (Bling, se a conta tem escopo)
       let danfeOk = soEtiqueta;   // no modo etiqueta, DANFE não entra
@@ -621,6 +619,11 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 
     // REGISTRO: o que entrou neste PDF fica marcado como impresso (com lote),
     // pra ninguém imprimir duas vezes nem esquecer nenhum
+    // 17/08: declarados ANTES do laço — estavam dentro dele e o separador,
+    // que roda no começo de cada grupo, quebrava com "soDanfe before init".
+    const soDanfe = q.tipo === 'nf_agendada';         // NF antes, etiqueta depois
+    const soEtiqueta = q.tipo === 'etiqueta_liberada'; // no dia do envio
+
     const lotePdf = `L${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
     if (q.tipo === 'nf_agendada' && prontos.length) {
       await supabase.from('wms_pedidos')
