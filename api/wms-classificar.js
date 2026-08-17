@@ -26,17 +26,27 @@ export function classificar(p, hojeBRT) {
   const full = p.ml_logistic_type === 'fulfillment';
   const meluni = canal === 'Meluni' || (p.conta === 'lumia' && canal === 'Outros');
   const agendado = p.ml_agendado_em && String(p.ml_agendado_em) > hojeBRT;
+  // SITUAÇÕES DA NF NO BLING (confirmado com ele 17/08):
+  //   1 pendente · 2 CANCELADA · 4 rejeitada · 5 autorizada (sem DANFE)
+  //   6 DANFE emitida · 8 aguardando protocolo · 9 denegada · 11 bloqueada
   const temNf = !!p.nf_id;
-  const nfPronta = p.nf_situacao === 5;         // autorizada, DANFE não impressa
-  const nfImpressa = p.nf_situacao === 6;       // DANFE já emitida
+  const sit = p.nf_situacao;
+  const nfPronta = sit === 5;
+  const nfImpressa = sit === 6;
+  const nfMorta = sit === 2 || sit === 4 || sit === 9 || sit === 11;
+  const nfEmTransito = sit === 1 || sit === 8;
+  const rotuloMorta = sit === 2 ? 'nota cancelada — precisa emitir outra'
+    : sit === 4 ? 'nota rejeitada pela SEFAZ'
+    : sit === 9 ? 'nota denegada' : 'nota bloqueada';
 
   if (meluni) return { regra: 'MELUNI', nf: false, etiqueta: true, estado: 'PRONTO', motivo: 'fluxo Meluni' };
   if (full) return { regra: 'ML_FULL', nf: false, etiqueta: false, estado: 'PRONTO', motivo: 'Full: sai pelo armazém do ML' };
 
   if (agendado) {
+    if (temNf && nfMorta) return { regra: 'MELI_AGENDADO', nf: true, etiqueta: false, estado: 'ERRO', motivo: rotuloMorta };
     return {
       regra: 'MELI_AGENDADO', nf: true, etiqueta: false,
-      estado: p.nf_agendada_impressa_em ? 'IMPRESSO' : (temNf ? 'PRONTO' : 'AGUARDA_NF'),
+      estado: p.nf_agendada_impressa_em ? 'IMPRESSO' : ((temNf && !nfEmTransito) ? 'PRONTO' : 'AGUARDA_NF'),
       motivo: temNf ? `envio programado para ${String(p.ml_agendado_em).split('-').reverse().join('/')}` : 'agendado, sem nota ainda',
     };
   }
@@ -53,11 +63,18 @@ export function classificar(p, hojeBRT) {
   // etiqueta — tem que contar como AGUARDANDO, não sumir da tela.
   if (!temNf) return { regra: 'SEM_NF', nf: true, etiqueta: true, estado: 'AGUARDA_NF', motivo: 'sem nota fiscal ainda' };
 
+  if (nfMorta) return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'ERRO', motivo: rotuloMorta };
   if (nfImpressa || p.etiqueta_impressa_em) {
     return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'IMPRESSO', motivo: 'já impresso' };
   }
   if (!nfPronta) {
-    return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'AGUARDA_NF', motivo: 'nota ainda não autorizada' };
+    // REGRA (17/08): situação desconhecida NUNCA vira "pronto" — na dúvida o
+    // app pede conferência, mesma lógica de falha fechada da emissão de NF.
+    return {
+      regra: 'NORMAL', nf: true, etiqueta: true, estado: 'AGUARDA_NF',
+      motivo: nfEmTransito ? 'nota emitida, aguardando a SEFAZ'
+        : (sit == null ? 'conferindo a situação da nota' : `situação ${sit} — conferir no Bling`),
+    };
   }
   return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'PRONTO', motivo: 'nota autorizada, pronto pra imprimir' };
 }
