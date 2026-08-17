@@ -148,6 +148,12 @@ export default async function handler(req, res) {
         }
       }
     }
+    // roda a função de verdade e mostra o que ela devolveu
+    try {
+      const teste = await etiquetasDoMl((lista || []).slice(0, 2), conta);
+      out.resultado_funcao = Object.entries(teste).map(([pid, d]) => ({ pedido_id: pid, formato: d.formato, bytes: d.bytes }));
+      out.qtd = Object.keys(teste).length;
+    } catch (e) { out.erro_funcao = String(e.message).slice(0, 300); }
     return res.status(200).json(out);
   }
   const limite = Math.min(parseInt(req.query?.limite) || 120, 300);
