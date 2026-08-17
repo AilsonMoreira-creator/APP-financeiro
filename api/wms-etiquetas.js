@@ -92,7 +92,8 @@ async function pedidosFiltrados(q) {
     // (com a data em cima) e separa; no dia, imprime só a etiqueta e despacha.
     const agendadoFuturo = p.ml_agendado_em && String(p.ml_agendado_em) > hojeBRT;
     const etiquetaLiberada = p.ml_ship_status === 'ready_to_ship'
-      && p.ml_ship_substatus !== 'printed' && p.ml_ship_substatus !== 'in_warehouse';
+      && p.ml_ship_substatus === 'ready_to_print'
+      && !p.etiqueta_impressa_em && p.status_wms !== 'finalizado';
     if (tipo === 'nf_agendada') {
       if (!(agendadoFuturo || p.ml_ship_substatus === 'buffered')) continue;
       // 17/08 (ordem dele): a nota do agendado sai UMA vez — some da lista
@@ -271,8 +272,12 @@ export default async function handler(req, res) {
         }
         // LIBERADAS: só as que ainda não saíram. Etiqueta impressa (nossa ou
         // pelo painel) e pedido já finalizado não contam mais.
+        // 17/08: "liberada" = o ML está ESPERANDO A IMPRESSÃO (ready_to_print).
+        // Os outros substatus já passaram do ponto — ready_for_pickup (impressa
+        // e aguardando coleta), picked_up/dropped_off (já saiu), in_warehouse,
+        // in_packing_list — e não podem inflar o contador.
         if (p.ml_ship_status === 'ready_to_ship'
-          && p.ml_ship_substatus !== 'printed'
+          && p.ml_ship_substatus === 'ready_to_print'
           && !p.etiqueta_impressa_em
           && p.status_wms !== 'finalizado') c.etiqueta_liberada++;
         if (p.print_estado !== 'PRONTO') continue;
