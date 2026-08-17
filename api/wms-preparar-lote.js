@@ -46,6 +46,28 @@ async function etiquetasDoMl(lista, conta) {
     await espera(120);
   }
   const sids = Object.keys(shipDe);
+
+  // RESERVA (17/08): se o ZPL não vier utilizável, pega o PDF em lote — o ML
+  // devolve UMA PÁGINA POR ETIQUETA, na ordem dos shipment_ids. O QZ Tray
+  // imprime PDF direto, então isso serve igual pra térmica.
+  const pdfEmLote = async (fatia) => {
+    try {
+      const { PDFDocument } = await import('pdf-lib');
+      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=pdf`, { headers: h });
+      if (!r.ok) return;
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      const doc = await PDFDocument.load(bytes);
+      for (let idx = 0; idx < fatia.length && idx < doc.getPageCount(); idx++) {
+        const uma = await PDFDocument.create();
+        const [pg] = await uma.copyPages(doc, [idx]);
+        uma.addPage(pg);
+        const b64 = Buffer.from(await uma.save()).toString('base64');
+        const pedido = shipDe[fatia[idx]];
+        if (pedido) out[String(pedido)] = { formato: 'PDF', conteudo: b64, bytes: b64.length };
+      }
+    } catch { /* sem etiqueta */ }
+  };
+
   for (let i = 0; i < sids.length; i += 40) {
     const fatia = sids.slice(i, i + 40);
     try {
@@ -74,6 +96,8 @@ async function etiquetasDoMl(lista, conta) {
         if (pedido && t.conteudo) out[String(pedido)] = { formato: 'ZPL', conteudo: t.conteudo, bytes: t.conteudo.length };
       });
     } catch { /* segue */ }
+    // nada veio pelo ZPL? tenta o PDF em lote
+    if (!fatia.some(sid => out[String(shipDe[sid])])) await pdfEmLote(fatia);
     await espera(200);
   }
   return out;
