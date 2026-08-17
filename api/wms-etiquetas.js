@@ -379,6 +379,11 @@ export default async function handler(req, res) {
       }
       // etiquetas que o canal entrega em PDF (Shein) não vão pra térmica em
       // ZPL — a tela orienta a usar o PDF nesses casos
+      // FLEX: a etiqueta vem do Mercado Livre. Se nada foi montado aqui, manda
+      // a tela pelo caminho do PDF, que já sabe buscar no ML (17/08).
+      if (!idsOk.length && (q.tipo === 'flex' || candidatos.some(p => p.ml_logistic_type === 'self_service'))) {
+        return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['flex'], so_pdf: true });
+      }
       return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf });
     }
 
