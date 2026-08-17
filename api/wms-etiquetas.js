@@ -301,22 +301,44 @@ export default async function handler(req, res) {
     }
     if (q.zpl === '1') {
       const { unzipSync } = await import('fflate');
+      // 17/08 — REDESENHO: os documentos já preparados vêm do banco. Só o que
+      // não estiver guardado é buscado agora no Bling (é o caso da Shein, que
+      // fica de fora do preparo porque baixar a etiqueta muda o status dela).
+      const idsLote = peds.map(p => p.pedido_id);
+      const guardados = {};
+      for (let i = 0; i < idsLote.length; i += 300) {
+        const { data } = await supabase.from('wms_documentos')
+          .select('pedido_id, formato, conteudo')
+          .eq('tipo', 'ETIQUETA').is('erro', null)
+          .in('pedido_id', idsLote.slice(i, i + 300));
+        (data || []).forEach(d => { if (d.conteudo) guardados[String(d.pedido_id)] = d; });
+      }
       const tk = {};
       const contasSet = new Set(peds.map(p => p.conta));
       for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
-      const links = await linksEtiqueta(peds.slice(0, 120), tk, 'impressao');
-      await preencherNfIds(peds.filter(p => links[String(p.pedido_id)]), tk, 60);
-      const sitDe = await situacaoPorNfId([...contasSet], tk, new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10), peds.map(p => p.nf_id).filter(Boolean));
+      // a situação já vem pré-carregada no banco (cron wms-nf-sync)
+      const sitDe = {};
+      for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
 
-      const alvo = peds.filter(p => links[String(p.pedido_id)]
-        && (q.reimprimir === '1'
-          || (!p.etiqueta_impressa_em && sitDe[String(p.nf_id)] === 5)));
+      const podeSair = (p) => q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
+        || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5));
+      const candidatos = peds.filter(podeSair);
+      // busca no Bling SÓ o que ainda não está guardado
+      const faltando = candidatos.filter(p => !guardados[String(p.pedido_id)]);
+      const links = faltando.length ? await linksEtiqueta(faltando, tk, 'impressao') : {};
+      const alvo = candidatos.filter(p => guardados[String(p.pedido_id)] || links[String(p.pedido_id)]);
 
       const blocos = []; const idsOk = []; const emPdf = []; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
         let zplDoPedido = null, ehPdf = false, pdf64 = null;
+        const jaTem = guardados[String(p.pedido_id)];
+        if (jaTem) {
+          if (jaTem.formato === 'ZPL') zplDoPedido = jaTem.conteudo;
+          else { ehPdf = true; pdf64 = jaTem.conteudo; }
+        }
         try {
+          if (jaTem) throw { pulaDownload: true };
           const r0 = await fetch(links[String(p.pedido_id)]);
           const b0 = new Uint8Array(await r0.arrayBuffer());
           if (b0[0] === 0x50 && b0[1] === 0x4b) {
@@ -327,7 +349,7 @@ export default async function handler(req, res) {
             else if (nomeP) { ehPdf = true; pdf64 = Buffer.from(z0[nomeP]).toString('base64'); }
           } else if (b0[0] === 0x25) { ehPdf = true; pdf64 = Buffer.from(b0).toString('base64'); }
           else if (String.fromCharCode(b0[0], b0[1]) === '^X') zplDoPedido = Buffer.from(b0).toString('utf8');
-        } catch { /* sem etiqueta */ }
+        } catch (e) { if (!e?.pulaDownload) { /* sem etiqueta */ } }
         if (!zplDoPedido && !ehPdf) continue;
 
         const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
