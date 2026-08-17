@@ -533,6 +533,14 @@
     {
       "path": "/api/wms-classificar",
       "schedule": "5,35 9-23 * * *"
+    },
+    {
+      "path": "/api/wms-classificar",
+      "schedule": "0,20,40,50 10 * * 1-6"
+    },
+    {
+      "path": "/api/wms-preparar-lote?limite=120",
+      "schedule": "5,25,45 10 * * 1-6"
     }
   ]
 }
