@@ -252,12 +252,13 @@ export default async function handler(req, res) {
     // quantas etiquetas estão esperando impressão. Lê só o banco.
     if (q.contadores === '1') {
       const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+      const contasFiltro = String(q.contas || 'todas');
       let sel = supabase.from('wms_pedidos')
         .select('conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em')
         .neq('status_wms', 'cancelado')
         .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
         .limit(3000);
-      if (contas !== 'todas') sel = sel.in('conta', contas.split(','));
+      if (contasFiltro !== 'todas') sel = sel.in('conta', contasFiltro.split(','));
       const { data } = await sel;
       const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0 };
       for (const p of (data || [])) {
