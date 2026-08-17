@@ -453,16 +453,10 @@ export default async function handler(req, res) {
 
     for (const p of prontos) {
       const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
-      if (k !== grupoAtual) {
+      if (k !== grupoAtual && !soDanfe) {
         grupoAtual = k;
         const pg = saida.addPage(P10x15);
         const qtdG = prontos.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k).length;
-        if (soDanfe) {
-          const dts = [...new Set(prontos.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k)
-            .map(x => String(x.ml_agendado_em || '').slice(0, 10)).filter(Boolean))]
-            .map(d => d.split('-').reverse().join('/')).join(' · ');
-          if (dts) pg.drawText(`ENVIAR ${dts}`, { x: 24, y: 380, size: 34, font: fonte, color: rgb(0.55, 0.1, 0.1) });
-        }
         if (q.por_empresa === '1') {
           pg.drawText(String(p.conta).toUpperCase(), { x: 24, y: 378, size: 26, font: fonte, color: rgb(0.45, 0.42, 0.36) });
         }
@@ -498,12 +492,15 @@ export default async function handler(req, res) {
                     saida.addPage(pg);
                     // 17/08 (ordem dele): a data de envio ESCRITA EM CIMA da
                     // nota — é o que a equipe fazia à mão. Só a data.
+                    // 17/08 (ajuste dele): a data ENTRA NO CABEÇALHO da própria
+                    // nota, discreta — sem tarja grande e sem folha a mais.
                     if (idx === 0 && soDanfe && p.ml_agendado_em) {
                       const { width, height } = pg.getSize();
-                      const txt = String(p.ml_agendado_em).slice(0, 10).split('-').reverse().join('/');
-                      const tam = Math.min(34, Math.max(20, width / 12));
-                      pg.drawRectangle({ x: 0, y: height - tam - 16, width, height: tam + 16, color: rgb(1, 1, 1) });
-                      pg.drawText(txt, { x: 14, y: height - tam - 6, size: tam, font: fonte, color: rgb(0, 0, 0) });
+                      const txt = 'ENVIAR ' + String(p.ml_agendado_em).slice(0, 10).split('-').reverse().join('/');
+                      const tam = 12;
+                      const larg = fonte.widthOfTextAtSize(txt, tam) + 12;
+                      pg.drawRectangle({ x: width - larg - 12, y: height - 26, width: larg, height: 18, color: rgb(1, 1, 1) });
+                      pg.drawText(txt, { x: width - larg - 6, y: height - 22, size: tam, font: fonte, color: rgb(0.6, 0.1, 0.1) });
                     }
                   });
                   danfeOk = true;

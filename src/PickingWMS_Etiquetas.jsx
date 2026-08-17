@@ -221,7 +221,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         </div>
         {fTipo === 'nf_agendada' && (
           <div style={{ fontSize: 12, color: palette.inkSoft, background: '#fdf6e3', border: '1px solid #e8d9a8', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
-            Envio programado do Mercado Livre: sai <b>só a nota</b>, com a data de envio impressa em cima. Separe a mercadoria e guarde — no dia, use “Etiquetas liberadas”. A NF continua valendo.
+            Envio programado do Mercado Livre: sai <b>só a nota</b>, com a data de envio no cabeçalho dela (mesma quantidade de folhas de sempre). Separe a mercadoria e guarde — no dia, use “Etiquetas liberadas”. A NF continua valendo.
           </div>
         )}
         {fTipo === 'etiqueta_liberada' && (
