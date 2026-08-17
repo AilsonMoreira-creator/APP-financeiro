@@ -47,7 +47,7 @@ async function pedidosFiltrados(q) {
   // Por isso buscamos: (1) quem já tem NF (últimos 7 dias, qualquer status) e
   // (2) quem ainda está no funil sem NF (aparece como "aguardando").
   const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
-  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, ml_agendado_em, ml_ship_status, ml_ship_substatus';
+  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em';
 
   let q1 = supabase.from('wms_pedidos').select(COLS)
     .not('nf_id', 'is', null)
@@ -93,7 +93,12 @@ async function pedidosFiltrados(q) {
     const agendadoFuturo = p.ml_agendado_em && String(p.ml_agendado_em) > hojeBRT;
     const etiquetaLiberada = p.ml_ship_status === 'ready_to_ship'
       && p.ml_ship_substatus !== 'printed' && p.ml_ship_substatus !== 'in_warehouse';
-    if (tipo === 'nf_agendada' && !(agendadoFuturo || p.ml_ship_substatus === 'buffered')) continue;
+    if (tipo === 'nf_agendada') {
+      if (!(agendadoFuturo || p.ml_ship_substatus === 'buffered')) continue;
+      // 17/08 (ordem dele): a nota do agendado sai UMA vez — some da lista
+      // depois de impressa (carimbo próprio, separado do da etiqueta)
+      if (p.nf_agendada_impressa_em && q.reimprimir !== '1') continue;
+    }
     if (tipo === 'etiqueta_liberada' && !etiquetaLiberada) continue;
     // nos demais tipos, o pedido agendado NÃO entra (a etiqueta nem existe)
     if (['nf_transporte', 'flex'].includes(tipo) && agendadoFuturo) continue;
@@ -260,7 +265,14 @@ export default async function handler(req, res) {
         // situação 5 = autorizada sem DANFE → PRECISA IMPRIMIR (se a etiqueta
         // já existe no Bling); sem NF ainda → aguardando
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
-        if (sit === 6 || p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
+        if (q.tipo === 'nf_agendada') {
+          // aqui o que conta é a NOTA: pronta = tem NF e ainda não foi impressa
+          if (p.nf_agendada_impressa_em) { grupos[k].impressas++; jaImpressas++; }
+          else if (p.nf_id) { grupos[k].prontas++; prontas++; }
+          else semEtiqueta++;
+        } else if (q.tipo === 'etiqueta_liberada') {
+          grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
+        } else if (sit === 6 || p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
         else if (sit === 5) { grupos[k].prontas++; prontas++; }
         else semEtiqueta++;
       }
@@ -277,6 +289,9 @@ export default async function handler(req, res) {
     // ── MODO ZPL (13/08): a etiqueta do Bling vem em ZPL dentro de um ZIP —
     // é o formato NATIVO da térmica. Com o QZ Tray na máquina da expedição,
     // mandamos o ZPL direto: mais rápido e mais nítido que PDF.
+    if (q.zpl === '1' && q.tipo === 'nf_agendada') {
+      return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['nota'], so_pdf: true });
+    }
     if (q.zpl === '1') {
       const { unzipSync } = await import('fflate');
       const tk = {};
@@ -413,7 +428,9 @@ export default async function handler(req, res) {
     await preencherNfIds(lote, tokenBling, 60);
     const sitDe2 = await situacaoPorNfId([...new Set(lote.map(p => p.conta))], tokenBling, desdeNf2);
     // situação 5 = autorizada sem DANFE (imprime) · 6 = já emitida (não)
-    const podeImprimir = (p) => q.reimprimir === '1'
+    // etiqueta_liberada: tudo que o ML liberou pra postar HOJE entra, mesmo
+    // que já tenha passado pela impressora (ordem dele 17/08)
+    const podeImprimir = (p) => q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
       || (!p.etiqueta_impressa_em && sitDe2[String(p.nf_id)] === 5);
     const prontos = q.tipo === 'nf_agendada'
       ? lote.filter(p => p.nf_id)                    // basta ter NF: a etiqueta vem depois
@@ -526,6 +543,11 @@ export default async function handler(req, res) {
     // REGISTRO: o que entrou neste PDF fica marcado como impresso (com lote),
     // pra ninguém imprimir duas vezes nem esquecer nenhum
     const lotePdf = `L${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
+    if (q.tipo === 'nf_agendada' && prontos.length) {
+      await supabase.from('wms_pedidos')
+        .update({ nf_agendada_impressa_em: new Date().toISOString() })
+        .in('pedido_id', prontos.map(p => p.pedido_id));
+    }
     const idsImpressos = [];
     for (const p of prontos) {
       if (linkBlingDe[String(p.pedido_id)] || shipDe[p.pedido_id]) idsImpressos.push(p.pedido_id);

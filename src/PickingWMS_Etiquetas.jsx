@@ -73,6 +73,12 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       const r = await fetch(`${API}/wms-etiquetas?${qs({ zpl: '1' })}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j.erro || `HTTP ${r.status}`);
+      if (j.so_pdf) {   // NF agendada: é nota, sai em PDF
+        setImprimindo('Abrindo as notas em PDF…');
+        window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank');
+        setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
+        return;
+      }
       if (!j.total) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
 
       setImprimindo('Conectando na impressora…');

@@ -503,15 +503,15 @@
       "path": "/api/ml-ads-sync"
     },
     {
-      "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=40",
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=40",
       "schedule": "30,50 9 * * 1-6"
     },
     {
-      "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=60",
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=60",
       "schedule": "10,30 10 * * 1-6"
     },
     {
-      "path": "/api/wms-nfe-auto?contas=lumia,muniam&limite=60",
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=60",
       "schedule": "45 10 * * 1-6"
     },
     {
@@ -521,6 +521,10 @@
     {
       "path": "/api/wms-ml-agenda-sync?limite=150",
       "schedule": "5 12-22/2 * * *"
+    },
+    {
+      "path": "/api/wms-ml-agenda-sync?limite=200",
+      "schedule": "30 10 * * *"
     }
   ]
 }
