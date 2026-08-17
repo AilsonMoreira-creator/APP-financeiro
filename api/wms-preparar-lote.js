@@ -51,11 +51,27 @@ async function etiquetasDoMl(lista, conta) {
     try {
       const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=zpl2`, { headers: h });
       if (!r.ok) continue;
-      const txt = await r.text();
-      // o ML devolve as etiquetas concatenadas: cada uma começa em ^XA
-      const partes = txt.split(/(?=\^XA)/).filter(x => x.trim().startsWith('^XA'));
-      fatia.forEach((sid, idx) => {
-        if (partes[idx]) out[String(shipDe[sid])] = { formato: 'ZPL', conteudo: partes[idx], bytes: partes[idx].length };
+      // 17/08: o ML entrega o ZPL DENTRO DE UM ZIP (um arquivo por etiqueta),
+      // não como texto corrido. Abre o zip e casa cada arquivo com o shipment.
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      let textos = [];
+      if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
+        const { unzipSync } = await import('fflate');
+        const z = unzipSync(bytes);
+        for (const nome of Object.keys(z)) {
+          const conteudo = Buffer.from(z[nome]).toString('utf8');
+          // o nome do arquivo costuma trazer o id do shipment
+          const sidNoNome = (String(nome).match(/(\d{6,})/) || [])[1];
+          textos.push({ sid: sidNoNome, conteudo });
+        }
+      } else {
+        const txt = Buffer.from(bytes).toString('utf8');
+        textos = txt.split(/(?=\^XA)/).filter(x => x.trim().startsWith('^XA')).map(conteudo => ({ sid: null, conteudo }));
+      }
+      textos.forEach((t, idx) => {
+        const sid = (t.sid && shipDe[t.sid]) ? t.sid : fatia[idx];
+        const pedido = shipDe[sid];
+        if (pedido && t.conteudo) out[String(pedido)] = { formato: 'ZPL', conteudo: t.conteudo, bytes: t.conteudo.length };
       });
     } catch { /* segue */ }
     await espera(200);
