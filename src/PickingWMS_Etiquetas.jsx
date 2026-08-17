@@ -180,6 +180,14 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           <button onClick={() => setFTipo('nf_transporte')} style={btn(fTipo === 'nf_transporte')}>NF + transporte</button>
           <button onClick={() => setFTipo('flex')} style={btn(fTipo === 'flex')}>⚡ Flex</button>
           <button onClick={() => setFTipo('meluni')} style={btn(fTipo === 'meluni')}>Meluni</button>
+          <button onClick={() => setFTipo('nf_agendada')} style={btn(fTipo === 'nf_agendada')}
+            title="Pedidos do Mercado Livre com envio programado: imprime só a NF, com a data de envio escrita em cima. A etiqueta sai no dia.">
+            📅 NF agendadas
+          </button>
+          <button onClick={() => setFTipo('etiqueta_liberada')} style={btn(fTipo === 'etiqueta_liberada')}
+            title="Só as etiquetas logísticas que o Mercado Livre liberou pra postar hoje (a NF já foi impressa antes).">
+            🏷 Etiquetas liberadas
+          </button>
           <input value={fRef} onChange={e => setFRef(e.target.value)} placeholder="REF específica"
             style={{ padding: '9px 12px', borderRadius: 10, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13.5, width: 130, color: palette.ink }} />
         </div>
@@ -205,6 +213,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         <div style={{ fontSize: 12, color: palette.inkMuted, marginBottom: 10 }}>
           Por localização e, dentro dela, as referências de maior quantidade primeiro — cada grupo sai com uma folha separadora antes das etiquetas (NF + transporte).
         </div>
+        {fTipo === 'nf_agendada' && (
+          <div style={{ fontSize: 12, color: palette.inkSoft, background: '#fdf6e3', border: '1px solid #e8d9a8', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
+            Envio programado do Mercado Livre: sai <b>só a nota</b>, com a data de envio impressa em cima. Separe a mercadoria e guarde — no dia, use “Etiquetas liberadas”. A NF continua valendo.
+          </div>
+        )}
+        {fTipo === 'etiqueta_liberada' && (
+          <div style={{ fontSize: 12, color: palette.inkSoft, background: '#eef5fb', border: '1px solid #cfe0ee', borderRadius: 8, padding: '8px 11px', marginBottom: 10 }}>
+            Só as etiquetas que o Mercado Livre liberou pra postagem — inclusive de pedidos guardados dias atrás. A nota desses já foi impressa antes.
+          </div>
+        )}
         {!!totalPedidos && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: palette.ok, background: palette.okSoft, padding: '6px 11px', borderRadius: 999 }}>

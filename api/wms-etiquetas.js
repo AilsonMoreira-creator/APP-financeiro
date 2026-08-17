@@ -25,6 +25,7 @@ const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const n = (v) => Number(v) || 0;
 
 async function pedidosFiltrados(q) {
+  const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   const contas = String(q.contas || 'todas');
   const loja = String(q.loja || 'todas');
   const tipo = String(q.tipo || 'nf_transporte');
@@ -45,9 +46,8 @@ async function pedidosFiltrados(q) {
   // "Emitida DANFE" (6) = já saiu, inclusive se a Sthefany imprimiu no painel.
   // Por isso buscamos: (1) quem já tem NF (últimos 7 dias, qualquer status) e
   // (2) quem ainda está no funil sem NF (aparece como "aguardando").
-  const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
-  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id';
+  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, ml_agendado_em, ml_ship_status, ml_ship_substatus';
 
   let q1 = supabase.from('wms_pedidos').select(COLS)
     .not('nf_id', 'is', null)
@@ -87,6 +87,16 @@ async function pedidosFiltrados(q) {
     if (tipo === 'flex' && !flex) continue;
     if (tipo === 'meluni' && canal !== 'Meluni') continue;
     if (tipo === 'nf_transporte' && (flex || canal === 'Meluni')) continue;
+
+    // 17/08 — ENVIOS PROGRAMADOS do Mercado Livre. A equipe imprime a NF antes
+    // (com a data em cima) e separa; no dia, imprime só a etiqueta e despacha.
+    const agendadoFuturo = p.ml_agendado_em && String(p.ml_agendado_em) > hojeBRT;
+    const etiquetaLiberada = p.ml_ship_status === 'ready_to_ship'
+      && p.ml_ship_substatus !== 'printed' && p.ml_ship_substatus !== 'in_warehouse';
+    if (tipo === 'nf_agendada' && !(agendadoFuturo || p.ml_ship_substatus === 'buffered')) continue;
+    if (tipo === 'etiqueta_liberada' && !etiquetaLiberada) continue;
+    // nos demais tipos, o pedido agendado NÃO entra (a etiqueta nem existe)
+    if (['nf_transporte', 'flex'].includes(tipo) && agendadoFuturo) continue;
     if (loja !== 'todas' && canal !== loja) continue;
     if (limiteCorte && new Date(p.data_pedido).getTime() > limiteCorte) continue;
     const it0 = (p.itens || [])[0] || {};
@@ -405,8 +415,10 @@ export default async function handler(req, res) {
     // situação 5 = autorizada sem DANFE (imprime) · 6 = já emitida (não)
     const podeImprimir = (p) => q.reimprimir === '1'
       || (!p.etiqueta_impressa_em && sitDe2[String(p.nf_id)] === 5);
-    const prontos = lote.filter(p => podeImprimir(p)
-      && (linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta])));
+    const prontos = q.tipo === 'nf_agendada'
+      ? lote.filter(p => p.nf_id)                    // basta ter NF: a etiqueta vem depois
+      : lote.filter(p => podeImprimir(p)
+        && (linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta])));
     if (!prontos.length) {
       return res.status(404).json({
         erro: 'Nenhuma etiqueta pronta nesses filtros.',
@@ -428,6 +440,12 @@ export default async function handler(req, res) {
         grupoAtual = k;
         const pg = saida.addPage(P10x15);
         const qtdG = prontos.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k).length;
+        if (soDanfe) {
+          const dts = [...new Set(prontos.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k)
+            .map(x => String(x.ml_agendado_em || '').slice(0, 10)).filter(Boolean))]
+            .map(d => d.split('-').reverse().join('/')).join(' · ');
+          if (dts) pg.drawText(`ENVIAR ${dts}`, { x: 24, y: 380, size: 34, font: fonte, color: rgb(0.55, 0.1, 0.1) });
+        }
         if (q.por_empresa === '1') {
           pg.drawText(String(p.conta).toUpperCase(), { x: 24, y: 378, size: 26, font: fonte, color: rgb(0.45, 0.42, 0.36) });
         }
@@ -437,9 +455,12 @@ export default async function handler(req, res) {
         pg.drawText(String((p.itens?.[0]?.descLimpa || '')).slice(0, 34), { x: 24, y: 185, size: 13, font: fonteN, color: rgb(0.35, 0.35, 0.35) });
       }
 
+      const soDanfe = q.tipo === 'nf_agendada';       // NF antes, etiqueta depois
+      const soEtiqueta = q.tipo === 'etiqueta_liberada'; // no dia do envio
+
       // DANFE do pedido (Bling, se a conta tem escopo)
-      let danfeOk = false;
-      if (tokenBling[p.conta]) {
+      let danfeOk = soEtiqueta;   // no modo etiqueta, DANFE não entra
+      if (tokenBling[p.conta] && !soEtiqueta) {
         try {
           const hb = { Authorization: 'Bearer ' + tokenBling[p.conta], Accept: 'application/json' };
           const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}`, hb);
@@ -456,7 +477,18 @@ export default async function handler(req, res) {
                 try {
                   const dDoc = await PDFDocument.load(dBytes);
                   const pgs = await saida.copyPages(dDoc, dDoc.getPageIndices());
-                  pgs.forEach(pg => saida.addPage(pg));
+                  pgs.forEach((pg, idx) => {
+                    saida.addPage(pg);
+                    // 17/08 (ordem dele): a data de envio ESCRITA EM CIMA da
+                    // nota — é o que a equipe fazia à mão. Só a data.
+                    if (idx === 0 && soDanfe && p.ml_agendado_em) {
+                      const { width, height } = pg.getSize();
+                      const txt = String(p.ml_agendado_em).slice(0, 10).split('-').reverse().join('/');
+                      const tam = Math.min(34, Math.max(20, width / 12));
+                      pg.drawRectangle({ x: 0, y: height - tam - 16, width, height: tam + 16, color: rgb(1, 1, 1) });
+                      pg.drawText(txt, { x: 14, y: height - tam - 6, size: tam, font: fonte, color: rgb(0, 0, 0) });
+                    }
+                  });
                   danfeOk = true;
                 } catch { /* link não era pdf */ }
               }
@@ -467,8 +499,8 @@ export default async function handler(req, res) {
       if (!danfeOk) semNf.push(p.numero);
 
       // etiqueta: Bling primeiro (qualquer marketplace), ML como reserva
-      let etqOk = false;
-      const linkB = linkBlingDe[String(p.pedido_id)];
+      let etqOk = soDanfe;   // no modo NF agendada, etiqueta não entra
+      const linkB = soDanfe ? null : linkBlingDe[String(p.pedido_id)];
       if (linkB) {
         try {
           const eR = await fetch(linkB);
