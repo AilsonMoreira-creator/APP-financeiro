@@ -83,6 +83,33 @@ async function baixarDocumento(link) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+
+  // ?debug_flex=1&conta=exitus — por que a etiqueta do Flex não vem?
+  if (req.query?.debug_flex === '1') {
+    const conta = String(req.query?.conta || 'exitus');
+    const { data: lista } = await supabase.from('wms_pedidos')
+      .select('pedido_id, numero, numero_loja, ml_logistic_type')
+      .eq('conta', conta).eq('print_regra', 'MELI_FLEX').eq('print_estado', 'PRONTO').limit(2);
+    const out = { conta, amostra: lista, passos: [] };
+    const token = await getValidToken(BRAND[conta]).catch(e => { out.passos.push({ token: e.message }); return null; });
+    out.passos.push({ token: token ? 'ok' : 'sem token' });
+    if (token && lista?.[0]) {
+      const h = { Authorization: `Bearer ${token}` };
+      const r1 = await fetch(`https://api.mercadolibre.com/orders/${lista[0].numero_loja}`, { headers: h });
+      const j1 = await r1.json();
+      out.passos.push({ order: r1.status, shipping_id: j1?.shipping?.id || null, msg: j1?.message || null });
+      const sid = j1?.shipping?.id;
+      if (sid) {
+        for (const tipo of ['zpl2', 'pdf']) {
+          const r2 = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${sid}&response_type=${tipo}`, { headers: h });
+          const ct = String(r2.headers.get('content-type'));
+          const corpo = ct.includes('json') ? (await r2.text()).slice(0, 250) : `(${ct})`;
+          out.passos.push({ etiqueta: tipo, http: r2.status, tipo: ct, corpo });
+        }
+      }
+    }
+    return res.status(200).json(out);
+  }
   const limite = Math.min(parseInt(req.query?.limite) || 120, 300);
   const contas = String(req.query?.contas || 'exitus,lumia,muniam').split(',').map(c => c.trim());
   const incluirShein = req.query?.incluir_shein === '1';
