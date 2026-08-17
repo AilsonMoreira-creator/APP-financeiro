@@ -72,6 +72,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, []);
 
   // QZ Tray (já instalado na máquina da expedição): carrega a lib sob demanda
+  // abrir o PDF: window.open depois de um await costuma ser BLOQUEADO pelo
+  // navegador (perde o "gesto do usuário"). Um link clicado por código passa.
+  const abrirPdf = (url) => {
+    try {
+      const a = document.createElement('a');
+      a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch { window.location.href = url; }
+  };
+
   const carregarQz = () => new Promise((ok, falha) => {
     if (window.qz) return ok(window.qz);
     const el = document.createElement('script');
@@ -105,7 +115,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       if (!r.ok) throw new Error(j.erro || `HTTP ${r.status}`);
       if (j.so_pdf) {   // NF agendada: é nota, sai em PDF
         setImprimindo('Abrindo as notas em PDF…');
-        window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank');
+        abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
         setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
         return;
       }
@@ -115,8 +125,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       const qz = await conectarQz();
       if (!qz) {
         // sem QZ (não instalado, fechado ou bloqueado) → PDF, sem travar
-        setImprimindo('Impressora térmica indisponível — abrindo o PDF…');
-        window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank');
+        setImprimindo('Sem impressora térmica aqui — gerando o PDF (pode levar alguns segundos)…');
+        abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
         setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
         return;
       }
@@ -146,8 +156,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     } catch (e) {
       const problemaQz = /qz|websocket|connection/i.test(String(e?.message || ''));
       if (problemaQz) {
-        setImprimindo('Impressora térmica indisponível — abrindo o PDF…');
-        window.open(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`, '_blank');
+        setImprimindo('Sem impressora térmica aqui — gerando o PDF (pode levar alguns segundos)…');
+        abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
         setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
         return;
       }

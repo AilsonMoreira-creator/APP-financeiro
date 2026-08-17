@@ -254,7 +254,7 @@ export default async function handler(req, res) {
       const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
       const contasFiltro = String(q.contas || 'todas');
       let sel = supabase.from('wms_pedidos')
-        .select('conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em')
+        .select('conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_situacao, etiqueta_impressa_em, status_wms')
         .neq('status_wms', 'cancelado')
         .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
         .limit(3000);
@@ -263,11 +263,18 @@ export default async function handler(req, res) {
       const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0 };
       for (const p of (data || [])) {
         const agendado = p.ml_agendado_em && String(p.ml_agendado_em) > hoje;
+        // AGENDADAS: sai do contador assim que a nota é impressa (carimbo nosso
+        // ou DANFE emitida no Bling) — ordem dele 17/08
         if (p.print_regra === 'MELI_AGENDADO' || agendado) {
-          if (!p.nf_agendada_impressa_em && p.print_estado === 'PRONTO') c.nf_agendada++;
+          if (!p.nf_agendada_impressa_em && p.nf_situacao !== 6 && p.print_estado === 'PRONTO') c.nf_agendada++;
           continue;
         }
-        if (p.ml_ship_status === 'ready_to_ship' && p.ml_ship_substatus !== 'printed') c.etiqueta_liberada++;
+        // LIBERADAS: só as que ainda não saíram. Etiqueta impressa (nossa ou
+        // pelo painel) e pedido já finalizado não contam mais.
+        if (p.ml_ship_status === 'ready_to_ship'
+          && p.ml_ship_substatus !== 'printed'
+          && !p.etiqueta_impressa_em
+          && p.status_wms !== 'finalizado') c.etiqueta_liberada++;
         if (p.print_estado !== 'PRONTO') continue;
         if (p.print_regra === 'MELI_FLEX') c.flex++;
         else if (p.print_regra === 'MELUNI') c.meluni++;

@@ -49,7 +49,9 @@ export function classificar(p, hojeBRT) {
     };
   }
 
-  if (!temNf) return { regra: 'SEM_NF', nf: false, etiqueta: false, estado: 'AGUARDA_NF', motivo: 'sem nota fiscal ainda' };
+  // 17/08 (ele apontou): pedido em aberto sem NF vai precisar de nota E
+  // etiqueta — tem que contar como AGUARDANDO, não sumir da tela.
+  if (!temNf) return { regra: 'SEM_NF', nf: true, etiqueta: true, estado: 'AGUARDA_NF', motivo: 'sem nota fiscal ainda' };
 
   if (nfImpressa || p.etiqueta_impressa_em) {
     return { regra: 'NORMAL', nf: true, etiqueta: true, estado: 'IMPRESSO', motivo: 'já impresso' };
