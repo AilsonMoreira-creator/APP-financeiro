@@ -136,12 +136,17 @@ async function pedidosFiltrados(q) {
 // (situação 6 = já impressa) — vale inclusive quando a Sthefany imprime
 // pelo painel. A listagem de NFs traz numeroPedidoLoja, que casa com o
 // numero_loja do wms_pedidos sem precisar abrir pedido por pedido.
-async function situacaoPorNfId(contas, tokenPorConta, desde) {
+async function situacaoPorNfId(contas, tokenPorConta, desde, precisa = null) {
   const mapa = {};
   for (const conta of contas) {
     if (!tokenPorConta[conta]) continue;
     const hb = { Authorization: 'Bearer ' + tokenPorConta[conta], Accept: 'application/json' };
-    for (let pagina = 1; pagina <= 8; pagina++) {
+    // 17/08: a Exitus emite centenas de notas por dia. Com o teto antigo de 8
+    // páginas (800 notas) as MAIS NOVAS ficavam fora da varredura e o pedido
+    // aparecia como "aguardando" mesmo com a NF pronta. Agora varre até
+    // encontrar todas as notas que interessam (ou acabar a lista).
+    const faltam = new Set((precisa || []).map(String));
+    for (let pagina = 1; pagina <= 30; pagina++) {
       const url = `https://api.bling.com.br/Api/v3/nfe?tipo=1&dataEmissaoInicial=${desde}&limite=100&pagina=${pagina}`;
       let j = {};
       try {
@@ -149,9 +154,14 @@ async function situacaoPorNfId(contas, tokenPorConta, desde) {
         j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
       } catch { break; }
       const lista = j?.data || [];
-      for (const nf of lista) if (nf?.id) mapa[String(nf.id)] = nf.situacao;
+      for (const nf of lista) {
+        if (!nf?.id) continue;
+        mapa[String(nf.id)] = nf.situacao;
+        faltam.delete(String(nf.id));
+      }
       if (lista.length < 100) break;
-      await new Promise(r2 => setTimeout(r2, 350));
+      if (precisa && precisa.length && faltam.size === 0) break;   // já achamos todas
+      await new Promise(r2 => setTimeout(r2, 300));
     }
   }
   return mapa;
@@ -251,7 +261,7 @@ export default async function handler(req, res) {
       // descobre o nf_id de quem ainda não tem (inclusive abertos: a NF pode
       // ter sido feita à mão no Bling antes da separação)
       await preencherNfIds(peds.filter(p => !p.nf_id), tk, 30);
-      const sitDe = await situacaoPorNfId([...contasSet], tk, desdeNf);
+      const sitDe = await situacaoPorNfId([...contasSet], tk, desdeNf, peds.map(p => p.nf_id).filter(Boolean));
       const links = {};
       const grupos = {};
       let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
@@ -299,7 +309,7 @@ export default async function handler(req, res) {
       for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
       const links = await linksEtiqueta(peds.slice(0, 120), tk, 'impressao');
       await preencherNfIds(peds.filter(p => links[String(p.pedido_id)]), tk, 60);
-      const sitDe = await situacaoPorNfId([...contasSet], tk, new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+      const sitDe = await situacaoPorNfId([...contasSet], tk, new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10), peds.map(p => p.nf_id).filter(Boolean));
 
       const alvo = peds.filter(p => links[String(p.pedido_id)]
         && (q.reimprimir === '1'
@@ -426,7 +436,7 @@ export default async function handler(req, res) {
     // por padrão — só entra com ?reimprimir=1 (escolha consciente na tela)
     const desdeNf2 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
     await preencherNfIds(lote, tokenBling, 60);
-    const sitDe2 = await situacaoPorNfId([...new Set(lote.map(p => p.conta))], tokenBling, desdeNf2);
+    const sitDe2 = await situacaoPorNfId([...new Set(lote.map(p => p.conta))], tokenBling, desdeNf2, lote.map(p => p.nf_id).filter(Boolean));
     // situação 5 = autorizada sem DANFE (imprime) · 6 = já emitida (não)
     // etiqueta_liberada: tudo que o ML liberou pra postar HOJE entra, mesmo
     // que já tenha passado pela impressora (ordem dele 17/08)
