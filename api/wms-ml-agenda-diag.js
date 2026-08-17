@@ -49,9 +49,12 @@ export default async function handler(req, res) {
               shipping_method: s.lead_time.shipping_method?.name,
             } : null,
             // alguns campos que às vezes trazem o agendamento
-            dispatch: s.shipping_option?.estimated_handling_limit || null,
+            // 17/08: 'buffered' = envio PROGRAMADO. A data deve estar aqui:
+            shipping_option: s.shipping_option || null,
+            substatus_history: (s.substatus_history || []).slice(0, 4),
+            status_history: s.status_history || null,
+            buffering: s.buffering || null,
             tags: s.tags,
-            chaves: Object.keys(s),
           };
         }
       } catch (e) { item.erro = String(e.message).slice(0, 120); }
