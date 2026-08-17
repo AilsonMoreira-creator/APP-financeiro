@@ -40,6 +40,35 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora, reimprimir, verFinalizados, porEmpresa]);
 
   const [imprimindo, setImprimindo] = useState('');
+  // PREPARO AUTOMÁTICO (17/08 — redesenho): ao abrir a tela o app já busca e
+  // guarda as etiquetas em segundo plano, em fatias. O clique de imprimir só
+  // consome o que está pronto. A Shein fica de fora (baixar a etiqueta dela
+  // muda o status no marketplace) e é buscada no clique final.
+  const [preparo, setPreparo] = useState(null);   // {rodando, prontos, faltam, msg}
+
+  const prepararLote = useCallback(async (auto = false) => {
+    setPreparo({ rodando: true, msg: auto ? 'preparando etiquetas…' : 'preparando agora…' });
+    let voltas = 0, prontos = 0;
+    try {
+      while (voltas < 6) {
+        voltas++;
+        const r = await fetch(`${API}/wms-preparar-lote?limite=120`);
+        const j = await r.json();
+        prontos += j.preparados || 0;
+        setPreparo({
+          rodando: (j.faltam || 0) > 0,
+          msg: (j.faltam || 0) > 0
+            ? `preparando… ${prontos} prontos, faltam ${j.faltam}`
+            : `${prontos} etiqueta(s) preparadas`,
+        });
+        if (!j.faltam) break;
+      }
+    } catch (e) {
+      setPreparo({ rodando: false, msg: 'não consegui preparar agora — dá pra imprimir mesmo assim' });
+    }
+    carregar();
+    setTimeout(() => setPreparo(p => (p && !p.rodando ? null : p)), 12000);
+  }, []);
 
   // QZ Tray (já instalado na máquina da expedição): carrega a lib sob demanda
   const carregarQz = () => new Promise((ok, falha) => {
@@ -139,6 +168,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, [API, qs, onErro]);
 
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { prepararLote(true); /* só na abertura */ }, []);   // eslint-disable-line
+
 
   const btn = (ativo) => ({
     padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5,
@@ -199,6 +230,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         </div>
       </div>
 
+      {/* preparo em segundo plano: a equipe vê o que está acontecendo */}
+      {preparo && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10, padding: '9px 12px',
+          borderRadius: 10, background: preparo.rodando ? '#fdf6e3' : palette.okSoft || '#e9f5ee',
+          border: `1px solid ${preparo.rodando ? '#e8d9a8' : '#cfe6d8'}`, fontSize: 12.5, color: palette.inkSoft, fontFamily: FONT }}>
+          <span>{preparo.rodando ? '⏳' : '✅'}</span>
+          <span style={{ flex: 1 }}>{preparo.msg}</span>
+        </div>
+      )}
+
       {/* ação — UM botão só (15/08 → 17/08, ordem dele): tenta a térmica e,
           se o QZ Tray não estiver disponível, cai sozinho pro PDF */}
       <div style={{ display: 'flex', gap: 9, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -208,8 +249,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             cursor: (vaiSair && !imprimindo) ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <Printer size={18} /> {imprimindo || `Imprimir etiquetas (${vaiSair})`}
         </button>
-        <button onClick={carregar} style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
-          <RefreshCw size={16} /> Atualizar
+        <button onClick={() => prepararLote(false)} disabled={preparo?.rodando}
+          title="Busca agora as etiquetas que ainda não foram preparadas (a Shein só é buscada no clique de imprimir)"
+          style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: preparo?.rodando ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, opacity: preparo?.rodando ? .6 : 1 }}>
+          <RefreshCw size={16} /> Preparar agora
         </button>
       </div>
 
