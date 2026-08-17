@@ -47,7 +47,7 @@ async function pedidosFiltrados(q) {
   // Por isso buscamos: (1) quem já tem NF (últimos 7 dias, qualquer status) e
   // (2) quem ainda está no funil sem NF (aparece como "aguardando").
   const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
-  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em';
+  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo';
 
   let q1 = supabase.from('wms_pedidos').select(COLS)
     .not('nf_id', 'is', null)
