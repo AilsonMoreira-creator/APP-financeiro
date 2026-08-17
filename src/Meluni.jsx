@@ -1874,8 +1874,10 @@ function SecaoCarrinho() {
   const [autoCarrinho, setAutoCarrinho] = useState(null);
   const [autoCarrinhoBusy, setAutoCarrinhoBusy] = useState(false);
   useEffect(() => {
+    // 17/08: o estado vem em `gates.disparo_ativo` (não na raiz) — por isso o
+    // botão aparecia sempre desligado mesmo com a chave ativa no banco.
     fetch('/api/meluni-templates-carrinho').then(r => r.json())
-      .then(j => { if (j?.ok !== false) setAutoCarrinho(!!j?.disparo_ativo); })
+      .then(j => { if (j?.ok !== false) setAutoCarrinho(!!(j?.gates?.disparo_ativo ?? j?.disparo_ativo)); })
       .catch(() => {});
   }, []);
   const alternarAutoCarrinho = async () => {
@@ -1889,8 +1891,11 @@ function SecaoCarrinho() {
         body: JSON.stringify({ gate: 'disparo', ativo: novo }),
       });
       const j = await r.json();
-      if (j?.ok !== false) setAutoCarrinho(novo);
-    } catch { /* mantém o estado */ }
+      if (j?.ok === false) throw new Error(j?.erro || 'não consegui salvar');
+      // confirma pelo que o servidor devolveu (e não pelo que pedimos)
+      const confirmado = j?.gates?.disparo_ativo ?? j?.disparo_ativo ?? novo;
+      setAutoCarrinho(!!confirmado);
+    } catch (e) { alert(`Não consegui alterar: ${e.message}`); }
     finally { setAutoCarrinhoBusy(false); }
   };
 
