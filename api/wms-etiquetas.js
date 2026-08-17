@@ -250,6 +250,33 @@ export default async function handler(req, res) {
   try {
     const peds = await pedidosFiltrados(q);
 
+    // CONTADORES POR TIPO (17/08, pedido dele): cada botão de IMPRIMIR mostra
+    // quantas etiquetas estão esperando impressão. Lê só o banco.
+    if (q.contadores === '1') {
+      const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+      let sel = supabase.from('wms_pedidos')
+        .select('conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em')
+        .neq('status_wms', 'cancelado')
+        .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
+        .limit(3000);
+      if (contas !== 'todas') sel = sel.in('conta', contas.split(','));
+      const { data } = await sel;
+      const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0 };
+      for (const p of (data || [])) {
+        const agendado = p.ml_agendado_em && String(p.ml_agendado_em) > hoje;
+        if (p.print_regra === 'MELI_AGENDADO' || agendado) {
+          if (!p.nf_agendada_impressa_em && p.print_estado === 'PRONTO') c.nf_agendada++;
+          continue;
+        }
+        if (p.ml_ship_status === 'ready_to_ship' && p.ml_ship_substatus !== 'printed') c.etiqueta_liberada++;
+        if (p.print_estado !== 'PRONTO') continue;
+        if (p.print_regra === 'MELI_FLEX') c.flex++;
+        else if (p.print_regra === 'MELUNI') c.meluni++;
+        else if (p.print_regra === 'NORMAL') c.nf_transporte++;
+      }
+      return res.status(200).json({ ok: true, contadores: c });
+    }
+
     if (q.previa === '1') {
       // 17/08 — REDESENHO: a prévia NÃO fala mais com o Bling. A situação da
       // nota vem pré-carregada pelo cron `wms-nf-sync` (a cada 10 min), o que
@@ -277,9 +304,15 @@ export default async function handler(req, res) {
           else semEtiqueta++;
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
-        } else if (sit === 6 || p.etiqueta_impressa_em) { grupos[k].impressas++; jaImpressas++; }
-        else if (sit === 5) { grupos[k].prontas++; prontas++; }
-        else semEtiqueta++;
+        } else if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
+          grupos[k].impressas++; jaImpressas++;
+        } else if (sit === 5 || p.print_estado === 'PRONTO') { grupos[k].prontas++; prontas++; }
+        else if (p.print_etiqueta === false || p.status_wms === 'finalizado') {
+          // 17/08 (ordem dele): Flex/Meluni sem NF e pedido já finalizado NÃO
+          // são "aguardando" — não têm nada pra imprimir aqui. Ficam fora da
+          // conta pra não assustar a equipe com um número que não é problema.
+          grupos[k].pedidos--;
+        } else semEtiqueta++;
       }
       const ultimaChecagem = peds.map(p => p.nf_checado_em).filter(Boolean).sort().pop() || null;
       return res.status(200).json({

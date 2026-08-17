@@ -45,6 +45,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   // consome o que está pronto. A Shein fica de fora (baixar a etiqueta dela
   // muda o status no marketplace) e é buscada no clique final.
   const [preparo, setPreparo] = useState(null);   // {rodando, prontos, faltam, msg}
+  const [contadores, setContadores] = useState(null);   // badge por tipo de impressão
 
   const prepararLote = useCallback(async (auto = false) => {
     setPreparo({ rodando: true, msg: auto ? 'preparando etiquetas…' : 'preparando agora…' });
@@ -168,9 +169,23 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, [API, qs, onErro]);
 
   useEffect(() => { carregar(); }, [carregar]);
+  // contadores de cada botão de IMPRIMIR (leitura leve, só do banco)
+  useEffect(() => {
+    const buscar = () => fetch(`${API}/wms-etiquetas?contadores=1&contas=${fConta}`)
+      .then(r => r.json()).then(j => { if (j?.ok) setContadores(j.contadores); }).catch(() => {});
+    buscar();
+    const t = setInterval(buscar, 60000);
+    return () => clearInterval(t);
+  }, [fConta, dados]);
   useEffect(() => { prepararLote(true); /* só na abertura */ }, []);   // eslint-disable-line
 
 
+
+  // bolinha com o número de etiquetas esperando impressão naquele tipo
+  const Badge = ({ n }) => (n ? (
+    <span style={{ marginLeft: 6, background: palette.accent, color: '#fff', borderRadius: 999,
+      padding: '1px 7px', fontSize: 11, fontWeight: 800, verticalAlign: 1 }}>{n}</span>
+  ) : null);
   const btn = (ativo) => ({
     padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5,
     fontWeight: ativo ? 800 : 600,
@@ -214,16 +229,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <span style={rotulo}>Imprimir</span>
-          <button onClick={() => setFTipo('nf_transporte')} style={btn(fTipo === 'nf_transporte')}>NF + transporte</button>
-          <button onClick={() => setFTipo('flex')} style={btn(fTipo === 'flex')}>⚡ Flex</button>
-          <button onClick={() => setFTipo('meluni')} style={btn(fTipo === 'meluni')}>Meluni</button>
+          <button onClick={() => setFTipo('nf_transporte')} style={btn(fTipo === 'nf_transporte')}>NF + transporte<Badge n={contadores?.nf_transporte} /></button>
+          <button onClick={() => setFTipo('flex')} style={btn(fTipo === 'flex')}>⚡ Flex<Badge n={contadores?.flex} /></button>
+          <button onClick={() => setFTipo('meluni')} style={btn(fTipo === 'meluni')}>Meluni<Badge n={contadores?.meluni} /></button>
           <button onClick={() => setFTipo('nf_agendada')} style={btn(fTipo === 'nf_agendada')}
             title="Pedidos do Mercado Livre com envio programado: imprime só a NF, com a data de envio escrita em cima. A etiqueta sai no dia.">
-            📅 NF agendadas
+            📅 NF agendadas<Badge n={contadores?.nf_agendada} />
           </button>
           <button onClick={() => setFTipo('etiqueta_liberada')} style={btn(fTipo === 'etiqueta_liberada')}
             title="Só as etiquetas logísticas que o Mercado Livre liberou pra postar hoje (a NF já foi impressa antes).">
-            🏷 Etiquetas liberadas
+            🏷 Etiquetas liberadas<Badge n={contadores?.etiqueta_liberada} />
           </button>
           <input value={fRef} onChange={e => setFRef(e.target.value)} placeholder="REF específica"
             style={{ padding: '9px 12px', borderRadius: 10, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13.5, width: 130, color: palette.ink }} />
