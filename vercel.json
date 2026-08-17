@@ -529,6 +529,10 @@
     {
       "path": "/api/wms-nf-sync?dias=2",
       "schedule": "*/10 9-23 * * *"
+    },
+    {
+      "path": "/api/wms-classificar",
+      "schedule": "5,35 9-23 * * *"
     }
   ]
 }
