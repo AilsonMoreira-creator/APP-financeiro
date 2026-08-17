@@ -251,17 +251,12 @@ export default async function handler(req, res) {
     const peds = await pedidosFiltrados(q);
 
     if (q.previa === '1') {
-      const tk = {};
-      const contasSet = new Set(peds.map(p => p.conta));
-      for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
-      // PRÉVIA LEVE (13/08): classifica SÓ pela situação da NF — consultar a
-      // etiqueta de cada pedido derrubava a tela por tempo. A etiqueta é
-      // buscada de verdade só na hora de gerar (PDF/ZPL).
-      const desdeNf = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      // descobre o nf_id de quem ainda não tem (inclusive abertos: a NF pode
-      // ter sido feita à mão no Bling antes da separação)
-      await preencherNfIds(peds.filter(p => !p.nf_id), tk, 30);
-      const sitDe = await situacaoPorNfId([...contasSet], tk, desdeNf, peds.map(p => p.nf_id).filter(Boolean));
+      // 17/08 — REDESENHO: a prévia NÃO fala mais com o Bling. A situação da
+      // nota vem pré-carregada pelo cron `wms-nf-sync` (a cada 10 min), o que
+      // tirou a tela de MINUTOS de espera para instantânea. O Bling só é
+      // chamado no momento real da impressão (buscar a etiqueta).
+      const sitDe = {};
+      for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
       const links = {};
       const grupos = {};
       let prontas = 0, jaImpressas = 0, semEtiqueta = 0;
@@ -286,7 +281,9 @@ export default async function handler(req, res) {
         else if (sit === 5) { grupos[k].prontas++; prontas++; }
         else semEtiqueta++;
       }
+      const ultimaChecagem = peds.map(p => p.nf_checado_em).filter(Boolean).sort().pop() || null;
       return res.status(200).json({
+        sincronizado_em: ultimaChecagem,
         total_pedidos: peds.length,
         prontas,
         ja_impressas: jaImpressas,
