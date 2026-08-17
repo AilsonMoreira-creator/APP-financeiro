@@ -447,6 +447,12 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 
     if (q.pdf !== '1' && q.debug !== '1') return res.status(400).json({ erro: 'use ?previa=1, ?zpl=1 ou ?pdf=1' });
     if (!peds.length) return res.status(404).json({ erro: 'nenhum pedido nos filtros' });
+    // 17/08: declarados no TOPO do bloco — antes ficavam no meio e o separador,
+    // que roda no início de cada grupo, quebrava com "soDanfe before init"
+    // (era esse o erro que abria a aba do PDF em branco).
+    const soDanfe = q.tipo === 'nf_agendada';          // NF antes, etiqueta depois
+    const soEtiqueta = q.tipo === 'etiqueta_liberada';  // no dia do envio
+
     const lote = peds.slice(0, 80);
 
     // tokens por conta (Bling) e por marca (ML)
@@ -619,11 +625,6 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 
     // REGISTRO: o que entrou neste PDF fica marcado como impresso (com lote),
     // pra ninguém imprimir duas vezes nem esquecer nenhum
-    // 17/08: declarados ANTES do laço — estavam dentro dele e o separador,
-    // que roda no começo de cada grupo, quebrava com "soDanfe before init".
-    const soDanfe = q.tipo === 'nf_agendada';         // NF antes, etiqueta depois
-    const soEtiqueta = q.tipo === 'etiqueta_liberada'; // no dia do envio
-
     const lotePdf = `L${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
     if (q.tipo === 'nf_agendada' && prontos.length) {
       await supabase.from('wms_pedidos')
