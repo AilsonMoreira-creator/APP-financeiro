@@ -248,8 +248,6 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const q = req.query || {};
   try {
-    const peds = await pedidosFiltrados(q);
-
     // CONTADORES POR TIPO (17/08, pedido dele): cada botão de IMPRIMIR mostra
     // quantas etiquetas estão esperando impressão. Lê só o banco.
     if (q.contadores === '1') {
@@ -276,6 +274,8 @@ export default async function handler(req, res) {
       }
       return res.status(200).json({ ok: true, contadores: c });
     }
+
+    const peds = await pedidosFiltrados(q);
 
     if (q.previa === '1') {
       // 17/08 — REDESENHO: a prévia NÃO fala mais com o Bling. A situação da
