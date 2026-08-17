@@ -143,7 +143,6 @@ export default async function handler(req, res) {
         const hojeAg = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
         const { count: agendadosMl } = await supabase.from('wms_pedidos')
           .select('pedido_id', { count: 'exact', head: true })
-          .eq('conta', 'exitus')
           .neq('status_wms', 'cancelado')
           .gte('ml_agendado_em', hojeAg);
 

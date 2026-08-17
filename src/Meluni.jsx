@@ -1132,74 +1132,6 @@ function SecaoClientes() {
   const [recargaHoje, setRecargaHoje] = useState(0);
   const disparosHoje = useDisparosHoje(recargaHoje);
   const isDesktop = useIsDesktop();
-  // AUTOMÁTICO do carrinho (Ailson 16/08): a importação já é automática (cron
-  // do Drive às 8h); aqui liga/desliga o DISPARO das 12h e 17h. A fila do
-  // automático é a MESMA da tela (status processando + origem carrinho), só
-  // com a janela de idade (2h a 30 dias) e telefone válido.
-  const [autoCarrinho, setAutoCarrinho] = useState(null);
-  const [autoCarrinhoBusy, setAutoCarrinhoBusy] = useState(false);
-  useEffect(() => {
-    fetch('/api/meluni-templates-carrinho').then(r => r.json())
-      .then(j => { if (j?.ok !== false) setAutoCarrinho(!!j?.disparo_ativo); })
-      .catch(() => {});
-  }, []);
-  const alternarAutoCarrinho = async () => {
-    if (autoCarrinhoBusy || autoCarrinho === null) return;
-    const novo = !autoCarrinho;
-    if (novo && !window.confirm('Ligar o disparo automático do carrinho?\n\nA Lara vai enviar sozinha às 12h e 17h (seg–sáb) pros carrinhos que estão em Processando, com telefone e abandonados há mais de 2 horas.')) return;
-    setAutoCarrinhoBusy(true);
-    try {
-      const r = await fetch('/api/meluni-templates-carrinho', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gate: 'disparo', ativo: novo }),
-      });
-      const j = await r.json();
-      if (j?.ok !== false) setAutoCarrinho(novo);
-    } catch { /* mantém o estado */ }
-    finally { setAutoCarrinhoBusy(false); }
-  };
-  // Liga/desliga do disparo pós-compra AUTOMÁTICO (cron seg-sáb 10h). Desligar
-  // serve pra bloquear o auto no dia de disparo de novidade/promoção. Ailson 26/06.
-  const [autoOn, setAutoOn] = useState(null);
-  const [autoBusy, setAutoBusy] = useState(false);
-  useEffect(() => {
-    fetch('/api/meluni-poscompra-auto').then(r => r.json()).then(j => { if (j?.ok) setAutoOn(!!j.ativo); }).catch(() => {});
-  }, []);
-  const toggleAuto = async () => {
-    if (autoBusy || autoOn === null) return;
-    const novo = !autoOn;
-    if (novo && !window.confirm('Ligar o disparo pós-compra AUTOMÁTICO? Vai mandar a mensagem da Lara toda manhã (seg a sáb, 10h) pras clientes de 10 a 14 dias que ainda não receberam.')) return;
-    if (!novo && !window.confirm('Desligar o disparo automático? Use isso no dia que for fazer disparo de novidade/promoção. Lembra de ligar de novo depois.')) return;
-    setAutoBusy(true); setAutoOn(novo);
-    try {
-      const r = await fetch('/api/meluni-poscompra-auto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: novo }) });
-      const j = await r.json();
-      if (!j?.ok) { setAutoOn(!novo); alert('Falhou ao salvar.'); }
-    } catch (e) { setAutoOn(!novo); alert('Erro: ' + (e?.message || e)); }
-    setAutoBusy(false);
-  };
-
-  // Liga/desliga do AUTO CROSS-SELL (cron seg-sáb 10h30, 7 dias após o pós-compra).
-  // Ailson 03/08/2026.
-  const [crossOn, setCrossOn] = useState(null);
-  const [crossBusy, setCrossBusy] = useState(false);
-  useEffect(() => {
-    fetch('/api/meluni-crossell-auto').then(r => r.json()).then(j => { if (j?.ok) setCrossOn(!!j.ativo); }).catch(() => {});
-  }, []);
-  const toggleCross = async () => {
-    if (crossBusy || crossOn === null) return;
-    const novo = !crossOn;
-    if (novo && !window.confirm('Ligar o AUTO CROSS-SELL? 7 dias depois de receber o pós-compra, a cliente recebe a oferta de cor/modelo de verão com foto (seg a sáb, 10h30, 1 envio por cliente pra sempre). Só sai depois que a Meta aprovar os 2 templates.')) return;
-    if (!novo && !window.confirm('Desligar o auto cross-sell?')) return;
-    setCrossBusy(true); setCrossOn(novo);
-    try {
-      const r = await fetch('/api/meluni-crossell-auto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: novo }) });
-      const j = await r.json();
-      if (!j?.ok) { setCrossOn(!novo); alert('Falhou ao salvar.'); }
-    } catch (e) { setCrossOn(!novo); alert('Erro: ' + (e?.message || e)); }
-    setCrossBusy(false);
-  };
-
   const carregar = useCallback(async () => {
     setLoading(true); setErro('');
     try {
@@ -1893,6 +1825,74 @@ function SecaoCarrinho() {
   const [recargaHoje, setRecargaHoje] = useState(0);
   const disparosHoje = useDisparosHoje(recargaHoje);
   const isDesktop = useIsDesktop();
+  // AUTOMÁTICO do carrinho (Ailson 16/08): a importação já é automática (cron
+  // do Drive às 8h); aqui liga/desliga o DISPARO das 12h e 17h. A fila do
+  // automático é a MESMA da tela (status processando + origem carrinho), só
+  // com a janela de idade (2h a 30 dias) e telefone válido.
+  const [autoCarrinho, setAutoCarrinho] = useState(null);
+  const [autoCarrinhoBusy, setAutoCarrinhoBusy] = useState(false);
+  useEffect(() => {
+    fetch('/api/meluni-templates-carrinho').then(r => r.json())
+      .then(j => { if (j?.ok !== false) setAutoCarrinho(!!j?.disparo_ativo); })
+      .catch(() => {});
+  }, []);
+  const alternarAutoCarrinho = async () => {
+    if (autoCarrinhoBusy || autoCarrinho === null) return;
+    const novo = !autoCarrinho;
+    if (novo && !window.confirm('Ligar o disparo automático do carrinho?\n\nA Lara vai enviar sozinha às 12h e 17h (seg–sáb) pros carrinhos que estão em Processando, com telefone e abandonados há mais de 2 horas.')) return;
+    setAutoCarrinhoBusy(true);
+    try {
+      const r = await fetch('/api/meluni-templates-carrinho', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gate: 'disparo', ativo: novo }),
+      });
+      const j = await r.json();
+      if (j?.ok !== false) setAutoCarrinho(novo);
+    } catch { /* mantém o estado */ }
+    finally { setAutoCarrinhoBusy(false); }
+  };
+  // Liga/desliga do disparo pós-compra AUTOMÁTICO (cron seg-sáb 10h). Desligar
+  // serve pra bloquear o auto no dia de disparo de novidade/promoção. Ailson 26/06.
+  const [autoOn, setAutoOn] = useState(null);
+  const [autoBusy, setAutoBusy] = useState(false);
+  useEffect(() => {
+    fetch('/api/meluni-poscompra-auto').then(r => r.json()).then(j => { if (j?.ok) setAutoOn(!!j.ativo); }).catch(() => {});
+  }, []);
+  const toggleAuto = async () => {
+    if (autoBusy || autoOn === null) return;
+    const novo = !autoOn;
+    if (novo && !window.confirm('Ligar o disparo pós-compra AUTOMÁTICO? Vai mandar a mensagem da Lara toda manhã (seg a sáb, 10h) pras clientes de 10 a 14 dias que ainda não receberam.')) return;
+    if (!novo && !window.confirm('Desligar o disparo automático? Use isso no dia que for fazer disparo de novidade/promoção. Lembra de ligar de novo depois.')) return;
+    setAutoBusy(true); setAutoOn(novo);
+    try {
+      const r = await fetch('/api/meluni-poscompra-auto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: novo }) });
+      const j = await r.json();
+      if (!j?.ok) { setAutoOn(!novo); alert('Falhou ao salvar.'); }
+    } catch (e) { setAutoOn(!novo); alert('Erro: ' + (e?.message || e)); }
+    setAutoBusy(false);
+  };
+
+  // Liga/desliga do AUTO CROSS-SELL (cron seg-sáb 10h30, 7 dias após o pós-compra).
+  // Ailson 03/08/2026.
+  const [crossOn, setCrossOn] = useState(null);
+  const [crossBusy, setCrossBusy] = useState(false);
+  useEffect(() => {
+    fetch('/api/meluni-crossell-auto').then(r => r.json()).then(j => { if (j?.ok) setCrossOn(!!j.ativo); }).catch(() => {});
+  }, []);
+  const toggleCross = async () => {
+    if (crossBusy || crossOn === null) return;
+    const novo = !crossOn;
+    if (novo && !window.confirm('Ligar o AUTO CROSS-SELL? 7 dias depois de receber o pós-compra, a cliente recebe a oferta de cor/modelo de verão com foto (seg a sáb, 10h30, 1 envio por cliente pra sempre). Só sai depois que a Meta aprovar os 2 templates.')) return;
+    if (!novo && !window.confirm('Desligar o auto cross-sell?')) return;
+    setCrossBusy(true); setCrossOn(novo);
+    try {
+      const r = await fetch('/api/meluni-crossell-auto', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: novo }) });
+      const j = await r.json();
+      if (!j?.ok) { setCrossOn(!novo); alert('Falhou ao salvar.'); }
+    } catch (e) { setCrossOn(!novo); alert('Erro: ' + (e?.message || e)); }
+    setCrossBusy(false);
+  };
+
   const LIM = 60;
   const tabs = [
     { id: 'processando', label: 'Processando', unread: unread.processando,
