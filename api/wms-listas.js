@@ -137,7 +137,17 @@ export default async function handler(req, res) {
         const { data: ultSync } = await supabase.from('wms_pedidos')
           .select('visto_em').order('visto_em', { ascending: false }).limit(1);
         const config = await lerWmsConfig();
-        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: CORTE_LISTA, corte_em: corteDeHoje(), ultimo_sync: ultSync?.[0]?.visto_em || null });
+
+        // ENVIOS PROGRAMADOS do Mercado Livre (17/08, pra TV): pedido que só
+        // libera a etiqueta num dia futuro — a equipe imprime a NF antes.
+        const hojeAg = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+        const { count: agendadosMl } = await supabase.from('wms_pedidos')
+          .select('pedido_id', { count: 'exact', head: true })
+          .eq('conta', 'exitus')
+          .neq('status_wms', 'cancelado')
+          .gte('ml_agendado_em', hojeAg);
+
+        return res.status(200).json({ ok: true, total: tot, por_conta: porConta, por_canal: porCanal, vendas_dia: vendasDia, config, corte_lista: CORTE_LISTA, corte_em: corteDeHoje(), agendados_ml: agendadosMl || 0, ultimo_sync: ultSync?.[0]?.visto_em || null });
       }
 
       if (acao === 'config') {

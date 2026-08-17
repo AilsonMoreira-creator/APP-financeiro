@@ -174,6 +174,8 @@ export default async function handler(req, res) {
     linhaP('⏳ Aguardando mercadoria', n(t.aguardando), n(t.aguardando) ? 'ambar' : 'verde');
     linhaP('⚡ Flex em separação', n(t.em_separacao_flex), 'azul');
     if (prev) linhaP('📄 NF faltando', Math.max(0, prev - comNf), (prev - comNf) ? 'ambar' : 'verde');
+    // envios programados do ML Exitus (a etiqueta só libera no dia)
+    linhaP('🗓 Agendados ML Exitus', n(d.agendados_ml), n(d.agendados_ml) ? 'ambar' : 'verde');
     linhaP('📅 Entraram após o corte', n(t.pra_amanha), 'azul');
 
     // alertas grandes
