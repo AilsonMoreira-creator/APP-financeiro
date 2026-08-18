@@ -51,7 +51,7 @@ export default async function handler(req, res) {
       // nenhuma nota no dia. Agora cada conta tem a sua cota.
       let geradosNaConta = 0;
       let token = null;
-      try { token = await refreshBlingToken(conta); } catch (e) { resumo.detalhe.push({ conta, erro: `token: ${e.message}` }); continue; }
+      try { token = await refreshBlingToken(conta); } catch (e) { resumo.detalhe.push({ conta, erro: `token: ${e.message}` }); return; }
       const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
       const headersPost = { ...headers, 'Content-Type': 'application/json' };
 
