@@ -36,24 +36,31 @@ export default async function handler(req, res) {
       const h = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
 
       // ── 1. descobrir o nf_id de quem ainda não tem (NF feita à mão no Bling)
+      // 18/08: Full/Flex/Meluni não precisam de NF neste fluxo e estavam
+      // ocupando as 60 vagas da rodada — pedido com nota recém-emitida nunca
+      // era consultado. Agora: só quem precisa, em RODÍZIO (carimba o check
+      // sempre, achou ou não, e a fila ordena pelo check mais antigo).
       const { data: semNf } = await supabase.from('wms_pedidos')
         .select('pedido_id')
         .eq('conta', conta).is('nf_id', null)
         .neq('status_wms', 'cancelado')
+        .or('ml_logistic_type.is.null,ml_logistic_type.not.in.(fulfillment,self_service)')
+        .neq('canal_geral', 'Meluni')
         .gte('criado_em', new Date(Date.now() - 3 * 86400000).toISOString())
+        .order('nf_checado_em', { ascending: true, nullsFirst: true })
         .limit(60);
       for (const p of (semNf || [])) {
         if (Date.now() - inicio > 240000) break;
+        let nfId = null;
         try {
           const rr = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}`, h);
           const j = typeof rr.json === 'function' ? await rr.json().catch(() => ({})) : {};
-          const nfId = j?.data?.notaFiscal?.id;
-          if (nfId) {
-            await supabase.from('wms_pedidos')
-              .update({ nf_id: nfId, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
-            r.nf_id_descobertos++;
-          }
-        } catch { /* segue */ }
+          nfId = j?.data?.notaFiscal?.id || null;
+        } catch { /* carimba mesmo assim pra não travar o rodízio */ }
+        await supabase.from('wms_pedidos')
+          .update({ ...(nfId ? { nf_id: nfId } : {}), nf_checado_em: new Date().toISOString() })
+          .eq('pedido_id', p.pedido_id);
+        if (nfId) r.nf_id_descobertos++;
         await espera(340);
       }
 
