@@ -9,7 +9,7 @@
  *
  * GET ?ref=02782
  */
-import { supabase, chaveCor } from './_bling-helpers.js';
+import { supabase, chaveCor, canonizarCor } from './_bling-helpers.js';
 import { getValidToken } from './_ml-helpers.js';
 import { lerRegras, calcularLinha } from './_full-motor.js';
 
@@ -125,9 +125,21 @@ export default async function handler(req, res) {
     }
 
     // ── monta as linhas ──
-    const linhas = [];
+    // 18/08: o Bling tem a mesma cor com duas grafias (Marrom e Marrom
+    // Escuro). Junta antes de calcular — uma linha por cor+tamanho, com o
+    // rótulo canônico e o maior saldo (não soma: é o mesmo produto).
+    const porCorTam = {};
     for (const e of (estoque || [])) {
       if (!e.cor_label && !e.cor_norm) continue;      // linha do produto pai
+      const k = `${chaveCor(e.cor_label || e.cor_norm)}|${String(e.tam).toUpperCase()}`;
+      const at = porCorTam[k];
+      if (!at || Math.abs(n(e.qtd)) > Math.abs(n(at.qtd))) {
+        porCorTam[k] = { ...e, cor_label: canonizarCor(e.cor_label || e.cor_norm) };
+      }
+    }
+
+    const linhas = [];
+    for (const e of Object.values(porCorTam)) {
       const k = `${chaveCor(e.cor_label || e.cor_norm)}|${String(e.tam).toUpperCase()}`;
       const vendaDia = (v14[k] || 0) / 14;
       const vendaAnterior = Math.max(0, (v28[k] || 0) - (v14[k] || 0)) / 14;
@@ -161,6 +173,28 @@ export default async function handler(req, res) {
         travado: trava ? { tipo: trava.tipo, qtd: trava.qtd, vence_em: trava.vence_em } : null,
         qtd_enviar: trava?.tipo === 'fora_da_semana' ? 0 : (trava?.qtd ?? linha.qtd_sugerida),
       });
+    }
+
+    // ── cor NOVA no Full só entra com a GRADE COMPLETA (ordem dele 18/08):
+    //    4 tamanhos no regular (P M G GG) ou 3 no plus. Faltando um, não
+    //    recomenda nenhum — mandar grade quebrada trava a venda no anúncio.
+    const PLUS = ['G1', 'G2', 'G3'];
+    const porCorNova = {};
+    for (const l of linhas) {
+      if (!l.nova_no_full) continue;
+      (porCorNova[chaveCor(l.cor)] = porCorNova[chaveCor(l.cor)] || []).push(l);
+    }
+    for (const [ck, itens] of Object.entries(porCorNova)) {
+      const ehPlus = itens.some(i => PLUS.includes(String(i.tam).toUpperCase()));
+      const exigidos = ehPlus ? 3 : 4;
+      const completos = itens.filter(i => n(i.qtd_sugerida) > 0).length;
+      if (completos < exigidos) {
+        for (const i of itens) {
+          if (!n(i.qtd_sugerida)) continue;
+          i.qtd_sugerida = 0; i.qtd_enviar = 0;
+          i.motivo = `cor nova: só daria ${completos} de ${exigidos} tamanhos — grade incompleta não entra no Full`;
+        }
+      }
     }
 
     // ── o que aparece na tela (ordem dele 18/08) ──

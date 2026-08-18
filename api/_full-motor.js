@@ -18,7 +18,13 @@ import { supabase } from './_bling-helpers.js';
 const n = (v) => Number(v) || 0;
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
-export function arredondar(q) {
+export function arredondar(q, ehBasica = false) {
+  // 18/08 (ordem dele): preto e bege sempre em múltiplo de 5
+  if (ehBasica) {
+    if (q <= 0) return 0;
+    if (q < 3) return 0;
+    return Math.max(5, Math.round(q / 5) * 5);
+  }
   if (q <= 0) return 0;
   if (q < 3) return 0;                    // piso: menos de 3 não vai
   if (q === 4 || q === 6) return 5;
@@ -134,7 +140,7 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   }
   const teto = Math.floor(estoqueFabrica * (tetoPct / 100));
   const qtd_possivel = Math.max(0, Math.min(qtd_ideal, teto));
-  const qtd_sugerida = arredondar(qtd_possivel);
+  const qtd_sugerida = arredondar(qtd_possivel, ehBasica);
 
   // ── motivo em uma frase ──
   const coberturaAtual = vendaDia > 0 ? +(estoqueFull / vendaDia).toFixed(1) : null;
