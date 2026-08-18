@@ -39,7 +39,12 @@ export function classificar(p, hojeBRT) {
     : sit === 4 ? 'nota rejeitada pela SEFAZ'
     : sit === 9 ? 'nota denegada' : 'nota bloqueada';
 
-  if (meluni) return { regra: 'MELUNI', nf: false, etiqueta: true, estado: 'PRONTO', motivo: 'fluxo Meluni' };
+  if (meluni) return {
+    regra: 'MELUNI', nf: false, etiqueta: true,
+    // 18/08: Meluni ficava PRONTO pra sempre — impressa tem que sair da fila
+    estado: p.etiqueta_impressa_em ? 'IMPRESSO' : 'PRONTO',
+    motivo: p.etiqueta_impressa_em ? 'já impresso' : 'fluxo Meluni',
+  };
   if (full) return { regra: 'ML_FULL', nf: false, etiqueta: false, estado: 'PRONTO', motivo: 'Full: sai pelo armazém do ML' };
 
   if (agendado) {

@@ -65,7 +65,7 @@ async function pedidosFiltrados(q) {
   // (3) FINALIZADOS RECENTES SEM nf_id no nosso banco — é o caso da NF feita
   // À MÃO no Bling (14/08, pedido 70997 Christine/Shopee Lumia): o pedido já
   // tinha nota, mas como o nf_id não estava gravado ele não caía em (1) nem
-  // em (2) e sumia da tela. O preencherNfIds abaixo descobre o nf_id deles.
+  // em (2) e sumia da tela. O cron wms-nf-sync descobre o nf_id deles em até ~20 min.
   let q3 = supabase.from('wms_pedidos').select(COLS)
     .is('nf_id', null)
     .eq('status_wms', 'finalizado')
@@ -95,7 +95,11 @@ async function pedidosFiltrados(q) {
     // 17/08 — ENVIOS PROGRAMADOS do Mercado Livre. A equipe imprime a NF antes
     // (com a data em cima) e separa; no dia, imprime só a etiqueta e despacha.
     const agendadoFuturo = p.ml_agendado_em && String(p.ml_agendado_em) > hojeBRT;
-    const etiquetaLiberada = p.ml_ship_status === 'ready_to_ship'
+    // 18/08 (regra dele): "liberada" é o AGENDADO cujo dia chegou — pedido
+    // normal em ready_to_print pertence ao NF + transporte, não aqui
+    const agendadoChegou = p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hojeBRT;
+    const etiquetaLiberada = agendadoChegou
+      && p.ml_ship_status === 'ready_to_ship'
       && p.ml_ship_substatus === 'ready_to_print'
       && !p.etiqueta_impressa_em && p.status_wms !== 'finalizado';
     if (tipo === 'nf_agendada') {
@@ -136,61 +140,8 @@ async function pedidosFiltrados(q) {
   return out;
 }
 
-// SITUAÇÃO DA NF POR PEDIDO (12/08, achado do Ailson): o Bling diferencia
-// "Autorizada" (situação 5 = SEM DANFE impressa) de "Emitida DANFE"
-// (situação 6 = já impressa) — vale inclusive quando a Sthefany imprime
-// pelo painel. A listagem de NFs traz numeroPedidoLoja, que casa com o
-// numero_loja do wms_pedidos sem precisar abrir pedido por pedido.
-async function situacaoPorNfId(contas, tokenPorConta, desde, precisa = null) {
-  const mapa = {};
-  for (const conta of contas) {
-    if (!tokenPorConta[conta]) continue;
-    const hb = { Authorization: 'Bearer ' + tokenPorConta[conta], Accept: 'application/json' };
-    // 17/08: a Exitus emite centenas de notas por dia. Com o teto antigo de 8
-    // páginas (800 notas) as MAIS NOVAS ficavam fora da varredura e o pedido
-    // aparecia como "aguardando" mesmo com a NF pronta. Agora varre até
-    // encontrar todas as notas que interessam (ou acabar a lista).
-    const faltam = new Set((precisa || []).map(String));
-    for (let pagina = 1; pagina <= 30; pagina++) {
-      const url = `https://api.bling.com.br/Api/v3/nfe?tipo=1&dataEmissaoInicial=${desde}&limite=100&pagina=${pagina}`;
-      let j = {};
-      try {
-        const r = await blingFetch(url, hb);
-        j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
-      } catch { break; }
-      const lista = j?.data || [];
-      for (const nf of lista) {
-        if (!nf?.id) continue;
-        mapa[String(nf.id)] = nf.situacao;
-        faltam.delete(String(nf.id));
-      }
-      if (lista.length < 100) break;
-      if (precisa && precisa.length && faltam.size === 0) break;   // já achamos todas
-      await new Promise(r2 => setTimeout(r2, 300));
-    }
-  }
-  return mapa;
-}
-
-// preenche wms_pedidos.nf_id dos que ainda não têm (única fonte é o detalhe
-// do pedido); limitado por chamada pra respeitar o rate limit do Bling
-async function preencherNfIds(peds, tokenPorConta, maximo = 40) {
-  const alvo = peds.filter(p => !p.nf_id).slice(0, maximo);
-  for (const p of alvo) {
-    if (!tokenPorConta[p.conta]) continue;
-    try {
-      const hb = { Authorization: 'Bearer ' + tokenPorConta[p.conta], Accept: 'application/json' };
-      const r = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}`, hb);
-      const j = typeof r.json === 'function' ? await r.json().catch(() => ({})) : {};
-      const nfId = j?.data?.notaFiscal?.id;
-      if (nfId) {
-        p.nf_id = nfId;
-        await supabase.from('wms_pedidos').update({ nf_id: nfId, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
-      }
-    } catch { /* segue */ }
-    await new Promise(r2 => setTimeout(r2, 350));
-  }
-}
+// 18/08: situacaoPorNfId e preencherNfIds saíram daqui — o cron wms-nf-sync
+// mantém nf_id e nf_situacao no banco, e a DANFE tem reserva no detalhe do pedido.
 
 // links de etiqueta do Bling (só existem depois de gerada/casada no Bling)
 /**
@@ -280,10 +231,11 @@ export default async function handler(req, res) {
         // LIBERADAS: só as que ainda não saíram. Etiqueta impressa (nossa ou
         // pelo painel) e pedido já finalizado não contam mais.
         // 17/08: "liberada" = o ML está ESPERANDO A IMPRESSÃO (ready_to_print).
-        // Os outros substatus já passaram do ponto — ready_for_pickup (impressa
-        // e aguardando coleta), picked_up/dropped_off (já saiu), in_warehouse,
-        // in_packing_list — e não podem inflar o contador.
-        if (p.ml_ship_status === 'ready_to_ship'
+        // 18/08 (regra dele): e tem que ser pedido AGENDADO cujo dia chegou —
+        // pedido normal em ready_to_print é do NF + transporte, contava em dobro.
+        const agendadoChegou = p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hoje;
+        if (agendadoChegou
+          && p.ml_ship_status === 'ready_to_ship'
           && p.ml_ship_substatus === 'ready_to_print'
           && !p.etiqueta_impressa_em
           && p.status_wms !== 'finalizado') c.etiqueta_liberada++;
@@ -378,8 +330,6 @@ export default async function handler(req, res) {
         (data || []).forEach(d => { if (d.conteudo) guardados[String(d.pedido_id)] = d; });
       }
       const tk = {};
-      const contasSet = new Set(peds.map(p => p.conta));
-      for (const c of contasSet) tk[c] = await refreshBlingToken(c).catch(() => null);
       // a situação já vem pré-carregada no banco (cron wms-nf-sync)
       const sitDe = {};
       for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
@@ -387,8 +337,10 @@ export default async function handler(req, res) {
       const podeSair = (p) => q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
         || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5));
       const candidatos = peds.filter(podeSair);
-      // busca no Bling SÓ o que ainda não está guardado
+      // busca no Bling SÓ o que ainda não está guardado — e o token só das
+      // contas que têm algo faltando (18/08: com tudo preparado, zero refresh)
       const faltando = candidatos.filter(p => !guardados[String(p.pedido_id)]);
+      for (const c of new Set(faltando.map(p => p.conta))) tk[c] = await refreshBlingToken(c).catch(() => null);
       const links = faltando.length ? await linksEtiqueta(faltando, tk, 'impressao') : {};
       const alvo = candidatos.filter(p => guardados[String(p.pedido_id)] || links[String(p.pedido_id)]);
 
@@ -439,7 +391,9 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplDoPedido });
         }
         idsOk.push(p.pedido_id);
-        await new Promise(r2 => setTimeout(r2, 120));
+        // 18/08: a pausa só faz sentido quando BAIXOU da rede — com o
+        // documento já preparado eram 14s parados num lote de 120
+        if (!jaTem) await new Promise(r2 => setTimeout(r2, 120));
       }
       // etiquetas que o canal entrega em PDF (Shein) não vão pra térmica em
       // ZPL — a tela orienta a usar o PDF nesses casos
@@ -557,14 +511,9 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
     // (evita separador órfão); o que falta aparece na TELA.
     // TRAVA (12/08, pedido dele): pedido com etiqueta JÁ IMPRESSA fica de fora
     // por padrão — só entra com ?reimprimir=1 (escolha consciente na tela)
-    const desdeNf2 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-    await preencherNfIds(lote, tokenBling, 60);
-    const sitDe2 = await situacaoPorNfId([...new Set(lote.map(p => p.conta))], tokenBling, desdeNf2, lote.map(p => p.nf_id).filter(Boolean));
-    // situação 5 = autorizada sem DANFE (imprime) · 6 = já emitida (não)
-    // etiqueta_liberada: tudo que o ML liberou pra postar HOJE entra, mesmo
-    // que já tenha passado pela impressora (ordem dele 17/08)
-    const podeImprimir = (p) => q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
-      || (!p.etiqueta_impressa_em && sitDe2[String(p.nf_id)] === 5);
+    // 18/08: saíram daqui preencherNfIds + situacaoPorNfId — custavam até 90s
+    // por PDF e alimentavam só uma função que ninguém chamava. O filtro
+    // `elegivel` acima já decide com nf_situacao/print_estado do banco.
     const prontos = q.tipo === 'nf_agendada'
       ? lote.filter(p => p.nf_id)                    // basta ter NF: a etiqueta vem depois
       : lote.filter(p => docsPdf[String(p.pedido_id)]
@@ -614,9 +563,14 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
       if (tokenBling[p.conta] && !soEtiqueta) {
         try {
           const hb = { Authorization: 'Bearer ' + tokenBling[p.conta], Accept: 'application/json' };
-          const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}`, hb);
-          const det = detR.ok ? await detR.json() : {};
-          const nfId = det?.data?.notaFiscal?.id;
+          // 18/08: o nf_id já vem do banco (cron nf-sync) — ir direto na nota
+          // corta um GET por pedido; o detalhe do pedido fica só de reserva
+          let nfId = p.nf_id;
+          if (!nfId) {
+            const detR = await blingFetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}`, hb);
+            const det = detR.ok ? await detR.json() : {};
+            nfId = det?.data?.notaFiscal?.id;
+          }
           if (nfId) {
             const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, hb);
             const nf = nfR.ok ? await nfR.json() : {};
