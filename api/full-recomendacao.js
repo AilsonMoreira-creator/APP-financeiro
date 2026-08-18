@@ -9,14 +9,17 @@
  *
  * GET ?ref=02782
  */
-import { supabase } from './_bling-helpers.js';
+import { supabase, chaveCor } from './_bling-helpers.js';
 import { getValidToken } from './_ml-helpers.js';
 import { lerRegras, calcularLinha } from './_full-motor.js';
 
 export const config = { maxDuration: 120 };
 const n = (v) => Number(v) || 0;
 const refNorm = (r) => String(r || '').replace(/^0+/, '');
-const chaveCor = (c) => String(c || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+// 18/08: usar o chaveCor de _bling-helpers, que aplica a TABELA DE SINÔNIMOS
+// (Azul claro = Azul-claro = Azul bebê · Branco = Off-white · Rosa = Rosa
+// claro · Marrom = Marrom escuro). Um chaveCor local, sem sinônimos, escondia
+// a Azul Claro: a venda estava gravada como "Azul bebê" e não casava.
 const dia = (d) => new Date(d).toISOString().slice(0, 10);
 
 /** venda por cor+tamanho no período, somando TODAS as plataformas */

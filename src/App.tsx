@@ -5641,11 +5641,18 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       </div>
       <div style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>última sync: <b style={{color:"#2c3e50"}}>{ultSync}</b></div>
       <button onClick={buscarProdutosNovos} disabled={syncCatalogo} title="Busca no Bling (Exitus) as refs cadastradas na calculadora que ainda não estão no módulo, grava o estoque e traz a foto do card" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ buscando":"🆕 buscar produtos novos"}</button>
-      {(fullPend||[]).length>0&&(
-        <button onClick={gerarEnvioFull} disabled={fullBusy}
+      {/* 18/08: sempre visível — antes só aparecia com REFs confirmadas e ele
+          não achava o botão na tela. Sem confirmação, explica o que fazer. */}
+      {(
+        <button onClick={()=>{
+          if(!(fullPend||[]).length){alert('Nenhuma referência confirmada ainda.\n\nAbra o card de um produto, clique em "▣ full", ajuste as quantidades e use "Confirmar pra semana". Depois volte aqui pra gerar o PDF do envio.');return;}
+          gerarEnvioFull();
+        }} disabled={fullBusy}
           title="Junta as referências confirmadas nas últimas 72h e gera o PDF com as matrizes por referência"
-          style={{background:"#2c3e50",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:fullBusy?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#fff",fontWeight:700,opacity:fullBusy?0.6:1}}>
-          {fullBusy?"⏳ gerando":`📦 gerar envio Full (${(fullPend||[]).reduce((s,r)=>s+(r.pecas||0),0)} peças · ${(fullPend||[]).length} refs)`}
+          style={{background:(fullPend||[]).length?"#2c3e50":"#fff",border:(fullPend||[]).length?"none":"1px solid #c8d8e4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:fullBusy?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:(fullPend||[]).length?"#fff":"#2c3e50",fontWeight:700,opacity:fullBusy?0.6:1}}>
+          {fullBusy?"⏳ gerando":((fullPend||[]).length
+            ?`📦 gerar envio Full (${(fullPend||[]).reduce((s,r)=>s+(r.pecas||0),0)} peças · ${(fullPend||[]).length} refs)`
+            :"📦 envio Full")}
         </button>
       )}
       <button onClick={()=>sincronizarEstoqueBling(false)} disabled={syncBlingEst} title="Lê as QUANTIDADES de estoque do Bling (Exitus, depósito Geral) pras refs da calculadora" style={{background:"#fff",border:"1px solid #2c3e50",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncBlingEst?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#2c3e50",opacity:syncBlingEst?0.5:1,fontWeight:600}}>{syncBlingEst?"⏳ estoque":"🟦 estoque Bling"}</button>
