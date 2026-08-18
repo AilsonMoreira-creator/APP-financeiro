@@ -315,6 +315,14 @@ export default async function handler(req, res) {
         // situação 5 = autorizada sem DANFE → PRECISA IMPRIMIR (se a etiqueta
         // já existe no Bling); sem NF ainda → aguardando
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
+        // 18/08 (ele apontou): "já impressas" tem que contar SÓ AS DE HOJE —
+        // estava somando os dias anteriores. E Flex não tem NF, então não
+        // pode entrar em "aguardando nota".
+        const impressaHoje = p.etiqueta_impressa_em
+          && String(new Date(p.etiqueta_impressa_em).getTime() - 3 * 3600000 > 0
+            ? new Date(new Date(p.etiqueta_impressa_em).getTime() - 3 * 3600000).toISOString().slice(0, 10) : '') === hojeBRT;
+        const ehFlexLinha = p.ml_logistic_type === 'self_service';
+
         if (q.tipo === 'nf_agendada') {
           // aqui o que conta é a NOTA: pronta = tem NF e ainda não foi impressa
           if (p.nf_agendada_impressa_em) { grupos[k].impressas++; jaImpressas++; }
@@ -323,8 +331,10 @@ export default async function handler(req, res) {
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
         } else if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
-          grupos[k].impressas++; jaImpressas++;
+          if (impressaHoje || sit === 6) { grupos[k].impressas++; jaImpressas++; }
+          else grupos[k].pedidos--;          // impressa em outro dia: fora da conta
         } else if (sit === 5 || p.print_estado === 'PRONTO') { grupos[k].prontas++; prontas++; }
+        else if (ehFlexLinha) { grupos[k].pedidos--; }   // Flex não tem nota
         else if (p.print_etiqueta === false || p.status_wms === 'finalizado') {
           // 17/08 (ordem dele): Flex/Meluni sem NF e pedido já finalizado NÃO
           // são "aguardando" — não têm nada pra imprimir aqui. Ficam fora da

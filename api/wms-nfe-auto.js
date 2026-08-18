@@ -42,6 +42,10 @@ export default async function handler(req, res) {
 
   try {
     for (const conta of contas) {
+      // 18/08 — o limite era GLOBAL: a Exitus roda primeiro, tem o maior
+      // volume e consumia a cota inteira; Lumia e Muniam ficavam sem emitir
+      // nenhuma nota no dia. Agora cada conta tem a sua cota.
+      let geradosNaConta = 0;
       let token = null;
       try { token = await refreshBlingToken(conta); } catch (e) { resumo.detalhe.push({ conta, erro: `token: ${e.message}` }); continue; }
       const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
@@ -57,7 +61,8 @@ export default async function handler(req, res) {
 
       for (const p of (peds || [])) {
         if (Date.now() - inicio > 250000) { resumo.detalhe.push({ conta, aviso: 'tempo esgotado — continua na próxima rodada' }); break; }
-        if (resumo.gerados >= limite) break;
+        if (Date.now() - inicio > 80000 * (contas.indexOf(conta) + 1)) { resumo.detalhe.push({ conta, aviso: 'cota de tempo da conta — segue pra próxima' }); break; }
+        if (geradosNaConta >= limite) break;
 
         // exclusões da operação: Full, Flex e Meluni não geram NF
         const flex = p.ml_logistic_type === 'self_service';
@@ -100,6 +105,7 @@ export default async function handler(req, res) {
           continue;
         }
         resumo.gerados++;
+        geradosNaConta++;
         await supabase.from('wms_pedidos').update({ nf_id: nfId, nf_checado_em: new Date().toISOString() }).eq('pedido_id', p.pedido_id);
         await log({ conta, pedido_id: p.pedido_id, numero: p.numero, nf_id: nfId, etapa: 'gerar', http: gerR.status, resultado: 'ok' });
 

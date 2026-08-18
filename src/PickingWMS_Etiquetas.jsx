@@ -375,7 +375,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             )}
             {aguardando > 0 && (
               <span style={{ fontSize: 12, fontWeight: 700, color: palette.warn, background: palette.warnSoft, padding: '6px 11px', borderRadius: 999 }}>
-                {aguardando} aguardando etiqueta no Bling
+                {aguardando} aguardando gerar NF no Bling
               </span>
             )}
           </div>
@@ -387,7 +387,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           </label>
           <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
             <input type="checkbox" checked={reimprimir} onChange={e => setReimprimir(e.target.checked)} />
-            Incluir as já impressas (reimprimir)
+            Incluir as impressas hoje (reimprimir)
           </label>
           <label style={{ fontSize: 12, color: palette.inkSoft, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: FONT }}>
             <input type="checkbox" checked={verFinalizados} onChange={e => setVerFinalizados(e.target.checked)} />
