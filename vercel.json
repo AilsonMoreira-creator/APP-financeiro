@@ -471,10 +471,6 @@
       "schedule": "35 * * * *"
     },
     {
-      "schedule": "*/15 9-14 * * *",
-      "path": "/api/wms-sync"
-    },
-    {
       "schedule": "0,30 15-23 * * *",
       "path": "/api/wms-sync"
     },
@@ -535,36 +531,16 @@
       "schedule": "0 13 * * 1-6"
     },
     {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "0 9 * * 1-6"
+      "path": "/api/wms-sync",
+      "schedule": "*/10 9-10 * * *"
     },
     {
       "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "15 9 * * 1-6"
+      "schedule": "5,15,25,35,45,55 9,10 * * 1-6"
     },
     {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "30 9 * * 1-6"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "45 9 * * 1-6"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "0 10 * * 1-6"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "15 10 * * 1-6"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "30 10 * * 1-6"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "45 10 * * 1-6"
+      "path": "/api/wms-sync",
+      "schedule": "*/15 11-14 * * *"
     }
   ]
 }
