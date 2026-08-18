@@ -503,18 +503,6 @@
       "path": "/api/ml-ads-sync"
     },
     {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=40",
-      "schedule": "30,50 9 * * 1-6"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=60",
-      "schedule": "10,30 10 * * 1-6"
-    },
-    {
-      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=60",
-      "schedule": "45 10 * * 1-6"
-    },
-    {
       "path": "/api/bling-devolucoes-sync?dias=35",
       "schedule": "25 8 * * *"
     },
@@ -545,6 +533,38 @@
     {
       "path": "/api/full-chegada-cron",
       "schedule": "0 13 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "0 9 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "15 9 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "30 9 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "45 9 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "0 10 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "15 10 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "30 10 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "45 10 * * 1-6"
     }
   ]
 }

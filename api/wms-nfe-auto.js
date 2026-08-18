@@ -41,7 +41,11 @@ export default async function handler(req, res) {
   const resumo = { contas, dry, gerados: 0, autorizados: 0, ja_tinham: 0, rejeitados: 0, erros: 0, pulados: 0, detalhe: [] };
 
   try {
-    for (const conta of contas) {
+    // 18/08 — as contas rodam EM PARALELO. O limite de 3 req/s do Bling é POR
+    // CONTA, então nada se atropela, e a Exitus (que sozinha faz ~300 pedidos
+    // por dia) deixa de consumir o tempo das outras duas. Antes era sequencial
+    // e Lumia/Muniam ficavam sem nota nenhuma no dia.
+    await Promise.all(contas.map(async (conta) => {
       // 18/08 — o limite era GLOBAL: a Exitus roda primeiro, tem o maior
       // volume e consumia a cota inteira; Lumia e Muniam ficavam sem emitir
       // nenhuma nota no dia. Agora cada conta tem a sua cota.
@@ -61,7 +65,6 @@ export default async function handler(req, res) {
 
       for (const p of (peds || [])) {
         if (Date.now() - inicio > 250000) { resumo.detalhe.push({ conta, aviso: 'tempo esgotado — continua na próxima rodada' }); break; }
-        if (Date.now() - inicio > 80000 * (contas.indexOf(conta) + 1)) { resumo.detalhe.push({ conta, aviso: 'cota de tempo da conta — segue pra próxima' }); break; }
         if (geradosNaConta >= limite) break;
 
         // exclusões da operação: Full, Flex e Meluni não geram NF
@@ -93,7 +96,7 @@ export default async function handler(req, res) {
         let ger = await gerR.json().catch(() => ({}));
         // 429 = só velocidade, não é erro do pedido: espera e tenta de novo
         for (let tent = 0; tent < 2 && gerR.status === 429; tent++) {
-          await espera(2500);
+          await espera(1800);
           gerR = await fetch(`https://api.bling.com.br/Api/v3/pedidos/vendas/${p.pedido_id}/gerar-nfe`, { method: 'POST', headers: headersPost, body: '{}' });
           ger = await gerR.json().catch(() => ({}));
         }
@@ -122,7 +125,7 @@ export default async function handler(req, res) {
         // 4. transmitir e conferir o resultado real
         const envR = await fetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}/enviar?enviarEmail=false`, { method: 'POST', headers: headersPost, body: '{}' });
         const env = await envR.json().catch(() => ({}));
-        await espera(1200);
+        await espera(900);
         const s2R = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, headers);
         const s2 = typeof s2R.json === 'function' ? await s2R.json().catch(() => ({})) : {};
         const sitF = s2?.data?.situacao;
@@ -137,7 +140,7 @@ export default async function handler(req, res) {
         });
         await espera(PAUSA);
       }
-    }
+    }));
     resumo.segundos = Math.round((Date.now() - inicio) / 1000);
     return res.status(200).json(resumo);
   } catch (e) {
