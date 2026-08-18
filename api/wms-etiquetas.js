@@ -453,7 +453,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
     const soDanfe = q.tipo === 'nf_agendada';          // NF antes, etiqueta depois
     const soEtiqueta = q.tipo === 'etiqueta_liberada';  // no dia do envio
 
-    const lote = peds.slice(0, 80);
+    const lote = peds.slice(0, 60);   // teto por PDF (o resto sai na próxima leva)
 
     // tokens por conta (Bling) e por marca (ML)
     const tokenBling = {}; const tokenMl = {};
@@ -464,7 +464,19 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 
     // ETIQUETA PELO BLING — só quando é impressão de verdade (o debug não
     // pode disparar isso: mexeria no status da Shein sem imprimir nada)
-    const linkBlingDe = q.debug === '1' ? {} : await linksEtiqueta(lote, tokenBling, 'impressao');
+    // 18/08: usa primeiro o que o preparo já guardou — antes o PDF buscava
+    // DANFE e etiqueta de TODOS na hora e estourava o tempo com 59 pedidos
+    // (a aba abria em branco no Mac). Só o que falta é buscado agora.
+    const idsLotePdf = lote.map(p => p.pedido_id);
+    const docsPdf = {};
+    for (let i = 0; i < idsLotePdf.length; i += 300) {
+      const { data } = await supabase.from('wms_documentos')
+        .select('pedido_id, formato, conteudo').eq('tipo', 'ETIQUETA').is('erro', null)
+        .in('pedido_id', idsLotePdf.slice(i, i + 300));
+      (data || []).forEach(x => { if (x.conteudo) docsPdf[String(x.pedido_id)] = x; });
+    }
+    const faltamPdf = lote.filter(p => !docsPdf[String(p.pedido_id)]);
+    const linkBlingDe = q.debug === '1' ? {} : await linksEtiqueta(faltamPdf, tokenBling, 'impressao');
 
     // shipment_ids do ML por pedido (RESERVA — só pros que o Bling não deu)
     const shipDe = {};
@@ -600,7 +612,16 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 
       // etiqueta: Bling primeiro (qualquer marketplace), ML como reserva
       let etqOk = soDanfe;   // no modo NF agendada, etiqueta não entra
-      const linkB = soDanfe ? null : linkBlingDe[String(p.pedido_id)];
+      const guardadoPdf = soDanfe ? null : docsPdf[String(p.pedido_id)];
+      if (guardadoPdf && guardadoPdf.formato === 'PDF') {
+        try {
+          const dDoc = await PDFDocument.load(Buffer.from(guardadoPdf.conteudo, 'base64'));
+          const pgs = await saida.copyPages(dDoc, dDoc.getPageIndices());
+          pgs.forEach(pg => saida.addPage(pg));
+          etqOk = true;
+        } catch { /* cai pro link */ }
+      }
+      const linkB = (soDanfe || etqOk) ? null : linkBlingDe[String(p.pedido_id)];
       if (linkB) {
         try {
           const eR = await fetch(linkB);
