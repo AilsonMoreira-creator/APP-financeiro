@@ -104,7 +104,11 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
                       return (
                         <tr key={k} style={{ background: i % 2 ? C.bege : '#fff' }}>
                           <td style={{ ...cel, fontWeight: 700, color: C.navy }}>
-                            {l.cor}{!l.ja_no_full && <span style={{ fontSize: 9.5, color: C.azul, marginLeft: 5 }}>NOVA</span>}
+                            {l.cor}
+                            {l.nova_no_full && (
+                              <span style={{ fontSize: 9, fontWeight: 800, marginLeft: 6, padding: '2px 6px', borderRadius: 999,
+                                background: '#fdf0e3', color: '#9a5b00', border: '1px solid #f0d5b5' }}>NÃO TEM NO FULL</span>
+                            )}
                           </td>
                           <td style={{ ...cel, color: C.azul, fontWeight: 700 }}>{l.tam}</td>
                           <td style={{ ...cel, textAlign: 'right' }}>{l.estoqueFull}</td>
@@ -136,6 +140,12 @@ export default function FullEnvio({ refProduto, desc, usuario, onClose }) {
                 ))}
               </div>
 
+              {(d.novas_no_full > 0 || d.ocultas > 0) && (
+                <div style={{ marginTop: 10, fontSize: 11.5, color: C.suave, lineHeight: 1.6 }}>
+                  {d.novas_no_full > 0 && <div><b style={{ color: '#9a5b00' }}>{d.novas_no_full} cor(es) que ainda não estão no Full</b> entraram como recomendação de estreia.</div>}
+                  {d.ocultas > 0 && <div>{d.ocultas} linha(s) ocultas: cor parada no Full e fora do ranking de vendas{d.ocultas_exemplo?.length ? ` (${d.ocultas_exemplo.join(' · ')}${d.ocultas > 6 ? '…' : ''})` : ''}.</div>}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 9, alignItems: 'center', marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.borda}`, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{total} peças</div>
                 <div style={{ flex: 1 }} />

@@ -50,7 +50,11 @@ export default async function handler(req, res) {
       .in('ref', [refNorm(ref), String(ref).padStart(5, '0')]);
 
     // 2) venda: 14 dias e os 14 anteriores (tendência)
-    const [v14, v28] = await Promise.all([vendaPorSku(ref, 14), vendaPorSku(ref, 28)]);
+    const [v14, v28, v30] = await Promise.all([vendaPorSku(ref, 14), vendaPorSku(ref, 28), vendaPorSku(ref, 30)]);
+    // "ranking de cores" = cor que aparece nas vendas dos últimos 30 dias.
+    // Cor parada no Full que nem no ranking está fica OCULTA (ordem dele 18/08).
+    const noRanking = new Set();
+    for (const [k, q] of Object.entries(v30)) if (q > 0) noRanking.add(k.split('|')[0]);
 
     // 3) estoque atual no Full (ML Exitus) por COR+TAMANHO
     // 17/08: as variações do ML vêm com o campo de SKU VAZIO — o casamento
@@ -144,7 +148,10 @@ export default async function handler(req, res) {
       }, regras, hoje);
 
       const trava = (travas || []).find(t => chaveCor(t.cor) === chaveCor(e.cor_label) && String(t.tam).toUpperCase() === String(e.tam).toUpperCase());
+      const corK = chaveCor(e.cor_label || e.cor_norm);
       linhas.push({
+        nova_no_full: !noFull || n(noFull.qtd) === 0,     // recomendação de cor nova
+        no_ranking: noRanking.has(corK),
         ...linha, sku: e.bling_sku,
         tendencia_pct: Math.round(tendencia),
         ja_no_full: !!noFull,
@@ -153,6 +160,21 @@ export default async function handler(req, res) {
       });
     }
 
+    // ── o que aparece na tela (ordem dele 18/08) ──
+    //   fica: cor ATIVA no Full (com quantidade) que esteja no ranking de
+    //         cores, e cor FORA do Full que a régua recomenda enviar
+    //   sai:  cor parada no Full que nem aparece no ranking de vendas
+    const ocultas = [];
+    const visiveis = linhas.filter(l => {
+      const ativaNoFull = n(l.estoqueFull) > 0;
+      if (n(l.qtd_enviar) > 0 || n(l.qtd_sugerida) > 0) return true;    // recomendada
+      if (ativaNoFull && l.no_ranking) return true;                     // ativa e vendendo
+      ocultas.push(`${l.cor} ${l.tam}`);
+      return false;
+    });
+    linhas.length = 0;
+    linhas.push(...visiveis);
+
     // ordena: quem mais precisa primeiro
     linhas.sort((a, b) => (b.qtd_sugerida - a.qtd_sugerida) || String(a.cor).localeCompare(String(b.cor)) || String(a.tam).localeCompare(String(b.tam)));
 
@@ -160,6 +182,9 @@ export default async function handler(req, res) {
       ref: refNorm(ref),
       regras: { cobertura: n(regras.cobertura_dias), basicas: n(regras.cobertura_basicas), transito: n(regras.transito_dias) },
       total_sugerido: linhas.reduce((s, l) => s + n(l.qtd_enviar), 0),
+      novas_no_full: linhas.filter(l => l.nova_no_full && n(l.qtd_enviar) > 0).length,
+      ocultas: ocultas.length,
+      ocultas_exemplo: ocultas.slice(0, 6),
       linhas,
     });
   } catch (e) {
