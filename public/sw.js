@@ -12,7 +12,7 @@
 // Pra Lojas (uso 100% online), eh aceitavel.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SW_VERSION = '2026-08-18-v87';
+const SW_VERSION = '2026-08-18-v88';
 
 self.addEventListener('install', (event) => {
   console.log('[SW] install', SW_VERSION);

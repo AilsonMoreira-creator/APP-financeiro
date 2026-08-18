@@ -4910,6 +4910,36 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [syncing,setSyncing]=useState(false);
   const [syncCatalogo,setSyncCatalogo]=useState(false);
   const [syncCatalogoMsg,setSyncCatalogoMsg]=useState(null);
+  // ENVIO PRO FULL (17/08): junta as REFs confirmadas nas últimas 72h e gera
+  // o PDF com as matrizes que a Cris lança no agendamento do Full.
+  const [fullPend,setFullPend]=useState(null);
+  const [fullBusy,setFullBusy]=useState(false);
+  const carregarPendentes=useCallback(()=>{
+    fetch('/api/full-envio?acao=pendentes').then(r=>r.json())
+      .then(j=>setFullPend((j?.refs||[]).filter(r=>r.tipo==='confirmado')))
+      .catch(()=>{});
+  },[]);
+  useEffect(()=>{carregarPendentes();const t=setInterval(carregarPendentes,60000);return()=>clearInterval(t);},[carregarPendentes]);
+  const gerarEnvioFull=async()=>{
+    const pecas=(fullPend||[]).reduce((s,r)=>s+(r.pecas||0),0);
+    const data=window.prompt(`Gerar envio do Full com ${pecas} peças em ${(fullPend||[]).length} referências.\n\nQual a data prevista de envio? (dd/mm)`,
+      new Date(Date.now()+86400000).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}));
+    if(!data)return;
+    const [dd,mm]=String(data).split('/');
+    if(!dd||!mm)return alert('Data inválida — use dd/mm');
+    const ano=new Date().getFullYear();
+    setFullBusy(true);
+    try{
+      const r=await fetch('/api/full-envio?acao=gerar',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({data_envio:`${ano}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`})});
+      const j=await r.json();
+      if(j?.erro)throw new Error(j.erro);
+      const a=document.createElement('a');
+      a.href=`/api/full-envio?acao=pdf&remessa=${j.remessa_id}`;a.target='_blank';a.rel='noopener';
+      document.body.appendChild(a);a.click();a.remove();
+      carregarPendentes();
+    }catch(e){alert(e.message);}finally{setFullBusy(false);}
+  };
   const [syncBlingEst,setSyncBlingEst]=useState(false);
   const [periodo,setPeriodo]=useState("semana"); // "semana" | "mes" | "anual"
   const [calcDesc,setCalcDesc]=useState({}); // ref → descricao da Calculadora
@@ -5611,6 +5641,13 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
       </div>
       <div style={{fontSize:11,color:"#8a9aa4",whiteSpace:"nowrap"}}>última sync: <b style={{color:"#2c3e50"}}>{ultSync}</b></div>
       <button onClick={buscarProdutosNovos} disabled={syncCatalogo} title="Busca no Bling (Exitus) as refs cadastradas na calculadora que ainda não estão no módulo, grava o estoque e traz a foto do card" style={{background:"#fff",border:"1px solid #c8a040",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncCatalogo?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#8a6500",opacity:syncCatalogo?0.5:1,fontWeight:600}}>{syncCatalogo?"⏳ buscando":"🆕 buscar produtos novos"}</button>
+      {(fullPend||[]).length>0&&(
+        <button onClick={gerarEnvioFull} disabled={fullBusy}
+          title="Junta as referências confirmadas nas últimas 72h e gera o PDF com as matrizes por referência"
+          style={{background:"#2c3e50",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:fullBusy?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#fff",fontWeight:700,opacity:fullBusy?0.6:1}}>
+          {fullBusy?"⏳ gerando":`📦 gerar envio Full (${(fullPend||[]).reduce((s,r)=>s+(r.pecas||0),0)} peças · ${(fullPend||[]).length} refs)`}
+        </button>
+      )}
       <button onClick={()=>sincronizarEstoqueBling(false)} disabled={syncBlingEst} title="Lê as QUANTIDADES de estoque do Bling (Exitus, depósito Geral) pras refs da calculadora" style={{background:"#fff",border:"1px solid #2c3e50",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:syncBlingEst?"not-allowed":"pointer",fontFamily:"Georgia,serif",color:"#2c3e50",opacity:syncBlingEst?0.5:1,fontWeight:600}}>{syncBlingEst?"⏳ estoque":"🟦 estoque Bling"}</button>
       <button onClick={()=>abrirLogsBling()} title="Histórico de alterações de estoque (ajustes manuais, sync, webhook)" style={{background:"#fff",border:"1px solid #8a9aa4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:"#5a6470",fontWeight:600}}>📜 Logs</button>
       {arquivadas.length>0&&<button onClick={()=>setMostrarArquivadas(v=>!v)} title="Refs arquivadas (fora da lista) — clique pra ver e restaurar" style={{background:mostrarArquivadas?"#2c3e50":"#fff",border:"1px solid #8a9aa4",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:"Georgia,serif",color:mostrarArquivadas?"#fff":"#5a6470",fontWeight:600}}>🗃 arquivadas ({arquivadas.length})</button>}
