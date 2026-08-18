@@ -10,6 +10,7 @@ import FilaDeCorte from './FilaDeCorte';
 import EstoqueTecido from './EstoqueTecido';
 import MapeamentoSkus from './MapeamentoSkus';
 import RaioXProduto from './RaioXProduto';
+import FullEnvio from './FullEnvio';
 import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
@@ -4976,6 +4977,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
   const [gtinOpen,setGtinOpen]=useState(null);   // {ref,refNorm,desc} | null
   const [mapOpen,setMapOpen]=useState<any>(null); // Verificar mapeamento SKU x canal (13/08)
   const [raioxOpen,setRaioxOpen]=useState<any>(null); // Raio-X do produto (15/08)
+  const [fullOpen,setFullOpen]=useState<any>(null);   // Envio pro Full (17/08)
   const [gtinBusy,setGtinBusy]=useState(false);
   const [gtinProg,setGtinProg]=useState(null);   // null=ainda não rodou; {fase,reservados,total,contas:{},erro}
   // Localização de estoque da ref (mesmo caminho do GTIN: prepara + grava nas 3
@@ -5854,6 +5856,9 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
               <button onClick={()=>{setEtqSample({desc,ref:modalRef,cor:vars[0]?.cor||'',tam:vars[0]?.tam||'',visiveis:[...new Set((vars||[]).map(v=>normCorBling(v.cor)))]});setEtqOpen(true);}} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>▢</span> criar etiqueta
               </button>
+              <button onClick={()=>setFullOpen({ref:modalRef,desc})} title="Quanto enviar pro Full do Mercado Livre nesta semana" style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                📦 full
+              </button>
               <button onClick={()=>setMapOpen({ref:modalRef,refNorm,desc,cores:[...new Set((vars||[]).map(v=>v.cor).filter(Boolean))]})} title={`Conferir se os SKUs da REF ${modalRef} estão vinculados nos canais das 3 empresas`} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>⇄</span> mapeamento
               </button>
@@ -5956,6 +5961,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         </div>;
       })()}
       {etqOpen && <EtiquetaGerar sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
+      {fullOpen && <FullEnvio refProduto={fullOpen.ref} desc={fullOpen.desc} usuario={usuario} onClose={()=>setFullOpen(null)}/>}
       {raioxOpen && <RaioXProduto refProduto={raioxOpen.ref} desc={raioxOpen.desc} foto={raioxOpen.foto} onClose={()=>setRaioxOpen(null)}/>}
       {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
       {gtinOpen && (
