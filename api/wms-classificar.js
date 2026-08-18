@@ -39,11 +39,14 @@ export function classificar(p, hojeBRT) {
     : sit === 4 ? 'nota rejeitada pela SEFAZ'
     : sit === 9 ? 'nota denegada' : 'nota bloqueada';
 
+  // 18/08 (regra dele): FINALIZADO sai da fila — a etiqueta saiu por fora
+  // (painel do ML / Bling) e nosso carimbo não existe. Vale pra Flex e Meluni.
+  const saiu = p.etiqueta_impressa_em || p.status_wms === 'finalizado';
+
   if (meluni) return {
     regra: 'MELUNI', nf: false, etiqueta: true,
-    // 18/08: Meluni ficava PRONTO pra sempre — impressa tem que sair da fila
-    estado: p.etiqueta_impressa_em ? 'IMPRESSO' : 'PRONTO',
-    motivo: p.etiqueta_impressa_em ? 'já impresso' : 'fluxo Meluni',
+    estado: saiu ? 'IMPRESSO' : 'PRONTO',
+    motivo: saiu ? 'já impresso' : 'fluxo Meluni',
   };
   if (full) return { regra: 'ML_FULL', nf: false, etiqueta: false, estado: 'PRONTO', motivo: 'Full: sai pelo armazém do ML' };
 
@@ -59,8 +62,8 @@ export function classificar(p, hojeBRT) {
   if (flex) {
     return {
       regra: 'MELI_FLEX', nf: false, etiqueta: true,
-      estado: p.etiqueta_impressa_em ? 'IMPRESSO' : 'PRONTO',
-      motivo: 'Flex: só etiqueta',
+      estado: saiu ? 'IMPRESSO' : 'PRONTO',
+      motivo: saiu ? 'já impresso' : 'Flex: só etiqueta',
     };
   }
 
