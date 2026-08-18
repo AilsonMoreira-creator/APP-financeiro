@@ -185,30 +185,37 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       const config = qz.configs.create(impressora);
 
       setImprimindo(`Imprimindo ${j.total} etiqueta(s) em ${impressora}…`);
-      // ZPL vai como raw (nativo da térmica); PDF (Shein) o próprio QZ Tray
-      // imprime como imagem — não precisa converter nada
-      const zpl = j.blocos.filter(b => b.tipo !== 'etiqueta_pdf' && b.zpl);
-      const pdfs = j.blocos.filter(b => b.tipo === 'etiqueta_pdf' && b.pdf);
-      if (zpl.length) {
-        await qz.print(config, zpl.map(b => ({ type: 'raw', format: 'plain', data: b.zpl })));
+      // 18/08: sai em PARES na ordem do servidor (DANFE do pedido e logo a
+      // etiqueta dele). ZPL vai raw e PDF vai pixel a 203dpi; trechos
+      // consecutivos do mesmo formato viajam juntos pra não picar o trabalho.
+      const cfgPdf = qz.configs.create(impressora, {
+        size: { width: 4, height: 6 }, units: 'in', scaleContent: true,
+        rasterize: true, density: 203, interpolation: 'nearest-neighbor', margins: 0,
+      });
+      const trechos = [];
+      for (const b of j.blocos) {
+        const modo = b.pdf ? 'pixel' : (b.zpl ? 'raw' : null);
+        if (!modo) continue;
+        const ult = trechos[trechos.length - 1];
+        if (ult && ult.modo === modo) ult.itens.push(b);
+        else trechos.push({ modo, itens: [b] });
       }
-      if (pdfs.length) {
-        // 18/08: o defeito de "listra larga" no código de barras da Shein é a
-        // rasterização — Chrome (e o padrão do QZ) reescala o PDF e as barras
-        // se fundem. Aqui a conversão é nossa: DPI nativo da térmica (203) e
-        // nearest-neighbor, que mantém cada barra no pixel exato.
-        const cfgPdf = qz.configs.create(impressora, {
-          size: { width: 4, height: 6 }, units: 'in', scaleContent: true,
-          rasterize: true, density: 203, interpolation: 'nearest-neighbor', margins: 0,
-        });
-        await qz.print(cfgPdf, pdfs.map(b => ({ type: 'pixel', format: 'pdf', flavor: 'base64', data: b.pdf })));
+      for (const t of trechos) {
+        if (t.modo === 'raw') {
+          await qz.print(config, t.itens.map(b => ({ type: 'raw', format: 'plain', data: b.zpl })));
+        } else {
+          await qz.print(cfgPdf, t.itens.map(b => ({ type: 'pixel', format: 'pdf', flavor: 'base64', data: b.pdf })));
+        }
+      }
+      if (j.sem_danfe?.length) {
+        setImprimindo(`⚠ Sem DANFE nos pedidos: ${j.sem_danfe.join(', ')} (etiqueta saiu, nota não)`);
       }
 
       // só marca como impressa depois que a térmica aceitou o trabalho
       for (let i = 0; i < j.ids.length; i += 30) {
         await fetch(`${API}/wms-etiquetas?marcar=1&ids=${j.ids.slice(i, i + 30).join(',')}`);
       }
-      setImprimindo(`✅ ${j.total} etiqueta(s) enviadas para ${impressora}`);
+      if (!j.sem_danfe?.length) setImprimindo(`✅ ${j.total} etiqueta(s) enviadas para ${impressora}`);
       carregar();
       setTimeout(() => setImprimindo(''), 8000);
     } catch (e) {

@@ -18,6 +18,9 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 import { getValidToken } from './_ml-helpers.js';
+import crypto from 'crypto';
+
+const hashDoc = (b) => crypto.createHash('sha256').update(b).digest('hex').slice(0, 32);
 
 export const config = { maxDuration: 300 };
 
@@ -332,6 +335,10 @@ export default async function handler(req, res) {
         (data || []).forEach(d => { if (d.conteudo) guardados[String(d.pedido_id)] = d; });
       }
       const tk = {};
+      const pegarToken = async (c) => {
+        if (!(c in tk)) tk[c] = await refreshBlingToken(c).catch(() => null);
+        return tk[c];
+      };
       // a situação já vem pré-carregada no banco (cron wms-nf-sync)
       const sitDe = {};
       for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
@@ -344,9 +351,49 @@ export default async function handler(req, res) {
       const faltando = candidatos.filter(p => !guardados[String(p.pedido_id)]);
       for (const c of new Set(faltando.map(p => p.conta))) tk[c] = await refreshBlingToken(c).catch(() => null);
       const links = faltando.length ? await linksEtiqueta(faltando, tk, 'impressao') : {};
+
+      // 18/08 (ordem dele): a térmica sai em PARES — DANFE do pedido e logo a
+      // etiqueta dele. Só no NF + transporte (Flex/Meluni não têm nota e a
+      // liberada é só etiqueta). A DANFE é nossa: baixar não mexe em
+      // marketplace, então fica guardada em wms_documentos pra sair na hora.
+      const comDanfe = String(q.tipo || 'nf_transporte') === 'nf_transporte';
+      const danfeGuardada = {};
+      if (comDanfe) {
+        const idsD = candidatos.map(p => p.pedido_id);
+        for (let i = 0; i < idsD.length; i += 300) {
+          const { data } = await supabase.from('wms_documentos')
+            .select('pedido_id, conteudo').eq('tipo', 'DANFE').is('erro', null)
+            .in('pedido_id', idsD.slice(i, i + 300));
+          (data || []).forEach(d => { if (d.conteudo) danfeGuardada[String(d.pedido_id)] = d.conteudo; });
+        }
+      }
+      const buscarDanfe = async (p) => {
+        let d64 = danfeGuardada[String(p.pedido_id)] || null;
+        if (d64 || !p.nf_id) return d64;
+        const tkC = await pegarToken(p.conta);
+        if (!tkC) return null;
+        try {
+          const hb2 = { Authorization: 'Bearer ' + tkC, Accept: 'application/json' };
+          const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${p.nf_id}`, hb2);
+          const nf = typeof nfR.json === 'function' ? await nfR.json().catch(() => ({})) : {};
+          const link = nf?.data?.linkDanfe || nf?.data?.linkPDF;
+          if (!link) return null;
+          const dR = await fetch(link);
+          if (!dR.ok) return null;
+          const db = new Uint8Array(await dR.arrayBuffer());
+          if (db[0] !== 0x25) return null;   // não veio PDF
+          d64 = Buffer.from(db).toString('base64');
+          await supabase.from('wms_documentos').upsert({
+            pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'PDF',
+            conteudo: d64, bytes: d64.length, hash: hashDoc(d64), origem: 'bling', erro: null,
+          }, { onConflict: 'pedido_id,tipo' });
+          return d64;
+        } catch { return null; }
+        finally { await new Promise(r2 => setTimeout(r2, 340)); }
+      };
       const alvo = candidatos.filter(p => guardados[String(p.pedido_id)] || links[String(p.pedido_id)]);
 
-      const blocos = []; const idsOk = []; const emPdf = []; let grupoAtual = '';
+      const blocos = []; const idsOk = []; const emPdf = []; const semDanfe = []; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
         let zplDoPedido = null, ehPdf = false, pdf64 = null;
@@ -385,6 +432,12 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 ^FO40,900^GB730,6,6^FS
 ^XZ` });
         }
+        // PAR: a DANFE entra na frente da etiqueta do mesmo pedido
+        if (comDanfe) {
+          const d64 = await buscarDanfe(p);
+          if (d64) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: d64 });
+          else semDanfe.push(p.numero);
+        }
         if (ehPdf) {
           // o QZ Tray imprime PDF direto na térmica (type pixel) — sem conversão
           blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: pdf64 });
@@ -404,7 +457,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
       if (!idsOk.length && (q.tipo === 'flex' || candidatos.some(p => p.ml_logistic_type === 'self_service'))) {
         return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['flex'], so_pdf: true });
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe });
     }
 
     // ── marcar como impressas depois que a térmica confirmou
