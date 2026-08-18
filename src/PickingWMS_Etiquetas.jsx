@@ -151,7 +151,15 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       return { qz, motivo: null };
     } catch (e1) {
       try { await qz.websocket.connect(); return { qz, motivo: null }; }
-      catch (e2) { return { qz: null, motivo: String(e2?.message || e1?.message || 'conexão recusada') }; }
+      catch (e2) {
+        let motivo = String(e2?.message || e1?.message || 'conexão recusada');
+        // Chrome 147+ (abr/2026): site público não fala mais com localhost sem
+        // permissão — e ignorar o aviso 3x vira bloqueio PERMANENTE e mudo.
+        if (/unable to establish connection/i.test(motivo)) {
+          motivo += ' — provável bloqueio do Chrome: cadeado ao lado do endereço, Configurações do site, permitir "Apps neste dispositivo" (acesso à rede local) e recarregar';
+        }
+        return { qz: null, motivo };
+      }
     }
   };
 
