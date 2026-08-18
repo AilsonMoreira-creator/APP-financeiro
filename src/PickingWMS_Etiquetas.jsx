@@ -175,7 +175,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       const qz = await conectarQz();
       if (!qz) {
         // sem QZ (não instalado, fechado ou bloqueado) → PDF, sem travar
-        setImprimindo('Sem impressora térmica aqui — gerando o PDF (pode levar alguns segundos)…');
+        setImprimindo('Sem impressora térmica aqui — gerando o PDF (pode levar alguns segundos)… Imprima em escala 100%; se o código de barras sair com defeito, abra o PDF no Firefox.');
         abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
         setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
         return;
@@ -193,7 +193,14 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         await qz.print(config, zpl.map(b => ({ type: 'raw', format: 'plain', data: b.zpl })));
       }
       if (pdfs.length) {
-        const cfgPdf = qz.configs.create(impressora, { size: { width: 4, height: 6 }, units: 'in', scaleContent: true });
+        // 18/08: o defeito de "listra larga" no código de barras da Shein é a
+        // rasterização — Chrome (e o padrão do QZ) reescala o PDF e as barras
+        // se fundem. Aqui a conversão é nossa: DPI nativo da térmica (203) e
+        // nearest-neighbor, que mantém cada barra no pixel exato.
+        const cfgPdf = qz.configs.create(impressora, {
+          size: { width: 4, height: 6 }, units: 'in', scaleContent: true,
+          rasterize: true, density: 203, interpolation: 'nearest-neighbor', margins: 0,
+        });
         await qz.print(cfgPdf, pdfs.map(b => ({ type: 'pixel', format: 'pdf', flavor: 'base64', data: b.pdf })));
       }
 
@@ -207,7 +214,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     } catch (e) {
       const problemaQz = /qz|websocket|connection/i.test(String(e?.message || ''));
       if (problemaQz) {
-        setImprimindo('Sem impressora térmica aqui — gerando o PDF (pode levar alguns segundos)…');
+        setImprimindo('Sem impressora térmica aqui — gerando o PDF (pode levar alguns segundos)… Imprima em escala 100%; se o código de barras sair com defeito, abra o PDF no Firefox.');
         abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
         setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
         return;
