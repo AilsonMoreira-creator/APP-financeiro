@@ -62,7 +62,15 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       setTimeout(() => setPreparo(null), 6000);
       return;
     }
-    setPreparo({ rodando: true, msg: auto ? 'conferindo se falta preparar alguma etiqueta…' : 'preparando agora…' });
+    setPreparo({ rodando: true, msg: auto ? 'conferindo se falta preparar alguma etiqueta…' : 'buscando as notas novas no Bling…' });
+    // 18/08: nota gerada à mão no Bling não aparecia até o cron de 10 min
+    // rodar. Agora o preparo puxa a cadeia inteira: situação das notas →
+    // classificação → busca das etiquetas.
+    try {
+      await fetch(`${API}/wms-nf-sync?dias=2`);
+      await fetch(`${API}/wms-classificar`);
+    } catch { /* segue: o preparo ainda tenta o que dá */ }
+    setPreparo({ rodando: true, msg: 'preparando etiquetas…' });
     let voltas = 0, prontos = 0;
     try {
       while (voltas < 6) {
