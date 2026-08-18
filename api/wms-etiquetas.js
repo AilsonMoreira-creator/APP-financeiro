@@ -587,7 +587,11 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 
     for (const p of prontos) {
       const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
-      if (k !== grupoAtual && !soDanfe) {
+      // 18/08 (regra dele): na tela de etiquetas o papel sai SÓ com etiqueta —
+      // nada de folha de localização, aviso ou carimbo. A separadora fica só
+      // no modo NF + transporte, onde a equipe usa pra agrupar a separação.
+      const usaSeparadora = q.tipo === 'nf_transporte' && !soDanfe && !soEtiqueta;
+      if (k !== grupoAtual && usaSeparadora) {
         grupoAtual = k;
         const pg = saida.addPage(P10x15);
         const qtdG = prontos.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k).length;
