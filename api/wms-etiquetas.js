@@ -453,7 +453,12 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
     const soDanfe = q.tipo === 'nf_agendada';          // NF antes, etiqueta depois
     const soEtiqueta = q.tipo === 'etiqueta_liberada';  // no dia do envio
 
-    const lote = peds.slice(0, 60);   // teto por PDF (o resto sai na próxima leva)
+    // 18/08: a DANFE ainda é buscada uma a uma no Bling (~1,5s cada), então
+    // um PDF de 60 pedidos estourava o tempo e a aba abria em branco. Teto de
+    // 25 por rodada: sai rápido e a última folha avisa quantos faltam.
+    const TETO_PDF = 25;
+    const totalNoFiltro = peds.length;
+    const lote = peds.slice(0, TETO_PDF);
 
     // tokens por conta (Bling) e por marca (ML)
     const tokenBling = {}; const tokenMl = {};
@@ -662,6 +667,12 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
         .in('pedido_id', idsImpressos);
     }
 
+    if (totalNoFiltro > TETO_PDF) {
+      const aviso = saida.addPage([595.28, 841.89]);
+      aviso.drawText('FALTAM ETIQUETAS NESTE FILTRO', { x: 60, y: 700, size: 19, font: fonte, color: rgb(0.55, 0.1, 0.1) });
+      aviso.drawText(`Sairam ${lote.length} de ${totalNoFiltro} pedidos.`, { x: 60, y: 662, size: 14, font: fonte, color: rgb(0.2, 0.2, 0.2) });
+      aviso.drawText('Clique em imprimir de novo para gerar as proximas.', { x: 60, y: 638, size: 12, font: fonte, color: rgb(0.4, 0.4, 0.4) });
+    }
     const bytes = await saida.save();
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename=etiquetas-${new Date().toISOString().slice(0, 10)}.pdf`);
