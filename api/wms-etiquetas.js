@@ -417,7 +417,7 @@ export default async function handler(req, res) {
         if (!zplDoPedido && !ehPdf) continue;
 
         const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
-        if (k !== grupoAtual) {
+        if (false && k !== grupoAtual) {   // sem separadora (ordem dele 18/08)
           grupoAtual = k;
           const qtd = alvo.filter(x => `${q.por_empresa === '1' ? x.conta + '·' : ''}${x.loc}·${x.ref}` === k).length;
           // etiqueta separadora 10x15 em ZPL (203dpi: 812x1218 pontos)
@@ -590,7 +590,9 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
       // 18/08 (regra dele): na tela de etiquetas o papel sai SÓ com etiqueta —
       // nada de folha de localização, aviso ou carimbo. A separadora fica só
       // no modo NF + transporte, onde a equipe usa pra agrupar a separação.
-      const usaSeparadora = q.tipo === 'nf_transporte' && !soDanfe && !soEtiqueta;
+      // 18/08 (ordem dele): NENHUMA impressão leva folha separadora — todas
+      // saem só com as etiquetas. LOC e REF continuam aparecendo na TELA.
+      const usaSeparadora = false;
       if (k !== grupoAtual && usaSeparadora) {
         grupoAtual = k;
         const pg = saida.addPage(P10x15);
