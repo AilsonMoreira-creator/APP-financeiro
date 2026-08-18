@@ -51,7 +51,18 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     (typeof localStorage !== 'undefined' && localStorage.getItem('wms_impressora')) || '');
 
   const prepararLote = useCallback(async (auto = false) => {
-    setPreparo({ rodando: true, msg: auto ? 'preparando etiquetas…' : 'preparando agora…' });
+    // 18/08 (ele perguntou): não repetir o preparo a cada abertura. O que já
+    // está guardado nunca é rebuscado, mas a varredura toda vez passava a
+    // impressão de retrabalho. Agora o automático só roda se fizer mais de
+    // 10 min desde o último — o botão "Preparar agora" ignora essa trava.
+    const ultimo = Number(localStorage.getItem('wms_preparo_em') || 0);
+    if (auto && Date.now() - ultimo < 10 * 60 * 1000) {
+      const min = Math.max(1, Math.round((Date.now() - ultimo) / 60000));
+      setPreparo({ rodando: false, msg: `etiquetas preparadas há ${min} min` });
+      setTimeout(() => setPreparo(null), 6000);
+      return;
+    }
+    setPreparo({ rodando: true, msg: auto ? 'conferindo se falta preparar alguma etiqueta…' : 'preparando agora…' });
     let voltas = 0, prontos = 0;
     try {
       while (voltas < 6) {
@@ -62,14 +73,17 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         setPreparo({
           rodando: (j.faltam || 0) > 0,
           msg: (j.faltam || 0) > 0
-            ? `preparando… ${prontos} prontos, faltam ${j.faltam}`
-            : `${prontos} etiqueta(s) preparadas`,
+            ? `preparando… ${prontos} prontas, faltam ${j.faltam}`
+            : (prontos > 0
+              ? `${prontos} etiqueta(s) preparadas`
+              : `nada novo pra preparar — ${j.ja_tinham || 0} já estavam prontas`),
         });
         if (!j.faltam) break;
       }
     } catch (e) {
       setPreparo({ rodando: false, msg: 'não consegui preparar agora — dá pra imprimir mesmo assim' });
     }
+    localStorage.setItem('wms_preparo_em', String(Date.now()));
     carregar();
     setTimeout(() => setPreparo(p => (p && !p.rodando ? null : p)), 12000);
   }, []);
