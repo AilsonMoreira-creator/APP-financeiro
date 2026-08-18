@@ -98,9 +98,18 @@ export default async function handler(req, res) {
       .select('cor, tam, tipo, qtd, vence_em')
       .eq('ref', refNorm(ref)).is('usada_em', null).gt('vence_em', new Date().toISOString());
 
+    // venda semanal POR COR (soma dos tamanhos) — é o que decide entrada no
+    // Full e permanência fora de estação
+    const semanaPorCor = {};
+    for (const [k, q] of Object.entries(v14)) {
+      const cor = k.split('|')[0];
+      semanaPorCor[cor] = (semanaPorCor[cor] || 0) + (q / 14) * 7;
+    }
+
     // ── monta as linhas ──
     const linhas = [];
     for (const e of (estoque || [])) {
+      if (!e.cor_label && !e.cor_norm) continue;      // linha do produto pai
       const k = `${chaveCor(e.cor_label || e.cor_norm)}|${String(e.tam).toUpperCase()}`;
       const vendaDia = (v14[k] || 0) / 14;
       const vendaAnterior = Math.max(0, (v28[k] || 0) - (v14[k] || 0)) / 14;
@@ -120,6 +129,7 @@ export default async function handler(req, res) {
         corteChegando: corte ? 1 : 0,
         diasAteCorte,
         jaNoFull: !!noFull,
+        vendaSemanaCor: semanaPorCor[chaveCor(e.cor_label || e.cor_norm)] || 0,
       }, regras, hoje);
 
       const trava = (travas || []).find(t => chaveCor(t.cor) === chaveCor(e.cor_label) && String(t.tam).toUpperCase() === String(e.tam).toUpperCase());

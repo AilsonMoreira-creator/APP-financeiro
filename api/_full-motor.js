@@ -81,12 +81,12 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   // fora de estação: marrom e marinho só com venda mínima na semana
   if (foraDeEstacao(regras, cor, hoje)) {
     const minSemana = n(regras.manter_fora_estacao_semana) || 6;
-    if (vendaDia * 7 < minSemana) {
+    if (semanaCor < minSemana) {
       return {
         cor, tam, vendaDia, estoqueFull, estoqueFabrica,
         cobertura_atual: vendaDia > 0 ? +(estoqueFull / vendaDia).toFixed(1) : null,
         qtd_ideal: 0, qtd_possivel: 0, qtd_sugerida: 0,
-        motivo: `fora de estação e vendendo ${(vendaDia * 7).toFixed(1)}/semana (mínimo ${minSemana}) — não repor`,
+        motivo: `fora de estação: a cor vende ${semanaCor.toFixed(1)}/semana (mínimo ${minSemana}) — não repor`,
       };
     }
     motivos.push('fora de estação, mas mantém venda');
@@ -95,11 +95,11 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   // cor que ainda não está no Full precisa de venda mínima pra entrar
   if (!jaNoFull) {
     const minEntrada = n(regras.entrada_nova_cor_semana) || 12;
-    if (vendaDia * 7 < minEntrada) {
+    if (semanaCor < minEntrada) {
       return {
         cor, tam, vendaDia, estoqueFull, estoqueFabrica,
         cobertura_atual: null, qtd_ideal: 0, qtd_possivel: 0, qtd_sugerida: 0,
-        motivo: `ainda não está no Full e vende ${(vendaDia * 7).toFixed(1)}/semana (entra com ${minEntrada})`,
+        motivo: `cor fora do Full vendendo ${semanaCor.toFixed(1)}/semana (entra com ${minEntrada})`,
       };
     }
     motivos.push('cor nova no Full: vende bem nos outros canais');
