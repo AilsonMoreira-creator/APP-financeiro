@@ -252,6 +252,9 @@ async function linksEtiqueta(peds, tokenPorConta, motivo = 'impressao') {
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   const q = req.query || {};
+  // 18/08: o contador de "impressas hoje" usa esta data e ela só existia
+  // dentro de pedidosFiltrados — a tela quebrava com "hojeBRT is not defined".
+  const hojeBRT = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
   try {
     // CONTADORES POR TIPO (17/08, pedido dele): cada botão de IMPRIMIR mostra
     // quantas etiquetas estão esperando impressão. Lê só o banco.
