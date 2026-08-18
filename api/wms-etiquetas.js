@@ -221,6 +221,9 @@ export default async function handler(req, res) {
       const { data } = await sel;
       const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0 };
       for (const p of (data || [])) {
+        // 18/08: Full sai ANTES de tudo — reposição do Full tem ml_agendado_em
+        // e vazava pro contador de NF agendada (sem nem ter nota)
+        if (p.print_regra === 'ML_FULL' || p.ml_logistic_type === 'fulfillment') continue;
         const agendado = p.ml_agendado_em && String(p.ml_agendado_em) > hoje;
         // AGENDADAS: sai do contador assim que a nota é impressa (carimbo nosso
         // ou DANFE emitida no Bling) — ordem dele 17/08
@@ -239,7 +242,6 @@ export default async function handler(req, res) {
           && p.ml_ship_substatus === 'ready_to_print'
           && !p.etiqueta_impressa_em
           && p.status_wms !== 'finalizado') c.etiqueta_liberada++;
-        if (p.print_regra === 'ML_FULL' || p.ml_logistic_type === 'fulfillment') continue;
         if (p.print_estado !== 'PRONTO') continue;
         if (p.print_regra === 'MELI_FLEX') c.flex++;
         else if (p.print_regra === 'MELUNI') c.meluni++;
