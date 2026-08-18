@@ -46,6 +46,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   // muda o status no marketplace) e é buscada no clique final.
   const [preparo, setPreparo] = useState(null);   // {rodando, prontos, faltam, msg}
   const [contadores, setContadores] = useState(null);   // badge por tipo de impressão
+  const [impressoras, setImpressoras] = useState([]);
+  const [impressoraSel, setImpressoraSel] = useState(
+    (typeof localStorage !== 'undefined' && localStorage.getItem('wms_impressora')) || '');
 
   const prepararLote = useCallback(async (auto = false) => {
     setPreparo({ rodando: true, msg: auto ? 'preparando etiquetas…' : 'preparando agora…' });
@@ -94,6 +97,31 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   // Conecta no QZ Tray com paciência: a lib às vezes precisa de 2 tentativas
   // (o app local demora a subir o websocket). Se não conectar, quem chama cai
   // pro PDF — o botão nunca deixa a equipe na mão.
+  // 18/08: pedir só a impressora PADRÃO do Windows falhava quando a padrão
+  // era outra (ou não havia padrão) — a térmica estava instalada e mesmo
+  // assim dava "não encontra a impressora". Agora: usa a lembrada, senão
+  // detecta a térmica pelo nome, senão a padrão, senão a primeira da lista.
+  const TERMICA = /zebra|zdesigner|zd\d|tsc|argox|elgin|gprinter|godex|bematech|thermal|etiq|label/i;
+
+  const escolherImpressora = async (qz) => {
+    let lista = [];
+    try { lista = await qz.printers.find(); } catch { /* segue */ }
+    if (!Array.isArray(lista)) lista = lista ? [lista] : [];
+    setImpressoras(lista);
+
+    const salva = localStorage.getItem('wms_impressora');
+    if (salva && lista.includes(salva)) return salva;
+
+    const termica = lista.find(x => TERMICA.test(x));
+    if (termica) { localStorage.setItem('wms_impressora', termica); return termica; }
+
+    try {
+      const padrao = await qz.printers.getDefault();
+      if (padrao) return padrao;
+    } catch { /* sem padrão definida */ }
+    return lista[0] || null;
+  };
+
   const conectarQz = async () => {
     const qz = await carregarQz();
     if (qz.websocket.isActive()) return qz;
@@ -130,7 +158,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
         return;
       }
-      const impressora = await qz.printers.getDefault();
+      const impressora = await escolherImpressora(qz);
+      if (!impressora) throw new Error('Nenhuma impressora encontrada pelo QZ Tray. Confira se ela aparece em Dispositivos e Impressoras do Windows.');
       const config = qz.configs.create(impressora);
 
       setImprimindo(`Imprimindo ${j.total} etiqueta(s) em ${impressora}…`);
@@ -188,6 +217,17 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     return () => clearInterval(t);
   }, [fConta, dados]);
   useEffect(() => { prepararLote(true); /* só na abertura */ }, []);   // eslint-disable-line
+  // descobre as impressoras assim que a tela abre, pra equipe já ver qual será usada
+  useEffect(() => {
+    (async () => {
+      try {
+        const qz = await conectarQz();
+        if (!qz) return;
+        const escolhida = await escolherImpressora(qz);
+        if (escolhida) setImpressoraSel(escolhida);
+      } catch { /* sem QZ nesta máquina: o botão cai no PDF */ }
+    })();
+  }, []);   // eslint-disable-line
 
 
 
@@ -254,6 +294,18 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             style={{ padding: '9px 12px', borderRadius: 10, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 13.5, width: 130, color: palette.ink }} />
         </div>
       </div>
+
+      {/* impressora usada nesta máquina (fica lembrada) */}
+      {impressoras.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 12, color: palette.inkSoft, fontFamily: FONT, flexWrap: 'wrap' }}>
+          <span>🖨 Impressora:</span>
+          <select value={impressoraSel || ''} onChange={e => { setImpressoraSel(e.target.value); localStorage.setItem('wms_impressora', e.target.value); }}
+            style={{ padding: '6px 9px', borderRadius: 8, border: `1px solid ${palette.beige}`, fontFamily: FONT, fontSize: 12, maxWidth: 320 }}>
+            {impressoras.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          <span style={{ fontSize: 11, color: palette.inkMuted }}>fica salva nesta máquina</span>
+        </div>
+      )}
 
       {/* preparo em segundo plano: a equipe vê o que está acontecendo */}
       {preparo && (
