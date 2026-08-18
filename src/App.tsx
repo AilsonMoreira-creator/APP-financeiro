@@ -5894,7 +5894,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>▢</span> criar etiqueta
               </button>
               <button onClick={()=>setFullOpen({ref:modalRef,desc})} title="Quanto enviar pro Full do Mercado Livre nesta semana" style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                📦 full
+                <span style={{fontSize:12,lineHeight:1,color:"#4a7fa5"}}>▣</span> full
               </button>
               <button onClick={()=>setMapOpen({ref:modalRef,refNorm,desc,cores:[...new Set((vars||[]).map(v=>v.cor).filter(Boolean))]})} title={`Conferir se os SKUs da REF ${modalRef} estão vinculados nos canais das 3 empresas`} style={{flex:mobile?"1 1 calc(50% - 4px)":1,minWidth:0,whiteSpace:"nowrap",background:"#fff",color:"#2c3e50",border:"1px solid #c8d8e4",borderRadius:8,padding:mobile?"11px 6px":"9px 8px",fontSize:mobile?11.5:12,fontWeight:700,fontFamily:"Georgia,serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
                 <span style={{fontSize:13,lineHeight:1,color:"#4a7fa5"}}>⇄</span> mapeamento
@@ -5998,7 +5998,7 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
         </div>;
       })()}
       {etqOpen && <EtiquetaGerar sample={etqSample} onClose={()=>setEtqOpen(false)}/>}
-      {fullOpen && <FullEnvio refProduto={fullOpen.ref} desc={fullOpen.desc} usuario={usuario} onClose={()=>setFullOpen(null)}/>}
+      {fullOpen && <FullEnvio refProduto={fullOpen.ref} desc={fullOpen.desc} usuario={(typeof window!=='undefined'&&localStorage.getItem('amicia_usuario'))||'equipe'} onClose={()=>setFullOpen(null)}/>}
       {raioxOpen && <RaioXProduto refProduto={raioxOpen.ref} desc={raioxOpen.desc} foto={raioxOpen.foto} onClose={()=>setRaioxOpen(null)}/>}
       {mapOpen && <MapeamentoSkus refProduto={mapOpen.ref} desc={mapOpen.desc} cores={mapOpen.cores} onClose={()=>setMapOpen(null)}/>}
       {gtinOpen && (
