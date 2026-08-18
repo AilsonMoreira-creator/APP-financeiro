@@ -457,8 +457,20 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
     // um PDF de 60 pedidos estourava o tempo e a aba abria em branco. Teto de
     // 25 por rodada: sai rápido e a última folha avisa quantos faltam.
     const TETO_PDF = 25;
-    const totalNoFiltro = peds.length;
-    const lote = peds.slice(0, TETO_PDF);
+    // 18/08: filtrar ANTES de cortar. Cortando primeiro, as 25 primeiras eram
+    // quase todas já impressas e o PDF voltava vazio ("nenhuma etiqueta
+    // pronta") mesmo com 59 esperando.
+    const hojePdf = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+    const elegivel = (p) => {
+      if (q.reimprimir === '1') return true;
+      if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em;
+      if (q.tipo === 'etiqueta_liberada') return true;
+      if (p.etiqueta_impressa_em) return false;
+      return p.print_estado === 'PRONTO' || p.nf_situacao === 5;
+    };
+    const candidatosPdf = peds.filter(elegivel);
+    const totalNoFiltro = candidatosPdf.length;
+    const lote = candidatosPdf.slice(0, TETO_PDF);
 
     // tokens por conta (Bling) e por marca (ML)
     const tokenBling = {}; const tokenMl = {};
@@ -537,8 +549,9 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
       || (!p.etiqueta_impressa_em && sitDe2[String(p.nf_id)] === 5);
     const prontos = q.tipo === 'nf_agendada'
       ? lote.filter(p => p.nf_id)                    // basta ter NF: a etiqueta vem depois
-      : lote.filter(p => podeImprimir(p)
-        && (linkBlingDe[String(p.pedido_id)] || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta])));
+      : lote.filter(p => docsPdf[String(p.pedido_id)]
+        || linkBlingDe[String(p.pedido_id)]
+        || (p.canal_geral === 'Mercado Livre' && tokenMl[p.conta]));
     if (!prontos.length) {
       return res.status(404).json({
         erro: 'Nenhuma etiqueta pronta nesses filtros.',
