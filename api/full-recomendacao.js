@@ -52,29 +52,40 @@ export default async function handler(req, res) {
     // 2) venda: 14 dias e os 14 anteriores (tendência)
     const [v14, v28] = await Promise.all([vendaPorSku(ref, 14), vendaPorSku(ref, 28)]);
 
-    // 3) estoque atual no Full (ML Exitus) por SKU
+    // 3) estoque atual no Full (ML Exitus) por COR+TAMANHO
+    // 17/08: as variações do ML vêm com o campo de SKU VAZIO — o casamento
+    // tem que ser pelos atributos (Cor/Tamanho) da variação, que são
+    // confiáveis. Antes eu tentava pelo seller_sku da variação e dava 0
+    // mesmo com ~400 peças no Full.
     const fullPorSku = {};
     try {
       const token = await getValidToken('Exitus');
       const h = { Authorization: `Bearer ${token}` };
       const me = await (await fetch('https://api.mercadolibre.com/users/me', { headers: h })).json();
-      // anúncios Full que carregam os SKUs desta REF
-      for (const e of (estoque || [])) {
+      // acha os anúncios Full desta REF (basta um SKU dela levar ao anúncio)
+      const itensFull = new Set();
+      for (const e of (estoque || []).slice(0, 8)) {
         if (!e.bling_sku) continue;
         const b = await (await fetch(
           `https://api.mercadolibre.com/users/${me.id}/items/search?seller_sku=${encodeURIComponent(e.bling_sku)}&logistic_type=fulfillment`,
           { headers: h })).json();
-        const itemId = (b?.results || [])[0];
-        if (!itemId) continue;
+        (b?.results || []).forEach(id => itensFull.add(id));
+        await new Promise(r => setTimeout(r, 150));
+        if (itensFull.size >= 3) break;
+      }
+      // lê as variações e casa por Cor + Tamanho
+      for (const itemId of itensFull) {
         const it = await (await fetch(`https://api.mercadolibre.com/items/${itemId}`, { headers: h })).json();
-        const varSku = (it.variations || []).find(v =>
-          String(v.seller_custom_field || '') === e.bling_sku
-          || (v.attributes || []).some(a => a.id === 'SELLER_SKU' && String(a.value_name) === e.bling_sku));
-        const invId = varSku?.inventory_id || it.inventory_id;
-        if (!invId) continue;
-        const est = await (await fetch(`https://api.mercadolibre.com/inventories/${invId}/stock/fulfillment`, { headers: h })).json();
-        fullPorSku[e.bling_sku] = { qtd: n(est?.available_quantity), inventory_id: invId };
-        await new Promise(r => setTimeout(r, 120));
+        for (const v of (it.variations || [])) {
+          const combo = v.attribute_combinations || [];
+          const cor = (combo.find(a => /cor|color/i.test(a.id || a.name)) || {}).value_name;
+          const tam = (combo.find(a => /size|tamanho/i.test(a.id || a.name)) || {}).value_name;
+          if (!cor || !tam) continue;
+          const k = `${chaveCor(cor)}|${String(tam).toUpperCase().trim()}`;
+          const atual = fullPorSku[k]?.qtd || 0;
+          fullPorSku[k] = { qtd: atual + n(v.available_quantity), inventory_id: v.inventory_id, anuncio: itemId };
+        }
+        await new Promise(r => setTimeout(r, 150));
       }
     } catch (e) { /* segue sem o Full: a tela avisa */ }
 
@@ -115,7 +126,7 @@ export default async function handler(req, res) {
       const vendaAnterior = Math.max(0, (v28[k] || 0) - (v14[k] || 0)) / 14;
       const tendencia = vendaAnterior > 0 ? ((vendaDia - vendaAnterior) / vendaAnterior) * 100 : (vendaDia > 0 ? 100 : 0);
 
-      const noFull = fullPorSku[e.bling_sku];
+      const noFull = fullPorSku[k];   // casado por cor+tamanho
       const corte = (cortes || []).find(c => (c.cores || []).some(x => chaveCor(x.nome) === chaveCor(e.cor_label)));
       const diasAteCorte = corte?.data_entrega
         ? Math.max(0, Math.ceil((new Date(corte.data_entrega) - hoje) / 86400000)) : 99;
