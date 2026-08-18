@@ -11,6 +11,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { Printer, RefreshCw } from 'lucide-react';
+import qzTray from 'qz-tray';
 import { palette, FONT } from './Lojas_Shared.jsx';
 
 const CONTAS = ['exitus', 'lumia', 'muniam'];
@@ -107,14 +108,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     } catch { window.location.href = url; }
   };
 
-  const carregarQz = () => new Promise((ok, falha) => {
-    if (window.qz) return ok(window.qz);
-    const el = document.createElement('script');
-    el.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
-    el.onload = () => ok(window.qz);
-    el.onerror = () => falha(new Error('não consegui carregar a biblioteca do QZ Tray'));
-    document.head.appendChild(el);
-  });
+  // 18/08: a lib do QZ agora vem NO BUNDLE (import) — antes carregava de CDN
+  // no clique e, se o CDN falhasse na máquina, caía pro PDF sem explicar.
+  const carregarQz = () => Promise.resolve(qzTray);
 
   // Conecta no QZ Tray com paciência: a lib às vezes precisa de 2 tentativas
   // (o app local demora a subir o websocket). Se não conectar, quem chama cai
@@ -145,14 +141,33 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   };
 
   const conectarQz = async () => {
-    const qz = await carregarQz();
-    if (qz.websocket.isActive()) return qz;
+    let qz;
+    try { qz = await carregarQz(); } catch (e) { return { qz: null, motivo: e.message }; }
+    if (qz.websocket.isActive()) return { qz, motivo: null };
     try {
-      await qz.websocket.connect({ retries: 2, delay: 1 });
-      return qz;
-    } catch {
-      try { await qz.websocket.connect(); return qz; } catch { return null; }
+      // 18/08: paciência maior — o aviso de permissão do QZ (Allow) precisa de
+      // tempo pra pessoa clicar; antes desistia em 2s e caía pro PDF
+      await qz.websocket.connect({ retries: 3, delay: 2 });
+      return { qz, motivo: null };
+    } catch (e1) {
+      try { await qz.websocket.connect(); return { qz, motivo: null }; }
+      catch (e2) { return { qz: null, motivo: String(e2?.message || e1?.message || 'conexão recusada') }; }
     }
+  };
+
+  // Diagnóstico na máquina da expedição: mostra cada passo da conexão
+  const testarQz = async () => {
+    setImprimindo('Testando o QZ Tray…');
+    const { qz, motivo } = await conectarQz();
+    if (!qz) { setImprimindo(`⚠ QZ não conectou: ${motivo}. Confira se o QZ Tray está aberto e se o site não está em Blocked no Site Manager.`); return; }
+    let versao = '?';
+    try { versao = await qz.api.getVersion(); } catch { /* segue */ }
+    let lista = [];
+    try { lista = await qz.printers.find(); } catch { /* segue */ }
+    if (!Array.isArray(lista)) lista = lista ? [lista] : [];
+    setImprimindo(lista.length
+      ? `✅ QZ ${versao} conectado. Impressoras: ${lista.join(' · ')}`
+      : `⚠ QZ ${versao} conectado, mas nenhuma impressora apareceu. Confira em Dispositivos e Impressoras do Windows.`);
   };
 
   const imprimirTermica = async () => {
@@ -172,12 +187,13 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       if (!j.total) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
 
       setImprimindo('Conectando na impressora…');
-      const qz = await conectarQz();
+      const { qz, motivo } = await conectarQz();
       if (!qz) {
-        // sem QZ (não instalado, fechado ou bloqueado) → PDF, sem travar
-        setImprimindo('Sem impressora térmica aqui — gerando o PDF (pode levar alguns segundos)… Imprima em escala 100%; se o código de barras sair com defeito, abra o PDF no Firefox.');
+        // sem QZ (não instalado, fechado ou bloqueado) → PDF, sem travar —
+        // mas agora DIZENDO o porquê, pra parar de adivinhar na expedição
+        setImprimindo(`QZ Tray não conectou (${motivo}) — gerando o PDF… Imprima em escala 100%; se o código de barras sair com defeito, abra o PDF no Firefox.`);
         abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
-        setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
+        setTimeout(() => { setImprimindo(''); carregar(); }, 9000);
         return;
       }
       const impressora = await escolherImpressora(qz);
@@ -221,9 +237,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     } catch (e) {
       const problemaQz = /qz|websocket|connection/i.test(String(e?.message || ''));
       if (problemaQz) {
-        setImprimindo('Sem impressora térmica aqui — gerando o PDF (pode levar alguns segundos)… Imprima em escala 100%; se o código de barras sair com defeito, abra o PDF no Firefox.');
+        setImprimindo(`QZ Tray falhou no meio (${String(e?.message || '').slice(0, 90)}) — gerando o PDF… Imprima em escala 100%; se o código de barras sair com defeito, abra o PDF no Firefox.`);
         abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
-        setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
+        setTimeout(() => { setImprimindo(''); carregar(); }, 9000);
         return;
       }
       setImprimindo(`⚠ ${e.message}`);
@@ -366,6 +382,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           title="Busca agora as etiquetas que ainda não foram preparadas (a Shein só é buscada no clique de imprimir)"
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: preparo?.rodando ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, opacity: preparo?.rodando ? .6 : 1 }}>
           <RefreshCw size={16} /> Preparar agora
+        </button>
+        <button onClick={testarQz}
+          title="Confere a conexão com o QZ Tray e lista as impressoras que ele enxerga"
+          style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
+          <Printer size={16} /> Testar QZ
         </button>
       </div>
 
