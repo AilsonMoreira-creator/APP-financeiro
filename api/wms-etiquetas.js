@@ -84,6 +84,10 @@ async function pedidosFiltrados(q) {
     const flex = p.ml_logistic_type === 'self_service';
     const full = p.ml_logistic_type === 'fulfillment';
     if (full) continue; // equipe não encosta
+    // 18/08: pedido do FULL não imprime nada aqui — a mercadoria já está no
+    // armazém do ML e ele mesmo despacha. Estava inflando "prontas" (eram 218
+    // na Exitus) e o PDF depois vinha vazio.
+    if (p.print_regra === 'ML_FULL' || p.ml_logistic_type === 'fulfillment') continue;
     if (tipo === 'flex' && !flex) continue;
     if (tipo === 'meluni' && canal !== 'Meluni') continue;
     if (tipo === 'nf_transporte' && (flex || canal === 'Meluni')) continue;
@@ -280,6 +284,7 @@ export default async function handler(req, res) {
           && p.ml_ship_substatus === 'ready_to_print'
           && !p.etiqueta_impressa_em
           && p.status_wms !== 'finalizado') c.etiqueta_liberada++;
+        if (p.print_regra === 'ML_FULL' || p.ml_logistic_type === 'fulfillment') continue;
         if (p.print_estado !== 'PRONTO') continue;
         if (p.print_regra === 'MELI_FLEX') c.flex++;
         else if (p.print_regra === 'MELUNI') c.meluni++;
