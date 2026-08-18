@@ -67,7 +67,15 @@ export function calcularLinha(dados, regras, hoje = new Date()) {
   const {
     cor, tam, vendaDia, estoqueFull, estoqueFabrica,
     emTransito = 0, corteChegando = 0, diasAteCorte = 99, jaNoFull = true,
+    vendaSemanaCor = null,   // venda da COR inteira (soma dos tamanhos)
   } = dados;
+
+  // 17/08 (correção): os gatilhos de entrada no Full e de permanência fora de
+  // estação são POR COR, somando os tamanhos — foi assim que ele descreveu
+  // ("uma cor que vender 12 peças/semana no geral já vale ir pro Full").
+  // Aplicando por SKU, a Rosa Claro (22/semana espalhados nos 4 tamanhos)
+  // era barrada em todos eles.
+  const semanaCor = vendaSemanaCor != null ? vendaSemanaCor : vendaDia * 7;
 
   const basicas = (regras.cores_basicas || ['bege', 'preto']).map(norm);
   const ehBasica = basicas.some(b => norm(cor).includes(b));
