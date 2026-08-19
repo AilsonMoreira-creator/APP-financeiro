@@ -19,7 +19,7 @@
 // Ailson 04/07/2026
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabase, setCors } from './_lojas-whats-helpers.js';
+import { supabase, setCors, getConfig, saveConfig } from './_lojas-whats-helpers.js';
 import { Buffer } from 'node:buffer';
 
 export const config = { api: { bodyParser: false } };
@@ -27,7 +27,24 @@ export const config = { api: { bodyParser: false } };
 const BUCKET = 'sofia-midias';
 const MAX_CRIATIVO = 2 * 1024 * 1024;
 const MIMES_OK = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-const CAMPOS = 'name, language, category, body_text, botoes, header, status, ativo, pasta, porque, fluxo, criativo_url, criativo_atualizado_em, atualizado_em';
+const CAMPOS = 'name, language, category, body_text, botoes, header, status, ativo, oculto, pasta, porque, fluxo, criativo_url, criativo_atualizado_em, atualizado_em';
+
+// Resolve o criativo que SAI DE VERDADE no envio: prioridade criativo_url
+// (trocável na tela); senão header.sample_ref -> mídia ativa -> storage.
+// Mesma lógica do cron-disparo2 (Ailson 19/08/2026).
+async function criativoEmUso(t) {
+  if (t.criativo_url) return t.criativo_url;
+  if (t.header?.format !== 'IMAGE' || !t.header?.sample_ref) return null;
+  const refRaw = String(t.header.sample_ref);
+  const refNorm = refRaw.replace(/^0+/, '') || '0';
+  const variantes = [...new Set([refNorm, refNorm.padStart(4, '0'), refNorm.padStart(5, '0'), refRaw])];
+  const { data: midia } = await supabase.from('lojas_whats_midias')
+    .select('storage_path').eq('tipo', 'foto').eq('ativa', true)
+    .in('ref', variantes).limit(1).maybeSingle();
+  if (!midia?.storage_path) return null;
+  const { data: pub } = supabase.storage.from('sofia-midias').getPublicUrl(midia.storage_path);
+  return pub?.publicUrl || null;
+}
 
 async function lerBody(req) {
   // Runtime do Vercel pode ja ter consumido o stream e deixado o corpo em
@@ -81,6 +98,30 @@ export default async function handler(req, res) {
         .order('criado_em', { ascending: false });
       if (error) return res.status(500).json({ ok: false, erro: error.message });
       const todos = data || [];
+
+      // último uso real de cada template (max enviada_em das mensagens de saída)
+      const usoDe = {};
+      try {
+        const { data: usos } = await supabase.rpc('fn_templates_ultimo_uso');
+        (usos || []).forEach(u => { usoDe[u.template_name] = u.ultimo_uso; });
+      } catch { /* view/fn ausente: segue sem último uso */ }
+
+      // criativo que sai de verdade no envio (em paralelo, só nos com header IMAGE)
+      await Promise.all(todos.map(async (t) => {
+        t.ultimo_uso = usoDe[t.name] || null;
+        t.criativo_em_uso_url = await criativoEmUso(t);
+      }));
+
+      // fluxos automáticos e qual template cada um usa hoje
+      const d2tpl = await getConfig('sofia_disparo2_template', 'tendencias_verao27_v1');
+      const d2on = (await getConfig('sofia_disparo2_ativo', true)) !== false;
+      const fluxos = {
+        primeiro_disparo: { rotulo: '1º disparo do carrinho', template: 'carrinho_abandonado_site_amicia_img_v2', ligado: true, fixo: true, obs: 'cai pra versão texto se a foto falhar' },
+        disparo2: { rotulo: '2º disparo do carrinho (24h sem resposta)', template: d2tpl, ligado: d2on, fixo: false },
+        followup_catalogo: { rotulo: 'Follow-up catálogo 24h', template: 'followup_catalogo_24h_v1', ligado: true, fixo: true },
+        pesquisa_motivo: { rotulo: 'Pesquisa de motivo (perdidas)', template: 'sofia_pesquisa_motivo_v2', ligado: true, fixo: true },
+      };
+
       const pastas = {
         curadoria:     todos.filter(t => t.pasta === 'curadoria'),
         novidades:     todos.filter(t => t.pasta === 'novidades'),
@@ -88,12 +129,31 @@ export default async function handler(req, res) {
         tendencias:    todos.filter(t => t.pasta === 'tendencias'),
         ativos:        todos.filter(t => t.ativo === true && t.status === 'aprovado'),
       };
-      return res.status(200).json({ ok: true, pastas });
+      return res.status(200).json({ ok: true, pastas, todos, fluxos });
     }
 
-    // ── PATCH: editar documentação (porque/fluxo) e corpo enquanto rascunho ─
+    // ── PATCH: documentação, ativo/oculto e troca do fluxo do 2º disparo ────
     if (req.method === 'PATCH') {
       const body = JSON.parse((await lerBody(req)).toString() || '{}');
+
+      // troca do fluxo do 2º disparo (Ailson 19/08/2026): valida antes de gravar
+      if (body.fluxo_disparo2) {
+        const { template, ligado } = body.fluxo_disparo2;
+        if (typeof template === 'string' && template) {
+          const { data: alvo } = await supabase.from('lojas_whats_templates')
+            .select('name, status, ativo, oculto').eq('name', template).maybeSingle();
+          if (!alvo) return res.status(404).json({ ok: false, erro: 'template nao encontrado' });
+          if (alvo.status !== 'aprovado' || !alvo.ativo || alvo.oculto) {
+            return res.status(400).json({ ok: false, erro: 'so template aprovado, ativo e visivel pode assumir o fluxo' });
+          }
+          await saveConfig('sofia_disparo2_template', template, 'template do 2º disparo do carrinho (tela Templates)');
+        }
+        if (typeof ligado === 'boolean') {
+          await saveConfig('sofia_disparo2_ativo', ligado, 'liga/desliga do 2º disparo do carrinho (tela Templates)');
+        }
+        return res.status(200).json({ ok: true });
+      }
+
       const { name } = body;
       if (!name) return res.status(400).json({ ok: false, erro: 'name obrigatorio' });
       const { data: tpl } = await supabase.from('lojas_whats_templates')
@@ -102,6 +162,8 @@ export default async function handler(req, res) {
       const upd = { atualizado_em: new Date().toISOString() };
       if (typeof body.porque === 'string') upd.porque = body.porque;
       if (typeof body.fluxo === 'string') upd.fluxo = body.fluxo;
+      if (typeof body.ativo === 'boolean') upd.ativo = body.ativo;
+      if (typeof body.oculto === 'boolean') upd.oculto = body.oculto;
       // corpo só edita enquanto rascunho (depois de aprovado na Meta é imutável)
       if (typeof body.body_text === 'string') {
         if (tpl.status !== 'rascunho') return res.status(400).json({ ok: false, erro: 'corpo aprovado na Meta nao pode ser editado' });

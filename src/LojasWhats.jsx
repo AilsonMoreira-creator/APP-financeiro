@@ -7995,44 +7995,45 @@ function PesquisaTab({ refreshTick, onAbrirChat }) {
   );
 }
 
-// ─── Pasta "Templates" da aba Mídias (Ailson 04/07/2026) ────────────────────
-// Catálogo dos templates HSM da Sofia organizado em subpastas: Curadoria,
-// Novidades, Dicas rápidas (reativação, criativo trocável) e Ativos hoje.
-// Cada card mostra DE FORMA REAL como o cliente recebe (criativo + corpo +
-// botões), em que fluxo é usado e por que existe — controle pra não se perder
-// com vários templates. Nos 3 de conteúdo dá pra subir/trocar o criativo sem
-// mexer no corpo aprovado.
+// ─── Pasta "Templates" da aba Mídias (reforma Ailson 19/08/2026) ─────────────
+// Painel "Fluxos automáticos" no topo (qual template roda em cada disparo, com
+// troca + liga/desliga no 2º disparo) e grid LARGO de cards enxutos: nome,
+// status Meta, último uso real, criativo QUE SAI no envio, badge "em uso",
+// chaves ativar/desativar e ocultar. Preview abre no toque. Ocultos ficam
+// recolhidos no fim.
 function TemplatesCatalogo() {
   const [aberto, setAberto] = useState(false);
-  const [pastas, setPastas] = useState(null);
-  const [subAberta, setSubAberta] = useState(null);
-  const [salvando, setSalvando] = useState(null);   // name em edicao/upload
+  const [dados, setDados] = useState(null);   // { todos, fluxos }
+  const [filtro, setFiltro] = useState('todos');
+  const [expandido, setExpandido] = useState(null);   // name do card aberto
+  const [mostrarOcultos, setMostrarOcultos] = useState(false);
+  const [salvando, setSalvando] = useState(null);
   const [msg, setMsg] = useState(null);
 
   const carregar = async () => {
     try {
       const r = await fetch('/api/lojas-whats-templates-catalogo');
       const j = await r.json();
-      if (j.ok) setPastas(j.pastas);
+      if (j.ok) setDados({ todos: j.todos || [], fluxos: j.fluxos || {} });
       else setMsg({ tipo: 'erro', txt: j.erro || 'falha ao carregar' });
     } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
   };
-  useEffect(() => { if (aberto && !pastas) carregar(); }, [aberto]);
+  useEffect(() => { if (aberto && !dados) carregar(); }, [aberto]);
   useEffect(() => {
     if (!msg) return;
-    const t = setTimeout(() => setMsg(null), 4000);
+    const t = setTimeout(() => setMsg(null), 4500);
     return () => clearTimeout(t);
   }, [msg]);
 
-  const salvarDoc = async (name, campo, valor) => {
-    setSalvando(name);
+  const patch = async (body, okTxt) => {
+    setSalvando(body.name || 'fluxo');
     try {
       const r = await fetch('/api/lojas-whats-templates-catalogo', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, [campo]: valor }),
+        body: JSON.stringify(body),
       });
       const j = await r.json();
-      if (j.ok) { setMsg({ tipo: 'ok', txt: 'Salvo' }); await carregar(); }
+      if (j.ok) { setMsg({ tipo: 'ok', txt: okTxt || 'Salvo' }); await carregar(); }
       else setMsg({ tipo: 'erro', txt: j.erro || 'falha' });
     } catch (e) { setMsg({ tipo: 'erro', txt: e.message }); }
     setSalvando(null);
@@ -8054,103 +8055,167 @@ function TemplatesCatalogo() {
     setSalvando(null);
   };
 
-  const SUBS = [
-    ['curadoria', '🎨 Curadoria', 'Cores e modelos que são tendência'],
-    ['novidades', '✨ Novidades', 'Novidades da Amícia'],
-    ['dicas_rapidas', '💡 Dicas rápidas', 'Conteúdos rápidos pro lojista'],
-    ['ativos', '📤 Ativos hoje', 'Como o cliente recebe e em que fluxo'],
-  ];
+  const todos = dados?.todos || [];
+  const fluxos = dados?.fluxos || {};
+  // em que fluxo cada template está plugado (pro badge e pras confirmações)
+  const emUsoDe = {};
+  Object.entries(fluxos).forEach(([, f]) => { if (f.template && f.ligado) emUsoDe[f.template] = f.rotulo; });
 
-  const CardTpl = ({ t, comCriativo }) => {
-    const [porqueEdit, setPorqueEdit] = useState(null);   // null = fechado
-    const [fluxoEdit, setFluxoEdit] = useState(null);
-    const ocupado = salvando === t.name;
+  const dataCurta = (iso) => iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : null;
+  const PASTA_ROTULO = { curadoria: 'Curadoria', novidades: 'Novidades', dicas_rapidas: 'Dica lojista', tendencias: 'Tendências' };
+  const FILTROS = [['todos', 'Todos'], ['em_uso', 'Em uso'], ['curadoria', 'Curadoria'], ['novidades', 'Novidades'], ['dicas_rapidas', 'Dicas'], ['tendencias', 'Tendências']];
+
+  const visiveis = todos.filter(t => !t.oculto).filter(t => {
+    if (filtro === 'todos') return true;
+    if (filtro === 'em_uso') return !!emUsoDe[t.name];
+    return t.pasta === filtro;
+  });
+  const ocultos = todos.filter(t => t.oculto);
+
+  const StatusChip = ({ t }) => (
+    <span style={{
+      fontSize: fz(10), fontWeight: 700, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap',
+      background: t.status === 'aprovado' ? '#e7f5ec' : t.status === 'pendente_aprovacao' ? '#fdf3e0' : '#f0ede8',
+      color: t.status === 'aprovado' ? '#2e7d32' : t.status === 'pendente_aprovacao' ? '#b07818' : palette.inkMuted,
+    }}>{t.status === 'aprovado' ? 'aprovado' : t.status === 'pendente_aprovacao' ? 'aguardando Meta' : t.status}</span>
+  );
+
+  const Chave = ({ ligada, onClick, titulo, ocupado }) => (
+    <button onClick={onClick} disabled={ocupado} title={titulo} style={{
+      width: 34, height: 19, borderRadius: 10, border: 'none', cursor: ocupado ? 'wait' : 'pointer',
+      background: ligada ? '#2e7d32' : palette.beige, position: 'relative', flexShrink: 0, padding: 0,
+    }}>
+      <span style={{
+        position: 'absolute', top: 2, left: ligada ? 17 : 2, width: 15, height: 15,
+        borderRadius: '50%', background: '#fff', transition: 'left .15s',
+      }} />
+    </button>
+  );
+
+  // ── Painel dos fluxos automáticos ──────────────────────────────────────────
+  const LinhaFluxo = ({ id, f }) => {
+    const tpl = todos.find(t => t.name === f.template);
+    const opcoes = todos.filter(t => t.status === 'aprovado' && t.ativo && !t.oculto);
     return (
-      <div style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, padding: 12, background: palette.surface, marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-          <strong style={{ fontSize: fz(13), color: palette.ink }}>{t.name}</strong>
-          <span style={{
-            fontSize: fz(10), fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-            background: t.status === 'aprovado' ? '#e7f5ec' : '#f0ede8',
-            color: t.status === 'aprovado' ? '#2e7d32' : palette.inkMuted,
-          }}>{t.status === 'aprovado' ? 'aprovado na Meta' : t.status}</span>
-          {t.criativo_atualizado_em && (
-            <span style={{ fontSize: fz(10), color: palette.inkMuted }}>
-              criativo de {new Date(t.criativo_atualizado_em).toLocaleDateString('pt-BR')}
-            </span>
-          )}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        padding: '9px 12px', borderBottom: `1px solid ${palette.beige}`,
+      }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: f.ligado ? '#2e7d32' : palette.inkMuted, flexShrink: 0 }} />
+        <div style={{ minWidth: 220, flex: '1 1 220px' }}>
+          <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ink }}>{f.rotulo}</div>
+          {f.obs && <div style={{ fontSize: fz(10), color: palette.inkMuted }}>{f.obs}</div>}
         </div>
+        {f.fixo ? (
+          <span style={{ fontSize: fz(11), color: palette.inkSoft, fontWeight: 600 }}>{f.template}</span>
+        ) : (
+          <>
+            <select value={f.template} disabled={salvando === 'fluxo'}
+              onChange={e => patch({ fluxo_disparo2: { template: e.target.value } }, 'Template do 2º disparo trocado')}
+              style={{
+                fontSize: fz(11), padding: '5px 8px', borderRadius: 6, maxWidth: 250,
+                border: `1px solid ${palette.beige}`, fontFamily: FONT, background: palette.surface, color: palette.ink,
+              }}>
+              {!opcoes.find(o => o.name === f.template) && <option value={f.template}>{f.template}</option>}
+              {opcoes.map(o => <option key={o.name} value={o.name}>{o.name}</option>)}
+            </select>
+            <Chave ligada={f.ligado} ocupado={salvando === 'fluxo'}
+              titulo={f.ligado ? 'Desligar o 2º disparo' : 'Ligar o 2º disparo'}
+              onClick={() => patch({ fluxo_disparo2: { ligado: !f.ligado } }, f.ligado ? '2º disparo desligado' : '2º disparo ligado')} />
+          </>
+        )}
+        {tpl?.criativo_em_uso_url && (
+          <img src={tpl.criativo_em_uso_url} alt="" style={{ width: 30, height: 30, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+        )}
+        {tpl?.ultimo_uso && (
+          <span style={{ fontSize: fz(10), color: palette.inkMuted, whiteSpace: 'nowrap' }}>último envio {dataCurta(tpl.ultimo_uso)}</span>
+        )}
+      </div>
+    );
+  };
 
-        {/* Preview real (como o cliente recebe) */}
-        <div style={{ maxWidth: 340, background: '#e7f8d4', borderRadius: 10, padding: 10, marginBottom: 10 }}>
-          {t.criativo_url && (
-            <img src={t.criativo_url} alt="criativo" style={{ width: '100%', borderRadius: 8, marginBottom: 8, display: 'block' }} />
-          )}
-          <div style={{ fontSize: fz(12), color: '#2c3e50', whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
-            {t.body_text}
+  // ── Card do template (enxuto; preview abre no toque) ───────────────────────
+  const CardTpl = ({ t }) => {
+    const abertoCard = expandido === t.name;
+    const ocupado = salvando === t.name;
+    const emUso = emUsoDe[t.name];
+    const criativo = t.criativo_em_uso_url;
+    const comCriativoTrocavel = ['curadoria', 'novidades', 'dicas_rapidas', 'tendencias'].includes(t.pasta);
+    const confirmar = (acao) => !emUso || window.confirm(`Este template está em uso no fluxo "${emUso}". ${acao} mesmo assim? O fluxo vai falhar até vc escolher outro.`);
+    return (
+      <div style={{ border: `1px solid ${emUso ? '#bfd8c9' : palette.beige}`, borderRadius: 10, background: palette.surface, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: 'pointer' }}
+          onClick={() => setExpandido(abertoCard ? null : t.name)}>
+          {criativo
+            ? <img src={criativo} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8, flexShrink: 0 }} />
+            : <div style={{ width: 40, height: 40, borderRadius: 8, background: palette.bg, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: fz(14) }}>💬</div>}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+              <StatusChip t={t} />
+              {emUso && <span style={{ fontSize: fz(10), fontWeight: 700, color: '#2e7d32' }}>em uso: {emUso}</span>}
+              <span style={{ fontSize: fz(10), color: palette.inkMuted }}>
+                {t.ultimo_uso ? `último envio ${dataCurta(t.ultimo_uso)}` : 'nunca enviado'}
+              </span>
+            </div>
           </div>
-          {Array.isArray(t.botoes) && t.botoes.length > 0 && (
-            <div style={{ marginTop: 8, borderTop: '1px solid #cfe3b8', paddingTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {t.botoes.map((b, i) => (
-                <div key={i} style={{ textAlign: 'center', fontSize: fz(12), fontWeight: 700, color: '#1a73a8' }}>
-                  {typeof b === 'string' ? b : (b.text || b.url || '')}
+          <span style={{ color: palette.inkMuted, fontSize: fz(12) }}>{abertoCard ? '▾' : '▸'}</span>
+        </div>
+
+        {abertoCard && (
+          <div style={{ padding: '0 12px 12px', borderTop: `1px solid ${palette.beige}` }}>
+            {/* Preview real (como o cliente recebe) — criativo QUE SAI no envio */}
+            <div style={{ maxWidth: 360, background: '#e7f8d4', borderRadius: 10, padding: 10, margin: '10px 0' }}>
+              {criativo && <img src={criativo} alt="criativo em uso" style={{ width: '100%', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
+              <div style={{ fontSize: fz(12), color: '#2c3e50', whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>{t.body_text}</div>
+              {Array.isArray(t.botoes) && t.botoes.length > 0 && (
+                <div style={{ marginTop: 8, borderTop: '1px solid #cfe3b8', paddingTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {t.botoes.map((b, i) => (
+                    <div key={i} style={{ textAlign: 'center', fontSize: fz(12), fontWeight: 700, color: '#1a73a8' }}>
+                      {typeof b === 'string' ? b : (b.text || b.url || '')}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
+            {t.header?.sample_ref && (
+              <div style={{ fontSize: fz(10), color: palette.inkMuted, marginBottom: 8 }}>
+                criativo vem da mídia ref <strong>{t.header.sample_ref}</strong>{criativo ? '' : ' — MÍDIA NÃO ENCONTRADA (o envio cai sem foto ou falha)'}
+              </div>
+            )}
 
-        {/* Por que existe */}
-        <div style={{ fontSize: fz(11), marginBottom: 6 }}>
-          <strong style={{ color: palette.inkSoft }}>Por quê:</strong>{' '}
-          {porqueEdit === null ? (
-            <>
+            <div style={{ fontSize: fz(11), marginBottom: 4 }}>
+              <strong style={{ color: palette.inkSoft }}>Por quê:</strong>{' '}
               <span style={{ color: palette.ink }}>{t.porque || '(sem explicação)'}</span>
-              <button onClick={() => setPorqueEdit(t.porque || '')} style={{ marginLeft: 6, fontSize: fz(10), border: 'none', background: 'none', color: palette.accent, cursor: 'pointer', fontWeight: 700 }}>editar</button>
-            </>
-          ) : (
-            <div style={{ marginTop: 4 }}>
-              <textarea value={porqueEdit} onChange={e => setPorqueEdit(e.target.value)} rows={2}
-                style={{ width: '100%', fontSize: fz(11), fontFamily: FONT, borderRadius: 6, border: `1px solid ${palette.beige}`, padding: 6, boxSizing: 'border-box' }} />
-              <button disabled={ocupado} onClick={async () => { await salvarDoc(t.name, 'porque', porqueEdit); setPorqueEdit(null); }}
-                style={{ fontSize: fz(11), padding: '3px 10px', borderRadius: 6, border: 'none', background: palette.accent, color: '#fff', cursor: 'pointer', fontWeight: 700, marginRight: 6 }}>salvar</button>
-              <button onClick={() => setPorqueEdit(null)} style={{ fontSize: fz(11), padding: '3px 10px', borderRadius: 6, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer' }}>cancelar</button>
             </div>
-          )}
-        </div>
-
-        {/* Fluxo de uso */}
-        <div style={{ fontSize: fz(11), marginBottom: comCriativo ? 8 : 0 }}>
-          <strong style={{ color: palette.inkSoft }}>Fluxo:</strong>{' '}
-          {fluxoEdit === null ? (
-            <>
+            <div style={{ fontSize: fz(11), marginBottom: 10 }}>
+              <strong style={{ color: palette.inkSoft }}>Fluxo:</strong>{' '}
               <span style={{ color: palette.ink }}>{t.fluxo || '(sem fluxo definido)'}</span>
-              <button onClick={() => setFluxoEdit(t.fluxo || '')} style={{ marginLeft: 6, fontSize: fz(10), border: 'none', background: 'none', color: palette.accent, cursor: 'pointer', fontWeight: 700 }}>editar</button>
-            </>
-          ) : (
-            <div style={{ marginTop: 4 }}>
-              <textarea value={fluxoEdit} onChange={e => setFluxoEdit(e.target.value)} rows={2}
-                style={{ width: '100%', fontSize: fz(11), fontFamily: FONT, borderRadius: 6, border: `1px solid ${palette.beige}`, padding: 6, boxSizing: 'border-box' }} />
-              <button disabled={ocupado} onClick={async () => { await salvarDoc(t.name, 'fluxo', fluxoEdit); setFluxoEdit(null); }}
-                style={{ fontSize: fz(11), padding: '3px 10px', borderRadius: 6, border: 'none', background: palette.accent, color: '#fff', cursor: 'pointer', fontWeight: 700, marginRight: 6 }}>salvar</button>
-              <button onClick={() => setFluxoEdit(null)} style={{ fontSize: fz(11), padding: '3px 10px', borderRadius: 6, border: `1px solid ${palette.beige}`, background: palette.surface, color: palette.inkMuted, cursor: 'pointer' }}>cancelar</button>
             </div>
-          )}
-        </div>
 
-        {/* Upload/troca de criativo (só nas subpastas de conteúdo) */}
-        {comCriativo && (
-          <label style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: fz(11),
-            fontWeight: 700, color: ocupado ? palette.inkMuted : palette.accent,
-            cursor: ocupado ? 'wait' : 'pointer',
-          }}>
-            <Upload size={sz(13)} />
-            {ocupado ? 'Enviando…' : (t.criativo_url ? 'Trocar criativo' : 'Subir criativo')}
-            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={ocupado}
-              onChange={e => { subirCriativo(t.name, e.target.files?.[0]); e.target.value = ''; }}
-              style={{ display: 'none' }} />
-          </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: fz(11), fontWeight: 700, color: palette.inkSoft }}>
+                <Chave ligada={t.ativo} ocupado={ocupado}
+                  titulo={t.ativo ? 'Desativar (some dos seletores de disparo)' : 'Ativar'}
+                  onClick={() => { if (t.ativo && !confirmar('Desativar')) return; patch({ name: t.name, ativo: !t.ativo }, t.ativo ? 'Template desativado' : 'Template ativado'); }} />
+                {t.ativo ? 'ativo' : 'desativado'}
+              </label>
+              {comCriativoTrocavel && (
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: fz(11), fontWeight: 700, color: ocupado ? palette.inkMuted : palette.accent, cursor: ocupado ? 'wait' : 'pointer' }}>
+                  <Upload size={sz(13)} />
+                  {ocupado ? 'Enviando…' : (t.criativo_url ? 'Trocar criativo' : 'Subir criativo')}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" disabled={ocupado}
+                    onChange={e => { subirCriativo(t.name, e.target.files?.[0]); e.target.value = ''; }}
+                    style={{ display: 'none' }} />
+                </label>
+              )}
+              <button disabled={ocupado}
+                onClick={() => { if (!confirmar('Ocultar')) return; patch({ name: t.name, oculto: true }, 'Template oculto'); setExpandido(null); }}
+                style={{ fontSize: fz(11), fontWeight: 700, border: 'none', background: 'none', color: palette.inkMuted, cursor: 'pointer' }}>
+                🙈 ocultar
+              </button>
+            </div>
+          </div>
         )}
       </div>
     );
@@ -8165,40 +8230,77 @@ function TemplatesCatalogo() {
       }}>
         📁 Templates {aberto ? '▾' : '▸'}
         <span style={{ fontSize: fz(10), fontWeight: 600, color: palette.inkMuted }}>
-          curadoria · novidades · dicas · ativos
+          fluxos automáticos · catálogo · ocultos
         </span>
       </button>
       {aberto && (
-        <div style={{ padding: '0 14px 12px' }}>
+        <div style={{ padding: '0 14px 14px' }}>
           {msg && (
             <div style={{ padding: '6px 10px', marginBottom: 8, borderRadius: 6, fontSize: fz(12), background: msg.tipo === 'erro' ? palette.alertSoft : '#e7f5ec', color: msg.tipo === 'erro' ? palette.alert : '#2e7d32' }}>{msg.txt}</div>
           )}
-          {!pastas ? (
+          {!dados ? (
             <div style={{ padding: 12, color: palette.inkMuted, fontSize: fz(12) }}>Carregando…</div>
-          ) : SUBS.map(([id, titulo, sub]) => {
-            const lista = pastas[id] || [];
-            const abertaSub = subAberta === id;
-            return (
-              <div key={id} style={{ marginBottom: 6 }}>
-                <button onClick={() => setSubAberta(abertaSub ? null : id)} style={{
-                  width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8,
-                  border: `1px solid ${palette.beige}`, background: palette.surface,
-                  fontFamily: FONT, fontSize: fz(12), fontWeight: 700, color: palette.ink,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                }}>
-                  {titulo} {abertaSub ? '▾' : '▸'}
-                  <span style={{ fontSize: fz(10), fontWeight: 500, color: palette.inkMuted }}>{sub} · {lista.length}</span>
-                </button>
-                {abertaSub && (
-                  <div style={{ padding: '8px 4px 0' }}>
-                    {lista.length === 0
-                      ? <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: '4px 8px' }}>Nenhum template aqui ainda.</div>
-                      : lista.map(t => <CardTpl key={t.name} t={t} comCriativo={id !== 'ativos'} />)}
-                  </div>
-                )}
+          ) : (
+            <>
+              {/* Fluxos automáticos */}
+              <div style={{ border: `1px solid ${palette.beige}`, borderRadius: 10, background: palette.surface, marginBottom: 12 }}>
+                <div style={{ padding: '9px 12px', fontSize: fz(12), fontWeight: 800, color: palette.ink, borderBottom: `1px solid ${palette.beige}` }}>
+                  Fluxos automáticos — o que está sendo enviado
+                </div>
+                {Object.entries(fluxos).map(([id, f]) => <LinhaFluxo key={id} id={id} f={f} />)}
               </div>
-            );
-          })}
+
+              {/* Filtros */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {FILTROS.map(([id, rot]) => (
+                  <button key={id} onClick={() => setFiltro(id)} style={{
+                    fontSize: fz(11), fontWeight: 700, padding: '5px 12px', borderRadius: 14,
+                    border: `1px solid ${filtro === id ? palette.accent : palette.beige}`,
+                    background: filtro === id ? palette.accent : palette.surface,
+                    color: filtro === id ? '#fff' : palette.inkSoft, cursor: 'pointer', fontFamily: FONT,
+                  }}>{rot}</button>
+                ))}
+              </div>
+
+              {/* Grid largo */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 10 }}>
+                {visiveis.length === 0
+                  ? <div style={{ fontSize: fz(11), color: palette.inkMuted, padding: 8 }}>Nenhum template neste filtro.</div>
+                  : visiveis.map(t => <CardTpl key={t.name} t={t} />)}
+              </div>
+
+              {/* Ocultos */}
+              {ocultos.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <button onClick={() => setMostrarOcultos(o => !o)} style={{
+                    fontSize: fz(11), fontWeight: 700, border: 'none', background: 'none',
+                    color: palette.inkMuted, cursor: 'pointer', fontFamily: FONT, padding: 0,
+                  }}>
+                    🙈 Ocultos ({ocultos.length}) {mostrarOcultos ? '▾' : '▸'}
+                  </button>
+                  {mostrarOcultos && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 10, marginTop: 8, opacity: .75 }}>
+                      {ocultos.map(t => (
+                        <div key={t.name} style={{ border: `1px dashed ${palette.beige}`, borderRadius: 10, background: palette.surface, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: fz(12), fontWeight: 700, color: palette.inkSoft, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                              <StatusChip t={t} />
+                              <span style={{ fontSize: fz(10), color: palette.inkMuted }}>{t.ultimo_uso ? `último envio ${dataCurta(t.ultimo_uso)}` : 'nunca enviado'}</span>
+                            </div>
+                          </div>
+                          <button disabled={salvando === t.name} onClick={() => patch({ name: t.name, oculto: false }, 'Template visível de novo')}
+                            style={{ fontSize: fz(11), fontWeight: 700, border: `1px solid ${palette.beige}`, borderRadius: 6, background: palette.surface, color: palette.accent, cursor: 'pointer', padding: '4px 10px', fontFamily: FONT }}>
+                            mostrar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
