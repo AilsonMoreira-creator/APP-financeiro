@@ -432,6 +432,11 @@ export default async function handler(req, res) {
               passos.download_status = dR.status;
               const db = new Uint8Array(await dR.arrayBuffer());
               passos.bytes = db.length; passos.magic_pdf = db[0] === 0x25;
+              let posPdf = -1;
+              for (let i3 = 0; i3 < Math.min(db.length - 3, 2048); i3++) {
+                if (db[i3] === 0x25 && db[i3 + 1] === 0x50 && db[i3 + 2] === 0x44 && db[i3 + 3] === 0x46) { posPdf = i3; break; }
+              }
+              passos.pdf_comeca_no_byte = posPdf;
             }
           }
         } catch (e2) { passos.erro = e2.message; }
@@ -483,8 +488,14 @@ export default async function handler(req, res) {
           const dR = await fetch(link);
           if (!dR.ok) return null;
           const db = new Uint8Array(await dR.arrayBuffer());
-          if (db[0] !== 0x25) return null;   // não veio PDF
-          d64 = Buffer.from(db).toString('base64');
+          // 19/08: a DANFE do Bling vem com bytes ANTES do cabeçalho %PDF — a
+          // checagem no byte zero rejeitava todas. Procura o cabeçalho no começo.
+          let iniPdf = -1;
+          for (let i2 = 0; i2 < Math.min(db.length - 3, 2048); i2++) {
+            if (db[i2] === 0x25 && db[i2 + 1] === 0x50 && db[i2 + 2] === 0x44 && db[i2 + 3] === 0x46) { iniPdf = i2; break; }
+          }
+          if (iniPdf < 0) return null;   // não veio PDF de verdade
+          d64 = Buffer.from(iniPdf ? db.slice(iniPdf) : db).toString('base64');
           await supabase.from('wms_documentos').upsert({
             pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'PDF',
             conteudo: d64, bytes: d64.length, hash: hashDoc(d64), origem: 'bling', erro: null,
