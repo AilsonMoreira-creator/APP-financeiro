@@ -14,6 +14,29 @@ import { Printer, RefreshCw } from 'lucide-react';
 import qzTray from 'qz-tray';
 import { palette, FONT } from './Lojas_Shared.jsx';
 
+const QZ_CERT = `-----BEGIN CERTIFICATE-----
+MIIDtzCCAp+gAwIBAgIUR/CWjsg2m/FmkjQCJr0FViyCaSowDQYJKoZIhvcNAQEL
+BQAwazELMAkGA1UEBhMCQlIxCzAJBgNVBAgMAlNQMRIwEAYDVQQHDAlTYW8gUGF1
+bG8xFTATBgNVBAoMDEdydXBvIEFtaWNpYTEkMCIGA1UEAwwbQVBQIEZpbmFuY2Vp
+cm8gR3J1cG8gQW1pY2lhMB4XDTI2MDgxOTExMjQwMFoXDTM2MDgxNjExMjQwMFow
+azELMAkGA1UEBhMCQlIxCzAJBgNVBAgMAlNQMRIwEAYDVQQHDAlTYW8gUGF1bG8x
+FTATBgNVBAoMDEdydXBvIEFtaWNpYTEkMCIGA1UEAwwbQVBQIEZpbmFuY2Vpcm8g
+R3J1cG8gQW1pY2lhMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA42DV
+IBm2q1f3vHfo5ysLmWqxlhKvfLlGiDZMHyEYGWDRyaDP3r/ZAfuSJPQhZMG1mfne
+69Sv5y2LWs0TCMF63k9S8Er5lCLcqSKarYyfTUnvxXSMCm2dEziMuJFgfsGmfdW2
+heI5WMQCPXNU2sibSX4mXXETJk66fzxSX163oV525XZgA5GzWlSbgBLUq0xyGmaI
+r2FIksu5sZ2Wrdk5caIT0TQnsKZTKtj8L7Jh7rv4jjkSZXhbBqemsIR9/1lEpOV3
+6MkPHHGbrVXIXa4+3WAt7OX91jBqoI+6X7dV2swoL0RBYhVr0eVlEVF4HGFBhhVJ
+dYgSzu4WOYLPBLBV/QIDAQABo1MwUTAdBgNVHQ4EFgQUmw7s/jYdJ5+S/JQ9xuu/
+8WU2H+gwHwYDVR0jBBgwFoAUmw7s/jYdJ5+S/JQ9xuu/8WU2H+gwDwYDVR0TAQH/
+BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAg+FxgrjdJQZSYNb9gqCLXm1dcF1F
+MPyjafhvSGms4ZNvQeANSTFqxwN27kmrivPIkjbNwuhxOZjiEjGVMSU42YM0eLVo
+LHjV75H7UsFBa3R93LeeV9GgeWxgy+M9RKBYDSigRfc9oRQpk8SV1pHYIE3/z7c2
+MF6IZjcw0J+G5ti7W+frRcfqZ/dfHhopbDNnXgPOakARkEOMTcSxOczB5p65nSYW
+zh3mLwIIqB7dRe2RCm1Lr3Vqqugs/0e1gSTwt6wZWgMGrl3PD8H5eGLsqzFItg4v
+fLPE8QepakxMu9EEprDLysaVQbS0hlvBIza2fPjC7pT+8CAjfM8XWGn0oA==
+-----END CERTIFICATE-----`;
+
 const CONTAS = ['exitus', 'lumia', 'muniam'];
 const NOME_CONTA = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const LOJAS = ['Mercado Livre', 'Shein', 'Shopee', 'TikTok', 'Magalu'];
@@ -115,7 +138,9 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const carregarQz = async () => {
     if (!qzTray.__amiciaAssinado) {
       qzTray.security.setCertificatePromise((resolve, reject) => {
-        fetch('/qz-cert.crt').then(r => r.ok ? r.text().then(resolve) : reject('certificado ausente')).catch(reject);
+        // 19/08: cert EMBUTIDO — o fetch podia cair no service worker e voltar
+        // o HTML do app (identidade inválida => QZ pedia permissão a cada folha)
+        resolve(QZ_CERT);
       });
       qzTray.security.setSignatureAlgorithm('SHA512');
       qzTray.security.setSignaturePromise((toSign) => (resolve, reject) => {
@@ -187,8 +212,8 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     setImprimindo('Testando o QZ Tray…');
     // 19/08: confere também o certificado e a assinatura — sem eles o QZ trata
     // o app como "anonymous" e pede permissão a CADA impressão
-    let certOk = false, signOk = false;
-    try { certOk = (await fetch('/qz-cert.crt')).ok; } catch { /* segue */ }
+    let signOk = false;
+    const certOk = QZ_CERT.includes('BEGIN CERTIFICATE');
     try {
       const rs = await fetch('/api/qz-sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toSign: 'teste' }) });
       signOk = (await rs.json())?.ok === true;

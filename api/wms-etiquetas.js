@@ -415,6 +415,29 @@ export default async function handler(req, res) {
       const sitDe = {};
       for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
 
+      // 19/08 DIAGNÓSTICO: ?zpl=1&debug_casada=1 mede a geometria do primeiro
+      // PDF de etiqueta guardado (ML) e testa o corte — nada é impresso/puxado.
+      if (q.debug_casada) {
+        const { data: docs } = await supabase.from('wms_documentos')
+          .select('pedido_id, conteudo').eq('tipo', 'ETIQUETA').eq('formato', 'PDF')
+          .order('criado_em', { ascending: false }).limit(3);
+        const saida = [];
+        for (const d of (docs || [])) {
+          const info = { pedido: d.pedido_id };
+          try {
+            const doc0 = await PDFDocument.load(Buffer.from(d.conteudo, 'base64'));
+            const pg0 = doc0.getPage(0);
+            const { width, height } = pg0.getSize();
+            info.width = Math.round(width); info.height = Math.round(height);
+            info.rotation = pg0.getRotation().angle; info.paginas = doc0.getPageCount();
+            const c = await dividirCasada(d.conteudo);
+            info.cortou = !!c;
+          } catch (e2) { info.erro = e2.message; }
+          saida.push(info);
+        }
+        return res.status(200).json({ debug_casada: saida });
+      }
+
       // 19/08 DIAGNÓSTICO: ?zpl=1&debug_danfe=1 roda o caminho da DANFE no
       // primeiro candidato com nf_id e devolve cada passo — NUNCA puxa etiqueta.
       if (q.debug_danfe) {

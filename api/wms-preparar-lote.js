@@ -177,13 +177,23 @@ export default async function handler(req, res) {
       .order('data_pedido', { ascending: true }).limit(600);
     const { data: candidatos } = await sel;
 
-    // já guardados não repetem (idempotência)
+    // já guardados não repetem (idempotência) — EXCETO quem tem etiqueta ZPL
+    // sem DANFE guardada (19/08): o preparo antigo jogava fora a DANFE que
+    // vinha no zip da Shopee; esses voltam pra fila pra re-baixar o zip.
     const ids = (candidatos || []).map(p => p.pedido_id);
     const guardados = new Set();
+    const temDanfe = new Set();
+    const formatoDe = {};
     for (let i = 0; i < ids.length; i += 300) {
       const { data } = await supabase.from('wms_documentos')
-        .select('pedido_id').eq('tipo', 'ETIQUETA').in('pedido_id', ids.slice(i, i + 300));
-      (data || []).forEach(d => guardados.add(String(d.pedido_id)));
+        .select('pedido_id, tipo, formato').in('pedido_id', ids.slice(i, i + 300));
+      (data || []).forEach(d => {
+        if (d.tipo === 'ETIQUETA') { guardados.add(String(d.pedido_id)); formatoDe[String(d.pedido_id)] = d.formato; }
+        if (d.tipo === 'DANFE') temDanfe.add(String(d.pedido_id));
+      });
+    }
+    for (const k of [...guardados]) {
+      if (formatoDe[k] === 'ZPL' && !temDanfe.has(k)) guardados.delete(k);   // re-prepara
     }
 
     const fila = [];
