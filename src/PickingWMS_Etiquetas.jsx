@@ -110,7 +110,26 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
 
   // 18/08: a lib do QZ agora vem NO BUNDLE (import) — antes carregava de CDN
   // no clique e, se o CDN falhasse na máquina, caía pro PDF sem explicar.
-  const carregarQz = () => Promise.resolve(qzTray);
+  // 19/08: conexão ASSINADA com o certificado do Grupo Amícia — sem isso o QZ
+  // trata como "anonymous request" e o Allow não fica salvo entre reinícios.
+  const carregarQz = async () => {
+    if (!qzTray.__amiciaAssinado) {
+      qzTray.security.setCertificatePromise((resolve, reject) => {
+        fetch('/qz-cert.crt').then(r => r.ok ? r.text().then(resolve) : reject('certificado ausente')).catch(reject);
+      });
+      qzTray.security.setSignatureAlgorithm('SHA512');
+      qzTray.security.setSignaturePromise((toSign) => (resolve, reject) => {
+        fetch('/api/qz-sign', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ toSign }),
+        }).then(r => r.json())
+          .then(j => j.ok ? resolve(j.assinatura) : reject(j.erro || 'assinatura falhou'))
+          .catch(reject);
+      });
+      qzTray.__amiciaAssinado = true;
+    }
+    return qzTray;
+  };
 
   // Conecta no QZ Tray com paciência: a lib às vezes precisa de 2 tentativas
   // (o app local demora a subir o websocket). Se não conectar, quem chama cai
