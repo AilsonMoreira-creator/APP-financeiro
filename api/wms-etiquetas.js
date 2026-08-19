@@ -346,9 +346,16 @@ export default async function handler(req, res) {
       const podeSair = (p) => q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
         || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5));
       const candidatos = peds.filter(podeSair);
+      // 19/08: LOTES. Com os pares (DANFE+etiqueta) 130 pedidos numa resposta
+      // estouravam o tempo e o teto de 4,5MB do Vercel ("An error occurred").
+      // O front chama em rodadas até `restantes` zerar.
+      const comDanfeLote = String(q.tipo || 'nf_transporte') === 'nf_transporte';
+      const tamLote = Math.max(1, Math.min(parseInt(q.lote, 10) || (comDanfeLote ? 15 : 60), 120));
+      const restantes = Math.max(0, candidatos.length - tamLote);
+      const candidatosLote = candidatos.slice(0, tamLote);
       // busca no Bling SÓ o que ainda não está guardado — e o token só das
       // contas que têm algo faltando (18/08: com tudo preparado, zero refresh)
-      const faltando = candidatos.filter(p => !guardados[String(p.pedido_id)]);
+      const faltando = candidatosLote.filter(p => !guardados[String(p.pedido_id)]);
       for (const c of new Set(faltando.map(p => p.conta))) tk[c] = await refreshBlingToken(c).catch(() => null);
       const links = faltando.length ? await linksEtiqueta(faltando, tk, 'impressao') : {};
 
@@ -356,10 +363,10 @@ export default async function handler(req, res) {
       // etiqueta dele. Só no NF + transporte (Flex/Meluni não têm nota e a
       // liberada é só etiqueta). A DANFE é nossa: baixar não mexe em
       // marketplace, então fica guardada em wms_documentos pra sair na hora.
-      const comDanfe = String(q.tipo || 'nf_transporte') === 'nf_transporte';
+      const comDanfe = comDanfeLote;
       const danfeGuardada = {};
       if (comDanfe) {
-        const idsD = candidatos.map(p => p.pedido_id);
+        const idsD = candidatosLote.map(p => p.pedido_id);
         for (let i = 0; i < idsD.length; i += 300) {
           const { data } = await supabase.from('wms_documentos')
             .select('pedido_id, conteudo').eq('tipo', 'DANFE').is('erro', null)
@@ -391,7 +398,7 @@ export default async function handler(req, res) {
         } catch { return null; }
         finally { await new Promise(r2 => setTimeout(r2, 340)); }
       };
-      const alvo = candidatos.filter(p => guardados[String(p.pedido_id)] || links[String(p.pedido_id)]);
+      const alvo = candidatosLote.filter(p => guardados[String(p.pedido_id)] || links[String(p.pedido_id)]);
 
       const blocos = []; const idsOk = []; const emPdf = []; const semDanfe = []; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
@@ -457,7 +464,7 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
       if (!idsOk.length && (q.tipo === 'flex' || candidatos.some(p => p.ml_logistic_type === 'self_service'))) {
         return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['flex'], so_pdf: true });
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe, restantes });
     }
 
     // ── marcar como impressas depois que a térmica confirmou

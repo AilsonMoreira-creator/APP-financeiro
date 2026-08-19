@@ -202,16 +202,6 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     if (!window.confirm(`Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`)) return;
     try {
       setImprimindo('Preparando as etiquetas…');
-      const r = await fetch(`${API}/wms-etiquetas?${qs({ zpl: '1' })}`);
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.erro || `HTTP ${r.status}`);
-      if (j.so_pdf) {   // NF agendada: é nota, sai em PDF
-        setImprimindo('Abrindo as notas em PDF…');
-        abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
-        setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
-        return;
-      }
-      if (!j.total) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
 
       setImprimindo('Conectando na impressora…');
       const { qz, motivo } = await conectarQz();
@@ -226,41 +216,67 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       const impressora = await escolherImpressora(qz);
       if (!impressora) throw new Error('Nenhuma impressora encontrada pelo QZ Tray. Confira se ela aparece em Dispositivos e Impressoras do Windows.');
       const config = qz.configs.create(impressora);
-
-      setImprimindo(`Imprimindo ${j.total} etiqueta(s) em ${impressora}…`);
-      // 18/08: sai em PARES na ordem do servidor (DANFE do pedido e logo a
-      // etiqueta dele). ZPL vai raw e PDF vai pixel a 203dpi; trechos
-      // consecutivos do mesmo formato viajam juntos pra não picar o trabalho.
       const cfgPdf = qz.configs.create(impressora, {
         size: { width: 4, height: 6 }, units: 'in', scaleContent: true,
         rasterize: true, density: 203, interpolation: 'nearest-neighbor', margins: 0,
       });
-      const trechos = [];
-      for (const b of j.blocos) {
-        const modo = b.pdf ? 'pixel' : (b.zpl ? 'raw' : null);
-        if (!modo) continue;
-        const ult = trechos[trechos.length - 1];
-        if (ult && ult.modo === modo) ult.itens.push(b);
-        else trechos.push({ modo, itens: [b] });
-      }
-      for (const t of trechos) {
-        if (t.modo === 'raw') {
-          await qz.print(config, t.itens.map(b => ({ type: 'raw', format: 'plain', data: b.zpl })));
-        } else {
-          await qz.print(cfgPdf, t.itens.map(b => ({ type: 'pixel', format: 'pdf', flavor: 'base64', data: b.pdf })));
+
+      // 19/08: RODADAS. Com os pares, um lote grande estourava o tempo e o
+      // teto de resposta do Vercel — agora o servidor manda ~15 pares por vez
+      // e a gente repete até a fila zerar. Cada rodada já marca as suas, então
+      // se cair no meio o que saiu não sai de novo.
+      let totalGeral = 0; let semDanfeTotal = []; let rodadas = 0;
+      while (rodadas < 40) {
+        rodadas++;
+        const rL = await fetch(`${API}/wms-etiquetas?${qs({ zpl: '1' })}`);
+        const bruto = await rL.text();
+        let jL;
+        try { jL = JSON.parse(bruto); }
+        catch { throw new Error(`Servidor respondeu fora do padrão (${bruto.slice(0, 60)}). Tenta de novo em 1 min.`); }
+        if (!rL.ok) throw new Error(jL.erro || `HTTP ${rL.status}`);
+        if (jL.so_pdf) {   // NF agendada: é nota, sai em PDF
+          setImprimindo('Abrindo as notas em PDF…');
+          abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
+          setTimeout(() => { setImprimindo(''); carregar(); }, 6000);
+          return;
         }
-      }
-      if (j.sem_danfe?.length) {
-        setImprimindo(`⚠ Sem DANFE nos pedidos: ${j.sem_danfe.join(', ')} (etiqueta saiu, nota não)`);
+        if (!jL.total && !totalGeral) throw new Error('Nenhuma etiqueta pronta nesses filtros.');
+        if (!jL.total) break;
+
+        // pares na ordem do servidor: ZPL raw, PDF pixel 203dpi; trechos
+        // consecutivos do mesmo formato viajam juntos
+        const trechos = [];
+        for (const b of jL.blocos) {
+          const modo = b.pdf ? 'pixel' : (b.zpl ? 'raw' : null);
+          if (!modo) continue;
+          const ult = trechos[trechos.length - 1];
+          if (ult && ult.modo === modo) ult.itens.push(b);
+          else trechos.push({ modo, itens: [b] });
+        }
+        for (const t of trechos) {
+          if (t.modo === 'raw') {
+            await qz.print(config, t.itens.map(b => ({ type: 'raw', format: 'plain', data: b.zpl })));
+          } else {
+            await qz.print(cfgPdf, t.itens.map(b => ({ type: 'pixel', format: 'pdf', flavor: 'base64', data: b.pdf })));
+          }
+        }
+        // só marca como impressa depois que a térmica aceitou o trabalho
+        for (let i = 0; i < jL.ids.length; i += 30) {
+          await fetch(`${API}/wms-etiquetas?marcar=1&ids=${jL.ids.slice(i, i + 30).join(',')}`);
+        }
+        totalGeral += jL.total;
+        semDanfeTotal = semDanfeTotal.concat(jL.sem_danfe || []);
+        if (!jL.restantes) break;
+        setImprimindo(`Imprimindo em ${impressora}… ${totalGeral} enviadas, faltam ${jL.restantes}`);
       }
 
-      // só marca como impressa depois que a térmica aceitou o trabalho
-      for (let i = 0; i < j.ids.length; i += 30) {
-        await fetch(`${API}/wms-etiquetas?marcar=1&ids=${j.ids.slice(i, i + 30).join(',')}`);
+      if (semDanfeTotal.length) {
+        setImprimindo(`✅ ${totalGeral} enviadas. ⚠ Sem DANFE: ${semDanfeTotal.join(', ')} (etiqueta saiu, nota não)`);
+      } else {
+        setImprimindo(`✅ ${totalGeral} etiqueta(s) enviadas para ${impressora}`);
       }
-      if (!j.sem_danfe?.length) setImprimindo(`✅ ${j.total} etiqueta(s) enviadas para ${impressora}`);
       carregar();
-      setTimeout(() => setImprimindo(''), 8000);
+      setTimeout(() => setImprimindo(''), 10000);
     } catch (e) {
       const problemaQz = /qz|websocket|connection/i.test(String(e?.message || ''));
       if (problemaQz) {
