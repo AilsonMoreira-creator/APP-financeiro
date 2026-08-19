@@ -49,7 +49,9 @@ async function pedidosFiltrados(q) {
   // "Emitida DANFE" (6) = já saiu, inclusive se a Sthefany imprimiu no painel.
   // Por isso buscamos: (1) quem já tem NF (últimos 7 dias, qualquer status) e
   // (2) quem ainda está no funil sem NF (aparece como "aguardando").
-  const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
+  // 19/08: 20 dias — o agendado do ML pode ser compra de ate 20 dias atras;
+  // com 7 dias a liberada do dia sumia da tela e do contador.
+  const desde7 = new Date(Date.now() - 20 * 86400000).toISOString();
   const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo';
 
   let q1 = supabase.from('wms_pedidos').select(COLS)
@@ -218,7 +220,7 @@ export default async function handler(req, res) {
       let sel = supabase.from('wms_pedidos')
         .select('conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_situacao, etiqueta_impressa_em, status_wms')
         .neq('status_wms', 'cancelado')
-        .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
+        .gte('criado_em', new Date(Date.now() - 20 * 86400000).toISOString())
         .limit(3000);
       if (contasFiltro !== 'todas') sel = sel.in('conta', contasFiltro.split(','));
       const { data } = await sel;

@@ -58,12 +58,17 @@ export default async function handler(req, res) {
           const agendado = buffering ? String(buffering).slice(0, 10) : null;
           const liberado = s?.status === 'ready_to_ship' || s?.substatus === 'ready_to_print';
 
-          await supabase.from('wms_pedidos').update({
-            ml_agendado_em: agendado,
+          // 19/08: no DIA da liberação o ML tira o buffering do shipment — se
+          // gravar null por cima, o pedido perde o agendamento na hora exata
+          // em que vira "liberada do dia" e some do contador. Data conhecida
+          // fica; só atualiza quando o ML manda uma data.
+          const upd = {
             ml_ship_status: s?.status || null,
             ml_ship_substatus: s?.substatus || null,
             ml_ship_checado_em: new Date().toISOString(),
-          }).eq('pedido_id', p.pedido_id);
+          };
+          if (agendado) upd.ml_agendado_em = agendado;
+          await supabase.from('wms_pedidos').update(upd).eq('pedido_id', p.pedido_id);
 
           if (agendado) { r.agendados++; resumo.agendados++; }
           if (liberado) { r.liberados++; resumo.liberados++; }
