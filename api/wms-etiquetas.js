@@ -103,10 +103,13 @@ async function pedidosFiltrados(q) {
     // 18/08 (regra dele): "liberada" é o AGENDADO cujo dia chegou — pedido
     // normal em ready_to_print pertence ao NF + transporte, não aqui
     const agendadoChegou = p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hojeBRT;
+    // 19/08: SEM excluir finalizado — no agendado a NF sai dias antes, o
+    // pedido vira atendido no Bling (finalizado) e a etiqueta só libera no
+    // dia. Quem diz se saiu e o ML: ready_to_print = falta imprimir.
     const etiquetaLiberada = agendadoChegou
       && p.ml_ship_status === 'ready_to_ship'
       && p.ml_ship_substatus === 'ready_to_print'
-      && !p.etiqueta_impressa_em && p.status_wms !== 'finalizado';
+      && !p.etiqueta_impressa_em;
     if (tipo === 'nf_agendada') {
       if (!(agendadoFuturo || p.ml_ship_substatus === 'buffered')) continue;
       // 17/08 (ordem dele): a nota do agendado sai UMA vez — some da lista
@@ -242,11 +245,12 @@ export default async function handler(req, res) {
         // 18/08 (regra dele): e tem que ser pedido AGENDADO cujo dia chegou —
         // pedido normal em ready_to_print é do NF + transporte, contava em dobro.
         const agendadoChegou = p.ml_agendado_em && String(p.ml_agendado_em).slice(0, 10) <= hoje;
+        // 19/08: finalizado NAO exclui — a NF antecipada finaliza o pedido no
+        // Bling dias antes da etiqueta liberar; ready_to_print = falta imprimir
         if (agendadoChegou
           && p.ml_ship_status === 'ready_to_ship'
           && p.ml_ship_substatus === 'ready_to_print'
-          && !p.etiqueta_impressa_em
-          && p.status_wms !== 'finalizado') c.etiqueta_liberada++;
+          && !p.etiqueta_impressa_em) c.etiqueta_liberada++;
         if (p.print_estado !== 'PRONTO') continue;
         if (p.print_regra === 'MELI_FLEX') c.flex++;
         else if (p.print_regra === 'MELUNI') c.meluni++;
