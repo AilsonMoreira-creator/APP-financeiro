@@ -122,15 +122,36 @@ export async function uploadMidiaSofiaComoMediaId(midia) {
  */
 export async function enviarMidiaSofia({ telefone, midia, caption, conversaId, mensagemId, decididaPor }) {
   try {
-    // 1. Baixa do Supabase
-    const { data: blob, error: errDl } = await supabase.storage
-      .from('sofia-midias')
-      .download(midia.storage_path);
-    if (errDl) throw new Error('storage download: ' + errDl.message);
-    const buf = Buffer.from(await blob.arrayBuffer());
+    // 19/08: media_id CACHEADO — o catálogo novo (6,8MB) baixado do storage e
+    // subido pra Meta A CADA mensagem estourava o tempo da função e 9 de cada
+    // 10 envios morriam antes da Meta responder. Agora sobe UMA vez e reusa
+    // por até 25 dias (a Meta guarda 30).
+    let mediaId = null;
+    try {
+      const { data: cache } = await supabase.from('lojas_whats_midias')
+        .select('meta_media_id, meta_media_em').eq('id', midia.id).maybeSingle();
+      if (cache?.meta_media_id && cache?.meta_media_em
+        && (Date.now() - new Date(cache.meta_media_em).getTime()) < 25 * 86400e3) {
+        mediaId = cache.meta_media_id;
+      }
+    } catch { /* sem cache, segue o caminho normal */ }
 
-    // 2. Upload pra Meta
-    const mediaId = await uploadMidiaParaMeta(buf, midia.mime_type, midia.nome_arquivo);
+    if (!mediaId) {
+      // 1. Baixa do Supabase
+      const { data: blob, error: errDl } = await supabase.storage
+        .from('sofia-midias')
+        .download(midia.storage_path);
+      if (errDl) throw new Error('storage download: ' + errDl.message);
+      const buf = Buffer.from(await blob.arrayBuffer());
+
+      // 2. Upload pra Meta (e guarda o id pros próximos envios)
+      mediaId = await uploadMidiaParaMeta(buf, midia.mime_type, midia.nome_arquivo);
+      try {
+        await supabase.from('lojas_whats_midias').update({
+          meta_media_id: mediaId, meta_media_em: new Date().toISOString(),
+        }).eq('id', midia.id);
+      } catch { /* cache é conveniência, não trava o envio */ }
+    }
 
     // 3. Envia mensagem com media_id
     const tipoWaMap = { foto: 'image', video: 'video', catalogo: 'document', cores: 'image' };
