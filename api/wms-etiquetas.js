@@ -401,7 +401,7 @@ export default async function handler(req, res) {
     //     fallback de página descritiva se o serviço falhar
     //   · Shein → SEMPRE página placeholder "Shein logística" (nunca puxa)
     //   · sem documento → página "será puxada na hora da impressão"
-    if (q.previa === '1') {
+    if (q.previa_pdf === '1') {
       const peds = await pedidosFiltrados(q);
       const candidatos = peds.filter(p => q.reimprimir === '1' ? true : !p.etiqueta_impressa_em).slice(0, 80);
       if (!candidatos.length) return res.status(200).json({ ok: false, erro: 'nenhum pedido nesses filtros' });
