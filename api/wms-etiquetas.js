@@ -437,6 +437,8 @@ export default async function handler(req, res) {
                 if (db[i3] === 0x25 && db[i3 + 1] === 0x50 && db[i3 + 2] === 0x44 && db[i3 + 3] === 0x46) { posPdf = i3; break; }
               }
               passos.pdf_comeca_no_byte = posPdf;
+              passos.content_type = dR.headers.get('content-type');
+              passos.primeiros_bytes = Buffer.from(db.slice(0, 160)).toString('utf8').replace(/[^\x20-\x7e]/g, '.');
             }
           }
         } catch (e2) { passos.erro = e2.message; }
