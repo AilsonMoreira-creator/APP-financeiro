@@ -111,8 +111,13 @@ async function baixarDocumento(link) {
     const { unzipSync } = await import('fflate');
     const z = unzipSync(bytes);
     const nomeZ = Object.keys(z).find(n => /\.txt$|zpl/i.test(n));
-    if (nomeZ) return { formato: 'ZPL', conteudo: Buffer.from(z[nomeZ]).toString('utf8'), bytes: z[nomeZ].length };
     const nomeP = Object.keys(z).find(n => /\.pdf$/i.test(n));
+    if (nomeZ) {
+      // 19/08: o zip da casada (Shopee) traz a DANFE em PDF junto do ZPL — era
+      // descartada aqui e o pedido preparado saía na térmica sem a nota
+      const danfe = nomeP ? Buffer.from(z[nomeP]).toString('base64') : null;
+      return { formato: 'ZPL', conteudo: Buffer.from(z[nomeZ]).toString('utf8'), bytes: z[nomeZ].length, danfe };
+    }
     if (nomeP) return { formato: 'PDF', conteudo: Buffer.from(z[nomeP]).toString('base64'), bytes: z[nomeP].length };
     return null;
   }
@@ -261,6 +266,15 @@ export default async function handler(req, res) {
               formato: doc.formato, conteudo: doc.conteudo, bytes: doc.bytes,
               hash: hash(doc.conteudo), origem: 'bling', erro: null,
             }, { onConflict: 'pedido_id,tipo' });
+            // 19/08: a DANFE que veio no zip vira documento próprio — na hora
+            // de imprimir o par sai do cache, sem depender do linkDanfe
+            if (doc.danfe) {
+              await supabase.from('wms_documentos').upsert({
+                pedido_id: p.pedido_id, conta, tipo: 'DANFE', formato: 'PDF',
+                conteudo: doc.danfe, bytes: doc.danfe.length,
+                hash: hash(doc.danfe), origem: 'bling', erro: null,
+              }, { onConflict: 'pedido_id,tipo' });
+            }
             c.ok++; r.preparados++;
           } catch (e) {
             c.erro++; r.erros++;
