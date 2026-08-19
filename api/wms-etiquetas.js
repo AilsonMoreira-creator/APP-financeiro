@@ -160,43 +160,6 @@ async function pedidosFiltrados(q) {
   return out;
 }
 
-async function contarPaginas(pdf64) {
-  try { return (await PDFDocument.load(Buffer.from(pdf64, 'base64'))).getPageCount(); }
-  catch { return 1; }
-}
-
-// 19/08: CASADA do Bling — ML (e outros com "etiquetas casadas") chega como
-// UMA página deitada com [etiqueta | DANFE] lado a lado. Impressa direto ela
-// encolhe pra caber no 10x15 em pé (saiu pequena e na horizontal no teste).
-// Aqui a página é cortada ao meio e vira DUAS páginas 10x15 em pé.
-async function dividirCasada(pdf64) {
-  try {
-    const doc = await PDFDocument.load(Buffer.from(pdf64, 'base64'));
-    const pg = doc.getPage(0);
-    const { width, height } = pg.getSize();
-    if (width <= height * 1.15) return null;   // já está em pé: não é casada
-    const metade = async (lado) => {
-      const novo = await PDFDocument.create();
-      const [emb] = await novo.embedPages([pg], [{
-        left: lado === 'esq' ? 0 : width / 2,
-        right: lado === 'esq' ? width / 2 : width,
-        top: height, bottom: 0,
-      }]);
-      const W = 288, H = 432;   // 4x6 pol em pontos
-      const esc = Math.min(W / (width / 2), H / height);
-      const pgN = novo.addPage([W, H]);
-      pgN.drawPage(emb, {
-        x: (W - (width / 2) * esc) / 2,
-        y: (H - height * esc) / 2,
-        xScale: esc, yScale: esc,
-      });
-      return Buffer.from(await novo.save()).toString('base64');
-    };
-    // na casada do Bling a etiqueta fica à ESQUERDA e a DANFE à DIREITA
-    return { etiqueta: await metade('esq'), danfe: await metade('dir') };
-  } catch { return null; }
-}
-
 // 18/08: situacaoPorNfId e preencherNfIds saíram daqui — o cron wms-nf-sync
 // mantém nf_id e nf_situacao no banco, e a DANFE tem reserva no detalhe do pedido.
 
@@ -389,6 +352,101 @@ export default async function handler(req, res) {
     // ── MODO ZPL (13/08): a etiqueta do Bling vem em ZPL dentro de um ZIP —
     // é o formato NATIVO da térmica. Com o QZ Tray na máquina da expedição,
     // mandamos o ZPL direto: mais rápido e mais nítido que PDF.
+    // ── PRÉVIA (19/08, pedido do Ailson): PDF único de conferência com a
+    // sequência REAL da impressão — SEM efeito colateral: nada é puxado do
+    // Bling/marketplace. Fontes: documentos guardados + DANFEs em cache.
+    //   · PDF guardado → normalizado (casada cortada) e incorporado
+    //   · ZPL guardado (Shopee) → renderizado via labelary (visual), com
+    //     fallback de página descritiva se o serviço falhar
+    //   · Shein → SEMPRE página placeholder "Shein logística" (nunca puxa)
+    //   · sem documento → página "será puxada na hora da impressão"
+    if (q.previa === '1') {
+      const peds = await pedidosFiltrados(q);
+      const candidatos = peds.filter(p => q.reimprimir === '1' ? true : !p.etiqueta_impressa_em).slice(0, 80);
+      if (!candidatos.length) return res.status(200).json({ ok: false, erro: 'nenhum pedido nesses filtros' });
+
+      const ids = candidatos.map(p => p.pedido_id);
+      const docsPor = {};
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data } = await supabase.from('wms_documentos')
+          .select('pedido_id, tipo, formato, conteudo').in('pedido_id', ids.slice(i, i + 200));
+        (data || []).forEach(d => {
+          const k = String(d.pedido_id);
+          docsPor[k] = docsPor[k] || {};
+          docsPor[k][d.tipo] = d;
+        });
+      }
+
+      const saida = await PDFDocument.create();
+      const fB = await saida.embedFont(StandardFonts.HelveticaBold);
+      const fN = await saida.embedFont(StandardFonts.Helvetica);
+      const W = 288, H = 432;
+      const pagTexto = (linhas, corFundo) => {
+        const pg = saida.addPage([W, H]);
+        if (corFundo) pg.drawRectangle({ x: 0, y: 0, width: W, height: H, color: corFundo });
+        let y = H - 90;
+        linhas.forEach((l, i2) => {
+          pg.drawText(String(l).slice(0, 34), { x: 22, y, size: i2 === 0 ? 16 : 11, font: i2 === 0 ? fB : fN, color: rgb(0.17, 0.24, 0.31) });
+          y -= i2 === 0 ? 30 : 17;
+        });
+      };
+      const addPdf = async (b64) => {
+        try {
+          const doc = await PDFDocument.load(Buffer.from(b64, 'base64'));
+          const pgs = await saida.copyPages(doc, doc.getPageIndices());
+          pgs.forEach(pg => saida.addPage(pg));
+          return true;
+        } catch { return false; }
+      };
+      const renderZpl = async (zpl) => {
+        try {
+          const rz = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/', {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'image/png' },
+            body: zpl,
+          });
+          if (!rz.ok) return null;
+          const png = await saida.embedPng(await rz.arrayBuffer());
+          const pg = saida.addPage([W, H]);
+          const esc = Math.min(W / png.width, H / png.height);
+          pg.drawImage(png, { x: (W - png.width * esc) / 2, y: (H - png.height * esc) / 2, width: png.width * esc, height: png.height * esc });
+          return true;
+        } catch { return null; }
+      };
+
+      let n = 0;
+      for (const p of candidatos) {
+        n++;
+        const docs = docsPor[String(p.pedido_id)] || {};
+        const ehShein = String(p.canal_geral || '').toLowerCase().includes('shein');
+        // DANFE em cache primeiro (quando não vem embutida na casada)
+        const et = docs.ETIQUETA;
+        if (ehShein) {
+          if (docs.DANFE?.conteudo) await addPdf(docs.DANFE.conteudo);
+          pagTexto([`Shein logística`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `A etiqueta é puxada só na`, `hora da impressão (regra:`, `baixar muda o status na Shein)`], rgb(0.97, 0.95, 0.90));
+          continue;
+        }
+        if (et?.formato === 'PDF' && et?.conteudo) {
+          const norm = await normalizarCasada(et.conteudo);
+          if (norm?.casada) { await addPdf(norm.pdf); continue; }
+          if (docs.DANFE?.conteudo) await addPdf(docs.DANFE.conteudo);
+          await addPdf(norm ? norm.pdf : et.conteudo);
+          continue;
+        }
+        if (et?.formato === 'ZPL' && et?.conteudo) {
+          if (docs.DANFE?.conteudo) await addPdf(docs.DANFE.conteudo);
+          const ok = await renderZpl(et.conteudo);
+          if (!ok) pagTexto([`Etiqueta ZPL`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `(render visual indisponível —`, `a impressão usa o ZPL original)`]);
+          continue;
+        }
+        pagTexto([`Sem documento ainda`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.canal_geral}`, ``, `Será puxada na hora da`, `impressão (ou rode Preparar)`], rgb(0.99, 0.93, 0.88));
+      }
+
+      const pdfBytes = await saida.save();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="previa-impressao.pdf"');
+      return res.status(200).send(Buffer.from(pdfBytes));
+    }
+
     if (q.zpl === '1' && q.tipo === 'nf_agendada') {
       return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['nota'], so_pdf: true });
     }
@@ -423,17 +481,16 @@ export default async function handler(req, res) {
           .order('criado_em', { ascending: false }).limit(3);
         const saida = [];
         for (const d of (docs || [])) {
-          const info = { pedido: d.pedido_id };
           try {
-            const doc0 = await PDFDocument.load(Buffer.from(d.conteudo, 'base64'));
-            const pg0 = doc0.getPage(0);
-            const { width, height } = pg0.getSize();
-            info.width = Math.round(width); info.height = Math.round(height);
-            info.rotation = pg0.getRotation().angle; info.paginas = doc0.getPageCount();
-            const c = await dividirCasada(d.conteudo);
-            info.cortou = !!c;
-          } catch (e2) { info.erro = e2.message; }
-          saida.push(info);
+            const doc = await PDFDocument.load(Buffer.from(d.conteudo, 'base64'));
+            const pags = [];
+            for (let ip = 0; ip < doc.getPageCount(); ip++) {
+              const { width, height } = doc.getPage(ip).getSize();
+              pags.push({ pg: ip + 1, width, height, deitada: width > height * 1.15 });
+            }
+            const norm = await normalizarCasada(d.conteudo);
+            saida.push({ pedido: d.pedido_id, paginas_origem: pags, saida_paginas: norm?.paginas, cortes: norm?.cortes, casada: norm?.casada });
+          } catch (e2) { saida.push({ pedido: d.pedido_id, erro: e2.message }); }
         }
         return res.status(200).json({ debug_casada: saida });
       }
@@ -597,14 +654,13 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
         // 4) linkDanfe do Bling (último recurso — pode vir como HTML).
         let parFeito = false;
         if (ehPdf && comDanfe) {
-          const casada = await dividirCasada(pdf64);
-          if (casada) {
-            blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: casada.danfe });
-            blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: casada.etiqueta });
+          const norm = await normalizarCasada(pdf64);
+          if (norm?.casada) {
+            // documento casado normalizado: DANFE já embutida, tudo 10x15 em pé
+            blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: norm.pdf });
             emPdf.push(p.numero); parFeito = true;
-          } else if (await contarPaginas(pdf64) >= 2) {
-            blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: pdf64 });
-            emPdf.push(p.numero); parFeito = true;
+          } else if (norm) {
+            pdf64 = norm.pdf;   // 1 página: etiqueta simples normalizada; DANFE vem da cascata
           }
         }
         if (!parFeito) {

@@ -460,6 +460,11 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: preparo?.rodando ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700, opacity: preparo?.rodando ? .6 : 1 }}>
           <RefreshCw size={16} /> Preparar agora
         </button>
+        <button onClick={() => abrirPdf(`${API}/wms-etiquetas?${qs({ previa: '1' })}`)}
+          title="PDF de conferência com a sequência que vai sair (DANFE + etiquetas). Não puxa nada do marketplace: a Shein aparece como página 'Shein logística' e só é buscada na impressão de verdade."
+          style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
+          👁 Prévia
+        </button>
         <button onClick={testarQz}
           title="Confere a conexão com o QZ Tray e lista as impressoras que ele enxerga"
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
