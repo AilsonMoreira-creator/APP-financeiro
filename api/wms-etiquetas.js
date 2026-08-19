@@ -160,6 +160,11 @@ async function pedidosFiltrados(q) {
   return out;
 }
 
+async function contarPaginas(pdf64) {
+  try { return (await PDFDocument.load(Buffer.from(pdf64, 'base64'))).getPageCount(); }
+  catch { return 1; }
+}
+
 // 19/08: CASADA do Bling — ML (e outros com "etiquetas casadas") chega como
 // UMA página deitada com [etiqueta | DANFE] lado a lado. Impressa direto ela
 // encolhe pra caber no 10x15 em pé (saiu pequena e na horizontal no teste).
@@ -487,9 +492,20 @@ export default async function handler(req, res) {
           const nf = typeof nfR.json === 'function' ? await nfR.json().catch(() => ({})) : {};
           const link = nf?.data?.linkDanfe || nf?.data?.linkPDF;
           if (!link) return null;
-          const dR = await fetch(link);
-          if (!dR.ok) return null;
-          const db = new Uint8Array(await dR.arrayBuffer());
+          const acharPdf = async (u) => {
+            const r3 = await fetch(u, { headers: { Accept: 'application/pdf' } });
+            if (!r3.ok) return null;
+            return new Uint8Array(await r3.arrayBuffer());
+          };
+          let db = await acharPdf(link);
+          if (!db) return null;
+          // se veio a pagina HTML do visualizador, garimpar o link do PDF dentro
+          if (db[0] === 0x3c) {
+            const html = Buffer.from(db).toString('utf8');
+            const m = html.match(/https?:\/\/[^"'<>\s]+\.pdf[^"'<>\s]*/i);
+            db = m ? await acharPdf(m[0]) : null;
+            if (!db) return null;
+          }
           // 19/08: a DANFE do Bling vem com bytes ANTES do cabeçalho %PDF — a
           // checagem no byte zero rejeitava todas. Procura o cabeçalho no começo.
           let iniPdf = -1;
@@ -511,7 +527,7 @@ export default async function handler(req, res) {
       const blocos = []; const idsOk = []; const emPdf = []; const semDanfe = []; let grupoAtual = '';
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
-        let zplDoPedido = null, ehPdf = false, pdf64 = null;
+        let zplDoPedido = null, ehPdf = false, pdf64 = null, zipDanfe64 = null;
         const jaTem = guardados[String(p.pedido_id)];
         if (jaTem) {
           if (jaTem.formato === 'ZPL') zplDoPedido = jaTem.conteudo;
@@ -525,7 +541,11 @@ export default async function handler(req, res) {
             const z0 = unzipSync(b0);
             const nomeZ = Object.keys(z0).find(n => /\.txt$|zpl/i.test(n));
             const nomeP = Object.keys(z0).find(n => /\.pdf$/i.test(n));
-            if (nomeZ) zplDoPedido = Buffer.from(z0[nomeZ]).toString('utf8');
+            if (nomeZ) {
+              zplDoPedido = Buffer.from(z0[nomeZ]).toString('utf8');
+              // 19/08: o zip da casada pode trazer a DANFE em PDF junto do ZPL
+              if (nomeP) zipDanfe64 = Buffer.from(z0[nomeP]).toString('base64');
+            }
             else if (nomeP) { ehPdf = true; pdf64 = Buffer.from(z0[nomeP]).toString('base64'); }
           } else if (b0[0] === 0x25) { ehPdf = true; pdf64 = Buffer.from(b0).toString('base64'); }
           else if (String.fromCharCode(b0[0], b0[1]) === '^X') zplDoPedido = Buffer.from(b0).toString('utf8');
@@ -547,17 +567,26 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 ^FO40,900^GB730,6,6^FS
 ^XZ` });
         }
-        // PAR: DANFE na frente da etiqueta do mesmo pedido. Se o PDF veio
-        // CASADO (deitado, etiqueta|DANFE), o corte da própria página é o par.
-        let casada = null;
-        if (ehPdf && comDanfe) casada = await dividirCasada(pdf64);
-        if (casada) {
-          blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: casada.danfe });
-          blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: casada.etiqueta });
-          emPdf.push(p.numero);
-        } else {
+        // PAR em cascata (19/08): a DANFE sai da MELHOR fonte disponível —
+        // 1) casada DEITADA (ML): corta a página em duas 10x15 em pé;
+        // 2) casada EM PÉ multi-página (Shein): já é o par, vai inteira;
+        // 3) PDF que veio no zip junto do ZPL (Shopee casada);
+        // 4) linkDanfe do Bling (último recurso — pode vir como HTML).
+        let parFeito = false;
+        if (ehPdf && comDanfe) {
+          const casada = await dividirCasada(pdf64);
+          if (casada) {
+            blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: casada.danfe });
+            blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: casada.etiqueta });
+            emPdf.push(p.numero); parFeito = true;
+          } else if (await contarPaginas(pdf64) >= 2) {
+            blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: pdf64 });
+            emPdf.push(p.numero); parFeito = true;
+          }
+        }
+        if (!parFeito) {
           if (comDanfe) {
-            const d64 = await buscarDanfe(p);
+            const d64 = zipDanfe64 || await buscarDanfe(p);
             if (d64) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: d64 });
             else semDanfe.push(p.numero);
           }
