@@ -49,9 +49,7 @@ async function pedidosFiltrados(q) {
   // "Emitida DANFE" (6) = já saiu, inclusive se a Sthefany imprimiu no painel.
   // Por isso buscamos: (1) quem já tem NF (últimos 7 dias, qualquer status) e
   // (2) quem ainda está no funil sem NF (aparece como "aguardando").
-  // 19/08: 20 dias — o agendado do ML pode ser compra de ate 20 dias atras;
-  // com 7 dias a liberada do dia sumia da tela e do contador.
-  const desde7 = new Date(Date.now() - 20 * 86400000).toISOString();
+  const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
   const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo';
 
   let q1 = supabase.from('wms_pedidos').select(COLS)
@@ -80,8 +78,22 @@ async function pedidosFiltrados(q) {
     .order('criado_em', { ascending: false }).limit(120);
   if (contas !== 'todas') q3 = q3.in('conta', contas.split(','));
 
-  const [{ data: comNf }, { data: semNf }, { data: finSemNf }] = await Promise.all([q1, q2, q3]);
-  const peds = [...(comNf || []), ...(semNf || []), ...(finSemNf || [])];
+  // (4) AGENDADOS do ML — compra de até 20 dias atrás libera hoje; a janela
+  // de 7 dias das outras consultas escondia a liberada do dia (19/08)
+  let q4 = supabase.from('wms_pedidos').select(COLS)
+    .not('ml_agendado_em', 'is', null)
+    .neq('status_wms', 'cancelado')
+    .gte('criado_em', new Date(Date.now() - 20 * 86400000).toISOString())
+    .order('data_pedido', { ascending: false }).limit(300);
+  if (contas !== 'todas') q4 = q4.in('conta', contas.split(','));
+
+  const [{ data: comNf }, { data: semNf }, { data: finSemNf }, { data: agend }] = await Promise.all([q1, q2, q3, q4]);
+  const vistosP = new Set();
+  const peds = [...(comNf || []), ...(semNf || []), ...(finSemNf || []), ...(agend || [])].filter(p => {
+    const k = String(p.pedido_id);
+    if (vistosP.has(k)) return false;
+    vistosP.add(k); return true;
+  });
 
   const out = [];
   for (const p of (peds || [])) {
@@ -220,13 +232,30 @@ export default async function handler(req, res) {
     if (q.contadores === '1') {
       const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
       const contasFiltro = String(q.contas || 'todas');
+      const COLS_CONT = 'pedido_id, conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_situacao, etiqueta_impressa_em, status_wms';
       let sel = supabase.from('wms_pedidos')
-        .select('conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_situacao, etiqueta_impressa_em, status_wms')
+        .select(COLS_CONT)
         .neq('status_wms', 'cancelado')
-        .gte('criado_em', new Date(Date.now() - 20 * 86400000).toISOString())
+        .gte('criado_em', new Date(Date.now() - 5 * 86400000).toISOString())
         .limit(3000);
       if (contasFiltro !== 'todas') sel = sel.in('conta', contasFiltro.split(','));
-      const { data } = await sel;
+      // 19/08: AGENDADOS têm consulta própria — compra de até 20 dias atrás
+      // libera hoje; alargar a janela geral estourava o limit de 3000 sem
+      // ordenação e as liberadas ficavam de fora do sorteio.
+      let selAg = supabase.from('wms_pedidos')
+        .select(COLS_CONT)
+        .not('ml_agendado_em', 'is', null)
+        .neq('status_wms', 'cancelado')
+        .gte('criado_em', new Date(Date.now() - 20 * 86400000).toISOString())
+        .limit(500);
+      if (contasFiltro !== 'todas') selAg = selAg.in('conta', contasFiltro.split(','));
+      const [{ data: dGeral }, { data: dAg }] = await Promise.all([sel, selAg]);
+      const vistos = new Set();
+      const data = [...(dGeral || []), ...(dAg || [])].filter(p => {
+        const k = String(p.pedido_id);
+        if (vistos.has(k)) return false;
+        vistos.add(k); return true;
+      });
       const c = { nf_transporte: 0, flex: 0, meluni: 0, nf_agendada: 0, etiqueta_liberada: 0 };
       for (const p of (data || [])) {
         // 18/08: Full sai ANTES de tudo — reposição do Full tem ml_agendado_em
