@@ -85,6 +85,7 @@ export default async function handler(req, res) {
         curadoria:     todos.filter(t => t.pasta === 'curadoria'),
         novidades:     todos.filter(t => t.pasta === 'novidades'),
         dicas_rapidas: todos.filter(t => t.pasta === 'dicas_rapidas'),
+        tendencias:    todos.filter(t => t.pasta === 'tendencias'),
         ativos:        todos.filter(t => t.ativo === true && t.status === 'aprovado'),
       };
       return res.status(200).json({ ok: true, pastas });

@@ -1771,6 +1771,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
           ...(j.pastas?.curadoria || []),
           ...(j.pastas?.novidades || []),
           ...(j.pastas?.dicas_rapidas || []),
+          ...(j.pastas?.tendencias || []),
         ]);
       })
       .catch(() => {});
@@ -2290,7 +2291,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
                   }}>
                   <option value="pesquisa">Pesquisa de motivo</option>
                   {tplsReativacao.map(t => {
-                    const rotulo = { curadoria: 'Curadoria', novidades: 'Novidades', dicas_rapidas: 'Dica lojista' }[t.pasta] || t.name;
+                    const rotulo = { curadoria: 'Curadoria', novidades: 'Novidades', dicas_rapidas: 'Dica lojista', tendencias: 'Tendência Balonê' }[t.pasta] || t.name;
                     const pronto = t.status === 'aprovado';
                     return (
                       <option key={t.name} value={t.name} disabled={!pronto}>
