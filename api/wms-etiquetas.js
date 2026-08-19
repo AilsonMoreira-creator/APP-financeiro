@@ -160,6 +160,38 @@ async function pedidosFiltrados(q) {
   return out;
 }
 
+// 19/08: CASADA do Bling — ML (e outros com "etiquetas casadas") chega como
+// UMA página deitada com [etiqueta | DANFE] lado a lado. Impressa direto ela
+// encolhe pra caber no 10x15 em pé (saiu pequena e na horizontal no teste).
+// Aqui a página é cortada ao meio e vira DUAS páginas 10x15 em pé.
+async function dividirCasada(pdf64) {
+  try {
+    const doc = await PDFDocument.load(Buffer.from(pdf64, 'base64'));
+    const pg = doc.getPage(0);
+    const { width, height } = pg.getSize();
+    if (width <= height * 1.15) return null;   // já está em pé: não é casada
+    const metade = async (lado) => {
+      const novo = await PDFDocument.create();
+      const [emb] = await novo.embedPages([pg], [{
+        left: lado === 'esq' ? 0 : width / 2,
+        right: lado === 'esq' ? width / 2 : width,
+        top: height, bottom: 0,
+      }]);
+      const W = 288, H = 432;   // 4x6 pol em pontos
+      const esc = Math.min(W / (width / 2), H / height);
+      const pgN = novo.addPage([W, H]);
+      pgN.drawPage(emb, {
+        x: (W - (width / 2) * esc) / 2,
+        y: (H - height * esc) / 2,
+        xScale: esc, yScale: esc,
+      });
+      return Buffer.from(await novo.save()).toString('base64');
+    };
+    // na casada do Bling a etiqueta fica à ESQUERDA e a DANFE à DIREITA
+    return { etiqueta: await metade('esq'), danfe: await metade('dir') };
+  } catch { return null; }
+}
+
 // 18/08: situacaoPorNfId e preencherNfIds saíram daqui — o cron wms-nf-sync
 // mantém nf_id e nf_situacao no banco, e a DANFE tem reserva no detalhe do pedido.
 
@@ -378,6 +410,34 @@ export default async function handler(req, res) {
       const sitDe = {};
       for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
 
+      // 19/08 DIAGNÓSTICO: ?zpl=1&debug_danfe=1 roda o caminho da DANFE no
+      // primeiro candidato com nf_id e devolve cada passo — NUNCA puxa etiqueta.
+      if (q.debug_danfe) {
+        const alvoDbg = peds.find(p2 => String(p2.pedido_id) === String(q.debug_danfe)) || peds.find(p2 => p2.nf_id);
+        if (!alvoDbg) return res.status(200).json({ debug: 'nenhum candidato com nf_id', total_peds: peds.length });
+        const passos = { pedido: alvoDbg.numero, conta: alvoDbg.conta, nf_id: alvoDbg.nf_id || null };
+        try {
+          const tkD = await refreshBlingToken(alvoDbg.conta).catch(e2 => { passos.token_erro = e2.message; return null; });
+          passos.token_ok = !!tkD;
+          if (tkD && alvoDbg.nf_id) {
+            const hb3 = { Authorization: 'Bearer ' + tkD, Accept: 'application/json' };
+            const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${alvoDbg.nf_id}`, hb3);
+            passos.nfe_ok = !!nfR.ok; passos.nfe_status = nfR.status || null;
+            const nf = typeof nfR.json === 'function' ? await nfR.json().catch(() => ({})) : {};
+            passos.tem_linkDanfe = !!nf?.data?.linkDanfe; passos.tem_linkPDF = !!nf?.data?.linkPDF;
+            passos.campos_data = Object.keys(nf?.data || {}).slice(0, 25);
+            const link = nf?.data?.linkDanfe || nf?.data?.linkPDF;
+            if (link) {
+              const dR = await fetch(link);
+              passos.download_status = dR.status;
+              const db = new Uint8Array(await dR.arrayBuffer());
+              passos.bytes = db.length; passos.magic_pdf = db[0] === 0x25;
+            }
+          }
+        } catch (e2) { passos.erro = e2.message; }
+        return res.status(200).json({ debug: passos });
+      }
+
       const podeSair = (p) => q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
         || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5));
       const candidatos = peds.filter(podeSair);
@@ -474,18 +534,27 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
 ^FO40,900^GB730,6,6^FS
 ^XZ` });
         }
-        // PAR: a DANFE entra na frente da etiqueta do mesmo pedido
-        if (comDanfe) {
-          const d64 = await buscarDanfe(p);
-          if (d64) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: d64 });
-          else semDanfe.push(p.numero);
-        }
-        if (ehPdf) {
-          // o QZ Tray imprime PDF direto na térmica (type pixel) — sem conversão
-          blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: pdf64 });
+        // PAR: DANFE na frente da etiqueta do mesmo pedido. Se o PDF veio
+        // CASADO (deitado, etiqueta|DANFE), o corte da própria página é o par.
+        let casada = null;
+        if (ehPdf && comDanfe) casada = await dividirCasada(pdf64);
+        if (casada) {
+          blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: casada.danfe });
+          blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: casada.etiqueta });
           emPdf.push(p.numero);
         } else {
-          blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplDoPedido });
+          if (comDanfe) {
+            const d64 = await buscarDanfe(p);
+            if (d64) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: d64 });
+            else semDanfe.push(p.numero);
+          }
+          if (ehPdf) {
+            // o QZ Tray imprime PDF direto na térmica (type pixel) — sem conversão
+            blocos.push({ tipo: 'etiqueta_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: pdf64 });
+            emPdf.push(p.numero);
+          } else {
+            blocos.push({ tipo: 'etiqueta', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: zplDoPedido });
+          }
         }
         idsOk.push(p.pedido_id);
         // 18/08: a pausa só faz sentido quando BAIXOU da rede — com o

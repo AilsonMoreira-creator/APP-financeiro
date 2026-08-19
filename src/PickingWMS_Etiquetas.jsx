@@ -185,6 +185,14 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   // Diagnóstico na máquina da expedição: mostra cada passo da conexão
   const testarQz = async () => {
     setImprimindo('Testando o QZ Tray…');
+    // 19/08: confere também o certificado e a assinatura — sem eles o QZ trata
+    // o app como "anonymous" e pede permissão a CADA impressão
+    let certOk = false, signOk = false;
+    try { certOk = (await fetch('/qz-cert.crt')).ok; } catch { /* segue */ }
+    try {
+      const rs = await fetch('/api/qz-sign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ toSign: 'teste' }) });
+      signOk = (await rs.json())?.ok === true;
+    } catch { /* segue */ }
     const { qz, motivo } = await conectarQz();
     if (!qz) { setImprimindo(`⚠ QZ não conectou: ${motivo}. Confira se o QZ Tray está aberto e se o site não está em Blocked no Site Manager.`); return; }
     let versao = '?';
@@ -192,9 +200,10 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
     let lista = [];
     try { lista = await qz.printers.find(); } catch { /* segue */ }
     if (!Array.isArray(lista)) lista = lista ? [lista] : [];
+    const id = certOk && signOk ? 'identidade Grupo Amícia OK' : `⚠ identidade com problema (cert ${certOk ? 'ok' : 'FALHOU'}, assinatura ${signOk ? 'ok' : 'FALHOU'}) — o QZ vai pedir permissão a cada impressão`;
     setImprimindo(lista.length
-      ? `✅ QZ ${versao} conectado. Impressoras: ${lista.join(' · ')}`
-      : `⚠ QZ ${versao} conectado, mas nenhuma impressora apareceu. Confira em Dispositivos e Impressoras do Windows.`);
+      ? `✅ QZ ${versao} conectado · ${id} · Impressoras: ${lista.join(' · ')}`
+      : `⚠ QZ ${versao} conectado (${id}), mas nenhuma impressora apareceu. Confira em Dispositivos e Impressoras do Windows.`);
   };
 
   const imprimirTermica = async () => {
