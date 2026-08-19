@@ -160,6 +160,47 @@ async function pedidosFiltrados(q) {
   return out;
 }
 
+// 19/08 v2: NORMALIZAR o PDF do Bling página a página — deitada corta em
+// duas 10x15 em pé (esquerda antes), em pé mantém. Cobre [etiqueta|DANFE],
+// multi-volume [et1|et2]+[DANFE na pg2] e Shein multi-página, sem descartar
+// nada (o corte antigo só olhava a página 1 e jogava a 2 fora — pedido de
+// 2 volumes saía com as etiquetas achatadas e SEM a nota).
+async function normalizarCasada(pdf64) {
+  try {
+    const doc = await PDFDocument.load(Buffer.from(pdf64, 'base64'));
+    const nPg = doc.getPageCount();
+    const W = 288, H = 432;   // 4x6 pol em pontos
+    const saida = await PDFDocument.create();
+    let cortes = 0;
+    for (let ip = 0; ip < nPg; ip++) {
+      const pg = doc.getPage(ip);
+      const { width, height } = pg.getSize();
+      const partes = width > height * 1.15
+        ? [{ left: 0, right: width / 2 }, { left: width / 2, right: width }]
+        : [{ left: 0, right: width }];
+      if (partes.length === 2) cortes++;
+      for (const parte of partes) {
+        const [emb] = await saida.embedPages([pg], [{ left: parte.left, right: parte.right, top: height, bottom: 0 }]);
+        const larguraParte = parte.right - parte.left;
+        const esc = Math.min(W / larguraParte, H / height);
+        const pgN = saida.addPage([W, H]);
+        pgN.drawPage(emb, {
+          x: (W - larguraParte * esc) / 2,
+          y: (H - height * esc) / 2,
+          xScale: esc, yScale: esc,
+        });
+      }
+    }
+    const total = saida.getPageCount();
+    return {
+      pdf: Buffer.from(await saida.save()).toString('base64'),
+      paginas: total,
+      casada: total >= 2,   // ≥2 páginas finais = DANFE embutida no documento
+      cortes,
+    };
+  } catch { return null; }
+}
+
 // 18/08: situacaoPorNfId e preencherNfIds saíram daqui — o cron wms-nf-sync
 // mantém nf_id e nf_situacao no banco, e a DANFE tem reserva no detalhe do pedido.
 
