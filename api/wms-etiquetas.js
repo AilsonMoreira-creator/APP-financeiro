@@ -711,7 +711,10 @@ export default async function handler(req, res) {
       const doMlZpl = {};
       if (comDanfeLote) {
         const mlPorConta = {};
-        for (const p of faltando) {
+        // 20/08 v2 (foto do teste): pedido ML com casada em CACHE nunca tentava
+        // o ZPL2 — e o corte cego da casada fatia na fronteira errada. Agora
+        // TODO ML do lote tenta o ZPL2 original primeiro; o cache é fallback.
+        for (const p of candidatosLote) {
           if (String(p.canal_geral || '') === 'Mercado Livre' && p.ml_logistic_type !== 'fulfillment' && p.numero_loja) {
             (mlPorConta[p.conta] = mlPorConta[p.conta] || []).push(p);
           }
@@ -752,6 +755,20 @@ export default async function handler(req, res) {
         const m = xml.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + tag + '>'));
         return m ? m[1].trim() : '';
       };
+      const xmlItens = (xml) => {
+        const itens = [];
+        const re = /<det[^>]*>([\s\S]*?)<\/det>/g;
+        let m2;
+        while ((m2 = re.exec(xml)) && itens.length < 8) {
+          const det = m2[1];
+          itens.push({
+            desc: xmlCampo(det, 'xProd'),
+            sku: xmlCampo(det, 'cProd'),
+            qtd: Math.round(parseFloat(xmlCampo(det, 'qCom') || '1')) || 1,
+          });
+        }
+        return itens;
+      };
       const montarDanfeZpl = (info) => {
         const esc = (t) => String(t || '').replace(/[\^~]/g, ' ').slice(0, 46);
         const chaveFmt = (info.chave.match(/.{1,4}/g) || []).join(' ');
@@ -773,7 +790,14 @@ export default async function handler(req, res) {
           + '^FO30,420^A0N,22,22^FDCHAVE DE ACESSO^FS'
           + '^FO30,450^BY2,2.5,150^BCN,150,N,N,N^FD' + info.chave + '^FS'
           + '^FO30,616^A0N,22,22^FD' + chaveFmt + '^FS'
-          + '^FO30,660^A0N,20,20^FDConsulta pela chave em www.nfe.fazenda.gov.br^FS'
+          + '^FO30,652^A0N,20,20^FDConsulta pela chave em www.nfe.fazenda.gov.br^FS'
+          + '^FO30,690^GB752,2,2^FS'
+          + '^FO30,706^A0N,22,22^FDPRODUTOS^FS'
+          + (info.itens || []).slice(0, 8).map((it, ix) => {
+            const linha = it.qtd + ' x ' + String(it.desc || '').slice(0, 38) + (it.sku ? '  (' + String(it.sku).slice(0, 14) + ')' : '');
+            return '^FO30,' + (736 + ix * 30) + '^A0N,22,22^FD' + linha.replace(/[\^~]/g, ' ') + '^FS';
+          }).join('')
+          + ((info.itens || []).length > 8 ? '^FO30,' + (736 + 8 * 30) + '^A0N,20,20^FD... e mais ' + (info.itens.length - 8) + ' item(ns)^FS' : '')
           + '^XZ';
       };
       const buscarDanfe = async (p) => {
@@ -808,6 +832,7 @@ export default async function handler(req, res) {
                     destDoc: xmlCampo(dest, 'CPF') || xmlCampo(dest, 'CNPJ'),
                     valor: nf?.data?.valorNota ?? xmlCampo(xml, 'vNF'),
                     protocolo: xmlCampo(prot, 'nProt'),
+                    itens: xmlItens(xml),
                   });
                   await supabase.from('wms_documentos').upsert({
                     pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'ZPL',
