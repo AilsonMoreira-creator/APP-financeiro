@@ -576,9 +576,23 @@ export default async function handler(req, res) {
       // 19/08 DIAGNÓSTICO: ?zpl=1&debug_casada=1 mede a geometria do primeiro
       // PDF de etiqueta guardado (ML) e testa o corte — nada é impresso/puxado.
       if (q.debug_casada) {
-        const { data: docs } = await supabase.from('wms_documentos')
+        let selD = supabase.from('wms_documentos')
           .select('pedido_id, conteudo').eq('tipo', 'ETIQUETA').eq('formato', 'PDF')
           .order('criado_em', { ascending: false }).limit(3);
+        const { data: docsAll } = await selD;
+        let docs = docsAll;
+        if (q.debug_casada.length > 1) {   // ?debug_casada=shein filtra por canal
+          const idsD2 = (docsAll || []).map(d => d.pedido_id);
+          const { data: docs30 } = await supabase.from('wms_documentos')
+            .select('pedido_id, conteudo').eq('tipo', 'ETIQUETA').eq('formato', 'PDF')
+            .order('criado_em', { ascending: false }).limit(30);
+          const ids30 = (docs30 || []).map(d => d.pedido_id);
+          const { data: pcs } = await supabase.from('wms_pedidos')
+            .select('pedido_id, canal_geral').in('pedido_id', ids30);
+          const canalDe = {};
+          (pcs || []).forEach(pc => { canalDe[String(pc.pedido_id)] = String(pc.canal_geral || '').toLowerCase(); });
+          docs = (docs30 || []).filter(d => (canalDe[String(d.pedido_id)] || '').includes(q.debug_casada.toLowerCase())).slice(0, 3);
+        }
         const saida = [];
         for (const d of (docs || [])) {
           try {
@@ -731,6 +745,29 @@ export default async function handler(req, res) {
           else if (String.fromCharCode(b0[0], b0[1]) === '^X') zplDoPedido = Buffer.from(b0).toString('utf8');
         } catch (e) { if (!e?.pulaDownload) { /* sem etiqueta */ } }
         if (!zplDoPedido && !ehPdf) continue;
+
+        // 20/08 (P3/P8 da arquitetura dele): toda etiqueta baixada na impressão
+        // fica GUARDADA — reimpressão sai do banco sem re-consultar o
+        // marketplace (crítico pra Shein: puxar de novo mexe no status), e a
+        // geometria de qualquer canal vira auditável pelo debug.
+        if (!jaTem) {
+          try {
+            const conteudoDoc = ehPdf ? pdf64 : zplDoPedido;
+            await supabase.from('wms_documentos').upsert({
+              pedido_id: p.pedido_id, conta: p.conta, tipo: 'ETIQUETA',
+              formato: ehPdf ? 'PDF' : 'ZPL', conteudo: conteudoDoc,
+              bytes: conteudoDoc.length, hash: hashDoc(conteudoDoc),
+              origem: 'impressao', erro: null,
+            }, { onConflict: 'pedido_id,tipo' });
+            if (zipDanfe64) {
+              await supabase.from('wms_documentos').upsert({
+                pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'PDF',
+                conteudo: zipDanfe64, bytes: zipDanfe64.length, hash: hashDoc(zipDanfe64),
+                origem: 'impressao', erro: null,
+              }, { onConflict: 'pedido_id,tipo' });
+            }
+          } catch { /* guardar é conveniência; a impressão segue */ }
+        }
 
         const k = `${q.por_empresa === '1' ? p.conta + '·' : ''}${p.loc}·${p.ref}`;
         if (false && k !== grupoAtual) {   // sem separadora (ordem dele 18/08)
