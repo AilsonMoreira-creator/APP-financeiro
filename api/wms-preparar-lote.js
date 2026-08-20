@@ -285,6 +285,26 @@ export default async function handler(req, res) {
                 hash: hash(doc.danfe), origem: 'bling', erro: null,
               }, { onConflict: 'pedido_id,tipo' });
             }
+            // 20/08 (cron 7:50): o VISUAL do ZPL fica pronto no preparo — a
+            // prévia de manhã sai do cache em segundos em vez de renderizar
+            // etiqueta por etiqueta no labelary na hora do clique
+            if (doc.formato === 'ZPL') {
+              try {
+                const rz = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'image/png' },
+                  body: doc.conteudo,
+                });
+                if (rz.ok) {
+                  const png64 = Buffer.from(await rz.arrayBuffer()).toString('base64');
+                  await supabase.from('wms_documentos').upsert({
+                    pedido_id: p.pedido_id, conta, tipo: 'PREVIA_PNG', formato: 'PNG',
+                    conteudo: png64, bytes: png64.length,
+                    hash: hash(png64), origem: 'labelary', erro: null,
+                  }, { onConflict: 'pedido_id,tipo' });
+                }
+              } catch { /* visual é conveniência; a prévia renderiza na hora se faltar */ }
+            }
             c.ok++; r.preparados++;
           } catch (e) {
             c.erro++; r.erros++;

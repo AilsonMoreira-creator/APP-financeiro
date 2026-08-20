@@ -524,7 +524,7 @@
     },
     {
       "path": "/api/wms-preparar-lote?limite=120",
-      "schedule": "5,25,45 10 * * 1-6"
+      "schedule": "5,25,45,50 10 * * 1-6"
     },
     {
       "path": "/api/full-chegada-cron",
@@ -541,6 +541,10 @@
     {
       "path": "/api/wms-sync",
       "schedule": "*/15 11-14 * * *"
+    },
+    {
+      "path": "/api/wms-preparar-lote?limite=150",
+      "schedule": "10 11 * * 1-6"
     }
   ]
 }

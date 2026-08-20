@@ -439,17 +439,31 @@ export default async function handler(req, res) {
           return true;
         } catch { return false; }
       };
-      const renderZpl = async (zpl) => {
+      const desenharPng = async (bytes) => {
+        const png = await saida.embedPng(bytes);
+        const pg = saida.addPage([W, H]);
+        const esc = Math.min(W / png.width, H / png.height);
+        pg.drawImage(png, { x: (W - png.width * esc) / 2, y: (H - png.height * esc) / 2, width: png.width * esc, height: png.height * esc });
+      };
+      const renderZpl = async (zpl, pngCache64, p2) => {
+        // 20/08: o preparo das 7:50 já deixa o visual pronto (PREVIA_PNG) —
+        // aqui só desenha; renderizar na hora vira exceção (e alimenta o cache)
         try {
+          if (pngCache64) { await desenharPng(Buffer.from(pngCache64, 'base64')); return true; }
           const rz = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/', {
             method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'image/png' },
             body: zpl,
           });
           if (!rz.ok) return null;
-          const png = await saida.embedPng(await rz.arrayBuffer());
-          const pg = saida.addPage([W, H]);
-          const esc = Math.min(W / png.width, H / png.height);
-          pg.drawImage(png, { x: (W - png.width * esc) / 2, y: (H - png.height * esc) / 2, width: png.width * esc, height: png.height * esc });
+          const bytes = await rz.arrayBuffer();
+          await desenharPng(bytes);
+          try {
+            const png64 = Buffer.from(bytes).toString('base64');
+            await supabase.from('wms_documentos').upsert({
+              pedido_id: p2.pedido_id, conta: p2.conta, tipo: 'PREVIA_PNG', formato: 'PNG',
+              conteudo: png64, bytes: png64.length, hash: hashDoc(png64), origem: 'labelary', erro: null,
+            }, { onConflict: 'pedido_id,tipo' });
+          } catch { /* cache é conveniência */ }
           return true;
         } catch { return null; }
       };
@@ -475,7 +489,7 @@ export default async function handler(req, res) {
         }
         if (et?.formato === 'ZPL' && et?.conteudo) {
           if (docs.DANFE?.conteudo) await addPdf(docs.DANFE.conteudo);
-          const ok = await renderZpl(et.conteudo);
+          const ok = await renderZpl(et.conteudo, docs.PREVIA_PNG?.conteudo, p);
           if (!ok) pagTexto([`Etiqueta ZPL`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `(render visual indisponível —`, `a impressão usa o ZPL original)`]);
           continue;
         }
