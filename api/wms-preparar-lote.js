@@ -23,6 +23,27 @@ const espera = (ms) => new Promise(r => setTimeout(r, ms));
 const hash = (b) => crypto.createHash('sha256').update(b).digest('hex').slice(0, 32);
 const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 
+// 20/08: visual do ZPL pra prévia — renderiza no labelary e guarda; falha
+// fica REGISTRADA na linha (tipo PREVIA_PNG com erro) pra não sumir no catch
+async function guardarPreviaPng(pedido_id, conta, zpl) {
+  try {
+    const rz = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/', {
+      method: 'POST', headers: { 'Content-Type': 'text/plain', Accept: 'image/png' }, body: zpl,
+    });
+    if (!rz.ok) {
+      await supabase.from('wms_documentos').upsert({ pedido_id, conta, tipo: 'PREVIA_PNG', erro: `labelary http ${rz.status}` }, { onConflict: 'pedido_id,tipo' });
+      return;
+    }
+    const png64 = Buffer.from(await rz.arrayBuffer()).toString('base64');
+    await supabase.from('wms_documentos').upsert({
+      pedido_id, conta, tipo: 'PREVIA_PNG', formato: 'PNG',
+      conteudo: png64, bytes: png64.length, hash: hash(png64), origem: 'labelary', erro: null,
+    }, { onConflict: 'pedido_id,tipo' });
+  } catch (e2) {
+    await supabase.from('wms_documentos').upsert({ pedido_id, conta, tipo: 'PREVIA_PNG', erro: String(e2.message).slice(0, 200) }, { onConflict: 'pedido_id,tipo' });
+  }
+}
+
 /**
  * Etiqueta de FLEX vem do MERCADO LIVRE, não do Bling (17/08). Pedimos em
  * ZPL, que é o formato nativo da térmica, em lotes de 40 shipments.
@@ -192,8 +213,11 @@ export default async function handler(req, res) {
         if (d.tipo === 'DANFE') temDanfe.add(String(d.pedido_id));
       });
     }
+    // Flex fica FORA do re-preparo: a etiqueta dele vem do ML e não existe
+    // DANFE no zip — sem esta exceção o mesmo pedido re-preparava toda rodada
+    const ehFlex = new Set((candidatos || []).filter(p2 => p2.ml_logistic_type === 'self_service').map(p2 => String(p2.pedido_id)));
     for (const k of [...guardados]) {
-      if (formatoDe[k] === 'ZPL' && !temDanfe.has(k)) guardados.delete(k);   // re-prepara
+      if (formatoDe[k] === 'ZPL' && !temDanfe.has(k) && !ehFlex.has(k)) guardados.delete(k);   // re-prepara
     }
 
     const fila = [];
@@ -226,7 +250,8 @@ export default async function handler(req, res) {
             pedido_id: p.pedido_id, conta, tipo: 'ETIQUETA', formato: d.formato,
             conteudo: d.conteudo, bytes: d.bytes, hash: hash(d.conteudo), origem: 'ml', erro: null,
           }, { onConflict: 'pedido_id,tipo' });
-          c.ok++; r.preparados++;
+          if (d.formato === 'ZPL') await guardarPreviaPng(p.pedido_id, conta, d.conteudo);
+          c.ok++; c.flex++; r.preparados++;
         }
         const resolvidos = new Set(Object.keys(doMl));
         lista = lista.filter(p => !resolvidos.has(String(p.pedido_id)));
@@ -286,36 +311,8 @@ export default async function handler(req, res) {
               }, { onConflict: 'pedido_id,tipo' });
             }
             // 20/08 (cron 7:50): o VISUAL do ZPL fica pronto no preparo — a
-            // prévia de manhã sai do cache em segundos em vez de renderizar
-            // etiqueta por etiqueta no labelary na hora do clique
-            if (doc.formato === 'ZPL') {
-              try {
-                const rz = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'text/plain', Accept: 'image/png' },
-                  body: doc.conteudo,
-                });
-                if (rz.ok) {
-                  const png64 = Buffer.from(await rz.arrayBuffer()).toString('base64');
-                  await supabase.from('wms_documentos').upsert({
-                    pedido_id: p.pedido_id, conta, tipo: 'PREVIA_PNG', formato: 'PNG',
-                    conteudo: png64, bytes: png64.length,
-                    hash: hash(png64), origem: 'labelary', erro: null,
-                  }, { onConflict: 'pedido_id,tipo' });
-                }
-                else {
-                  await supabase.from('wms_documentos').upsert({
-                    pedido_id: p.pedido_id, conta, tipo: 'PREVIA_PNG',
-                    erro: `labelary http ${rz.status}`,
-                  }, { onConflict: 'pedido_id,tipo' });
-                }
-              } catch (e2) {
-                await supabase.from('wms_documentos').upsert({
-                  pedido_id: p.pedido_id, conta, tipo: 'PREVIA_PNG',
-                  erro: String(e2.message).slice(0, 200),
-                }, { onConflict: 'pedido_id,tipo' }).catch?.(() => {});
-              }
-            }
+            // prévia de manhã sai do cache em segundos
+            if (doc.formato === 'ZPL') await guardarPreviaPng(p.pedido_id, conta, doc.conteudo);
             c.ok++; r.preparados++;
           } catch (e) {
             c.erro++; r.erros++;
