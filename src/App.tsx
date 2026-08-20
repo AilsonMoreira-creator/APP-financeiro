@@ -4317,7 +4317,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
                         <FotoProd sbUrl={sbUrl} refProd={c.ref} onZoom={handleZoom}/><div style={{width:34,height:44,borderRadius:4,background:"#f0ebe3",display:"none",alignItems:"center",justifyContent:"center",border:"1px solid #e8e2da",flexShrink:0}}><span style={{fontSize:12,opacity:0.3}}>📷</span></div>
                         <div style={{fontSize:12,fontWeight:700,color:"#2c3e50",fontFamily:"Georgia,serif"}}>{c.ref}</div>
                       </div>
-                      <div style={{padding:"5px 8px"}}><div style={{fontSize:12,color:"#2c3e50"}}>{c.descricao}</div><div style={{height:16,marginTop:1,textAlign:"center",lineHeight:"16px"}}><span style={{fontSize:9,color:"#fff",background:c.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 5px",verticalAlign:"middle"}}>{c.marca}</span><span style={{position:"relative",display:"inline-block",width:0,height:16,verticalAlign:"middle"}}><span style={{position:"absolute",left:5,top:"50%",transform:"translateY(-50%)",whiteSpace:"nowrap"}}><CaseadoBtnIcone corte={c} api={caseadoApi}/></span></span></div></div>
+                      <div style={{padding:"5px 8px"}}><div style={{fontSize:12,color:"#2c3e50"}}>{c.descricao}</div><div style={{height:16,marginTop:1,textAlign:"center",lineHeight:"16px"}}><span style={{fontSize:9,color:"#fff",background:c.marca==="Meluni"?"#9b59b6":"#4a7fa5",borderRadius:3,padding:"1px 5px",verticalAlign:"middle"}}>{c.marca}</span><span style={{position:"relative",display:"inline-block",width:0,height:16,verticalAlign:"middle"}}><span style={{position:"absolute",left:5,top:"50%",transform:"translateY(-50%)",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:3}}><CaseadoBtnIcone corte={c} api={caseadoApi}/><PassadoriaBtnIcone corte={c} api={passadoriaApi} caseadoApi={caseadoApi}/></span></span></div></div>
                       <div style={{padding:"5px 8px",fontSize:11,color:"#2c3e50"}}>{c.oficina}</div>
                       <div style={{padding:"5px 8px",fontSize:15,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.qtd}</div>
                       <div style={{padding:"5px 8px",fontSize:_FS,fontWeight:700,textAlign:"right",color:"#2c3e50",fontFamily:_FN}}>{c.valorUnit!=null?"R$ "+Number(c.valorUnit).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—"}</div>
@@ -4335,7 +4335,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     <path d="M4 13L7 16" stroke="#3a6f95" strokeWidth="1" strokeLinecap="round"/>
   </svg>
 </span></div>
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><PassadoriaBtnIcone corte={c} api={passadoriaApi} caseadoApi={caseadoApi}/></div>
+                      <div/>
                     </div>
                   );
                 })}

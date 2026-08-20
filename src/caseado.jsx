@@ -177,17 +177,22 @@ export function useCaseado() {
 }
 
 // ── Ícone de botão (camisa) na linha do corte ────────────────────────────────
-function SvgBotaoCamisa({ definido }) {
-  const fill = definido ? '#27ae60' : '#fff';
-  const stroke = definido ? '#1e8449' : '#4a7fa5';
-  const furo = definido ? '#fff' : '#4a7fa5';
+// 20/08 (regra do Ailson): AMARELO falta definir · VERDE definido ·
+// CINZA CLARO entregue · neutro antes do corte ficar pronto.
+export const CORES_ETAPA = {
+  amarelo:  { fill: '#f0a80d', stroke: '#c07f06', furo: '#fff', bg: '#fff7e4', borda: '#eccf8e' },
+  verde:    { fill: '#27ae60', stroke: '#1e8449', furo: '#fff', bg: '#eafaf0', borda: '#bfe6cd' },
+  cinza:    { fill: '#cbd5dd', stroke: '#9fb0bc', furo: '#fff', bg: '#f6f8fa', borda: '#dde5ea' },
+  neutro:   { fill: '#fff',    stroke: '#4a7fa5', furo: '#4a7fa5', bg: '#fff', borda: '#c8d8e4' },
+};
+function SvgBotaoCamisa({ cores }) {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" style={{ display: 'block' }}>
-      <circle cx="12" cy="12" r="9" fill={fill} stroke={stroke} strokeWidth="1.6" />
-      <circle cx="9.4" cy="9.4" r="1.4" fill={furo} />
-      <circle cx="14.6" cy="9.4" r="1.4" fill={furo} />
-      <circle cx="9.4" cy="14.6" r="1.4" fill={furo} />
-      <circle cx="14.6" cy="14.6" r="1.4" fill={furo} />
+      <circle cx="12" cy="12" r="9" fill={cores.fill} stroke={cores.stroke} strokeWidth="1.8" />
+      <circle cx="9.4" cy="9.4" r="1.4" fill={cores.furo} />
+      <circle cx="14.6" cy="9.4" r="1.4" fill={cores.furo} />
+      <circle cx="9.4" cy="14.6" r="1.4" fill={cores.furo} />
+      <circle cx="14.6" cy="14.6" r="1.4" fill={cores.furo} />
     </svg>
   );
 }
@@ -197,10 +202,13 @@ export function CaseadoBtnIcone({ corte, api }) {
   if (!api?.precisaCaseado?.(corte?.ref)) return null;
 
   const reg = api.registroPorCorte(corte.id);
-  const definido = !!reg;
-  // bolinha amarela: corte entregue pela oficina (disponível pro caseado) e ainda sem caseado definido
-  const mostrarBolinha = !!corte?.entregue && !definido;
-  const titulo = definido ? `Caseado: ${reg.nome}${reg.entregue ? ' (entregue)' : ''}` : 'Definir caseado';
+  // AMARELO: corte entregue e caseado ainda não definido · VERDE: definido ·
+  // CINZA CLARO: caseado entregue · neutro: corte ainda na oficina
+  const estado = reg?.entregue ? 'cinza' : reg ? 'verde' : corte?.entregue ? 'amarelo' : 'neutro';
+  const cores = CORES_ETAPA[estado];
+  const titulo = reg
+    ? `Caseado: ${reg.nome}${reg.entregue ? ' (entregue)' : ''}`
+    : estado === 'amarelo' ? 'Falta definir o caseado' : 'Definir caseado';
 
   return (
     <>
@@ -210,14 +218,11 @@ export function CaseadoBtnIcone({ corte, api }) {
         onClick={(e) => { e.stopPropagation(); setModal(true); }}
         style={{
           position: 'relative', width: 16, height: 16, borderRadius: 4,
-          background: definido ? '#eafaf0' : '#fff', border: `1px solid ${definido ? '#bfe6cd' : '#c8d8e4'}`,
+          background: cores.bg, border: `1px solid ${cores.borda}`,
           cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}
       >
-        <SvgBotaoCamisa definido={definido} />
-        {mostrarBolinha && (
-          <span title="Disponível pro caseado" style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: '#f0b429', border: '1.5px solid #fff' }} />
-        )}
+        <SvgBotaoCamisa cores={cores} />
       </button>
       {modal && (
         <ModalDefinirCaseado corte={corte} api={api} registroAtual={reg} onClose={() => setModal(false)} />

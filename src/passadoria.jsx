@@ -138,12 +138,13 @@ export function usePassadoria() {
 
 // ── Ícone: ferro de passar ───────────────────────────────────────────────────
 // cor: '#b7791f' (amarelo aceso), '#27ae60' (definida), '#8a9aa4' (vazado)
-function SvgFerro({ size = 14, cor = '#8a9aa4', preenchido = false }) {
+import { CORES_ETAPA } from './caseado.jsx';
+function SvgFerro({ size = 13, cores }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'block' }}>
-      <path d="M4 16h17v2.2c0 .5-.4.8-.9.8H4.2c-.7 0-1.1-.7-.8-1.3L4 16Z" fill={preenchido ? cor : 'none'} stroke={cor} strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M6.5 16c.2-3.2 1.6-6 5.5-6h5.5c1.9 0 3.5 1.4 3.5 3.4V16" fill={preenchido ? cor : 'none'} stroke={cor} strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M12 10c0-2 1.2-3.5 3.2-3.5H19" fill="none" stroke={cor} strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M4 16h17v2.2c0 .5-.4.8-.9.8H4.2c-.7 0-1.1-.7-.8-1.3L4 16Z" fill={cores.fill} stroke={cores.stroke} strokeWidth="2.1" strokeLinejoin="round" />
+      <path d="M6.5 16c.2-3.2 1.6-6 5.5-6h5.5c1.9 0 3.5 1.4 3.5 3.4V16" fill={cores.fill === '#fff' ? 'none' : cores.fill} stroke={cores.stroke} strokeWidth="2.1" strokeLinejoin="round" />
+      <path d="M12 10c0-2 1.2-3.5 3.2-3.5H19" fill="none" stroke={cores.stroke} strokeWidth="2.1" strokeLinecap="round" />
     </svg>
   );
 }
@@ -182,14 +183,15 @@ export function PassadoriaBtnIcone({ corte, api, caseadoApi }) {
   const caseadoOk = !temBotao || !!regCaseado?.entregue;
   const disponivel = !!corte.entregue && caseadoOk;   // pronto pra passadoria
 
-  const definida = !!reg && !reg.entregue;
-  const entreguePass = !!reg?.entregue;
-
-  let cor = '#c8d4dc', preenchido = false, titulo = 'Passadoria (aguardando o corte ficar pronto)';
-  if (entreguePass) { cor = '#8a9aa4'; preenchido = false; titulo = `Passadoria: ${reg.nome} ✓ entregue`; }
-  else if (definida) { cor = '#27ae60'; preenchido = true; titulo = `Na passadoria: ${reg.nome}`; }
-  else if (disponivel) { cor = '#f0b429'; preenchido = true; titulo = 'Definir a passadoria'; }
-  else if (temBotao && corte.entregue && !caseadoOk) titulo = 'Passadoria (aguardando o caseado entregar)';
+  // MESMA régua de cores do caseado (regra do Ailson 20/08):
+  // AMARELO falta definir · VERDE definida · CINZA CLARO entregue · neutro antes
+  const estado = reg?.entregue ? 'cinza' : reg ? 'verde' : disponivel ? 'amarelo' : 'neutro';
+  const cores = CORES_ETAPA[estado];
+  const titulo = reg
+    ? (reg.entregue ? `Passadoria: ${reg.nome} (entregue)` : `Na passadoria: ${reg.nome}`)
+    : estado === 'amarelo' ? 'Falta definir a passadoria'
+    : (temBotao && corte.entregue) ? 'Passadoria (aguardando o caseado entregar)'
+    : 'Passadoria (aguardando o corte ficar pronto)';
 
   const podeClicar = disponivel || !!reg;   // registro antigo continua consultável
 
@@ -200,15 +202,14 @@ export function PassadoriaBtnIcone({ corte, api, caseadoApi }) {
         title={titulo}
         onClick={(e) => { e.stopPropagation(); if (podeClicar) setModal(true); }}
         style={{
-          width: 20, height: 20, borderRadius: 4, padding: 0, flexShrink: 0,
-          background: definida ? '#eafaf0' : (disponivel && !reg) ? '#fff8e6' : '#fff',
-          border: `1px solid ${definida ? '#bfe6cd' : (disponivel && !reg) ? '#f0dca8' : '#d6e0e8'}`,
+          width: 16, height: 16, borderRadius: 4, padding: 0, flexShrink: 0,
+          background: cores.bg, border: `1px solid ${cores.borda}`,
           cursor: podeClicar ? 'pointer' : 'default',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          opacity: podeClicar ? 1 : 0.55,
+          opacity: podeClicar || estado !== 'neutro' ? 1 : 0.6,
         }}
       >
-        <SvgFerro size={13} cor={cor} preenchido={preenchido} />
+        <SvgFerro size={12} cores={estado === 'neutro' ? { ...cores, fill: '#fff', stroke: '#7d94a6' } : cores} />
       </button>
       {modal && (
         <ModalDefinirPassadoria
