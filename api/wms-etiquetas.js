@@ -638,6 +638,26 @@ export default async function handler(req, res) {
               passos.pdf_comeca_no_byte = posPdf;
               passos.content_type = dR.headers.get('content-type');
               passos.primeiros_bytes = Buffer.from(db.slice(0, 160)).toString('utf8').replace(/[^\x20-\x7e]/g, '.');
+              // 20/08: testar o GARIMPO — se veio HTML, procurar a URL do PDF
+              // dentro e tentar baixar (o mesmo caminho do buscarDanfe real)
+              if (db[0] === 0x3c) {
+                const html2 = Buffer.from(db).toString('utf8');
+                const m2 = html2.match(/https?:\/\/[^"'<>\s]+\.pdf[^"'<>\s]*/i);
+                passos.garimpo_achou_url = m2 ? m2[0].slice(0, 120) : null;
+                if (m2) {
+                  try {
+                    const d2R = await fetch(m2[0], { headers: { Accept: 'application/pdf' } });
+                    passos.garimpo_status = d2R.status;
+                    const db2 = new Uint8Array(await d2R.arrayBuffer());
+                    passos.garimpo_bytes = db2.length;
+                    let pos2 = -1;
+                    for (let i4 = 0; i4 < Math.min(db2.length - 3, 2048); i4++) {
+                      if (db2[i4] === 0x25 && db2[i4+1] === 0x50 && db2[i4+2] === 0x44 && db2[i4+3] === 0x46) { pos2 = i4; break; }
+                    }
+                    passos.garimpo_e_pdf = pos2 >= 0;
+                  } catch (e3) { passos.garimpo_erro = e3.message; }
+                }
+              }
             }
           }
         } catch (e2) { passos.erro = e2.message; }
