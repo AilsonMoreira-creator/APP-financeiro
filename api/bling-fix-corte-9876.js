@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     const token = await refreshBlingToken('exitus');
     const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
     const { data: cfg } = await supabase.from('amicia_data').select('payload').eq('user_id', 'bling-estoque-config').maybeSingle();
-    const depositoId = cfg?.payload?.deposito_geral_exitus;
+    const depositoId = cfg?.payload?.deposito_geral || cfg?.payload?.deposito_geral_exitus;
     if (!depositoId) return res.status(500).json({ erro: 'deposito geral exitus não configurado' });
 
     const feito = [];
