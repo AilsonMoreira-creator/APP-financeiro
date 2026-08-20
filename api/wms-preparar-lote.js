@@ -204,6 +204,7 @@ export default async function handler(req, res) {
     const ids = (candidatos || []).map(p => p.pedido_id);
     const guardados = new Set();
     const temDanfe = new Set();
+    const temPrevia = new Set();
     const formatoDe = {};
     for (let i = 0; i < ids.length; i += 300) {
       const { data } = await supabase.from('wms_documentos')
@@ -211,13 +212,17 @@ export default async function handler(req, res) {
       (data || []).forEach(d => {
         if (d.tipo === 'ETIQUETA') { guardados.add(String(d.pedido_id)); formatoDe[String(d.pedido_id)] = d.formato; }
         if (d.tipo === 'DANFE') temDanfe.add(String(d.pedido_id));
+        if (d.tipo === 'PREVIA_PNG') temPrevia.add(String(d.pedido_id));
       });
     }
     // Flex fica FORA do re-preparo: a etiqueta dele vem do ML e não existe
     // DANFE no zip — sem esta exceção o mesmo pedido re-preparava toda rodada
     const ehFlex = new Set((candidatos || []).filter(p2 => p2.ml_logistic_type === 'self_service').map(p2 => String(p2.pedido_id)));
     for (const k of [...guardados]) {
-      if (formatoDe[k] === 'ZPL' && !temDanfe.has(k) && !ehFlex.has(k)) guardados.delete(k);   // re-prepara
+      if (formatoDe[k] === 'ZPL' && !temDanfe.has(k) && !ehFlex.has(k)) guardados.delete(k);   // re-prepara (danfe do zip)
+      // ZPL sem visual re-prepara UMA vez: depois a linha PREVIA_PNG existe
+      // (com png ou com o erro registrado) e o pedido não volta mais
+      else if (formatoDe[k] === 'ZPL' && !temPrevia.has(k)) guardados.delete(k);
     }
 
     const fila = [];
