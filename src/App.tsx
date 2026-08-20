@@ -12,6 +12,7 @@ import MapeamentoSkus from './MapeamentoSkus';
 import RaioXProduto from './RaioXProduto';
 import FullEnvio from './FullEnvio';
 import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
+import { usePassadoria, PassadoriaBtnIcone, TelaPassadoria, PassadoriaTabIcon } from './passadoria.jsx';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
 import OsAmicia from './os-amicia/OsAmicia';
@@ -3981,6 +3982,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
   // Fotos: mesma lógica FotoProd + zoom DOM
   const sbUrl=import.meta.env.VITE_SUPABASE_URL||localStorage.getItem("sb_url")||"";
   const caseadoApi=useCaseado();
+  const passadoriaApi=usePassadoria();
   const handleZoom=(src)=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:pointer';const img=document.createElement('img');img.src=src;img.style.cssText='width:265px;height:378px;object-fit:cover;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.3);border:3px solid #fff';ov.appendChild(img);ov.onclick=()=>document.body.removeChild(ov);document.body.appendChild(ov);};
   const [dashPeriodo,setDashPeriodo]=useState("ano");
   const [dashDe,setDashDe]=useState("");
@@ -4231,9 +4233,11 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
         <TabBtn id="produtos" label="Produtos" Icon={SvgProdutosOf}/>
         <TabBtn id="cadastros" label="Cadastros" Icon={SvgCadastros}/>
         <TabBtn id="caseado" label="Caseado" Icon={CaseadoTabIcon}/>
+        <TabBtn id="passadoria" label="Passadoria" Icon={PassadoriaTabIcon}/>
       </div>
 
       {aba==="caseado"&&<TelaCaseado api={caseadoApi}/>}
+      {aba==="passadoria"&&<TelaPassadoria api={passadoriaApi}/>}
 
       {aba==="cortes"&&(
         <div>
@@ -4331,7 +4335,7 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     <path d="M4 13L7 16" stroke="#3a6f95" strokeWidth="1" strokeLinecap="round"/>
   </svg>
 </span></div>
-                      <div/>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}><PassadoriaBtnIcone corte={c} api={passadoriaApi} caseadoApi={caseadoApi}/></div>
                     </div>
                   );
                 })}
@@ -10265,6 +10269,7 @@ export default function App(){
   const [homeSofiaPending,setHomeSofiaPending]=useState(0);
   const [homeReativarPending,setHomeReativarPending]=useState(0);
   const [homeCaseadoAbertos,setHomeCaseadoAbertos]=useState(0);
+  const [homePassadoriaAbertos,setHomePassadoriaAbertos]=useState(0);
   const [oficinasAbaPedida,setOficinasAbaPedida]=useState(null);
   const [sessaoExpirada,setSessaoExpirada]=useState(false);
   const ultimaAtividadeRef=useRef(Date.now()); // timestamp da última atividade do usuário (toque/click/scroll/keydown). Reseta o timeout de inatividade.
@@ -10856,6 +10861,10 @@ export default function App(){
     // Caseado: cortes em aberto (entregue=false)
     supabase.from('oficinas_caseado').select('id',{count:'exact',head:true}).eq('entregue',false).then(({count})=>{
       setHomeCaseadoAbertos(count||0);
+    }).catch(()=>{});
+    // Passadoria: cortes em aberto (entregue=false)
+    supabase.from('oficinas_passadoria').select('id',{count:'exact',head:true}).eq('entregue',false).then(({count})=>{
+      setHomePassadoriaAbertos(count||0);
     }).catch(()=>{});
     // Agenda: count today's items (only items for today's day number)
     const hojeDia=new Date().getDate();
@@ -11957,6 +11966,9 @@ export default function App(){
             {id:"caseado",gate:"oficinas",navTo:"oficinas",subAba:"caseado",label:"Caseado",Icon:CaseadoTabIcon,color:"#5a3a8c",bg:"#f4eefb",border:"#ddd0ee",
               kpiValue:homeCaseadoAbertos>0?`${homeCaseadoAbertos}`:"✓",kpiLabel:homeCaseadoAbertos>0?"no caseado":"nada no caseado",
               detail:homeCaseadoAbertos>0?"Cortes aguardando botão":"Tudo entregue"},
+            {id:"passadoria",gate:"oficinas",navTo:"oficinas",subAba:"passadoria",label:"Passadoria",Icon:PassadoriaTabIcon,color:"#1f6f6b",bg:"#e8f6f5",border:"#c2e4e2",
+              kpiValue:homePassadoriaAbertos>0?`${homePassadoriaAbertos}`:"✓",kpiLabel:homePassadoriaAbertos>0?"na passadoria":"nada na passadoria",
+              detail:homePassadoriaAbertos>0?"Cortes sendo passados":"Tudo entregue"},
             {id:"salascorte",label:"Salas de Corte",Icon:SvgSalasCorte,color:"#6b4c3b",bg:"#f8f3ee",border:"#e0d4c8",
               kpiValue:homeSCPending>0?`${homeSCPending}`:"✓",kpiLabel:homeSCPending>0?"cortes pendentes":"todos concluídos",
               detail:homeSCPending>0?"Aguardando peças":"Nenhum pendente"},
