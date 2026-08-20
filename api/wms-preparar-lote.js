@@ -28,7 +28,7 @@ const BRAND = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 async function guardarPreviaPng(pedido_id, conta, zpl) {
   try {
     const rz = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/', {
-      method: 'POST', headers: { 'Content-Type': 'text/plain', Accept: 'image/png' }, body: zpl,
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'image/png' }, body: zpl,
     });
     if (!rz.ok) {
       await supabase.from('wms_documentos').upsert({ pedido_id, conta, tipo: 'PREVIA_PNG', erro: `labelary http ${rz.status}` }, { onConflict: 'pedido_id,tipo' });

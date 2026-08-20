@@ -451,7 +451,7 @@ export default async function handler(req, res) {
         try {
           if (pngCache64) { await desenharPng(Buffer.from(pngCache64, 'base64')); return true; }
           const rz = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/', {
-            method: 'POST', headers: { 'Content-Type': 'text/plain', Accept: 'image/png' },
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'image/png' },
             body: zpl,
           });
           if (!rz.ok) return null;
