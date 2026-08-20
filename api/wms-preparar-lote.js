@@ -15,6 +15,7 @@
  * GET ?limite=120[&contas=exitus,lumia,muniam][&incluir_shein=1]
  */
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
+import { etiquetasDoMl } from './_wms-ml-etiquetas.js';
 import { getValidToken } from './_ml-helpers.js';
 import crypto from 'crypto';
 
@@ -42,86 +43,6 @@ async function guardarPreviaPng(pedido_id, conta, zpl) {
   } catch (e2) {
     await supabase.from('wms_documentos').upsert({ pedido_id, conta, tipo: 'PREVIA_PNG', erro: String(e2.message).slice(0, 200) }, { onConflict: 'pedido_id,tipo' });
   }
-}
-
-/**
- * Etiqueta de FLEX vem do MERCADO LIVRE, não do Bling (17/08). Pedimos em
- * ZPL, que é o formato nativo da térmica, em lotes de 40 shipments.
- * Devolve { pedido_id: {formato:'ZPL', conteudo} }.
- */
-async function etiquetasDoMl(lista, conta) {
-  const out = {};
-  const token = await getValidToken(BRAND[conta]).catch(() => null);
-  if (!token) return out;
-  const h = { Authorization: `Bearer ${token}` };
-
-  // pedido → shipment
-  const shipDe = {};
-  for (const p of lista) {
-    if (!p.numero_loja) continue;
-    try {
-      const r = await fetch(`https://api.mercadolibre.com/orders/${p.numero_loja}`, { headers: h });
-      const j = await r.json();
-      if (j?.shipping?.id) shipDe[String(j.shipping.id)] = p.pedido_id;
-    } catch { /* segue */ }
-    await espera(120);
-  }
-  const sids = Object.keys(shipDe);
-
-  // RESERVA (17/08): se o ZPL não vier utilizável, pega o PDF em lote — o ML
-  // devolve UMA PÁGINA POR ETIQUETA, na ordem dos shipment_ids. O QZ Tray
-  // imprime PDF direto, então isso serve igual pra térmica.
-  const pdfEmLote = async (fatia) => {
-    try {
-      const { PDFDocument } = await import('pdf-lib');
-      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=pdf&label_type=label`, { headers: h });
-      if (!r.ok) return;
-      const bytes = new Uint8Array(await r.arrayBuffer());
-      const doc = await PDFDocument.load(bytes);
-      for (let idx = 0; idx < fatia.length && idx < doc.getPageCount(); idx++) {
-        const uma = await PDFDocument.create();
-        const [pg] = await uma.copyPages(doc, [idx]);
-        uma.addPage(pg);
-        const b64 = Buffer.from(await uma.save()).toString('base64');
-        const pedido = shipDe[fatia[idx]];
-        if (pedido) out[String(pedido)] = { formato: 'PDF', conteudo: b64, bytes: b64.length };
-      }
-    } catch { /* sem etiqueta */ }
-  };
-
-  for (let i = 0; i < sids.length; i += 40) {
-    const fatia = sids.slice(i, i + 40);
-    try {
-      const r = await fetch(`https://api.mercadolibre.com/shipment_labels?shipment_ids=${fatia.join(',')}&response_type=zpl2&label_type=label`, { headers: h });
-      if (!r.ok) continue;
-      // 17/08: o ML entrega o ZPL DENTRO DE UM ZIP (um arquivo por etiqueta),
-      // não como texto corrido. Abre o zip e casa cada arquivo com o shipment.
-      const bytes = new Uint8Array(await r.arrayBuffer());
-      let textos = [];
-      if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
-        const { unzipSync } = await import('fflate');
-        const z = unzipSync(bytes);
-        for (const nome of Object.keys(z)) {
-          const conteudo = Buffer.from(z[nome]).toString('utf8');
-          // o nome do arquivo costuma trazer o id do shipment
-          const sidNoNome = (String(nome).match(/(\d{6,})/) || [])[1];
-          textos.push({ sid: sidNoNome, conteudo });
-        }
-      } else {
-        const txt = Buffer.from(bytes).toString('utf8');
-        textos = txt.split(/(?=\^XA)/).filter(x => x.trim().startsWith('^XA')).map(conteudo => ({ sid: null, conteudo }));
-      }
-      textos.forEach((t, idx) => {
-        const sid = (t.sid && shipDe[t.sid]) ? t.sid : fatia[idx];
-        const pedido = shipDe[sid];
-        if (pedido && t.conteudo) out[String(pedido)] = { formato: 'ZPL', conteudo: t.conteudo, bytes: t.conteudo.length };
-      });
-    } catch { /* segue */ }
-    // nada veio pelo ZPL? tenta o PDF em lote
-    if (!fatia.some(sid => out[String(shipDe[sid])])) await pdfEmLote(fatia);
-    await espera(200);
-  }
-  return out;
 }
 
 /** baixa o arquivo da etiqueta e devolve {formato, conteudo, bytes} */

@@ -19,6 +19,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { supabase, blingFetch, refreshBlingToken } from './_bling-helpers.js';
 import { getValidToken } from './_ml-helpers.js';
 import crypto from 'crypto';
+import { etiquetasDoMl } from './_wms-ml-etiquetas.js';
 
 const hashDoc = (b) => crypto.createHash('sha256').update(b).digest('hex').slice(0, 32);
 
@@ -694,8 +695,31 @@ export default async function handler(req, res) {
       // busca no Bling SÓ o que ainda não está guardado — e o token só das
       // contas que têm algo faltando (18/08: com tudo preparado, zero refresh)
       const faltando = candidatosLote.filter(p => !guardados[String(p.pedido_id)]);
-      for (const c of new Set(faltando.map(p => p.conta))) tk[c] = await refreshBlingToken(c).catch(() => null);
-      const links = faltando.length ? await linksEtiqueta(faltando, tk, 'impressao') : {};
+
+      // 20/08 (arquitetura aprovada, item 2): pedidos do MERCADO LIVRE usam o
+      // ZPL2 ORIGINAL da API do ML como fonte primária — formato nativo da
+      // Zebra, zero transformação. O par vira DANFE(linkPDF) + ZPL, igual à
+      // Shopee. A casada do Bling continua como FALLBACK de quem não vier.
+      // Baixar aqui marca "printed" no painel do ML — ok: é o momento real da
+      // impressão e etiqueta_impressa_em é gravada segundos depois.
+      const doMlZpl = {};
+      if (comDanfeLote) {
+        const mlPorConta = {};
+        for (const p of faltando) {
+          if (String(p.canal_geral || '') === 'Mercado Livre' && p.ml_logistic_type !== 'fulfillment' && p.numero_loja) {
+            (mlPorConta[p.conta] = mlPorConta[p.conta] || []).push(p);
+          }
+        }
+        for (const [conta2, lst] of Object.entries(mlPorConta)) {
+          try {
+            const r2 = await etiquetasDoMl(lst, conta2);
+            Object.assign(doMlZpl, r2);
+          } catch { /* fallback Bling cuida */ }
+        }
+      }
+      const aindaFaltando = faltando.filter(p => !doMlZpl[String(p.pedido_id)]);
+      for (const c of new Set(aindaFaltando.map(p => p.conta))) tk[c] = await refreshBlingToken(c).catch(() => null);
+      const links = aindaFaltando.length ? await linksEtiqueta(aindaFaltando, tk, 'impressao') : {};
 
       // 18/08 (ordem dele): a térmica sai em PARES — DANFE do pedido e logo a
       // etiqueta dele. Só no NF + transporte (Flex/Meluni não têm nota e a
@@ -761,13 +785,19 @@ export default async function handler(req, res) {
       for (const p of alvo.slice(0, 120)) {
         // baixa primeiro: só cria separador se a etiqueta for mesmo ZPL
         let zplDoPedido = null, ehPdf = false, pdf64 = null, zipDanfe64 = null;
-        const jaTem = guardados[String(p.pedido_id)];
+        // fonte primária ML (ZPL2 original da API) — depois guardados, depois Bling
+        const doMl = doMlZpl[String(p.pedido_id)];
+        const jaTem = doMl ? null : guardados[String(p.pedido_id)];
+        if (doMl) {
+          if (doMl.formato === 'ZPL') zplDoPedido = doMl.conteudo;
+          else { ehPdf = true; pdf64 = doMl.conteudo; }
+        }
         if (jaTem) {
           if (jaTem.formato === 'ZPL') zplDoPedido = jaTem.conteudo;
           else { ehPdf = true; pdf64 = jaTem.conteudo; }
         }
         try {
-          if (jaTem) throw { pulaDownload: true };
+          if (jaTem || doMl) throw { pulaDownload: true };
           const r0 = await fetch(links[String(p.pedido_id)]);
           const b0 = new Uint8Array(await r0.arrayBuffer());
           if (b0[0] === 0x50 && b0[1] === 0x4b) {
@@ -796,7 +826,7 @@ export default async function handler(req, res) {
               pedido_id: p.pedido_id, conta: p.conta, tipo: 'ETIQUETA',
               formato: ehPdf ? 'PDF' : 'ZPL', conteudo: conteudoDoc,
               bytes: conteudoDoc.length, hash: hashDoc(conteudoDoc),
-              origem: 'impressao', erro: null,
+              origem: doMl ? 'ml-zpl2' : 'impressao', erro: null,
             }, { onConflict: 'pedido_id,tipo' });
             if (zipDanfe64) {
               await supabase.from('wms_documentos').upsert({
