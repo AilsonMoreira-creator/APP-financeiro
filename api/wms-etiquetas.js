@@ -172,10 +172,20 @@ async function normalizarCasada(pdf64) {
     const W = 288, H = 432;   // 4x6 pol em pontos
     const saida = await PDFDocument.create();
     let cortes = 0;
+    // 20/08 (Ailson): quando o documento TEM página deitada, a casada já traz
+    // etiqueta+DANFE — as páginas em pé extras (DANFE A4 completa) são
+    // redundantes e não saem. Documento todo em pé (Shein) mantém tudo.
+    let temDeitada = false;
+    for (let ip = 0; ip < nPg; ip++) {
+      const { width, height } = doc.getPage(ip).getSize();
+      if (width > height * 1.15) { temDeitada = true; break; }
+    }
     for (let ip = 0; ip < nPg; ip++) {
       const pg = doc.getPage(ip);
       const { width, height } = pg.getSize();
-      const partes = width > height * 1.15
+      const ehDeitada = width > height * 1.15;
+      if (temDeitada && !ehDeitada) continue;   // A4 redundante da casada
+      const partes = ehDeitada
         ? [{ left: 0, right: width / 2 }, { left: width / 2, right: width }]
         : [{ left: 0, right: width }];
       if (partes.length === 2) cortes++;
@@ -401,6 +411,41 @@ export default async function handler(req, res) {
     //     fallback de página descritiva se o serviço falhar
     //   · Shein → SEMPRE página placeholder "Shein logística" (nunca puxa)
     //   · sem documento → página "será puxada na hora da impressão"
+    // ── PRINT JOB (20/08, arquitetura do Ailson): cada clique de imprimir
+    // vira um PACOTE com identidade, e cada passo fica no histórico —
+    // rodadas, marcações, falhas e fechamento. Base pra fila/estados finos.
+    if (q.job_criar === '1') {
+      const { data: job, error } = await supabase.from('wms_print_jobs')
+        .insert({ filtros: { contas: q.contas, tipo: q.tipo, ref: q.ref || null, periodo: q.periodo || null } })
+        .select('id').single();
+      if (error) return res.status(500).json({ ok: false, erro: error.message });
+      await supabase.from('wms_print_log').insert({ job_id: job.id, evento: 'criado', detalhe: { filtros: q } });
+      return res.status(200).json({ ok: true, job_id: job.id });
+    }
+    if (q.job_fechar) {
+      const jid = parseInt(q.job_fechar, 10);
+      const falhou = !!q.falha;
+      await supabase.from('wms_print_jobs').update({
+        status: falhou ? 'falhou' : 'concluido',
+        totais: { impressas: parseInt(q.total, 10) || 0, sem_danfe: parseInt(q.sem_danfe, 10) || 0 },
+        fechado_em: new Date().toISOString(),
+      }).eq('id', jid);
+      await supabase.from('wms_print_log').insert({
+        job_id: jid, evento: falhou ? 'falhou' : 'concluido',
+        detalhe: { total: q.total, falha: q.falha ? String(q.falha).slice(0, 300) : undefined },
+      });
+      return res.status(200).json({ ok: true });
+    }
+    if (q.job_listar === '1') {
+      const { data: jobs } = await supabase.from('wms_print_jobs')
+        .select('id, criado_em, status, filtros, totais, fechado_em')
+        .order('id', { ascending: false }).limit(10);
+      const ids = (jobs || []).map(j2 => j2.id);
+      const { data: logs } = ids.length ? await supabase.from('wms_print_log')
+        .select('job_id, ts, evento, detalhe').in('job_id', ids).order('ts') : { data: [] };
+      return res.status(200).json({ ok: true, jobs, logs });
+    }
+
     if (q.previa_pdf === '1') {
       const peds = await pedidosFiltrados(q);
       const candidatos = peds.filter(p => q.reimprimir === '1' ? true : !p.etiqueta_impressa_em).slice(0, 80);
@@ -743,6 +788,12 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
       // a tela pelo caminho do PDF, que já sabe buscar no ML (17/08).
       if (!idsOk.length && (q.tipo === 'flex' || candidatos.some(p => p.ml_logistic_type === 'self_service'))) {
         return res.status(200).json({ total: 0, blocos: [], ids: [], em_pdf: ['flex'], so_pdf: true });
+      }
+      if (q.job) {
+        await supabase.from('wms_print_log').insert({
+          job_id: parseInt(q.job, 10), evento: 'rodada',
+          detalhe: { pares: idsOk.length, restantes, sem_danfe: semDanfe.length ? semDanfe : undefined, pedidos: idsOk },
+        }).then?.(() => {}, () => {});
       }
       return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe, restantes });
     }

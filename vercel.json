@@ -524,7 +524,7 @@
     },
     {
       "path": "/api/wms-preparar-lote?limite=120",
-      "schedule": "5,25,45,50 10 * * 1-6"
+      "schedule": "5,25,40,50 10 * * 1-6"
     },
     {
       "path": "/api/full-chegada-cron",
@@ -536,7 +536,7 @@
     },
     {
       "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
-      "schedule": "5,15,25,35,45,55 9,10 * * 1-6"
+      "schedule": "5,15,25,35,45,55 9 * * 1-6"
     },
     {
       "path": "/api/wms-sync",
@@ -544,7 +544,11 @@
     },
     {
       "path": "/api/wms-preparar-lote?limite=150",
-      "schedule": "10 11 * * 1-6"
+      "schedule": "55 10 * * 1-6"
+    },
+    {
+      "path": "/api/wms-nfe-auto?contas=exitus,lumia,muniam&limite=120",
+      "schedule": "5,15,25,30 10 * * 1-6"
     }
   ]
 }

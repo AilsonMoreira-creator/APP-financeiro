@@ -234,6 +234,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   const imprimirTermica = async () => {
     // a etiqueta muda o status no marketplace — confirma antes (13/08)
     if (!window.confirm(`Imprimir ${vaiSair} etiqueta(s)?\n\nAo confirmar, elas são puxadas do Bling e os pedidos passam a constar como "aguardando coleta" nos marketplaces.`)) return;
+    let jobId = null;
     try {
       setImprimindo('Preparando as etiquetas…');
 
@@ -259,10 +260,16 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       // teto de resposta do Vercel — agora o servidor manda ~15 pares por vez
       // e a gente repete até a fila zerar. Cada rodada já marca as suas, então
       // se cair no meio o que saiu não sai de novo.
+      // 20/08: cada clique vira um PRINT JOB — pacote com número e histórico
+      // (rodadas, falhas, fechamento) pra auditar o que saiu e o que travou.
+      try {
+        const rJ = await fetch(`${API}/wms-etiquetas?${qs({ job_criar: '1' })}`);
+        jobId = (await rJ.json())?.job_id || null;
+      } catch { /* job é auditoria, não trava a impressão */ }
       let totalGeral = 0; let semDanfeTotal = []; let rodadas = 0;
       while (rodadas < 40) {
         rodadas++;
-        const rL = await fetch(`${API}/wms-etiquetas?${qs({ zpl: '1' })}`);
+        const rL = await fetch(`${API}/wms-etiquetas?${qs(jobId ? { zpl: '1', job: String(jobId) } : { zpl: '1' })}`);
         const bruto = await rL.text();
         let jL;
         try { jL = JSON.parse(bruto); }
@@ -304,14 +311,17 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         setImprimindo(`Imprimindo em ${impressora}… ${totalGeral} enviadas, faltam ${jL.restantes}`);
       }
 
+      if (jobId) fetch(`${API}/wms-etiquetas?job_fechar=${jobId}&total=${totalGeral}&sem_danfe=${semDanfeTotal.length}`).catch(() => {});
+      const rotJob = jobId ? ` · pacote #${jobId}` : '';
       if (semDanfeTotal.length) {
-        setImprimindo(`✅ ${totalGeral} enviadas. ⚠ Sem DANFE: ${semDanfeTotal.join(', ')} (etiqueta saiu, nota não)`);
+        setImprimindo(`✅ ${totalGeral} enviadas${rotJob}. ⚠ Sem DANFE: ${semDanfeTotal.join(', ')} (etiqueta saiu, nota não)`);
       } else {
-        setImprimindo(`✅ ${totalGeral} etiqueta(s) enviadas para ${impressora}`);
+        setImprimindo(`✅ ${totalGeral} etiqueta(s) enviadas para ${impressora}${rotJob}`);
       }
       carregar();
       setTimeout(() => setImprimindo(''), 10000);
     } catch (e) {
+      if (jobId) fetch(`${API}/wms-etiquetas?job_fechar=${jobId}&falha=${encodeURIComponent(String(e?.message || '').slice(0, 200))}`).catch(() => {});
       const problemaQz = /qz|websocket|connection/i.test(String(e?.message || ''));
       if (problemaQz) {
         setImprimindo(`QZ Tray falhou no meio (${String(e?.message || '').slice(0, 90)}) — gerando o PDF… Imprima em escala 100%; se o código de barras sair com defeito, abra o PDF no Firefox.`);
