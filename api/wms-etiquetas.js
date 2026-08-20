@@ -640,7 +640,9 @@ export default async function handler(req, res) {
               } catch (e6) { passos.linkpdf_erro = e6.message; }
             }
             passos.campos_data = Object.keys(nf?.data || {}).slice(0, 25);
-            const link = nf?.data?.linkDanfe || nf?.data?.linkPDF;
+            // 20/08 PROVADO no debug: linkPDF = DANFE em PDF real; linkDanfe = pagina
+          // HTML do visualizador. A ordem antiga nunca chegava no PDF.
+          const link = nf?.data?.linkPDF || nf?.data?.linkDanfe;
             if (link) {
               const dR = await fetch(link);
               passos.download_status = dR.status;
@@ -719,7 +721,9 @@ export default async function handler(req, res) {
           const hb2 = { Authorization: 'Bearer ' + tkC, Accept: 'application/json' };
           const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${p.nf_id}`, hb2);
           const nf = typeof nfR.json === 'function' ? await nfR.json().catch(() => ({})) : {};
-          const link = nf?.data?.linkDanfe || nf?.data?.linkPDF;
+          // 20/08 PROVADO no debug: linkPDF = DANFE em PDF real; linkDanfe = pagina
+          // HTML do visualizador. A ordem antiga nunca chegava no PDF.
+          const link = nf?.data?.linkPDF || nf?.data?.linkDanfe;
           if (!link) return null;
           const acharPdf = async (u) => {
             const r3 = await fetch(u, { headers: { Accept: 'application/pdf' } });
@@ -1039,7 +1043,9 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           if (nfId) {
             const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${nfId}`, hb);
             const nf = nfR.ok ? await nfR.json() : {};
-            const link = nf?.data?.linkDanfe || nf?.data?.linkPDF;
+            // 20/08 PROVADO no debug: linkPDF = DANFE em PDF real; linkDanfe = pagina
+          // HTML do visualizador. A ordem antiga nunca chegava no PDF.
+          const link = nf?.data?.linkPDF || nf?.data?.linkDanfe;
             if (link) {
               const dR = await fetch(link);
               if (dR.ok) {
