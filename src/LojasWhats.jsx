@@ -1564,19 +1564,34 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   const [filtroTag, setFiltroTag] = useState('todas');
   // 20/08 (Ailson): busca de cliente na lista — casa quem COMEÇA com as letras
   const [buscaCliente, setBuscaCliente] = useState('');
-  // normaliza (sem acento, minúsculo) e casa por COMEÇA-COM no nome; se o
-  // termo for só número, procura no telefone (contém)
-  const normBusca = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const conversasBuscadas = useMemo(() => {
-    const termo = normBusca(buscaCliente.trim());
-    if (!termo) return conversas;
-    const soDigitos = /^\d+$/.test(termo);
-    return conversas.filter(c => {
-      if (soDigitos) return String(c.telefone || '').replace(/\D/g, '').includes(termo);
-      const nome = normBusca(c.nome_cliente || c.nome || '');
-      return nome.startsWith(termo) || nome.split(/\s+/).some(p => p.startsWith(termo));
-    });
-  }, [conversas, buscaCliente]);
+  // 20/08 v2 (Ailson): a busca é GLOBAL — de qualquer aba, procura em TODAS
+  // as etapas direto no banco (como se estivesse na etapa "todas"). Nome por
+  // COMEÇA-COM (início do nome ou de qualquer sobrenome); só números = telefone.
+  const [buscaResultados, setBuscaResultados] = useState(null);   // null = busca inativa
+  const [buscaCarregando, setBuscaCarregando] = useState(false);
+  useEffect(() => {
+    const termo = buscaCliente.trim();
+    if (!termo) { setBuscaResultados(null); setBuscaCarregando(false); return; }
+    setBuscaCarregando(true);
+    const t = setTimeout(async () => {
+      try {
+        const soDigitos = /^\d+$/.test(termo);
+        let q = supabase.from('lojas_whats_conversas')
+          .select(`
+          id, telefone, nome_cliente, tipo_documento, documento, carrinho_id, etapa, valor_carrinho, qtd_pecas, ultima_atividade_em, iniciada_em, score_quente, lead_prioritario, observacao_para_sofia, observacao_assistente, cliente_indicou_site, origem_lead, unread_count, sugestao_quente_pendente_em, sugestao_quente_motivo, sugestao_quente_gatilhos, vendedora_atribuida_id, catalogo_enviado_em, catalogo_followup_6h_em, catalogo_followup_pausado, follow_up_vence_em, editando_por, editando_em, fup_relogio_em, pesquisa_enviada_em, pesquisa_respondida_em, pesquisa_motivo, vendeu_venda_id, vendeu_valor, vendeu_site, hsm_envios, ciclo24_vence_em, perdida_em, tags, reposicao_alerta_em, disparo2_em,
+          handoffs:lojas_whats_handoffs(status, vendedora_id),
+          sugestoes:lojas_whats_sugestoes(id, status)
+        `);
+        if (soDigitos) q = q.ilike('telefone', `%${termo}%`);
+        else q = q.or(`nome_cliente.ilike.${termo}%,nome_cliente.ilike.% ${termo}%`);
+        const { data } = await q.order('ultima_atividade_em', { ascending: false }).limit(60);
+        setBuscaResultados(Array.isArray(data) ? data : []);
+      } catch { setBuscaResultados([]); }
+      finally { setBuscaCarregando(false); }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [buscaCliente]);
+  const conversasBuscadas = buscaResultados !== null ? buscaResultados : conversas;
 
   const [tagsTick, setTagsTick] = useState(0);
   const [modalTags, setModalTags] = useState(false);
@@ -2254,7 +2269,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
           style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: fz(14), border: `1px solid ${palette.beige}`, borderRadius: 8, fontFamily: FONT, color: palette.ink, outline: 'none', background: palette.surface }} />
         {buscaCliente.trim() && (
           <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 4 }}>
-            {conversasBuscadas.length} cliente(s) começando com "{buscaCliente.trim()}"
+            {buscaCarregando ? 'buscando...' : `${conversasBuscadas.length} cliente(s) em TODAS as etapas começando com "${buscaCliente.trim()}"`}
             <button onClick={() => setBuscaCliente('')} style={{ marginLeft: 8, fontSize: fz(11), border: 'none', background: 'none', color: palette.inkSoft, cursor: 'pointer', textDecoration: 'underline', fontFamily: FONT }}>limpar</button>
           </div>
         )}
@@ -2490,7 +2505,7 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
 
       {conversasBuscadas.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>
-          {buscaCliente.trim() ? 'Nenhum cliente começando com essas letras nessa etapa.' : 'Nenhuma conversa nessa etapa.'}
+          {buscaCliente.trim() ? 'Nenhum cliente começando com essas letras (em nenhuma etapa).' : 'Nenhuma conversa nessa etapa.'}
         </div>
       ) : (
         <>
