@@ -624,6 +624,21 @@ export default async function handler(req, res) {
             passos.nfe_ok = !!nfR.ok; passos.nfe_status = nfR.status || null;
             const nf = typeof nfR.json === 'function' ? await nfR.json().catch(() => ({})) : {};
             passos.tem_linkDanfe = !!nf?.data?.linkDanfe; passos.tem_linkPDF = !!nf?.data?.linkPDF;
+            // 20/08: testar o linkPDF SEPARADO (o buscarDanfe nunca chegava nele)
+            if (nf?.data?.linkPDF) {
+              try {
+                const pR = await fetch(nf.data.linkPDF, { headers: { Accept: 'application/pdf' } });
+                passos.linkpdf_status = pR.status;
+                passos.linkpdf_content_type = pR.headers.get('content-type');
+                const pb = new Uint8Array(await pR.arrayBuffer());
+                passos.linkpdf_bytes = pb.length;
+                let posP = -1;
+                for (let i5 = 0; i5 < Math.min(pb.length - 3, 2048); i5++) {
+                  if (pb[i5] === 0x25 && pb[i5+1] === 0x50 && pb[i5+2] === 0x44 && pb[i5+3] === 0x46) { posP = i5; break; }
+                }
+                passos.linkpdf_e_pdf = posP >= 0;
+              } catch (e6) { passos.linkpdf_erro = e6.message; }
+            }
             passos.campos_data = Object.keys(nf?.data || {}).slice(0, 25);
             const link = nf?.data?.linkDanfe || nf?.data?.linkPDF;
             if (link) {
