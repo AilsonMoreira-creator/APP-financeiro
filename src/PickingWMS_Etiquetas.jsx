@@ -64,6 +64,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
   }, [fConta, fLoja, fTipo, fJanela, fRef, corteHora, reimprimir, verFinalizados, porEmpresa]);
 
   const [imprimindo, setImprimindo] = useState('');
+  const [modalCert, setModalCert] = useState(false);
   // PREPARO AUTOMÁTICO (17/08 — redesenho): ao abrir a tela o app já busca e
   // guarda as etiquetas em segundo plano, em fatias. O clique de imprimir só
   // consome o que está pronto. A Shein fica de fora (baixar a etiqueta dela
@@ -493,6 +494,33 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
           <Printer size={16} /> Testar QZ
         </button>
+        <button onClick={() => setModalCert(true)}
+          title="Instalar o certificado do QZ e liberar o Chrome nesta máquina"
+          style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
+          🛡 Certificado
+        </button>
+        {modalCert && (
+          <div onClick={() => setModalCert(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: 22, width: 460, maxWidth: '94vw', boxShadow: '0 12px 44px rgba(0,0,0,0.28)', fontFamily: FONT }}>
+              <button onClick={() => setModalCert(false)} style={{ position: 'absolute', top: 8, right: 10, width: 30, height: 30, border: 'none', background: 'none', cursor: 'pointer', fontSize: 22, color: '#b0b8c0' }}>×</button>
+              <div style={{ fontSize: 17, fontWeight: 700, color: palette.ink, textAlign: 'center', marginBottom: 4 }}>Instalação do certificado (máquina nova)</div>
+              <div style={{ fontSize: 12, color: '#6b7c8a', textAlign: 'center', marginBottom: 16 }}>Dois arquivos, uma vez por máquina. Depois disso: impressão sem nenhum aviso.</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <a href="/instalar-certificado-qz.bat" download style={{ textDecoration: 'none', padding: '13px 14px', borderRadius: 10, border: '2px solid #4a7fa5', background: '#f2f7fb', color: palette.ink, fontWeight: 700, fontSize: 14, textAlign: 'center' }}>
+                  1️⃣ Baixar instalador do certificado QZ (.bat)
+                </a>
+                <div style={{ fontSize: 12, color: '#6b7c8a', margin: '-4px 4px 4px' }}>Na pasta Downloads: botão direito → <b>Executar como administrador</b>. Ele instala o certificado no QZ Tray e reinicia o programa — os avisos somem de vez.</div>
+                <a href="/liberar-qz-chrome.reg" download style={{ textDecoration: 'none', padding: '13px 14px', borderRadius: 10, border: '1.5px solid #d8e2ea', background: '#fff', color: palette.inkSoft, fontWeight: 700, fontSize: 14, textAlign: 'center' }}>
+                  2️⃣ Baixar liberação do Chrome (.reg) — se o Chrome bloquear
+                </a>
+                <div style={{ fontSize: 12, color: '#6b7c8a', margin: '-4px 4px 4px' }}>Só se aparecer bloqueio de "rede local" no Chrome: 2 cliques no arquivo → aceitar → reiniciar o Chrome.</div>
+              </div>
+              <div style={{ fontSize: 12, color: palette.inkSoft, background: '#f7f4f0', borderRadius: 8, padding: '10px 12px', marginTop: 14 }}>
+                Pra fechar: recarrega o app (2x) e clica em <b>Testar QZ</b> — tem que conectar sem nenhuma caixa de aviso.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* grupos na ordem de impressão */}

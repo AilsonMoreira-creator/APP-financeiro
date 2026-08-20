@@ -1,0 +1,10 @@
+Windows Registry Editor Version 5.00
+
+; Grupo Amicia - libera o APP Financeiro pra falar com o QZ Tray (rede local)
+; no Chrome 147+. Rodar com 2 cliques e aceitar. Vale pra maquina inteira.
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls]
+"1"="https://app-financeiro-brown.vercel.app"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google\Chrome\InsecurePrivateNetworkRequestsAllowedForUrls]
+"1"="https://app-financeiro-brown.vercel.app"

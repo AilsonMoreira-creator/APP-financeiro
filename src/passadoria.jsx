@@ -19,6 +19,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from './supabase.js';
 
 const FN = "Calibri,'Segoe UI',Arial,sans-serif";
@@ -202,14 +203,14 @@ export function PassadoriaBtnIcone({ corte, api, caseadoApi }) {
         title={titulo}
         onClick={(e) => { e.stopPropagation(); if (podeClicar) setModal(true); }}
         style={{
-          width: 16, height: 16, borderRadius: 4, padding: 0, flexShrink: 0,
+          width: 17, height: 17, borderRadius: 4, padding: 0, flexShrink: 0,
           background: cores.bg, border: `1px solid ${cores.borda}`,
           cursor: podeClicar ? 'pointer' : 'default',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           opacity: podeClicar || estado !== 'neutro' ? 1 : 0.6,
         }}
       >
-        <SvgFerro size={12} cores={estado === 'neutro' ? { ...cores, fill: '#fff', stroke: '#7d94a6' } : cores} />
+        <SvgFerro size={13} cores={estado === 'neutro' ? { ...cores, fill: '#fff', stroke: '#4a7fa5' } : cores} />
       </button>
       {modal && (
         <ModalDefinirPassadoria
@@ -246,13 +247,13 @@ export function ModalDefinirPassadoria({ corte, api, registroAtual, caseadoNome,
     else { setStatus('erro'); }
   };
 
-  return (
+  return createPortal(
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: 20, width: 360, maxWidth: '92vw', boxShadow: '0 12px 44px rgba(0,0,0,0.28)' }}>
         <button type="button" onClick={onClose} aria-label="Fechar" style={{ position: 'absolute', top: 8, right: 10, width: 30, height: 30, border: 'none', background: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: '#b0b8c0' }}>×</button>
         <div style={{ fontSize: 17, fontWeight: 700, color: '#2c3e50', fontFamily: 'Georgia,serif', textAlign: 'center', marginBottom: 4 }}>Definir Passadoria</div>
-        <div style={{ fontSize: 12, color: '#6b7c8a', textAlign: 'center', marginBottom: 16 }}>
-          Ref {corte?.ref} · {corte?.descricao || ''}{corte?.oficina ? ` · ${corte.oficina}` : ''}
+        <div style={{ fontSize: 12, color: '#6b7c8a', textAlign: 'center', marginBottom: 16, overflowWrap: 'break-word', lineHeight: 1.5 }}>
+          Ref <b style={{ color: '#2c3e50' }}>{corte?.ref}</b> · {corte?.descricao || ''}{corte?.oficina ? <> · <b style={{ color: '#2c3e50' }}>{corte.oficina}</b></> : null}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '46vh', overflowY: 'auto' }}>
           {(api?.nomes || []).map(nome => {
@@ -296,7 +297,8 @@ export function ModalDefinirPassadoria({ corte, api, registroAtual, caseadoNome,
           </button>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
