@@ -5246,8 +5246,12 @@ const EstoqueView=({sbUrl,handleZoom,produtos=[]})=>{
     try{
       const r=await fetch('/api/bling-estoque-acrescentar-corte',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conta:'exitus',ref:acrescModal,corte_id:ct.id,corte_n:ct.nCorte,usuario:usuarioSessao,matriz})});
       const j=await r.json().catch(()=>({}));
-      if(r.status===409){setAcrescResultado({erro:'Esse corte já foi adicionado ao estoque.'});return;}
-      if(!r.ok&&!j.resultado){setAcrescResultado({erro:j.error||('HTTP '+r.status)});return;}
+      if(r.status===409){setAcrescResultado({erro:j.em_andamento?'Esse corte está sendo processado agora — aguarda uns segundos e confere o log.':'Esse corte já foi adicionado ao estoque.'});return;}
+      if(!r.ok&&!j.resultado){
+        const ehTimeout=r.status===504||r.status===502||r.status===408;
+        setAcrescResultado({erro:ehTimeout?'O processamento demorou e a conexão caiu NO MEIO — parte das variações pode ter entrado. CLICA DE NOVO: o sistema continua de onde parou, sem somar duas vezes.':(j.error||('HTTP '+r.status))});
+        return;
+      }
       setAcrescResultado(j);
       if(j.resultado){
         setBlingEstoque(prev=>{const n={...prev};j.resultado.forEach(c=>{if(c.ok)n[`${acrescModal}|${c.cor_norm}|${c.tam}`]=c.nova;});return n;});

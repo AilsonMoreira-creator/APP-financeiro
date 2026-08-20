@@ -24,7 +24,7 @@
 import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 import { zerarFilhosSku } from './_bling-filhos-helpers.js';
 
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 300 };
 const API = 'https://api.bling.com.br/Api/v3';
 
 const normCor = (s) =>
@@ -46,10 +46,35 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'ref, corte_id e matriz obrigatórios' });
 
   try {
-    // ── trava de reinserção ──
+    // ── 20/08 (caso Cris/corte 9876): SELO NO COMEÇO + RETOMADA POR CÉLULA.
+    // Antes o registro só era gravado no FIM — a função morria no timeout,
+    // o front ficava sem resposta e cada novo clique re-somava as mesmas
+    // células (corte entrou 3x). Agora: selo 'processando' nasce antes do
+    // loop (2º clique simultâneo leva 409), cada célula já aplicada em
+    // tentativa anterior é PULADA (idempotência pelo log), e o selo só vira
+    // 'ok' quando a matriz inteira terminar.
     const { data: jaTem } = await supabase.from('bling_cortes_inseridos')
-      .select('id,inserido_em').eq('ref_norm', ref).eq('corte_id', corte_id).maybeSingle();
-    if (jaTem) return res.status(409).json({ error: 'corte já adicionado ao estoque', inserido_em: jaTem.inserido_em });
+      .select('id,inserido_em,status,atualizado_em').eq('ref_norm', ref).eq('corte_id', corte_id).maybeSingle();
+    if (jaTem && jaTem.status !== 'processando')
+      return res.status(409).json({ error: 'corte já adicionado ao estoque', inserido_em: jaTem.inserido_em });
+    if (jaTem && jaTem.status === 'processando') {
+      const idadeMs = Date.now() - new Date(jaTem.atualizado_em || jaTem.inserido_em).getTime();
+      if (idadeMs < 45000)
+        return res.status(409).json({ error: 'esse corte está sendo processado agora — aguarde uns segundos', em_andamento: true });
+      // processamento morto (timeout anterior): segue como RETOMADA
+    }
+    const seloBase = { ref_norm: ref, corte_id, corte_n: corte_n || null, inserido_por: usuario, status: 'processando', atualizado_em: new Date().toISOString() };
+    if (jaTem) await supabase.from('bling_cortes_inseridos').update(seloBase).eq('id', jaTem.id);
+    else await supabase.from('bling_cortes_inseridos').insert({ ...seloBase, matriz_editada: matriz });
+
+    // células já aplicadas em tentativa anterior deste MESMO corte → pular
+    const motivoCorte = `corte ${corte_n || corte_id}`;
+    const jaAplicadas = new Set();
+    {
+      const { data: logsAnt } = await supabase.from('bling_estoque_logs')
+        .select('cor_norm,tam').eq('ref', ref).eq('origem', 'acrescentar_corte').eq('motivo', motivoCorte);
+      (logsAnt || []).forEach(l => jaAplicadas.add(`${l.cor_norm}|${l.tam}`));
+    }
 
     const token = await refreshBlingToken(conta);
     const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' };
@@ -98,6 +123,13 @@ export default async function handler(req, res) {
         const row = porTam[tam];
         if (!row) { resultado.push({ cor_nome, cor_norm, tam, add, ok: false, motivo: 'tamanho sem cadastro no Bling' }); continue; }
 
+        if (jaAplicadas.has(`${cor_norm}|${tam}`)) {
+          resultado.push({ cor_nome, cor_norm, tam, add, ok: true, pulada: true, motivo: 'já aplicada em tentativa anterior' });
+          continue;
+        }
+        // selo respira a cada célula — o 409 de "em andamento" mede por aqui
+        supabase.from('bling_cortes_inseridos').update({ atualizado_em: new Date().toISOString() })
+          .eq('ref_norm', ref).eq('corte_id', corte_id).then?.(() => {}, () => {});
         let produtoId = row.bling_produto_id || null;
         if (!produtoId && row.bling_sku) {
           const rp = await blingFetch(`${API}/produtos?codigo=${encodeURIComponent(row.bling_sku)}`, headers);
@@ -160,19 +192,20 @@ export default async function handler(req, res) {
       );
     }
 
-    // nada acrescentado → não grava registro (deixa ele corrigir cadastro e tentar de novo)
+    // nada acrescentado → apaga o selo (deixa corrigir cadastro e tentar de novo)
     if (okCount === 0) {
+      await supabase.from('bling_cortes_inseridos').delete().eq('ref_norm', ref).eq('corte_id', corte_id).eq('status', 'processando');
       return res.status(200).json({ ok: false, gravado: false, okCount: 0, resultado, cores_ignoradas, msg: 'nenhuma variação acrescentada' });
     }
 
-    // grava o rastreio (some da projeção, vira "adicionado", guarda matriz editada)
-    const { error: eIns } = await supabase.from('bling_cortes_inseridos').insert({
-      ref_norm: ref, corte_id, corte_n: corte_n || null, inserido_por: usuario,
-      matriz_editada: matriz, cores_ignoradas, resultado,
-    });
+    // matriz completa → selo vira 'ok' (some da projeção, vira "adicionado")
+    const { error: eIns } = await supabase.from('bling_cortes_inseridos').update({
+      status: 'ok', matriz_editada: matriz, cores_ignoradas, resultado, atualizado_em: new Date().toISOString(),
+    }).eq('ref_norm', ref).eq('corte_id', corte_id);
     if (eIns) return res.status(500).json({ error: 'gravou no Bling mas falhou o registro: ' + eIns.message, resultado, cores_ignoradas });
 
-    return res.status(200).json({ ok: true, gravado: true, okCount, resultado, cores_ignoradas });
+    const puladas = resultado.filter(r2 => r2.pulada).length;
+    return res.status(200).json({ ok: true, gravado: true, okCount, puladas, retomada: puladas > 0, resultado, cores_ignoradas });
   } catch (e) {
     return res.status(500).json({ error: e.message || String(e) });
   }
