@@ -10,12 +10,11 @@ import { refreshBlingToken, blingFetch, supabase } from './_bling-helpers.js';
 export const config = { maxDuration: 120 };
 const API = 'https://api.bling.com.br/Api/v3';
 
-// vendável PRÉ-corte medido nos logs (qtd_anterior da 1ª leva)
+// 20/08 22h — REVISADO após os logs: a Cris já corrigiu quase tudo na mão
+// (17:04-17:07). Sobrou SÓ a Sálvia GG com o corte dobrado (53; correto =
+// 5 pré + 24 do corte = 29). Estorno cirúrgico + selo do corte.
 const CELULAS = [
-  { cor_norm: 'verdesalvia', tam: 'M',  valor_correto: 0 },
-  { cor_norm: 'verdesalvia', tam: 'G',  valor_correto: 0 },
-  { cor_norm: 'verdesalvia', tam: 'GG', valor_correto: 5 },
-  { cor_norm: 'nude',        tam: 'M',  valor_correto: 14 },
+  { cor_norm: 'verdesalvia', tam: 'GG', valor_correto: 29 },
 ];
 const REF = '2798';
 const MOTIVO_CORTE = 'corte 9876';
@@ -63,12 +62,20 @@ export default async function handler(req, res) {
       await new Promise(r2 => setTimeout(r2, 400));
     }
 
-    // apaga os logs das levas duplicadas — o corte volta a ficar virgem
-    // (a retomada por célula usa esses logs; sem apagar, o re-acréscimo pularia as 4)
-    const { error: eDel } = await supabase.from('bling_estoque_logs').delete()
-      .eq('ref', REF).eq('origem', 'acrescentar_corte').eq('motivo', MOTIVO_CORTE);
+    // SELA o corte 9876 como adicionado: sai da projeção e a trava impede
+    // qualquer novo acréscimo (a matriz toda já está no estoque, conferida)
+    const corteId = String(req.query?.corte_id || '');
+    let selo = null;
+    if (corteId) {
+      const { error: eS } = await supabase.from('bling_cortes_inseridos').upsert({
+        ref_norm: REF, corte_id: corteId, corte_n: '9876', inserido_por: 'correcao-incidente',
+        status: 'ok', atualizado_em: new Date().toISOString(),
+        resultado: [{ obs: 'incidente 20/08: levas duplicadas corrigidas manualmente pela Cris + estorno da Salvia GG; matriz completa no estoque' }],
+      }, { onConflict: 'ref_norm,corte_id' });
+      selo = eS ? eS.message : 'gravado';
+    }
 
-    return res.status(200).json({ ok: feito.every(f => f.ok), feito, logs_apagados: !eDel });
+    return res.status(200).json({ ok: feito.every(f => f.ok), feito, selo });
   } catch (e) {
     return res.status(500).json({ erro: e.message });
   }
