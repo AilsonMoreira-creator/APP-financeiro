@@ -1041,7 +1041,10 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
       const guardadoPdf = soDanfe ? null : docsPdf[String(p.pedido_id)];
       if (guardadoPdf && guardadoPdf.formato === 'PDF') {
         try {
-          const dDoc = await PDFDocument.load(Buffer.from(guardadoPdf.conteudo, 'base64'));
+          // 20/08: mesmo no modo PDF a casada sai NORMALIZADA (em pé, cortada,
+          // sem a A4 redundante) — antes ia inteira e o navegador rotacionava
+          const normG = await normalizarCasada(guardadoPdf.conteudo);
+          const dDoc = await PDFDocument.load(Buffer.from(normG ? normG.pdf : guardadoPdf.conteudo, 'base64'));
           const pgs = await saida.copyPages(dDoc, dDoc.getPageIndices());
           pgs.forEach(pg => saida.addPage(pg));
           etqOk = true;
@@ -1052,7 +1055,9 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
         try {
           const eR = await fetch(linkB);
           if (eR.ok) {
-            const eDoc = await PDFDocument.load(new Uint8Array(await eR.arrayBuffer()));
+            const bruto64 = Buffer.from(new Uint8Array(await eR.arrayBuffer())).toString('base64');
+            const normL = await normalizarCasada(bruto64);
+            const eDoc = await PDFDocument.load(Buffer.from(normL ? normL.pdf : bruto64, 'base64'));
             const pgs = await saida.copyPages(eDoc, eDoc.getPageIndices());
             pgs.forEach(pg => saida.addPage(pg));
             etqOk = true;

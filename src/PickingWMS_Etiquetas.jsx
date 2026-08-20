@@ -241,11 +241,24 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
       setImprimindo('Conectando na impressora…');
       const { qz, motivo } = await conectarQz();
       if (!qz) {
-        // sem QZ (não instalado, fechado ou bloqueado) → PDF, sem travar —
-        // mas agora DIZENDO o porquê, pra parar de adivinhar na expedição
-        setImprimindo(`QZ Tray não conectou (${motivo}) — gerando o PDF… Imprima em escala 100%; se o código de barras sair com defeito, abra o PDF no Firefox.`);
-        abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
-        setTimeout(() => { setImprimindo(''); carregar(); }, 9000);
+        // 20/08 (arquitetura dele): SEM fallback silencioso. Hoje de manhã o
+        // QZ caiu, o app gerou PDF sozinho e o time imprimiu casada inteira
+        // 6x10 sem perceber. Agora PARA, mostra o motivo e o PDF só sai por
+        // decisão explícita — sabendo que é o modo degradado.
+        setImprimindo('');
+        const querPdf = window.confirm(
+          `A TÉRMICA NÃO VAI IMPRIMIR: o QZ Tray não conectou.\n\nMotivo: ${motivo}\n\n` +
+          `O certo é resolver o QZ (abrir o programa, clicar em Testar QZ, conferir o bloqueio do Chrome) e imprimir de novo.\n\n` +
+          `Quer gerar o PDF pro navegador MESMO ASSIM? É o modo degradado: qualidade inferior no código de barras e sem os pares automáticos.`
+        );
+        if (querPdf) {
+          setImprimindo('Gerando o PDF (modo degradado)… Imprima em escala 100%; código de barras com defeito → abra no Firefox.');
+          abrirPdf(`${API}/wms-etiquetas?${qs({ pdf: '1' })}`);
+          setTimeout(() => { setImprimindo(''); carregar(); }, 9000);
+        } else {
+          setImprimindo(`⛔ Impressão cancelada — QZ Tray não conectou (${motivo}). Clique em Testar QZ pra diagnosticar.`);
+          setTimeout(() => setImprimindo(''), 15000);
+        }
         return;
       }
       const impressora = await escolherImpressora(qz);
