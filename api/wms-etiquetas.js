@@ -514,6 +514,12 @@ export default async function handler(req, res) {
         } catch { return null; }
       };
 
+      const addDanfe = async (docs, p3) => {
+        const d = docs.DANFE;
+        if (!d?.conteudo) return;
+        if (d.formato === 'ZPL') await renderZpl(d.conteudo, null, p3);
+        else await addPdf(d.conteudo);
+      };
       let n = 0;
       for (const p of candidatos) {
         n++;
@@ -522,19 +528,19 @@ export default async function handler(req, res) {
         // DANFE em cache primeiro (quando não vem embutida na casada)
         const et = docs.ETIQUETA;
         if (ehShein) {
-          if (docs.DANFE?.conteudo) await addPdf(docs.DANFE.conteudo);
+          await addDanfe(docs, p);
           pagTexto([`Shein logística`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `A etiqueta é puxada só na`, `hora da impressão (regra:`, `baixar muda o status na Shein)`], rgb(0.97, 0.95, 0.90));
           continue;
         }
         if (et?.formato === 'PDF' && et?.conteudo) {
           const norm = await normalizarCasada(et.conteudo);
           if (norm?.casada) { await addPdf(norm.pdf); continue; }
-          if (docs.DANFE?.conteudo) await addPdf(docs.DANFE.conteudo);
+          await addDanfe(docs, p);
           await addPdf(norm ? norm.pdf : et.conteudo);
           continue;
         }
         if (et?.formato === 'ZPL' && et?.conteudo) {
-          if (docs.DANFE?.conteudo) await addPdf(docs.DANFE.conteudo);
+          await addDanfe(docs, p);
           const ok = await renderZpl(et.conteudo, docs.PREVIA_PNG?.conteudo, p);
           if (!ok) pagTexto([`Etiqueta ZPL`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `(render visual indisponível —`, `a impressão usa o ZPL original)`]);
           continue;
@@ -731,22 +737,89 @@ export default async function handler(req, res) {
         const idsD = candidatosLote.map(p => p.pedido_id);
         for (let i = 0; i < idsD.length; i += 300) {
           const { data } = await supabase.from('wms_documentos')
-            .select('pedido_id, conteudo').eq('tipo', 'DANFE').is('erro', null)
+            .select('pedido_id, conteudo, formato').eq('tipo', 'DANFE').is('erro', null)
             .in('pedido_id', idsD.slice(i, i + 300));
-          (data || []).forEach(d => { if (d.conteudo) danfeGuardada[String(d.pedido_id)] = d.conteudo; });
+          (data || []).forEach(d => { if (d.conteudo) danfeGuardada[String(d.pedido_id)] = { conteudo: d.conteudo, formato: d.formato || 'PDF' }; });
         }
       }
+      // 20/08 v2 (foto do Ailson: DANFE A4 espremida em 10x15 = letra de
+      // formiga). A nota avulsa agora sai como DANFE SIMPLIFICADA gerada em
+      // ZPL — nativa da Zebra, texto nítido e código de barras perfeito, sem
+      // rasterizar A4. Os dados vêm do XML da NFe (emitente, protocolo, tudo).
+      // Fallback: se o XML falhar, o PDF do linkPDF sai como antes.
+      // Retorna { formato:'ZPL'|'PDF', conteudo } ou null.
+      const xmlCampo = (xml, tag) => {
+        const m = xml.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + tag + '>'));
+        return m ? m[1].trim() : '';
+      };
+      const montarDanfeZpl = (info) => {
+        const esc = (t) => String(t || '').replace(/[\^~]/g, ' ').slice(0, 46);
+        const chaveFmt = (info.chave.match(/.{1,4}/g) || []).join(' ');
+        const dt = info.emissao ? info.emissao.slice(8, 10) + '/' + info.emissao.slice(5, 7) + '/' + info.emissao.slice(0, 4) : '';
+        const valor = info.valor ? Number(info.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+        return '^XA^CI28^PW812^LL1218^LH0,0'
+          + '^FO30,30^A0N,34,34^FDDANFE SIMPLIFICADO - ETIQUETA^FS'
+          + '^FO30,72^A0N,24,24^FDNF-e Num ' + esc(info.numero) + '  Serie ' + esc(info.serie) + '  Emissao ' + dt + '^FS'
+          + '^FO30,106^GB752,2,2^FS'
+          + '^FO30,124^A0N,22,22^FDEMITENTE^FS'
+          + '^FO30,152^A0N,26,26^FD' + esc(info.emitNome) + '^FS'
+          + '^FO30,184^A0N,24,24^FDCNPJ ' + esc(info.emitCnpj) + '^FS'
+          + '^FO30,222^A0N,22,22^FDDESTINATARIO^FS'
+          + '^FO30,250^A0N,26,26^FD' + esc(info.destNome) + '^FS'
+          + (info.destDoc ? '^FO30,282^A0N,24,24^FDCPF/CNPJ ' + esc(info.destDoc) + '^FS' : '')
+          + '^FO30,320^GB752,2,2^FS'
+          + '^FO30,340^A0N,26,26^FDVALOR TOTAL  R$ ' + valor + '^FS'
+          + (info.protocolo ? '^FO30,376^A0N,22,22^FDProtocolo de autorizacao ' + esc(info.protocolo) + '^FS' : '')
+          + '^FO30,420^A0N,22,22^FDCHAVE DE ACESSO^FS'
+          + '^FO30,450^BY2,2.5,150^BCN,150,N,N,N^FD' + info.chave + '^FS'
+          + '^FO30,616^A0N,22,22^FD' + chaveFmt + '^FS'
+          + '^FO30,660^A0N,20,20^FDConsulta pela chave em www.nfe.fazenda.gov.br^FS'
+          + '^XZ';
+      };
       const buscarDanfe = async (p) => {
-        let d64 = danfeGuardada[String(p.pedido_id)] || null;
-        if (d64 || !p.nf_id) return d64;
+        const cache = danfeGuardada[String(p.pedido_id)] || null;
+        if (cache || !p.nf_id) return cache;
         const tkC = await pegarToken(p.conta);
         if (!tkC) return null;
         try {
           const hb2 = { Authorization: 'Bearer ' + tkC, Accept: 'application/json' };
           const nfR = await blingFetch(`https://api.bling.com.br/Api/v3/nfe/${p.nf_id}`, hb2);
           const nf = typeof nfR.json === 'function' ? await nfR.json().catch(() => ({})) : {};
-          // 20/08 PROVADO no debug: linkPDF = DANFE em PDF real; linkDanfe = pagina
-          // HTML do visualizador. A ordem antiga nunca chegava no PDF.
+
+          // 1º caminho: XML da NFe → DANFE simplificada em ZPL
+          if (nf?.data?.xml) {
+            try {
+              const xr = await fetch(nf.data.xml);
+              if (xr.ok) {
+                const xml = await xr.text();
+                const chave = (xml.match(/Id="NFe(\d{44})"/) || [])[1] || String(nf?.data?.chaveAcesso || '').replace(/\D/g, '');
+                const emit = xmlCampo(xml, 'emit');
+                const dest = xmlCampo(xml, 'dest');
+                const prot = xmlCampo(xml, 'protNFe');
+                if (chave && chave.length === 44) {
+                  const zplDanfe = montarDanfeZpl({
+                    chave,
+                    numero: nf?.data?.numero || xmlCampo(xml, 'nNF'),
+                    serie: nf?.data?.serie ?? xmlCampo(xml, 'serie'),
+                    emissao: String(nf?.data?.dataEmissao || xmlCampo(xml, 'dhEmi') || ''),
+                    emitNome: xmlCampo(emit, 'xNome'),
+                    emitCnpj: xmlCampo(emit, 'CNPJ'),
+                    destNome: xmlCampo(dest, 'xNome'),
+                    destDoc: xmlCampo(dest, 'CPF') || xmlCampo(dest, 'CNPJ'),
+                    valor: nf?.data?.valorNota ?? xmlCampo(xml, 'vNF'),
+                    protocolo: xmlCampo(prot, 'nProt'),
+                  });
+                  await supabase.from('wms_documentos').upsert({
+                    pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'ZPL',
+                    conteudo: zplDanfe, bytes: zplDanfe.length, hash: hashDoc(zplDanfe), origem: 'xml-nfe', erro: null,
+                  }, { onConflict: 'pedido_id,tipo' });
+                  return { formato: 'ZPL', conteudo: zplDanfe };
+                }
+              }
+            } catch { /* cai pro PDF */ }
+          }
+
+          // 2º caminho (fallback): PDF do linkPDF, como antes
           const link = nf?.data?.linkPDF || nf?.data?.linkDanfe;
           if (!link) return null;
           const acharPdf = async (u) => {
@@ -756,26 +829,23 @@ export default async function handler(req, res) {
           };
           let db = await acharPdf(link);
           if (!db) return null;
-          // se veio a pagina HTML do visualizador, garimpar o link do PDF dentro
           if (db[0] === 0x3c) {
             const html = Buffer.from(db).toString('utf8');
             const m = html.match(/https?:\/\/[^"'<>\s]+\.pdf[^"'<>\s]*/i);
             db = m ? await acharPdf(m[0]) : null;
             if (!db) return null;
           }
-          // 19/08: a DANFE do Bling vem com bytes ANTES do cabeçalho %PDF — a
-          // checagem no byte zero rejeitava todas. Procura o cabeçalho no começo.
           let iniPdf = -1;
           for (let i2 = 0; i2 < Math.min(db.length - 3, 2048); i2++) {
             if (db[i2] === 0x25 && db[i2 + 1] === 0x50 && db[i2 + 2] === 0x44 && db[i2 + 3] === 0x46) { iniPdf = i2; break; }
           }
-          if (iniPdf < 0) return null;   // não veio PDF de verdade
-          d64 = Buffer.from(iniPdf ? db.slice(iniPdf) : db).toString('base64');
+          if (iniPdf < 0) return null;
+          const d64 = Buffer.from(iniPdf ? db.slice(iniPdf) : db).toString('base64');
           await supabase.from('wms_documentos').upsert({
             pedido_id: p.pedido_id, conta: p.conta, tipo: 'DANFE', formato: 'PDF',
             conteudo: d64, bytes: d64.length, hash: hashDoc(d64), origem: 'bling', erro: null,
           }, { onConflict: 'pedido_id,tipo' });
-          return d64;
+          return { formato: 'PDF', conteudo: d64 };
         } catch { return null; }
         finally { await new Promise(r2 => setTimeout(r2, 340)); }
       };
@@ -871,8 +941,9 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
         }
         if (!parFeito) {
           if (comDanfe) {
-            const d64 = zipDanfe64 || await buscarDanfe(p);
-            if (d64) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: d64 });
+            const dRes = zipDanfe64 ? { formato: 'PDF', conteudo: zipDanfe64 } : await buscarDanfe(p);
+            if (dRes?.formato === 'ZPL') blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: dRes.conteudo });
+            else if (dRes?.conteudo) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: dRes.conteudo });
             else semDanfe.push(p.numero);
           }
           if (ehPdf) {
