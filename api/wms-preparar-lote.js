@@ -292,7 +292,7 @@ export default async function handler(req, res) {
               try {
                 const rz = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'image/png' },
+                  headers: { 'Content-Type': 'text/plain', Accept: 'image/png' },
                   body: doc.conteudo,
                 });
                 if (rz.ok) {
@@ -303,7 +303,18 @@ export default async function handler(req, res) {
                     hash: hash(png64), origem: 'labelary', erro: null,
                   }, { onConflict: 'pedido_id,tipo' });
                 }
-              } catch { /* visual é conveniência; a prévia renderiza na hora se faltar */ }
+                else {
+                  await supabase.from('wms_documentos').upsert({
+                    pedido_id: p.pedido_id, conta, tipo: 'PREVIA_PNG',
+                    erro: `labelary http ${rz.status}`,
+                  }, { onConflict: 'pedido_id,tipo' });
+                }
+              } catch (e2) {
+                await supabase.from('wms_documentos').upsert({
+                  pedido_id: p.pedido_id, conta, tipo: 'PREVIA_PNG',
+                  erro: String(e2.message).slice(0, 200),
+                }, { onConflict: 'pedido_id,tipo' }).catch?.(() => {});
+              }
             }
             c.ok++; r.preparados++;
           } catch (e) {
