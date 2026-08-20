@@ -530,8 +530,8 @@ export default function LojasWhats({ userId, isAdmin, onBack }) {
     { id: 'aprendizado', label: 'Aprendizado', icon: Brain },
     { id: 'midias',      label: 'Mídias',      icon: Paperclip },
     { id: 'pesquisa',    label: 'Pesquisa',    icon: FileText },
-    { id: 'config',      label: 'Config',      icon: Settings },
     { id: 'clientes',    label: 'Clientes',    icon: Users, badge: clientesAbertos },
+    { id: 'config',      label: 'Config',      icon: Settings },
     { id: 'produtos',    label: 'Produtos',    icon: Package },
   ];
 
@@ -1562,6 +1562,22 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
   // Tags (Ailson 07/07/2026): defs no cache module-level; tick força re-render
   // quando carregam/mudam. filtroTag só age na aba conversando (desktop).
   const [filtroTag, setFiltroTag] = useState('todas');
+  // 20/08 (Ailson): busca de cliente na lista — casa quem COMEÇA com as letras
+  const [buscaCliente, setBuscaCliente] = useState('');
+  // normaliza (sem acento, minúsculo) e casa por COMEÇA-COM no nome; se o
+  // termo for só número, procura no telefone (contém)
+  const normBusca = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const conversasBuscadas = useMemo(() => {
+    const termo = normBusca(buscaCliente.trim());
+    if (!termo) return conversas;
+    const soDigitos = /^\d+$/.test(termo);
+    return conversas.filter(c => {
+      if (soDigitos) return String(c.telefone || '').replace(/\D/g, '').includes(termo);
+      const nome = normBusca(c.nome_cliente || c.nome || '');
+      return nome.startsWith(termo) || nome.split(/\s+/).some(p => p.startsWith(termo));
+    });
+  }, [conversas, buscaCliente]);
+
   const [tagsTick, setTagsTick] = useState(0);
   const [modalTags, setModalTags] = useState(false);
   useEffect(() => { carregarTagsDefs().then(() => setTagsTick(t => t + 1)); }, []);
@@ -2231,6 +2247,19 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         </div>
       )}
 
+      {/* Busca de cliente (Ailson 20/08): começa-com no nome; números buscam o telefone */}
+      <div style={{ marginBottom: 12 }}>
+        <input value={buscaCliente} onChange={e => setBuscaCliente(e.target.value)}
+          placeholder="🔎 Buscar cliente pelo nome (ou telefone)..."
+          style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: fz(14), border: `1px solid ${palette.beige}`, borderRadius: 8, fontFamily: FONT, color: palette.ink, outline: 'none', background: palette.surface }} />
+        {buscaCliente.trim() && (
+          <div style={{ fontSize: fz(11), color: palette.inkMuted, marginTop: 4 }}>
+            {conversasBuscadas.length} cliente(s) começando com "{buscaCliente.trim()}"
+            <button onClick={() => setBuscaCliente('')} style={{ marginLeft: 8, fontSize: fz(11), border: 'none', background: 'none', color: palette.inkSoft, cursor: 'pointer', textDecoration: 'underline', fontFamily: FONT }}>limpar</button>
+          </div>
+        )}
+      </div>
+
       {/* Barra de selecao multipla — abas processando, aprovar, perdida, follow-up */}
       {(ehAbaProcessando || ehAbaAprovar || ehAbaPerdida || ehAbaFollowup) && conversas.length > 0 && (
         <div style={{
@@ -2459,14 +2488,14 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
         }}>{feedback.msg}</div>
       )}
 
-      {conversas.length === 0 ? (
+      {conversasBuscadas.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 40, color: palette.inkMuted }}>
-          Nenhuma conversa nessa etapa.
+          {buscaCliente.trim() ? 'Nenhum cliente começando com essas letras nessa etapa.' : 'Nenhuma conversa nessa etapa.'}
         </div>
       ) : (
         <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {conversas.map(c => (
+            {conversasBuscadas.map(c => (
               <ConversaRow key={c.id} c={c}
                 vendedoraNome={c.vendedora_atribuida_id ? vendedorasMap.get(c.vendedora_atribuida_id) : (c.vendeu_site ? '🌐 Site' : null)}
                 vendedorasMap={vendedorasMap}
