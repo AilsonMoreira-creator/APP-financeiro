@@ -131,7 +131,7 @@ export default async function handler(req, res) {
 
     if (q.executar !== '1') {
       return res.status(200).json({
-        previa: true, anuncios_ativos: ids.length, refs_no_card: Object.keys(cards).length,
+        previa: true, anuncios_ml: mlbs.length, refs_no_card: Object.keys(cards).length,
         a_corrigir: corrigir.length, ok: plano.filter(p => p.acao === 'ok').length,
         sem_anuncio: plano.filter(p => p.acao === 'sem_anuncio_ativo').length, plano,
       });
