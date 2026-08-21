@@ -51,7 +51,7 @@ async function pedidosFiltrados(q) {
   // Por isso buscamos: (1) quem já tem NF (últimos 7 dias, qualquer status) e
   // (2) quem ainda está no funil sem NF (aparece como "aguardando").
   const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
-  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo';
+  const COLS = 'conta, pedido_id, numero, numero_loja, canal_geral, ml_logistic_type, itens, status_wms, data_pedido, etiqueta_impressa_em, finalizado_em, nf_id, nf_situacao, nf_checado_em, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, print_estado, print_regra, print_nf, print_etiqueta, print_motivo, situacao_bling';
 
   let q1 = supabase.from('wms_pedidos').select(COLS)
     .not('nf_id', 'is', null)
@@ -284,7 +284,7 @@ export default async function handler(req, res) {
     if (q.contadores === '1') {
       const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
       const contasFiltro = String(q.contas || 'todas');
-      const COLS_CONT = 'pedido_id, conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_situacao, etiqueta_impressa_em, status_wms';
+      const COLS_CONT = 'pedido_id, conta, canal_geral, ml_logistic_type, print_regra, print_estado, ml_agendado_em, ml_ship_status, ml_ship_substatus, nf_agendada_impressa_em, nf_situacao, etiqueta_impressa_em, status_wms, situacao_bling';
       let sel = supabase.from('wms_pedidos')
         .select(COLS_CONT)
         .neq('status_wms', 'cancelado')
