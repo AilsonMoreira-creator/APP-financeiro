@@ -383,7 +383,7 @@ export default async function handler(req, res) {
           // só quem tem o NOSSO carimbo de impressão DE HOJE.
           if (impressaHoje) { grupos[k].impressas++; jaImpressas++; }
           else grupos[k].pedidos--;          // impressa em outro dia: fora da conta
-        } else if ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled') { grupos[k].prontas++; prontas++; }
+        } else if ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled' && p.situacao_bling !== 9) { grupos[k].prontas++; prontas++; }
         else if (ehFlexLinha) { grupos[k].pedidos--; }   // Flex não tem nota
         else if (p.print_etiqueta === false || p.status_wms === 'finalizado') {
           // 17/08 (ordem dele): Flex/Meluni sem NF e pedido já finalizado NÃO
@@ -463,6 +463,7 @@ export default async function handler(req, res) {
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
         if (p.ml_ship_status === 'cancelled') return false;   // envio cancelado no ML
+        if (p.situacao_bling === 9) return false;             // atendido no Bling = impresso por la
         return sit === 5 || p.print_estado === 'PRONTO';
       }).slice(0, 80);
       if (!candidatos.length) return res.status(200).json({ ok: false, erro: 'nenhum pedido pronto nesses filtros' });
@@ -719,7 +720,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ debug: passos });
       }
 
-      const podeSair = (p) => p.ml_ship_status !== 'cancelled' && (q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
+      const podeSair = (p) => p.ml_ship_status !== 'cancelled' && p.situacao_bling !== 9 && (q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
         || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5)));
       const candidatos = peds.filter(podeSair);
       // 19/08: LOTES. Com os pares (DANFE+etiqueta) 130 pedidos numa resposta
@@ -792,8 +793,16 @@ export default async function handler(req, res) {
         let m2;
         while ((m2 = re.exec(xml)) && itens.length < 8) {
           const det = m2[1];
+          const xp = xmlCampo(det, 'xProd');
+          // 21/08 (pedido dele): REF primeiro, cor e tamanho — o xProd do
+          // Bling traz "... (ref 02773) (H) Cor:PRETO;Tamanho:G2"
+          const ref2 = (xp.match(/ref[.\s]*0*(\d{3,5})/i) || [])[1] || null;
+          const cor2 = (xp.match(/Cor:\s*([^;<]+)/i) || [])[1]?.trim() || null;
+          const tam2 = (xp.match(/Tamanho:\s*([^;<\s]+)/i) || [])[1]?.trim() || null;
+          const descLimpa = xp.replace(/\(ref[^)]*\)/i, '').replace(/\(H\)/i, '').replace(/Cor:[^;<]+;?/i, '').replace(/Tamanho:[^;<\s]+/i, '').replace(/\s+-\s*$/, '').replace(/\s{2,}/g, ' ').trim();
           itens.push({
-            desc: xmlCampo(det, 'xProd'),
+            desc: descLimpa || xp,
+            ref: ref2, cor: cor2, tam: tam2,
             sku: xmlCampo(det, 'cProd'),
             qtd: Math.round(parseFloat(xmlCampo(det, 'qCom') || '1')) || 1,
           });
@@ -824,11 +833,16 @@ export default async function handler(req, res) {
           + '^FO30,652^A0N,20,20^FDConsulta pela chave em www.nfe.fazenda.gov.br^FS'
           + '^FO30,690^GB752,2,2^FS'
           + '^FO30,706^A0N,22,22^FDPRODUTOS^FS'
-          + (info.itens || []).slice(0, 8).map((it, ix) => {
-            const linha = it.qtd + ' x ' + String(it.desc || '').slice(0, 38) + (it.sku ? '  (' + String(it.sku).slice(0, 14) + ')' : '');
-            return '^FO30,' + (736 + ix * 30) + '^A0N,22,22^FD' + linha.replace(/[\^~]/g, ' ') + '^FS';
+          + (info.itens || []).slice(0, 6).map((it, ix) => {
+            // REF primeiro (negrito maior), depois cor · tamanho · qtd, e a
+            // descricao curta embaixo — leitura de bancada em 1 segundo
+            const y = 736 + ix * 58;
+            const l1 = (it.ref ? 'REF ' + it.ref + '  ' : '') + (it.cor ? String(it.cor).toUpperCase() + '  ' : '') + (it.tam ? 'TAM ' + it.tam + '  ' : '') + it.qtd + ' pc';
+            const l2 = String(it.desc || '').slice(0, 44) + (!it.ref && it.sku ? ' (' + String(it.sku).slice(0, 14) + ')' : '');
+            return '^FO30,' + y + '^A0N,26,26^FD' + l1.replace(/[\^~]/g, ' ').slice(0, 46) + '^FS'
+              + '^FO30,' + (y + 28) + '^A0N,20,20^FD' + l2.replace(/[\^~]/g, ' ') + '^FS';
           }).join('')
-          + ((info.itens || []).length > 8 ? '^FO30,' + (736 + 8 * 30) + '^A0N,20,20^FD... e mais ' + (info.itens.length - 8) + ' item(ns)^FS' : '')
+          + ((info.itens || []).length > 6 ? '^FO30,' + (736 + 6 * 58) + '^A0N,20,20^FD... e mais ' + (info.itens.length - 6) + ' item(ns)^FS' : '')
           + '^XZ';
       };
       const buscarDanfe = async (p) => {
