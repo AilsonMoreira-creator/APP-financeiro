@@ -45,7 +45,18 @@ export default async function handler(req, res) {
         .ilike('telefone', `%${f.slice(-8)}%`).limit(4);
       (cf || []).forEach(x => convsPorFone.push(x));
     }
-    return res.status(200).json({ conversas: convs || [], ultimas_mensagens: msgs, sacolas, cadastro_lojas: cadastro, conversas_por_telefone: convsPorFone });
+    // leads do site B2B (visitas/carrinho do amicialoja entram aqui)
+    let leads = [];
+    try {
+      const { data: l1 } = await supabase.from('lojas_leads_carrinho').select('*').limit(1);
+      const cols = Object.keys(l1?.[0] || {});
+      const colNome = cols.find(c => /nome/i.test(c));
+      if (colNome) {
+        const { data: l2 } = await supabase.from('lojas_leads_carrinho').select('*').ilike(colNome, like).limit(5);
+        leads = l2 || [];
+      } else leads = [{ _colunas: cols }];
+    } catch { /* segue */ }
+    return res.status(200).json({ conversas: convs || [], ultimas_mensagens: msgs, sacolas, cadastro_lojas: cadastro, conversas_por_telefone: convsPorFone, leads_site: leads });
   } catch (e) {
     return res.status(500).json({ erro: String(e?.message || e) });
   }
