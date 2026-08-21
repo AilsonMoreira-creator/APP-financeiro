@@ -79,6 +79,10 @@ export default async function handler(req, res) {
         // data de HOJE em BRT — com toISOString() puro o "Finalizados Hoje"
         // zerava as 21h (virada do dia em UTC). Ailson 07/08/2026.
         const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+        // 21/08 (ordem dele): pedido ABERTO com mais de 3 dias sai do contador
+        // do dia — e caso antigo/orfao (cancelado na plataforma, esquecido),
+        // nao fila de separacao. Continua visivel no Detalhar Pedidos.
+        const limiteVelho = new Date(Date.now() - 3 * 3600000 - 3 * 86400000).toISOString().slice(0, 10);
         const corteMs = new Date(corteDeHoje()).getTime();
         const porConta = {};
         const porCanal = {};
@@ -116,7 +120,8 @@ export default async function handler(req, res) {
             // virada do dia, quando o corte de "hoje" passa a ser o de amanha).
             // Ailson 09/08: pos-corte NAO entra nos avisos amarelos de prazo
             // (k.pendentes) — o aviso e sobre a onda de hoje, ate o corte.
-            if (r.criado_em && new Date(r.criado_em).getTime() >= corteMs) { c.pra_amanha++; tot.pra_amanha++; }
+            if ((r.data_pedido || hoje) < limiteVelho) { /* velho demais: fora do contador */ }
+            else if (r.criado_em && new Date(r.criado_em).getTime() >= corteMs) { c.pra_amanha++; tot.pra_amanha++; }
             else { k.pendentes++; c.abertos++; tot.abertos++; c.pecas_abertas += r.qtd_pecas || 0; tot.pecas_abertas += r.qtd_pecas || 0; }
           }
           else if (r.status_wms === 'em_separacao') {
