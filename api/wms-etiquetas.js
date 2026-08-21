@@ -378,7 +378,10 @@ export default async function handler(req, res) {
         } else if (q.tipo === 'etiqueta_liberada') {
           grupos[k].prontas++; prontas++;   // liberada pelo ML = pode imprimir
         } else if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') {
-          if (impressaHoje || sit === 6) { grupos[k].impressas++; jaImpressas++; }
+          // 20/08 (ele apontou: "540 impressas" impossível): situação 6 de
+          // QUALQUER dia entrava na conta de hoje. Agora "já impressas" =
+          // só quem tem o NOSSO carimbo de impressão DE HOJE.
+          if (impressaHoje) { grupos[k].impressas++; jaImpressas++; }
           else grupos[k].pedidos--;          // impressa em outro dia: fora da conta
         } else if (sit === 5 || p.print_estado === 'PRONTO') { grupos[k].prontas++; prontas++; }
         else if (ehFlexLinha) { grupos[k].pedidos--; }   // Flex não tem nota
