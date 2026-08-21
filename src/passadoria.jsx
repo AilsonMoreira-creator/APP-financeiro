@@ -77,6 +77,14 @@ export function usePassadoria() {
 
   // Define (ou troca) a passadoria de um corte. Preserva entregue ao trocar o nome.
   const definir = useCallback(async (corte, nome, caseadoNome) => {
+    // 20/08: puxa o ACORDO da passadoria pra esta ref (passadoria_precos) e
+    // grava a base do pagamento — qtd e valor ficam editáveis no card da tela
+    let valorUnit = null;
+    try {
+      const { data: pr } = await supabase.from('passadoria_precos')
+        .select('valor').eq('ref_norm', normRef(corte.ref)).eq('passadoria', nome).maybeSingle();
+      if (pr?.valor != null) valorUnit = pr.valor;
+    } catch { /* sem acordo cadastrado — campo fica em branco */ }
     const row = {
       corte_id: corte.id,
       ref: corte.ref ?? null,
@@ -85,6 +93,8 @@ export function usePassadoria() {
       oficina: corte.oficina ?? null,
       caseado_nome: caseadoNome ?? null,
       qtd: corte.qtd ?? null,
+      qtd_pagar: corte.qtd ?? null,
+      valor_unit: valorUnit,
       nome,
       definido_por: getUsuario(),
       definido_em: new Date().toISOString(),
@@ -106,6 +116,17 @@ export function usePassadoria() {
       updated_at: new Date().toISOString(),
     }).eq('id', registro.id);
     if (error) { console.error('[passadoria] entregue:', error.message); return { ok: false, erro: error.message }; }
+    await carregarRegistros();
+    return { ok: true };
+  }, [carregarRegistros]);
+
+  // edita a base do pagamento no card (peça a menos / valor renegociado)
+  const salvarPagamento = useCallback(async (registro, campos) => {
+    if (!registro?.id) return { ok: false };
+    const { error } = await supabase.from('oficinas_passadoria').update({
+      ...campos, updated_at: new Date().toISOString(),
+    }).eq('id', registro.id);
+    if (error) { console.error('[passadoria] pagamento:', error.message); return { ok: false }; }
     await carregarRegistros();
     return { ok: true };
   }, [carregarRegistros]);
@@ -134,7 +155,7 @@ export function usePassadoria() {
     setNomes(prev => { const novos = prev.filter(x => x !== n); salvarNomes(novos); return novos; });
   }, [salvarNomes]);
 
-  return { registros, nomes, loading, registroPorCorte, definir, toggleEntregue, remover, addNome, removeNome };
+  return { registros, nomes, loading, registroPorCorte, definir, toggleEntregue, remover, addNome, removeNome, salvarPagamento };
 }
 
 // ── Ícone: ferro de passar ───────────────────────────────────────────────────
@@ -302,6 +323,103 @@ export function ModalDefinirPassadoria({ corte, api, registroAtual, caseadoNome,
   );
 }
 
+// ── Preços por passadoria (Ailson 20/08): quanto cada passadoria recebe pra
+// passar e embalar ESTE produto. Fica em passadoria_precos (ref × passadoria)
+// e NÃO entra na composição de custo (o campo Passadoria do custo engloba
+// tag/etiqueta/etc). Usado nos editores da Calculadora e da Ficha Técnica.
+export function PassadoriaPrecosBtn({ refProd, descricao }) {
+  const [aberto, setAberto] = useState(false);
+  const temRef = !!String(refProd || '').trim();
+  return (
+    <>
+      <button type="button" disabled={!temRef}
+        title={temRef ? 'Valores de passadoria deste produto' : 'Preencha a referência primeiro'}
+        onClick={() => temRef && setAberto(true)}
+        style={{ background: '#fff', border: '1px solid #c8d8e4', borderRadius: 8, padding: '6px 10px', cursor: temRef ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: 6, color: '#4a7fa5', fontWeight: 700, fontSize: 12, fontFamily: 'Georgia,serif', opacity: temRef ? 1 : 0.5 }}>
+        <PassadoriaTabIcon size={15} /> Passadoria
+      </button>
+      {aberto && <ModalPrecosPassadoria refProd={refProd} descricao={descricao} onClose={() => setAberto(false)} />}
+    </>
+  );
+}
+
+function ModalPrecosPassadoria({ refProd, descricao, onClose }) {
+  const refNorm = normRef(refProd);
+  const [nomes, setNomes] = useState([]);
+  const [valores, setValores] = useState({});
+  const [status, setStatus] = useState('carregando'); // carregando | pronto | salvando | ok | erro
+  useEffect(() => {
+    (async () => {
+      try {
+        const [rN, rP] = await Promise.all([
+          supabase.from('amicia_data').select('payload').eq('user_id', 'passadoria-config').maybeSingle(),
+          supabase.from('passadoria_precos').select('passadoria, valor').eq('ref_norm', refNorm),
+        ]);
+        const ns = Array.isArray(rN.data?.payload?.nomes) && rN.data.payload.nomes.length ? rN.data.payload.nomes : NOMES_PADRAO;
+        const vs = {};
+        (rP.data || []).forEach(p => { vs[p.passadoria] = p.valor != null ? String(p.valor).replace('.', ',') : ''; });
+        setNomes(ns); setValores(vs); setStatus('pronto');
+      } catch { setStatus('erro'); }
+    })();
+  }, [refNorm]);
+
+  const salvar = async () => {
+    setStatus('salvando');
+    try {
+      for (const nome of nomes) {
+        const bruto = String(valores[nome] ?? '').trim().replace(',', '.');
+        const v = bruto === '' ? null : parseFloat(bruto);
+        if (v == null || !Number.isFinite(v)) {
+          await supabase.from('passadoria_precos').delete().eq('ref_norm', refNorm).eq('passadoria', nome);
+        } else {
+          await supabase.from('passadoria_precos').upsert({
+            ref_norm: refNorm, passadoria: nome, valor: v,
+            atualizado_em: new Date().toISOString(), atualizado_por: getUsuario(),
+          }, { onConflict: 'ref_norm,passadoria' });
+        }
+      }
+      setStatus('ok');
+      setTimeout(onClose, 900);
+    } catch { setStatus('erro'); }
+  };
+
+  return createPortal(
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: 20, width: 380, maxWidth: '94vw', boxShadow: '0 12px 44px rgba(0,0,0,0.28)' }}>
+        <button type="button" onClick={onClose} style={{ position: 'absolute', top: 8, right: 10, width: 30, height: 30, border: 'none', background: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: '#b0b8c0' }}>×</button>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#2c3e50', fontFamily: 'Georgia,serif', textAlign: 'center', marginBottom: 4 }}>Valores de Passadoria</div>
+        <div style={{ fontSize: 12, color: '#6b7c8a', textAlign: 'center', marginBottom: 14, overflowWrap: 'break-word' }}>
+          Ref <b style={{ color: '#2c3e50' }}>{refProd}</b>{descricao ? ` · ${descricao}` : ''}
+        </div>
+        <div style={{ fontSize: 11, color: '#a89f94', textAlign: 'center', marginBottom: 12 }}>
+          Quanto cada passadoria recebe pra passar e embalar este produto. Não entra na composição de custo.
+        </div>
+        {status === 'carregando' ? (
+          <div style={{ textAlign: 'center', padding: 16, color: '#a89f94', fontSize: 13 }}>Carregando…</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '46vh', overflowY: 'auto' }}>
+            {nomes.map(nome => (
+              <div key={nome} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid #e2e8ee', borderRadius: 8, background: '#f6f9fc' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: '#2c3e50', flex: 1 }}><PassadoriaTabIcon size={14} />{nome}</span>
+                <span style={{ fontSize: 12, color: '#8a9aa4' }}>R$</span>
+                <input value={valores[nome] ?? ''} onChange={e => setValores(v => ({ ...v, [nome]: e.target.value }))}
+                  placeholder="—" inputMode="decimal"
+                  style={{ width: 74, padding: '7px 8px', fontSize: 14, textAlign: 'right', border: '1px solid #c8d8e4', borderRadius: 6, outline: 'none', fontFamily: "Calibri,'Segoe UI',Arial,sans-serif", background: '#fff', colorScheme: 'light' }} />
+              </div>
+            ))}
+          </div>
+        )}
+        <button type="button" onClick={salvar} disabled={status === 'salvando' || status === 'carregando'}
+          style={{ marginTop: 14, width: '100%', padding: '11px', fontSize: 14, fontWeight: 700, color: '#fff', background: status === 'ok' ? '#27ae60' : '#4a7fa5', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Georgia,serif', opacity: status === 'salvando' ? 0.7 : 1 }}>
+          {status === 'salvando' ? 'Salvando…' : status === 'ok' ? '✓ Salvo' : 'Salvar valores'}
+        </button>
+        {status === 'erro' && <div style={{ fontSize: 12, color: '#c0392b', textAlign: 'center', marginTop: 8 }}>Erro ao carregar/salvar. Tenta de novo.</div>}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ── Foto miniatura (mesmo padrão da tela Caseado) ────────────────────────────
 function FotoPassadoria({ refProd, w = 44, h = 56 }) {
   const sbUrl = (supabase && supabase.supabaseUrl) || (import.meta.env && import.meta.env.VITE_SUPABASE_URL) || '';
@@ -329,6 +447,36 @@ function FotoPassadoria({ refProd, w = 44, h = 56 }) {
         }}
         style={{ width: w, height: h, objectFit: 'cover', borderRadius: 6, border: '1px solid #e8e2da' }} />
       <div style={{ width: w, height: h, borderRadius: 6, background: 'linear-gradient(135deg,#f0ebe3,#e8e2da)', display: 'none', alignItems: 'center', justifyContent: 'center', border: '1px solid #e8e2da', position: 'absolute', top: 0, left: 0, color: '#c0b8b0', fontSize: 16 }}>📷</div>
+    </div>
+  );
+}
+
+// linha "1194 pç × R$ 1,00 = R$ 1.194,00" — qtd e valor editáveis (peça a
+// menos / acordo renegociado). Sem acordo cadastrado o valor fica em branco.
+function LinhaPagamento({ reg, api }) {
+  const [qtd, setQtd] = useState(reg.qtd_pagar != null ? String(reg.qtd_pagar) : (reg.qtd != null ? String(reg.qtd) : ''));
+  const [valor, setValor] = useState(reg.valor_unit != null ? String(reg.valor_unit).replace('.', ',') : '');
+  useEffect(() => { setQtd(reg.qtd_pagar != null ? String(reg.qtd_pagar) : (reg.qtd != null ? String(reg.qtd) : '')); }, [reg.qtd_pagar, reg.qtd]);
+  useEffect(() => { setValor(reg.valor_unit != null ? String(reg.valor_unit).replace('.', ',') : ''); }, [reg.valor_unit]);
+  const nQtd = parseInt(qtd, 10);
+  const nValor = parseFloat(String(valor).replace(',', '.'));
+  const total = Number.isFinite(nQtd) && Number.isFinite(nValor) ? nQtd * nValor : null;
+  const salvar = () => {
+    const campos = {};
+    campos.qtd_pagar = Number.isFinite(nQtd) ? nQtd : null;
+    campos.valor_unit = Number.isFinite(nValor) ? nValor : null;
+    if (campos.qtd_pagar !== (reg.qtd_pagar ?? null) || campos.valor_unit !== (reg.valor_unit ?? null)) api.salvarPagamento(reg, campos);
+  };
+  const inp = { padding: '5px 7px', fontSize: 13, textAlign: 'right', border: '1px solid #c8d8e4', borderRadius: 6, outline: 'none', fontFamily: FN, background: '#fff', colorScheme: 'light' };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+      <input value={qtd} onChange={e => setQtd(e.target.value.replace(/[^0-9]/g, ''))} onBlur={salvar} inputMode="numeric" title="Quantidade a pagar" style={{ ...inp, width: 58 }} />
+      <span style={{ fontSize: 11, color: '#8a9aa4' }}>pç ×</span>
+      <span style={{ fontSize: 11, color: '#8a9aa4' }}>R$</span>
+      <input value={valor} onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ''))} onBlur={salvar} inputMode="decimal" placeholder="—" title="Valor por peça (acordo da passadoria)" style={{ ...inp, width: 58, borderColor: valor === '' ? '#f0b429' : '#c8d8e4', background: valor === '' ? '#fffdf4' : '#fff' }} />
+      <span style={{ fontSize: 13, fontWeight: 700, color: total != null ? '#1f6f6b' : '#c0b8b0', fontFamily: FN }}>
+        = {total != null ? 'R$ ' + total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'R$ —'}
+      </span>
     </div>
   );
 }
@@ -417,6 +565,7 @@ export function TelaPassadoria({ api }) {
                     <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 2 }}>
                       🧵 {reg.oficina || '—'}{reg.caseado_nome ? ` · caseado: ${reg.caseado_nome}` : ''} · {reg.qtd != null ? `${reg.qtd} pç` : '—'} · chegou {fmtData(reg.definido_em)}{ent && reg.entregue_em ? ` · entregue ${fmtData(reg.entregue_em)}` : ''}
                     </div>
+                    <LinhaPagamento reg={reg} api={api} />
                   </div>
                   <div style={{ textAlign: 'center', minWidth: 46 }}>
                     <div style={{ fontSize: 22, fontWeight: 700, fontFamily: FN, color: (dias >= 7 && !ent) ? '#c0392b' : '#2c3e50' }}>{dias}</div>

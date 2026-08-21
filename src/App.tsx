@@ -12,7 +12,7 @@ import MapeamentoSkus from './MapeamentoSkus';
 import RaioXProduto from './RaioXProduto';
 import FullEnvio from './FullEnvio';
 import { useCaseado, CaseadoBtnIcone, TelaCaseado, CaseadoTabIcon } from './caseado.jsx';
-import { usePassadoria, PassadoriaBtnIcone, TelaPassadoria, PassadoriaTabIcon } from './passadoria.jsx';
+import { usePassadoria, PassadoriaBtnIcone, TelaPassadoria, PassadoriaTabIcon, PassadoriaPrecosBtn } from './passadoria.jsx';
 import OrdemMatrixModal from './OrdemMatrixModal';
 import HistoricoVendas from './HistoricoVendas';
 import OsAmicia from './os-amicia/OsAmicia';
@@ -8825,7 +8825,10 @@ const CalcFormProd=({onSalvar,onVoltar,inicial,onRegras})=>{
           <button onClick={onVoltar} style={{background:"#fff",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:13,color:"#4a7fa5"}}>← Voltar</button>
           <div style={{fontSize:20,fontWeight:700,color:"#2c3e50"}}>{inicial?"Editar Produto":"Novo Produto"}</div>
         </div>
-        {onRegras&&<button onClick={onRegras} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>⚙ Regras Plataformas</button>}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <PassadoriaPrecosBtn refProd={f.ref} descricao={f.descricao}/>
+          {onRegras&&<button onClick={onRegras} style={{background:"#fff",color:"#2c3e50",border:"1px solid #e8e2da",borderRadius:8,padding:"7px 14px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif",fontWeight:600}}>⚙ Regras Plataformas</button>}
+        </div>
       </div>
       <div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e8e2da"}}>
         <div style={{display:"flex",gap:16,marginBottom:12}}>
@@ -9411,6 +9414,7 @@ function FichaFormProd(props){
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
           <button onClick={onVoltar} style={ftBtnVolt}>← Voltar</button>
           <div style={{fontSize:20,fontWeight:700,color:_S}}>{inicial?"Editar Produto":"Novo Produto"}</div>
+          <div style={{marginLeft:"auto"}}><PassadoriaPrecosBtn refProd={f.ref} descricao={f.descricao}/></div>
         </div>
         <div style={{background:_W,borderRadius:12,padding:20,border:"1px solid "+_BD}}>
           <div style={{display:"flex",gap:16,marginBottom:12}}>
