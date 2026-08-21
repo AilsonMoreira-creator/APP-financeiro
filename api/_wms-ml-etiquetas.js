@@ -25,13 +25,32 @@ export async function etiquetasDoMl(lista, conta) {
   const h = { Authorization: `Bearer ${token}` };
 
   // pedido → shipment
+  // 21/08 (diag dos pedidos 9585/9586 muniam): compra em CARRINHO faz o
+  // Bling gravar o numeroLoja como PACK id — /orders/{pack} dá 404
+  // "Order do not exists". Fallback: /packs/{id} → primeira order → shipment.
   const shipDe = {};
   for (const p of lista) {
     if (!p.numero_loja) continue;
     try {
+      let sid = null;
       const r = await fetch(`https://api.mercadolibre.com/orders/${p.numero_loja}`, { headers: h });
-      const j = await r.json();
-      if (j?.shipping?.id) shipDe[String(j.shipping.id)] = p.pedido_id;
+      if (r.ok) {
+        const j = await r.json();
+        sid = j?.shipping?.id || null;
+      }
+      if (!sid) {
+        const rp = await fetch(`https://api.mercadolibre.com/packs/${p.numero_loja}`, { headers: h });
+        if (rp.ok) {
+          const jp = await rp.json();
+          sid = jp?.shipment?.id || null;
+          const ordId = jp?.orders?.[0]?.id;
+          if (!sid && ordId) {
+            const ro = await fetch(`https://api.mercadolibre.com/orders/${ordId}`, { headers: h });
+            if (ro.ok) sid = (await ro.json())?.shipping?.id || null;
+          }
+        }
+      }
+      if (sid) shipDe[String(sid)] = p.pedido_id;
     } catch { /* segue */ }
     await espera(120);
   }
