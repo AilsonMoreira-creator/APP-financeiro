@@ -449,8 +449,19 @@ export default async function handler(req, res) {
 
     if (q.previa_pdf === '1') {
       const peds = await pedidosFiltrados(q);
-      const candidatos = peds.filter(p => q.reimprimir === '1' ? true : !p.etiqueta_impressa_em).slice(0, 80);
-      if (!candidatos.length) return res.status(200).json({ ok: false, erro: 'nenhum pedido nesses filtros' });
+      // 20/08 (ele apontou): a prévia mostrava TODO pedido em aberto — até sem
+      // NF. Agora usa exatamente o critério de "pronta" da tela/impressão.
+      const sitDe = {};
+      for (const p of peds) if (p.nf_id && p.nf_situacao != null) sitDe[String(p.nf_id)] = p.nf_situacao;
+      const candidatos = peds.filter(p => {
+        if (q.reimprimir === '1') return true;
+        if (q.tipo === 'nf_agendada') return !!p.nf_id && !p.nf_agendada_impressa_em;
+        if (q.tipo === 'etiqueta_liberada') return true;
+        const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
+        if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
+        return sit === 5 || p.print_estado === 'PRONTO';
+      }).slice(0, 80);
+      if (!candidatos.length) return res.status(200).json({ ok: false, erro: 'nenhum pedido pronto nesses filtros' });
 
       const ids = candidatos.map(p => p.pedido_id);
       const docsPor = {};
@@ -530,6 +541,16 @@ export default async function handler(req, res) {
         if (ehShein) {
           await addDanfe(docs, p);
           pagTexto([`Shein logística`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `A etiqueta é puxada só na`, `hora da impressão (regra:`, `baixar muda o status na Shein)`], rgb(0.97, 0.95, 0.90));
+          continue;
+        }
+        // Mercado Livre (20/08): a impressão usa o ZPL2 ORIGINAL da API do ML,
+        // que a prévia não pode baixar (marcaria "printed" no painel). Se o
+        // cache já tem esse ZPL (impressão anterior), mostra ele; a casada PDF
+        // do Bling NÃO aparece mais — o corte dela não representa a impressão.
+        const ehMl = String(p.canal_geral || '') === 'Mercado Livre' && p.ml_logistic_type !== 'fulfillment';
+        if (ehMl && et?.formato !== 'ZPL') {
+          await addDanfe(docs, p);
+          pagTexto([`Mercado Livre`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `A etiqueta ZPL original do ML`, `é puxada só na hora da`, `impressão (regra: baixar`, `muda o status no painel)`], rgb(0.97, 0.95, 0.90));
           continue;
         }
         if (et?.formato === 'PDF' && et?.conteudo) {
