@@ -61,7 +61,20 @@ export default async function handler(req, res) {
         if (Date.now() - inicio > 260000) { r.aviso = 'tempo esgotado'; break; }
         try {
           const o = await (await fetch(`https://api.mercadolibre.com/orders/${p.numero_loja}`, { headers: h })).json();
-          const sid = o?.shipping?.id;
+          let sid = o?.shipping?.id;
+          // 21/08 (diag 9585/9586): compra em CARRINHO faz o numeroLoja ser o
+          // PACK id (orders/{pack} = 404) — por isso o espelho ficava "?/?"
+          // e envio cancelado passava batido. Fallback: pack → order → shipment.
+          if (!sid) {
+            const pk = await (await fetch(`https://api.mercadolibre.com/packs/${p.numero_loja}`, { headers: h })).json().catch(() => ({}));
+            const ordId = pk?.orders?.[0]?.id;
+            if (ordId) {
+              await espera(120);
+              const o2 = await (await fetch(`https://api.mercadolibre.com/orders/${ordId}`, { headers: h })).json().catch(() => ({}));
+              sid = o2?.shipping?.id || null;
+            }
+            if (!sid) sid = pk?.shipment?.id || null;
+          }
           if (!sid) continue;
           await espera(120);
           const s = await (await fetch(`https://api.mercadolibre.com/shipments/${sid}`, { headers: h })).json();

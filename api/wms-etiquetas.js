@@ -383,7 +383,7 @@ export default async function handler(req, res) {
           // só quem tem o NOSSO carimbo de impressão DE HOJE.
           if (impressaHoje) { grupos[k].impressas++; jaImpressas++; }
           else grupos[k].pedidos--;          // impressa em outro dia: fora da conta
-        } else if (sit === 5 || p.print_estado === 'PRONTO') { grupos[k].prontas++; prontas++; }
+        } else if ((sit === 5 || p.print_estado === 'PRONTO') && p.ml_ship_status !== 'cancelled') { grupos[k].prontas++; prontas++; }
         else if (ehFlexLinha) { grupos[k].pedidos--; }   // Flex não tem nota
         else if (p.print_etiqueta === false || p.status_wms === 'finalizado') {
           // 17/08 (ordem dele): Flex/Meluni sem NF e pedido já finalizado NÃO
@@ -462,6 +462,7 @@ export default async function handler(req, res) {
         if (q.tipo === 'etiqueta_liberada') return true;
         const sit = p.nf_id ? sitDe[String(p.nf_id)] : null;
         if (sit === 6 || p.etiqueta_impressa_em || p.print_estado === 'IMPRESSO') return false;
+        if (p.ml_ship_status === 'cancelled') return false;   // envio cancelado no ML
         return sit === 5 || p.print_estado === 'PRONTO';
       }).slice(0, 80);
       if (!candidatos.length) return res.status(200).json({ ok: false, erro: 'nenhum pedido pronto nesses filtros' });
@@ -718,8 +719,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ debug: passos });
       }
 
-      const podeSair = (p) => q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
-        || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5));
+      const podeSair = (p) => p.ml_ship_status !== 'cancelled' && (q.reimprimir === '1' || q.tipo === 'etiqueta_liberada'
+        || (!p.etiqueta_impressa_em && (p.print_estado === 'PRONTO' || sitDe[String(p.nf_id)] === 5)));
       const candidatos = peds.filter(podeSair);
       // 19/08: LOTES. Com os pares (DANFE+etiqueta) 130 pedidos numa resposta
       // estouravam o tempo e o teto de 4,5MB do Vercel ("An error occurred").
