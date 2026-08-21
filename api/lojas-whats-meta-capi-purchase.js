@@ -168,6 +168,9 @@ export async function dispararPurchase({ conversa_id, venda_info, tipo_match }) 
     event_time: Math.floor(Date.now() / 1000),
     event_id: eventId,
     action_source: temCtwa ? 'business_messaging' : 'website',
+    // 21/08 (audit: subcode 2804063 em TODOS os envios desde 30/05): a Meta
+    // exige messaging_channel quando action_source=business_messaging
+    ...(temCtwa ? { messaging_channel: 'whatsapp' } : {}),
     user_data,
     custom_data: {
       currency: 'BRL',
