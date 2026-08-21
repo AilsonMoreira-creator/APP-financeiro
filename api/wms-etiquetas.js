@@ -788,10 +788,10 @@ export default async function handler(req, res) {
         return m ? m[1].trim() : '';
       };
       // 21/08 (achado da Sthefany): o painel entrega junto uma DANFE "mini"
-      // (so chave/protocolo, sem produtos) que a equipe DESCARTA. Os ZPLs
-      // baixados (zip Shopee, ZPL2 do ML) podem embutir esse bloco — corta
-      // antes de imprimir/guardar. A nossa DANFE rica e gerada a parte e
-      // nunca passa por aqui.
+      // (so chave/protocolo, sem produtos) que a equipe DESCARTA. Aplicado
+      // SOMENTE no ZPL2 do MERCADO LIVRE (ordem dele 21/08: a Shopee ja sai
+      // certa pelo App — nao mexer no que esta validado). A nossa DANFE rica
+      // e gerada a parte e nunca passa por aqui.
       const cortarMiniDanfe = (zpl) => {
         if (!zpl || !/DANFE|Chave de acesso|Protocolo de Autoriza/i.test(zpl)) return zpl;
         const blocos2 = String(zpl).match(/\^XA[\s\S]*?\^XZ/g);
@@ -954,7 +954,7 @@ export default async function handler(req, res) {
           else { ehPdf = true; pdf64 = doMl.conteudo; }
         }
         if (jaTem) {
-          if (jaTem.formato === 'ZPL') zplDoPedido = cortarMiniDanfe(jaTem.conteudo);
+          if (jaTem.formato === 'ZPL') zplDoPedido = jaTem.conteudo;
           else { ehPdf = true; pdf64 = jaTem.conteudo; }
         }
         try {
@@ -966,13 +966,13 @@ export default async function handler(req, res) {
             const nomeZ = Object.keys(z0).find(n => /\.txt$|zpl/i.test(n));
             const nomeP = Object.keys(z0).find(n => /\.pdf$/i.test(n));
             if (nomeZ) {
-              zplDoPedido = cortarMiniDanfe(Buffer.from(z0[nomeZ]).toString('utf8'));
+              zplDoPedido = Buffer.from(z0[nomeZ]).toString('utf8');
               // 19/08: o zip da casada pode trazer a DANFE em PDF junto do ZPL
               if (nomeP) zipDanfe64 = Buffer.from(z0[nomeP]).toString('base64');
             }
             else if (nomeP) { ehPdf = true; pdf64 = Buffer.from(z0[nomeP]).toString('base64'); }
           } else if (b0[0] === 0x25) { ehPdf = true; pdf64 = Buffer.from(b0).toString('base64'); }
-          else if (String.fromCharCode(b0[0], b0[1]) === '^X') zplDoPedido = cortarMiniDanfe(Buffer.from(b0).toString('utf8'));
+          else if (String.fromCharCode(b0[0], b0[1]) === '^X') zplDoPedido = Buffer.from(b0).toString('utf8');
         } catch (e) { if (!e?.pulaDownload) { /* sem etiqueta */ } }
         if (!zplDoPedido && !ehPdf) continue;
 
