@@ -124,6 +124,9 @@ async function executar() {
           await supabase.from('lojas_whats_conversas').update({
             etapa: 'vendeu',
             vendeu_em: new Date().toISOString(),
+            vendeu_valor: Number(match.valor_liquido) || null,
+            vendeu_venda_id: match.venda_id || null,
+            vendeu_canal: match.categoria || null,
             atualizado_em: new Date().toISOString(),
           }).eq('id', conv.id);
         }
@@ -144,45 +147,52 @@ async function executar() {
 }
 
 // ─── BUSCA VENDA NO MIRE PARA UMA CONVERSA ────────────────────────────────
+async function buscarVendaPorDocumento(docOriginal, iniciaDate) {
+  const docLimpo = String(docOriginal || '').replace(/\D/g, '');
+  if (!docLimpo) return null;
+  const { data: atac } = await supabase.from('lojas_vendas')
+    .select('id, numero_pedido, data_venda, valor_liquido')
+    .or(`documento_cliente_raw.eq.${docLimpo},documento_cliente_raw.eq.${docOriginal}`)
+    .gte('data_venda', iniciaDate)
+    .order('data_venda', { ascending: true })
+    .limit(1);
+  if (atac?.length) {
+    return { venda_id: atac[0].id, numero_pedido: atac[0].numero_pedido, data_venda: atac[0].data_venda, valor_liquido: atac[0].valor_liquido, categoria: 'atacado', tipo_match: 'documento' };
+  }
+  const { data: varejo } = await supabase.from('lojas_vendas_varejo')
+    .select('id, numero_pedido, data_venda, valor_liquido')
+    .or(`documento_raw.eq.${docLimpo},documento_raw.eq.${docOriginal}`)
+    .gte('data_venda', iniciaDate)
+    .order('data_venda', { ascending: true })
+    .limit(1);
+  if (varejo?.length) {
+    return { venda_id: varejo[0].id, numero_pedido: varejo[0].numero_pedido, data_venda: varejo[0].data_venda, valor_liquido: varejo[0].valor_liquido, categoria: 'varejo', tipo_match: 'documento' };
+  }
+  return null;
+}
+
 async function buscarVendaParaConversa(conv) {
   const iniciaDate = conv.iniciada_em.split('T')[0];
 
   // 1. PRIMARY — match por documento (CPF/CNPJ) se Sofia tem
   if (conv.documento) {
-    const docLimpo = conv.documento.replace(/\D/g, '');
+    const r1 = await buscarVendaPorDocumento(conv.documento, iniciaDate);
+    if (r1) return r1;
+  }
 
-    const { data: atac } = await supabase.from('lojas_vendas')
-      .select('id, numero_pedido, data_venda, valor_liquido')
-      .or(`documento_cliente_raw.eq.${docLimpo},documento_cliente_raw.eq.${conv.documento}`)
-      .gte('data_venda', iniciaDate)
-      .order('data_venda', { ascending: true })
-      .limit(1);
-    if (atac?.length) {
-      return {
-        venda_id: atac[0].id,
-        numero_pedido: atac[0].numero_pedido,
-        data_venda: atac[0].data_venda,
-        valor_liquido: atac[0].valor_liquido,
-        categoria: 'atacado',
-        tipo_match: 'documento',
-      };
-    }
-
-    const { data: varejo } = await supabase.from('lojas_vendas_varejo')
-      .select('id, numero_pedido, data_venda, valor_liquido')
-      .or(`documento_raw.eq.${docLimpo},documento_raw.eq.${conv.documento}`)
-      .gte('data_venda', iniciaDate)
-      .order('data_venda', { ascending: true })
-      .limit(1);
-    if (varejo?.length) {
-      return {
-        venda_id: varejo[0].id,
-        numero_pedido: varejo[0].numero_pedido,
-        data_venda: varejo[0].data_venda,
-        valor_liquido: varejo[0].valor_liquido,
-        categoria: 'varejo',
-        tipo_match: 'documento',
-      };
+  // 2. PONTE lojas_clientes (21/08, caso Lizi 💛): conversa SEM documento e
+  // venda SEM telefone deixavam o match impossivel. A ponte: telefone da
+  // conversa → cadastro do cliente (backfill de telefone) → DOCUMENTO →
+  // venda. Ultimos 8 digitos resolvem o nono digito e o DDI.
+  const ult8 = String(conv.telefone || '').replace(/\D/g, '').slice(-8);
+  if (ult8.length === 8) {
+    const { data: clis } = await supabase.from('lojas_clientes')
+      .select('documento')
+      .ilike('telefone_principal', `%${ult8}`)
+      .limit(3);
+    for (const cli of (clis || [])) {
+      const r2 = await buscarVendaPorDocumento(cli.documento, iniciaDate);
+      if (r2) return { ...r2, tipo_match: 'cliente_telefone' };
     }
   }
 
