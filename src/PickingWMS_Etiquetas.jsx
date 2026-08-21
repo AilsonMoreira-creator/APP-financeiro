@@ -546,7 +546,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             </span>
             {jaImpressas > 0 && (
               <span style={{ fontSize: 12, fontWeight: 700, color: palette.inkSoft, background: palette.beigeSoft, padding: '6px 11px', borderRadius: 999 }}>
-                {jaImpressas} já impressa{jaImpressas === 1 ? '' : 's'}
+                {jaImpressas} impressa{jaImpressas === 1 ? '' : 's'} no App hoje
               </span>
             )}
             {aguardando > 0 && (
@@ -589,7 +589,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: g.prontas ? palette.ok : palette.inkMuted }}>{g.prontas || 0}/{g.pedidos}</div>
               <div style={{ fontSize: 10.5, color: palette.inkMuted }}>
-                {g.impressas ? `${g.impressas} impressa${g.impressas === 1 ? '' : 's'}` : 'prontas'}
+                {g.impressas ? `${g.impressas} impressa${g.impressas === 1 ? '' : 's'} no App` : 'prontas'}
               </div>
             </div>
           </div>
