@@ -527,7 +527,12 @@ export default async function handler(req, res) {
 
       const addDanfe = async (docs, p3) => {
         const d = docs.DANFE;
-        if (!d?.conteudo) return;
+        if (!d?.conteudo) {
+          // par completo SEMPRE: sem DANFE em cache, entra o cartão dela —
+          // a prévia espelha 1:1 a sequência física (nota, etiqueta, nota...)
+          pagTexto([`DANFE`, ``, `Pedido ${p3.numero}  REF ${p3.ref}`, `Loc ${p3.loc} · ${p3.conta}`, ``, `Gerada na hora da impressão`, `(simplificada em ZPL, com`, `produtos e código de barras)`], rgb(0.93, 0.96, 0.93));
+          return;
+        }
         if (d.formato === 'ZPL') await renderZpl(d.conteudo, null, p3);
         else await addPdf(d.conteudo);
       };
@@ -566,7 +571,8 @@ export default async function handler(req, res) {
           if (!ok) pagTexto([`Etiqueta ZPL`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `(render visual indisponível —`, `a impressão usa o ZPL original)`]);
           continue;
         }
-        pagTexto([`Sem documento ainda`, ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.canal_geral}`, ``, `Será puxada na hora da`, `impressão (ou rode Preparar)`], rgb(0.99, 0.93, 0.88));
+        await addDanfe(docs, p);
+        pagTexto([`Etiqueta ${String(p.canal_geral || '')}`.trim(), ``, `Pedido ${p.numero}  REF ${p.ref}`, `Loc ${p.loc} · ${p.conta}`, ``, `Será puxada na hora da`, `impressão (ou rode Preparar)`], rgb(0.99, 0.93, 0.88));
       }
 
       const pdfBytes = await saida.save();
@@ -986,11 +992,17 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           }
         }
         if (!parFeito) {
+          // 20/08 (ordem dele): o PAR é ATÔMICO — DANFE e etiqueta saem juntas
+          // ou o pedido não sai. Antes a DANFE era empurrada antes de saber se
+          // a etiqueta existia; quando falhava, saía NOTA ÓRFÃ e a esteira
+          // física embaralhava os pares.
+          const temEtiqueta = ehPdf ? !!pdf64 : !!zplDoPedido;
+          if (!temEtiqueta) { semEtiqueta.push(p.numero); continue; }
           if (comDanfe) {
             const dRes = zipDanfe64 ? { formato: 'PDF', conteudo: zipDanfe64 } : await buscarDanfe(p);
             if (dRes?.formato === 'ZPL') blocos.push({ tipo: 'danfe_zpl', pedido: p.numero, ref: p.ref, loc: p.loc, zpl: dRes.conteudo });
             else if (dRes?.conteudo) blocos.push({ tipo: 'danfe_pdf', pedido: p.numero, ref: p.ref, loc: p.loc, pdf: dRes.conteudo });
-            else semDanfe.push(p.numero);
+            else { semDanfe.push(p.numero); continue; }   // sem nota, etiqueta não sai sozinha
           }
           if (ehPdf) {
             // o QZ Tray imprime PDF direto na térmica (type pixel) — sem conversão
