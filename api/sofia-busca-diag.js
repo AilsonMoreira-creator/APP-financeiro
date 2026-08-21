@@ -1,63 +1,39 @@
-// /api/sofia-busca-diag — one-off: confirma se um cliente da loja física
-// existe no módulo Sofia (conversas, sacolas, leads). ?nome=eliziane
+// /api/sofia-busca-diag — one-off: rastreia um cliente em TODAS as bases
+// (Sofia, sacolas, leads, importacoes, cadastros) por nome, documento e
+// telefone. ?nome= &doc=72449160000 &fone=11999999999
 import { supabase } from './_lojas-whats-helpers.js';
+
+const TABELAS = [
+  'lojas_whats_conversas', 'lojas_pedidos_sacola', 'lojas_leads_carrinho',
+  'lojas_importacoes', 'lojas_clientes_kpis', 'clientes_sofia',
+  'clientes_sofia_cadastro', 'clientes_sofia_dados', 'lojas_clientes',
+];
 
 export default async function handler(req, res) {
   const nome = String(req.query?.nome || '').trim();
-  if (nome.length < 3) return res.status(400).json({ erro: 'passa ?nome=' });
-  try {
-    const like = `%${nome}%`;
-    const { data: convs } = await supabase.from('lojas_whats_conversas')
-      .select('id, nome_cliente, telefone, etapa, criado_em, atualizado_em')
-      .ilike('nome_cliente', like).order('atualizado_em', { ascending: false }).limit(10);
-    const ids = (convs || []).map(c => c.id);
-    let msgs = [];
-    if (ids.length) {
-      const { data: m } = await supabase.from('lojas_whats_mensagens')
-        .select('conversa_id, enviada_em, direcao, template_name')
-        .in('conversa_id', ids).order('enviada_em', { ascending: false }).limit(12);
-      msgs = m || [];
-    }
-    let sacolas = [];
+  const doc = String(req.query?.doc || '').replace(/\D/g, '');
+  const fone = String(req.query?.fone || '').replace(/\D/g, '');
+  if (!nome && !doc && !fone) return res.status(400).json({ erro: 'passa ?nome= e/ou ?doc= e/ou ?fone=' });
+  const docFmt = doc.length === 11 ? `${doc.slice(0,3)}.${doc.slice(3,6)}.${doc.slice(6,9)}-${doc.slice(9)}` : null;
+  const saida = {};
+  for (const t of TABELAS) {
     try {
-      const { data: s } = await supabase.from('lojas_pedidos_sacola')
-        .select('*').ilike('cliente_nome', like).limit(5);
-      sacolas = s || [];
-    } catch { /* coluna pode ter outro nome */ }
-    // base de clientes das lojas (KPIs importados do PDV): acha o telefone
-    // pelo nome e cruza com a Sofia por telefone
-    let cadastro = [];
-    let convsPorFone = [];
-    try {
-      const { data: k } = await supabase.from('lojas_clientes_kpis').select('*').or(`nome.ilike.${like},cliente.ilike.${like}`).limit(5);
-      cadastro = k || [];
-    } catch (e2) {
-      try {
-        const { data: k2 } = await supabase.from('lojas_clientes_kpis').select('*').limit(1);
-        cadastro = [{ _colunas: Object.keys(k2?.[0] || {}) }];
-      } catch { /* tabela indisponivel */ }
-    }
-    const fones = [...new Set(cadastro.flatMap(c => [c.telefone, c.celular, c.fone, c.whatsapp].filter(Boolean)))]
-      .map(f => String(f).replace(/\D/g, '')).filter(f => f.length >= 10);
-    for (const f of fones.slice(0, 4)) {
-      const { data: cf } = await supabase.from('lojas_whats_conversas')
-        .select('id, nome_cliente, telefone, etapa, criado_em, atualizado_em')
-        .ilike('telefone', `%${f.slice(-8)}%`).limit(4);
-      (cf || []).forEach(x => convsPorFone.push(x));
-    }
-    // leads do site B2B (visitas/carrinho do amicialoja entram aqui)
-    let leads = [];
-    try {
-      const { data: l1 } = await supabase.from('lojas_leads_carrinho').select('*').limit(1);
-      const cols = Object.keys(l1?.[0] || {});
-      const colNome = cols.find(c => /nome/i.test(c));
-      if (colNome) {
-        const { data: l2 } = await supabase.from('lojas_leads_carrinho').select('*').ilike(colNome, like).limit(5);
-        leads = l2 || [];
-      } else leads = [{ _colunas: cols }];
-    } catch { /* segue */ }
-    return res.status(200).json({ conversas: convs || [], ultimas_mensagens: msgs, sacolas, cadastro_lojas: cadastro, conversas_por_telefone: convsPorFone, leads_site: leads });
-  } catch (e) {
-    return res.status(500).json({ erro: String(e?.message || e) });
+      const { data: um, error: e1 } = await supabase.from(t).select('*').limit(1);
+      if (e1) { saida[t] = { erro: e1.message.slice(0, 60) }; continue; }
+      const cols = Object.keys(um?.[0] || {});
+      if (!cols.length) { saida[t] = { vazia: true }; continue; }
+      const alvoNome = cols.filter(c => /nome|cliente(?!_id)/i.test(c) && !/id$/i.test(c));
+      const alvoDoc = cols.filter(c => /cpf|cnpj|doc/i.test(c));
+      const alvoFone = cols.filter(c => /fone|telefone|celular|whats/i.test(c));
+      const ors = [];
+      if (nome) alvoNome.forEach(c => ors.push(`${c}.ilike.%${nome}%`));
+      if (doc) alvoDoc.forEach(c => { ors.push(`${c}.ilike.%${doc}%`); if (docFmt) ors.push(`${c}.ilike.%${docFmt}%`); });
+      if (fone && fone.length >= 8) alvoFone.forEach(c => ors.push(`${c}.ilike.%${fone.slice(-8)}%`));
+      if (!ors.length) { saida[t] = { sem_colunas_alvo: cols.slice(0, 12) }; continue; }
+      const { data: hits, error: e2 } = await supabase.from(t).select('*').or(ors.join(',')).limit(5);
+      if (e2) { saida[t] = { erro: e2.message.slice(0, 60) }; continue; }
+      saida[t] = hits?.length ? hits : 0;
+    } catch (e) { saida[t] = { erro: String(e?.message || e).slice(0, 60) }; }
   }
+  return res.status(200).json(saida);
 }
