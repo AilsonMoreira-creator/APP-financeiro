@@ -6,11 +6,9 @@
 //   - diferença <= 1% não corrige
 // Modos: ?debug=1 (amostra pra validar o casamento por ref) ·
 //        GET (prévia) · ?executar=1 (aplica no payload calc-meluni).
-import { createClient } from '@supabase/supabase-js';
-import { getValidToken } from './_ml-helpers.js';
+import { getValidToken, supabase } from './_ml-helpers.js';
 
 export const config = { maxDuration: 300 };
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const espera = (ms) => new Promise(r => setTimeout(r, ms));
 const normRef = (r) => String(r || '').trim().replace(/^0+/, '') || '0';
 
