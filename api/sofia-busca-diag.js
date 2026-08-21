@@ -13,7 +13,7 @@ const TABELAS = [
 export default async function handler(req, res) {
   if (req.query?.capi === '1') {
     const { data } = await supabase.from('lojas_whats_capi_eventos')
-      .select('*').order('created_at', { ascending: false }).limit(3);
+      .select('*').limit(3);
     return res.status(200).json({ eventos: data || [] });
   }
   const nome = String(req.query?.nome || '').trim();
