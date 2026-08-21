@@ -77,7 +77,7 @@ export default async function handler(req, res) {
     // 1. Template precisa existir, estar aprovado e ativo.
     const { data: tpl } = await supabase
       .from('lojas_whats_templates')
-      .select('name, language, status, ativo, body_text, header, criativo_url')
+      .select('name, language, status, ativo, body_text, header, criativo_url, variables')
       .eq('name', template).maybeSingle();
     if (!tpl) return res.status(404).json({ error: 'template_nao_encontrado', template });
     if (tpl.status !== 'aprovado' || !tpl.ativo) {
@@ -117,7 +117,12 @@ export default async function handler(req, res) {
 
       try {
         const opts = headerImage ? { headerImage } : {};
-        const r = await enviarTemplate(conv.telefone, template, [nome, saud], tpl.language || 'pt_BR', opts);
+        // 20/08 (mesmo fix do cron disparo2 de 19/08): o nº de variáveis segue
+        // o TEMPLATE — o balonê só tem {{1}}; mandar saudação junto fazia a
+        // Meta rejeitar o lote inteiro ("0 enviados, N falhas")
+        const nVars = Array.isArray(tpl.variables) && tpl.variables.length ? tpl.variables.length : 2;
+        const vars = [nome, saud].slice(0, nVars);
+        const r = await enviarTemplate(conv.telefone, template, vars, tpl.language || 'pt_BR', opts);
         const metaMsgId = r?.messages?.[0]?.id || null;
         if (!metaMsgId) throw new Error('meta_sem_message_id');
 
@@ -128,7 +133,7 @@ export default async function handler(req, res) {
           template_name: template,
           texto: renderBody(tpl.body_text, nome, saud),
           midia_url: headerImage || null,
-          template_vars: { '1': nome, '2': saud },
+          template_vars: Object.fromEntries(vars.map((v, i) => [String(i + 1), v])),
           meta_message_id: metaMsgId, status: 'enviando', enviada_em: agora,
         });
         await supabase.from('lojas_whats_conversas').update({

@@ -2108,7 +2108,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       } else {
         const puladosMsg = j.pulados?.length ? `, ${j.pulados.length} pulada(s)` : '';
         const falhasMsg = j.falhas?.length ? `, ${j.falhas.length} falha(s)` : '';
-        setFeedback({ tipo: 'ok', msg: `Disparo: ${j.enviados || 0} enviada(s)${puladosMsg}${falhasMsg}` });
+        const motivoFalha = j.falhas?.length ? ` — motivo: ${String(j.falhas[0].erro || '').slice(0, 160)}` : '';
+        setFeedback({ tipo: j.falhas?.length && !(j.enviados?.length || j.enviados > 0) ? 'erro' : 'ok', msg: `Disparo: ${Array.isArray(j.enviados) ? j.enviados.length : (j.enviados || 0)} enviada(s)${puladosMsg}${falhasMsg}${motivoFalha}` });
         setSelecionados(new Set());
         setReloadTick(t => t + 1);
       }
@@ -2135,7 +2136,8 @@ function ConversasTab({ refreshTick, userId, filtroInicial = 'todas', conversaIn
       } else {
         const puladosMsg = j.pulados?.length ? `, ${j.pulados.length} pulada(s)` : '';
         const falhasMsg = j.falhas?.length ? `, ${j.falhas.length} falha(s)` : '';
-        setFeedback({ tipo: 'ok', msg: `Disparo: ${j.enviados || 0} enviada(s)${puladosMsg}${falhasMsg}` });
+        const motivoFalha = j.falhas?.length ? ` — motivo: ${String(j.falhas[0].erro || '').slice(0, 160)}` : '';
+        setFeedback({ tipo: j.falhas?.length && !(j.enviados?.length || j.enviados > 0) ? 'erro' : 'ok', msg: `Disparo: ${Array.isArray(j.enviados) ? j.enviados.length : (j.enviados || 0)} enviada(s)${puladosMsg}${falhasMsg}${motivoFalha}` });
         setSelecionados(new Set());
         setReloadTick(t => t + 1);
       }
