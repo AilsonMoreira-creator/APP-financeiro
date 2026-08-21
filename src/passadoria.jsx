@@ -38,6 +38,15 @@ function getUsuario() {
 
 const NOMES_PADRAO = ['Bom Retiro', 'Eliana', 'Perla', 'Guilherme', 'Silva Teles'];
 
+// trilha de auditoria da passadoria (botão Log na tela)
+function logAcao(corteId, ref, acao, detalhe) {
+  try {
+    supabase.from('oficinas_passadoria_log').insert({
+      corte_id: corteId ?? null, ref: ref ?? null, acao, detalhe: detalhe ?? null, usuario: getUsuario(),
+    }).then(() => {}, () => {});
+  } catch { /* log nunca trava o fluxo */ }
+}
+
 // ── Hook principal ───────────────────────────────────────────────────────────
 export function usePassadoria() {
   const [registros, setRegistros] = useState([]);
@@ -77,6 +86,13 @@ export function usePassadoria() {
 
   // Define (ou troca) a passadoria de um corte. Preserva entregue ao trocar o nome.
   const definir = useCallback(async (corte, nome, caseadoNome) => {
+    // registro atual (pra logar definição × troca)
+    let anterior = null;
+    try {
+      const { data: at } = await supabase.from('oficinas_passadoria').select('nome, pago').eq('corte_id', corte.id).maybeSingle();
+      anterior = at || null;
+    } catch { /* segue */ }
+    if (anterior?.pago) return { ok: false, erro: 'esse corte já foi PAGO — não dá pra trocar a passadoria' };
     // 20/08: puxa o ACORDO da passadoria pra esta ref (passadoria_precos) e
     // grava a base do pagamento — qtd e valor ficam editáveis no card da tela
     let valorUnit = null;
@@ -102,6 +118,8 @@ export function usePassadoria() {
     };
     const { error } = await supabase.from('oficinas_passadoria').upsert(row, { onConflict: 'corte_id' });
     if (error) { console.error('[passadoria] definir:', error.message); return { ok: false, erro: error.message }; }
+    if (anterior && anterior.nome !== nome) logAcao(corte.id, corte.ref, 'trocou passadoria', `${anterior.nome} → ${nome}`);
+    else if (!anterior) logAcao(corte.id, corte.ref, 'definiu passadoria', nome);
     await carregarRegistros();
     return { ok: true };
   }, [carregarRegistros]);
@@ -116,6 +134,7 @@ export function usePassadoria() {
       updated_at: new Date().toISOString(),
     }).eq('id', registro.id);
     if (error) { console.error('[passadoria] entregue:', error.message); return { ok: false, erro: error.message }; }
+    logAcao(registro.corte_id, registro.ref, novo ? 'marcou entregue' : 'desmarcou entrega', registro.nome);
     await carregarRegistros();
     return { ok: true };
   }, [carregarRegistros]);
@@ -127,8 +146,28 @@ export function usePassadoria() {
       ...campos, updated_at: new Date().toISOString(),
     }).eq('id', registro.id);
     if (error) { console.error('[passadoria] pagamento:', error.message); return { ok: false }; }
+    const mud = [];
+    if ('qtd_pagar' in campos && campos.qtd_pagar !== (registro.qtd_pagar ?? null)) mud.push(`qtd ${registro.qtd_pagar ?? '—'} → ${campos.qtd_pagar ?? '—'}`);
+    if ('valor_unit' in campos && campos.valor_unit !== (registro.valor_unit ?? null)) mud.push(`valor ${registro.valor_unit ?? '—'} → ${campos.valor_unit ?? '—'}`);
+    if (mud.length) logAcao(registro.corte_id, registro.ref, 'editou qtd/valor', mud.join(' · '));
     await carregarRegistros();
     return { ok: true };
+  }, [carregarRegistros]);
+
+  // pagamento em lote: carimba os cortes selecionados como pagos
+  const registrarPagamento = useCallback(async (regs) => {
+    const pagamentoId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
+    const agora = new Date().toISOString();
+    for (const r of regs) {
+      const { error } = await supabase.from('oficinas_passadoria').update({
+        pago: true, pago_em: agora, pago_por: getUsuario(), pagamento_id: pagamentoId, updated_at: agora,
+      }).eq('id', r.id).eq('pago', false);
+      if (error) { console.error('[passadoria] pagar:', error.message); return { ok: false, erro: error.message }; }
+      const tot = (r.qtd_pagar ?? 0) * (r.valor_unit ?? 0);
+      logAcao(r.corte_id, r.ref, 'marcou pago', `${r.nome} · ${r.qtd_pagar} pç × ${r.valor_unit} = R$ ${tot.toFixed(2)}`);
+    }
+    await carregarRegistros();
+    return { ok: true, pagamentoId };
   }, [carregarRegistros]);
 
   const remover = useCallback(async (corteId) => {
@@ -155,7 +194,7 @@ export function usePassadoria() {
     setNomes(prev => { const novos = prev.filter(x => x !== n); salvarNomes(novos); return novos; });
   }, [salvarNomes]);
 
-  return { registros, nomes, loading, registroPorCorte, definir, toggleEntregue, remover, addNome, removeNome, salvarPagamento };
+  return { registros, nomes, loading, registroPorCorte, definir, toggleEntregue, remover, addNome, removeNome, salvarPagamento, registrarPagamento };
 }
 
 // ── Ícone: ferro de passar ───────────────────────────────────────────────────
@@ -495,11 +534,16 @@ function chipStyle(active) {
 }
 
 // ── Tela Passadoria (aba ao lado de Caseado no módulo Oficinas) ──────────────
-export function TelaPassadoria({ api }) {
+export function TelaPassadoria({ api, isAdmin = true, onLancarDespesa }) {
   const [busca, setBusca] = useState('');
   const [nomeFiltro, setNomeFiltro] = useState('todos');
   const [statusFiltro, setStatusFiltro] = useState('todos'); // todos | aberto | entregue
   const [gerenciar, setGerenciar] = useState(false);
+  const [selecao, setSelecao] = useState(() => new Set());
+  const [modalPag, setModalPag] = useState(false);
+  const [modalLog, setModalLog] = useState(false);
+  const [trocando, setTrocando] = useState(null); // registro sendo trocado de passadoria
+  const toggleSel = (id) => setSelecao(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const registros = api?.registros || [];
   const nomes = api?.nomes || [];
 
@@ -529,7 +573,8 @@ export function TelaPassadoria({ api }) {
         {nomes.map(n => (
           <button key={n} onClick={() => setNomeFiltro(n)} style={chipStyle(nomeFiltro === n)}><PassadoriaTabIcon size={13} />{n} ({contaPorNome(n)})</button>
         ))}
-        <button onClick={() => setGerenciar(true)} title="Cadastrar / remover passadorias" style={{ marginLeft: 'auto', padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d8e2ea', background: '#fff', color: '#5a6470', cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ Gerenciar</button>
+        <button onClick={() => setModalLog(true)} title="Histórico de ações da passadoria" style={{ marginLeft: 'auto', padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d8e2ea', background: '#fff', color: '#5a6470', cursor: 'pointer', whiteSpace: 'nowrap' }}>🕘 Log</button>
+        <button onClick={() => setGerenciar(true)} title="Cadastrar / remover passadorias" style={{ padding: '8px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid #d8e2ea', background: '#fff', color: '#5a6470', cursor: 'pointer', whiteSpace: 'nowrap' }}>⚙ Gerenciar</button>
       </div>
 
       <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar ref ou descrição..." style={{ ...inputPass, width: '100%', boxSizing: 'border-box', marginBottom: 8 }} />
@@ -541,6 +586,14 @@ export function TelaPassadoria({ api }) {
         <span style={{ fontSize: 12, color: '#8a9aa4', marginLeft: 'auto' }}>{nAbertos} aberto(s) · {nEntregues} entregue(s)</span>
       </div>
 
+      {selecao.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#eafaf0', border: '1px solid #bfe6cd', borderRadius: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#1f6f6b' }}>{selecao.size} selecionado(s)</span>
+          <button onClick={() => setModalPag(true)} style={{ padding: '9px 16px', fontSize: 13, fontWeight: 700, color: '#fff', background: '#27ae60', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Georgia,serif' }}>💰 Efetuar pagamento ({selecao.size})</button>
+          <button onClick={() => setSelecao(new Set())} style={{ padding: '9px 12px', fontSize: 12, fontWeight: 600, color: '#5a6470', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>limpar seleção</button>
+        </div>
+      )}
+
       {lista.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 30, color: '#a89f94', fontSize: 14 }}>
           {registros.length === 0 ? 'Nenhum corte na passadoria ainda. Defina pelo ícone de ferro na lista de Cortes.' : 'Nenhum resultado pros filtros.'}
@@ -550,9 +603,18 @@ export function TelaPassadoria({ api }) {
           {lista.map(reg => {
             const dias = diasNaPassadoria(reg);
             const ent = !!reg.entregue;
+            const pago = !!reg.pago;
+            const selecionavel = ent && !pago && reg.valor_unit != null && reg.qtd_pagar != null;
             return (
-              <div key={reg.id} style={{ background: '#fff', border: `1px solid ${ent ? '#d4edc4' : '#e8e2da'}`, borderRadius: 10, padding: 12, opacity: ent ? 0.92 : 1 }}>
+              <div key={reg.id} style={{ background: pago ? '#f8fbf6' : '#fff', border: `1px solid ${pago ? '#cfe6c4' : ent ? '#d4edc4' : '#e8e2da'}`, borderRadius: 10, padding: 12, opacity: ent && !pago ? 0.97 : pago ? 0.9 : 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  {ent && !pago && (
+                    <div onClick={() => selecionavel && toggleSel(reg.id)}
+                      title={selecionavel ? 'Selecionar pra pagamento' : 'Defina qtd e valor antes de selecionar'}
+                      style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${selecao.has(reg.id) ? '#27ae60' : selecionavel ? '#9fc3b4' : '#dde5ea'}`, background: selecao.has(reg.id) ? '#27ae60' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: selecionavel ? 'pointer' : 'default', flexShrink: 0, opacity: selecionavel ? 1 : 0.5 }}>
+                      {selecao.has(reg.id) && <span style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>✓</span>}
+                    </div>
+                  )}
                   <FotoPassadoria refProd={reg.ref} />
                   <div style={{ flex: '1 1 200px', minWidth: 150 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
@@ -560,6 +622,11 @@ export function TelaPassadoria({ api }) {
                         {ent ? '✓ Entregue' : 'Na passadoria'}
                       </span>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: '#1f6f6b', background: '#e8f6f5', border: '1px solid #c2e4e2', borderRadius: 10, padding: '3px 9px' }}><PassadoriaTabIcon size={13} />{reg.nome}</span>
+                      {pago && <span style={{ fontSize: 11, fontWeight: 700, color: '#1e7a45', background: '#dff3e4', border: '1px solid #b9e0c4', borderRadius: 10, padding: '3px 9px' }}>💰 Pago {reg.pago_em ? fmtData(reg.pago_em) : ''}</span>}
+                      {!pago && (
+                        <button onClick={() => setTrocando(reg)} title="Trocar a passadoria (colocou por engano?)"
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: '#8a9aa4', padding: 2 }}>✏️</button>
+                      )}
                     </div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#2c3e50' }}>REF {reg.ref}{reg.descricao ? ` · ${reg.descricao}` : ''}</div>
                     <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 2 }}>
@@ -585,7 +652,188 @@ export function TelaPassadoria({ api }) {
       )}
 
       {gerenciar && <ModalGerenciarPassadorias api={api} onClose={() => setGerenciar(false)} />}
+      {modalLog && <ModalLogPassadoria onClose={() => setModalLog(false)} />}
+      {trocando && (
+        <ModalDefinirPassadoria
+          corte={{ id: trocando.corte_id, ref: trocando.ref, descricao: trocando.descricao, oficina: trocando.oficina, qtd: trocando.qtd }}
+          api={api} registroAtual={trocando} caseadoNome={trocando.caseado_nome}
+          onClose={() => setTrocando(null)} />
+      )}
+      {modalPag && (
+        <ModalPagamentoPassadoria
+          regs={registros.filter(r => selecao.has(r.id))}
+          isAdmin={isAdmin}
+          onGravar={async (regsPagar) => {
+            const r = await api.registrarPagamento(regsPagar);
+            if (r?.ok) {
+              // 1 lançamento por passadoria no financeiro (Despesas → Passadoria)
+              if (onLancarDespesa) {
+                const porNome = {};
+                regsPagar.forEach(g => {
+                  const t = (g.qtd_pagar ?? 0) * (g.valor_unit ?? 0);
+                  porNome[g.nome] = (porNome[g.nome] || 0) + t;
+                });
+                Object.entries(porNome).forEach(([nome, total]) => {
+                  onLancarDespesa({ passadoria: nome, total: Math.round(total * 100) / 100, pagamentoId: r.pagamentoId, qtdCortes: regsPagar.filter(g => g.nome === nome).length });
+                });
+              }
+              setSelecao(new Set());
+            }
+            return r;
+          }}
+          onClose={() => setModalPag(false)} />
+      )}
     </div>
+  );
+}
+
+// ── Modal de pagamento (lote selecionado) ────────────────────────────────────
+function ModalPagamentoPassadoria({ regs, isAdmin, onGravar, onClose }) {
+  const [status, setStatus] = useState('idle'); // idle | gravando | ok | erro
+  const fmtBRL = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const linhas = regs.map(r => ({ ...r, total: (r.qtd_pagar ?? 0) * (r.valor_unit ?? 0) }));
+  const somaGeral = linhas.reduce((s, l) => s + l.total, 0);
+  const nomes = [...new Set(linhas.map(l => l.nome))];
+
+  const gerarPdf = () => {
+    const hoje = new Date().toLocaleDateString('pt-BR');
+    const porNome = nomes.map(n => ({ nome: n, ls: linhas.filter(l => l.nome === n) }));
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Demonstrativo Passadoria</title>
+<style>
+  body{font-family:Georgia,serif;color:#2c3e50;margin:32px;}
+  h1{font-size:20px;margin:0 0 2px;} .sub{color:#6b7c8a;font-size:12px;margin-bottom:20px;}
+  h2{font-size:15px;margin:22px 0 8px;display:flex;align-items:center;gap:6px;}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th{background:#4a7fa5;color:#fff;padding:7px 8px;text-align:left;font-weight:600;}
+  td{padding:7px 8px;border-bottom:1px solid #e2e8ee;}
+  td.n,th.n{text-align:right;font-family:Calibri,Arial,sans-serif;}
+  .subtotal td{font-weight:700;background:#f2f7fb;}
+  .total{margin-top:22px;font-size:16px;font-weight:700;text-align:right;border-top:2px solid #2c3e50;padding-top:10px;}
+  .rodape{margin-top:28px;font-size:11px;color:#8a9aa4;}
+  @media print{.noprint{display:none}}
+</style></head><body>
+<h1>Grupo Am&iacute;cia &mdash; Demonstrativo de Pagamento</h1>
+<div class="sub">Passadoria &middot; emitido em ${hoje}</div>
+${porNome.map(g => `
+  <h2>&#128204; ${g.nome}</h2>
+  <table>
+    <tr><th>Entrega</th><th>REF</th><th>Descri&ccedil;&atilde;o</th><th>Marca</th><th class="n">Qtd</th><th class="n">Valor p&ccedil;</th><th class="n">Total</th></tr>
+    ${g.ls.map(l => `<tr>
+      <td>${l.entregue_em ? new Date(l.entregue_em).toLocaleDateString('pt-BR') : '—'}</td>
+      <td>${l.ref || ''}</td><td>${l.descricao || ''}</td><td>${l.marca || ''}</td>
+      <td class="n">${l.qtd_pagar ?? ''}</td>
+      <td class="n">${Number(l.valor_unit ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+      <td class="n">${Number(l.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+    </tr>`).join('')}
+    <tr class="subtotal"><td colspan="6">Subtotal ${g.nome}</td><td class="n">${g.ls.reduce((s, l) => s + l.total, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td></tr>
+  </table>`).join('')}
+<div class="total">TOTAL A PAGAR: ${somaGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+<div class="rodape">Demonstrativo gerado pelo APP Financeiro Grupo Am&iacute;cia para envio junto ao comprovante Pix.</div>
+<script>window.onload=function(){window.print();};</script>
+</body></html>`;
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  const gravar = async () => {
+    if (!isAdmin) { alert('⚠️ Apenas admin pode gravar pagamento. Avisa o Ailson.'); return; }
+    if (status !== 'idle') return;
+    setStatus('gravando');
+    const r = await onGravar(regs);
+    if (r?.ok) { setStatus('ok'); setTimeout(onClose, 1200); }
+    else setStatus('erro');
+  };
+
+  return createPortal(
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: 20, width: 640, maxWidth: '96vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 12px 44px rgba(0,0,0,0.28)' }}>
+        <button type="button" onClick={onClose} style={{ position: 'absolute', top: 8, right: 10, width: 30, height: 30, border: 'none', background: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: '#b0b8c0' }}>×</button>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#2c3e50', fontFamily: 'Georgia,serif', textAlign: 'center', marginBottom: 4 }}>Efetuar pagamento</div>
+        <div style={{ fontSize: 12, color: '#6b7c8a', textAlign: 'center', marginBottom: 14 }}>{regs.length} corte(s) · {nomes.join(' · ')}</div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr>
+                {['Entrega', 'REF', 'Descrição', 'Marca', 'Qtd', 'Valor pç', 'Total'].map(h => (
+                  <th key={h} style={{ background: '#4a7fa5', color: '#fff', padding: '7px 8px', textAlign: ['Qtd', 'Valor pç', 'Total'].includes(h) ? 'right' : 'left', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {linhas.map(l => (
+                <tr key={l.id}>
+                  <td style={{ padding: '7px 8px', borderBottom: '1px solid #e2e8ee', whiteSpace: 'nowrap' }}>{l.entregue_em ? fmtData(l.entregue_em) : '—'}</td>
+                  <td style={{ padding: '7px 8px', borderBottom: '1px solid #e2e8ee', fontWeight: 700 }}>{l.ref}</td>
+                  <td style={{ padding: '7px 8px', borderBottom: '1px solid #e2e8ee' }}>{l.descricao || ''}</td>
+                  <td style={{ padding: '7px 8px', borderBottom: '1px solid #e2e8ee' }}>{l.marca || ''}</td>
+                  <td style={{ padding: '7px 8px', borderBottom: '1px solid #e2e8ee', textAlign: 'right', fontFamily: FN }}>{l.qtd_pagar}</td>
+                  <td style={{ padding: '7px 8px', borderBottom: '1px solid #e2e8ee', textAlign: 'right', fontFamily: FN }}>{Number(l.valor_unit ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                  <td style={{ padding: '7px 8px', borderBottom: '1px solid #e2e8ee', textAlign: 'right', fontFamily: FN, fontWeight: 700 }}>{Number(l.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 700, color: '#1f6f6b', marginTop: 12, fontFamily: FN }}>
+          Total a pagar: {fmtBRL(somaGeral)}
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+          <button type="button" onClick={gerarPdf} style={{ flex: 1, minWidth: 180, padding: '12px', fontSize: 14, fontWeight: 700, color: '#2c3e50', background: '#fff', border: '2px solid #4a7fa5', borderRadius: 8, cursor: 'pointer', fontFamily: 'Georgia,serif' }}>🖨 Gerar PDF (demonstrativo)</button>
+          <button type="button" onClick={gravar} disabled={status !== 'idle'} style={{ flex: 1, minWidth: 180, padding: '12px', fontSize: 14, fontWeight: 700, color: '#fff', background: status === 'ok' ? '#1e7a45' : '#27ae60', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: 'Georgia,serif', opacity: status === 'gravando' ? 0.7 : 1 }}>
+            {status === 'gravando' ? 'Gravando…' : status === 'ok' ? '✓ Pagamento gravado' : '💰 Gravar pagamentos'}
+          </button>
+        </div>
+        {status === 'ok' && <div style={{ fontSize: 12, color: '#1e7a45', textAlign: 'center', marginTop: 10, fontWeight: 600 }}>Cortes carimbados como pagos e despesa lançada em Lançamentos → Despesas → Passadoria.</div>}
+        {status === 'erro' && <div style={{ fontSize: 12, color: '#c0392b', textAlign: 'center', marginTop: 10 }}>Erro ao gravar. Tenta de novo.</div>}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ── Modal do log (auditoria) ─────────────────────────────────────────────────
+function ModalLogPassadoria({ onClose }) {
+  const [eventos, setEventos] = useState(null);
+  const [filtro, setFiltro] = useState('');
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.from('oficinas_passadoria_log')
+          .select('*').order('criado_em', { ascending: false }).limit(150);
+        setEventos(data || []);
+      } catch { setEventos([]); }
+    })();
+  }, []);
+  const termo = filtro.trim().toLowerCase();
+  const lista = (eventos || []).filter(e => !termo || String(e.ref || '').toLowerCase().includes(termo) || String(e.acao || '').toLowerCase().includes(termo) || String(e.usuario || '').toLowerCase().includes(termo));
+  const fmtDH = (x) => { try { const d = new Date(x); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); } catch { return '—'; } };
+  const corAcao = (a) => a?.includes('pago') ? '#1e7a45' : a?.includes('trocou') ? '#b7791f' : a?.includes('entregue') ? '#4a7fa5' : a?.includes('editou') ? '#8a5ec0' : '#5a6470';
+  return createPortal(
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: 20, width: 560, maxWidth: '96vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 44px rgba(0,0,0,0.28)' }}>
+        <button type="button" onClick={onClose} style={{ position: 'absolute', top: 8, right: 10, width: 30, height: 30, border: 'none', background: 'none', cursor: 'pointer', fontSize: 22, lineHeight: 1, color: '#b0b8c0' }}>×</button>
+        <div style={{ fontSize: 17, fontWeight: 700, color: '#2c3e50', fontFamily: 'Georgia,serif', textAlign: 'center', marginBottom: 10 }}>🕘 Log da Passadoria</div>
+        <input value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Filtrar por ref, ação ou usuário..." style={{ ...inputPass, width: '100%', boxSizing: 'border-box', marginBottom: 10, fontSize: 13, padding: '9px 11px' }} />
+        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {eventos === null ? (
+            <div style={{ textAlign: 'center', padding: 16, color: '#a89f94', fontSize: 13 }}>Carregando…</div>
+          ) : lista.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 16, color: '#a89f94', fontSize: 13 }}>Nenhum evento.</div>
+          ) : lista.map(e => (
+            <div key={e.id} style={{ padding: '8px 10px', border: '1px solid #eef2f5', borderRadius: 8, background: '#fafcfd' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: '#8a9aa4', fontFamily: FN, whiteSpace: 'nowrap' }}>{fmtDH(e.criado_em)}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#2c3e50' }}>{e.usuario || '—'}</span>
+                {e.ref && <span style={{ fontSize: 11, fontWeight: 700, color: '#4a7fa5' }}>REF {e.ref}</span>}
+                <span style={{ fontSize: 12, fontWeight: 700, color: corAcao(e.acao) }}>{e.acao}</span>
+              </div>
+              {e.detalhe && <div style={{ fontSize: 11, color: '#6b7c8a', marginTop: 2 }}>{e.detalhe}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

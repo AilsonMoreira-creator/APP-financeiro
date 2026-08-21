@@ -4237,7 +4237,21 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
       </div>
 
       {aba==="caseado"&&<TelaCaseado api={caseadoApi}/>}
-      {aba==="passadoria"&&<TelaPassadoria api={passadoriaApi}/>}
+      {aba==="passadoria"&&<TelaPassadoria api={passadoriaApi} isAdmin={isAdmin}
+        onLancarDespesa={({passadoria,total,pagamentoId,qtdCortes})=>{
+          // lançamento em Despesas → Passadoria (padrão do togglePago dos cortes;
+          // idempotente por pagamento_id — realtime/re-render não duplica)
+          if(!setAuxDataPorMes)return;
+          const hoje=new Date();const mes=hoje.getMonth()+1;
+          const dd=`${String(hoje.getDate()).padStart(2,"0")}/${String(mes).padStart(2,"0")}`;
+          setAuxDataPorMes(m=>{
+            const aux=m[mes]||{};
+            const ps=[...(aux["Passadoria"]||[])];
+            if(ps.some(p=>p.pagamento_id===pagamentoId&&p.prestador===passadoria))return m;
+            ps.push({pagamento_id:pagamentoId,data:dd,prestador:passadoria,valor:String(total),descricao:`Passadoria - ${qtdCortes} corte(s)`});
+            return{...m,[mes]:{...aux,"Passadoria":ps}};
+          });
+        }}/>}
 
       {aba==="cortes"&&(
         <div>
