@@ -4,12 +4,18 @@
 import { supabase } from './_lojas-whats-helpers.js';
 
 const TABELAS = [
+  'lojas_whats_capi_eventos',
   'lojas_whats_conversas', 'lojas_pedidos_sacola', 'lojas_leads_carrinho',
   'lojas_importacoes', 'lojas_clientes_kpis', 'clientes_sofia',
   'clientes_sofia_cadastro', 'clientes_sofia_dados', 'lojas_clientes',
 ];
 
 export default async function handler(req, res) {
+  if (req.query?.capi === '1') {
+    const { data } = await supabase.from('lojas_whats_capi_eventos')
+      .select('*').order('created_at', { ascending: false }).limit(3);
+    return res.status(200).json({ eventos: data || [] });
+  }
   const nome = String(req.query?.nome || '').trim();
   const doc = String(req.query?.doc || '').replace(/\D/g, '');
   const fone = String(req.query?.fone || '').replace(/\D/g, '');
