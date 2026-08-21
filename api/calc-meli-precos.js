@@ -7,6 +7,7 @@
 // Modos: ?debug=1 (amostra pra validar o casamento por ref) ·
 //        GET (prévia) · ?executar=1 (aplica no payload calc-meluni).
 import { getValidToken, supabase } from './_ml-helpers.js';
+import { refreshBlingToken, blingFetch } from './_bling-helpers.js';
 
 export const config = { maxDuration: 300 };
 const espera = (ms) => new Promise(r => setTimeout(r, ms));
@@ -20,51 +21,81 @@ export default async function handler(req, res) {
     const me = await (await fetch('https://api.mercadolibre.com/users/me', { headers: h })).json();
     if (!me?.id) return res.status(500).json({ erro: 'token exitus sem users/me' });
 
-    // ── todos os anúncios ativos da Exitus (scan) ──
-    const ids = [];
-    let scroll = null;
-    for (let voltas = 0; voltas < 40; voltas++) {
-      const u = `https://api.mercadolibre.com/users/${me.id}/items/search?status=active&search_type=scan&limit=100${scroll ? `&scroll_id=${encodeURIComponent(scroll)}` : ''}`;
-      const j = await (await fetch(u, { headers: h })).json();
-      (j?.results || []).forEach(i => ids.push(i));
-      scroll = j?.scroll_id || null;
-      if (!j?.results?.length) break;
-      await espera(120);
+    // ── casamento REF → anúncios MLB via BLING (caminho validado na
+    // auditoria de SKUs): produto PAI tem "(ref.X)" no nome; o vínculo
+    // produto-loja do canal ML traz o codigo MLB do anúncio ──
+    const tokenB = await refreshBlingToken('exitus');
+    const hb = { Authorization: `Bearer ${tokenB}`, Accept: 'application/json' };
+
+    // canal Mercado Livre Exitus (FULL fica de fora — frente separada)
+    const rc = await blingFetch('https://api.bling.com.br/Api/v3/canais-venda?limite=100', hb);
+    const canais = (await rc.json().catch(() => ({})))?.data || [];
+    const canalMl = canais.find(c => /mercado\s*livre/i.test(c.descricao || '') && !/full/i.test(c.descricao || ''));
+    if (!canalMl) return res.status(500).json({ erro: 'canal mercado livre exitus nao encontrado', canais: canais.map(c => c.descricao) });
+
+    // produtos PAI (nome traz "(ref.X)") → mapa idPai → ref
+    const refPorPai = {};
+    for (let pg = 1; pg <= 40; pg++) {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/produtos?tipo=P&formato=V&limite=100&pagina=${pg}`, hb);
+      const lista = (await r.json().catch(() => ({})))?.data || [];
+      for (const p of lista) {
+        const m = String(p.nome || '').match(/ref[.\s]*0*(\d{3,5})/i);
+        if (m) refPorPai[String(p.id)] = m[1];
+      }
+      if (lista.length < 100) break;
+      await espera(360);
     }
 
-    // ── detalhes em multiget (título + preços) ──
-    const itens = [];
-    for (let i = 0; i < ids.length; i += 20) {
-      const lote = ids.slice(i, i + 20);
+    // vínculos do canal ML → codigo MLB dos PAIS
+    const mlbPorRef = {};
+    const mlbSet = new Set();
+    for (let pg = 1; pg <= 80; pg++) {
+      const r = await blingFetch(`https://api.bling.com.br/Api/v3/produtos/lojas?idLoja=${canalMl.id}&limite=100&pagina=${pg}`, hb);
+      const lista = (await r.json().catch(() => ({})))?.data || [];
+      for (const v of lista) {
+        const cod = String(v.codigo || '');
+        if (!/^MLB/i.test(cod)) continue;
+        const ref = refPorPai[String(v.produto?.id)];
+        if (!ref) continue;
+        (mlbPorRef[ref] = mlbPorRef[ref] || []).push(cod);
+        mlbSet.add(cod);
+      }
+      if (lista.length < 100) break;
+      await espera(360);
+    }
+
+    // preço REAL dos anúncios na API do ML (multiget)
+    const itemDe = {};
+    const mlbs = [...mlbSet];
+    for (let i = 0; i < mlbs.length; i += 20) {
+      const lote = mlbs.slice(i, i + 20);
       const j = await (await fetch(`https://api.mercadolibre.com/items?ids=${lote.join(',')}&attributes=id,title,price,original_price,status`, { headers: h })).json();
-      (Array.isArray(j) ? j : []).forEach(x => { if (x?.code === 200 && x.body) itens.push(x.body); });
+      (Array.isArray(j) ? j : []).forEach(x => { if (x?.code === 200 && x.body) itemDe[x.body.id] = x.body; });
       await espera(120);
     }
-
-    // casamento por REF no título: "(ref.2782)" ou "ref 2782" etc
-    const refDoTitulo = (t) => {
-      const m = String(t || '').match(/ref[.\s]*0*(\d{3,5})/i);
-      return m ? m[1] : null;
-    };
 
     if (q.debug === '1') {
+      const amostraRefs = Object.entries(mlbPorRef).slice(0, 8).map(([r2, ids2]) => ({
+        ref: r2, anuncios: ids2.map(id2 => ({ id: id2, status: itemDe[id2]?.status, price: itemDe[id2]?.price, original_price: itemDe[id2]?.original_price })),
+      }));
       return res.status(200).json({
-        total_ativos: ids.length,
-        amostra: itens.slice(0, 12).map(i => ({ id: i.id, title: i.title, ref_casada: refDoTitulo(i.title), price: i.price, original_price: i.original_price })),
-        sem_ref_no_titulo: itens.filter(i => !refDoTitulo(i.title)).length,
+        canal_ml: canalMl.descricao, pais_com_ref: Object.keys(refPorPai).length,
+        refs_com_anuncio: Object.keys(mlbPorRef).length, mlbs: mlbs.length, amostra: amostraRefs,
       });
     }
-
     // ── menor TABELA por ref ──
     const menorPorRef = {};
     const anunciosPorRef = {};
-    for (const it of itens) {
-      const r = refDoTitulo(it.title);
-      if (!r || it.status !== 'active') continue;
-      const tabela = Number(it.original_price ?? it.price);
-      if (!Number.isFinite(tabela) || tabela <= 0) continue;
-      (anunciosPorRef[r] = anunciosPorRef[r] || []).push({ id: it.id, tabela, price: it.price });
-      if (!(r in menorPorRef) || tabela < menorPorRef[r]) menorPorRef[r] = tabela;
+    for (const [r, ids2] of Object.entries(mlbPorRef)) {
+      const rn2 = normRef(r);
+      for (const id2 of ids2) {
+        const it = itemDe[id2];
+        if (!it || it.status !== 'active') continue;
+        const tabela = Number(it.original_price ?? it.price);
+        if (!Number.isFinite(tabela) || tabela <= 0) continue;
+        (anunciosPorRef[rn2] = anunciosPorRef[rn2] || []).push({ id: id2, tabela, price: it.price });
+        if (!(rn2 in menorPorRef) || tabela < menorPorRef[rn2]) menorPorRef[rn2] = tabela;
+      }
     }
 
     // ── cards da calculadora (prs "<ref>|mercadolivre") ──
