@@ -113,6 +113,22 @@ async function executar(conversaId = null) {
       }
       stats.com_match++;
 
+      // 21/08 (ordem dele): a VENDA move a conversa pra 'vendeu' SEMPRE —
+      // o CAPI é consequência de marketing e pode falhar/atrasar sem
+      // segurar a etapa. Com capi_purchase_enviado=false a conversa segue
+      // candidata e o envio é re-tentado nas próximas rodadas.
+      if (conv.etapa !== 'vendeu' && conv.etapa !== 'feedback' && conv.etapa !== 'inativo') {
+        await supabase.from('lojas_whats_conversas').update({
+          etapa: 'vendeu',
+          vendeu_em: new Date().toISOString(),
+          vendeu_valor: Number(match.valor_liquido) || null,
+          vendeu_venda_id: match.venda_id || null,
+          vendeu_canal: match.categoria || null,
+          atualizado_em: new Date().toISOString(),
+        }).eq('id', conv.id);
+        conv.etapa = 'vendeu';
+      }
+
       const resultado = await dispararPurchase({
         conversa_id: conv.id,
         venda_info: {
@@ -126,17 +142,6 @@ async function executar(conversaId = null) {
 
       if (resultado.status === 'enviado') {
         stats.capi_enviado_ok++;
-        // Marca conversa como 'vendeu' se ainda nao tava
-        if (conv.etapa !== 'vendeu' && conv.etapa !== 'feedback' && conv.etapa !== 'inativo') {
-          await supabase.from('lojas_whats_conversas').update({
-            etapa: 'vendeu',
-            vendeu_em: new Date().toISOString(),
-            vendeu_valor: Number(match.valor_liquido) || null,
-            vendeu_venda_id: match.venda_id || null,
-            vendeu_canal: match.categoria || null,
-            atualizado_em: new Date().toISOString(),
-          }).eq('id', conv.id);
-        }
       } else if (resultado.status === 'duplicado') {
         // ja tinha sido enviado — nao conta como sucesso novo nem como falha
       } else {
