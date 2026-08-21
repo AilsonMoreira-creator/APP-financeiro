@@ -4046,7 +4046,13 @@ const OficinasContent=({cortes,setCortes,produtos,setProdutos,onExcluirProduto,o
     setRefBusca("");setMostraForm(false);setEditId(null);
   };
   const iniciarEdicao=(c)=>{setEditId(c.id);setForm({nCorte:c.nCorte,ref:c.ref,descricao:c.descricao,marca:c.marca,qtd:String(c.qtd),valorUnit:String(c.valorUnit),oficina:c.oficina,data:c.data});setRefBusca(c.ref);setMostraForm(true);};
-  const deletarCorte=(id)=>setConfirm({msg:"Apagar este corte?",onYes:()=>{setCortes(prev=>prev.filter(c=>c.id!==id));setConfirm(null);}});
+  const deletarCorte=(id)=>setConfirm({msg:"Apagar este corte?",onYes:()=>{setCortes(prev=>prev.filter(c=>c.id!==id));setConfirm(null);
+    // 21/08: carimba a delecao no ESPELHO — assim a restauracao automatica
+    // sabe que este sumico foi de proposito e nao ressuscita o corte
+    try{const s=JSON.parse(localStorage.getItem('amica_session')||'{}');
+      supabase.from('oficinas_cortes_espelho').update({deletado_em:new Date().toISOString(),deletado_por:s.usuario||s.nome||'?'}).eq('corte_id',String(id)).then(()=>{},()=>{});
+    }catch(e){console.error('espelho delecao:',e);}
+  }});
   // 📦 ARQUIVAR (Ailson 17/05/2026) — substitui exclusão (que não funcionava
   // via filter por causa do merge multi-user). Arquivar é apenas SET de flag
   // no item, o merge por _mod respeita normalmente.
@@ -10549,7 +10555,27 @@ export default function App(){
       // Cortes (chave separada — cortes + produtos com merge por _mod)
       if(!ec&&dc?.payload){
         const d=dc.payload;
-        if(d.cortes){setCortes(d.cortes);lastCorteLoadTs.current=Date.now();try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}}
+        if(d.cortes){setCortes(d.cortes);lastCorteLoadTs.current=Date.now();try{localStorage.setItem("amica_cortes",JSON.stringify(d.cortes));}catch(e){console.error(e)}
+          // 21/08 RESTAURACAO AUTOMATICA (ideia dele): corte que existe no
+          // ESPELHO sem carimbo de delecao mas sumiu do payload = perda por
+          // conflito de save → volta sozinho, com _mod novo pra vencer merges.
+          setTimeout(async()=>{try{
+            const {data:esp}=await supabase.from('oficinas_cortes_espelho').select('corte_id,dados').is('deletado_em',null);
+            if(!esp?.length)return;
+            const idsAtuais=new Set((d.cortes||[]).map(c=>String(c.id)));
+            const perdidos=esp.filter(r=>!idsAtuais.has(String(r.corte_id))&&r.dados&&r.dados.id);
+            if(!perdidos.length)return;
+            const agora=Date.now();
+            const restaurados=perdidos.map(r=>({...r.dados,_mod:agora}));
+            console.warn('🛟 ESPELHO: restaurando',restaurados.length,'corte(s) perdido(s):',restaurados.map(c=>`${c.id} REF ${c.ref||'?'}`).join(' · '));
+            setCortes(prev=>{
+              const ids=new Set((prev||[]).map(c=>String(c.id)));
+              const faltam=restaurados.filter(c=>!ids.has(String(c.id)));
+              return faltam.length?[...prev,...faltam]:prev;
+            });
+            supabase.from('oficinas_cortes_espelho').update({restaurado_em:new Date().toISOString()}).in('corte_id',perdidos.map(r=>String(r.corte_id))).then(()=>{},()=>{});
+          }catch(e){console.error('espelho restauracao:',e);}},2600);
+        }
         if(d.oficinasCAD&&d.oficinasCAD.length>0)setOficinasCAD(d.oficinasCAD);
         if(d.logTroca)setLogTroca(d.logTroca);
         if(d.produtosExcluidos){setProdutosExcluidos(prev=>({...prev,...d.produtosExcluidos}));produtosExcluidosRef.current={...produtosExcluidosRef.current,...d.produtosExcluidos};}
@@ -10707,6 +10733,7 @@ export default function App(){
 
   // ── REALTIME OFICINAS — sync cortes entre 3 usuários simultâneos ────────────
   const lastCorteSaveTs=useRef(0);
+  const espelhoUltimoMod=useRef(0);   // 21/08: controle incremental do espelho anti-perda
   useEffect(()=>{
     if(!supabase||!dbCarregado)return;
     const ch=supabase.channel('sync-oficinas')
@@ -11403,6 +11430,19 @@ export default function App(){
           logTroca:usuarioLogado?.admin?logTroca||[]:remoto.logTroca||logTroca||[]};
         lastCorteSaveTs.current=Date.now();
         await supabase.from('amicia_data').upsert({user_id:'ailson_cortes',payload},{onConflict:'user_id'});
+        // 21/08 ESPELHO ANTI-PERDA: cada corte vira linha propria em
+        // oficinas_cortes_espelho (tabela relacional — save de payload nao
+        // apaga linha). Incremental: so os cortes com _mod novo desde o
+        // ultimo espelhamento desta sessao.
+        try{
+          const novosEspelho=merged.filter(c=>c&&c.id&&(c._mod||0)>(espelhoUltimoMod.current||0));
+          if(novosEspelho.length){
+            const rows=novosEspelho.map(c=>({corte_id:String(c.id),dados:c,atualizado_em:new Date().toISOString()}));
+            const {error:eEsp}=await supabase.from('oficinas_cortes_espelho').upsert(rows,{onConflict:'corte_id'});
+            if(!eEsp)espelhoUltimoMod.current=Math.max(...novosEspelho.map(c=>c._mod||0));
+            else console.error('espelho cortes:',eEsp.message);
+          }
+        }catch(e){console.error('espelho cortes:',e);}
         // 📸 OFICINAS FASE 2: aplicar metrica_snapshot nos cortes que foram
         // marcados como entregue neste ciclo. RPC lê o payload do banco —
         // por isso rodamos DEPOIS do upsert. Falha silenciosa: se algum corte
