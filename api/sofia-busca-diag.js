@@ -24,7 +24,28 @@ export default async function handler(req, res) {
         .select('*').ilike('cliente_nome', like).limit(5);
       sacolas = s || [];
     } catch { /* coluna pode ter outro nome */ }
-    return res.status(200).json({ conversas: convs || [], ultimas_mensagens: msgs, sacolas });
+    // base de clientes das lojas (KPIs importados do PDV): acha o telefone
+    // pelo nome e cruza com a Sofia por telefone
+    let cadastro = [];
+    let convsPorFone = [];
+    try {
+      const { data: k } = await supabase.from('lojas_clientes_kpis').select('*').or(`nome.ilike.${like},cliente.ilike.${like}`).limit(5);
+      cadastro = k || [];
+    } catch (e2) {
+      try {
+        const { data: k2 } = await supabase.from('lojas_clientes_kpis').select('*').limit(1);
+        cadastro = [{ _colunas: Object.keys(k2?.[0] || {}) }];
+      } catch { /* tabela indisponivel */ }
+    }
+    const fones = [...new Set(cadastro.flatMap(c => [c.telefone, c.celular, c.fone, c.whatsapp].filter(Boolean)))]
+      .map(f => String(f).replace(/\D/g, '')).filter(f => f.length >= 10);
+    for (const f of fones.slice(0, 4)) {
+      const { data: cf } = await supabase.from('lojas_whats_conversas')
+        .select('id, nome_cliente, telefone, etapa, criado_em, atualizado_em')
+        .ilike('telefone', `%${f.slice(-8)}%`).limit(4);
+      (cf || []).forEach(x => convsPorFone.push(x));
+    }
+    return res.status(200).json({ conversas: convs || [], ultimas_mensagens: msgs, sacolas, cadastro_lojas: cadastro, conversas_por_telefone: convsPorFone });
   } catch (e) {
     return res.status(500).json({ erro: String(e?.message || e) });
   }
