@@ -910,9 +910,10 @@ export default async function handler(req, res) {
       // cache nem link do Bling — 6 prontos viravam zero sem explicacao.
       const alvo = [];
       const foraDoAlvo = [];
+      const foraIds = [];
       for (const p of candidatosLote) {
         if (doMlZpl[String(p.pedido_id)] || guardados[String(p.pedido_id)] || links[String(p.pedido_id)]) alvo.push(p);
-        else foraDoAlvo.push(p.numero);
+        else { foraDoAlvo.push(p.numero); foraIds.push(p.pedido_id); }
       }
 
       const blocos = []; const idsOk = []; const emPdf = []; const semDanfe = []; const semEtiqueta = [...foraDoAlvo]; let grupoAtual = '';
@@ -1042,13 +1043,13 @@ ${q.por_empresa === '1' ? `^FO40,120^A0N,110,110^FD${String(p.conta).toUpperCase
           detalhe: { pares: idsOk.length, restantes, sem_danfe: semDanfe.length ? semDanfe : undefined, pedidos: idsOk },
         }).then?.(() => {}, () => {});
       }
-      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, restantes });
+      return res.status(200).json({ total: idsOk.length, blocos, ids: idsOk, em_pdf: emPdf, sem_danfe: semDanfe, sem_etiqueta: semEtiqueta, sem_etiqueta_ids: foraIds, restantes });
     }
 
     // ── marcar como impressas depois que a térmica confirmou
     if (q.marcar === '1' && q.ids) {
       const ids = String(q.ids).split(',').map(x => parseInt(x)).filter(Boolean);
-      const lote = `T${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
+      const lote = q.origem === 'fora' ? `FORA${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}` : `T${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}`;
       if (ids.length) {
         await supabase.from('wms_pedidos')
           .update({ etiqueta_impressa_em: new Date().toISOString(), etiqueta_lote: lote })

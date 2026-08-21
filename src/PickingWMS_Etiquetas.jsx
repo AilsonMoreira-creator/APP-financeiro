@@ -42,6 +42,10 @@ const NOME_CONTA = { exitus: 'Exitus', lumia: 'Lumia', muniam: 'Muniam' };
 const LOJAS = ['Mercado Livre', 'Shein', 'Shopee', 'TikTok', 'Magalu'];
 
 export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
+  // 21/08: pedidos impressos POR FORA (painel Bling/marketplace) ficavam
+  // presos como "prontos" — este estado guarda os que o clique nao conseguiu
+  // e oferece o carimbo manual de "ja resolvido por fora"
+  const [foraImpressao, setForaImpressao] = React.useState(null);
   const [fConta, setFConta] = useState('todas');
   const [fLoja, setFLoja] = useState('todas');
   const [fJanela, setFJanela] = useState('todos');   // todos | ate_corte
@@ -297,6 +301,7 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
         }
         if (!jL.total && !totalGeral) {
           const se = jL.sem_etiqueta || []; const sd = jL.sem_danfe || [];
+          if (jL.sem_etiqueta_ids?.length) setForaImpressao({ ids: jL.sem_etiqueta_ids, numeros: se });
           if (se.length || sd.length) throw new Error(`Nada saiu: ${se.length ? `${se.length} pedido(s) sem etiqueta disponível ainda (${se.slice(0, 5).join(', ')}${se.length > 5 ? '…' : ''})` : ''}${se.length && sd.length ? ' · ' : ''}${sd.length ? `${sd.length} sem DANFE (${sd.slice(0, 5).join(', ')}${sd.length > 5 ? '…' : ''})` : ''}. Shopee: o Bling libera o link depois de arranjar a coleta. Roda Preparar agora e tenta de novo.`);
           throw new Error('Nenhuma etiqueta pronta nesses filtros.');
         }
@@ -503,6 +508,23 @@ export default function TelaEtiquetas({ API, corteHora = '12:30', onErro }) {
           style={{ padding: '14px 16px', borderRadius: 12, border: `1.5px solid ${palette.beige}`, background: '#fff', color: palette.inkSoft, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, fontWeight: 700 }}>
           🛡 Certificado
         </button>
+        {foraImpressao?.ids?.length > 0 && (
+          <div style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#fdf6e8', border: '1px solid #ecd9ad', borderRadius: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: '#7a6428' }}>
+              {foraImpressao.ids.length} pedido(s) sem etiqueta pelo App ({foraImpressao.numeros.slice(0, 6).join(', ')}{foraImpressao.numeros.length > 6 ? '…' : ''}). Já imprimiu pelo painel do Bling ou do marketplace?
+            </span>
+            <button onClick={async () => {
+              try {
+                const r = await fetch(`${API}/wms-etiquetas?marcar=1&origem=fora&ids=${foraImpressao.ids.join(',')}`);
+                const j = await r.json();
+                if (j.marcados) { setForaImpressao(null); setImprimindo(`✓ ${j.marcados} pedido(s) marcados como impressos por fora`); setTimeout(() => setImprimindo(''), 6000); carregar(); }
+              } catch { /* tenta de novo */ }
+            }} style={{ padding: '9px 14px', fontSize: 13, fontWeight: 700, color: '#fff', background: '#b7791f', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: FONT }}>
+              ✓ Marcar como impressos por fora
+            </button>
+            <button onClick={() => setForaImpressao(null)} style={{ padding: '9px 10px', fontSize: 12, color: '#8a7a52', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>agora não</button>
+          </div>
+        )}
         {modalCert && (
           <div onClick={() => setModalCert(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#fff', borderRadius: 14, padding: 22, width: 460, maxWidth: '94vw', boxShadow: '0 12px 44px rgba(0,0,0,0.28)', fontFamily: FONT }}>
