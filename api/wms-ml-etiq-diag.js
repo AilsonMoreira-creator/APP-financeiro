@@ -34,13 +34,13 @@ export default async function handler(req, res) {
         const pr = await fetch(`https://api.mercadolibre.com/packs/${p.numero_loja}`, { headers: h });
         const pj = await pr.json().catch(() => ({}));
         linha.pack_http = pr.status;
-        sid = pj?.shipment?.id || null;
         const ordId = pj?.orders?.[0]?.id;
         linha.pack_order = ordId || null;
-        if (!sid && ordId) {
+        if (ordId) {
           const ro = await fetch(`https://api.mercadolibre.com/orders/${ordId}`, { headers: h });
           if (ro.ok) sid = (await ro.json())?.shipping?.id || null;
         }
+        if (!sid) sid = pj?.shipment?.id || null;
       }
       if (!sid) { linha.erro = 'sem shipment (order e pack)'; linha.order_msg = oj?.message || null; saida.push(linha); continue; }
       linha.shipment_id = sid;

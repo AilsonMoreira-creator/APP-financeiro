@@ -42,12 +42,14 @@ export async function etiquetasDoMl(lista, conta) {
         const rp = await fetch(`https://api.mercadolibre.com/packs/${p.numero_loja}`, { headers: h });
         if (rp.ok) {
           const jp = await rp.json();
-          sid = jp?.shipment?.id || null;
+          // a ORDER de dentro do pack tem o shipment VIGENTE (o do pack pode
+          // ser um envio antigo cancelado quando o comprador mudou a entrega)
           const ordId = jp?.orders?.[0]?.id;
-          if (!sid && ordId) {
+          if (ordId) {
             const ro = await fetch(`https://api.mercadolibre.com/orders/${ordId}`, { headers: h });
             if (ro.ok) sid = (await ro.json())?.shipping?.id || null;
           }
+          if (!sid) sid = jp?.shipment?.id || null;
         }
       }
       if (sid) shipDe[String(sid)] = p.pedido_id;
